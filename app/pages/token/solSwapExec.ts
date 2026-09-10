@@ -41,9 +41,12 @@ export const WSOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_SOL_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC on Solana (6 decimals)
 const LAMPORTS_PER_SOL = 1_000_000_000;
 export const MAX_SLIPPAGE_BPS = 300; // 3% hard cap — refuse any quote/route asking for more.
-// Public Solana RPC fallback if the wallet provider doesn't carry one. The wallet's own rpcUrl is
-// preferred (the user's endpoint); this only backstops simulate/confirm.
-const FALLBACK_RPC = "https://api.mainnet-beta.solana.com";
+// Route the web3.js Connection through OUR worker Solana-RPC proxy. The public Solana RPC 403s /
+// rate-limits BROWSERS, and the wallet rarely carries a usable rpcUrl — so a direct browser
+// Connection fails on getBalance AND on the simulate/send/confirm that the buy needs. The worker
+// (/sol/rpc) fans out to reliable upstreams server-side. A wallet-provided https endpoint that isn't
+// the flaky public one (the user's own node) is still honored. "The read is ours" — same as Jupiter.
+const SOL_RPC_PROXY = `${AGENT_API}/sol/rpc`;
 
 // Top-level programs a Jupiter v6 swap legitimately touches. Anything else at the top level → refuse.
 const ALLOWED_PROGRAMS = new Set<string>([
@@ -87,7 +90,26 @@ const isSolAddr = (a: unknown): a is string =>
 
 function resolveRpc(provider: SolProvider): string {
   const u = typeof provider?.rpcUrl === "string" ? provider.rpcUrl : "";
-  return /^https:\/\//.test(u) ? u : FALLBACK_RPC;
+  // Honor a real user-supplied node, but never the flaky public endpoints — those go via our proxy.
+  if (/^https:\/\//.test(u) && !/(mainnet-beta|devnet|testnet)\.solana\.com|api\.(devnet|testnet)/.test(u)) return u;
+  return SOL_RPC_PROXY;
+}
+
+// Confirm by POLLING getSignatureStatuses over HTTP (not conn.confirmTransaction, which opens a
+// WebSocket the /sol/rpc HTTP proxy doesn't serve). Throws on an on-chain error; returns false on a
+// pending timeout so the caller can surface the sig to watch rather than fake success.
+async function pollConfirm(conn: Connection, sig: string, timeoutMs = 45000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    let status = null;
+    try { const r = await conn.getSignatureStatuses([sig]); status = r?.value?.[0] ?? null; } catch { status = null; }
+    if (status) {
+      if (status.err) throw new Error("Swap failed on-chain — nothing was bought (only network fees).");
+      if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") return true;
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  return false;
 }
 
 // Ask Jupiter for a quote + a swap transaction for `taker`, then run every guard on the returned tx.
@@ -265,13 +287,8 @@ export async function executeSolBuy(provider: SolProvider, plan: SolBuyPlan, onS
   }
 
   onStep("confirming on-chain…");
-  try {
-    const res = await conn.confirmTransaction(sig, "confirmed");
-    if (res.value.err) throw new Error("Swap failed on-chain — nothing was bought (only network fees).");
-    return { sig, confirmed: true };
-  } catch (e) {
-    // A timeout leaves it pending; surface the sig so the user can watch it. A real error → throw.
-    if ((e as Error)?.message?.includes("failed on-chain")) throw e;
-    return { sig, confirmed: false };
-  }
+  // pollConfirm throws on a real on-chain error (→ surfaced as a revert); a pending timeout returns
+  // false and we surface the sig to watch rather than claim a fake success.
+  const confirmed = await pollConfirm(conn, sig);
+  return { sig, confirmed };
 }

@@ -648,6 +648,14 @@ export default function TokenTerminal() {
     return solUnit === "usd" ? (solUsd && solUsd > 0 ? v / solUsd : 0) : v;
   })();
   const solEstOut = (isSolToken && solInSol > 0 && solUsd && (pair?.priceUsd || 0) > 0) ? (solInSol * solUsd) / (pair!.priceUsd as number) : null;
+  // Affordability: a buy needs (SOL spent + a fee/rent buffer) ≤ wallet SOL, and we must KNOW the
+  // balance to allow it — a green Confirm over an unread "—" balance is wrong. The buffer covers the
+  // tx fee + wSOL rent + priority fee. Drives the ticket button + the modal Confirm gate.
+  const SOL_FEE_BUFFER = 0.01;
+  const solBalanceKnown = solBalance != null;
+  const solInputAffordable = solBalanceKnown && solInSol > 0 && solInSol + SOL_FEE_BUFFER <= (solBalance as number);
+  const solPlanNeed = solPlan ? solPlan.solIn + SOL_FEE_BUFFER : null;
+  const solPlanAffordable = solBalanceKnown && solPlanNeed != null && solPlanNeed <= (solBalance as number);
   // The token quantity a SELL resolves to, in EITHER unit (MAX = whole balance; USD = $/price).
   const sellPrice = pair?.priceUsd || 0;
   const sellTokens = sellMax && held ? held.amount
@@ -835,6 +843,9 @@ export default function TokenTerminal() {
     // Resolve the typed amount to SOL (USD mode → $/SOL price). planSolBuy quotes + guards the real amount.
     const amt = solUnit === "usd" ? (solUsd && solUsd > 0 ? (parseFloat(solAmt) || 0) / solUsd : 0) : (parseFloat(solAmt) || 0);
     if (!Number.isFinite(amt) || amt <= 0) { setSolErr(solUnit === "usd" && !solUsd ? "No SOL price yet — switch to SOL amount." : "Enter an amount to buy."); return; }
+    // Don't even build a route we can't cover. Must know the balance first (no green Confirm over "—").
+    if (solBalance == null) { setSolErr("Balance unavailable — can't verify you can cover this. Try again in a moment."); return; }
+    if (amt + SOL_FEE_BUFFER > solBalance) { setSolErr(`Not enough SOL: you have ${solBalance.toLocaleString("en-US", { maximumFractionDigits: 4 })}, need ~${(amt + SOL_FEE_BUFFER).toLocaleString("en-US", { maximumFractionDigits: 4 })} (incl. ~${SOL_FEE_BUFFER} fees). Try a smaller size.`); return; }
     setSolPlanning(true);
     try {
       const p = await planSolBuy(pair.baseAddress, pair.baseSymbol, amt, solSigner.address, solProvider);
@@ -842,7 +853,7 @@ export default function TokenTerminal() {
     } catch (e) {
       setSolErr((e as Error)?.message || "Couldn't build the swap — use the deep-link.");
     } finally { setSolPlanning(false); }
-  }, [pair, solProvider, solSigner.address, solAmt, solUnit, solUsd]);
+  }, [pair, solProvider, solSigner.address, solAmt, solUnit, solUsd, solBalance, SOL_FEE_BUFFER]);
 
   const confirmSolBuy = useCallback(async () => {
     if (!solPlan || !solProvider) return;
@@ -1037,7 +1048,8 @@ export default function TokenTerminal() {
                       <div>pubkey: <span style={{ color: BRIGHT, wordBreak: "break-all" }}>{solSigner.address ?? "—"}</span></div>
                       <div style={{ color: FAINT }}>orderly ns: {wcNamespace ?? "—"} · orderly-sol {_hasSolSigner(wc) ? "✓" : "✗"} · privy.SOL {_privyCtx.walletSOL ? "set" : "null"} · privy.allSOL {_privyCtx.allWalletsSOL?.length ?? 0}</div>
                       <div style={{ color: FAINT }}>gate: flag {SOL_INAPP_BUY ? "✓" : "✗"} · spot {showSpot ? "✓" : "✗"} · buy {side === "buy" ? "✓" : "✗"} · quote {swapState.kind === "quote" ? "✓" : swapState.kind} · router {quote?.router ?? "—"}</div>
-                      <div style={{ color: canSolBuy ? POS : NEG, fontWeight: 700, marginTop: 3 }}>canSolBuy: {canSolBuy ? "TRUE — Buy-with-SOL card should mount below ▾" : "false"}{solUsd != null ? ` · jup-proxy ✓ ($${solUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}/SOL)` : ""}</div>
+                      <div style={{ color: FAINT }}>balance: <span style={{ color: solBalance != null ? POS : NEG }}>{solBalance != null ? `${solBalance.toLocaleString("en-US", { maximumFractionDigits: 5 })} SOL` : "— (RPC read failed)"}</span>{solUsd != null ? ` · jup-proxy ✓ ($${solUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}/SOL)` : " · jup-proxy —"}</div>
+                      <div style={{ color: canSolBuy ? POS : NEG, fontWeight: 700, marginTop: 3 }}>canSolBuy: {canSolBuy ? "TRUE — Buy-with-SOL card should mount below ▾" : "false"}</div>
                     </div>
                     {!(solSigner.hasSign || solSigner.hasSend) && (
                       <div style={{ fontFamily: UI, fontSize: 10, color: FAINT, lineHeight: 1.5, marginTop: 6 }}>No Solana signer found on any source — connect a <b style={{ color: MUT }}>Solana wallet</b> via the Orderly/Privy modal (not the Jupiter in-app browser), then reopen this token.</div>
@@ -1284,10 +1296,17 @@ export default function TokenTerminal() {
                           <span>Est. output{solInSol > 0 ? ` · ${solInSol.toLocaleString("en-US", { maximumFractionDigits: 4 })} SOL` : ""}</span>
                           <span style={{ color: BRIGHT }}>{solEstOut != null ? `≈ ${solEstOut.toLocaleString("en-US", { maximumFractionDigits: solEstOut >= 1 ? 2 : 6 })} ${pair.baseSymbol}` : "—"}</span>
                         </div>
-                        <button onClick={openSolBuy} disabled={solPlanning}
-                          style={{ display: "block", width: "100%", textAlign: "center", fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "#0a0a0b", background: POS, border: "none", borderRadius: 9, padding: "12px 0", cursor: solPlanning ? "wait" : "pointer", opacity: solPlanning ? 0.7 : 1 }}>
-                          {solPlanning ? "Building route…" : `Buy ${pair.baseSymbol} with SOL →`}
-                        </button>
+                        {(() => {
+                          const insufficient = solInSol > 0 && solBalanceKnown && !solInputAffordable;
+                          const disabled = solPlanning || insufficient;
+                          return (
+                            <button onClick={openSolBuy} disabled={disabled}
+                              style={{ display: "block", width: "100%", textAlign: "center", fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: insufficient ? FAINT : "#0a0a0b", background: insufficient ? "none" : POS, border: insufficient ? `1px solid ${BORD}` : "none", borderRadius: 9, padding: "12px 0", cursor: disabled ? (solPlanning ? "wait" : "not-allowed") : "pointer", opacity: solPlanning ? 0.7 : 1 }}>
+                              {solPlanning ? "Building route…" : insufficient ? "Insufficient SOL" : `Buy ${pair.baseSymbol} with SOL →`}
+                            </button>
+                          );
+                        })()}
+                        {solInSol > 0 && !solBalanceKnown && <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT, marginTop: 6, textAlign: "center" }}>reading balance…</div>}
                         {solErr && !solModalOpen && <div style={{ fontFamily: MONO, fontSize: 10, color: NEG, marginTop: 7, textAlign: "center" }}>{solErr}</div>}
                       </div>
                     )}
@@ -1547,6 +1566,7 @@ export default function TokenTerminal() {
               return !solDone ? (
                 <>
                   <ModalRow label="You pay" value={`${solPlan.solIn.toLocaleString("en-US", { maximumFractionDigits: 6 })} SOL`} sub="native SOL · Solana" />
+                  <ModalRow label="Wallet balance" value={solBalance != null ? `${solBalance.toLocaleString("en-US", { maximumFractionDigits: 4 })} SOL` : "unavailable"} sub={solBalance != null ? `need ~${(solPlan.solIn + SOL_FEE_BUFFER).toLocaleString("en-US", { maximumFractionDigits: 4 })} incl. fees` : "couldn't read your balance"} danger={!solPlanAffordable} />
                   <ModalRow label="Receive (est.)" value={recvFmt ? `${recvFmt} ${solPlan.outSym}` : "—"} />
                   <ModalRow label="Minimum received" value={minFmt ? `${minFmt} ${solPlan.outSym}` : "on-chain floor applies"} sub={slip != null ? `reverts below this · ≤${slip.toFixed(2)}% slippage` : "slippage floor enforced on-chain"} accent />
                   <ModalRow label="Route" value={solPlan.router} />
@@ -1558,7 +1578,7 @@ export default function TokenTerminal() {
                   {solErr && <div style={{ fontFamily: MONO, fontSize: 11, color: NEG, marginBottom: 10, textAlign: "center" }}>{solErr}</div>}
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={closeSolModal} disabled={solBusy} style={{ flex: 1, fontFamily: MONO, fontSize: 12, fontWeight: 700, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 8, padding: "11px 0", cursor: solBusy ? "default" : "pointer" }}>Cancel</button>
-                    <button onClick={confirmSolBuy} disabled={solBusy} style={{ flex: 2, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", color: "#0a0a0b", background: POS, border: "none", borderRadius: 8, padding: "11px 0", cursor: solBusy ? "wait" : "pointer", opacity: solBusy ? 0.7 : 1 }}>{solBusy ? "Confirming…" : "Confirm swap"}</button>
+                    <button onClick={confirmSolBuy} disabled={solBusy || !solPlanAffordable} style={{ flex: 2, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", color: solBusy || solPlanAffordable ? "#0a0a0b" : FAINT, background: solBusy || solPlanAffordable ? POS : BORD, border: "none", borderRadius: 8, padding: "11px 0", cursor: solBusy ? "wait" : solPlanAffordable ? "pointer" : "not-allowed", opacity: solBusy ? 0.7 : 1 }}>{solBusy ? "Confirming…" : !solBalanceKnown ? "Balance unavailable" : !solPlanAffordable ? "Insufficient SOL" : "Confirm swap"}</button>
                   </div>
                 </>
               ) : (

@@ -5697,6 +5697,37 @@ document.getElementById("btn").addEventListener("click",go);
       }
     }
 
+    // ── POST /sol/rpc — Solana JSON-RPC proxy (server-side, reliable) ──
+    // The public Solana RPC (api.mainnet-beta) 403s / rate-limits BROWSERS, so the in-app BUY's
+    // balance read AND its simulate/send/confirm are routed through here — the client's web3.js
+    // Connection points at this URL. Server-side fetch has no browser origin/CORS block. Passthrough
+    // to a FIXED upstream set (no SSRF; upstream is env.SOLANA_RPC → publicnode → mainnet-beta, tried
+    // in order). Method allowlist = reads (get*) + simulateTransaction + sendTransaction only, so it
+    // can't be abused for requestAirdrop etc. The browser still runs every guard on the tx bytes
+    // before signing, so this relay adds no trust — same model as the Jupiter proxy ("the read is ours").
+    if (parts[0] === "sol" && parts[1] === "rpc") {
+      if (request.method !== "POST") return json({ error: "method not allowed" }, request, 405);
+      let rpcBody;
+      try { rpcBody = await request.json(); } catch { return json({ error: "bad_json" }, request, 400); }
+      const methodOk = (m) => typeof m === "string" && (/^get[A-Z]/.test(m) || m === "simulateTransaction" || m === "sendTransaction" || m === "isBlockhashValid");
+      const calls = Array.isArray(rpcBody) ? rpcBody : [rpcBody];
+      if (!calls.length || calls.length > 20 || !calls.every((c) => c && methodOk(c.method))) return json({ error: "method_not_allowed" }, request, 403);
+      // Upstream is a FIXED set (env override → publicnode → mainnet-beta). env.SOLANA_RPC may carry
+      // an api-key in its URL, so NEVER echo the upstream URL or a raw fetch-error string back to the
+      // client — only a status code. (Workers fetch errors don't embed the URL, but keep it airtight.)
+      const upstreams = [env.SOLANA_RPC, "https://solana-rpc.publicnode.com", "https://api.mainnet-beta.solana.com"].filter(Boolean);
+      const payload = JSON.stringify(rpcBody);
+      let lastStatus = 502;
+      for (const u of upstreams) {
+        try {
+          const r = await fetch(u, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: payload });
+          if (r.ok) return new Response(await r.text(), { status: 200, headers: { "Content-Type": "application/json", ...cors(request) } });
+          lastStatus = r.status;
+        } catch { lastStatus = 502; }
+      }
+      return json({ error: "sol_rpc_upstream_failed", status: lastStatus }, request, 502);
+    }
+
     // ── GET /swap/quote — EVM swap quote via Fabric (secret X-App-Id stays server-side) ──
     // The token terminal's EVM router. Jupiter (Solana) is keyless and quoted client-side; Fabric
     // needs our App ID, which must NEVER reach the browser — so it is injected HERE and nowhere
