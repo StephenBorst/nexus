@@ -621,6 +621,7 @@ export default function TokenTerminal() {
   const [solStep, setSolStep] = useState("");
   const [solErr, setSolErr] = useState<string | null>(null);
   const [solDone, setSolDone] = useState<{ sig: string } | null>(null);
+  const [solRpcHealth, setSolRpcHealth] = useState<string | null>(null); // raw /sol/rpc status (diagnostic)
   // Venue routing: a perp token can show BOTH — Long/Short on our book (showPerp) AND the spot
   // buy/sell panel (showSpot). A non-perp token is spot only. In-app fill is Fabric-on-EVM only.
   const showPerp = isPerp && venue === "perp";
@@ -837,6 +838,27 @@ export default function TokenTerminal() {
     return () => { alive = false; };
   }, [isSolToken, solSigner.address]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Diagnostic: hit the worker /sol/rpc directly with a getBalance and report the RAW HTTP status, so
+  // a failed balance read is pinpointed on-device (502 = worker upstreams blocked → set SOLANA_RPC;
+  // network/CORS = didn't reach the worker; 200 = proxy healthy). Never signs; read-only.
+  useEffect(() => {
+    if (!isSolToken || !solSigner.address) { setSolRpcHealth(null); return; }
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("https://og.nexustradinglabs.com/sol/rpc", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getBalance", params: [solSigner.address] }),
+        });
+        const txt = await r.text();
+        let note = "";
+        try { const j = JSON.parse(txt); note = j?.result?.value != null ? "ok" : (typeof j?.error === "string" ? j.error : j?.error ? JSON.stringify(j.error) : ""); } catch { note = txt.slice(0, 40); }
+        if (alive) setSolRpcHealth(`${r.status}${note ? " · " + String(note).slice(0, 48) : ""}`);
+      } catch (e) { if (alive) setSolRpcHealth(`unreachable · ${(e as Error)?.message?.slice(0, 40) || "fetch failed"}`); }
+    })();
+    return () => { alive = false; };
+  }, [isSolToken, solSigner.address]);
+
   const openSolBuy = useCallback(async () => {
     setSolErr(null); setSolDone(null);
     if (!pair?.baseAddress || !solProvider || !solSigner.address) return;
@@ -1049,6 +1071,7 @@ export default function TokenTerminal() {
                       <div style={{ color: FAINT }}>orderly ns: {wcNamespace ?? "—"} · orderly-sol {_hasSolSigner(wc) ? "✓" : "✗"} · privy.SOL {_privyCtx.walletSOL ? "set" : "null"} · privy.allSOL {_privyCtx.allWalletsSOL?.length ?? 0}</div>
                       <div style={{ color: FAINT }}>gate: flag {SOL_INAPP_BUY ? "✓" : "✗"} · spot {showSpot ? "✓" : "✗"} · buy {side === "buy" ? "✓" : "✗"} · quote {swapState.kind === "quote" ? "✓" : swapState.kind} · router {quote?.router ?? "—"}</div>
                       <div style={{ color: FAINT }}>balance: <span style={{ color: solBalance != null ? POS : NEG }}>{solBalance != null ? `${solBalance.toLocaleString("en-US", { maximumFractionDigits: 5 })} SOL` : "— (RPC read failed)"}</span>{solUsd != null ? ` · jup-proxy ✓ ($${solUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}/SOL)` : " · jup-proxy —"}</div>
+                      <div style={{ color: FAINT }}>/sol/rpc: <span style={{ color: solRpcHealth?.startsWith("200") ? POS : NEG }}>{solRpcHealth ?? "…"}</span></div>
                       <div style={{ color: canSolBuy ? POS : NEG, fontWeight: 700, marginTop: 3 }}>canSolBuy: {canSolBuy ? "TRUE — Buy-with-SOL card should mount below ▾" : "false"}</div>
                     </div>
                     {!(solSigner.hasSign || solSigner.hasSend) && (

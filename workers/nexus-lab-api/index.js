@@ -5715,7 +5715,10 @@ document.getElementById("btn").addEventListener("click",go);
       // Upstream is a FIXED set (env override → publicnode → mainnet-beta). env.SOLANA_RPC may carry
       // an api-key in its URL, so NEVER echo the upstream URL or a raw fetch-error string back to the
       // client — only a status code. (Workers fetch errors don't embed the URL, but keep it airtight.)
-      const upstreams = [env.SOLANA_RPC, "https://solana-rpc.publicnode.com", "https://api.mainnet-beta.solana.com"].filter(Boolean);
+      // env.SOLANA_RPC (a keyed Helius/Triton URL) is the reliable one and is tried FIRST. The public
+      // endpoints often 403 Cloudflare's egress, so several keyless fallbacks are tried in order — the
+      // first that answers 200 wins. api.mainnet-beta is last (it blocks datacenter IPs the most).
+      const upstreams = [env.SOLANA_RPC, "https://solana-rpc.publicnode.com", "https://rpc.ankr.com/solana", "https://solana.drpc.org", "https://api.mainnet-beta.solana.com"].filter(Boolean);
       const payload = JSON.stringify(rpcBody);
       let lastStatus = 502;
       for (const u of upstreams) {
