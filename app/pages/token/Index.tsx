@@ -566,21 +566,45 @@ export default function TokenTerminal() {
   // The deep-link never goes away — this is the extra "don't leave to Uniswap" path, and any
   // failure falls back to it. planBuy validates hard before the modal; executeBuy signs only on
   // an explicit confirm.
-  const { wallet: wc } = useWalletConnector();
+  // Minimal shape shared by the Orderly + Privy connector wallets we read below (provider is a bag —
+  // signTransaction/sendTransaction/network are read defensively via typeof).
+  type WCWallet = { provider?: Record<string, unknown>; accounts?: { address?: string }[]; label?: string };
+  const _wcCtx = useWalletConnector() as unknown as { wallet?: WCWallet | null; namespace?: string | null };
+  const wc = _wcCtx.wallet || null;
   const provider = (wc?.provider as Eip1193 | undefined) || undefined;
-  // ── Solana signer (Privy walletSOL) ──────────────────────────────────────────────────────────
-  // walletSOL = { label, provider:{signTransaction,sendTransaction,signMessage,network,rpcUrl},
-  // accounts:[{address}] } when a Solana wallet is connected via the Orderly/Privy modal.
-  const { walletSOL } = (useWalletConnectorPrivy() as unknown as { walletSOL?: { provider?: Record<string, unknown>; accounts?: { address?: string }[]; label?: string } | null }) || {};
-  const solProvider = walletSOL?.provider as unknown as SolProvider | undefined;
+  const wcNamespace = _wcCtx.namespace != null ? String(_wcCtx.namespace) : null;
+  // ── Solana signer resolution ─────────────────────────────────────────────────────────────────
+  // A connected Solana wallet exposes a SolanaWalletProvider ({ signTransaction, sendTransaction,
+  // signMessage, network, rpcUrl }) + a base58 pubkey. It can surface on EITHER connector context,
+  // so we scan both and take the first that carries a real Solana signer, most-reliable source first:
+  //   1) Orderly useWalletConnector().wallet — the SAME context that renders the wallet chip, so it's
+  //      the dependable one. WalletProvider = EIP1193 | SolanaWalletProvider, so when a Solana wallet
+  //      is active, wallet.provider IS the Solana signer and namespace === "SOL".
+  //   2) Privy useWalletConnectorPrivy().walletSOL / allWalletsSOL — secondary. This was the SOLE
+  //      source before and came back null when the token page read it (a2cd8d8 still didn't mount on
+  //      prod), so it can't be trusted as the only source. The one signing site stays solSwapExec.ts.
+  const _privyCtx = (useWalletConnectorPrivy() as unknown as { walletSOL?: WCWallet | null; allWalletsSOL?: { wallet?: WCWallet }[] }) || {};
+  const _isSolAddr = (a: unknown): a is string => typeof a === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a);
+  const _hasSolSigner = (w?: WCWallet | null): boolean => {
+    const p = w?.provider;
+    return (typeof p?.signTransaction === "function" || typeof p?.sendTransaction === "function") && _isSolAddr(w?.accounts?.[0]?.address);
+  };
+  const solSources: { src: string; w?: WCWallet | null }[] = [
+    { src: "orderly", w: wc },
+    { src: "privy.walletSOL", w: _privyCtx.walletSOL },
+    { src: "privy.allSOL", w: _privyCtx.allWalletsSOL?.[0]?.wallet },
+  ];
+  const solPick = solSources.find((c) => _hasSolSigner(c.w)) || null;
+  const solProvider = (solPick?.w?.provider as unknown as SolProvider | undefined) || undefined;
   const solSigner = (() => {
-    const p = walletSOL?.provider;
+    const p = solPick?.w?.provider;
     return {
       hasSign: typeof p?.signTransaction === "function",
       hasSend: typeof p?.sendTransaction === "function",
-      address: walletSOL?.accounts?.[0]?.address ?? null,
+      address: solPick?.w?.accounts?.[0]?.address ?? null,
       network: p?.network != null ? String(p.network) : null,
-      label: walletSOL?.label != null ? String(walletSOL.label) : null,
+      label: solPick?.w?.label != null ? String(solPick.w.label) : null,
+      src: solPick?.src ?? null,
     };
   })();
   // ── Solana in-app BUY (Jupiter, wSOL → token) — behind VITE_SOL_INAPP_BUY. Shows only for a Solana
@@ -1002,20 +1026,21 @@ export default function TokenTerminal() {
                   </div>
                 )}
 
-                {/* ◎ SOLANA SIGNER — live-check readout (commit 1 of the Jupiter pass). Shows for
-                    Solana tokens so a connected Solana wallet can be verified end-to-end before any
-                    signing code exists. Read-only; replaced by the real in-app BUY once confirmed. */}
+                {/* ◎ SOLANA SIGNER — live diagnostic readout. Shows for Solana tokens so the exact
+                    reason the in-app BUY card does/doesn't mount is visible on the device (I can't
+                    observe prod). Reports which source holds the signer + every canSolBuy gate. */}
                 {pair.chainId === "solana" && (
-                  <div style={{ background: CARD, border: `1px solid ${solSigner.hasSign && solSigner.hasSend ? "#3ecf8e55" : BORD}`, borderRadius: 10, padding: "11px 14px", marginBottom: 12 }}>
+                  <div style={{ background: CARD, border: `1px solid ${canSolBuy ? "#3ecf8e55" : BORD}`, borderRadius: 10, padding: "11px 14px", marginBottom: 12 }}>
                     <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em", color: FAINT, textTransform: "uppercase", marginBottom: 6 }}>◎ Solana signer · live check</div>
-                    {solSigner.hasSign || solSigner.hasSend || solSigner.address ? (
-                      <div style={{ fontFamily: MONO, fontSize: 11, color: MUT, lineHeight: 1.6 }}>
-                        <div>provider.signTransaction: <span style={{ color: solSigner.hasSign ? POS : NEG }}>{solSigner.hasSign ? "✓ reachable" : "✗ missing"}</span> · sendTransaction: <span style={{ color: solSigner.hasSend ? POS : NEG }}>{solSigner.hasSend ? "✓" : "✗"}</span></div>
-                        <div>pubkey: <span style={{ color: BRIGHT, wordBreak: "break-all" }}>{solSigner.address ?? "—"}</span></div>
-                        <div style={{ color: FAINT }}>wallet: {solSigner.label ?? "—"} · network: {solSigner.network ?? "—"}</div>
-                      </div>
-                    ) : (
-                      <div style={{ fontFamily: UI, fontSize: 11, color: FAINT, lineHeight: 1.5 }}>Connect a <b style={{ color: MUT }}>Solana wallet</b> via the wallet modal, then reopen this token — this line will show the signer + your pubkey once the connector exposes it.</div>
+                    <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUT, lineHeight: 1.65 }}>
+                      <div>picked: <span style={{ color: solSigner.src ? POS : NEG }}>{solSigner.src ?? "none"}</span> · sign <span style={{ color: solSigner.hasSign ? POS : NEG }}>{solSigner.hasSign ? "✓" : "✗"}</span> · send <span style={{ color: solSigner.hasSend ? POS : NEG }}>{solSigner.hasSend ? "✓" : "✗"}</span> · net {solSigner.network ?? "—"}</div>
+                      <div>pubkey: <span style={{ color: BRIGHT, wordBreak: "break-all" }}>{solSigner.address ?? "—"}</span></div>
+                      <div style={{ color: FAINT }}>orderly ns: {wcNamespace ?? "—"} · orderly-sol {_hasSolSigner(wc) ? "✓" : "✗"} · privy.SOL {_privyCtx.walletSOL ? "set" : "null"} · privy.allSOL {_privyCtx.allWalletsSOL?.length ?? 0}</div>
+                      <div style={{ color: FAINT }}>gate: flag {SOL_INAPP_BUY ? "✓" : "✗"} · spot {showSpot ? "✓" : "✗"} · buy {side === "buy" ? "✓" : "✗"} · quote {swapState.kind === "quote" ? "✓" : swapState.kind} · router {quote?.router ?? "—"}</div>
+                      <div style={{ color: canSolBuy ? POS : NEG, fontWeight: 700, marginTop: 3 }}>canSolBuy: {canSolBuy ? "TRUE — Buy-with-SOL card should mount below ▾" : "false"}{solUsd != null ? ` · jup-proxy ✓ ($${solUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}/SOL)` : ""}</div>
+                    </div>
+                    {!(solSigner.hasSign || solSigner.hasSend) && (
+                      <div style={{ fontFamily: UI, fontSize: 10, color: FAINT, lineHeight: 1.5, marginTop: 6 }}>No Solana signer found on any source — connect a <b style={{ color: MUT }}>Solana wallet</b> via the Orderly/Privy modal (not the Jupiter in-app browser), then reopen this token.</div>
                     )}
                   </div>
                 )}
