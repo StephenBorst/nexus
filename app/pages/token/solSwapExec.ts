@@ -332,9 +332,9 @@ export async function solRpcCall(method: string, params: unknown[]): Promise<unk
 // Ticket helpers (for the BUY panel's SOL-% chips + USD chips + est output). Balance is read via the
 // raw proxy call above; SOL/USD via the Jupiter proxy. Fail-soft → nulls (balanceErr carries the real
 // reason for the on-device diagnostic). Never touches signing.
-export async function getSolWalletContext(_provider: SolProvider, pubkey: string): Promise<{ balanceSol: number | null; usdcBal: number | null; solUsd: number | null; balanceErr: string | null }> {
-  let balanceSol: number | null = null, usdcBal: number | null = null, solUsd: number | null = null, balanceErr: string | null = null;
-  if (!isSolAddr(pubkey)) return { balanceSol, usdcBal, solUsd, balanceErr: "bad pubkey" };
+export async function getSolWalletContext(_provider: SolProvider, pubkey: string, tokenMint?: string): Promise<{ balanceSol: number | null; usdcBal: number | null; tokenBal: number | null; solUsd: number | null; balanceErr: string | null }> {
+  let balanceSol: number | null = null, usdcBal: number | null = null, tokenBal: number | null = null, solUsd: number | null = null, balanceErr: string | null = null;
+  if (!isSolAddr(pubkey)) return { balanceSol, usdcBal, tokenBal, solUsd, balanceErr: "bad pubkey" };
   try {
     const res = await solRpcCall("getBalance", [pubkey]) as { value?: number } | number | null;
     const lamports = Number((res as { value?: number })?.value ?? res); // {context,value} or a bare number
@@ -352,6 +352,17 @@ export async function getSolWalletContext(_provider: SolProvider, pubkey: string
       else if (b?.value?.amount != null) usdcBal = Number(b.value.amount) / 1e6;
     }
   } catch { /* no USDC ATA → no USDC chips */ }
+  if (tokenMint && isSolAddr(tokenMint) && tokenMint !== USDC_SOL_MINT) {
+    try {
+      // Current token's balance = getTokenAccountBalance of its ATA (0/null if none) — for the wallet chip.
+      const ata = deriveAta(tokenMint, pubkey);
+      if (ata) {
+        const b = await solRpcCall("getTokenAccountBalance", [ata]) as { value?: { uiAmount?: number; amount?: string } } | null;
+        const ui = b?.value?.uiAmount;
+        if (typeof ui === "number" && Number.isFinite(ui)) tokenBal = ui;
+      }
+    } catch { /* no token ATA → no token chip */ }
+  }
   try {
     // SOL/USD from a Jupiter quote (1 SOL → USDC), through the same worker proxy.
     const r = await fetch(`${JUP_QUOTE}?inputMint=${WSOL_MINT}&outputMint=${USDC_SOL_MINT}&amount=${LAMPORTS_PER_SOL}&slippageBps=50&swapMode=ExactIn`, { headers: { Accept: "application/json" } });
@@ -359,7 +370,7 @@ export async function getSolWalletContext(_provider: SolProvider, pubkey: string
     const out = Number(j?.outAmount);
     if (Number.isFinite(out) && out > 0) solUsd = out / 1e6;
   } catch { /* no price → no USD chips */ }
-  return { balanceSol, usdcBal, solUsd, balanceErr };
+  return { balanceSol, usdcBal, tokenBal, solUsd, balanceErr };
 }
 
 // Execute the plan: RE-FETCH a fresh swap tx (fresh blockhash) and RE-RUN every guard on the exact

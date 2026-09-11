@@ -615,6 +615,7 @@ export default function TokenTerminal() {
   const [solPayWith, setSolPayWith] = useState<"sol" | "usdc">("sol"); // input token: native SOL or USDC
   const [solBalance, setSolBalance] = useState<number | null>(null); // wallet SOL balance (for 25/50/MAX)
   const [usdcBal, setUsdcBal] = useState<number | null>(null);       // wallet USDC balance (for the USDC ticket)
+  const [solTokenBal, setSolTokenBal] = useState<number | null>(null); // current Solana token balance (YOUR WALLET chip)
   const [solUsd, setSolUsd] = useState<number | null>(null);         // USD per SOL (for USD chips + est out)
   const [solPlan, setSolPlan] = useState<SolBuyPlan | null>(null);
   const [solModalOpen, setSolModalOpen] = useState(false);
@@ -680,6 +681,22 @@ export default function TokenTerminal() {
     : sellUnit === "usd" ? (sellPrice > 0 ? (parseFloat(sellAmt) || 0) / sellPrice : 0)
     : (parseFloat(sellAmt) || 0);
   const sellUsdEst = held && sellPrice > 0 ? sellTokens * sellPrice : null;
+  // YOUR WALLET chips when a Solana wallet is connected: SOL / USDC / the current token — the EVM
+  // holdings sweep is empty for a Solana pubkey, so build these from getSolWalletContext instead of
+  // showing "No spot tokens". Read-only; each chip is a launcher like the EVM rows.
+  const solHoldings = useMemo<Holding[]>(() => {
+    if (!isSolToken || !solSigner.address) return [];
+    const mk = (sym: string, amount: number, usd: number | null, address: string | null, dp = 4): Holding => ({
+      sym, chain: "solana", amount, usd, address,
+      amountLabel: amount.toLocaleString("en-US", { maximumFractionDigits: amount >= 1 ? dp : 6 }),
+      usdLabel: usd != null ? `$${usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—",
+    });
+    const rows: Holding[] = [];
+    if (solBalance != null && solBalance > 0) rows.push(mk("SOL", solBalance, solUsd ? solBalance * solUsd : null, null));
+    if (usdcBal != null && usdcBal > 0) rows.push(mk("USDC", usdcBal, usdcBal, "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", 2));
+    if (solTokenBal != null && solTokenBal > 0 && pair?.baseAddress) rows.push(mk(pair.baseSymbol, solTokenBal, (pair.priceUsd || 0) > 0 ? solTokenBal * (pair.priceUsd as number) : null, pair.baseAddress));
+    return rows;
+  }, [isSolToken, solSigner.address, solBalance, usdcBal, solTokenBal, solUsd, pair]);
   // YOUR POSITION (from tracked in-app buys) — invested, avg entry, and P&L on the TRACKED tokens
   // (honest: we only know what you bought in-app, not external cost basis). null when nothing tracked.
   const position = useMemo(() => {
@@ -847,13 +864,13 @@ export default function TokenTerminal() {
   // fresh bytes, re-guards, simulates, then signs via the Privy Solana provider. Fail-soft → deep-link. ──
   // SOL balance + SOL/USD for the buy ticket (%-chips + USD chips + est output). Fail-soft → nulls.
   useEffect(() => {
-    if (!isSolToken || !solProvider || !solSigner.address) { setSolBalance(null); setSolUsd(null); return; }
+    if (!isSolToken || !solProvider || !solSigner.address) { setSolBalance(null); setUsdcBal(null); setSolTokenBal(null); setSolUsd(null); return; }
     let alive = true;
-    getSolWalletContext(solProvider, solSigner.address)
-      .then((c) => { if (alive) { setSolBalance(c.balanceSol); setUsdcBal(c.usdcBal); setSolUsd(c.solUsd); setSolBalanceErr(c.balanceErr); } })
-      .catch((e) => { if (alive) { setSolBalance(null); setUsdcBal(null); setSolUsd(null); setSolBalanceErr((e as Error)?.message?.slice(0, 80) || "read failed"); } });
+    getSolWalletContext(solProvider, solSigner.address, pair?.baseAddress)
+      .then((c) => { if (alive) { setSolBalance(c.balanceSol); setUsdcBal(c.usdcBal); setSolTokenBal(c.tokenBal); setSolUsd(c.solUsd); setSolBalanceErr(c.balanceErr); } })
+      .catch((e) => { if (alive) { setSolBalance(null); setUsdcBal(null); setSolTokenBal(null); setSolUsd(null); setSolBalanceErr((e as Error)?.message?.slice(0, 80) || "read failed"); } });
     return () => { alive = false; };
-  }, [isSolToken, solSigner.address]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSolToken, solSigner.address, pair?.baseAddress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Diagnostic: hit the worker /sol/rpc directly with a getBalance and report the RAW HTTP status, so
   // a failed balance read is pinpointed on-device (502 = worker upstreams blocked → set SOLANA_RPC;
@@ -933,7 +950,7 @@ export default function TokenTerminal() {
             Nexus custom surfaces (X-Ray / Feed / Proof), not a bespoke page. */}
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "20px 14px 96px" : "32px 24px 80px" }}>
         <SectionHeader eyebrow="SPOT" title="Trade any token." note="LIVE DATA · ANY CHAIN" />
-        {wallet && <HoldingsStrip holdings={holdings} loading={holdingsLoading} onOpen={(h) => navigate(`/token/${encodeURIComponent(h.address || h.sym)}`)} />}
+        {(wallet || solSigner.address) && <HoldingsStrip holdings={holdings.length ? holdings : solHoldings} loading={holdingsLoading || (isSolToken && !!solSigner.address && solHoldings.length === 0 && solBalance == null && solBalanceErr == null)} onOpen={(h) => navigate(`/token/${encodeURIComponent(h.address || h.sym)}`)} />}
         {/* ── SEARCH ── Definitive's "Search CA or Token" */}
         <form onSubmit={(e) => { e.preventDefault(); submit(input); }} style={{ display: "flex", gap: 8, marginBottom: 16, maxWidth: 640 }}>
           {/* Relative wrapper so the one-tap clear (✕) sits inside the field — wiping a long
