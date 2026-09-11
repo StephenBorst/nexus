@@ -47,6 +47,7 @@ const encBalanceOf = (owner: string): string => SEL.balanceOf + padAddr(owner);
 const EXPLORER: Record<number, string> = {
   1: "https://etherscan.io/tx/", 8453: "https://basescan.org/tx/", 42161: "https://arbiscan.io/tx/",
   10: "https://optimistic.etherscan.io/tx/", 137: "https://polygonscan.com/tx/",
+  4663: "https://robinhoodchain.blockscout.com/tx/", // Robinhood Chain (Blockscout)
 };
 export const explorerTx = (chainId: number, hash: string): string | null => (EXPLORER[chainId] ? EXPLORER[chainId] + hash : null);
 
@@ -103,15 +104,18 @@ async function readBalanceOf(provider: Eip1193, token: string, owner: string): P
   return ethCall(provider, token, encBalanceOf(owner));
 }
 
-// USDC by DexScreener chainId → numeric chainId + canonical USDC. Mirrors the preview map in
-// data.ts; kept here so the executable path never guesses a token address. USDC is the input of
-// a BUY and the OUTPUT of a SELL.
-export const EVM_USDC: Record<string, { chainId: number; usdc: string }> = {
-  base:     { chainId: 8453,  usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
-  ethereum: { chainId: 1,     usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
-  arbitrum: { chainId: 42161, usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
-  optimism: { chainId: 10,    usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" },
-  polygon:  { chainId: 137,   usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" },
+// Input stablecoin by DexScreener chainId → numeric chainId + address + symbol. Mirrors the preview
+// map in data.ts; kept here so the executable path never guesses a token address. This token is the
+// input of a BUY and the OUTPUT of a SELL. `sym` drives the modal label. On Robinhood Chain (4663)
+// the dollar is USDG (6 decimals, like USDC), not USDC — the approve guard binds to THIS address, so
+// a buy there approves exactly USDG and nothing else.
+export const EVM_USDC: Record<string, { chainId: number; usdc: string; sym: string }> = {
+  base:      { chainId: 8453,  usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", sym: "USDC" },
+  ethereum:  { chainId: 1,     usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", sym: "USDC" },
+  arbitrum:  { chainId: 42161, usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", sym: "USDC" },
+  optimism:  { chainId: 10,    usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", sym: "USDC" },
+  polygon:   { chainId: 137,   usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", sym: "USDC" },
+  robinhood: { chainId: 4663,  usdc: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", sym: "USDG" },
 };
 
 function safeBig(v: string | number): bigint | null {
@@ -177,13 +181,13 @@ export async function planBuy(dsChain: string, tokenOut: string, outSym: string,
   if (!isAddr(taker)) throw new Error("Connect a wallet to swap in-app.");
   if (!(usd >= 1)) throw new Error("Enter at least $1 to swap.");
   if (usd > 100000) throw new Error("Amount too large for the in-app swap.");
-  if (tokenOut.toLowerCase() === evm.usdc.toLowerCase()) throw new Error("That's already USDC.");
+  if (tokenOut.toLowerCase() === evm.usdc.toLowerCase()) throw new Error(`That's already ${evm.sym}.`);
 
-  const amountIn = BigInt(Math.round(usd * 1e6)); // USDC = 6 decimals; USD ≈ USDC (a dollar stable)
+  const amountIn = BigInt(Math.round(usd * 1e6)); // input stable = 6 decimals (USDC/USDG); USD ≈ 1 unit
   const decimalsOut = await readDecimals(provider, tokenOut);
   const plan = await quoteAndGuard({
     dir: "buy", chainId: evm.chainId, tokenIn: evm.usdc, tokenOut, amountIn, taker, provider,
-    decimalsIn: 6, decimalsOut, inSym: "USDC", outSym,
+    decimalsIn: 6, decimalsOut, inSym: evm.sym, outSym,
   });
   plan.usd = usd;
   return plan;
@@ -209,7 +213,7 @@ export async function planSell(dsChain: string, tokenIn: string, inSym: string, 
   if (!evm) throw new Error("In-app swap isn't available on this chain — use the deep-link.");
   if (!isAddr(tokenIn)) throw new Error("Missing token address.");
   if (!isAddr(taker)) throw new Error("Connect a wallet to swap in-app.");
-  if (tokenIn.toLowerCase() === evm.usdc.toLowerCase()) throw new Error("That's already USDC.");
+  if (tokenIn.toLowerCase() === evm.usdc.toLowerCase()) throw new Error(`That's already ${evm.sym}.`);
 
   // Decimals + balance are read FRESH on-chain — a SELL is sized off the chain, never a cached float.
   const decimalsIn = await readDecimals(provider, tokenIn);
@@ -248,7 +252,7 @@ export async function planSell(dsChain: string, tokenIn: string, inSym: string, 
   if (outToken.toLowerCase() === tokenIn.toLowerCase()) throw new Error("Pick a different token to receive.");
   const plan = await quoteAndGuard({
     dir: "sell", chainId: evm.chainId, tokenIn, tokenOut: outToken, amountIn, taker, provider,
-    decimalsIn, decimalsOut: out ? out.decimals : 6, inSym, outSym: out?.sym ?? "USDC",
+    decimalsIn, decimalsOut: out ? out.decimals : 6, inSym, outSym: out?.sym ?? evm.sym,
   });
   // USD line only when the OUT is USDC (a dollar stable). For a token→token swap the received side
   // isn't dollars, so leave usd null and let the modal show the token amount + slippage instead.

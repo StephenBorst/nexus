@@ -319,12 +319,15 @@ const JUP_QUOTE = `${AGENT_API}/swap/jup/quote`;
 const USDC_SOL = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC mint, Solana
 // USDC by DexScreener chainId → numeric chainId, for the EVM (Fabric) quote probe. Only chains
 // where we know the canonical USDC; anything else simply doesn't get an EVM quote (deep-link).
+// `usdc` = the chain's INPUT stablecoin for a buy. On Robinhood Chain (4663) that's USDG, not USDC
+// (its native dollar; 6 decimals like USDC, so the probe's *1e6 holds). Fabric routes 4663 (Uni v4).
 const EVM_USDC: Record<string, { chainId: number; usdc: string }> = {
   base:      { chainId: 8453,  usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
   ethereum:  { chainId: 1,     usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
   arbitrum:  { chainId: 42161, usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
   optimism:  { chainId: 10,    usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" },
   polygon:   { chainId: 137,   usdc: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" },
+  robinhood: { chainId: 4663,  usdc: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168" }, // USDG
 };
 export interface SwapQuote { router: string; priceImpactPct: number | null; probeUsd: number }
 
