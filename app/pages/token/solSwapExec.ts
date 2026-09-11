@@ -88,10 +88,12 @@ export interface SolBuyPlan {
 const isSolAddr = (a: unknown): a is string =>
   typeof a === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a); // base58, 32-44 chars
 
-function resolveRpc(provider: SolProvider): string {
-  const u = typeof provider?.rpcUrl === "string" ? provider.rpcUrl : "";
-  // Honor a real user-supplied node, but never the flaky public endpoints — those go via our proxy.
-  if (/^https:\/\//.test(u) && !/(mainnet-beta|devnet|testnet)\.solana\.com|api\.(devnet|testnet)/.test(u)) return u;
+function resolveRpc(_provider: SolProvider): string {
+  // ALWAYS our worker proxy — the ONE path proven to answer (the health probe got 200 · ok from it).
+  // The wallet/Orderly-provided rpcUrl is unreliable from the browser (a devnet default or a
+  // CORS/egress-blocked endpoint); honoring it made the card's getBalance fail while a raw POST to
+  // /sol/rpc succeeded. Route balance + decimals + simulate + send + confirm through the same URL.
+  // Not a new vendor — the same proxy the health check hit.
   return SOL_RPC_PROXY;
 }
 
