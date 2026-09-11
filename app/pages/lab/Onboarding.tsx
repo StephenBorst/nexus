@@ -62,12 +62,16 @@ export function LabWelcome() {
 export function OnboardingChecklist({
   hasThesis,
   hasTrade,
+  hasAgent,
   onGoThesis,
+  onGoAgent,
   onGoAnalytics,
 }: {
   hasThesis: boolean;
   hasTrade: boolean;
+  hasAgent: boolean;
   onGoThesis: () => void;
+  onGoAgent: () => void;
   onGoAnalytics: () => void;
 }) {
   const [dismissed, setDismissed] = useState(
@@ -79,6 +83,9 @@ export function OnboardingChecklist({
     { key: "connect", label: "Connect your wallet", hint: "Your data is loading — you're in.", done: true, action: null },
     { key: "thesis",  label: "Plan your first thesis", hint: "Size a trade with R:R, stops & funding in the Nexus Thesis Engine.", done: hasThesis, action: onGoThesis, cta: "OPEN NEXUS THESIS ENGINE" },
     { key: "trade",   label: "Place your first trade", hint: "Trade anywhere on Nexus — it flows back here automatically.", done: hasTrade, action: null },
+    // The flagship, and the lowest-friction "wow": PAPER needs no funds and no key, so a
+    // brand-new user can watch the agent hunt funding edges hands-free on their first visit.
+    { key: "agent",   label: "Meet your autonomous agent", hint: "PAPER mode — no funds, no key, zero risk. Watch it hunt funding edges hands-free.", done: hasAgent, action: onGoAgent, cta: "OPEN AGENT" },
     { key: "grade",   label: "Grade your performance", hint: "See your trading score, breakdowns & journal.", done: hasTrade, action: onGoAnalytics, cta: "VIEW ANALYTICS" },
   ];
   const doneCount = steps.filter((s) => s.done).length;

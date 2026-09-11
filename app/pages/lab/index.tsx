@@ -57,6 +57,18 @@ export default function TheLabPage() {
     window.addEventListener("nexus:lab-tab", onTab);
     return () => window.removeEventListener("nexus:lab-tab", onTab);
   }, []);
+  // Onboarding: mark the agent step done once the user has opened the flagship at least
+  // once (persisted so it stays checked across sessions). Live state so the checkmark
+  // ticks the moment they land on the tab, not on next mount.
+  const [agentVisited, setAgentVisited] = useState(
+    () => typeof window !== "undefined" && window.localStorage.getItem("nexus_agent_visited") === "1"
+  );
+  useEffect(() => {
+    if (activeTab === "agent" && !agentVisited) {
+      setAgentVisited(true);
+      try { window.localStorage.setItem("nexus_agent_visited", "1"); } catch { /* ignore */ }
+    }
+  }, [activeTab, agentVisited]);
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [showAllTabs, setShowAllTabs] = useState(false); // More expands the condensed nav → full set
@@ -310,7 +322,9 @@ export default function TheLabPage() {
           <OnboardingChecklist
             hasThesis={theses.length > 0}
             hasTrade={processedTrades.length > 0}
+            hasAgent={agentVisited}
             onGoThesis={() => setActiveTab("thesis")}
+            onGoAgent={() => setActiveTab("agent")}
             onGoAnalytics={() => setActiveTab("analytics")}
           />
         )}
