@@ -314,6 +314,92 @@ export async function handleTheses(parts, request, env) {
     }, request);
   }
 
+  // ── /theses/symbol/:coin — credible callers positioned on ONE coin right now ──
+  // The per-token "who's on this" read for the Spot terminal: land on a token and see
+  // which graded, credible callers hold a LONG/SHORT here right now — from the SAME
+  // stance universe as /theses/contested + /theses/consensus (open positions + active
+  // public calls), just focused on one symbol. Every number is recomputable from public
+  // price; nothing here can move funds. Fail-soft: an uncalled symbol returns an empty
+  // caller list, which the UI renders as nothing.
+  if (parts[0] === "theses" && parts[1] === "symbol" && parts[2]) {
+    if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
+    const bare = (s) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
+    const coin = bare(decodeURIComponent(parts[2]));
+    if (!coin) return json({ error: "invalid symbol" }, request, 400);
+
+    // 60s micro-cache of the (expensive) full stance snapshot — one compute serves every
+    // per-coin hit in the window. Cache only what the strip needs: raw stances + a compact
+    // per-wallet record map ({calls,wins,rSum}). Profiles are fetched per request but only
+    // for the (few) wallets actually on THIS coin, so KV reads stay bounded.
+    const SNAP_KEY = "stance:snapshot:v1", SNAP_TTL = 60;
+    let snap = null;
+    try { const c = await env.LAB_STORE.get(SNAP_KEY); if (c) snap = JSON.parse(c); } catch { /* recompute */ }
+    if (!snap || !Array.isArray(snap.entries)) {
+      const { entries, byWallet } = await gatherStanceEntries(env);
+      const records = {};
+      for (const [w, r] of Object.entries(byWallet || {})) {
+        if (r && r.calls) records[String(w).toLowerCase()] = { calls: r.calls, wins: r.wins || 0, rSum: r.rSum || 0 };
+      }
+      snap = { entries, records };
+      try { await env.LAB_STORE.put(SNAP_KEY, JSON.stringify(snap), { expirationTtl: SNAP_TTL }); } catch { /* best-effort */ }
+    }
+
+    // Stances on this coin, deduped per wallet (opposing self-stances void, same side keeps
+    // the strongest weight) — the same collapse consensusBySymbol does.
+    const perWallet = new Map();
+    for (const e of snap.entries) {
+      if (!e || bare(e.symbol) !== coin) continue;
+      const dir = String(e.direction).toUpperCase();
+      if (dir !== "LONG" && dir !== "SHORT") continue;
+      const key = String(e.wallet).toLowerCase();
+      const w = Number(e.weight) > 0 ? Number(e.weight) : 1;
+      const cur = perWallet.get(key);
+      if (!cur) { perWallet.set(key, { wallet: e.wallet, direction: dir, weight: w, sources: new Set([e.source]), conflict: false }); continue; }
+      if (cur.conflict) continue;
+      if (cur.direction !== dir) { cur.conflict = true; continue; }
+      cur.weight = Math.max(cur.weight, w);
+      cur.sources.add(e.source);
+    }
+    const live = [...perWallet.values()].filter((s) => !s.conflict);
+
+    // Merit-weighted lean over the surviving stances (same formula/threshold as consensus).
+    let longWeight = 0, shortWeight = 0, longCount = 0, shortCount = 0;
+    for (const s of live) {
+      if (s.direction === "LONG") { longWeight += s.weight; longCount++; }
+      else { shortWeight += s.weight; shortCount++; }
+    }
+    const total = longWeight + shortWeight;
+    const lean = total > 0 ? (longWeight - shortWeight) / total : 0;
+    const side = lean >= 0.15 ? "LONG" : lean <= -0.15 ? "SHORT" : "SPLIT";
+
+    // Enrich only the wallets on THIS coin with profile identity + merit + graded record.
+    const callers = await Promise.all(live.map(async (s) => {
+      const rec = snap.records[s.wallet.toLowerCase()] || null;
+      const merit = rankCaller(rec);
+      const record = rec && rec.calls
+        ? { calls: rec.calls, winRate: Math.round((rec.wins / rec.calls) * 1000) / 10, avgR: Math.round((rec.rSum / rec.calls) * 100) / 100 }
+        : null;
+      let p = {};
+      try { const raw = await env.LAB_STORE.get(`profile:${s.wallet}`); if (raw) p = JSON.parse(raw); } catch { /* anon */ }
+      return { wallet: s.wallet, displayName: p.displayName || null, pfp: p.pfp || null, direction: s.direction, meritRank: merit, record, sources: [...s.sources] };
+    }));
+    // Earned merit leads (Apex→Sharp→Signal), then better graded record, then more calls.
+    const tierRank = { Apex: 3, Sharp: 2, Signal: 1 };
+    callers.sort((a, b) =>
+      (tierRank[b.meritRank?.tier] || 0) - (tierRank[a.meritRank?.tier] || 0) ||
+      ((b.record?.avgR ?? -99) - (a.record?.avgR ?? -99)) ||
+      ((b.record?.calls || 0) - (a.record?.calls || 0)));
+
+    return json({
+      coin, side, lean: Math.round(lean * 100) / 100,
+      longCount, shortCount, participants: live.length,
+      callers: callers.slice(0, 12),
+      criteria: {
+        note: "Credible callers positioned on this symbol RIGHT NOW — from currently-open positions (agents + opted-in humans) and active (unresolved, <14d) public calls. Direction + earned merit tier + graded record per caller; lean is merit-weighted (Apex 3 / Sharp 2 / Signal 1). A wallet on both sides of the symbol is voided. Recomputable from public price.",
+      },
+    }, request);
+  }
+
   // ── /theses/proof-of-edge — resolved calls as case studies ──
   // Borrowed framing (Quotient's "Proof of Edge"): trace RESOLVED public calls through
   // the thesis → the levels → the first-touch outcome, all in the public record. Ranked

@@ -272,6 +272,41 @@ export async function chartOverlays(coin: string): Promise<{ calls: CallMark[]; 
   return { calls, liq };
 }
 
+// ── verified callers positioned on THIS coin — the Spot "who's on it" strip. Reads the
+// worker's /theses/symbol/:coin (open positions + active public calls, merit-weighted, graded
+// record per caller — recomputable from public price). Only populates for a coin that maps to a
+// listed perp people have actually called; arbitrary CAs return nothing (fail-soft). Cached per
+// coin ~45s so re-renders don't refetch. This is the moat FOMO can't copy: not self-reported.
+export interface SymbolCaller {
+  wallet: string;
+  displayName: string | null;
+  pfp: string | null;
+  direction: "LONG" | "SHORT";
+  meritRank: { tier: string; title: string; glyph: string } | null;
+  record: { calls: number; winRate: number; avgR: number } | null;
+  sources: string[];
+}
+export interface SymbolCallers {
+  coin: string;
+  side: "LONG" | "SHORT" | "SPLIT";
+  lean: number;
+  longCount: number;
+  shortCount: number;
+  participants: number;
+  callers: SymbolCaller[];
+}
+const _callersCache = new Map<string, { at: number; data: SymbolCallers }>();
+export async function fetchSymbolCallers(coin: string): Promise<SymbolCallers | null> {
+  const sym = bareSym(coin);
+  if (!sym) return null;
+  const hit = _callersCache.get(sym);
+  if (hit && Date.now() - hit.at < 45000) return hit.data;
+  const j = (await getJson(`${AGENT_API}/theses/symbol/${encodeURIComponent(sym)}`)) as SymbolCallers | null;
+  if (!j || !Array.isArray(j.callers)) return hit?.data ?? null;
+  _callersCache.set(sym, { at: Date.now(), data: j });
+  return j;
+}
+
 // ── Spot TAKES — ungraded bull/bear conviction on a token, discussable (FOMO-style, but on
 // verifiable wallet identity). Firewalled server-side under takes:{chain}:{ca} — never touches
 // grading / the caller leaderboard / the ledger. Each take's `id` seeds a SocialBar (🔥 + comments).

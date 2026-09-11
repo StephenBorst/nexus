@@ -16,9 +16,9 @@ import { SectionHeader } from "@/pages/lab/components";
 import { FADE_FUNDING_FLOOR_PCT_YR } from "@/pages/lab/briefing";
 import {
   searchToken, poolCandles, poolTrades, orderlyPerpSet, nexusSignal, swapQuote, chartOverlays,
-  fetchTakes, postTake, deleteTake, fetchCallerMerit, fetchMovers,
+  fetchTakes, postTake, deleteTake, fetchCallerMerit, fetchMovers, fetchSymbolCallers,
   fmtUsd, fmtTapeUsd, fmtPrice, fmtAge, shortAddr,
-  type TokenPair, type Candle, type Trade, type NexusSignal, type SwapQuote, type CallMark, type LiqMap, type Take, type CallerMerit, type Mover,
+  type TokenPair, type Candle, type Trade, type NexusSignal, type SwapQuote, type CallMark, type LiqMap, type Take, type CallerMerit, type Mover, type SymbolCallers,
 } from "./data";
 import { SocialBar } from "@/components/SocialBar";
 import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
@@ -334,6 +334,51 @@ function MoversRail({ onPick }: { onPick: (sym: string) => void }) {
   );
 }
 
+// ── who's positioned on THIS coin — the moat FOMO can't copy ───────────────────
+// Not self-reported "I'm long": credible callers with an OPEN position or an active graded
+// call on this symbol right now, each with earned merit + graded record, and a merit-weighted
+// lean. Sits in the ◆ NEXUS sidebar for a listed market; renders nothing for an uncalled coin.
+function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCallers; onOpen: (wallet: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const rows = expanded ? data.callers : data.callers.slice(0, 5);
+  const leanColor = data.side === "LONG" ? POS : data.side === "SHORT" ? NEG : MUT;
+  const leanLabel = data.side === "SPLIT" ? "SPLIT" : `${Math.abs(Math.round(data.lean * 100))}% ${data.side}`;
+  const nCallers = data.participants;
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+        <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.14em", color: BRIGHT }}>◆ CALLERS ON ${coin}</span>
+        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: leanColor, background: leanColor + "14", border: `1px solid ${leanColor}44`, borderRadius: 5, padding: "2px 6px" }}>{leanLabel}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {rows.map((c) => {
+          const long = c.direction === "LONG";
+          return (
+            <button key={c.wallet} onClick={() => onOpen(c.wallet)} className="nx-card-interactive"
+              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: `1px solid ${BORD2}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer" }}>
+              {c.pfp
+                ? <img src={c.pfp} alt="" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                : <div style={{ width: 20, height: 20, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 9, color: MUT }}>{(c.displayName || c.wallet).slice(0, 1).toUpperCase()}</div>}
+              <span style={{ fontFamily: MONO, fontSize: 10.5, color: BRIGHT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 92 }}>{c.displayName || shortAddr(c.wallet)}</span>
+              {c.meritRank?.glyph && (
+                <span title={`${c.meritRank.title} caller`} style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, color: POS, flexShrink: 0 }}>{c.meritRank.glyph}</span>
+              )}
+              {c.record && (
+                <span style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT, flexShrink: 0, whiteSpace: "nowrap" }}>{c.record.winRate}% · {c.record.avgR >= 0 ? "+" : ""}{c.record.avgR}R</span>
+              )}
+              <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: long ? POS : NEG, background: (long ? POS : NEG) + "18", border: `1px solid ${(long ? POS : NEG)}44`, borderRadius: 5, padding: "2px 6px", flexShrink: 0 }}>{c.direction}</span>
+            </button>
+          );
+        })}
+      </div>
+      {data.callers.length > 5 && (
+        <button onClick={() => setExpanded((x) => !x)} style={{ width: "100%", marginTop: 8, background: "none", border: "none", color: MUT, fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.06em", cursor: "pointer", padding: "4px 0" }}>{expanded ? "show less ▴" : `+${data.callers.length - 5} more ▾`}</button>
+      )}
+      <div style={{ fontFamily: MONO, fontSize: 8, color: FAINT, marginTop: 8, lineHeight: 1.4 }}>{nCallers} positioned · open positions + active public calls, graded on public price</div>
+    </div>
+  );
+}
+
 // ── one header stat cell ──────────────────────────────────────────────────────
 function Stat({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
   return (
@@ -399,6 +444,9 @@ export default function TokenTerminal() {
   // Graded call markers + estimated liq for the chart — only for a LISTED perp (the Lab data).
   const [chartCalls, setChartCalls] = useState<CallMark[]>([]);
   const [chartLiq, setChartLiq] = useState<LiqMap | null>(null);
+  // Credible callers positioned on THIS coin (open positions + active public calls) — the ◆ NEXUS
+  // "who's on it" strip. Listed markets only (same honesty gate as the signal); null = render nothing.
+  const [callers, setCallers] = useState<SymbolCallers | null>(null);
 
   // Connected wallet → read-only spot holdings (no txs). Disconnected → no strip.
   const { state: acct } = useAccount();
@@ -495,6 +543,19 @@ export default function TokenTerminal() {
     let alive = true;
     chartOverlays(sym).then((o) => { if (alive) { setChartCalls(o.calls); setChartLiq(o.liq); } }).catch(() => { if (alive) { setChartCalls([]); setChartLiq(null); } });
     return () => { alive = false; };
+  }, [pair, perpSet]);
+
+  // ── callers positioned on this coin — the ◆ NEXUS "who's on it" strip (listed perps only) ──
+  // Same honesty gate as the signal: only a market we list has a caller graph to show. Polls 45s;
+  // fail-soft (an uncalled coin returns an empty list → the strip renders nothing).
+  useEffect(() => {
+    const sym = pair?.baseSymbol;
+    if (!sym || !perpSet.has(sym)) { setCallers(null); return; }
+    let alive = true;
+    const load = () => fetchSymbolCallers(sym).then((c) => { if (alive) setCallers(c); }).catch(() => { if (alive) setCallers(null); });
+    load();
+    const iv = setInterval(load, 45000);
+    return () => { alive = false; clearInterval(iv); };
   }, [pair, perpSet]);
 
   // ── TAKES for this token (fetched by chain+CA; firewalled from the graded boards) ──
@@ -1225,6 +1286,11 @@ export default function TokenTerminal() {
                   style={{ width: "100%", fontFamily: MONO, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.04em", color: BRIGHT, background: "none", border: `1px solid #ededf055`, borderRadius: 8, padding: "10px 0", cursor: "pointer" }}
                 >Ask Nexus about {pair.baseSymbol} →</button>
               </div>
+
+              {/* who's positioned on this coin — credible callers, graded, not self-reported */}
+              {isPerp && callers && callers.callers.length > 0 && (
+                <CallersStrip coin={pair.baseSymbol} data={callers} onOpen={(w) => navigate(`/trader/${w}`)} />
+              )}
 
               {/* trade panel — honest routing, no fake fills */}
               <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, padding: 14 }}>
