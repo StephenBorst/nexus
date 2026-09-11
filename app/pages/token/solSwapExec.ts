@@ -112,19 +112,33 @@ function resolveRpc(_provider: SolProvider): string {
   return SOL_RPC_PROXY;
 }
 
-// Confirm by POLLING getSignatureStatuses over HTTP (not conn.confirmTransaction, which opens a
-// WebSocket the /sol/rpc HTTP proxy doesn't serve). Throws on an on-chain error; returns false on a
-// pending timeout so the caller can surface the sig to watch rather than fake success.
-async function pollConfirm(conn: Connection, sig: string, timeoutMs = 45000): Promise<boolean> {
+// Confirm by POLLING getSignatureStatuses over HTTP via the RAW /sol/rpc proxy — NOT
+// conn.getSignatureStatuses (web3.js), which adds the `solana-client` header the CORS preflight
+// chokes on and, without searchTransactionHistory, misses a sig that aged out of the recent status
+// cache — so the modal sat on "confirming…" for the full timeout even though the tx had confirmed
+// (observed on a real Solana SELL). This is the SAME raw read path proven for balances. We pass
+// searchTransactionHistory so a just-confirmed sig is always found, and accept the rooted shape
+// (confirmations===null) from RPCs that omit confirmationStatus. Throws on a real on-chain error;
+// returns false only on a genuine pending timeout so the caller surfaces the sig rather than fake
+// success. NOT a swap guard — this runs AFTER signing, purely to report the outcome.
+async function pollConfirm(sig: string, timeoutMs = 45000): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    let status = null;
-    try { const r = await conn.getSignatureStatuses([sig]); status = r?.value?.[0] ?? null; } catch { status = null; }
-    if (status) {
-      if (status.err) throw new Error("Swap failed on-chain — nothing was swapped (only network fees).");
-      if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") return true;
+    try {
+      const r = await solRpcCall("getSignatureStatuses", [[sig], { searchTransactionHistory: true }]) as
+        { value?: Array<{ err: unknown; confirmationStatus?: string; confirmations?: number | null } | null> } | null;
+      const st = r?.value?.[0] ?? null;
+      if (st) {
+        if (st.err) throw new Error("Swap failed on-chain — nothing was swapped (only network fees).");
+        // Confirmed/finalized by status, or rooted (confirmations===null) on RPCs that omit the field.
+        // "processed" is deliberately NOT accepted — it can still be dropped.
+        if (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized" || st.confirmations === null) return true;
+      }
+    } catch (e) {
+      // A real on-chain failure propagates; a transient read error just keeps polling.
+      if ((e as Error)?.message?.includes("nothing was swapped")) throw e;
     }
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 1200));
   }
   return false;
 }
@@ -432,7 +446,7 @@ export async function executeSolBuy(provider: SolProvider, plan: SolBuyPlan, onS
   onStep("confirming on-chain…");
   // pollConfirm throws on a real on-chain error (→ surfaced as a revert); a pending timeout returns
   // false and we surface the sig to watch rather than claim a fake success.
-  const confirmed = await pollConfirm(conn, sig);
+  const confirmed = await pollConfirm(sig);
   return { sig, confirmed };
 }
 
