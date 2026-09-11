@@ -844,7 +844,7 @@ export default function TokenTerminal() {
   // a failed balance read is pinpointed on-device (502 = worker upstreams blocked → set SOLANA_RPC;
   // network/CORS = didn't reach the worker; 200 = proxy healthy). Never signs; read-only.
   useEffect(() => {
-    if (!isSolToken || !solSigner.address) { setSolRpcHealth(null); return; }
+    if (!import.meta.env.DEV || !isSolToken || !solSigner.address) { setSolRpcHealth(null); return; }
     let alive = true;
     (async () => {
       try {
@@ -1061,10 +1061,10 @@ export default function TokenTerminal() {
                   </div>
                 )}
 
-                {/* ◎ SOLANA SIGNER — live diagnostic readout. Shows for Solana tokens so the exact
-                    reason the in-app BUY card does/doesn't mount is visible on the device (I can't
-                    observe prod). Reports which source holds the signer + every canSolBuy gate. */}
-                {pair.chainId === "solana" && (
+                {/* ◎ SOLANA SIGNER — live diagnostic readout. DEV-ONLY (hidden on prod now that the
+                    buy works): reports which source holds the signer, the /sol/rpc health, balance,
+                    and every canSolBuy gate. Kept for local debugging; never shown to real users. */}
+                {import.meta.env.DEV && pair.chainId === "solana" && (
                   <div style={{ background: CARD, border: `1px solid ${canSolBuy ? "#3ecf8e55" : BORD}`, borderRadius: 10, padding: "11px 14px", marginBottom: 12 }}>
                     <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em", color: FAINT, textTransform: "uppercase", marginBottom: 6 }}>◎ Solana signer · live check</div>
                     <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUT, lineHeight: 1.65 }}>

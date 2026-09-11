@@ -181,25 +181,78 @@ async function quoteAndBuildGuarded(args: {
   return { tx, plan };
 }
 
-// 5) Simulate the tx and assert the fee payer's SOL delta doesn't exceed input + a fee/rent budget —
-// the real "no stray SOL past the wrap" guard, from simulated balance deltas (not lamport parsing).
+// Program ids for deriving the taker's output-token ATA (standard SPL Token; a Token-2022 mint yields
+// a different ATA than this derivation, so the guard below just fails open for those — never blocks).
+const SPL_TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+function deriveAta(mint: string, owner: string): string | null {
+  try {
+    const [ata] = PublicKey.findProgramAddressSync(
+      [new PublicKey(owner).toBuffer(), SPL_TOKEN_PROGRAM.toBuffer(), new PublicKey(mint).toBuffer()],
+      ATA_PROGRAM,
+    );
+    return ata.toBase58();
+  } catch { return null; }
+}
+// Decode an SPL token account's `amount` (u64 LE at byte offset 64) from base64 account data.
+function tokenAcctAmount(acct: unknown): number | null {
+  try {
+    const data = (acct as { data?: unknown })?.data;
+    const b64 = Array.isArray(data) ? (data[0] as string) : null;
+    if (!b64) return null;
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    if (bytes.length < 72) return null;
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    return Number(dv.getBigUint64(64, true));
+  } catch { return null; }
+}
+
+// 5) Simulate the tx and assert (a) the fee payer's SOL delta doesn't exceed input + a fee/rent budget
+// (the "no stray SOL past the wrap" guard) and (b) the taker's OUTPUT token account gains ≥ minOut.
+// Both from simulated post-state. (b) is defense-in-depth on top of the on-chain otherAmountThreshold
+// floor (which already reverts a short-fill), so it FAILS OPEN — any inability to compute it skips
+// rather than blocks a valid swap.
 async function simulateGuard(conn: Connection, tx: VersionedTransaction, plan: SolBuyPlan): Promise<void> {
   const takerPk = new PublicKey(plan.taker);
   let pre: number;
   try { pre = await conn.getBalance(takerPk, "processed"); } catch { throw new Error("Couldn't read your SOL balance — try again."); }
+
+  // Output-token ATA + its pre-balance (fail-open: unknown → 0, and the check below skips if unusable).
+  const outAta = deriveAta(plan.outputMint, plan.taker);
+  let preOut = 0;
+  if (outAta) {
+    try { const b = await solRpcCall("getTokenAccountBalance", [outAta]) as { value?: { amount?: string } }; preOut = Number(b?.value?.amount ?? 0) || 0; }
+    catch { preOut = 0; } // ATA doesn't exist yet → 0
+  }
+
   let sim;
   try {
-    sim = await conn.simulateTransaction(tx, { replaceRecentBlockhash: true, sigVerify: false, commitment: "processed", accounts: { encoding: "base64", addresses: [plan.taker] } });
+    sim = await conn.simulateTransaction(tx, { replaceRecentBlockhash: true, sigVerify: false, commitment: "processed", accounts: { encoding: "base64", addresses: outAta ? [plan.taker, outAta] : [plan.taker] } });
   } catch { throw new Error("Simulation failed to run — not signing."); }
   if (sim.value.err) throw new Error("Swap would fail on-chain (simulation reverted) — not signing.");
-  // The simulated post-balance of the fee payer. The most it may drop is the SOL we're spending plus
-  // a generous fee/rent budget (priority fee + ATA rent ≈ ≤ 0.02 SOL). More than that = a drain → refuse.
+
+  // (a) The simulated post-balance of the fee payer. The most it may drop is the SOL we're spending
+  // plus a fee/rent budget (priority fee + ATA rent ≈ ≤ 0.02 SOL). More than that = a drain → refuse.
   const acct = sim.value.accounts?.[0];
   if (acct && typeof acct.lamports === "number") {
     const post = acct.lamports;
     const drop = pre - post;
     const maxDrop = plan.lamports + 0.02 * LAMPORTS_PER_SOL;
     if (drop > maxDrop) throw new Error("Transaction would move more SOL than the swap — refused.");
+  }
+
+  // (b) Output-ATA gain ≥ minOut (fail-open). 1% tolerance absorbs sim/float noise; only our own
+  // "below the minimum" error propagates — any decode/shape issue defers to the on-chain floor.
+  try {
+    if (outAta && plan.minOut != null && plan.minOut > 0) {
+      const post = tokenAcctAmount(sim.value.accounts?.[1]);
+      if (post != null) {
+        const gained = post - preOut;
+        if (Number.isFinite(gained) && gained < plan.minOut * 0.99) throw new Error("Simulation delivers less than the minimum — refused.");
+      }
+    }
+  } catch (e) {
+    if ((e as Error)?.message?.includes("less than the minimum")) throw e;
   }
 }
 
