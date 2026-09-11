@@ -29,7 +29,12 @@ export function cors(request) {
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    // "*" (not just Content-Type): @solana/web3.js Connection adds a custom `solana-client`
+    // request header to every RPC POST, which forces a CORS preflight — with only Content-Type
+    // allowed the browser BLOCKED web3.js's getBalance/simulate/send/getSignatureStatuses to
+    // /sol/rpc while a plain fetch (Content-Type only) to the same URL returned 200. Requests are
+    // non-credentialed so "*" is honored as a wildcard; auth is body walletSig, never a header.
+    "Access-Control-Allow-Headers": "*",
     "Access-Control-Max-Age": "86400",
   };
 }

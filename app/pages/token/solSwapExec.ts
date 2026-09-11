@@ -237,16 +237,35 @@ export function solSlippagePct(outAmount: number | null, minOut: number | null):
 }
 export const solscanTx = (sig: string): string => `https://solscan.io/tx/${sig}`;
 
-// Ticket helpers (for the BUY panel's SOL-% chips + USD chips + est output). Fail-soft → nulls, so
-// the ticket degrades gracefully (no chips / no est) rather than breaking. Never touches signing.
-export async function getSolWalletContext(provider: SolProvider, pubkey: string): Promise<{ balanceSol: number | null; solUsd: number | null }> {
-  let balanceSol: number | null = null, solUsd: number | null = null;
-  if (!isSolAddr(pubkey)) return { balanceSol, solUsd };
+// Raw JSON-RPC straight to the /sol/rpc proxy — NOT web3.js Connection. web3.js adds a custom
+// `solana-client` request header that tripped the CORS preflight, so Connection.getBalance silently
+// failed while a plain fetch to the SAME URL returned 200. This is the ONE read path now. Throws with
+// an HTTP-status-tagged message so the caller can surface exactly what happened.
+export async function solRpcCall(method: string, params: unknown[]): Promise<unknown> {
+  const r = await fetch(SOL_RPC_PROXY, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  const txt = await r.text();
+  if (!r.ok) throw new Error(`HTTP ${r.status}${txt ? " " + txt.slice(0, 80) : ""}`);
+  let j: { result?: unknown; error?: unknown };
+  try { j = JSON.parse(txt); } catch { throw new Error(`bad json (HTTP ${r.status})`); }
+  if (j?.error) { const e = j.error as { message?: string }; throw new Error((typeof j.error === "string" ? j.error : e?.message || JSON.stringify(j.error)).slice(0, 80)); }
+  return j?.result;
+}
+
+// Ticket helpers (for the BUY panel's SOL-% chips + USD chips + est output). Balance is read via the
+// raw proxy call above; SOL/USD via the Jupiter proxy. Fail-soft → nulls (balanceErr carries the real
+// reason for the on-device diagnostic). Never touches signing.
+export async function getSolWalletContext(_provider: SolProvider, pubkey: string): Promise<{ balanceSol: number | null; solUsd: number | null; balanceErr: string | null }> {
+  let balanceSol: number | null = null, solUsd: number | null = null, balanceErr: string | null = null;
+  if (!isSolAddr(pubkey)) return { balanceSol, solUsd, balanceErr: "bad pubkey" };
   try {
-    const conn = new Connection(resolveRpc(provider), "confirmed");
-    const lamports = await conn.getBalance(new PublicKey(pubkey));
+    const res = await solRpcCall("getBalance", [pubkey]) as { value?: number } | number | null;
+    const lamports = Number((res as { value?: number })?.value ?? res); // {context,value} or a bare number
     if (Number.isFinite(lamports)) balanceSol = lamports / LAMPORTS_PER_SOL;
-  } catch { /* no balance → no %-chips */ }
+    else balanceErr = "no value in result";
+  } catch (e) { balanceErr = (e as Error)?.message?.slice(0, 80) || "read failed"; }
   try {
     // SOL/USD from a Jupiter quote (1 SOL → USDC), through the same worker proxy.
     const r = await fetch(`${JUP_QUOTE}?inputMint=${WSOL_MINT}&outputMint=${USDC_SOL_MINT}&amount=${LAMPORTS_PER_SOL}&slippageBps=50&swapMode=ExactIn`, { headers: { Accept: "application/json" } });
@@ -254,7 +273,7 @@ export async function getSolWalletContext(provider: SolProvider, pubkey: string)
     const out = Number(j?.outAmount);
     if (Number.isFinite(out) && out > 0) solUsd = out / 1e6;
   } catch { /* no price → no USD chips */ }
-  return { balanceSol, solUsd };
+  return { balanceSol, solUsd, balanceErr };
 }
 
 // Execute the plan: RE-FETCH a fresh swap tx (fresh blockhash) and RE-RUN every guard on the exact

@@ -622,6 +622,8 @@ export default function TokenTerminal() {
   const [solErr, setSolErr] = useState<string | null>(null);
   const [solDone, setSolDone] = useState<{ sig: string } | null>(null);
   const [solRpcHealth, setSolRpcHealth] = useState<string | null>(null); // raw /sol/rpc status (diagnostic)
+  const [solBalanceErr, setSolBalanceErr] = useState<string | null>(null); // why the balance read failed (diagnostic)
+  const SOL_BUILD = "solrpc-cors"; // build marker so a deploy can be confirmed on-device
   // Venue routing: a perp token can show BOTH — Long/Short on our book (showPerp) AND the spot
   // buy/sell panel (showSpot). A non-perp token is spot only. In-app fill is Fabric-on-EVM only.
   const showPerp = isPerp && venue === "perp";
@@ -833,8 +835,8 @@ export default function TokenTerminal() {
     if (!isSolToken || !solProvider || !solSigner.address) { setSolBalance(null); setSolUsd(null); return; }
     let alive = true;
     getSolWalletContext(solProvider, solSigner.address)
-      .then((c) => { if (alive) { setSolBalance(c.balanceSol); setSolUsd(c.solUsd); } })
-      .catch(() => { if (alive) { setSolBalance(null); setSolUsd(null); } });
+      .then((c) => { if (alive) { setSolBalance(c.balanceSol); setSolUsd(c.solUsd); setSolBalanceErr(c.balanceErr); } })
+      .catch((e) => { if (alive) { setSolBalance(null); setSolUsd(null); setSolBalanceErr((e as Error)?.message?.slice(0, 80) || "read failed"); } });
     return () => { alive = false; };
   }, [isSolToken, solSigner.address]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1070,8 +1072,8 @@ export default function TokenTerminal() {
                       <div>pubkey: <span style={{ color: BRIGHT, wordBreak: "break-all" }}>{solSigner.address ?? "—"}</span></div>
                       <div style={{ color: FAINT }}>orderly ns: {wcNamespace ?? "—"} · orderly-sol {_hasSolSigner(wc) ? "✓" : "✗"} · privy.SOL {_privyCtx.walletSOL ? "set" : "null"} · privy.allSOL {_privyCtx.allWalletsSOL?.length ?? 0}</div>
                       <div style={{ color: FAINT }}>gate: flag {SOL_INAPP_BUY ? "✓" : "✗"} · spot {showSpot ? "✓" : "✗"} · buy {side === "buy" ? "✓" : "✗"} · quote {swapState.kind === "quote" ? "✓" : swapState.kind} · router {quote?.router ?? "—"}</div>
-                      <div style={{ color: FAINT }}>balance: <span style={{ color: solBalance != null ? POS : NEG }}>{solBalance != null ? `${solBalance.toLocaleString("en-US", { maximumFractionDigits: 5 })} SOL` : "— (RPC read failed)"}</span>{solUsd != null ? ` · jup-proxy ✓ ($${solUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}/SOL)` : " · jup-proxy —"}</div>
-                      <div style={{ color: FAINT }}>/sol/rpc: <span style={{ color: solRpcHealth?.startsWith("200") ? POS : NEG }}>{solRpcHealth ?? "…"}</span></div>
+                      <div style={{ color: FAINT }}>balance: <span style={{ color: solBalance != null ? POS : NEG }}>{solBalance != null ? `${solBalance.toLocaleString("en-US", { maximumFractionDigits: 5 })} SOL` : `— ${solBalanceErr ?? "reading…"}`}</span>{solUsd != null ? ` · jup-proxy ✓ ($${solUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}/SOL)` : " · jup-proxy —"}</div>
+                      <div style={{ color: FAINT }}>/sol/rpc: <span style={{ color: solRpcHealth?.startsWith("200") ? POS : NEG }}>{solRpcHealth ?? "…"}</span> · build <span style={{ color: MUT }}>{SOL_BUILD}</span></div>
                       <div style={{ color: canSolBuy ? POS : NEG, fontWeight: 700, marginTop: 3 }}>canSolBuy: {canSolBuy ? "TRUE — Buy-with-SOL card should mount below ▾" : "false"}</div>
                     </div>
                     {!(solSigner.hasSign || solSigner.hasSend) && (
