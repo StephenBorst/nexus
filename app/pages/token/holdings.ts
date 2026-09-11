@@ -103,9 +103,14 @@ export function addRecent(address: string, token: RecentToken): void {
 export interface CostLot { ts: number; usd: number; tokens: number }
 const COST_KEY = (addr: string, chain: string, ca: string): string => `nexus_cost_${addr.toLowerCase()}_${chain}_${ca.toLowerCase()}`;
 const COST_CAP = 50;
+// Cost basis spans EVM (0x) AND Solana (base58) — an account/mint on either family is valid, so
+// an in-app fill is tracked regardless of chain (recents/probe stay EVM-only, isCa, by design). The
+// key lowercases consistently on read+write, so a case-sensitive base58 id is still a stable bucket.
+const isAcct = (s: unknown): s is string =>
+  typeof s === "string" && (/^0x[a-fA-F0-9]{40}$/.test(s) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s));
 
 export function getCostBasis(addr: string, chain: string, ca: string): CostLot[] {
-  if (!isCa(addr) || !isCa(ca)) return [];
+  if (!isAcct(addr) || !isAcct(ca)) return [];
   try {
     const raw = localStorage.getItem(COST_KEY(addr, chain, ca));
     if (!raw) return [];
@@ -115,9 +120,9 @@ export function getCostBasis(addr: string, chain: string, ca: string): CostLot[]
   } catch { return []; }
 }
 
-// Record one in-app buy lot (call ONLY after a confirmed status=1 buy). Newest first, capped.
+// Record one in-app buy lot (call ONLY after a confirmed buy). Newest first, capped.
 export function addCostLot(addr: string, chain: string, ca: string, lot: CostLot): void {
-  if (!isCa(addr) || !isCa(ca) || !(lot.usd > 0) || !(lot.tokens > 0)) return;
+  if (!isAcct(addr) || !isAcct(ca) || !(lot.usd > 0) || !(lot.tokens > 0)) return;
   try {
     const next = [lot, ...getCostBasis(addr, chain, ca)].slice(0, COST_CAP);
     localStorage.setItem(COST_KEY(addr, chain, ca), JSON.stringify(next));

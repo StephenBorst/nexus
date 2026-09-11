@@ -573,11 +573,8 @@ export default function TokenTerminal() {
     return () => { alive = false; };
   }, [pair?.baseAddress, pair?.chainId]);
 
-  // Your tracked cost basis (in-app buy lots) for this token — powers the position card + chart pins.
-  useEffect(() => {
-    if (!pair?.baseAddress || !wallet) { setCostLots([]); return; }
-    setCostLots(getCostBasis(wallet, pair.chainId, pair.baseAddress));
-  }, [pair?.baseAddress, pair?.chainId, wallet]);
+  // (Cost-basis load effect moved below — it needs the Solana signer address, which is resolved
+  // further down; see the "tracked cost basis" effect after the Solana balance read.)
 
   const submit = useCallback((q: string) => {
     const v = q.trim();
@@ -765,6 +762,10 @@ export default function TokenTerminal() {
   // Solana in-app SELL (token → USDC): same gates as the buy + a detected on-chain token balance (a
   // sell needs something to sell). holdsToken here resolves from the Solana balance via `held` above.
   const canInAppSolSell = SOL_INAPP_BUY && isSolToken && showSpot && side === "sell" && swapState.kind === "quote" && quote?.router === "Jupiter" && (solSigner.hasSign || solSigner.hasSend) && !!solSigner.address && holdsToken;
+  // The account that owns this token's tracked in-app fills: the Solana pubkey for a Solana token,
+  // else the EVM wallet. Cost basis is keyed by it so YOUR POSITION attaches fills on the RIGHT chain
+  // (a Solana buy was invisible before — it keyed off the null EVM wallet).
+  const costOwner = isSolToken ? solSigner.address : wallet;
   // ── Solana buy ticket: pay with SOL (Jupiter wraps it) or USDC. The SOL ticket keeps the SOL/USD
   // unit math; the USDC ticket types USDC directly. ──
   const solInputDesc: SolInput = solPayWith === "usdc" ? USDC_INPUT : SOL_INPUT;
@@ -1009,6 +1010,14 @@ export default function TokenTerminal() {
     return () => { alive = false; };
   }, [pair?.baseAddress, pair?.chainId, wallet, provider, isSolToken, isPerp, balNonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Your tracked cost basis (in-app buy lots) for this token — powers YOUR POSITION + chart pins.
+  // Keyed by costOwner (Solana pubkey or EVM wallet) so a fill on either chain attaches. Re-reads on
+  // token/owner change + after a confirmed swap (balNonce).
+  useEffect(() => {
+    if (!pair?.baseAddress || !costOwner) { setCostLots([]); return; }
+    setCostLots(getCostBasis(costOwner, pair.chainId, pair.baseAddress));
+  }, [pair?.baseAddress, pair?.chainId, costOwner, balNonce]);
+
   // Diagnostic: hit the worker /sol/rpc directly with a getBalance and report the RAW HTTP status, so
   // a failed balance read is pinpointed on-device (502 = worker upstreams blocked → set SOLANA_RPC;
   // network/CORS = didn't reach the worker; 200 = proxy healthy). Never signs; read-only.
@@ -1060,14 +1069,25 @@ export default function TokenTerminal() {
     if (!solPlan || !solProvider) return;
     setSolBusy(true); setSolErr(null); setSolStep("preparing…");
     try {
-      const { sig } = await executeSolBuy(solProvider, solPlan, setSolStep);
+      const { sig, confirmed } = await executeSolBuy(solProvider, solPlan, setSolStep);
       setSolDone({ sig });
       setBalNonce((n) => n + 1); // balances moved → re-read the ticket
+      // Record the buy lot (USD spent + tokens received) so YOUR POSITION attaches this fill — the
+      // Solana buy path recorded nothing before, so a Solana position always read "no buys tracked".
+      // USD: USDC input ≈ $; SOL input priced via solUsd. tokens: quote out / decimals.
+      if (confirmed && pair?.baseAddress && solSigner.address && solPlan.outAmount != null && solPlan.outDecimals != null) {
+        const tokens = solPlan.outAmount / 10 ** solPlan.outDecimals;
+        const usd = solPlan.inSym === "USDC" ? solPlan.inDisplay : (solUsd && solUsd > 0 ? solPlan.inDisplay * solUsd : 0);
+        if (usd > 0 && tokens > 0) {
+          addCostLot(solSigner.address, pair.chainId, pair.baseAddress, { ts: Date.now(), usd, tokens });
+          setCostLots(getCostBasis(solSigner.address, pair.chainId, pair.baseAddress));
+        }
+      }
     } catch (e) {
       const m = (e as Error)?.message || "swap failed";
       setSolErr(/user reject|denied|cancel|4001/i.test(m) ? "Cancelled in your wallet." : m);
     } finally { setSolBusy(false); setSolStep(""); }
-  }, [solPlan, solProvider]);
+  }, [solPlan, solProvider, pair, solSigner.address, solUsd]);
 
   // ── Solana in-app SELL (token → USDC). Same sell ticket the EVM path uses (sellAmt/sellMax/sellUnit);
   // planSolSell reads the balance + decimals FRESH and sizes the exact base-unit amount (MAX = whole
