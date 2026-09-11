@@ -485,6 +485,34 @@ export default function TraderPage() {
   const walletAddress = (accountState as { address?: string })?.address ?? null;
   const isOwn = walletAddress?.toLowerCase() === wallet?.toLowerCase();
 
+  // Follow graph — follow this caller so their next open pings you (LiveAlerts is follow-aware).
+  // Same server-side graph the Feed uses (/follows/:you); we hold the whole set and PUT it back so
+  // a toggle here never clobbers follows made elsewhere.
+  const [followSet, setFollowSet] = useState<Set<string>>(new Set());
+  const [followBusy, setFollowBusy] = useState(false);
+  const isFollowing = !!wallet && followSet.has(wallet.toLowerCase());
+  useEffect(() => {
+    if (!walletAddress) { setFollowSet(new Set()); return; }
+    let alive = true;
+    fetch(`${API_BASE}/follows/${walletAddress}`).then((r) => r.json())
+      .then((d: { following?: string[] }) => { if (alive) setFollowSet(new Set((d.following ?? []).map((w: string) => w.toLowerCase()))); })
+      .catch(() => { /* fail-soft */ });
+    return () => { alive = false; };
+  }, [walletAddress]);
+  async function toggleFollow() {
+    if (!walletAddress || !wallet || isOwn || followBusy) return;
+    const lw = wallet.toLowerCase();
+    const next = new Set(followSet);
+    if (next.has(lw)) next.delete(lw); else next.add(lw);
+    setFollowSet(next); // optimistic
+    setFollowBusy(true);
+    try {
+      await fetch(`${API_BASE}/follows/${walletAddress}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ following: [...next] }),
+      });
+    } catch { /* keep optimistic; a reload re-syncs from the server */ } finally { setFollowBusy(false); }
+  }
+
   // Fetch all public theses, filter to this wallet
   useEffect(() => {
     if (!wallet) return;
@@ -646,7 +674,21 @@ export default function TraderPage() {
         <div style={{ flex: 1, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#33333a", letterSpacing: "0.05em" }}>
           / TRADER
         </div>
-        {/* Header actions — one shared size so MESSAGE + SHARE read as a matched set. */}
+        {/* Header actions — one shared size so FOLLOW + MESSAGE + SHARE read as a matched set. */}
+        {walletAddress && !isOwn && wallet && (
+          <button
+            onClick={toggleFollow}
+            disabled={followBusy}
+            title={isFollowing ? "Unfollow — stop starred alerts when they open a position" : "Follow — their next open pings you in Live Alerts"}
+            style={{
+              background: isFollowing ? "#f5c45114" : "none", border: `1px solid ${isFollowing ? "#f5c451" : "#232327"}`, borderRadius: 4,
+              color: isFollowing ? "#f5c451" : "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10,
+              padding: "6px 14px", cursor: followBusy ? "default" : "pointer", letterSpacing: "0.05em", minWidth: 108,
+            }}
+          >
+            {isFollowing ? "★ FOLLOWING" : "☆ FOLLOW"}
+          </button>
+        )}
         <MessageTraderButton
           wallet={wallet}
           myWallet={walletAddress}

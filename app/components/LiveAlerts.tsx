@@ -3,28 +3,52 @@
 // we've already seen, and surfaces genuinely-new opens as in-app toasts +
 // (opt-in) OS notifications. Reuses existing data — no new backend, no push infra.
 // Mounted globally so alerts fire wherever you are in the app.
+//
+// Follow-aware: if you follow callers (the Feed follow graph, /follows/:wallet), a
+// followed caller's open gets a STARRED, prioritized toast that's never crowded out
+// by the general market pulse — so following actually DELIVERS alpha instead of just
+// filtering a tab. Follow no one and it's unchanged (all opens, pulse mode).
 import { useEffect, useRef, useState } from "react";
+import { useAccount } from "@orderly.network/hooks";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const green = "#ededf0";
 const red = "#f7525f";
+const star = "#f5c451"; // "someone you follow" accent — reads as a favorite, distinct from the pulse
 const NOTIF_KEY = "nexus_live_notif"; // "on" once the user enables OS notifications
 
 type LivePos = {
   wallet: string; agent: boolean; displayName: string | null;
   symbol: string; direction: "LONG" | "SHORT"; opened_at: number | null;
 };
-type Toast = { id: string; who: string; symbol: string; direction: "LONG" | "SHORT" };
+type Toast = { id: string; who: string; symbol: string; direction: "LONG" | "SHORT"; followed: boolean };
 
 const tk = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
 const shortAddr = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
 const keyOf = (p: LivePos) => `${p.wallet}|${p.symbol}|${p.opened_at ?? ""}`;
 
 export default function LiveAlerts() {
+  const { state: accountState } = useAccount();
+  const walletAddress = (accountState as { address?: string })?.address ?? null;
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [notif, setNotif] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(NOTIF_KEY) === "on");
   const [showEnable, setShowEnable] = useState(false);
   const seen = useRef<Set<string> | null>(null); // null until first load (don't alert the existing backlog)
+  // Who this wallet follows (lowercased). A ref so the position poll reads it without
+  // re-subscribing; refreshed on connect + every 90s so follows made this session count.
+  const followRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!walletAddress) { followRef.current = new Set(); return; }
+    let alive = true;
+    const load = () => fetch(`${API_BASE}/follows/${walletAddress}`)
+      .then((r) => r.json())
+      .then((d: { following?: string[] }) => { if (alive) followRef.current = new Set((d.following ?? []).map((w) => w.toLowerCase())); })
+      .catch(() => { /* fail-soft — no follow graph = pulse mode */ });
+    load();
+    const id = setInterval(load, 90000);
+    return () => { alive = false; clearInterval(id); };
+  }, [walletAddress]);
 
   useEffect(() => {
     let alive = true;
@@ -39,13 +63,21 @@ export default function LiveAlerts() {
         for (const k of keys) seen.current.add(k);
         if (!fresh.length) return;
         if (!window.localStorage.getItem(NOTIF_KEY)) setShowEnable(true); // nudge once there's activity
-        for (const p of fresh.slice(0, 3)) {
+        // Callers you follow lead and are never crowded out of the 3-per-tick budget.
+        const follows = followRef.current;
+        const tagged = fresh
+          .map((p) => ({ p, followed: follows.has(p.wallet.toLowerCase()) }))
+          .sort((a, b) => Number(b.followed) - Number(a.followed));
+        for (const { p, followed } of tagged.slice(0, 3)) {
           const who = p.agent ? "Nexus Agent" : (p.displayName || shortAddr(p.wallet));
           const id = `${keyOf(p)}-${Date.now()}`;
-          setToasts((t) => [{ id, who, symbol: p.symbol, direction: p.direction }, ...t].slice(0, 4));
-          setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 9000);
+          setToasts((t) => [{ id, who, symbol: p.symbol, direction: p.direction, followed }, ...t].slice(0, 4));
+          setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), followed ? 12000 : 9000);
           if (notif && typeof Notification !== "undefined" && Notification.permission === "granted") {
-            try { new Notification(`${who} opened ${p.direction} ${tk(p.symbol)}`, { body: "Tap to view on Nexus", icon: "/icon-1024.png" }); } catch { /* ignore */ }
+            try {
+              new Notification(`${followed ? "★ " : ""}${who} opened ${p.direction} ${tk(p.symbol)}`,
+                { body: followed ? "A caller you follow — tap to view" : "Tap to view on Nexus", icon: "/icon-1024.png" });
+            } catch { /* ignore */ }
           }
         }
       } catch { /* fail-soft */ }
@@ -79,11 +111,12 @@ export default function LiveAlerts() {
         <a
           key={t.id}
           href={`/perp/${t.symbol.startsWith("PERP_") ? t.symbol : `PERP_${t.symbol}_USDC`}`}
-          style={{ textDecoration: "none", background: "#141416", border: `1px solid ${t.direction === "LONG" ? "#33333a" : "#4a1e22"}`, borderRadius: 6, padding: "9px 11px", fontFamily: "var(--nx-font-mono)", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.5)" }}
+          style={{ textDecoration: "none", background: "#141416", border: `1px solid ${t.followed ? star : t.direction === "LONG" ? "#33333a" : "#4a1e22"}`, borderRadius: 6, padding: "9px 11px", fontFamily: "var(--nx-font-mono)", display: "flex", alignItems: "center", gap: 8, boxShadow: t.followed ? `0 4px 16px rgba(245,196,81,0.18)` : "0 4px 16px rgba(0,0,0,0.5)" }}
         >
-          <span style={{ fontSize: 13 }}>🔔</span>
+          <span style={{ fontSize: 13 }}>{t.followed ? "★" : "🔔"}</span>
           <span style={{ fontSize: 11, color: "#f4f4f5" }}>
-            <b style={{ color: "#fff" }}>{t.who}</b> opened{" "}
+            <b style={{ color: t.followed ? star : "#fff" }}>{t.who}</b>
+            {t.followed && <span style={{ color: "#71717a" }}> · following</span>} opened{" "}
             <b style={{ color: t.direction === "LONG" ? green : red }}>{t.direction === "LONG" ? "↑" : "↓"} {t.direction} {tk(t.symbol)}</b>
           </span>
         </a>
