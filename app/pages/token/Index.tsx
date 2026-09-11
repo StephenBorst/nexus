@@ -625,7 +625,8 @@ export default function TokenTerminal() {
   const [solErr, setSolErr] = useState<string | null>(null);
   const [solDone, setSolDone] = useState<{ sig: string } | null>(null);
   const [solRpcHealth, setSolRpcHealth] = useState<string | null>(null); // raw /sol/rpc status (diagnostic)
-  const [solBalanceErr, setSolBalanceErr] = useState<string | null>(null); // why the balance read failed (diagnostic)
+  const [solBalanceErr, setSolBalanceErr] = useState<string | null>(null); // why the SOL balance read failed (diagnostic)
+  const [solUsdcErr, setSolUsdcErr] = useState<string | null>(null);       // why the USDC balance read failed (diagnostic + card)
   const SOL_BUILD = "solrpc-cors"; // build marker so a deploy can be confirmed on-device
   // Venue routing: a perp token can show BOTH — Long/Short on our book (showPerp) AND the spot
   // buy/sell panel (showSpot). A non-perp token is spot only. In-app fill is Fabric-on-EVM only.
@@ -867,8 +868,8 @@ export default function TokenTerminal() {
     if (!isSolToken || !solProvider || !solSigner.address) { setSolBalance(null); setUsdcBal(null); setSolTokenBal(null); setSolUsd(null); return; }
     let alive = true;
     getSolWalletContext(solProvider, solSigner.address, pair?.baseAddress)
-      .then((c) => { if (alive) { setSolBalance(c.balanceSol); setUsdcBal(c.usdcBal); setSolTokenBal(c.tokenBal); setSolUsd(c.solUsd); setSolBalanceErr(c.balanceErr); } })
-      .catch((e) => { if (alive) { setSolBalance(null); setUsdcBal(null); setSolTokenBal(null); setSolUsd(null); setSolBalanceErr((e as Error)?.message?.slice(0, 80) || "read failed"); } });
+      .then((c) => { if (alive) { setSolBalance(c.balanceSol); setUsdcBal(c.usdcBal); setSolUsdcErr(c.usdcErr); setSolTokenBal(c.tokenBal); setSolUsd(c.solUsd); setSolBalanceErr(c.balanceErr); } })
+      .catch((e) => { if (alive) { setSolBalance(null); setUsdcBal(null); setSolUsdcErr((e as Error)?.message?.slice(0, 80) || "read failed"); setSolTokenBal(null); setSolUsd(null); setSolBalanceErr((e as Error)?.message?.slice(0, 80) || "read failed"); } });
     return () => { alive = false; };
   }, [isSolToken, solSigner.address, pair?.baseAddress]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1113,6 +1114,7 @@ export default function TokenTerminal() {
                       <div style={{ color: FAINT }}>orderly ns: {wcNamespace ?? "—"} · orderly-sol {_hasSolSigner(wc) ? "✓" : "✗"} · privy.SOL {_privyCtx.walletSOL ? "set" : "null"} · privy.allSOL {_privyCtx.allWalletsSOL?.length ?? 0}</div>
                       <div style={{ color: FAINT }}>gate: flag {SOL_INAPP_BUY ? "✓" : "✗"} · spot {showSpot ? "✓" : "✗"} · buy {side === "buy" ? "✓" : "✗"} · quote {swapState.kind === "quote" ? "✓" : swapState.kind} · router {quote?.router ?? "—"}</div>
                       <div style={{ color: FAINT }}>balance: <span style={{ color: solBalance != null ? POS : NEG }}>{solBalance != null ? `${solBalance.toLocaleString("en-US", { maximumFractionDigits: 5 })} SOL` : `— ${solBalanceErr ?? "reading…"}`}</span>{solUsd != null ? ` · jup-proxy ✓ ($${solUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}/SOL)` : " · jup-proxy —"}</div>
+                      <div style={{ color: FAINT }}>usdc: <span style={{ color: usdcBal != null ? POS : NEG }}>{usdcBal != null ? `${usdcBal.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC` : `— ${solUsdcErr ?? "reading…"}`}</span></div>
                       <div style={{ color: FAINT }}>/sol/rpc: <span style={{ color: solRpcHealth?.startsWith("200") ? POS : NEG }}>{solRpcHealth ?? "…"}</span> · build <span style={{ color: MUT }}>{SOL_BUILD}</span></div>
                       <div style={{ color: canSolBuy ? POS : NEG, fontWeight: 700, marginTop: 3 }}>canSolBuy: {canSolBuy ? "TRUE — Buy-with-SOL card should mount below ▾" : "false"}</div>
                     </div>
@@ -1390,7 +1392,8 @@ export default function TokenTerminal() {
                             </button>
                           );
                         })()}
-                        {solInputHuman > 0 && (solPayWith === "usdc" ? (usdcBal == null || solBalance == null) : !solBalanceKnown) && <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT, marginTop: 6, textAlign: "center" }}>reading balance…</div>}
+                        {solInputHuman > 0 && (solPayWith === "usdc" ? (usdcBal == null && !solUsdcErr) || solBalance == null : !solBalanceKnown) && <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT, marginTop: 6, textAlign: "center" }}>reading balance…</div>}
+                        {solPayWith === "usdc" && usdcBal == null && solUsdcErr && <div style={{ fontFamily: MONO, fontSize: 9.5, color: NEG, marginTop: 6, textAlign: "center", wordBreak: "break-word" }}>USDC read failed: {solUsdcErr}</div>}
                         {solErr && !solModalOpen && <div style={{ fontFamily: MONO, fontSize: 10, color: NEG, marginTop: 7, textAlign: "center" }}>{solErr}</div>}
                       </div>
                     )}
