@@ -196,6 +196,14 @@ export function optimisticHolding(sym: string, chain: string, address: string, r
   return { sym, chain, amount, usd, address, amountLabel: fmtAmount(amount), usdLabel: usd != null ? fmtUsd(usd) : "—" };
 }
 
+// Build a Holding from an already-known human amount (a provider balanceOf on a chain the sweep can't
+// reach — e.g. Robinhood 4663 — or a Solana token balance). Same label formatting as the swept rows so
+// the strip + SELL ticket render identically regardless of source. usd is null when no price is known.
+export function makeHolding(sym: string, chain: string, address: string | null, amount: number, priceUsd: number | null): Holding {
+  const usd = priceUsd != null && Number.isFinite(priceUsd) && priceUsd > 0 ? amount * priceUsd : null;
+  return { sym, chain, amount, usd, address, amountLabel: fmtAmount(amount), usdLabel: usd != null ? fmtUsd(usd) : "—" };
+}
+
 // Read the connected EVM wallet's spot balances (curated ∪ this wallet's recents) across
 // supported chains. Read-only — no txs, no signing.
 export async function fetchHoldings(address: string): Promise<Holding[]> {

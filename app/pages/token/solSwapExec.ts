@@ -1,9 +1,13 @@
-// ── Spot in-app SWAP EXECUTION (SOLANA · Jupiter · BUY only) ──────────────────────────────────
+// ── Spot in-app SWAP EXECUTION (SOLANA · Jupiter · BUY + SELL) ──────────────────────────────────
 // The Solana sibling of swapExec.ts (EVM/Fabric). The ONE place the Solana path signs. Deliberately
 // narrow and single-purpose:
 //
-//   • BUY only, same-chain: native SOL → the token's mint (wSOL in, wrapAndUnwrapSol handled by
-//     Jupiter). No SELL, no token→token, no LiFi, no bridge.
+//   • BUY: native SOL or USDC → the token's mint (wSOL in, wrapAndUnwrapSol handled by Jupiter).
+//     SELL: the token's mint → USDC (no wrap — neither side is native SOL). Both same-chain. No
+//     token→token beyond that, no LiFi, no bridge. SELL is the exact INVERSE of a USDC-input buy —
+//     it runs the SAME guards (quoteAndBuildGuarded + simulateGuard), which are direction-agnostic:
+//     inputMint≠wSOL ⇒ wrapAndUnwrapSol:false and solSpent:0, so the SOL-delta ceiling permits only
+//     fees/rent to leave SOL, and the output-ATA≥minOut check simply lands on the USDC ATA.
 //   • Signer comes from the EXISTING tree — the app is Privy-based, so a connected Solana wallet is
 //     exposed as useWalletConnector().wallet.provider with { signTransaction, sendTransaction,
 //     network, rpcUrl }. We add NO second WalletProvider and NO wallet-adapter dep.
@@ -117,7 +121,7 @@ async function pollConfirm(conn: Connection, sig: string, timeoutMs = 45000): Pr
     let status = null;
     try { const r = await conn.getSignatureStatuses([sig]); status = r?.value?.[0] ?? null; } catch { status = null; }
     if (status) {
-      if (status.err) throw new Error("Swap failed on-chain — nothing was bought (only network fees).");
+      if (status.err) throw new Error("Swap failed on-chain — nothing was swapped (only network fees).");
       if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") return true;
     }
     await new Promise((r) => setTimeout(r, 1500));
@@ -345,6 +349,26 @@ export async function splBalanceOwned(pubkey: string, mint: string): Promise<{ b
   } catch (e) { return { bal: null, err: (e as Error)?.message?.slice(0, 80) || "read failed" }; }
 }
 
+// SPL balance in BASE UNITS (+ the mint's decimals) — what a SELL sizes against. uiAmount (a float) is
+// fine to DISPLAY but a SELL needs the exact integer to sell the whole balance without a float that
+// overshoots/reverts, so this reads tokenAmount.amount (base-unit string) + decimals. Sums matching
+// accounts (usually one ATA). raw:0 when none held; err set on a real RPC failure.
+export async function splBalanceRaw(pubkey: string, mint: string): Promise<{ raw: number; decimals: number | null; err: string | null }> {
+  try {
+    const r = await solRpcCall("getTokenAccountsByOwner", [pubkey, { mint }, { encoding: "jsonParsed" }]) as
+      { value?: Array<{ account?: { data?: { parsed?: { info?: { tokenAmount?: { amount?: string; decimals?: number } } } } } }> } | null;
+    const accts = Array.isArray(r?.value) ? r!.value : [];
+    let raw = 0; let decimals: number | null = null;
+    for (const a of accts) {
+      const ta = a?.account?.data?.parsed?.info?.tokenAmount;
+      const amt = Number(ta?.amount);
+      if (Number.isFinite(amt)) raw += amt;
+      if (decimals == null && Number.isInteger(ta?.decimals)) decimals = ta!.decimals as number;
+    }
+    return { raw, decimals, err: null };
+  } catch (e) { return { raw: 0, decimals: null, err: (e as Error)?.message?.slice(0, 80) || "read failed" }; }
+}
+
 // Ticket helpers (for the BUY panel's SOL-% chips + USD chips + est output). Balance is read via the
 // raw proxy call above; SOL/USD via the Jupiter proxy. Fail-soft → nulls (balanceErr carries the real
 // reason for the on-device diagnostic). Never touches signing.
@@ -411,3 +435,48 @@ export async function executeSolBuy(provider: SolProvider, plan: SolBuyPlan, onS
   const confirmed = await pollConfirm(conn, sig);
   return { sig, confirmed };
 }
+
+// A Solana SELL plan is the same shape as a buy plan — only the mints are inverted (inputMint = the
+// token, outputMint = USDC). The alias documents intent at call sites.
+export type SolSwapPlan = SolBuyPlan;
+
+// SELL: the token's mint → USDC. The exact inverse of a USDC-input buy, sized off the FRESH on-chain
+// token balance in base units (100%/over → the whole balance, never a float that overshoots). Reuses
+// quoteAndBuildGuarded (binds input=the token / output=USDC; wrapAndUnwrapSol:false; solSpent:0) so it
+// carries the identical guards as a buy. Fail-soft: throws → the "Swap via Jupiter" deep-link.
+export async function planSolSell(tokenMint: string, tokenSym: string, req: { pct?: number; amountStr?: string }, taker: string, provider: SolProvider, slippageBps = 100): Promise<SolSwapPlan> {
+  if (!isSolAddr(tokenMint)) throw new Error("Bad token mint.");
+  if (!isSolAddr(taker)) throw new Error("Connect a Solana wallet to swap in-app.");
+  if (tokenMint === USDC_SOL_MINT) throw new Error("That's already USDC.");
+  // Fresh on-chain balance + decimals — a SELL is sized off the chain, never a cached float.
+  const { raw, decimals, err } = await splBalanceRaw(taker, tokenMint);
+  if (err) throw new Error("Couldn't read your balance — try again or use the deep-link.");
+  if (decimals == null) throw new Error("Couldn't read this token — sell via the deep-link.");
+  if (!(raw > 0)) throw new Error("You don't hold this token to sell.");
+  if (raw > Number.MAX_SAFE_INTEGER) throw new Error("Balance too large for the in-app sell — use the deep-link.");
+  // Integer base-unit math, ALWAYS bounded by the live balance (100%/over-amount → the exact whole balance).
+  let inAmount: number;
+  if (req.pct != null) {
+    const p = Math.round(req.pct);
+    if (!(p >= 1 && p <= 100)) throw new Error("Pick how much to sell.");
+    inAmount = p >= 100 ? raw : Math.floor((raw * p) / 100);
+  } else if (req.amountStr != null) {
+    const wanted = Math.floor((parseFloat(req.amountStr) || 0) * 10 ** decimals);
+    if (!(wanted > 0)) throw new Error("Enter an amount to sell.");
+    inAmount = wanted > raw ? raw : wanted; // clamp to holdings — a stale price can never oversell
+  } else {
+    throw new Error("Pick how much to sell.");
+  }
+  if (!(inAmount > 0)) throw new Error("That amount rounds to zero — enter a larger amount.");
+  const cappedBps = Math.min(Math.max(1, Math.round(slippageBps)), MAX_SLIPPAGE_BPS);
+  const { plan } = await quoteAndBuildGuarded({
+    inputMint: tokenMint, inSym: tokenSym, inDecimals: decimals, inAmount,
+    outputMint: USDC_SOL_MINT, taker, slippageBps: cappedBps, provider, outSym: "USDC", outDecimals: 6,
+  });
+  return plan;
+}
+
+// Execute a SELL. The executor is entirely plan-driven and direction-agnostic (it re-fetches fresh
+// bytes for plan.inputMint→plan.outputMint, re-runs every guard, simulates, then signs), so a SELL
+// plan runs the EXACT same audited path as a buy — hence a thin alias rather than a second signer.
+export const executeSolSell = executeSolBuy;

@@ -104,6 +104,28 @@ async function readBalanceOf(provider: Eip1193, token: string, owner: string): P
   return ethCall(provider, token, encBalanceOf(owner));
 }
 
+// Current-token balance for the SELL ticket, read through the connected wallet's own provider — so it
+// works on ANY EVM chain the wallet is on, INCLUDING ones the curated holdings sweep (Base/Arb only)
+// can't reach, e.g. Robinhood Chain (4663). We first verify the wallet is actually ON `expectedChainId`
+// (eth_chainId): reading balanceOf while the wallet sits on a different chain would return a misleading
+// 0, so a chain mismatch returns { onChain:false } (the ticket can prompt a switch) rather than a false
+// "no balance." Read-only; the SELL exec still reads balance FRESH again at plan time (planSell) — this
+// is purely to mount + size the ticket. Fail-soft → null (unknown; ticket falls back to the deep-link).
+export async function readWalletTokenBalance(
+  provider: Eip1193, token: string, owner: string, expectedChainId: number,
+): Promise<{ raw: bigint; decimals: number; amount: number; onChain: true } | { onChain: false } | null> {
+  if (!isAddr(token) || !isAddr(owner)) return null;
+  try {
+    const cur = (await provider.request({ method: "eth_chainId" })) as string;
+    if (typeof cur !== "string" || BigInt(cur) !== BigInt(expectedChainId)) return { onChain: false };
+  } catch { return null; }
+  const [raw, decimals] = await Promise.all([readBalanceOf(provider, token, owner), readDecimals(provider, token)]);
+  if (raw == null || decimals == null) return null;
+  const amount = Number(raw) / 10 ** decimals;
+  if (!Number.isFinite(amount)) return null;
+  return { raw, decimals, amount, onChain: true };
+}
+
 // Input stablecoin by DexScreener chainId → numeric chainId + address + symbol. Mirrors the preview
 // map in data.ts; kept here so the executable path never guesses a token address. This token is the
 // input of a BUY and the OUTPUT of a SELL. `sym` drives the modal label. On Robinhood Chain (4663)

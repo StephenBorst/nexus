@@ -21,9 +21,9 @@ import {
   type TokenPair, type Candle, type Trade, type NexusSignal, type SwapQuote, type CallMark, type LiqMap, type Take, type CallerMerit, type Mover, type SymbolCallers,
 } from "./data";
 import { SocialBar } from "@/components/SocialBar";
-import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
-import { planBuy, planSell, executeSwap, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, type SwapPlan, type Eip1193 } from "./swapExec";
-import { planSolBuy, executeSolBuy, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
+import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, makeHolding, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
+import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, type SwapPlan, type Eip1193 } from "./swapExec";
+import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
 // EVM slot). The Privy connector exposes walletEVM/walletSOL separately — walletSOL carries the Solana
@@ -715,8 +715,14 @@ export default function TokenTerminal() {
   const [solBalance, setSolBalance] = useState<number | null>(null); // wallet SOL balance (for 25/50/MAX)
   const [usdcBal, setUsdcBal] = useState<number | null>(null);       // wallet USDC balance (for the USDC ticket)
   const [solTokenBal, setSolTokenBal] = useState<number | null>(null); // current Solana token balance (YOUR WALLET chip)
+  // Current EVM token balance for the SELL ticket, read via the wallet provider so it works on chains
+  // the Base/Arb holdings sweep can't reach (e.g. Robinhood 4663). onChain:false = wallet is on another
+  // network (prompt a switch, don't show a false "no balance").
+  const [evmTokenBal, setEvmTokenBal] = useState<{ amount: number; onChain: boolean } | null>(null);
+  const [balNonce, setBalNonce] = useState(0); // bump to force a balance re-read after a confirmed swap
   const [solUsd, setSolUsd] = useState<number | null>(null);         // USD per SOL (for USD chips + est out)
   const [solPlan, setSolPlan] = useState<SolBuyPlan | null>(null);
+  const [solPlanDir, setSolPlanDir] = useState<"buy" | "sell">("buy"); // which flow built solPlan (drives modal copy + confirm)
   const [solModalOpen, setSolModalOpen] = useState(false);
   const [solPlanning, setSolPlanning] = useState(false);
   const [solBusy, setSolBusy] = useState(false);
@@ -733,19 +739,32 @@ export default function TokenTerminal() {
   const showSpot = !isPerp || venue === "spot";
   const fabricEvm = swapState.kind === "quote" && quote?.router === "Fabric" && !!wallet && !!provider;
   const canInAppBuy = showSpot && side === "buy" && fabricEvm;
-  // The wallet's on-chain holding of THIS token (from the balance strip) — a SELL needs it.
+  const isSolToken = pair?.chainId === "solana";
+  // The wallet's on-chain holding of THIS token — a SELL needs it to mount + size. Resolved from ALL
+  // sources so the ticket sees last night's fills regardless of chain: (1) the curated/recents sweep
+  // (Base/Arb), (2) the Solana token balance, (3) an EVM provider read for chains the sweep can't
+  // reach (Robinhood 4663). The SELL exec re-reads balance FRESH at plan time regardless — this only
+  // decides the ticket.
   const held = useMemo(() => {
     const ca = pair?.baseAddress?.toLowerCase();
     if (!ca || !pair) return undefined;
-    return holdings.find((h) => (h.address || "").toLowerCase() === ca && h.chain === pair.chainId);
-  }, [holdings, pair]);
+    const swept = holdings.find((h) => (h.address || "").toLowerCase() === ca && h.chain === pair.chainId);
+    if (swept) return swept;
+    if (isSolToken && solTokenBal != null && solTokenBal > 0)
+      return makeHolding(pair.baseSymbol, "solana", pair.baseAddress, solTokenBal, pair.priceUsd ?? null);
+    if (!isSolToken && evmTokenBal?.onChain && evmTokenBal.amount > 0)
+      return makeHolding(pair.baseSymbol, pair.chainId, pair.baseAddress, evmTokenBal.amount, pair.priceUsd ?? null);
+    return undefined;
+  }, [holdings, pair, isSolToken, solTokenBal, evmTokenBal]);
   const holdsToken = !!held && held.amount > 0;
   const canInAppSell = showSpot && side === "sell" && fabricEvm && holdsToken;
   const isSpotSell = showSpot && side === "sell";
   // Solana in-app BUY availability: flag on · Solana token · spot BUY · a Jupiter quote · a reachable
   // Solana signer + pubkey. Everything else (EVM, no signer, flag off) keeps the "Swap via Jupiter" deep-link.
-  const isSolToken = pair?.chainId === "solana";
   const canSolBuy = SOL_INAPP_BUY && isSolToken && showSpot && side === "buy" && swapState.kind === "quote" && quote?.router === "Jupiter" && (solSigner.hasSign || solSigner.hasSend) && !!solSigner.address;
+  // Solana in-app SELL (token → USDC): same gates as the buy + a detected on-chain token balance (a
+  // sell needs something to sell). holdsToken here resolves from the Solana balance via `held` above.
+  const canInAppSolSell = SOL_INAPP_BUY && isSolToken && showSpot && side === "sell" && swapState.kind === "quote" && quote?.router === "Jupiter" && (solSigner.hasSign || solSigner.hasSend) && !!solSigner.address && holdsToken;
   // ── Solana buy ticket: pay with SOL (Jupiter wraps it) or USDC. The SOL ticket keeps the SOL/USD
   // unit math; the USDC ticket types USDC directly. ──
   const solInputDesc: SolInput = solPayWith === "usdc" ? USDC_INPUT : SOL_INPUT;
@@ -775,6 +794,10 @@ export default function TokenTerminal() {
   const solPlanNeed = solPlan ? solPlan.inDisplay + (solPlanIsUsdc ? 0 : SOL_FEE_BUFFER) : null;
   const solPlanFeeOk = !solPlan || !solPlanIsUsdc ? true : (solBalance != null && solBalance >= SOL_FEE_RESERVE);
   const solPlanAffordable = solPlanBal != null && solPlanNeed != null && solPlanNeed <= solPlanBal && solPlanFeeOk;
+  // SELL affordability: the token amount is pre-clamped to the on-chain balance (planSolSell), so the
+  // only gate is enough SOL for network fees. solModalAffordable unifies the Confirm gate for both dirs.
+  const solSellFeeOk = solBalance != null && solBalance >= SOL_FEE_RESERVE;
+  const solModalAffordable = solPlanDir === "sell" ? solSellFeeOk : solPlanAffordable;
   // The token quantity a SELL resolves to, in EITHER unit (MAX = whole balance; USD = $/price).
   const sellPrice = pair?.priceUsd || 0;
   const sellTokens = sellMax && held ? held.amount
@@ -911,6 +934,7 @@ export default function TokenTerminal() {
           addRecent(wallet, { ca: plan.tokenOut, sym: plan.outSym, chain: pair.chainId, decimals: plan.decimalsOut });
         }
         fetchHoldings(wallet).then(setHoldings).catch(() => { /* keep what's shown */ });
+        setBalNonce((n) => n + 1); // re-read the current-token provider balance too (covers 4663)
       }
     } catch (e) {
       const m = (e as Error)?.message || "swap failed";
@@ -970,7 +994,20 @@ export default function TokenTerminal() {
       .then((c) => { if (alive) { setSolBalance(c.balanceSol); setUsdcBal(c.usdcBal); setSolUsdcErr(c.usdcErr); setSolTokenBal(c.tokenBal); setSolUsd(c.solUsd); setSolBalanceErr(c.balanceErr); } })
       .catch((e) => { if (alive) { setSolBalance(null); setUsdcBal(null); setSolUsdcErr((e as Error)?.message?.slice(0, 80) || "read failed"); setSolTokenBal(null); setSolUsd(null); setSolBalanceErr((e as Error)?.message?.slice(0, 80) || "read failed"); } });
     return () => { alive = false; };
-  }, [isSolToken, solSigner.address, pair?.baseAddress]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSolToken, solSigner.address, pair?.baseAddress, balNonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Current EVM token balance for the SELL ticket via the wallet provider — covers chains the Base/Arb
+  // sweep can't (Robinhood 4663). Only for a Fabric-supported EVM chain (EVM_USDC), a connected wallet,
+  // and a non-perp token. Read-only; fail-soft → null. Re-reads on token/wallet change + after a swap.
+  useEffect(() => {
+    const evm = pair ? EVM_USDC[pair.chainId] : undefined;
+    if (isSolToken || isPerp || !pair?.baseAddress || !wallet || !provider || !evm) { setEvmTokenBal(null); return; }
+    let alive = true;
+    readWalletTokenBalance(provider, pair.baseAddress, wallet, evm.chainId)
+      .then((r) => { if (!alive) return; setEvmTokenBal(r == null ? null : r.onChain ? { amount: r.amount, onChain: true } : { amount: 0, onChain: false }); })
+      .catch(() => { if (alive) setEvmTokenBal(null); });
+    return () => { alive = false; };
+  }, [pair?.baseAddress, pair?.chainId, wallet, provider, isSolToken, isPerp, balNonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Diagnostic: hit the worker /sol/rpc directly with a getBalance and report the RAW HTTP status, so
   // a failed balance read is pinpointed on-device (502 = worker upstreams blocked → set SOLANA_RPC;
@@ -1013,7 +1050,7 @@ export default function TokenTerminal() {
     setSolPlanning(true);
     try {
       const p = await planSolBuy(pair.baseAddress, pair.baseSymbol, solInputDesc, amt, solSigner.address, solProvider);
-      setSolPlan(p); setSolModalOpen(true);
+      setSolPlan(p); setSolPlanDir("buy"); setSolModalOpen(true);
     } catch (e) {
       setSolErr((e as Error)?.message || "Couldn't build the swap — use the deep-link.");
     } finally { setSolPlanning(false); }
@@ -1025,6 +1062,42 @@ export default function TokenTerminal() {
     try {
       const { sig } = await executeSolBuy(solProvider, solPlan, setSolStep);
       setSolDone({ sig });
+      setBalNonce((n) => n + 1); // balances moved → re-read the ticket
+    } catch (e) {
+      const m = (e as Error)?.message || "swap failed";
+      setSolErr(/user reject|denied|cancel|4001/i.test(m) ? "Cancelled in your wallet." : m);
+    } finally { setSolBusy(false); setSolStep(""); }
+  }, [solPlan, solProvider]);
+
+  // ── Solana in-app SELL (token → USDC). Same sell ticket the EVM path uses (sellAmt/sellMax/sellUnit);
+  // planSolSell reads the balance + decimals FRESH and sizes the exact base-unit amount (MAX = whole
+  // balance). Guards are the buy's, inverted. Fail-soft → the deep-link. ──
+  const openSolSell = useCallback(async () => {
+    setSolErr(null); setSolDone(null);
+    if (!pair?.baseAddress || !solProvider || !solSigner.address) return;
+    if (!holdsToken) { setSolErr("You don't hold this token to sell."); return; }
+    // A sell still pays network fees in SOL — refuse over an unread or too-thin SOL balance.
+    if (solBalance != null && solBalance < SOL_FEE_RESERVE) { setSolErr(`Need ~${SOL_FEE_RESERVE} SOL for network fees to sell.`); return; }
+    const price = pair.priceUsd || 0;
+    const tokens = sellUnit === "usd" ? (price > 0 ? (parseFloat(sellAmt) || 0) / price : 0) : (parseFloat(sellAmt) || 0);
+    if (!sellMax && !(tokens > 0)) { setSolErr(sellUnit === "usd" && price <= 0 ? "No price to size a USD sell — switch to token amount." : "Enter an amount to sell."); return; }
+    const req = sellMax ? { pct: 100 } : { amountStr: sellUnit === "usd" ? tokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : sellAmt };
+    setSolPlanning(true);
+    try {
+      const p = await planSolSell(pair.baseAddress, pair.baseSymbol, req, solSigner.address, solProvider);
+      setSolPlan(p); setSolPlanDir("sell"); setSolModalOpen(true);
+    } catch (e) {
+      setSolErr((e as Error)?.message || "Couldn't build the sell — use the deep-link.");
+    } finally { setSolPlanning(false); }
+  }, [pair, solProvider, solSigner.address, sellAmt, sellMax, sellUnit, holdsToken, solBalance, SOL_FEE_RESERVE]);
+
+  const confirmSolSell = useCallback(async () => {
+    if (!solPlan || !solProvider) return;
+    setSolBusy(true); setSolErr(null); setSolStep("preparing…");
+    try {
+      const { sig } = await executeSolSell(solProvider, solPlan, setSolStep);
+      setSolDone({ sig });
+      setBalNonce((n) => n + 1); // token balance dropped, USDC rose → re-read the ticket
     } catch (e) {
       const m = (e as Error)?.message || "swap failed";
       setSolErr(/user reject|denied|cancel|4001/i.test(m) ? "Cancelled in your wallet." : m);
@@ -1036,8 +1109,9 @@ export default function TokenTerminal() {
     setSolModalOpen(false); setSolPlan(null); setSolErr(null); setSolDone(null);
   }, [solBusy]);
 
-  // A changed token/amount invalidates a captured Solana plan.
-  useEffect(() => { setSolModalOpen(false); setSolPlan(null); setSolErr(null); setSolDone(null); }, [pair?.baseAddress, solAmt, solPayWith]);
+  // A changed token/amount invalidates a captured Solana plan (buy inputs solAmt/solPayWith, sell
+  // inputs sellAmt/sellMax) so the modal never signs a plan that no longer matches the ticket.
+  useEffect(() => { setSolModalOpen(false); setSolPlan(null); setSolErr(null); setSolDone(null); }, [pair?.baseAddress, solAmt, solPayWith, sellAmt, sellMax]);
 
   const pageMeta = getPageMeta();
   const pageTitle = generatePageTitle(pair ? `${pair.baseSymbol} · Spot` : "Spot");
@@ -1432,6 +1506,16 @@ export default function TokenTerminal() {
                         </a>
                       </>
                     )}
+                    {/* ◎ Solana in-app SELL (Jupiter, token → USDC) — mirrors the EVM sell button. The
+                        sell ticket above (amount/chips) is shared; this just signs it. The bright Jupiter
+                        deep-link below stays as the fallback (same pattern as the Solana buy). */}
+                    {side === "sell" && canInAppSolSell && (
+                      <button onClick={openSolSell} disabled={solPlanning}
+                        style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "#fff", background: NEG, border: "none", borderRadius: 9, padding: "13px 0", cursor: solPlanning ? "wait" : "pointer", opacity: solPlanning ? 0.7 : 1 }}>
+                        {solPlanning ? "Building route…" : `Sell ${pair.baseSymbol} → USDC in-app →`}
+                      </button>
+                    )}
+                    {side === "sell" && canInAppSolSell && solErr && !solModalOpen && <div style={{ fontFamily: MONO, fontSize: 10, color: NEG, marginTop: 7, textAlign: "center" }}>{solErr}</div>}
                     {/* ◎ Solana in-app BUY (Jupiter) — additive; the deep-link below stays. Mounts on
                         signer + Jupiter quote (NOT on amount). Pay with native SOL OR USDC (same pubkey).
                         SOL ticket keeps the SOL/USD unit toggle; USDC ticket types USDC directly. */}
@@ -1750,17 +1834,22 @@ export default function TokenTerminal() {
         <div onClick={closeSolModal} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", color: BRIGHT }}>CONFIRM SWAP · SOLANA</span>
+              <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", color: BRIGHT }}>CONFIRM {solPlanDir === "sell" ? "SELL" : "SWAP"} · SOLANA</span>
               <button onClick={closeSolModal} disabled={solBusy} style={{ background: "none", border: "none", color: solBusy ? FAINT : MUT, fontSize: 16, cursor: solBusy ? "default" : "pointer", lineHeight: 1 }}>✕</button>
             </div>
             {(() => {
               const recvFmt = fmtSolTokenAmount(solPlan.outAmount, solPlan.outDecimals);
               const minFmt = fmtSolTokenAmount(solPlan.minOut, solPlan.outDecimals);
               const slip = solSlippagePct(solPlan.outAmount, solPlan.minOut);
+              const isSolSell = solPlanDir === "sell";
               return !solDone ? (
                 <>
-                  <ModalRow label="You pay" value={`${solPlan.inDisplay.toLocaleString("en-US", { maximumFractionDigits: solPlanIsUsdc ? 2 : 6 })} ${solPlan.inSym}`} sub={solPlanIsUsdc ? "USDC · Solana (fees paid in SOL)" : "native SOL · Solana"} />
-                  <ModalRow label="Wallet balance" value={solPlanBal != null ? `${solPlanBal.toLocaleString("en-US", { maximumFractionDigits: solPlanIsUsdc ? 2 : 4 })} ${solPlan.inSym}` : "unavailable"} sub={solPlanBal == null ? "couldn't read your balance" : solPlanIsUsdc ? (solPlanFeeOk ? `need ${solPlan.inDisplay.toLocaleString("en-US", { maximumFractionDigits: 2 })} + ~${SOL_FEE_RESERVE} SOL fees` : `need ~${SOL_FEE_RESERVE} SOL for fees`) : `need ~${(solPlan.inDisplay + SOL_FEE_BUFFER).toLocaleString("en-US", { maximumFractionDigits: 4 })} incl. fees`} danger={!solPlanAffordable} />
+                  <ModalRow label={isSolSell ? "You sell" : "You pay"} value={`${solPlan.inDisplay.toLocaleString("en-US", { maximumFractionDigits: isSolSell ? (solPlan.inDisplay >= 1 ? 4 : 8) : solPlanIsUsdc ? 2 : 6 })} ${solPlan.inSym}`} sub={isSolSell ? "on Solana (fees paid in SOL)" : solPlanIsUsdc ? "USDC · Solana (fees paid in SOL)" : "native SOL · Solana"} />
+                  {isSolSell ? (
+                    <ModalRow label="Wallet balance" value={held ? `${held.amountLabel} ${solPlan.inSym}` : "—"} sub={solBalance == null ? "couldn't read your SOL for fees" : solSellFeeOk ? `to USDC · ~${SOL_FEE_RESERVE} SOL covers fees` : `need ~${SOL_FEE_RESERVE} SOL for network fees`} danger={!solSellFeeOk} />
+                  ) : (
+                    <ModalRow label="Wallet balance" value={solPlanBal != null ? `${solPlanBal.toLocaleString("en-US", { maximumFractionDigits: solPlanIsUsdc ? 2 : 4 })} ${solPlan.inSym}` : "unavailable"} sub={solPlanBal == null ? "couldn't read your balance" : solPlanIsUsdc ? (solPlanFeeOk ? `need ${solPlan.inDisplay.toLocaleString("en-US", { maximumFractionDigits: 2 })} + ~${SOL_FEE_RESERVE} SOL fees` : `need ~${SOL_FEE_RESERVE} SOL for fees`) : `need ~${(solPlan.inDisplay + SOL_FEE_BUFFER).toLocaleString("en-US", { maximumFractionDigits: 4 })} incl. fees`} danger={!solPlanAffordable} />
+                  )}
                   <ModalRow label="Receive (est.)" value={recvFmt ? `${recvFmt} ${solPlan.outSym}` : "—"} />
                   <ModalRow label="Minimum received" value={minFmt ? `${minFmt} ${solPlan.outSym}` : "on-chain floor applies"} sub={slip != null ? `reverts below this · ≤${slip.toFixed(2)}% slippage` : "slippage floor enforced on-chain"} accent />
                   <ModalRow label="Route" value={solPlan.router} />
@@ -1772,7 +1861,7 @@ export default function TokenTerminal() {
                   {solErr && <div style={{ fontFamily: MONO, fontSize: 11, color: NEG, marginBottom: 10, textAlign: "center" }}>{solErr}</div>}
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={closeSolModal} disabled={solBusy} style={{ flex: 1, fontFamily: MONO, fontSize: 12, fontWeight: 700, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 8, padding: "11px 0", cursor: solBusy ? "default" : "pointer" }}>Cancel</button>
-                    <button onClick={confirmSolBuy} disabled={solBusy || !solPlanAffordable} style={{ flex: 2, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", color: solBusy || solPlanAffordable ? "#0a0a0b" : FAINT, background: solBusy || solPlanAffordable ? POS : BORD, border: "none", borderRadius: 8, padding: "11px 0", cursor: solBusy ? "wait" : solPlanAffordable ? "pointer" : "not-allowed", opacity: solBusy ? 0.7 : 1 }}>{solBusy ? "Confirming…" : !solBalanceKnown ? "Balance unavailable" : !solPlanAffordable ? "Insufficient SOL" : "Confirm swap"}</button>
+                    <button onClick={isSolSell ? confirmSolSell : confirmSolBuy} disabled={solBusy || !solModalAffordable} style={{ flex: 2, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", color: solBusy || solModalAffordable ? "#0a0a0b" : FAINT, background: solBusy || solModalAffordable ? POS : BORD, border: "none", borderRadius: 8, padding: "11px 0", cursor: solBusy ? "wait" : solModalAffordable ? "pointer" : "not-allowed", opacity: solBusy ? 0.7 : 1 }}>{solBusy ? "Confirming…" : !solBalanceKnown ? "SOL balance unavailable" : !solModalAffordable ? "Need SOL for fees" : isSolSell ? "Confirm sell" : "Confirm swap"}</button>
                   </div>
                 </>
               ) : (
