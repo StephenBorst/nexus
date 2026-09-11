@@ -69,12 +69,23 @@ export type SolProvider = {
   rpcUrl?: string;
 };
 
+// The two inputs a Solana buy may spend: native SOL (wrapped by Jupiter) or USDC. The mint the guard
+// binds to, plus display sym/decimals. Exported so the ticket can offer a "Pay with SOL | USDC" toggle.
+export const SOL_INPUT = { mint: WSOL_MINT, sym: "SOL", decimals: 9 } as const;
+export const USDC_INPUT = { mint: USDC_SOL_MINT, sym: "USDC", decimals: 6 } as const;
+export type SolInput = { mint: string; sym: string; decimals: number };
+
 export interface SolBuyPlan {
-  inputMint: string;         // native SOL (wSOL) — what we spend
+  inputMint: string;         // what we spend — wSOL or the USDC mint (the exact quote-input bind)
+  inSym: string;             // "SOL" | "USDC" — display
+  inDecimals: number;        // 9 (SOL) | 6 (USDC)
+  inAmount: number;          // input spent, in base units (the exact bind)
+  inDisplay: number;         // input spent, human units (modal "You pay")
+  solSpent: number;          // SOL LEAVING THE BALANCE, in lamports (= inAmount for wSOL, 0 for USDC).
+                             // The SOL-delta simulate ceiling uses THIS, so a USDC buy only permits
+                             // fees/rent to leave SOL, never a stray wrap.
   outputMint: string;        // the token's mint — what we receive
   taker: string;             // connected Solana pubkey (fee payer + recipient)
-  lamports: number;          // SOL spent, in lamports (the exact bind)
-  solIn: number;             // SOL spent (display)
   outAmount: number | null;  // Jupiter quote out (raw token units)
   outDecimals: number | null;
   minOut: number | null;     // otherAmountThreshold (raw token units) — on-chain floor
@@ -118,35 +129,38 @@ async function pollConfirm(conn: Connection, sig: string, timeoutMs = 45000): Pr
 // Returns the deserialized-and-validated tx PLUS the plan the modal renders. Throws a plain message
 // on anything unexpected. Shared by planSolBuy (preview) and executeSolBuy (fresh, right before sign).
 async function quoteAndBuildGuarded(args: {
-  outputMint: string; lamports: number; taker: string; slippageBps: number; provider: SolProvider;
+  inputMint: string; inSym: string; inDecimals: number; inAmount: number;
+  outputMint: string; taker: string; slippageBps: number; provider: SolProvider;
   outSym: string; outDecimals: number | null;
 }): Promise<{ tx: VersionedTransaction; plan: SolBuyPlan }> {
-  const { outputMint, lamports, taker, slippageBps, provider, outSym, outDecimals } = args;
+  const { inputMint, inSym, inDecimals, inAmount, outputMint, taker, slippageBps, provider, outSym, outDecimals } = args;
   if (!isSolAddr(outputMint)) throw new Error("Bad token mint.");
+  if (!isSolAddr(inputMint)) throw new Error("Bad input mint.");
   if (!isSolAddr(taker)) throw new Error("Connect a Solana wallet to swap in-app.");
-  if (outputMint === WSOL_MINT) throw new Error("That's already SOL.");
-  if (!(lamports > 0)) throw new Error("Enter an amount of SOL to swap.");
+  if (outputMint === inputMint) throw new Error(`That's already ${inSym}.`);
+  if (!(inAmount > 0)) throw new Error(`Enter an amount of ${inSym} to swap.`);
   if (!(slippageBps > 0) || slippageBps > MAX_SLIPPAGE_BPS) throw new Error("Slippage out of range.");
 
-  // 1) Quote — native SOL (wSOL) → the token's mint.
-  const qUrl = `${JUP_QUOTE}?inputMint=${WSOL_MINT}&outputMint=${encodeURIComponent(outputMint)}&amount=${lamports}&slippageBps=${slippageBps}&swapMode=ExactIn`;
+  // 1) Quote — the chosen input mint (wSOL or USDC) → the token's mint.
+  const qUrl = `${JUP_QUOTE}?inputMint=${encodeURIComponent(inputMint)}&outputMint=${encodeURIComponent(outputMint)}&amount=${inAmount}&slippageBps=${slippageBps}&swapMode=ExactIn`;
   const qRes = await fetch(qUrl, { headers: { Accept: "application/json" } });
   const quote = (await qRes.json().catch(() => null)) as {
     inputMint?: string; outputMint?: string; inAmount?: string; outAmount?: string;
     otherAmountThreshold?: string; priceImpactPct?: string | number; slippageBps?: number;
   } | null;
   if (!quote || !quote.outAmount) throw new Error("No Jupiter route right now — use the deep-link.");
-  // Bind the quote to EXACTLY what we asked for (guard 1).
-  if (quote.inputMint !== WSOL_MINT) throw new Error("Quote input isn't SOL — refused.");
+  // Bind the quote to EXACTLY what we asked for (guard 1) — the chosen input mint + our amount.
+  if (quote.inputMint !== inputMint) throw new Error(`Quote input isn't ${inSym} — refused.`);
   if (quote.outputMint !== outputMint) throw new Error("Quote output mismatch — refused.");
-  if (String(quote.inAmount) !== String(lamports)) throw new Error("Quote amount mismatch — refused.");
+  if (String(quote.inAmount) !== String(inAmount)) throw new Error("Quote amount mismatch — refused.");
   // Slippage cap (guard 2) — trust our requested cap, and re-check Jupiter didn't widen it.
   if (typeof quote.slippageBps === "number" && quote.slippageBps > slippageBps) throw new Error("Route widened slippage — refused.");
 
-  // 2) Swap tx — bound to the taker (recipient), Jupiter wraps/unwraps SOL for us.
+  // 2) Swap tx — bound to the taker (recipient). Only wrap/unwrap SOL when the input IS native SOL;
+  // a USDC input spends the SPL token directly (no wrap).
   const sRes = await fetch(JUP_SWAP, {
     method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ quoteResponse: quote, userPublicKey: taker, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true, prioritizationFeeLamports: "auto" }),
+    body: JSON.stringify({ quoteResponse: quote, userPublicKey: taker, wrapAndUnwrapSol: inputMint === WSOL_MINT, dynamicComputeUnitLimit: true, prioritizationFeeLamports: "auto" }),
   });
   const swap = (await sRes.json().catch(() => null)) as { swapTransaction?: string } | null;
   if (!swap?.swapTransaction || typeof swap.swapTransaction !== "string") throw new Error("Jupiter didn't return an executable swap — use the deep-link.");
@@ -174,7 +188,9 @@ async function quoteAndBuildGuarded(args: {
   const impact = Number(quote.priceImpactPct); // Jupiter returns a fraction (0.012 = 1.2%)
 
   const plan: SolBuyPlan = {
-    inputMint: WSOL_MINT, outputMint, taker, lamports, solIn: lamports / LAMPORTS_PER_SOL,
+    inputMint, inSym, inDecimals, inAmount, inDisplay: inAmount / 10 ** inDecimals,
+    solSpent: inputMint === WSOL_MINT ? inAmount : 0, // only native-SOL input drains SOL from the balance
+    outputMint, taker,
     outAmount, outDecimals, minOut, priceImpactPct: Number.isFinite(impact) ? impact * 100 : null,
     slippageBps, router: "Jupiter", rpcUrl: resolveRpc(provider), outSym,
   };
@@ -237,7 +253,7 @@ async function simulateGuard(conn: Connection, tx: VersionedTransaction, plan: S
   if (acct && typeof acct.lamports === "number") {
     const post = acct.lamports;
     const drop = pre - post;
-    const maxDrop = plan.lamports + 0.02 * LAMPORTS_PER_SOL;
+    const maxDrop = plan.solSpent + 0.02 * LAMPORTS_PER_SOL; // wSOL input: the wrap + fees; USDC input: fees/rent only
     if (drop > maxDrop) throw new Error("Transaction would move more SOL than the swap — refused.");
   }
 
@@ -258,11 +274,14 @@ async function simulateGuard(conn: Connection, tx: VersionedTransaction, plan: S
 
 // Preview plan for the confirm modal — quotes, builds, and runs the static guards (1-4). The heavier
 // simulate guard (5) runs at execute time on fresh bytes so the modal opens fast and the simulation is
-// against the exact tx we sign. `solIn` is the SOL amount the user typed. Fail-soft: throws → deep-link.
-export async function planSolBuy(outputMint: string, outSym: string, solIn: number, taker: string, provider: SolProvider, slippageBps = 100): Promise<SolBuyPlan> {
-  if (!(solIn > 0)) throw new Error("Enter an amount of SOL.");
-  if (solIn > 1000) throw new Error("Amount too large for the in-app swap.");
-  const lamports = Math.round(solIn * LAMPORTS_PER_SOL);
+// against the exact tx we sign. `input` selects what we spend (SOL_INPUT or USDC_INPUT) and `amountHuman`
+// is the amount the user typed in that token. Fail-soft: throws → deep-link.
+export async function planSolBuy(outputMint: string, outSym: string, input: SolInput, amountHuman: number, taker: string, provider: SolProvider, slippageBps = 100): Promise<SolBuyPlan> {
+  if (!(amountHuman > 0)) throw new Error(`Enter an amount of ${input.sym}.`);
+  if (input.decimals < 0 || input.decimals > 18) throw new Error("Bad input token.");
+  const inAmount = Math.round(amountHuman * 10 ** input.decimals);
+  if (!(inAmount > 0)) throw new Error("That amount rounds to zero — enter more.");
+  if (inAmount > Number.MAX_SAFE_INTEGER) throw new Error("Amount too large for the in-app swap.");
   const cappedBps = Math.min(Math.max(1, Math.round(slippageBps)), MAX_SLIPPAGE_BPS);
   // Best-effort token decimals from the mint (for the modal's "receive" amount) — fail-soft to null;
   // safety (minOut floor, slippage %, simulate) never depends on this display value.
@@ -273,7 +292,10 @@ export async function planSolBuy(outputMint: string, outSym: string, solIn: numb
     const d = (info.value?.data as { parsed?: { info?: { decimals?: number } } } | null | undefined)?.parsed?.info?.decimals;
     if (Number.isInteger(d)) outDecimals = d as number;
   } catch { /* modal falls back to slippage %/impact, which are decimals-independent */ }
-  const { plan } = await quoteAndBuildGuarded({ outputMint, lamports, taker, slippageBps: cappedBps, provider, outSym, outDecimals });
+  const { plan } = await quoteAndBuildGuarded({
+    inputMint: input.mint, inSym: input.sym, inDecimals: input.decimals, inAmount,
+    outputMint, taker, slippageBps: cappedBps, provider, outSym, outDecimals,
+  });
   return plan;
 }
 
@@ -310,9 +332,9 @@ export async function solRpcCall(method: string, params: unknown[]): Promise<unk
 // Ticket helpers (for the BUY panel's SOL-% chips + USD chips + est output). Balance is read via the
 // raw proxy call above; SOL/USD via the Jupiter proxy. Fail-soft → nulls (balanceErr carries the real
 // reason for the on-device diagnostic). Never touches signing.
-export async function getSolWalletContext(_provider: SolProvider, pubkey: string): Promise<{ balanceSol: number | null; solUsd: number | null; balanceErr: string | null }> {
-  let balanceSol: number | null = null, solUsd: number | null = null, balanceErr: string | null = null;
-  if (!isSolAddr(pubkey)) return { balanceSol, solUsd, balanceErr: "bad pubkey" };
+export async function getSolWalletContext(_provider: SolProvider, pubkey: string): Promise<{ balanceSol: number | null; usdcBal: number | null; solUsd: number | null; balanceErr: string | null }> {
+  let balanceSol: number | null = null, usdcBal: number | null = null, solUsd: number | null = null, balanceErr: string | null = null;
+  if (!isSolAddr(pubkey)) return { balanceSol, usdcBal, solUsd, balanceErr: "bad pubkey" };
   try {
     const res = await solRpcCall("getBalance", [pubkey]) as { value?: number } | number | null;
     const lamports = Number((res as { value?: number })?.value ?? res); // {context,value} or a bare number
@@ -320,13 +342,24 @@ export async function getSolWalletContext(_provider: SolProvider, pubkey: string
     else balanceErr = "no value in result";
   } catch (e) { balanceErr = (e as Error)?.message?.slice(0, 80) || "read failed"; }
   try {
+    // USDC balance = the getTokenAccountBalance of the taker's USDC ATA (0 / null if none). For the
+    // "Pay with USDC" ticket's chips + affordability. Fail-soft → null (no USDC chips).
+    const ata = deriveAta(USDC_SOL_MINT, pubkey);
+    if (ata) {
+      const b = await solRpcCall("getTokenAccountBalance", [ata]) as { value?: { uiAmount?: number; amount?: string } } | null;
+      const ui = b?.value?.uiAmount;
+      if (typeof ui === "number" && Number.isFinite(ui)) usdcBal = ui;
+      else if (b?.value?.amount != null) usdcBal = Number(b.value.amount) / 1e6;
+    }
+  } catch { /* no USDC ATA → no USDC chips */ }
+  try {
     // SOL/USD from a Jupiter quote (1 SOL → USDC), through the same worker proxy.
     const r = await fetch(`${JUP_QUOTE}?inputMint=${WSOL_MINT}&outputMint=${USDC_SOL_MINT}&amount=${LAMPORTS_PER_SOL}&slippageBps=50&swapMode=ExactIn`, { headers: { Accept: "application/json" } });
     const j = (await r.json().catch(() => null)) as { outAmount?: string | number } | null;
     const out = Number(j?.outAmount);
     if (Number.isFinite(out) && out > 0) solUsd = out / 1e6;
   } catch { /* no price → no USD chips */ }
-  return { balanceSol, solUsd, balanceErr };
+  return { balanceSol, usdcBal, solUsd, balanceErr };
 }
 
 // Execute the plan: RE-FETCH a fresh swap tx (fresh blockhash) and RE-RUN every guard on the exact
@@ -338,7 +371,8 @@ export async function executeSolBuy(provider: SolProvider, plan: SolBuyPlan, onS
   onStep("refreshing the route…");
   // Fresh tx + all static guards on the bytes we're about to sign (freshness + re-bind).
   const { tx, plan: fresh } = await quoteAndBuildGuarded({
-    outputMint: plan.outputMint, lamports: plan.lamports, taker: plan.taker,
+    inputMint: plan.inputMint, inSym: plan.inSym, inDecimals: plan.inDecimals, inAmount: plan.inAmount,
+    outputMint: plan.outputMint, taker: plan.taker,
     slippageBps: plan.slippageBps, provider, outSym: plan.outSym, outDecimals: plan.outDecimals,
   });
   const conn = new Connection(fresh.rpcUrl, "confirmed");

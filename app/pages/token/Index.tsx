@@ -23,7 +23,7 @@ import {
 import { SocialBar } from "@/components/SocialBar";
 import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
 import { planBuy, planSell, executeSwap, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, type SwapPlan, type Eip1193 } from "./swapExec";
-import { planSolBuy, executeSolBuy, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, type SolBuyPlan, type SolProvider } from "./solSwapExec";
+import { planSolBuy, executeSolBuy, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
 // EVM slot). The Privy connector exposes walletEVM/walletSOL separately — walletSOL carries the Solana
@@ -611,8 +611,10 @@ export default function TokenTerminal() {
   // token with a Jupiter quote and a reachable Solana signer. The one signing site is solSwapExec.ts. ──
   const SOL_INAPP_BUY = getRuntimeConfigBoolean("VITE_SOL_INAPP_BUY");
   const [solAmt, setSolAmt] = useState("");
-  const [solUnit, setSolUnit] = useState<"sol" | "usd">("sol"); // type the buy in SOL or $ (Grok ticket parity)
+  const [solUnit, setSolUnit] = useState<"sol" | "usd">("sol"); // SOL ticket: type in SOL or $ (Grok ticket parity)
+  const [solPayWith, setSolPayWith] = useState<"sol" | "usdc">("sol"); // input token: native SOL or USDC
   const [solBalance, setSolBalance] = useState<number | null>(null); // wallet SOL balance (for 25/50/MAX)
+  const [usdcBal, setUsdcBal] = useState<number | null>(null);       // wallet USDC balance (for the USDC ticket)
   const [solUsd, setSolUsd] = useState<number | null>(null);         // USD per SOL (for USD chips + est out)
   const [solPlan, setSolPlan] = useState<SolBuyPlan | null>(null);
   const [solModalOpen, setSolModalOpen] = useState(false);
@@ -643,22 +645,35 @@ export default function TokenTerminal() {
   // Solana signer + pubkey. Everything else (EVM, no signer, flag off) keeps the "Swap via Jupiter" deep-link.
   const isSolToken = pair?.chainId === "solana";
   const canSolBuy = SOL_INAPP_BUY && isSolToken && showSpot && side === "buy" && swapState.kind === "quote" && quote?.router === "Jupiter" && (solSigner.hasSign || solSigner.hasSend) && !!solSigner.address;
-  // The SOL amount the ticket resolves to (SOL mode = as typed; USD mode = $/SOL price). est output
-  // tokens ≈ ($value) / token price — a display estimate; the confirm modal shows the real Jupiter quote.
-  const solInSol = (() => {
+  // ── Solana buy ticket: pay with SOL (Jupiter wraps it) or USDC. The SOL ticket keeps the SOL/USD
+  // unit math; the USDC ticket types USDC directly. ──
+  const solInputDesc: SolInput = solPayWith === "usdc" ? USDC_INPUT : SOL_INPUT;
+  const solInSol = (() => { // SOL the SOL-ticket resolves to (as typed, or $/SOL in USD mode)
     const v = parseFloat(solAmt);
     if (!Number.isFinite(v) || v <= 0) return 0;
     return solUnit === "usd" ? (solUsd && solUsd > 0 ? v / solUsd : 0) : v;
   })();
-  const solEstOut = (isSolToken && solInSol > 0 && solUsd && (pair?.priceUsd || 0) > 0) ? (solInSol * solUsd) / (pair!.priceUsd as number) : null;
-  // Affordability: a buy needs (SOL spent + a fee/rent buffer) ≤ wallet SOL, and we must KNOW the
-  // balance to allow it — a green Confirm over an unread "—" balance is wrong. The buffer covers the
-  // tx fee + wSOL rent + priority fee. Drives the ticket button + the modal Confirm gate.
-  const SOL_FEE_BUFFER = 0.01;
+  // Amount in the INPUT token's units + that token's wallet balance.
+  const solInputHuman = solPayWith === "usdc" ? Math.max(0, parseFloat(solAmt) || 0) : solInSol;
+  const solInputBal = solPayWith === "usdc" ? usdcBal : solBalance;
+  // USD value of the input (USDC ≈ $; SOL via solUsd) → est tokens out.
+  const solInUsd = solPayWith === "usdc" ? solInputHuman : (solUsd ? solInSol * solUsd : null);
+  const solEstOut = (isSolToken && solInputHuman > 0 && solInUsd != null && (pair?.priceUsd || 0) > 0) ? (solInUsd as number) / (pair!.priceUsd as number) : null;
+  // Affordability: SOL input → (SOL + buffer) ≤ SOL bal. USDC input → USDC ≤ USDC bal AND enough SOL
+  // for fees/rent (a USDC swap still pays gas in SOL). Balance must be KNOWN — a green Confirm over an
+  // unread "—" balance is wrong. Drives the ticket button + the modal Confirm gate.
+  const SOL_FEE_BUFFER = 0.01;   // SOL reserved on a SOL-input buy (wrap + fee + rent)
+  const SOL_FEE_RESERVE = 0.003; // SOL needed for fees/rent on a USDC-input buy
   const solBalanceKnown = solBalance != null;
-  const solInputAffordable = solBalanceKnown && solInSol > 0 && solInSol + SOL_FEE_BUFFER <= (solBalance as number);
-  const solPlanNeed = solPlan ? solPlan.solIn + SOL_FEE_BUFFER : null;
-  const solPlanAffordable = solBalanceKnown && solPlanNeed != null && solPlanNeed <= (solBalance as number);
+  const solInputAffordable = solPayWith === "usdc"
+    ? (usdcBal != null && solInputHuman > 0 && solInputHuman <= usdcBal && solBalanceKnown && (solBalance as number) >= SOL_FEE_RESERVE)
+    : (solBalanceKnown && solInSol > 0 && solInSol + SOL_FEE_BUFFER <= (solBalance as number));
+  // Modal Confirm gate off the PLAN's ACTUAL input (not the current toggle).
+  const solPlanIsUsdc = solPlan?.inSym === "USDC";
+  const solPlanBal = solPlan ? (solPlanIsUsdc ? usdcBal : solBalance) : null;
+  const solPlanNeed = solPlan ? solPlan.inDisplay + (solPlanIsUsdc ? 0 : SOL_FEE_BUFFER) : null;
+  const solPlanFeeOk = !solPlan || !solPlanIsUsdc ? true : (solBalance != null && solBalance >= SOL_FEE_RESERVE);
+  const solPlanAffordable = solPlanBal != null && solPlanNeed != null && solPlanNeed <= solPlanBal && solPlanFeeOk;
   // The token quantity a SELL resolves to, in EITHER unit (MAX = whole balance; USD = $/price).
   const sellPrice = pair?.priceUsd || 0;
   const sellTokens = sellMax && held ? held.amount
@@ -835,8 +850,8 @@ export default function TokenTerminal() {
     if (!isSolToken || !solProvider || !solSigner.address) { setSolBalance(null); setSolUsd(null); return; }
     let alive = true;
     getSolWalletContext(solProvider, solSigner.address)
-      .then((c) => { if (alive) { setSolBalance(c.balanceSol); setSolUsd(c.solUsd); setSolBalanceErr(c.balanceErr); } })
-      .catch((e) => { if (alive) { setSolBalance(null); setSolUsd(null); setSolBalanceErr((e as Error)?.message?.slice(0, 80) || "read failed"); } });
+      .then((c) => { if (alive) { setSolBalance(c.balanceSol); setUsdcBal(c.usdcBal); setSolUsd(c.solUsd); setSolBalanceErr(c.balanceErr); } })
+      .catch((e) => { if (alive) { setSolBalance(null); setUsdcBal(null); setSolUsd(null); setSolBalanceErr((e as Error)?.message?.slice(0, 80) || "read failed"); } });
     return () => { alive = false; };
   }, [isSolToken, solSigner.address]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -864,20 +879,28 @@ export default function TokenTerminal() {
   const openSolBuy = useCallback(async () => {
     setSolErr(null); setSolDone(null);
     if (!pair?.baseAddress || !solProvider || !solSigner.address) return;
-    // Resolve the typed amount to SOL (USD mode → $/SOL price). planSolBuy quotes + guards the real amount.
-    const amt = solUnit === "usd" ? (solUsd && solUsd > 0 ? (parseFloat(solAmt) || 0) / solUsd : 0) : (parseFloat(solAmt) || 0);
-    if (!Number.isFinite(amt) || amt <= 0) { setSolErr(solUnit === "usd" && !solUsd ? "No SOL price yet — switch to SOL amount." : "Enter an amount to buy."); return; }
-    // Don't even build a route we can't cover. Must know the balance first (no green Confirm over "—").
-    if (solBalance == null) { setSolErr("Balance unavailable — can't verify you can cover this. Try again in a moment."); return; }
-    if (amt + SOL_FEE_BUFFER > solBalance) { setSolErr(`Not enough SOL: you have ${solBalance.toLocaleString("en-US", { maximumFractionDigits: 4 })}, need ~${(amt + SOL_FEE_BUFFER).toLocaleString("en-US", { maximumFractionDigits: 4 })} (incl. ~${SOL_FEE_BUFFER} fees). Try a smaller size.`); return; }
+    // Amount in the input token's units (USDC ticket types USDC; SOL ticket resolves SOL/USD). planSolBuy
+    // quotes + guards the exact amount against the chosen input mint.
+    const amt = solInputHuman;
+    const sym = solInputDesc.sym;
+    if (!Number.isFinite(amt) || amt <= 0) { setSolErr(solPayWith === "sol" && solUnit === "usd" && !solUsd ? "No SOL price yet — switch to SOL amount." : `Enter an amount of ${sym} to buy.`); return; }
+    // Don't build a route we can't cover. Must KNOW the balances first (no green Confirm over "—").
+    if (solPayWith === "usdc") {
+      if (usdcBal == null) { setSolErr("USDC balance unavailable — try again in a moment."); return; }
+      if (amt > usdcBal) { setSolErr(`Not enough USDC: you have ${usdcBal.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Try a smaller size.`); return; }
+      if (solBalance == null || solBalance < SOL_FEE_RESERVE) { setSolErr(`Need ~${SOL_FEE_RESERVE} SOL for network fees to swap USDC.`); return; }
+    } else {
+      if (solBalance == null) { setSolErr("Balance unavailable — can't verify you can cover this. Try again in a moment."); return; }
+      if (amt + SOL_FEE_BUFFER > solBalance) { setSolErr(`Not enough SOL: you have ${solBalance.toLocaleString("en-US", { maximumFractionDigits: 4 })}, need ~${(amt + SOL_FEE_BUFFER).toLocaleString("en-US", { maximumFractionDigits: 4 })} (incl. ~${SOL_FEE_BUFFER} fees). Try a smaller size.`); return; }
+    }
     setSolPlanning(true);
     try {
-      const p = await planSolBuy(pair.baseAddress, pair.baseSymbol, amt, solSigner.address, solProvider);
+      const p = await planSolBuy(pair.baseAddress, pair.baseSymbol, solInputDesc, amt, solSigner.address, solProvider);
       setSolPlan(p); setSolModalOpen(true);
     } catch (e) {
       setSolErr((e as Error)?.message || "Couldn't build the swap — use the deep-link.");
     } finally { setSolPlanning(false); }
-  }, [pair, solProvider, solSigner.address, solAmt, solUnit, solUsd, solBalance, SOL_FEE_BUFFER]);
+  }, [pair, solProvider, solSigner.address, solInputHuman, solInputDesc, solPayWith, solUnit, solUsd, solBalance, usdcBal, SOL_FEE_BUFFER, SOL_FEE_RESERVE]);
 
   const confirmSolBuy = useCallback(async () => {
     if (!solPlan || !solProvider) return;
@@ -897,7 +920,7 @@ export default function TokenTerminal() {
   }, [solBusy]);
 
   // A changed token/amount invalidates a captured Solana plan.
-  useEffect(() => { setSolModalOpen(false); setSolPlan(null); setSolErr(null); setSolDone(null); }, [pair?.baseAddress, solAmt]);
+  useEffect(() => { setSolModalOpen(false); setSolPlan(null); setSolErr(null); setSolDone(null); }, [pair?.baseAddress, solAmt, solPayWith]);
 
   const pageMeta = getPageMeta();
   const pageTitle = generatePageTitle(pair ? `${pair.baseSymbol} · Spot` : "Spot");
@@ -1283,55 +1306,74 @@ export default function TokenTerminal() {
                         </a>
                       </>
                     )}
-                    {/* ◎ Solana in-app BUY (Jupiter · wSOL→token) — additive; the deep-link below stays.
-                        Mounts on signer + Jupiter quote (NOT on amount). Ticket mirrors the SPOT SELL:
-                        SOL|USD unit toggle, 25/50/MAX-of-balance (SOL) or $ presets (USD), Est. output. */}
+                    {/* ◎ Solana in-app BUY (Jupiter) — additive; the deep-link below stays. Mounts on
+                        signer + Jupiter quote (NOT on amount). Pay with native SOL OR USDC (same pubkey).
+                        SOL ticket keeps the SOL/USD unit toggle; USDC ticket types USDC directly. */}
                     {canSolBuy && (
                       <div style={{ marginTop: 10, background: BG, border: `1px solid ${POS}44`, borderRadius: 9, padding: 11 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                          <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.1em", color: POS, textTransform: "uppercase" }}>◎ Buy with SOL · in-app</span>
-                          {/* unit toggle — type the buy in SOL or in $ (matches the SELL ticket) */}
+                          <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.1em", color: POS, textTransform: "uppercase" }}>◎ Buy in-app · pay with</span>
+                          {/* input-token toggle — spend native SOL or USDC */}
                           <span style={{ display: "flex", gap: 4 }}>
-                            {(["sol", "usd"] as const).map((u) => (
-                              <button key={u} onClick={() => { setSolUnit(u); setSolAmt(""); }} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: solUnit === u ? BRIGHT : FAINT, background: solUnit === u ? "#ededf012" : "none", border: `1px solid ${solUnit === u ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{u === "usd" ? "USD" : "SOL"}</button>
+                            {(["sol", "usdc"] as const).map((p) => (
+                              <button key={p} onClick={() => { setSolPayWith(p); setSolAmt(""); }} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: solPayWith === p ? BRIGHT : FAINT, background: solPayWith === p ? "#ededf012" : "none", border: `1px solid ${solPayWith === p ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{p === "usdc" ? "USDC" : "SOL"}</button>
                             ))}
                           </span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>
-                          <span>{solBalance != null ? `Bal ${solBalance.toLocaleString("en-US", { maximumFractionDigits: 4 })} SOL${solUsd ? ` · $${(solBalance * solUsd).toLocaleString("en-US", { maximumFractionDigits: 2 })}` : ""}` : "Balance —"}</span>
-                          <span style={{ color: FAINT }}>Jupiter · you sign</span>
+                          <span>{solPayWith === "usdc"
+                            ? (usdcBal != null ? `Bal ${usdcBal.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC` : "USDC bal —")
+                            : (solBalance != null ? `Bal ${solBalance.toLocaleString("en-US", { maximumFractionDigits: 4 })} SOL${solUsd ? ` · $${(solBalance * solUsd).toLocaleString("en-US", { maximumFractionDigits: 2 })}` : ""}` : "Balance —")}</span>
+                          {/* SOL ticket keeps its SOL/USD unit toggle; USDC ticket just shows the signer note */}
+                          {solPayWith === "sol"
+                            ? <span style={{ display: "flex", gap: 4 }}>{(["sol", "usd"] as const).map((u) => (
+                                <button key={u} onClick={() => { setSolUnit(u); setSolAmt(""); }} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: solUnit === u ? BRIGHT : FAINT, background: solUnit === u ? "#ededf012" : "none", border: `1px solid ${solUnit === u ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{u === "usd" ? "USD" : "SOL"}</button>
+                              ))}</span>
+                            : <span style={{ color: FAINT }}>Jupiter · you sign</span>}
                         </div>
-                        <input value={solAmt} onChange={(e) => setSolAmt(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder={solUnit === "usd" ? "$0.00" : "0.0 SOL"}
+                        <input value={solAmt} onChange={(e) => setSolAmt(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder={solPayWith === "usdc" ? "0.00 USDC" : solUnit === "usd" ? "$0.00" : "0.0 SOL"}
                           style={{ width: "100%", boxSizing: "border-box", background: CARD, border: `1px solid ${BORD}`, borderRadius: 8, color: BRIGHT, fontFamily: MONO, fontSize: 16, fontWeight: 600, padding: "9px 11px", outline: "none", marginBottom: 7 }} />
                         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                          {solUnit === "usd"
-                            ? [5, 25, 100].map((v) => (
-                                <button key={v} onClick={() => setSolAmt(String(v))} style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: MUT, background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, padding: "6px 0", cursor: "pointer" }}>${v}</button>
-                              ))
-                            : [25, 50, 100].map((v) => {
-                                const canFill = solBalance != null && solBalance > 0;
-                                // MAX reserves a small SOL buffer for fees + wSOL rent so it doesn't guarantee-fail.
+                          {solPayWith === "usdc"
+                            ? [25, 50, 100].map((v) => {
+                                const canFill = usdcBal != null && usdcBal > 0;
                                 return (
-                                  <button key={v} disabled={!canFill} onClick={() => { if (!canFill) return; const frac = v >= 100 ? Math.max(0, solBalance! - 0.01) : (solBalance! * v / 100); setSolAmt(String(Number(frac.toFixed(6)))); }}
+                                  <button key={v} disabled={!canFill} onClick={() => { if (!canFill) return; const frac = v >= 100 ? usdcBal! : (usdcBal! * v / 100); setSolAmt(String(Number(frac.toFixed(2)))); }}
                                     style={{ flex: 1, fontFamily: MONO, fontSize: 10, fontWeight: 700, color: canFill ? MUT : FAINT, background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, padding: "6px 0", cursor: canFill ? "pointer" : "not-allowed" }}>{v === 100 ? "MAX" : `${v}%`}</button>
                                 );
-                              })}
+                              })
+                            : solUnit === "usd"
+                              ? [5, 25, 100].map((v) => (
+                                  <button key={v} onClick={() => setSolAmt(String(v))} style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: MUT, background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, padding: "6px 0", cursor: "pointer" }}>${v}</button>
+                                ))
+                              : [25, 50, 100].map((v) => {
+                                  const canFill = solBalance != null && solBalance > 0;
+                                  // MAX reserves a small SOL buffer for fees + wSOL rent so it doesn't guarantee-fail.
+                                  return (
+                                    <button key={v} disabled={!canFill} onClick={() => { if (!canFill) return; const frac = v >= 100 ? Math.max(0, solBalance! - 0.01) : (solBalance! * v / 100); setSolAmt(String(Number(frac.toFixed(6)))); }}
+                                      style={{ flex: 1, fontFamily: MONO, fontSize: 10, fontWeight: 700, color: canFill ? MUT : FAINT, background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, padding: "6px 0", cursor: canFill ? "pointer" : "not-allowed" }}>{v === 100 ? "MAX" : `${v}%`}</button>
+                                  );
+                                })}
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", fontFamily: MONO, fontSize: 10.5, color: MUT, marginBottom: 8 }}>
-                          <span>Est. output{solInSol > 0 ? ` · ${solInSol.toLocaleString("en-US", { maximumFractionDigits: 4 })} SOL` : ""}</span>
+                          <span>Est. output{solInputHuman > 0 ? ` · ${solInputHuman.toLocaleString("en-US", { maximumFractionDigits: solPayWith === "usdc" ? 2 : 4 })} ${solInputDesc.sym}` : ""}</span>
                           <span style={{ color: BRIGHT }}>{solEstOut != null ? `≈ ${solEstOut.toLocaleString("en-US", { maximumFractionDigits: solEstOut >= 1 ? 2 : 6 })} ${pair.baseSymbol}` : "—"}</span>
                         </div>
                         {(() => {
-                          const insufficient = solInSol > 0 && solBalanceKnown && !solInputAffordable;
+                          const known = solPayWith === "usdc" ? (usdcBal != null && solBalance != null) : solBalanceKnown;
+                          const insufficient = solInputHuman > 0 && known && !solInputAffordable;
                           const disabled = solPlanning || insufficient;
+                          const insufLabel = solPayWith === "usdc"
+                            ? (usdcBal != null && solInputHuman > usdcBal ? "Insufficient USDC" : "Need SOL for fees")
+                            : "Insufficient SOL";
                           return (
                             <button onClick={openSolBuy} disabled={disabled}
                               style={{ display: "block", width: "100%", textAlign: "center", fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: insufficient ? FAINT : "#0a0a0b", background: insufficient ? "none" : POS, border: insufficient ? `1px solid ${BORD}` : "none", borderRadius: 9, padding: "12px 0", cursor: disabled ? (solPlanning ? "wait" : "not-allowed") : "pointer", opacity: solPlanning ? 0.7 : 1 }}>
-                              {solPlanning ? "Building route…" : insufficient ? "Insufficient SOL" : `Buy ${pair.baseSymbol} with SOL →`}
+                              {solPlanning ? "Building route…" : insufficient ? insufLabel : `Buy ${pair.baseSymbol} with ${solInputDesc.sym} →`}
                             </button>
                           );
                         })()}
-                        {solInSol > 0 && !solBalanceKnown && <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT, marginTop: 6, textAlign: "center" }}>reading balance…</div>}
+                        {solInputHuman > 0 && (solPayWith === "usdc" ? (usdcBal == null || solBalance == null) : !solBalanceKnown) && <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT, marginTop: 6, textAlign: "center" }}>reading balance…</div>}
                         {solErr && !solModalOpen && <div style={{ fontFamily: MONO, fontSize: 10, color: NEG, marginTop: 7, textAlign: "center" }}>{solErr}</div>}
                       </div>
                     )}
@@ -1590,8 +1632,8 @@ export default function TokenTerminal() {
               const slip = solSlippagePct(solPlan.outAmount, solPlan.minOut);
               return !solDone ? (
                 <>
-                  <ModalRow label="You pay" value={`${solPlan.solIn.toLocaleString("en-US", { maximumFractionDigits: 6 })} SOL`} sub="native SOL · Solana" />
-                  <ModalRow label="Wallet balance" value={solBalance != null ? `${solBalance.toLocaleString("en-US", { maximumFractionDigits: 4 })} SOL` : "unavailable"} sub={solBalance != null ? `need ~${(solPlan.solIn + SOL_FEE_BUFFER).toLocaleString("en-US", { maximumFractionDigits: 4 })} incl. fees` : "couldn't read your balance"} danger={!solPlanAffordable} />
+                  <ModalRow label="You pay" value={`${solPlan.inDisplay.toLocaleString("en-US", { maximumFractionDigits: solPlanIsUsdc ? 2 : 6 })} ${solPlan.inSym}`} sub={solPlanIsUsdc ? "USDC · Solana (fees paid in SOL)" : "native SOL · Solana"} />
+                  <ModalRow label="Wallet balance" value={solPlanBal != null ? `${solPlanBal.toLocaleString("en-US", { maximumFractionDigits: solPlanIsUsdc ? 2 : 4 })} ${solPlan.inSym}` : "unavailable"} sub={solPlanBal == null ? "couldn't read your balance" : solPlanIsUsdc ? (solPlanFeeOk ? `need ${solPlan.inDisplay.toLocaleString("en-US", { maximumFractionDigits: 2 })} + ~${SOL_FEE_RESERVE} SOL fees` : `need ~${SOL_FEE_RESERVE} SOL for fees`) : `need ~${(solPlan.inDisplay + SOL_FEE_BUFFER).toLocaleString("en-US", { maximumFractionDigits: 4 })} incl. fees`} danger={!solPlanAffordable} />
                   <ModalRow label="Receive (est.)" value={recvFmt ? `${recvFmt} ${solPlan.outSym}` : "—"} />
                   <ModalRow label="Minimum received" value={minFmt ? `${minFmt} ${solPlan.outSym}` : "on-chain floor applies"} sub={slip != null ? `reverts below this · ≤${slip.toFixed(2)}% slippage` : "slippage floor enforced on-chain"} accent />
                   <ModalRow label="Route" value={solPlan.router} />
