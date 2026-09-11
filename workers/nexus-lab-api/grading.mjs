@@ -202,19 +202,33 @@ export async function computeCallerStats(env, maxHorizonS = 30 * 86400, opts = {
     symFrom[t.symbol] = Math.min(symFrom[t.symbol] ?? start, start);
   }
   const history = {};
-  await Promise.all(Object.entries(symFrom).map(async ([sym, fromS]) => {
-    try {
-      // Pad the window backwards so each call has prior bars to classify (see REGIME_PAD_S).
-      const from = Math.max(fromS - REGIME_PAD_S, now - maxHorizonS - REGIME_PAD_S);
-      // ⚠️ Normalize the BARE ticker theses store ("BTC") to the Orderly perp id — the
-      // /tv/history call returns nothing for a bare symbol, which silently graded every
-      // form-posted call PENDING here (so the leaderboard never counted them). Same fix
-      // as fetchGradeHistory; this fetch is independent of it.
-      const r = await fetch(`https://api-evm.orderly.org/tv/history?symbol=${normalizeSymbol(sym) || sym}&resolution=60&from=${from}&to=${now}`);
-      const d = await r.json();
-      if (d && d.s === "ok" && Array.isArray(d.t)) history[sym] = { t: d.t, h: d.h, l: d.l, c: d.c };
-    } catch (e) { console.error("[caller-stats] history fetch", sym, e.message); }
-  }));
+  // ⚠️ The ALL-wallets run fetches /tv/history for EVERY unique symbol across every caller. Firing
+  // them all at once (a single Promise.all) burst-rate-limits Orderly's public endpoint, so a chunk
+  // come back non-ok → those symbols' calls silently graded PENDING → a wallet with a dozen resolved
+  // calls showed as "emerging · N to verify" on the board, while its own process x-ray (few symbols,
+  // no burst) graded all of them. Fetch in BOUNDED BATCHES with one retry so nearly every symbol
+  // resolves. (onlyWallet has few symbols and was never affected — hence the divergence.)
+  const fetchHistoryOne = async ([sym, fromS]) => {
+    // Pad the window backwards so each call has prior bars to classify (see REGIME_PAD_S).
+    const from = Math.max(fromS - REGIME_PAD_S, now - maxHorizonS - REGIME_PAD_S);
+    // Normalize the BARE ticker theses store ("BTC") to the Orderly perp id — /tv/history returns
+    // nothing for a bare symbol (same fix as fetchGradeHistory; this fetch is independent).
+    const url = `https://api-evm.orderly.org/tv/history?symbol=${normalizeSymbol(sym) || sym}&resolution=60&from=${from}&to=${now}`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) { if (attempt === 0) { await new Promise((res) => setTimeout(res, 300)); continue; } break; } // 429/5xx → one retry
+        const d = await r.json();
+        if (d && d.s === "ok" && Array.isArray(d.t)) history[sym] = { t: d.t, h: d.h, l: d.l, c: d.c };
+        break;
+      } catch (e) { if (attempt === 1) console.error("[caller-stats] history fetch", sym, e.message); else await new Promise((res) => setTimeout(res, 300)); }
+    }
+  };
+  const symEntries = Object.entries(symFrom);
+  const HIST_BATCH = 8; // gentle enough to avoid the burst rate-limit, few enough batches to stay fast
+  for (let i = 0; i < symEntries.length; i += HIST_BATCH) {
+    await Promise.all(symEntries.slice(i, i + HIST_BATCH).map(fetchHistoryOne));
+  }
   // Contrarian grading is OPT-IN (opts.contrarian) so the hot stance path — gatherStanceEntries
   // → computeCallerStats for merit weights — doesn't pay for the extra KV reads. Only the
   // leaderboard + the contrarians board ask for it. Stance history is keyed by BARE coin.
