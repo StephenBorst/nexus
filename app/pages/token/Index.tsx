@@ -16,9 +16,9 @@ import { SectionHeader } from "@/pages/lab/components";
 import { FADE_FUNDING_FLOOR_PCT_YR } from "@/pages/lab/briefing";
 import {
   searchToken, poolCandles, poolTrades, orderlyPerpSet, nexusSignal, swapQuote, chartOverlays,
-  fetchTakes, postTake, deleteTake, fetchCallerMerit,
+  fetchTakes, postTake, deleteTake, fetchCallerMerit, fetchMovers,
   fmtUsd, fmtTapeUsd, fmtPrice, fmtAge, shortAddr,
-  type TokenPair, type Candle, type Trade, type NexusSignal, type SwapQuote, type CallMark, type LiqMap, type Take, type CallerMerit,
+  type TokenPair, type Candle, type Trade, type NexusSignal, type SwapQuote, type CallMark, type LiqMap, type Take, type CallerMerit, type Mover,
 } from "./data";
 import { SocialBar } from "@/components/SocialBar";
 import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
@@ -292,6 +292,44 @@ function HoldingsStrip({ holdings, loading, onOpen }: { holdings: Holding[]; loa
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── MOVERS rail (Spot landing discovery) — real Orderly 24h gainers/losers/most-active. Each is a
+// listed perp, so a tap lands on its Spot page (trade on our book). Self-fetching, 60s refresh,
+// fail-soft (renders nothing without data). Turns "search a token you already know" into "land and
+// see what's ripping → tap → trade." ─────────────────────────────────────────────────────────────
+function MoversRail({ onPick }: { onPick: (sym: string) => void }) {
+  const [m, setM] = useState<{ gainers: Mover[]; losers: Mover[]; active: Mover[] } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => fetchMovers().then((d) => { if (alive) setM(d); }).catch(() => {});
+    load();
+    const iv = setInterval(load, 60000);
+    return () => { alive = false; clearInterval(iv); };
+  }, []);
+  if (!m || (!m.gainers.length && !m.losers.length && !m.active.length)) return null;
+  const sections = [["▲ Gainers · 24h", m.gainers, "chg"], ["▼ Losers · 24h", m.losers, "chg"], ["⚡ Most active", m.active, "vol"]] as const;
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.14em", color: MUT, textTransform: "uppercase", marginBottom: 10 }}>Movers · live on Nexus</div>
+      {sections.map(([label, rows, kind]) => rows.length ? (
+        <div key={label} style={{ marginBottom: 10 }}>
+          <div style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.12em", color: FAINT, textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {rows.map((r) => (
+              <button key={r.sym} onClick={() => onPick(r.sym)} className="nx-press"
+                style={{ display: "flex", alignItems: "center", gap: 6, background: CARD, border: `1px solid ${BORD}`, borderRadius: 7, padding: "6px 10px", cursor: "pointer", fontFamily: MONO }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: BRIGHT }}>{r.sym}</span>
+                {kind === "vol"
+                  ? <span style={{ fontSize: 10.5, color: MUT }}>{fmtUsd(r.volUsd)}</span>
+                  : <span style={{ fontSize: 10.5, fontWeight: 700, color: r.changePct >= 0 ? POS : NEG }}>{r.changePct >= 0 ? "+" : ""}{r.changePct.toFixed(1)}%</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null)}
     </div>
   );
 }
@@ -973,17 +1011,20 @@ export default function TokenTerminal() {
           <button type="submit" style={{ flexShrink: 0, background: BRIGHT, color: "#0a0a0b", border: "none", borderRadius: 8, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", padding: "0 18px", cursor: "pointer" }}>SEARCH</button>
         </form>
 
-        {/* ── LANDING (no query) ── */}
+        {/* ── LANDING (no query) — live MOVERS discovery first, then the blurb + majors ── */}
         {!query && (
-          <div style={{ maxWidth: 640 }}>
-            <div style={{ fontFamily: UI, fontSize: 15, color: BRIGHT, fontWeight: 600, marginBottom: 6 }}>Look up any token.</div>
-            <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 16 }}>
-              Live price, chart, and the trade tape for any token across the majors and every memecoin — read the market, then trade it. When it’s a market Nexus lists, you trade it here; otherwise we route you to its pool.
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {["BTC", "ETH", "SOL", "HYPE", "NEXUS"].map((s) => (
-                <button key={s} onClick={() => submit(s)} style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, color: MUT, fontFamily: MONO, fontSize: 12, padding: "7px 12px", cursor: "pointer" }}>{s}</button>
-              ))}
+          <div>
+            <MoversRail onPick={(s) => submit(s)} />
+            <div style={{ maxWidth: 640 }}>
+              <div style={{ fontFamily: UI, fontSize: 15, color: BRIGHT, fontWeight: 600, marginBottom: 6 }}>Look up any token.</div>
+              <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 16 }}>
+                Live price, chart, and the trade tape for any token across the majors and every memecoin — read the market, then trade it. When it’s a market Nexus lists, you trade it here; otherwise we route you to its pool.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {["BTC", "ETH", "SOL", "HYPE", "NEXUS"].map((s) => (
+                  <button key={s} onClick={() => submit(s)} style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, color: MUT, fontFamily: MONO, fontSize: 12, padding: "7px 12px", cursor: "pointer" }}>{s}</button>
+                ))}
+              </div>
             </div>
           </div>
         )}

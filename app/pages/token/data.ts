@@ -194,6 +194,42 @@ export async function orderlyPerpSet(): Promise<Set<string>> {
   return set;
 }
 
+// ── MOVERS (Spot discovery rail) ──────────────────────────────────────────────
+// Real Orderly 24h market data across every listed perp — quality alpha, not boosted-token noise:
+// top gainers / losers / most-active by 24h notional. Each is perp-listed, so a tap lands on a Spot
+// page that trades on OUR book. Module-cached ~60s. Fail-soft → last value or empty.
+export interface Mover { sym: string; changePct: number; price: number; volUsd: number }
+const ORDERLY_FUTURES = "https://api-evm.orderly.org/v1/public/futures";
+let _movers: { gainers: Mover[]; losers: Mover[]; active: Mover[] } | null = null;
+let _moversAt = 0;
+export async function fetchMovers(): Promise<{ gainers: Mover[]; losers: Mover[]; active: Mover[] }> {
+  const empty = { gainers: [], losers: [], active: [] };
+  if (_movers && Date.now() - _moversAt < 60 * 1000) return _movers;
+  const j = (await getJson(ORDERLY_FUTURES)) as { data?: { rows?: Record<string, unknown>[] } } | null;
+  const rows = j?.data?.rows;
+  if (!Array.isArray(rows)) return _movers || empty;
+  const all: Mover[] = [];
+  for (const r of rows) {
+    const sym = bareSym(String(r.symbol || ""));
+    const open = Number(r["24h_open"]);
+    const close = Number(r["24h_close"] ?? r.mark_price);
+    const vol = Number(r["24h_amount"] ?? 0) || 0;
+    if (!sym || !(open > 0) || !Number.isFinite(close)) continue;
+    const changePct = ((close - open) / open) * 100;
+    if (!Number.isFinite(changePct)) continue;
+    all.push({ sym, changePct, price: close, volUsd: vol });
+  }
+  if (!all.length) return _movers || empty;
+  const byChange = [...all].sort((a, b) => b.changePct - a.changePct);
+  const out = {
+    gainers: byChange.filter((m) => m.changePct > 0).slice(0, 8),
+    losers: byChange.filter((m) => m.changePct < 0).sort((a, b) => a.changePct - b.changePct).slice(0, 8),
+    active: [...all].filter((m) => m.volUsd > 0).sort((a, b) => b.volUsd - a.volUsd).slice(0, 8),
+  };
+  _movers = out; _moversAt = Date.now();
+  return out;
+}
+
 // ── the Nexus edge, on any token we list ──────────────────────────────────────
 // The differentiator vs a plain swap terminal: next to the chart, the SAME graded funding
 // verdict the Board and the ticket show. Reads the canonical /signals row (the ONE verdict
