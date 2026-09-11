@@ -663,8 +663,9 @@ export default function TraderPage() {
         <CopyModal thesis={copyTarget} walletAddress={walletAddress} onClose={() => setCopyTarget(null)} />
       )}
 
-      {/* Header */}
-      <div style={{ padding: "8px 16px", borderBottom: "1px solid #232327", background: "#0f0f11", display: "flex", alignItems: "center", gap: 10 }}>
+      {/* Header — flexWrap so the three actions (FOLLOW + MESSAGE + SHARE) drop to a second
+          row on a phone instead of overflowing the right edge; on desktop they stay inline. */}
+      <div style={{ padding: "8px 16px", borderBottom: "1px solid #232327", background: "#0f0f11", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 8 }}>
         <button
           onClick={() => navigate("/feed")}
           style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: 0 }}
