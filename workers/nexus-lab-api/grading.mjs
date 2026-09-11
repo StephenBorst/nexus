@@ -202,32 +202,50 @@ export async function computeCallerStats(env, maxHorizonS = 30 * 86400, opts = {
     symFrom[t.symbol] = Math.min(symFrom[t.symbol] ?? start, start);
   }
   const history = {};
-  // ⚠️ The ALL-wallets run fetches /tv/history for EVERY unique symbol across every caller. Firing
-  // them all at once (a single Promise.all) burst-rate-limits Orderly's public endpoint, so a chunk
-  // come back non-ok → those symbols' calls silently graded PENDING → a wallet with a dozen resolved
-  // calls showed as "emerging · N to verify" on the board, while its own process x-ray (few symbols,
-  // no burst) graded all of them. Fetch in BOUNDED BATCHES with one retry so nearly every symbol
-  // resolves. (onlyWallet has few symbols and was never affected — hence the divergence.)
-  const fetchHistoryOne = async ([sym, fromS]) => {
-    // Pad the window backwards so each call has prior bars to classify (see REGIME_PAD_S).
-    const from = Math.max(fromS - REGIME_PAD_S, now - maxHorizonS - REGIME_PAD_S);
+  // ⚠️ The ALL-wallets run needs /tv/history for EVERY unique symbol across every caller. Fetching
+  // them all live (even batched) starves the run — Orderly's public endpoint rate-limits/403s a chunk
+  // under the aggregate load → history[sym] undefined → those calls silently graded PENDING → a wallet
+  // with a dozen resolved calls showed as "emerging · N to verify" while its own per-wallet x-ray (few
+  // symbols) graded them all. Fix structurally with a per-symbol KV CACHE (LAB_STORE, ~30min TTL):
+  //   • The window is standardized to the FULL horizon [now - maxHorizonS - PAD, now] so the board and
+  //     the onlyWallet x-ray share ONE cache entry per symbol.
+  //   • The working x-ray runs (which succeed) WARM the same cache the board reads, and repeat board
+  //     loads warm the rest — so live fetches shrink to cache-misses instead of the whole set.
+  const HIST_TTL_S = 1800;
+  const HKEY = (sym) => `tvhist:v1:${normalizeSymbol(sym) || sym}`;
+  const winFrom = now - maxHorizonS - REGIME_PAD_S; // standardized window (same for every run → cacheable)
+  const symList = Object.keys(symFrom);
+  const misses = [];
+  // 1) Serve from cache where we can (KV reads are reliable + not rate-limited, unlike the origin).
+  await Promise.all(symList.map(async (sym) => {
+    try {
+      const cached = await env.LAB_STORE.get(HKEY(sym));
+      if (cached) { const d = JSON.parse(cached); if (d && Array.isArray(d.t)) { history[sym] = d; return; } }
+    } catch { /* miss/parse → fetch below */ }
+    misses.push(sym);
+  }));
+  // 2) Fetch only the misses (bounded batches + one retry) and write each into the shared cache.
+  const fetchOne = async (sym) => {
     // Normalize the BARE ticker theses store ("BTC") to the Orderly perp id — /tv/history returns
     // nothing for a bare symbol (same fix as fetchGradeHistory; this fetch is independent).
-    const url = `https://api-evm.orderly.org/tv/history?symbol=${normalizeSymbol(sym) || sym}&resolution=60&from=${from}&to=${now}`;
+    const url = `https://api-evm.orderly.org/tv/history?symbol=${normalizeSymbol(sym) || sym}&resolution=60&from=${winFrom}&to=${now}`;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const r = await fetch(url);
         if (!r.ok) { if (attempt === 0) { await new Promise((res) => setTimeout(res, 300)); continue; } break; } // 429/5xx → one retry
         const d = await r.json();
-        if (d && d.s === "ok" && Array.isArray(d.t)) history[sym] = { t: d.t, h: d.h, l: d.l, c: d.c };
+        if (d && d.s === "ok" && Array.isArray(d.t)) {
+          const rec = { t: d.t, h: d.h, l: d.l, c: d.c };
+          history[sym] = rec;
+          try { await env.LAB_STORE.put(HKEY(sym), JSON.stringify(rec), { expirationTtl: HIST_TTL_S }); } catch { /* cache write best-effort */ }
+        }
         break;
       } catch (e) { if (attempt === 1) console.error("[caller-stats] history fetch", sym, e.message); else await new Promise((res) => setTimeout(res, 300)); }
     }
   };
-  const symEntries = Object.entries(symFrom);
   const HIST_BATCH = 8; // gentle enough to avoid the burst rate-limit, few enough batches to stay fast
-  for (let i = 0; i < symEntries.length; i += HIST_BATCH) {
-    await Promise.all(symEntries.slice(i, i + HIST_BATCH).map(fetchHistoryOne));
+  for (let i = 0; i < misses.length; i += HIST_BATCH) {
+    await Promise.all(misses.slice(i, i + HIST_BATCH).map(fetchOne));
   }
   // Contrarian grading is OPT-IN (opts.contrarian) so the hot stance path — gatherStanceEntries
   // → computeCallerStats for merit weights — doesn't pay for the extra KV reads. Only the
