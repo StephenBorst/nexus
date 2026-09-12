@@ -105,13 +105,18 @@ export function AgentTrackRecord({ title, accent, trades, paper, onReset, summar
     ? summary!.firstTradeAt
     : (trades.length ? Math.min(...trades.map((t) => new Date(t.opened_at).getTime() || Date.now())) : 0);
   const since = sinceMs ? new Date(sinceMs).toLocaleDateString() : null;
+  // Paper has no server-side aggregate, so `trades` IS the record — but exec caps
+  // paper_trades at the last 50 (rolling). Past the cap, these stats are a rolling
+  // window (and `since` is just the oldest RETAINED trade, not the record start), so
+  // label it honestly rather than imply a lifetime total. Auto-off if a summary lands.
+  const rolling = !!paper && !useSummary && trades.length >= 50;
 
   return (
     <div style={{ ...agentCardStyle, borderColor: tr > 0 ? (net >= 0 ? "#33333a" : "#4a1e22") : "#232327" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ ...agentLabelStyle, color: accent }}>{title}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {since && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>since {since}</span>}
+          {since && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>{rolling ? `last 50 · since ${since}` : `since ${since}`}</span>}
           {onReset && tr > 0 && (
             <button onClick={onReset} style={{ ...navBtnStyle, fontSize: 9, padding: "3px 10px", color: "#d4d4d8", borderColor: "#33333a" }}>RESET</button>
           )}
@@ -141,7 +146,9 @@ export function AgentTrackRecord({ title, accent, trades, paper, onReset, summar
           </div>
           <div style={{ marginTop: 10, fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#52525b", lineHeight: 1.5 }}>
             {paper
-              ? "🧪 Simulated results — paper trades never touch the exchange. A great paper record is encouraging, not a guarantee."
+              ? (rolling
+                  ? "🧪 Simulated results — the most recent 50 paper trades (rolling window), not a lifetime total. Paper never touches the exchange; encouraging, not a guarantee."
+                  : "🧪 Simulated results — paper trades never touch the exchange. A great paper record is encouraging, not a guarantee.")
               : "⚠ Past performance does not guarantee future results. Markets are risky — only deploy capital you can afford to lose, and start small."}
           </div>
         </>

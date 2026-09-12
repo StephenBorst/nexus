@@ -4829,7 +4829,7 @@ document.getElementById("btn").addEventListener("click",go);
         asOf: new Date().toISOString(),
         config: { horizonsHours: [4, 12, 24], minSamples: min, coins: coinSets.map((c) => c.coin) },
         ...scorecard,
-        note: "Walk-forward event study on self-logged history — forward returns, no lookahead, first/second-half stability. INSUFFICIENT until the series matures (~Sept 14). A read is not an edge until it's PREDICTIVE here.",
+        note: "Walk-forward event study on self-logged history — forward returns, no lookahead, first/second-half stability. Axes read INSUFFICIENT until the series matures. A read is not an edge until it's PREDICTIVE here.",
       };
       try { await env.LAB_STORE.put(CACHE, JSON.stringify(out), { expirationTtl: 3600 }); } catch { /* best-effort */ }
       return json(out, request);

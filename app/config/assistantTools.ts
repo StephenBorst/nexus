@@ -452,7 +452,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_signal_scoreboard",
     description:
-      "Get the SIGNAL SCOREBOARD — how our OWN reads perform when graded by the same trustless standard we grade traders: forward returns, no lookahead, pooled across the core markets, with a walk-forward stability check (first half vs second half must agree). Each axis gets a verdict: PREDICTIVE (a real, stable edge), PROMISING (positive but unconfirmed), NOISE (no edge), or INSUFFICIENT/ACCRUING (not enough self-logged history yet). Use for 'do your signals actually work', 'which reads have an edge', 'is the funding fade profitable', 'how's the backtest looking'. IMPORTANT framing: most axes read ACCRUING right now — the self-logged history matures around Sept 14, which is validation day. Be honest that a read is NOT an edge until it's PREDICTIVE here — publishing the misses is the whole point (radical transparency). Not advice.",
+      "Get the SIGNAL SCOREBOARD — how our OWN reads perform when graded by the same trustless standard we grade traders: forward returns, no lookahead, pooled across the core markets, with a walk-forward stability check (first half vs second half must agree). Each axis gets a verdict: PREDICTIVE (a real, stable edge), PROMISING (positive but unconfirmed), NOISE (no edge), or INSUFFICIENT/ACCRUING (not enough self-logged history yet). Use for 'do your signals actually work', 'which reads have an edge', 'is the funding fade profitable', 'how's the backtest looking'. IMPORTANT framing: most axes read ACCRUING right now — until the self-logged history matures and the sample clears the bar. Be honest that a read is NOT an edge until it's PREDICTIVE here — publishing the misses is the whole point (radical transparency). Not advice.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
       const sc = await fetch(`${AGENT_API}/intel/axis-backtest`).then((r) => r.json()).catch(() => null);
@@ -464,9 +464,9 @@ export const TOOLS: ToolDef[] = [
           signal: a.label, verdict: a.verdict,
           best: a.best && a.verdict !== "INSUFFICIENT"
             ? { horizon_h: a.best.h, hit_rate_pct: a.best.hitRate, mean_forward_bps: a.best.meanBps, observations: a.best.samples, walk_forward_stable: a.best.stable }
-            : "accruing — validation Sept 14",
+            : "accruing — not yet rated",
         })),
-        note: "Forward-return event study, no lookahead. A read is not an edge until it's PREDICTIVE + stable. We publish the misses too — that's the standard. Validation day is Sept 14.",
+        note: "Forward-return event study, no lookahead. A read is not an edge until it's PREDICTIVE + stable. We publish the misses too — that's the standard.",
       });
     },
   },

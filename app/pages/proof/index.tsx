@@ -66,7 +66,7 @@ function SignalRow({ a }: { a: AxisRow }) {
           {a.best.stable && <span style={{ color: POS }} title="First half vs second half agree in sign">✓ stable</span>}
         </span>
       ) : (
-        <span style={{ ...statCell, marginLeft: "auto", color: FAINT }}>accruing — validation Sept 14</span>
+        <span style={{ ...statCell, marginLeft: "auto", color: FAINT }}>accruing — not yet rated</span>
       )}
     </div>
   );
@@ -357,7 +357,7 @@ export default function ProofPage() {
         <BoardShell title="◆ SIGNAL SCOREBOARD — OUR OWN READS, GRADED" count={scorecard?.axes?.length}>
           <div style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.6, maxWidth: 660, marginBottom: 12 }}>
             Every read in the engine, scored the way we grade traders — <b style={{ color: BRIGHT }}>forward returns, no lookahead</b>, pooled across the core markets, with a walk-forward stability check.
-            A read is not an edge until it's <span style={{ color: POS }}>◆ PREDICTIVE</span> here. Most sit at <span style={{ color: FAINT }}>ACCRUING</span> until the self-logged history matures — validation day is <b style={{ color: BRIGHT }}>Sept 14</b>.
+            A read is not an edge until it's <span style={{ color: POS }}>◆ PREDICTIVE</span> here. Most sit at <span style={{ color: FAINT }}>ACCRUING</span> until the self-logged history matures and the sample clears the bar.
           </div>
           {scorecard === null ? empty("loading…") : !scorecard.axes?.length ? empty("scorecard warming up…") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
