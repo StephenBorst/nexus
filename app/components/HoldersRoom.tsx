@@ -18,7 +18,7 @@ import {
   TIER_THRESHOLDS,
 } from "@/hooks/useNexusTier";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
-import { NexusTreasuryStack } from "@/components/NexusTreasuryStack";
+import { TreasuryInventory } from "@/components/TreasuryInventory";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -149,7 +149,7 @@ export function HoldersRoom({ walletAddress }: { walletAddress: string | null })
             <NexusTierBadge tier={tier} size="md" />
           </div>
         </div>
-        <NexusTreasuryStack compact />
+        <TreasuryInventory compact />
       </div>
 
       {loadingFeed && (

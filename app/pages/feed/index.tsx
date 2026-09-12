@@ -13,7 +13,7 @@ import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePr
 import { fetchOnChainRepScore } from "@/hooks/useThesisRegistry";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
-import { NexusTreasuryStack } from "@/components/NexusTreasuryStack";
+import { TreasuryInventory } from "@/components/TreasuryInventory";
 import { NexusTicker } from "@/components/NexusTicker";
 import { NexusBuyBar } from "@/components/NexusBuyBar";
 import type { ThesisTrade } from "@/pages/lab/types";
@@ -1630,7 +1630,7 @@ export default function FeedPage() {
       {/* The bulky $NEXUS stat card was redundant with the top ticker — keep the slim
           BUY $NEXUS row and the treasury flywheel. */}
       <NexusBuyBar />
-      <NexusTreasuryStack />
+      <TreasuryInventory />
     </div>
   );
 
