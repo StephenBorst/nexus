@@ -123,19 +123,32 @@ function bestPair(pairs: TokenPair[]): TokenPair | null {
 // endpoint for an exact hit.
 //
 // ⚠️ A bare TICKER is where DexScreener betrays us: it happily returns a same-symbol scam wrapper (a
-// fake LP with a stolen mcap and ~$4 of real volume) that outranks — or entirely hides — the real
-// token, so a naive highest-liquidity pick lands on FbLa…/2fbB…/8k3v… impostors. Three-tier
-// resolution for a bare ticker fixes it, in order:
+// fake LP with a stolen mcap and ~$4 of real volume) — OR, for a non-DEX-native major, a bridged
+// Solana/Wormhole WRAPPER that has real volume (so a floor alone can't reject it) but is NOT the asset.
+// A naive highest-liquidity pick lands on those. Resolution for a bare ticker, in order:
+//   0) a PERP_PREFERRED major (BTC/ETH/ZEC/POL/DOT/APT/…): the asset has no DEX-native spot we trust —
+//      its only on-chain "spot" is a wrapper — so DON'T attempt spot at all; signal the terminal to
+//      route to the Nexus perp page (perpBase). This is the trust boundary: we'd rather trade it on our
+//      own book than ever surface a bridged look-alike.
 //   1) a curated CANONICAL mint we KNOW (SOL → wrapped SOL) — resolve straight to that mint;
 //   2) else the highest-liquidity EXACT-ticker pair that clears a real volume+liquidity floor — a real
-//      market, not a $4 fake LP. This alone rescues RAY/JUP/AAVE/CAKE/POL: the deep pool clears the
-//      floor, the impostor is dropped (volume is far harder to fake than a static LP, so it's the
-//      discriminator);
-//   3) else NO legit spot for this ticker (ZEC/APT/DOT native L1s, etc.) → return best:null so the
-//      terminal routes a perp-listed name to the Nexus perp page rather than EVER showing the scam.
+//      market, not a $4 fake LP. This rescues the DEX-NATIVE alts (RAY/JUP/AAVE/CAKE/…): their genuine
+//      deep pool clears the floor, the impostor is dropped (volume is harder to fake than a static LP);
+//   3) else NO legit spot for this ticker → best:null so the terminal routes a perp-listed name to the
+//      Nexus perp page rather than EVER showing the scam.
 const CANONICAL_SPOT: Record<string, string> = {
   SOL: "So11111111111111111111111111111111111111112", // wrapped SOL (Solana)
 };
+// Perp-listed majors whose only on-chain "spot" is a bridged wrapper / scam look-alike (no DEX-native
+// token). A bare-ticker search for these must go to the Nexus perp book, never a wrapper — this is what
+// bit BTC/ETH/ZEC/POL (they landed on Solana wrappers even after the volume floor, because the wrapper
+// clears it). DEX-native perps (RAY/JUP/AAVE/CAKE/LINK/UNI/WIF/BONK/PEPE/…) are deliberately NOT here —
+// they resolve to their real spot pool via tier 2. Curated + extensible; a missing name just falls to
+// tier 2 (still scam-filtered), a wrongly-included one just trades on the perp (safe).
+const PERP_PREFERRED = new Set<string>([
+  "BTC", "ETH", "ZEC", "POL", "DOT", "APT", "ADA", "XRP", "LTC", "BCH", "ATOM", "NEAR", "TON", "TRX",
+  "XLM", "DOGE", "AVAX", "BNB", "ALGO", "XMR", "ETC", "FIL", "HBAR", "DASH", "XTZ", "EGLD", "FLOW", "EOS", "KAS",
+]);
 // A pair reads as a REAL market only above these floors. A ~$4-volume wrapper never clears them; every
 // genuine listed name clears them with orders of magnitude to spare (250x+ over the observed scams).
 const MIN_SPOT_VOL_USD = 1000;
@@ -145,10 +158,19 @@ const isRealMarket = (p: TokenPair): boolean =>
 const dedupePairs = (arr: (TokenPair | null | undefined)[]): TokenPair[] =>
   arr.filter((p): p is TokenPair => !!p).filter((p, i, a) => a.findIndex((x) => x.pairAddress === p.pairAddress) === i);
 
-export async function searchToken(query: string): Promise<{ best: TokenPair | null; alts: TokenPair[] }> {
+export async function searchToken(query: string): Promise<{ best: TokenPair | null; alts: TokenPair[]; perpBase?: string }> {
   const q = query.trim();
   if (!q) return { best: null, alts: [] };
   const isAddress = /^0x[a-fA-F0-9]{40}$/.test(q) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q);
+
+  // ── Tier 0 — a perp-preferred major (bare ticker only). Skip DexScreener entirely: the asset has no
+  // trusted DEX-native spot, so hand the terminal the perp base and let it route to /perp. No wrapper
+  // ever enters the running. (An address query is exact and never goes through this.)
+  if (!isAddress) {
+    const wantSym = q.replace(/^\$/, "").toUpperCase();
+    if (PERP_PREFERRED.has(wantSym)) return { best: null, alts: [], perpBase: wantSym };
+  }
+
   const url = isAddress ? `${DS_BASE}/tokens/${encodeURIComponent(q)}` : `${DS_BASE}/search?q=${encodeURIComponent(q)}`;
   const j = (await getJson(url)) as { pairs?: unknown[] } | null;
   const pairs = Array.isArray(j?.pairs) ? j!.pairs!.map(toPair).filter((p): p is TokenPair => !!p) : [];
@@ -158,7 +180,7 @@ export async function searchToken(query: string): Promise<{ best: TokenPair | nu
     .sort((a, b) => (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0))
     .slice(0, 4);
 
-  // An address query is exact — never second-guess it. A bare ticker runs the three-tier resolution.
+  // An address query is exact — never second-guess it. A bare ticker runs the tier-1→3 resolution.
   if (!isAddress) {
     const wantSym = q.replace(/^\$/, "").toUpperCase();
     let resolved = false;

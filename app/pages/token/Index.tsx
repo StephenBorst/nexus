@@ -475,14 +475,17 @@ export default function TokenTerminal() {
     // independent watchdog: never leave the terminal on a spinner if the fetch hangs
     const paint = setTimeout(() => { if (alive) setLoading(false); }, 6500);
     searchToken(query)
-      .then(({ best }) => {
+      .then(({ best, perpBase }) => {
         if (!alive) return;
+        // A perp-preferred major (BTC/ETH/ZEC/POL/…) has no trusted DEX spot — go straight to the
+        // Nexus perp book instead of ever rendering a bridged wrapper.
+        if (perpBase) { navigate(`/perp/PERP_${perpBase}_USDC`, { replace: true }); return; }
         setPair(best); setNotFound(!best);
       })
       .catch(() => { if (alive) { setPair(null); setNotFound(true); } })
       .finally(() => { if (alive) { setLoading(false); clearTimeout(paint); } });
     return () => { alive = false; clearTimeout(paint); };
-  }, [query]);
+  }, [query, navigate]);
 
   // ── Tier 3 spot→perp fallback ──
   // A searched ticker with NO legit spot pair (searchToken returns best:null after the scam filter —
