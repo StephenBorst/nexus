@@ -484,6 +484,17 @@ export default function TokenTerminal() {
     return () => { alive = false; clearTimeout(paint); };
   }, [query]);
 
+  // ── Tier 3 spot→perp fallback ──
+  // A searched ticker with NO legit spot pair (searchToken returns best:null after the scam filter —
+  // e.g. ZEC/APT/DOT, native L1s with only impostor wrappers) that IS a Nexus perp → route to the perp
+  // book rather than leaving a dead "not found" or ever showing the $4-vol scam. Perp-listed names with
+  // real spot (SOL/BTC) resolve to a pair, so notFound is false and this never fires for them.
+  useEffect(() => {
+    if (loading || !notFound || !query) return;
+    const base = query.trim().replace(/^\$/, "").replace(/^PERP_/i, "").replace(/_USDC$/i, "").toUpperCase();
+    if (base && perpSet.has(base)) navigate(`/perp/PERP_${base}_USDC`, { replace: true });
+  }, [notFound, query, perpSet, loading, navigate]);
+
   // ── chart for the resolved pair (+ on timeframe change) ──
   useEffect(() => {
     if (!pair) { setCandles([]); return; }

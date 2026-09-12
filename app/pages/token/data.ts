@@ -119,15 +119,31 @@ function bestPair(pairs: TokenPair[]): TokenPair | null {
 }
 
 // Search by symbol, name, or contract address (Definitive's "Search CA or Token"). Returns the
-// deepest pair plus the ranked alternates (so the UI can offer "did you mean" for ambiguous
-// tickers). A bare EVM/Solana address goes straight to the token endpoint for an exact hit.
-// A bare ticker that DexScreener search resolves badly (a same-symbol scam/low-liq token, or a perp
-// mapping) → the ONE canonical spot mint we actually mean. Searching "SOL" must land on wrapped SOL,
-// not a FbLa…-style impostor. The resulting page is still perp-listed, so the Nexus SOL-PERP stays
-// offered there as the secondary venue — we PREFER the real mint, we don't replace it with the perp.
+// deepest pair plus the ranked alternates. A bare EVM/Solana address goes straight to the token
+// endpoint for an exact hit.
+//
+// ⚠️ A bare TICKER is where DexScreener betrays us: it happily returns a same-symbol scam wrapper (a
+// fake LP with a stolen mcap and ~$4 of real volume) that outranks — or entirely hides — the real
+// token, so a naive highest-liquidity pick lands on FbLa…/2fbB…/8k3v… impostors. Three-tier
+// resolution for a bare ticker fixes it, in order:
+//   1) a curated CANONICAL mint we KNOW (SOL → wrapped SOL) — resolve straight to that mint;
+//   2) else the highest-liquidity EXACT-ticker pair that clears a real volume+liquidity floor — a real
+//      market, not a $4 fake LP. This alone rescues RAY/JUP/AAVE/CAKE/POL: the deep pool clears the
+//      floor, the impostor is dropped (volume is far harder to fake than a static LP, so it's the
+//      discriminator);
+//   3) else NO legit spot for this ticker (ZEC/APT/DOT native L1s, etc.) → return best:null so the
+//      terminal routes a perp-listed name to the Nexus perp page rather than EVER showing the scam.
 const CANONICAL_SPOT: Record<string, string> = {
   SOL: "So11111111111111111111111111111111111111112", // wrapped SOL (Solana)
 };
+// A pair reads as a REAL market only above these floors. A ~$4-volume wrapper never clears them; every
+// genuine listed name clears them with orders of magnitude to spare (250x+ over the observed scams).
+const MIN_SPOT_VOL_USD = 1000;
+const MIN_SPOT_LIQ_USD = 5000;
+const isRealMarket = (p: TokenPair): boolean =>
+  (p.volume24h ?? 0) >= MIN_SPOT_VOL_USD && (p.liquidityUsd ?? 0) >= MIN_SPOT_LIQ_USD;
+const dedupePairs = (arr: (TokenPair | null | undefined)[]): TokenPair[] =>
+  arr.filter((p): p is TokenPair => !!p).filter((p, i, a) => a.findIndex((x) => x.pairAddress === p.pairAddress) === i);
 
 export async function searchToken(query: string): Promise<{ best: TokenPair | null; alts: TokenPair[] }> {
   const q = query.trim();
@@ -142,27 +158,55 @@ export async function searchToken(query: string): Promise<{ best: TokenPair | nu
     .sort((a, b) => (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0))
     .slice(0, 4);
 
-  // Canonical spot override: a bare ticker (not an address) that maps to a known mint must resolve to
-  // THAT mint. Prefer a pair whose BASE is the canonical mint (the real SOL/USDC market) — search
-  // results first, then the token endpoint, since wSOL is usually the QUOTE in other pools. Only
-  // overrides when such a pair is found; the impostor best is demoted to a "did you mean" alt.
+  // An address query is exact — never second-guess it. A bare ticker runs the three-tier resolution.
   if (!isAddress) {
-    const canon = CANONICAL_SPOT[q.replace(/^\$/, "").toUpperCase()];
-    if (canon && best?.baseAddress?.toLowerCase() !== canon.toLowerCase()) {
-      let canonPairs = pairs.filter((p) => p.baseAddress.toLowerCase() === canon.toLowerCase());
-      if (!canonPairs.length) {
-        const cj = (await getJson(`${DS_BASE}/tokens/${canon}`)) as { pairs?: unknown[] } | null;
-        const cp = Array.isArray(cj?.pairs) ? cj!.pairs!.map(toPair).filter((p): p is TokenPair => !!p) : [];
-        canonPairs = cp.filter((p) => p.baseAddress.toLowerCase() === canon.toLowerCase());
+    const wantSym = q.replace(/^\$/, "").toUpperCase();
+    let resolved = false;
+
+    // ── Tier 1 — curated canonical mint. Prefer a pair whose BASE is that mint (the real SOL/USDC
+    // market), search results first then the token endpoint (wSOL is usually the QUOTE elsewhere).
+    const canon = CANONICAL_SPOT[wantSym];
+    if (canon) {
+      if (best?.baseAddress?.toLowerCase() === canon.toLowerCase()) {
+        resolved = true; // already the canonical mint
+      } else {
+        let canonPairs = pairs.filter((p) => p.baseAddress.toLowerCase() === canon.toLowerCase());
+        if (!canonPairs.length) {
+          const cj = (await getJson(`${DS_BASE}/tokens/${canon}`)) as { pairs?: unknown[] } | null;
+          const cp = Array.isArray(cj?.pairs) ? cj!.pairs!.map(toPair).filter((p): p is TokenPair => !!p) : [];
+          canonPairs = cp.filter((p) => p.baseAddress.toLowerCase() === canon.toLowerCase());
+        }
+        const canonBest = bestPair(canonPairs);
+        if (canonBest) {
+          const prev = best;
+          best = canonBest;
+          resolved = true;
+          alts = dedupePairs([prev, ...alts]).filter((p) => p.pairAddress !== canonBest.pairAddress).slice(0, 4);
+        }
       }
-      const canonBest = bestPair(canonPairs);
-      if (canonBest) {
-        const prev = best;
-        best = canonBest;
-        alts = [prev, ...alts]
-          .filter((p): p is TokenPair => !!p && p.pairAddress !== canonBest.pairAddress)
-          .filter((p, i, arr) => arr.findIndex((x) => x.pairAddress === p.pairAddress) === i)
-          .slice(0, 4);
+    }
+
+    // ── Tier 2 — prefer a REAL exact-ticker market over a same-ticker impostor / fake LP. ──
+    if (!resolved) {
+      const bestOk = !!best && best.baseSymbol === wantSym && isRealMarket(best);
+      if (!bestOk) {
+        const legit = pairs
+          .filter((p) => p.baseSymbol === wantSym && isRealMarket(p))
+          .sort((a, b) => (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0));
+        if (legit.length) {
+          const prev = best;
+          best = legit[0];
+          // Demote the rest, but never surface a same-ticker sub-floor impostor as a "did you mean".
+          alts = dedupePairs([prev, ...alts])
+            .filter((p) => p.pairAddress !== best!.pairAddress && (p.baseSymbol !== wantSym || isRealMarket(p)))
+            .slice(0, 4);
+        } else if (best && best.baseSymbol === wantSym) {
+          // ── Tier 3 — the only exact-ticker match is a sub-floor impostor and no real spot exists.
+          // Drop it so the terminal routes a perp-listed name to /perp (or shows notFound) — never the
+          // scam. A non-exact best (a partial name hit) is left alone; it isn't the impostor pattern.
+          best = null;
+          alts = alts.filter((p) => p.baseSymbol !== wantSym || isRealMarket(p)); // don't offer scams as "did you mean" either
+        }
       }
     }
   }
