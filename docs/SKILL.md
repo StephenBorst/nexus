@@ -1,6 +1,6 @@
 ---
 name: nexus
-description: Non-custodial perpetual DEX on Arbitrum with an autonomous trading agent. Use when user says buy, sell, trade, long, short, open position, close position, flip trade, set leverage, deposit USDC, withdraw funds, check balance, view positions, cancel order, copy a thesis, publish trade on-chain, check leaderboard, top traders, Rep Score, market intel, crypto news, funding rate, thesis, analyst feed, who's winning on Nexus, deploy an agent, run a trading bot, autonomous agent, paper trade, activate my agent, go live, autonomous mode, pause agent, kill agent, agent status, how's my agent, fund my agent, top agents, deploy your best strategy, winning strategy, proven strategy, strategy preset, what's winning, top strategy, run the proven one, trailing stop, scale out, take profit ladder, DCA, safety orders, webhook, tradingview signal, regime filter, backtest, agent leaderboard, prove it on-chain, verify on-chain, is it self-funding.
+description: Non-custodial perpetual DEX on Arbitrum with an autonomous trading agent. Use when user says buy, sell, trade, long, short, open position, close position, flip trade, set leverage, deposit USDC, withdraw funds, check balance, view positions, cancel order, copy a thesis, publish trade on-chain, check leaderboard, top traders, Rep Score, market intel, crypto news, funding rate, thesis, analyst feed, who's winning on Nexus, deploy an agent, run a trading bot, autonomous agent, paper trade, activate my agent, go live, autonomous mode, pause agent, kill agent, agent status, how's my agent, fund my agent, top agents, deploy your best strategy, winning strategy, proven strategy, strategy preset, what's winning, top strategy, run the proven one, trailing stop, scale out, take profit ladder, DCA, safety orders, webhook, tradingview signal, regime filter, backtest, agent leaderboard, prove it on-chain, verify on-chain, verify on arbitrum, is it self-funding, where does revenue go, what can you not do with my wallet.
 metadata:
   {
     "clawdbot":
@@ -138,7 +138,8 @@ risk-free before real funds).
 cross-market walk-forward: it FADES the funding+OI confluence, but only in the regimes where
 fading actually pays (high volatility, non-Asia session). ~60% win, positive expectancy,
 net-positive out-of-sample. Still a young sample (~20 trades) → a validated LEAD, **not
-"proven"**. PAPER it and watch it build a graded record.
+"proven"**. PAPER starts *this wallet's* own forward clock, risk-free — it does **not** appear
+on `/agents/leaderboard`; only AUTONOMOUS settled trades do.
 ```json
 { "signalMode": "CONFLUENCE", "invertSignal": true,
   "symbols": ["PERP_BTC_USDC","PERP_ETH_USDC","PERP_SOL_USDC","PERP_HYPE_USDC"],
@@ -191,9 +192,12 @@ This is what separates Nexus from every "trust me it works" agent:
   not self-reported. The number is recomputable by anyone.
 - **On-chain ledger.** The canonical trade ledger is SHA-256 hashed and ANCHORED ON-CHAIN
   (Arbitrum, append-only). `GET /agents/ledger` returns the hash + on-chain proof — anyone can
-  recompute and verify it.
+  recompute and verify it. **When the human asks to verify, hand them the Arbiscan link —
+  `https://arbiscan.io/address/0x57a698df84a44F3dA3dac3E08CA455a55A4eff84` (the append-only anchor
+  contract; its Anchored events are every committed root) — NOT raw JSON.**
 - **Self-funding.** x402 cloud endpoints sell Nexus signals priced in $NEXUS; that revenue feeds
-  the treasury, which accumulates $NEXUS and HOLDS. The agent pays for its own edge.
+  the treasury (the Nexus Safe), which accumulates $NEXUS and HOLDS. The agent pays for its own edge.
+  **Say "the onchain treasury" — never quote a dollar figure (it drifts).**
 - **Non-custodial + capped.** Real money, hard risk limits, order-only key (can't withdraw),
   kill switch. You don't trust the track record — **you verify it on-chain.**
 
