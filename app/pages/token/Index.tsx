@@ -809,7 +809,7 @@ export default function TokenTerminal() {
   // holdings sweep is empty for a Solana pubkey, so build these from getSolWalletContext instead of
   // showing "No spot tokens". Read-only; each chip is a launcher like the EVM rows.
   const solHoldings = useMemo<Holding[]>(() => {
-    if (!isSolToken || !solSigner.address) return [];
+    if (!solSigner.address) return []; // any connected Solana wallet — SOL/USDC show on /spot home too
     const mk = (sym: string, amount: number, usd: number | null, address: string | null, dp = 4): Holding => ({
       sym, chain: "solana", amount, usd, address,
       amountLabel: amount.toLocaleString("en-US", { maximumFractionDigits: amount >= 1 ? dp : 6 }),
@@ -818,7 +818,8 @@ export default function TokenTerminal() {
     const rows: Holding[] = [];
     if (solBalance != null && solBalance > 0) rows.push(mk("SOL", solBalance, solUsd ? solBalance * solUsd : null, null));
     if (usdcBal != null && usdcBal > 0) rows.push(mk("USDC", usdcBal, usdcBal, "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", 2));
-    if (solTokenBal != null && solTokenBal > 0 && pair?.baseAddress) rows.push(mk(pair.baseSymbol, solTokenBal, (pair.priceUsd || 0) > 0 ? solTokenBal * (pair.priceUsd as number) : null, pair.baseAddress));
+    // The current token's chip only when we're actually on a Solana token (its mint = the launcher).
+    if (isSolToken && solTokenBal != null && solTokenBal > 0 && pair?.baseAddress) rows.push(mk(pair.baseSymbol, solTokenBal, (pair.priceUsd || 0) > 0 ? solTokenBal * (pair.priceUsd as number) : null, pair.baseAddress));
     return rows;
   }, [isSolToken, solSigner.address, solBalance, usdcBal, solTokenBal, solUsd, pair]);
   // YOUR POSITION (from tracked in-app buys) — invested, avg entry, and P&L on the TRACKED tokens
@@ -987,11 +988,14 @@ export default function TokenTerminal() {
 
   // ── Solana in-app BUY handlers (Jupiter, wSOL → token) — plan validates + guards; execute re-fetches
   // fresh bytes, re-guards, simulates, then signs via the Privy Solana provider. Fail-soft → deep-link. ──
-  // SOL balance + SOL/USD for the buy ticket (%-chips + USD chips + est output). Fail-soft → nulls.
+  // SOL + USDC balance (+ SOL/USD) for a connected Solana wallet — read whenever the wallet is
+  // connected, NOT only on a Solana token page, so YOUR WALLET shows SOL/USDC chips on the /spot home
+  // too (it used to say "No spot tokens" until a Solana token was opened). The current token's balance
+  // is read only when we're actually on a Solana token (pass the mint only then). Fail-soft → nulls.
   useEffect(() => {
-    if (!isSolToken || !solProvider || !solSigner.address) { setSolBalance(null); setUsdcBal(null); setSolTokenBal(null); setSolUsd(null); return; }
+    if (!solProvider || !solSigner.address) { setSolBalance(null); setUsdcBal(null); setSolTokenBal(null); setSolUsd(null); return; }
     let alive = true;
-    getSolWalletContext(solProvider, solSigner.address, pair?.baseAddress)
+    getSolWalletContext(solProvider, solSigner.address, isSolToken ? pair?.baseAddress : undefined)
       .then((c) => { if (alive) { setSolBalance(c.balanceSol); setUsdcBal(c.usdcBal); setSolUsdcErr(c.usdcErr); setSolTokenBal(c.tokenBal); setSolUsd(c.solUsd); setSolBalanceErr(c.balanceErr); } })
       .catch((e) => { if (alive) { setSolBalance(null); setUsdcBal(null); setSolUsdcErr((e as Error)?.message?.slice(0, 80) || "read failed"); setSolTokenBal(null); setSolUsd(null); setSolBalanceErr((e as Error)?.message?.slice(0, 80) || "read failed"); } });
     return () => { alive = false; };
@@ -1144,7 +1148,7 @@ export default function TokenTerminal() {
             Nexus custom surfaces (X-Ray / Feed / Proof), not a bespoke page. */}
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "20px 14px 96px" : "32px 24px 80px" }}>
         <SectionHeader eyebrow="SPOT" title="Trade any token." note="LIVE DATA · ANY CHAIN" />
-        {(wallet || solSigner.address) && <HoldingsStrip holdings={holdings.length ? holdings : solHoldings} loading={holdingsLoading || (isSolToken && !!solSigner.address && solHoldings.length === 0 && solBalance == null && solBalanceErr == null)} onOpen={(h) => navigate(`/token/${encodeURIComponent(h.address || h.sym)}`)} />}
+        {(wallet || solSigner.address) && <HoldingsStrip holdings={holdings.length ? holdings : solHoldings} loading={holdingsLoading || (!!solSigner.address && solHoldings.length === 0 && solBalance == null && solBalanceErr == null)} onOpen={(h) => navigate(`/token/${encodeURIComponent(h.address || h.sym)}`)} />}
         {/* ── SEARCH ── Definitive's "Search CA or Token" */}
         <form onSubmit={(e) => { e.preventDefault(); submit(input); }} style={{ display: "flex", gap: 8, marginBottom: 16, maxWidth: 640 }}>
           {/* Relative wrapper so the one-tap clear (✕) sits inside the field — wiping a long

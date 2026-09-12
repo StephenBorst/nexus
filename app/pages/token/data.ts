@@ -121,6 +121,14 @@ function bestPair(pairs: TokenPair[]): TokenPair | null {
 // Search by symbol, name, or contract address (Definitive's "Search CA or Token"). Returns the
 // deepest pair plus the ranked alternates (so the UI can offer "did you mean" for ambiguous
 // tickers). A bare EVM/Solana address goes straight to the token endpoint for an exact hit.
+// A bare ticker that DexScreener search resolves badly (a same-symbol scam/low-liq token, or a perp
+// mapping) → the ONE canonical spot mint we actually mean. Searching "SOL" must land on wrapped SOL,
+// not a FbLa…-style impostor. The resulting page is still perp-listed, so the Nexus SOL-PERP stays
+// offered there as the secondary venue — we PREFER the real mint, we don't replace it with the perp.
+const CANONICAL_SPOT: Record<string, string> = {
+  SOL: "So11111111111111111111111111111111111111112", // wrapped SOL (Solana)
+};
+
 export async function searchToken(query: string): Promise<{ best: TokenPair | null; alts: TokenPair[] }> {
   const q = query.trim();
   if (!q) return { best: null, alts: [] };
@@ -128,11 +136,36 @@ export async function searchToken(query: string): Promise<{ best: TokenPair | nu
   const url = isAddress ? `${DS_BASE}/tokens/${encodeURIComponent(q)}` : `${DS_BASE}/search?q=${encodeURIComponent(q)}`;
   const j = (await getJson(url)) as { pairs?: unknown[] } | null;
   const pairs = Array.isArray(j?.pairs) ? j!.pairs!.map(toPair).filter((p): p is TokenPair => !!p) : [];
-  const best = bestPair(pairs);
-  const alts = pairs
+  let best = bestPair(pairs);
+  let alts = pairs
     .filter((p) => p.pairAddress !== best?.pairAddress)
     .sort((a, b) => (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0))
     .slice(0, 4);
+
+  // Canonical spot override: a bare ticker (not an address) that maps to a known mint must resolve to
+  // THAT mint. Prefer a pair whose BASE is the canonical mint (the real SOL/USDC market) — search
+  // results first, then the token endpoint, since wSOL is usually the QUOTE in other pools. Only
+  // overrides when such a pair is found; the impostor best is demoted to a "did you mean" alt.
+  if (!isAddress) {
+    const canon = CANONICAL_SPOT[q.replace(/^\$/, "").toUpperCase()];
+    if (canon && best?.baseAddress?.toLowerCase() !== canon.toLowerCase()) {
+      let canonPairs = pairs.filter((p) => p.baseAddress.toLowerCase() === canon.toLowerCase());
+      if (!canonPairs.length) {
+        const cj = (await getJson(`${DS_BASE}/tokens/${canon}`)) as { pairs?: unknown[] } | null;
+        const cp = Array.isArray(cj?.pairs) ? cj!.pairs!.map(toPair).filter((p): p is TokenPair => !!p) : [];
+        canonPairs = cp.filter((p) => p.baseAddress.toLowerCase() === canon.toLowerCase());
+      }
+      const canonBest = bestPair(canonPairs);
+      if (canonBest) {
+        const prev = best;
+        best = canonBest;
+        alts = [prev, ...alts]
+          .filter((p): p is TokenPair => !!p && p.pairAddress !== canonBest.pairAddress)
+          .filter((p, i, arr) => arr.findIndex((x) => x.pairAddress === p.pairAddress) === i)
+          .slice(0, 4);
+      }
+    }
+  }
   return { best, alts };
 }
 
@@ -195,11 +228,16 @@ export async function orderlyPerpSet(): Promise<Set<string>> {
 }
 
 // ── MOVERS (Spot discovery rail) ──────────────────────────────────────────────
-// Real Orderly 24h market data across every listed perp — quality alpha, not boosted-token noise:
-// top gainers / losers / most-active by 24h notional. Each is perp-listed, so a tap lands on a Spot
-// page that trades on OUR book. Module-cached ~60s. Fail-soft → last value or empty.
+// Real Orderly 24h market data — top gainers / losers / most-active by 24h notional. This is a SPOT
+// discovery rail, so it must list only names that map to a real spot mint/CA: we keep ONLY the clean
+// crypto perps (`PERP_<BASE>_USDC`, the SAME shape orderlyPerpSet accepts) and DROP the exotic/equity
+// perps that carry an extra market segment (e.g. PERP_DELL_USDC_MYTHOS, AMD, PONS) — those are
+// perp-only, have no spot token to land on, and were leaking ugly compound tickers into the rail.
+// Those perps stay tradeable on the book; they just don't belong in a spot rail. Cached ~60s, fail-soft.
 export interface Mover { sym: string; changePct: number; price: number; volUsd: number }
 const ORDERLY_FUTURES = "https://api-evm.orderly.org/v1/public/futures";
+// A real spot-mappable perp: PERP_<BASE>_USDC with nothing after (no _MYTHOS/equity market suffix).
+const SPOT_MAPPABLE_PERP = /^PERP_[A-Z0-9]+_USDC$/i;
 let _movers: { gainers: Mover[]; losers: Mover[]; active: Mover[] } | null = null;
 let _moversAt = 0;
 export async function fetchMovers(): Promise<{ gainers: Mover[]; losers: Mover[]; active: Mover[] }> {
@@ -210,7 +248,9 @@ export async function fetchMovers(): Promise<{ gainers: Mover[]; losers: Mover[]
   if (!Array.isArray(rows)) return _movers || empty;
   const all: Mover[] = [];
   for (const r of rows) {
-    const sym = bareSym(String(r.symbol || ""));
+    const rawSym = String(r.symbol || "");
+    if (!SPOT_MAPPABLE_PERP.test(rawSym)) continue; // drop equity/exotic perps — spot rail only
+    const sym = bareSym(rawSym);
     const open = Number(r["24h_open"]);
     const close = Number(r["24h_close"] ?? r.mark_price);
     const vol = Number(r["24h_amount"] ?? 0) || 0;
