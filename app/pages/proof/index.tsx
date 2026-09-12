@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { SectionHeader } from "@/pages/lab/components";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import CarrySleeve from "./CarrySleeve";
+import FeaturedLead from "./FeaturedLead";
 
 const API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -205,6 +206,9 @@ export default function ProofPage() {
         self-reported, and hashed into a ledger anyone can recompute and check against the chain. This is the part
         competitors can't copy: being <i>right</i> is the only thing that ranks.
       </div>
+
+      {/* FEATURED LEAD — the engine's validated edge, front and center (booth hero). */}
+      <FeaturedLead isMobile={isMobile} />
 
       {/* Ledger trust strip — the primitive that unifies everything. */}
       {ledger?.ledgerHash && (
