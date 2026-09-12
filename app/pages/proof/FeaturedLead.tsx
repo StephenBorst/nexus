@@ -17,7 +17,10 @@ const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
 const POS = "#3ecf8e", AMBER = "#e0a458";
 const BORDER = "#232327", SURFACE_ALT = "#0f0f11", INSET = "#08080a";
-const LEDGER_URL = "https://og.nexustradinglabs.com/agents/ledger";
+// The append-only ledger anchor ON ARBITRUM — public, no login, always resolves.
+// A judge can tap this on a phone and see the Anchored events (every committed
+// root). Cleaner on-stage proof than raw ledger JSON, and screenshot-able offline.
+const ANCHOR_EXPLORER = "https://arbiscan.io/address/0x57a698df84a44F3dA3dac3E08CA455a55A4eff84";
 
 const LEAD = STRATEGY_PRESETS.find((p) => p.id === "regime-gated-invert");
 
@@ -77,10 +80,11 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
 
       {/* Honest label + self-funding line */}
       <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
-        A backtest <b style={{ color: FOG }}>lead</b>, not a live record — a young sample, so we call it validated,
-        not proven. Deploy it and it earns a graded, on-chain-verifiable track record, exactly like every agent on the
-        board below. And the same funding edge pays its own way: it's sold as data via{" "}
-        <b style={{ color: FOG }}>x402</b> (priced in $NEXUS) — the agent funds itself.
+        A backtest <b style={{ color: FOG }}>lead</b>, not a live record — young sample, so: validated, not proven.
+        Run it in <b style={{ color: FOG }}>PAPER</b> to start its forward clock, risk-free — that record is yours,
+        not this board. Take it <b style={{ color: FOG }}>live</b> and it joins the graded, on-chain-verifiable agents
+        below: real settled trades, never a paper sim. Either way the edge funds itself — the same signals sell as data
+        via <b style={{ color: FOG }}>x402</b>, priced in $NEXUS.
       </div>
 
       {/* CTAs — deploy + verify */}
@@ -92,10 +96,10 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
           Deploy in the Lab →
         </button>
         <a
-          href={LEDGER_URL} target="_blank" rel="noopener noreferrer"
+          href={ANCHOR_EXPLORER} target="_blank" rel="noopener noreferrer"
           style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, textDecoration: "none", border: `1px solid ${BORDER}`, borderRadius: 4, padding: "8px 14px", background: "#1a1a1e" }}
         >
-          ⛓ Verify the ledger ↗
+          ⛓ Verify on Arbitrum ↗
         </a>
       </div>
     </div>
