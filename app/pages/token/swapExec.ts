@@ -184,6 +184,14 @@ async function quoteAndGuard(args: {
 
   const outAmount = j.outAmount != null ? safeBig(j.outAmount) : null;
   const minOut = j.minOut != null ? safeBig(j.minOut) : null;
+  // 5) Min-received sanity band (pre-signature). We can't simulate the router's opaque calldata the
+  // way the Solana path does, so at minimum refuse a quote whose REPORTED floor is broken/hostile: a
+  // non-positive minOut, or one more than 50% below the quoted out. No honest spot quote sets >50%
+  // slippage, so this never fires on a real fill — it only trips on a zero/garbage floor that would
+  // let the swap fill at near-nothing without reverting. (Guards the reported floor, not the calldata's
+  // embedded floor — closing that fully needs state-override simulation injected providers don't offer.)
+  if (outAmount != null && outAmount > 0n && minOut != null && (minOut <= 0n || minOut < outAmount / 2n))
+    throw new Error("Quote's minimum-received floor looks wrong — refused. Use the deep-link.");
   const impact = Number(j.priceImpact);
   const feeBps = Number.isInteger(j.feeBps) && (j.feeBps as number) > 0 ? (j.feeBps as number) : 0;
 

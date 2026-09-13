@@ -5,7 +5,7 @@
 // execution — Nexus has no spot venue, so the CTA routes to where an order can actually
 // fill: our own perp page when the token is a listed Orderly market, else a deep-link to
 // the token's pool. No fake order tabs, no dead "Buy" button.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { generatePageTitle } from "@/utils/utils";
 import { getPageMeta } from "@/utils/seo";
@@ -29,6 +29,13 @@ import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // EVM slot). The Privy connector exposes walletEVM/walletSOL separately — walletSOL carries the Solana
 // signer (provider.signTransaction/sendTransaction). Safe outside the provider (useContext default).
 import { useWalletConnectorPrivy } from "@orderly.network/wallet-connector-privy";
+
+// WooFi majors-swap widget — the in-app fill for the majors WooFi routes (BTC/ETH/SOL/USDC etc.),
+// restored as an additive Spot panel (the old standalone /swap now redirects to /token). Lazy so its
+// heavy third-party bundle only loads when a user opens the panel; it never touches the Fabric/Jupiter
+// per-token routing below. WooFi is self-custodial and quotes its own majors; unlisted long-tail tokens
+// still use the per-token Fabric/Jupiter in-app fill or the honest deep-link.
+const WooFiWidget = lazy(() => import("@/components/WooFiWidget"));
 
 // Canonical WETH per DexScreener chain slug — the always-available token→token target on a SELL
 // (alongside the user's own recents). Address-list data only; the received token is NEVER approved
@@ -881,6 +888,7 @@ export default function TokenTerminal() {
   const [swapStep, setSwapStep] = useState("");
   const [swapErr, setSwapErr] = useState<string | null>(null);
   const [swapDone, setSwapDone] = useState<{ hash: string } | null>(null);
+  const [wooFiOpen, setWooFiOpen] = useState(false); // majors-swap panel (WooFi) — additive to the routing above
 
   // A changed token/side/amount invalidates a captured plan — close + clear so the modal can
   // never sign against a plan the numbers on screen no longer match.
@@ -1661,6 +1669,15 @@ export default function TokenTerminal() {
                     ? <>Nexus doesn’t run a spot book for {pair.baseSymbol}, so we route you to <b style={{ color: MUT }}>{swapState.venue}</b> where it can fill. The read is ours; the swap is theirs.</>
                     : <>No router quotes {pair.baseSymbol} right now — no honest fill to offer, so we don’t fake it. The read above still stands.</>}
                 </div>
+
+                {/* ── WooFi majors panel (additive) — an in-app fill for the majors WooFi routes,
+                    separate from the per-token routing above. Opens the self-custodial widget in a
+                    modal so it gets its own room. Useful when the token here doesn't route but you
+                    want to swap a major (get USDC to buy with, rotate BTC/ETH/SOL) without leaving. */}
+                <button onClick={() => setWooFiOpen(true)} className="nx-press"
+                  style={{ width: "100%", marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 9, padding: "10px 0", cursor: "pointer" }}>
+                  ⇄ Swap majors in-app <span style={{ color: FAINT, fontWeight: 400 }}>· WooFi</span>
+                </button>
                 </>)}
               </div>
             </div>
@@ -1795,6 +1812,26 @@ export default function TokenTerminal() {
         )}
         </div>
       </div>
+
+      {/* ── WooFi majors-swap panel (modal) — self-custodial widget, its own token picker + chain
+          switch + execution. Additive: mounted lazily on open, never touches the Fabric/Jupiter
+          per-token routing. Backdrop-click / ✕ closes; the widget keeps its own confirm flow. ── */}
+      {wooFiOpen && (
+        <div onClick={() => setWooFiOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 460, marginTop: "6vh", background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", color: BRIGHT }}>SWAP MAJORS</div>
+                <div style={{ fontFamily: UI, fontSize: 10, color: FAINT, marginTop: 2 }}>WooFi · self-custodial · you sign in your own wallet</div>
+              </div>
+              <button onClick={() => setWooFiOpen(false)} style={{ background: "none", border: "none", color: MUT, fontSize: 16, cursor: "pointer", lineHeight: 1 }}>✕</button>
+            </div>
+            <Suspense fallback={<div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, textAlign: "center", padding: "40px 0" }}>loading swap…</div>}>
+              <WooFiWidget />
+            </Suspense>
+          </div>
+        </div>
+      )}
 
       {/* ── swap confirm modal (in-app EVM/Fabric buy) — nothing signs until "Confirm swap" ── */}
       {modalOpen && plan && pair && (

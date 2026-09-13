@@ -5831,8 +5831,11 @@ document.getElementById("btn").addEventListener("click",go);
         const feeApplied = feeSent != null && feeEcho != null;
         const feeBps = feeApplied ? cfgBps : 0;
         return json({ available: true, ok: outAmount != null, router: "Fabric", outAmount, priceImpact, approval, tx, minOut, feeBps, feeApplied, feeConfigured, feeSent, raw: body }, request);
-      } catch (e) {
-        return json({ available: true, ok: false, error: String(e) }, request);
+      } catch {
+        // Never echo the raw exception (mirrors the Jupiter/Sol proxies' status-only discipline —
+        // the App ID lives in a header, not the URL, but keep the failure shape airtight regardless).
+        // The client reads only `ok` here and falls back to the honest Uniswap deep-link.
+        return json({ available: true, ok: false, reason: "fabric_error" }, request);
       }
     }
 
