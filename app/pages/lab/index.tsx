@@ -420,7 +420,11 @@ export default function TheLabPage() {
               <PositioningBoard trades={connected ? processedTrades : undefined} />
             </Collapsible>
           );
-          const catalysts = <div style={{ marginTop: 22 }}><CatalystBoard /></div>;
+          const catalysts = (
+            <Collapsible title="◇ CATALYSTS · WORLD EVENTS" subtitle="liquid prediction-market events mapped to the markets they move on Nexus" storageKey="nx_catalysts_open">
+              <CatalystBoard />
+            </Collapsible>
+          );
           // FORECAST DIVERGENCE — the prediction-market lens, restored but scoped to markets
           // you can trade here (our-markets-only until the Quotient feed lands). A tradeable,
           // gradeable call on a Nexus market. Fail-soft (renders a quiet line if sparse).
