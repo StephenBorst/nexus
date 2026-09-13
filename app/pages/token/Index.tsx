@@ -418,6 +418,10 @@ export default function TokenTerminal() {
   const [pair, setPair] = useState<TokenPair | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  // A perp-preferred major (BTC/ETH/SOL/…) has no trusted DEX spot pair — instead of bouncing the
+  // user out to the /perp book, we KEEP them in the Spot terminal and offer WooFi (majors swap) +
+  // a link to the perp book. Holds the base symbol when that's the case; null otherwise.
+  const [perpOnly, setPerpOnly] = useState<string | null>(null);
   const [candles, setCandles] = useState<Candle[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [tf, setTf] = useState(1); // index into TIMEFRAMES (1H default)
@@ -476,34 +480,36 @@ export default function TokenTerminal() {
 
   // ── resolve the searched token → the deepest pair ──
   useEffect(() => {
-    if (!query) { setPair(null); setNotFound(false); return; }
+    if (!query) { setPair(null); setNotFound(false); setPerpOnly(null); return; }
     let alive = true;
-    setLoading(true); setNotFound(false);
+    setLoading(true); setNotFound(false); setPerpOnly(null);
     // independent watchdog: never leave the terminal on a spinner if the fetch hangs
     const paint = setTimeout(() => { if (alive) setLoading(false); }, 6500);
     searchToken(query)
       .then(({ best, perpBase }) => {
         if (!alive) return;
-        // A perp-preferred major (BTC/ETH/ZEC/POL/…) has no trusted DEX spot — go straight to the
-        // Nexus perp book instead of ever rendering a bridged wrapper.
-        if (perpBase) { navigate(`/perp/PERP_${perpBase}_USDC`, { replace: true }); return; }
+        // A perp-preferred major (BTC/ETH/ZEC/POL/…) has no trusted DEX spot pair. We no longer
+        // bounce the user out to the /perp book — WooFi now fills majors in-app, so KEEP them in
+        // the Spot terminal (perpOnly card) with a WooFi swap + a link to the perp book.
+        if (perpBase) { setPerpOnly(perpBase); setPair(null); setNotFound(false); return; }
         setPair(best); setNotFound(!best);
       })
       .catch(() => { if (alive) { setPair(null); setNotFound(true); } })
       .finally(() => { if (alive) { setLoading(false); clearTimeout(paint); } });
     return () => { alive = false; clearTimeout(paint); };
-  }, [query, navigate]);
+  }, [query]);
 
   // ── Tier 3 spot→perp fallback ──
   // A searched ticker with NO legit spot pair (searchToken returns best:null after the scam filter —
-  // e.g. ZEC/APT/DOT, native L1s with only impostor wrappers) that IS a Nexus perp → route to the perp
-  // book rather than leaving a dead "not found" or ever showing the $4-vol scam. Perp-listed names with
-  // real spot (SOL/BTC) resolve to a pair, so notFound is false and this never fires for them.
+  // e.g. ZEC/APT/DOT, native L1s with only impostor wrappers) that IS a Nexus perp → surface the
+  // perpOnly card (WooFi swap + perp-book link) rather than leaving a dead "not found" or ever showing
+  // the $4-vol scam. Perp-listed names with real spot (SOL/BTC) resolve to a pair, so notFound is false
+  // and this never fires for them.
   useEffect(() => {
     if (loading || !notFound || !query) return;
     const base = query.trim().replace(/^\$/, "").replace(/^PERP_/i, "").replace(/_USDC$/i, "").toUpperCase();
-    if (base && perpSet.has(base)) navigate(`/perp/PERP_${base}_USDC`, { replace: true });
-  }, [notFound, query, perpSet, loading, navigate]);
+    if (base && perpSet.has(base)) { setPerpOnly(base); setNotFound(false); }
+  }, [notFound, query, perpSet, loading]);
 
   // ── chart for the resolved pair (+ on timeframe change) ──
   useEffect(() => {
@@ -1170,6 +1176,14 @@ export default function TokenTerminal() {
             Nexus custom surfaces (X-Ray / Feed / Proof), not a bespoke page. */}
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "20px 14px 96px" : "32px 24px 80px" }}>
         <SectionHeader eyebrow="SPOT" title="Trade any token." note="LIVE DATA · ANY CHAIN" />
+        {/* Back to the Spot landing (movers + majors + search) — a token detail otherwise had no
+            way home except leaving Spot and returning. Shows on any resolved/searching state. */}
+        {(query || perpOnly) && (
+          <button onClick={() => { setInput(""); navigate("/token"); }} className="nx-press"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${BORD}`, borderRadius: 7, color: MUT, fontFamily: MONO, fontSize: 11, letterSpacing: "0.04em", padding: "6px 11px", cursor: "pointer", marginBottom: 14 }}>
+            ‹ Spot home
+          </button>
+        )}
         {(wallet || solSigner.address) && <HoldingsStrip holdings={holdings.length ? holdings : solHoldings} loading={holdingsLoading || (!!solSigner.address && solHoldings.length === 0 && solBalance == null && solBalanceErr == null)} onOpen={(h) => navigate(`/token/${encodeURIComponent(h.address || h.sym)}`)} />}
         {/* ── SEARCH ── Definitive's "Search CA or Token" */}
         <form onSubmit={(e) => { e.preventDefault(); submit(input); }} style={{ display: "flex", gap: 8, marginBottom: 16, maxWidth: 640 }}>
@@ -1218,6 +1232,31 @@ export default function TokenTerminal() {
         {/* ── LOADING ── */}
         {query && loading && !pair && (
           <div style={{ fontFamily: MONO, fontSize: 12, color: FAINT, padding: "40px 0" }}>resolving {query}…</div>
+        )}
+
+        {/* ── PERP-PREFERRED MAJOR (no trusted spot pair) ── Kept in Spot instead of bouncing to the
+            /perp book: WooFi fills the big majors in-app, and the perp book stays one tap away. ── */}
+        {perpOnly && !pair && !loading && (
+          <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: isMobile ? 18 : 24, maxWidth: 560, marginTop: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 15, color: MUT }}>{perpOnly.slice(0, 1)}</div>
+              <div>
+                <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: BRIGHT }}>{perpOnly}</div>
+                <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase" }}>Nexus perp market</div>
+              </div>
+            </div>
+            <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 16 }}>
+              There’s no trusted spot pool to price <b style={{ color: BRIGHT }}>{perpOnly}</b> here, so we don’t fake one. Swap the majors in-app via <b style={{ color: BRIGHT }}>WooFi</b>, or trade <b style={{ color: BRIGHT }}>{perpOnly}</b> on the Nexus perp book — graded like every Nexus position.
+            </div>
+            <button onClick={() => setWooFiOpen(true)} className="nx-press"
+              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "#0a0a0b", background: POS, border: "none", borderRadius: 9, padding: "13px 0", cursor: "pointer", marginBottom: 10 }}>
+              ⇄ Swap majors in-app · WooFi
+            </button>
+            <button onClick={() => navigate(`/perp/PERP_${perpOnly}_USDC`)} className="nx-press"
+              style={{ width: "100%", textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 9, padding: "12px 0", cursor: "pointer" }}>
+              Trade {perpOnly} on the Nexus perp book →
+            </button>
+          </div>
         )}
 
         {/* ── THE TERMINAL ── */}
