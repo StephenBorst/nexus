@@ -1,5 +1,5 @@
 /**
- * Nexus AI Assistant — config + provider plumbing (single source of truth).
+ * Nexus Assistant — config + provider plumbing (single source of truth).
  *
  * v1 is BYOK, CLIENT-SIDE ONLY: the user's API key lives in localStorage and the
  * browser calls the model provider directly. The key NEVER touches a Nexus

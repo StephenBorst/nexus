@@ -272,7 +272,7 @@ function useIsMobile(bp = 768) {
   return mob;
 }
 
-// A "why?" chip on a mover — opens the Nexus AI copilot and asks it to explain
+// A "why?" chip on a mover — opens the Nexus copilot and asks it to explain
 // the move (explain_move tool → live move + cited headlines). Lives inside the
 // mover <a>, so it must swallow the click to avoid also opening the chart link.
 function WhyChip({ ticker }: { ticker: string }) {

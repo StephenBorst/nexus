@@ -1,5 +1,5 @@
 /**
- * Nexus AI Assistant — tool definitions (v2: read-only, agentic).
+ * Nexus Assistant — tool definitions (v2: read-only, agentic).
  *
  * Each tool is provider-agnostic: a name + description + JSON-schema input + an
  * async executor that fetches from Nexus/Orderly public endpoints and returns a

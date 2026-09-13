@@ -310,7 +310,7 @@ export default function TheLabPage() {
         </div>
       </div>
       {/* Extra bottom padding on phones so the last board rows (and their → ) can scroll clear
-          of the fixed bottom-right NEXUS AI FAB, instead of resting under it. */}
+          of the fixed bottom-right NEXUS FAB, instead of resting under it. */}
       <div style={{ padding: isMobile ? "12px 12px 88px" : 16 }}>
         {/* Information hierarchy: the graded record (the moat claim) + onboarding
             lead, then the active tab — the task the user came for. The ambient promo/
