@@ -130,6 +130,33 @@ export function liqFlushEvents(cs, _pmap, { minHist = 12 } = {}) {
   return ev;
 }
 
+// ── BASIS × conditioner CONFLUENCE (the Sept-14 stack) ────────────────────────
+// basis_extreme is the first PREDICTIVE axis, but modest (+0.07R) and lumpy (maxDdR 42). The
+// method that got us here = STACK orthogonal tools: take the basis fade ONLY when a second,
+// harder-to-arb read AGREES on the same side at that hour. Each conditioner's side is read
+// no-lookahead (the SAME series/classifiers as its standalone axis) and intersected with the
+// basis event at the SAME hour; the forward outcome is still strictly future. Rare
+// intersections → small n → the scorecard flags INSUFFICIENT honestly (confluence is meant to
+// be selective). Keep only the conditioners that LIFT stability/expectancy over standalone basis.
+function liqFlushSideByHour(cs) {
+  const m = new Map();
+  for (const e of liqFlushEvents(cs)) m.set(hourBucket(e.t), e.side); // DOWN→LONG / UP→SHORT (revert)
+  return m;
+}
+function cvdSideByHour(cs, pmap) {
+  const m = new Map();
+  for (const e of cvdDivergenceEvents(cs, pmap)) m.set(hourBucket(e.t), e.side);
+  return m;
+}
+// Take each basis extreme ONLY when `sideByHour` gives the SAME side at that hour.
+export function basisConfluenceEvents(cs, pmap, sideByHour) {
+  const cond = sideByHour instanceof Map ? sideByHour : new Map();
+  return basisExtremeEvents(cs).filter((e) => cond.get(hourBucket(e.t)) === e.side);
+}
+export function basisXsmartEvents(cs, pmap) { return basisConfluenceEvents(cs, pmap, smByHour(cs.smHist)); }
+export function basisXliqEvents(cs, pmap) { return basisConfluenceEvents(cs, pmap, liqFlushSideByHour(cs)); }
+export function basisXcvdEvents(cs, pmap) { return basisConfluenceEvents(cs, pmap, cvdSideByHour(cs, pmap)); }
+
 // ── RSI momentum-cooldown continuation (Stoic's H4 study, done rigorously) ────
 // EMA of a numeric series.
 export function ema(values, period) {
@@ -526,6 +553,9 @@ export const AXES = [
   { name: "cvd_divergence", label: "CVD divergence", gen: cvdDivergenceEvents },
   { name: "basis_extreme", label: "Basis extreme fade (perp premium/discount)", gen: basisExtremeEvents },
   { name: "liq_flush", label: "Liquidation-flush reversion", gen: liqFlushEvents },
+  { name: "basis_x_smart", label: "Basis extreme × smart money agrees", gen: basisXsmartEvents },
+  { name: "basis_x_liqflush", label: "Basis extreme × liq-flush timing", gen: basisXliqEvents },
+  { name: "basis_x_cvd", label: "Basis extreme × CVD divergence", gen: basisXcvdEvents },
   { name: "smart_fade", label: "Funding fade × smart money", gen: smartFadeEvents },
   { name: "smart_follow", label: "Follow smart money", gen: smartFollowEvents },
   { name: "rsi_reset_held", label: "RSI reset held 45+ (A: uptrend)", gen: rsiResetEvents },

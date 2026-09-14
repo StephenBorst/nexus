@@ -2,7 +2,7 @@
 // Run: node --test workers/nexus-lab-api/axisbt.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hourBucket, priceByHour, forwardReturn, callPnl, fundingFadeEvents, cvdDivergenceEvents, scoreEvents, runScorecard, ema, rsi, rsiResetEvents, slopeUp, relStrength, rsiResetTrendEvents, candlesByHour, vwapAt, atrPctAt, atrPctH4At, volGrowth, volumeRotatesInto, rsValuePullbackCandleEvents, rsValuePullbackEvents, rsQuartiles, gradeEventR, trailingPct, basisExtremeEvents, liqFlushEvents } from "./axisbt.mjs";
+import { hourBucket, priceByHour, forwardReturn, callPnl, fundingFadeEvents, cvdDivergenceEvents, scoreEvents, runScorecard, ema, rsi, rsiResetEvents, slopeUp, relStrength, rsiResetTrendEvents, candlesByHour, vwapAt, atrPctAt, atrPctH4At, volGrowth, volumeRotatesInto, rsValuePullbackCandleEvents, rsValuePullbackEvents, rsQuartiles, gradeEventR, trailingPct, basisExtremeEvents, liqFlushEvents, basisConfluenceEvents } from "./axisbt.mjs";
 import { priceSeries } from "./axisbt.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 
@@ -91,7 +91,7 @@ test("runScorecard: returns every axis, ranked, with a coin count", () => {
   const coinSets = [{ oiHist: mkOi(rising), cvdHist: [], smHist: [] }];
   const sc = runScorecard(coinSets, { horizons: [4, 12], minSamples: 20 });
   assert.equal(sc.coins, 1);
-  assert.equal(sc.axes.length, 14);
+  assert.equal(sc.axes.length, 17);
   assert.ok(sc.axes.every((a) => typeof a.verdict === "string"));
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback"));
 });
@@ -208,7 +208,7 @@ test("runScorecard: candle + rotation axes registered; runs on a candle series",
     };
   };
   const sc = runScorecard([mkCS("BTC", 0.2, () => 100), mkCS("SOL", 0.5, (i) => (i > N / 2 ? 200 : 50))], { horizons: [4], minSamples: 20 });
-  assert.equal(sc.axes.length, 14);
+  assert.equal(sc.axes.length, 17);
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback_candle"));
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback_rotation"));
   assert.ok(sc.universe[0].quartile >= 1); // rs quartiles attached to the universe
@@ -356,4 +356,23 @@ test("runScorecard: basis_extreme + liq_flush axes registered", () => {
   const sc = runScorecard([{ oiHist: mkOi(rising), cvdHist: [], smHist: [], basisHist: [], liqHist: [] }], { horizons: [4], minSamples: 20 });
   assert.ok(sc.axes.some((a) => a.name === "basis_extreme"));
   assert.ok(sc.axes.some((a) => a.name === "liq_flush"));
+});
+
+// ── The conditioner stack: basis fade kept only when a second read agrees ─────
+test("basisConfluenceEvents: keeps a basis event only when the conditioner agrees on side", () => {
+  const calm = Array.from({ length: 60 }, (_, i) => ({ t: BASE + i * HR, basisPct: 0.01 * (i % 2 ? 1 : -1) }));
+  const basisHist = [...calm, { t: BASE + 60 * HR, basisPct: 0.6 }]; // premium spike → SHORT at hour 60
+  const h = (t) => Math.round(t / (3600 * 1000));
+  // conditioner AGREES (SHORT) at that hour → kept
+  assert.equal(basisConfluenceEvents({ basisHist }, null, new Map([[h(BASE + 60 * HR), "SHORT"]])).length, 1);
+  // conditioner DISAGREES (LONG) → dropped
+  assert.equal(basisConfluenceEvents({ basisHist }, null, new Map([[h(BASE + 60 * HR), "LONG"]])).length, 0);
+  // conditioner ABSENT at that hour → dropped (confluence requires an actual agreeing signal)
+  assert.equal(basisConfluenceEvents({ basisHist }, null, new Map()).length, 0);
+  assert.equal(basisConfluenceEvents({ basisHist }, null, null).length, 0); // non-Map guard
+});
+
+test("runScorecard: basis conditioner-stack axes registered", () => {
+  const sc = runScorecard([{ oiHist: mkOi(rising), cvdHist: [], smHist: [], basisHist: [], liqHist: [] }], { horizons: [4], minSamples: 20 });
+  for (const n of ["basis_x_smart", "basis_x_liqflush", "basis_x_cvd"]) assert.ok(sc.axes.some((a) => a.name === n), n);
 });
