@@ -2,7 +2,7 @@
 // Run: node --test workers/nexus-lab-api/axisbt.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hourBucket, priceByHour, forwardReturn, callPnl, fundingFadeEvents, cvdDivergenceEvents, scoreEvents, runScorecard, ema, rsi, rsiResetEvents, slopeUp, relStrength, rsiResetTrendEvents, candlesByHour, vwapAt, atrPctAt, atrPctH4At, volGrowth, volumeRotatesInto, rsValuePullbackCandleEvents, rsValuePullbackEvents, rsQuartiles, gradeEventR } from "./axisbt.mjs";
+import { hourBucket, priceByHour, forwardReturn, callPnl, fundingFadeEvents, cvdDivergenceEvents, scoreEvents, runScorecard, ema, rsi, rsiResetEvents, slopeUp, relStrength, rsiResetTrendEvents, candlesByHour, vwapAt, atrPctAt, atrPctH4At, volGrowth, volumeRotatesInto, rsValuePullbackCandleEvents, rsValuePullbackEvents, rsQuartiles, gradeEventR, trailingPct, basisExtremeEvents, liqFlushEvents } from "./axisbt.mjs";
 import { priceSeries } from "./axisbt.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 
@@ -91,7 +91,7 @@ test("runScorecard: returns every axis, ranked, with a coin count", () => {
   const coinSets = [{ oiHist: mkOi(rising), cvdHist: [], smHist: [] }];
   const sc = runScorecard(coinSets, { horizons: [4, 12], minSamples: 20 });
   assert.equal(sc.coins, 1);
-  assert.equal(sc.axes.length, 12);
+  assert.equal(sc.axes.length, 14);
   assert.ok(sc.axes.every((a) => typeof a.verdict === "string"));
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback"));
 });
@@ -208,7 +208,7 @@ test("runScorecard: candle + rotation axes registered; runs on a candle series",
     };
   };
   const sc = runScorecard([mkCS("BTC", 0.2, () => 100), mkCS("SOL", 0.5, (i) => (i > N / 2 ? 200 : 50))], { horizons: [4], minSamples: 20 });
-  assert.equal(sc.axes.length, 12);
+  assert.equal(sc.axes.length, 14);
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback_candle"));
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback_rotation"));
   assert.ok(sc.universe[0].quartile >= 1); // rs quartiles attached to the universe
@@ -313,4 +313,47 @@ test("runScorecard: D1_candle axis registered (the D0/D1 candle ablation)", () =
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback_candle_rsi"));
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback_candle"));
   assert.ok(sc.axes.every((a) => Array.isArray(a.rsQuartileDist))); // every axis exposes the rs quartile dist
+});
+
+// ── The Sept-14 axes: basis extreme fade + liquidation-flush reversion ────────
+test("trailingPct: nearest-rank quantile, null on empty", () => {
+  assert.equal(trailingPct([], 0.9), null);
+  assert.equal(trailingPct([5], 0.9), 5);
+  assert.equal(trailingPct([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.9), 9); // ceil(0.9*10)=9th smallest → 9
+  assert.equal(trailingPct([10, 1, 5, 3], 0.5), 3); // sorted [1,3,5,10], ceil(0.5*4)=2nd → 3
+  assert.equal(trailingPct([1, NaN, 2, undefined, 3], 1.0), 3); // ignores non-finite
+});
+
+test("basisExtremeEvents: fades the extreme, correct side, no lookahead", () => {
+  const calm = Array.from({ length: 60 }, (_, i) => ({ t: BASE + i * HR, basisPct: 0.01 * (i % 2 ? 1 : -1) })); // ± noise
+  // A big PREMIUM spike after warmup → SHORT (fade the crowded longs).
+  const evUp = basisExtremeEvents({ basisHist: [...calm, { t: BASE + 60 * HR, basisPct: 0.6 }] });
+  assert.equal(evUp.length, 1);
+  assert.equal(evUp[0].side, "SHORT");
+  assert.equal(evUp[0].t, BASE + 60 * HR);
+  // A big DISCOUNT spike → LONG (fade the crowded shorts).
+  assert.equal(basisExtremeEvents({ basisHist: [...calm, { t: BASE + 60 * HR, basisPct: -0.6 }] })[0].side, "LONG");
+  // Within warmup (<48 prior points) nothing fires even on a huge spike (no lookahead / no thin-sample fire).
+  assert.equal(basisExtremeEvents({ basisHist: [{ t: BASE, basisPct: 0.01 }, { t: BASE + HR, basisPct: 0.9 }] }).length, 0);
+  assert.equal(basisExtremeEvents({}).length, 0);
+});
+
+test("liqFlushEvents: reverts the cascade (DOWN→LONG, UP→SHORT), needs history", () => {
+  const base = Array.from({ length: 12 }, (_, i) => ({ t: BASE + i * HR, longMag: 100, shortMag: 100, count: 5 }));
+  // DOWN flush: longMag spikes 10× the trailing median (longs capitulating) → LONG.
+  const evD = liqFlushEvents({ liqHist: [...base, { t: BASE + 12 * HR, longMag: 1000, shortMag: 100, count: 9 }] });
+  assert.equal(evD.length, 1);
+  assert.equal(evD[0].side, "LONG");
+  assert.equal(evD[0].t, BASE + 12 * HR);
+  // UP squeeze: shortMag spikes (shorts force-bought) → SHORT.
+  assert.equal(liqFlushEvents({ liqHist: [...base, { t: BASE + 12 * HR, longMag: 100, shortMag: 1000, count: 9 }] })[0].side, "SHORT");
+  // Too little history for classifyFlush (<12) → nothing.
+  assert.equal(liqFlushEvents({ liqHist: base.slice(0, 5) }).length, 0);
+  assert.equal(liqFlushEvents({}).length, 0);
+});
+
+test("runScorecard: basis_extreme + liq_flush axes registered", () => {
+  const sc = runScorecard([{ oiHist: mkOi(rising), cvdHist: [], smHist: [], basisHist: [], liqHist: [] }], { horizons: [4], minSamples: 20 });
+  assert.ok(sc.axes.some((a) => a.name === "basis_extreme"));
+  assert.ok(sc.axes.some((a) => a.name === "liq_flush"));
 });

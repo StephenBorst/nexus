@@ -4814,15 +4814,18 @@ document.getElementById("btn").addEventListener("click",go);
       const readJson = async (kv, key) => { try { const r = await kv.get(key); return r ? JSON.parse(r) : []; } catch { return []; } };
       const coinSets = [];
       for (const coin of COINS) {
-        const [oiHist, cvdHist, smHist, candleHist] = await Promise.all([
+        const [oiHist, cvdHist, smHist, candleHist, basisHist, liqHist] = await Promise.all([
           readJson(AGENT_KV, `oi:hist:PERP_${coin}_USDC`),
           readJson(AGENT_KV, `cvd:hist:${coin}`),
           readJson(AGENT_KV, `sm:hist:${coin}`),
           readJson(AGENT_KV, `candle:hist:PERP_${coin}_USDC`),
+          readJson(AGENT_KV, `basis:hist:${coin}`),
+          readJson(AGENT_KV, `liq:hist:${coin}`),
         ]);
         // Include the coin if EITHER series has data — the candle axes grade off candle:hist
-        // depth (backfilled), so a coin with deep candles but shallow oi still belongs.
-        if ((oiHist || []).length >= 2 || (candleHist || []).length >= 2) coinSets.push({ coin, oiHist, cvdHist, smHist, candleHist });
+        // depth (backfilled), so a coin with deep candles but shallow oi still belongs. The
+        // basis/liq axes ride the same price spine (oi/candle) for forward-return + R grading.
+        if ((oiHist || []).length >= 2 || (candleHist || []).length >= 2) coinSets.push({ coin, oiHist, cvdHist, smHist, candleHist, basisHist, liqHist });
       }
       const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min });
       const out = {

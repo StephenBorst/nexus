@@ -8,10 +8,11 @@
 // discipline that killed the naive dials (in-sample sweeps mislead; always walk-forward).
 //
 // Signal generators are pure (events from stored series, using only data ≤ the signal
-// hour); the CVD one REUSES the deployed classifier so the backtest scores live behavior.
-// Pure + tested. Fed entirely by the self-logged series (oi/cvd/sm/stance:hist) — which is
-// why it only becomes meaningful as that history matures (~Sept 14).
+// hour); the CVD + liq-flush ones REUSE the deployed classifiers so the backtest scores
+// live behavior. Pure + tested. Fed entirely by the self-logged series (oi/cvd/sm/basis/
+// liq:hist) — which is why it only becomes meaningful as that history matures (~Sept 14).
 import { classifyCvdDivergence } from "./flow.mjs";
+import { classifyFlush } from "./liquidations.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
 
@@ -35,7 +36,7 @@ export function forwardReturn(pmap, t, h) {
 export function callPnl(fwdRet, side) { return side === "SHORT" ? -fwdRet : fwdRet; }
 
 // ── Signal generators: (coinSet, priceByHourMap) → [{ t, side }] ──────────────
-// coinSet = { coin, oiHist, cvdHist, smHist, stanceHist, basisHist }.
+// coinSet = { coin, oiHist, cvdHist, smHist, candleHist, basisHist, liqHist }.
 
 // Fade the crowd: at each hour with stretched funding, take the contrarian side.
 export function fundingFadeEvents(cs, _pmap, { threshold = 0.0001 } = {}) {
@@ -82,6 +83,51 @@ export function smartFadeEvents(cs, _pmap, { threshold = 0.0001 } = {}) {
 // Baseline for comparison: just follow the smart-money lean.
 export function smartFollowEvents(cs) {
   return (cs.smHist || []).filter((s) => s && (s.side === "LONG" || s.side === "SHORT")).map((s) => ({ t: s.t, side: s.side }));
+}
+
+// ── Spot-perp BASIS extreme fade (basis:hist {t, basisPct}) ───────────────────
+// The perp's premium/discount to spot is INSTANTANEOUS leverage froth (vs funding's
+// periodic rate) — the pre-registered "standout lead" (54% win, 12d in-sample). Fade the
+// EXTREME: an outlier PREMIUM = crowded longs → SHORT; an outlier DISCOUNT = crowded
+// shorts → LONG. "Extreme" = the coin's OWN trailing p90 of |basis| over `window` hours
+// ending strictly BEFORE the event (no lookahead), so it adapts per-coin/regime instead of
+// a fixed cutoff. Graded on the same frozen R contract as every other axis.
+export function trailingPct(values, p) {
+  const arr = (values || []).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (!arr.length) return null;
+  const idx = Math.min(arr.length - 1, Math.max(0, Math.ceil(p * arr.length) - 1)); // nearest-rank quantile
+  return arr[idx];
+}
+export function basisExtremeEvents(cs, _pmap, { window = 168, minWarmup = 48, pct = 0.9 } = {}) {
+  const rows = (cs.basisHist || []).filter((b) => b && Number.isFinite(b.basisPct)).sort((a, b) => (a.t || 0) - (b.t || 0));
+  const ev = [];
+  for (let i = 0; i < rows.length; i++) {
+    const trail = rows.slice(Math.max(0, i - window), i).map((r) => Math.abs(r.basisPct)); // strictly before i
+    if (trail.length < minWarmup) continue;
+    const thr = trailingPct(trail, pct), mag = Math.abs(rows[i].basisPct);
+    if (!(thr > 0) || !(mag > thr)) continue; // strictly ABOVE the trailing p90 (a flat regime has no extreme)
+    ev.push({ t: rows[i].t, side: rows[i].basisPct > 0 ? "SHORT" : "LONG" }); // premium→SHORT, discount→LONG
+  }
+  return ev;
+}
+
+// ── LIQUIDATION-FLUSH reversion (liq:hist {t, longMag, shortMag}) ─────────────
+// A forced-liquidation cascade overshoots then reverts — the confluence search's single
+// best timing gate (fading the funding crowd INTO a flush lifted win-rate 38.6%→49%).
+// Graded standalone here: a DOWN flush (longs capitulating) = a washout low → LONG; an UP
+// flush (shorts squeezed) = a blow-off high → SHORT. Reuses the LIVE classifyFlush (2.5×
+// trailing-median spike) so the backtest scores deployed behavior; the trailing history is
+// strictly PRIOR to the event bar (no lookahead). The continuation read (DOWN→SHORT) is the
+// exact inverse — a one-line follow-up if this reverts negative.
+export function liqFlushEvents(cs, _pmap, { minHist = 12 } = {}) {
+  const rows = (cs.liqHist || []).filter((p) => p && Number.isFinite(p.longMag) && Number.isFinite(p.shortMag)).sort((a, b) => (a.t || 0) - (b.t || 0));
+  const ev = [];
+  for (let i = minHist; i < rows.length; i++) {
+    const flush = classifyFlush(rows.slice(0, i), rows[i]); // history strictly before the event bar
+    if (!flush) continue;
+    ev.push({ t: rows[i].t, side: flush.side === "DOWN" ? "LONG" : "SHORT" }); // revert the cascade
+  }
+  return ev;
 }
 
 // ── RSI momentum-cooldown continuation (Stoic's H4 study, done rigorously) ────
@@ -478,6 +524,8 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
 export const AXES = [
   { name: "funding_fade", label: "Funding fade (baseline)", gen: fundingFadeEvents },
   { name: "cvd_divergence", label: "CVD divergence", gen: cvdDivergenceEvents },
+  { name: "basis_extreme", label: "Basis extreme fade (perp premium/discount)", gen: basisExtremeEvents },
+  { name: "liq_flush", label: "Liquidation-flush reversion", gen: liqFlushEvents },
   { name: "smart_fade", label: "Funding fade × smart money", gen: smartFadeEvents },
   { name: "smart_follow", label: "Follow smart money", gen: smartFollowEvents },
   { name: "rsi_reset_held", label: "RSI reset held 45+ (A: uptrend)", gen: rsiResetEvents },
