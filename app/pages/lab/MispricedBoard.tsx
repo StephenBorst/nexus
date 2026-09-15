@@ -613,7 +613,7 @@ export function MispricedBoard() {
   const tradeRow = (m: Market) => {
     const listed = perpSet ? perpSet.has(m.coin) : true;
     const perpHref = `/perp/PERP_${m.coin}_USDC`;
-    const spotHref = `/token/${encodeURIComponent(m.coin)}`;
+    const spotHref = `/token/${encodeURIComponent(m.coin)}?venue=spot`;
     return (
       <div style={{ display: "flex", gap: 8 }}>
         {listed && (

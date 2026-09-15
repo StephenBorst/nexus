@@ -6,7 +6,7 @@
 // fill: our own perp page when the token is a listed Orderly market, else a deep-link to
 // the token's pool. No fake order tabs, no dead "Buy" button.
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { generatePageTitle } from "@/utils/utils";
 import { getPageMeta } from "@/utils/seo";
 import { renderSEOTags } from "@/utils/seo-tags";
@@ -414,6 +414,10 @@ export default function TokenTerminal() {
   const isMobile = useIsMobile();
   const { query } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // The board's "Trade on Spot" deep-links /token/:sym?venue=spot so a LISTED perp opens on the
+  // Spot door, not its own book. Non-perp tokens are spot-only regardless (the toggle is perp-only).
+  const wantSpot = searchParams.get("venue") === "spot";
   const [input, setInput] = useState(query || "");
   const [pair, setPair] = useState<TokenPair | null>(null);
   const [loading, setLoading] = useState(false);
@@ -431,7 +435,7 @@ export default function TokenTerminal() {
   const [amount, setAmount] = useState("");
   // Perp-listed tokens can trade EITHER our own book (perp) OR spot — this picks which panel.
   // A SPOT SELL is sized by a typed token amount (sellAmt) or MAX (sellMax = the whole balance).
-  const [venue, setVenue] = useState<"perp" | "spot">("perp");
+  const [venue, setVenue] = useState<"perp" | "spot">(wantSpot ? "spot" : "perp");
   const [sellAmt, setSellAmt] = useState("");
   const [sellMax, setSellMax] = useState(false);
   const [sellUnit, setSellUnit] = useState<"token" | "usd">("token"); // type the sell in tokens or $
@@ -485,7 +489,15 @@ export default function TokenTerminal() {
     setLoading(true); setNotFound(false); setPerpOnly(null);
     // independent watchdog: never leave the terminal on a spinner if the fetch hangs
     const paint = setTimeout(() => { if (alive) setLoading(false); }, 6500);
-    searchToken(query)
+    // DexScreener 429s/timeouts return an empty set → a FALSE "no token found" for a real ticker
+    // (BNKR resolves to its Base pool the moment DS responds). Retry ONCE on an empty, no-perp
+    // result before dead-ending, so a transient blip never loses a legit token.
+    const resolveToken = async () => {
+      let r = await searchToken(query);
+      if (!r.best && !r.perpBase) { await new Promise((res) => setTimeout(res, 700)); r = await searchToken(query); }
+      return r;
+    };
+    resolveToken()
       .then(({ best, perpBase }) => {
         if (!alive) return;
         // A perp-preferred major (BTC/ETH/ZEC/POL/…) has no trusted DEX spot pair. We no longer
@@ -615,7 +627,7 @@ export default function TokenTerminal() {
   const spotRoute = useMemo(() => (pair ? tradeLink(pair, false) : null), [pair]);
   // Reset to the book (perp) view when the token changes — keyed on the CA so a 25s price poll
   // (which makes a new `pair` object) never flips the panel out from under the user.
-  useEffect(() => { setVenue("perp"); }, [pair?.baseAddress]);
+  useEffect(() => { setVenue(wantSpot ? "spot" : "perp"); }, [pair?.baseAddress, wantSpot]);
 
   // ── auto-hydrate recents (Order 0) ── When a connected wallet lands on a token's Spot page and
   // actually HOLDS it, remember it — so the chip self-heals across browsers/devices without a
@@ -1224,9 +1236,19 @@ export default function TokenTerminal() {
           </div>
         )}
 
-        {/* ── NOT FOUND ── */}
+        {/* ── NOT FOUND — never a dead end (Grok P1): a real ticker (BNKR) resolves via DexScreener,
+            and even a genuine miss offers the CA-paste path + a DexScreener lookup, not "no token". ── */}
         {query && notFound && !loading && (
-          <div style={{ fontFamily: MONO, fontSize: 13, color: MUT, padding: "40px 0" }}>No token found for “{query}”. Try a symbol (SOL), a name, or paste the contract address.</div>
+          <div style={{ padding: "40px 0", display: "flex", flexDirection: "column", gap: 10, maxWidth: 480 }}>
+            <div style={{ fontFamily: MONO, fontSize: 13, color: BRIGHT }}>No verified market for “{query}”.</div>
+            <div style={{ fontFamily: UI, fontSize: 12, color: MUT, lineHeight: 1.6 }}>
+              Paste the exact <b style={{ color: FOG }}>contract address</b> (0x… on EVM, or the mint on Solana) in the search above to trade it directly — or look it up on DexScreener and copy the address.
+            </div>
+            <a href={`https://dexscreener.com/search?q=${encodeURIComponent(query)}`} target="_blank" rel="noopener"
+              style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.06em", color: BRIGHT, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 7, padding: "8px 12px", alignSelf: "flex-start" }}>
+              Open “{query}” on DexScreener ↗
+            </a>
+          </div>
         )}
 
         {/* ── LOADING ── */}
