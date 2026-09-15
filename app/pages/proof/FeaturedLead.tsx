@@ -84,7 +84,7 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
         Run it in <b style={{ color: FOG }}>PAPER</b> to start its forward clock, risk-free — that record is yours,
         not this board. Take it <b style={{ color: FOG }}>live</b> and it joins the graded, on-chain-verifiable agents
         below: real settled trades, never a paper sim. Either way the edge funds itself — the same signals sell as data
-        via <b style={{ color: FOG }}>x402</b>, priced in $NEXUS.
+        via <a href="https://og.nexustradinglabs.com/signals/x402" target="_blank" rel="noopener" style={{ color: FOG, textDecoration: "underline" }}>x402</a>, priced in USDC.
       </div>
 
       {/* CTAs — deploy + verify */}

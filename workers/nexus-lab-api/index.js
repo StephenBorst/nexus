@@ -5656,6 +5656,45 @@ document.getElementById("btn").addEventListener("click",go);
       const result = await deliverSignals(env, { dryRun: !send });
       return json({ mode: send ? "live" : "dry-run", ...result }, request);
     }
+    // ── GET /signals/x402 — the graded edge, SOLD as data (x402, USDC on Base) ──────
+    // The Proof story made real, curl-able: an agent pays USDC → gets the SAME graded
+    // funding+OI reads the autonomous agent trades. UNPAID is fail-soft and NEVER a fake
+    // grade — it returns the standard x402 402 challenge PLUS a redacted teaser (real
+    // symbols + funding %/yr, but the verdict/edge/n LOCKED). A present X-PAYMENT settles
+    // only when X402_LIVE is armed (after a live $1 co-test — we never blind-grant against
+    // unverified money); until then it 402s with "arming pending" so no fabricated access.
+    if (parts[0] === "signals" && parts[1] === "x402" && request.method === "GET") {
+      const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+      const PAY_TO = env.X402_PAY_TO || "0x06cD9c281E6ab09906B46a10e059F2770EfdE49A"; // subs/AI receiver (Base EOA)
+      const PRICE = String(env.X402_PRICE_USDC || "100000"); // 0.10 USDC (6 decimals)
+      const RESOURCE = "https://og.nexustradinglabs.com/signals/x402";
+      const payment = request.headers.get("x-payment") || request.headers.get("payment-signature");
+      let rows = [];
+      try { rows = await computeSignalRows(env); } catch { rows = []; }
+      // Teaser: the row is REAL data with the grade withheld — the crowd read (funding %/yr)
+      // is the free hook; verdict/edge/n unlock on payment. Never a fabricated verdict.
+      const teaser = (Array.isArray(rows) ? rows : []).slice(0, 8).map((s) => ({
+        sym: s.symbol, funding_annual_pct: s.funding_annual_pct ?? null,
+        verdict: "▮ locked", edgeQuality: "▮ locked", n: "▮ locked",
+      }));
+      const challenge = {
+        x402Version: 1,
+        error: "payment required",
+        accepts: [{
+          scheme: "exact", network: "base", maxAmountRequired: PRICE, resource: RESOURCE,
+          description: "Nexus graded signals — the autonomous agent's funding + OI-divergence edge, as machine-readable JSON.",
+          mimeType: "application/json", payTo: PAY_TO, maxTimeoutSeconds: 120,
+          asset: USDC_BASE, extra: { name: "USD Coin", version: "2" },
+        }],
+        preview: { note: "Pay to unlock the graded verdict, edge quality and sample size. This teaser is REAL data with the grade withheld — never a fabricated read.", rows: teaser },
+      };
+      if (!payment) return json(challenge, request, 402);
+      // A payment is presented, but settlement is money-path: armed only after a live co-test.
+      if (env.X402_LIVE !== "true") return json({ ...challenge, error: "x402 settlement arming — live co-test pending", pending: true }, request, 402);
+      // (Armed) verify + settle the x402 payment before returning the full grade — added in the co-test.
+      return json({ ...challenge, error: "x402 verify not yet implemented — arming" }, request, 402);
+    }
+
     if (parts[0] === "signals") {
       if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
       // Shared builder (signal-delivery.mjs) so the public API + the Telegram push agree.
