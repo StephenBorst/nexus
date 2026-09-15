@@ -49,6 +49,23 @@ NexusLedgerAnchor.sol (Arbitrum) — append-only on-chain ledger anchor
 
 ---
 
+## Spot swaps (Uniswap)
+
+Perps settle on Orderly; **spot** trades through an honest routing tier that ends at Uniswap:
+
+- **In-app fill** via a Uniswap-v4-aware router (Fabric) when a route quotes — 10 bps, exact-amount approve.
+- **Honest Uniswap deep-link** when no aggregator quotes the pool — we name the venue and never fake a Buy (`noroute` = disabled).
+
+Fallback code:
+
+- Uniswap deep-link builder — [`app/pages/token/Index.tsx:94-104`](app/pages/token/Index.tsx#L94-L104)
+- Route state (`quote` / `deeplink` / `noroute`) — [`app/pages/token/Index.tsx:673-709`](app/pages/token/Index.tsx#L673-L709), render [`:1684-1709`](app/pages/token/Index.tsx#L1684-L1709)
+- $NEXUS is a **Uniswap v4** pool (indexers miss it → resolved from GeckoTerminal, bought via the same path) — [`app/pages/token/data.ts:161-187`](app/pages/token/data.ts#L161-L187), [`app/components/BuyNexusButton.tsx`](app/components/BuyNexusButton.tsx)
+
+See [`FEEDBACK.md`](FEEDBACK.md) for integration notes, including the v4-hook indexing gap.
+
+---
+
 ## Development
 
 ```sh
