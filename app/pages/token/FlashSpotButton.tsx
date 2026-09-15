@@ -91,13 +91,39 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
       if (!typed) throw new Error("Flash returned nothing to sign — check the size/market.");
       const sign = async (td: unknown) => (await provider.request({ method: "eth_signTypedData_v4", params: [walletAddress, typeof td === "string" ? td : JSON.stringify(td)] })) as string;
       const userSignature = await sign(typed);
-      const body: Record<string, unknown> = { quoteId: q.quoteId, userSignature, evmOrderTypedData: typed, funderAddress: walletAddress };
+      // Flash /v1/order requires the FULL order params echoed back — targetChain, contraChain,
+      // targetAsset, contraAsset, side, qty, orderType, funderAddress — PLUS userSignature. The old
+      // body sent only {quoteId, userSignature, evmOrderTypedData, funderAddress} → "Request
+      // validation failed" before the fill. Rebuild from the SAME quoteBody params so they match the
+      // quote exactly; quoteId + evmOrderTypedData are optional echoes that bind the marketable fill.
+      const body: Record<string, unknown> = { ...quoteBody(size, false), quoteId: q.quoteId, userSignature, evmOrderTypedData: typed };
       if (q?.evm?.permitTypedData) { body.evmPermitSignature = await sign(q.evm.permitTypedData); body.evmPermitTypedData = q.evm.permitTypedData; }
+      // Attach the SL/TP bracket only when the quote echoed a fully-formed one AND both legs are set
+      // (Flash mandates takeProfit + stopLoss together). It carries its OWN signature over the
+      // bracket's orderTypedData, plus the quote's salt/deadline/signedMaxFromAmount echoed verbatim.
+      const ab = q?.attachedBracket;
+      if (ab && side === "buy" && parseFloat(tp) > 0 && parseFloat(sl) > 0 && ab?.evm?.orderTypedData) {
+        setStatus("Sign the SL/TP bracket in your wallet…");
+        const bracket: Record<string, unknown> = {
+          takeProfit: { notionalPrice: String(tp) }, stopLoss: { notionalPrice: String(sl) },
+          userSignature: await sign(ab.evm.orderTypedData),
+          salt: ab.salt, deadline: ab.deadline, signedMaxFromAmount: ab.signedMaxFromAmount,
+        };
+        if (ab?.evm?.permitTypedData) { bracket.evmPermitSignature = await sign(ab.evm.permitTypedData); bracket.evmPermitTypedData = ab.evm.permitTypedData; }
+        body.attachedBracket = bracket;
+      }
       setStatus("Submitting…");
       const or = await fetch(`${FLASH}/order`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      const order = await or.json();
-      if (!or.ok) throw new Error(order?.error?.message || order?.message || order?.error || `order failed (${or.status})`);
-      setDone(order?.orderId || order?.id || "submitted");
+      // Surface the RAW Flash body (the worker forwards it verbatim) so a 4xx shows the exact
+      // validation failure in the modal instead of a swallowed one-line message.
+      const rawBody = await or.text();
+      let order: Record<string, unknown> = {};
+      try { order = JSON.parse(rawBody); } catch { /* non-JSON — the raw text is shown below */ }
+      if (!or.ok) {
+        const msg = (order?.error as { message?: string })?.message || (order?.message as string) || (typeof order?.error === "string" ? (order.error as string) : "");
+        throw new Error(`Flash ${or.status}${msg ? " · " + msg : ""}\n${rawBody.slice(0, 400)}`);
+      }
+      setDone((order?.orderId as string) || (order?.id as string) || "submitted");
     } catch (e) { setErr((e as Error)?.message || "Flash order failed."); }
     finally { setBusy(false); setStatus(""); }
   };
@@ -136,7 +162,7 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
               </div>
             )}
             {busy && status && <div style={{ fontFamily: UI, fontSize: 11, color: FOG, marginBottom: 12 }}>{status}</div>}
-            {err && <div style={{ fontFamily: UI, fontSize: 11, color: NEG, lineHeight: 1.5, marginBottom: 12 }}>{err}</div>}
+            {err && <div style={{ fontFamily: MONO, fontSize: 10.5, color: NEG, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 168, overflowY: "auto", background: BG, border: `1px solid ${BORD}`, borderRadius: 6, padding: "8px 10px" }}>{err}</div>}
             {done && <div style={{ fontFamily: UI, fontSize: 12, color: POS, marginBottom: 12 }}>Order placed on Flash ✓ <span style={{ color: MUT }}>{done}</span></div>}
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => !busy && setOpen(false)} style={{ flex: 1, background: "none", border: "1px solid #33333a", borderRadius: 7, padding: "9px 0", color: FOG, fontFamily: MONO, fontSize: 11, cursor: busy ? "default" : "pointer" }}>{done ? "CLOSE" : "CANCEL"}</button>
