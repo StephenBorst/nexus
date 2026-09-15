@@ -23,6 +23,7 @@ import {
 import { SocialBar } from "@/components/SocialBar";
 import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, makeHolding, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
 import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, type SwapPlan, type Eip1193 } from "./swapExec";
+import { FlashSpotButton } from "./FlashSpotButton";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -431,7 +432,9 @@ export default function TokenTerminal() {
   const [tf, setTf] = useState(1); // index into TIMEFRAMES (1H default)
   const [trades, setTrades] = useState<Trade[]>([]);
   const [perpSet, setPerpSet] = useState<Set<string>>(new Set());
-  const [side, setSide] = useState<"buy" | "sell">("buy");
+  // ?side=buy|sell prefills the ticket — the thesis "Express on Spot" deep-link sets it
+  // (LONG→buy, SHORT→sell), so a fade never lands on the wrong side.
+  const [side, setSide] = useState<"buy" | "sell">(searchParams.get("side") === "sell" ? "sell" : "buy");
   const [amount, setAmount] = useState("");
   // Perp-listed tokens can trade EITHER our own book (perp) OR spot — this picks which panel.
   // A SPOT SELL is sized by a typed token amount (sellAmt) or MAX (sellMax = the whole balance).
@@ -1715,6 +1718,9 @@ export default function TokenTerminal() {
                       </div>
                     )}
                     {swapErr && !modalOpen && <div style={{ fontFamily: MONO, fontSize: 10.5, color: NEG, marginTop: 8, textAlign: "center" }}>{swapErr}</div>}
+                    {/* Flash — a third EVM router next to Fabric (self-hides off-EVM). Market buy/sell,
+                        confirm-modal, non-custodial. Fabric stays first, Uniswap stays the no-route link. */}
+                    <FlashSpotButton chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : sellAmt} walletAddress={wallet} provider={provider} />
                   </>
                 )}
 

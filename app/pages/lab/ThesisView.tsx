@@ -246,9 +246,9 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
               style={{ ...navBtnStyle, fontSize: 10, color: "#ededf0", borderColor: "#33333a", minHeight: 36, padding: "6px 12px" }}>
               ▶ TRADE
             </button>
-            {/* Flash bracket — the SPOT exec door for a LONG thesis (additive to Orderly perps).
-                Self-hides for SHORT / non-curated symbols. Confirm-modal gated, non-custodial. */}
-            <FlashBracketButton symbol={t.symbol} direction={t.direction} entryPrice={t.entryPrice} stopLoss={t.stopLoss} takeProfit={t.takeProfit1} walletAddress={walletAddress} navBtnStyle={navBtnStyle} />
+            {/* Thesis → Spot express: the honest SHORT note + "Express on Spot →" (LONG→Buy,
+                SHORT→Sell). Flash exec itself lives on the Spot terminal now. */}
+            <FlashBracketButton symbol={t.symbol} direction={t.direction} />
             <button onClick={() => onRemove(t.id)} style={{ ...navBtnStyle, fontSize: 10, color: "#f7525f", borderColor: "#4a1e22", minHeight: 36, padding: "6px 12px" }}>REMOVE</button>
           </div>
         </div>
