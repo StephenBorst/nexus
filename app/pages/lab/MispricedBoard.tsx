@@ -30,6 +30,21 @@ import { SectionHeader } from "./components";
 import { Simulate } from "./Simulate";
 import { ProjectionBand } from "@/components/ProjectionBand";
 
+// The board's /intel/mispriced call gates the "loading board…" spinner, so a hung connection
+// would strand a guest on it forever. Cap it (the SAME abort pattern as DecisionBoard) so it
+// REJECTS instead of pending, and the caller fails soft to last-good/empty within ~2s.
+const BOARD_TIMEOUT_MS = 2000;
+async function fetchJsonTimeout(url: string, ms: number) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ctl.signal });
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 type EdgeQuality = { tier: "PROVEN" | "TRAP" | "MIXED" | "UNPROVEN"; revertedPct: number | null; samples: number };
 // The SYNTHESIS input — where the graded top Orderly traders (the sharp capital) actually
 // sit on this market, + the long/short split. Funding = the crowd (fade it); smartMoney =
@@ -481,16 +496,21 @@ export function MispricedBoard() {
   useEffect(() => {
     let live = true;
     const load = () => {
-      fetch(`${AGENT_API}/intel/mispriced`).then((r) => r.json())
-        .then((d: BoardResp) => { if (live) setBoard(d || {}); })
-        .catch(() => { if (live) { setBoard({ markets: [] }); setErr(true); } });
+      // Cap /intel/mispriced + fail soft to LAST-GOOD so the board settles fast and a later
+      // blip never wipes rows already on screen (was setBoard({markets:[]}) on any error). err
+      // only surfaces in the empty branch, so it's harmless while last-good rows are shown.
+      fetchJsonTimeout(`${AGENT_API}/intel/mispriced`, BOARD_TIMEOUT_MS)
+        .then((d: BoardResp) => { if (live) { setBoard(d || {}); setErr(false); } })
+        .catch(() => { if (live) { setBoard((prev) => (prev && prev.markets && prev.markets.length ? prev : { markets: [] })); setErr(true); } });
       fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json())
         .then((d: ConsensusResp) => { if (live) setLean(d?.consensus || {}); })
         .catch(() => { /* fail-soft — board still renders */ });
     };
     load();
+    // Hard deadline (belt-and-suspenders): never leave the spinner gated on null past the cap.
+    const deadline = setTimeout(() => { if (live) setBoard((prev) => prev ?? { markets: [] }); }, BOARD_TIMEOUT_MS + 300);
     const t = setInterval(load, 90_000); // funding moves slowly; the server caches 180s
-    return () => { live = false; clearInterval(t); };
+    return () => { live = false; clearTimeout(deadline); clearInterval(t); };
   }, []);
 
   // Load the listed-perp set once (module-cached in token/data) → drives the secondary CTA's

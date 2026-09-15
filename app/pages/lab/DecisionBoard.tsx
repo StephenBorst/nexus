@@ -283,8 +283,13 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       }).catch(() => { /* price column just shows — */ });
     };
     load();
+    // Hard deadline — belt-and-suspenders on top of the /signals abort. Whatever happens to
+    // the fetch or its abort, never leave the table gated on `null` past the cap: resolve to
+    // empty within ~2s so the board settles to rows or "no rows this tick", never an infinite
+    // spinner. Last-good is preserved (prev is replaced ONLY while it is still null).
+    const deadline = setTimeout(() => { if (alive) setSignals((prev) => (prev == null ? [] : prev)); }, SIGNALS_TIMEOUT_MS + 300);
     const iv = setInterval(load, 30000);
-    return () => { alive = false; clearInterval(iv); };
+    return () => { alive = false; clearTimeout(deadline); clearInterval(iv); };
   }, []);
 
   const rows: Row[] = useMemo(() => {
@@ -390,7 +395,9 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
     onSelectTab?.("thesis");
   };
 
-  if (signals && signals.length === 0) return null;   // fail-soft: nothing to say
+  // Empty/failed load renders a real "no rows this tick" state inline (below) — the board
+  // never VANISHES (was `return null`, which left a guest on the manifesto with nothing) and
+  // never HANGS. Its identity/header stays; the row area carries the honest empty message.
 
   const dirColor = (d: Dir | null) => (d === "LONG" ? C.pos : d === "SHORT" ? C.neg : C.text.faint);
   const sortBtn = (mode: SortMode, label: string) => (
@@ -446,7 +453,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       <SectionHeader
         eyebrow="THE BOARD"
         title="Every market, one read"
-        note={<span>{signals ? `${rows.length} markets` : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""} · every column verifiable</span>}
+        note={<span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""} · every column verifiable</span>}
       />
 
       {/* Honesty framing — the whole point of the moat. On a phone it is ONE sentence (Grok):
@@ -499,6 +506,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
 
       {!signals ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>loading the board…</div>
+      ) : rows.length === 0 ? (
+        // Real empty state (never vanish, never hang): the /signals cap resolved to no rows —
+        // a live-but-quiet tick, not a broken board. Refreshes on the 30s interval.
+        <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>no rows this tick — the read refreshes every 30s.</div>
       ) : isMobile ? (
         // Mobile — the 720px table hid THE PLAY behind a side-swipe. Instead, one 2-line card per
         // row so the DECISION is the first paint: line 1 = market · funding/yr · the play · → ;
