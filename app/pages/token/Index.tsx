@@ -852,7 +852,7 @@ export default function TokenTerminal() {
     const mk = (sym: string, amount: number, usd: number | null, address: string | null, dp = 4): Holding => ({
       sym, chain: "solana", amount, usd, address,
       amountLabel: amount.toLocaleString("en-US", { maximumFractionDigits: amount >= 1 ? dp : 6 }),
-      usdLabel: usd != null ? `$${usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—",
+      usdLabel: usd != null ? `$${usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "unpriced",
     });
     const rows: Holding[] = [];
     if (solBalance != null && solBalance > 0) rows.push(mk("SOL", solBalance, solUsd ? solBalance * solUsd : null, null));

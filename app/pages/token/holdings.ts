@@ -198,7 +198,7 @@ const fmtAmount = (n: number): string =>
 export function optimisticHolding(sym: string, chain: string, address: string, rawAmount: bigint, decimals: number, priceUsd: number | null): Holding {
   const amount = Number(formatUnits(rawAmount, decimals));
   const usd = priceUsd != null && Number.isFinite(priceUsd) ? amount * priceUsd : null;
-  return { sym, chain, amount, usd, address, amountLabel: fmtAmount(amount), usdLabel: usd != null ? fmtUsd(usd) : "—" };
+  return { sym, chain, amount, usd, address, amountLabel: fmtAmount(amount), usdLabel: usd != null ? fmtUsd(usd) : "unpriced" };
 }
 
 // Build a Holding from an already-known human amount (a provider balanceOf on a chain the sweep can't
@@ -206,7 +206,7 @@ export function optimisticHolding(sym: string, chain: string, address: string, r
 // the strip + SELL ticket render identically regardless of source. usd is null when no price is known.
 export function makeHolding(sym: string, chain: string, address: string | null, amount: number, priceUsd: number | null): Holding {
   const usd = priceUsd != null && Number.isFinite(priceUsd) && priceUsd > 0 ? amount * priceUsd : null;
-  return { sym, chain, amount, usd, address, amountLabel: fmtAmount(amount), usdLabel: usd != null ? fmtUsd(usd) : "—" };
+  return { sym, chain, amount, usd, address, amountLabel: fmtAmount(amount), usdLabel: usd != null ? fmtUsd(usd) : "unpriced" };
 }
 
 // Read the connected EVM wallet's spot balances (curated ∪ this wallet's recents) across
@@ -224,7 +224,7 @@ export async function fetchHoldings(address: string): Promise<Holding[]> {
       if (amount > 0) {
         const px = await priceUsd(c.nativePriceVia);
         const usd = px != null ? amount * px : null;
-        rows.push({ sym: c.native, chain: c.dsChain, amount, usd, address: null, amountLabel: fmtAmount(amount), usdLabel: usd != null ? fmtUsd(usd) : "—" });
+        rows.push({ sym: c.native, chain: c.dsChain, amount, usd, address: null, amountLabel: fmtAmount(amount), usdLabel: usd != null ? fmtUsd(usd) : "unpriced" });
       }
     } catch { /* skip native on this chain */ }
     // curated ERC-20s + this wallet's recents on this chain (deduped by CA vs curated).
@@ -242,7 +242,7 @@ export async function fetchHoldings(address: string): Promise<Holding[]> {
         if (amount <= 0) return;
         const px = await priceUsd(t.addr, t.stable);
         const usd = px != null ? amount * px : null;
-        rows.push({ sym: t.sym, chain: c.dsChain, amount, usd, address: t.addr, amountLabel: fmtAmount(amount), usdLabel: usd != null ? fmtUsd(usd) : "—" });
+        rows.push({ sym: t.sym, chain: c.dsChain, amount, usd, address: t.addr, amountLabel: fmtAmount(amount), usdLabel: usd != null ? fmtUsd(usd) : "unpriced" });
       } catch { /* skip this token */ }
     }));
     return rows;
