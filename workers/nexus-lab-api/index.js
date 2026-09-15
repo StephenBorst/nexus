@@ -5706,6 +5706,30 @@ document.getElementById("btn").addEventListener("click",go);
       }, request);
     }
 
+    // ── Flash (Definitive) proxy — advanced SPOT orders (Bracket / SL+TP) ────────
+    // The FLASH_API_KEY stays server-side (same model as the Jupiter proxy): the browser POSTs
+    // the quote/order intent here, we add x-definitive-api-key and forward VERBATIM to Flash's
+    // v1 API, returning its body unchanged. Between quote and order the browser signs the
+    // returned EIP-712 orderTypedData with the USER's own wallet (non-custodial — we never
+    // sign, never hold funds). Whitelisted actions only (quote|order), fixed upstream (no SSRF).
+    // A 401 here means the key is a Portfolio key, not a Flash key — surfaced verbatim so the op
+    // knows to regenerate. Adds no trust: the browser still confirms the ticket before signing.
+    if (parts[0] === "flash" && (parts[1] === "quote" || parts[1] === "order") && request.method === "POST") {
+      const key = env.FLASH_API_KEY || "";
+      if (!key) return json({ error: "flash_not_configured", detail: "FLASH_API_KEY secret is not set" }, request, 503);
+      try {
+        const body = await request.text();
+        const r = await fetch(`https://flash.definitive.fi/v1/${parts[1]}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-definitive-api-key": key },
+          body,
+        });
+        return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
+      } catch (e) {
+        return json({ error: "flash_proxy_failed", detail: String(e?.message || e) }, request, 502);
+      }
+    }
+
     // ── Jupiter (Solana) swap proxy — GET /swap/jup/quote + POST /swap/jup/swap ──
     // The Solana in-app BUY money-path (solSwapExec.ts) and the Spot preview call Jupiter THROUGH
     // here so our api.jup.ag x-api-key (paid tier) never reaches the browser. Thin AUTHENTICATED

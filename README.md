@@ -64,6 +64,8 @@ Fallback code:
 
 See [`FEEDBACK.md`](FEEDBACK.md) for integration notes, including the v4-hook indexing gap.
 
+**Flash bracket on a LONG Draft.** A LONG frozen thesis can execute as a one-tap **spot** order on [Definitive Flash](https://www.definitive.fi/flash-api): a BUY with the thesis's own frozen bracket attached — **TP = 1.5R, SL = 1.2× H4 ATR** — through a confirm-modal, client-signed (non-custodial) `quote → sign → submit` flow. The `FLASH_API_KEY` stays on our worker proxy (`/flash/quote`, `/flash/order`); SHORT theses stay on the Orderly perp book. Code: [`app/pages/lab/FlashBracketButton.tsx`](app/pages/lab/FlashBracketButton.tsx).
+
 ---
 
 ## Development
