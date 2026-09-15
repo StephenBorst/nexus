@@ -9,11 +9,16 @@ import { useNavigate } from "react-router-dom";
 
 const bareOf = (s: string) => s.replace(/^PERP_/, "").replace(/_USDC$/, "").toUpperCase();
 
-export function FlashBracketButton({ symbol, direction }: { symbol: string; direction: "LONG" | "SHORT" }) {
+export function FlashBracketButton({ symbol, direction, stopLoss, takeProfit1 }: { symbol: string; direction: "LONG" | "SHORT"; stopLoss?: string; takeProfit1?: string }) {
   const navigate = useNavigate();
   const sym = bareOf(symbol);
   const spotSide = direction === "LONG" ? "buy" : "sell"; // never buy-to-short
-  const href = `/token/${encodeURIComponent(sym)}?venue=spot&side=${spotSide}`;
+  // A LONG carries its FROZEN R-dollar stop / TP1 into the Flash bracket (&sl=&tp=); a SHORT never
+  // does — it expresses on the Orderly perp book, and Flash spot has no short/bracket to inherit.
+  const rLevels = direction === "LONG"
+    ? `${parseFloat(stopLoss || "") > 0 ? `&sl=${encodeURIComponent(stopLoss as string)}` : ""}${parseFloat(takeProfit1 || "") > 0 ? `&tp=${encodeURIComponent(takeProfit1 as string)}` : ""}`
+    : "";
+  const href = `/token/${encodeURIComponent(sym)}?venue=spot&side=${spotSide}${rLevels}`;
   const express = (
     <a href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}
       title={`Open ${sym} on the Spot terminal with ${spotSide === "buy" ? "Buy" : "Sell"} prefilled (Fabric / Flash / Uniswap).`}

@@ -24,17 +24,22 @@ async function waitReceipt(provider: Eip1193, hash: string, tries = 45): Promise
   }
 }
 
-export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAmount, walletAddress, provider }: {
+export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAmount, defaultSl, defaultTp, walletAddress, provider }: {
   chainId: string; tokenAddress: string; symbol: string; side: "buy" | "sell"; defaultAmount?: string;
+  // A LONG thesis "Express on Spot" carries its FROZEN R-dollar stop/TP1 in via the URL → these
+  // seed the STOP $ / TP $ fields (buy only; a bracket still attaches only when the quote echoes it).
+  defaultSl?: string; defaultTp?: string;
   walletAddress?: string | null; provider?: Eip1193 | null;
 }) {
+  const okSl = (v?: string) => side === "buy" && !!v && parseFloat(v) > 0;
   const usdc = EVM_USDC[chainId]?.usdc;
   const [open, setOpen] = useState(false);
   const [size, setSize] = useState(defaultAmount && parseFloat(defaultAmount) > 0 ? defaultAmount : (side === "buy" ? "25" : ""));
-  const [sl, setSl] = useState(""); const [tp, setTp] = useState("");
+  const [sl, setSl] = useState(okSl(defaultSl) ? (defaultSl as string) : ""); const [tp, setTp] = useState(okSl(defaultTp) ? (defaultTp as string) : "");
   const [preview, setPreview] = useState<{ est: string; min: string; fee: string; bracket: boolean } | null>(null);
   const [busy, setBusy] = useState(false); const [status, setStatus] = useState("");
   const [err, setErr] = useState<string | null>(null); const [done, setDone] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
 
   if (!FLASH_EVM.has(chainId) || !usdc) return null; // EVM + known USDC only
 
@@ -133,7 +138,16 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
   // starter; sell empty → "" (never an invented default). Mirrors the initializer.
   const openModal = () => {
     const seed = defaultAmount && parseFloat(defaultAmount) > 0 ? defaultAmount : (side === "buy" ? "25" : "");
-    setSize(seed); setOpen(true); setDone(null); setErr(null); fetchPreview(seed);
+    setSize(seed);
+    // Re-apply the thesis stop/TP ONLY when the Express link carried them — never clobber a stop the
+    // user typed directly on the Spot terminal with an empty default.
+    if (okSl(defaultSl)) setSl(defaultSl as string);
+    if (okSl(defaultTp)) setTp(defaultTp as string);
+    setOpen(true); setDone(null); setErr(null); setShareCopied(false); fetchPreview(seed);
+  };
+  // Flash success card share link — the token's Spot page (same /token/{ca} the share-on-swap card uses).
+  const copyShare = () => {
+    try { navigator.clipboard.writeText(`${window.location.origin}/token/${tokenAddress}?venue=spot`); setShareCopied(true); setTimeout(() => setShareCopied(false), 1600); } catch { /* clipboard blocked */ }
   };
   const inStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", background: BG, border: "1px solid #33333a", borderRadius: 6, color: BRIGHT, fontFamily: MONO, outline: "none" };
 
@@ -169,7 +183,19 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
             )}
             {busy && status && <div style={{ fontFamily: UI, fontSize: 11, color: FOG, marginBottom: 12 }}>{status}</div>}
             {err && <div style={{ fontFamily: MONO, fontSize: 10.5, color: NEG, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 168, overflowY: "auto", background: BG, border: `1px solid ${BORD}`, borderRadius: 6, padding: "8px 10px" }}>{err}</div>}
-            {done && <div style={{ fontFamily: UI, fontSize: 12, color: POS, marginBottom: 12 }}>Order placed on Flash ✓ <span style={{ color: MUT }}>{done}</span></div>}
+            {done && (() => {
+              // Honest fill card (same register as share-on-swap): SYM · FLASH · $n + a /token/{ca}
+              // link. The FACT only — no E[R], no conviction, no lifetime record.
+              const nUsd = side === "buy" ? parseFloat(size) : parseFloat(preview?.est || "");
+              const dollar = Number.isFinite(nUsd) && nUsd > 0 ? `$${nUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "";
+              return (
+                <div style={{ background: BG, border: `1px solid ${BORD}`, borderRadius: 8, padding: "10px 12px", marginBottom: 12 }}>
+                  <div style={{ fontSize: 9.5, letterSpacing: "0.08em", color: FAINT, marginBottom: 3 }}>{symbol} · FLASH{dollar ? ` · ${dollar}` : ""}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: POS, marginBottom: 9 }}>Filled on Flash ✓ <span style={{ color: MUT, fontWeight: 400, fontSize: 9.5 }}>{done}</span></div>
+                  <button onClick={copyShare} style={{ width: "100%", fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.03em", color: shareCopied ? POS : BRIGHT, background: "none", border: `1px solid ${shareCopied ? "#3ecf8e88" : BORD}`, borderRadius: 7, padding: "9px 0", cursor: "pointer" }}>{shareCopied ? "✓ Link copied" : `Copy ${symbol} link ↗`}</button>
+                </div>
+              );
+            })()}
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => !busy && setOpen(false)} style={{ flex: 1, background: "none", border: "1px solid #33333a", borderRadius: 7, padding: "9px 0", color: FOG, fontFamily: MONO, fontSize: 11, cursor: busy ? "default" : "pointer" }}>{done ? "CLOSE" : "CANCEL"}</button>
               {!done && <button onClick={run} disabled={busy || !(parseFloat(size) > 0)} style={{ flex: 1.4, background: busy || !(parseFloat(size) > 0) ? "#1a1a1e" : POS, border: "none", borderRadius: 7, padding: "9px 0", color: busy || !(parseFloat(size) > 0) ? MUT : "#08080a", fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: busy ? "default" : "pointer" }}>{busy ? "WORKING…" : "CONFIRM & SIGN"}</button>}

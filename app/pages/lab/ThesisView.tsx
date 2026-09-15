@@ -248,7 +248,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
             </button>
             {/* Thesis → Spot express: the honest SHORT note + "Express on Spot →" (LONG→Buy,
                 SHORT→Sell). Flash exec itself lives on the Spot terminal now. */}
-            <FlashBracketButton symbol={t.symbol} direction={t.direction} />
+            <FlashBracketButton symbol={t.symbol} direction={t.direction} stopLoss={String(t.stopLoss ?? "")} takeProfit1={String(t.takeProfit1 ?? "")} />
             <button onClick={() => onRemove(t.id)} style={{ ...navBtnStyle, fontSize: 10, color: "#f7525f", borderColor: "#4a1e22", minHeight: 36, padding: "6px 12px" }}>REMOVE</button>
           </div>
         </div>

@@ -435,6 +435,10 @@ export default function TokenTerminal() {
   // ?side=buy|sell prefills the ticket — the thesis "Express on Spot" deep-link sets it
   // (LONG→buy, SHORT→sell), so a fade never lands on the wrong side.
   const [side, setSide] = useState<"buy" | "sell">(searchParams.get("side") === "sell" ? "sell" : "buy");
+  // A LONG thesis "Express on Spot" also carries its FROZEN R-dollar stop / TP1 (&sl=&tp=) so the
+  // Flash bracket inherits them; read once from the URL (Flash uses them on the BUY side only).
+  const spotSl = searchParams.get("sl") || "";
+  const spotTp = searchParams.get("tp") || "";
   const [amount, setAmount] = useState("");
   // Perp-listed tokens can trade EITHER our own book (perp) OR spot — this picks which panel.
   // A SPOT SELL is sized by a typed token amount (sellAmt) or MAX (sellMax = the whole balance).
@@ -1724,7 +1728,7 @@ export default function TokenTerminal() {
                         amount; SELL size = the ticket TOKEN quantity (reuse sellTokens, which already
                         resolves MAX→balance and the USD toggle via $/mark) — never the USD label, and
                         empty ticket → empty (no invented default). */}
-                    <FlashSpotButton chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : (sellTokens > 0 ? sellTokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : "")} walletAddress={wallet} provider={provider} />
+                    <FlashSpotButton chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : (sellTokens > 0 ? sellTokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : "")} defaultSl={spotSl} defaultTp={spotTp} walletAddress={wallet} provider={provider} />
                   </>
                 )}
 
