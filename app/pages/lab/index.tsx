@@ -209,7 +209,7 @@ export default function TheLabPage() {
   })();
 
   return (
-    <div style={{ background: "#0a0a0b", minHeight: "100dvh", padding: 0 }}>
+    <div style={{ background: "#0a0a0b", padding: 0 }}>
       <style>{`@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px #ededf0}50%{opacity:0.4;box-shadow:0 0 2px #ededf0}}`}</style>
       {/* ── LIVE MARKET TICKER ── the Wall-Street tape up top (market presence
           restored to the fold as one thin ambient line, not the old 415px stack). */}
@@ -461,10 +461,10 @@ export default function TheLabPage() {
             redundant clutter. Keep only the actionable bits: a thin BUY $NEXUS row
             and (connected) the PRO status/upsell. Hairline rule separates it from
             the working surface above. */}
-        {/* Mobile: tighten the gap up to the footer (no half-screen void after the last lens), and
-            pad the bottom so BUY $NEXUS clears the floating ◆ (its orb sits ~84–136px up) — the same
-            CTA-clearance the board → gets. Desktop spacing is unchanged. */}
-        <div style={{ marginTop: isMobile ? 14 : 24, paddingTop: 16, paddingBottom: isMobile ? 140 : 0, borderTop: "1px solid #232327", display: "flex", flexDirection: "column", gap: 12 }}>
+        {/* Mobile: the page now sizes to content (no minHeight:100dvh canyon), so the footer sits on
+            the last lens. Just a small bottom pad keeps BUY $NEXUS ~24px clear of the floating ◆ — no
+            140px black lake. Desktop spacing is unchanged. */}
+        <div style={{ marginTop: isMobile ? 14 : 24, paddingTop: 16, paddingBottom: isMobile ? 24 : 0, borderTop: "1px solid #232327", display: "flex", flexDirection: "column", gap: 12 }}>
           <NexusBuyBar />
           {connected && <CreatorEarnings address={rootWalletAddress} />}
           {connected && <NexusPro walletAddress={rootWalletAddress} />}
