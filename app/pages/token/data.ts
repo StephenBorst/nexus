@@ -158,9 +158,38 @@ const isRealMarket = (p: TokenPair): boolean =>
 const dedupePairs = (arr: (TokenPair | null | undefined)[]): TokenPair[] =>
   arr.filter((p): p is TokenPair => !!p).filter((p, i, a) => a.findIndex((x) => x.pairAddress === p.pairAddress) === i);
 
+// ── $NEXUS lives in a Uniswap v4 pool DexScreener doesn't index (the v4-hook gap), so a normal
+// search would dead-end on our OWN token. Resolve it from GeckoTerminal (which DOES index v4) → a
+// curated pair so the terminal renders its Spot page. The actual fill is Fabric if it routes the
+// pool, else the honest Uniswap deep-link (like any token) — never a bounce to GeckoTerminal.
+const NEXUS_CA = "0x3D958634ab725B627919EF8F2Ed59227309fDba3";
+const NEXUS_POOL = "0xdc5be7d936f69eb3219ad6bd98b0be0b0c56f172a81f70eca09fd97d6bfd2009";
+async function nexusCuratedPair(): Promise<TokenPair | null> {
+  const j = (await getJson(`https://api.geckoterminal.com/api/v2/networks/base/pools/${NEXUS_POOL}`)) as { data?: { attributes?: Record<string, unknown> } } | null;
+  const a = j?.data?.attributes;
+  if (!a) return null;
+  const pcp = (a.price_change_percentage as Record<string, unknown>) || {};
+  const vol = (a.volume_usd as Record<string, unknown>) || {};
+  const tx = ((a.transactions as Record<string, unknown> | undefined)?.h24 as Record<string, unknown>) || {};
+  const created = typeof a.pool_created_at === "string" ? Date.parse(a.pool_created_at) : NaN;
+  return {
+    chainId: "base", dexId: "uniswap-v4", url: `https://www.geckoterminal.com/base/pools/${NEXUS_POOL}`,
+    pairAddress: NEXUS_POOL, baseSymbol: "NEXUS", baseName: "Nexus", baseAddress: NEXUS_CA, quoteSymbol: "WETH",
+    priceUsd: num(a.base_token_price_usd), priceChange24h: num(pcp.h24), liquidityUsd: num(a.reserve_in_usd),
+    fdv: num(a.fdv_usd), marketCap: num(a.market_cap_usd), volume24h: num(vol.h24), volume1h: num(vol.h1),
+    buys24h: num(tx.buys), sells24h: num(tx.sells), imageUrl: null, websites: [], socials: [],
+    createdAt: Number.isFinite(created) ? created : null,
+  };
+}
+
 export async function searchToken(query: string): Promise<{ best: TokenPair | null; alts: TokenPair[]; perpBase?: string }> {
   const q = query.trim();
   if (!q) return { best: null, alts: [] };
+  // Our own token first — GeckoTerminal-curated so a v4-pool token never dead-ends in our terminal.
+  if (q.toLowerCase() === NEXUS_CA.toLowerCase() || q.replace(/^\$/, "").toUpperCase() === "NEXUS") {
+    const p = await nexusCuratedPair();
+    if (p) return { best: p, alts: [] };
+  }
   const isAddress = /^0x[a-fA-F0-9]{40}$/.test(q) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q);
 
   // ── Tier 0 — a perp-preferred major (bare ticker only). Skip DexScreener entirely: the asset has no

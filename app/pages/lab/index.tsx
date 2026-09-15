@@ -431,7 +431,7 @@ export default function TheLabPage() {
           // Collapsed by default so its charts are OFF the Intel first paint (expand to read) —
           // the first screen after the briefing is the ACTIONABLE board, not a wall of charts.
           const forecast = (
-            <Collapsible title="◇ FORECAST DIVERGENCE" subtitle="where prediction markets disagree with price — our markets only" shortTitle="◇ FORECAST DIVERGENCE" shortSub="prediction markets vs price" storageKey="nx_forecast_open">
+            <Collapsible title="◇ FORECAST DIVERGENCE" subtitle="where prediction markets disagree with price — our markets only" shortTitle="◇ FORECAST DIVERGENCE" shortSub="preds vs price" storageKey="nx_forecast_open">
               <ForecastDivergence />
             </Collapsible>
           );

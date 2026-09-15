@@ -1,25 +1,25 @@
 /**
- * BuyNexusButton — "Buy $NEXUS" CTA (v1, ship-now).
+ * BuyNexusButton — "Buy $NEXUS" CTA.
  *
- * $NEXUS liquidity lives in a Uniswap v4 Nexus/WETH pool on Base. Most swap
- * aggregators (LiFi, etc.) don't route v4 yet, so we deeplink to Uniswap — the
- * pool's native interface — prefilled with NEXUS on Base. Reliable routing today;
- * an embedded in-app swap (v4 routing) is the planned v2 upgrade.
+ * Primary buy = Nexus Spot (in-app). The token terminal opens on the $NEXUS pool with the venue
+ * on Spot, where Fabric fills it (10 bps, exact approve) or falls back to an honest Uniswap
+ * deep-link if Fabric misses the v4 pool. No bounce to an external tab / GeckoTerminal. ($NEXUS is
+ * a Uniswap v4 pool DexScreener can't index, so the terminal resolves it from GeckoTerminal — see
+ * nexusCuratedPair in pages/token/data.ts.)
  */
+import { Link } from "react-router-dom";
 
 const NEXUS_TOKEN = "0x3D958634ab725B627919EF8F2Ed59227309fDba3";
-// Uniswap prefilled: Base chain, ETH in (auto-wraps to WETH for the v4 pool), NEXUS out.
-const UNISWAP_URL = `https://app.uniswap.org/swap?chain=base&inputCurrency=ETH&outputCurrency=${NEXUS_TOKEN}`;
+// In-app Spot page for $NEXUS (venue=spot is explicit; a non-perp is spot-only regardless).
+const SPOT_URL = `/token/${NEXUS_TOKEN}?venue=spot`;
 
 export function BuyNexusButton({ size = "md" }: { size?: "sm" | "md" }) {
   const pad = size === "sm" ? "5px 10px" : "8px 14px";
   const fontSize = size === "sm" ? 10 : 12;
   return (
-    <a
-      href={UNISWAP_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      title="Buy $NEXUS on Uniswap (Base)"
+    <Link
+      to={SPOT_URL}
+      title="Buy $NEXUS on Nexus Spot"
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -38,7 +38,7 @@ export function BuyNexusButton({ size = "md" }: { size?: "sm" | "md" }) {
         boxShadow: "0 0 12px rgba(237,237,240,0.25)",
       }}
     >
-      BUY $NEXUS ↗
-    </a>
+      BUY $NEXUS
+    </Link>
   );
 }
