@@ -389,7 +389,7 @@ export default function TheLabPage() {
           // read); the deep Market Intel (news, movers, OI, long/short) collapses so the
           // tab opens as a read, not a wall of rows.
           const deep = (
-            <Collapsible title="◇ MARKET INTEL · DEEP DETAIL" subtitle="news, movers, OI, long/short, per-market" storageKey="nx_intel_deep_open">
+            <Collapsible title="◇ MARKET INTEL · DEEP DETAIL" subtitle="news, movers, OI, long/short, per-market" shortTitle="◇ MARKET INTEL" shortSub="news · movers · OI · long/short" storageKey="nx_intel_deep_open">
               <MarketIntelView />
             </Collapsible>
           );
@@ -411,17 +411,17 @@ export default function TheLabPage() {
             </div>
           );
           const funding = (
-            <Collapsible title="◇ FUNDING EDGES · ALL MARKETS" subtitle="every mispriced perp + which fades PAID vs which were a TRAP" storageKey="nx_funding_board_open">
+            <Collapsible title="◇ FUNDING EDGES · ALL MARKETS" subtitle="every mispriced perp + which fades PAID vs which were a TRAP" shortTitle="◇ FUNDING EDGES" shortSub="every mispriced perp · paid vs trap" storageKey="nx_funding_board_open">
               <MispricedBoard />
             </Collapsible>
           );
           const positioning = (
-            <Collapsible title="◇ POSITIONING · CROWD vs SMART MONEY" subtitle="where the leveraged crowd and the sharp wallets disagree — on your edge" storageKey="nx_positioning_open">
+            <Collapsible title="◇ POSITIONING · CROWD vs SMART MONEY" subtitle="where the leveraged crowd and the sharp wallets disagree — on your edge" shortTitle="◇ POSITIONING" shortSub="crowd vs smart money" storageKey="nx_positioning_open">
               <PositioningBoard trades={connected ? processedTrades : undefined} />
             </Collapsible>
           );
           const catalysts = (
-            <Collapsible title="◇ CATALYSTS · WORLD EVENTS" subtitle="liquid prediction-market events mapped to the markets they move on Nexus" storageKey="nx_catalysts_open">
+            <Collapsible title="◇ CATALYSTS · WORLD EVENTS" subtitle="liquid prediction-market events mapped to the markets they move on Nexus" shortTitle="◇ CATALYSTS" shortSub="world events on Nexus markets" storageKey="nx_catalysts_open">
               <CatalystBoard />
             </Collapsible>
           );
@@ -431,7 +431,7 @@ export default function TheLabPage() {
           // Collapsed by default so its charts are OFF the Intel first paint (expand to read) —
           // the first screen after the briefing is the ACTIONABLE board, not a wall of charts.
           const forecast = (
-            <Collapsible title="◇ FORECAST DIVERGENCE" subtitle="where prediction markets disagree with price — our markets only" storageKey="nx_forecast_open">
+            <Collapsible title="◇ FORECAST DIVERGENCE" subtitle="where prediction markets disagree with price — our markets only" shortTitle="◇ FORECAST DIVERGENCE" shortSub="prediction markets vs price" storageKey="nx_forecast_open">
               <ForecastDivergence />
             </Collapsible>
           );
@@ -461,7 +461,10 @@ export default function TheLabPage() {
             redundant clutter. Keep only the actionable bits: a thin BUY $NEXUS row
             and (connected) the PRO status/upsell. Hairline rule separates it from
             the working surface above. */}
-        <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #232327", display: "flex", flexDirection: "column", gap: 12 }}>
+        {/* Mobile: tighten the gap up to the footer (no half-screen void after the last lens), and
+            pad the bottom so BUY $NEXUS clears the floating ◆ (its orb sits ~84–136px up) — the same
+            CTA-clearance the board → gets. Desktop spacing is unchanged. */}
+        <div style={{ marginTop: isMobile ? 14 : 24, paddingTop: 16, paddingBottom: isMobile ? 140 : 0, borderTop: "1px solid #232327", display: "flex", flexDirection: "column", gap: 12 }}>
           <NexusBuyBar />
           {connected && <CreatorEarnings address={rootWalletAddress} />}
           {connected && <NexusPro walletAddress={rootWalletAddress} />}
