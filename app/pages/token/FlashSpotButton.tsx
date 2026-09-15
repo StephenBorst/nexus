@@ -128,7 +128,13 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
     finally { setBusy(false); setStatus(""); }
   };
 
-  const openModal = () => { setOpen(true); setDone(null); setErr(null); fetchPreview(size); };
+  // Re-seed SIZE from the live ticket every open (the component stays mounted, so the useState
+  // initializer alone would miss an amount typed after mount, and a side flip). Buy empty → "25"
+  // starter; sell empty → "" (never an invented default). Mirrors the initializer.
+  const openModal = () => {
+    const seed = defaultAmount && parseFloat(defaultAmount) > 0 ? defaultAmount : (side === "buy" ? "25" : "");
+    setSize(seed); setOpen(true); setDone(null); setErr(null); fetchPreview(seed);
+  };
   const inStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", background: BG, border: "1px solid #33333a", borderRadius: 6, color: BRIGHT, fontFamily: MONO, outline: "none" };
 
   return (

@@ -1720,7 +1720,11 @@ export default function TokenTerminal() {
                     {swapErr && !modalOpen && <div style={{ fontFamily: MONO, fontSize: 10.5, color: NEG, marginTop: 8, textAlign: "center" }}>{swapErr}</div>}
                     {/* Flash — a third EVM router next to Fabric (self-hides off-EVM). Market buy/sell,
                         confirm-modal, non-custodial. Fabric stays first, Uniswap stays the no-route link. */}
-                    <FlashSpotButton chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : sellAmt} walletAddress={wallet} provider={provider} />
+                    {/* Prefill in the FLASH unit, not the ticket's label: BUY size = the ticket USDC
+                        amount; SELL size = the ticket TOKEN quantity (reuse sellTokens, which already
+                        resolves MAX→balance and the USD toggle via $/mark) — never the USD label, and
+                        empty ticket → empty (no invented default). */}
+                    <FlashSpotButton chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : (sellTokens > 0 ? sellTokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : "")} walletAddress={wallet} provider={provider} />
                   </>
                 )}
 
