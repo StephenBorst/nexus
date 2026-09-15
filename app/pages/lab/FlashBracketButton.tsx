@@ -44,8 +44,17 @@ export function FlashBracketButton({ symbol, direction, entryPrice, stopLoss, ta
   const [done, setDone] = useState<string | null>(null);
 
   const spot = FLASH_SPOT[bareOf(symbol)];
-  // LONG-only (spot can't short) + curated market only → otherwise the Orderly perp book owns it.
-  if (direction !== "LONG" || !spot) return null;
+  if (!spot) return null; // non-curated symbol → no Flash chrome at all; Orderly perps own it.
+  // A Flash spot BUY is long. It must NEVER mount on a SHORT/fade thesis — a buy would trade
+  // AGAINST the call. On a curated-symbol SHORT, show one honest line (no button), never a ticket.
+  if (direction !== "LONG") {
+    return (
+      <span title="Flash spot orders are buy-only; a SHORT fade executes on the Orderly perp book."
+        style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9.5, color: "#52525b", display: "inline-flex", alignItems: "center", minHeight: 36, padding: "6px 4px", whiteSpace: "nowrap", lineHeight: 1.3 }}>
+        Flash is spot-long — this fade is {direction} → Orderly
+      </span>
+    );
+  }
 
   const run = async () => {
     setErr(null); setDone(null); setBusy(true); setStatus("Getting a quote…");
