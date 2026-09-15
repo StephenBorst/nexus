@@ -106,8 +106,9 @@ export function NexusTicker() {
   if (!items || !items.length) return null;
 
   // Doubled track → seamless -50% loop. Duration scales with item count so speed
-  // stays constant regardless of how many markets are live.
-  const durationSec = Math.max(40, items.length * 3.6);
+  // stays constant regardless of how many markets are live. ~7s/item = a calm,
+  // premium tape (matches the landing's cadence — see nexus-landing ticker 140s/20).
+  const durationSec = Math.max(75, items.length * 7);
   const track = [...items, ...items];
 
   // Click a market → its trading page; click $NEXUS → GeckoTerminal. Pause-on-hover
@@ -131,6 +132,14 @@ export function NexusTicker() {
         borderRight: `1px solid ${C.border}`, whiteSpace: "nowrap", fontFamily: MONO, fontSize: 11, cursor: "pointer",
       }}
     >
+      {/* Coin logo — Orderly's per-symbol set (same coins as our feed); $NEXUS = the house mark.
+          Broken/missing logos hide themselves so a row never shows a torn-image glyph. */}
+      <img
+        src={it.house ? "/logo-mark.png" : `https://oss.orderly.network/static/symbol_logo/${it.sym}.png`}
+        alt="" aria-hidden="true" loading="lazy" width={18} height={18}
+        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+        style={{ width: 18, height: 18, borderRadius: it.house ? 4 : "50%", flexShrink: 0, objectFit: "cover" }}
+      />
       <span style={{ color: it.house ? C.accent : C.text.fog, fontWeight: it.house ? 700 : 600, letterSpacing: it.house ? "0.1em" : "0.02em" }}>{it.sym}</span>
       <span style={{ color: C.text.bright }}>{it.price}</span>
       {it.chg != null && (
