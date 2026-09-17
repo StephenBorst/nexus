@@ -144,7 +144,7 @@ export default function TheLabPage() {
     .filter((p) => p.symbol);
 
   // ── The loop, made visible ────────────────────────────────────────────────
-  // The product's whole claim is a LOOP — observe → plan → execute → prove — but the
+  // The product's whole claim is a LOOP — observe → plan → run → prove — but the
   // nav used to be nine equal-weight peers, which reads as nine unrelated tools and
   // hides the one thing that makes the Lab coherent. Tabs are unchanged; they're now
   // grouped under the phase they belong to, so the structure teaches the workflow.
@@ -154,10 +154,10 @@ export default function TheLabPage() {
     { id: "intel",          label: "Market Intel",       short: "INTEL", phase: "OBSERVE" },
     { id: "smart",          label: "Smart Money",        short: "SMART", phase: "OBSERVE" },
     { id: "thesis",         label: "Thesis Engine",      short: "LAB",   phase: "PLAN"    },
-    { id: "agent",          label: "Trading Agent",      short: "AGENT", phase: "EXECUTE" },
-    { id: "quicktrade",     label: "Quick Trade",        short: "TRADE", phase: "EXECUTE" },
-    { id: "copies",         label: "Copy Trades",        short: "COPY",  phase: "EXECUTE" },
-    // Holders Room is community access, not a trading step — it sits between EXECUTE
+    { id: "agent",          label: "Trading Agent",      short: "AGENT", phase: "RUN"     },
+    { id: "quicktrade",     label: "Quick Trade",        short: "TRADE", phase: "RUN"     },
+    { id: "copies",         label: "Copy Trades",        short: "COPY",  phase: "RUN"     },
+    // Holders Room is community access, not a trading step — it sits between RUN
     // and PROVE so the loop still ENDS on Analytics (which closes it back to the top).
     { id: "holders",        label: "Holders Room",       short: "ROOM",  phase: ""        },
     { id: "tradelog",       label: "Trading Log",        short: "LOG",   phase: "PROVE"   },
