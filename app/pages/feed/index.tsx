@@ -1087,7 +1087,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                 </div>
                 {trader.graded ? (
                   <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", marginTop: 2 }}>
-                    {trader.graded.hitRate.toFixed(0)}% hit · {trader.graded.avgR > 0 ? "+" : ""}{trader.graded.avgR.toFixed(2)}R · {trader.graded.calls} graded calls
+                    {trader.graded.hitRate.toFixed(0)}% hit · <span title="R = profit per call measured in multiples of what they risked. +1R = they made what they put at risk; +2R = twice that. Averaged across every graded call.">{trader.graded.avgR > 0 ? "+" : ""}{trader.graded.avgR.toFixed(2)}R avg</span> · {trader.graded.calls} graded calls
                     {trader.graded.regimeEdge && (
                       <span title="The market this caller's graded record is actually strongest in — classified from the candles before each call.">
                         {" "}· best in {REGIME_LABEL[trader.graded.regimeEdge.best.bucket] ?? trader.graded.regimeEdge.best.bucket}
@@ -1103,7 +1103,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   not just a number. Only for graded callers with ≥2 resolved calls. */}
               {trader.graded && trader.graded.rSeries.length >= 2 && (
                 <div style={{ flex: "1 1 72px", minWidth: 72, textAlign: "center" }}>
-                  <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)", marginBottom: 2 }}>R CURVE</div>
+                  <div title="Their running profit across graded calls, in multiples of risk (R). Up and to the right = consistently right over time — the track record as a shape, not just a number." style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)", marginBottom: 2 }}>R CURVE</div>
                   <Sparkline points={trader.graded.rSeries} width={72} height={22} />
                 </div>
               )}
