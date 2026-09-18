@@ -73,9 +73,20 @@ const MIN_BROADCAST_MS = 3 * 3600 * 1000;      // at most one push / 3h, however
 // so the public API and the push can never disagree.
 export async function computeSignalRows(env) {
   const KV = env.NEXUS_AGENT || env.LAB_STORE;
+  // Market data in ONE request via the orderly-proxy (the SAME path the Briefing/tape use and
+  // that works — cached, so the Worker makes zero direct Orderly calls), then look up each
+  // symbol below. The old 7 parallel per-symbol api-evm fetches got rate-limited from the
+  // Worker's IP → every row null → "no rows this tick" on The Board. Proxy-first, with a
+  // per-symbol api-evm fallback so a proxy blip can never zero the whole board.
+  const bySym = {};
+  try {
+    const all = await (await fetch("https://orderly-proxy.stephenpatrick24.workers.dev")).json();
+    for (const m of (all?.data?.rows ?? [])) if (m?.symbol) bySym[m.symbol] = m;
+  } catch { /* fall through to per-symbol below */ }
   const rows = await Promise.all(SIGNAL_SYMS.map(async (sym) => {
     try {
-      const d = (await (await fetch(`https://api-evm.orderly.org/v1/public/futures/${sym}`)).json())?.data;
+      let d = bySym[sym];
+      if (!d || !d.mark_price) d = (await (await fetch(`https://api-evm.orderly.org/v1/public/futures/${sym}`)).json())?.data;
       if (!d || !d.mark_price) return null;
       const mark = Number(d.mark_price), funding = Number(d.last_funding_rate) || 0, oi = Number(d.open_interest) || 0;
       const prev = JSON.parse((await KV.get(`market:prev:${sym}`)) || "null");
