@@ -250,6 +250,37 @@ Sweep → Save → Publish → Community board → COPY → activate → graded.
   wallets = bad UX, NOT multi-position-one-account = perps net per symbol/account). Sequence AFTER a proven edge
   (concurrency multiplies edge). Bonus: sub-accounts → per-STRATEGY graded records → stronger marketplace ranking.
 
+## ⭐ Signal engine — the AXIS SCOREBOARD (CURRENT, supersedes the funding-fade flagship)
+The engine evolved past funding+OI confluence. The scoreboard **graded our own old flagship (funding fade) as
+NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BASIS + a conditioner stack.**
+- **The reads (orthogonal signal stack):** spot-perp **basis** (perp premium/discount — grades fade QUALITY;
+  `flow.mjs` on OKX), **CVD** (aggressor flow), **liq-flush** (`liquidations.mjs`), **smart money**, **OI**,
+  order-book imbalance, **RSI reset** (uptrend continuation), and **vol regime = contango/backwardation**
+  (Deribit DVOL term structure, `deribit.mjs`/`flow.mjs` — backwardation favors fades, contango = trend). Each
+  self-logs hourly (`basis:hist`/`cvd:hist`/`liq:hist`/`sm:hist`/`oi:hist`/`candle:hist`).
+- ⚠️ **BASIS ≠ CONTANGO** (don't fuse them): basis = spot-vs-perp price = the fade *signal*; contango/backwardation
+  = the options vol *regime* = a *conditioner* (when fades work), not a strategy.
+- **The SIGNAL SCOREBOARD** = `GET /intel/axis-backtest` (worker `axisbt.mjs` `runScorecard`) → rendered by
+  `app/pages/proof/index.tsx` (`SignalRow`/`Stat`), shown on **/proof** AND the Feed **SIGNALS** tab. **It grades
+  our OWN reads the way we grade traders:** forward returns, no lookahead, pooled across ~12 core markets,
+  first-half/second-half **walk-forward stability**. Horizons 4/12/24h.
+  - **Tiers:** `PREDICTIVE` (enough samples AND positive AND stable) > `PROMISING` (positive, not stable) >
+    `NOISE` (flat/neg) > `ACCRUING` (code `INSUFFICIENT` — not enough history yet). *"A read is not an edge until
+    it's PREDICTIVE."* Row metrics: **horizon · hit rate · avg edge (bps, 100=1%) · samples · stable.**
+- **⚠️ The stack method (the moat):** take a basis fade ONLY when a second, harder-to-arb read AGREES at the same
+  hour (`basisXcvd`/`basisXsmart`/`basisXliq` in `axisbt.mjs`) — no-lookahead, keep only conditioners that lift
+  stability. Rare intersections → small n → flagged INSUFFICIENT honestly.
+- **Timeline (real):** **Sept 14 2026** = first maturation gate — funding-fade graded NOISE, `basis_extreme` the
+  first PREDICTIVE axis (but thin/lumpy). **Oct 15 2026 15:00 UTC** = scheduled **Routine
+  `trig_01E1U5mnh4qcNMqFDxQKzJcx` "Re-validate Nexus engine — basis + conditioner stack"** → confirm the basis
+  stack holds on a real sample (basis:hist/cvd:hist are younger, so obs are still low: 22–203). ⚠️ The date is a
+  ROUTINE, not a hardcoded string in the worker — don't grep code for it and conclude "no date."
+- **⚠️ Scoreboard reads are NOT agent signalModes yet.** The agent trades CONFLUENCE/FUNDING/OI/MOMENTUM/
+  MEAN_REVERSION only; basis/CVD/RSI reads are the research/proof layer. Findings feed house defaults + manual
+  Thesis Engine use. **Wiring a PREDICTIVE read → a one-click agent strategy = roadmap, not built.**
+- **Landing Proof section** (`nexus-landing` `#proof`) speaks to this in-cadence: "many reads, graded in public,
+  most still noise, always sharpening" — NOT "one signal." Keep it that way.
+
 ## Bankr SKILL + marketing assets (where things live)
 - **Bankr skill** = `github.com/BankrBot/skills` → `nexus-trading-labs/SKILL.md` + `references/*.md` (markdown skill,
   YAML frontmatter `name: nexus` + trigger `description`). Published/maintained by Nexus. Update = edit SKILL.md/refs,
