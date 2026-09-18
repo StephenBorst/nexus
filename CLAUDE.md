@@ -633,13 +633,23 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
 - **Lab tab row mobile:** tabs are equal-width `flex:1` with `short` labels; Holders short = `ROOM` (was a
   cryptic `◆`); the sync/operational status dot is hidden on mobile to reclaim space. Feed nav mirrors this
   (equal `flex:1` tabs, glyphs+divider dropped, "N theses" count hidden on mobile — no awkward gap).
-- Aesthetic: monospace terminal / green (#00ff88). Keep it — it's an ownable brand, don't "SaaS-ify".
+- Aesthetic: **see "## Brand & voice" below** — canonical system is `app/config/theme.ts`. Bone/white `#ededf0` is the ONE accent; green `#3ecf8e` is DEMOTED to profit-data only. **NOT neon `#00ff88`** (that was a wrong note that misled a build). Ownable brand — don't "SaaS-ify".
 - Commit trailer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`. Commit/push when asked.
 - Env is **Windows PowerShell** — no `&&` chaining; use `;`. `gh` CLI is NOT installed.
 - `tsc --noEmit` baseline is now **0 errors** (cleaned up 2026-08-24 — the old walletConnector
   `EvmInitialProps` mismatch fixed via a `walletConfig` appMetadata.name fallback; useNav
   `RouteOption` now imported from `@orderly.network/types`). Keep it at 0 — any error you see is
   yours to fix, not pre-existing noise.
+
+## Brand & voice — design source of truth ⭐ (read BEFORE any brand-facing asset: landing, decks, videos, share cards, motion, marketing)
+Canonical system = **`app/config/theme.ts`** (`C` tokens), mirrored 1:1 by the landing (`nexus-landing/index.html` `:root`). Pull colors from these — never invent.
+- **Palette (Linear-discipline monochrome):** canvas `#0a0a0b` · surface `#141416` · borders `#232327`/`#33333a` · text bone `#f4f4f5` / fog `#a1a1aa` / muted `#71717a` / faint `#52525b`. **THE accent = bone/white `#ededf0`** (CTAs, headlines, interaction). **Green `#3ecf8e` = DATA role — profit/up/live ONLY, never the brand color.** neg `#f7525f`, warn `#fbbf24`. Elevation = hairline border + surface tier, NOT heavy shadow; ONE rationed accent; 4px spacing scale.
+  - ⚠️ **NOT neon green.** "near-black + acid-green pop" is the exact AI-cliché to AVOID. It's bone-on-near-black, green rationed to data.
+- **Type:** IBM Plex Mono (labels/terminal) + Manrope (sans — headlines/CTAs) + Libre Baskerville (serif — editorial accent). Landing loads all three.
+- **Voice / cadence (match the landing):** calm, declarative, confident, short sentences. Identity lines — **"an onchain trading terminal" · "Welcome to The Lab" · "Plan it. Run it. Prove it." · "From idea to an onchain call."** Agent: "hand an agent your rules · paper first, live when you say so · order-only keys + kill switch · 24/7." Intel: "funding edge intelligence · where the smart money is actually positioned · the edge the desk trades on."
+  - ⚠️ **Verifiability is stated CALMLY, once, as fact** ("graded from public price · the ledger's on Arbitrum · open the contract and look") — NEVER a "can't fake" war-cry. Blockchain-can't-fake is table stakes; the onchain terminal (The Lab) OWNS verifiability inherently, so don't lead with it or preach it. It's a quiet supporting fact, not the thesis.
+  - ⚠️ No filler ("in plain English", "the leaderboard you can't fake"). Say the thing, in the landing's register.
+- **"Video demos"** = self-playing / animated **design artifacts** (branded HTML you screen-record), the same medium as the Claude Design "video demo" projects — there is NO rendered-MP4 export from Claude. Build these on the palette + voice above. Current demo motion kit: artifact `KuNRnRrDJ3Q9GDLwBP3Eai` (V2, on-brand: bone/near-black, green whisper).
 
 ## // NEXUS AI — floating AI copilot (Session 2026-06-05, on main)
 Terminal-wide floating ◆ assistant; flagship "make-you-a-better-trader" feature. **BYOK, client-side
