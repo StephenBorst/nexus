@@ -703,6 +703,27 @@ async function getOnChainWallets(env) {
 }
 
 // ── HOUSE SIGNALS — seed the caller board with a systematic, graded track record ──
+// The all-markets Orderly futures snapshot (mark_price, funding, OI for every symbol) —
+// the ONE input every funding-edge intelligence board reads. Proxy-FIRST: the orderly-proxy
+// is cached and the only path that reliably works from the Worker IP — direct api-evm calls
+// intermittently 403/rate-limit from here and were ZEROING these boards ("no rows this tick" /
+// "No liquid markets"). Direct api-evm is the fallback (browser UA) so a proxy blip can't zero
+// it either. Returns the rows array ([] only if BOTH fail). One path, no drift — same fix as
+// computeSignalRows (/signals) in signal-delivery.mjs.
+async function fetchAllFutures() {
+  try {
+    const all = await (await fetch("https://orderly-proxy.stephenpatrick24.workers.dev")).json();
+    const rows = all?.data?.rows || [];
+    if (rows.length) return rows;
+  } catch { /* fall through to direct api-evm */ }
+  try {
+    const res = await fetch("https://api-evm.orderly.org/v1/public/futures", {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36", "Accept": "application/json, text/plain, */*" },
+    });
+    return (await res.json())?.data?.rows || [];
+  } catch { return []; }
+}
+
 // Takes the current top funding-fade off the mispriced board and publishes it as a
 // graded thesis under the house identity (HOUSE_CALLER_ADDRESS), so the empty caller
 // boards fill with REAL graded outcomes (same public first-touch engine as any human
@@ -722,12 +743,9 @@ async function generateHouseCalls(env, { dryRun = false, max = 1 } = {}) {
     if (cached) { const c = JSON.parse(cached); if (Array.isArray(c?.markets)) markets = c.markets; }
   } catch { /* fall through to fetch */ }
   if (!markets) {
-    try {
-      const res = await fetch("https://api-evm.orderly.org/v1/public/futures", {
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36", "Accept": "application/json, text/plain, */*" },
-      });
-      markets = mispricedBoard((await res.json())?.data?.rows || []).markets;
-    } catch (e) { return { error: `no board available (cache cold + futures fetch failed): ${e}` }; }
+    const rows = await fetchAllFutures(); // proxy-first, fail-soft ([] if both paths fail)
+    if (!rows.length) return { error: "no board available (cache cold + futures fetch failed)" };
+    markets = mispricedBoard(rows).markets;
   }
   const fades = (markets || []).filter((m) => m.status === "MISPRICED" && m.direction !== "NONE").sort((a, b) => b.edge - a.edge);
   if (!fades.length) return { posted: [], note: "no fade signal right now" };
@@ -771,9 +789,8 @@ async function buildCatalystBoard(env) {
   const board = catalystBoard(rows);
   let markByCoin = {};
   try {
-    const fut = await fetch("https://api-evm.orderly.org/v1/public/futures", { headers: { "User-Agent": UA, "Accept": "application/json" } }).then((r) => r.json());
     const bySym = {};
-    for (const m of (fut?.data?.rows || [])) bySym[m.symbol] = parseFloat(m.mark_price);
+    for (const m of await fetchAllFutures()) bySym[m.symbol] = parseFloat(m.mark_price); // proxy-first
     for (const [coin, sym] of Object.entries(CATALYST_MARKETS)) { if (Number.isFinite(bySym[sym])) markByCoin[coin] = bySym[sym]; }
     if (markByCoin.SPX != null) markByCoin.SPX500 = markByCoin.SPX;
     if (markByCoin.NAS != null) markByCoin.NAS100 = markByCoin.NAS;
@@ -1171,10 +1188,7 @@ export default {
         let markets = null;
         const cached = await env.LAB_STORE.get("intel:mispriced:v1");
         if (cached) { const c = JSON.parse(cached); if (Array.isArray(c?.markets)) markets = c.markets; }
-        if (!markets) {
-          const res = await fetch("https://api-evm.orderly.org/v1/public/futures", { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36", "Accept": "application/json" } });
-          markets = mispricedBoard((await res.json())?.data?.rows || []).markets;
-        }
+        if (!markets) markets = mispricedBoard(await fetchAllFutures()).markets; // proxy-first, [] on failure → NONE card
         row = (markets || []).find((m) => String(m.coin).toUpperCase() === coin) || null;
       } catch { /* row stays null → NONE card */ }
       // 2) the pierce test on recorded funding (oi:hist) → the frozen verdict.
@@ -2876,22 +2890,12 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         }
       } catch { /* cache miss → recompute */ }
       try {
-        // Realistic UA — Orderly's edge intermittently serves an HTML 403 to header-light Worker
-        // fetches (same reason the brain sends browser headers). That 403 throws on .json() and
-        // dumped the WHOLE board empty (scanned:0, no cards — it blinked out on a bad tick). One
-        // extra attempt (a short pause lands it on a different edge node) recovers it; if BOTH
-        // attempts fail we fail-soft WITHOUT caching, so the very next request retries fresh (never
-        // pin an empty board for the 600s cache TTL).
-        let rows = [];
-        for (let attempt = 0; attempt < 2 && !rows.length; attempt++) {
-          if (attempt > 0) await new Promise((r) => setTimeout(r, 200));
-          try {
-            const res = await fetch("https://api-evm.orderly.org/v1/public/futures", {
-              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36", "Accept": "application/json, text/plain, */*" },
-            });
-            rows = (await res.json())?.data?.rows || [];
-          } catch { /* retry once, then fail-soft below */ }
-        }
+        // All-markets snapshot via the shared proxy-first helper (see fetchAllFutures). The direct
+        // api-evm path intermittently served an HTML 403 to header-light Worker fetches and dumped
+        // the WHOLE board empty ("No liquid markets"); the proxy is cached and IP-reliable, with the
+        // direct call as fallback. Fail-soft WITHOUT caching so the very next request retries fresh
+        // (never pin an empty board for the cache TTL).
+        const rows = await fetchAllFutures();
         if (!rows.length) return json({ asOf: new Date().toISOString(), scanned: 0, mispricedCount: 0, markets: [], error: "futures unavailable" }, request);
         const board = mispricedBoard(rows);
 
@@ -3056,19 +3060,17 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       } catch { /* cache miss → recompute */ }
       try {
         const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
-        const [pm, fut] = await Promise.all([
+        const [pm, futRows] = await Promise.all([
           // Active crypto markets, deepest first. tag_id=21 = Polymarket's Crypto tag
           // (verified); order=volumeNum surfaces the liquid price-target markets. Our own
           // asset regex is the real filter, so a tag drift still yields correct input.
           fetch("https://gamma-api.polymarket.com/markets?closed=false&active=true&limit=200&order=volumeNum&ascending=false&tag_id=21", {
             headers: { "User-Agent": UA, "Accept": "application/json" },
           }).then((r) => r.json()).catch(() => []),
-          fetch("https://api-evm.orderly.org/v1/public/futures", {
-            headers: { "User-Agent": UA, "Accept": "application/json, text/plain, */*" },
-          }).then((r) => r.json()).catch(() => ({})),
+          fetchAllFutures(), // proxy-first — direct api-evm was 403/rate-limiting → empty divergence board
         ]);
         const rows = Array.isArray(pm) ? pm : (pm?.data || []);
-        const board = forecastDivergence(rows, fut?.data?.rows || []);
+        const board = forecastDivergence(rows, futRows);
         const payload = {
           asOf: new Date().toISOString(), asOfMs: Date.now(), ...board,
           criteria: { note: "Polymarket forecast probability joined to Orderly funding. On price-target markets, a DIVERGENCE = the forecasting crowd leans one way (conviction ≥15pts off a coin-flip) while leveraged positioning (funding) leans the other. Not a fair-value oracle and not advice — a prompt to investigate, and to stake a graded thesis on the gap." },
