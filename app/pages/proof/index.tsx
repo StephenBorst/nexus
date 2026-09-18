@@ -50,6 +50,19 @@ const VERDICT: Record<string, { color: string; label: string }> = {
   INSUFFICIENT: { color: FAINT, label: "ACCRUING" },
 };
 
+// A single labeled stat — value over a plain micro-label, so the scoreboard reads
+// itself (no memorizing "bps"/"obs"). The tooltip carries the deeper gloss on hover.
+function Stat({ v, unit, l, color, title }: { v: string; unit?: string; l: string; color?: string; title?: string }) {
+  return (
+    <span title={title} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, cursor: title ? "help" : "default" }}>
+      <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 700, color: color || BRIGHT, lineHeight: 1, whiteSpace: "nowrap" }}>
+        {v}{unit ? <span style={{ fontSize: 8.5, color: MUTED, fontWeight: 500 }}> {unit}</span> : null}
+      </span>
+      <span style={{ fontFamily: MONO, fontSize: 7.5, letterSpacing: "0.09em", textTransform: "uppercase", color: MUTED, whiteSpace: "nowrap" }}>{l}</span>
+    </span>
+  );
+}
+
 // One row per candidate signal — our OWN reads, graded by forward returns.
 function SignalRow({ a }: { a: AxisRow }) {
   const v = VERDICT[a.verdict] || VERDICT.INSUFFICIENT;
@@ -58,12 +71,12 @@ function SignalRow({ a }: { a: AxisRow }) {
       <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 700, color: BRIGHT, flexShrink: 0, minWidth: 150 }}>{a.label}</span>
       <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: v.color, border: `1px solid ${v.color}55`, borderRadius: 3, padding: "1px 6px", flexShrink: 0 }}>{v.label}</span>
       {a.best && a.verdict !== "INSUFFICIENT" ? (
-        <span style={{ ...statCell, marginLeft: "auto", display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <span>{a.best.h}h</span>
-          <span>{a.best.hitRate}% hit</span>
-          <span style={{ color: a.best.meanBps >= 0 ? POS : NEG }}>{a.best.meanBps >= 0 ? "+" : ""}{a.best.meanBps}bps</span>
-          <span style={{ color: FAINT }}>{a.best.samples} obs</span>
-          {a.best.stable && <span style={{ color: POS }} title="First half vs second half agree in sign">✓ stable</span>}
+        <span style={{ marginLeft: "auto", display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "flex-end" }}>
+          <Stat v={`${a.best.h}h`} l="horizon" title="How far ahead we measure the move — this read's best window." />
+          <Stat v={`${a.best.hitRate}%`} l="hit rate" title="Share of times it moved the predicted way." />
+          <Stat v={`${a.best.meanBps >= 0 ? "+" : ""}${a.best.meanBps}`} unit="bps" l="avg edge" color={a.best.meanBps >= 0 ? POS : NEG} title="Average forward move it caught, in basis points (100 bps = 1%)." />
+          <Stat v={`${a.best.samples}`} l="samples" title="How many times this read has fired — more samples = more trustworthy." />
+          <Stat v={a.best.stable ? "✓" : "—"} l="stable" color={a.best.stable ? POS : FAINT} title="Held up in BOTH halves of the record (walk-forward) — not a fluke of one stretch." />
         </span>
       ) : (
         <span style={{ ...statCell, marginLeft: "auto", color: FAINT }}>accruing — not yet rated</span>
@@ -358,6 +371,9 @@ export default function ProofPage() {
           <div style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.6, maxWidth: 660, marginBottom: 12 }}>
             Every read in the engine, scored the way we grade traders — <b style={{ color: BRIGHT }}>forward returns, no lookahead</b>, pooled across the core markets, with a walk-forward stability check.
             A read is not an edge until it's <span style={{ color: POS }}>◆ PREDICTIVE</span> here. Most sit at <span style={{ color: FAINT }}>ACCRUING</span> until the self-logged history matures and the sample clears the bar.
+            <span style={{ display: "block", marginTop: 8, color: MUTED, fontSize: 11.5 }}>
+              Reading a row — <b style={{ color: FOG }}>horizon</b> (how far ahead) · <b style={{ color: FOG }}>hit rate</b> (share that went the right way) · <b style={{ color: FOG }}>edge</b> (avg move caught, 100 bps = 1%) · <b style={{ color: FOG }}>samples</b> (times it&rsquo;s fired) · <b style={{ color: FOG }}>stable</b> (held up in both halves).
+            </span>
           </div>
           {scorecard === null ? empty("loading…") : !scorecard.axes?.length ? empty("scorecard warming up…") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
