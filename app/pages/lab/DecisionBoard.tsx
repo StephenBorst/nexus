@@ -200,11 +200,13 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
   const [proc, setProc] = useState<ProcessEdge>(null);
   const [sort, setSort] = useState<SortMode>("actionable");
   const [draftingSym, setDraftingSym] = useState<string | null>(null); // the row whose PLAY→draft is fetching levels
-  // ── Deep link: /lab?guest=1&coin=SOL ──────────────────────────────────────────
+  // ── Deep link: /lab?guest=1&coin=SOL (or &play=SOL) ───────────────────────────
   // A shared verdict card lands here. Scroll that row into view and mark it, so the reader sees
   // the row the card was about — and its → still drafts. Fail-soft: an unknown coin is ignored.
+  // Accept both `coin=` (THE BOARD's own share param) and `play=` (the funding-lens share param)
+  // so any shared board link focuses the row here, on the surface people actually see first.
   const [searchParams] = useSearchParams();
-  const deepCoin = (searchParams.get("coin") || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
+  const deepCoin = (searchParams.get("coin") || searchParams.get("play") || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const scrolledFor = useRef<string | null>(null);
 
