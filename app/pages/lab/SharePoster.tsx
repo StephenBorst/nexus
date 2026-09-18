@@ -33,6 +33,7 @@ export type PosterData =
       kind: "smart";
       symbol: string; direction: string;
       szUsd?: number | null; trader?: string | null; roi?: number | null;
+      source?: string | null; // "orderly" | "hl" — the real venue, so the card can't misattribute it
       consensus?: number | null; // # of tracked smart-money traders agreeing (consensus card)
     };
 
@@ -64,7 +65,9 @@ function PosterSVG({ data, svgRef }: { data: PosterData; svgRef: React.Ref<SVGSV
     headlineColor = dirColor;
     subline = data.consensus && data.consensus > 1
       ? `${data.consensus} smart-money traders agree`
-      : "smart money · Hyperliquid";
+      : data.source === "orderly" ? "smart money · Orderly"
+      : data.source === "hl" ? "smart money · Hyperliquid"
+      : "smart money"; // unknown source → never claim a venue (verify, don't trust)
     if (data.szUsd != null && data.szUsd > 0) rows.push({ label: "SIZE", value: money(data.szUsd) });
     if (data.consensus && data.consensus > 1) rows.push({ label: "CONSENSUS", value: `${data.consensus} traders`, color: ACCENT });
     if (data.trader) rows.push({ label: "TRADER", value: data.trader });
