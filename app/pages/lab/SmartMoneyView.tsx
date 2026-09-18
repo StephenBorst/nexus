@@ -84,6 +84,14 @@ const usd = (n: number | null | undefined) => {
   const s = a >= 1e9 ? `${(a / 1e9).toFixed(1)}B` : a >= 1e6 ? `${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `${(a / 1e3).toFixed(0)}K` : `${a.toFixed(0)}`;
   return `${v < 0 ? "-" : ""}$${s}`;
 };
+// A PRICE, not a size — a $2,000 entry must read "$2,000", never "$2K" (usd() abbreviates
+// like a size, which read as gibberish next to the position size). Full number with commas,
+// magnitude-aware decimals for sub-$1 coins. NaN/≤0 → "" so the caller can drop it cleanly.
+const priceUsd = (n: number | null | undefined) => {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v <= 0) return "";
+  return v >= 1000 ? `$${Math.round(v).toLocaleString()}` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toPrecision(4)}`;
+};
 const ago = (ts: number) => {
   const m = Math.max(0, Math.round((Date.now() - ts) / 60000));
   return m < 1 ? "now" : m < 60 ? `${m}m` : m < 1440 ? `${(m / 60).toFixed(0)}h` : `${(m / 1440).toFixed(0)}d`;
@@ -602,8 +610,8 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                   </div>
                   {/* meta line — size · price · realized pnl (on close) · source · age */}
                   <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", marginTop: 3 }}>
-                    <span style={{ color: "#a1a1aa" }}>{usd(e.szUsd)}</span>
-                    {e.price ? <span style={{ color: "#52525b" }}>@ {usd(e.price)}</span> : null}
+                    <span style={{ color: "#a1a1aa" }}>{usd(e.szUsd)} size</span>
+                    {priceUsd(e.price) ? <span style={{ color: "#52525b" }}>@ {priceUsd(e.price)} {isOpen ? "entry" : "price"}</span> : null}
                     {e.closedPnl != null && <span style={{ color: e.closedPnl >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: 700 }}>{e.closedPnl >= 0 ? "+" : ""}{usd(e.closedPnl)}</span>}
                     <span style={{ color: "#3f3f46" }}>·</span>
                     <span title={e.source === "orderly" ? "Orderly (native)" : "Hyperliquid"} style={{ color: e.source === "orderly" ? "#3ecf8e" : "#52525b" }}>{e.source === "orderly" ? "◆ Orderly" : "Hyperliquid"}</span>
@@ -614,7 +622,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                 {/* actions — only a fresh OPEN is copyable */}
                 {isOpen && (
                   <span style={{ display: "flex", gap: 6, flexShrink: 0, marginTop: 1 }}>
-                    {shareBtn({ kind: "smart", symbol: e.sym, direction: e.side, szUsd: e.szUsd, trader: short(e.addr) })}
+                    {shareBtn({ kind: "smart", symbol: e.sym, direction: e.side, szUsd: e.szUsd, trader: short(e.addr), source: e.source })}
                     {thesisBtn(() => openThesis(e.sym, e.side, e.price, `${short(e.addr)} (smart money) opened ${e.side} ${e.sym}.`))}
                     {tradeBtn(() => copy(e.sym, e.side, e.price, null, e.addr))}
                   </span>
