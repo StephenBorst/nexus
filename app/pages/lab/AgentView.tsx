@@ -1096,11 +1096,11 @@ export function AgentView() {
             )}
             <div style={{ ...agentLabelStyle, fontSize: 9, marginTop: 8, color: "#71717a" }}>
               {({
-                CONFLUENCE: "Both funding + OI-divergence must agree — the strictest filter, so the fewest, most-selective entries.",
-                FUNDING_ONLY: "Trades funding extremes alone. More entries, lower selectivity.",
-                OI_ONLY: "Trades OI-divergence alone. Funding ignored.",
-                MOMENTUM: "Trades WITH a price move above your threshold — rides strength. Noisy on short ticks; test in PAPER.",
-                MEAN_REVERSION: "FADES a price move above your threshold — buy the dip, sell the rip. Test in PAPER.",
+                CONFLUENCE: "Strictest filter — the agent only acts when the crowd is offside TWO ways at once: paying up to hold one side (funding) AND piling into it (open interest). Fewest trades, highest bar.",
+                FUNDING_ONLY: "Acts when traders are paying an extreme rate to hold one side (funding) — a crowded, one-sided book the agent fades. More trades, less selective than CONFLUENCE.",
+                OI_ONLY: "Acts on open interest alone — a fast pile-in of new positions that the funding read can miss. Funding ignored.",
+                MOMENTUM: "Trades WITH a price move once it clears your threshold — rides strength instead of fighting it. Noisy on small moves; PAPER it first.",
+                MEAN_REVERSION: "Fades a sharp move once it clears your threshold — buy the dip, sell the rip, betting it snaps back. PAPER it first.",
               } as Record<string, string>)[config.signalMode ?? "FUNDING_ONLY"]}
             </div>
           </div>
