@@ -5,7 +5,8 @@ import { C } from "@/config/theme";
 import { SectionHeader } from "./components";
 import { useSubscription } from "@/hooks/useSubscription";
 import { TIER_NAME, PRO_HOLDER_TIER, PRO_MONTHLY_USDC, nexusDiscountedPrice } from "@/config/subscription";
-import { selectAndGuard, signXPayment, type Eip1193 } from "./qpay";
+import { loadQuotientDirect, type Eip1193 } from "./qpay";
+import { shapeQuotientSignals, type QSignal, type QBoard } from "./qshape";
 
 // ── Q Signals lens — Quotient's fair value vs the market (PRO · you pay per pull) ──────
 // The forecasting DESK's read: Quotient prices a model FAIR VALUE for a liquid prediction
@@ -24,7 +25,6 @@ import { selectAndGuard, signXPayment, type Eip1193 } from "./qpay";
 // means re-opening the lens shows the last paid pull instead of charging again. Fail-soft
 // throughout: a missing wallet, a declined payment, or a sparse feed renders a quiet line.
 
-const AGENT_API = "https://og.nexustradinglabs.com";
 const CACHE_KEY = "nx_qsignals_cache";
 const CACHE_TTL_MS = 15 * 60 * 1000; // re-opening within 15 min shows the last paid pull, no re-charge
 
@@ -35,40 +35,7 @@ const POS = C.pos, NEG = C.neg, ACCENT = C.accent, CANVAS = C.canvas;
 const SURFACE = C.surface, SURFACE_ALT = C.surfaceAlt, INSET = C.inset, BORDER = C.border, BORDER_STRONG = C.borderStrong;
 const MF = "var(--nx-font-mono)";
 
-interface QSignal {
-  id: string;
-  question: string;
-  venue: string | null;
-  url: string | null;
-  quotientUrl: string | null;
-  side: string | null;
-  qProbPct: number;
-  marketProbPct: number;
-  spreadPp: number;
-  convictionTier: number | null;
-  conviction: string;
-  convergeUpsidePct: number | null;
-  maxRoiPct: number | null;
-  thesis: string | null;
-  windowDays: number | null;
-  endDate: string | null;
-  volume24hUsd: number | null;
-  capacityUsd: number | null;
-  isFresh: boolean;
-  isNewToday: boolean;
-  status: string | null;
-  adverseMovePct: number | null;
-  perp: { coin: string; perpSymbol: string; direction: "LONG" | "SHORT"; targetUsd: number | null } | null;
-}
-interface QBoard {
-  ok?: boolean;
-  reason?: string;
-  scanned?: number;
-  freshCount?: number;
-  highConvictionCount?: number;
-  perpCount?: number;
-  signals?: QSignal[];
-}
+// QSignal / QBoard types + the shaper live in ./qshape (shared with the client-direct pull).
 
 function fmtUsd(n: number | null): string {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -216,31 +183,14 @@ export function QSignals({ address }: { address?: string | null }) {
     if (phase === "loading") return;
     if (!provider) { setErr("Connect a wallet to load Q signals."); return; }
     setPhase("loading"); setErr(null);
+    setStatus("sign the ~$0.01 USDC payment on Base in your wallet…");
     try {
-      setStatus("fetching the payment challenge…");
-      const cr = await fetch(`${AGENT_API}/intel/quotient/challenge`);
-      const cj = await cr.json().catch(() => null);
-      if (!cj?.ok || !Array.isArray(cj.accepts) || !cj.accepts.length) {
-        const why = (cj as { reason?: string } | null)?.reason;
-        throw new Error(`Quotient's payment isn't available right now${why ? ` (${why})` : ""} — try again shortly.`);
-      }
-      const g = selectAndGuard(cj.accepts); // PINS network/asset/recipient + CAPS amount before signing
-      setStatus(`approve the $${g.usd.toFixed(2)} USDC payment on Base in your wallet…`);
-      const { header } = await signXPayment(provider, g);
-      setStatus("unlocking signals…");
-      const pr = await fetch(`${AGENT_API}/intel/quotient`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ xPayment: header, minConviction: 3 }),
-      });
-      const pj = (await pr.json().catch(() => null)) as QBoard | null;
-      if (!pj?.ok) {
-        const reason = (pj as { reason?: string } | null)?.reason;
-        throw new Error(reason === "payment_declined"
-          ? "Quotient declined the payment — check your Base USDC balance and try again."
-          : `Couldn't load signals${reason ? ` (${reason})` : ""} — try again shortly.`);
-      }
-      setBoard(pj); setPaidUsd(g.usd); setLoadedAt(Date.now());
-      writeCache({ board: pj, usd: g.usd, ts: Date.now() });
+      // The BROWSER pays Quotient directly (residential IP) — Quotient 403s our worker's IP,
+      // so this can never go through the server. Then shape client-side (qshape).
+      const { signals: raw, usd } = await loadQuotientDirect(provider, 3);
+      const board = shapeQuotientSignals(raw);
+      setBoard(board); setPaidUsd(usd); setLoadedAt(Date.now());
+      writeCache({ board, usd, ts: Date.now() });
     } catch (e) {
       setErr((e as Error)?.message || "Couldn't load signals.");
     } finally {

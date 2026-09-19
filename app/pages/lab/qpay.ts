@@ -167,3 +167,38 @@ export async function signXPayment(provider: Eip1193, g: GuardedReq): Promise<{ 
   if (typeof sig !== "string" || !/^0x[0-9a-fA-F]+$/.test(sig)) throw new Error("Couldn't sign the payment.");
   return { header: encodeXPayment(g, from, nonce, validAfter, validBefore, sig), from };
 }
+
+// ── Client-DIRECT x402 pull ───────────────────────────────────────────────────
+// The browser (residential IP) calls Quotient directly — the way x402 is meant to be used.
+// This is REQUIRED, not just preferred: Quotient 403s Cloudflare-Worker / datacenter IPs, so
+// a worker relay can never reach it (same block the codebase dodges for rss2json). GET → 402
+// challenge (CORS `*`, readable) → guard + sign → GET again with X-PAYMENT → the data. Returns
+// the RAW `signals` array (the caller shapes it with qshape) + the USD actually authorized.
+const QUOTIENT_SIGNALS_URL = "https://quotient-api-gateway.onrender.com/api/v1/signals";
+
+export async function loadQuotientDirect(provider: Eip1193, minConviction = 3): Promise<{ signals: unknown[]; usd: number }> {
+  const mc = Number.isFinite(minConviction) && minConviction >= 1 && minConviction <= 5 ? minConviction : 3;
+  const url = `${QUOTIENT_SIGNALS_URL}?min_conviction=${mc}`;
+  const rawSignals = (d: unknown): unknown[] => {
+    const arr = (d as { signals?: unknown })?.signals;
+    return Array.isArray(arr) ? arr : [];
+  };
+  // 1) keyless probe → expect the 402 payment challenge.
+  let r1: Response;
+  try { r1 = await fetch(url, { headers: { Accept: "application/json" } }); }
+  catch { throw new Error("Couldn't reach Quotient — try again shortly."); }
+  if (r1.status === 200) return { signals: rawSignals(await r1.json().catch(() => null)), usd: 0 }; // already served
+  if (r1.status === 403) throw new Error("Quotient blocked the request (403) — try again shortly.");
+  if (r1.status !== 402) throw new Error(`Quotient unavailable (${r1.status}).`);
+  const challenge = (await r1.json().catch(() => null)) as { accepts?: unknown } | null;
+  const g = selectAndGuard(challenge?.accepts);                 // pins network/asset/recipient + caps amount
+  // 2) sign the EIP-3009 authorization for exactly that amount.
+  const { header } = await signXPayment(provider, g);
+  // 3) retry WITH the payment → the data.
+  let r2: Response;
+  try { r2 = await fetch(url, { headers: { Accept: "application/json", "X-PAYMENT": header } }); }
+  catch { throw new Error("Payment sent but the data request was blocked — try again shortly."); }
+  if (r2.status === 402) throw new Error("Quotient declined the payment — check your Base USDC balance and try again.");
+  if (!r2.ok) throw new Error(`Quotient error (${r2.status}).`);
+  return { signals: rawSignals(await r2.json().catch(() => null)), usd: g.usd };
+}
