@@ -1837,6 +1837,113 @@ export function forecastDivergence(polyMarkets, futuresRows, cfg = FORECAST, opt
   };
 }
 
+// ── QUOTIENT · Q-SIGNALS — the forecasting DESK's fair value vs the market ─────
+// Sibling of forecastDivergence, but the OTHER way round. forecastDivergence reads
+// the Polymarket CROWD and REFUSES to invent a probability (Q's model is their moat).
+// This reads Quotient's own product: for a liquid prediction market Q publishes a
+// model FAIR VALUE (`latest_q`, 0..1) and a convergence signal where that fair value
+// diverges from the live venue price (`market_odds`). So here we surface THEIR number,
+// with THEIR conviction, honestly — as a prompt to stake a GRADED thesis, never as an
+// oracle and never as advice. The record still grades the call, not Quotient.
+//
+// Pure + side-effect-free: takes the raw `signals` array from the Quotient gateway
+// and returns a minimal, UI-ready board. Credits are metered upstream, so the ROUTE
+// caches (shared KV) — this function just normalizes, filters, ranks. Unit-tested
+// against the documented response shape.
+export const QUOTIENT = {
+  maxSignals: 24,
+  // Only surface a row Quotient itself marks tradeable: active, not suppressed, and
+  // grounded ("actionable"). A retired/suppressed/ungrounded row is noise, not an edge.
+  requireActionable: true,
+};
+
+// A 0..1 probability → percent (1 dp). Falls back to an already-percent integer
+// (Quotient sends both `latest_q` 0..1 and `entry_q` as whole percents).
+function pctFrom01(prob01, pctFallback) {
+  const p = Number(prob01);
+  if (Number.isFinite(p) && p >= 0 && p <= 1) return round(p * 100, 1);
+  const f = Number(pctFallback);
+  return Number.isFinite(f) ? round(f, 1) : null;
+}
+const numOrNull = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+
+// Conviction tier (1..3, higher = stronger) → a stable label. Prefer the upstream
+// string when present; otherwise derive from the tier so the UI always has a word.
+function convictionLabel(tier, upstream) {
+  if (upstream) return String(upstream).toLowerCase();
+  if (tier >= 3) return "high";
+  if (tier === 2) return "medium";
+  if (tier >= 1) return "low";
+  return "—";
+}
+
+export function quotientSignals(rawSignals, cfg = QUOTIENT) {
+  const rows = Array.isArray(rawSignals) ? rawSignals : [];
+  const out = [];
+  for (const s of rows) {
+    if (!s || typeof s !== "object") continue;
+    const market = s.market || {};
+    const question = market.question || s.question || null;
+    if (!question) continue;
+    // Quotient's OWN gating — only tradeable rows (unless the caller disables it).
+    if (cfg.requireActionable) {
+      if (s.is_active === false) continue;
+      if (s.suppression_reason) continue;
+      if (s.grounding_status && s.grounding_status !== "actionable") continue;
+    }
+    // Q fair value vs the live venue price. Prefer the normalized 0..1 fields; fall
+    // back to the whole-percent `entry_*` mirrors.
+    const qProbPct = pctFrom01(s.latest_q, s.entry_q);
+    const mktProbPct = pctFrom01(
+      market.market_odds != null ? market.market_odds : (s.venue_quote && s.venue_quote.selected_probability),
+      s.entry_pm,
+    );
+    if (qProbPct == null || mktProbPct == null) continue;
+    // The edge in percentage points: |fair − market|. Prefer the upstream spread Q
+    // actually entered on (`entry_spread_pp`); else compute it from the two prices.
+    const spreadPp = Number.isFinite(Number(s.entry_spread_pp))
+      ? Math.abs(Number(s.entry_spread_pp))
+      : round(Math.abs(qProbPct - mktProbPct), 1);
+    const tier = Number.isFinite(Number(s.conviction_tier)) ? Number(s.conviction_tier) : null;
+    out.push({
+      id: s.id ?? market.marketKey ?? question,
+      question,
+      venue: market.venue || (s.venue_quote && s.venue_quote.venue) || null,
+      url: market.marketUrl || market.polymarketUrl || market.sourceUrl || null,
+      quotientUrl: market.quotientUrl || null,
+      side: s.q_side || s.side || null,           // the side Q is on (YES / NO)
+      qProbPct,                                    // Q's fair probability, %
+      marketProbPct: mktProbPct,                   // the live venue price, %
+      spreadPp,                                    // the edge, percentage points
+      convictionTier: tier,
+      conviction: convictionLabel(tier ?? 0, s.conviction),
+      convergeUpsidePct: numOrNull(s.converge_upside_pct),
+      maxRoiPct: numOrNull(s.max_roi_pct),
+      thesis: typeof s.thesis === "string" ? s.thesis : null,
+      windowDays: numOrNull(s.window_days),
+      endDate: market.end_date || null,
+      volume24hUsd: numOrNull(market.volume_24h),
+      capacityUsd: numOrNull(s.capacity_usd_at_2c),
+      isFresh: s.is_fresh === true,
+      isNewToday: s.is_new_today === true,
+      status: (s.forecast_status && s.forecast_status.state) || null,   // toward | sideways | against
+      adverseMovePct: s.forecast_status ? numOrNull(s.forecast_status.adverse_move_pct) : null,
+    });
+  }
+  // Strongest conviction first, then the biggest edge, then the freshest.
+  out.sort((a, b) =>
+    ((b.convictionTier ?? 0) - (a.convictionTier ?? 0)) ||
+    ((b.spreadPp ?? 0) - (a.spreadPp ?? 0)) ||
+    (Number(b.isFresh) - Number(a.isFresh)),
+  );
+  return {
+    scanned: out.length,
+    freshCount: out.filter((s) => s.isFresh).length,
+    highConvictionCount: out.filter((s) => (s.convictionTier ?? 0) >= 3).length,
+    signals: out.slice(0, cfg.maxSignals),
+  };
+}
+
 // ── MACRO EVENTS — the intelligence corner for event traders ──────────────────
 // Sibling of forecastDivergence, but for MACRO/geopolitical events (Fed, recession,
 // war, elections, crypto policy) rather than asset price-target markets. Classifies a

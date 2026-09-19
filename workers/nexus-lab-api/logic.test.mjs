@@ -12,6 +12,7 @@ import {
   LOSS_REASONS, isLossReason, postmortemSummary,
   validateArenaRegistration, arenaAgentConfig,
   parsePriceTarget, forecastDivergence, FORECAST,
+  quotientSignals, QUOTIENT,
   classifyMacro, macroEvents,
   houseCallFromSignal, wargameScenario,
   catalystToThesis, attachCatalystTheses, catalystHouseCall,
@@ -2090,4 +2091,83 @@ test("fundingStretched + readVerdict: pierce=FADE, in-band=WATCH, thin=WATCH", (
   assert.equal(readVerdict("SHORT", false, 40), "WATCH");   // not pierced → WATCH even if huge
   assert.equal(readVerdict("SHORT", null, 40), "WATCH");    // can't confirm pierce → WATCH, never FADE
   assert.equal(readVerdict("NONE", true, 40), "NONE");
+});
+
+// ── Quotient Q-signals shaper ────────────────────────────────────────────────
+// Sample mirrors the documented gateway response (one Polymarket forecast row).
+const qSample = () => ({
+  id: "sig-1",
+  side: "NO", entry_q: 22, entry_pm: 44, entry_spread_pp: 22, window_days: 12,
+  conviction_tier: 3, conviction: "high", latest_q: 0.22, q_side: "NO",
+  thesis: "Q sees the ceasefire conditions as unlikely to be met before year-end.",
+  converge_upside_pct: 34, max_roi_pct: 72,
+  is_new_today: false, is_fresh: true, is_active: true,
+  grounding_status: "actionable", suppression_reason: null, capacity_usd_at_2c: 3400,
+  forecast_status: { state: "sideways", adverse_move_pct: -3.6 },
+  venue_quote: { venue: "polymarket", selected_probability: 0.42 },
+  market: {
+    venue: "polymarket", question: "Will there be a Russia-Ukraine ceasefire in 2026?",
+    market_odds: 0.42, volume_24h: 120000, marketUrl: "https://polymarket.com/event/x",
+    quotientUrl: "https://quotient.social/markets/789012", end_date: "2026-12-31T00:00:00Z",
+  },
+});
+
+test("quotientSignals: normalizes a documented signal (fair vs market, spread, conviction)", () => {
+  const { signals, scanned, freshCount, highConvictionCount } = quotientSignals([qSample()]);
+  assert.equal(scanned, 1);
+  assert.equal(signals.length, 1);
+  const s = signals[0];
+  assert.equal(s.qProbPct, 22);       // latest_q 0.22 → 22%
+  assert.equal(s.marketProbPct, 42);  // market_odds 0.42 → 42%
+  assert.equal(s.spreadPp, 22);       // entry_spread_pp preferred
+  assert.equal(s.side, "NO");
+  assert.equal(s.conviction, "high");
+  assert.equal(s.convictionTier, 3);
+  assert.equal(s.convergeUpsidePct, 34);
+  assert.equal(s.venue, "polymarket");
+  assert.equal(s.question, "Will there be a Russia-Ukraine ceasefire in 2026?");
+  assert.equal(s.isFresh, true);
+  assert.equal(freshCount, 1);
+  assert.equal(highConvictionCount, 1);
+});
+
+test("quotientSignals: requireActionable drops inactive / suppressed / ungrounded rows", () => {
+  const inactive = { ...qSample(), id: "a", is_active: false };
+  const suppressed = { ...qSample(), id: "b", suppression_reason: "capacity" };
+  const ungrounded = { ...qSample(), id: "c", grounding_status: "pending" };
+  const out = quotientSignals([inactive, suppressed, ungrounded, qSample()]);
+  assert.equal(out.scanned, 1);       // only the clean row survives
+  assert.equal(out.signals[0].id, "sig-1");
+});
+
+test("quotientSignals: a row with no question is skipped", () => {
+  const noQ = { ...qSample(), id: "x", market: { venue: "polymarket" } };
+  assert.equal(quotientSignals([noQ]).scanned, 0);
+});
+
+test("quotientSignals: falls back to whole-percent entry_q/entry_pm when 0..1 fields absent", () => {
+  const row = { ...qSample() };
+  delete row.latest_q; delete row.market.market_odds; delete row.venue_quote;
+  const s = quotientSignals([row]).signals[0];
+  assert.equal(s.qProbPct, 22);       // entry_q
+  assert.equal(s.marketProbPct, 44);  // entry_pm
+});
+
+test("quotientSignals: ranks higher conviction first, then wider spread", () => {
+  const hi = { ...qSample(), id: "hi", conviction_tier: 3, entry_spread_pp: 10 };
+  const midWide = { ...qSample(), id: "midWide", conviction_tier: 2, conviction: "medium", entry_spread_pp: 30 };
+  const midNarrow = { ...qSample(), id: "midNarrow", conviction_tier: 2, conviction: "medium", entry_spread_pp: 8 };
+  const ids = quotientSignals([midNarrow, midWide, hi]).signals.map((s) => s.id);
+  assert.deepEqual(ids, ["hi", "midWide", "midNarrow"]);
+});
+
+test("quotientSignals: non-array / empty input is a safe empty board", () => {
+  assert.deepEqual(quotientSignals(null), { scanned: 0, freshCount: 0, highConvictionCount: 0, signals: [] });
+  assert.equal(quotientSignals([]).scanned, 0);
+});
+
+test("quotientSignals: maxSignals cap is honored", () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ ...qSample(), id: `m${i}` }));
+  assert.equal(quotientSignals(many).signals.length, QUOTIENT.maxSignals);
+  assert.equal(quotientSignals(many).scanned, 30);
 });

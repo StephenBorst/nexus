@@ -44,6 +44,15 @@ SPOT_FEE_RECIPIENT = "0x34dFC08eB3B7eD60D00e5B2CB611ac27C152B45c"
 # static walletSig only). Set to "true" to REQUIRE a fresh /auth/challenge signature
 # on gated high-risk routes (withdraw first). Flip on only once clients send v2.
 # AUTH_V2 = "true"
+# ── Quotient Q-signals (/intel/quotient) ──────────────────────────────────────
+# Reads Quotient's paid prediction-market fair-value signals for the Lab lens. The
+# API key is a SECRET (never in this file): set it once with
+#   npx wrangler secret put QUOTIENT_API_KEY      (value = the qt_… key)
+# or in the CF dashboard. The route fails soft when unset (the lens shows a calm
+# "connect Quotient" line, no error). Each upstream call spends a credit, so the
+# route caches hard in KV (10-min shared window) and the lens is lazy-mounted.
+# Optional non-secret tuning — min conviction tier 1..5 (route defaults to 3):
+# QUOTIENT_MIN_CONVICTION = "3"
 
 [observability.logs]
 enabled = true

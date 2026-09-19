@@ -23,7 +23,7 @@ import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { hexToBytes, bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, AGENT_BOARD, aggregateAgentTrades, agentStanding, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, orderlyAccountId, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, AGENT_BOARD, aggregateAgentTrades, agentStanding, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, orderlyAccountId, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
 // Keep copy:copiers:{leader} = [followers] in sync when a follower's config
@@ -3080,6 +3080,61 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       } catch (e) {
         // Fail-soft: 200 empty board so the Lab renders "no linked forecasts", not an error.
         return json({ asOf: new Date().toISOString(), scanned: 0, divergentCount: 0, markets: [], error: String(e) }, request);
+      }
+    }
+
+    // ── /intel/quotient — Quotient's Q-signals (the forecasting desk's fair value) ──
+    // Quotient publishes, for liquid prediction markets, a model FAIR VALUE and a
+    // convergence signal where fair value diverges from the live venue price. This is
+    // the paid, credit-metered sibling of /intel/forecasts (which reads the Polymarket
+    // CROWD for free and refuses to invent a probability). Surfaced honestly in the Lab
+    // as a prompt to stake a GRADED thesis — never an oracle, never advice.
+    // ⚠️ CREDITS: each upstream call spends a Quotient credit, so we cache HARD in shared
+    // KV (10-min freshness) — every viewer draws from ONE cached pull, capping upstream
+    // calls to ≤~6/hr no matter the traffic. The Lab lens is also collapsed-by-default and
+    // lazy-mounted, so nothing here runs until a user actually opens it. Fail-soft: a
+    // missing key or an out-of-credits 402 returns 200 with a reason the UI renders calmly.
+    if (parts[0] === "intel" && parts[1] === "quotient" && request.method === "GET") {
+      const CACHE_KEY = "intel:quotient:v1", TTL_MS = 600 * 1000; // 10-min shared freshness window
+      const respond = (payload) => new Response(JSON.stringify(payload), {
+        headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300", ...cors(request) },
+      });
+      // Not configured yet → 200 so the lens shows "connect Quotient", not an error.
+      if (!env.QUOTIENT_API_KEY) {
+        return respond({ asOf: new Date().toISOString(), asOfMs: Date.now(), configured: false, ok: false, reason: "not_configured", scanned: 0, signals: [] });
+      }
+      try {
+        const cached = await env.LAB_STORE.get(CACHE_KEY);
+        if (cached) { const c = JSON.parse(cached); if (c && (Date.now() - (c.asOfMs || 0)) < TTL_MS) return respond(c); }
+      } catch { /* cache miss → recompute */ }
+      // min_conviction 1..5 (Quotient's tier gate). Query param wins, else the env default, else 3.
+      const minConv = (() => {
+        const raw = new URL(request.url).searchParams.get("min_conviction") || env.QUOTIENT_MIN_CONVICTION || "3";
+        const v = parseInt(raw, 10);
+        return Number.isFinite(v) && v >= 1 && v <= 5 ? v : 3;
+      })();
+      try {
+        const r = await fetch(`https://quotient-api-gateway.onrender.com/api/v1/signals?min_conviction=${minConv}`, {
+          headers: { "x-quotient-api-key": env.QUOTIENT_API_KEY, "Accept": "application/json" },
+        });
+        if (!r.ok) {
+          // 402 = out of credits (fund the balance); anything else = upstream hiccup. Cache
+          // the empty result briefly so a dry balance doesn't spend a check on every request.
+          const reason = r.status === 402 ? "no_credits" : `upstream_${r.status}`;
+          const payload = { asOf: new Date().toISOString(), asOfMs: Date.now(), configured: true, ok: false, reason, minConviction: minConv, scanned: 0, signals: [] };
+          try { await env.LAB_STORE.put(CACHE_KEY, JSON.stringify(payload), { expirationTtl: 120 }); } catch { /* best-effort */ }
+          return respond(payload);
+        }
+        const d = await r.json();
+        const board = quotientSignals(Array.isArray(d?.signals) ? d.signals : []);
+        const payload = {
+          asOf: new Date().toISOString(), asOfMs: Date.now(), configured: true, ok: true, minConviction: minConv, ...board,
+          criteria: { note: "Quotient prices a model fair value for liquid prediction markets and flags a convergence signal where fair value diverges from the live venue price. Q's number + Q's conviction, surfaced honestly as a prompt to stake a GRADED thesis — not a fair-value oracle, not advice." },
+        };
+        try { await env.LAB_STORE.put(CACHE_KEY, JSON.stringify(payload), { expirationTtl: 900 }); } catch { /* best-effort */ }
+        return respond(payload);
+      } catch (e) {
+        return respond({ asOf: new Date().toISOString(), asOfMs: Date.now(), configured: true, ok: false, reason: "error", minConviction: minConv, scanned: 0, signals: [], error: String(e) });
       }
     }
 
