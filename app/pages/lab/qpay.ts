@@ -133,9 +133,9 @@ function buildTypedData(g: GuardedReq, from: string, nonce: string, validAfter: 
 // Assemble the base64 X-PAYMENT header. Byte-identical to the x402 lib's encodePayment: the
 // key order (x402Version, scheme, network, payload{signature, authorization{...}}) and btoa
 // encoding were verified against the reference implementation.
-function encodeXPayment(g: GuardedReq, from: string, nonce: string, validAfter: string, validBefore: string, signature: string): string {
+function encodeXPayment(g: GuardedReq, from: string, nonce: string, validAfter: string, validBefore: string, signature: string, x402Version = 1): string {
   const payload = {
-    x402Version: 1,
+    x402Version,
     scheme: g.req.scheme,
     network: g.req.network,
     payload: {
@@ -163,7 +163,7 @@ async function payingAccount(provider: Eip1193): Promise<string> {
 // Build + sign the X-PAYMENT header for a guarded requirement. Off-chain signature only —
 // no tx, no gas, no chain switch (the domain names Base explicitly and the facilitator
 // settles on Base regardless of the wallet's current network).
-export async function signXPayment(provider: Eip1193, g: GuardedReq): Promise<{ header: string; from: string }> {
+export async function signXPayment(provider: Eip1193, g: GuardedReq, x402Version = 1): Promise<{ header: string; from: string }> {
   const from = await payingAccount(provider);
   const now = Math.floor(Date.now() / 1000);
   const validAfter = String(now - 600); // 10 min of clock skew tolerance
@@ -178,7 +178,7 @@ export async function signXPayment(provider: Eip1193, g: GuardedReq): Promise<{ 
     throw new Error(/reject|denied|cancel/i.test(msg) ? "Payment signature was cancelled." : "Couldn't sign the payment.");
   }
   if (typeof sig !== "string" || !/^0x[0-9a-fA-F]+$/.test(sig)) throw new Error("Couldn't sign the payment.");
-  return { header: encodeXPayment(g, from, nonce, validAfter, validBefore, sig), from };
+  return { header: encodeXPayment(g, from, nonce, validAfter, validBefore, sig, x402Version), from };
 }
 
 // ── Client-DIRECT x402 pull ───────────────────────────────────────────────────
@@ -203,16 +203,31 @@ export async function loadQuotientDirect(provider: Eip1193, minConviction = 3): 
   if (r1.status === 200) return { signals: rawSignals(await r1.json().catch(() => null)), usd: 0 }; // already served
   if (r1.status === 403) throw new Error("Quotient blocked the request (403) — try again shortly.");
   if (r1.status !== 402) throw new Error(`Quotient unavailable (${r1.status}).`);
-  const challenge = await r1.json().catch(() => null);
-  const c = challenge as { accepts?: unknown; x402?: { accepts?: unknown }; paymentRequirements?: unknown } | null;
-  const accepts = Array.isArray(c?.accepts) ? c!.accepts
-    : Array.isArray(challenge) ? challenge
-    : Array.isArray(c?.x402?.accepts) ? c!.x402!.accepts
-    : Array.isArray(c?.paymentRequirements) ? c!.paymentRequirements
-    : [];
+  // x402 v2 (Quotient): the challenge rides in the base64 `payment-required` RESPONSE HEADER
+  // (CORS-exposed via access-control-expose-headers), NOT the JSON body. Decode → { x402Version,
+  // accepts:[…] }. Fall back to the body for gateways that put it there.
+  let accepts: unknown[] = [];
+  let x402Version = 2;
+  const hdr = r1.headers.get("payment-required") || r1.headers.get("PAYMENT-REQUIRED");
+  if (hdr) {
+    try {
+      const decoded = JSON.parse(atob(hdr.replace(/-/g, "+").replace(/_/g, "/"))) as { accepts?: unknown; x402Version?: number };
+      if (Array.isArray(decoded?.accepts)) accepts = decoded.accepts;
+      if (Number.isFinite(decoded?.x402Version)) x402Version = Number(decoded.x402Version);
+    } catch { /* fall through to body */ }
+  }
+  if (!accepts.length) {
+    const challenge = await r1.json().catch(() => null);
+    const c = challenge as { accepts?: unknown; x402?: { accepts?: unknown }; paymentRequirements?: unknown } | null;
+    accepts = Array.isArray(c?.accepts) ? c!.accepts
+      : Array.isArray(challenge) ? (challenge as unknown[])
+      : Array.isArray(c?.x402?.accepts) ? c!.x402!.accepts as unknown[]
+      : Array.isArray(c?.paymentRequirements) ? c!.paymentRequirements as unknown[]
+      : [];
+  }
   const g = selectAndGuard(accepts);                 // pins network/asset/recipient + caps amount
-  // 2) sign the EIP-3009 authorization for exactly that amount.
-  const { header } = await signXPayment(provider, g);
+  // 2) sign the EIP-3009 authorization for exactly that amount (echo the challenge's x402 version).
+  const { header } = await signXPayment(provider, g, x402Version);
   // 3) retry WITH the payment → the data.
   let r2: Response;
   try { r2 = await fetch(url, { headers: { Accept: "application/json", "X-PAYMENT": header } }); }
