@@ -3138,6 +3138,73 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       }
     }
 
+    // ── /intel/quotient/challenge — hand the client the x402 payment challenge ──
+    // Client-pays path (the PRO model): the USER'S wallet pays Quotient per pull, never
+    // our credits. To sign, the client needs the current x402 requirements, so we PROBE
+    // Quotient with NO api key → Quotient answers 402 + `accepts[]` (network/asset/payTo/
+    // amount). We pass those straight through; the client guards + signs them (qpay.ts).
+    // Public + fail-soft; the requirements are stable, so we cache the probe briefly.
+    if (parts[0] === "intel" && parts[1] === "quotient" && parts[2] === "challenge" && request.method === "GET") {
+      const respondC = (payload) => new Response(JSON.stringify(payload), {
+        headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300", ...cors(request) },
+      });
+      const CK = "intel:quotient:challenge:v1";
+      try {
+        const cached = await env.LAB_STORE.get(CK);
+        if (cached) { const c = JSON.parse(cached); if (c && (Date.now() - (c.asOfMs || 0)) < 300 * 1000) return respondC(c); }
+      } catch { /* miss → probe */ }
+      try {
+        const r = await fetch("https://quotient-api-gateway.onrender.com/api/v1/signals?min_conviction=3", {
+          headers: { "Accept": "application/json" }, // NO api key → force the 402 challenge
+        });
+        // The x402 challenge arrives as 402; some gateways echo it on 200 too. Either way read accepts[].
+        const d = await r.json().catch(() => null);
+        const accepts = d && Array.isArray(d.accepts) ? d.accepts : [];
+        if (!accepts.length) return respondC({ asOfMs: Date.now(), ok: false, reason: r.status === 200 ? "no_challenge" : `upstream_${r.status}`, accepts: [] });
+        const payload = { asOfMs: Date.now(), ok: true, x402Version: d.x402Version || 1, accepts };
+        try { await env.LAB_STORE.put(CK, JSON.stringify(payload), { expirationTtl: 600 }); } catch { /* best-effort */ }
+        return respondC(payload);
+      } catch (e) {
+        return respondC({ asOfMs: Date.now(), ok: false, reason: "error", accepts: [], error: String(e) });
+      }
+    }
+
+    // ── POST /intel/quotient — relay the USER'S signed x402 payment → the signals ──
+    // The client signs an EIP-3009 USDC authorization (Base) and posts the X-PAYMENT header
+    // here; we forward it to Quotient WITHOUT our api key, so the payment (user → Quotient)
+    // is what unlocks the data — Nexus spends nothing. We only relay + shape (via the tested
+    // quotientSignals), so Quotient's endpoint/shape never touch the browser and there's no
+    // custom-header CORS to fight. NOT server-PRO-gated by design: the micro-payment IS the
+    // barrier (no free data, and it costs us nothing), so the PRO framing lives in the UI
+    // rather than a second wallet signature here. Never cached — each pull is a paid, per-user call.
+    if (parts[0] === "intel" && parts[1] === "quotient" && parts.length === 2 && request.method === "POST") {
+      const respondP = (payload) => new Response(JSON.stringify(payload), {
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...cors(request) },
+      });
+      let body = {};
+      try { body = await request.json(); } catch { /* {} */ }
+      const xPayment = typeof body.xPayment === "string" ? body.xPayment.trim() : "";
+      // Base64 header, bounded — reject anything obviously not an x402 payment header.
+      if (!xPayment || xPayment.length > 8000 || !/^[A-Za-z0-9+/=_-]+$/.test(xPayment))
+        return respondP({ ok: false, reason: "bad_payment" });
+      const minConv = (() => {
+        const v = parseInt(body.minConviction, 10);
+        return Number.isFinite(v) && v >= 1 && v <= 5 ? v : (parseInt(env.QUOTIENT_MIN_CONVICTION, 10) || 3);
+      })();
+      try {
+        const r = await fetch(`https://quotient-api-gateway.onrender.com/api/v1/signals?min_conviction=${minConv}`, {
+          headers: { "X-PAYMENT": xPayment, "Accept": "application/json" }, // user's payment, NO api key
+        });
+        if (r.status === 402) return respondP({ ok: false, reason: "payment_declined" });
+        if (!r.ok) return respondP({ ok: false, reason: `upstream_${r.status}` });
+        const d = await r.json();
+        const board = quotientSignals(Array.isArray(d?.signals) ? d.signals : []);
+        return respondP({ asOf: new Date().toISOString(), ok: true, minConviction: minConv, paid: true, ...board });
+      } catch (e) {
+        return respondP({ ok: false, reason: "error", error: String(e) });
+      }
+    }
+
     // ── /intel/events — the MACRO/EVENTS intelligence corner ─────────────────
     // The execution-layer seam for event traders (the Quotient overlap): pulls the most
     // liquid Polymarket markets, classifies the MACRO/geopolitical ones (Fed, recession,

@@ -46,6 +46,7 @@ export const TIER_RANK: Record<NexusTier, number> = {
 
 export type ProFeatureKey =
   | "agentStrategies"
+  | "qSignals"
   | "advancedAnalytics"
   | "priorityCopy"
   | "dataApi"
@@ -55,6 +56,7 @@ export type ProFeatureKey =
 /** What PRO unlocks — the public benefits list (additive value, not paywalling core). */
 export const PRO_FEATURES: { key: ProFeatureKey; label: string; desc: string }[] = [
   { key: "agentStrategies",   label: "Full agent arsenal",   desc: "All strategy modes, more concurrent agent slots & higher capital caps." },
+  { key: "qSignals",          label: "Q Signals",            desc: "Quotient's model fair value vs the live market on liquid prediction markets. You pay per pull in USDC — no Nexus markup." },
   { key: "advancedAnalytics", label: "Advanced analytics",   desc: "Deeper breakdowns, exports, and longer history on your track record." },
   { key: "priorityCopy",      label: "Priority copy",        desc: "Early access to copy hot traders & top agents before slots fill." },
   { key: "dataApi",           label: "Verified data API",    desc: "Programmatic access to the trustless, on-chain-anchored leaderboard." },

@@ -45,13 +45,17 @@ SPOT_FEE_RECIPIENT = "0x34dFC08eB3B7eD60D00e5B2CB611ac27C152B45c"
 # on gated high-risk routes (withdraw first). Flip on only once clients send v2.
 # AUTH_V2 = "true"
 # ── Quotient Q-signals (/intel/quotient) ──────────────────────────────────────
-# Reads Quotient's paid prediction-market fair-value signals for the Lab lens. The
-# API key is a SECRET (never in this file): set it once with
+# Q Signals is a PRO lens whose data is paid PER PULL by the USER'S wallet via x402
+# (an off-chain USDC authorization on Base) — Nexus spends nothing. The client fetches
+# the payment challenge (GET /intel/quotient/challenge, we probe Quotient with NO key),
+# signs it, and posts the X-PAYMENT header (POST /intel/quotient) which we forward to
+# Quotient — again with NO key — so the user's payment unlocks the data.
+# ⚠️ So QUOTIENT_API_KEY is NO LONGER required for the live feature. It's only read by
+# the LEGACY credit-metered GET /intel/quotient (kept for back-compat / an internal
+# credit-funded pull). Leave it UNSET for the client-pays model, or set it if you ever
+# want that credit path live:
 #   npx wrangler secret put QUOTIENT_API_KEY      (value = the qt_… key)
-# or in the CF dashboard. The route fails soft when unset (the lens shows a calm
-# "connect Quotient" line, no error). Each upstream call spends a credit, so the
-# route caches hard in KV (10-min shared window) and the lens is lazy-mounted.
-# Optional non-secret tuning — min conviction tier 1..5 (route defaults to 3):
+# Optional non-secret tuning — min conviction tier 1..5 (routes default to 3):
 # QUOTIENT_MIN_CONVICTION = "3"
 
 [observability.logs]

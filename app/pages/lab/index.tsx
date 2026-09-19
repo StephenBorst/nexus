@@ -439,11 +439,11 @@ export default function TheLabPage() {
           // Q SIGNALS — Quotient's PAID fair-value read on liquid prediction markets, the
           // forecasting DESK's number beside Forecast Divergence's free crowd lens: fair
           // value vs the venue price, conviction-ranked. Collapsed + lazy-mounted (Collapsible
-          // renders children only when open), so it spends a Quotient credit only when a user
-          // opens it. Fail-soft when the key is unset or credits are dry.
+          // renders children only when open). Q Signals is a PRO lens: non-PRO wallets see a
+          // locked card, and each pull is paid by the USER'S wallet via x402 (no auto-poll).
           const qsignals = (
             <Collapsible title="◇ Q SIGNALS · QUOTIENT" subtitle="the forecasting desk's fair value vs the market — conviction-ranked" shortTitle="◇ Q SIGNALS" shortSub="fair value vs the market" storageKey="nx_qsignals_open">
-              <QSignals />
+              <QSignals address={rootWalletAddress} />
             </Collapsible>
           );
           const lenses = <>{lensesHeader}{funding}{positioning}{catalysts}{forecast}{qsignals}</>;

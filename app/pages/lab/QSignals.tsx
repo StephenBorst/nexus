@@ -1,24 +1,36 @@
 import { useEffect, useState } from "react";
+import { useWalletConnector } from "@orderly.network/hooks";
 import { C } from "@/config/theme";
 import { SectionHeader } from "./components";
+import { useSubscription } from "@/hooks/useSubscription";
+import { TIER_NAME, PRO_HOLDER_TIER, PRO_MONTHLY_USDC, nexusDiscountedPrice } from "@/config/subscription";
+import { selectAndGuard, signXPayment, type Eip1193 } from "./qpay";
 
-// ── Q Signals lens — Quotient's fair value vs the market ──────────────────────
-// The forecasting DESK's read, paid + credit-metered — the sibling of Forecast
-// Divergence (which reads the FREE Polymarket crowd and refuses to invent a
-// probability). Quotient prices a model FAIR VALUE for a liquid prediction market
-// and flags a convergence signal where that fair value diverges from the live venue
-// price. We surface Q's number + Q's conviction honestly: a prompt to stake a GRADED
-// thesis, never a fair-value oracle, never advice. The record still grades the call.
+// ── Q Signals lens — Quotient's fair value vs the market (PRO · you pay per pull) ──────
+// The forecasting DESK's read: Quotient prices a model FAIR VALUE for a liquid prediction
+// market and flags a convergence signal where that fair value diverges from the live venue.
+// It's the paid sibling of Forecast Divergence (which reads the FREE Polymarket crowd and
+// refuses to invent a probability). We surface Q's number + Q's conviction honestly — a prompt
+// to stake a GRADED thesis, never a fair-value oracle, never advice. The record still grades it.
 //
-// Fail-soft by design: renders a calm one-liner when the key is unset, credits are
-// dry, or the feed is sparse. Data comes from the KV-cached worker route, and this
-// lens is collapsed-by-default + lazy-mounted, so it spends a credit only when opened.
+// Two gates, by design:
+//   • ACCESS — Q Signals is a Nexus PRO lens (hold ARCHITECT $NEXUS, or subscribe). Non-PRO
+//     wallets see a calm locked card, not the data.
+//   • DATA COST — each pull is paid by the USER'S wallet via x402 (an off-chain, gasless USDC
+//     authorization on Base, ~$0.01 to Quotient). Nexus spends nothing; there's no markup.
+//
+// NO auto-poll: nothing loads until the user clicks and signs. A short client cache (15 min)
+// means re-opening the lens shows the last paid pull instead of charging again. Fail-soft
+// throughout: a missing wallet, a declined payment, or a sparse feed renders a quiet line.
 
 const AGENT_API = "https://og.nexustradinglabs.com";
-// Canonical design tokens (app/config/theme.ts) — same palette the Forecast lens draws
-// from, so this corner matches the rest of the Lab. Green stays rationed to data.
+const CACHE_KEY = "nx_qsignals_cache";
+const CACHE_TTL_MS = 15 * 60 * 1000; // re-opening within 15 min shows the last paid pull, no re-charge
+
+// Canonical design tokens (app/config/theme.ts) — same palette the Forecast lens draws from.
+// Green stays rationed to data (profit/up), bone is THE accent.
 const BONE = C.text.bright, FOG = C.text.fog, DIM = C.text.muted, FAINT = C.text.faint;
-const POS = C.pos, ACCENT = C.accent;
+const POS = C.pos, ACCENT = C.accent, CANVAS = C.canvas;
 const SURFACE = C.surface, SURFACE_ALT = C.surfaceAlt, INSET = C.inset, BORDER = C.border, BORDER_STRONG = C.borderStrong;
 const MF = "var(--nx-font-mono)";
 
@@ -47,7 +59,6 @@ interface QSignal {
   adverseMovePct: number | null;
 }
 interface QBoard {
-  configured?: boolean;
   ok?: boolean;
   reason?: string;
   scanned?: number;
@@ -67,6 +78,9 @@ function fmtEnds(iso: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+function fmtClock(ts: number): string {
+  try { return new Date(ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
 }
 // Conviction tier → the ONE bit of chroma on a card: green only for "high" (data role),
 // then quiet tones. If everything glows, nothing reads as the strong signal.
@@ -128,59 +142,149 @@ function SignalCard({ s }: { s: QSignal }) {
   );
 }
 
-export function QSignals() {
-  const [board, setBoard] = useState<QBoard | null>(null);
-  const [loading, setLoading] = useState(true);
+// Small pill button in the Lab register — bone border, mono, press feedback.
+function LoadButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button onClick={onClick} disabled={disabled} className="nx-press"
+      style={{
+        background: disabled ? INSET : ACCENT, color: disabled ? FAINT : CANVAS,
+        border: `1px solid ${disabled ? BORDER : ACCENT}`, borderRadius: 2, padding: "7px 16px",
+        fontFamily: MF, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em",
+        cursor: disabled ? "default" : "pointer",
+      }}
+    >{label}</button>
+  );
+}
 
+interface Cached { board: QBoard; usd: number; ts: number; }
+function readCache(): Cached | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw) as Cached;
+    if (!c || typeof c.ts !== "number" || Date.now() - c.ts > CACHE_TTL_MS) return null;
+    return c;
+  } catch { return null; }
+}
+function writeCache(c: Cached) { try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch { /* private mode */ } }
+
+export function QSignals({ address }: { address?: string | null }) {
+  const { isPro, via, isLoading: subLoading } = useSubscription(address);
+
+  // EIP-1193 provider from the Orderly wallet connector (same source swapExec uses to sign).
+  type WCWallet = { provider?: Record<string, unknown> };
+  const wcCtx = useWalletConnector() as unknown as { wallet?: WCWallet | null };
+  const provider = (wcCtx?.wallet?.provider as unknown as Eip1193 | undefined) || undefined;
+
+  const [board, setBoard] = useState<QBoard | null>(null);
+  const [paidUsd, setPaidUsd] = useState<number | null>(null);
+  const [loadedAt, setLoadedAt] = useState<number | null>(null);
+  const [phase, setPhase] = useState<"idle" | "loading">("idle");
+  const [status, setStatus] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  // Hydrate the last paid pull (≤15 min old) so re-opening the lens doesn't re-charge.
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const r = await fetch(`${AGENT_API}/intel/quotient`);
-        const d = await r.json();
-        if (!cancelled) setBoard(d && typeof d === "object" ? d : {});
-      } catch { if (!cancelled) setBoard({}); }
-      finally { if (!cancelled) setLoading(false); }
-    };
-    load();
-    // 5-min client poll; the worker route is KV-cached ~10 min, so this rarely spends a credit.
-    const iv = setInterval(load, 300_000);
-    return () => { cancelled = true; clearInterval(iv); };
-  }, []);
+    if (!isPro) return;
+    const c = readCache();
+    if (c) { setBoard(c.board); setPaidUsd(c.usd); setLoadedAt(c.ts); }
+  }, [isPro]);
+
+  const load = async () => {
+    if (phase === "loading") return;
+    if (!provider) { setErr("Connect a wallet to load Q signals."); return; }
+    setPhase("loading"); setErr(null);
+    try {
+      setStatus("fetching the payment challenge…");
+      const cr = await fetch(`${AGENT_API}/intel/quotient/challenge`);
+      const cj = await cr.json().catch(() => null);
+      if (!cj?.ok || !Array.isArray(cj.accepts) || !cj.accepts.length)
+        throw new Error("Quotient's payment isn't available right now — try again shortly.");
+      const g = selectAndGuard(cj.accepts); // PINS network/asset/recipient + CAPS amount before signing
+      setStatus(`approve the $${g.usd.toFixed(2)} USDC payment on Base in your wallet…`);
+      const { header } = await signXPayment(provider, g);
+      setStatus("unlocking signals…");
+      const pr = await fetch(`${AGENT_API}/intel/quotient`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ xPayment: header, minConviction: 3 }),
+      });
+      const pj = (await pr.json().catch(() => null)) as QBoard | null;
+      if (!pj?.ok) {
+        const reason = (pj as { reason?: string } | null)?.reason;
+        throw new Error(reason === "payment_declined"
+          ? "Quotient declined the payment — check your Base USDC balance and try again."
+          : "Couldn't load signals — try again shortly.");
+      }
+      setBoard(pj); setPaidUsd(g.usd); setLoadedAt(Date.now());
+      writeCache({ board: pj, usd: g.usd, ts: Date.now() });
+    } catch (e) {
+      setErr((e as Error)?.message || "Couldn't load signals.");
+    } finally {
+      setPhase("idle"); setStatus("");
+    }
+  };
 
   const signals = board?.signals ?? [];
-  const configured = board?.configured !== false;
-  const noCredits = board?.ok === false && board?.reason === "no_credits";
+  const loading = phase === "loading";
 
   return (
     <div style={{ marginTop: 20 }}>
-      <SectionHeader eyebrow="Quotient · fair value vs the market" title="Q Signals" note="PREDICTION MARKETS · CONVICTION-RANKED" />
+      <SectionHeader eyebrow="Quotient · fair value vs the market" title="Q Signals" note={`${TIER_NAME} · PREDICTION MARKETS · YOU PAY PER PULL`} />
 
       <div style={{ background: SURFACE_ALT, border: `1px solid ${BORDER}`, borderRadius: 2, padding: "14px 16px" }}>
-        {loading ? (
-          <div style={{ color: FAINT, fontSize: 11, fontFamily: MF }}>Reading Quotient signals…</div>
-        ) : !configured ? (
-          <div style={{ color: DIM, fontSize: 11, fontFamily: MF, lineHeight: 1.6 }}>
-            Quotient isn’t connected yet — set the API key and the forecasting desk’s fair-value signals stream in here.
+        {subLoading ? (
+          <div style={{ color: FAINT, fontSize: 11, fontFamily: MF }}>Checking access…</div>
+        ) : !isPro ? (
+          /* ── LOCKED — Q Signals is a PRO lens ── */
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ color: BONE, fontFamily: MF, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "2px 8px" }}>◆ {TIER_NAME}</span>
+              <span style={{ color: FOG, fontSize: 12 }}>Q Signals is a {TIER_NAME} lens.</span>
+            </div>
+            <div style={{ color: DIM, fontSize: 11.5, lineHeight: 1.65 }}>
+              Quotient's model fair value vs the live market on liquid prediction markets — a prompt to stake a graded
+              thesis, priced against the venue. Each pull is paid by your wallet (~$0.01 USDC on Base); Nexus takes no cut.
+            </div>
+            <div style={{ marginTop: 10, color: FAINT, fontSize: 10.5, fontFamily: MF, lineHeight: 1.7 }}>
+              Unlock with {TIER_NAME}: hold <span style={{ color: FOG }}>{PRO_HOLDER_TIER}</span> in $NEXUS,
+              or subscribe (<span style={{ color: FOG }}>${PRO_MONTHLY_USDC}/mo</span>, or ${nexusDiscountedPrice()} in $NEXUS).
+            </div>
           </div>
-        ) : noCredits ? (
-          <div style={{ color: DIM, fontSize: 11, fontFamily: MF, lineHeight: 1.6 }}>
-            Quotient connected · <span style={{ color: FOG }}>credits empty</span>. Fund the balance to stream live signals.
-          </div>
-        ) : !signals.length ? (
-          <div style={{ color: DIM, fontSize: 11, fontFamily: MF, lineHeight: 1.6 }}>
-            No live Q signals right now — sparse by design (Quotient publishes only where its fair value clears the conviction gate).
-          </div>
-        ) : (
+        ) : signals.length ? (
+          /* ── LOADED — the signals + a paid-refresh control ── */
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {signals.map((s) => <SignalCard key={s.id} s={s} />)}
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
+              <LoadButton label={loading ? "loading…" : "refresh · $0.01"} onClick={load} disabled={loading} />
+              {loadedAt ? <span style={{ color: FAINT, fontSize: 9.5, fontFamily: MF }}>loaded {fmtClock(loadedAt)}{paidUsd != null ? ` · paid $${paidUsd.toFixed(2)}` : ""}</span> : null}
+              {loading && status ? <span style={{ color: DIM, fontSize: 9.5, fontFamily: MF }}>{status}</span> : null}
+            </div>
+            {err ? <div style={{ marginTop: 8, color: C.neg, fontSize: 10.5, fontFamily: MF }}>{err}</div> : null}
             <div style={{ marginTop: 12, color: FAINT, fontSize: 9, fontFamily: MF, lineHeight: 1.6 }}>
-              Fair value + conviction from Quotient, priced against the live venue. A spread = Q’s model and the market disagree —
+              Fair value + conviction from Quotient, priced against the live venue. A spread = Q's model and the market disagree —
               a prompt to investigate and stake a graded call, not a fair-value oracle. Not advice.
             </div>
           </>
+        ) : loading ? (
+          <div style={{ color: FOG, fontSize: 11, fontFamily: MF, lineHeight: 1.7 }}>
+            {status || "Loading Q signals…"}
+          </div>
+        ) : (
+          /* ── PRO, nothing loaded yet — explicit pay-to-load (no auto-poll) ── */
+          <div>
+            <div style={{ color: DIM, fontSize: 11.5, lineHeight: 1.65, marginBottom: 12 }}>
+              Load Quotient's live fair-value signals. Your wallet pays Quotient <b style={{ color: FOG }}>~$0.01 USDC on Base</b> per
+              pull (an off-chain, gasless authorization — no Nexus markup, nothing stored). Nothing loads until you sign; there's no auto-refresh.
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <LoadButton label={loading ? "loading…" : "Load signals · $0.01"} onClick={load} disabled={loading || !provider} />
+              {!provider ? <span style={{ color: FAINT, fontSize: 9.5, fontFamily: MF }}>connect a wallet to pay</span> : null}
+              {via === "holder" ? <span style={{ color: FAINT, fontSize: 9.5, fontFamily: MF }}>{TIER_NAME} via $NEXUS holdings</span> : null}
+            </div>
+            {err ? <div style={{ marginTop: 8, color: C.neg, fontSize: 10.5, fontFamily: MF }}>{err}</div> : null}
+          </div>
         )}
       </div>
     </div>
