@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useWalletConnector } from "@orderly.network/hooks";
 import { C } from "@/config/theme";
 import { SectionHeader } from "./components";
@@ -30,7 +31,7 @@ const CACHE_TTL_MS = 15 * 60 * 1000; // re-opening within 15 min shows the last 
 // Canonical design tokens (app/config/theme.ts) — same palette the Forecast lens draws from.
 // Green stays rationed to data (profit/up), bone is THE accent.
 const BONE = C.text.bright, FOG = C.text.fog, DIM = C.text.muted, FAINT = C.text.faint;
-const POS = C.pos, ACCENT = C.accent, CANVAS = C.canvas;
+const POS = C.pos, NEG = C.neg, ACCENT = C.accent, CANVAS = C.canvas;
 const SURFACE = C.surface, SURFACE_ALT = C.surfaceAlt, INSET = C.inset, BORDER = C.border, BORDER_STRONG = C.borderStrong;
 const MF = "var(--nx-font-mono)";
 
@@ -57,6 +58,7 @@ interface QSignal {
   isNewToday: boolean;
   status: string | null;
   adverseMovePct: number | null;
+  perp: { coin: string; perpSymbol: string; direction: "LONG" | "SHORT"; targetUsd: number | null } | null;
 }
 interface QBoard {
   ok?: boolean;
@@ -64,6 +66,7 @@ interface QBoard {
   scanned?: number;
   freshCount?: number;
   highConvictionCount?: number;
+  perpCount?: number;
   signals?: QSignal[];
 }
 
@@ -109,7 +112,7 @@ function ConvergenceBar({ qPct, mktPct }: { qPct: number; mktPct: number }) {
   );
 }
 
-function SignalCard({ s }: { s: QSignal }) {
+function SignalCard({ s, onTrade, onStake }: { s: QSignal; onTrade: (x: QSignal) => void; onStake: (x: QSignal) => void }) {
   const tc = tierColor(s.convictionTier);
   const link = s.quotientUrl || s.url;
   return (
@@ -138,6 +141,23 @@ function SignalCard({ s }: { s: QSignal }) {
           >open ↗</a>
         ) : null}
       </div>
+      {s.perp ? (
+        <div style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${BORDER}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: BONE, fontFamily: MF, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em" }}>
+            <span style={{ color: FAINT }}>◆</span>{s.perp.coin}
+            <b style={{ color: s.perp.direction === "LONG" ? POS : NEG }}>{s.perp.direction}</b>
+          </span>
+          <span style={{ color: FAINT, fontFamily: MF, fontSize: 8.5, letterSpacing: "0.08em" }}>Q READ → PERP</span>
+          <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+            <button onClick={() => onTrade(s)} className="nx-press"
+              style={{ background: ACCENT, color: CANVAS, border: `1px solid ${ACCENT}`, borderRadius: 2, padding: "3px 11px", fontFamily: MF, fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+            >⚡ Trade</button>
+            <button onClick={() => onStake(s)} className="nx-press"
+              style={{ background: "transparent", color: BONE, border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "3px 11px", fontFamily: MF, fontSize: 10, cursor: "pointer" }}
+            >◆ Stake thesis</button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -175,6 +195,7 @@ export function QSignals({ address }: { address?: string | null }) {
   type WCWallet = { provider?: Record<string, unknown> };
   const wcCtx = useWalletConnector() as unknown as { wallet?: WCWallet | null };
   const provider = (wcCtx?.wallet?.provider as unknown as Eip1193 | undefined) || undefined;
+  const navigate = useNavigate();
 
   const [board, setBoard] = useState<QBoard | null>(null);
   const [paidUsd, setPaidUsd] = useState<number | null>(null);
@@ -182,6 +203,7 @@ export function QSignals({ address }: { address?: string | null }) {
   const [phase, setPhase] = useState<"idle" | "loading">("idle");
   const [status, setStatus] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [perpOnly, setPerpOnly] = useState(true); // perp focus by default — the tradeable slice
 
   // Hydrate the last paid pull (≤15 min old) so re-opening the lens doesn't re-charge.
   useEffect(() => {
@@ -226,7 +248,27 @@ export function QSignals({ address }: { address?: string | null }) {
     }
   };
 
+  // Q read → perp actions (only on the crypto price-target slice that maps to a listed perp).
+  const goTrade = (s: QSignal) => { if (s.perp) navigate(`/perp/${s.perp.perpSymbol}`); };
+  const stakeThesis = (s: QSignal) => {
+    if (!s.perp) return;
+    const draft = {
+      symbol: s.perp.coin,
+      direction: s.perp.direction,
+      catalyst: `Quotient fair value ${s.qProbPct}% vs venue ${s.marketProbPct}% (${s.spreadPp}pp edge)`,
+      targetWindow: s.windowDays ? `${s.windowDays}d` : "7d",
+      notes: `Quotient's model prices "${s.question}" at ${s.qProbPct}% vs the venue's ${s.marketProbPct}% — a ${s.spreadPp}pp gap.${s.thesis ? ` ${s.thesis}` : ""} Trading the convergence as a directional ${s.perp.coin} view (${s.perp.direction})${s.perp.targetUsd ? `, price ~$${s.perp.targetUsd.toLocaleString()}` : ""}. Q's read — your call: add entry/stop/targets. Graded from public price.`,
+    };
+    try { localStorage.setItem("nexus_thesis_draft", JSON.stringify(draft)); } catch { /* private mode */ }
+    try {
+      window.dispatchEvent(new CustomEvent("nexus:lab-tab", { detail: { tab: "thesis" } }));
+      window.dispatchEvent(new CustomEvent("nexus:thesis-draft"));
+    } catch { /* non-browser */ }
+  };
+
   const signals = board?.signals ?? [];
+  const perpSignals = signals.filter((s) => s.perp);
+  const shown = perpOnly && perpSignals.length ? perpSignals : signals;
   const loading = phase === "loading";
 
   return (
@@ -256,9 +298,20 @@ export function QSignals({ address }: { address?: string | null }) {
           /* ── LOADED (paid) — the signals, or a calm empty note; + a paid-refresh control ── */
           <>
             {signals.length ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {signals.map((s) => <SignalCard key={s.id} s={s} />)}
-              </div>
+              <>
+                {perpSignals.length && signals.length > perpSignals.length ? (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                    {([[true, `PERPS · ${perpSignals.length}`], [false, `ALL · ${signals.length}`]] as const).map(([po, lbl]) => (
+                      <button key={String(po)} onClick={() => setPerpOnly(po)} className="nx-press"
+                        style={{ background: perpOnly === po ? ACCENT : INSET, color: perpOnly === po ? CANVAS : DIM, border: `1px solid ${perpOnly === po ? ACCENT : BORDER}`, borderRadius: 2, padding: "3px 11px", fontFamily: MF, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer" }}
+                      >{lbl}</button>
+                    ))}
+                  </div>
+                ) : null}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {shown.map((s) => <SignalCard key={s.id} s={s} onTrade={goTrade} onStake={stakeThesis} />)}
+                </div>
+              </>
             ) : (
               <div style={{ color: DIM, fontSize: 11.5, fontFamily: MF, lineHeight: 1.65 }}>
                 No Q signal cleared the conviction bar right now — sparse by design (Quotient publishes only where its fair value diverges enough from the venue). Your pull went through; check back later.

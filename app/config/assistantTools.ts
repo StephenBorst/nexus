@@ -83,6 +83,40 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "q_signals",
+    description:
+      "Read the trader's most recent Quotient Q-Signals pull (a prediction-market model FAIR VALUE vs the live venue price), focused on the PERP-tradeable slice — crypto price-target markets mapped to an Orderly perp with a LONG/SHORT lean. This reads their LAST PAID pull cached in the browser; Q-Signals is pay-per-pull, so this does NOT spend anything. If nothing is cached, tell them to open The Lab → Market Intel → Q Signals and hit Load first. Use for 'what is Quotient flagging', 'any Q signal on BTC', 'perp reads from Q'. Each row is a PROMPT to investigate + stake a graded call, never advice — the spread means Q's model and the venue disagree. Offer to draft a thesis (draft_thesis) or open the perp.",
+    input_schema: {
+      type: "object",
+      properties: { perpsOnly: { type: "boolean", description: "Only the perp-mapped (tradeable) signals. Default true." } },
+    },
+    run: async (args) => {
+      let cache: { board?: { signals?: unknown[]; perpCount?: number }; usd?: number; ts?: number } | null = null;
+      try { cache = JSON.parse(localStorage.getItem("nx_qsignals_cache") || "null"); } catch { cache = null; }
+      const sigsRaw = cache?.board?.signals;
+      if (!cache || !Array.isArray(sigsRaw) || !sigsRaw.length)
+        return JSON.stringify({ available: false, note: "No Q-Signals pull cached. Open The Lab → Market Intel → Q Signals and hit Load (pay-per-pull, ~$0.01 from your wallet) first, then ask again." });
+      const perpsOnly = args.perpsOnly !== false;
+      type QS = { question?: string; venue?: string; side?: string; qProbPct?: number; marketProbPct?: number; spreadPp?: number; conviction?: string; thesis?: string; perp?: { perpSymbol: string; coin: string; direction: string; targetUsd: number | null } | null };
+      const sigs = (sigsRaw as QS[])
+        .filter((s) => (perpsOnly ? !!s.perp : true))
+        .slice(0, 12)
+        .map((s) => ({
+          question: s.question, venue: s.venue, side: s.side,
+          qFairPct: s.qProbPct, marketPct: s.marketProbPct, spreadPp: s.spreadPp,
+          conviction: s.conviction, thesis: s.thesis,
+          perp: s.perp ? { symbol: s.perp.perpSymbol, coin: s.perp.coin, direction: s.perp.direction, targetUsd: s.perp.targetUsd } : null,
+        }));
+      const ageMin = cache.ts ? Math.round((Date.now() - cache.ts) / 60000) : null;
+      return JSON.stringify({
+        available: true, loadedMinutesAgo: ageMin, paidUsd: cache.usd ?? null,
+        perpCount: cache.board?.perpCount ?? sigs.filter((x) => x.perp).length, count: sigs.length,
+        signals: sigs,
+        note: "Q's fair value vs the live venue. A prompt to investigate + stake a graded call, not advice.",
+      });
+    },
+  },
+  {
     name: "explain_move",
     description:
       "Explain WHY a market may be moving. Returns the live move (24h % change, funding, OI, volume) plus recent NEWS HEADLINES for that specific asset (works for crypto, commodities like CL/WTI crude or GC/gold, and equities). Use for 'why is oil pumping', 'what's moving BTC', 'why is X dumping'. IMPORTANT when you answer: the headlines are CANDIDATE context, not proven causes — synthesize the most likely drivers, CITE the specific headlines you used (by title), and frame it as a hypothesis ('possible drivers'), never as confirmed causation. If nothing relevant is in the headlines, say the move isn't clearly explained by current news rather than inventing a reason. Offer to draft a thesis from the read.",

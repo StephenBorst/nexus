@@ -12,7 +12,7 @@ import {
   LOSS_REASONS, isLossReason, postmortemSummary,
   validateArenaRegistration, arenaAgentConfig,
   parsePriceTarget, forecastDivergence, FORECAST,
-  quotientSignals, QUOTIENT,
+  quotientSignals, QUOTIENT, quotientPerpMap,
   classifyMacro, macroEvents,
   houseCallFromSignal, wargameScenario,
   catalystToThesis, attachCatalystTheses, catalystHouseCall,
@@ -2162,8 +2162,50 @@ test("quotientSignals: ranks higher conviction first, then wider spread", () => 
 });
 
 test("quotientSignals: non-array / empty input is a safe empty board", () => {
-  assert.deepEqual(quotientSignals(null), { scanned: 0, freshCount: 0, highConvictionCount: 0, signals: [] });
+  assert.deepEqual(quotientSignals(null), { scanned: 0, freshCount: 0, highConvictionCount: 0, perpCount: 0, signals: [] });
   assert.equal(quotientSignals([]).scanned, 0);
+});
+
+// ── quotientPerpMap — "perp signals from Q" (crypto price-target slice → perp stance) ──
+test("quotientPerpMap: YES on 'reach $X' → LONG the perp", () => {
+  const m = quotientPerpMap({ question: "Will Bitcoin reach $150,000 by Dec 31?", side: "YES" });
+  assert.deepEqual(m, { coin: "BTC", perpSymbol: "PERP_BTC_USDC", direction: "LONG", targetUsd: 150000 });
+});
+test("quotientPerpMap: NO on 'reach $X' → SHORT (the YES=up outcome is faded)", () => {
+  const m = quotientPerpMap({ question: "Will SOL hit $300 this year?", side: "NO" });
+  assert.equal(m.perpSymbol, "PERP_SOL_USDC");
+  assert.equal(m.direction, "SHORT");
+});
+test("quotientPerpMap: 'fall below $X' inverts direction", () => {
+  const yes = quotientPerpMap({ question: "Will ETH fall below $2,000 in Q1?", side: "YES" });
+  assert.equal(yes.perpSymbol, "PERP_ETH_USDC");
+  assert.equal(yes.direction, "SHORT");          // YES = down → short
+  const no = quotientPerpMap({ question: "Will ETH fall below $2,000 in Q1?", side: "NO" });
+  assert.equal(no.direction, "LONG");            // NO = not-down → long
+});
+test("quotientPerpMap: no side → infers from fair-value lean (Q fair > market ⇒ on YES)", () => {
+  const m = quotientPerpMap({ question: "Will BTC exceed $200k?", side: null, qProbPct: 30, marketProbPct: 18 });
+  assert.equal(m.direction, "LONG");             // fair>market ⇒ YES ⇒ up ⇒ long
+});
+test("quotientPerpMap: an election / event market does NOT map (null)", () => {
+  assert.equal(quotientPerpMap({ question: "Will there be a Russia-Ukraine ceasefire in 2026?", side: "NO" }), null);
+});
+test("quotientPerpMap: a coin with no clear direction word does NOT map", () => {
+  assert.equal(quotientPerpMap({ question: "Will Ethereum flip Bitcoin by 2027?", side: "YES" }), null);
+});
+test("quotientPerpMap: word-boundary — 'solar'/'adapt' are not SOL/ADA", () => {
+  assert.equal(quotientPerpMap({ question: "Will solar capacity exceed 500 GW?", side: "YES" }), null);
+});
+test("quotientSignals: attaches perp + counts it for a crypto price market", () => {
+  const btc = { ...qSample(), id: "btc", q_side: "YES",
+    market: { ...qSample().market, question: "Will BTC reach $150k by year-end?" } };
+  const out = quotientSignals([btc, qSample()]);   // one crypto, one event
+  assert.equal(out.perpCount, 1);
+  const mapped = out.signals.find((s) => s.id === "btc");
+  assert.equal(mapped.perp.perpSymbol, "PERP_BTC_USDC");
+  assert.equal(mapped.perp.direction, "LONG");
+  const evt = out.signals.find((s) => s.id === "sig-1");
+  assert.equal(evt.perp, null);
 });
 
 test("quotientSignals: maxSignals cap is honored", () => {

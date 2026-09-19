@@ -1877,6 +1877,63 @@ function convictionLabel(tier, upstream) {
   return "—";
 }
 
+// ── QUOTIENT → PERP mapping ("perp signals from Q") ──────────────────────────
+// Q's feed is MOSTLY prediction markets (elections/events); a SLICE is crypto price-target
+// markets ("Will BTC reach $150k by …") that map cleanly to a directional Orderly perp
+// trade. This extracts that slice: parse the market question for a known coin + an
+// unambiguous up/down price claim, combine it with Q's side (YES/NO, or the fair-value
+// lean) → a LONG/SHORT stance on `PERP_<coin>_USDC`. CONSERVATIVE: maps ONLY when BOTH a
+// coin and a single direction are clear; anything else → null (it stays a read-only
+// prediction signal, never a bogus perp action). Pure + unit-tested.
+const PERP_COIN_ALIASES = {
+  BTC: ["btc", "bitcoin"], ETH: ["eth", "ethereum", "ether"], SOL: ["sol", "solana"],
+  XRP: ["xrp", "ripple"], BNB: ["bnb"], DOGE: ["doge", "dogecoin"], ADA: ["ada", "cardano"],
+  AVAX: ["avax", "avalanche"], LINK: ["link", "chainlink"], SUI: ["sui"], LTC: ["ltc", "litecoin"],
+  DOT: ["dot", "polkadot"], HYPE: ["hyperliquid"], TON: ["toncoin"], ARB: ["arbitrum"],
+  OP: ["optimism"], PEPE: ["pepe"], WIF: ["dogwifhat"], BONK: ["bonk"], AAVE: ["aave"],
+};
+const Q_UP_WORDS = ["reach", "hit", "above", "exceed", "surpass", "cross", "break above", "climb to", "rise to", "rally to", "all-time high", "ath", "≥"];
+const Q_DOWN_WORDS = ["below", "under", "fall", "drop", "dip", "crash", "decline", "less than", "dump", "≤"];
+
+export function quotientPerpMap(sig) {
+  const q = String((sig && sig.question) || "").toLowerCase();
+  if (!q) return null;
+  // 1) A known coin (word-boundary so "sol" ≠ "solar", "ada" ≠ "adapt").
+  let coin = null;
+  for (const [sym, aliases] of Object.entries(PERP_COIN_ALIASES)) {
+    if (aliases.some((a) => new RegExp(`(^|[^a-z])${a}([^a-z]|$)`).test(q))) { coin = sym; break; }
+  }
+  if (!coin) return null;
+  // 2) Does the market's YES outcome mean price UP or DOWN? Need exactly one.
+  const up = Q_UP_WORDS.some((w) => q.includes(w));
+  const down = Q_DOWN_WORDS.some((w) => q.includes(w));
+  if (up === down) return null; // neither, or contradictory → don't guess
+  const yesMeansUp = up;
+  // 3) Q's stance. Explicit side wins; else infer from the fair-value lean (Q fair >
+  //    market ⇒ Q thinks YES is underpriced ⇒ Q is effectively on YES).
+  const side = String((sig && sig.side) || "").toUpperCase();
+  let onYes;
+  if (side === "YES") onYes = true;
+  else if (side === "NO") onYes = false;
+  else if (Number.isFinite(Number(sig && sig.qProbPct)) && Number.isFinite(Number(sig && sig.marketProbPct)))
+    onYes = Number(sig.qProbPct) >= Number(sig.marketProbPct);
+  else return null;
+  const bullish = onYes ? yesMeansUp : !yesMeansUp;
+  // 4) Best-effort target price (context only) — require an explicit $ so we don't grab a
+  //    year or a percent. "$150k" / "$2,000" / "$1.5m".
+  let targetUsd = null;
+  // Suffix must ABUT the digits and be followed by a non-letter, so "$150,000 by Dec" doesn't
+  // read the "b" of "by" as billions.
+  const m = q.match(/\$\s?([0-9][0-9,]*(?:\.[0-9]+)?)(k|m|b)?(?![a-z])/);
+  if (m) {
+    let n = parseFloat(m[1].replace(/,/g, ""));
+    const suf = m[2];
+    if (suf === "k") n *= 1e3; else if (suf === "m") n *= 1e6; else if (suf === "b") n *= 1e9;
+    if (Number.isFinite(n) && n > 0) targetUsd = n;
+  }
+  return { coin, perpSymbol: `PERP_${coin}_USDC`, direction: bullish ? "LONG" : "SHORT", targetUsd };
+}
+
 export function quotientSignals(rawSignals, cfg = QUOTIENT) {
   const rows = Array.isArray(rawSignals) ? rawSignals : [];
   const out = [];
@@ -1905,7 +1962,7 @@ export function quotientSignals(rawSignals, cfg = QUOTIENT) {
       ? Math.abs(Number(s.entry_spread_pp))
       : round(Math.abs(qProbPct - mktProbPct), 1);
     const tier = Number.isFinite(Number(s.conviction_tier)) ? Number(s.conviction_tier) : null;
-    out.push({
+    const entry = {
       id: s.id ?? market.marketKey ?? question,
       question,
       venue: market.venue || (s.venue_quote && s.venue_quote.venue) || null,
@@ -1928,7 +1985,11 @@ export function quotientSignals(rawSignals, cfg = QUOTIENT) {
       isNewToday: s.is_new_today === true,
       status: (s.forecast_status && s.forecast_status.state) || null,   // toward | sideways | against
       adverseMovePct: s.forecast_status ? numOrNull(s.forecast_status.adverse_move_pct) : null,
-    });
+    };
+    // "Perp signals from Q" — the crypto price-target slice mapped to an Orderly perp
+    // stance (null for the election/event markets, which stay read-only reads).
+    entry.perp = quotientPerpMap(entry);
+    out.push(entry);
   }
   // Strongest conviction first, then the biggest edge, then the freshest.
   out.sort((a, b) =>
@@ -1940,6 +2001,7 @@ export function quotientSignals(rawSignals, cfg = QUOTIENT) {
     scanned: out.length,
     freshCount: out.filter((s) => s.isFresh).length,
     highConvictionCount: out.filter((s) => (s.convictionTier ?? 0) >= 3).length,
+    perpCount: out.filter((s) => s.perp).length,     // how many map to a tradeable perp
     signals: out.slice(0, cfg.maxSignals),
   };
 }

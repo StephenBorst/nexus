@@ -1807,6 +1807,16 @@ export default function FeedPage() {
                 <span style={{ flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "#ededf0", background: "#1a1a1e", border: "1px solid #33333a", borderRadius: 4, padding: "5px 10px" }}>OPEN PROOF →</span>
               </div>
             )}
+            {/* Q Signals discovery — Quotient fair value vs the market, mapped to perp reads.
+                PRO + pay-per-pull, so we LINK to the lens (never show paid data on a public surface). */}
+            {!loading && !error && (
+              <div onClick={() => navigate("/lab?tab=intel")} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "#0f0f11", border: "1px solid #232327", borderLeft: "2px solid #ededf0", borderRadius: 6, padding: "10px 12px", margin: "14px 0", cursor: "pointer" }}>
+                <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.5 }}>
+                  <b style={{ color: "#f4f4f5" }}>Q Signals</b> — Quotient&rsquo;s model fair value vs the live market, mapped to perp reads. PRO &middot; your wallet pays per pull.
+                </span>
+                <span style={{ flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "#ededf0", background: "#1a1a1e", border: "1px solid #33333a", borderRadius: 4, padding: "5px 10px" }}>OPEN LAB →</span>
+              </div>
+            )}
             {/* Ecosystem context below the ranking — the just-resolved grade tape (proof of
                 the ranking), live positions, the pulse stats, and the secondary boards. */}
             {!loading && !error && <FeedPulse feed={feed} />}
