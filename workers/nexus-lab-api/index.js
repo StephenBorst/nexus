@@ -3139,34 +3139,45 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     }
 
     // ── /intel/quotient/challenge — hand the client the x402 payment challenge ──
-    // Client-pays path (the PRO model): the USER'S wallet pays Quotient per pull, never
-    // our credits. To sign, the client needs the current x402 requirements, so we PROBE
-    // Quotient with NO api key → Quotient answers 402 + `accepts[]` (network/asset/payTo/
-    // amount). We pass those straight through; the client guards + signs them (qpay.ts).
-    // Public + fail-soft; the requirements are stable, so we cache the probe briefly.
+    // Client-pays path (the PRO model): the USER'S wallet pays Quotient per pull, never our
+    // credits. To sign, the client needs the current x402 requirements, so we PROBE Quotient
+    // for its 402 challenge (`accepts[]` = network/asset/payTo/amount) and pass it through;
+    // the client guards + signs it (qpay.ts). We try KEYLESS first (pure x402); if that gives
+    // no usable challenge we retry WITH the api key — some gateways only issue the 402 to an
+    // IDENTIFIED-but-unfunded account ($0 credits), and it also warms a cold Render dyno. A
+    // zero-credit key can't spend credits, so the payment path still governs ("they pay, not
+    // us"). Fail-soft + SELF-DIAGNOSING: on a miss we return the upstream status + a short body
+    // snippet so the real cause is visible (open the URL in a browser to read it).
     if (parts[0] === "intel" && parts[1] === "quotient" && parts[2] === "challenge" && request.method === "GET") {
       const respondC = (payload) => new Response(JSON.stringify(payload), {
-        headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300", ...cors(request) },
+        headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=60", ...cors(request) },
       });
       const CK = "intel:quotient:challenge:v1";
       try {
         const cached = await env.LAB_STORE.get(CK);
-        if (cached) { const c = JSON.parse(cached); if (c && (Date.now() - (c.asOfMs || 0)) < 300 * 1000) return respondC(c); }
+        if (cached) { const c = JSON.parse(cached); if (c && c.ok && (Date.now() - (c.asOfMs || 0)) < 300 * 1000) return respondC(c); }
       } catch { /* miss → probe */ }
-      try {
-        const r = await fetch("https://quotient-api-gateway.onrender.com/api/v1/signals?min_conviction=3", {
-          headers: { "Accept": "application/json" }, // NO api key → force the 402 challenge
-        });
-        // The x402 challenge arrives as 402; some gateways echo it on 200 too. Either way read accepts[].
-        const d = await r.json().catch(() => null);
-        const accepts = d && Array.isArray(d.accepts) ? d.accepts : [];
-        if (!accepts.length) return respondC({ asOfMs: Date.now(), ok: false, reason: r.status === 200 ? "no_challenge" : `upstream_${r.status}`, accepts: [] });
-        const payload = { asOfMs: Date.now(), ok: true, x402Version: d.x402Version || 1, accepts };
-        try { await env.LAB_STORE.put(CK, JSON.stringify(payload), { expirationTtl: 600 }); } catch { /* best-effort */ }
-        return respondC(payload);
-      } catch (e) {
-        return respondC({ asOfMs: Date.now(), ok: false, reason: "error", accepts: [], error: String(e) });
+      const QURL = "https://quotient-api-gateway.onrender.com/api/v1/signals?min_conviction=3";
+      const attempts = [{ label: "keyless", headers: { "Accept": "application/json" } }];
+      if (env.QUOTIENT_API_KEY) attempts.push({ label: "keyed", headers: { "Accept": "application/json", "x-quotient-api-key": env.QUOTIENT_API_KEY } });
+      let lastStatus = 0, lastSnippet = "";
+      for (const a of attempts) {
+        try {
+          const r = await fetch(QURL, { headers: a.headers });
+          lastStatus = r.status;
+          const text = await r.text();
+          lastSnippet = text.slice(0, 400);
+          let d = null; try { d = JSON.parse(text); } catch { /* non-JSON (cold dyno / html) */ }
+          // x402 challenge shape: accepts[] at top level, or nested under an error envelope.
+          const accepts = d ? (Array.isArray(d.accepts) ? d.accepts : (Array.isArray(d?.error?.accepts) ? d.error.accepts : null)) : null;
+          if (accepts && accepts.length) {
+            const payload = { asOfMs: Date.now(), ok: true, x402Version: d.x402Version || d?.error?.x402Version || 1, accepts, via: a.label };
+            try { await env.LAB_STORE.put(CK, JSON.stringify(payload), { expirationTtl: 300 }); } catch { /* best-effort */ }
+            return respondC(payload);
+          }
+        } catch (e) { lastSnippet = String(e).slice(0, 400); }
       }
+      return respondC({ asOfMs: Date.now(), ok: false, reason: `no_challenge_${lastStatus}`, upstreamStatus: lastStatus, upstreamSnippet: lastSnippet, accepts: [] });
     }
 
     // ── POST /intel/quotient — relay the USER'S signed x402 payment → the signals ──
@@ -3191,18 +3202,26 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         const v = parseInt(body.minConviction, 10);
         return Number.isFinite(v) && v >= 1 && v <= 5 ? v : (parseInt(env.QUOTIENT_MIN_CONVICTION, 10) || 3);
       })();
-      try {
-        const r = await fetch(`https://quotient-api-gateway.onrender.com/api/v1/signals?min_conviction=${minConv}`, {
-          headers: { "X-PAYMENT": xPayment, "Accept": "application/json" }, // user's payment, NO api key
-        });
-        if (r.status === 402) return respondP({ ok: false, reason: "payment_declined" });
-        if (!r.ok) return respondP({ ok: false, reason: `upstream_${r.status}` });
-        const d = await r.json();
-        const board = quotientSignals(Array.isArray(d?.signals) ? d.signals : []);
-        return respondP({ asOf: new Date().toISOString(), ok: true, minConviction: minConv, paid: true, ...board });
-      } catch (e) {
-        return respondP({ ok: false, reason: "error", error: String(e) });
+      // Present the user's X-PAYMENT. Try keyless (pure x402) first; if the gateway wants the
+      // account identified too, retry with the api key ALONGSIDE the payment — the $0-credit key
+      // only identifies; the X-PAYMENT is what settles (the user pays, never our credits).
+      const QURL = `https://quotient-api-gateway.onrender.com/api/v1/signals?min_conviction=${minConv}`;
+      const attempts = [{ label: "keyless", headers: { "X-PAYMENT": xPayment, "Accept": "application/json" } }];
+      if (env.QUOTIENT_API_KEY) attempts.push({ label: "keyed", headers: { "X-PAYMENT": xPayment, "Accept": "application/json", "x-quotient-api-key": env.QUOTIENT_API_KEY } });
+      let lastStatus = 0, lastSnippet = "";
+      for (const a of attempts) {
+        try {
+          const r = await fetch(QURL, { headers: a.headers });
+          lastStatus = r.status;
+          if (r.ok) {
+            const d = await r.json().catch(() => null);
+            const board = quotientSignals(Array.isArray(d?.signals) ? d.signals : []);
+            return respondP({ asOf: new Date().toISOString(), ok: true, minConviction: minConv, paid: true, via: a.label, ...board });
+          }
+          lastSnippet = (await r.text().catch(() => "")).slice(0, 300);
+        } catch (e) { lastSnippet = String(e).slice(0, 300); }
       }
+      return respondP({ ok: false, reason: lastStatus === 402 ? "payment_declined" : `upstream_${lastStatus}`, upstreamStatus: lastStatus, upstreamSnippet: lastSnippet });
     }
 
     // ── /intel/events — the MACRO/EVENTS intelligence corner ─────────────────

@@ -198,8 +198,10 @@ export function QSignals({ address }: { address?: string | null }) {
       setStatus("fetching the payment challenge…");
       const cr = await fetch(`${AGENT_API}/intel/quotient/challenge`);
       const cj = await cr.json().catch(() => null);
-      if (!cj?.ok || !Array.isArray(cj.accepts) || !cj.accepts.length)
-        throw new Error("Quotient's payment isn't available right now — try again shortly.");
+      if (!cj?.ok || !Array.isArray(cj.accepts) || !cj.accepts.length) {
+        const why = (cj as { reason?: string } | null)?.reason;
+        throw new Error(`Quotient's payment isn't available right now${why ? ` (${why})` : ""} — try again shortly.`);
+      }
       const g = selectAndGuard(cj.accepts); // PINS network/asset/recipient + CAPS amount before signing
       setStatus(`approve the $${g.usd.toFixed(2)} USDC payment on Base in your wallet…`);
       const { header } = await signXPayment(provider, g);
@@ -213,7 +215,7 @@ export function QSignals({ address }: { address?: string | null }) {
         const reason = (pj as { reason?: string } | null)?.reason;
         throw new Error(reason === "payment_declined"
           ? "Quotient declined the payment — check your Base USDC balance and try again."
-          : "Couldn't load signals — try again shortly.");
+          : `Couldn't load signals${reason ? ` (${reason})` : ""} — try again shortly.`);
       }
       setBoard(pj); setPaidUsd(g.usd); setLoadedAt(Date.now());
       writeCache({ board: pj, usd: g.usd, ts: Date.now() });
