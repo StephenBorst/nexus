@@ -51,24 +51,37 @@ export interface PaymentReq {
 // A guarded, ready-to-sign requirement + the human amount to show before the wallet prompt.
 export interface GuardedReq { req: Required<Pick<PaymentReq, "scheme" | "network" | "payTo" | "asset">> & PaymentReq; amountUnits: bigint; usd: number; }
 
-// Pick the Base/exact/USDC requirement from a 402 challenge and GUARD it hard. Throws a plain
-// message (caller fails soft) on anything unexpected — this runs BEFORE any signature.
+// Base is named "base" (Coinbase x402) OR CAIP-2 "eip155:8453" / "8453"; the asset can be a bare
+// address or CAIP-19 ("eip155:8453/erc20:0x…"). So we match the network against the known Base
+// identifiers and the asset by CONTAINMENT of our pinned USDC address. The loosening only affects
+// WHICH offer we accept — we still SIGN against our canonical BASE_USDC / QUOTIENT_PAYTO / chainId
+// 8453 (buildTypedData hardcodes them), still pin the recipient, still hard-cap the amount. On a
+// miss we surface exactly what Quotient offered so the shape is visible.
+const BASE_NETWORKS = ["base", "eip155:8453", "8453", "base-mainnet"];
 export function selectAndGuard(accepts: unknown): GuardedReq {
   const list = Array.isArray(accepts) ? (accepts as PaymentReq[]) : [];
-  const r = list.find(
-    (a) => a && a.scheme === "exact" && a.network === "base" && typeof a.asset === "string" && a.asset.toLowerCase() === BASE_USDC.toLowerCase(),
-  );
-  if (!r) throw new Error("Quotient didn't offer a Base-USDC payment option — can't pay in-app.");
-  if (!isAddr(r.payTo) || r.payTo.toLowerCase() !== QUOTIENT_PAYTO.toLowerCase())
-    throw new Error("Unexpected payment recipient — refused.");
+  const usdc = BASE_USDC.toLowerCase();
+  const r = list.find((a) => {
+    const net = String(a?.network ?? "").toLowerCase();
+    const asset = String(a?.asset ?? "").toLowerCase();
+    return a?.scheme === "exact" && BASE_NETWORKS.includes(net) && asset.includes(usdc);
+  });
+  if (!r) {
+    const offered = list.slice(0, 3)
+      .map((a) => `{net:${a?.network} scheme:${a?.scheme} asset:${String(a?.asset ?? "").slice(0, 26)} payTo:${String(a?.payTo ?? "").slice(0, 12)}}`)
+      .join(" · ");
+    throw new Error(`No Base-USDC 'exact' option. Quotient offered: ${offered || "nothing"}`);
+  }
+  if (!String(r.payTo ?? "").toLowerCase().includes(QUOTIENT_PAYTO.toLowerCase()))
+    throw new Error(`Unexpected recipient (${String(r.payTo ?? "").slice(0, 16)}) — refused.`);
   let amountUnits: bigint;
-  try { amountUnits = BigInt(String(r.maxAmountRequired ?? "")); } catch { throw new Error("Bad payment amount — refused."); }
+  try { amountUnits = BigInt(String((r.maxAmountRequired ?? (r as { amount?: unknown }).amount) ?? "")); } catch { throw new Error("Bad payment amount — refused."); }
   if (amountUnits <= 0n) throw new Error("Bad payment amount — refused.");
   if (amountUnits > X402_MAX_UNITS) throw new Error("Payment exceeds the in-app cap — refused.");
   const usd = Number(amountUnits) / 10 ** USDC_DECIMALS;
-  // Canonicalize to OUR pinned constants (guaranteed equal to the challenge by the checks
-  // above) so nothing downstream signs a value the attacker could have shaped.
-  return { req: { ...r, scheme: "exact", network: "base", payTo: QUOTIENT_PAYTO, asset: BASE_USDC }, amountUnits, usd };
+  // Keep the challenge's ORIGINAL scheme/network strings for the X-PAYMENT echo (the facilitator
+  // matches on them); canonicalize the recipient + asset for what we actually sign.
+  return { req: { ...r, scheme: String(r.scheme), network: String(r.network), payTo: QUOTIENT_PAYTO, asset: BASE_USDC, maxAmountRequired: String(amountUnits) }, amountUnits, usd };
 }
 
 // A random 32-byte nonce (bytes32 hex) — browser crypto, prevents replay.
@@ -190,8 +203,14 @@ export async function loadQuotientDirect(provider: Eip1193, minConviction = 3): 
   if (r1.status === 200) return { signals: rawSignals(await r1.json().catch(() => null)), usd: 0 }; // already served
   if (r1.status === 403) throw new Error("Quotient blocked the request (403) — try again shortly.");
   if (r1.status !== 402) throw new Error(`Quotient unavailable (${r1.status}).`);
-  const challenge = (await r1.json().catch(() => null)) as { accepts?: unknown } | null;
-  const g = selectAndGuard(challenge?.accepts);                 // pins network/asset/recipient + caps amount
+  const challenge = await r1.json().catch(() => null);
+  const c = challenge as { accepts?: unknown; x402?: { accepts?: unknown }; paymentRequirements?: unknown } | null;
+  const accepts = Array.isArray(c?.accepts) ? c!.accepts
+    : Array.isArray(challenge) ? challenge
+    : Array.isArray(c?.x402?.accepts) ? c!.x402!.accepts
+    : Array.isArray(c?.paymentRequirements) ? c!.paymentRequirements
+    : [];
+  const g = selectAndGuard(accepts);                 // pins network/asset/recipient + caps amount
   // 2) sign the EIP-3009 authorization for exactly that amount.
   const { header } = await signXPayment(provider, g);
   // 3) retry WITH the payment → the data.
