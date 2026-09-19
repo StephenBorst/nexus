@@ -250,12 +250,18 @@ export function QSignals({ address }: { address?: string | null }) {
               or subscribe (<span style={{ color: FOG }}>${PRO_MONTHLY_USDC}/mo</span>, or ${nexusDiscountedPrice()} in $NEXUS).
             </div>
           </div>
-        ) : signals.length ? (
-          /* ── LOADED — the signals + a paid-refresh control ── */
+        ) : board ? (
+          /* ── LOADED (paid) — the signals, or a calm empty note; + a paid-refresh control ── */
           <>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {signals.map((s) => <SignalCard key={s.id} s={s} />)}
-            </div>
+            {signals.length ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {signals.map((s) => <SignalCard key={s.id} s={s} />)}
+              </div>
+            ) : (
+              <div style={{ color: DIM, fontSize: 11.5, fontFamily: MF, lineHeight: 1.65 }}>
+                No Q signal cleared the conviction bar right now — sparse by design (Quotient publishes only where its fair value diverges enough from the venue). Your pull went through; check back later.
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
               <LoadButton label={loading ? "loading…" : "refresh · $0.01"} onClick={load} disabled={loading} />
               {loadedAt ? <span style={{ color: FAINT, fontSize: 9.5, fontFamily: MF }}>loaded {fmtClock(loadedAt)}{paidUsd != null ? ` · paid $${paidUsd.toFixed(2)}` : ""}</span> : null}
