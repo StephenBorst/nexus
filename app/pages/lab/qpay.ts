@@ -36,6 +36,7 @@ const isAddr = (a: unknown): a is string => typeof a === "string" && /^0x[a-fA-F
 export interface GuardedReq {
   accept: Record<string, unknown>;
   resource: unknown;
+  extensions: unknown;
   amountUnits: bigint;
   usd: number;
   maxTimeoutSeconds: number;
@@ -46,7 +47,7 @@ export interface GuardedReq {
 // and asset by CONTAINMENT of our pinned USDC. The loosening only affects WHICH offer we accept —
 // we still SIGN against canonical BASE_USDC / QUOTIENT_PAYTO / chainId 8453 and hard-cap the amount.
 const BASE_NETWORKS = ["base", "eip155:8453", "8453", "base-mainnet"];
-export function selectAndGuard(accepts: unknown, resource?: unknown): GuardedReq {
+export function selectAndGuard(accepts: unknown, resource?: unknown, extensions?: unknown): GuardedReq {
   const list = Array.isArray(accepts) ? (accepts as Record<string, unknown>[]) : [];
   const usdc = BASE_USDC.toLowerCase();
   const r = list.find((a) => {
@@ -68,7 +69,7 @@ export function selectAndGuard(accepts: unknown, resource?: unknown): GuardedReq
   if (amountUnits > X402_MAX_UNITS) throw new Error("Payment exceeds the in-app cap — refused.");
   const usd = Number(amountUnits) / 10 ** USDC_DECIMALS;
   const mts = Number(r.maxTimeoutSeconds);
-  return { accept: r, resource: resource ?? null, amountUnits, usd, maxTimeoutSeconds: Number.isFinite(mts) && mts > 0 ? mts : 120 };
+  return { accept: r, resource: resource ?? null, extensions: extensions ?? {}, amountUnits, usd, maxTimeoutSeconds: Number.isFinite(mts) && mts > 0 ? mts : 120 };
 }
 
 // A random 32-byte nonce (bytes32 hex) — browser crypto, prevents replay.
@@ -104,15 +105,25 @@ function buildTypedData(g: GuardedReq, from: string, nonce: string, validAfter: 
   };
 }
 
-// Assemble the base64 X-PAYMENT header. x402 v2 (Quotient's version) wraps the signed authorization
-// with the ECHOED `resource` + `accepted` (the exact requirement) + `extensions`; v1 uses the flat
-// {scheme, network, payload}. The authorization is identical either way.
+// UTF-8-safe base64 — the challenge's `resource.description` carries non-Latin1 chars (em-dashes,
+// curly quotes) that plain btoa can't encode. Quotient base64s its header as UTF-8, so we match.
+function b64utf8(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+// Assemble the base64 payment payload. x402 v2 (Quotient's flavor) wraps the signed authorization
+// with the ECHOED `resource`, `accepted` (the chosen requirement, VERBATIM — network stays CAIP-2
+// eip155:8453), and `extensions`; v1 uses the flat {scheme, network, payload}. It rides in the
+// PAYMENT-SIGNATURE request header (NOT X-PAYMENT — that's what Quotient couldn't see).
 function encodeXPayment(g: GuardedReq, from: string, nonce: string, validAfter: string, validBefore: string, signature: string, x402Version = 2): string {
   const authorization = { from, to: QUOTIENT_PAYTO, value: String(g.amountUnits), validAfter, validBefore, nonce };
   const payload = x402Version >= 2
-    ? { x402Version, resource: g.resource ?? undefined, accepted: g.accept, payload: { signature, authorization }, extensions: {} }
+    ? { x402Version, resource: g.resource ?? undefined, accepted: g.accept, payload: { signature, authorization }, extensions: g.extensions ?? {} }
     : { x402Version, scheme: g.accept.scheme, network: g.accept.network, payload: { signature, authorization } };
-  return btoa(JSON.stringify(payload));
+  return b64utf8(JSON.stringify(payload));
 }
 
 // The connected EVM account that will pay — read fresh from the provider (the signer of the
@@ -152,7 +163,7 @@ export async function signXPayment(provider: Eip1193, g: GuardedReq, x402Version
 const QUOTIENT_SIGNALS_URL = "https://quotient-api-gateway.onrender.com/api/v1/signals";
 
 // Best-effort decode of a base64 x402 header (payment-required / payment-response) → { error, message }.
-function decodeX402Header(hdr: string | null): { error?: string; message?: string; accepts?: unknown; resource?: unknown; x402Version?: number } | null {
+function decodeX402Header(hdr: string | null): { error?: string; message?: string; accepts?: unknown; resource?: unknown; extensions?: unknown; x402Version?: number } | null {
   if (!hdr) return null;
   try { return JSON.parse(atob(hdr.replace(/-/g, "+").replace(/_/g, "/"))); } catch { return null; }
 }
@@ -173,26 +184,29 @@ export async function loadQuotientDirect(provider: Eip1193, minConviction = 3): 
   if (r1.status !== 402) throw new Error(`Quotient unavailable (${r1.status}).`);
   let accepts: unknown[] = [];
   let resource: unknown = null;
+  let extensions: unknown = {};
   let x402Version = 2;
   const decoded = decodeX402Header(r1.headers.get("payment-required") || r1.headers.get("PAYMENT-REQUIRED"));
   if (decoded) {
     if (Array.isArray(decoded.accepts)) accepts = decoded.accepts;
     if (Number.isFinite(decoded.x402Version)) x402Version = Number(decoded.x402Version);
     resource = decoded.resource ?? null;
+    extensions = decoded.extensions ?? {};
   }
   if (!accepts.length) {
     // Fallback: some gateways put accepts in the JSON body.
     const challenge = await r1.json().catch(() => null);
-    const c = challenge as { accepts?: unknown; resource?: unknown } | null;
-    if (Array.isArray(c?.accepts)) { accepts = c!.accepts; resource = c!.resource ?? resource; }
+    const c = challenge as { accepts?: unknown; resource?: unknown; extensions?: unknown } | null;
+    if (Array.isArray(c?.accepts)) { accepts = c!.accepts; resource = c!.resource ?? resource; extensions = c!.extensions ?? extensions; }
     else if (Array.isArray(challenge)) accepts = challenge as unknown[];
   }
-  const g = selectAndGuard(accepts, resource);       // pins network/asset/recipient + caps amount
+  const g = selectAndGuard(accepts, resource, extensions);   // pins network/asset/recipient + caps amount
   // 2) sign the EIP-3009 authorization for exactly that amount (echo the challenge's x402 version).
   const { header } = await signXPayment(provider, g, x402Version);
-  // 3) retry WITH the payment → the data.
+  // 3) retry WITH the payment. Quotient's v2 reads it from the PAYMENT-SIGNATURE header, NOT
+  //    X-PAYMENT (both are in its allow-headers; X-PAYMENT is silently ignored → "Payment required").
   let r2: Response;
-  try { r2 = await fetch(url, { headers: { Accept: "application/json", "X-PAYMENT": header } }); }
+  try { r2 = await fetch(url, { headers: { Accept: "application/json", "PAYMENT-SIGNATURE": header } }); }
   catch { throw new Error("Payment sent but the data request was blocked — try again shortly."); }
   if (r2.ok) return { signals: rawSignals(await r2.json().catch(() => null)), usd: g.usd };
   // Surface the facilitator's ACTUAL reason (payment-response / payment-required header, or body).
