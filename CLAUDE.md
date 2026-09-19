@@ -496,37 +496,52 @@ token-value scheme. $NEXUS only adds **consumptive use** (pay-in-$NEXUS discount
 - **⚠️ The Safe unblocks THREE things at once:** buyback flywheel + public treasury banner (`NEXUS_TREASURY_ADDRESS`)
   + PRO revenue (`SUBSCRIPTION_RECEIVER`). Standing up the Safe (app.safe.global, ~10 min) is the highest-leverage move.
 
-## Q Signals — Quotient x402 lens (LIVE 2026-09-19) ⭐ the client-pays x402 pattern
+## Q Signals — Quotient x402 v2 lens (LIVE + ON-CHAIN VERIFIED 2026-09-19) ⭐ the client-pays x402 pattern
 Prediction-market **fair-value** intel in Lab → Market Intel (`app/pages/lab/QSignals.tsx`, a Collapsible lens).
-Quotient prices a model fair value for liquid prediction markets (Polymarket/Kalshi/Limitless) + flags convergence
-vs the live venue — surfaced honestly as a prompt to stake a GRADED thesis, never an oracle, never advice.
-- **Two gates:** (1) ACCESS = Nexus **PRO** (`useSubscription` → hold ARCHITECT 100M $NEXUS or sub); non-PRO see a
-  locked card. Client-side gate only — the micro-payment is the real barrier and costs us nothing, so the worker relay
-  is deliberately NOT server-PRO-enforced (no second signature). (2) DATA COST = **the USER'S wallet pays per pull via
-  x402** (~$0.01 USDC on Base). Nexus spends NO credits, no markup. ("They pay, not us.")
-- **⚠️ client-pays x402 = the reusable money-path pattern.** `app/pages/lab/qpay.ts` HAND-ROLLS the x402 EVM flow
-  (EIP-3009 `TransferWithAuthorization`: wallet signs `eth_signTypedData_v4` — OFF-CHAIN, gasless, NO tx, NO chain
-  switch; Quotient's facilitator settles on Base). **Verified BYTE-FOR-BYTE identical to the reference `x402`/`x402-fetch`
-  lib** (sig + encoded X-PAYMENT header) via a throwaway oracle — so we carry NONE of that lib's bundle (it statically
-  pulls the whole Solana stack for EVM use; a `yarn add x402-fetch viem` was REVERTED). Guards BEFORE any signature
-  (mirror `swapExec.ts`): PIN scheme=exact / network=base / asset=Base-USDC / payTo=Quotient using CANONICAL constants
-  (not the challenge's echoed values) + HARDCODED USDC EIP-712 domain (`"USD Coin"`/`"2"`) + amount CAP
-  `X402_MAX_UNITS=50000` ($0.05). A hostile/drifted 402 can authorize at most a nickel to our pinned payTo — no drain,
-  no redirect. `QUOTIENT_PAYTO`/`BASE_USDC` live in qpay.ts.
-- **NO auto-poll** (locked decision): nothing fetches until the user clicks **"Load signals · $0.01"** + signs. 15-min
-  localStorage cache (`nx_qsignals_cache`) so re-opening doesn't re-charge. ⚠️ Empty result AFTER paying shows a calm
-  "none cleared the bar" note — **board-presence (not `signals.length`) decides "loaded"** (else a paid-but-empty pull
-  wrongly re-shows the Load button = looks broken).
-- **Worker routes (lab-api index.js, ADDITIVE):** `GET /intel/quotient/challenge` (probe Quotient with NO key → return
-  the 402 `accepts[]` for the client to sign — avoids browser CORS on the custom X-PAYMENT header) + `POST /intel/quotient
-  {xPayment, minConviction}` (relay the user's X-PAYMENT to Quotient with NO key → shape via `quotientSignals` in
-  logic.mjs → signals). The LEGACY credit-metered `GET /intel/quotient` (uses `QUOTIENT_API_KEY`) is untouched but now
-  vestigial → **`QUOTIENT_API_KEY` is OPTIONAL** (leave unset for the client-pays model). `quotientSignals` shaper + its
-  7 tests already in logic.mjs (238 total green).
-- **Source of truth:** `qSignals` is in `PRO_FEATURES` (`app/config/subscription.ts`) → flows to the NexusPro card + the
-  landing `#pro` section; Quotient added to the landing partners row. Upstream = `quotient-api-gateway.onrender.com/api/
-  v1/signals?min_conviction=1..5` (default 3). ⚠️ Upstream + `og.nexustradinglabs.com` are egress-blocked from cloud
-  sessions → the pay flow can only be verified in a real browser wallet.
+Quotient prices a model fair value for liquid prediction markets (Polymarket/Kalshi/Limitless) + flags convergence vs
+the live venue — a prompt to stake a GRADED thesis, never an oracle, never advice. **Verified live: real Base USDC
+settlement tx `0xcbd2a8228985db73b26883207c520b23cb86ea28ae7c80879308ef2d97b34b36`.**
+- **Two gates:** (1) ACCESS = Nexus **PRO** (`useSubscription` → hold ARCHITECT 100M $NEXUS or sub); non-PRO see a locked
+  card (client-side gate only — the micro-payment is the real barrier). (2) DATA COST = **the USER'S wallet pays per pull
+  via x402** (~$0.01 USDC on Base, real on-chain settlement). Nexus spends NO credits, no markup. ("They pay, not us.")
+- **⚠️⚠️ THE MONEY PATH IS CLIENT-DIRECT — the worker CANNOT reach Quotient.** Quotient's gateway
+  (`quotient-api-gateway.onrender.com`) **403s Cloudflare-Worker / datacenter IPs** (same block the codebase dodges for
+  rss2json). So a server relay is impossible; the BROWSER (residential IP) calls Quotient directly. Do NOT rebuild a
+  worker relay. (The old `GET /intel/quotient/challenge` + `POST /intel/quotient` worker routes + `QUOTIENT_API_KEY` are
+  DEAD/vestigial — the worker 403s. `logic.mjs quotientSignals` stays only as the tested source of truth.)
+- **⚠️ Quotient runs x402 VERSION 2, a NON-STANDARD flavor the npm `x402`/`x402-fetch` lib does NOT speak** (the lib
+  sends `X-PAYMENT` + `network:"base"` and REJECTS CAIP — it will NOT work here). The real wire (hand-rolled in
+  `app/pages/lab/qpay.ts`, `loadQuotientDirect`):
+  1. GET (keyless) → **402**; the challenge is in the base64 **`payment-required` RESPONSE HEADER** (CORS-exposed), NOT
+     the body. Decode → `{ x402Version:2, resource, accepts:[…], extensions }`.
+  2. `accepts[0]` = `{scheme:"exact", network:"eip155:8453" (CAIP-2, NOT "base"), amount:"10000" (field is `amount`, not
+     `maxAmountRequired`), asset:"0x8335…2913" (bare), payTo:"0xC3d0…97cB" (bare), maxTimeoutSeconds:300,
+     extra:{name:"USD Coin",version:"2"}}`.
+  3. Sign EIP-3009 `TransferWithAuthorization` via `eth_signTypedData_v4` (OFF-CHAIN, gasless, no tx, no chain switch).
+     Domain HARDCODED: name "USD Coin" / version "2" / chainId 8453 / verifyingContract = BASE_USDC. message.to =
+     QUOTIENT_PAYTO, value = amount.
+  4. Retry with the payment in the **`PAYMENT-SIGNATURE` request header (NOT `X-PAYMENT` — X-PAYMENT is silently ignored
+     → the facilitator re-issues "Payment required")**. Payload = base64 of the NESTED v2 shape:
+     `{x402Version:2, resource:<echo>, accepted:<chosen accept VERBATIM — network stays eip155:8453>, payload:{signature,
+     authorization:{from,to,value,validAfter,validBefore,nonce}}, extensions:<echo or {}>}`. **UTF-8-safe base64**
+     (`resource.description` has em-dashes → plain `btoa` throws; use `TextEncoder`).
+  5. 200 → `{signals:[…]}` → shape client-side.
+- **Guards (risk posture, all pre-signature):** match network ∈ base/eip155:8453/8453, asset CONTAINS BASE_USDC, scheme
+  "exact", payTo CONTAINS QUOTIENT_PAYTO; CAP amount ≤ `X402_MAX_UNITS=50000` ($0.05). Sign against canonical
+  BASE_USDC/QUOTIENT_PAYTO/chainId-8453 (a hostile 402 can authorize at most a nickel to our pinned payTo).
+- **Client shaper `app/pages/lab/qshape.ts`** = faithful port of the TESTED `workers/nexus-lab-api/logic.mjs`
+  `quotientSignals` + `quotientPerpMap` (worker can't relay → shape in the browser; logic.mjs stays source of truth,
+  246 tests). **NO auto-poll**: explicit "Load signals · $0.01" + 15-min localStorage cache (`nx_qsignals_cache`).
+  Empty-after-paid shows a calm "none cleared the bar" (board-presence, not signals.length, decides "loaded").
+  `min_conviction` valid range **1..3** (Quotient schema max = 3, NOT 5); client requests 1 (most signals).
+- **"Perp signals from Q" (`quotientPerpMap`, tested):** the crypto price-target slice of Q's feed ("Will BTC reach
+  $150k…") maps to a LONG/SHORT stance on `PERP_<coin>_USDC`; election/event markets stay read-only. Lens shows a perp
+  badge + **⚡ Trade** (→ /perp/SYM) + **◆ Stake thesis** (prefills the Thesis Engine draft) + a PERPS/ALL filter. Also:
+  copilot tool `q_signals` (reads the cached pull, no new charge) + a Feed discovery card (links to the lens).
+- **Source of truth:** `qSignals` ∈ `PRO_FEATURES` (`app/config/subscription.ts`) → NexusPro card + landing `#pro`;
+  Quotient in the landing partners row. **⚠️ Quotient gateway + `og.nexustradinglabs.com` are egress-blocked from
+  cloud/worker/datacenter IPs → the pay flow can ONLY be exercised in a real browser (residential) wallet.**
+  Launch post: `marketing/q-signals-launch.md`.
 
 ## Tokenomics direction — Bankr-informed pivot (2026-06-08) ⭐ CURRENT
 The Safe is **LIVE** (`0x4Fe2…C733`, 1/1 Arbitrum+Base) and the PRO USDC payment rail is **wired**

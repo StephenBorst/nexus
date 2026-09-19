@@ -187,7 +187,7 @@ export function QSignals({ address }: { address?: string | null }) {
     try {
       // The BROWSER pays Quotient directly (residential IP) — Quotient 403s our worker's IP,
       // so this can never go through the server. Then shape client-side (qshape).
-      const { signals: raw, usd } = await loadQuotientDirect(provider, 3);
+      const { signals: raw, usd } = await loadQuotientDirect(provider, 1);
       const board = shapeQuotientSignals(raw);
       setBoard(board); setPaidUsd(usd); setLoadedAt(Date.now());
       writeCache({ board, usd, ts: Date.now() });
