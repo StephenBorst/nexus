@@ -22,6 +22,7 @@ import { SmartMoneyView } from "./SmartMoneyView";
 import { MispricedBoard } from "./MispricedBoard";
 import { CatalystBoard } from "./CatalystBoard";
 import { ForecastDivergence } from "./ForecastDivergence";
+import { QSignals } from "./QSignals";
 import { PositioningBoard } from "./PositioningBoard";
 import { Collapsible } from "./Collapsible";
 import { LabWelcome, OnboardingChecklist } from "./Onboarding";
@@ -435,7 +436,17 @@ export default function TheLabPage() {
               <ForecastDivergence />
             </Collapsible>
           );
-          const lenses = <>{lensesHeader}{funding}{positioning}{catalysts}{forecast}</>;
+          // Q SIGNALS — Quotient's PAID fair-value read on liquid prediction markets, the
+          // forecasting DESK's number beside Forecast Divergence's free crowd lens: fair
+          // value vs the venue price, conviction-ranked. Collapsed + lazy-mounted (Collapsible
+          // renders children only when open), so it spends a Quotient credit only when a user
+          // opens it. Fail-soft when the key is unset or credits are dry.
+          const qsignals = (
+            <Collapsible title="◇ Q SIGNALS · QUOTIENT" subtitle="the forecasting desk's fair value vs the market — conviction-ranked" shortTitle="◇ Q SIGNALS" shortSub="fair value vs the market" storageKey="nx_qsignals_open">
+              <QSignals />
+            </Collapsible>
+          );
+          const lenses = <>{lensesHeader}{funding}{positioning}{catalysts}{forecast}{qsignals}</>;
           // The splash only greets a brand-new DISCONNECTED visitor who hasn't cleared
           // onboarding yet (in practice the full-screen modal covers this — it's a
           // defensive fallback). Everyone else — connected, or a guest/onboarded preview
