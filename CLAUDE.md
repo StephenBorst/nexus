@@ -239,7 +239,16 @@ Sweep → Save → Publish → Community board → COPY → activate → graded.
   (`DEFAULT_CONFIG` fundingThreshold 0.02, maxTradesPerDay 4). **Agent net-negative = the #1 real constraint.**
 - **OI history logging:** brain records hourly `{t,price,oi,funding}` into `oi:hist:{symbol}` (core BTC/ETH/SOL +
   watchlists, independent of position state — bug fixed where it only ran for flat users). `GET /agent/oi-history/
-  :symbol`. **⏳ Once ~2-3 wks mature (≈mid-July 2026) → wire OI into backtest so CONFLUENCE (flagship) is testable.**
+  :symbol`. **✅ OI→BACKTEST WIRE SHIPPED (don't re-derive).** `backtest.mjs` `makeOiChangeAt` builds a NO-LOOKAHEAD
+  fractional OI-delta from oi:hist; `runBacktest` feeds it into `deriveSignal` per bar; `backtestConfig`/`runSweep`/
+  `walkForwardValidate` all take `oiHistBySymbol`. `strategies.mjs loadOiHistForBacktest` gates on coverage
+  (`OI_BACKTEST_MIN_DAYS=14`, `OI_BACKTEST_MIN_SAMPLES=200`, min across the universe) → `oiMature`; index.js passes
+  real OI in ONLY when mature, else CONFLUENCE/OI_ONLY are flagged `untestable` + the backtest routes surface
+  `oiTested`/`oiCoverage`/`oiWindowDays` + honest notes, rendered by `AgentBacktestCard.tsx`. So CONFLUENCE lights up
+  AUTOMATICALLY the moment the gate clears (brain caps oi:hist at 2200 pts ≈90d hourly). Tests: `backtest.test.mjs`
+  proves the no-lookahead lookup + CONFLUENCE fires WITH recorded OI / abstains WITHOUT it (no fabricated divergence).
+  To confirm live maturity: run a CONFLUENCE backtest in the Lab — the note reads either "tested over Nd of recorded
+  OI" or "still maturing (Nd/14d, Ns/200)". **CONFLUENCE was NOT-yet-testable = STALE; it is wired + self-gating now.**
 - **Strategy library + sharing:** `/agent/:addr/strategies` CRUD (save/delete owner-authed, list public) + `/publish`
   toggle; `GET /agents/strategies/public?style=` ranks public strategies by the **author's GRADED record** (not
   backtest — keeps discovery on-moat), optional style filter. Config-tab STRATEGY LIBRARY + COMMUNITY STRATEGIES cards.

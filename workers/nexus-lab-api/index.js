@@ -4738,7 +4738,8 @@ document.getElementById("btn").addEventListener("click",go);
     // "Test my strategy": replays the given config over Orderly OHLC + funding
     // history using the deployed deriveSignal/evaluateExit, returns per-symbol +
     // combined stats. PRO-gated (walletSig → ecrecover → walletIsPro). Read-only.
-    // Note: CONFLUENCE/OI_ONLY can't be backtested (no OI history) — surfaced to UI.
+    // Note: CONFLUENCE/OI_ONLY are testable once recorded oi:hist matures past the gate
+    // (loadOiHistForBacktest); until then they're flagged untestable + surfaced to the UI.
     if (parts[0] === "agent" && parts[1] === "backtest" && request.method === "POST") {
       let body; try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
       const { config, walletSig } = body || {};

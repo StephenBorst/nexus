@@ -5,9 +5,12 @@
 // "Test my strategy" endpoint) AND the dev runner in tools/backtest, so there is
 // ONE engine and it can't drift from production.
 //
-// Data reality (Orderly): price OHLC + funding-rate history exist; OI history does
-// NOT (only current). So oiChange is fed as 0 → CONFLUENCE / OI_ONLY are inert here;
-// MOMENTUM / MEAN_REVERSION / FUNDING_ONLY + the full exit toolkit are backtestable.
+// Data reality (Orderly): price OHLC + funding-rate history exist; there is NO OI-history
+// ENDPOINT. So the OI series is fed from the brain's own recorded oi:hist:{symbol} (via
+// makeOiChangeAt / oiHistBySymbol) once it has matured past the coverage gate — which is
+// what makes CONFLUENCE / OI_ONLY testable. Until a bar has a recorded OI delta, oiChange
+// is null → CONFLUENCE / OI_ONLY simply don't fire there (no fabricated divergence).
+// MOMENTUM / MEAN_REVERSION / FUNDING_ONLY + the full exit toolkit are always backtestable.
 import { deriveSignal } from "../nexus-agent-brain/logic.mjs";
 import { computePnl, evaluateExit, breakevenArmed, volScaledLevels } from "../nexus-agent-exec/logic.mjs";
 import { percentileRank } from "./logic.mjs";
