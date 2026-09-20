@@ -162,13 +162,29 @@ export async function signXPayment(provider: Eip1193, g: GuardedReq, x402Version
 // ── Client-DIRECT x402 pull ───────────────────────────────────────────────────
 const QUOTIENT_SIGNALS_URL = "https://quotient-api-gateway.onrender.com/api/v1/signals";
 
-// Best-effort decode of a base64 x402 header (payment-required / payment-response) → { error, message }.
-function decodeX402Header(hdr: string | null): { error?: string; message?: string; accepts?: unknown; resource?: unknown; extensions?: unknown; x402Version?: number } | null {
+// Best-effort decode of a base64 x402 header (payment-required / payment-response). The
+// payment-response (returned on the paid 200) carries the SETTLEMENT proof — Quotient's
+// facilitator submitted the EIP-3009 authorization on-chain and reports the Base tx here
+// ({ success, transaction, network, payer }); we surface it as the receipt next to the cards.
+function decodeX402Header(hdr: string | null): {
+  error?: string; message?: string; accepts?: unknown; resource?: unknown; extensions?: unknown; x402Version?: number;
+  success?: boolean; transaction?: string; txHash?: string; network?: string; payer?: string;
+} | null {
   if (!hdr) return null;
   try { return JSON.parse(atob(hdr.replace(/-/g, "+").replace(/_/g, "/"))); } catch { return null; }
 }
 
-export async function loadQuotientDirect(provider: Eip1193, minConviction = 3): Promise<{ signals: unknown[]; usd: number }> {
+// The on-chain settlement receipt: the Base tx hash Quotient's facilitator submitted (+ network).
+// Null on a hit that never charged (already-served 200). Read from the payment-response header only.
+export interface Settlement { tx: string | null; network: string | null; }
+
+const asTxHash = (v: unknown): string | null =>
+  typeof v === "string" && /^0x[0-9a-fA-F]{64}$/.test(v) ? v : null;
+
+export async function loadQuotientDirect(
+  provider: Eip1193,
+  minConviction = 3,
+): Promise<{ signals: unknown[]; usd: number; settlement: Settlement }> {
   const mc = Number.isFinite(minConviction) && minConviction >= 1 && minConviction <= 5 ? minConviction : 3;
   const url = `${QUOTIENT_SIGNALS_URL}?min_conviction=${mc}`;
   const rawSignals = (d: unknown): unknown[] => {
@@ -179,7 +195,7 @@ export async function loadQuotientDirect(provider: Eip1193, minConviction = 3): 
   let r1: Response;
   try { r1 = await fetch(url, { headers: { Accept: "application/json" } }); }
   catch { throw new Error("Couldn't reach Quotient — try again shortly."); }
-  if (r1.status === 200) return { signals: rawSignals(await r1.json().catch(() => null)), usd: 0 }; // already served
+  if (r1.status === 200) return { signals: rawSignals(await r1.json().catch(() => null)), usd: 0, settlement: { tx: null, network: null } }; // already served, no charge
   if (r1.status === 403) throw new Error("Quotient blocked the request (403) — try again shortly.");
   if (r1.status !== 402) throw new Error(`Quotient unavailable (${r1.status}).`);
   let accepts: unknown[] = [];
@@ -208,7 +224,13 @@ export async function loadQuotientDirect(provider: Eip1193, minConviction = 3): 
   let r2: Response;
   try { r2 = await fetch(url, { headers: { Accept: "application/json", "PAYMENT-SIGNATURE": header } }); }
   catch { throw new Error("Payment sent but the data request was blocked — try again shortly."); }
-  if (r2.ok) return { signals: rawSignals(await r2.json().catch(() => null)), usd: g.usd };
+  if (r2.ok) {
+    // Paid + served. The payment-response header proves the on-chain settlement (Base tx hash).
+    const receipt = decodeX402Header(r2.headers.get("payment-response") || r2.headers.get("PAYMENT-RESPONSE"));
+    const tx = asTxHash(receipt?.transaction) || asTxHash(receipt?.txHash);
+    const network = typeof receipt?.network === "string" ? receipt.network : null;
+    return { signals: rawSignals(await r2.json().catch(() => null)), usd: g.usd, settlement: { tx, network } };
+  }
   // Surface the facilitator's ACTUAL reason (payment-response / payment-required header, or body).
   const why = decodeX402Header(r2.headers.get("payment-response") || r2.headers.get("payment-required"));
   const body = (await r2.json().catch(() => null)) as { error?: string; message?: string } | null;

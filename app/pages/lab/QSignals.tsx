@@ -52,6 +52,8 @@ function fmtEnds(iso: string | null): string {
 function fmtClock(ts: number): string {
   try { return new Date(ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
 }
+// A Base tx hash → the short receipt form used everywhere on-chain: 0xcbd2…4b36 (6 + 4).
+function shortTx(tx: string): string { return `${tx.slice(0, 6)}…${tx.slice(-4)}`; }
 // Conviction tier → the ONE bit of chroma on a card: green only for "high" (data role),
 // then quiet tones. If everything glows, nothing reads as the strong signal.
 const tierColor = (tier: number | null) => (tier != null && tier >= 3 ? POS : tier === 2 ? FOG : FAINT);
@@ -143,7 +145,7 @@ function LoadButton({ label, onClick, disabled }: { label: string; onClick: () =
   );
 }
 
-interface Cached { board: QBoard; usd: number; ts: number; }
+interface Cached { board: QBoard; usd: number; ts: number; settlementTx?: string | null; }
 function readCache(): Cached | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
@@ -166,6 +168,7 @@ export function QSignals({ address }: { address?: string | null }) {
 
   const [board, setBoard] = useState<QBoard | null>(null);
   const [paidUsd, setPaidUsd] = useState<number | null>(null);
+  const [settlementTx, setSettlementTx] = useState<string | null>(null); // Base tx from the paid pull
   const [loadedAt, setLoadedAt] = useState<number | null>(null);
   const [phase, setPhase] = useState<"idle" | "loading">("idle");
   const [status, setStatus] = useState("");
@@ -176,7 +179,7 @@ export function QSignals({ address }: { address?: string | null }) {
   useEffect(() => {
     if (!isPro) return;
     const c = readCache();
-    if (c) { setBoard(c.board); setPaidUsd(c.usd); setLoadedAt(c.ts); }
+    if (c) { setBoard(c.board); setPaidUsd(c.usd); setLoadedAt(c.ts); setSettlementTx(c.settlementTx ?? null); }
   }, [isPro]);
 
   const load = async () => {
@@ -187,10 +190,11 @@ export function QSignals({ address }: { address?: string | null }) {
     try {
       // The BROWSER pays Quotient directly (residential IP) — Quotient 403s our worker's IP,
       // so this can never go through the server. Then shape client-side (qshape).
-      const { signals: raw, usd } = await loadQuotientDirect(provider, 1);
+      const { signals: raw, usd, settlement } = await loadQuotientDirect(provider, 1);
       const board = shapeQuotientSignals(raw);
-      setBoard(board); setPaidUsd(usd); setLoadedAt(Date.now());
-      writeCache({ board, usd, ts: Date.now() });
+      const ts = Date.now();
+      setBoard(board); setPaidUsd(usd); setLoadedAt(ts); setSettlementTx(settlement.tx);
+      writeCache({ board, usd, ts, settlementTx: settlement.tx });
     } catch (e) {
       setErr((e as Error)?.message || "Couldn't load signals.");
     } finally {
@@ -270,6 +274,15 @@ export function QSignals({ address }: { address?: string | null }) {
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
               <LoadButton label={loading ? "loading…" : "refresh · $0.01"} onClick={load} disabled={loading} />
               {loadedAt ? <span style={{ color: FAINT, fontSize: 9.5, fontFamily: MF }}>loaded {fmtClock(loadedAt)}{paidUsd != null ? ` · paid $${paidUsd.toFixed(2)}` : ""}</span> : null}
+              {settlementTx ? (
+                <a href={`https://basescan.org/tx/${settlementTx}`} target="_blank" rel="noreferrer noopener" className="nx-press"
+                  title="On-chain USDC settlement on Base"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, color: FAINT, fontSize: 9.5, fontFamily: MF, textDecoration: "none" }}
+                >
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: POS, display: "inline-block" }} />
+                  settled <span style={{ color: FOG }}>{shortTx(settlementTx)}</span> ↗
+                </a>
+              ) : null}
               {loading && status ? <span style={{ color: DIM, fontSize: 9.5, fontFamily: MF }}>{status}</span> : null}
             </div>
             {err ? <div style={{ marginTop: 8, color: C.neg, fontSize: 10.5, fontFamily: MF }}>{err}</div> : null}
