@@ -110,6 +110,11 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
       // to funding or OI.
       if (raw.basisSide === "LONG" || raw.basisSide === "SHORT") {
         direction = raw.basisSide; confidence = 70; why = "basis-extreme fade";
+      } else if (typeof raw.basisReason === "string" && raw.basisReason) {
+        // Surface WHY it sat out ("accruing (12/48h)" / "basis stale (5h)" / "basis not
+        // extreme") instead of a bare "no signal" — this is the read the operator needs
+        // on day one to tell "not wired" apart from "wired and correctly quiet".
+        why = raw.basisReason;
       }
       break;
     case "EXTERNAL":

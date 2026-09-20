@@ -300,3 +300,10 @@ test("BASIS_FADE: ignores a malformed side rather than trusting it", () => {
     assert.equal(deriveSignal({ basisSide: bad, hasPrev: true }, { signalMode: "BASIS_FADE" }).direction, "NONE");
   }
 });
+
+test("BASIS_FADE: a quiet tick explains itself", () => {
+  const r = deriveSignal({ basisSide: null, basisReason: "accruing (12/48h)", hasPrev: true }, { signalMode: "BASIS_FADE" });
+  assert.equal(r.direction, "NONE");
+  assert.equal(r.reason, "accruing (12/48h)", "'no signal' can't distinguish not-wired from correctly-quiet");
+  assert.equal(deriveSignal({ hasPrev: true }, { signalMode: "BASIS_FADE" }).reason, "no signal");
+});
