@@ -5421,6 +5421,9 @@ document.getElementById("btn").addEventListener("click",go);
         const state = JSON.parse(stateRaw);
         const cleared = (state.paper_trades || []).length;
         state.paper_trades = [];
+        // RESET means the record starts clean — clear the LIFETIME aggregate too,
+        // or the card would keep reporting totals for trades the user just wiped.
+        state.paper_agg = null;
         // Also reset paper-mode daily counters so the record starts clean
         if (state.current_position?.paper) state.current_position = null;
         state.daily_pnl = 0;

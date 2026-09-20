@@ -13,6 +13,7 @@
 
 import * as ed from "@noble/ed25519";
 import bs58 from "bs58";
+import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
 import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, dcaTakeProfitPrice, breakevenArmed, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
@@ -1239,9 +1240,13 @@ async function partialClose(address, state, config, env, action, cache) {
     opened_at: new Date(pos.opened_at).toISOString(), closed_at: new Date().toISOString(),
   };
   if (paper) {
+    // tp_level is added on the PAPER row only — the live insert keeps its exact
+    // existing column set (an unmigrated column would drop the row to the fallback).
+    const paperSlice = { id: `paper_${Date.now()}`, tp_level: action.level, ...sliceTrade };
     state.paper_trades = state.paper_trades || [];
-    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...sliceTrade });
+    state.paper_trades.unshift(paperSlice);
     if (state.paper_trades.length > 50) state.paper_trades.pop();
+    state.paper_agg = accruePaperAgg(state.paper_agg, paperSlice);
   } else {
     await logAgentTrade(address, env, {
       ...sliceTrade,
@@ -1363,6 +1368,9 @@ async function closePosition(address, state, env, reason, cache) {
     state.paper_trades = state.paper_trades || [];
     state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable });
     if (state.paper_trades.length > 50) state.paper_trades.pop(); // keep last 50
+    // ⚠️ That pop is why the window is NOT the record. Accrue the LIFETIME aggregate
+    // here, once, at close — it cannot be rebuilt from a truncated window later.
+    state.paper_agg = accruePaperAgg(state.paper_agg, auditable);
   } else {
     await logAgentTrade(address, env, auditable);
   }

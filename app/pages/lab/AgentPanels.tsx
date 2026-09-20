@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import type { AgentTrade } from "./types";
 import { agentCardStyle, agentLabelStyle, agentInputStyle, navBtnStyle } from "./styles";
 import { fmtUsdCompact, fmtUsdCompactAbs, fmtUsdExact } from "@/lib/fmtUsd.mjs";
+import { paperBlotter, tradeNotional, holdHours } from "@/lib/paperStats.mjs";
 
 /**
  * Number input that holds its own text state so you can clear/edit freely
@@ -111,13 +112,16 @@ export function AgentTrackRecord({ title, accent, trades, paper, onReset, summar
   // window (and `since` is just the oldest RETAINED trade, not the record start), so
   // label it honestly rather than imply a lifetime total. Auto-off if a summary lands.
   const rolling = !!paper && !useSummary && trades.length >= 50;
+  // Lifetime = a server-accrued aggregate exists, so the tiles are the REAL record and
+  // `trades` is just the rolling window exec still retains. Say both, plainly.
+  const lifetime = !!paper && useSummary;
 
   return (
     <div style={{ ...agentCardStyle, borderColor: tr > 0 ? (net >= 0 ? "#33333a" : "#4a1e22") : "#232327" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ ...agentLabelStyle, color: accent }}>{title}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {since && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>{rolling ? `last 50 · since ${since}` : `since ${since}`}</span>}
+          {since && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>{lifetime ? `lifetime · since ${since}` : rolling ? `last 50 · since ${since}` : `since ${since}`}</span>}
           {onReset && tr > 0 && (
             <button onClick={onReset} style={{ ...navBtnStyle, fontSize: 9, padding: "3px 10px", color: "#d4d4d8", borderColor: "#33333a" }}>RESET</button>
           )}
@@ -148,15 +152,105 @@ export function AgentTrackRecord({ title, accent, trades, paper, onReset, summar
               </div>
             ))}
           </div>
+          {lifetime && (
+            <div style={{ marginTop: 8, fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>
+              last {trades.length} · rolling <span style={{ color: "#52525b" }}>— the window exec retains; totals above are lifetime</span>
+            </div>
+          )}
           <div style={{ marginTop: 10, fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#52525b", lineHeight: 1.5 }}>
             {paper
-              ? (rolling
+              ? (lifetime
+                  ? "🧪 Simulated results — LIFETIME totals, accrued once per close so they survive the rolling window. Paper never touches the exchange; encouraging, not a guarantee."
+                  : rolling
                   ? "🧪 Simulated results — the most recent 50 paper trades (rolling window), not a lifetime total. Paper never touches the exchange; encouraging, not a guarantee."
                   : "🧪 Simulated results — paper trades never touch the exchange. A great paper record is encouraging, not a guarantee.")
               : "⚠ Past performance does not guarantee future results. Markets are risky — only deploy capital you can afford to lose, and start small."}
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── PAPER BLOTTER — how trades actually END ──────────────────────────────────
+// "Why are losses bigger than wins?" is unanswerable from a net number. This prints the
+// distribution instead: which exit closes each loss, where wins die on the scale-out
+// ladder, and avg win vs avg loss at the CURRENT position size only — mixing an old fat
+// notional into avg$ makes it meaningless. Read-only: retuning TP/SL is a separate call.
+export function PaperBlotter({ trades, currentNotional }: { trades: AgentTrade[]; currentNotional?: number | null }) {
+  const b = paperBlotter(trades, { currentNotional: currentNotional ?? null });
+  if (!b.n) return null;
+
+  const Chips = ({ label, parts, tone }: { label: string; parts: { label: string; n: number; pct: number }[]; tone: string }) => (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+      <span style={{ ...agentLabelStyle, fontSize: 9, minWidth: 74 }}>{label}</span>
+      {parts.length === 0
+        ? <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b" }}>none yet</span>
+        : parts.map((p) => (
+            <span key={p.label} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
+              {p.label} <b style={{ color: tone }}>{p.pct}%</b> <span style={{ color: "#52525b" }}>({p.n})</span>
+            </span>
+          ))}
+    </div>
+  );
+
+  return (
+    <div style={agentCardStyle}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ ...agentLabelStyle, color: "#ededf0" }}>🧾 PAPER BLOTTER — how trades end</div>
+        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>
+          {b.n} closed · {b.winRate}% win · window
+        </span>
+      </div>
+
+      <Chips label="LOSSES END" parts={b.lossByExit} tone="#f7525f" />
+      <Chips label="WINS END" parts={b.winByExit} tone="#3ecf8e" />
+
+      {b.atSize && (
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+          <span style={{ ...agentLabelStyle, fontSize: 9, minWidth: 74 }}>AT SIZE</span>
+          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
+            {fmtUsdCompactAbs(b.atSize.notional)} notional · avg win <b style={{ color: "#3ecf8e" }}>{fmtUsdCompactAbs(b.atSize.avgWin)}</b>
+            {" · "}avg loss <b style={{ color: "#f7525f" }}>{fmtUsdCompactAbs(b.atSize.avgLoss)}</b>
+            {" · "}<span style={{ color: "#52525b" }}>{b.atSize.n} trades{b.atSize.excluded ? `, ${b.atSize.excluded} at other sizes excluded` : ""}</span>
+          </span>
+        </div>
+      )}
+
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+        <span style={{ ...agentLabelStyle, fontSize: 9, minWidth: 74 }}>HOLD</span>
+        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
+          win <b style={{ color: "#ededf0" }}>{b.avgHoldWinH.toFixed(1)}h</b> · loss <b style={{ color: "#ededf0" }}>{b.avgHoldLossH.toFixed(1)}h</b>
+        </span>
+      </div>
+
+      {/* Dense row table — scrolls on mobile rather than clipping (inline-style app). */}
+      <div style={{ marginTop: 10, overflowX: "auto", maxHeight: 280, overflowY: "auto" }}>
+        <div style={{ minWidth: 420 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 0.5fr 0.7fr 0.7fr 0.9fr 0.5fr", gap: 6, padding: "0 0 4px", borderBottom: "1px solid #232327", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>
+            <span>MARKET</span><span>SIDE</span><span style={{ textAlign: "right" }}>NOTIONAL</span>
+            <span style={{ textAlign: "right" }}>P&L</span><span>EXIT</span><span style={{ textAlign: "right" }}>HOLD</span>
+          </div>
+          {trades.map((t) => {
+            const n = tradeNotional(t), h = holdHours(t);
+            const lvl = Number.isFinite(Number(t.tp_level)) ? `TP${Number(t.tp_level)}` : null;
+            return (
+              <div key={t.id} style={{ display: "grid", gridTemplateColumns: "1fr 0.5fr 0.7fr 0.7fr 0.9fr 0.5fr", gap: 6, padding: "4px 0", borderBottom: "1px solid #141416", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
+                <span style={{ color: "#d4d4d8" }}>{t.symbol.replace("PERP_", "").replace("_USDC", "")}</span>
+                <span style={{ color: t.direction === "LONG" ? "#3ecf8e" : "#f7525f" }}>{t.direction === "LONG" ? "L" : "S"}</span>
+                <span style={{ textAlign: "right" }}>{n == null ? "—" : fmtUsdCompactAbs(n)}</span>
+                <span style={{ textAlign: "right", color: t.pnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{fmtUsdCompact(t.pnl)}</span>
+                <span style={{ color: "#71717a" }}>{lvl ?? t.reason}</span>
+                <span style={{ textAlign: "right", color: "#52525b" }}>{h == null ? "—" : `${h.toFixed(1)}h`}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ marginTop: 8, fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#52525b", lineHeight: 1.5 }}>
+        Distribution over the retained window (not lifetime). Exit names are exec&apos;s own:
+        stop / time / trail / breakeven / take-profit / scale-out, plus external-flip for a webhook close.
+      </div>
     </div>
   );
 }

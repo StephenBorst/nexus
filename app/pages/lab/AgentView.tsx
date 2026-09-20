@@ -9,6 +9,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { isProStrategy } from "@/config/subscription";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
 import { fmtUsdExact } from "@/lib/fmtUsd.mjs";
+import { paperSummary } from "@/lib/paperStats.mjs";
 import { STYLE_PRESETS, deriveStyle, type TradingStyle } from "@/config/agentStyles";
 import { AGENT_PREFILL_KEY, DIRECTIVE_PREFILL_KEY, type AgentPrefill, type DirectiveDraft } from "@/utils/agentPrefill";
 import { PnlChart, CountUp, TableSkeleton, Coachmark } from "./components";
@@ -21,7 +22,7 @@ import { SharePoster, type PosterData } from "./SharePoster";
 // readers now live beside this file. Behavior is unchanged — the move was purely
 // mechanical, which matters because this is the agent MONEY PATH.
 import { AGENT_API, TG_BOT, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentStanding } from "./agentTypes";
-import { NumberField, AgentTrackRecord, AgentToggleCard } from "./AgentPanels";
+import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter } from "./AgentPanels";
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
@@ -963,7 +964,13 @@ export function AgentView() {
           {/* Track record — surfaced before activation so users judge on real numbers.
               Live (Supabase) and Paper (state ledger) are kept strictly separate. */}
           {(config.mode === "PAPER" || (agentState?.paper_trades?.length ?? 0) > 0) && (
-            <AgentTrackRecord title="🧪 PAPER TRACK RECORD" accent="#d4d4d8" trades={agentState?.paper_trades ?? []} paper onReset={resetPaperRecord} />
+            <>
+              {/* summary = the LIFETIME aggregate exec accrues at close; the trades prop is
+                  the rolling last-50 window. The card shows lifetime totals + names the window. */}
+              <AgentTrackRecord title="🧪 PAPER TRACK RECORD" accent="#d4d4d8" trades={agentState?.paper_trades ?? []} paper onReset={resetPaperRecord}
+                summary={paperSummary((agentState as unknown as { paper_agg?: unknown } | null)?.paper_agg ?? null)} />
+              <PaperBlotter trades={agentState?.paper_trades ?? []} currentNotional={(config.capitalPerTrade || 0) * (config.leverage || 1)} />
+            </>
           )}
 
           {/* Graduation nudge — once a paper agent is proven, bridge to live */}

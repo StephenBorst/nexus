@@ -104,6 +104,21 @@ is everything built on top:
 ## Agent paper mode details
 - Frontend default mode = PAPER (new users start risk-free). PAPER needs no trading key.
 - Track records are kept strictly separate: LIVE (Supabase) vs PAPER (`state.paper_trades`, capped 50).
+- **⚠️ The 50-cap is a WINDOW, not the record (fixed 2026-09-20).** exec pops past 50, so the card's
+  TRADES stuck at 50 and "since" slid forward as rows fell off. Lifetime is now accrued ONCE at close
+  into **`state.paper_agg`** (`{trades,wins,losses,grossWin,grossLoss,net,firstTradeAt,lastTradeAt}`) —
+  it CANNOT be rebuilt from a truncated window, so the accrual must happen at write time. Pure math in
+  **`app/lib/paperStats.mjs`** (`accruePaperAgg`/`paperSummary`/`paperBlotter`/`tradeNotional`/`holdHours`,
+  tested) imported by BOTH exec (accrual) and the Lab (render) so they can't disagree. lab-api ships it
+  free (GET returns `state` wholesale). AgentTrackRecord shows LIFETIME tiles + a "last N · rolling" line
+  naming the window. `paper/reset` clears `paper_agg` too. Live money path untouched.
+- **🧾 PAPER BLOTTER** (`PaperBlotter` in `AgentPanels.tsx`): per-trade symbol/side/notional/pnl/exit/hold +
+  one-line breakdowns of how losses vs wins END, and avg win/loss at the CURRENT notional only (old fat
+  notionals excluded — mixing sizes makes avg$ meaningless). `notional = entry_price × qty` and hold =
+  `closed_at − opened_at`, both DERIVED, so the blotter works on rows recorded before it shipped.
+  ⚠️ **Real exit vocabulary** (don't invent buckets): `SL · TIMEOUT · TRAIL · BE · TP · TP_PARTIAL ·
+  KILLED · WEBHOOK_CLOSE`. **There is no "signal flip" exit** — WEBHOOK_CLOSE is the nearest analogue.
+  `tp_level` is stamped on PAPER slice rows only (the live Supabase insert keeps its exact column set).
 - API endpoints: `POST /agent/:address/paper/reset` (clear paper ledger), `POST /agent/:address/test-signal`
   (DEV-only force a paper signal; hard-refuses unless mode===PAPER). Force button is gated to
   `import.meta.env.DEV`.

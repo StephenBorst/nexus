@@ -180,6 +180,7 @@ export interface AgentTrade {
   pnl: number;
   pnl_percent?: number;    // P&L as % of margin
   reason: string;
+  tp_level?: number | null; // scale-out ladder level (PAPER rows only; older rows: absent)
   strategy?: string | null; // "DAY · FUNDING_ONLY" — stamped at entry (older trades: null)
   opened_at: string;
   closed_at: string;
