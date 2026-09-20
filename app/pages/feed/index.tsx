@@ -19,6 +19,7 @@ import { NexusBuyBar } from "@/components/NexusBuyBar";
 import type { ThesisTrade } from "@/pages/lab/types";
 import { SocialBar } from "@/components/SocialBar";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
+import { fmtUsdCompact } from "@/lib/fmtUsd.mjs";
 import { Sparkline, SectionHeader } from "@/pages/lab/components";
 import { getAgentSig } from "@/pages/lab/agentKeys";
 import { chartImageList, effectiveStatus } from "@/pages/lab/helpers";
@@ -1393,7 +1394,7 @@ function AgentTrackRecord() {
         {[
           { label: "TRADES", val: String(s.trades), color: "#fff" },
           { label: "WIN RATE", val: `${s.winRate}%`, color: s.winRate >= 50 ? "#ededf0" : "#fbbf24" },
-          { label: "NET P&L", val: `${s.net >= 0 ? "+" : "-"}$${Math.abs(s.net).toFixed(2)}`, color: s.net >= 0 ? "#3ecf8e" : "#f7525f" },
+          { label: "NET P&L", val: fmtUsdCompact(s.net), color: s.net >= 0 ? "#3ecf8e" : "#f7525f" },
         ].map((x) => (
           <div key={x.label} style={{ textAlign: "right", lineHeight: 1.25 }}>
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: "bold", color: x.color }}>{x.val}</div>

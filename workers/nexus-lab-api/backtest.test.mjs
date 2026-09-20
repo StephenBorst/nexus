@@ -117,3 +117,54 @@ test("aggregate: taker fees reduce net vs a zero-fee run", () => {
   assert.ok(net.netUsd < gross.netUsd, "fees only ever cut into net");
   assert.equal(gross.trades, 3);
 });
+
+// ── The preset knobs must CHANGE the result, or a "strategy" is decoration ────
+// A "Regime-Gated Invert" TEST that prints byte-identical numbers to raw CONFLUENCE
+// means the config never reached deriveSignal. These pin each knob to a real effect.
+const oscCandles = (n) => Array.from({ length: n }, (_, i) => {
+  const c = 100 + Math.sin(i / 7) * 3 + i * 0.02;     // oscillates across sessions + vol
+  return { t: Math.floor(BASE_MS / 1000) + i * 3600, o: c, h: c * 1.008, l: c * 0.992, c };
+});
+const decliningOi = (candles) => makeOiChangeAt(candles.map((c, i) => ({ t: c.t * 1000, oi: 5000 - i * 2 })));
+const BASE_CFG = { signalMode: "CONFLUENCE", fundingThreshold: 0.01, oiChangeThreshold: 0, tpPercent: 2, slPercent: 1, maxHoldHours: 4, leverage: 5, capitalPerTrade: 50 };
+const runCfg = (cfg) => {
+  const candles = oscCandles(400);
+  return runBacktest(candles, () => 0.0002, { ...BASE_CFG, ...cfg }, null, decliningOi(candles));
+};
+
+test("invertSignal actually flips the trade and changes P&L", () => {
+  const plain = runCfg({});
+  const inv = runCfg({ invertSignal: true });
+  assert.ok(plain.trades > 0 && inv.trades > 0, "both sides must actually trade");
+  assert.equal(plain._trades[0].direction, "SHORT");
+  assert.equal(inv._trades[0].direction, "LONG", "invert takes the OPPOSITE side");
+  assert.notEqual(plain.netUsd, inv.netUsd, "an inverted run cannot have identical P&L");
+});
+
+test("tradeSessions actually gates entries", () => {
+  const plain = runCfg({});
+  const gated = runCfg({ tradeSessions: ["US", "EUROPE"] });
+  assert.ok(gated.trades < plain.trades, `session gate must drop trades (${plain.trades} -> ${gated.trades})`);
+  assert.ok(gated.trades > 0, "but not to zero on this fixture");
+});
+
+test("minVolAtrPct actually gates entries when the bar is too calm", () => {
+  const plain = runCfg({});
+  const gated = runCfg({ minVolAtrPct: 5 }); // above this fixture's ATR%
+  assert.ok(gated.trades < plain.trades, `vol floor must suppress entries (${plain.trades} -> ${gated.trades})`);
+});
+
+test("oiChangeThreshold actually gates the OI rule", () => {
+  const plain = runCfg({});
+  const strict = runCfg({ oiChangeThreshold: 1 }); // the shipped preset's value: 1% hourly OI move
+  assert.notEqual(strict.trades, plain.trades, "a 1% OI floor cannot leave the trade count untouched");
+});
+
+test("the full Regime-Gated Invert composition differs from raw CONFLUENCE", () => {
+  const plain = runCfg({});
+  const preset = runCfg({ invertSignal: true, minVolAtrPct: 0.7, tradeSessions: ["US", "EUROPE"], oiChangeThreshold: 1 });
+  assert.ok(
+    preset.trades !== plain.trades || preset.netUsd !== plain.netUsd,
+    "identical numbers would mean the preset never reached the engine",
+  );
+});

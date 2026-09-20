@@ -8,6 +8,7 @@ import { agentCardStyle, agentLabelStyle, agentInputStyle, agentBtnStyle, btnPri
 import { useSubscription } from "@/hooks/useSubscription";
 import { isProStrategy } from "@/config/subscription";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
+import { fmtUsdExact } from "@/lib/fmtUsd.mjs";
 import { STYLE_PRESETS, deriveStyle, type TradingStyle } from "@/config/agentStyles";
 import { AGENT_PREFILL_KEY, DIRECTIVE_PREFILL_KEY, type AgentPrefill, type DirectiveDraft } from "@/utils/agentPrefill";
 import { PnlChart, CountUp, TableSkeleton, Coachmark } from "./components";
@@ -971,14 +972,19 @@ export function AgentView() {
             const net = pt.reduce((s, t) => s + t.pnl, 0);
             const wins = pt.filter((t) => t.pnl > 0).length;
             const wr = pt.length ? Math.round((wins / pt.length) * 100) : 0;
+            // exec caps paper_trades at the last 50, so past the cap these numbers are a
+            // ROLLING window, not a lifetime record — say so rather than imply a total.
+            const rolling = pt.length >= 50;
             if (pt.length < 5 || net <= 0) return null;
             return (
               <div style={{ ...agentCardStyle, borderColor: "#33333a", background: "#1a1a1e" }}>
                 <div style={{ ...agentLabelStyle, color: "#ededf0" }}>🎓 READY TO GO LIVE?</div>
                 <div style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, lineHeight: 1.6, marginTop: 8 }}>
-                  Your paper agent is proven — <strong style={{ color: "#ededf0" }}>+${net.toFixed(2)}</strong> over{" "}
-                  <strong style={{ color: "#fff" }}>{pt.length}</strong> simulated trades ({wr}% win rate). Same strategy,
-                  same guardrails — switch it to live to put it to work for real.
+                  Your paper agent is up <strong style={{ color: "#ededf0" }}>{fmtUsdExact(net)}</strong> over{" "}
+                  <strong style={{ color: "#fff" }}>{pt.length}</strong> simulated trades ({wr}% win rate)
+                  {rolling ? " — the rolling last 50, not a lifetime record" : ""}. Paper fills don&apos;t slip, and nothing
+                  is graded until it trades live: a reason to look closer, not proof. Same strategy, same guardrails —
+                  switch it to live when you&apos;re ready.
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <button onClick={() => { setConfig({ ...config, mode: "ASSISTED" }); setSuccess("Mode → ASSISTED. Review params + hit Update below."); setTimeout(() => setSuccess(null), 4000); }}

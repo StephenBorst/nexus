@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import type { AgentTrade } from "./types";
 import { agentCardStyle, agentLabelStyle, agentInputStyle, navBtnStyle } from "./styles";
+import { fmtUsdCompact, fmtUsdCompactAbs, fmtUsdExact } from "@/lib/fmtUsd.mjs";
 
 /**
  * Number input that holds its own text state so you can clear/edit freely
@@ -132,15 +133,18 @@ export function AgentTrackRecord({ title, accent, trades, paper, onReset, summar
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(108px, 1fr))", gap: 12, marginTop: 8 }}>
             {[
-              { label: "NET P&L", value: `${net >= 0 ? "+" : "-"}$${Math.abs(net).toFixed(2)}`, color: net >= 0 ? "#3ecf8e" : "#f7525f" },
-              { label: "WIN RATE", value: `${wr.toFixed(1)}%`, color: wr >= 50 ? "#3ecf8e" : "#f7525f" },
-              { label: "TRADES", value: String(tr), color: "#d4d4d8" },
-              { label: "AVG WIN", value: `$${avgWin.toFixed(2)}`, color: "#ededf0" },
-              { label: "AVG LOSS", value: `$${avgLoss.toFixed(2)}`, color: "#f7525f" },
-            ].map(({ label, value, color }) => (
-              <div key={label}>
+              // COMPACT value + exact-in-title. A 6-figure P&L ("+$148617.53") is wider than
+              // a tile track at phone width, so it overflowed and ran into the next value
+              // ("+$148617.5376.0%"). minWidth:0 + nowrap keeps every cell inside its lane.
+              { label: "NET P&L", value: fmtUsdCompact(net), exact: fmtUsdExact(net), color: net >= 0 ? "#3ecf8e" : "#f7525f" },
+              { label: "WIN RATE", value: `${wr.toFixed(1)}%`, exact: "", color: wr >= 50 ? "#3ecf8e" : "#f7525f" },
+              { label: "TRADES", value: String(tr), exact: "", color: "#d4d4d8" },
+              { label: "AVG WIN", value: fmtUsdCompactAbs(avgWin), exact: fmtUsdExact(avgWin), color: "#ededf0" },
+              { label: "AVG LOSS", value: fmtUsdCompactAbs(avgLoss), exact: fmtUsdExact(avgLoss), color: "#f7525f" },
+            ].map(({ label, value, exact, color }) => (
+              <div key={label} style={{ minWidth: 0 }}>
                 <div style={{ ...agentLabelStyle, fontSize: 9 }}>{label}</div>
-                <div style={{ color, fontFamily: "var(--nx-font-mono)", fontSize: 16, fontWeight: 600 }}>{value}</div>
+                <div title={exact || undefined} style={{ color, fontFamily: "var(--nx-font-mono)", fontSize: 16, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
               </div>
             ))}
           </div>
