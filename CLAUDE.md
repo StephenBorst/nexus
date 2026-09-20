@@ -525,7 +525,10 @@ settlement tx `0xcbd2a8228985db73b26883207c520b23cb86ea28ae7c80879308ef2d97b34b3
      `{x402Version:2, resource:<echo>, accepted:<chosen accept VERBATIM — network stays eip155:8453>, payload:{signature,
      authorization:{from,to,value,validAfter,validBefore,nonce}}, extensions:<echo or {}>}`. **UTF-8-safe base64**
      (`resource.description` has em-dashes → plain `btoa` throws; use `TextEncoder`).
-  5. 200 → `{signals:[…]}` → shape client-side.
+  5. 200 → `{signals:[…]}` → shape client-side. The paid 200 also carries a base64 **`payment-response` RESPONSE
+     HEADER** = the facilitator's on-chain settlement proof `{success, transaction (Base tx hash), network, payer}`;
+     `loadQuotientDirect` decodes it → `settlement:{tx,network}` and the lens shows a calm **"settled 0x…↗" Basescan
+     link** next to the cards (null on an already-served 200 that never charged). Cached in `nx_qsignals_cache`.
 - **Guards (risk posture, all pre-signature):** match network ∈ base/eip155:8453/8453, asset CONTAINS BASE_USDC, scheme
   "exact", payTo CONTAINS QUOTIENT_PAYTO; CAP amount ≤ `X402_MAX_UNITS=50000` ($0.05). Sign against canonical
   BASE_USDC/QUOTIENT_PAYTO/chainId-8453 (a hostile 402 can authorize at most a nickel to our pinned payTo).
