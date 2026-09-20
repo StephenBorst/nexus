@@ -85,11 +85,22 @@ const mean = (xs) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0)
 
 // The blotter read: how losses END vs how wins END, and the win/loss size at the CURRENT
 // position size only — mixing a $50 trade with an old fat notional makes avg$ meaningless.
+// Exits that are supposed to BANK a gain. A row carrying one of these with pnl <= 0 is
+// an anomaly worth surfacing, not averaging away.
+const PROFIT_EXITS = new Set(["TP", "TP_PARTIAL"]);
+
+const median = (xs) => {
+  const a = [...xs].sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+};
+
 /**
  * @param {any[]} trades
- * @param {{ currentNotional?: number|null, tolerancePct?: number }} [opts]
+ * @param {{ currentNotional?: number|null, tolerancePct?: number, maxHoldHours?: number|null }} [opts]
  */
-export function paperBlotter(trades, { currentNotional = null, tolerancePct = 25 } = {}) {
+export function paperBlotter(trades, { currentNotional = null, tolerancePct = 25, maxHoldHours = null } = {}) {
   const rows = (Array.isArray(trades) ? trades : []).filter((t) => Number.isFinite(Number(t?.pnl)));
   const wins = rows.filter((t) => Number(t.pnl) > 0);
   const losses = rows.filter((t) => Number(t.pnl) <= 0);
@@ -102,11 +113,45 @@ export function paperBlotter(trades, { currentNotional = null, tolerancePct = 25
     const l = inSize.filter((t) => Number(t.pnl) <= 0).map((t) => Math.abs(Number(t.pnl)));
     atSize = {
       notional: target, n: inSize.length, wins: w.length, losses: l.length,
-      avgWin: mean(w), avgLoss: mean(l),
+      // ⚠️ null, NOT 0, when there is nothing at this size. mean([]) === 0 would render
+      // "$0.00 avg win", which reads as a real measurement of a sample that doesn't exist.
+      avgWin: w.length ? mean(w) : null,
+      avgLoss: l.length ? mean(l) : null,
       net: inSize.reduce((s, t) => s + Number(t.pnl), 0),
       excluded: rows.length - inSize.length,
     };
   }
+
+  // Is the retained window even describing the CURRENT bot? If every row is at a wildly
+  // different notional, the percentages below are about a configuration that no longer
+  // exists — the single most decision-relevant fact on the panel.
+  const notionals = rows.map(tradeNotional).filter((n) => n != null);
+  const medNotional = median(notionals);
+  const sizeDrift = (medNotional != null && Number(currentNotional) > 0)
+    ? { medianNotional: medNotional, currentNotional: Number(currentNotional), ratio: medNotional / Number(currentNotional) }
+    : null;
+  // "Stale" = the typical retained row is an order of magnitude off the current size.
+  const staleWindow = !!sizeDrift && (sizeDrift.ratio >= 3 || sizeDrift.ratio <= 1 / 3);
+
+  // Profit-labelled exits that closed RED. Either the fill diverged from the price that
+  // triggered the exit, or a remainder/ladder row is mislabelled — the split by reason
+  // says which, so this reports rather than guesses.
+  const redProfitExits = rows.filter((t) => PROFIT_EXITS.has(String(t?.reason)) && Number(t.pnl) <= 0);
+  const anomalies = {
+    n: redProfitExits.length,
+    byExit: tally(redProfitExits),
+    worst: redProfitExits.reduce((w, t) => (w == null || Number(t.pnl) < Number(w.pnl) ? t : w), null),
+  };
+
+  // Did anything outlive the CURRENT max-hold cap? Separates "TIMEOUT is broken" from
+  // "these rows predate the current cap".
+  const cap = Number(maxHoldHours);
+  const overHold = Number.isFinite(cap) && cap > 0
+    ? (() => {
+        const over = rows.map((t) => ({ t, h: holdHours(t) })).filter((x) => x.h != null && x.h > cap * 1.25);
+        return { cap, n: over.length, maxH: over.reduce((m, x) => Math.max(m, x.h), 0) };
+      })()
+    : null;
 
   const hh = (xs) => mean(xs.map(holdHours).filter((h) => h != null));
   return {
@@ -115,6 +160,6 @@ export function paperBlotter(trades, { currentNotional = null, tolerancePct = 25
     lossByExit: tally(losses),
     winByExit: tally(wins),
     avgHoldWinH: hh(wins), avgHoldLossH: hh(losses),
-    atSize,
+    atSize, sizeDrift, staleWindow, anomalies, overHold,
   };
 }

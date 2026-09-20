@@ -177,9 +177,10 @@ export function AgentTrackRecord({ title, accent, trades, paper, onReset, summar
 // distribution instead: which exit closes each loss, where wins die on the scale-out
 // ladder, and avg win vs avg loss at the CURRENT position size only — mixing an old fat
 // notional into avg$ makes it meaningless. Read-only: retuning TP/SL is a separate call.
-export function PaperBlotter({ trades, currentNotional }: { trades: AgentTrade[]; currentNotional?: number | null }) {
-  const b = paperBlotter(trades, { currentNotional: currentNotional ?? null });
+export function PaperBlotter({ trades, currentNotional, maxHoldHours }: { trades: AgentTrade[]; currentNotional?: number | null; maxHoldHours?: number | null }) {
+  const b = paperBlotter(trades, { currentNotional: currentNotional ?? null, maxHoldHours: maxHoldHours ?? null });
   if (!b.n) return null;
+  const isRedProfitExit = (t: AgentTrade) => (t.reason === "TP" || t.reason === "TP_PARTIAL") && t.pnl <= 0;
 
   const Chips = ({ label, parts, tone }: { label: string; parts: { label: string; n: number; pct: number }[]; tone: string }) => (
     <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
@@ -203,17 +204,43 @@ export function PaperBlotter({ trades, currentNotional }: { trades: AgentTrade[]
         </span>
       </div>
 
+      {b.staleWindow && b.sizeDrift && (
+        <div style={{ marginTop: 8, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3, color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5 }}>
+          ⚠ These rows are not this bot. Typical retained size is {fmtUsdCompactAbs(b.sizeDrift.medianNotional)} notional
+          vs {fmtUsdCompactAbs(b.sizeDrift.currentNotional)} now — the window describes an older configuration, so every
+          percentage below is about a setup you are no longer running.
+        </div>
+      )}
+
+      {b.anomalies.n > 0 && (
+        <div style={{ marginTop: 8, padding: "6px 8px", border: "1px solid #f7525f30", borderRadius: 3, color: "#f7525f", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5 }}>
+          ⚠ {b.anomalies.n} profit-labelled exit{b.anomalies.n === 1 ? "" : "s"} closed RED
+          {b.anomalies.byExit.length ? ` (${b.anomalies.byExit.map((x: { label: string; n: number }) => `${x.label} ${x.n}`).join(" · ")})` : ""}
+          {b.anomalies.worst ? `, worst ${fmtUsdCompact(b.anomalies.worst.pnl)}` : ""}.
+          <span style={{ color: "#a1a1aa" }}> A take-profit bucket points at the fill diverging from the price that triggered the exit; a TP1/TP2 bucket points at the ladder/remainder path.</span>
+        </div>
+      )}
+
       <Chips label="LOSSES END" parts={b.lossByExit} tone="#f7525f" />
       <Chips label="WINS END" parts={b.winByExit} tone="#3ecf8e" />
 
       {b.atSize && (
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
           <span style={{ ...agentLabelStyle, fontSize: 9, minWidth: 74 }}>AT SIZE</span>
-          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
-            {fmtUsdCompactAbs(b.atSize.notional)} notional · avg win <b style={{ color: "#3ecf8e" }}>{fmtUsdCompactAbs(b.atSize.avgWin)}</b>
-            {" · "}avg loss <b style={{ color: "#f7525f" }}>{fmtUsdCompactAbs(b.atSize.avgLoss)}</b>
-            {" · "}<span style={{ color: "#52525b" }}>{b.atSize.n} trades{b.atSize.excluded ? `, ${b.atSize.excluded} at other sizes excluded` : ""}</span>
-          </span>
+          {b.atSize.n === 0 ? (
+            // No sample ⇒ say so. An averaged empty set renders "$0.00", which reads as a
+            // real measurement of trades that don't exist.
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#fbbf24" }}>
+              no trades at {fmtUsdCompactAbs(b.atSize.notional)} notional yet
+              <span style={{ color: "#52525b" }}> — all {b.atSize.excluded} retained rows are at other sizes</span>
+            </span>
+          ) : (
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
+              {fmtUsdCompactAbs(b.atSize.notional)} notional · avg win <b style={{ color: "#3ecf8e" }}>{b.atSize.avgWin == null ? "—" : fmtUsdCompactAbs(b.atSize.avgWin)}</b>
+              {" · "}avg loss <b style={{ color: "#f7525f" }}>{b.atSize.avgLoss == null ? "—" : fmtUsdCompactAbs(b.atSize.avgLoss)}</b>
+              {" · "}<span style={{ color: "#52525b" }}>{b.atSize.n} trades{b.atSize.excluded ? `, ${b.atSize.excluded} at other sizes excluded` : ""}</span>
+            </span>
+          )}
         </div>
       )}
 
@@ -221,6 +248,14 @@ export function PaperBlotter({ trades, currentNotional }: { trades: AgentTrade[]
         <span style={{ ...agentLabelStyle, fontSize: 9, minWidth: 74 }}>HOLD</span>
         <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
           win <b style={{ color: "#ededf0" }}>{b.avgHoldWinH.toFixed(1)}h</b> · loss <b style={{ color: "#ededf0" }}>{b.avgHoldLossH.toFixed(1)}h</b>
+          {b.overHold ? (
+            <>
+              {" · "}<span style={{ color: "#52525b" }}>cap {b.overHold.cap}h</span>
+              {b.overHold.n > 0 && (
+                <span style={{ color: "#fbbf24" }}> · {b.overHold.n} outlived it (max {b.overHold.maxH.toFixed(1)}h)</span>
+              )}
+            </>
+          ) : null}
         </span>
       </div>
 
@@ -240,7 +275,9 @@ export function PaperBlotter({ trades, currentNotional }: { trades: AgentTrade[]
                 <span style={{ color: t.direction === "LONG" ? "#3ecf8e" : "#f7525f" }}>{t.direction === "LONG" ? "L" : "S"}</span>
                 <span style={{ textAlign: "right" }}>{n == null ? "—" : fmtUsdCompactAbs(n)}</span>
                 <span style={{ textAlign: "right", color: t.pnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{fmtUsdCompact(t.pnl)}</span>
-                <span style={{ color: "#71717a" }}>{lvl ?? t.reason}</span>
+                <span style={{ color: isRedProfitExit(t) ? "#f7525f" : "#71717a" }} title={isRedProfitExit(t) ? "profit-labelled exit that closed red" : undefined}>
+                  {isRedProfitExit(t) ? "⚠ " : ""}{lvl ?? t.reason}
+                </span>
                 <span style={{ textAlign: "right", color: "#52525b" }}>{h == null ? "—" : `${h.toFixed(1)}h`}</span>
               </div>
             );

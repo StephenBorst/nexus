@@ -80,6 +80,53 @@ test("paperBlotter: splits how losses vs wins actually END", () => {
   assert.ok(b.winByExit.some((x) => x.label === "TP2"));
 });
 
+test("paperBlotter: NO trades at current size ⇒ nulls, never a fabricated $0.00", () => {
+  // The live case: every retained row is a ~$130k notional, current size is $250.
+  const fat = Array.from({ length: 6 }, (_, i) => mk(i % 2 ? 900 : -700, { entry: 100, qty: 1300 }));
+  const b = paperBlotter(fat, { currentNotional: 250 });
+  assert.equal(b.atSize.n, 0);
+  assert.equal(b.atSize.excluded, 6);
+  assert.equal(b.atSize.avgWin, null, "mean([]) would be 0 and read as a real measurement");
+  assert.equal(b.atSize.avgLoss, null);
+  assert.equal(b.staleWindow, true, "the window describes a configuration that no longer exists");
+  assert.ok(b.sizeDrift.ratio > 100);
+});
+
+test("paperBlotter: window is NOT flagged stale when sizes match current", () => {
+  const b = paperBlotter([mk(5, { entry: 100, qty: 2.5 }), mk(-2, { entry: 100, qty: 2.5 })], { currentNotional: 250 });
+  assert.equal(b.staleWindow, false);
+  assert.equal(b.atSize.n, 2);
+  assert.equal(b.atSize.avgWin, 5);
+});
+
+test("paperBlotter: flags profit-labelled exits that closed RED", () => {
+  const b = paperBlotter([
+    mk(-3, { reason: "TP" }),                          // TP full close, red
+    mk(-1, { reason: "TP_PARTIAL", tp_level: 1 }),     // ladder slice, red
+    mk(4, { reason: "TP" }),                           // healthy
+    mk(-9, { reason: "SL" }),                          // a stop being red is normal
+  ]);
+  assert.equal(b.anomalies.n, 2, "only the profit-labelled reds count");
+  assert.equal(Number(b.anomalies.worst.pnl), -3, "worst offender surfaced for inspection");
+  const labels = b.anomalies.byExit.map((x) => x.label);
+  assert.ok(labels.includes("take-profit"), "TP full-close bucket → fill diverged from the trigger price");
+  assert.ok(labels.includes("TP1"), "TP1 bucket → ladder/remainder path");
+});
+
+test("paperBlotter: no anomalies when profit exits are green", () => {
+  const b = paperBlotter([mk(4, { reason: "TP" }), mk(-9, { reason: "SL" }), mk(0, { reason: "BE" })]);
+  assert.equal(b.anomalies.n, 0);
+  assert.equal(b.anomalies.worst, null);
+});
+
+test("paperBlotter: over-hold separates a broken TIMEOUT from stale rows", () => {
+  const b = paperBlotter([mk(1, { h: 12 }), mk(1, { h: 11 }), mk(1, { h: 2 })], { maxHoldHours: 4 });
+  assert.equal(b.overHold.cap, 4);
+  assert.equal(b.overHold.n, 2, "two rows outlived the current cap");
+  assert.equal(b.overHold.maxH, 12);
+  assert.equal(paperBlotter([mk(1, { h: 12 })]).overHold, null, "no cap supplied ⇒ no claim made");
+});
+
 test("paperBlotter: avg win/loss scoped to the CURRENT size only", () => {
   const b = paperBlotter([
     mk(5, { entry: 100, qty: 0.5 }),    // $50 notional — in scope
@@ -97,6 +144,7 @@ test("paperBlotter: empty/garbage in, honest zeros out", () => {
   assert.equal(b.n, 0); assert.equal(b.winRate, 0);
   assert.deepEqual(b.lossByExit, []);
   assert.equal(b.atSize.n, 0);
+  assert.equal(b.atSize.avgWin, null);
   assert.equal(paperBlotter(null).n, 0);
 });
 

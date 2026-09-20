@@ -969,7 +969,7 @@ export function AgentView() {
                   the rolling last-50 window. The card shows lifetime totals + names the window. */}
               <AgentTrackRecord title="🧪 PAPER TRACK RECORD" accent="#d4d4d8" trades={agentState?.paper_trades ?? []} paper onReset={resetPaperRecord}
                 summary={paperSummary((agentState as unknown as { paper_agg?: unknown } | null)?.paper_agg ?? null)} />
-              <PaperBlotter trades={agentState?.paper_trades ?? []} currentNotional={(config.capitalPerTrade || 0) * (config.leverage || 1)} />
+              <PaperBlotter trades={agentState?.paper_trades ?? []} currentNotional={(config.capitalPerTrade || 0) * (config.leverage || 1)} maxHoldHours={config.maxHoldHours ?? null} />
             </>
           )}
 
