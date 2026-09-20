@@ -249,6 +249,28 @@ Sweep → Save → Publish → Community board → COPY → activate → graded.
   proves the no-lookahead lookup + CONFLUENCE fires WITH recorded OI / abstains WITHOUT it (no fabricated divergence).
   To confirm live maturity: run a CONFLUENCE backtest in the Lab — the note reads either "tested over Nd of recorded
   OI" or "still maturing (Nd/14d, Ns/200)". **CONFLUENCE was NOT-yet-testable = STALE; it is wired + self-gating now.**
+- **⚠️ OI maturity is PER-SYMBOL (fixed 2026-09-20 — the TEST-vs-VALIDATE split gate).** The gate used to be
+  `min(days)/min(samples)` across every requested symbol. `/agent/backtest` asks about the CONFIG's symbols
+  (BTC…), `/agent/validate` asks about a hardcoded 6-symbol `VALIDATE_UNIVERSE` incl. **BNB/XRP/LINK — which the
+  brain only records when a user WATCHLISTS them** (it logs core BTC/ETH/SOL + watchlists). So one never-recorded
+  symbol zeroed the min → same wallet, same session: TEST said "tested over 81d", VALIDATE said "still maturing
+  (0/14d)". Now `loadOiHistForBacktest` returns `perSymbol[{symbol,days,samples,mature}]` + `matureSymbols` /
+  `staleSymbols` / `oiHistMature` (only mature series reach the engine) / `matureMinDays` / `anyMature`; strict
+  `oiMature` (ALL mature) is kept for back-compat. Callers RUN THE MATURE SUBSET and name the excluded markets
+  instead of failing the whole run — `revalidateStrategy` had the identical bug (published CONFLUENCE strategies
+  were pinned at `pending_oi` forever). **`MIN_VALIDATE_SYMBOLS=2`** — a walk-forward on ONE market would let
+  `robustnessVerdict` hand out ROBUST off a single symbol, which is exactly what it exists to fail. Routes return
+  `oiCoverage`/`excludedSymbols`/`strategyLabel`/`gatesSkipped`; `AgentBacktestCard` renders per-symbol coverage
+  chips. Tests: `strategies.test.mjs` (incl. 2 regression tests pinning the split).
+- **⚠️ A backtest CANNOT simulate `respectRegime` or `respectSmartMoney`.** `runBacktest` calls
+  `deriveSignal(raw, config)` with NO regime/consensus args, and `deriveSignal` skips those gates when the arg is
+  absent — so backtesting a regime-gated config silently tests the UN-gated version. **Session + volatility(ATR) +
+  invert + funding-percentile ARE simulated** (runBacktest supplies `raw.hourUtc`/`raw.atrPct`). The shipped
+  **"Regime-Gated Invert" preset uses vol+session, NOT `respectRegime`** — so it IS faithfully tested; its only
+  unsimulated field is `maxSignalAgeSec` (a live latency guard). Surfaced via `backtestGateSupport()`.
+- **Strategy NAMING:** `app/lib/strategyLabel.mjs` (shared by worker notes + the Lab card, so it can't drift) —
+  a preset is a COMPOSITION, and labelling an INVERTED config "CONFLUENCE" described the opposite trade. invert+gates
+  → "Regime-Gated Invert"; invert alone → "Inverted <mode>"; gates alone → "Gated <mode>". Tested.
 - **Strategy library + sharing:** `/agent/:addr/strategies` CRUD (save/delete owner-authed, list public) + `/publish`
   toggle; `GET /agents/strategies/public?style=` ranks public strategies by the **author's GRADED record** (not
   backtest — keeps discovery on-moat), optional style filter. Config-tab STRATEGY LIBRARY + COMMUNITY STRATEGIES cards.

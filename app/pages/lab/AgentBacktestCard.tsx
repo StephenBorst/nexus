@@ -9,7 +9,37 @@
 // them properly is a separate change, not a silent rider on a refactor.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { AgentConfig } from "./types";
+import { strategyLabel, backtestGateSupport } from "@/lib/strategyLabel.mjs";
 import { agentCardStyle, agentLabelStyle, btnPrimary, navBtnStyle } from "./styles";
+
+// Per-symbol recorded-OI coverage. A bare "0/14d" hid WHICH market was short — and since
+// the brain only records OI for core BTC/ETH/SOL + watchlisted symbols, that was usually a
+// market the user never asked about zeroing a min() across the whole universe.
+function OiCoverage({ rows }: { rows?: any[] }) {
+  if (!Array.isArray(rows) || !rows.length) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
+      {rows.map((r: any) => (
+        <span key={r.symbol} title={r.mature ? "mature — included in the OI run" : "not enough recorded OI — excluded"}
+          style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "2px 7px", borderRadius: 2, border: `1px solid ${r.mature ? "#3ecf8e44" : "#33333a"}`, color: r.mature ? "#3ecf8e" : "#71717a" }}>
+          {String(r.symbol).replace("PERP_", "").replace("_USDC", "")} {r.days}d/{r.samples}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// Gates the SIM cannot honour. deriveSignal skips the regime / smart-money filters when no
+// regime or consensus is supplied, and a backtest has neither — so a green number must
+// never imply a filter that silently never ran.
+function GatesNote({ skipped }: { skipped?: string[] }) {
+  if (!Array.isArray(skipped) || !skipped.length) return null;
+  return (
+    <div style={{ color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 9.5, lineHeight: 1.5, marginTop: 7 }}>
+      ⚠ Not simulated here: {skipped.join(" · ")}. Those apply live only — the numbers above are the un-gated version.
+    </div>
+  );
+}
 
 export function AgentBacktestCard({
   isPro, config, backtest, backtesting, sweep, sweeping, validation, validating,
@@ -34,6 +64,9 @@ export function AgentBacktestCard({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={agentLabelStyle}>BACKTEST</div>
+          {/* Name the COMPOSITION, not just signalMode — an inverted config takes the
+              OPPOSITE trade, so "CONFLUENCE" described a trade we aren't making. */}
+          <span title="What this config actually trades" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#a1a1aa", border: "1px solid #232327", borderRadius: 3, padding: "2px 8px" }}>{strategyLabel(config)}</span>
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0", border: "1px solid #33333a", borderRadius: 3, padding: "2px 8px" }}>◆ PRO</span>
         </div>
         {isPro && (
@@ -64,6 +97,7 @@ export function AgentBacktestCard({
               {backtest.untestable && (
                 <div style={{ color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, marginBottom: 10, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3 }}>
                   ⚠ {backtest.note}
+                  <OiCoverage rows={backtest.oiCoverage} />
                 </div>
               )}
               {/* When OI-driven modes ARE testable, surface the OI-window caveat
@@ -71,8 +105,10 @@ export function AgentBacktestCard({
               {!backtest.untestable && backtest.note && (
                 <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, marginBottom: 10, padding: "6px 8px", border: "1px solid #232327", borderRadius: 3 }}>
                   ◆ {backtest.note}
+                  <OiCoverage rows={backtest.oiCoverage} />
                 </div>
               )}
+              <GatesNote skipped={backtest.gatesSkipped ?? backtestGateSupport(config).skipped} />
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12 }}>
                 {[
                   { label: "NET P&L (60d)", value: `${backtest.combined.netUsd >= 0 ? "+" : ""}$${backtest.combined.netUsd}`, color: backtest.combined.netUsd >= 0 ? "#3ecf8e" : "#f7525f" },
@@ -105,10 +141,13 @@ export function AgentBacktestCard({
             return (
               <div style={{ marginTop: 14 }}>
                 <div style={{ ...agentLabelStyle, fontSize: 9, marginBottom: 6 }}>
-                  WALK-FORWARD — {validation.totalSymbols} symbols · {validation.folds} time folds · {validation.days}d · fees on
+                  WALK-FORWARD — {validation.strategyLabel ?? strategyLabel(config)} · {validation.totalSymbols} symbols · {validation.folds} time folds · {validation.days}d · fees on
                 </div>
                 {validation.untestable ? (
-                  <div style={{ color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3 }}>⚠ {validation.note}</div>
+                  <div style={{ color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3 }}>
+                    ⚠ {validation.note}
+                    <OiCoverage rows={validation.oiCoverage} />
+                  </div>
                 ) : (
                   <>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "8px 10px", border: `1px solid ${vc}44`, borderRadius: 4, background: `${vc}0c` }}>
@@ -117,6 +156,12 @@ export function AgentBacktestCard({
                         net-positive on {validation.posSymbols}/{validation.totalSymbols} markets · {validation.foldConsistency}% of folds positive · net <span style={{ color: validation.totalNet >= 0 ? "#3ecf8e" : "#f7525f" }}>{validation.totalNet >= 0 ? "+" : ""}${validation.totalNet}</span>
                       </span>
                     </div>
+                    {validation.note && (
+                      <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 9.5, lineHeight: 1.5, marginTop: 8 }}>
+                        ◆ {validation.note}
+                        <OiCoverage rows={validation.oiCoverage} />
+                      </div>
+                    )}
                     <div style={{ marginTop: 8, overflowX: "auto" }}>
                       <div style={{ minWidth: 320 }}>
                         {validation.perSymbol.map((s: any) => (

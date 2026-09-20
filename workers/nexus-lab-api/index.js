@@ -65,7 +65,8 @@ import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
 import { handleFeed } from "./routes-feed.mjs";
-import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
+import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols } from "./strategies.mjs";
+import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
 import { json, cors, normalizeAddress, recoverEthAddress, ALLOWED_ORIGINS, holdersRoomMessage, appendNotification } from "./shared.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, REGIME_PAD_S, ADVICE_FLAG_TEXT } from "./grading.mjs";
 import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signal-delivery.mjs";
@@ -4719,13 +4720,29 @@ document.getElementById("btn").addEventListener("click",go);
       const folds = Math.min(6, Math.max(3, Number(body.folds) || 4));
       const needsOi = ["CONFLUENCE", "OI_ONLY"].includes(config.signalMode);
       const oi = needsOi ? await loadOiHistForBacktest(UNIVERSE, env) : null;
-      const untestable = needsOi && !oi.oiMature;
+      // ⚠️ Validate the markets that ACTUALLY have mature recorded OI. This used to gate on
+      // min(days) across the whole fixed universe, so one never-recorded symbol (BNB/XRP/
+      // LINK are only logged when a user watchlists them) reported "0/14d · still maturing"
+      // for a config that /agent/backtest simultaneously reported testable over 81d.
+      const runSymbols = needsOi ? oi.matureSymbols : UNIVERSE;
+      const untestable = needsOi && runSymbols.length < MIN_VALIDATE_SYMBOLS;
+      const label = strategyLabel(config);
+      const gatesSkipped = backtestGateSupport(config).skipped;
+      const oiInfo = needsOi ? { oiCoverage: oi.gate.perSymbol, excludedSymbols: oi.staleSymbols } : {};
       try {
-        const result = await walkForwardValidate(config, { symbols: UNIVERSE, days, folds }, oi?.oiMature ? oi.oiHistBySymbol : {});
+        if (untestable) {
+          // Don't burn a 6-symbol x 60d fetch just to report zeros.
+          return json({
+            days, folds, symbols: runSymbols, totalSymbols: runSymbols.length, perSymbol: [],
+            untestable: true, strategyLabel: label, gatesSkipped, ...oiInfo,
+            note: `${label} needs at least ${MIN_VALIDATE_SYMBOLS} markets with ${OI_BACKTEST_MIN_DAYS}d+ recorded OI to walk-forward — ${runSymbols.length} qualify. Coverage: ${oiCoverageText(oi.gate.perSymbol)}. (The brain records OI for core BTC/ETH/SOL plus watchlisted symbols, so the rest stay at 0 until someone watches them.)`,
+          }, request);
+        }
+        const result = await walkForwardValidate(config, { symbols: runSymbols, days, folds }, needsOi ? oi.oiHistMature : {});
         return json({
-          ...result, untestable,
-          note: untestable
-            ? `${config.signalMode} needs recorded OI history to validate — still maturing (${oi.gate.minDays}/${OI_BACKTEST_MIN_DAYS}d). Validate MOMENTUM / MEAN_REVERSION / FUNDING_ONLY meanwhile.`
+          ...result, untestable: false, strategyLabel: label, gatesSkipped, ...oiInfo,
+          note: needsOi
+            ? `${label} walk-forwarded on ${runSymbols.length} markets with mature recorded OI (${oi.matureMinDays}d+)${oi.staleSymbols.length ? ` — excluded, no recorded OI yet: ${shortSymbols(oi.staleSymbols)}` : ""}.`
             : null,
         }, request);
       } catch (e) {
@@ -4756,15 +4773,21 @@ document.getElementById("btn").addEventListener("click",go);
       // only when deep enough; otherwise stay honestly "untestable".
       const needsOi = ["CONFLUENCE", "OI_ONLY"].includes(config.signalMode);
       const oi = needsOi ? await loadOiHistForBacktest(symbols, env) : null;
-      const untestable = needsOi && !oi.oiMature;
+      // Per-symbol gate (same fix as /agent/validate): run the markets with mature recorded
+      // OI and name the ones excluded; only when NONE qualify is the run honestly inert.
+      const runSymbols = needsOi && oi.anyMature ? oi.matureSymbols : symbols;
+      const untestable = needsOi && !oi.anyMature;
+      const label = strategyLabel(config);
+      const gatesSkipped = backtestGateSupport(config).skipped;
       try {
-        const result = await backtestConfig(config, { symbols, days }, oi?.oiMature ? oi.oiHistBySymbol : {});
+        const result = await backtestConfig(config, { symbols: runSymbols, days }, needsOi ? oi.oiHistMature : {});
         return json({
-          ...result, untestable,
-          ...(oi?.oiMature ? { oiWindowDays: oi.gate.minDays } : {}),
+          ...result, untestable, strategyLabel: label, gatesSkipped,
+          ...(needsOi ? { oiCoverage: oi.gate.perSymbol, excludedSymbols: oi.staleSymbols } : {}),
+          ...(needsOi && oi.anyMature ? { oiWindowDays: oi.matureMinDays } : {}),
           note: untestable
-            ? `${config.signalMode} needs recorded OI history — still maturing (${oi.gate.minDays}/${OI_BACKTEST_MIN_DAYS}d, ${oi.gate.minSamples}/${OI_BACKTEST_MIN_SAMPLES} samples across symbols). Entries shown are funding/price-driven only; test MOMENTUM / MEAN_REVERSION / FUNDING_ONLY for a full backtest.`
-            : (needsOi ? `CONFLUENCE tested over the ${oi.gate.minDays}d of recorded OI history (funding+price span the full ${days}d).` : null),
+            ? `${label} needs recorded OI history — no market here qualifies yet (${oiCoverageText(oi.gate.perSymbol)}; needs ${OI_BACKTEST_MIN_DAYS}d + ${OI_BACKTEST_MIN_SAMPLES} samples). Entries shown are funding/price-driven only; test MOMENTUM / MEAN_REVERSION / FUNDING_ONLY for a full backtest.`
+            : (needsOi ? `${label} tested over ${oi.matureMinDays}d of recorded OI history (funding+price span the full ${days}d)${oi.staleSymbols.length ? ` — excluded, no recorded OI yet: ${shortSymbols(oi.staleSymbols)}` : ""}.` : null),
         }, request);
       } catch (e) {
         console.error("[backtest] error:", e);
