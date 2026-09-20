@@ -19,9 +19,9 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: "regime-gated-invert",
     name: "Regime-Gated Invert",
-    tag: "VALIDATED LEAD",
-    accent: "#3ecf8e",
-    blurb: "The first config to clear our cross-market walk-forward. It FADES the confluence signal (funding + OI agree) — but only in the regimes where fading actually pays: high volatility (ATR% ≥ 0.7) and outside the Asia session, where these signals bleed. 60d backtest: ~60% win, positive expectancy, net-positive on 4 of 5 markets AND out-of-sample. Still a young sample (~20 trades) so we call it a validated LEAD, not proven — PAPER it and watch it build a graded record. This is the honest edge, not a marketed backtest.",
+    tag: "LEAD · NOT YET ROBUST",
+    accent: "#e0a458",
+    blurb: "Fades the confluence signal (funding + OI agree), and only where fading has paid: high volatility (ATR% ≥ 0.7), US/Europe sessions, fresh signals only. It beats raw confluence on the same window — smaller loss, higher win rate — but both are still net negative, and the cross-market walk-forward comes back NOT ROBUST (net-positive on 1 of 4 markets). A lead worth papering, not an edge. PAPER only until it has a graded record.",
     config: {
       symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC", "PERP_HYPE_USDC"],
       signalMode: "CONFLUENCE", invertSignal: true,

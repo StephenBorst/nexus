@@ -2,7 +2,7 @@
 // Run: node --test workers/nexus-agent-exec/logic.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, exitReason, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, dcaTakeProfitPrice, breakevenArmed, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal } from "./logic.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, exitReason, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, dcaTakeProfitPrice, breakevenArmed, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, resolveExitPrice } from "./logic.mjs";
 
 // ─── snapQty ───────────────────────────────────────────────
 test("snapQty: snaps cleanly to base_tick (no float artifacts)", () => {
@@ -556,4 +556,32 @@ test("twapProgress: filled/total/notional summary", () => {
   assert.equal(p.filled, 1);
   assert.equal(p.remaining, 2);
   assert.equal(p.filledNotional, 101);
+});
+
+// ── resolveExitPrice — paper books at the price the exit was DECIDED on ──────
+// A "TP" row recorded RED is the symptom: the monitor decides the exit from a price it
+// already has, then the close re-reads the mark. For a live fill that second read is the
+// honest proxy. For paper there is no fill, so the re-read can only add drift.
+test("resolveExitPrice: PAPER books the decision price, not a re-read", () => {
+  assert.equal(resolveExitPrice({ paper: true, decisionPrice: 100, fetchedPrice: 93 }), 100);
+});
+
+test("resolveExitPrice: LIVE always books the fetched mark (unchanged behaviour)", () => {
+  assert.equal(resolveExitPrice({ paper: false, decisionPrice: 100, fetchedPrice: 93 }), 93);
+  assert.equal(resolveExitPrice({ paper: false, decisionPrice: null, fetchedPrice: 93 }), 93);
+});
+
+test("resolveExitPrice: paper falls back when there is no usable decision price", () => {
+  // KILL / webhook-close / price-outage paths call in without one.
+  for (const bad of [null, undefined, 0, -5, NaN, "abc"]) {
+    assert.equal(resolveExitPrice({ paper: true, decisionPrice: bad, fetchedPrice: 93 }), 93);
+  }
+});
+
+test("resolveExitPrice: a TP decided in profit can no longer book red on paper", () => {
+  const entry = 100, decided = 102;      // +2% ⇒ evaluateExit says TP
+  const whipsawed = 97;                  // the re-read that used to get booked
+  const booked = resolveExitPrice({ paper: true, decisionPrice: decided, fetchedPrice: whipsawed });
+  assert.ok(booked > entry, "a profit-labelled exit books a profit");
+  assert.equal(booked, decided);
 });

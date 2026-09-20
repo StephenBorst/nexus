@@ -14,7 +14,7 @@
 import * as ed from "@noble/ed25519";
 import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, dcaTakeProfitPrice, breakevenArmed, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress } from "./logic.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, dcaTakeProfitPrice, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const COOLDOWN_MS = 15 * 60 * 1000; // 15 min between trades
@@ -1035,21 +1035,21 @@ async function monitorPosition(address, state, config, env, cache) {
     // new safety order or TP so a recovered position can't round-trip to a loss.
     pos.be_armed = breakevenArmed(pos, dcaPnl, config.breakevenTriggerPct);
     if (pos.be_armed && dcaPnl <= (Number(config.breakevenBufferPct) || 0)) {
-      await closePosition(address, state, env, "BE", cache); return;
+      await closePosition(address, state, env, "BE", cache, currentPrice); return;
     }
 
     if (dcaPnl >= (pos.dca.takeProfitPct || config.tpPercent)) {
-      await closePosition(address, state, env, "TP", cache); return;
+      await closePosition(address, state, env, "TP", cache, currentPrice); return;
     }
     if (holdMs >= config.maxHoldHours * 60 * 60 * 1000) {
-      await closePosition(address, state, env, "TIMEOUT", cache); return;
+      await closePosition(address, state, env, "TIMEOUT", cache, currentPrice); return;
     }
     const so = nextSafetyOrder(pos, currentPrice, config.capitalPerTrade, pos.dca);
     if (so.shouldAdd) { await addSafetyOrder(address, state, config, env, so, currentPrice); return; }
     pos.next_safety_price = so.trigger ?? pos.next_safety_price;
     // Final stop — only after the whole ladder is spent (averaging is done).
     if ((pos.filled_safety_orders || 0) >= maxSO && pos.slPercent && dcaPnl <= -pos.slPercent) {
-      await closePosition(address, state, env, "SL", cache); return;
+      await closePosition(address, state, env, "SL", cache, currentPrice); return;
     }
     await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
     console.log(`[exec] ${address.slice(0, 10)} ${pos.paper ? "PAPER " : ""}DCA HOLD ${pos.direction} ${pos.symbol.replace("PERP_", "").replace("_USDC", "")} avgPnl=${dcaPnl.toFixed(3)}% SOs=${pos.filled_safety_orders || 0}/${maxSO}`);
@@ -1082,7 +1082,7 @@ async function monitorPosition(address, state, config, env, cache) {
   });
 
   if (action && action.type === "FULL_CLOSE") {
-    await closePosition(address, state, env, action.reason, cache);
+    await closePosition(address, state, env, action.reason, cache, currentPrice);
     return;
   }
   if (action && action.type === "PARTIAL_TP") {
@@ -1198,7 +1198,7 @@ async function partialClose(address, state, config, env, action, cache) {
   const leftoverDust = afterRemain > 0 && (afterRemain < (pos.base_min || tick) ||
     (pos.min_notional && afterRemain * price < pos.min_notional));
   if (tooSmallSlice || leftoverDust || afterRemain <= 0) {
-    await closePosition(address, state, env, "TP", cache);
+    await closePosition(address, state, env, "TP", cache, price);
     return;
   }
 
@@ -1260,7 +1260,7 @@ async function partialClose(address, state, config, env, action, cache) {
   console.log(`[exec] ${address.slice(0, 10)} ${paper ? "PAPER " : ""}PARTIAL TP L${action.level} ${action.sizePct}% slice=${slice} pnl=$${pnlUsdc.toFixed(4)} remaining=${afterRemain}`);
 }
 
-async function closePosition(address, state, env, reason, cache) {
+async function closePosition(address, state, env, reason, cache, decisionPrice = null) {
   const pos = state.current_position;
   if (!pos) return;
   const paper = !!pos.paper;
@@ -1322,11 +1322,20 @@ async function closePosition(address, state, env, reason, cache) {
     return;
   }
 
-  // Fetch final price
+  // Book the close. PAPER books at the price the exit was DECIDED on — there is no real
+  // fill to approximate, and a second mark read only lets the booked price drift from the
+  // one that triggered the exit (that drift is how a "TP" row gets recorded red: the
+  // monitor can fall back to the last known price, decide TP on it, and then this read
+  // succeeds with a worse one). LIVE still re-fetches — there the fresh mark is the best
+  // proxy for the price the exchange actually filled at.
   let exitPrice = pos.current_price;
-  try {
-    exitPrice = await getMarkPrice(pos.symbol, env, cache);
-  } catch (e) {}
+  if (paper && Number.isFinite(decisionPrice) && decisionPrice > 0) {
+    exitPrice = resolveExitPrice({ paper, decisionPrice, fetchedPrice: exitPrice });
+  } else {
+    try {
+      exitPrice = resolveExitPrice({ paper, decisionPrice, fetchedPrice: await getMarkPrice(pos.symbol, env, cache) });
+    } catch (e) {}
+  }
 
   // DCA positions realize P&L against the BLENDED average entry (the honest cost
   // basis after averaging in); single-entry positions use their entry price.

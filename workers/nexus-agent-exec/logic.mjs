@@ -513,3 +513,17 @@ export function twapProgress(state) {
     remaining: slices.length - filled.length,
   };
 }
+
+// ── Which price a close is RECORDED at ───────────────────────────────────────
+// The monitor decides an exit from a price it already fetched this tick, then
+// closePosition fetches the mark AGAIN for the recorded fill. For a LIVE trade that
+// second read is right — it approximates the price the exchange actually filled at.
+// For PAPER there is no fill to approximate: re-reading can only introduce drift
+// between the price that TRIGGERED the exit and the price the row is booked at, which
+// is how a "TP" row ends up recorded red (the monitor's price fetch can fall back to
+// the last known value, decide TP on it, and then the re-read succeeds with a worse
+// one). So paper books at the decision price; live keeps the re-fetch.
+export function resolveExitPrice({ paper, decisionPrice, fetchedPrice }) {
+  if (paper && Number.isFinite(decisionPrice) && decisionPrice > 0) return decisionPrice;
+  return fetchedPrice;
+}

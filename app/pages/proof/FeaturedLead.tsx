@@ -1,9 +1,9 @@
-// ── FEATURED LEAD — the engine's validated edge, front and center ─────────────
-// The booth hero. Our backtest engine (orthogonal signals + a smart-money regime
-// filter, run walk-forward over months of data) surfaced ONE config that cleared a
-// cross-market, out-of-sample test: Regime-Gated Invert. We feature it as a LEAD,
-// not a live-proven record — backtest ≠ live, and we say so plainly. Deploy it and
-// it earns a graded, on-chain-verifiable record like every agent on the board below.
+// ── FEATURED LEAD — the best config we have, and its real verdict ─────────────
+// The booth hero. Regime-Gated Invert is the best-performing config the engine has
+// surfaced; the cross-market walk-forward still returns NOT ROBUST (net-positive on
+// 1 of 4 markets, net negative overall). We publish that here rather than bury it —
+// this board exists to grade our own work the way it grades everyone else's. Deploy
+// it and it earns a graded, on-chain-verifiable record like every agent below.
 //
 // Self-contained on purpose: reads NO endpoint (its identity + config come from the
 // same preset the Lab/Bankr skill deploy), so it always renders crisp for a 90-second
@@ -15,7 +15,7 @@ import { STRATEGY_PRESETS } from "@/config/strategyPresets";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", AMBER = "#e0a458";
+const POS = "#3ecf8e", AMBER = "#e0a458", NEG = "#f7525f";
 const BORDER = "#232327", SURFACE_ALT = "#0f0f11", INSET = "#08080a";
 // The append-only ledger anchor ON ARBITRUM — public, no login, always resolves.
 // A judge can tap this on a phone and see the Anchored events (every committed
@@ -24,13 +24,13 @@ const ANCHOR_EXPLORER = "https://arbiscan.io/address/0x57a698df84a44F3dA3dac3E08
 
 const LEAD = STRATEGY_PRESETS.find((p) => p.id === "regime-gated-invert");
 
-// The walk-forward receipts — the honest, vetted numbers behind the "LEAD" claim.
-// These are backtest results, labeled as such; they are NOT a live track record.
+// The walk-forward receipts — what the engine ACTUALLY returns for this config.
+// Backtest results, labeled as such, verdict included. Not a live track record.
 const RECEIPTS: { label: string; value: string; tone?: string }[] = [
-  { label: "60d walk-forward", value: "~60% win", tone: POS },
-  { label: "net-positive", value: "4 of 5 mkts", tone: POS },
-  { label: "held out-of-sample", value: "✓", tone: POS },
-  { label: "sample", value: "~20 trades", tone: AMBER },
+  { label: "walk-forward", value: "NOT ROBUST", tone: NEG },
+  { label: "net-positive", value: "1 of 4 mkts", tone: NEG },
+  { label: "vs raw confluence", value: "better, still −", tone: AMBER },
+  { label: "live record", value: "none yet", tone: AMBER },
 ];
 
 export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
@@ -47,11 +47,11 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
   );
 
   return (
-    <div style={{ marginTop: 20, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${POS}`, borderRadius: 8, background: SURFACE_ALT, padding: isMobile ? 14 : 18 }}>
+    <div style={{ marginTop: 20, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${AMBER}`, borderRadius: 8, background: SURFACE_ALT, padding: isMobile ? 14 : 18 }}>
       {/* Identity + status tags */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
-        <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: MUTED }}>The validated lead</span>
-        <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: POS, border: `1px solid ${POS}55`, borderRadius: 3, padding: "2px 6px" }}>WALK-FORWARD</span>
+        <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: MUTED }}>The current lead</span>
+        <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: AMBER, border: `1px solid ${AMBER}55`, borderRadius: 3, padding: "2px 6px" }}>NOT YET ROBUST</span>
         <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: AMBER, border: `1px solid ${AMBER}55`, borderRadius: 3, padding: "2px 6px" }}>NOT YET LIVE-PROVEN</span>
       </div>
 
@@ -62,10 +62,10 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
       </div>
 
       <div style={{ fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.6, maxWidth: 640, marginBottom: 14 }}>
-        The one config that cleared our engine's cross-market walk-forward. It <b style={{ color: BRIGHT }}>fades</b> the
-        confluence signal (funding + open-interest agree) — but only in the regimes where fading actually pays:
-        high volatility and outside the Asia session, where these signals bleed. Filtered by a smart-money regime
-        gate, entered only on a fresh signal.
+        The best-performing config the engine has surfaced, and still not good enough. It <b style={{ color: BRIGHT }}>fades</b> the
+        confluence signal (funding + open-interest agree) — but only in the regimes where fading has paid:
+        high volatility and outside the Asia session, where these signals bleed. It beats raw confluence.
+        It does not beat zero.
       </div>
 
       {/* Walk-forward receipts — the honest numbers */}
@@ -80,7 +80,7 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
 
       {/* Honest label + self-funding line */}
       <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
-        A backtest <b style={{ color: FOG }}>lead</b>, not a live record — young sample, so: validated, not proven.
+        A <b style={{ color: FOG }}>lead</b>, not an edge. The walk-forward says NOT ROBUST and that is printed above rather than buried.
         Run it in <b style={{ color: FOG }}>PAPER</b> to start its forward clock, risk-free — that record is yours,
         not this board. Take it <b style={{ color: FOG }}>live</b> and it joins the graded, on-chain-verifiable agents
         below: real settled trades, never a paper sim. Either way the edge funds itself — the same signals sell as data
@@ -91,7 +91,7 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
       <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button
           onClick={() => navigate("/lab?tab=agent")}
-          style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "#08080a", background: POS, border: "none", borderRadius: 4, padding: "8px 16px", cursor: "pointer" }}
+          style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "#08080a", background: BONE, border: "none", borderRadius: 4, padding: "8px 16px", cursor: "pointer" }}
         >
           Deploy in the Lab →
         </button>

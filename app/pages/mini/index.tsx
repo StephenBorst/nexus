@@ -894,7 +894,7 @@ export default function MiniApp() {
             ) : (
               <>
                 <div style={{ fontSize: 11, color: "#a1a1aa", lineHeight: 1.5 }}>
-                  Try the <span style={{ color: profit }}>Regime-Gated Invert</span> — the first edge to clear our cross-market walk-forward (~60% win, +EV in backtest). It fades confluence only in high volatility, outside the Asia session. <span style={{ color: "#fff" }}>PAPER only</span> — watch it build a graded record. No funds, no key.
+                  Try the <span style={{ color: "#e0a458" }}>Regime-Gated Invert</span> — our best config so far, and still not robust: it beats raw confluence but the cross-market walk-forward comes back net negative. It fades confluence only in high volatility, outside the Asia session. <span style={{ color: "#fff" }}>PAPER only</span> — watch it build a graded record. No funds, no key.
                 </div>
                 <button onClick={deployPaperAgent} disabled={agentBusy} style={{ background: "#2a1a00", color: "#fbbf24", border: "1px solid #4a3a00", borderRadius: 5, padding: "10px 0", fontFamily: mono, fontSize: 11, fontWeight: "bold", cursor: agentBusy ? "wait" : "pointer", letterSpacing: "0.04em", opacity: agentBusy ? 0.6 : 1 }}>{agentBusy ? "DEPLOYING…" : "🧪 PAPER-TEST THE REGIME-GATED EDGE"}</button>
               </>
