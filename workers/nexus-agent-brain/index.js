@@ -16,6 +16,7 @@
 // ═══════════════════════════════════════════════════════════
 
 import { deriveSignal, computeRegime, atrPct } from "./logic.mjs";
+import { basisFadeFromHistory } from "../../app/lib/basisFade.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 
@@ -100,10 +101,13 @@ export default {
       const needFundingPct = Object.values(userConfigs).some(({ config }) => (config.fundingPercentileMin ?? 0) > 0);
       // Only fetch candles for ATR when some active user opted into the volatility gate.
       const needVol = Object.values(userConfigs).some(({ config }) => (config.minVolAtrPct ?? 0) > 0 || (config.maxVolAtrPct ?? 0) > 0);
+      // Only read basis:hist when somebody is actually trading BASIS_FADE — one KV get
+      // per symbol, and zero cost for every other agent.
+      const needBasis = Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE");
       const rawBySymbol = {};
       for (const symbol of symbolSet) {
         try {
-          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol);
+          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis);
         } catch (e) {
           console.error(`[brain] ${symbol} eval error:`, e.message);
         }
@@ -170,7 +174,7 @@ export default {
 // Fetch one symbol's market data and compute RAW deltas vs last cycle.
 // No strategy interpretation here — deriveSignal() applies each user's mode +
 // thresholds. `market:prev:{symbol}` is stored so price/OI deltas are real.
-async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false) {
+async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false) {
   const json = await orderlyPublicGet(`${ORDERLY_API}/v1/public/futures/${symbol}`);
   const d = json.data;
 
@@ -226,8 +230,26 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
     price: markPrice, oi: openInterest, timestamp: Date.now(),
   }));
 
+  // ── Spot-perp BASIS (opt-in) ──────────────────────────────────────────────
+  // lab-api's hourly flow cron records {t, basisPct} into basis:hist:{BARE} in THIS
+  // same KV namespace, so the read is one KV get — no extra external fetch, no new
+  // subrequest pressure on the 5-min tick. The verdict comes from the SHARED rule the
+  // scoreboard grades with; if the series is thin or stale it returns null and
+  // BASIS_FADE simply doesn't fire (never a silent fallback to funding/OI).
+  let basis = null;
+  if (computeBasis) {
+    try {
+      const bare = symbol.replace(/^PERP_/, "").replace(/_USDC$/, "");
+      const raw = await env.NEXUS_AGENT.get(`basis:hist:${bare}`);
+      basis = basisFadeFromHistory(raw ? JSON.parse(raw) : []);
+    } catch (e) {
+      console.error(`[brain] ${symbol} basis read failed:`, e.message);
+    }
+  }
+
   return {
     symbol, price: markPrice, oi: openInterest, fundingRate, priceChange, oiChange, hasPrev: !!prev, fundingPct,
+    ...(basis ? { basisSide: basis.side, basisPct: basis.basisPct, basisThr: basis.thr, basisReason: basis.reason } : {}),
     // Regime-conditioning inputs for the opt-in session/vol gates in deriveSignal.
     hourUtc: new Date().getUTCHours(),
     ...(atrPctVal !== undefined ? { atrPct: atrPctVal } : {}),

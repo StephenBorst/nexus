@@ -17,6 +17,22 @@ export interface StrategyPreset {
 
 export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
+    id: "basis-extreme-fade",
+    name: "Basis Extreme Fade",
+    tag: "EXPERIMENTAL · PAPER",
+    accent: "#e0a458",
+    blurb: "Trades the one read our signal scoreboard grades PREDICTIVE (n=203, stable) — while it grades our own funding-fade flagship NOISE. A perp far above spot is froth (fade it short); far below is capitulation (fade it long). Extreme is measured against this market's own trailing week, never a fixed number, and it is the SAME rule the scoreboard grades — not a combo stack, not basis×CVD. ⚠️ PREDICTIVE rates the READ, not a strategy: the exits, sizing and fees here are unvalidated, and it is NOT walk-forward robust. Runs on a 12h hold because that is a graded horizon. PAPER only, on its own wallet, until it has a record of its own.",
+    config: {
+      symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC"],
+      signalMode: "BASIS_FADE",
+      mode: "PAPER",
+      leverage: 5, capitalPerTrade: 50,
+      tpPercent: 2.5, slPercent: 2, maxHoldHours: 12,
+      // Hard stops: at most 3 entries a day, and the day ends after ~2 full losers.
+      maxTradesPerDay: 3, maxDailyLossUsdc: 10,
+    },
+  },
+  {
     id: "regime-gated-invert",
     name: "Regime-Gated Invert",
     tag: "LEAD · NOT YET ROBUST",

@@ -273,3 +273,30 @@ test("atrPct: null on too little history", () => {
   assert.equal(atrPct([{ o: 1, h: 1, l: 1, c: 1 }]), null);
   assert.equal(atrPct(null), null);
 });
+
+// ── BASIS_FADE — the scoreboard's PREDICTIVE read, traded ────────────────────
+// The verdict comes from the SHARED rule in app/lib/basisFade.mjs (the same code
+// axisbt grades with). deriveSignal only routes it — so these pin the routing, and
+// above all that a missing basis NEVER silently falls through to funding/OI.
+test("BASIS_FADE: routes the shared rule's verdict", () => {
+  const s = deriveSignal({ basisSide: "SHORT", basisPct: 0.9, basisThr: 0.1, hasPrev: true }, { signalMode: "BASIS_FADE" });
+  assert.equal(s.direction, "SHORT");
+  assert.equal(s.confidence, 70);
+  const l = deriveSignal({ basisSide: "LONG", basisPct: -0.9, basisThr: 0.1, hasPrev: true }, { signalMode: "BASIS_FADE" });
+  assert.equal(l.direction, "LONG");
+});
+
+test("BASIS_FADE: no basis ⇒ NO signal, never a proxy through funding/OI", () => {
+  // Funding is extreme AND OI diverges — CONFLUENCE would fire here. BASIS_FADE must not.
+  const raw = { fundingRate: 0.05, priceChange: 0.02, oiChange: -0.05, hasPrev: true };
+  assert.equal(deriveSignal(raw, { signalMode: "BASIS_FADE" }).direction, "NONE");
+  assert.equal(deriveSignal({ ...raw, basisSide: null }, { signalMode: "BASIS_FADE" }).direction, "NONE");
+  // and the same raw DOES fire confluence — proving the inputs were live, not empty.
+  assert.notEqual(deriveSignal(raw, { signalMode: "CONFLUENCE" }).direction, "NONE");
+});
+
+test("BASIS_FADE: ignores a malformed side rather than trusting it", () => {
+  for (const bad of ["BUY", "", 1, {}, undefined]) {
+    assert.equal(deriveSignal({ basisSide: bad, hasPrev: true }, { signalMode: "BASIS_FADE" }).direction, "NONE");
+  }
+});

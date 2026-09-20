@@ -6,6 +6,7 @@
 //   CONFLUENCE (default, validated) — both funding + OI rules must AGREE. Strictest.
 //   FUNDING_ONLY                    — fade funding extremes only.
 //   OI_ONLY                         — OI-divergence only.
+//   BASIS_FADE                      — fade an extreme spot-perp basis (EXPERIMENTAL, paper).
 //   MOMENTUM                        — trade WITH a tick price move > priceChangeThreshold (trend-follow).
 //   MEAN_REVERSION                  — FADE a tick price move > priceChangeThreshold (buy dip / sell rip).
 // Thresholds (per user): fundingThreshold (%), oiChangeThreshold (% min OI move to count).
@@ -99,6 +100,16 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
     case "MEAN_REVERSION":
       if (hasPrev && Math.abs(priceChange) >= priceChangeThreshold) {
         direction = priceChange > 0 ? "SHORT" : "LONG"; confidence = 60; why = "mean-reversion";
+      }
+      break;
+    case "BASIS_FADE":
+      // Fade an extreme spot-perp basis — the scoreboard's PREDICTIVE read, traded.
+      // raw.basisSide is the verdict of the SHARED rule (app/lib/basisFade.mjs) that
+      // axisbt grades with; nothing is re-derived here, so the traded signal cannot
+      // drift from the graded one. Absent/stale basis ⇒ no signal, never a fallback
+      // to funding or OI.
+      if (raw.basisSide === "LONG" || raw.basisSide === "SHORT") {
+        direction = raw.basisSide; confidence = 70; why = "basis-extreme fade";
       }
       break;
     case "EXTERNAL":

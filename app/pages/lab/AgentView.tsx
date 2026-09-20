@@ -1086,6 +1086,7 @@ export function AgentView() {
                 { v: "OI_ONLY", label: "OI DIVERGENCE", hint: "Open-interest divergence only" },
                 { v: "MOMENTUM", label: "MOMENTUM", hint: "Trade WITH the move (trend-follow)" },
                 { v: "MEAN_REVERSION", label: "MEAN REVERSION", hint: "Fade the move (buy dip / sell rip)" },
+                { v: "BASIS_FADE", label: "BASIS FADE", hint: "Fade an extreme spot-perp basis — EXPERIMENTAL, paper only" },
               ] as const).map(({ v, label, hint }) => {
                 const sel = (config.signalMode ?? "FUNDING_ONLY") === v;
                 const locked = isProStrategy(v) && !isPro;
@@ -1114,6 +1115,7 @@ export function AgentView() {
                 OI_ONLY: "Acts on open interest alone — a fast pile-in of new positions that the funding read can miss. Funding ignored.",
                 MOMENTUM: "Trades WITH a price move once it clears your threshold — rides strength instead of fighting it. Noisy on small moves; PAPER it first.",
                 MEAN_REVERSION: "Fades a sharp move once it clears your threshold — buy the dip, sell the rip, betting it snaps back. PAPER it first.",
+                BASIS_FADE: "Fades an extreme spot-perp basis: a perp trading far above spot is froth (short it), far below is capitulation (long it). Extreme is measured against this market's own last week, not a fixed number. This read grades PREDICTIVE on the signal scoreboard — which rates the READ, not a strategy: entries, exits and fees are unproven. EXPERIMENTAL, PAPER only.",
               } as Record<string, string>)[config.signalMode ?? "FUNDING_ONLY"]}
             </div>
           </div>

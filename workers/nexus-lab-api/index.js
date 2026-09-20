@@ -4771,6 +4771,16 @@ document.getElementById("btn").addEventListener("click",go);
       // OI-dependent modes (CONFLUENCE / OI_ONLY) become testable once the brain's
       // recorded oi:hist has matured — load it, gate on coverage, feed the engine
       // only when deep enough; otherwise stay honestly "untestable".
+      // BASIS_FADE replays as a silent zero: the engine feeds price + funding (+ recorded
+      // OI), and spot-perp basis history is NOT wired into the replay. Say that instead of
+      // returning "0 trades" and letting it read as a result.
+      if (config.signalMode === "BASIS_FADE") {
+        return json({
+          days, symbols, untestable: true, strategyLabel: strategyLabel(config),
+          combined: { trades: 0, winRate: 0, netUsd: 0 }, perSymbol: [],
+          note: "BASIS_FADE can't be backtested here — the replay feeds price, funding and recorded OI, but not spot-perp basis history. The read itself is graded on the signal scoreboard (/proof); grade the STRATEGY forward in PAPER.",
+        }, request);
+      }
       const needsOi = ["CONFLUENCE", "OI_ONLY"].includes(config.signalMode);
       const oi = needsOi ? await loadOiHistForBacktest(symbols, env) : null;
       // Per-symbol gate (same fix as /agent/validate): run the markets with mature recorded

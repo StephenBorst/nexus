@@ -321,9 +321,21 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   `trig_01E1U5mnh4qcNMqFDxQKzJcx` "Re-validate Nexus engine — basis + conditioner stack"** → confirm the basis
   stack holds on a real sample (basis:hist/cvd:hist are younger, so obs are still low: 22–203). ⚠️ The date is a
   ROUTINE, not a hardcoded string in the worker — don't grep code for it and conclude "no date."
+- **✅ FIRST SCOREBOARD READ WIRED TO THE AGENT (2026-09-20): `BASIS_FADE`.** The gap was total — the brain had
+  ZERO references to basis and `deriveSignal` had no such mode. Now: the rule lives ONCE in
+  **`app/lib/basisFade.mjs`** (`basisExtremeSide` / `basisFadeFromHistory`, defaults window 168 · minWarmup 48 ·
+  p90) and BOTH `axisbt.basisExtremeEvents` (grading) and the brain (trading) call it, so the traded signal cannot
+  drift from the graded read. Brain reads `basis:hist:{BARE}` — lab-api's hourly `snapshotFlow` writes it into the
+  SAME `NEXUS_AGENT` namespace, so it's ONE KV get, opt-in via `needBasis` (no cost to other agents). Stale >3h or
+  under warmup ⇒ no signal, **never a fallback to funding/OI** (tested). Preset `basis-extreme-fade`
+  (EXPERIMENTAL · PAPER, $50/5x, 12h hold, 3 trades/day, $10 daily stop). ⚠️ `POST /agent/backtest` REFUSES
+  BASIS_FADE with an honest note — basis history is not in the replay, so it would return a silent "0 trades".
+  ⚠️ **Bug the tests caught: `{ ...DEFAULTS, minWarmup, pct }` spreads `undefined` OVER the defaults when the caller
+  omits opts → thr `undefined` → the signal NEVER fires. Coalesce per field.** ⚠️ PREDICTIVE grades the READ, not a
+  strategy — exits/sizing/fees are unvalidated and it is NOT walk-forward robust. PAPER, second wallet, own record.
 - **⚠️ Scoreboard reads are NOT agent signalModes yet.** The agent trades CONFLUENCE/FUNDING/OI/MOMENTUM/
   MEAN_REVERSION only; basis/CVD/RSI reads are the research/proof layer. Findings feed house defaults + manual
-  Thesis Engine use. **Wiring a PREDICTIVE read → a one-click agent strategy = roadmap, not built.**
+  Thesis Engine use. ~~Wiring a PREDICTIVE read → a one-click agent strategy = roadmap~~ **→ DONE for basis (see above); CVD/RSI still research-only.**
 - **Landing Proof section** (`nexus-landing` `#proof`) speaks to this in-cadence: "many reads, graded in public,
   most still noise, always sharpening" — NOT "one signal." Keep it that way.
 

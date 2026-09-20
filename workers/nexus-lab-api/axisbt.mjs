@@ -15,6 +15,7 @@ import { classifyCvdDivergence } from "./flow.mjs";
 import { classifyFlush } from "./liquidations.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
+import { trailingPct, basisExtremeSide } from "../../app/lib/basisFade.mjs";
 
 export function hourBucket(t) { return Math.round(Number(t) / 3600000); }
 
@@ -92,21 +93,16 @@ export function smartFollowEvents(cs) {
 // shorts → LONG. "Extreme" = the coin's OWN trailing p90 of |basis| over `window` hours
 // ending strictly BEFORE the event (no lookahead), so it adapts per-coin/regime instead of
 // a fixed cutoff. Graded on the same frozen R contract as every other axis.
-export function trailingPct(values, p) {
-  const arr = (values || []).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
-  if (!arr.length) return null;
-  const idx = Math.min(arr.length - 1, Math.max(0, Math.ceil(p * arr.length) - 1)); // nearest-rank quantile
-  return arr[idx];
-}
+// trailingPct + the basis-extreme rule now live in app/lib/basisFade.mjs so the LIVE
+// agent signal and this GRADED read are the same code. Re-exported: public API unchanged.
+export { trailingPct };
 export function basisExtremeEvents(cs, _pmap, { window = 168, minWarmup = 48, pct = 0.9 } = {}) {
   const rows = (cs.basisHist || []).filter((b) => b && Number.isFinite(b.basisPct)).sort((a, b) => (a.t || 0) - (b.t || 0));
   const ev = [];
   for (let i = 0; i < rows.length; i++) {
     const trail = rows.slice(Math.max(0, i - window), i).map((r) => Math.abs(r.basisPct)); // strictly before i
-    if (trail.length < minWarmup) continue;
-    const thr = trailingPct(trail, pct), mag = Math.abs(rows[i].basisPct);
-    if (!(thr > 0) || !(mag > thr)) continue; // strictly ABOVE the trailing p90 (a flat regime has no extreme)
-    ev.push({ t: rows[i].t, side: rows[i].basisPct > 0 ? "SHORT" : "LONG" }); // premium→SHORT, discount→LONG
+    const side = basisExtremeSide(trail, rows[i].basisPct, { minWarmup, pct }); // premium→SHORT, discount→LONG
+    if (side) ev.push({ t: rows[i].t, side });
   }
   return ev;
 }

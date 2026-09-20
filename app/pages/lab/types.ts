@@ -108,7 +108,8 @@ export interface AgentConfig {
   fundingThreshold: number;
   fundingPercentileMin?: number; // 0=off; fade only when funding is ≥ this percentile vs its history
   volTargetPct?: number; // 0=off; volatility-targeted sizing — scale capital inversely to recent realized vol
-  signalMode: "CONFLUENCE" | "FUNDING_ONLY" | "OI_ONLY" | "MOMENTUM" | "MEAN_REVERSION";
+  // BASIS_FADE is the scoreboard's PREDICTIVE spot-perp read, traded. EXPERIMENTAL/paper.
+  signalMode: "CONFLUENCE" | "FUNDING_ONLY" | "OI_ONLY" | "MOMENTUM" | "MEAN_REVERSION" | "BASIS_FADE";
   oiChangeThreshold: number; // % min OI move for the OI-divergence rule to count (0 = any)
   priceChangeThreshold: number; // % price move on the tick that triggers MOMENTUM / MEAN_REVERSION
   respectRegime?: boolean; // opt-in: brain skips NEW entries that fight a strong market regime
