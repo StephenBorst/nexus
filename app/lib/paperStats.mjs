@@ -39,13 +39,17 @@ export function accruePaperAgg(agg, trade) {
 export function paperSummary(agg) {
   const a = agg || null;
   if (!a || !Number.isFinite(a.trades) || a.trades <= 0) return null;
+  // `paper_agg` arrives from the server, so treat every field as untrusted: an older
+  // exec build (or a partial write) can omit one, and NaN in a stat tile is a lie.
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const wins = num(a.wins), losses = num(a.losses), trades = num(a.trades);
   return {
-    trades: a.trades,
-    winRate: (a.wins / a.trades) * 100,
-    netPnl: a.net,
-    avgWin: a.wins ? a.grossWin / a.wins : 0,
-    avgLoss: a.losses ? a.grossLoss / a.losses : 0,
-    firstTradeAt: a.firstTradeAt ?? undefined,
+    trades,
+    winRate: trades ? (wins / trades) * 100 : 0,
+    netPnl: num(a.net),
+    avgWin: wins ? num(a.grossWin) / wins : 0,
+    avgLoss: losses ? num(a.grossLoss) / losses : 0,
+    firstTradeAt: Number.isFinite(Number(a.firstTradeAt)) ? Number(a.firstTradeAt) : undefined,
   };
 }
 

@@ -84,10 +84,10 @@ export function AgentToggleCard({ label, description, on, onToggle }: {
 }
 
 // ─── Agent Track Record (shared by live + paper) ─────────
-export function AgentTrackRecord({ title, accent, trades, paper, onReset, summary }: {
+export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onReset, summary }: {
   title: string;
   accent: string;
-  trades: AgentTrade[];
+  trades?: AgentTrade[] | null;
   paper?: boolean;
   onReset?: () => void;
   // Server-side FULL aggregate (all trades, not the last-50 the GET ships). When
@@ -95,7 +95,12 @@ export function AgentTrackRecord({ title, accent, trades, paper, onReset, summar
   // undercounted; falls back to computing from `trades` (paper has no server side).
   summary?: { trades: number; winRate: number; netPnl: number; avgWin: number; avgLoss: number; firstTradeAt?: number } | null;
 }) {
-  const useSummary = !!summary && (summary.trades ?? 0) > 0;
+  // Normalize ONCE at the boundary: a fresh wallet has no agent state at all, and this
+  // component reads .length/.filter/.map on `trades` in a dozen places. One undefined
+  // prop would take down the whole Lab route (react-router errorElement), so the prop
+  // is coerced here rather than guarded at every use site.
+  const trades = Array.isArray(tradesProp) ? tradesProp : [];
+  const useSummary = !!summary && Number.isFinite(summary.trades) && (summary.trades ?? 0) > 0;
   const tr = useSummary ? summary!.trades : trades.length;
   const wr = useSummary ? summary!.winRate : (trades.length ? (trades.filter((t) => t.pnl > 0).length / trades.length) * 100 : 0);
   const net = useSummary ? summary!.netPnl : trades.reduce((s, t) => s + t.pnl, 0);
@@ -177,7 +182,8 @@ export function AgentTrackRecord({ title, accent, trades, paper, onReset, summar
 // distribution instead: which exit closes each loss, where wins die on the scale-out
 // ladder, and avg win vs avg loss at the CURRENT position size only — mixing an old fat
 // notional into avg$ makes it meaningless. Read-only: retuning TP/SL is a separate call.
-export function PaperBlotter({ trades, currentNotional, maxHoldHours }: { trades: AgentTrade[]; currentNotional?: number | null; maxHoldHours?: number | null }) {
+export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours }: { trades?: AgentTrade[] | null; currentNotional?: number | null; maxHoldHours?: number | null }) {
+  const trades = Array.isArray(tradesProp) ? tradesProp : [];   // see AgentTrackRecord
   const b = paperBlotter(trades, { currentNotional: currentNotional ?? null, maxHoldHours: maxHoldHours ?? null });
   if (!b.n) return null;
   const isRedProfitExit = (t: AgentTrade) => (t.reason === "TP" || t.reason === "TP_PARTIAL") && t.pnl <= 0;

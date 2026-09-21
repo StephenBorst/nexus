@@ -1550,7 +1550,7 @@ export function AgentView() {
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
             {!isActive ? (
               <>
-                <button onClick={activateAgent} disabled={saving || config.symbols.length === 0} style={{
+                <button onClick={activateAgent} disabled={saving || (config.symbols?.length ?? 0) === 0} style={{
                   ...agentBtnStyle(true),
                   opacity: saving || config.symbols.length === 0 ? 0.5 : 1,
                   flex: 1,

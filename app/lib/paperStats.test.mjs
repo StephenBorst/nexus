@@ -153,3 +153,56 @@ test("paperBlotter: hold time separates winners from losers", () => {
   assert.equal(b.avgHoldWinH, 1);
   assert.equal(b.avgHoldLossH, 4);
 });
+
+// ── FRESH WALLET — nothing saved anywhere ───────────────────────────────────
+// Repro that motivated these: connect a brand-new address → Lab → Trading Agent.
+// GET /agent/:addr returns {config:null, state:null, trades:[], pending:[]}, so every
+// stat path sees undefined/empty. A single unguarded .length here takes down the whole
+// Lab route (react-router errorElement), not just the card.
+test("fresh wallet: no paper_agg ⇒ null summary, card falls back to the window", () => {
+  assert.equal(paperSummary(undefined), null);
+  assert.equal(paperSummary(null), null);
+  assert.equal(paperSummary({}), null, "an empty agg is not a record");
+});
+
+test("fresh wallet: a PARTIAL paper_agg never yields NaN in a stat tile", () => {
+  // e.g. written by an older exec build, or a half-written object.
+  const s = paperSummary({ trades: 3 });
+  assert.equal(s.trades, 3);
+  assert.equal(s.winRate, 0);
+  assert.equal(s.netPnl, 0);
+  assert.equal(s.avgWin, 0);
+  assert.equal(s.avgLoss, 0);
+  assert.equal(s.firstTradeAt, undefined);
+  for (const v of Object.values(s)) assert.ok(v === undefined || Number.isFinite(v), "no NaN reaches the UI");
+});
+
+test("fresh wallet: garbage field types are coerced, not propagated", () => {
+  const s = paperSummary({ trades: 2, wins: "1", net: "abc", grossWin: null, losses: 1, grossLoss: undefined });
+  assert.equal(s.winRate, 50, "numeric strings still count");
+  assert.equal(s.netPnl, 0, "non-numeric net becomes 0, never NaN");
+  assert.equal(s.avgWin, 0);
+  assert.equal(s.avgLoss, 0);
+});
+
+test("fresh wallet: blotter over no trades at all", () => {
+  for (const empty of [[], null, undefined]) {
+    const b = paperBlotter(empty, { currentNotional: 250, maxHoldHours: 4 });
+    assert.equal(b.n, 0);
+    assert.equal(b.wins, 0);
+    assert.equal(b.losses, 0);
+    assert.deepEqual(b.lossByExit, []);
+    assert.deepEqual(b.winByExit, []);
+    assert.equal(b.anomalies.n, 0);
+    assert.equal(b.staleWindow, false, "no rows ⇒ nothing to call stale");
+    assert.equal(b.sizeDrift, null);
+    assert.equal(b.overHold.n, 0);
+    assert.ok(Number.isFinite(b.avgHoldWinH) && Number.isFinite(b.avgHoldLossH));
+  }
+});
+
+test("fresh wallet: accrual starts clean from nothing", () => {
+  const agg = accruePaperAgg(undefined, { pnl: 2, opened_at: iso(T0), closed_at: iso(T0 + 3600000) });
+  assert.equal(agg.trades, 1);
+  assert.equal(paperSummary(agg).trades, 1);
+});
