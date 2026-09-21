@@ -201,3 +201,16 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
 
   return { direction, confidence, reason };
 }
+
+// ── Hourly OI snapshot cadence ───────────────────────────────────────────────
+// oi:hist is an HOURLY series but the brain ticks every ~5 min. The append was already
+// gated at write time; the per-symbol Orderly FETCH was not, so 11 of every 12 fetches
+// were thrown away. Checking this BEFORE fetching keeps the series identical and makes
+// widening the symbol set cheap instead of multiplying dead calls.
+export const OI_SNAPSHOT_MIN_GAP_MS = 55 * 60 * 1000;
+export function oiSnapshotDue(hist, now = Date.now()) {
+  const rows = Array.isArray(hist) ? hist : [];
+  const last = rows[rows.length - 1];
+  if (!last || !Number.isFinite(Number(last.t))) return true;   // nothing recorded yet
+  return now - Number(last.t) >= OI_SNAPSHOT_MIN_GAP_MS;
+}

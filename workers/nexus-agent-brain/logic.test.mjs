@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deriveSignal } from "./logic.mjs";
+import { deriveSignal, oiSnapshotDue } from "./logic.mjs";
 
 // raw helper: funding in decimal, changes in decimal
 const raw = (o) => ({ fundingRate: 0, priceChange: 0, oiChange: 0, hasPrev: true, ...o });
@@ -306,4 +306,29 @@ test("BASIS_FADE: a quiet tick explains itself", () => {
   assert.equal(r.direction, "NONE");
   assert.equal(r.reason, "accruing (12/48h)", "'no signal' can't distinguish not-wired from correctly-quiet");
   assert.equal(deriveSignal({ hasPrev: true }, { signalMode: "BASIS_FADE" }).reason, "no signal");
+});
+
+// ── oiSnapshotDue — the hourly gate that now also skips the FETCH ────────────
+test("oiSnapshotDue: nothing recorded yet ⇒ always due", () => {
+  assert.equal(oiSnapshotDue([], Date.now()), true);
+  assert.equal(oiSnapshotDue(null, Date.now()), true);
+  assert.equal(oiSnapshotDue([{ t: "nope" }], Date.now()), true, "unusable stamp ⇒ record rather than skip");
+});
+
+test("oiSnapshotDue: within the hour ⇒ skip (no network call)", () => {
+  const now = Date.now();
+  assert.equal(oiSnapshotDue([{ t: now - 5 * 60000 }], now), false, "5 min old");
+  assert.equal(oiSnapshotDue([{ t: now - 54 * 60000 }], now), false, "just inside the gap");
+});
+
+test("oiSnapshotDue: past the gap ⇒ due", () => {
+  const now = Date.now();
+  assert.equal(oiSnapshotDue([{ t: now - 55 * 60000 }], now), true, "exactly at the gap");
+  assert.equal(oiSnapshotDue([{ t: now - 3 * 3600000 }], now), true);
+});
+
+test("oiSnapshotDue: reads the LAST row, not the first", () => {
+  const now = Date.now();
+  const hist = [{ t: now - 10 * 3600000 }, { t: now - 2 * 60000 }];
+  assert.equal(oiSnapshotDue(hist, now), false, "an old first row must not force a re-record");
 });

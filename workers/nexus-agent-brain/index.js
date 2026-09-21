@@ -15,8 +15,17 @@
 //   Entry: BOTH rules must agree (confluence). Single signal = no trade.
 // ═══════════════════════════════════════════════════════════
 
-import { deriveSignal, computeRegime, atrPct } from "./logic.mjs";
+import { deriveSignal, computeRegime, atrPct, oiSnapshotDue } from "./logic.mjs";
 import { basisFadeFromHistory } from "../../app/lib/basisFade.mjs";
+
+// The markets we ALWAYS record oi:hist for. ⚠️ Keep this in step with
+// VALIDATE_UNIVERSE in nexus-lab-api/strategies.mjs — a symbol the walk-forward asks
+// about but the brain never records can NEVER mature, which is exactly how 3 of the 6
+// validate markets sat permanently at 0 days of coverage.
+const OI_CORE_SYMBOLS = [
+  "PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC",
+  "PERP_BNB_USDC", "PERP_XRP_USDC", "PERP_LINK_USDC",
+];
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 
@@ -59,7 +68,7 @@ export default {
       // below used to strand it → history only grew while someone was trading).
       // Idempotent within a tick: recordOiSnapshot's 55-min gate no-ops the repeat
       // call for watchlist symbols further down.
-      await recordOiForSymbols(["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC"], env);
+      await recordOiForSymbols(OI_CORE_SYMBOLS, env);
       // Real OHLC+volume candles (from Orderly's own tv/history) — the SAME market-
       // data-not-per-user rationale as OI above, so it matures with zero active
       // agents. Unlocks true VWAP/ATR + rs_rank quartiles for the harness and the
@@ -77,7 +86,7 @@ export default {
       // Load each active user's config up front.
       const userConfigs = {};
       const symbolSet = new Set(); // every symbol any active user watches
-      const oiSymbols = new Set(["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC"]); // core + all watchlists
+      const oiSymbols = new Set(OI_CORE_SYMBOLS); // core + all watchlists
       for (const address of users) {
         const configRaw = await env.NEXUS_AGENT.get(`agent:config:${address}`);
         const stateRaw = await env.NEXUS_AGENT.get(`agent:state:${address}`);
@@ -263,6 +272,11 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
 async function recordOiForSymbols(symbols, env) {
   for (const symbol of symbols) {
     try {
+      // Skip the network call entirely when this hour's point is already recorded —
+      // the append was gated, the fetch wasn't, so most ticks paid for a discarded read.
+      let hist = null;
+      try { const raw = await env.NEXUS_AGENT.get(`oi:hist:${symbol}`); hist = raw ? JSON.parse(raw) : []; } catch { hist = null; }
+      if (hist && !oiSnapshotDue(hist)) continue;
       const d = (await orderlyPublicGet(`${ORDERLY_API}/v1/public/futures/${symbol}`)).data;
       await recordOiSnapshot(symbol, env, {
         price: parseFloat(d.mark_price), oi: parseFloat(d.open_interest) || 0, funding: parseFloat(d.last_funding_rate) || 0,
