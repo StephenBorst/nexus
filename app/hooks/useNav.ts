@@ -8,7 +8,23 @@ export function useNav() {
   const [searchParams] = useSearchParams();
 
   const onRouteChange = useCallback(
-    (option: RouteOption) => {
+    (option?: RouteOption) => {
+      // The Orderly scaffold's mobile back chevron calls onRouteChange(undefined)
+      // for pages that aren't registered main menus (e.g. /analyze, /arena: their
+      // initialMenu matches nothing in mainMenus, so the scaffold treats them as
+      // sub-pages and its onBack finds no target). Reading option.href used to
+      // throw here, so the button silently did nothing. Treat it as a real back:
+      // step back through history when there is any, otherwise land on home
+      // (which redirects to the trading page).
+      if (!option || typeof option.href !== "string") {
+        if (typeof window !== "undefined" && window.history.length > 1) {
+          navigate(-1);
+        } else {
+          navigate("/");
+        }
+        return;
+      }
+
       const searchParamsString = searchParams.toString();
       const queryString = searchParamsString ? `?${searchParamsString}` : "";
 
