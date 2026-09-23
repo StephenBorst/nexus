@@ -16,6 +16,7 @@ import { bookConcentration } from "@/lib/bookRisk.mjs";
 import { fusePositioning, positioningRead } from "@/lib/positioning.mjs";
 import { rankConviction, convictionLevel } from "@/lib/conviction.mjs";
 import { fetchDeribitTerm } from "@/lib/deribit.mjs";
+import { fetchHLFillsPaged, fetchHLPortfolio, type HLFill } from "@/utils/hyperliquid";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const AGENT_API = "https://og.nexustradinglabs.com";
@@ -699,27 +700,31 @@ export const TOOLS: ToolDef[] = [
       const w = String(args.wallet ?? "").trim();
       if (!/^0x[0-9a-fA-F]{40}$/.test(w)) return JSON.stringify({ error: "invalid wallet address" });
 
-      const [hlRes, ordRes, trkRes] = await Promise.allSettled([
-        fetch("https://api.hyperliquid.xyz/info", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "userFills", user: w.toLowerCase() }),
-        }).then((r) => r.json()),
+      const [hlRes, ordRes, trkRes, pfRes] = await Promise.allSettled([
+        // Paged forward from genesis — the raw userFills endpoint caps at ~2,000 recent
+        // fills, and grading only that slice mislabels whales.
+        fetchHLFillsPaged(w),
         fetch(`${AGENT_API}/smart/xray?address=${encodeURIComponent(w)}`).then((r) => r.json()),
         // Self-seeding: reading the history also begins/extends this wallet's Tracked
         // Record, so vetting a wallet starts grading its consistency over time.
         fetch(`${AGENT_API}/smart/xray/history?address=${encodeURIComponent(w)}`).then((r) => r.json()),
+        // Total vs perp-only lifetime PnL — the HL leaderboard ranks TOTAL PnL, so a
+        // wallet can show $445M there with $0 from perps (vault/spot).
+        fetchHLPortfolio(w),
       ]);
 
       // Hyperliquid: closed fills only → count / net pnl / win rate.
       let hyperliquid: Record<string, unknown> = { closed_trades: 0 };
-      if (hlRes.status === "fulfilled" && Array.isArray(hlRes.value)) {
-        const closed = hlRes.value.filter(
-          (f: { dir?: string; closedPnl?: string }) =>
-            /^Close/.test(String(f.dir ?? "")) || parseFloat(f.closedPnl ?? "0") !== 0,
+      let fillsTruncated = false;
+      if (hlRes.status === "fulfilled") {
+        const fills = hlRes.value.fills;
+        fillsTruncated = hlRes.value.truncated;
+        const closed = fills.filter(
+          (f: HLFill) =>
+            /^Close/.test(f.dir ?? "") || parseFloat(f.closedPnl ?? "0") !== 0,
         );
         const pnls = closed.map(
-          (f: { closedPnl?: string; fee?: string }) =>
+          (f: HLFill) =>
             parseFloat(f.closedPnl ?? "0") - Math.abs(parseFloat(f.fee ?? "0")),
         );
         const wins = pnls.filter((p: number) => p > 0).length;
@@ -727,6 +732,7 @@ export const TOOLS: ToolDef[] = [
           closed_trades: closed.length,
           net_pnl: Math.round(pnls.reduce((s: number, p: number) => s + p, 0)),
           win_rate_pct: pnls.length ? Math.round((wins / pnls.length) * 100) : null,
+          fills_truncated: fillsTruncated,
         };
       }
 
@@ -764,11 +770,28 @@ export const TOOLS: ToolDef[] = [
               })
         : null;
 
-      return JSON.stringify({
-        wallet: w, hyperliquid, orderly, tracked_record,
-        note: orderly
+      // Portfolio split: total vs perp-only lifetime PnL. A wallet with a big
+      // all-time number and zero perp PnL is a vault/spot record — no perp tape
+      // to grade, and it must be reported as such, never as "no history".
+      const pf = pfRes.status === "fulfilled" ? pfRes.value : null;
+      const hl_portfolio = pf
+        ? { all_time_pnl: Math.round(pf.allTime), perp_all_time_pnl: Math.round(pf.perpAllTime) }
+        : null;
+      const nonPerpRecord = !!hl_portfolio && hl_portfolio.all_time_pnl > 0 && hl_portfolio.perp_all_time_pnl === 0;
+
+      const notes = [
+        orderly
           ? "Orderly figures are per-MARKET settled totals (no public per-trade tape), so hold-time/timing stats are Hyperliquid-only. tracked_record grades the CHANGE in realized PnL between daily snapshots — consistency_score/tier are EARNED from consistency over time and stay null until enough daily windows accrue; long gaps in watching are excluded so a month can't pose as a green day."
           : "No Orderly-network history found for this wallet (sub-accounts aren't resolvable from an address).",
+      ];
+      if (nonPerpRecord)
+        notes.push(`Hyperliquid shows ${hl_portfolio!.all_time_pnl} all-time PnL that is entirely NON-perp (vault/spot) — this wallet has no perp tape to grade. Report that explicitly; never call it "no trading history".`);
+      if (fillsTruncated)
+        notes.push("Hyperliquid fills were truncated at 10,000 — closed_trades/net_pnl/win_rate cover the most recent fills only, not the full record.");
+
+      return JSON.stringify({
+        wallet: w, hyperliquid, hl_portfolio, orderly, tracked_record,
+        note: notes.join(" "),
         full_report: `/analyze?address=${w}`,
       });
     },

@@ -2,8 +2,15 @@
 // wallet connect. Acquisition wedge: grade a trader who's never touched our DEX.
 //
 // TWO SOURCES, DELIBERATELY DIFFERENT DEPTH:
-//  • Hyperliquid — public /info `userFills` returns a per-TRADE tape, so we can
-//    render the full <AnalyticsView> (hold time, timing, streaks, per-trade P&L).
+//  • Hyperliquid — public /info `userFillsByTime` (paged forward from genesis via
+//    @/utils/hyperliquid) returns a per-TRADE tape, so we can render the full
+//    <AnalyticsView> (hold time, timing, streaks, per-trade P&L). The raw
+//    `userFills` endpoint caps at ~2,000 recent fills — grading only that slice
+//    mislabels whales, so we page and disclose when the tape is still partial.
+//    The `portfolio` endpoint splits allTime vs perpAllTime PnL: the HL leaderboard
+//    ranks TOTAL PnL, so a wallet can show $445M there with $0 from perps
+//    (vault/spot). An empty perp tape + non-perp record gets an explicit message,
+//    not the misleading "no trading history".
 //  • Orderly (incl. OUR venue) — the public dashboard indexer is keyed by
 //    account_id and only exposes per-SYMBOL aggregates; /trades is hash-encoded
 //    and /events_v2 is empty. So Orderly gets a venue/market breakdown, NOT the
@@ -21,6 +28,7 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import type { ProcessedTrade } from "@/pages/lab/types";
 import { deployDirectiveFromThesis } from "@/utils/agentPrefill";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
+import { fetchHLFillsPaged, fetchHLPortfolio, HL_FILLS_MAX, type HLFill } from "@/utils/hyperliquid";
 
 // Shared design tokens — same set the Arena uses, so the two pages read as one system.
 const MONO = "var(--nx-font-mono)";
@@ -79,11 +87,6 @@ async function fetchOrderlyXray(address: string): Promise<XrayResult> {
   return res.json();
 }
 
-type HLFill = {
-  coin: string; px: string; sz: string; side: string; time: number;
-  dir: string; closedPnl: string; fee: string;
-};
-
 const isAddress = (s: string) => /^0x[a-fA-F0-9]{40}$/.test(s.trim());
 
 function fillsToTrades(fills: HLFill[]): ProcessedTrade[] {
@@ -105,18 +108,6 @@ function fillsToTrades(fills: HLFill[]): ProcessedTrade[] {
     .sort((a, b) => a.timestamp - b.timestamp);
 }
 
-async function fetchHLFills(address: string): Promise<HLFill[]> {
-  const res = await fetch("https://api.hyperliquid.xyz/info", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "userFills", user: address.trim().toLowerCase() }),
-  });
-  if (!res.ok) throw new Error(`Hyperliquid API ${res.status}`);
-  const data = await res.json();
-  if (!Array.isArray(data)) throw new Error("Unexpected response from Hyperliquid");
-  return data as HLFill[];
-}
-
 export default function AnalyzePage() {
   const [params, setParams] = useSearchParams();
   const [input, setInput] = useState(params.get("address") ?? "");
@@ -126,6 +117,7 @@ export default function AnalyzePage() {
   const [track, setTrack] = useState<XrayTrack | null>(null); // the graded, WATCHED record (settlement deltas over time)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [partialTape, setPartialTape] = useState(false); // fills hit HL_FILLS_MAX — oldest history not graded
   const [watch, setWatch] = useState<string[]>(loadWatch);
   const navigate = useNavigate();
 
@@ -170,15 +162,17 @@ export default function AnalyzePage() {
     navigate("/lab?tab=thesis");
   };
 
-  // Both venues in parallel — one failing must never hide the other, so this uses
-  // allSettled and only surfaces an error when NEITHER source returned anything.
+  // Three sources in parallel — one failing must never hide the others, so this uses
+  // allSettled and only surfaces an error when NEITHER venue returned anything.
   const run = useCallback(async (addr: string) => {
     if (!isAddress(addr)) { setError("Enter a valid 0x… wallet address"); return; }
-    setLoading(true); setError(null); setTrades(null); setOrderly(null); setTrack(null);
-    const [hl, ord] = await Promise.allSettled([fetchHLFills(addr), fetchOrderlyXray(addr)]);
+    setLoading(true); setError(null); setTrades(null); setOrderly(null); setTrack(null); setPartialTape(false);
+    const [hl, ord, pf] = await Promise.allSettled([fetchHLFillsPaged(addr), fetchOrderlyXray(addr), fetchHLPortfolio(addr)]);
 
-    const t = hl.status === "fulfilled" ? fillsToTrades(hl.value) : [];
+    const fills = hl.status === "fulfilled" ? hl.value.fills : [];
+    const t = fillsToTrades(fills);
     setTrades(t);
+    setPartialTape(hl.status === "fulfilled" && hl.value.truncated);
     const ox = ord.status === "fulfilled" ? ord.value : null;
     setOrderly(ox);
 
@@ -192,11 +186,23 @@ export default function AnalyzePage() {
     const hasHL = t.length > 0;
     const hasOrderly = !!ox && ox.venues.length > 0;
     if (!hasHL && !hasOrderly) {
-      setError(
-        hl.status === "rejected" && ord.status === "rejected"
-          ? "Couldn't reach Hyperliquid or Orderly. Try again."
-          : "No perp trading history found for this wallet on Hyperliquid or the Orderly network.",
-      );
+      const portfolio = pf.status === "fulfilled" ? pf.value : null;
+      if (hl.status === "rejected" && ord.status === "rejected") {
+        setError("Couldn't reach Hyperliquid or Orderly. Try again.");
+      } else if (portfolio && portfolio.allTime > 0 && portfolio.perpAllTime === 0) {
+        // Leaderboard-whale case: a real Hyperliquid record, but none of it is perps
+        // (vault/spot). Say so explicitly instead of the misleading dead-end message.
+        setError(
+          `No perp tape on this wallet. Hyperliquid shows ${usd(portfolio.allTime)} all-time PnL — all of it non-perp (vault/spot). Nothing to grade.`,
+        );
+      } else if (portfolio && portfolio.perpAllTime !== 0) {
+        // Realized perp PnL exists, so fills must exist too — the fills read failed.
+        setError(
+          `Hyperliquid shows ${usd(portfolio.perpAllTime)} perp PnL on this wallet, but no fills came back. Try again.`,
+        );
+      } else {
+        setError("No perp trading history found for this wallet on Hyperliquid or the Orderly network.");
+      }
     }
     setLoading(false);
   }, []);
@@ -333,6 +339,9 @@ export default function AnalyzePage() {
         <div className="nx-fade-in">
           <div style={{ fontFamily: MONO, fontSize: 11, color: FOG, marginBottom: 10 }}>
             <span style={{ color: BONE }}>{trades.length}</span> closed perp trades · source: Hyperliquid · {address?.slice(0, 6)}…{address?.slice(-4)}
+            {partialTape && (
+              <span style={{ color: MUTED }}> · partial tape — oldest fills beyond the {HL_FILLS_MAX.toLocaleString()}-fill cap</span>
+            )}
           </div>
           <AnalyticsView orders={trades} totalPnl={totalPnl} winRate={winRate} collateral={0} />
           <div style={{ marginTop: 24, padding: "16px 18px", border: `1px solid ${BORDER}`, borderRadius: 6, background: SURFACE_ALT, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
