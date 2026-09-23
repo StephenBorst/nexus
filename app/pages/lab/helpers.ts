@@ -18,6 +18,14 @@ export function formatPnlCompact(val: number) {
   return `${val >= 0 ? "+" : "-"}$${s}`;
 }
 
+// Sign-less compact USD for balances — same M/K thresholds as formatPnlCompact,
+// but no +/-: a balance isn't a P&L figure.
+export function formatUsdCompact(val: number) {
+  const a = Math.abs(val);
+  const s = a >= 1e6 ? `${(a / 1e6).toFixed(2)}M` : a >= 1e3 ? `${(a / 1e3).toFixed(1)}K` : a.toFixed(2);
+  return `$${s}`;
+}
+
 export function getDayKey(ts: number) {
   const d = new Date(ts);
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;

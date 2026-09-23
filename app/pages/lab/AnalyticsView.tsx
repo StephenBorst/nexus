@@ -6,7 +6,7 @@ import { cardStyle, labelStyle } from "./styles";
 import { ProcessSection } from "./ProcessView";
 import { OperatorProfileCard } from "./OperatorProfile";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
-import { formatPnl, formatPnlCompact } from "./helpers";
+import { formatPnl, formatPnlCompact, formatUsdCompact } from "./helpers";
 import { PnlChart, PnlBars, EmptyState, CountUp, SectionHeader } from "./components";
 import { Collapsible } from "./Collapsible";
 import { useIsMobile } from "./useIsMobile";
@@ -628,7 +628,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
         </div>
         <div style={cardStyle}>
           <div style={labelStyle}>BALANCE</div>
-          <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: "#f4f4f5", fontVariantNumeric: "tabular-nums" }}>{collateral > 0 ? <CountUp value={collateral} format={(v) => `$${v.toFixed(2)}`} /> : "—"}</div>
+          <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: "#f4f4f5", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{collateral > 0 ? <CountUp value={collateral} format={formatUsdCompact} /> : "—"}</div>
           <div style={{ fontSize: 10, color: "#52525b", marginTop: 4, fontFamily: "var(--nx-font-mono)" }}>usdc</div>
         </div>
       </div>
