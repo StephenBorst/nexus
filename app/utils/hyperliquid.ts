@@ -13,7 +13,7 @@
 
 export type HLFill = {
   coin: string; px: string; sz: string; side: string; time: number;
-  dir: string; closedPnl: string; fee: string;
+  dir: string; closedPnl: string; fee: string; tid?: number | string;
 };
 
 export type HLPortfolio = { allTime: number; perpAllTime: number };
@@ -52,30 +52,54 @@ export async function fetchHLPortfolio(address: string): Promise<HLPortfolio> {
 // we advance startTime past each page's newest fill. Mega-whales (more fills than
 // the page budget) fall back to the most recent slice with truncated=true:
 // grading the oldest 10k would mislead the other way.
+//
+// Dedupe is by fill tid, not timestamp: a page boundary can land mid-millisecond
+// for HFT wallets, so we advance with startTime = newest (not newest + 1) and
+// skip already-seen tids instead of silently dropping boundary fills.
 export async function fetchHLFillsPaged(address: string): Promise<{ fills: HLFill[]; truncated: boolean }> {
   const user = address.trim().toLowerCase();
   const now = Date.now();
   const fills: HLFill[] = [];
+  const seen = new Set<number | string>();
   let startTime = 0;
   let exhausted = false;
   for (let page = 0; page < 5 && fills.length < HL_FILLS_MAX; page++) {
     const data = (await postInfo({ type: "userFillsByTime", user, startTime, endTime: now })) as HLFill[];
     if (!Array.isArray(data) || data.length === 0) { exhausted = true; break; }
-    const newest = data.reduce((m, f) => Math.max(m, f.time), startTime);
-    fills.push(...data);
+    let newest = startTime;
+    for (const f of data) {
+      if (f.tid !== undefined && seen.has(f.tid)) continue; // boundary dupe from startTime = newest
+      if (f.tid !== undefined) seen.add(f.tid);
+      fills.push(f);
+      if (f.time > newest) newest = f.time;
+    }
     if (newest <= startTime) { exhausted = true; break; } // no progress — never loop forever
-    startTime = newest + 1;
+    startTime = newest;
   }
+  let truncated = false;
   if (!exhausted) {
     // Page budget hit with history still coming — but first probe: a wallet with
     // exactly HL_FILLS_MAX fills ends on a full page, and that IS the full tape.
+    // The probe reuses startTime (= newest fetched); genuinely new fills are the
+    // ones whose tid we haven't seen.
     const probe = (await postInfo({ type: "userFillsByTime", user, startTime, endTime: now })) as HLFill[];
-    if (Array.isArray(probe) && probe.length === 0) {
-      return { fills: fills.slice(0, HL_FILLS_MAX), truncated: false };
+    const probeOk = Array.isArray(probe);
+    const fresh = probeOk ? probe.filter((f) => f.tid === undefined || !seen.has(f.tid)) : [];
+    if (!probeOk || fresh.length > 0) {
+      // More history is proven (or at least not disproven) to exist — from here
+      // on the tape is partial no matter which slice we grade.
+      truncated = true;
+      // Genuine mega-whale: plain userFills returns the most recent ~2,000 fills.
+      const recent = (await postInfo({ type: "userFills", user })) as HLFill[];
+      if (Array.isArray(recent) && recent.length > 0) {
+        const newestRecent = recent.reduce((m, f) => Math.max(m, f.time), 0);
+        // userFills must extend BEYOND what we forward-paged; otherwise it's a
+        // stale slice and grading it as "most recent" would mislead.
+        if (newestRecent > startTime) return { fills: recent.slice(0, HL_FILLS_MAX), truncated: true };
+      }
+      // Fallback: grade the oldest 10k we already hold, but STILL flagged partial.
+      return { fills: fills.slice(0, HL_FILLS_MAX), truncated: true };
     }
-    // Genuine mega-whale: plain userFills returns the most recent ~2,000 fills.
-    const recent = (await postInfo({ type: "userFills", user })) as HLFill[];
-    if (Array.isArray(recent) && recent.length > 0) return { fills: recent, truncated: true };
   }
-  return { fills: fills.slice(0, HL_FILLS_MAX), truncated: false };
+  return { fills: fills.slice(0, HL_FILLS_MAX), truncated };
 }

@@ -60,12 +60,13 @@ type XraySymbol = {
 };
 type XrayVenue = {
   brokerId: string; accountId: string; isNexus: boolean;
-  realized: number; unrealized: number; markets: number; wins: number; losses: number;
+  realized: number; unrealized: number; markets: number; marketsCapped?: boolean; wins: number; losses: number;
   profitableMarketsPct: number; openPositions: number; bySymbol: XraySymbol[];
 };
 type XrayResult = {
   address: string; venues: XrayVenue[];
   totalRealized: number; totalUnrealized: number; markets: number; brokersChecked: number;
+  brokersFailed?: string[]; marketsCapped?: boolean;
 };
 
 const usd = (n: number) => {
@@ -189,9 +190,10 @@ export default function AnalyzePage() {
       const portfolio = pf.status === "fulfilled" ? pf.value : null;
       if (hl.status === "rejected" && ord.status === "rejected") {
         setError("Couldn't reach Hyperliquid or Orderly. Try again.");
-      } else if (portfolio && portfolio.allTime > 0 && portfolio.perpAllTime === 0) {
+      } else if (portfolio && portfolio.allTime !== 0 && portfolio.perpAllTime === 0) {
         // Leaderboard-whale case: a real Hyperliquid record, but none of it is perps
-        // (vault/spot). Say so explicitly instead of the misleading dead-end message.
+        // (vault/spot) — winners AND underwater vault records alike. Say so explicitly
+        // instead of the misleading dead-end message.
         setError(
           `No perp tape on this wallet. Hyperliquid shows ${usd(portfolio.allTime)} all-time PnL — all of it non-perp (vault/spot). Nothing to grade.`,
         );
@@ -200,6 +202,10 @@ export default function AnalyzePage() {
         setError(
           `Hyperliquid shows ${usd(portfolio.perpAllTime)} perp PnL on this wallet, but no fills came back. Try again.`,
         );
+      } else if (pf.status === "rejected") {
+        // The portfolio read itself failed — don't fall through to the old dead-end
+        // message when we simply couldn't verify the record.
+        setError("Couldn't verify the full Hyperliquid record right now. Try again.");
       } else {
         setError("No perp trading history found for this wallet on Hyperliquid or the Orderly network.");
       }
@@ -299,7 +305,7 @@ export default function AnalyzePage() {
         const stats = ([
           trades && trades.length ? { l: "HL WIN RATE", v: `${winRate.toFixed(0)}%`, c: winRate >= 50 ? POS : NEG } : null,
           trades && trades.length ? { l: "HL TRADES", v: String(trades.length), c: BRIGHT } : null,
-          markets ? { l: "MARKETS", v: String(markets), c: BRIGHT } : null,
+          markets ? { l: "MARKETS", v: orderly?.marketsCapped ? `${markets}+` : String(markets), c: BRIGHT } : null,
           profitablePct != null ? { l: "PROFITABLE MKTS", v: `${profitablePct}%`, c: BRIGHT } : null,
           { l: "OPEN NOW", v: String(openNow), c: openNow ? BRIGHT : FAINT },
         ].filter(Boolean)) as { l: string; v: string; c: string }[];
@@ -320,7 +326,10 @@ export default function AnalyzePage() {
               <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap", marginBottom: 16 }}>
                 <span style={{ fontFamily: UI, fontSize: 24, fontWeight: 700, color: good ? POS : NEG, letterSpacing: "-0.01em" }}>{good ? "Net profitable" : "Underwater"}</span>
                 <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: good ? POS : NEG }}>{usd(combined)}</span>
-                <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>all-time realized · {srcs}</span>
+                <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
+                  {partialTape ? `partial tape · most recent ${HL_FILLS_MAX.toLocaleString()} fills · ` : "all-time realized · "}{srcs}
+                  {orderly?.marketsCapped ? " · Orderly markets capped at 100/venue" : ""}
+                </span>
               </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 12 }}>
@@ -360,7 +369,13 @@ export default function AnalyzePage() {
           <SubHead title="ORDERLY NETWORK RECORD" note="PUBLIC INDEXER" />
           <p style={{ fontFamily: UI, fontSize: 12.5, color: MUTED, lineHeight: 1.6, margin: "0 0 16px", maxWidth: 680 }}>
             Settled on-chain, read from Orderly&apos;s public indexer — found on{" "}
-            <b style={{ color: BRIGHT }}>{orderly.venues.length}</b> of {orderly.brokersChecked} venues probed.
+            <b style={{ color: BRIGHT }}>{orderly.venues.length}</b> of {orderly.brokersChecked} venues probed
+            {orderly.brokersFailed && orderly.brokersFailed.length > 0 && (
+              <> · <b style={{ color: BRIGHT }}>{orderly.brokersFailed.length}</b> failed to read ({orderly.brokersFailed.join(", ")})</>
+            )}
+            {orderly.marketsCapped && (
+              <> · per-venue market list capped at 100 — totals may understate</>
+            )}.
             These are per-market totals; Orderly doesn&apos;t publish a per-trade tape, so the
             hold-time and timing analytics above stay Hyperliquid-only.
           </p>
@@ -391,7 +406,7 @@ export default function AnalyzePage() {
                 {[
                   { l: "REALIZED", v: usd(v.realized), c: v.realized >= 0 ? POS : NEG },
                   { l: "UNREALIZED", v: v.unrealized ? usd(v.unrealized) : "—", c: v.unrealized === 0 ? FAINT : v.unrealized > 0 ? POS : NEG },
-                  { l: "MARKETS", v: String(v.markets), c: BRIGHT },
+                  { l: "MARKETS", v: v.marketsCapped ? `${v.markets}+` : String(v.markets), c: BRIGHT },
                   { l: "PROFITABLE MKTS", v: `${v.profitableMarketsPct}%`, c: BRIGHT },
                   { l: "OPEN NOW", v: String(v.openPositions), c: v.openPositions ? BRIGHT : FAINT },
                 ].map(({ l, v: val, c }) => (

@@ -75,7 +75,9 @@ async function xrayAggregate(address) {
   const coin = (s) => String(s).replace("PERP_", "").replace("_USDC", "");
   const probed = await Promise.all(ORDERLY_BROKERS.map(async (brokerId) => {
     let accountId;
-    try { accountId = orderlyAccountId(address, brokerId); } catch { return null; }
+    // Derivation failure and indexer failure are both "couldn't read this venue" —
+    // never silently counted as an empty venue downstream.
+    try { accountId = orderlyAccountId(address, brokerId); } catch { return { brokerId, failed: true }; }
     try {
       const d = await orderlyDashboard(`/ranking/realized_pnl?account_id=${accountId}&limit=100`);
       const rows = d?.data?.rows || [];
@@ -100,14 +102,17 @@ async function xrayAggregate(address) {
       return {
         brokerId, accountId, isNexus: brokerId === NEXUS_BROKER_ID,
         realized: Math.round(realized), unrealized: Math.round(unrealized),
-        markets: rows.length, wins, losses,
+        // limit=100: a full page means markets exist beyond the cap, so the summed
+        // realized UNDERSTATES. Flag it; the page/tool disclose instead of hiding it.
+        markets: rows.length, marketsCapped: rows.length >= 100, wins, losses,
         profitableMarketsPct: graded ? Math.round((wins / graded) * 1000) / 10 : 0,
         openPositions: bySymbol.filter((s) => s.open).length,
         bySymbol,
       };
-    } catch { return null; }
+    } catch { return { brokerId, failed: true }; }
   }));
-  const venues = probed.filter(Boolean)
+  const brokersFailed = probed.filter((p) => p && p.failed).map((p) => p.brokerId);
+  const venues = probed.filter((p) => p && !p.failed)
     .sort((a, b) => (b.isNexus ? 1 : 0) - (a.isNexus ? 1 : 0) || b.realized - a.realized);
   return {
     address, venues,
@@ -118,6 +123,8 @@ async function xrayAggregate(address) {
     totalLosses: venues.reduce((s, v) => s + v.losses, 0),
     totalOpen: venues.reduce((s, v) => s + v.openPositions, 0),
     brokersChecked: ORDERLY_BROKERS.length,
+    brokersFailed,
+    marketsCapped: venues.some((v) => v.marketsCapped),
   };
 }
 

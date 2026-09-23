@@ -714,7 +714,10 @@ export const TOOLS: ToolDef[] = [
       ]);
 
       // Hyperliquid: closed fills only → count / net pnl / win rate.
-      let hyperliquid: Record<string, unknown> = { closed_trades: 0 };
+      // A rejected fills fetch is NOT "no history" — it must stay distinguishable
+      // so the agent never vets a real trader as a blank wallet during an outage.
+      let hyperliquid: Record<string, unknown> =
+        hlRes.status === "rejected" ? { closed_trades: null, fills_fetch_failed: true } : { closed_trades: 0 };
       let fillsTruncated = false;
       if (hlRes.status === "fulfilled") {
         const fills = hlRes.value.fills;
@@ -739,16 +742,19 @@ export const TOOLS: ToolDef[] = [
       // Orderly: per-market aggregates per broker (ours flagged). NO per-trade tape
       // exists publicly, so never claim hold-time/timing stats from this side.
       const ord = ordRes.status === "fulfilled" ? ordRes.value : null;
+      const orderlyFailed = ordRes.status === "rejected";
       const orderly = ord?.venues?.length
         ? {
             venues: ord.venues.map((v: Record<string, unknown>) => ({
               broker: v.brokerId, is_nexus: v.isNexus, realized: v.realized,
-              unrealized: v.unrealized, markets: v.markets,
+              unrealized: v.unrealized, markets: v.markets, markets_capped: !!v.marketsCapped,
               profitable_markets_pct: v.profitableMarketsPct, open_positions: v.openPositions,
               top_markets: (v.bySymbol as Record<string, unknown>[] ?? []).slice(0, 5)
                 .map((s) => ({ sym: s.sym, realized: s.realized, open: s.open, side: s.side })),
             })),
             total_realized: ord.totalRealized,
+            markets_capped: !!ord.marketsCapped,
+            brokers_failed: ord.brokersFailed ?? [],
           }
         : null;
 
@@ -779,13 +785,28 @@ export const TOOLS: ToolDef[] = [
         : null;
       const nonPerpRecord = !!hl_portfolio && hl_portfolio.all_time_pnl > 0 && hl_portfolio.perp_all_time_pnl === 0;
 
+      // Compact $ formatter matching the /analyze page's usd() style.
+      const usdShort = (n: number) => {
+        const a = Math.abs(n);
+        const s = a >= 1e6 ? `${(a / 1e6).toFixed(2)}M` : a >= 1e3 ? `${(a / 1e3).toFixed(1)}K` : a.toFixed(2);
+        return `${n < 0 ? "-" : ""}$${s}`;
+      };
+
       const notes = [
         orderly
           ? "Orderly figures are per-MARKET settled totals (no public per-trade tape), so hold-time/timing stats are Hyperliquid-only. tracked_record grades the CHANGE in realized PnL between daily snapshots — consistency_score/tier are EARNED from consistency over time and stay null until enough daily windows accrue; long gaps in watching are excluded so a month can't pose as a green day."
-          : "No Orderly-network history found for this wallet (sub-accounts aren't resolvable from an address).",
+          : orderlyFailed
+            ? "Orderly-network read failed (indexer error) — retry; do not report this as no history."
+            : "No Orderly-network history found for this wallet on the venues probed.",
       ];
       if (nonPerpRecord)
-        notes.push(`Hyperliquid shows ${hl_portfolio!.all_time_pnl} all-time PnL that is entirely NON-perp (vault/spot) — this wallet has no perp tape to grade. Report that explicitly; never call it "no trading history".`);
+        notes.push(`Hyperliquid shows ${usdShort(hl_portfolio!.all_time_pnl)} all-time PnL that is entirely NON-perp (vault/spot) — this wallet has no perp tape to grade. Report that explicitly; never call it "no trading history".`);
+      if (hlRes.status === "rejected" && !nonPerpRecord)
+        notes.push("Hyperliquid fills failed to load (API error) — do NOT report this wallet as having no perp history; tell the user to retry.");
+      if (orderly?.markets_capped)
+        notes.push("Orderly per-venue market lists cap at 100 — total_realized may understate for diversified wallets.");
+      if (orderly && (orderly.brokers_failed as string[]).length > 0)
+        notes.push(`Orderly venues failed to read (${(orderly.brokers_failed as string[]).join(", ")}) — treat as unread, not empty.`);
       if (fillsTruncated)
         notes.push("Hyperliquid fills were truncated at 10,000 — closed_trades/net_pnl/win_rate cover the most recent fills only, not the full record.");
 
