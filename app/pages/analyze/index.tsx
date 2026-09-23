@@ -327,7 +327,7 @@ export default function AnalyzePage() {
                 <span style={{ fontFamily: UI, fontSize: 24, fontWeight: 700, color: good ? POS : NEG, letterSpacing: "-0.01em" }}>{good ? "Net profitable" : "Underwater"}</span>
                 <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: good ? POS : NEG }}>{usd(combined)}</span>
                 <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
-                  {partialTape ? `partial tape · most recent ${HL_FILLS_MAX.toLocaleString()} fills · ` : "all-time realized · "}{srcs}
+                  {partialTape ? `partial tape · most recent ${(trades?.length ?? HL_FILLS_MAX).toLocaleString()} fills · ` : "all-time realized · "}{srcs}
                   {orderly?.marketsCapped ? " · Orderly markets capped at 100/venue" : ""}
                 </span>
               </div>
@@ -349,7 +349,7 @@ export default function AnalyzePage() {
           <div style={{ fontFamily: MONO, fontSize: 11, color: FOG, marginBottom: 10 }}>
             <span style={{ color: BONE }}>{trades.length}</span> closed perp trades · source: Hyperliquid · {address?.slice(0, 6)}…{address?.slice(-4)}
             {partialTape && (
-              <span style={{ color: MUTED }}> · partial tape — oldest fills beyond the {HL_FILLS_MAX.toLocaleString()}-fill cap</span>
+              <span style={{ color: MUTED }}> · partial tape — history exceeds the {HL_FILLS_MAX.toLocaleString()}-fill paging budget; grading the most recent {trades.length.toLocaleString()}</span>
             )}
           </div>
           <AnalyticsView orders={trades} totalPnl={totalPnl} winRate={winRate} collateral={0} />

@@ -808,7 +808,7 @@ export const TOOLS: ToolDef[] = [
       if (orderly && (orderly.brokers_failed as string[]).length > 0)
         notes.push(`Orderly venues failed to read (${(orderly.brokers_failed as string[]).join(", ")}) — treat as unread, not empty.`);
       if (fillsTruncated)
-        notes.push("Hyperliquid fills were truncated at 10,000 — closed_trades/net_pnl/win_rate cover the most recent fills only, not the full record.");
+        notes.push(`Hyperliquid history exceeds the 10,000-fill paging budget — closed_trades/net_pnl/win_rate cover the most recent ${hyperliquid.closed_trades} fills only, not the full record.`);
 
       return JSON.stringify({
         wallet: w, hyperliquid, hl_portfolio, orderly, tracked_record,
