@@ -6,7 +6,7 @@ import { cardStyle, labelStyle } from "./styles";
 import { ProcessSection } from "./ProcessView";
 import { OperatorProfileCard } from "./OperatorProfile";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
-import { formatPnl } from "./helpers";
+import { formatPnl, formatPnlCompact } from "./helpers";
 import { PnlChart, PnlBars, EmptyState, CountUp, SectionHeader } from "./components";
 import { Collapsible } from "./Collapsible";
 import { useIsMobile } from "./useIsMobile";
@@ -296,7 +296,7 @@ function TopAssets({ orders }: { orders: ProcessedTrade[] }) {
                 <span style={{ fontSize: 13, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{sym}</span>
                 <span style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{data.trades}</span>
               </div>
-              <div style={{ fontSize: 16, color: data.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", fontWeight: "bold", marginBottom: 8 }}>{formatPnl(data.pnl)}</div>
+              <div style={{ fontSize: 16, color: data.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", fontWeight: "bold", marginBottom: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{formatPnlCompact(data.pnl)}</div>
               <div style={{ height: 3, background: "#232327", borderRadius: 2, marginBottom: 4 }}>
                 <div style={{ height: 3, background: wr > 50 ? "#3ecf8e" : "#f7525f", borderRadius: 2, width: `${wr}%` }} />
               </div>
@@ -532,7 +532,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
         <>
           <div style={{ fontSize: 18, color: "#f4f4f5", fontFamily: "var(--nx-font-mono)", marginTop: 2 }}>{s.symbol}</div>
           <div style={{ fontSize: 11, color: tone === "pos" ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", marginTop: 2 }}>
-            {s.winRatePct}% · {s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl)} · {s.trades} trades
+            {s.winRatePct}% · {formatPnlCompact(s.pnl)} · {s.trades} trades
           </div>
         </>
       ) : <div style={{ fontSize: 13, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginTop: 4 }}>—</div>}
@@ -546,7 +546,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
       <div style={{ flex: 1, minWidth: 0, border: `1px solid ${on ? "#33333a" : "#232327"}`, borderRadius: 6, padding: "10px 12px", background: on ? "rgba(237,237,240,0.03)" : "transparent" }}>
         <div style={{ fontSize: 9, color: on ? "#ededf0" : "#52525b", letterSpacing: "0.08em", fontFamily: "var(--nx-font-mono)" }}>{label}{on ? " ◂ stronger" : ""}</div>
         <div style={{ fontSize: 18, color: "#f4f4f5", fontFamily: "var(--nx-font-mono)", marginTop: 2 }}>{se.trades ? `${se.winRatePct}%` : "—"}</div>
-        <div style={{ fontSize: 11, color: se.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", marginTop: 2 }}>{se.trades ? `${se.pnl >= 0 ? "+" : "-"}$${Math.abs(se.pnl)} · ${se.trades} trades` : "no data"}</div>
+        <div style={{ fontSize: 11, color: se.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", marginTop: 2 }}>{se.trades ? `${formatPnlCompact(se.pnl)} · ${se.trades} trades` : "no data"}</div>
       </div>
     );
   };
@@ -613,7 +613,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 8 }}>
         <div style={cardStyle}>
           <div style={labelStyle}>TOTAL PNL</div>
-          <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: totalPnl >= 0 ? "#3ecf8e" : "#f7525f", fontVariantNumeric: "tabular-nums" }}>{orders.length ? <CountUp value={totalPnl} format={formatPnl} /> : "—"}</div>
+          <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: totalPnl >= 0 ? "#3ecf8e" : "#f7525f", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{orders.length ? <CountUp value={totalPnl} format={formatPnlCompact} /> : "—"}</div>
           <div style={{ fontSize: 10, color: "#52525b", marginTop: 4, fontFamily: "var(--nx-font-mono)" }}>realized</div>
         </div>
         <div style={cardStyle}>
