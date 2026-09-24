@@ -64,6 +64,24 @@ type Market = {
   stretched?: boolean | null;
   verdict?: "FADE" | "WATCH" | "NONE";
 };
+
+// ── Funding: the PERIOD rate beside the annualized one ─────────────────────────
+// %/yr is per-8h × 1095 — arithmetically real, but on a thin FX perp a −0.19%/8h print
+// annualizes to −206%/yr and reads like a bug. Show both so the reader sees the source.
+// Never clamp: the number is the number.
+const signed = (n: number, body: string) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${body}`;
+function fmt8h(pct8h: number): string {
+  const a = Math.abs(pct8h);
+  const body = a === 0 ? "0" : a >= 0.1 ? a.toFixed(2) : Number(a.toPrecision(2)).toString();
+  return `${signed(pct8h, body)}%/8h`;
+}
+function fmtYr(pctYr: number): string { return `${signed(pctYr, String(Math.abs(pctYr)))}%/yr`; }
+// Low-confidence liquidity band. The server floor is $50k OI (below it a market never
+// reaches the board); between $50k and this, a wide funding print is real but THIN —
+// a few positions can set it. Flagged, not hidden.
+const THIN_OI_USD = 250_000;
+const isThinOi = (m: { oiUsd: number }) => Number.isFinite(m.oiUsd) && m.oiUsd < THIN_OI_USD;
+const THIN_TITLE = `Under $${THIN_OI_USD / 1000}k open interest — a handful of positions can set this funding rate. Low confidence.`;
 type BoardResp = { asOf?: string; scanned?: number; mispricedCount?: number; markets?: Market[] };
 type Lean = { side: "LONG" | "SHORT" | "SPLIT"; lean: number; longCount: number; shortCount: number; participants: number };
 type ConsensusResp = { consensus?: Record<string, Lean> };
@@ -660,7 +678,7 @@ export function MispricedBoard() {
     // SAME verdict object the badge and the Draft gate read, so the head cannot disagree.
     const verdictLabel = verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? "⚠ WATCH" : "◆ WATCHING";
     const verdictColor = isFade ? C.accent : draftAnyway ? C.warn : C.text.muted;
-    const fundingLabel = `${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr`;
+    const fundingLabel = `${fmt8h(m.funding8hPct)} → ${fmtYr(m.fundingAnnualPct)}`;
     // HIST is the canonical edgeQuality record (the source the share card already cites); absent
     // when the coin has no graded reversion history yet — then it simply isn't drawn.
     const histTag = m.edgeQuality && m.edgeQuality.revertedPct != null && m.edgeQuality.samples > 0
@@ -675,8 +693,10 @@ export function MispricedBoard() {
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontFamily: MONO, fontSize: 10, marginBottom: 8 }}>
                 <span style={{ color: C.text.muted, textTransform: "uppercase", letterSpacing: "0.14em", fontSize: 8.5 }}>Funding edge</span>
                 <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 22, fontWeight: 600, color: C.text.bright }}>
-                  {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%<span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontSize: 11, color: C.text.faint, marginLeft: 3 }}>/yr</span>
+                  <span title="The raw rate paid each 8h funding period." style={{ fontSize: 11, fontWeight: 400, color: C.text.muted, marginRight: 8 }}>{fmt8h(m.funding8hPct)} →</span>
+                  {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%<span title="Annualized — per-8h rate × 1095 (three periods a day). What it adds up to over a year if today's rate held." style={{ fontSize: 11, color: C.text.faint, marginLeft: 3 }}>/yr</span>
                 </span>
+                {isThinOi(m) && <span title={THIN_TITLE} style={{ fontSize: 8.5, color: C.warn, letterSpacing: "0.08em" }}>THIN OI · LOW CONFIDENCE</span>}
               </div>
               <SynthChart points={pos?.points ?? []} price={price ?? []} direction={m.direction}
                 smartMoney={m.smartMoney} markPrice={m.markPrice} fundingAnnualPct={m.fundingAnnualPct} maxEdge={maxEdge} m={m} />
@@ -897,14 +917,16 @@ export function MispricedBoard() {
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11 }}>
                         <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.text.bright }}>{m.coin}</span>
                         <span style={{ fontFamily: MONO, fontSize: 8.5, color: C.text.faint }}>{fmtUsd(m.oiUsd)} open interest</span>
+                        {isThinOi(m) && <span title={THIN_TITLE} style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: C.warn, border: `1px solid ${C.warn}55`, borderRadius: 2, padding: "0 4px" }}>THIN · LOW CONF</span>}
                         <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: badgeColor }}>{verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? `⚠ WATCH · ${m.edgeQuality?.revertedPct}% HIST` : "◆ WATCHING"}</span>
                       </div>
                       <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
                         <div>
                           <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: C.text.muted, marginBottom: 3 }}>Funding edge</div>
                           <div style={{ fontFamily: MONO, fontSize: 31, fontWeight: 600, color: C.text.bright, lineHeight: 0.9, letterSpacing: "-0.02em" }}>
-                            {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}<span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontSize: 13, color: C.text.faint, marginLeft: 4 }}>%/yr</span>
+                            {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}<span title="Annualized — per-8h rate × 1095 (three periods a day). What it adds up to over a year if today's rate held." style={{ fontSize: 13, color: C.text.faint, marginLeft: 4 }}>%/yr</span>
                           </div>
+                          <div title="The raw rate paid each 8h funding period — the annualized figure is this × 1095." style={{ fontFamily: MONO, fontSize: 10, color: C.text.muted, marginTop: 6 }}>{fmt8h(m.funding8hPct)} × 1095</div>
                         </div>
                       </div>
                       <EdgeQualityChip q={m.edgeQuality} />
@@ -958,13 +980,13 @@ export function MispricedBoard() {
                 {fair.map((m, i) => (
                   <div key={m.symbol} onClick={() => setOpenCoin(m.coin)}
                     className="nx-card-interactive"
-                    style={{ display: "grid", gridTemplateColumns: isMobile ? "70px 1fr 84px" : "90px 1fr 96px 84px", gap: 12, alignItems: "center", padding: "9px 13px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
+                    style={{ display: "grid", gridTemplateColumns: isMobile ? "56px 1fr 138px" : "90px 1fr 190px 84px", gap: 12, alignItems: "center", padding: "9px 13px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
                     <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: C.text.fog }}>{m.coin}</span>
                     {!isMobile && <div style={{ height: 4, borderRadius: 3, background: C.inset, border: `1px solid ${C.border}`, position: "relative" }}>
                       <div style={{ position: "absolute", top: 0, bottom: 0, background: C.borderStrong, ...(m.direction === "LONG" ? { right: "50%" } : { left: "50%" }), width: `${Math.min(46, (m.edge / maxEdge) * 46)}%` }} />
                     </div>}
                     {isMobile && <span />}
-                    <span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontFamily: MONO, fontSize: 10.5, color: C.text.muted, textAlign: "right" }}>{m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%/yr</span>
+                    <span title={`Per-8h rate → annualized (× 1095).${isThinOi(m) ? " " + THIN_TITLE : ""}`} style={{ fontFamily: MONO, fontSize: isMobile ? 9.5 : 10.5, color: C.text.muted, textAlign: "right", whiteSpace: "nowrap" }}>{isThinOi(m) && <span style={{ color: C.warn }}>· </span>}<span style={{ color: C.text.faint }}>{fmt8h(m.funding8hPct)} → </span>{fmtYr(m.fundingAnnualPct)}</span>
                     <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.08em", color: C.text.faint, textAlign: "right" }}>FAIR</span>
                   </div>
                 ))}
@@ -975,7 +997,7 @@ export function MispricedBoard() {
       )}
 
       <p style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint, lineHeight: 1.6, marginTop: 18, letterSpacing: "0.02em" }}>
-        Funding annualized (per-8h × 1095). |edge| ≥ 12%/yr on a market with ≥ $50k open interest ⇒ Mispriced · Watching; else priced fair.
+        Funding shown per 8h → annualized (× 1095, not clamped). |edge| ≥ 12%/yr on a market with ≥ $50k open interest ⇒ Mispriced · Watching; else priced fair. Under $250k open interest is marked thin · low confidence.
         Caller lean is merit-weighted from open positions + active public calls. A read on positioning, not advice — a stretched market can stay stretched.
       </p>
     </div>

@@ -29,9 +29,15 @@ const CROWDED = 0.0004;   // |funding|/8h at/above which the crowd is extended (
 // response, no reset — seen on a cold guest-context load while curl to the same URL
 // returns rows) would strand it on "loading the board…" forever. Cap it: abort after
 // SIGNALS_TIMEOUT_MS so the promise REJECTS instead of pending, and the caller fails
-// soft to last-good/empty. No explicit return-type annotation → it infers Promise<any>
+// soft to last-good. No explicit return-type annotation → it infers Promise<any>
 // from r.json(), so callers keep reading j?.signals exactly as before.
-const SIGNALS_TIMEOUT_MS = 2000;
+// ⚠️ The cap must outlast a COLD /signals (~15s observed). It used to be 2s and resolved
+// the table to [] — so a slow first load rendered "no rows this tick" (a false empty) and
+// the abort threw the real answer away. A timeout/failure is NOT an empty tick: it shows
+// "loading…"/"retrying…" and retries fast; "no rows this tick" only when a response
+// actually came back empty.
+const SIGNALS_TIMEOUT_MS = 20000;
+const SIGNALS_RETRY_MS = 5000;
 async function fetchJsonTimeout(url: string, ms: number) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), ms);
@@ -191,6 +197,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
 }) {
   const isMobile = useIsMobile();
   const [signals, setSignals] = useState<MarketSignal[] | null>(null);
+  const [signalsFailed, setSignalsFailed] = useState(false); // last /signals attempt errored/timed out (≠ an empty tick)
   const [tape, setTape] = useState<Record<string, { price: number; change: number }>>({});
   const [tapeRead, setTapeRead] = useState<{ score: number; label: string } | null>(null); // RISK-OFF/ON breadth — context for the fade tag
   const [consensus, setConsensus] = useState<Consensus | null>(null);
@@ -249,12 +256,30 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
 
   useEffect(() => {
     let alive = true;
-    const load = () => {
-      // /signals gates the table spinner — timeout-cap it and fail soft to last-good
-      // (or empty on the very first load) so the board can never hang on "loading…".
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let inflight = false;
+    const loadSignals = () => {
+      // /signals gates the table — timeout-capped. Success (even an empty array) is the
+      // only thing that sets rows; a failure keeps last-good and retries quickly instead of
+      // pretending the tick was empty.
+      if (inflight) return; // a slow fetch is still running — don't stack a second one
+      inflight = true;
+      clearTimeout(retry);
       fetchJsonTimeout(`${AGENT_API}/signals`, SIGNALS_TIMEOUT_MS)
-        .then((j) => { if (alive) setSignals(Array.isArray(j?.signals) ? j.signals : []); })
-        .catch(() => { if (alive) setSignals((prev) => prev ?? []); });
+        .then((j) => {
+          if (!alive) return;
+          setSignals(Array.isArray(j?.signals) ? j.signals : []);
+          setSignalsFailed(false);
+        })
+        .catch(() => {
+          if (!alive) return;
+          setSignalsFailed(true);
+          retry = setTimeout(loadSignals, SIGNALS_RETRY_MS);
+        })
+        .finally(() => { inflight = false; });
+    };
+    const load = () => {
+      loadSignals();
       fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json()).then((j) => { if (alive) setConsensus(j?.consensus ?? null); }).catch(() => { /* no crowd lean */ });
       // Three more INDEPENDENT lenses to fuse into the read — smart money, catalysts,
       // forecasters. Each fail-soft (an absent lens just shows "·", never blocks the board).
@@ -285,13 +310,8 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       }).catch(() => { /* price column just shows — */ });
     };
     load();
-    // Hard deadline — belt-and-suspenders on top of the /signals abort. Whatever happens to
-    // the fetch or its abort, never leave the table gated on `null` past the cap: resolve to
-    // empty within ~2s so the board settles to rows or "no rows this tick", never an infinite
-    // spinner. Last-good is preserved (prev is replaced ONLY while it is still null).
-    const deadline = setTimeout(() => { if (alive) setSignals((prev) => (prev == null ? [] : prev)); }, SIGNALS_TIMEOUT_MS + 300);
     const iv = setInterval(load, 30000);
-    return () => { alive = false; clearTimeout(deadline); clearInterval(iv); };
+    return () => { alive = false; clearTimeout(retry); clearInterval(iv); };
   }, []);
 
   const rows: Row[] = useMemo(() => {
@@ -455,7 +475,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       <SectionHeader
         eyebrow="THE BOARD"
         title="Every market, one read"
-        note={<span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""} · every column verifiable</span>}
+        note={<span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : signalsFailed ? "retrying…" : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""} · every column verifiable</span>}
       />
 
       {/* Honesty framing — the whole point of the moat. On a phone it is ONE sentence (Grok):
@@ -507,10 +527,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       )}
 
       {!signals ? (
-        <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>loading the board…</div>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>{signalsFailed ? "the read didn't come back — retrying…" : "loading the board…"}</div>
       ) : rows.length === 0 ? (
-        // Real empty state (never vanish, never hang): the /signals cap resolved to no rows —
-        // a live-but-quiet tick, not a broken board. Refreshes on the 30s interval.
+        // Real empty state (never vanish): /signals RESPONDED with no rows — a live-but-quiet
+        // tick, not a slow load (that stays "loading…" above). Refreshes on the 30s interval.
         <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>no rows this tick — the read refreshes every 30s.</div>
       ) : isMobile ? (
         // Mobile — the 720px table hid THE PLAY behind a side-swipe. Instead, one 2-line card per
