@@ -50,21 +50,65 @@ export function cvdSideForRow(cvdRow, pmap) {
   return classifyCvdDivergence(((p0 - pPrev) / pPrev) * 100, cvdRow);
 }
 
-// LIVE confirm for a basis fade. `basisT` is the timestamp of the basis observation that
-// fired, `side` its fade side. Confirmed ONLY when the cvd:hist row in the SAME hour
+// The side a series gives at hour `h`, with the grader's EXACT semantics: the grader builds
+// an hour→side Map by iterating the stored array in order and calling .set() only for rows
+// that produce a side — so the LAST row in that hour WITH a side wins (a later neutral row
+// does not erase an earlier signal). Mirroring that here is what keeps live == graded when a
+// cron writes twice inside one rounded hour. Returns { rows, side, sig } for the hour.
+function sideAtHour(rows, h, sideOf) {
+  const inHour = [];
+  let side = null, sig = null;
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (!r || !Number.isFinite(r.t) || hourBucket(r.t) !== h) continue;
+    inHour.push(r);
+    const s = sideOf(r);
+    if (s && (s.side === "LONG" || s.side === "SHORT")) { side = s.side; sig = s; }
+  }
+  return { rows: inHour, side, sig };
+}
+
+// Smart-money lean by hour (sm:hist {t, side, long, short}) — shared with the grader's
+// smart_fade / basis_x_smart axes. Same last-with-a-side-wins Map semantics.
+export function smByHour(smHist) {
+  const m = new Map();
+  for (const s of smHist || []) if (s && (s.side === "LONG" || s.side === "SHORT")) m.set(hourBucket(s.t), s.side);
+  return m;
+}
+
+function checkBasis(basisT, side) {
+  if (side !== "LONG" && side !== "SHORT") return { confirmed: false, reason: "no basis extreme" };
+  if (!Number.isFinite(basisT)) return { confirmed: false, reason: "basis hour unknown" };
+  return null;
+}
+
+// LIVE confirm for a basis fade — CVD. `basisT` is the timestamp of the basis observation
+// that fired, `side` its fade side. Confirmed ONLY when the cvd:hist read in the SAME hour
 // classifies to the SAME side — exactly the intersection basisXcvdEvents grades.
 // Never guesses: a missing row, a missing price, or a disagreeing/neutral read all
 // return confirmed:false with the reason, so the agent can say why it sat out.
 export function basisCvdConfirm({ basisT, side, cvdHist, oiHist }) {
-  if (side !== "LONG" && side !== "SHORT") return { confirmed: false, cvdSide: null, reason: "no basis extreme" };
-  if (!Number.isFinite(basisT)) return { confirmed: false, cvdSide: null, reason: "basis hour unknown" };
+  const bad = checkBasis(basisT, side);
+  if (bad) return { ...bad, cvdSide: null };
   const h = hourBucket(basisT);
-  const row = (Array.isArray(cvdHist) ? cvdHist : []).find((c) => c && Number.isFinite(c.t) && hourBucket(c.t) === h);
-  if (!row) return { confirmed: false, cvdSide: null, reason: "no CVD read for that hour" };
   const pmap = priceByHour(oiHist);
+  const { rows, side: cvdSide, sig } = sideAtHour(cvdHist, h, (r) => cvdSideForRow(r, pmap));
+  if (!rows.length) return { confirmed: false, cvdSide: null, reason: "no CVD read for that hour" };
   if (!(pmap.get(h) > 0) || !(pmap.get(h - 1) > 0)) return { confirmed: false, cvdSide: null, reason: "no price for the CVD hour" };
-  const sig = cvdSideForRow(row, pmap);
-  if (!sig) return { confirmed: false, cvdSide: null, reason: "CVD neutral (no divergence)" };
-  if (sig.side !== side) return { confirmed: false, cvdSide: sig.side, reason: `CVD disagrees (${sig.kind} → ${sig.side})` };
-  return { confirmed: true, cvdSide: sig.side, reason: `CVD confirms (${sig.kind})` };
+  if (!cvdSide) return { confirmed: false, cvdSide: null, reason: "CVD neutral (no divergence)" };
+  if (cvdSide !== side) return { confirmed: false, cvdSide, reason: `CVD disagrees (${sig.kind} → ${cvdSide})` };
+  return { confirmed: true, cvdSide, reason: `CVD confirms (${sig.kind})` };
+}
+
+// LIVE confirm for a basis fade — SMART MONEY. Confirmed ONLY when the sm:hist lean in the
+// SAME hour is on the SAME side — exactly the intersection basisXsmartEvents grades.
+export function basisSmartConfirm({ basisT, side, smHist }) {
+  const bad = checkBasis(basisT, side);
+  if (bad) return { ...bad, smartSide: null };
+  const h = hourBucket(basisT);
+  const { rows, side: smartSide, sig } = sideAtHour(smHist, h, (r) => (r.side === "LONG" || r.side === "SHORT" ? { side: r.side, long: r.long, short: r.short } : null));
+  if (!rows.length) return { confirmed: false, smartSide: null, reason: "no smart-money read for that hour" };
+  if (!smartSide) return { confirmed: false, smartSide: null, reason: "smart money split (no lean)" };
+  const tally = Number.isFinite(sig.long) && Number.isFinite(sig.short) ? ` ${sig.long}L/${sig.short}S` : "";
+  if (smartSide !== side) return { confirmed: false, smartSide, reason: `smart money leans ${smartSide}${tally}` };
+  return { confirmed: true, smartSide, reason: `smart money agrees${tally}` };
 }

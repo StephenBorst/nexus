@@ -1121,15 +1121,36 @@ export function AgentView() {
             </div>
           </div>
 
-          {/* Basis × CVD STACK — only meaningful on BASIS_FADE. The same-hour intersection the
-              scoreboard grades as basis_x_cvd (shared rule: app/lib/basisStack.mjs, parity-tested). */}
+          {/* Basis STACK — only meaningful on BASIS_FADE. Take the fade only when a second,
+              harder-to-arb read agrees in the SAME hour — the scoreboard's basis_x_cvd /
+              basis_x_smart intersections (shared rules: app/lib/basisStack.mjs, parity-tested). */}
           {config.signalMode === "BASIS_FADE" && (
-            <AgentToggleCard
-              label="REQUIRE CVD CONFIRM — the basis × CVD stack"
-              description={<>Take the basis fade ONLY when aggressor flow in the same hour diverges the same way (price up on net selling → short; price down on net buying → long). This is exactly the read the scoreboard grades as <b style={{ color: "#ededf0" }}>Basis extreme × CVD divergence</b>. Rarer entries by design; when it sits out, the status says why. Off = plain basis fade.</>}
-              on={config.basisConfirm === "CVD"}
-              onToggle={() => setConfig({ ...config, basisConfirm: config.basisConfirm === "CVD" ? undefined : "CVD" })}
-            />
+            <div style={agentCardStyle}>
+              <div style={agentLabelStyle}>CONFIRM THE FADE <span style={{ color: "#71717a" }}>— the basis stack</span></div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+                {([
+                  { v: undefined, label: "OFF", hint: "Plain basis fade — trade every extreme." },
+                  { v: "CVD" as const, label: "CVD", hint: "Only when aggressor flow in the same hour diverges the same way (price up on net selling → short; down on net buying → long). Graded as Basis extreme × CVD divergence." },
+                  { v: "SMART" as const, label: "SMART MONEY", hint: "Only when the tracked smart-money wallets lean the same side in the same hour. Graded as Basis extreme × smart money agrees. ⚠️ Pending the Oct-15 re-validation." },
+                ]).map((o) => {
+                  const on = (config.basisConfirm ?? undefined) === o.v;
+                  return (
+                    <button key={o.label} title={o.hint} onClick={() => setConfig({ ...config, basisConfirm: o.v })} style={{
+                      flex: "1 1 90px", cursor: "pointer", fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+                      padding: "8px 10px", borderRadius: 4, background: on ? "#ededf010" : "#0a0a0b",
+                      border: `1px solid ${on ? "#ededf0" : "#232327"}`, color: on ? "#ededf0" : "#a1a1aa",
+                    }}>{o.label}{on ? " ✓" : ""}</button>
+                  );
+                })}
+              </div>
+              <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 11, lineHeight: 1.5, marginTop: 8 }}>
+                {config.basisConfirm === "CVD"
+                  ? "Takes the basis fade only when same-hour CVD divergence agrees. Rarer entries; when it sits out, the status says why."
+                  : config.basisConfirm === "SMART"
+                    ? "Takes the basis fade only when the same-hour smart-money lean agrees. Rarer entries; when it sits out, the status says why. Pending the Oct-15 re-validation — PAPER it."
+                    : "Off — the plain basis fade. Pick a confirm to trade only the stacked intersections the scoreboard grades."}
+              </div>
+            </div>
           )}
 
           {/* The experimental FILTERS & CONDITIONING cluster (invert, tape, smart-money,

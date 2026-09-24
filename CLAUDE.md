@@ -341,8 +341,17 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   (`app/lib/basisStack.test.mjs`) proves live gate == scoreboard `basis_x_cvd` hour-by-hour on a synthetic tape. Preset
   `basis-cvd-stack` (PAPER). `AXIS_PRESET` (strategyPresets.ts) maps scoreboard axis → preset trading the EXACT rule
   (basis_extreme, basis_x_cvd only) — the /proof SignalRow shows "Load … in the agent →" (forces PAPER via
-  `deployToAgent`); unmapped PREDICTIVE reads say "research read — not an agent mode yet". Next candidate:
-  `basisConfirm:"SMART"` (basis_x_smart), same pattern, gated on the Oct-15 re-validation.
+  `deployToAgent`); unmapped PREDICTIVE reads say "research read — not an agent mode yet".
+- **✅ BASIS × SMART MONEY WIRED (2026-09-24): `basisConfirm:"SMART"`.** `basisSmartConfirm` + shared `smByHour` in
+  basisStack.mjs (axisbt's smart_fade/basis_x_smart import it); brain reads `sm:hist:{BARE}` (lab-api's hourly
+  smart-money cron, same KV) only when opted in (`needBasisSmart`). Agent config = 3-way CONFIRM selector (OFF / CVD /
+  SMART MONEY) on BASIS FADE. **Deliberately NOT a preset and NOT in `AXIS_PRESET` yet** — gated on the Oct-15
+  re-validation; if it holds, add a `basis-smart-stack` preset + `basis_x_smart` entry (2 lines).
+- **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
+  and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
+  doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one
+  rounded hour. `sideAtHour` in basisStack.mjs mirrors the grader exactly. Parity tests now run 3 seeds × with/without
+  same-hour rewrites for BOTH gates + a coverage guard so parity can't pass vacuously.
 - **⚠️ The Oct-15 routine can't reach `og.nexustradinglabs.com` from a cloud container** (curl + WebFetch both
   egress-denied, verified 2026-09-24). Fix = allow the domain in the environment's Network access. The routine was
   created via http_api so agents can't edit it; the updated prompt lives in `docs/routines/revalidate-basis-2026-10-15.md`.

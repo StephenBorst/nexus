@@ -11,7 +11,7 @@
 // hour); the CVD + liq-flush ones REUSE the deployed classifiers so the backtest scores
 // live behavior. Pure + tested. Fed entirely by the self-logged series (oi/cvd/sm/basis/
 // liq:hist) — which is why it only becomes meaningful as that history matures (~Sept 14).
-import { hourBucket, priceByHour, cvdSideForRow } from "../../app/lib/basisStack.mjs";
+import { hourBucket, priceByHour, cvdSideForRow, smByHour } from "../../app/lib/basisStack.mjs";
 import { classifyFlush } from "./liquidations.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
@@ -55,12 +55,8 @@ export function cvdDivergenceEvents(cs, pmap) {
   return ev;
 }
 
-// Smart lean by hour (from sm:hist {t, side}).
-function smByHour(smHist) {
-  const m = new Map();
-  for (const s of smHist || []) if (s && (s.side === "LONG" || s.side === "SHORT")) m.set(hourBucket(s.t), s.side);
-  return m;
-}
+// Smart lean by hour (from sm:hist {t, side}) — smByHour lives in app/lib/basisStack.mjs,
+// shared with the brain's live basis×smart gate.
 
 // The "one open door": the funding fade CONDITIONED on smart money agreeing.
 export function smartFadeEvents(cs, _pmap, { threshold = 0.0001 } = {}) {
