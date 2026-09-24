@@ -102,6 +102,7 @@ export function AgentStrategyLibrary({
                       if (!v) return null;
                       if (v.status === "validating") return <span title="Walk-forward validation running" style={{ fontSize: 8, color: "#a1a1aa", border: "1px solid #232327", borderRadius: 3, padding: "1px 5px" }}>⏳ VALIDATING</span>;
                       if (v.status === "pending_oi") return <span title="Awaiting OI history to validate the confluence signal" style={{ fontSize: 8, color: "#d4d4d8", border: "1px solid #33333a", borderRadius: 3, padding: "1px 5px" }}>⏳ OI PENDING</span>;
+                      if (v.status === "pending_basis") return <span title="Awaiting enough recorded basis history to walk-forward the basis stack" style={{ fontSize: 8, color: "#d4d4d8", border: "1px solid #33333a", borderRadius: 3, padding: "1px 5px" }}>⏳ BASIS PENDING</span>;
                       if (v.status !== "done") return null;
                       const vc = v.verdict === "ROBUST" ? "#3ecf8e" : v.verdict === "FRAGILE" ? "#fbbf24" : "#f7525f";
                       const lbl = v.verdict === "ROBUST" ? "✅ ROBUST" : v.verdict === "FRAGILE" ? "🟨 FRAGILE" : "❌ NOT ROBUST";

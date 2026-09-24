@@ -296,7 +296,10 @@ export function AgentView() {
   // symbols/leverage/capital/mode; swaps mode/threshold/exits). The bridge that
   // turns "here's what worked" into "now it's my config."
   function applySweepConfig(cfg: any) {
-    const clean = Object.fromEntries(Object.entries(cfg).filter(([, v]) => v !== undefined));
+    const clean: Record<string, unknown> = Object.fromEntries(Object.entries(cfg).filter(([, v]) => v !== undefined));
+    // A basis sweep row carries basisConfirm:null for the plain fade — that must CLEAR a
+    // previously chosen confirm, so map it to "off" rather than dropping it.
+    if (clean.basisConfirm === null) clean.basisConfirm = undefined;
     setConfig((prev) => ({ ...prev, ...clean }));
     setSuccess("Config applied to the editor — review, then Save or Backtest."); setTimeout(() => setSuccess(null), 4000);
   }

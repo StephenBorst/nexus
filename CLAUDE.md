@@ -330,6 +330,7 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   under warmup ⇒ no signal, **never a fallback to funding/OI** (tested). Preset `basis-extreme-fade`
   (EXPERIMENTAL · PAPER, $50/5x, 12h hold, 3 trades/day, $10 daily stop). ⚠️ `POST /agent/backtest` REFUSES
   BASIS_FADE with an honest note — basis history is not in the replay, so it would return a silent "0 trades".
+  **→ SUPERSEDED 2026-09-24: BASIS_FADE IS BACKTESTABLE (see "Basis replay" below).**
   ⚠️ **Bug the tests caught: `{ ...DEFAULTS, minWarmup, pct }` spreads `undefined` OVER the defaults when the caller
   omits opts → thr `undefined` → the signal NEVER fires. Coalesce per field.** ⚠️ PREDICTIVE grades the READ, not a
   strategy — exits/sizing/fees are unvalidated and it is NOT walk-forward robust. PAPER, second wallet, own record.
@@ -347,6 +348,19 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   smart-money cron, same KV) only when opted in (`needBasisSmart`). Agent config = 3-way CONFIRM selector (OFF / CVD /
   SMART MONEY) on BASIS FADE. **Deliberately NOT a preset and NOT in `AXIS_PRESET` yet** — gated on the Oct-15
   re-validation; if it holds, add a `basis-smart-stack` preset + `basis_x_smart` entry (2 lines).
+- **✅ BASIS REPLAY — BASIS_FADE is backtestable / sweepable / walk-forwardable (2026-09-24).** `backtest.mjs`
+  `makeBasisAt(flow,{needCvd,needSmart})` evaluates the SAME shared rules the brain calls (`basisFadeFromHistory` →
+  `basisCvdConfirm`/`basisSmartConfirm`) on each series' PREFIX `t <= barClose` (binary-search, memoized per bar) —
+  no lookahead, no second implementation. `runBacktest(..., basisAt)` merges it into `raw` at the bar CLOSE (entry
+  fills at `c.c`). `backtestConfig`/`walkForwardValidate` take `flowBySymbol`; `runBasisSweep` = confirm (none/CVD/
+  SMART) × 4 exits × holds 4/12/24h, ranked by net with per-row `posSymbols` (breadth — prefer it over best-net).
+  `strategies.mjs loadFlowHistForBacktest` reads basis/cvd/oi/sm hist, per-symbol maturity
+  (`BASIS_BACKTEST_MIN_DAYS=14`, `…_MIN_SAMPLES=200`, binding = thinnest series the config needs), names excluded
+  markets, returns `windowDays` → routes SIZE THE REPLAY to recorded coverage (empty pre-history would read as losing
+  folds). Routes: `/agent/backtest`, `/agent/backtest/sweep`, `/agent/validate`, + publish-time `revalidateStrategy`
+  (`pending_basis` badge). Labels: "Basis Extreme Fade" / "Basis × CVD Stack" / "Basis × Smart Stack". Tests:
+  `backtest.basis.test.mjs` (poisoned-future no-lookahead, equals-the-brain, subset, stale, sweep, loader). Perf: full
+  3-mkt×60d×36-variant sweep ≈1s CPU. ⚠️ `maxTradesPerDay` is NOT simulated by runBacktest (true for all modes).
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
   and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
   doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one

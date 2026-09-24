@@ -49,7 +49,7 @@ async function prevCopyLeaders(env, address) {
   catch { return []; }
 }
 
-import { backtestConfig, runSweep, oiSeriesInfo, walkForwardValidate, runBacktest, fetchCandles, fetchFundingAt, makeFundingPctAt } from "./backtest.mjs";
+import { backtestConfig, runSweep, runBasisSweep, oiSeriesInfo, walkForwardValidate, runBacktest, fetchCandles, fetchFundingAt, makeFundingPctAt } from "./backtest.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
 import { runScorecard } from "./axisbt.mjs";
@@ -65,7 +65,7 @@ import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
 import { handleFeed } from "./routes-feed.mjs";
-import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols } from "./strategies.mjs";
+import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
 import { json, cors, normalizeAddress, recoverEthAddress, ALLOWED_ORIGINS, holdersRoomMessage, appendNotification } from "./shared.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, REGIME_PAD_S, ADVICE_FLAG_TEXT } from "./grading.mjs";
@@ -4689,6 +4689,43 @@ document.getElementById("btn").addEventListener("click",go);
       if (!(await walletIsPro(caller, env))) return json({ error: "pro_backtest_locked", hint: "Strategy backtesting is a Nexus PRO feature — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
       const symbols = (Array.isArray(config?.symbols) && config.symbols.length ? config.symbols : ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC"]).slice(0, 3);
       const days = Math.min(90, Math.max(7, Number(body.days) || 60));
+      // BASIS_FADE → the basis sweep: confirm (none / CVD / smart) × exits × hold, over the
+      // markets + window the recorded basis history actually covers.
+      if (config?.signalMode === "BASIS_FADE") {
+        try {
+          const [base, cvd, smart] = await Promise.all([
+            loadFlowHistForBacktest(symbols, env),
+            loadFlowHistForBacktest(symbols, env, { needCvd: true }),
+            loadFlowHistForBacktest(symbols, env, { needSmart: true }),
+          ]);
+          const runSymbols = base.matureSymbols;
+          if (!runSymbols.length) {
+            return json({ days, symbols, results: [], untestable: true, basisCoverage: base.perSymbol, note: `No market has enough recorded basis history yet (${flowCoverageText(base.perSymbol)}; needs ${BASIS_BACKTEST_MIN_DAYS}d + ${BASIS_BACKTEST_MIN_SAMPLES} samples).` }, request);
+          }
+          const cvdOk = runSymbols.every((s) => cvd.flowBySymbol[s]);
+          const smartOk = runSymbols.every((s) => smart.flowBySymbol[s]);
+          const flowBySymbol = {};
+          for (const s of runSymbols) {
+            flowBySymbol[s] = {
+              basisHist: base.flowBySymbol[s].basisHist,
+              cvdHist: cvdOk ? cvd.flowBySymbol[s].cvdHist : [], oiHist: cvdOk ? cvd.flowBySymbol[s].oiHist : [],
+              smHist: smartOk ? smart.flowBySymbol[s].smHist : [],
+            };
+          }
+          const confirms = [null, ...(cvdOk ? ["CVD"] : []), ...(smartOk ? ["SMART"] : [])];
+          const windows = [base.windowDays, ...(cvdOk ? [cvd.windowDays] : []), ...(smartOk ? [smart.windowDays] : [])];
+          const bDays = Math.max(7, Math.min(days, ...windows));
+          const sweep = await runBasisSweep(config, { symbols: runSymbols, days: bDays }, flowBySymbol, { confirms });
+          const skippedConfirms = [...(cvdOk ? [] : ["CVD"]), ...(smartOk ? [] : ["SMART"])];
+          return json({
+            ...sweep, basisWindowDays: bDays, basisCoverage: base.perSymbol, excludedSymbols: base.staleSymbols,
+            note: `Basis sweep over ${bDays}d of recorded history on ${shortSymbols(runSymbols)} — ${sweep.results.length} variants (confirm × exits × hold), fees included. Ranked by net; prefer rows net-positive on most markets (posSymbols), not the single best.${skippedConfirms.length ? ` Not in the grid (confirm series not deep enough on every market yet): ${skippedConfirms.join(", ")}.` : ""}`,
+          }, request);
+        } catch (e) {
+          console.error("[sweep] basis error:", e);
+          return json({ error: "sweep failed", detail: String(e.message || e) }, request, 500);
+        }
+      }
       try {
         // Fold CONFLUENCE / OI_ONLY into the discovery grid only once recorded OI is
         // deep enough; until then the sweep stays funding/price-only (still honest).
@@ -4718,6 +4755,31 @@ document.getElementById("btn").addEventListener("click",go);
       const UNIVERSE = ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC", "PERP_BNB_USDC", "PERP_XRP_USDC", "PERP_LINK_USDC"];
       const days = Math.min(90, Math.max(28, Number(body.days) || 60));
       const folds = Math.min(6, Math.max(3, Number(body.folds) || 4));
+      // BASIS_FADE: walk-forward over the markets with mature recorded basis (+ confirm)
+      // history, window sized to that history so empty pre-history can't read as losing folds.
+      if (config.signalMode === "BASIS_FADE") {
+        const label = strategyLabel(config);
+        const flow = await loadFlowHistForBacktest(UNIVERSE, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART" });
+        if (flow.matureSymbols.length < MIN_VALIDATE_SYMBOLS) {
+          return json({
+            days, folds, symbols: flow.matureSymbols, totalSymbols: flow.matureSymbols.length, perSymbol: [],
+            untestable: true, strategyLabel: label, basisCoverage: flow.perSymbol, excludedSymbols: flow.staleSymbols,
+            note: `${label} needs at least ${MIN_VALIDATE_SYMBOLS} markets with ${BASIS_BACKTEST_MIN_DAYS}d+ recorded basis history to walk-forward — ${flow.matureSymbols.length} qualify (${flowCoverageText(flow.perSymbol)}).`,
+          }, request);
+        }
+        const bDays = Math.max(14, Math.min(days, flow.windowDays));
+        try {
+          const result = await walkForwardValidate(config, { symbols: flow.matureSymbols, days: bDays, folds }, {}, flow.flowBySymbol);
+          return json({
+            ...result, untestable: false, strategyLabel: label, gatesSkipped: backtestGateSupport(config).skipped,
+            basisCoverage: flow.perSymbol, excludedSymbols: flow.staleSymbols, basisWindowDays: bDays,
+            note: `${label} walk-forwarded on ${flow.matureSymbols.length} markets over ${bDays}d of recorded basis history, ${folds} folds, fees included.${flow.staleSymbols.length ? ` Excluded — not enough recorded history: ${shortSymbols(flow.staleSymbols)}.` : ""}`,
+          }, request);
+        } catch (e) {
+          console.error("[validate] basis error:", e);
+          return json({ error: "validate failed", detail: String(e.message || e) }, request, 500);
+        }
+      }
       const needsOi = ["CONFLUENCE", "OI_ONLY"].includes(config.signalMode);
       const oi = needsOi ? await loadOiHistForBacktest(UNIVERSE, env) : null;
       // ⚠️ Validate the markets that ACTUALLY have mature recorded OI. This used to gate on
@@ -4771,15 +4833,32 @@ document.getElementById("btn").addEventListener("click",go);
       // OI-dependent modes (CONFLUENCE / OI_ONLY) become testable once the brain's
       // recorded oi:hist has matured — load it, gate on coverage, feed the engine
       // only when deep enough; otherwise stay honestly "untestable".
-      // BASIS_FADE replays as a silent zero: the engine feeds price + funding (+ recorded
-      // OI), and spot-perp basis history is NOT wired into the replay. Say that instead of
-      // returning "0 trades" and letting it read as a result.
+      // BASIS_FADE replays off RECORDED basis history (+ the CVD / smart-money series its
+      // confirm needs), evaluated exactly as the brain would at each bar close (shared rules,
+      // prefix-only — no lookahead). Only markets whose recorded series clear the maturity
+      // bar run; the rest are NAMED. The window is sized to the data that exists.
       if (config.signalMode === "BASIS_FADE") {
-        return json({
-          days, symbols, untestable: true, strategyLabel: strategyLabel(config),
-          combined: { trades: 0, winRate: 0, netUsd: 0 }, perSymbol: [],
-          note: "BASIS_FADE can't be backtested here — the replay feeds price, funding and recorded OI, but not spot-perp basis history. The read itself is graded on the signal scoreboard (/proof); grade the STRATEGY forward in PAPER.",
-        }, request);
+        const label = strategyLabel(config);
+        const flow = await loadFlowHistForBacktest(symbols, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART" });
+        if (!flow.anyMature) {
+          return json({
+            days, symbols, untestable: true, strategyLabel: label, basisCoverage: flow.perSymbol,
+            combined: { trades: 0, winRate: 0, netUsd: 0 }, perSymbol: [],
+            note: `${label} replays off recorded basis history — no market here qualifies yet (${flowCoverageText(flow.perSymbol)}; needs ${BASIS_BACKTEST_MIN_DAYS}d + ${BASIS_BACKTEST_MIN_SAMPLES} samples).`,
+          }, request);
+        }
+        const bDays = Math.max(7, Math.min(days, flow.windowDays));
+        try {
+          const result = await backtestConfig(config, { symbols: flow.matureSymbols, days: bDays }, {}, flow.flowBySymbol);
+          return json({
+            ...result, untestable: false, strategyLabel: label, gatesSkipped: backtestGateSupport(config).skipped,
+            basisCoverage: flow.perSymbol, excludedSymbols: flow.staleSymbols, basisWindowDays: bDays,
+            note: `${label} replayed over ${bDays}d of recorded basis history${config.basisConfirm ? ` + the ${config.basisConfirm === "CVD" ? "CVD" : "smart-money"} series` : ""}, bar by bar as the agent would have seen it (first ~2d are warm-up). Fees included.${flow.staleSymbols.length ? ` Excluded — not enough recorded history yet: ${shortSymbols(flow.staleSymbols)}.` : ""}`,
+          }, request);
+        } catch (e) {
+          console.error("[backtest] basis error:", e);
+          return json({ error: "backtest failed", detail: String(e.message || e) }, request, 500);
+        }
       }
       const needsOi = ["CONFLUENCE", "OI_ONLY"].includes(config.signalMode);
       const oi = needsOi ? await loadOiHistForBacktest(symbols, env) : null;

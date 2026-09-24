@@ -18,6 +18,10 @@ function hasGates(config) {
 // The human name for what this config actually trades.
 export function strategyLabel(config = {}) {
   const mode = config.signalMode || "CONFLUENCE";
+  // The basis stack reads by what it trades, matching the presets + the scoreboard rows.
+  if (mode === "BASIS_FADE" && !config.invertSignal && !hasGates(config)) {
+    return config.basisConfirm === "CVD" ? "Basis × CVD Stack" : config.basisConfirm === "SMART" ? "Basis × Smart Stack" : "Basis Extreme Fade";
+  }
   if (config.invertSignal) return hasGates(config) ? "Regime-Gated Invert" : `Inverted ${mode}`;
   return hasGates(config) ? `Gated ${mode}` : mode;
 }
@@ -35,6 +39,9 @@ export function backtestGateSupport(config = {}) {
   if (Array.isArray(config.tradeSessions) && config.tradeSessions.length > 0) applied.push("session");
   if ((config.minVolAtrPct ?? 0) > 0 || (config.maxVolAtrPct ?? 0) > 0) applied.push("volatility");
   if ((config.fundingPercentileMin ?? 0) > 0) applied.push("funding-percentile");
+  // The basis confirms replay off recorded cvd:hist / sm:hist, bar by bar — simulated.
+  if (config.signalMode === "BASIS_FADE" && config.basisConfirm === "CVD") applied.push("CVD confirm");
+  if (config.signalMode === "BASIS_FADE" && config.basisConfirm === "SMART") applied.push("smart-money confirm");
   if (config.respectRegime) skipped.push("regime (RISK_ON/RISK_OFF tape)");
   if (config.respectSmartMoney) skipped.push("smart-money consensus");
   if ((config.maxSignalAgeSec ?? 0) > 0) skipped.push("signal-age (live latency guard)");

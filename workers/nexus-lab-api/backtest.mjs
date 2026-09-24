@@ -14,6 +14,8 @@
 import { deriveSignal } from "../nexus-agent-brain/logic.mjs";
 import { computePnl, evaluateExit, breakevenArmed, volScaledLevels } from "../nexus-agent-exec/logic.mjs";
 import { percentileRank } from "./logic.mjs";
+import { basisFadeFromHistory } from "../../app/lib/basisFade.mjs";
+import { basisCvdConfirm, basisSmartConfirm } from "../../app/lib/basisStack.mjs";
 
 // Rolling ATR% at candle index i, from the `periods` candles BEFORE i (no lookahead).
 // Mirrors the exec's live fetchAtrPct (ATR as a % of price) so a vol-scaled-stops
@@ -76,6 +78,60 @@ export function oiSeriesInfo(rows) {
   return { samples: s.length, days: Math.round((s[s.length - 1].t - s[0].t) / 86400000) };
 }
 
+// ── BASIS replay: the basis stack, evaluated exactly as the live brain would ──────
+// Recorded series (lab-api's hourly flow crons + the brain's oi:hist): basisHist
+// [{t, basisPct}], cvdHist [{t, cvd, buy, sell}], smHist [{t, side}], oiHist [{t, price}].
+// At time `nowMs` the brain can only see rows ALREADY WRITTEN (t <= nowMs) — so each lookup
+// filters every series to that prefix before calling the SAME shared functions the brain
+// calls (basisFadeFromHistory → basisCvdConfirm / basisSmartConfirm). No row from after the
+// decision can reach it: no lookahead, and no second implementation to drift.
+// Returns the raw fields deriveSignal reads (basisSide/basisReason + the confirm fields).
+function prefixByTime(rows) {
+  const sorted = (Array.isArray(rows) ? rows : []).filter((r) => r && Number.isFinite(r.t)).sort((a, b) => a.t - b.t);
+  return (nowMs) => {
+    let lo = 0, hi = sorted.length; // first index with t > nowMs
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid].t <= nowMs) lo = mid + 1; else hi = mid; }
+    return sorted.slice(0, lo);
+  };
+}
+export function makeBasisAt({ basisHist, cvdHist, smHist, oiHist } = {}, { needCvd = false, needSmart = false } = {}) {
+  const basisUpTo = prefixByTime(basisHist);
+  const cvdUpTo = needCvd ? prefixByTime(cvdHist) : null;
+  const oiUpTo = needCvd ? prefixByTime(oiHist) : null;
+  const smUpTo = needSmart ? prefixByTime(smHist) : null;
+  // Memoized per bar: the verdict at a given close doesn't depend on exits/sizing, so a
+  // sweep or walk-forward reusing this lookup computes each bar once, not once per config.
+  const memo = new Map();
+  return (nowMs) => {
+    if (memo.has(nowMs)) return memo.get(nowMs);
+    const b = basisFadeFromHistory(basisUpTo(nowMs), { now: nowMs });
+    const out = { basisSide: b.side, basisPct: b.basisPct, basisThr: b.thr, basisReason: b.reason };
+    if (b.side && cvdUpTo) {
+      const c = basisCvdConfirm({ basisT: b.t, side: b.side, cvdHist: cvdUpTo(nowMs), oiHist: oiUpTo(nowMs) });
+      Object.assign(out, { basisCvdConfirmed: c.confirmed, basisCvdSide: c.cvdSide, basisCvdReason: c.reason });
+    }
+    if (b.side && smUpTo) {
+      const m = basisSmartConfirm({ basisT: b.t, side: b.side, smHist: smUpTo(nowMs) });
+      Object.assign(out, { basisSmartConfirmed: m.confirmed, basisSmartSide: m.smartSide, basisSmartReason: m.reason });
+    }
+    memo.set(nowMs, out);
+    return out;
+  };
+}
+
+// Coverage of a recorded hourly series ([{t,…}]) — samples + days spanned.
+export function histSeriesInfo(rows) {
+  const s = (Array.isArray(rows) ? rows : []).filter((r) => r && Number.isFinite(r.t)).sort((a, b) => a.t - b.t);
+  if (s.length < 2) return { samples: s.length, days: 0, firstT: s[0]?.t ?? null };
+  return { samples: s.length, days: Math.round((s[s.length - 1].t - s[0].t) / 86400000), firstT: s[0].t };
+}
+
+// Build the per-symbol basis lookup a BASIS_FADE config needs (null for any other mode).
+export function basisAtForConfig(config, flow) {
+  if (config?.signalMode !== "BASIS_FADE" || !flow) return null;
+  return makeBasisAt(flow, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART" });
+}
+
 // candles: [{ t(sec), o, h, l, c }] ascending. fundingAt(tsSec) → funding rate
 // (decimal) at/before ts. oiChangeAt(tsSec) → fractional OI change (or null) —
 // pass it to make CONFLUENCE/OI_ONLY testable; omit for funding/price-only modes.
@@ -85,7 +141,9 @@ export function oiSeriesInfo(rows) {
 // entry. This is the conditioning hook: it lets research test "the signal only works
 // in <regime/session/vol>" without changing the signal itself. Default null = no gate,
 // so every existing caller (lab-api endpoints) is byte-for-byte unchanged.
-export function runBacktest(candles, fundingAt, config, fundingPctAt = null, oiChangeAt = null, entryFilter = null) {
+// basisAt (optional): (nowMs) → basis raw fields (see makeBasisAt). Evaluated at the bar's
+// CLOSE — the moment the entry fills at c.c — so the brain's view and the fill price line up.
+export function runBacktest(candles, fundingAt, config, fundingPctAt = null, oiChangeAt = null, entryFilter = null, basisAt = null) {
   const trades = [];
   let pos = null;
   let lastExitIdx = -Infinity;
@@ -146,6 +204,9 @@ export function runBacktest(candles, fundingAt, config, fundingPctAt = null, oiC
       raw.hourUtc = new Date(c.t * 1000).getUTCHours();
       const atr = atrPctAt(candles, i);
       if (Number.isFinite(atr)) raw.atrPct = atr;
+      // Basis stack: what the brain would have seen when this bar closed (the entry fills
+      // at c.c). Candles are hourly; the close is the next bar's open (or +1h on the last).
+      if (basisAt) Object.assign(raw, basisAt(((candles[i + 1]?.t) ?? (c.t + 3600)) * 1000));
       const sig = deriveSignal(raw, config);
       if (sig.direction && sig.direction !== "NONE" && (sig.confidence ?? 0) >= 50
           && (!entryFilter || entryFilter(candles, i, sig, config))) {
@@ -281,18 +342,73 @@ export async function runSweep(base, { symbols, days }, oiHistBySymbol = {}) {
   return { days, symbols, notional: common.capitalPerTrade * common.leverage, results };
 }
 
+// ── BASIS sweep: the exits × confirm grid for the basis stack ─────────────────
+// The scoreboard grades the READ (forward move after an extreme). This grades the
+// STRATEGY around it: which confirm (none / CVD / smart money) and which exits survive
+// fees across markets. Each (symbol × confirm) basis lookup is built ONCE and shared by
+// every exit variant (memoized per bar). A confirm whose series isn't recorded for every
+// symbol is left out of the grid rather than run as a silent zero.
+export const BASIS_SWEEP_EXITS = {
+  "tp1.5/sl1": { tpPercent: 1.5, slPercent: 1 },
+  "tp2.5/sl2": { tpPercent: 2.5, slPercent: 2 },
+  "tp3/sl1.5": { tpPercent: 3, slPercent: 1.5 },
+  "scale-out 1.5/3 · sl1.5": { tpPercent: 1.5, slPercent: 1.5, takeProfits: [{ pct: 1.5, sizePct: 50 }, { pct: 3, sizePct: 50 }] },
+};
+export const BASIS_SWEEP_HOLDS = [4, 12, 24]; // the scoreboard's graded horizons
+export async function runBasisSweep(base, { symbols, days }, flowBySymbol = {}, { confirms = [null, "CVD", "SMART"] } = {}) {
+  const data = {};
+  for (const s of symbols) {
+    const [candles, funding] = await Promise.all([fetchCandles(s, days), fetchFundingAt(s)]);
+    data[s] = { candles, fundingAt: funding.at, basisAt: {} };
+    for (const cf of confirms) {
+      const f = flowBySymbol[s];
+      if (!f) continue;
+      if (cf === "CVD" && !(f.cvdHist?.length && f.oiHist?.length)) continue;
+      if (cf === "SMART" && !f.smHist?.length) continue;
+      data[s].basisAt[String(cf)] = makeBasisAt(f, { needCvd: cf === "CVD", needSmart: cf === "SMART" });
+    }
+  }
+  const liveConfirms = confirms.filter((cf) => symbols.every((s) => data[s].basisAt[String(cf)]));
+  const common = { signalMode: "BASIS_FADE", leverage: base.leverage || 5, capitalPerTrade: base.capitalPerTrade || 50, feeBps: DEFAULT_FEE_BPS };
+  const label = (cf) => (cf === "CVD" ? "Basis × CVD" : cf === "SMART" ? "Basis × Smart" : "Basis Extreme");
+  const results = [];
+  for (const cf of liveConfirms) {
+    for (const [exName, ex] of Object.entries(BASIS_SWEEP_EXITS)) {
+      for (const hold of BASIS_SWEEP_HOLDS) {
+        const config = { ...common, ...ex, maxHoldHours: hold, ...(cf ? { basisConfirm: cf } : {}) };
+        let net = 0, trades = 0, wins = 0, posSymbols = 0;
+        for (const s of symbols) {
+          const r = runBacktest(data[s].candles, data[s].fundingAt, config, null, null, null, data[s].basisAt[String(cf)]);
+          net += r.netUsd; trades += r.trades; wins += Math.round((r.winRate / 100) * r.trades);
+          if (r.netUsd > 0) posSymbols++;
+        }
+        results.push({
+          name: `${label(cf)} · ${exName} · ${hold}h`, trades, posSymbols, totalSymbols: symbols.length,
+          winRate: trades ? Math.round((wins / trades) * 1000) / 10 : 0, netUsd: Math.round(net * 100) / 100,
+          config: {
+            signalMode: "BASIS_FADE", basisConfirm: cf || null, tpPercent: ex.tpPercent, slPercent: ex.slPercent,
+            takeProfits: ex.takeProfits || null, trailingStopPct: 0, maxHoldHours: hold,
+          },
+        });
+      }
+    }
+  }
+  results.sort((a, b) => b.netUsd - a.netUsd);
+  return { days, symbols, notional: common.capitalPerTrade * common.leverage, results, confirmsTested: liveConfirms.map((c) => c || "NONE") };
+}
+
 // Orchestrator: run one config across symbols, return per-symbol + combined stats.
 // oiHistBySymbol (optional) = { symbol: [{t(ms),price,oi,funding}] } from the brain's
 // recorded oi:hist — pass it to make CONFLUENCE/OI_ONLY testable (the endpoint reads
 // it from KV and gates on maturity first).
-export async function backtestConfig(config, { symbols, days }, oiHistBySymbol = {}) {
+export async function backtestConfig(config, { symbols, days }, oiHistBySymbol = {}, flowBySymbol = {}) {
   const perSymbol = [];
   let net = 0, trades = 0, wins = 0;
   for (const symbol of symbols) {
     const [candles, funding] = await Promise.all([fetchCandles(symbol, days), fetchFundingAt(symbol)]);
     const oiRows = oiHistBySymbol[symbol];
     const oiChangeAt = oiRows && oiRows.length >= 2 ? makeOiChangeAt(oiRows) : null;
-    const r = runBacktest(candles, funding.at, { feeBps: DEFAULT_FEE_BPS, ...config }, makeFundingPctAt(funding.rows), oiChangeAt);
+    const r = runBacktest(candles, funding.at, { feeBps: DEFAULT_FEE_BPS, ...config }, makeFundingPctAt(funding.rows), oiChangeAt, null, basisAtForConfig(config, flowBySymbol[symbol]));
     const { _trades, ...summary } = r; // don't leak the full trade list into the API response
     perSymbol.push({ symbol, candles: candles.length, ...summary });
     net += r.netUsd; trades += r.trades; wins += Math.round((r.winRate / 100) * r.trades);
@@ -331,7 +447,7 @@ export function robustnessVerdict(posSymbols, totalSymbols, foldConsistencyPct) 
 // symbol over `days`, buckets real trades into `folds`, and returns a cross-market +
 // cross-time verdict. oiHistBySymbol makes CONFLUENCE/OI_ONLY testable (endpoint gates
 // maturity). Kept lean on symbol count so it fits a Worker's subrequest budget.
-export async function walkForwardValidate(config, { symbols, days, folds = 4 }, oiHistBySymbol = {}) {
+export async function walkForwardValidate(config, { symbols, days, folds = 4 }, oiHistBySymbol = {}, flowBySymbol = {}) {
   const cfg = { feeBps: DEFAULT_FEE_BPS, ...config };
   const perSymbol = [];
   let posSymbols = 0, foldPos = 0, foldTotal = 0, totNet = 0, totTrades = 0;
@@ -339,7 +455,7 @@ export async function walkForwardValidate(config, { symbols, days, folds = 4 }, 
     const [candles, funding] = await Promise.all([fetchCandles(symbol, days), fetchFundingAt(symbol)]);
     const oiRows = oiHistBySymbol[symbol];
     const oiChangeAt = oiRows && oiRows.length >= 2 ? makeOiChangeAt(oiRows) : null;
-    const res = runBacktest(candles, funding.at, cfg, makeFundingPctAt(funding.rows), oiChangeAt);
+    const res = runBacktest(candles, funding.at, cfg, makeFundingPctAt(funding.rows), oiChangeAt, null, basisAtForConfig(cfg, flowBySymbol[symbol]));
     const { net, cnt } = foldsByEntry(res, candles, cfg, folds);
     const symNet = Math.round(net.reduce((a, b) => a + b, 0) * 100) / 100;
     const symTrades = cnt.reduce((a, b) => a + b, 0);

@@ -5,7 +5,7 @@
 // belongs to a single route family, so it lives here rather than being duplicated.
 //
 // ⚠️ Pure move — logic byte-identical to what shipped.
-import { walkForwardValidate, oiSeriesInfo } from "./backtest.mjs";
+import { walkForwardValidate, oiSeriesInfo, histSeriesInfo } from "./backtest.mjs";
 
 // ── OI-history loader for backtests ───────────────────────────────────────────
 // CONFLUENCE / OI_ONLY need the brain's recorded oi:hist:{symbol} series (Orderly has no
@@ -79,17 +79,29 @@ export async function revalidateStrategy(address, stratId, config, env) {
   const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
   let validation;
   try {
-    const needsOi = ["CONFLUENCE", "OI_ONLY"].includes(config.signalMode);
-    const oi = needsOi ? await loadOiHistForBacktest(VALIDATE_UNIVERSE, env) : null;
-    // Run the symbols that actually HAVE mature recorded OI, not the whole fixed universe
-    // (BNB/XRP/LINK are only logged when a user watchlists them, and a single unrecorded
-    // symbol used to pin every published CONFLUENCE strategy at "pending_oi" forever).
-    const runSymbols = needsOi ? oi.matureSymbols : VALIDATE_UNIVERSE;
-    if (needsOi && runSymbols.length < MIN_VALIDATE_SYMBOLS) {
-      validation = { status: "pending_oi", note: `awaiting OI history (${runSymbols.length}/${MIN_VALIDATE_SYMBOLS} markets with ${OI_BACKTEST_MIN_DAYS}d+ recorded OI)`, checkedAt: Date.now() };
+    if (config.signalMode === "BASIS_FADE") {
+      // Basis replays off recorded basis (+ confirm) history — validate the mature markets
+      // over the window that history covers; too few markets ⇒ pending, never a fake verdict.
+      const flow = await loadFlowHistForBacktest(VALIDATE_UNIVERSE, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART" });
+      if (flow.matureSymbols.length < MIN_VALIDATE_SYMBOLS) {
+        validation = { status: "pending_basis", note: `awaiting basis history (${flow.matureSymbols.length}/${MIN_VALIDATE_SYMBOLS} markets with ${BASIS_BACKTEST_MIN_DAYS}d+ recorded)`, checkedAt: Date.now() };
+      } else {
+        const r = await walkForwardValidate(config, { symbols: flow.matureSymbols, days: Math.max(14, Math.min(60, flow.windowDays)), folds: 4 }, {}, flow.flowBySymbol);
+        validation = { status: "done", verdict: r.verdict, posSymbols: r.posSymbols, totalSymbols: r.totalSymbols, foldConsistency: r.foldConsistency, totalNet: r.totalNet, validatedAt: Date.now() };
+      }
     } else {
-      const r = await walkForwardValidate(config, { symbols: runSymbols, days: 60, folds: 4 }, needsOi ? oi.oiHistMature : {});
-      validation = { status: "done", verdict: r.verdict, posSymbols: r.posSymbols, totalSymbols: r.totalSymbols, foldConsistency: r.foldConsistency, totalNet: r.totalNet, validatedAt: Date.now() };
+      const needsOi = ["CONFLUENCE", "OI_ONLY"].includes(config.signalMode);
+      const oi = needsOi ? await loadOiHistForBacktest(VALIDATE_UNIVERSE, env) : null;
+      // Run the symbols that actually HAVE mature recorded OI, not the whole fixed universe
+      // (BNB/XRP/LINK are only logged when a user watchlists them, and a single unrecorded
+      // symbol used to pin every published CONFLUENCE strategy at "pending_oi" forever).
+      const runSymbols = needsOi ? oi.matureSymbols : VALIDATE_UNIVERSE;
+      if (needsOi && runSymbols.length < MIN_VALIDATE_SYMBOLS) {
+        validation = { status: "pending_oi", note: `awaiting OI history (${runSymbols.length}/${MIN_VALIDATE_SYMBOLS} markets with ${OI_BACKTEST_MIN_DAYS}d+ recorded OI)`, checkedAt: Date.now() };
+      } else {
+        const r = await walkForwardValidate(config, { symbols: runSymbols, days: 60, folds: 4 }, needsOi ? oi.oiHistMature : {});
+        validation = { status: "done", verdict: r.verdict, posSymbols: r.posSymbols, totalSymbols: r.totalSymbols, foldConsistency: r.foldConsistency, totalNet: r.totalNet, validatedAt: Date.now() };
+      }
     }
   } catch { validation = { status: "error", checkedAt: Date.now() }; }
   // Re-read latest before patching so a concurrent save/publish isn't clobbered.
@@ -101,4 +113,49 @@ export async function revalidateStrategy(address, stratId, config, env) {
   if (!s) return;
   s.validation = validation;
   await AGENT_KV.put(key, JSON.stringify(list));
+}
+
+// ── Basis-stack history loader for backtests ─────────────────────────────────
+// BASIS_FADE replays off RECORDED series only (Orderly has no basis/CVD/smart-money
+// history): basis:hist:{BARE} + (CVD confirm) cvd:hist:{BARE} + oi:hist:{PERP} price
+// spine + (SMART confirm) sm:hist:{BARE} — all in the NEXUS_AGENT namespace the
+// scoreboard and the brain read. Maturity is per-symbol, like OI: the basis series must
+// clear the bar, and so must the confirm series the config actually uses. A market that
+// doesn't qualify is excluded and NAMED, never run as a silent zero. `windowDays` = the
+// shallowest mature coverage, so callers can size the replay to data that exists (folds
+// over empty pre-history would read as losing folds).
+export const BASIS_BACKTEST_MIN_DAYS = 14, BASIS_BACKTEST_MIN_SAMPLES = 200;
+export function flowSymbolMature(info) {
+  return !!info && info.days >= BASIS_BACKTEST_MIN_DAYS && info.samples >= BASIS_BACKTEST_MIN_SAMPLES;
+}
+export async function loadFlowHistForBacktest(symbols, env, { needCvd = false, needSmart = false } = {}) {
+  const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
+  const read = async (key) => { try { const r = await AGENT_KV.get(key); return r ? JSON.parse(r) : []; } catch { return []; } };
+  const flowBySymbol = {}, perSymbol = [];
+  for (const s of symbols) {
+    const bare = shortSymbol(s);
+    const [basisHist, cvdHist, oiHist, smHist] = await Promise.all([
+      read(`basis:hist:${bare}`),
+      needCvd ? read(`cvd:hist:${bare}`) : [],
+      needCvd ? read(`oi:hist:${s}`) : [],
+      needSmart ? read(`sm:hist:${bare}`) : [],
+    ]);
+    const basis = histSeriesInfo(basisHist);
+    // The binding constraint is the thinnest series this config needs.
+    const infos = [basis, ...(needCvd ? [histSeriesInfo(cvdHist)] : []), ...(needSmart ? [histSeriesInfo(smHist)] : [])];
+    const days = Math.min(...infos.map((i) => i.days)), samples = Math.min(...infos.map((i) => i.samples));
+    const mature = infos.every(flowSymbolMature);
+    perSymbol.push({ symbol: s, days, samples, mature, basisDays: basis.days });
+    if (mature) flowBySymbol[s] = { basisHist, cvdHist, oiHist, smHist };
+  }
+  const matureSymbols = perSymbol.filter((i) => i.mature).map((i) => i.symbol);
+  return {
+    flowBySymbol, perSymbol, matureSymbols,
+    staleSymbols: perSymbol.filter((i) => !i.mature).map((i) => i.symbol),
+    anyMature: matureSymbols.length > 0,
+    windowDays: matureSymbols.length ? Math.min(...perSymbol.filter((i) => i.mature).map((i) => i.days)) : 0,
+  };
+}
+export function flowCoverageText(perSymbol) {
+  return (perSymbol || []).map((i) => `${shortSymbol(i.symbol)} ${i.days}d/${i.samples}`).join(" · ");
 }

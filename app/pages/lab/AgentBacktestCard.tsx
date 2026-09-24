@@ -21,7 +21,7 @@ function OiCoverage({ rows }: { rows?: any[] }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
       {rows.map((r: any) => (
-        <span key={r.symbol} title={r.mature ? "mature — included in the OI run" : "not enough recorded OI — excluded"}
+        <span key={r.symbol} title={r.mature ? "mature — included in the run" : "not enough recorded history — excluded"}
           style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "2px 7px", borderRadius: 2, border: `1px solid ${r.mature ? "#3ecf8e44" : "#33333a"}`, color: r.mature ? "#3ecf8e" : "#71717a" }}>
           {bareTicker(String(r.symbol))} {r.days}d/{r.samples}
         </span>
@@ -98,7 +98,7 @@ export function AgentBacktestCard({
               {backtest.untestable && (
                 <div style={{ color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, marginBottom: 10, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3 }}>
                   ⚠ {backtest.note}
-                  <OiCoverage rows={backtest.oiCoverage} />
+                  <OiCoverage rows={backtest.oiCoverage ?? backtest.basisCoverage} />
                 </div>
               )}
               {/* When OI-driven modes ARE testable, surface the OI-window caveat
@@ -106,7 +106,7 @@ export function AgentBacktestCard({
               {!backtest.untestable && backtest.note && (
                 <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, marginBottom: 10, padding: "6px 8px", border: "1px solid #232327", borderRadius: 3 }}>
                   ◆ {backtest.note}
-                  <OiCoverage rows={backtest.oiCoverage} />
+                  <OiCoverage rows={backtest.oiCoverage ?? backtest.basisCoverage} />
                 </div>
               )}
               <GatesNote skipped={backtest.gatesSkipped ?? backtestGateSupport(config).skipped} />
@@ -147,7 +147,7 @@ export function AgentBacktestCard({
                 {validation.untestable ? (
                   <div style={{ color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3 }}>
                     ⚠ {validation.note}
-                    <OiCoverage rows={validation.oiCoverage} />
+                    <OiCoverage rows={validation.oiCoverage ?? validation.basisCoverage} />
                   </div>
                 ) : (
                   <>
@@ -160,7 +160,7 @@ export function AgentBacktestCard({
                     {validation.note && (
                       <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 9.5, lineHeight: 1.5, marginTop: 8 }}>
                         ◆ {validation.note}
-                        <OiCoverage rows={validation.oiCoverage} />
+                        <OiCoverage rows={validation.oiCoverage ?? validation.basisCoverage} />
                       </div>
                     )}
                     <div style={{ marginTop: 8, overflowX: "auto" }}>
@@ -185,22 +185,28 @@ export function AgentBacktestCard({
               </div>
             );
           })()}
-          {sweep && (
+          {sweep && (() => {
+            // The basis sweep reports per-row market breadth (posSymbols) — show it, because
+            // "best net on one market" is exactly the overfit a sweep invites.
+            const hasMkts = sweep.results.some((r: any) => Number.isFinite(r.posSymbols));
+            const sweepCols = hasMkts ? "1fr 62px 44px 44px 50px" : "1fr 70px 52px 56px";
+            return (
             <div style={{ marginTop: 14 }}>
               <div style={{ ...agentLabelStyle, fontSize: 9, marginBottom: 6 }}>
                 RANKED — {sweep.results.length} configs · {sweep.symbols.map((s: string) => bareTicker(s)).join("/")} · {sweep.days}d · ${sweep.notional} notional
               </div>
               <div style={{ overflowX: "auto" }}>
                 <div style={{ minWidth: 340 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 52px 56px", gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", padding: "0 0 4px", borderBottom: "1px solid #232327" }}>
-                    <span>STRATEGY</span><span style={{ textAlign: "right" }}>NET$</span><span style={{ textAlign: "right" }}>WIN%</span><span style={{ textAlign: "right" }}>TRADES</span>
+                  <div style={{ display: "grid", gridTemplateColumns: sweepCols, gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", padding: "0 0 4px", borderBottom: "1px solid #232327" }}>
+                    <span>STRATEGY</span><span style={{ textAlign: "right" }}>NET$</span>{hasMkts && <span title="Markets it was net-positive on" style={{ textAlign: "right" }}>MKTS+</span>}<span style={{ textAlign: "right" }}>WIN%</span><span style={{ textAlign: "right" }}>TRADES</span>
                   </div>
                   {sweep.results.slice(0, 12).map((r: any, i: number) => (
-                    <div key={i} onClick={() => r.config && applySweepConfig(r.config)} title="Apply this config to the editor above" style={{ display: "grid", gridTemplateColumns: "1fr 70px 52px 56px", gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 4px", borderBottom: "1px solid #141416", color: "#a1a1aa", cursor: r.config ? "pointer" : "default", borderRadius: 3 }}
+                    <div key={i} onClick={() => r.config && applySweepConfig(r.config)} title="Apply this config to the editor above" style={{ display: "grid", gridTemplateColumns: sweepCols, gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 4px", borderBottom: "1px solid #141416", color: "#a1a1aa", cursor: r.config ? "pointer" : "default", borderRadius: 3 }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "#141416"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
                       <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{i === 0 ? "★ " : ""}{r.name}</span>
                       <span style={{ textAlign: "right", color: r.netUsd >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: 600 }}>{r.netUsd >= 0 ? "+" : ""}{r.netUsd}</span>
+                      {hasMkts && <span style={{ textAlign: "right", color: r.posSymbols * 2 > r.totalSymbols ? "#d4d4d8" : "#71717a" }}>{r.posSymbols}/{r.totalSymbols}</span>}
                       <span style={{ textAlign: "right" }}>{r.winRate}</span>
                       <span style={{ textAlign: "right" }}>{r.trades}</span>
                     </div>
@@ -208,12 +214,14 @@ export function AgentBacktestCard({
                 </div>
               </div>
               <div style={{ color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 8, lineHeight: 1.5 }}>
-                ↑ Click any row to apply that config to the editor. {sweep.oiTested
+                ↑ Click any row to apply that config to the editor. {sweep.note ? sweep.note : sweep.oiTested
                   ? `CONFLUENCE + OI-divergence are now in the sweep${sweep.oiCoverage?.minDays ? `, graded on ${sweep.oiCoverage.minDays}d of recorded OI history` : ""}.`
                   : "CONFLUENCE/OI aren't in the sweep yet — they fold in automatically once recorded OI history is deep enough."} Every config here was graded on real price — apply a winner, then paper-test before going live.
               </div>
+              {sweep.basisCoverage && <OiCoverage rows={sweep.basisCoverage} />}
             </div>
-          )}
+            );
+          })()}
         </>
       )}
     </div>
