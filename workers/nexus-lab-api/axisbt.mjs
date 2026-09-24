@@ -11,20 +11,15 @@
 // hour); the CVD + liq-flush ones REUSE the deployed classifiers so the backtest scores
 // live behavior. Pure + tested. Fed entirely by the self-logged series (oi/cvd/sm/basis/
 // liq:hist) — which is why it only becomes meaningful as that history matures (~Sept 14).
-import { classifyCvdDivergence } from "./flow.mjs";
+import { hourBucket, priceByHour, cvdSideForRow } from "../../app/lib/basisStack.mjs";
 import { classifyFlush } from "./liquidations.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
 import { trailingPct, basisExtremeSide } from "../../app/lib/basisFade.mjs";
 
-export function hourBucket(t) { return Math.round(Number(t) / 3600000); }
-
-// Price spine: hour → price, from oi:hist ({t, price, oi, funding}).
-export function priceByHour(oiHist) {
-  const m = new Map();
-  for (const p of oiHist || []) if (p && Number.isFinite(p.price) && p.price > 0) m.set(hourBucket(p.t), p.price);
-  return m;
-}
+// hourBucket + the oi:hist price spine live in app/lib/basisStack.mjs (shared with the
+// brain's basis×CVD gate); re-exported so existing importers keep working.
+export { hourBucket, priceByHour };
 
 // Forward return over `h` hours — NO LOOKAHEAD (outcome strictly after the signal).
 export function forwardReturn(pmap, t, h) {
@@ -54,9 +49,7 @@ export function cvdDivergenceEvents(cs, pmap) {
   const ev = [];
   for (const c of cs.cvdHist || []) {
     if (!c) continue;
-    const h0 = hourBucket(c.t), p0 = pmap.get(h0), pPrev = pmap.get(h0 - 1);
-    if (!(p0 > 0) || !(pPrev > 0)) continue;
-    const sig = classifyCvdDivergence(((p0 - pPrev) / pPrev) * 100, c);
+    const sig = cvdSideForRow(c, pmap); // shared with the brain's live basis×CVD gate
     if (sig) ev.push({ t: c.t, side: sig.side });
   }
   return ev;

@@ -17,6 +17,7 @@
 
 import { deriveSignal, computeRegime, atrPct, oiSnapshotDue } from "./logic.mjs";
 import { basisFadeFromHistory } from "../../app/lib/basisFade.mjs";
+import { basisCvdConfirm } from "../../app/lib/basisStack.mjs";
 
 // The markets we ALWAYS record oi:hist for. ⚠️ Keep this in step with
 // VALIDATE_UNIVERSE in nexus-lab-api/strategies.mjs — a symbol the walk-forward asks
@@ -113,10 +114,12 @@ export default {
       // Only read basis:hist when somebody is actually trading BASIS_FADE — one KV get
       // per symbol, and zero cost for every other agent.
       const needBasis = Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE");
+      // The basis×CVD stack gate reads cvd:hist + oi:hist too — only when someone opted in.
+      const needBasisCvd = Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisConfirm === "CVD");
       const rawBySymbol = {};
       for (const symbol of symbolSet) {
         try {
-          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis);
+          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis, needBasisCvd);
         } catch (e) {
           console.error(`[brain] ${symbol} eval error:`, e.message);
         }
@@ -183,7 +186,7 @@ export default {
 // Fetch one symbol's market data and compute RAW deltas vs last cycle.
 // No strategy interpretation here — deriveSignal() applies each user's mode +
 // thresholds. `market:prev:{symbol}` is stored so price/OI deltas are real.
-async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false) {
+async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false, computeBasisCvd = false) {
   const json = await orderlyPublicGet(`${ORDERLY_API}/v1/public/futures/${symbol}`);
   const d = json.data;
 
@@ -256,9 +259,30 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
     }
   }
 
+  // ── Basis × CVD stack (opt-in conditioner) ─────────────────────────────────
+  // Only when the base read actually fired: is the CVD read in the SAME hour on the
+  // SAME side? Shared rule (app/lib/basisStack.mjs) = the exact intersection axisbt's
+  // basis_x_cvd grades. Two KV gets (cvd:hist from lab-api's flow cron, oi:hist that
+  // this brain records) — no external fetch. Any failure ⇒ unconfirmed, never a pass.
+  let basisCvd = null;
+  if (computeBasisCvd && basis && (basis.side === "LONG" || basis.side === "SHORT")) {
+    try {
+      const bare = symbol.replace(/^PERP_/, "").replace(/_USDC$/, "");
+      const [cRaw, oRaw] = await Promise.all([
+        env.NEXUS_AGENT.get(`cvd:hist:${bare}`),
+        env.NEXUS_AGENT.get(`oi:hist:${symbol}`),
+      ]);
+      basisCvd = basisCvdConfirm({ basisT: basis.t, side: basis.side, cvdHist: cRaw ? JSON.parse(cRaw) : [], oiHist: oRaw ? JSON.parse(oRaw) : [] });
+    } catch (e) {
+      console.error(`[brain] ${symbol} basis×cvd read failed:`, e.message);
+      basisCvd = { confirmed: false, cvdSide: null, reason: "CVD read failed" };
+    }
+  }
+
   return {
     symbol, price: markPrice, oi: openInterest, fundingRate, priceChange, oiChange, hasPrev: !!prev, fundingPct,
     ...(basis ? { basisSide: basis.side, basisPct: basis.basisPct, basisThr: basis.thr, basisReason: basis.reason } : {}),
+    ...(basisCvd ? { basisCvdConfirmed: basisCvd.confirmed, basisCvdSide: basisCvd.cvdSide, basisCvdReason: basisCvd.reason } : {}),
     // Regime-conditioning inputs for the opt-in session/vol gates in deriveSignal.
     hourUtc: new Date().getUTCHours(),
     ...(atrPctVal !== undefined ? { atrPct: atrPctVal } : {}),

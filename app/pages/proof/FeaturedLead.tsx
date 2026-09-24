@@ -11,6 +11,7 @@
 // the same funding signals are sold as data via x402, priced in $NEXUS.
 import { useNavigate } from "react-router-dom";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
+import { deployToAgent } from "@/utils/agentPrefill";
 import { bareTicker } from "@/utils/utils";
 
 const MONO = "var(--nx-font-mono)";
@@ -91,7 +92,7 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
       {/* CTAs — deploy + verify */}
       <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button
-          onClick={() => navigate("/lab?tab=agent")}
+          onClick={() => (LEAD ? deployToAgent({ ...LEAD.config, mode: "PAPER" }, `the ${LEAD.name} preset (PAPER)`, undefined, navigate) : navigate("/lab?tab=agent"))}
           style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "#08080a", background: BONE, border: "none", borderRadius: 4, padding: "8px 16px", cursor: "pointer" }}
         >
           Deploy in the Lab →

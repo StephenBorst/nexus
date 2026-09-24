@@ -117,23 +117,9 @@ export function classifyOrderbook(imbalance) {
 // We surface ONLY divergence — confirmation (price and flow agree) is trend, not an
 // edge, so it stays silent. Pure; the endpoint supplies the price move + live CVD.
 // cvd:hist is logging so this becomes backtestable as the series matures.
-export const CVD_MIN_MOVE = 0.25; // % price move over the window to call a direction
-export const CVD_MIN_TILT = 0.08; // |cvd|/(buy+sell) floor — a real aggressor tilt
-export function classifyCvdDivergence(priceChangePct, cvdObj) {
-  if (!cvdObj || !Number.isFinite(priceChangePct)) return null;
-  const total = (Number(cvdObj.buy) || 0) + (Number(cvdObj.sell) || 0);
-  if (total <= 0) return null;
-  const tilt = (Number(cvdObj.cvd) || 0) / total; // -1..1 net aggressor lean
-  if (Math.abs(priceChangePct) < CVD_MIN_MOVE || Math.abs(tilt) < CVD_MIN_TILT) return null;
-  const priceUp = priceChangePct > 0, flowUp = tilt > 0;
-  if (priceUp === flowUp) return null; // agreement = trend, not a fade tell
-  return {
-    side: priceUp ? "SHORT" : "LONG",
-    kind: priceUp ? "distribution" : "accumulation",
-    tilt: Math.round(tilt * 100) / 100,
-    priceChangePct: Math.round(priceChangePct * 100) / 100,
-  };
-}
+// CVD divergence rule + thresholds live in app/lib/basisStack.mjs — the SAME function the
+// grader (axisbt) and the brain's basis×CVD gate call, so the three can't drift.
+export { CVD_MIN_MOVE, CVD_MIN_TILT, classifyCvdDivergence } from "../../app/lib/basisStack.mjs";
 
 export function classifyBasis(basisPct) {
   const PREMIUM = 0.03; // % — below this the perp is priced with spot, no froth signal

@@ -1121,6 +1121,17 @@ export function AgentView() {
             </div>
           </div>
 
+          {/* Basis × CVD STACK — only meaningful on BASIS_FADE. The same-hour intersection the
+              scoreboard grades as basis_x_cvd (shared rule: app/lib/basisStack.mjs, parity-tested). */}
+          {config.signalMode === "BASIS_FADE" && (
+            <AgentToggleCard
+              label="REQUIRE CVD CONFIRM — the basis × CVD stack"
+              description={<>Take the basis fade ONLY when aggressor flow in the same hour diverges the same way (price up on net selling → short; price down on net buying → long). This is exactly the read the scoreboard grades as <b style={{ color: "#ededf0" }}>Basis extreme × CVD divergence</b>. Rarer entries by design; when it sits out, the status says why. Off = plain basis fade.</>}
+              on={config.basisConfirm === "CVD"}
+              onToggle={() => setConfig({ ...config, basisConfirm: config.basisConfirm === "CVD" ? undefined : "CVD" })}
+            />
+          )}
+
           {/* The experimental FILTERS & CONDITIONING cluster (invert, tape, smart-money,
               regime/session/vol, vol-scaled stops) — all opt-in, off by default, validate
               on Test/Sweep. Tucked behind disclosure so the config flows mode → strategy →

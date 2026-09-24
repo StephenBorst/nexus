@@ -10,6 +10,8 @@ import { SectionHeader } from "@/pages/lab/components";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import CarrySleeve from "./CarrySleeve";
 import FeaturedLead from "./FeaturedLead";
+import { AXIS_PRESET, presetById } from "@/config/strategyPresets";
+import { deployToAgent } from "@/utils/agentPrefill";
 
 const API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -52,9 +54,9 @@ const VERDICT: Record<string, { color: string; label: string }> = {
 
 // A single labeled stat — value over a plain micro-label, so the scoreboard reads
 // itself (no memorizing "bps"/"obs"). The tooltip carries the deeper gloss on hover.
-function Stat({ v, unit, l, color, title }: { v: string; unit?: string; l: string; color?: string; title?: string }) {
+function Stat({ v, unit, l, color, title, align = "end" }: { v: string; unit?: string; l: string; color?: string; title?: string; align?: "start" | "end" }) {
   return (
-    <span title={title} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, cursor: title ? "help" : "default" }}>
+    <span title={title} style={{ display: "flex", flexDirection: "column", alignItems: align === "end" ? "flex-end" : "flex-start", gap: 3, minWidth: 0, cursor: title ? "help" : "default" }}>
       <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 700, color: color || BRIGHT, lineHeight: 1, whiteSpace: "nowrap" }}>
         {v}{unit ? <span style={{ fontSize: 8.5, color: MUTED, fontWeight: 500 }}> {unit}</span> : null}
       </span>
@@ -64,23 +66,49 @@ function Stat({ v, unit, l, color, title }: { v: string; unit?: string; l: strin
 }
 
 // One row per candidate signal — our OWN reads, graded by forward returns.
+// Layout: the name + verdict on line 1 (the name WRAPS — it never shoves the stats off
+// the card), the five stats on line 2 as an equal 5-cell grid on phones (never a tall
+// column, never clipped), inline right on desktop. When the read has an agent mode that
+// trades the EXACT graded rule (AXIS_PRESET — shared module + parity test), a third line
+// loads it into the agent in PAPER. Reads without one say so rather than borrow a look-alike.
 function SignalRow({ a }: { a: AxisRow }) {
+  const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const v = VERDICT[a.verdict] || VERDICT.INSUFFICIENT;
+  const rated = !!a.best && a.verdict !== "INSUFFICIENT";
+  const preset = AXIS_PRESET[a.name] ? presetById(AXIS_PRESET[a.name]) : undefined;
+  const align = isMobile ? "start" : "end";
+  const stats = rated && a.best ? [
+    <Stat key="h" align={align} v={`${a.best.h}h`} l="horizon" title="How far ahead we measure the move — this read's best window." />,
+    <Stat key="hr" align={align} v={`${a.best.hitRate}%`} l="hit rate" title="Share of times it moved the predicted way." />,
+    <Stat key="e" align={align} v={`${a.best.meanBps >= 0 ? "+" : ""}${a.best.meanBps}`} unit={isMobile ? undefined : "bps"} l={isMobile ? "edge · bps" : "avg edge"} color={a.best.meanBps >= 0 ? POS : NEG} title="Average forward move it caught, in basis points (100 bps = 1%)." />,
+    <Stat key="n" align={align} v={`${a.best.samples}`} l="samples" title="How many times this read has fired — more samples = more trustworthy." />,
+    <Stat key="s" align={align} v={a.best.stable ? "✓" : "—"} l="stable" color={a.best.stable ? POS : FAINT} title="Held up in BOTH halves of the record (walk-forward) — not a fluke of one stretch." />,
+  ] : null;
+  const load = () => preset && deployToAgent({ ...preset.config, mode: "PAPER" }, `the ${preset.name} preset (PAPER)`, undefined, navigate);
   return (
-    <div style={{ ...rowStyle(false), alignItems: "center" }}>
-      <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 700, color: BRIGHT, flexShrink: 0, minWidth: 150 }}>{a.label}</span>
-      <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: v.color, border: `1px solid ${v.color}55`, borderRadius: 3, padding: "1px 6px", flexShrink: 0 }}>{v.label}</span>
-      {a.best && a.verdict !== "INSUFFICIENT" ? (
-        <span style={{ marginLeft: "auto", display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "flex-end", alignItems: "flex-end" }}>
-          <Stat v={`${a.best.h}h`} l="horizon" title="How far ahead we measure the move — this read's best window." />
-          <Stat v={`${a.best.hitRate}%`} l="hit rate" title="Share of times it moved the predicted way." />
-          <Stat v={`${a.best.meanBps >= 0 ? "+" : ""}${a.best.meanBps}`} unit="bps" l="avg edge" color={a.best.meanBps >= 0 ? POS : NEG} title="Average forward move it caught, in basis points (100 bps = 1%)." />
-          <Stat v={`${a.best.samples}`} l="samples" title="How many times this read has fired — more samples = more trustworthy." />
-          <Stat v={a.best.stable ? "✓" : "—"} l="stable" color={a.best.stable ? POS : FAINT} title="Held up in BOTH halves of the record (walk-forward) — not a fluke of one stretch." />
-        </span>
-      ) : (
-        <span style={{ ...statCell, marginLeft: "auto", color: FAINT }}>accruing — not yet rated</span>
-      )}
+    <div style={{ background: INSET, border: `1px solid ${BORDER}`, borderRadius: 5, padding: isMobile ? "10px 12px" : "9px 12px" }}>
+      <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", gap: 10 }}>
+        <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 700, color: BRIGHT, flex: isMobile ? 1 : "0 1 auto", minWidth: 0, lineHeight: 1.4, overflowWrap: "anywhere" }}>{a.label}</span>
+        <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: v.color, border: `1px solid ${v.color}55`, borderRadius: 3, padding: "1px 6px", flexShrink: 0, whiteSpace: "nowrap" }}>{v.label}</span>
+        {!isMobile && (stats
+          ? <span style={{ marginLeft: "auto", display: "flex", gap: 16, alignItems: "flex-end", flexShrink: 0 }}>{stats}</span>
+          : <span style={{ ...statCell, marginLeft: "auto", color: FAINT }}>accruing — not yet rated</span>)}
+      </div>
+      {isMobile && (stats
+        ? <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>{stats}</div>
+        : <div style={{ ...statCell, color: FAINT, marginTop: 6 }}>accruing — not yet rated</div>)}
+      {preset ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+          <button type="button" onClick={load} className="nx-press"
+            style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", color: "#08080a", background: BONE, border: "none", borderRadius: 3, padding: "6px 12px", cursor: "pointer" }}>
+            Load “{preset.name}” in the agent →
+          </button>
+          <span style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT }}>PAPER · same rule the board grades · review, then Save</span>
+        </div>
+      ) : rated && (a.verdict === "PREDICTIVE" || a.verdict === "PROMISING") ? (
+        <div style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT, marginTop: 8 }}>research read — not an agent mode yet</div>
+      ) : null}
     </div>
   );
 }

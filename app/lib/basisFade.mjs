@@ -63,7 +63,7 @@ export function basisFadeFromHistory(rows, { now = Date.now(), window, minWarmup
   // basis:hist accrues HOURLY. A gap means the flow cron stalled — trading a stale
   // premium is worse than not trading, so this refuses rather than guesses.
   if (ageMs > maxAgeMs) {
-    return { side: null, basisPct: obs.basisPct, thr: null, ageMs, reason: `basis stale (${Math.round(ageMs / 3600000)}h)` };
+    return { side: null, basisPct: obs.basisPct, thr: null, ageMs, t: obs.t, reason: `basis stale (${Math.round(ageMs / 3600000)}h)` };
   }
   const trailRows = sorted.slice(Math.max(0, sorted.length - 1 - cfg.window), sorted.length - 1);
   const trailAbs = trailRows.map((r) => Math.abs(r.basisPct));
@@ -72,5 +72,6 @@ export function basisFadeFromHistory(rows, { now = Date.now(), window, minWarmup
   const reason = side
     ? `basis ${obs.basisPct > 0 ? "premium" : "discount"} ${obs.basisPct.toFixed(3)}% > p${Math.round(cfg.pct * 100)} ${thr?.toFixed(3)}%`
     : (trailAbs.length < cfg.minWarmup ? `accruing (${trailAbs.length}/${cfg.minWarmup}h)` : "basis not extreme");
-  return { side, basisPct: obs.basisPct, thr, ageMs, reason };
+  // `t` = the observation's hour — the join key for stack conditioners (basisStack.mjs).
+  return { side, basisPct: obs.basisPct, thr, ageMs, t: obs.t, reason };
 }

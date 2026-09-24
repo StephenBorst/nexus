@@ -333,6 +333,19 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   ⚠️ **Bug the tests caught: `{ ...DEFAULTS, minWarmup, pct }` spreads `undefined` OVER the defaults when the caller
   omits opts → thr `undefined` → the signal NEVER fires. Coalesce per field.** ⚠️ PREDICTIVE grades the READ, not a
   strategy — exits/sizing/fees are unvalidated and it is NOT walk-forward robust. PAPER, second wallet, own record.
+- **✅ BASIS × CVD STACK WIRED (2026-09-24): `BASIS_FADE` + `basisConfirm:"CVD"`.** Conditioner rules live ONCE in
+  **`app/lib/basisStack.mjs`** (`hourBucket`/`priceByHour`/`classifyCvdDivergence`/`cvdSideForRow`/`basisCvdConfirm`) —
+  axisbt's `cvdDivergenceEvents` and lab-api `flow.mjs` (re-export) use it, and the brain calls `basisCvdConfirm` with the
+  basis obs hour (`basisFadeFromHistory` now returns `t`). Brain reads `cvd:hist:{BARE}` + `oi:hist:{PERP}` (same KV) only
+  when someone opted in (`needBasisCvd`). Absent/failed CVD ⇒ sits out with the reason, never a pass. **Parity test**
+  (`app/lib/basisStack.test.mjs`) proves live gate == scoreboard `basis_x_cvd` hour-by-hour on a synthetic tape. Preset
+  `basis-cvd-stack` (PAPER). `AXIS_PRESET` (strategyPresets.ts) maps scoreboard axis → preset trading the EXACT rule
+  (basis_extreme, basis_x_cvd only) — the /proof SignalRow shows "Load … in the agent →" (forces PAPER via
+  `deployToAgent`); unmapped PREDICTIVE reads say "research read — not an agent mode yet". Next candidate:
+  `basisConfirm:"SMART"` (basis_x_smart), same pattern, gated on the Oct-15 re-validation.
+- **⚠️ The Oct-15 routine can't reach `og.nexustradinglabs.com` from a cloud container** (curl + WebFetch both
+  egress-denied, verified 2026-09-24). Fix = allow the domain in the environment's Network access. The routine was
+  created via http_api so agents can't edit it; the updated prompt lives in `docs/routines/revalidate-basis-2026-10-15.md`.
 - **⚠️ Scoreboard reads are NOT agent signalModes yet.** The agent trades CONFLUENCE/FUNDING/OI/MOMENTUM/
   MEAN_REVERSION only; basis/CVD/RSI reads are the research/proof layer. Findings feed house defaults + manual
   Thesis Engine use. ~~Wiring a PREDICTIVE read → a one-click agent strategy = roadmap~~ **→ DONE for basis (see above); CVD/RSI still research-only.**
@@ -825,6 +838,11 @@ into PRO rail. Open call: free-forever BYOK vs gate behind PRO.
   card, ContributePrompt (feed<12), and **outbound 𝕏/Farcaster share** on theses (Lab ThesisView +
   thesis detail page) → links unfurl via existing `/og/thesis/:wallet/:id(.png)` cards. The
   create→distribute→recruit loop = the real fix for thin supply (rest is go-to-market).
+
+## ⚠️ Settled — do NOT re-raise as "next moves" (borst, 2026-09-24)
+- **Cold-start / feed liveness** is behind us — don't pitch it as the #1 risk or a next move.
+- **Fabric in-app buy is LIVE and tested** — don't pitch "run a small live test" again.
+- Current focus = **the engine and its signals** (basis stack, scoreboard → one-click strategies, mobile polish).
 
 ## Strategic framing (for partner/Orderly convos)
 The DEX is a commodity (anyone can clone the Orderly template). The moat is the Lab + social graph:
