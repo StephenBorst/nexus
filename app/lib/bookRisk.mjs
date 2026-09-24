@@ -26,7 +26,14 @@ const SECTORS = {
 const SECTOR_OF = {};
 for (const [s, arr] of Object.entries(SECTORS)) for (const t of arr) SECTOR_OF[t] = s;
 
-export const bareTicker = (s) => String(s).replace("PERP_", "").replace("_USDC", "").replace("-USD", "").toUpperCase();
+export const bareTicker = (s) => {
+  // Orderly appends a broker suffix to many markets (PERP_XLM_USDC_mythos) — strip it
+  // so sector/coin grouping sees XLM, not XLM_mythos.
+  const str = String(s || "");
+  const m = /^PERP_([^_]+)_USDC(?:_.*)?$/.exec(str);
+  const base = m ? m[1] : str.replace("PERP_", "").replace("_USDC", "").replace("-USD", "");
+  return base.toUpperCase();
+};
 export const sectorOf = (symbol) => SECTOR_OF[bareTicker(symbol)] || "OTHER";
 
 const sideOf = (p) => {

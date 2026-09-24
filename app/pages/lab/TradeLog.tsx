@@ -7,6 +7,7 @@ import { formatPnl, daysInMonth, firstDayOfMonth, MONTH_NAMES } from "./helpers"
 import { EmptyState } from "./components";
 import { useIsMobile } from "./useIsMobile";
 import { C } from "@/config/theme";
+import { bareTicker } from "@/utils/utils";
 
 function CalendarView({ dayGroups, onDayClick, viewMonth, viewYear, onPrevMonth, onNextMonth, totalPnl }: { dayGroups: Record<string, DayGroup>; onDayClick: (key: string, day: number) => void; viewMonth: number; viewYear: number; onPrevMonth: () => void; onNextMonth: () => void; totalPnl: number; }) {
   const isMobile = useIsMobile();
@@ -99,7 +100,7 @@ export function TradeLogAllView({
     if (filter === "wins" && g.pnl < 0) return false;
     if (filter === "losses" && g.pnl >= 0) return false;
     if (search) {
-      const syms = g.tradeList.map(t => t.symbol.replace("PERP_","").replace("_USDC","").toLowerCase());
+      const syms = g.tradeList.map(t => bareTicker(t.symbol).toLowerCase());
       if (!syms.some(s => s.includes(search.toLowerCase())) && !key.includes(search)) return false;
     }
     return true;
@@ -218,7 +219,7 @@ export function TradeLogAllView({
               </div>
               {/* symbols */}
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {[...new Set(g.tradeList.map(t => t.symbol.replace("PERP_","").replace("_USDC","")))].map(s => (
+                {[...new Set(g.tradeList.map(t => bareTicker(t.symbol)))].map(s => (
                   <span key={s} style={{ fontSize: 9, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", background: "#141416", border: "1px solid #232327", borderRadius: 3, padding: "2px 6px" }}>{s}</span>
                 ))}
               </div>
@@ -294,7 +295,7 @@ export function TradeLogView({ dayKey, data, onBack, initialNote, onSaveNote }: 
         <div key={i} style={{ ...cardStyle, marginBottom: 8 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
             <div>
-              <div style={{ fontSize: 16, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{trade.symbol.replace("_USDC", "").replace("PERP_", "")}</div>
+              <div style={{ fontSize: 16, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{bareTicker(trade.symbol)}</div>
               <div style={{ fontSize: 10, color: trade.direction === "SHORT" ? "#f7525f" : "#3ecf8e", marginTop: 3, fontFamily: "var(--nx-font-mono)" }}>
                 {trade.direction === "SHORT" ? "↓" : "↑"} {trade.direction} {trade.leverage ? `${trade.leverage}x` : ""}
               </div>

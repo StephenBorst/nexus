@@ -11,6 +11,7 @@ import { PnlChart, PnlBars, EmptyState, CountUp, SectionHeader } from "./compone
 import { Collapsible } from "./Collapsible";
 import { useIsMobile } from "./useIsMobile";
 import { computeEdge } from "@/config/edge";
+import { bareTicker } from "@/utils/utils";
 
 // ─── Radar Chart ─────────────────────────────────────────
 function RadarChart({ scores }: { scores: { label: string; value: number }[] }) {
@@ -274,7 +275,7 @@ function TopAssets({ orders }: { orders: ProcessedTrade[] }) {
   const assets = useMemo(() => {
     const map: Record<string, { pnl: number; trades: number; wins: number }> = {};
     orders.forEach((o) => {
-      const sym = o.symbol.replace("PERP_", "").replace("_USDC", "");
+      const sym = bareTicker(o.symbol);
       if (!map[sym]) map[sym] = { pnl: 0, trades: 0, wins: 0 };
       map[sym].pnl += o.pnl; map[sym].trades++;
       if (o.pnl > 0) map[sym].wins++;
@@ -454,8 +455,8 @@ function PerformanceAnalysis({ orders }: { orders: ProcessedTrade[] }) {
 
   if (!data) return null;
 
-  const bestSym = data.best.symbol.replace("PERP_", "").replace("_USDC", "");
-  const worstSym = data.worst.symbol.replace("PERP_", "").replace("_USDC", "");
+  const bestSym = bareTicker(data.best.symbol);
+  const worstSym = bareTicker(data.worst.symbol);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8, marginTop: 8 }}>
@@ -665,7 +666,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
           <PnlBars
             values={orders.map((o) => o.pnl)}
             labels={orders.map((o) => {
-              const sym = o.symbol.replace("PERP_", "").replace("_USDC", "");
+              const sym = bareTicker(o.symbol);
               const d = o.timestamp ? new Date(o.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
               return `${sym} ${o.direction}${d ? ` · ${d}` : ""} · ${o.pnl >= 0 ? "+" : "-"}$${Math.abs(o.pnl).toFixed(2)}`;
             })}

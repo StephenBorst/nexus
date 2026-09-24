@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { signWithInjected } from "@/utils/injectedWallet";
+import { bareTicker } from "@/utils/utils";
 import {
   useNexusTier,
   TIER_META,
@@ -179,7 +180,7 @@ export function HoldersRoom({ walletAddress }: { walletAddress: string | null })
       )}
 
       {theses && theses.map((t) => {
-        const ticker = t.symbol.replace("PERP_", "").replace("_USDC", "");
+        const ticker = bareTicker(t.symbol);
         const name = t.displayName ?? `${t.wallet.slice(0, 6)}…${t.wallet.slice(-4)}`;
         const statusColor = STATUS_COLOR[t.status] ?? "#a1a1aa";
         return (

@@ -26,6 +26,7 @@ import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter } from "./
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
+import { bareTicker } from "@/utils/utils";
 
 export function AgentView() {
   const [config, setConfig] = useState<AgentConfig>(DEFAULT_CONFIG);
@@ -730,7 +731,7 @@ export function AgentView() {
 
       {/* ── DIRECTIVE: review a draft from a thesis, then arm it ─────────── */}
       {directiveDraft && (() => {
-        const tk = directiveDraft.symbol.replace("PERP_", "").replace("_USDC", "");
+        const tk = bareTicker(directiveDraft.symbol);
         const isLong = directiveDraft.direction === "LONG";
         const rr = Math.abs(directiveDraft.entryPrice - directiveDraft.stopLoss) > 0
           ? Math.abs(directiveDraft.takeProfit1 - directiveDraft.entryPrice) / Math.abs(directiveDraft.entryPrice - directiveDraft.stopLoss)
@@ -832,7 +833,7 @@ export function AgentView() {
 
       {/* ── DIRECTIVE: currently armed / live ────────────────────────────── */}
       {!directiveDraft && activeDirective && (activeDirective.status === "ARMED" || activeDirective.status === "LIVE") && (() => {
-        const tk = activeDirective.symbol.replace("PERP_", "").replace("_USDC", "");
+        const tk = bareTicker(activeDirective.symbol);
         const isLong = activeDirective.direction === "LONG";
         const armed = activeDirective.status === "ARMED";
         const num = (n?: number) => (n && n > 0 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: n < 10 ? 4 : 2 })}` : "—");
@@ -1221,7 +1222,7 @@ export function AgentView() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {AVAILABLE_SYMBOLS.map((sym) => {
                 const selected = config.symbols.includes(sym);
-                const label = sym.replace("PERP_", "").replace("_USDC", "");
+                const label = bareTicker(sym);
                 return (
                   <button key={sym} onClick={() => {
                     setConfig({
@@ -1627,7 +1628,7 @@ export function AgentView() {
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
                     <span style={{ color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 600 }}>
-                      {t.symbol.replace("PERP_", "").replace("_USDC", "")}
+                      {bareTicker(t.symbol)}
                     </span>
                     <span style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 600 }}>
                       {t.direction}
@@ -1805,7 +1806,7 @@ export function AgentView() {
                 <div>
                   <div style={{ ...agentLabelStyle, fontSize: 9 }}>SYMBOL</div>
                   <div style={{ color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: 600 }}>
-                    {agentState.current_position.symbol.replace("PERP_", "").replace("_USDC", "")}
+                    {bareTicker(agentState.current_position.symbol)}
                   </div>
                 </div>
                 <div>
@@ -1857,7 +1858,7 @@ export function AgentView() {
                 <div>
                   <div style={{ ...agentLabelStyle, fontSize: 9 }}>SYMBOL</div>
                   <div style={{ color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 13 }}>
-                    {(agentState.last_signal.symbol || "").replace("PERP_", "").replace("_USDC", "")}
+                    {bareTicker(agentState.last_signal.symbol)}
                   </div>
                 </div>
                 <div>
@@ -1890,7 +1891,7 @@ export function AgentView() {
                   background: "#141416", border: "1px solid #232327", borderRadius: 3,
                   padding: "3px 8px", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa",
                 }}>
-                  {sym.replace("PERP_", "").replace("_USDC", "")}
+                  {bareTicker(sym)}
                 </span>
               ))}
             </div>
@@ -1925,7 +1926,7 @@ export function AgentView() {
                 {histTrades.map((trade, i) => {
                   const rowId = trade.id || String(i);
                   const open = expandedTrade === rowId;
-                  const asset = trade.symbol.replace("PERP_", "").replace("_USDC", "");
+                  const asset = bareTicker(trade.symbol);
                   const qty = trade.qty ?? 0;
                   const notional = qty * (trade.entry_price || 0);
                   const openedMs = trade.opened_at ? new Date(trade.opened_at).getTime() : 0;
@@ -2172,7 +2173,7 @@ export function AgentView() {
                         <div style={{ display: "flex", gap: 3, marginTop: 2, flexWrap: "wrap" }}>
                           {(e.config?.symbols ?? []).slice(0, 4).map((s) => (
                             <span key={s} style={{ fontSize: 8, color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", background: "#1a1a1e", border: "1px solid #1a1a1e", borderRadius: 2, padding: "1px 4px" }}>
-                              {s.replace("PERP_", "").replace("_USDC", "")}
+                              {bareTicker(s)}
                             </span>
                           ))}
                         </div>

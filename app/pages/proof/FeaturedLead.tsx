@@ -11,6 +11,7 @@
 // the same funding signals are sold as data via x402, priced in $NEXUS.
 import { useNavigate } from "react-router-dom";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
+import { bareTicker } from "@/utils/utils";
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
@@ -37,7 +38,7 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
   const navigate = useNavigate();
   if (!LEAD) return null;
   const c = LEAD.config;
-  const syms = (c.symbols || []).map((s) => s.replace("PERP_", "").replace("_USDC", "")).join(" · ");
+  const syms = (c.symbols || []).map((s) => bareTicker(s)).join(" · ");
 
   const receipt = (r: { label: string; value: string; tone?: string }) => (
     <div key={r.label} style={{ display: "flex", flexDirection: "column", gap: 2, background: INSET, border: `1px solid ${BORDER}`, borderRadius: 5, padding: "8px 11px", flex: isMobile ? "1 1 44%" : "0 1 auto" }}>

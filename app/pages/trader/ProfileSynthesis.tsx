@@ -17,6 +17,7 @@ import { C, MONO, RADIUS } from "@/config/theme";
 import { buildOperatorProfile, profileNarrative } from "@/lib/operatorProfile.mjs";
 import { callProgress, openCallsSummary, PROGRESS_LABEL } from "@/lib/callProgress.mjs";
 import { openIdentityShare } from "@/utils/shareIdentity";
+import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -130,7 +131,7 @@ export function InFlightCalls({ calls, prices }: { calls: OpenCall[]; prices: Re
             <div key={`${t.symbol}-${i}`}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
                 <span style={{ fontFamily: MONO, fontSize: 11, color: C.text.fog, minWidth: 0 }}>
-                  <strong style={{ color: C.text.bright }}>{t.symbol.replace("PERP_", "").replace("_USDC", "")}</strong>{" "}
+                  <strong style={{ color: C.text.bright }}>{bareTicker(t.symbol)}</strong>{" "}
                   <span style={{ color: C.text.faint }}>{t.direction}</span>
                 </span>
                 <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 11, color: tone, fontVariantNumeric: "tabular-nums" }}>
@@ -189,11 +190,11 @@ export function VenueEvidence({ wallet, openCalls }: { wallet: string | null; op
     for (const v of xray?.venues || []) {
       for (const p of v.bySymbol || []) {
         if (!p.open || !p.side) continue;
-        held.set(String(p.symbol).replace("PERP_", "").replace("_USDC", "").toUpperCase(), p.side);
+        held.set(bareTicker(String(p.symbol)).toUpperCase(), p.side);
       }
     }
     return (openCalls || []).flatMap((c) => {
-      const bare = c.symbol.replace("PERP_", "").replace("_USDC", "").toUpperCase();
+      const bare = bareTicker(c.symbol).toUpperCase();
       const holds = held.get(bare);
       if (!holds) return [];
       return holds === c.direction ? [] : [{ symbol: bare, says: c.direction, holds }];

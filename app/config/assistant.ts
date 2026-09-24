@@ -71,6 +71,7 @@ export function loadHostedModel(): string {
 
 import { anthropicTools, openaiTools, TOOL_BY_NAME, type ToolCtx } from "@/config/assistantTools";
 import { createWalletClient, custom } from "viem";
+import { bareTicker } from "@/utils/utils";
 
 // ── Hosted inference (PRO) — route the Anthropic format through our authed proxy
 // so PRO users need no API key of their own (we inject ours server-side). ──────
@@ -175,7 +176,7 @@ export function buildContextBlock(ctx: {
   if (ctx.theses.length) {
     lines.push(`User's theses (${ctx.theses.length}):`);
     for (const t of ctx.theses.slice(0, 12)) {
-      const sym = t.symbol.replace("PERP_", "").replace("_USDC", "");
+      const sym = bareTicker(t.symbol);
       lines.push(`  • ${sym} ${t.direction} — ${t.status}${t.riskReward ? ` (R:R 1:${t.riskReward.toFixed(2)})` : ""}`);
     }
   } else {

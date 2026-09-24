@@ -23,6 +23,7 @@ import { ProjectionBand } from "@/components/ProjectionBand";
 import { MarketStatStrip } from "@/components/MarketStatStrip";
 import { SimComposer } from "./SimComposer";
 import { useIsMobile } from "./useIsMobile";
+import { bareTicker } from "@/utils/utils";
 
 /**
  * One open position + a one-tap CLOSE (market, full size). Rendered only when a
@@ -34,7 +35,7 @@ function PositionRow({ position }: { position: Record<string, unknown> }) {
   const entry = Number(position.average_open_price) || 0;
   const uPnl = Number(position.unrealized_pnl) || 0;
   const sym = String(position.symbol || "");
-  const ticker = sym.replace("PERP_", "").replace("_USDC", "");
+  const ticker = bareTicker(sym);
   const { submit, isMutating } = usePositionClose({
     position: position as never,
     order: { type: OrderType.MARKET, quantity: String(Math.abs(qty)), price: "" },
@@ -65,7 +66,7 @@ const SYMBOLS = [
   "PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC",
   "PERP_HYPE_USDC", "PERP_XRP_USDC", "PERP_DOGE_USDC",
 ];
-const tk = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+const tk = (s: string) => bareTicker(s);
 
 // Snap base qty to the symbol's step size (mirrors the agent's snapQty guard).
 function snapQty(raw: number, baseTick: number, baseMin: number): number {

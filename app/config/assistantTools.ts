@@ -9,6 +9,7 @@
  */
 
 import { deployDirectiveFromThesis } from "@/utils/agentPrefill";
+import { bareTicker } from "@/utils/utils";
 // Same synthesis the Lab renders — the copilot must speak with ONE point of view,
 // not answer from an older, narrower readout while the terminal shows another.
 import { buildOperatorProfile, profileNarrative, PUBLIC_READS } from "@/lib/operatorProfile.mjs";
@@ -542,7 +543,7 @@ export const TOOLS: ToolDef[] = [
       let consensus = [...byCoin.values()].filter((c) => c.traders.size >= 2)
         .map((c) => ({ coin: c.sym, side: c.side, traders: c.traders.size, netUsd: Math.round(c.netUsd) }))
         .sort((a, b) => b.traders - a.traders || b.netUsd - a.netUsd);
-      const focus = String(args.symbol ?? "").replace("PERP_", "").replace("_USDC", "").toUpperCase();
+      const focus = bareTicker(String(args.symbol ?? "")).toUpperCase();
       if (focus) consensus = consensus.filter((c) => c.coin.toUpperCase() === focus);
       const topTraders = traders.slice(0, 8).map((t: { address: string; source: string; pnl: number; pnlLabel: string; positions?: { side: string; sym: string; szUsd: number }[] }) => ({
         address: t.address, source: t.source, pnl: t.pnl, pnlLabel: t.pnlLabel,

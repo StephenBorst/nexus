@@ -21,6 +21,7 @@ import { computeTape, FADE_FUNDING_FLOOR_PCT_YR, type MarketSignal } from "./bri
 import type { TabId } from "./types";
 import { R_CONTRACT } from "@/lib/rContract.mjs";
 import { frozenLevelsFor } from "@/lib/frozenDraft";
+import { bareTicker } from "@/utils/utils";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const FUTURES = "https://api-evm.orderly.org/v1/public/futures";
@@ -29,6 +30,7 @@ const CROWDED = 0.0004;   // |funding|/8h at/above which the crowd is extended (
 // response, no reset — seen on a cold guest-context load while curl to the same URL
 // returns rows) would strand it on "loading the board…" forever. Cap it: abort after
 // SIGNALS_TIMEOUT_MS so the promise REJECTS instead of pending, and the caller fails
+
 // soft to last-good. No explicit return-type annotation → it infers Promise<any>
 // from r.json(), so callers keep reading j?.signals exactly as before.
 // ⚠️ The cap must outlast a COLD /signals (~15s observed). It used to be 2s and resolved
@@ -100,7 +102,7 @@ function forecastLeans(markets: { coin?: string; forecastLean?: string; markPric
   return out;
 }
 
-const tk = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+const tk = (s: string) => bareTicker(s);
 const pct = (n: number, d = 2) => `${n >= 0 ? "+" : ""}${n.toFixed(d)}%`;
 const fmtPrice = (n: number) => (n >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 5 : n < 100 ? 3 : 2 }));
 

@@ -6,6 +6,7 @@
 // design). Links out to /arena for the full board + registration.
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const green = "#ededf0";
@@ -58,7 +59,7 @@ export default function ArenaStrip() {
               {a.builder && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.05em", color: "#71717a", border: "1px solid #232327", borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>{a.builder}</span>}
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8.5, letterSpacing: "0.06em", color: isLive ? green : "#52525b", flexShrink: 0 }}>{isLive ? "⛓ LIVE" : "PAPER"}</span>
               {a.currentPosition && (
-                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", flexShrink: 0 }}>{a.currentPosition.direction} {a.currentPosition.symbol.replace("PERP_", "").replace("_USDC", "")}</span>
+                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", flexShrink: 0 }}>{a.currentPosition.direction} {bareTicker(a.currentPosition.symbol)}</span>
               )}
               {s ? (
                 <span style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#a1a1aa", flexShrink: 0 }}>

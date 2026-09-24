@@ -9,6 +9,7 @@ import type { AgentTrade } from "./types";
 import { agentCardStyle, agentLabelStyle, agentInputStyle, navBtnStyle } from "./styles";
 import { fmtUsdCompact, fmtUsdCompactAbs, fmtUsdExact } from "@/lib/fmtUsd.mjs";
 import { paperBlotter, tradeNotional, holdHours } from "@/lib/paperStats.mjs";
+import { bareTicker } from "@/utils/utils";
 
 /**
  * Number input that holds its own text state so you can clear/edit freely
@@ -277,7 +278,7 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
             const lvl = Number.isFinite(Number(t.tp_level)) ? `TP${Number(t.tp_level)}` : null;
             return (
               <div key={t.id} style={{ display: "grid", gridTemplateColumns: "1fr 0.5fr 0.7fr 0.7fr 0.9fr 0.5fr", gap: 6, padding: "4px 0", borderBottom: "1px solid #141416", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
-                <span style={{ color: "#d4d4d8" }}>{t.symbol.replace("PERP_", "").replace("_USDC", "")}</span>
+                <span style={{ color: "#d4d4d8" }}>{bareTicker(t.symbol)}</span>
                 <span style={{ color: t.direction === "LONG" ? "#3ecf8e" : "#f7525f" }}>{t.direction === "LONG" ? "L" : "S"}</span>
                 <span style={{ textAlign: "right" }}>{n == null ? "—" : fmtUsdCompactAbs(n)}</span>
                 <span style={{ textAlign: "right", color: t.pnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{fmtUsdCompact(t.pnl)}</span>

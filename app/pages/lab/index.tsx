@@ -248,7 +248,10 @@ export default function TheLabPage() {
               (phase labels would eat the row, and the order alone carries the loop). */}
           {tabGroups.map((group, gi) => (
             <div key={group.phase || `x${gi}`} style={{ display: "contents" }}>
-              {!isMobile && gi > 0 && group.phase && (
+              {/* Phase spine: every phase names the group AFTER it, including OBSERVE
+                  on the first group — otherwise the first visible label (PLAN) reads
+                  as if it belonged to the OBSERVE tabs before it. */}
+              {!isMobile && group.phase && (
                 <span style={{
                   fontFamily: "var(--nx-font-mono)", fontSize: 7.5, letterSpacing: "0.24em",
                   color: "#3f3f46", flexShrink: 0, padding: "1px 12px 0 16px", alignSelf: "center",

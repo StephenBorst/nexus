@@ -15,6 +15,7 @@ import { TraderDetail } from "./TraderDetail";
 import type { XrayTrack } from "@/components/TrackedRecordCard";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { ConvictionScanner } from "./ConvictionScanner";
+import { bareTicker } from "@/utils/utils";
 
 interface SmConsensus { sym: string; side: "LONG" | "SHORT"; count: number; netUsd: number; refPrice: number; }
 
@@ -312,7 +313,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
     for (const p of (myPositions || [])) {
       const qty = parseFloat(String(p.position_qty ?? 0));
       if (!p.symbol || Math.abs(qty) < 1e-9) continue;
-      const coin = p.symbol.replace("PERP_", "").replace("_USDC", "");
+      const coin = bareTicker(p.symbol);
       const bias = smartBias.get(coin);
       if (!bias || (bias.longUsd === 0 && bias.shortUsd === 0)) continue;
       const smartSide: "LONG" | "SHORT" = bias.longUsd >= bias.shortUsd ? "LONG" : "SHORT";

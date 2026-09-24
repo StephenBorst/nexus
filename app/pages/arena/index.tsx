@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { SectionHeader } from "@/pages/lab/components";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { getAgentSig } from "@/pages/lab/agentKeys";
+import { bareTicker } from "@/utils/utils";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -210,7 +211,7 @@ function AgentDetail({ wallet }: { wallet: string }) {
             {recent.map((t, i) => (
               <div key={i} style={{ display: "grid", gridTemplateColumns: "52px 90px 60px 1fr 90px", gap: 10, padding: "4px 0", fontFamily: MONO, fontSize: 10.5, color: FOG }}>
                 <span style={{ color: t.tier === "LIVE" ? BRIGHT : FAINT }}>{t.tier}</span>
-                <span>{t.symbol?.replace("PERP_", "").replace("_USDC", "")}</span>
+                <span>{bareTicker(t.symbol)}</span>
                 <span>{t.direction}</span>
                 <span style={{ color: FAINT }}>{t.reason || ""}{t.closed_at ? ` · ${ago(new Date(t.closed_at).getTime())}` : ""}</span>
                 <span style={{ color: t.pnl >= 0 ? POS : NEG, textAlign: "right" }}>{usd(t.pnl)}</span>
@@ -334,7 +335,7 @@ export default function ArenaPage() {
                   </div>
                   <div style={{ fontFamily: MONO, fontSize: 10.5, color: a.currentPosition ? FOG : FAINT }}>
                     {a.currentPosition
-                      ? <><span className="nx-live-dot" style={{ marginRight: 6 }} />{a.currentPosition.direction} {a.currentPosition.symbol.replace("PERP_", "").replace("_USDC", "")}</>
+                      ? <><span className="nx-live-dot" style={{ marginRight: 6 }} />{a.currentPosition.direction} {bareTicker(a.currentPosition.symbol)}</>
                       : "flat"}
                   </div>
                   <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.08em", color: a.live ? BRIGHT : MUTED }}>

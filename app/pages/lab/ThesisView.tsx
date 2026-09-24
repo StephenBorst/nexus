@@ -26,6 +26,7 @@ import { ThesisAdvisor } from "./ThesisAdvisor";
 import { PnlChart, EmptyState, Coachmark } from "./components";
 import { Collapsible } from "./Collapsible";
 import { SharePoster, type PosterData } from "./SharePoster";
+import { bareTicker } from "@/utils/utils";
 
 // Crash-proof number formatting — a partial thesis (e.g. a systematic house call with
 // no leverage/positionSize/fundingCost) must NEVER take the whole app down with
@@ -134,7 +135,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "flex-start", justifyContent: "space-between", marginBottom: 10, gap: isMobile ? 10 : 0 }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: 1, minWidth: 0 }}>
           <div style={{ minWidth: 52 }}>
-            <div style={{ fontSize: 16, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{t.symbol.replace("PERP_","").replace("_USDC","")}</div>
+            <div style={{ fontSize: 16, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{bareTicker(t.symbol)}</div>
             <div style={{ fontSize: 10, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>
               {t.direction === "LONG" ? "↑" : "↓"} {t.direction} · {nf(t.leverage, 1)}x
             </div>
@@ -170,7 +171,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
             )}
             {t.isPublic && walletAddress && (() => {
               // Share your own public call → pulls external eyes back to the feed.
-              const tk = t.symbol.replace("PERP_", "").replace("_USDC", "");
+              const tk = bareTicker(t.symbol);
               // Share via the worker OG proxy so the per-thesis card unfurls on X/etc
               // (the SPA's JS-injected OG tags are invisible to crawlers). It redirects
               // humans straight to the app page.
@@ -225,7 +226,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
             })()}
             <button onClick={() => deployToAgent(
                 thesisToAgentConfig(t),
-                `your ${t.symbol.replace("PERP_", "").replace("_USDC", "")} thesis`,
+                `your ${bareTicker(t.symbol)} thesis`,
                 thesisAgentNotice(t),
                 navigate,
               )}
@@ -678,7 +679,7 @@ export function ThesisAnalyticsView() {
   const assetStats = useMemo(() => {
     const map = new Map<string, { wins: number; total: number; rrSum: number }>();
     for (const t of closed) {
-      const sym = t.symbol.replace("PERP_", "").replace("_USDC", "");
+      const sym = bareTicker(t.symbol);
       if (!map.has(sym)) map.set(sym, { wins: 0, total: 0, rrSum: 0 });
       const s = map.get(sym)!;
       s.total++;
@@ -880,7 +881,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
       const patch: Record<string, { hitRate: number; expectancyR: number; samples: number }> = {};
       for (const t of need) {
         try {
-          const coin = t.symbol.replace("PERP_", "").replace("_USDC", "").toUpperCase();
+          const coin = bareTicker(t.symbol).toUpperCase();
           const d = await (await fetch(`${AGENT_API}/intel/baserate/${coin}`)).json();
           if (d && d.available && Number.isFinite(d.hitRate) && Number.isFinite(d.expectancyR)) patch[t.id] = { hitRate: d.hitRate, expectancyR: d.expectancyR, samples: d.samples };
         } catch { /* skip this one */ }
@@ -969,7 +970,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
       try {
         const d = await (await fetch("https://api-evm.orderly.org/v1/public/info")).json();
         const rows = d?.data?.rows ?? [];
-        const tickers = rows.map((x: { symbol?: string }) => String(x.symbol || "").replace("PERP_", "").replace("_USDC", "")).filter(Boolean);
+        const tickers = rows.map((x: { symbol?: string }) => bareTicker(String(x.symbol || ""))).filter(Boolean);
         if (alive && tickers.length) setMarketTickers([...new Set<string>(tickers)].sort());
       } catch { /* fail-soft — no validation rather than a false warning */ }
     })();

@@ -5,6 +5,7 @@
 // deps). Share buttons deep-link X / Farcaster. Brand register: terminal-black,
 // monospace, rationed green, "verify — don't trust".
 import { useRef, useState, useEffect } from "react";
+import { bareTicker } from "@/utils/utils";
 
 const GREEN = "#3ecf8e";   // profit ONLY (realized) — never decoration or a planned metric
 const ACCENT = "#ededf0";  // bone/white — the brand accent (labels, brand column, plan metrics)
@@ -37,7 +38,7 @@ export type PosterData =
       consensus?: number | null; // # of tracked smart-money traders agreeing (consensus card)
     };
 
-const asset = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+const asset = (s: string) => bareTicker(s);
 const money = (v: number) => `${v >= 0 ? "" : "-"}$${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: Math.abs(v) < 100 ? 4 : 2 })}`;
 
 // The 1200×630 card, as SVG JSX. Kept dimensionally identical across variants so

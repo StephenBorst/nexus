@@ -4,6 +4,7 @@ import { usePrivateQuery } from "@orderly.network/hooks";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { Sparkline } from "@/pages/lab/components";
 import { C } from "@/config/theme";
+import { bareTicker } from "@/utils/utils";
 
 // ─── Constants ────────────────────────────────────────────────
 // Palette is DERIVED from the shared design tokens, never re-typed as hex — that's
@@ -95,7 +96,7 @@ async function fetchHyperliquid(): Promise<HLAsset[]> {
   // by BASE volume → ratio ~markPx too big → EVERY symbol tripped HIGH CONCENTRATION.
   const raw = (d.data.rows as any[]).map((row: any) => {
     const sym     = row.symbol as string;
-    const name    = sym.replace("PERP_", "").replace("_USDC", "");
+    const name    = bareTicker(sym);
     const markPx  = parseFloat(row.mark_price  || row.index_price || "0");
     const oi      = parseFloat(row.open_interest || "0") * markPx;
     const volBase = parseFloat(row["24h_volume"] || "0");
@@ -728,7 +729,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
                   {openPositions.length === 0
                     ? <span style={{ color: DIM }}>No open positions</span>
                     : openPositions.slice(0, 4).map((p: any) => {
-                        const sym  = (p.symbol as string).replace("PERP_","").replace("_USDC","");
+                        const sym  = bareTicker((p.symbol as string));
                         const dir  = p.position_qty > 0 ? "LONG" : "SHORT";
                         const pnl  = p.unsettled_pnl ?? 0;
                         const pnlC = pnl >= 0 ? GREEN : RED;

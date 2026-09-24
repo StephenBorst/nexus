@@ -33,6 +33,7 @@ import { lifecycleState, describeUpdate, updateKind } from "@/lib/lifecycle.mjs"
 import Desks from "./Desks";
 import ArenaStrip from "./ArenaStrip";
 import WatchOnlyBanner from "./WatchOnlyBanner";
+import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -139,7 +140,7 @@ function CopyModal({
   accountBalance?: number | null;
   onClose: () => void;
 }) {
-  const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
+  const ticker = bareTicker(thesis.symbol);
   const traderName = thesis.displayName ?? `${thesis.wallet.slice(0, 6)}…${thesis.wallet.slice(-4)}`;
 
   // Auto-sized from the connected trading balance — no manual account number to type.
@@ -492,7 +493,7 @@ function FeedCard({
   // active/other stay a quiet neutral so a screen isn't a stack of colors.
   const leftRule = eff === "HIT_TP" ? "#3ecf8e" : eff === "STOPPED_OUT" ? "#f7525f" : eff === "INVALIDATED" ? "#3f3f46" : "#33333a";
   const shortAddr = `${thesis.wallet.slice(0, 6)}…${thesis.wallet.slice(-4)}`;
-  const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
+  const ticker = bareTicker(thesis.symbol);
   const isOwnThesis = walletAddress?.toLowerCase() === thesis.wallet.toLowerCase();
   const isFollowing = following.has(thesis.wallet.toLowerCase());
   const navigate = useNavigate();
@@ -819,7 +820,7 @@ function buildLeaderboard(feed: FeedThesis[]): TraderStats[] {
 
     if (t.riskReward > s.bestRR) {
       s.bestRR = t.riskReward;
-      s.bestTicker = t.symbol.replace("PERP_", "").replace("_USDC", "");
+      s.bestTicker = bareTicker(t.symbol);
     }
   }
 
@@ -1227,7 +1228,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#33333a" }}>no theses</div>
                 ) : traderTheses.map((t) => {
                   const cfg = STATUS_CONFIG[effectiveStatus(t)] ?? STATUS_CONFIG.ACTIVE;
-                  const ticker = t.symbol.replace("PERP_", "").replace("_USDC", "");
+                  const ticker = bareTicker(t.symbol);
                   return (
                     <div key={t.id} style={{
                       background: "#08080a", border: `1px solid ${cfg.border}`,
@@ -1595,7 +1596,7 @@ export default function FeedPage() {
     if (dirFilter !== "ALL" && t.direction !== dirFilter) return false; // Ph23
     if (search) {
       const q = search.toLowerCase();
-      const ticker = t.symbol.replace("PERP_", "").replace("_USDC", "").toLowerCase();
+      const ticker = bareTicker(t.symbol).toLowerCase();
       const name = (t.displayName ?? "").toLowerCase();
       const addr = t.wallet.toLowerCase();
       if (!ticker.includes(q) && !name.includes(q) && !addr.includes(q)) return false;

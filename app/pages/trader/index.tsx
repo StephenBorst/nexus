@@ -18,6 +18,7 @@ import { deployToAgent } from "@/utils/agentPrefill";
 import { deriveStyle } from "@/config/agentStyles";
 import { PublicOperatorProfile, InFlightCalls, VenueEvidence } from "./ProfileSynthesis";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
+import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -130,7 +131,7 @@ function ThesisRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const cfg = STATUS_CONFIG[thesis.status] ?? STATUS_FALLBACK;
-  const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
+  const ticker = bareTicker(thesis.symbol);
   const timeAgo = (() => {
     const diff = Date.now() - thesis.createdAt;
     const h = Math.floor(diff / 3600000);
@@ -298,7 +299,7 @@ const COPY_PREFS_KEY = "nexus-copy-prefs";
 
 // ─── Copy Modal (inline, same logic as feed) ──────────────────────────────────
 function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; walletAddress: string; onClose: () => void }) {
-  const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
+  const ticker = bareTicker(thesis.symbol);
   const traderName = thesis.displayName ?? `${thesis.wallet.slice(0, 6)}…${thesis.wallet.slice(-4)}`;
 
   const [accountSize, setAccountSize] = useState(() => {
@@ -830,7 +831,7 @@ export default function TraderPage() {
                     <StatBox
                       label="BEST R:R"
                       value={`1:${stats.bestTrade.riskReward.toFixed(2)}`}
-                      sub={stats.bestTrade.symbol.replace("PERP_", "").replace("_USDC", "")}
+                      sub={bareTicker(stats.bestTrade.symbol)}
                       color="#ededf0"
                     />
                   )}

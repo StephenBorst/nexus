@@ -16,6 +16,7 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { chartImageList, effectiveStatus } from "@/pages/lab/helpers";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
 import { SocialBar } from "@/components/SocialBar";
+import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const OG_BASE  = "https://og.nexustradinglabs.com";
@@ -162,7 +163,7 @@ export default function ThesisPage() {
   // ── OG meta tags ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!thesis || !wallet || !id) return;
-    const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
+    const ticker = bareTicker(thesis.symbol);
     const name = thesis.displayName ?? `${thesis.wallet.slice(0, 6)}…${thesis.wallet.slice(-4)}`;
     const title = `${ticker} ${thesis.direction} by ${name}`;
     const desc = `Entry: $${thesis.entryPrice.toFixed(2)} | SL: $${thesis.stopLoss.toFixed(2)} | TP: $${thesis.takeProfit1.toFixed(2)} | R:R 1:${thesis.riskReward.toFixed(2)}`;
@@ -242,7 +243,7 @@ export default function ThesisPage() {
   }
 
   const cfg = STATUS_CONFIG[effectiveStatus(thesis)] ?? STATUS_FALLBACK;
-  const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
+  const ticker = bareTicker(thesis.symbol);
   const shortAddr = `${thesis.wallet.slice(0, 6)}…${thesis.wallet.slice(-4)}`;
   const traderName = thesis.displayName ?? shortAddr;
   const timeAgo = (() => {

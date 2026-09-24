@@ -16,6 +16,7 @@
 import { useEffect, useState } from "react";
 import sdk from "@farcaster/miniapp-sdk";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
+import { bareTicker } from "@/utils/utils";
 
 // The flagship "Proven Edge" preset — single source of truth with the Lab, so the
 // mini-app one-tap deploy can never drift from the web preset.
@@ -60,7 +61,7 @@ type AgentStatus = {
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: "#d4d4d8", HIT_TP: "#3ecf8e", STOPPED_OUT: "#f7525f", INVALIDATED: "#fbbf24", CLOSED: "#a1a1aa",
 };
-const tk = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+const tk = (s: string) => bareTicker(s);
 const shortAddr = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
 const fmtPrice = (n: number) =>
   n >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 2 })

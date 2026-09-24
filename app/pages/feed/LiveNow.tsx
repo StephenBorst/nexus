@@ -5,6 +5,7 @@
 // renders nothing when there are no open positions, so it never shows an empty
 // band. Polls so PnL ticks. Horizontal-scroll row → never clips on mobile.
 import { useEffect, useState } from "react";
+import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const green = "#ededf0";
@@ -24,7 +25,7 @@ type LivePos = {
   opened_at: number | null;
 };
 
-const tk = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+const tk = (s: string) => bareTicker(s);
 const shortAddr = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
 const ago = (ms: number | null) => {
   if (!ms) return "";

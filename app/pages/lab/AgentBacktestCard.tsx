@@ -11,6 +11,7 @@
 import type { AgentConfig } from "./types";
 import { strategyLabel, backtestGateSupport } from "@/lib/strategyLabel.mjs";
 import { agentCardStyle, agentLabelStyle, btnPrimary, navBtnStyle } from "./styles";
+import { bareTicker } from "@/utils/utils";
 
 // Per-symbol recorded-OI coverage. A bare "0/14d" hid WHICH market was short — and since
 // the brain only records OI for core BTC/ETH/SOL + watchlisted symbols, that was usually a
@@ -22,7 +23,7 @@ function OiCoverage({ rows }: { rows?: any[] }) {
       {rows.map((r: any) => (
         <span key={r.symbol} title={r.mature ? "mature — included in the OI run" : "not enough recorded OI — excluded"}
           style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "2px 7px", borderRadius: 2, border: `1px solid ${r.mature ? "#3ecf8e44" : "#33333a"}`, color: r.mature ? "#3ecf8e" : "#71717a" }}>
-          {String(r.symbol).replace("PERP_", "").replace("_USDC", "")} {r.days}d/{r.samples}
+          {bareTicker(String(r.symbol))} {r.days}d/{r.samples}
         </span>
       ))}
     </div>
@@ -124,7 +125,7 @@ export function AgentBacktestCard({
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
                 {backtest.perSymbol.map((s: any) => (
                   <div key={s.symbol} style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", borderTop: "1px solid #232327", paddingTop: 4 }}>
-                    <span>{s.symbol.replace("PERP_", "").replace("_USDC", "")}</span>
+                    <span>{bareTicker(s.symbol)}</span>
                     <span>{s.trades} trades · {s.winRate}% win · PF {s.profitFactor} · <span style={{ color: s.netUsd >= 0 ? "#3ecf8e" : "#f7525f" }}>{s.netUsd >= 0 ? "+" : ""}${s.netUsd}</span></span>
                   </div>
                 ))}
@@ -166,7 +167,7 @@ export function AgentBacktestCard({
                       <div style={{ minWidth: 320 }}>
                         {validation.perSymbol.map((s: any) => (
                           <div key={s.symbol} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "3px 0", borderTop: "1px solid #141416" }}>
-                            <span style={{ width: 46, color: "#d4d4d8" }}>{s.symbol.replace("PERP_", "").replace("_USDC", "")}</span>
+                            <span style={{ width: 46, color: "#d4d4d8" }}>{bareTicker(s.symbol)}</span>
                             <span style={{ width: 66, textAlign: "right", color: s.net >= 0 ? "#3ecf8e" : "#f7525f" }}>{s.net >= 0 ? "+" : ""}${s.net}</span>
                             <span style={{ width: 54, textAlign: "right", color: "#a1a1aa" }}>{s.foldsPositive}/{validation.folds}f</span>
                             <span style={{ display: "flex", gap: 2, marginLeft: 6 }}>
@@ -187,7 +188,7 @@ export function AgentBacktestCard({
           {sweep && (
             <div style={{ marginTop: 14 }}>
               <div style={{ ...agentLabelStyle, fontSize: 9, marginBottom: 6 }}>
-                RANKED — {sweep.results.length} configs · {sweep.symbols.map((s: string) => s.replace("PERP_", "").replace("_USDC", "")).join("/")} · {sweep.days}d · ${sweep.notional} notional
+                RANKED — {sweep.results.length} configs · {sweep.symbols.map((s: string) => bareTicker(s)).join("/")} · {sweep.days}d · ${sweep.notional} notional
               </div>
               <div style={{ overflowX: "auto" }}>
                 <div style={{ minWidth: 340 }}>

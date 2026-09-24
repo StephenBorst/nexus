@@ -14,6 +14,7 @@ import { useAccount, usePrivateQuery, usePositionStream } from "@orderly.network
 import { useLabStorage } from "@/hooks/useLabStorage";
 import { computeEdge } from "@/config/edge";
 import { tiltRead, sessionEdge, overtradingRead, sizingRead } from "@/lib/behavioral.mjs";
+import { bareTicker } from "@/utils/utils";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { useSubscription } from "@/hooks/useSubscription";
 import {
@@ -137,11 +138,11 @@ export default function NexusAssistant() {
     const worst = trades.reduce<{ symbol: string; pnl: number } | null>((a, t) => (!a || t.pnl < a.pnl ? t : a), null);
     const bySym: Record<string, { trades: number; pnl: number }> = {};
     for (const t of trades) {
-      const k = t.symbol.replace("PERP_", "").replace("_USDC", "");
+      const k = bareTicker(t.symbol);
       bySym[k] = bySym[k] || { trades: 0, pnl: 0 };
       bySym[k].trades += 1; bySym[k].pnl += t.pnl;
     }
-    const clean = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+    const clean = (s: string) => bareTicker(s);
     return {
       closed_trades: trades.length, wins, losses,
       win_rate_pct: wins + losses ? Math.round((wins / (wins + losses)) * 100) : null,

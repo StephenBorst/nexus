@@ -4,6 +4,7 @@
 // an idea" into "the agent is set up for it" in one click. AgentView consumes the
 // key on mount, merges it into the editor, and clears it.
 import type { AgentConfig } from "@/pages/lab/types";
+import { bareTicker } from "@/utils/utils";
 
 export const AGENT_PREFILL_KEY = "nexus_agent_prefill";
 
@@ -77,7 +78,7 @@ export function thesisToAgentConfig(t: {
 // The honest one-liner shown when a thesis is pushed to the agent. Prevents the
 // "I wrote a LONG but the bot shorted me" trust break: the agent is signal-driven.
 export function thesisAgentNotice(t: { symbol: string; direction?: string }): string {
-  const tk = t.symbol.replace("PERP_", "").replace("_USDC", "");
+  const tk = bareTicker(t.symbol);
   const dir = t.direction ? `${t.direction} ` : "";
   return `The agent trades ${tk} on funding/OI signals — it won't just place your ${dir}thesis as-is. It may enter EITHER direction when a signal fires, using your thesis TP/SL and leverage as risk bounds. Review the config below, then Save or Backtest before activating.`;
 }

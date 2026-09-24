@@ -46,6 +46,7 @@ export interface BriefingInput {
 // scanner's file of truth) and re-exported here so the ticket + Board import it from one place.
 // Imported locally too (the briefing rows gate their FADE/WATCH word on it — one floor).
 import { FADE_FUNDING_FLOOR_PCT_YR } from "@/lib/conviction.mjs";
+import { bareTicker } from "@/utils/utils";
 export { FADE_FUNDING_FLOOR_PCT_YR };
 
 // (breadth 50% / BTC trend 40% / funding crowding 10%). Kept pure here so the
@@ -71,7 +72,7 @@ export function computeTape(rows: { symbol: string; "24h_open"?: string | number
   return { score, label };
 }
 
-const ticker = (sym: string) => sym.replace("PERP_", "").replace("_USDC", "");
+const ticker = (sym: string) => bareTicker(sym);
 const money = (n: number) => `${n < 0 ? "-" : "+"}$${Math.abs(n) >= 1000 ? `${(Math.abs(n) / 1000).toFixed(1)}K` : Math.abs(n).toFixed(2)}`;
 const wrOf = (rows: BriefingTrade[]) => (rows.length ? Math.round((rows.filter((t) => t.pnl > 0).length / rows.length) * 1000) / 10 : 0);
 
@@ -237,8 +238,8 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
     let top = { sym: "", chg: 0 }, bot = { sym: "", chg: 0 };
     for (const r of rows) {
       const c = pctChange(r["24h_open"], r["24h_close"]);
-      if (c > top.chg) top = { sym: r.symbol.replace("PERP_", "").replace("_USDC", ""), chg: c };
-      if (c < bot.chg) bot = { sym: r.symbol.replace("PERP_", "").replace("_USDC", ""), chg: c };
+      if (c > top.chg) top = { sym: bareTicker(r.symbol), chg: c };
+      if (c < bot.chg) bot = { sym: bareTicker(r.symbol), chg: c };
     }
     if (top.sym && bot.sym && (Math.abs(top.chg) >= 4 || Math.abs(bot.chg) >= 4)) {
       out.push({

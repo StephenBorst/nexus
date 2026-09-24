@@ -16,6 +16,7 @@
 // now pings you the moment they call, not just when they take a position.
 import { useEffect, useRef, useState } from "react";
 import { useAccount } from "@orderly.network/hooks";
+import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const green = "#ededf0";
@@ -35,7 +36,7 @@ type FeedThesis = {
 // A toast is either a position OPEN (link to the perp) or a new CALL (link to the thesis).
 type Toast = { id: string; who: string; symbol: string; direction: "LONG" | "SHORT"; followed: boolean; kind: "open" | "call"; href: string };
 
-const tk = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+const tk = (s: string) => bareTicker(s);
 const shortAddr = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
 const keyOf = (p: LivePos) => `${p.wallet}|${p.symbol}|${p.opened_at ?? ""}`;
 const perpHref = (symbol: string) => `/perp/${symbol.startsWith("PERP_") ? symbol : `PERP_${symbol}_USDC`}`;
