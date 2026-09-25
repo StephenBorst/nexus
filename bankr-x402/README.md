@@ -15,7 +15,7 @@ public price + anchored on-chain.
 |---|---|---|---|
 | `nexus-callers` | Verified-caller leaderboard (graded, anchored) | 10,000 $NEXUS | Provably-real track records |
 | `nexus-agents-live` | LIVE NOW open positions, uPnL from public price | 10,000 $NEXUS | Real-time, verifiable |
-| **`nexus-signals`** | **Funding + OI-divergence reads (the agent's edge)** | **50,000 $NEXUS** | **The alpha, as data** |
+| `nexus-signals` | Funding + OI-divergence reads, with the scoreboard's live grade attached | 50,000 $NEXUS | Board data, graded in public (currently NOISE, see below) |
 
 Prices are in TOKEN units, not USD (Bankr resolves symbol/decimals from the
 `tokenAddress` at deploy). ~$0.005 / $0.025 at current $NEXUS price — **tune them.**
@@ -26,6 +26,13 @@ $NEXUS = `0x3D958634ab725B627919EF8F2Ed59227309fDba3` (Base).
 - `nexus-callers.ts` · `nexus-agents-live.ts` · `nexus-signals.ts` — handlers.
   Each is a plain `Request → Response` that, after Bankr settles payment, fetches
   the corresponding `og.nexustradinglabs.com` endpoint and returns it.
+
+## ⚠️ Honest label on `nexus-signals` (2026-09-25)
+Our own scoreboard (`/intel/axis-backtest`, shown on /proof) grades the funding-fade read this feed
+serves as **NOISE** (n≈3,076, 31% hit, −0.21R). The handler now attaches that live grade to every
+response (`grade`), and the listing no longer calls it "the edge". Plan: swap the feed to the graded
+basis reads after the Oct-15 re-validation. **Redeploy to make it live:** `bankr x402 deploy nexus-signals`
+(Bankr hosts the handler; pushing to GitHub does not update it).
 
 ## Deploy — two paths
 

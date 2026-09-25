@@ -23,7 +23,9 @@ is everything built on top:
   receivers → the Safe on a cadence. Safe is set as `NEXUS_TREASURY_ADDRESS` → public treasury banner live.
 - **⚠️ x402 data revenue (LIVE 2026-06-15) → 3rd sweep source.** Three Bankr x402 cloud endpoints sell Nexus
   data priced in **$NEXUS** on Base (`x402.bankr.bot/<deployerWallet>/<name>`): `nexus-signals` (50k $NEXUS/req,
-  the agent's funding+OI edge via `/signals`), `nexus-callers` (10k, `/theses/leaderboard`), `nexus-agents-live`
+  the funding+OI read via `/signals`; ⚠️ scoreboard grades it NOISE → since 2026-09-25 every response carries the
+  LIVE `grade` from `/intel/axis-backtest` and the listing says "not a proven edge"; swap to graded basis reads after
+  Oct-15; handler changes go live only via `bankr x402 deploy nexus-signals`), `nexus-callers` (10k, `/theses/leaderboard`), `nexus-agents-live`
   (10k, `/agents/live`). Bankr hosts + wraps payment; we just supply handler+config (`bankr-x402/`). **Payout =
   the DEPLOYER wallet** (currently the Bankr wallet `0xd9f7…b449`), **95% after Bankr's 5% fee**, accrues as the
   $NEXUS ERC-20 (no withdraw step). To route to treasury: **sweep `0xd9f7…b449` → the Safe on the same cadence**
