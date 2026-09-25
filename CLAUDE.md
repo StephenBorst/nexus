@@ -704,6 +704,59 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
+## Wallet X-Ray — windows, copy gate, live positions (2026-09-25)
+`/analyze` (`app/pages/analyze/index.tsx` + `XrayPanels.tsx`); ALL rules in **`app/lib/xrayGrade.mjs`** (tested).
+- **Time windows 24H/7D/30D/ALL**, each graded by the SAME code on fills filtered by close time (AnalyticsView gets
+  the windowed trades). **Minimums 5/10/20/20 closed trades** — below that the window reads **ACCRUING** (no PF/win%,
+  no AnalyticsView). Default 30D; falls back to ALL only if 30D is accruing and ALL isn't. Truncated HL tapes flag
+  every window the held slice doesn't reach back to. **Edge decay row** = PF ALL → 30D → 7D.
+- **Orderly can't be windowed per trade** (indexer = per-market totals) → windows read off the WATCHED record:
+  `/smart/xray/history` now also returns `series` (daily `{t,realized}`, additive); a window only reads if a snapshot
+  exists at/before its start, else "watched Nd, not enough to cover".
+- **Copy gate (`edgeGate`) — EVERY ⚡ COPY on the page goes through it** (hero CTA, positions panel, Orderly per-market
+  rows; they were ungated before). Pass = graded 30D HL window net>0 AND PF>1, OR watched record ≥20 graded days net>0.
+  Veto = ANY graded evidence negative. Locked state lists the reasons. ◆ draft-thesis stays open (planning, not copying).
+  Gate reads 30D regardless of the tab shown. No 0–100 score — the grade is its parts.
+- **Open positions:** HL `clearinghouseState` (leverage, entry, uPnL, venue-reported `liquidationPx`; mark =
+  positionValue/|szi|). Orderly rows = indexer side/entry/uPnL + public futures mark; **leverage + liq = "—", never
+  estimated** (not public). HL copy only if `hlCoinToOrderly(coin)` is a listed `PERP_*_USDC` (futures list = listed set).
+- **⚠️ HL positions span EVERY perp dex (fixed 2026-09-25, Ember/Flood).** Equities (NVDA/AMD/MSFT/INTC…) live on
+  builder-deployed HIP-3 dexes (`xyz:`, `flx:`…); `clearinghouseState` WITHOUT `dex` returns ONLY the main dex → the
+  panel showed BTC and missed the stocks. `fetchHLPositions` lists `perpDexs` and reads each (`{dex}`), tags the row
+  "Hyperliquid · xyz", shows ISO, and NAMES any dex it couldn't read ("list may be incomplete").
+- **⚠️ HL serves only a wallet's 10,000 MOST RECENT fills — no public endpoint pages further back.** Full history
+  = HL's S3 node-fills archive (all wallets, global crawl) — not per-wallet on-demand. `app/lib/hlTape.mjs`
+  (`mergeFills`/`tapeStatus`, tested): every slice is MERGED + tid-deduped, never swapped (the old code threw away
+  the 10k it paged for the newest ~2k whenever a busy wallet traded mid-read). Partial ⇔ we hold the 10k cap; labels
+  say "N most recent fills (all Hyperliquid serves) · complete from <date>", and the analytics line flags partial
+  ONLY on windows that reach past it (the old label printed CLOSED-TRADE count as "fills" → Ember's "~300 fills").
+- **✅ FORWARD FILL COLLECTION (2026-09-25).** lab-api **`GET /xray/hltape?address=`** (`routes-hltape.mjs`, tested):
+  first view SEEDS KV `xray:hltape:{addr}` (LAB_STORE) with everything HL serves; later views + the 12h cron
+  (`sweepHlTapes`, ≤30 WATCHED wallets from `sm:wl:*`) sync forward from the newest stored fill (startTime inclusive)
+  + `userFills`, merged via `syncTape` in `hlTape.mjs`. The tape GROWS PAST HL's 10k (cap `TAPE_STORE_CAP=50k`, compact
+  rows). **Gap rule:** the forward page must return our newest stored fill; no overlap ⇒ >10k fills happened between
+  syncs ⇒ `completeFrom` moves forward (disclosed, never papered over). A failed first page never writes/never claims a
+  gap. Throttles: ≤1 HL sync/wallet/min (cached reads free), 20 syncs/min/IP (over → stored tape served `stale`, or 429).
+  Page reads via `fetchHLTape` (falls back to direct HL if the worker is down); labels "N fills collected · complete
+  from X · tape collected since Y". `completeFrom:null` = complete from the wallet's first fill.
+
+- **✅ SHARE (2026-09-25).** `↗ SHARE` on the verdict card shares **`og.nexustradinglabs.com/share/xray/:address`**
+  (NOT the SPA URL — its meta is JS-injected, crawlers never run it); mobile = `navigator.share`, else clipboard.
+  Worker `routes-xrayshare.mjs`: `/share/xray/:a` = real OG/Twitter meta + forwards to `/analyze?address=`;
+  `/og/xray/:a.png?v=` = 1200×630 card (resvg, same mono font). **ONE grade, every surface:** card content =
+  `app/lib/xrayCard.mjs` (`xrayCard`) graded with `xrayGrade.mjs` on the STORED tape via `fillsToClosedTrades` —
+  the SAME function the page now imports. Card rules: always **30D in parts** (net/trades/win%/PF) + lifetime
+  context; **ACCRUING** below 20 trades (no PF/win%); Orderly-only → **watched record**; dated ("Sep 25 · 14:00
+  UTC"); partial tape disclosed; NO copy/trade prompt. Image URL versioned by `cardVersion` (newest fill + counts)
+  so a re-share after new fills gets a fresh image (X caches by URL); versioned PNGs edge-cached 24h. Unseeded
+  wallet → seeds via `syncHlTape` under a 10/min/IP budget, else honest "no record" card.
+
+- **✅ COPILOT = SAME GRADE (2026-09-25).** The AI copilot's `xray_wallet` tool no longer computes its own lifetime
+  win rate from a raw HL read. It reads the STORED tape (`fetchHLTape`) and returns `xraySummary` (xrayGrade.mjs —
+  the page's exact composition: per-window grades with ACCRUING, headline window, decay row, partial windows, copy
+  gate) + `copy_gate {pass, evidence, locked_reasons}` + `share_link`. Its note tells the model: lead with the
+  headline window, never quote win rate/PF on an ACCRUING window, never suggest copying when the gate is locked.
+
 ## Nexus PRO — subscriptions / revenue (freemium model)
 The business-model layer. **PRO is a SOFTWARE subscription** (ordinary commerce, real USDC revenue) — NOT a
 token-value scheme. $NEXUS only adds **consumptive use** (pay-in-$NEXUS discount) + **access** (hold-to-unlock).

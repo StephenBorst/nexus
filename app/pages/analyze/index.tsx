@@ -28,12 +28,18 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import type { ProcessedTrade } from "@/pages/lab/types";
 import { deployDirectiveFromThesis } from "@/utils/agentPrefill";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
-import { fetchHLFillsPaged, fetchHLPortfolio, HL_FILLS_MAX, type HLFill } from "@/utils/hyperliquid";
+import { fetchHLTape, fetchHLPortfolio, fetchHLPositions, HL_FILLS_MAX, type HLFill, type HLPosition } from "@/utils/hyperliquid";
+import {
+  gradeAllWindows, defaultWindow, decayRow, tradesInWindow, windowComplete, edgeGate, watchedWindow,
+  hlCoinToOrderly, fillsToClosedTrades,
+} from "@/lib/xrayGrade.mjs";
+import { WindowGradeCard, EdgeGateCard, PositionsPanel, type WindowKey, type WindowGrade, type WatchedWin, type DecayCell, type Gate, type PosRow, WINDOW_KEYS, ShareXrayButton } from "./XrayPanels";
 
 // Shared design tokens — same set the Arena uses, so the two pages read as one system.
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const AGENT_API = "https://og.nexustradinglabs.com";
+const ORDERLY_API = "https://api-evm.orderly.org";
 const BONE = "#ededf0";
 const POS = "#3ecf8e", NEG = "#f7525f";
 const FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b", BRIGHT = "#f4f4f5";
@@ -75,6 +81,13 @@ const usd = (n: number) => {
   return `${n < 0 ? "-" : ""}$${s}`;
 };
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+// "Jul 3" (or "Jul 3 2025" when not this year) — where a partial tape becomes complete.
+const sinceLabel = (ts: number | null | undefined) => {
+  if (!ts || !Number.isFinite(ts)) return "—";
+  const d = new Date(ts);
+  const sameYear = d.getUTCFullYear() === new Date().getUTCFullYear();
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }), timeZone: "UTC" });
+};
 
 // Shared with the Lab's Smart Money watchlist, ON PURPOSE — starring a wallet
 // here makes it show up (and alert) over there. Same key, one list.
@@ -88,26 +101,26 @@ async function fetchOrderlyXray(address: string): Promise<XrayResult> {
   return res.json();
 }
 
+// Public mark prices for every Orderly perp (PERP_<COIN>_USDC → mark). Doubles as the
+// LISTED set: a Hyperliquid position is only copyable if its market exists here.
+async function fetchOrderlyMarks(): Promise<Record<string, number>> {
+  const res = await fetch(`${ORDERLY_API}/v1/public/futures`);
+  if (!res.ok) throw new Error(`Orderly futures ${res.status}`);
+  const d = await res.json();
+  const out: Record<string, number> = {};
+  for (const r of (d?.data?.rows ?? []) as Array<{ symbol: string; mark_price?: number | string }>) {
+    const m = parseFloat(String(r.mark_price ?? ""));
+    if (r.symbol && Number.isFinite(m) && m > 0) out[r.symbol] = m;
+  }
+  return out;
+}
+
+type SeriesPt = { t: number; realized: number };
+
 const isAddress = (s: string) => /^0x[a-fA-F0-9]{40}$/.test(s.trim());
 
-function fillsToTrades(fills: HLFill[]): ProcessedTrade[] {
-  return fills
-    .filter((f) => /^Close/.test(f.dir) || parseFloat(f.closedPnl || "0") !== 0)
-    .map((f) => {
-      const pnl = parseFloat(f.closedPnl || "0") - Math.abs(parseFloat(f.fee || "0"));
-      const direction: "LONG" | "SHORT" = /Long/.test(f.dir) ? "LONG" : "SHORT";
-      return {
-        symbol: f.coin,
-        direction,
-        side: f.side,
-        pnl,
-        qty: parseFloat(f.sz || "0"),
-        price: parseFloat(f.px || "0"),
-        timestamp: f.time,
-      } as ProcessedTrade;
-    })
-    .sort((a, b) => a.timestamp - b.timestamp);
-}
+// Same conversion the worker's share card uses (xrayGrade.mjs) — one grade, every surface.
+const fillsToTrades = (fills: HLFill[]): ProcessedTrade[] => fillsToClosedTrades(fills) as ProcessedTrade[];
 
 export default function AnalyzePage() {
   const [params, setParams] = useSearchParams();
@@ -118,8 +131,16 @@ export default function AnalyzePage() {
   const [track, setTrack] = useState<XrayTrack | null>(null); // the graded, WATCHED record (settlement deltas over time)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [partialTape, setPartialTape] = useState(false); // fills hit HL_FILLS_MAX — oldest history not graded
+  const [partialTape, setPartialTape] = useState(false); // we hold HL's 10k serving cap — older history isn't public
+  const [tape, setTape] = useState<{ fills: number; oldestTs: number | null; source: "stored" | "direct"; seededAt: number | null } | null>(null);
   const [watch, setWatch] = useState<string[]>(loadWatch);
+  const [hlPos, setHlPos] = useState<HLPosition[]>([]);
+  const [hlPosFailed, setHlPosFailed] = useState(false);
+  const [hlDexFailed, setHlDexFailed] = useState<string[]>([]);
+  const [series, setSeries] = useState<SeriesPt[] | null>(null); // watched Orderly record, daily points
+  const [marks, setMarks] = useState<Record<string, number> | null>(null);
+  const [win, setWin] = useState<WindowKey | null>(null);        // null = use the default (30D, or ALL fallback)
+  const [loadedAt, setLoadedAt] = useState(() => Date.now());
   const navigate = useNavigate();
 
   const toggleWatch = (addr: string) => {
@@ -133,7 +154,8 @@ export default function AnalyzePage() {
   // ⚡ Copy an OPEN position into an agent directive. Same bridge Smart Money uses,
   // so the agent honors the direction verbatim and manages the exit. Default stop
   // 3% / target 6% off the observed entry — the user reviews + edits before arming.
-  const copyPosition = (s: XraySymbol, from: string) => {
+  type CopySrc = { sym: string; side: "LONG" | "SHORT" | null; entry: number; szUsd: number };
+  const copyPosition = (s: CopySrc, from: string) => {
     const p = s.entry > 0 ? s.entry : 0;
     const isLong = s.side === "LONG";
     deployDirectiveFromThesis({
@@ -147,7 +169,7 @@ export default function AnalyzePage() {
   };
 
   // ◆ Draft a thesis from the position instead — plan it yourself before automating.
-  const draftThesis = (s: XraySymbol, from: string) => {
+  const draftThesis = (s: CopySrc, from: string) => {
     const p = s.entry > 0 ? s.entry : 0;
     const isLong = s.side === "LONG";
     try {
@@ -167,13 +189,22 @@ export default function AnalyzePage() {
   // allSettled and only surfaces an error when NEITHER venue returned anything.
   const run = useCallback(async (addr: string) => {
     if (!isAddress(addr)) { setError("Enter a valid 0x… wallet address"); return; }
-    setLoading(true); setError(null); setTrades(null); setOrderly(null); setTrack(null); setPartialTape(false);
-    const [hl, ord, pf] = await Promise.allSettled([fetchHLFillsPaged(addr), fetchOrderlyXray(addr), fetchHLPortfolio(addr)]);
+    setLoading(true); setError(null); setTrades(null); setOrderly(null); setTrack(null); setPartialTape(false); setTape(null); setHlDexFailed([]);
+    setHlPos([]); setHlPosFailed(false); setSeries(null); setWin(null); setLoadedAt(Date.now());
+    const [hl, ord, pf] = await Promise.allSettled([fetchHLTape(addr), fetchOrderlyXray(addr), fetchHLPortfolio(addr)]);
+    // Live positions + marks are context, never a blocker — fail-soft, off the critical path.
+    fetchHLPositions(addr)
+      .then((r) => { setHlPos(r.positions); setHlDexFailed(r.failedDexes); })
+      .catch(() => setHlPosFailed(true));
+    fetchOrderlyMarks().then(setMarks).catch(() => setMarks({}));
 
     const fills = hl.status === "fulfilled" ? hl.value.fills : [];
     const t = fillsToTrades(fills);
     setTrades(t);
     setPartialTape(hl.status === "fulfilled" && hl.value.truncated);
+    setTape(hl.status === "fulfilled"
+      ? { fills: fills.length, oldestTs: hl.value.oldestTs, source: hl.value.source, seededAt: hl.value.seededAt }
+      : null);
     const ox = ord.status === "fulfilled" ? ord.value : null;
     setOrderly(ox);
 
@@ -181,7 +212,10 @@ export default function AnalyzePage() {
     // wallet. It's the HEADLINE (Grok): lifetime totals flatter; the watched number is the
     // grade. Self-seeds on read; fail-soft (leaves the lifetime verdict as the only number).
     fetch(`${AGENT_API}/smart/xray/history?address=${encodeURIComponent(addr)}`)
-      .then((r) => r.json()).then((x) => { if (x && x.track) setTrack(x.track as XrayTrack); })
+      .then((r) => r.json()).then((x) => {
+        if (x && x.track) setTrack(x.track as XrayTrack);
+        if (x && Array.isArray(x.series)) setSeries(x.series as SeriesPt[]);
+      })
       .catch(() => { /* no tracked record — lifetime verdict stands */ });
 
     const hasHL = t.length > 0;
@@ -223,14 +257,74 @@ export default function AnalyzePage() {
     setParams({ address: addr });
   };
 
-  const { totalPnl, winRate } = useMemo(() => {
-    if (!trades || !trades.length) return { totalPnl: 0, winRate: 0 };
-    const wins = trades.filter((t) => t.pnl > 0).length;
-    return {
-      totalPnl: trades.reduce((s, t) => s + t.pnl, 0),
-      winRate: (wins / trades.length) * 100,
-    };
-  }, [trades]);
+  // Lifetime HL realized — the verdict's context line. Win rate etc. live per window now.
+  const totalPnl = useMemo(() => (trades ? trades.reduce((s, t) => s + t.pnl, 0) : 0), [trades]);
+
+  // ── Time-window grades + the copy gate ─────────────────────────────────────
+  // Windows end at loadedAt (the moment the tape was read), so tabs don't drift.
+  const grades = useMemo(
+    () => (trades && trades.length ? gradeAllWindows(trades, loadedAt) as Record<WindowKey, WindowGrade> : null),
+    [trades, loadedAt],
+  );
+  const dflt = useMemo(() => (grades ? defaultWindow(grades) as { key: WindowKey; fellBack: boolean } : { key: "30D" as WindowKey, fellBack: false }), [grades]);
+  const activeWin: WindowKey = win ?? dflt.key;
+  const partialKeys = useMemo(() => {
+    if (!partialTape || !trades || !trades.length) return [] as WindowKey[];
+    // Coverage starts at the oldest FILL we hold (not the oldest closed trade).
+    const oldestTs = tape?.oldestTs ?? trades[0].timestamp;
+    return WINDOW_KEYS.filter((k) => !windowComplete(k, loadedAt, { truncated: true, oldestTs }));
+  }, [partialTape, trades, tape, loadedAt]);
+  const watchedWins = useMemo(() => {
+    if (!series || series.length < 2) return null;
+    const out = {} as Record<WindowKey, WatchedWin>;
+    for (const k of WINDOW_KEYS) out[k] = watchedWindow(series, k, loadedAt) as WatchedWin;
+    return out;
+  }, [series, loadedAt]);
+  const decay = useMemo(() => (grades ? decayRow(grades) as DecayCell[] : null), [grades]);
+  // The gate reads 30D whatever tab is showing — "is the edge alive NOW" decides copy.
+  const gate: Gate = useMemo(() => edgeGate({
+    hl30: grades ? grades["30D"] : null,
+    watched: track && !track.building ? track : null,
+  }) as Gate, [grades, track]);
+  const windowTrades = useMemo(
+    () => (trades && trades.length ? tradesInWindow(trades, activeWin, loadedAt) as ProcessedTrade[] : []),
+    [trades, activeWin, loadedAt],
+  );
+  const activeGrade = grades ? grades[activeWin] : null;
+
+  // Every open position, both venues, one table. Hyperliquid numbers are venue-reported;
+  // Orderly's indexer has no leverage/liq → those stay null ("—"), never estimated.
+  const posRows: PosRow[] = useMemo(() => {
+    const rows: PosRow[] = hlPos.map((p) => {
+      const oc = hlCoinToOrderly(p.coin);
+      return {
+        key: `hl:${p.coin}`, venue: p.dex ? `Hyperliquid · ${p.dex}` : "Hyperliquid", sym: p.coin, side: p.side,
+        leverage: p.leverage, isolated: p.leverageType === "isolated", entry: p.entry, mark: p.mark, uPnl: p.unrealizedPnl, valueUsd: p.valueUsd,
+        liq: p.liquidationPx, liqReported: true,
+        copySym: oc && marks && marks[`PERP_${oc}_USDC`] ? oc : null,
+      };
+    });
+    for (const v of orderly?.venues ?? []) {
+      for (const s of v.bySymbol) {
+        if (!s.open || !s.side) continue;
+        rows.push({
+          key: `or:${v.brokerId}:${s.sym}`, venue: `Orderly · ${v.brokerId}`, sym: s.sym, side: s.side,
+          leverage: null, entry: s.entry, mark: marks?.[`PERP_${s.sym}_USDC`] ?? null, uPnl: s.unrealized, valueUsd: s.szUsd,
+          liq: null, liqReported: false, copySym: s.sym,
+        });
+      }
+    }
+    return rows.sort((a, b) => b.valueUsd - a.valueUsd);
+  }, [hlPos, orderly, marks]);
+  const topCopy = gate.pass ? posRows.find((r) => r.copySym) ?? null : null;
+  const copyRow = (r: PosRow) => {
+    if (!gate.pass || !r.copySym || !address) return; // belt + braces: never copy past a locked gate
+    copyPosition({ sym: r.copySym, side: r.side, entry: r.entry, szUsd: r.valueUsd }, address);
+  };
+  const draftRow = (r: PosRow) => {
+    if (!address) return;
+    draftThesis({ sym: r.copySym ?? hlCoinToOrderly(r.sym) ?? r.sym, side: r.side, entry: r.entry, szUsd: r.valueUsd }, address);
+  };
 
   const isMobile = useIsMobile();
 
@@ -291,7 +385,7 @@ export default function AnalyzePage() {
         const orRealized = orderly ? orderly.totalRealized : 0;
         const combined = hlPnl + orRealized;
         const markets = orderly?.markets ?? 0;
-        const openNow = orderly ? orderly.venues.reduce((a, v) => a + v.openPositions, 0) : 0;
+        const openNow = posRows.length;
         const profitablePct = orderly && orderly.venues.length
           ? Math.round(orderly.venues.reduce((a, v) => a + v.profitableMarketsPct, 0) / orderly.venues.length) : null;
         const good = combined >= 0;
@@ -303,15 +397,17 @@ export default function AnalyzePage() {
         const wGood = wNet >= 0;
         const srcs = [trades && trades.length ? "Hyperliquid" : null, orderly && orderly.venues.length ? "Orderly" : null].filter(Boolean).join(" + ");
         const stats = ([
-          trades && trades.length ? { l: "HL WIN RATE", v: `${winRate.toFixed(0)}%`, c: winRate >= 50 ? POS : NEG } : null,
-          trades && trades.length ? { l: "HL TRADES", v: String(trades.length), c: BRIGHT } : null,
+          trades && trades.length ? { l: "HL TRADES · ALL", v: String(trades.length), c: BRIGHT } : null,
           markets ? { l: "MARKETS", v: orderly?.marketsCapped ? `${markets}+` : String(markets), c: BRIGHT } : null,
           profitablePct != null ? { l: "PROFITABLE MKTS", v: `${profitablePct}%`, c: BRIGHT } : null,
           { l: "OPEN NOW", v: String(openNow), c: openNow ? BRIGHT : FAINT },
         ].filter(Boolean)) as { l: string; v: string; c: string }[];
         return (
           <div className="nx-fade-in" style={{ border: `1px solid ${BORDER}`, borderLeft: `3px solid ${(hasWatched ? wGood : good) ? POS : NEG}`, borderRadius: 8, background: SURFACE_ALT, padding: "18px 20px", marginBottom: 22 }}>
-            <div style={{ ...label, marginBottom: 12 }}>◆ X-RAY VERDICT · {short(address)}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+              <div style={label}>◆ X-RAY VERDICT · {short(address)}</div>
+              <ShareXrayButton address={address} isMobile={isMobile} />
+            </div>
             {hasWatched ? (
               // Watched grade leads; lifetime is a demoted context line beneath it (Grok).
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
@@ -327,7 +423,11 @@ export default function AnalyzePage() {
                 <span style={{ fontFamily: UI, fontSize: 24, fontWeight: 700, color: good ? POS : NEG, letterSpacing: "-0.01em" }}>{good ? "Net profitable" : "Underwater"}</span>
                 <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: good ? POS : NEG }}>{usd(combined)}</span>
                 <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
-                  {partialTape ? `partial tape · most recent ${(trades?.length ?? HL_FILLS_MAX).toLocaleString()} fills · ` : "all-time realized · "}{srcs}
+                  {partialTape
+                    ? tape?.source === "stored"
+                      ? `partial tape · ${tape.fills.toLocaleString()} fills collected · complete from ${sinceLabel(tape.oldestTs)} · `
+                      : `partial tape · ${(tape?.fills ?? HL_FILLS_MAX).toLocaleString()} most recent fills (all Hyperliquid serves) · complete from ${sinceLabel(tape?.oldestTs)} · `
+                    : "all-time realized · "}{srcs}
                   {orderly?.marketsCapped ? " · Orderly markets capped at 100/venue" : ""}
                 </span>
               </div>
@@ -344,15 +444,81 @@ export default function AnalyzePage() {
         );
       })()}
 
+      {/* ── THE GRADE BY WINDOW → the gated CTA → live positions ─────────────────
+          The window grade answers "is this edge still alive"; the CTA sits right
+          under it and only opens when the 30D record clears the bar (xrayGrade.mjs). */}
+      {!loading && address && ((trades && trades.length > 0) || (orderly && orderly.venues.length > 0)) && (
+        <>
+          <WindowGradeCard
+            hasTape={!!trades && trades.length > 0}
+            grades={grades}
+            active={activeWin}
+            onPick={setWin}
+            fellBack={dflt.fellBack && win == null}
+            partialKeys={partialKeys}
+            watched={watchedWins}
+            decay={decay}
+          />
+          <EdgeGateCard gate={gate}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              {gate.pass && topCopy && (
+                <button onClick={() => copyRow(topCopy)} className="nx-btn"
+                  title="Load this position into your agent as a directive — you review and arm it; nothing executes from here"
+                  style={{ background: BONE, color: "#0a0a0b", border: "none", borderRadius: 4, padding: "10px 18px", fontFamily: MONO, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                  ⚡ COPY {topCopy.side} {topCopy.copySym} →
+                </button>
+              )}
+              {gate.pass && !topCopy && (
+                <span style={{ fontFamily: MONO, fontSize: 11, color: MUTED }}>No open position to copy right now — watch it to catch the next one.</span>
+              )}
+              <button
+                onClick={() => toggleWatch(address)}
+                title={watch.includes(address) ? "Remove from your Smart Money watchlist" : "Track this wallet in Smart Money — its record keeps accruing"}
+                style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 4, cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", padding: "9px 14px", color: watch.includes(address) ? BONE : MUTED }}
+              >
+                {watch.includes(address) ? "★ WATCHING" : "☆ WATCH"}
+              </button>
+            </div>
+          </EdgeGateCard>
+          <PositionsPanel
+            rows={posRows}
+            gatePass={gate.pass}
+            onCopy={copyRow}
+            onDraft={draftRow}
+            hlFailed={hlPosFailed}
+            failedDexes={hlDexFailed}
+            hasOrderly={posRows.some((r) => !r.liqReported)}
+          />
+        </>
+      )}
+
       {trades && trades.length > 0 && (
         <div className="nx-fade-in">
           <div style={{ fontFamily: MONO, fontSize: 11, color: FOG, marginBottom: 10 }}>
-            <span style={{ color: BONE }}>{trades.length}</span> closed perp trades · source: Hyperliquid · {address?.slice(0, 6)}…{address?.slice(-4)}
-            {partialTape && (
-              <span style={{ color: MUTED }}> · partial tape — history exceeds the {HL_FILLS_MAX.toLocaleString()}-fill paging budget; grading the most recent {trades.length.toLocaleString()}</span>
+            <span style={{ color: BONE }}>{windowTrades.length}</span> closed perp trades · {activeWin} · source: Hyperliquid · {address?.slice(0, 6)}…{address?.slice(-4)}
+            {/* Only when THIS window reaches past what Hyperliquid serves — a 30D view that the
+                10k tape fully covers is complete, and saying "partial" there would be wrong. */}
+            {partialKeys.includes(activeWin) && (
+              <span style={{ color: MUTED }}>
+                {tape?.source === "stored"
+                  ? ` · partial tape — complete from ${sinceLabel(tape.oldestTs)} (${tape.fills.toLocaleString()} fills collected; older history is past what Hyperliquid serves)`
+                  : ` · partial tape — Hyperliquid serves only the ${HL_FILLS_MAX.toLocaleString()} most recent fills (${(tape?.fills ?? 0).toLocaleString()} held · complete from ${sinceLabel(tape?.oldestTs)})`}
+              </span>
+            )}
+            {/* The stored tape keeps growing past HL's window from the day it was first seeded. */}
+            {tape?.source === "stored" && tape.seededAt && (
+              <span style={{ color: FAINT }}> · tape collected since {sinceLabel(tape.seededAt)}</span>
             )}
           </div>
-          <AnalyticsView orders={trades} totalPnl={totalPnl} winRate={winRate} collateral={0} />
+          {/* Same grading code, fills filtered to the window. Below the window's minimum
+              there's no analytics grade to show — the tab reads ACCRUING above. */}
+          {activeGrade && activeGrade.status === "GRADED" ? (
+            <AnalyticsView orders={windowTrades} totalPnl={activeGrade.net} winRate={activeGrade.winRate ?? 0} collateral={0} />
+          ) : (
+            <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, padding: "14px 16px", border: `1px dashed ${BORDER}`, borderRadius: 6 }}>
+              Full analytics unlock once {activeWin} has {activeGrade?.min ?? 20} closed trades ({activeGrade?.trades ?? 0} so far). Try a wider window.
+            </div>
+          )}
           <div style={{ marginTop: 24, padding: "16px 18px", border: `1px solid ${BORDER}`, borderRadius: 6, background: SURFACE_ALT, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontFamily: UI, fontSize: 13, color: BRIGHT }}>Like what you see? Build a track record nobody can fake.</div>
             <a href="/lab" className="nx-btn" style={{ background: BONE, color: "#0a0a0b", textDecoration: "none", borderRadius: 4, padding: "10px 20px", fontFamily: MONO, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em" }}>OPEN THE LAB →</a>
@@ -436,8 +602,13 @@ export default function AnalyzePage() {
                         <>
                           <button onClick={() => draftThesis(s, orderly.address)} title="Draft a thesis from this position"
                             style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: MUTED, fontFamily: MONO, fontSize: 9, padding: "2px 7px", cursor: "pointer" }}>◆</button>
-                          <button onClick={() => copyPosition(s, orderly.address)} className="nx-btn" title="Copy this position — the agent enters your direction, manages the exit, and grades it on-chain"
-                            style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: BONE, fontFamily: MONO, fontSize: 9, letterSpacing: "0.04em", padding: "2px 7px", cursor: "pointer", whiteSpace: "nowrap" }}>⚡ COPY</button>
+                          {/* Gated: never one-tap copy a wallet whose grade hasn't cleared the bar. */}
+                          {gate.pass ? (
+                            <button onClick={() => { if (gate.pass) copyPosition(s, orderly.address); }} className="nx-btn" title="Copy this position — the agent enters your direction, manages the exit, and grades it on-chain"
+                              style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: BONE, fontFamily: MONO, fontSize: 9, letterSpacing: "0.04em", padding: "2px 7px", cursor: "pointer", whiteSpace: "nowrap" }}>⚡ COPY</button>
+                          ) : (
+                            <span title="Copy locked — the wallet's grade hasn't cleared the bar (see the gate above)" style={{ color: FAINT, fontSize: 9, padding: "2px 4px" }}>🔒</span>
+                          )}
                         </>
                       )}
                     </span>

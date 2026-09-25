@@ -11,6 +11,10 @@
 //     perpAllTime so an empty perp tape reads as "no perp tape — non-perp record"
 //     instead of the misleading "no trading history".
 
+import { mergeFills, tapeStatus, expandFill, HL_SERVED_MAX } from "@/lib/hlTape.mjs";
+
+const AGENT_API = "https://og.nexustradinglabs.com";
+
 export type HLFill = {
   coin: string; px: string; sz: string; side: string; time: number;
   dir: string; closedPnl: string; fee: string; tid?: number | string;
@@ -18,9 +22,9 @@ export type HLFill = {
 
 export type HLPortfolio = { allTime: number; perpAllTime: number };
 
-// Stop paging here; beyond this the tape is disclosed as partial rather than
-// fetched forever (a 100k-fill HFT wallet would take dozens of sequential calls).
-export const HL_FILLS_MAX = 10_000;
+// Hyperliquid's serving cap: only a wallet's 10,000 most recent fills are public.
+// Holding this many means older history exists that no public endpoint returns.
+export const HL_FILLS_MAX = HL_SERVED_MAX;
 
 const HL_INFO = "https://api.hyperliquid.xyz/info";
 
@@ -47,59 +51,148 @@ export async function fetchHLPortfolio(address: string): Promise<HLPortfolio> {
   return { allTime: last("allTime"), perpAllTime: last("perpAllTime") };
 }
 
-// Full fill history, oldest → newest, via userFillsByTime FORWARD pagination —
-// the endpoint returns earliest-first within the window (~2,000 fills/page), so
-// we advance startTime past each page's newest fill. Mega-whales (more fills than
-// the page budget) fall back to the most recent slice with truncated=true:
-// grading the oldest 10k would mislead the other way.
+// The fill tape, oldest → newest. Hyperliquid serves only a wallet's 10,000 MOST RECENT
+// fills — nothing public pages further back (see @/lib/hlTape.mjs). We read all of it:
+//  1. userFillsByTime FORWARD from genesis (≤2,000/page, earliest-first inside the
+//     served window), advancing startTime to each page's newest fill;
+//  2. userFills (the newest ~2,000) — catches fills that landed while we paged.
+// Every slice is MERGED (deduped by tid), never swapped: the old code threw away the
+// 10k it had paged for the newest ~2k whenever a busy wallet traded mid-read.
+// `truncated` = we hold HL's serving cap, so older history exists that we can't read.
 //
-// Dedupe is by fill tid, not timestamp: a page boundary can land mid-millisecond
-// for HFT wallets, so we advance with startTime = newest (not newest + 1) and
-// skip already-seen tids instead of silently dropping boundary fills.
-export async function fetchHLFillsPaged(address: string): Promise<{ fills: HLFill[]; truncated: boolean }> {
+// Pages advance with startTime = newest (not newest + 1): a boundary can land
+// mid-millisecond for HFT wallets; the tid dedupe drops the repeats.
+export async function fetchHLFillsPaged(address: string): Promise<{ fills: HLFill[]; truncated: boolean; oldestTs: number | null }> {
   const user = address.trim().toLowerCase();
   const now = Date.now();
-  const fills: HLFill[] = [];
-  const seen = new Set<number | string>();
+  let paged: HLFill[] = [];
   let startTime = 0;
-  let exhausted = false;
-  for (let page = 0; page < 5 && fills.length < HL_FILLS_MAX; page++) {
+  // 5 pages cover the 10k cap; the slack absorbs fills that arrive during the read.
+  for (let page = 0; page < 8; page++) {
     const data = (await postInfo({ type: "userFillsByTime", user, startTime, endTime: now })) as HLFill[];
-    if (!Array.isArray(data) || data.length === 0) { exhausted = true; break; }
-    let newest = startTime;
-    for (const f of data) {
-      if (f.tid !== undefined && seen.has(f.tid)) continue; // boundary dupe from startTime = newest
-      if (f.tid !== undefined) seen.add(f.tid);
-      fills.push(f);
-      if (f.time > newest) newest = f.time;
-    }
-    if (newest <= startTime) { exhausted = true; break; } // no progress — never loop forever
+    if (!Array.isArray(data) || data.length === 0) break;
+    const before = paged.length;
+    paged = mergeFills(paged, data) as HLFill[];
+    const newest = data.reduce((m, f) => Math.max(m, f.time), startTime);
+    if (paged.length === before || newest <= startTime) break; // no progress — never loop forever
     startTime = newest;
   }
-  let truncated = false;
-  if (!exhausted) {
-    // Page budget hit with history still coming — but first probe: a wallet with
-    // exactly HL_FILLS_MAX fills ends on a full page, and that IS the full tape.
-    // The probe reuses startTime (= newest fetched); genuinely new fills are the
-    // ones whose tid we haven't seen.
-    const probe = (await postInfo({ type: "userFillsByTime", user, startTime, endTime: now })) as HLFill[];
-    const probeOk = Array.isArray(probe);
-    const fresh = probeOk ? probe.filter((f) => f.tid === undefined || !seen.has(f.tid)) : [];
-    if (!probeOk || fresh.length > 0) {
-      // More history is proven (or at least not disproven) to exist — from here
-      // on the tape is partial no matter which slice we grade.
-      truncated = true;
-      // Genuine mega-whale: plain userFills returns the most recent ~2,000 fills.
-      const recent = (await postInfo({ type: "userFills", user })) as HLFill[];
-      if (Array.isArray(recent) && recent.length > 0) {
-        const newestRecent = recent.reduce((m, f) => Math.max(m, f.time), 0);
-        // userFills must extend BEYOND what we forward-paged; otherwise it's a
-        // stale slice and grading it as "most recent" would mislead.
-        if (newestRecent > startTime) return { fills: recent.slice(0, HL_FILLS_MAX), truncated: true };
-      }
-      // Fallback: grade the oldest 10k we already hold, but STILL flagged partial.
-      return { fills: fills.slice(0, HL_FILLS_MAX), truncated: true };
-    }
+  // The newest slice rides along even if paging broke early; a failure here is non-fatal.
+  let recent: HLFill[] = [];
+  try {
+    const r = (await postInfo({ type: "userFills", user })) as HLFill[];
+    if (Array.isArray(r)) recent = r;
+  } catch { /* the paged tape stands */ }
+  const all = mergeFills(paged, recent) as HLFill[];
+  // Hold at most HL's cap — the newest, since that's the window HL itself serves.
+  const fills = all.length > HL_FILLS_MAX ? all.slice(all.length - HL_FILLS_MAX) : all;
+  const st = tapeStatus(fills);
+  return { fills, truncated: st.truncated, oldestTs: st.oldestTs };
+}
+
+// The tape X-Ray grades: the worker's STORED tape (routes-hltape.mjs) — every fill we've
+// collected since this wallet was first viewed/watched, which grows past HL's 10k window
+// over time. Falls back to reading Hyperliquid directly if the worker is unreachable, so
+// the page never depends on it. `oldestTs` = where the tape is known complete from.
+export type HLTape = {
+  fills: HLFill[]; truncated: boolean; oldestTs: number | null;
+  source: "stored" | "direct"; seededAt: number | null; stale: boolean;
+};
+
+export async function fetchHLTape(address: string): Promise<HLTape> {
+  try {
+    const res = await fetch(`${AGENT_API}/xray/hltape?address=${encodeURIComponent(address.trim())}`);
+    if (!res.ok) throw new Error(`tape ${res.status}`);
+    const d = await res.json() as { fills?: unknown[]; completeFrom?: number | null; seededAt?: number | null; stale?: boolean };
+    if (!Array.isArray(d?.fills)) throw new Error("tape shape");
+    const fills = d.fills.map((row) => expandFill(row) as HLFill);
+    const completeFrom = d.completeFrom ?? null;
+    return {
+      fills, truncated: completeFrom != null, oldestTs: completeFrom ?? (fills.length ? fills[0].time : null),
+      source: "stored", seededAt: d.seededAt ?? null, stale: !!d.stale,
+    };
+  } catch {
+    const r = await fetchHLFillsPaged(address);
+    return { ...r, source: "direct", seededAt: null, stale: false };
   }
-  return { fills: fills.slice(0, HL_FILLS_MAX), truncated };
+}
+
+// Live open perp positions from `clearinghouseState`, across EVERY perp dex.
+// Hyperliquid runs the main dex plus builder-deployed (HIP-3) dexes — equities like
+// NVDA/AMD/MSFT live on those ("xyz:INTC"). Each dex is its own clearinghouse, and a
+// clearinghouseState call WITHOUT `dex` only returns the main one — that's why the
+// panel showed BTC and missed the stocks. So: list the dexes (`perpDexs`), read each.
+//
+// Everything is what Hyperliquid REPORTS — leverage (+ cross/isolated), entry, uPnL,
+// liquidationPx (null when none is reported). Mark = positionValue/|size|, which HL
+// computes at the mark price. Nothing is estimated.
+export type HLPosition = {
+  coin: string; dex: string; side: "LONG" | "SHORT"; size: number; entry: number; mark: number | null;
+  valueUsd: number; unrealizedPnl: number; leverage: number | null; leverageType: string | null;
+  liquidationPx: number | null;
+};
+
+type HLAssetPosition = { position?: {
+  coin: string; szi: string; entryPx: string | null; positionValue: string; unrealizedPnl: string;
+  liquidationPx: string | null; leverage?: { type?: string; value?: number };
+} };
+
+// Bound the fan-out: HL lists a growing set of builder dexes; each is one call.
+const MAX_DEXES = 24;
+
+function parsePositions(data: { assetPositions?: HLAssetPosition[] } | null, dex: string): HLPosition[] {
+  const num = (s: unknown) => { const n = parseFloat(String(s ?? "")); return Number.isFinite(n) ? n : null; };
+  const out: HLPosition[] = [];
+  for (const ap of data?.assetPositions ?? []) {
+    const p = ap?.position;
+    const szi = num(p?.szi);
+    if (!p || !szi) continue;
+    const value = Math.abs(num(p.positionValue) ?? 0);
+    const liq = num(p.liquidationPx);
+    // Builder-dex coins normally arrive prefixed ("xyz:INTC"); prefix defensively if not.
+    const coin = dex && !p.coin.includes(":") ? `${dex}:${p.coin}` : p.coin;
+    out.push({
+      coin, dex,
+      side: szi > 0 ? "LONG" : "SHORT",
+      size: Math.abs(szi),
+      entry: num(p.entryPx) ?? 0,
+      mark: value > 0 ? value / Math.abs(szi) : null,
+      valueUsd: value,
+      unrealizedPnl: num(p.unrealizedPnl) ?? 0,
+      leverage: num(p.leverage?.value),
+      leverageType: p.leverage?.type ?? null,
+      liquidationPx: liq && liq > 0 ? liq : null,
+    });
+  }
+  return out;
+}
+
+// `failedDexes` names every dex we couldn't read, so a partial panel says so instead
+// of passing itself off as the whole book. Throws only if the MAIN dex read fails.
+export async function fetchHLPositions(address: string): Promise<{ positions: HLPosition[]; failedDexes: string[] }> {
+  const user = address.trim().toLowerCase();
+  let dexes: string[] = [];
+  let listFailed = false;
+  try {
+    const list = (await postInfo({ type: "perpDexs" })) as Array<{ name?: string } | null>;
+    if (Array.isArray(list)) {
+      dexes = list.map((d) => (d && typeof d.name === "string" ? d.name : "")).filter(Boolean).slice(0, MAX_DEXES);
+    }
+  } catch { listFailed = true; }
+  const reads = await Promise.allSettled([
+    postInfo({ type: "clearinghouseState", user }),                       // main dex
+    ...dexes.map((dex) => postInfo({ type: "clearinghouseState", user, dex })),
+  ]);
+  if (reads[0].status === "rejected") throw reads[0].reason;
+  const positions: HLPosition[] = [];
+  const failedDexes: string[] = listFailed ? ["builder dexes (list unavailable)"] : [];
+  reads.forEach((r, i) => {
+    const dex = i === 0 ? "" : dexes[i - 1];
+    if (r.status === "fulfilled") positions.push(...parsePositions(r.value as { assetPositions?: HLAssetPosition[] }, dex));
+    else failedDexes.push(dex);
+  });
+  // A dex can echo main-dex rows; keep one row per coin.
+  const seen = new Set<string>();
+  const unique = positions.filter((p) => (seen.has(p.coin) ? false : (seen.add(p.coin), true)));
+  return { positions: unique.sort((a, b) => b.valueUsd - a.valueUsd), failedDexes };
 }

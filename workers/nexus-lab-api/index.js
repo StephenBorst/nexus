@@ -64,6 +64,8 @@ import { twapSchedule, twapProgress } from "../nexus-agent-exec/logic.mjs";
 // Route families lifted out of the 74-route fetch handler (see shared.mjs for the
 // migration rules — one family per commit, read-only families first).
 import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus } from "./routes-smart.mjs";
+import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
+import { handleXrayShare, logShareHit } from "./routes-xrayshare.mjs";
 import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
@@ -169,6 +171,13 @@ async function getMonoFont() {
 
 
 
+
+// SVG → PNG with the shared mono font (the same path every OG card here uses).
+async function renderMonoPng(svg) {
+  await ensureResvg();
+  const font = await getMonoFont();
+  return new Resvg(svg, { font: { loadSystemFonts: false, fontBuffers: [font], defaultFontFamily: "JetBrains Mono" } }).render().asPng();
+}
 
 // ── Agent key encryption at rest (AES-256-GCM via Web Crypto) ──────────────────
 // Trading keys are encrypted before being written to KV so a KV dump alone is
@@ -979,6 +988,11 @@ export default {
         try { const r = await sweepTrackedXray(env); console.log(`[xray] snapshotted ${r.snapped}/${r.watched} watched wallets`); }
         catch (e) { console.error("[xray] sweep failed:", String(e)); }
       })());
+      // Grow every watched wallet's Hyperliquid fill tape before HL's 10k window drops fills.
+      ctx.waitUntil((async () => {
+        try { const r = await sweepHlTapes(env); console.log(`[hltape] synced ${r.synced}/${r.watched} watched · +${r.added} fills · ${r.gaps} gaps · ${r.failed} failed`); }
+        catch (e) { console.error("[hltape] sweep failed:", String(e)); }
+      })());
     }
   },
 
@@ -997,6 +1011,16 @@ export default {
     // positions copyable) + HYPERLIQUID secondary (wider discovery). Unified shape
     // with a `source` tag. KV-cached 10min so browsers get a light payload.
     // Smart Money family → routes-smart.mjs (migration rules in shared.mjs).
+    // GET /xray/hltape — the stored, forward-collected Hyperliquid fill tape (routes-hltape.mjs).
+    {
+      const tapeRes = await handleHlTape(parts, request, env);
+      if (tapeRes) return tapeRes;
+    }
+    // GET /share/xray/:address + /og/xray/:address(.png) — X-Ray share links (routes-xrayshare.mjs).
+    {
+      const shareRes = await handleXrayShare(parts, request, env, { renderPng: renderMonoPng });
+      if (shareRes) return shareRes;
+    }
     {
       const smartRes = await handleSmart(parts, request, env, ctx);
       if (smartRes) return smartRes;
@@ -1323,6 +1347,7 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
 
     // ── Ph22: /og/thesis/:wallet/:id(.png)? → thesis OG image ─
     if (parts[0] === "og" && parts[1] === "thesis" && parts[2] && parts[3]) {
+      logShareHit(request, { route: "og/thesis", status: 200, ms: 0 });
       if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
       const isPng = parts[3].endsWith(".png");
       const thesisId = isPng ? parts[3].slice(0, -4) : parts[3];
@@ -1517,6 +1542,8 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
     // the generic site card. This route returns real per-thesis OG meta a crawler can
     // read, and redirects humans to the actual app page. Share links point here.
     if (parts[0] === "share" && parts[1] === "thesis" && parts[2] && parts[3]) {
+      // Same crawler log as /share/xray — the baseline to compare X-Ray unfurls against.
+      logShareHit(request, { route: "share/thesis", status: 200, ms: 0 });
       const wallet = normalizeAddress(parts[2]);
       const thesisId = parts[3];
       const appUrl = `https://trade.nexustradinglabs.com/feed/thesis/${wallet}/${thesisId}`;
