@@ -76,3 +76,13 @@ TASK:
 6. Output a concise, structured report as your FINAL message (borst reads the run log). Do NOT modify code, open PRs, or arm any capital — everything stays PAPER until borst signs off in person.
 
 Be honest and specific with the numbers. A null or declining result is a valid and valuable outcome — report it straight.
+
+
+## Sept 25 finding — read before judging any basis number
+- Every basis_x_cvd trade in the evidence replay (30/30, both holds) was LONG. The OKX perp trades at a persistent
+  discount to spot, so the rule's "extreme" is always the deepest discount → always LONG. The short side never fires.
+- So a PREDICTIVE basis read here means "buying the widest discount beats random longs", not a two-sided fade.
+  If the market trended down between Sept 25 and Oct 15, expect the basis reads to weaken for THAT reason — say so.
+- Check: in `GET /intel/evidence?axis=basis_x_cvd&hold=24`, `perMarket[].diag.longs/shorts`. If shorts is still 0,
+  repeat this caveat in the recommendation.
+- HYPE: data clean; it loses on stops (stop ≈ 2 typical hourly ranges). Don't drop it; note `diag.stopInRanges`.

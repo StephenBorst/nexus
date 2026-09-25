@@ -702,6 +702,19 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   PF 1.15 · vs random 75.7% (median −$13.37) · ~138 more trades · 24h +$52.27 · 29T · 62% · PF 1.80 · 6/7 green ·
   vs random **89.3% LEANS_ABOVE** (median +$0.46) · ~22 more trades. HYPE the consistent loser (8T, 25%) — don't curate.
   The hold ranking FLIPS vs the 3-market read → noise still dominates the hold question.
+  **Per-market `diag` (2026-09-25, `marketDiag`, cache `evidence:v2`):** exits by reason, longs/shorts, avg hold,
+  median hourly range, `stopInRanges` (SL % ÷ typical hourly range). **HYPE check result: the data is CLEAN** (no
+  zeros/stale repeats, jumps like XRP) — HYPE loses on EXITS: 6/8 SL at 24h, its 2% stop sits only ~2.0 typical
+  hourly ranges away (tightest in the set; LINK 2.07 also red) vs ETH 3.3× / BTC 4.4×. Exit sizing, not bad data →
+  keep it in; `volScaledStops` is the existing lever (a Lab test, not a preset edit).
+  **⚠️ BIGGER FINDING — BASIS_FADE IS LONG-ONLY IN PRACTICE.** Every trade in both holds (30/30) is LONG, and every
+  recorded basis row checked (72h × BTC/ETH/SOL/XRP/HYPE) is NEGATIVE: the OKX USDT perp sits at a persistent
+  ~−0.05% discount to spot. `basisExtremeSide` thresholds |basis| vs its own trailing p90 and takes the SIGN from
+  zero — so an "extreme" is always the deepest discount → always LONG. The "premium → SHORT" half of the rule never
+  fires. So the graded basis reads = "buy when the discount is widest" (timing among longs beats random longs
+  89.3% — the baseline preserves the long mix, so that part stands), NOT a two-sided fade. Untested in a sustained
+  downtrend. Candidate fix = measure the extreme vs the trailing MEAN (demeaned basis) so both sides can fire —
+  a RULE change, so it must be graded as a NEW axis beside the current one (parity), never swapped in silently.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
