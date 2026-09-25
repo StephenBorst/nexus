@@ -420,6 +420,10 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   **24h Lab run (borst, Sept 25, only maxHoldHours 12→24):** backtest +$31.35 · 84.6% · 13T (vs 12h +$22.62/14T);
   walk-forward **NOT ROBUST** +$45.46, 4/6 mkts, 42% folds (vs 12h +$32.06) — better capture, same robustness, tiny
   n, in-sample. Routine compares Oct-15 reads against this datapoint (doesn't re-recommend the test).
+  **Forward PAPER A/B (from Sept 25):** 12h control `0x9A30…cB28` vs 24h variant `0xa77c…a9a7`, identical config
+  except maxHoldHours. Both ledgers RESET Sept 25 (old CONFLUENCE-era ledgers archived in `docs/paper-archive/`) —
+  reset, not date-filter, because `paper_agg` is accrued at close and can't be split by date. Oct-15 routine reads
+  both via public `GET /agent/:addr` (step 2c) with a guard if `firstTradeAt` predates the reset.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
   and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
   doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one
