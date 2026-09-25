@@ -11,7 +11,9 @@
 //     perpAllTime so an empty perp tape reads as "no perp tape — non-perp record"
 //     instead of the misleading "no trading history".
 
-import { mergeFills, tapeStatus, HL_SERVED_MAX } from "@/lib/hlTape.mjs";
+import { mergeFills, tapeStatus, expandFill, HL_SERVED_MAX } from "@/lib/hlTape.mjs";
+
+const AGENT_API = "https://og.nexustradinglabs.com";
 
 export type HLFill = {
   coin: string; px: string; sz: string; side: string; time: number;
@@ -86,6 +88,33 @@ export async function fetchHLFillsPaged(address: string): Promise<{ fills: HLFil
   const fills = all.length > HL_FILLS_MAX ? all.slice(all.length - HL_FILLS_MAX) : all;
   const st = tapeStatus(fills);
   return { fills, truncated: st.truncated, oldestTs: st.oldestTs };
+}
+
+// The tape X-Ray grades: the worker's STORED tape (routes-hltape.mjs) — every fill we've
+// collected since this wallet was first viewed/watched, which grows past HL's 10k window
+// over time. Falls back to reading Hyperliquid directly if the worker is unreachable, so
+// the page never depends on it. `oldestTs` = where the tape is known complete from.
+export type HLTape = {
+  fills: HLFill[]; truncated: boolean; oldestTs: number | null;
+  source: "stored" | "direct"; seededAt: number | null; stale: boolean;
+};
+
+export async function fetchHLTape(address: string): Promise<HLTape> {
+  try {
+    const res = await fetch(`${AGENT_API}/xray/hltape?address=${encodeURIComponent(address.trim())}`);
+    if (!res.ok) throw new Error(`tape ${res.status}`);
+    const d = await res.json() as { fills?: unknown[]; completeFrom?: number | null; seededAt?: number | null; stale?: boolean };
+    if (!Array.isArray(d?.fills)) throw new Error("tape shape");
+    const fills = d.fills.map((row) => expandFill(row) as HLFill);
+    const completeFrom = d.completeFrom ?? null;
+    return {
+      fills, truncated: completeFrom != null, oldestTs: completeFrom ?? (fills.length ? fills[0].time : null),
+      source: "stored", seededAt: d.seededAt ?? null, stale: !!d.stale,
+    };
+  } catch {
+    const r = await fetchHLFillsPaged(address);
+    return { ...r, source: "direct", seededAt: null, stale: false };
+  }
 }
 
 // Live open perp positions from `clearinghouseState`, across EVERY perp dex.
