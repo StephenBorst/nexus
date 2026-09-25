@@ -50,6 +50,13 @@ jobs:
           echo "::error::yarn install failed after 3 attempts"
           exit 1
 
+      # Nothing ships to prod unless every test passes. These are the money-path
+      # (order sizing, signing guards, exits) and trust-path (grading, parity) tests.
+      - name: Test
+        run: |
+          for d in nexus-lab-api nexus-agent-exec nexus-carry-engine; do (cd "workers/$d" && npm ci); done
+          node tools/run-tests.mjs
+
       - name: Build
         run: yarn tsx scripts/generate-manifest.ts && yarn vite build --no-minify && yarn tsx scripts/generate-manifest.ts
         env:

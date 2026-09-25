@@ -19,3 +19,28 @@ jobs:
       # (or grows a baselined legacy colour). Fix = use a theme token, or name a new
       # SIGNAL colour in theme.ts with its one job.
       - run: node tools/check-palette.mjs
+
+  # Every *.test.mjs in the repo (money path: order sizing, signing guards, exits; trust
+  # path: grading, parity, ledger inputs) + the TypeScript baseline (kept at 0 errors).
+  tests:
+    name: Tests + typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          corepack enable
+          n=0
+          until [ "$n" -ge 3 ]; do
+            yarn install --frozen-lockfile && break
+            n=$((n+1))
+            echo "::warning::yarn install failed (attempt $n/3) — retrying in 10s"
+            sleep 10
+          done
+          [ "$n" -lt 3 ] || { echo "::error::yarn install failed after 3 attempts"; exit 1; }
+          for d in nexus-lab-api nexus-agent-exec nexus-carry-engine; do (cd "workers/$d" && npm ci); done
+      - run: node tools/run-tests.mjs
+      - run: yarn tsc --noEmit
