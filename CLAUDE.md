@@ -407,6 +407,9 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   SignalRow now shows every horizon (not just best) + an "AS THE PRESET TRADES IT" line. **The live Basis × CVD Stack
   paper run stays 12h = the control group — don't edit it;** a 24h variant is a Lab test (Load → 24h → Test+Validate),
   decided at Oct-15. Tests: `workers/nexus-lab-api/axisbt.exit.test.mjs`.
+  **First live exit read (Sept 25):** basis_x_cvd via preset exit = PROMISING +3.2bps net, 48%, n33, NOT stable, exits
+  TP4/SL6/TIMEOUT23 · basis_extreme via preset exit = **NOISE −8.3bps net, n299**, TP50/SL66/TIMEOUT183. The 12h cap,
+  not the TP, decides most trades — the mismatch bites.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
   and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
   doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one
