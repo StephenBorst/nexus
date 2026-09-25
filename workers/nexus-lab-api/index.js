@@ -53,6 +53,7 @@ import { backtestConfig, runSweep, runBasisSweep, oiSeriesInfo, walkForwardValid
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
 import { runScorecard, AXES, priceByHour } from "./axisbt.mjs";
+import { keyProxyOriginOk, makeRateLimiter } from "./keyProxy.mjs";
 import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
 // TWAP planner/status — reuse the exec worker's tested logic (wrangler bundles the
@@ -876,6 +877,17 @@ async function generateCatalystHouseCalls(env, { dryRun = false, max = 2 } = {})
       await env.LAB_STORE.put(pk, JSON.stringify({ displayName: env.HOUSE_CATALYST_NAME || "Catalyst Read", bio: "World events → tradeable Nexus markets. Deterministic levels, graded trustlessly from public price." }));
   } catch { /* best-effort */ }
   return { house: houseAddr, posted: toPost.map((c) => ({ id: c.id, symbol: c.symbol, direction: c.direction, entry: c.entryPrice, tp: c.takeProfit1, sl: c.stopLoss, catalyst: c.catalyst })) };
+}
+
+// Per-IP budgets for the routes that spend OUR API keys (see keyProxy.mjs). Isolate-local.
+const flashLimiter = makeRateLimiter({ limit: 30, windowMs: 60000 });
+const jupLimiter = makeRateLimiter({ limit: 120, windowMs: 60000 });
+// Gate for a key-carrying proxy: our own origin only, within the per-IP budget. Returns a
+// Response to send (refusal) or null to proceed.
+function keyProxyGate(request, limiter) {
+  if (!keyProxyOriginOk(request.headers.get("Origin"))) return json({ error: "origin_not_allowed" }, request, 403);
+  if (limiter(request.headers.get("CF-Connecting-IP") || "unknown")) return json({ error: "rate_limited", retryAfterSec: 60 }, request, 429);
+  return null;
 }
 
 export default {
@@ -6028,6 +6040,7 @@ document.getElementById("btn").addEventListener("click",go);
     // A 401 here means the key is a Portfolio key, not a Flash key — surfaced verbatim so the op
     // knows to regenerate. Adds no trust: the browser still confirms the ticket before signing.
     if (parts[0] === "flash" && (parts[1] === "quote" || parts[1] === "order") && request.method === "POST") {
+      const gated = keyProxyGate(request, flashLimiter); if (gated) return gated;
       const key = env.FLASH_API_KEY || "";
       if (!key) return json({ error: "flash_not_configured", detail: "FLASH_API_KEY secret is not set" }, request, 503);
       try {
@@ -6052,6 +6065,7 @@ document.getElementById("btn").addEventListener("click",go);
     // returned bytes before any signature, so this relay adds no trust. Key from env.JUP_API_KEY
     // (JUPITER_API_KEY honored as an alt); with no key it still forwards and Jupiter decides.
     if (parts[0] === "swap" && parts[1] === "jup" && (parts[2] === "quote" || parts[2] === "swap")) {
+      const gated = keyProxyGate(request, jupLimiter); if (gated) return gated;
       const jupKey = env.JUP_API_KEY || env.JUPITER_API_KEY || "";
       const jupHdr = { Accept: "application/json" };
       if (jupKey) jupHdr["x-api-key"] = jupKey;

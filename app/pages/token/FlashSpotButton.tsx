@@ -7,7 +7,8 @@
 // the signature — never auto-submit. EVM chains only (Solana uses the app's Jupiter path).
 import { useState } from "react";
 import { parseTransaction } from "viem";
-import { EVM_USDC } from "./swapExec";
+import { EVM_USDC, ensureChain } from "./swapExec";
+import { checkFlashOrder, checkFlashSetupTx, checkFlashBracket, encodeApprove, toBaseUnits, FLASH_ALLOWANCE } from "@/lib/flashGuards.mjs";
 
 const FLASH = "https://og.nexustradinglabs.com/flash";
 type Eip1193 = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> };
@@ -17,11 +18,28 @@ const FLASH_EVM = new Set(["base", "ethereum", "arbitrum", "optimism", "polygon"
 const MONO = "var(--nx-font-mono)", UI = "var(--nx-font-ui, sans-serif)";
 const BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUT = "#71717a", FAINT = "#52525b", BORD = "#232327", CARD = "#0f0f11", BG = "#08080a", POS = "#3ecf8e", NEG = "#f7525f";
 
+// Wait for a receipt and require success. A reverted approval must stop the flow (the order
+// would fail anyway); a receipt that never lands is "still pending", never "done".
 async function waitReceipt(provider: Eip1193, hash: string, tries = 45): Promise<void> {
   for (let i = 0; i < tries; i++) {
-    try { const r = await provider.request({ method: "eth_getTransactionReceipt", params: [hash] }); if (r && (r as { blockNumber?: unknown }).blockNumber) return; } catch { /* keep polling */ }
+    try {
+      const r = (await provider.request({ method: "eth_getTransactionReceipt", params: [hash] })) as { blockNumber?: unknown; status?: string } | null;
+      if (r && r.blockNumber) {
+        if (r.status && r.status !== "0x1") throw new Error("The approval transaction reverted — nothing was traded.");
+        return;
+      }
+    } catch (e) { if ((e as Error)?.message?.includes("reverted")) throw e; /* else keep polling */ }
     await new Promise((res) => setTimeout(res, 2000));
   }
+  throw new Error("The approval is still pending — wait for it to confirm, then retry.");
+}
+
+// ERC-20 decimals() via the wallet's own RPC (the wallet is already on the trade's chain).
+async function tokenDecimals(provider: Eip1193, token: string): Promise<number> {
+  const r = (await provider.request({ method: "eth_call", params: [{ to: token, data: "0x313ce567" }, "latest"] })) as string;
+  const d = Number(BigInt(r || "0x0"));
+  if (!Number.isInteger(d) || d <= 0 || d > 36) throw new Error("Couldn't read the token's decimals — try again.");
+  return d;
 }
 
 export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAmount, defaultSl, defaultTp, walletAddress, provider }: {
@@ -79,22 +97,38 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
       const r = await fetch(`${FLASH}/quote`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(quoteBody(size, true)) });
       const q = await r.json();
       if (!r.ok) throw new Error(q?.error?.message || q?.message || q?.error || (r.status === 401 ? "Flash key invalid (Portfolio, not Flash). Regenerate it." : `quote failed (${r.status})`));
-      // one-time token approval Flash returns as a raw tx → decode + send + wait, before signing.
+      // ── Pre-signature guards (app/lib/flashGuards.mjs) — nothing reaches the wallet unchecked ──
+      // Right chain first, then the ORDER is validated before any approval is sent: it must be a
+      // FlashOrder on this chain against the pinned Flash contract, bound to THIS wallet as both
+      // swapper and recipient, spending the right token, no more than the size entered.
+      const chainNum = EVM_USDC[chainId].chainId;
+      await ensureChain(provider, chainNum);
+      const fromToken = side === "buy" ? usdc : tokenAddress;
+      const toToken = side === "buy" ? tokenAddress : usdc;
+      const typedUnits = toBaseUnits(size, await tokenDecimals(provider, fromToken));
+      if (typedUnits == null || typedUnits === 0n) throw new Error("Enter a valid size.");
+      const maxFromAmount = typedUnits + 1n; // one base unit of rounding slack (a long-decimal sell), nothing more
+      const chk = checkFlashOrder(q?.evm?.orderTypedData, { chainId: chainNum, wallet: walletAddress, fromToken, toToken, maxFromAmount });
+      if (!chk.ok) throw new Error(`Refused before signing: ${chk.reason}.`);
+      // A permit is a spend authorization we haven't seen Flash use — never sign one blind.
+      if (q?.evm?.permitTypedData) throw new Error("Refused before signing: Flash asked for an unexpected permit signature.");
+      // Approvals: Flash returns an UNLIMITED approve. We verify it's a zero-ETH approve of the
+      // order's token to the pinned Flash contract, then send OUR exact-amount approve instead —
+      // for precisely the signed fromAmount (zero-amount resets pass through as-is).
       const setupTxs: string[] = Array.isArray(q?.setupTxs) ? q.setupTxs : [];
       for (const raw of setupTxs) {
-        setStatus(side === "buy" ? "Approve USDC for Flash…" : `Approve ${symbol} for Flash…`);
-        let to: `0x${string}` | null | undefined, data: `0x${string}` | undefined, value: bigint | undefined;
-        try { const p = parseTransaction(raw as `0x${string}`); to = p.to; data = p.data; value = p.value; }
-        catch { throw new Error("Approve the token for Flash in your wallet, then retry."); }
-        const tx: Record<string, unknown> = { from: walletAddress, to, data };
-        if (value && value > 0n) tx.value = `0x${value.toString(16)}`;
-        const hash = (await provider.request({ method: "eth_sendTransaction", params: [tx] })) as string;
+        let p: ReturnType<typeof parseTransaction>;
+        try { p = parseTransaction(raw as `0x${string}`); } catch { throw new Error("Refused before signing: Flash sent a setup transaction we can't read."); }
+        const st = checkFlashSetupTx({ to: p.to, data: p.data, value: p.value }, { fromToken });
+        if (!st.ok) throw new Error(`Refused before signing: ${st.reason}.`);
+        setStatus(side === "buy" ? "Approve exactly this USDC amount for Flash…" : `Approve exactly this ${symbol} amount for Flash…`);
+        const data = st.amount === 0n ? (p.data as string) : encodeApprove(FLASH_ALLOWANCE, chk.fromAmount);
+        const hash = (await provider.request({ method: "eth_sendTransaction", params: [{ from: walletAddress, to: fromToken, data, value: "0x0" }] })) as string;
         setStatus("Waiting for approval to confirm…"); await waitReceipt(provider, hash);
       }
       setStatus("Sign the order in your wallet…");
-      const typed = q?.evm?.orderTypedData;
-      if (!typed) throw new Error("Flash returned nothing to sign — check the size/market.");
       const sign = async (td: unknown) => (await provider.request({ method: "eth_signTypedData_v4", params: [walletAddress, typeof td === "string" ? td : JSON.stringify(td)] })) as string;
+      const typed = q.evm.orderTypedData;
       const userSignature = await sign(typed);
       // Flash /v1/order requires the FULL order params echoed back — targetChain, contraChain,
       // targetAsset, contraAsset, side, qty, orderType, funderAddress — PLUS userSignature. The old
@@ -102,20 +136,20 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
       // validation failed" before the fill. Rebuild from the SAME quoteBody params so they match the
       // quote exactly; quoteId + evmOrderTypedData are optional echoes that bind the marketable fill.
       const body: Record<string, unknown> = { ...quoteBody(size, false), quoteId: q.quoteId, userSignature, evmOrderTypedData: typed };
-      if (q?.evm?.permitTypedData) { body.evmPermitSignature = await sign(q.evm.permitTypedData); body.evmPermitTypedData = q.evm.permitTypedData; }
       // Attach the SL/TP bracket only when the quote echoed a fully-formed one AND both legs are set
-      // (Flash mandates takeProfit + stopLoss together). It carries its OWN signature over the
-      // bracket's orderTypedData, plus the quote's salt/deadline/signedMaxFromAmount echoed verbatim.
+      // (Flash mandates takeProfit + stopLoss together) AND its order passes the bracket guard.
+      // It carries its OWN signature, plus the quote's salt/deadline/signedMaxFromAmount echoed.
       const ab = q?.attachedBracket;
       if (ab && side === "buy" && parseFloat(tp) > 0 && parseFloat(sl) > 0 && ab?.evm?.orderTypedData) {
+        const bc = checkFlashBracket(ab.evm.orderTypedData, { chainId: chainNum, wallet: walletAddress, boughtToken: tokenAddress, contraToken: usdc });
+        if (!bc.ok) throw new Error(`Refused before signing: ${bc.reason}. Clear STOP/TP to trade market-only.`);
+        if (ab?.evm?.permitTypedData) throw new Error("Refused before signing: the bracket asked for an unexpected permit. Clear STOP/TP to trade market-only.");
         setStatus("Sign the SL/TP bracket in your wallet…");
-        const bracket: Record<string, unknown> = {
+        body.attachedBracket = {
           takeProfit: { notionalPrice: String(tp) }, stopLoss: { notionalPrice: String(sl) },
           userSignature: await sign(ab.evm.orderTypedData),
           salt: ab.salt, deadline: ab.deadline, signedMaxFromAmount: ab.signedMaxFromAmount,
         };
-        if (ab?.evm?.permitTypedData) { bracket.evmPermitSignature = await sign(ab.evm.permitTypedData); bracket.evmPermitTypedData = ab.evm.permitTypedData; }
-        body.attachedBracket = bracket;
       }
       setStatus("Submitting…");
       const or = await fetch(`${FLASH}/order`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
