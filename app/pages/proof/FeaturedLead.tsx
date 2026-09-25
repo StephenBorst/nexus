@@ -94,8 +94,8 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
         call it. Printed here rather than buried, and re-run as the history grows. Measured Sept 25 on the preset exactly as it deploys.
         Run it in <b style={{ color: FOG }}>PAPER</b> to start its forward clock, risk-free — that record is yours,
         not this board. Take it <b style={{ color: FOG }}>live</b> and it joins the graded, on-chain-verifiable agents
-        below: real settled trades, never a paper sim. Either way the edge funds itself — the same signals sell as data
-        via <a href="https://x402.bankr.bot/0xd9f7b3273b504e1473c3faba6341299d0ec9b449/nexus-signals" target="_blank" rel="noopener" style={{ color: FOG, textDecoration: "underline" }}>x402</a>, priced in $NEXUS.
+        below: real settled trades, never a paper sim. The board’s funding read also sells as data via{" "}
+        <a href="https://x402.bankr.bot/0xd9f7b3273b504e1473c3faba6341299d0ec9b449/nexus-signals" target="_blank" rel="noopener noreferrer" style={{ color: FOG, textDecoration: "underline" }}>x402</a>, priced in $NEXUS, with its live grade on every response.
       </div>
 
       {/* CTAs — deploy + verify */}

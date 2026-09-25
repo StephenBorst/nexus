@@ -1,0 +1,17 @@
+{
+  "@typescript-eslint/no-explicit-any": 53,
+  "@typescript-eslint/no-unused-vars": 27,
+  "jsx-a11y/click-events-have-key-events": 56,
+  "jsx-a11y/label-has-associated-control": 8,
+  "jsx-a11y/no-noninteractive-element-interactions": 1,
+  "jsx-a11y/no-static-element-interactions": 56,
+  "no-empty": 6,
+  "no-inner-declarations": 6,
+  "no-irregular-whitespace": 1,
+  "no-unused-vars": 38,
+  "no-useless-escape": 2,
+  "prefer-const": 1,
+  "react/jsx-no-comment-textnodes": 12,
+  "react/no-unescaped-entities": 54,
+  "react/prop-types": 2
+}

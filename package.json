@@ -14,6 +14,7 @@
     "dev": "tsx scripts/generate-manifest.ts && vite",
     "generate:manifest": "tsx scripts/generate-manifest.ts",
     "test": "node tools/run-tests.mjs",
+    "lint:check": "node tools/check-lint.mjs",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
     "check:palette": "node tools/check-palette.mjs",
     "check:workers": "eslint --no-eslintrc -c workers/.eslintrc.worker.json workers/*/index.js workers/*/*.mjs",

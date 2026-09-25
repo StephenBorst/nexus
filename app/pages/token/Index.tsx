@@ -1251,7 +1251,7 @@ export default function TokenTerminal() {
             <div style={{ fontFamily: UI, fontSize: 12, color: MUT, lineHeight: 1.6 }}>
               Paste the exact <b style={{ color: FOG }}>contract address</b> (0x… on EVM, or the mint on Solana) in the search above to trade it directly — or look it up on DexScreener and copy the address.
             </div>
-            <a href={`https://dexscreener.com/search?q=${encodeURIComponent(query)}`} target="_blank" rel="noopener"
+            <a href={`https://dexscreener.com/search?q=${encodeURIComponent(query)}`} target="_blank" rel="noopener noreferrer"
               style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.06em", color: BRIGHT, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 7, padding: "8px 12px", alignSelf: "flex-start" }}>
               Open “{query}” on DexScreener ↗
             </a>

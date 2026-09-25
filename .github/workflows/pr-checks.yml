@@ -44,3 +44,6 @@ jobs:
           for d in nexus-lab-api nexus-agent-exec nexus-carry-engine; do (cd "workers/$d" && npm ci); done
       - run: node tools/run-tests.mjs
       - run: yarn tsc --noEmit
+      # Lint ratchet: legacy style/a11y debt is baselined per rule (tools/lint-baseline.json);
+      # a PR fails only if it ADDS errors, or brings back no-undef / rules-of-hooks (pinned at 0).
+      - run: node tools/check-lint.mjs
