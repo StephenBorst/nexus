@@ -1,14 +1,15 @@
 // ── FEATURED LEAD — the best config we have, and its real verdict ─────────────
-// The booth hero. Basis × CVD Stack is the best-performing config the engine has
-// surfaced: the basis-extreme fade taken ONLY when same-hour CVD divergence leans the
-// same way. A same-day backtest replay (33d of recorded basis + CVD history, fees in)
-// came back net-positive on 3/3 markets at a 77.8% win rate — the first config to
-// clear zero. The cross-market walk-forward (6 markets, 4 time folds, 33d, fees in)
-// came back NOT ROBUST: net +$3.72 overall, but only 3 of 6 markets green and 25% of
-// folds positive — the edge lives mostly in SOL. A lead with a backtest, not a proven
-// edge. We publish that here rather than bury it — this board exists to grade our own
-// work the way it grades everyone else's. Deploy it and it earns a graded, on-chain-
-// verifiable record like every agent below.
+// The booth hero. Basis × CVD Stack is the current lead: the basis-extreme fade taken
+// ONLY when same-hour CVD divergence leans the same way. Its read grades PREDICTIVE on
+// the signal scoreboard; the strategy around it is thin (≈9 trades over 33d of recorded
+// history in the 2026-09-24 replays) and the walk-forward came back NOT ROBUST. We print
+// that rather than bury it — this board grades our own work the way it grades everyone
+// else's.
+//
+// ⚠️ Every receipt here must be true of the EXACT preset the Deploy button loads. The
+// first cut printed $ figures from a user-edited config (different exits/hold, and a
+// walk-forward run with extra filters on) next to the preset's button. Dollar receipts
+// come back only when measured on this preset, unedited (Load → Test/Validate, no changes).
 //
 // Self-contained on purpose: reads NO endpoint (its identity + config come from the
 // same preset the Lab/Bankr skill deploy), so it always renders crisp for a 90-second
@@ -31,15 +32,13 @@ const ANCHOR_EXPLORER = "https://arbiscan.io/address/0x57a698df84a44F3dA3dac3E08
 
 const LEAD = STRATEGY_PRESETS.find((p) => p.id === "basis-cvd-stack");
 
-// The walk-forward receipts — what the engine ACTUALLY returns for this config.
-// Backtest: measured 2026-09-24 on 33d of recorded basis + CVD history (BTC/ETH/SOL,
-// $250 notional/trade, taker fees modeled). Walk-forward: measured 2026-09-24 on 6
-// markets × 4 time folds, 33d, fees in — NOT ROBUST. Not a live track record.
+// The receipts — each one true of this preset as deployed. Backtest-derived rows are
+// labelled as such; none of this is a live track record.
 const RECEIPTS: { label: string; value: string; tone?: string }[] = [
-  { label: "backtest net", value: "+$12.04", tone: POS },
-  { label: "win rate", value: "77.8% · 9T", tone: POS },
+  { label: "the read", value: "◆ PREDICTIVE", tone: POS },
+  { label: "sample", value: "~9 trades · 33d", tone: AMBER },
   { label: "walk-forward", value: "NOT ROBUST", tone: NEG },
-  { label: "net-positive", value: "3 of 6 mkts", tone: AMBER },
+  { label: "live record", value: "none yet", tone: AMBER },
 ];
 
 export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
@@ -71,11 +70,9 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
       </div>
 
       <div style={{ fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.6, maxWidth: 640, marginBottom: 14 }}>
-        The best-performing config the engine has surfaced — and the first to clear zero. It takes the
-        basis-extreme fade (a perp far above spot is froth, far below is capitulation) <b style={{ color: BRIGHT }}>only</b> when
-        same-hour CVD divergence leans the same way. Choosy by design: 9 trades in 33 days across three
-        markets, 7 of them winners, every market green. The read underneath grades <span style={{ color: POS }}>◆ PREDICTIVE</span> on
-        the signal scoreboard; the strategy — exits, sizing, fees — is validated by this backtest so far.
+        It takes the basis-extreme fade — a perp far above spot is froth, far below is capitulation — <b style={{ color: BRIGHT }}>only</b> when
+        same-hour CVD divergence leans the same way. The read underneath grades <span style={{ color: POS }}>◆ PREDICTIVE</span> on the
+        signal scoreboard. The strategy around it is choosy and still thin: about nine trades in 33 days of recorded history.
       </div>
 
       {/* Backtest receipts — the honest numbers */}
@@ -90,9 +87,9 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
 
       {/* Honest label + self-funding line */}
       <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
-        A <b style={{ color: FOG }}>lead with a backtest</b>, not a proven edge. The walk-forward came back{" "}
-        <b style={{ color: NEG }}>NOT ROBUST</b> — net positive overall (+$3.72) but only 3 of 6 markets green and
-        25% of time folds positive; the edge lives mostly in SOL. That verdict is printed here rather than buried.
+        A <b style={{ color: FOG }}>lead</b>, not an edge. The walk-forward came back <b style={{ color: NEG }}>NOT ROBUST</b>: it
+        held on some markets and failed on others, over too few weeks to say which is signal. That verdict is printed here
+        rather than buried, and it gets re-run as the history grows.
         Run it in <b style={{ color: FOG }}>PAPER</b> to start its forward clock, risk-free — that record is yours,
         not this board. Take it <b style={{ color: FOG }}>live</b> and it joins the graded, on-chain-verifiable agents
         below: real settled trades, never a paper sim. Either way the edge funds itself — the same signals sell as data

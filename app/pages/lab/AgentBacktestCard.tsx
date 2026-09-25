@@ -30,6 +30,19 @@ function OiCoverage({ rows }: { rows?: any[] }) {
   );
 }
 
+// Name what was ACTUALLY tested. A filtered or inverted run reads "Gated …" / "Inverted …"
+// (strategyLabel), so it can't be mistaken for the preset — inverted runs trade the mirror
+// image and are flagged loud, because that is exactly how a saved config went −$21 unnoticed.
+function TestedAs({ label }: { label?: string }) {
+  if (!label) return null;
+  const inverted = label.startsWith("Inverted");
+  return (
+    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, color: inverted ? "#fbbf24" : "#71717a", marginBottom: 8 }}>
+      TESTED AS: <b style={{ color: inverted ? "#fbbf24" : "#d4d4d8" }}>{label}</b>{inverted ? " — INVERT is on: this trades the opposite side of the signal" : ""}
+    </div>
+  );
+}
+
 // Gates the SIM cannot honour. deriveSignal skips the regime / smart-money filters when no
 // regime or consensus is supplied, and a backtest has neither — so a green number must
 // never imply a filter that silently never ran.
@@ -109,10 +122,11 @@ export function AgentBacktestCard({
                   <OiCoverage rows={backtest.oiCoverage ?? backtest.basisCoverage} />
                 </div>
               )}
+              <TestedAs label={backtest.strategyLabel} />
               <GatesNote skipped={backtest.gatesSkipped ?? backtestGateSupport(config).skipped} />
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12 }}>
                 {[
-                  { label: "NET P&L (60d)", value: `${backtest.combined.netUsd >= 0 ? "+" : ""}$${backtest.combined.netUsd}`, color: backtest.combined.netUsd >= 0 ? "#3ecf8e" : "#f7525f" },
+                  { label: `NET P&L (${backtest.basisWindowDays ?? backtest.days ?? 60}d)`, value: `${backtest.combined.netUsd >= 0 ? "+" : ""}$${backtest.combined.netUsd}`, color: backtest.combined.netUsd >= 0 ? "#3ecf8e" : "#f7525f" },
                   { label: "WIN RATE", value: `${backtest.combined.winRate}%`, color: "#d4d4d8" },
                   { label: "TRADES", value: String(backtest.combined.trades), color: "#d4d4d8" },
                 ].map(({ label, value, color }) => (

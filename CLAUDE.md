@@ -361,6 +361,22 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   (`pending_basis` badge). Labels: "Basis Extreme Fade" / "Basis × CVD Stack" / "Basis × Smart Stack". Tests:
   `backtest.basis.test.mjs` (poisoned-future no-lookahead, equals-the-brain, subset, stale, sweep, loader). Perf: full
   3-mkt×60d×36-variant sweep ≈1s CPU. ⚠️ `maxTradesPerDay` is NOT simulated by runBacktest (true for all modes).
+- **📊 FIRST REAL BASIS RESULTS (2026-09-24, run in-browser by Ember, 33d of recorded history, fees on).** Sweep
+  (BTC/ETH/SOL, 36 variants): Basis × CVD owns the top; best row +$47.78 · 76.9% win · **13 trades** · 3/3 mkts.
+  Plain Basis Extreme also nets positive but needs 61–84 trades (churn + fee drag). Walk-forward (6 mkts × 4 folds)
+  on a *gated* basis variant: **NOT ROBUST** — +$3.72, 3/6 markets green, 25% folds positive; SOL carries it,
+  XRP/LINK zero positive folds. ⚠️ Read with the sample size: 9–13 trades over 33d is a THIN, in-sample result —
+  the best sweep row is the overfit a sweep invites. Don't curate the market list to SOL (that's curve-fitting);
+  let the window grow (Oct-15 re-validation ≈ 54d).
+- **⚠️ Sweep-apply bug (FIXED 2026-09-24):** applying a sweep row merged onto the editor's experimental filters, so a
+  saved config with INVERT still on tested the mirror image (+$12.04 → −$21.33). Sweep rows are graded WITHOUT
+  filters → `applySweepConfig` now resets `SWEEP_UNGRADED_FILTERS_OFF` (invert/regime/smart/session/vol/volScaled/
+  breakeven) before applying the row. `strategyLabel` now names filtered/inverted basis runs ("Gated …"/"Inverted …")
+  and the Backtest card prints **TESTED AS: <label>** (amber when inverted).
+- **⚠️ Proof hero receipts rule:** every receipt on `FeaturedLead` must be true of the EXACT preset its Deploy button
+  loads. Ember's first cut printed $ figures from a user-EDITED config next to the preset's button — replaced with
+  preset-true receipts (read PREDICTIVE · ~9 trades/33d · walk-forward NOT ROBUST · no live record). $ receipts
+  return only when measured on the preset unedited (Load → Test / Validate, no changes).
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
   and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
   doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one

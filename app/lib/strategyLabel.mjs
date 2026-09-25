@@ -18,9 +18,12 @@ function hasGates(config) {
 // The human name for what this config actually trades.
 export function strategyLabel(config = {}) {
   const mode = config.signalMode || "CONFLUENCE";
-  // The basis stack reads by what it trades, matching the presets + the scoreboard rows.
-  if (mode === "BASIS_FADE" && !config.invertSignal && !hasGates(config)) {
-    return config.basisConfirm === "CVD" ? "Basis × CVD Stack" : config.basisConfirm === "SMART" ? "Basis × Smart Stack" : "Basis Extreme Fade";
+  // The basis stack reads by what it trades, matching the presets + the scoreboard rows —
+  // and a filtered/inverted variant SAYS so, so a result can't be mistaken for the preset.
+  if (mode === "BASIS_FADE") {
+    const base = config.basisConfirm === "CVD" ? "Basis × CVD Stack" : config.basisConfirm === "SMART" ? "Basis × Smart Stack" : "Basis Extreme Fade";
+    if (config.invertSignal) return `Inverted ${base}`;
+    return hasGates(config) ? `Gated ${base}` : base;
   }
   if (config.invertSignal) return hasGates(config) ? "Regime-Gated Invert" : `Inverted ${mode}`;
   return hasGates(config) ? `Gated ${mode}` : mode;

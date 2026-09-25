@@ -172,3 +172,9 @@ test("labels + gate support name the basis stack honestly", () => {
   assert.equal(strategyLabel({ signalMode: "BASIS_FADE", basisConfirm: "SMART" }), "Basis × Smart Stack");
   assert.deepEqual(backtestGateSupport({ signalMode: "BASIS_FADE", basisConfirm: "CVD" }).applied, ["CVD confirm"]);
 });
+
+test("labels: a filtered or inverted basis run can't pass for the preset", () => {
+  assert.equal(strategyLabel({ signalMode: "BASIS_FADE", basisConfirm: "CVD", tradeSessions: ["US"] }), "Gated Basis × CVD Stack");
+  assert.equal(strategyLabel({ signalMode: "BASIS_FADE", basisConfirm: "CVD", invertSignal: true }), "Inverted Basis × CVD Stack");
+  assert.equal(strategyLabel({ signalMode: "BASIS_FADE", minVolAtrPct: 0.7 }), "Gated Basis Extreme Fade");
+});

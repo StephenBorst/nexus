@@ -28,6 +28,12 @@ import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
 import { bareTicker } from "@/utils/utils";
 
+// Every experimental filter a sweep row is graded WITHOUT — applying a row resets them.
+const SWEEP_UNGRADED_FILTERS_OFF = {
+  invertSignal: false, respectRegime: false, respectSmartMoney: false, volScaledStops: false,
+  tradeSessions: undefined, minVolAtrPct: undefined, maxVolAtrPct: undefined, breakevenTriggerPct: undefined,
+} as const;
+
 export function AgentView() {
   const [config, setConfig] = useState<AgentConfig>(DEFAULT_CONFIG);
   // The config editor is a working copy: load the server config ONCE, then it's the
@@ -300,8 +306,12 @@ export function AgentView() {
     // A basis sweep row carries basisConfirm:null for the plain fade — that must CLEAR a
     // previously chosen confirm, so map it to "off" rather than dropping it.
     if (clean.basisConfirm === null) clean.basisConfirm = undefined;
-    setConfig((prev) => ({ ...prev, ...clean }));
-    setSuccess("Config applied to the editor — review, then Save or Backtest."); setTimeout(() => setSuccess(null), 4000);
+    // A sweep row was graded WITHOUT the experimental filters (the sweep grid never sets
+    // them). Applying the row on top of them saved a config the sweep never tested — with
+    // INVERT on it traded the mirror image (+$12 → −$21 in the first real run). So the row
+    // replaces the whole filter set: what you apply is exactly what was graded.
+    setConfig((prev) => ({ ...prev, ...SWEEP_UNGRADED_FILTERS_OFF, ...clean }));
+    setSuccess("Row applied exactly as graded — experimental filters reset to off. Review, then Save or Backtest."); setTimeout(() => setSuccess(null), 5000);
   }
 
   // Strategy library — save the current composed config under a name, load one
