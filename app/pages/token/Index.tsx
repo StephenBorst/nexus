@@ -82,8 +82,8 @@ function nexusReadLabel(sig: NexusSignal): { label: string; color: string; sub: 
   const isFade = sig.verdict === "FADE" && !!dir && bigEnough;
   const fundTxt = `funding ${annual >= 0 ? "+" : ""}${annual.toFixed(1)}%/yr`;
   if (isFade) return { label: `◆ FADE ${dir}`, color: "#3ecf8e", sub: `${fundTxt} — the crowd is stretched ${dir === "SHORT" ? "long" : "short"}, graded from the tape after.` };
-  if (sig.verdict === "FADE" || sig.verdict === "WATCH") return { label: "◆ WATCHING", color: "#71717a", sub: `${fundTxt} — elevated but not stretched vs its own range. No fade edge yet.` };
-  return { label: "BALANCED", color: "#71717a", sub: `${fundTxt} — no crowd extreme to fade right now.` };
+  if (sig.verdict === "FADE" || sig.verdict === "WATCH") return { label: "◆ WATCHING", color: "#71717a", sub: `${fundTxt}. Elevated, not stretched vs its own range. No fade edge yet.` };
+  return { label: "BALANCED", color: "#71717a", sub: `${fundTxt}. No crowd extreme to fade.` };
 }
 
 const MONO = "var(--nx-font-mono)";
@@ -929,7 +929,7 @@ export default function TokenTerminal() {
       const p = await planBuy(pair.chainId, pair.baseAddress, pair.baseSymbol, usd, wallet, provider);
       setPlan(p); setModalOpen(true);
     } catch (e) {
-      setSwapErr((e as Error)?.message || "Couldn't build the swap — use the deep-link.");
+      setSwapErr((e as Error)?.message || "Couldn't build the swap. Use the deep-link.");
     } finally { setPlanning(false); }
   }, [pair, wallet, provider, amount]);
 
@@ -944,14 +944,14 @@ export default function TokenTerminal() {
     // balance and clamps to it, so a stale price can never oversell — the modal shows the real qty.
     const price = pair.priceUsd || 0;
     const tokens = sellUnit === "usd" ? (price > 0 ? (parseFloat(sellAmt) || 0) / price : 0) : (parseFloat(sellAmt) || 0);
-    if (!sellMax && !(tokens > 0)) { setSwapErr(sellUnit === "usd" && price <= 0 ? "No price to size a USD sell — switch to token amount." : "Enter an amount to sell."); return; }
+    if (!sellMax && !(tokens > 0)) { setSwapErr(sellUnit === "usd" && price <= 0 ? "No price to size a USD sell. Switch to token amount." : "Enter an amount to sell."); return; }
     const req = sellMax ? { pct: 100 } : { amountStr: sellUnit === "usd" ? tokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : sellAmt };
     setPlanning(true);
     try {
       const p = await planSell(pair.chainId, pair.baseAddress, pair.baseSymbol, req, wallet, provider, pair.priceUsd ?? null, sellOut ?? undefined);
       setPlan(p); setModalOpen(true);
     } catch (e) {
-      setSwapErr((e as Error)?.message || "Couldn't build the sell — use the deep-link.");
+      setSwapErr((e as Error)?.message || "Couldn't build the sell. Use the deep-link.");
     } finally { setPlanning(false); }
   }, [pair, wallet, provider, sellAmt, sellMax, sellUnit, sellOut, holdsToken]);
 
@@ -1097,14 +1097,14 @@ export default function TokenTerminal() {
     // quotes + guards the exact amount against the chosen input mint.
     const amt = solInputHuman;
     const sym = solInputDesc.sym;
-    if (!Number.isFinite(amt) || amt <= 0) { setSolErr(solPayWith === "sol" && solUnit === "usd" && !solUsd ? "No SOL price yet — switch to SOL amount." : `Enter an amount of ${sym} to buy.`); return; }
+    if (!Number.isFinite(amt) || amt <= 0) { setSolErr(solPayWith === "sol" && solUnit === "usd" && !solUsd ? "No SOL price yet. Switch to SOL amount." : `Enter an amount of ${sym} to buy.`); return; }
     // Don't build a route we can't cover. Must KNOW the balances first (no green Confirm over "—").
     if (solPayWith === "usdc") {
-      if (usdcBal == null) { setSolErr("USDC balance unavailable — try again in a moment."); return; }
+      if (usdcBal == null) { setSolErr("USDC balance unavailable. Try again in a moment."); return; }
       if (amt > usdcBal) { setSolErr(`Not enough USDC: you have ${usdcBal.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Try a smaller size.`); return; }
       if (solBalance == null || solBalance < SOL_FEE_RESERVE) { setSolErr(`Need ~${SOL_FEE_RESERVE} SOL for network fees to swap USDC.`); return; }
     } else {
-      if (solBalance == null) { setSolErr("Balance unavailable — can't verify you can cover this. Try again in a moment."); return; }
+      if (solBalance == null) { setSolErr("Balance unavailable. Can't verify you can cover this. Try again in a moment."); return; }
       if (amt + SOL_FEE_BUFFER > solBalance) { setSolErr(`Not enough SOL: you have ${solBalance.toLocaleString("en-US", { maximumFractionDigits: 4 })}, need ~${(amt + SOL_FEE_BUFFER).toLocaleString("en-US", { maximumFractionDigits: 4 })} (incl. ~${SOL_FEE_BUFFER} fees). Try a smaller size.`); return; }
     }
     setSolPlanning(true);
@@ -1112,7 +1112,7 @@ export default function TokenTerminal() {
       const p = await planSolBuy(pair.baseAddress, pair.baseSymbol, solInputDesc, amt, solSigner.address, solProvider);
       setSolPlan(p); setSolPlanDir("buy"); setSolModalOpen(true);
     } catch (e) {
-      setSolErr((e as Error)?.message || "Couldn't build the swap — use the deep-link.");
+      setSolErr((e as Error)?.message || "Couldn't build the swap. Use the deep-link.");
     } finally { setSolPlanning(false); }
   }, [pair, solProvider, solSigner.address, solInputHuman, solInputDesc, solPayWith, solUnit, solUsd, solBalance, usdcBal, SOL_FEE_BUFFER, SOL_FEE_RESERVE]);
 
@@ -1151,14 +1151,14 @@ export default function TokenTerminal() {
     if (solBalance != null && solBalance < SOL_FEE_RESERVE) { setSolErr(`Need ~${SOL_FEE_RESERVE} SOL for network fees to sell.`); return; }
     const price = pair.priceUsd || 0;
     const tokens = sellUnit === "usd" ? (price > 0 ? (parseFloat(sellAmt) || 0) / price : 0) : (parseFloat(sellAmt) || 0);
-    if (!sellMax && !(tokens > 0)) { setSolErr(sellUnit === "usd" && price <= 0 ? "No price to size a USD sell — switch to token amount." : "Enter an amount to sell."); return; }
+    if (!sellMax && !(tokens > 0)) { setSolErr(sellUnit === "usd" && price <= 0 ? "No price to size a USD sell. Switch to token amount." : "Enter an amount to sell."); return; }
     const req = sellMax ? { pct: 100 } : { amountStr: sellUnit === "usd" ? tokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : sellAmt };
     setSolPlanning(true);
     try {
       const p = await planSolSell(pair.baseAddress, pair.baseSymbol, req, solSigner.address, solProvider);
       setSolPlan(p); setSolPlanDir("sell"); setSolModalOpen(true);
     } catch (e) {
-      setSolErr((e as Error)?.message || "Couldn't build the sell — use the deep-link.");
+      setSolErr((e as Error)?.message || "Couldn't build the sell. Use the deep-link.");
     } finally { setSolPlanning(false); }
   }, [pair, solProvider, solSigner.address, sellAmt, sellMax, sellUnit, holdsToken, solBalance, SOL_FEE_RESERVE]);
 
@@ -1212,7 +1212,7 @@ export default function TokenTerminal() {
           <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
             <input
               value={input} onChange={(e) => setInput(e.target.value)}
-              placeholder="Search any token — symbol, name, or contract address"
+              placeholder="Search any token · symbol, name or contract"
               spellCheck={false} autoCapitalize="off" autoCorrect="off"
               style={{ width: "100%", background: CARD, border: `1px solid ${BORD}`, borderRadius: 8, color: BRIGHT, fontFamily: MONO, fontSize: 13, padding: "11px 40px 11px 14px", outline: "none", boxSizing: "border-box" }}
             />
@@ -1387,7 +1387,7 @@ export default function TokenTerminal() {
                         <div style={{ fontFamily: UI, fontSize: 9.5, color: FAINT, marginTop: 8, lineHeight: 1.5 }}>Cost basis + P&L from your <b style={{ color: MUT }}>in-app Nexus buys</b> only (we can’t see external buys). ⊕ marks your entries on the chart.</div>
                       </>
                     ) : (
-                      <div style={{ fontFamily: UI, fontSize: 10, color: FAINT, lineHeight: 1.5 }}>No in-app buys tracked yet — buy on Spot to track your avg entry + P&L here.</div>
+                      <div style={{ fontFamily: UI, fontSize: 10, color: FAINT, lineHeight: 1.5 }}>No in-app buys tracked yet. Buy on Spot to track avg entry and P&L here.</div>
                     )}
                   </div>
                 )}
@@ -1738,7 +1738,7 @@ export default function TokenTerminal() {
                     ? <>Nexus lists {pair.baseSymbol} as a perp — trade it here on our book, graded like every Nexus position{isPerp ? <>, or switch to <b style={{ color: MUT }}>Spot</b> to buy/sell the token itself</> : null}.</>
                     : swapState.kind === "quote"
                     ? ((side === "buy" ? canInAppBuy : canInAppSell)
-                      ? <>Route + price from <b style={{ color: MUT }}>{swapState.quoteRouter}</b> — you sign the swap in your own wallet (exact-amount approval, minimum-received enforced on-chain). Non-custodial. The read is ours.</>
+                      ? <>Route + price from <b style={{ color: MUT }}>{swapState.quoteRouter}</b>. Your wallet signs. Exact-amount approval. Minimum received enforced on-chain.</>
                       : <>Route + price from <b style={{ color: MUT }}>{swapState.quoteRouter}</b>{side === "sell" && !holdsToken ? <> — connect the wallet holding {pair.baseSymbol} to sell in-app; meanwhile you complete on <b style={{ color: MUT }}>{swapState.completeVenue}</b></> : swapState.completeVenue !== swapState.quoteRouter ? <>; you complete on <b style={{ color: MUT }}>{swapState.completeVenue}</b></> : <> — preview only</>}. The read is ours.</>)
                     : swapState.kind === "deeplink"
                     ? <>Nexus doesn’t run a spot book for {pair.baseSymbol}, so we route you to <b style={{ color: MUT }}>{swapState.venue}</b> where it can fill. The read is ours; the swap is theirs.</>
@@ -1872,8 +1872,8 @@ export default function TokenTerminal() {
 
                   <div style={{ fontFamily: UI, fontSize: 11, lineHeight: 1.55, color: FAINT }}>
                     {isPerp
-                      ? <>Nexus lists <b style={{ color: MUT }}>{pair.baseSymbol}</b> as a graded perp market — calls on it are trustlessly graded against public price, and the funding/positioning read is ours.</>
-                      : <><b style={{ color: MUT }}>Unverified token.</b> Nexus doesn’t run a graded market on it — stats are public (DexScreener/GeckoTerminal) and the takes here are ungraded conviction, not signals.</>}
+                      ? <>Nexus lists <b style={{ color: MUT }}>{pair.baseSymbol}</b> as a perp market. Calls on it are graded against public price. The funding and positioning read is ours.</>
+                      : <><b style={{ color: MUT }}>Unverified token.</b> No graded market on Nexus. Stats are public, from DexScreener and GeckoTerminal. Takes here are ungraded, not signals.</>}
                   </div>
                 </div>
               )}

@@ -15,13 +15,13 @@ function relativeTime(ts: number): string {
 }
 
 function typeIcon(type: Notification["type"]): string {
-  if (type === "follow") return "👥";
-  if (type === "copy") return "📋";
+  if (type === "follow") return "+";
+  if (type === "copy") return "⧉";
   if (type === "thesis_closed" || type === "call_resolved") return "◈";
-  if (type === "comment") return "💬";
-  if (type === "reaction") return "🔥";
+  if (type === "comment") return "≡";
+  if (type === "reaction") return "▲";
   if (type === "challenge") return "⚔";
-  return "🔔";
+  return "●";
 }
 
 export default function NotificationBell() {
@@ -47,7 +47,7 @@ export default function NotificationBell() {
   const shareResolution = (n: Notification) => {
     if (!n.thesisId || !walletAddress) return;
     const url = `https://og.nexustradinglabs.com/share/thesis/${walletAddress.toLowerCase()}/${n.thesisId}`;
-    const text = `📡 ${n.message} — graded on-chain vs public price. The tape marked this, not me. // Nexus Trading Labs 👇`;
+    const text = `${n.message}\n\nGraded against public price. The tape marked it, not me.\n\nNexus Trading Labs`;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank", "noopener");
   };
 
@@ -88,6 +88,7 @@ export default function NotificationBell() {
           borderRadius: "50%",
           border: open ? "2px solid #ededf0" : "2px solid #232327",
           background: "#141416",
+          color: "#d4d4d8",
           cursor: "pointer",
           padding: 0,
           display: "flex",
@@ -98,7 +99,10 @@ export default function NotificationBell() {
           position: "relative",
         }}
       >
-        <span style={{ fontSize: 15, lineHeight: 1 }}>🔔</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
         {unreadCount > 0 && (
           <span
             style={{
