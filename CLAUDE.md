@@ -473,8 +473,9 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   basis_x_cvd PREDICTIVE (R +0.31, n35, stable) · basis_x_liqflush PREDICTIVE (R +0.11, n93, stable) · basis_x_smart
   **slipped to PROMISING** (R +0.14, n141, NOT stable) — confirms keeping SMART off the presets. Backtest/validate
   routes need a PRO walletSig → routines can't run them (never put a wallet key in a routine).
-- **⚠️ Scoreboard reads are NOT agent signalModes yet.** The agent trades CONFLUENCE/FUNDING/OI/MOMENTUM/
-  MEAN_REVERSION only; basis/CVD/RSI reads are the research/proof layer. Findings feed house defaults + manual
+- **Scoreboard reads vs agent modes (updated 2026-09-25):** the agent trades CONFLUENCE/FUNDING/OI/MOMENTUM/
+  MEAN_REVERSION + **BASIS_FADE** (with CVD/SMART/LIQ confirms); other reads (RSI, OB imbalance, basis_dev) are
+  the research/proof layer. Findings feed house defaults + manual
   Thesis Engine use. ~~Wiring a PREDICTIVE read → a one-click agent strategy = roadmap~~ **→ DONE for basis (see above); CVD/RSI still research-only.**
 - **Landing Proof section** (`nexus-landing` `#proof`) speaks to this in-cadence: "many reads, graded in public,
   most still noise, always sharpening" — NOT "one signal." Keep it that way.
@@ -525,7 +526,7 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   `ledgerHash` anyone can recompute (verified: Python recompute == server hash). Each read checkpoints
   an append-only prev-linked hash chain (`GET /agents/ledger/chain`). Frontend TOP AGENTS shows the hash
   + "verify ↗".
-- **Tier 3+ — on-chain anchor (code DONE; needs deploy+fund):** `contracts/NexusLedgerAnchor.sol`
+- **Tier 3+ — on-chain anchor (✅ DEPLOYED + LIVE, see below; original handoff kept as history):** `contracts/NexusLedgerAnchor.sol`
   (Arbitrum, append-only `anchor(bytes32 root, uint256 count)`, owner-only, emits `Anchored`). New worker
   `workers/nexus-ledger-anchor` (hourly cron, viem) reads /agents/ledger, dedupes vs on-chain `latestRoot`,
   and commits the root when changed; writes proof to KV `agent:ledger:onchain`. lab-api `/agents/ledger`
@@ -599,8 +600,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   Frontend caches the signature per-session (8min) to avoid re-prompting.
 - **Public flywheel strip** (Feed header + Lab header + landing): `NexusMarket` (live price/MC/vol/liq from
   GeckoTerminal, **client-side fetch** — GeckoTerminal/CoinGecko 403 datacenter IPs; carries the GT link-back) +
-  `NexusTreasury` (USDC balance of the Safe on Arbitrum; renders NOTHING until `NEXUS_TREASURY_ADDRESS` is set —
-  one-line activation when the Safe exists) + `NexusBurnCounter` (on-chain $NEXUS at dead address as % of supply;
+  `NexusTreasury` (USDC balance of the Safe on Arbitrum; LIVE — `NEXUS_TREASURY_ADDRESS` is set to the Safe) + `NexusBurnCounter` (on-chain $NEXUS at dead address as % of supply;
   honest at 0 until first burn). All fail-soft.
 - **Landing** (`nexus-landing` repo, static `index.html`, `wrangler deploy` — no CI): has its own $NEXUS market
   strip (inline GeckoTerminal fetch). ⚠️ `.assetsignore` excludes `.git` (the assets dir is repo root — was
@@ -649,8 +649,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   deep-link. So "Swap via Fabric" shows for Fabric-listed EVM tokens; unlisted → Uniswap. SIGNING pass builds on
   the execution fields above (exact-amount approve → tx via the mini-app `eth_sendTransaction` pattern → confirm
   modal showing amount/minReceived/venue → /security-review before merge). Solana signing still deferred (no wallet wiring).
-- **⚙️ In-app EVM/Fabric BUY signing — BUILT (branch `claude/guest-lab-half-shipped-1dkw0n`), pending a small live test
-  before merge.** `app/pages/token/swapExec.ts` = the ONE signing site: `planBuy()` fetches an EXECUTABLE Fabric quote
+- **✅ In-app EVM/Fabric BUY signing — LIVE and tested (see "Settled"; the notes below are the build record).** `app/pages/token/swapExec.ts` = the ONE signing site: `planBuy()` fetches an EXECUTABLE Fabric quote
   (worker `/swap/quote` now forwards an optional `taker` + surfaces normalized `approval{token,amount,spender}`/`tx{to,data}`/
   `minOut` alongside `raw`), VALIDATES hard, then `executeBuy()` signs via `useWalletConnector().wallet.provider`
   (`eth_sendTransaction`). Guards (all pre-signature): approve token MUST === our hardcoded USDC (never Fabric's claimed
@@ -836,14 +835,14 @@ token-value scheme. $NEXUS only adds **consumptive use** (pay-in-$NEXUS discount
   fail-soft → FREE), `NexusPro` card (active-state for PRO / upsell for free; shown in Lab under the market strip).
 - **Tune (locked, all in subscription.ts):** `$20/mo` USDC · `25%` off paying in $NEXUS (→ `$15`) · hold **ARCHITECT (100M)**
   → PRO free (dollar cost of unlock rises with token price — cheap now to drive buying, real commitment later).
-- **First gate LIVE + SERVER-ENFORCED:** advanced agent strategies (**MOMENTUM + MEAN_REVERSION**) are PRO; 3 core
-  modes (CONFLUENCE/FUNDING/OI) stay free. UI gates it (`isProStrategy` + `useSubscription` in AgentView) AND lab-api
+- **First gate LIVE + SERVER-ENFORCED:** advanced agent strategies (**MOMENTUM + MEAN_REVERSION**) are PRO; core
+  modes (CONFLUENCE/FUNDING/OI + BASIS_FADE) stay free. UI gates it (`isProStrategy` + `useSubscription` in AgentView) AND lab-api
   now ENFORCES it server-side: every config-write site (`PUT /agent/:addr`, `PUT /agent/:addr/config`, `POST
   /agent/:addr/bankr/activate`) rejects a PRO `signalMode` from a non-PRO wallet with **402 `pro_strategy_locked`**.
   PRO resolved by `walletIsPro(address, env)`: paid `sub:{addr}` (future) OR holder-unlock = $NEXUS `balanceOf` ≥
   ARCHITECT (100M) on Base via `eth_call` (reuses the `/feed/holders` RPC pattern; fails CLOSED if RPC unreachable).
   Gate only fires for PRO strategies — free modes skip the RPC. So the paywall is real on web AND Bankr chat now.
-- **⚠️ PAYMENT RAIL — SCOPED, shovel-ready, BLOCKED on the treasury Safe (the receiver address):**
+- **✅ PAYMENT RAIL — LIVE (see "Revenue + AI + Treasury" at the top; the design notes below are kept as history):**
   - Insight: NO indexer/processor needed. A sub payment = an ERC-20 transfer to the treasury. Worker verifies via ONE
     `eth_getTransactionReceipt` (read the `Transfer` log). **Grant PRO to the tx's `from` address** → spoofing
     impossible, no signature dance.
@@ -855,8 +854,8 @@ token-value scheme. $NEXUS only adds **consumptive use** (pay-in-$NEXUS discount
   - Effort ~3–4 days, ~$0 infra (public RPC + existing KV). No recurring billing (crypto = manual 30-day renewal).
   - Legal: USDC-for-software = plain commerce (not Howey); pay-in-$NEXUS = consumptive use. Low-stakes vs the buyback;
     one-line mention to the lawyer during the treasury chat.
-- **⚠️ The Safe unblocks THREE things at once:** buyback flywheel + public treasury banner (`NEXUS_TREASURY_ADDRESS`)
-  + PRO revenue (`SUBSCRIPTION_RECEIVER`). Standing up the Safe (app.safe.global, ~10 min) is the highest-leverage move.
+- **✅ The Safe is LIVE** (`0x4Fe2…C733`) — treasury banner (`NEXUS_TREASURY_ADDRESS`) + PRO revenue (`SUBSCRIPTION_RECEIVER`)
+  are both wired. Buys follow `docs/treasury-buyback-policy.md` (discretionary, hold-not-burn).
 
 ## Q Signals — Quotient x402 v2 lens (LIVE + ON-CHAIN VERIFIED 2026-09-19) ⭐ the client-pays x402 pattern
 Prediction-market **fair-value** intel in Lab → Market Intel (`app/pages/lab/QSignals.tsx`, a Collapsible lens).
@@ -904,8 +903,9 @@ settlement tx `0xcbd2a8228985db73b26883207c520b23cb86ea28ae7c80879308ef2d97b34b3
   badge + **⚡ Trade** (→ /perp/SYM) + **◆ Stake thesis** (prefills the Thesis Engine draft) + a PERPS/ALL filter. Also:
   copilot tool `q_signals` (reads the cached pull, no new charge) + a Feed discovery card (links to the lens).
 - **Source of truth:** `qSignals` ∈ `PRO_FEATURES` (`app/config/subscription.ts`) → NexusPro card + landing `#pro`;
-  Quotient in the landing partners row. **⚠️ Quotient gateway + `og.nexustradinglabs.com` are egress-blocked from
-  cloud/worker/datacenter IPs → the pay flow can ONLY be exercised in a real browser (residential) wallet.**
+  Quotient in the landing partners row. **⚠️ The Quotient gateway is egress-blocked from cloud/worker/datacenter IPs →
+  the pay flow can ONLY be exercised in a real browser (residential) wallet.** (`og.nexustradinglabs.com` IS reachable
+  from cloud sessions since 2026-09-25.)
   Launch post: `marketing/q-signals-launch.md`.
 
 ## Tokenomics direction — Bankr-informed pivot (2026-06-08) ⭐ CURRENT
@@ -1025,9 +1025,15 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   scrollable needs a rebuild from granular widgets (`NewListingListWidget`, `MarketsListWidget`, etc.), not a tweak.
 
 ## Testing (money-path + trust-path)
+- **✅ CI ENFORCES TESTS (2026-09-25).** `yarn test` = `node tools/run-tests.mjs` runs EVERY `*.test.mjs` under
+  app/ tools/ workers/ (47 files, 874 tests at add-time). Runs on every PR (`pr-checks.yml` job "Tests + typecheck",
+  + `tsc --noEmit`) AND gates the prod deploy (`deploy.yml` "Test" step before Build — red test = nothing ships).
+  Worker tests need their deps: `npm ci` in workers/nexus-lab-api, nexus-agent-exec, nexus-carry-engine. A new test
+  file is picked up automatically. ⚠️ Lint is NOT enforced yet: 359 errors across 67 files (incl. `no-undef` 39 and
+  `react-hooks/rules-of-hooks` 4 — possible real bugs); cleanup = its own PR.
 - Pure logic is extracted into `logic.mjs` next to each worker's `index.js` (which imports it, so
-  tests cover the REAL deployed code, not a copy). Tests = zero-dep `node:test` in `logic.test.mjs`.
-  Run: `node --test workers/<worker>/logic.test.mjs` (or `npm test` in the worker dir).
+  tests cover the REAL deployed code, not a copy). Tests = zero-dep `node:test`. The per-file counts below are
+  historical.
 - **nexus-agent-exec/logic.mjs** (12 tests): `snapQty` (-1104 step-size float-artifact guard +
   base_min/min_notional), `shouldResetDaily`, `dailyCapBlocked` (never blocks a win), `computePnl`
   (long/short), `exitReason` (TP→SL→timeout priority).
@@ -1162,9 +1168,8 @@ xray_wallet, DeFi/macro/indicators) + action/no-execution (open_symbol/trader/xr
 mispriced/autocopy, draft_thesis/directive → localStorage `nexus_thesis_draft` + `/lab?tab=thesis`;
 Lab reads `?tab=`, ThesisView consumes draft).
 Persists chat (`nexus_ai_chat`), markdown render (incl. tables), discovery nudge (`nexus_ai_seen`),
-local personal-insight teaser. ⚠️ Thesis form symbol = BARE ticker ("BTC"), not PERP_. Next: **hosted
-inference** (pay-in-$NEXUS/USDC worker proxy) — the BYOK-wall unlock, BLOCKED on the treasury Safe; fold
-into PRO rail. Open call: free-forever BYOK vs gate behind PRO.
+local personal-insight teaser. ⚠️ Thesis form symbol = BARE ticker ("BTC"), not PERP_. **Hosted
+inference is LIVE** as a PRO benefit (`POST /ai/chat`, see "Revenue + AI + Treasury"); free users keep BYOK.
 
 ## Agent ops + feed liveness (Session 2026-06-05, on main)
 - ⚠️ **"Agents down" is usually a false alarm.** Before declaring an exec outage, check Cloudflare dash →
@@ -1200,3 +1205,8 @@ network effects from the social layer. Positioning: "The trading terminal that m
   unproven. Honest grading is the moat, so this is survivable; the failure mode is copy shipping ahead of the
   grade ("proven", "validated lead" — both already walked back once). Next gate: the Oct 15 2026 basis-stack
   re-validation Routine. Cold-start is SETTLED (see "⚠️ Settled" above) — don't re-raise it.
+- **CEO pass (2026-09-25, borst + Ember agreed):** (1) hardening first — tests gate CI + prod deploy (done);
+  (2) the paid x402 `nexus-signals` feed sells the funding+OI read the scoreboard grades NOISE → label it honestly
+  NOW, swap to graded basis reads AFTER Oct-15 (a 30-trade grade is too thin to sell); (3) new agents default to the
+  Basis × CVD Stack in PAPER (presets + the 12h/24h A/B untouched). Vision: the only trading terminal that grades
+  itself in public — every read, agent and caller carries a verdict you can check.
