@@ -813,6 +813,20 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   the rung and 3 tests fail across both surfaces. ⚠️ **BELOW_RANDOM is NOT a licence to invert.** "Fading the fade" is
   a DIFFERENT rule and must be graded as its own read first (the copilot prompt forbids suggesting it; Regime-Gated
   Invert — the last invert idea — came back NOT ROBUST).
+  **First BELOW_RANDOM read (Sept 25, 23:42 UTC, live `axisbt:v8`):** 10 side-rows flipped NOT_DISTINGUISHABLE →
+  BELOW_RANDOM, each reliably worse than random entries in its own window: **funding_fade on BOTH sides** (L n693
+  −0.02R vs random +0.08R, 1.3% · S n2385 −0.26R vs −0.18R, 0%) — the old flagship's timing is worse than random entry
+  timing, not merely flat · **smart_fade** both sides (1.2% / 1%) · **smart_follow SHORT** (n916, −0.16R vs −0.09R,
+  3.8%) — the ONE row hiding under a PROMISING board verdict (its long side is ~random, 66%) · the whole
+  **rs_value_pullback** family on longs (proxy 4.8%; candle / candle_rsi / rotation 0%, −0.33 to −0.39R vs +0.08R).
+  The other 9 rows were already NOISE on the board, so the rung sharpens "no edge" into "reliably worse than random";
+  it overturns no verdict. Tide on the same read: random long +0.08R / short −0.10R (10 mkts, Jul 1 → Sep 26) — the
+  window rose, which is why random shorts lose everywhere.
+  **Same read, top end (the random baseline's first read — not recorded until now):** only **rsi_reset_deep**
+  BEATS_RANDOM (L n143, +0.24R vs +0.05R, 97%). The basis family LEANS_ABOVE and none clears 95%: basis_extreme 92.3%
+  (n328) · basis_dev 91.5% (n139) · basis_dev_x_cvd 90.5% (n18) · **basis_x_cvd 82.2% (n37, ~81 more events to
+  separate)** — the live preset's read. **1 of 5 PREDICTIVE reads beats random** — PREDICTIVE ≠ an edge. One window,
+  rising, in-sample; Oct-15 re-reads it. ⚠️ Not a licence to invert any BELOW row.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
