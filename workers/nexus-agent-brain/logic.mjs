@@ -7,7 +7,7 @@
 //   FUNDING_ONLY                    — fade funding extremes only.
 //   OI_ONLY                         — OI-divergence only.
 //   BASIS_FADE                      — fade an extreme spot-perp basis (EXPERIMENTAL, paper).
-//                                     basisConfirm:"CVD" | "SMART" = only when that same-hour read agrees.
+//                                     basisConfirm:"CVD" | "SMART" | "LIQ" = only when that same-hour read agrees.
 //   MOMENTUM                        — trade WITH a tick price move > priceChangeThreshold (trend-follow).
 //   MEAN_REVERSION                  — FADE a tick price move > priceChangeThreshold (buy dip / sell rip).
 // Thresholds (per user): fundingThreshold (%), oiChangeThreshold (% min OI move to count).
@@ -126,6 +126,14 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
             direction = raw.basisSide; confidence = 78; why = "basis-extreme fade · smart money agrees";
           } else {
             why = `basis extreme, ${raw.basisSmartReason || "smart money not read"} — sat out`;
+          }
+        } else if (config.basisConfirm === "LIQ") {
+          // The basis×LIQUIDATION-FLUSH stack: take the fade only when a same-hour cascade
+          // reverts to the same side — the scoreboard's basis_x_liqflush (app/lib/basisStack.mjs).
+          if (raw.basisLiqConfirmed === true && raw.basisLiqSide === raw.basisSide) {
+            direction = raw.basisSide; confidence = 78; why = "basis-extreme fade · liq flush confirms";
+          } else {
+            why = `basis extreme, ${raw.basisLiqReason || "liquidations not read"} — sat out`;
           }
         } else {
           direction = raw.basisSide; confidence = 70; why = "basis-extreme fade";

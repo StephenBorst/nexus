@@ -1,9 +1,9 @@
 // Run: node --test app/lib/basisStack.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hourBucket, priceByHour, classifyCvdDivergence, cvdSideForRow, basisCvdConfirm, basisSmartConfirm, smByHour } from "./basisStack.mjs";
+import { hourBucket, priceByHour, classifyCvdDivergence, cvdSideForRow, basisCvdConfirm, basisSmartConfirm, smByHour, basisLiqConfirm, liqFlushEventsFromHist } from "./basisStack.mjs";
 import { basisFadeFromHistory } from "./basisFade.mjs";
-import { basisXcvdEvents, basisXsmartEvents } from "../../workers/nexus-lab-api/axisbt.mjs";
+import { basisXcvdEvents, basisXsmartEvents, basisXliqEvents, liqFlushEvents } from "../../workers/nexus-lab-api/axisbt.mjs";
 import { deriveSignal } from "../../workers/nexus-agent-brain/logic.mjs";
 
 const H = 3600000;
@@ -180,4 +180,62 @@ test("BASIS_FADE + basisConfirm SMART: enters only when smart money agrees", () 
   // a CVD confirmation must not satisfy the SMART gate
   const crossed = deriveSignal({ basisSide: "LONG", basisCvdConfirmed: true, basisCvdSide: "LONG", hasPrev: true }, cfg);
   assert.equal(crossed.direction, "NONE");
+});
+
+// ── LIQ FLUSH confirm: parity with the scoreboard's basis_x_liqflush ────────────
+function liqTape({ dupes = false, seed: s0 = 3 } = {}) {
+  let seed = s0;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const basisHist = [], liqHist = [];
+  for (let i = 0; i < 240; i++) {
+    const t = T0 + i * H + 7 * 60000;
+    const spike = i > 60 && i % 13 === 0;
+    basisHist.push({ t, basisPct: spike ? (rnd() > 0.5 ? 1 : -1) * (0.5 + rnd()) : (rnd() - 0.5) * 0.1 });
+    // Baseline liquidations ~100; every ~5th hour a 3-6× cascade on one side.
+    const cascade = rnd() < 0.2;
+    const up = rnd() > 0.5;
+    const base = () => 80 + 40 * rnd();
+    liqHist.push({ t: T0 + i * H + 11 * 60000, longMag: cascade && !up ? base() * (3 + 3 * rnd()) : base(), shortMag: cascade && up ? base() * (3 + 3 * rnd()) : base() });
+    if (dupes && i % 4 === 0) liqHist.push({ t: T0 + i * H + 31 * 60000, longMag: base() * (rnd() > 0.5 ? 4 : 1), shortMag: base() * (rnd() > 0.5 ? 4 : 1) });
+  }
+  return { basisHist, liqHist, oiHist: [] };
+}
+const firedLiq = { false: 0, true: 0 };
+for (const dupes of [false, true]) {
+  for (const seed of [3, 21, 99]) {
+    test(`parity: live basis×liq-flush gate == scoreboard basis_x_liqflush (${dupes ? "same-hour rewrites" : "one row/hour"}, seed ${seed})`, () => {
+      const cs = liqTape({ dupes, seed });
+      firedLiq[dupes] += assertParity(cs, basisXliqEvents, (b) => basisLiqConfirm({ basisT: b.t, side: b.side, liqHist: cs.liqHist }));
+    });
+  }
+}
+test("parity coverage: the liq fixtures actually fire, with and without rewrites", () => {
+  assert.ok(firedLiq.false > 0 && firedLiq.true > 0, JSON.stringify(firedLiq));
+});
+
+test("liqFlushEventsFromHist == the scoreboard's liq_flush events (same shared function)", () => {
+  const cs = liqTape({ dupes: true, seed: 7 });
+  assert.deepEqual(liqFlushEventsFromHist(cs.liqHist), liqFlushEvents(cs));
+});
+
+test("basisLiqConfirm: agrees / disagrees / quiet / missing", () => {
+  const hist = Array.from({ length: 20 }, (_, i) => ({ t: T0 + i * H, longMag: 100, shortMag: 100 }));
+  const flushDown = [...hist, { t: T0 + 20 * H, longMag: 400, shortMag: 100 }]; // longs flushed → LONG
+  const ok = basisLiqConfirm({ basisT: T0 + 20 * H, side: "LONG", liqHist: flushDown });
+  assert.equal(ok.confirmed, true);
+  assert.match(ok.reason, /DOWN flush 4×/);
+  const no = basisLiqConfirm({ basisT: T0 + 20 * H, side: "SHORT", liqHist: flushDown });
+  assert.equal(no.confirmed, false);
+  assert.equal(no.liqSide, "LONG");
+  assert.match(basisLiqConfirm({ basisT: T0 + 20 * H, side: "LONG", liqHist: [...hist, { t: T0 + 20 * H, longMag: 110, shortMag: 100 }] }).reason, /no liquidation flush/);
+  assert.match(basisLiqConfirm({ basisT: T0 + 30 * H, side: "LONG", liqHist: flushDown }).reason, /no liquidation read/);
+});
+
+test("BASIS_FADE + basisConfirm LIQ: enters only when the flush confirms; other confirms don't count", () => {
+  const cfg = { signalMode: "BASIS_FADE", basisConfirm: "LIQ" };
+  assert.equal(deriveSignal({ basisSide: "SHORT", basisLiqConfirmed: true, basisLiqSide: "SHORT", hasPrev: true }, cfg).direction, "SHORT");
+  const no = deriveSignal({ basisSide: "SHORT", basisLiqConfirmed: false, basisLiqReason: "no liquidation flush", hasPrev: true }, cfg);
+  assert.equal(no.direction, "NONE");
+  assert.match(no.reason, /no liquidation flush/);
+  assert.equal(deriveSignal({ basisSide: "SHORT", basisCvdConfirmed: true, basisCvdSide: "SHORT", hasPrev: true }, cfg).direction, "NONE");
 });

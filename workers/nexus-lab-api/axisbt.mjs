@@ -11,8 +11,7 @@
 // hour); the CVD + liq-flush ones REUSE the deployed classifiers so the backtest scores
 // live behavior. Pure + tested. Fed entirely by the self-logged series (oi/cvd/sm/basis/
 // liq:hist) — which is why it only becomes meaningful as that history matures (~Sept 14).
-import { hourBucket, priceByHour, cvdSideForRow, smByHour } from "../../app/lib/basisStack.mjs";
-import { classifyFlush } from "./liquidations.mjs";
+import { hourBucket, priceByHour, cvdSideForRow, smByHour, liqFlushEventsFromHist } from "../../app/lib/basisStack.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
 import { trailingPct, basisExtremeSide } from "../../app/lib/basisFade.mjs";
@@ -105,14 +104,8 @@ export function basisExtremeEvents(cs, _pmap, { window = 168, minWarmup = 48, pc
 // strictly PRIOR to the event bar (no lookahead). The continuation read (DOWN→SHORT) is the
 // exact inverse — a one-line follow-up if this reverts negative.
 export function liqFlushEvents(cs, _pmap, { minHist = 12 } = {}) {
-  const rows = (cs.liqHist || []).filter((p) => p && Number.isFinite(p.longMag) && Number.isFinite(p.shortMag)).sort((a, b) => (a.t || 0) - (b.t || 0));
-  const ev = [];
-  for (let i = minHist; i < rows.length; i++) {
-    const flush = classifyFlush(rows.slice(0, i), rows[i]); // history strictly before the event bar
-    if (!flush) continue;
-    ev.push({ t: rows[i].t, side: flush.side === "DOWN" ? "LONG" : "SHORT" }); // revert the cascade
-  }
-  return ev;
+  // Shared with the brain's live basis×liq-flush gate (app/lib/basisStack.mjs).
+  return liqFlushEventsFromHist(cs.liqHist, { minHist });
 }
 
 // ── BASIS × conditioner CONFLUENCE (the Sept-14 stack) ────────────────────────

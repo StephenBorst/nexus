@@ -348,6 +348,13 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   smart-money cron, same KV) only when opted in (`needBasisSmart`). Agent config = 3-way CONFIRM selector (OFF / CVD /
   SMART MONEY) on BASIS FADE. **Deliberately NOT a preset and NOT in `AXIS_PRESET` yet** — gated on the Oct-15
   re-validation; if it holds, add a `basis-smart-stack` preset + `basis_x_smart` entry (2 lines).
+- **✅ BASIS × LIQ-FLUSH WIRED (2026-09-25): `basisConfirm:"LIQ"`.** `classifyFlush` MOVED (unchanged) from lab-api
+  `liquidations.mjs` (now re-exports it) into `app/lib/basisStack.mjs`, plus `liqFlushEventsFromHist` (axisbt's
+  `liqFlushEvents` delegates to it) and `basisLiqConfirm` (classifies only the rows in the basis hour, each vs its own
+  prior history, last-event-wins — same answer as the grader, cheap per bar). Brain reads `liq:hist:{BARE}` only when
+  opted in (`needBasisLiq`); replay `makeBasisAt(...,{needLiq})`; loader `needLiq`; label "Basis × Liq-Flush Stack".
+  Agent CONFIRM selector = OFF / CVD / SMART MONEY / LIQ FLUSH. **MANUAL only — no preset, not in `AXIS_PRESET`, not in
+  the basis sweep grid** until Oct-15 rules. Parity tests: 3 seeds × with/without same-hour rewrites + coverage guard.
 - **✅ BASIS REPLAY — BASIS_FADE is backtestable / sweepable / walk-forwardable (2026-09-24).** `backtest.mjs`
   `makeBasisAt(flow,{needCvd,needSmart})` evaluates the SAME shared rules the brain calls (`basisFadeFromHistory` →
   `basisCvdConfirm`/`basisSmartConfirm`) on each series' PREFIX `t <= barClose` (binary-search, memoized per bar) —

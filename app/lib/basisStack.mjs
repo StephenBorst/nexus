@@ -112,3 +112,69 @@ export function basisSmartConfirm({ basisT, side, smHist }) {
   if (smartSide !== side) return { confirmed: false, smartSide, reason: `smart money leans ${smartSide}${tally}` };
   return { confirmed: true, smartSide, reason: `smart money agrees${tally}` };
 }
+
+// ── Liquidation flush ────────────────────────────────────────────────────────
+// liq:hist {t, longMag, shortMag} (lab-api's hourly OKX liquidation snapshot). A forced-
+// liquidation cascade overshoots, then reverts: a DOWN flush (longs liquidated) is a washout
+// low → LONG; an UP flush (shorts squeezed) is a blow-off high → SHORT. "Flush" = this row's
+// magnitude ≥ 2.5× the trailing median of the rows strictly BEFORE it (no lookahead).
+// Moved here unchanged from lab-api liquidations.mjs (which re-exports it) so the scoreboard's
+// liq_flush / basis_x_liqflush axes and the brain's live gate call one function.
+export const LIQ_FLUSH_MIN_HIST = 12;
+export function classifyFlush(hist, current) {
+  const pts = (hist || []).filter((p) => Number.isFinite(p?.longMag) && Number.isFinite(p?.shortMag));
+  if (pts.length < 12 || !current) return null;
+  const longs = pts.map((p) => p.longMag).sort((a, b) => a - b);
+  const shorts = pts.map((p) => p.shortMag).sort((a, b) => a - b);
+  const med = (arr) => arr[Math.floor(arr.length / 2)] || 0;
+  const lMed = med(longs), sMed = med(shorts);
+  const lRatio = lMed > 0 ? current.longMag / lMed : (current.longMag > 0 ? 99 : 0);
+  const sRatio = sMed > 0 ? current.shortMag / sMed : (current.shortMag > 0 ? 99 : 0);
+  const FLUSH = 2.5; // 2.5x the trailing median = a genuine cascade
+  if (lRatio < FLUSH && sRatio < FLUSH) return null;
+  const side = lRatio >= sRatio ? "DOWN" : "UP"; // DOWN = longs liquidated
+  return { side, ratio: Math.round((side === "DOWN" ? lRatio : sRatio) * 10) / 10 };
+}
+
+// The grader's exact row order: finite rows, sorted by t.
+function liqRows(liqHist) {
+  return (liqHist || []).filter((p) => p && Number.isFinite(p.longMag) && Number.isFinite(p.shortMag)).sort((a, b) => (a.t || 0) - (b.t || 0));
+}
+// The reversion side at sorted index i (history = rows strictly before i), or null.
+function liqFlushAt(rows, i, minHist) {
+  if (i < minHist) return null;
+  const flush = classifyFlush(rows.slice(0, i), rows[i]);
+  return flush ? { side: flush.side === "DOWN" ? "LONG" : "SHORT", flush } : null;
+}
+// Every flush event in the series — what the liq_flush axis grades.
+export function liqFlushEventsFromHist(liqHist, { minHist = LIQ_FLUSH_MIN_HIST } = {}) {
+  const rows = liqRows(liqHist), ev = [];
+  for (let i = minHist; i < rows.length; i++) {
+    const hit = liqFlushAt(rows, i, minHist);
+    if (hit) ev.push({ t: rows[i].t, side: hit.side });
+  }
+  return ev;
+}
+
+// LIVE confirm for a basis fade — LIQ FLUSH. Confirmed ONLY when a liquidation flush in the
+// SAME hour reverts to the SAME side — exactly the intersection basisXliqEvents grades. Only
+// the rows in that hour are classified (each against its own prior history), with the
+// grader's last-event-in-the-hour-wins semantics, so this is cheap enough for every bar.
+export function basisLiqConfirm({ basisT, side, liqHist, minHist = LIQ_FLUSH_MIN_HIST }) {
+  const bad = checkBasis(basisT, side);
+  if (bad) return { ...bad, liqSide: null };
+  const h = hourBucket(basisT);
+  const rows = liqRows(liqHist);
+  let inHour = 0, hit = null;
+  for (let i = 0; i < rows.length; i++) {
+    if (hourBucket(rows[i].t) !== h) continue;
+    inHour++;
+    const r = liqFlushAt(rows, i, minHist);
+    if (r) hit = r;
+  }
+  if (!inHour) return { confirmed: false, liqSide: null, reason: "no liquidation read for that hour" };
+  if (!hit) return { confirmed: false, liqSide: null, reason: "no liquidation flush" };
+  const what = `${hit.flush.side} flush ${hit.flush.ratio}×`;
+  if (hit.side !== side) return { confirmed: false, liqSide: hit.side, reason: `liq flush disagrees (${what} → ${hit.side})` };
+  return { confirmed: true, liqSide: hit.side, reason: `liq flush confirms (${what})` };
+}

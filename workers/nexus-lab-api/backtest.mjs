@@ -15,7 +15,7 @@ import { deriveSignal } from "../nexus-agent-brain/logic.mjs";
 import { computePnl, evaluateExit, breakevenArmed, volScaledLevels } from "../nexus-agent-exec/logic.mjs";
 import { percentileRank } from "./logic.mjs";
 import { basisFadeFromHistory } from "../../app/lib/basisFade.mjs";
-import { basisCvdConfirm, basisSmartConfirm } from "../../app/lib/basisStack.mjs";
+import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 
 // Rolling ATR% at candle index i, from the `periods` candles BEFORE i (no lookahead).
 // Mirrors the exec's live fetchAtrPct (ATR as a % of price) so a vol-scaled-stops
@@ -94,11 +94,12 @@ function prefixByTime(rows) {
     return sorted.slice(0, lo);
   };
 }
-export function makeBasisAt({ basisHist, cvdHist, smHist, oiHist } = {}, { needCvd = false, needSmart = false } = {}) {
+export function makeBasisAt({ basisHist, cvdHist, smHist, oiHist, liqHist } = {}, { needCvd = false, needSmart = false, needLiq = false } = {}) {
   const basisUpTo = prefixByTime(basisHist);
   const cvdUpTo = needCvd ? prefixByTime(cvdHist) : null;
   const oiUpTo = needCvd ? prefixByTime(oiHist) : null;
   const smUpTo = needSmart ? prefixByTime(smHist) : null;
+  const liqUpTo = needLiq ? prefixByTime(liqHist) : null;
   // Memoized per bar: the verdict at a given close doesn't depend on exits/sizing, so a
   // sweep or walk-forward reusing this lookup computes each bar once, not once per config.
   const memo = new Map();
@@ -113,6 +114,10 @@ export function makeBasisAt({ basisHist, cvdHist, smHist, oiHist } = {}, { needC
     if (b.side && smUpTo) {
       const m = basisSmartConfirm({ basisT: b.t, side: b.side, smHist: smUpTo(nowMs) });
       Object.assign(out, { basisSmartConfirmed: m.confirmed, basisSmartSide: m.smartSide, basisSmartReason: m.reason });
+    }
+    if (b.side && liqUpTo) {
+      const l = basisLiqConfirm({ basisT: b.t, side: b.side, liqHist: liqUpTo(nowMs) });
+      Object.assign(out, { basisLiqConfirmed: l.confirmed, basisLiqSide: l.liqSide, basisLiqReason: l.reason });
     }
     memo.set(nowMs, out);
     return out;
@@ -129,7 +134,7 @@ export function histSeriesInfo(rows) {
 // Build the per-symbol basis lookup a BASIS_FADE config needs (null for any other mode).
 export function basisAtForConfig(config, flow) {
   if (config?.signalMode !== "BASIS_FADE" || !flow) return null;
-  return makeBasisAt(flow, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART" });
+  return makeBasisAt(flow, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART", needLiq: config.basisConfirm === "LIQ" });
 }
 
 // candles: [{ t(sec), o, h, l, c }] ascending. fundingAt(tsSec) → funding rate

@@ -178,3 +178,27 @@ test("labels: a filtered or inverted basis run can't pass for the preset", () =>
   assert.equal(strategyLabel({ signalMode: "BASIS_FADE", basisConfirm: "CVD", invertSignal: true }), "Inverted Basis × CVD Stack");
   assert.equal(strategyLabel({ signalMode: "BASIS_FADE", minVolAtrPct: 0.7 }), "Gated Basis Extreme Fade");
 });
+
+test("makeBasisAt (LIQ): a future cascade cannot change a past bar's verdict", () => {
+  const { flow } = market();
+  const liqHist = flow.basisHist.map((b, i) => ({ t: b.t + 4 * 60000, longMag: 100 + (i % 7), shortMag: 100 + (i % 5) }));
+  const f = { ...flow, liqHist };
+  const now = T0 + 250 * H + 30 * 60000;
+  const before = makeBasisAt(f, { needLiq: true })(now);
+  const poisoned = { ...f, liqHist: [...liqHist, { t: now + 60000, longMag: 1e9, shortMag: 1 }] };
+  assert.deepEqual(makeBasisAt(poisoned, { needLiq: true })(now), before);
+});
+
+test("loadFlowHistForBacktest (needLiq): the liquidation series binds maturity", async () => {
+  const days = (n) => Array.from({ length: n * 24 }, (_, i) => ({ t: T0 + i * H, basisPct: 0.01, longMag: 100, shortMag: 100 }));
+  const kv = new Map([
+    ["basis:hist:BTC", JSON.stringify(days(30))], ["liq:hist:BTC", JSON.stringify(days(30))],
+    ["basis:hist:ETH", JSON.stringify(days(30))], ["liq:hist:ETH", JSON.stringify(days(4))],
+  ]);
+  const env = { NEXUS_AGENT: { get: async (k) => kv.get(k) ?? null } };
+  const r = await loadFlowHistForBacktest(["PERP_BTC_USDC", "PERP_ETH_USDC"], env, { needLiq: true });
+  assert.deepEqual(r.matureSymbols, ["PERP_BTC_USDC"]);
+  assert.ok(r.flowBySymbol.PERP_BTC_USDC.liqHist.length > 0);
+  assert.equal(strategyLabel({ signalMode: "BASIS_FADE", basisConfirm: "LIQ" }), "Basis × Liq-Flush Stack");
+  assert.deepEqual(backtestGateSupport({ signalMode: "BASIS_FADE", basisConfirm: "LIQ" }).applied, ["liq-flush confirm"]);
+});

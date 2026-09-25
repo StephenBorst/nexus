@@ -1141,6 +1141,7 @@ export function AgentView() {
                   { v: undefined, label: "OFF", hint: "Plain basis fade — trade every extreme." },
                   { v: "CVD" as const, label: "CVD", hint: "Only when aggressor flow in the same hour diverges the same way (price up on net selling → short; down on net buying → long). Graded as Basis extreme × CVD divergence." },
                   { v: "SMART" as const, label: "SMART MONEY", hint: "Only when the tracked smart-money wallets lean the same side in the same hour. Graded as Basis extreme × smart money agrees. ⚠️ Pending the Oct-15 re-validation." },
+                  { v: "LIQ" as const, label: "LIQ FLUSH", hint: "Only when a same-hour liquidation cascade reverts to the same side (longs flushed → long, shorts squeezed → short). Graded as Basis extreme × liq-flush timing. ⚠️ Pending the Oct-15 re-validation." },
                 ]).map((o) => {
                   const on = (config.basisConfirm ?? undefined) === o.v;
                   return (
@@ -1157,6 +1158,8 @@ export function AgentView() {
                   ? "Takes the basis fade only when same-hour CVD divergence agrees. Rarer entries; when it sits out, the status says why."
                   : config.basisConfirm === "SMART"
                     ? "Takes the basis fade only when the same-hour smart-money lean agrees. Rarer entries; when it sits out, the status says why. Pending the Oct-15 re-validation — PAPER it."
+                    : config.basisConfirm === "LIQ"
+                    ? "Takes the basis fade only when a same-hour liquidation cascade reverts the same way. Rarer entries; when it sits out, the status says why. Pending the Oct-15 re-validation — PAPER it."
                     : "Off — the plain basis fade. Pick a confirm to trade only the stacked intersections the scoreboard grades."}
               </div>
             </div>

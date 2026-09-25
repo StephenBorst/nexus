@@ -82,7 +82,7 @@ export async function revalidateStrategy(address, stratId, config, env) {
     if (config.signalMode === "BASIS_FADE") {
       // Basis replays off recorded basis (+ confirm) history — validate the mature markets
       // over the window that history covers; too few markets ⇒ pending, never a fake verdict.
-      const flow = await loadFlowHistForBacktest(VALIDATE_UNIVERSE, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART" });
+      const flow = await loadFlowHistForBacktest(VALIDATE_UNIVERSE, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART", needLiq: config.basisConfirm === "LIQ" });
       if (flow.matureSymbols.length < MIN_VALIDATE_SYMBOLS) {
         validation = { status: "pending_basis", note: `awaiting basis history (${flow.matureSymbols.length}/${MIN_VALIDATE_SYMBOLS} markets with ${BASIS_BACKTEST_MIN_DAYS}d+ recorded)`, checkedAt: Date.now() };
       } else {
@@ -128,25 +128,26 @@ export const BASIS_BACKTEST_MIN_DAYS = 14, BASIS_BACKTEST_MIN_SAMPLES = 200;
 export function flowSymbolMature(info) {
   return !!info && info.days >= BASIS_BACKTEST_MIN_DAYS && info.samples >= BASIS_BACKTEST_MIN_SAMPLES;
 }
-export async function loadFlowHistForBacktest(symbols, env, { needCvd = false, needSmart = false } = {}) {
+export async function loadFlowHistForBacktest(symbols, env, { needCvd = false, needSmart = false, needLiq = false } = {}) {
   const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
   const read = async (key) => { try { const r = await AGENT_KV.get(key); return r ? JSON.parse(r) : []; } catch { return []; } };
   const flowBySymbol = {}, perSymbol = [];
   for (const s of symbols) {
     const bare = shortSymbol(s);
-    const [basisHist, cvdHist, oiHist, smHist] = await Promise.all([
+    const [basisHist, cvdHist, oiHist, smHist, liqHist] = await Promise.all([
       read(`basis:hist:${bare}`),
       needCvd ? read(`cvd:hist:${bare}`) : [],
       needCvd ? read(`oi:hist:${s}`) : [],
       needSmart ? read(`sm:hist:${bare}`) : [],
+      needLiq ? read(`liq:hist:${bare}`) : [],
     ]);
     const basis = histSeriesInfo(basisHist);
     // The binding constraint is the thinnest series this config needs.
-    const infos = [basis, ...(needCvd ? [histSeriesInfo(cvdHist)] : []), ...(needSmart ? [histSeriesInfo(smHist)] : [])];
+    const infos = [basis, ...(needCvd ? [histSeriesInfo(cvdHist)] : []), ...(needSmart ? [histSeriesInfo(smHist)] : []), ...(needLiq ? [histSeriesInfo(liqHist)] : [])];
     const days = Math.min(...infos.map((i) => i.days)), samples = Math.min(...infos.map((i) => i.samples));
     const mature = infos.every(flowSymbolMature);
     perSymbol.push({ symbol: s, days, samples, mature, basisDays: basis.days });
-    if (mature) flowBySymbol[s] = { basisHist, cvdHist, oiHist, smHist };
+    if (mature) flowBySymbol[s] = { basisHist, cvdHist, oiHist, smHist, liqHist };
   }
   const matureSymbols = perSymbol.filter((i) => i.mature).map((i) => i.symbol);
   return {

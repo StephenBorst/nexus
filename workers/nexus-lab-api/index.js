@@ -4759,7 +4759,7 @@ document.getElementById("btn").addEventListener("click",go);
       // history, window sized to that history so empty pre-history can't read as losing folds.
       if (config.signalMode === "BASIS_FADE") {
         const label = strategyLabel(config);
-        const flow = await loadFlowHistForBacktest(UNIVERSE, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART" });
+        const flow = await loadFlowHistForBacktest(UNIVERSE, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART", needLiq: config.basisConfirm === "LIQ" });
         if (flow.matureSymbols.length < MIN_VALIDATE_SYMBOLS) {
           return json({
             days, folds, symbols: flow.matureSymbols, totalSymbols: flow.matureSymbols.length, perSymbol: [],
@@ -4839,7 +4839,7 @@ document.getElementById("btn").addEventListener("click",go);
       // bar run; the rest are NAMED. The window is sized to the data that exists.
       if (config.signalMode === "BASIS_FADE") {
         const label = strategyLabel(config);
-        const flow = await loadFlowHistForBacktest(symbols, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART" });
+        const flow = await loadFlowHistForBacktest(symbols, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART", needLiq: config.basisConfirm === "LIQ" });
         if (!flow.anyMature) {
           return json({
             days, symbols, untestable: true, strategyLabel: label, basisCoverage: flow.perSymbol,
@@ -4853,7 +4853,7 @@ document.getElementById("btn").addEventListener("click",go);
           return json({
             ...result, untestable: false, strategyLabel: label, gatesSkipped: backtestGateSupport(config).skipped,
             basisCoverage: flow.perSymbol, excludedSymbols: flow.staleSymbols, basisWindowDays: bDays,
-            note: `${label} replayed over ${bDays}d of recorded basis history${config.basisConfirm ? ` + the ${config.basisConfirm === "CVD" ? "CVD" : "smart-money"} series` : ""}, bar by bar as the agent would have seen it (first ~2d are warm-up). Fees included.${flow.staleSymbols.length ? ` Excluded — not enough recorded history yet: ${shortSymbols(flow.staleSymbols)}.` : ""}`,
+            note: `${label} replayed over ${bDays}d of recorded basis history${config.basisConfirm ? ` + the ${config.basisConfirm === "CVD" ? "CVD" : config.basisConfirm === "SMART" ? "smart-money" : "liquidation"} series` : ""}, bar by bar as the agent would have seen it (first ~2d are warm-up). Fees included.${flow.staleSymbols.length ? ` Excluded — not enough recorded history yet: ${shortSymbols(flow.staleSymbols)}.` : ""}`,
           }, request);
         } catch (e) {
           console.error("[backtest] basis error:", e);
