@@ -25,7 +25,8 @@ is everything built on top:
   data priced in **$NEXUS** on Base (`x402.bankr.bot/<deployerWallet>/<name>`): `nexus-signals` (50k $NEXUS/req,
   the funding+OI read via `/signals`; ⚠️ scoreboard grades it NOISE → since 2026-09-25 every response carries the
   LIVE `grade` from `/intel/axis-backtest` and the listing says "not a proven edge"; swap to graded basis reads after
-  Oct-15; handler changes go live only via `bankr x402 deploy nexus-signals`), `nexus-callers` (10k, `/theses/leaderboard`), `nexus-agents-live`
+  Oct-15; handler changes go live only via `bankr x402 deploy nexus-signals` — ✅ redeployed + verified live by borst
+  2026-09-25 (v5)), `nexus-callers` (10k, `/theses/leaderboard`), `nexus-agents-live`
   (10k, `/agents/live`). Bankr hosts + wraps payment; we just supply handler+config (`bankr-x402/`). **Payout =
   the DEPLOYER wallet** (currently the Bankr wallet `0xd9f7…b449`), **95% after Bankr's 5% fee**, accrues as the
   $NEXUS ERC-20 (no withdraw step). To route to treasury: **sweep `0xd9f7…b449` → the Safe on the same cadence**
@@ -1254,6 +1255,6 @@ network effects from the social layer. Positioning: "The trading terminal that m
 - **CEO pass (2026-09-25, borst + Ember agreed):** (1) hardening first — tests gate CI + prod deploy (done);
   (2) the paid x402 `nexus-signals` feed sells the funding+OI read the scoreboard grades NOISE → label it honestly
   NOW, swap to graded basis reads AFTER Oct-15 (a 30-trade grade is too thin to sell); (3) new agents default to the
-  Basis × CVD Stack in PAPER (presets + the 12h/24h A/B untouched) — DONE, x402 label DONE (needs the manual
-  `bankr x402 deploy nexus-signals`). Vision: the only trading terminal that grades
+  Basis × CVD Stack in PAPER (presets + the 12h/24h A/B untouched) — DONE, x402 label DONE + live (Bankr v5 redeployed,
+  verified by borst 2026-09-25). All three CEO-pass items closed. Vision: the only trading terminal that grades
   itself in public — every read, agent and caller carries a verdict you can check.
