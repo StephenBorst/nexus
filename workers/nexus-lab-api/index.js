@@ -65,6 +65,7 @@ import { twapSchedule, twapProgress } from "../nexus-agent-exec/logic.mjs";
 // migration rules — one family per commit, read-only families first).
 import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus } from "./routes-smart.mjs";
 import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
+import { handleXrayShare } from "./routes-xrayshare.mjs";
 import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
@@ -170,6 +171,13 @@ async function getMonoFont() {
 
 
 
+
+// SVG → PNG with the shared mono font (the same path every OG card here uses).
+async function renderMonoPng(svg) {
+  await ensureResvg();
+  const font = await getMonoFont();
+  return new Resvg(svg, { font: { loadSystemFonts: false, fontBuffers: [font], defaultFontFamily: "JetBrains Mono" } }).render().asPng();
+}
 
 // ── Agent key encryption at rest (AES-256-GCM via Web Crypto) ──────────────────
 // Trading keys are encrypted before being written to KV so a KV dump alone is
@@ -1007,6 +1015,11 @@ export default {
     {
       const tapeRes = await handleHlTape(parts, request, env);
       if (tapeRes) return tapeRes;
+    }
+    // GET /share/xray/:address + /og/xray/:address(.png) — X-Ray share links (routes-xrayshare.mjs).
+    {
+      const shareRes = await handleXrayShare(parts, request, env, { renderPng: renderMonoPng });
+      if (shareRes) return shareRes;
     }
     {
       const smartRes = await handleSmart(parts, request, env, ctx);

@@ -185,3 +185,21 @@ export function hlCoinToOrderly(coin) {
   if (/^k[A-Z]/.test(coin)) return "1000" + coin.slice(1);
   return coin;
 }
+
+// Hyperliquid fills → closed trades (one per closing fill, net of fee), oldest → newest.
+// THE conversion the page grades AND the worker's share card grades — one function, so a
+// shared card can never show a different number than the page it links to.
+export function fillsToClosedTrades(fills) {
+  return (Array.isArray(fills) ? fills : [])
+    .filter((f) => /^Close/.test(f.dir) || parseFloat(f.closedPnl || "0") !== 0)
+    .map((f) => ({
+      symbol: f.coin,
+      direction: /Long/.test(f.dir) ? "LONG" : "SHORT",
+      side: f.side,
+      pnl: parseFloat(f.closedPnl || "0") - Math.abs(parseFloat(f.fee || "0")),
+      qty: parseFloat(f.sz || "0"),
+      price: parseFloat(f.px || "0"),
+      timestamp: Number(f.time),
+    }))
+    .sort((a, b) => a.timestamp - b.timestamp);
+}
