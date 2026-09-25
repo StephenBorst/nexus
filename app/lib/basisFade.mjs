@@ -75,3 +75,26 @@ export function basisFadeFromHistory(rows, { now = Date.now(), window, minWarmup
   // `t` = the observation's hour — the join key for stack conditioners (basisStack.mjs).
   return { side, basisPct: obs.basisPct, thr, ageMs, t: obs.t, reason };
 }
+
+// ── TWO-SIDED variant: extreme vs the market's OWN USUAL basis, not vs zero ─────
+// Found 2026-09-25: the OKX USDT perp sits at a persistent ~−0.05% discount to spot, so
+// basisExtremeSide (|basis| vs its trailing p90, sign taken from ZERO) only ever fires the
+// deepest discount → LONG. The premium → SHORT half never fires; the read is one-sided.
+// This measures the deviation from the TRAILING MEAN instead: a discount WIDER than usual →
+// LONG, NARROWER than usual (a relative premium) → SHORT. Same window / warmup / p90 as the
+// original, same strictly-prior trail. It is a DIFFERENT rule, so it is graded as its own
+// scoreboard axis beside basis_extreme — never swapped into the live preset silently.
+const DEV_EPS = 1e-9; // % units — far below any real basis move (~1e-3)
+export function basisDeviationSide(trailRaw, basisPct, { minWarmup, pct } = {}) {
+  const cfg = { minWarmup: minWarmup ?? BASIS_FADE_DEFAULTS.minWarmup, pct: pct ?? BASIS_FADE_DEFAULTS.pct };
+  if (!Number.isFinite(basisPct)) return null;
+  const trail = (trailRaw || []).filter((v) => Number.isFinite(v));
+  if (trail.length < cfg.minWarmup) return null;
+  const mean = trail.reduce((s, v) => s + v, 0) / trail.length;
+  const thr = trailingPct(trail.map((v) => Math.abs(v - mean)), cfg.pct);
+  const dev = basisPct - mean;
+  // thr must clear a float floor: the mean of a flat series is off by ~1e-17, which would
+  // otherwise "detect" an extreme in pure rounding noise (the test caught it).
+  if (!(thr > DEV_EPS) || !(Math.abs(dev) > thr)) return null; // strictly ABOVE — a flat regime has no extreme
+  return dev > 0 ? "SHORT" : "LONG";
+}

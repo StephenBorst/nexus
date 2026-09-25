@@ -715,6 +715,14 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   89.3% — the baseline preserves the long mix, so that part stands), NOT a two-sided fade. Untested in a sustained
   downtrend. Candidate fix = measure the extreme vs the trailing MEAN (demeaned basis) so both sides can fire —
   a RULE change, so it must be graded as a NEW axis beside the current one (parity), never swapped in silently.
+  **✅ BUILT (2026-09-25): two-sided basis, graded only.** `basisDeviationSide` in `app/lib/basisFade.mjs` (extreme =
+  |basis − trailing MEAN| > trailing p90 of those deviations; wider-than-usual discount → LONG, narrower → SHORT; same
+  168/48/p90, strictly-prior trail, `DEV_EPS` float floor — a flat series' mean is off by ~1e-17 and the test caught it
+  "detecting" an extreme in rounding noise). Scoreboard axes **`basis_dev`** + **`basis_dev_x_cvd`** (axisbt
+  `basisDevEvents`/`basisDevXcvdEvents`), cache `axisbt:v4`. NOT in `AXIS_PRESET`, no preset, the brain doesn't trade
+  it — /proof shows it as a research read. Tests: `axisbt.basisdev.test.mjs` (old axis long-only vs new both sides on a
+  persistent-discount tape, poisoned-future no-lookahead, registered) + basisFade.test.mjs. Promote only if it grades
+  PREDICTIVE with BOTH sides represented — then it needs its own brain wiring + parity test like basis_x_cvd.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 

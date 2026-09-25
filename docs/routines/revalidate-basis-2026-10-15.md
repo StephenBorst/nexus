@@ -86,3 +86,7 @@ Be honest and specific with the numbers. A null or declining result is a valid a
 - Check: in `GET /intel/evidence?axis=basis_x_cvd&hold=24`, `perMarket[].diag.longs/shorts`. If shorts is still 0,
   repeat this caveat in the recommendation.
 - HYPE: data clean; it loses on stops (stop ≈ 2 typical hourly ranges). Don't drop it; note `diag.stopInRanges`.
+- NEW axes since Sept 25 (graded only, no preset): `basis_dev` + `basis_dev_x_cvd` = the TWO-SIDED basis (extreme vs
+  the market's usual level, so it can short). Report them beside basis_extreme / basis_x_cvd: verdict, samples, and
+  whether both sides fired. If basis_dev_x_cvd grades PREDICTIVE with shorts in the sample, flag it as the candidate
+  to wire next — don't recommend swapping the live preset on one read.

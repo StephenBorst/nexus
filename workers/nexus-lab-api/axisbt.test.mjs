@@ -91,7 +91,7 @@ test("runScorecard: returns every axis, ranked, with a coin count", () => {
   const coinSets = [{ oiHist: mkOi(rising), cvdHist: [], smHist: [] }];
   const sc = runScorecard(coinSets, { horizons: [4, 12], minSamples: 20 });
   assert.equal(sc.coins, 1);
-  assert.equal(sc.axes.length, 17);
+  assert.equal(sc.axes.length, 19); // + basis_dev, basis_dev_x_cvd (two-sided basis, 2026-09-25)
   assert.ok(sc.axes.every((a) => typeof a.verdict === "string"));
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback"));
 });
@@ -208,7 +208,7 @@ test("runScorecard: candle + rotation axes registered; runs on a candle series",
     };
   };
   const sc = runScorecard([mkCS("BTC", 0.2, () => 100), mkCS("SOL", 0.5, (i) => (i > N / 2 ? 200 : 50))], { horizons: [4], minSamples: 20 });
-  assert.equal(sc.axes.length, 17);
+  assert.equal(sc.axes.length, 19);
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback_candle"));
   assert.ok(sc.axes.some((a) => a.name === "rs_value_pullback_rotation"));
   assert.ok(sc.universe[0].quartile >= 1); // rs quartiles attached to the universe
