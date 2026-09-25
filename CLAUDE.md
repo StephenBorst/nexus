@@ -29,7 +29,7 @@ is everything built on top:
   $NEXUS ERC-20 (no withdraw step). To route to treasury: **sweep `0xd9f7…b449` → the Safe on the same cadence**
   (do NOT redeploy from the Safe — a multisig can't be the Bankr deployer; or ask Bankr support to migrate
   `payTo`). Narrative: treasury accumulates $NEXUS from EARNED, recurring revenue (stronger than "buy the lows");
-  agents needing $NEXUS to pay = token demand from usage. x402 challenge verified live (402 + correct amounts).
+  agents needing $NEXUS to pay = token demand from usage (internal analysis ONLY — never public copy; see buyback policy §4). x402 challenge verified live (402 + correct amounts).
 - **PRO payment rail LIVE** (`PAYMENTS_LIVE=true`): `POST /sub/verify {txHash,chain}` verifies ONE tx receipt
   → grants 30d PRO to the tx's `from` (spoof-proof, replay-guarded). USDC/Arbitrum $20 · $NEXUS/Base $15
   (DexScreener-priced, 12% tolerance, fails closed). `walletIsPro` reads `sub:{addr}`. Logic+tests in lab-api `logic.mjs`.
@@ -558,7 +558,7 @@ grading (the moat they can't copy). 5 shipped this session (#3 Arena/Seasons def
 ## $NEXUS token & holder perks (pure-meme + flywheel UI)
 $NEXUS = pure community meme token on **Base** (`0x3D958634ab725B627919EF8F2Ed59227309fDba3`, 100B supply,
 18 decimals). **Zero built-in utility / revenue share** — perks are cosmetic/access only; the framing is
-baked into the code comments. Keep it that way (Howey). The real lawyer-gate is the first buyback→burn.
+baked into the code comments. Keep it that way (Howey). The real lawyer-gate is the first buyback (see the Sept-25 SEC FAQ note + `docs/treasury-buyback-policy.md`).
 - **Tier hook** (`app/hooks/useNexusTier.ts`): reads $NEXUS balance on Base via viem with a CORS-friendly
   RPC `fallback()` (llamarpc/publicnode/drpc — the default `mainnet.base.org` 403s/CORS-blocks the browser,
   which silently hid badges). Module-cached, fail-soft. **Tiers (low→high): ▪ OPERATOR 50M / ◇ ARCHITECT 100M
@@ -801,6 +801,16 @@ The Safe is **LIVE** (`0x4Fe2…C733`, 1/1 Arbitrum+Base) and the PRO USDC payme
   (from buying lows) FUNDS retroactive Season drops to top **verifiable** contributors. Quality-weighted via our
   trustless grading (reward being RIGHT, not loud) = built-in anti-wash-farming. Hold $NEXUS = points multiplier
   (aligned, not pay-to-win). Retroactive + merit-based + from a treasury = clean.
+- **⚖️ SEC staff FAQ (Sept 25, 2026) — updates the legal half of the drop above.** CorpFin FAQ on crypto assets
+  (builds on the March 2026 interpretation): a buyback of a NON-security token on an ALREADY-FUNCTIONAL network is not,
+  by itself, a promise of managerial effort under Howey — UNLESS it's presented as yield/returns. Staff guidance only
+  (not law, not Commission-approved, reversible). So "buyback = automatic Howey" is STALE — don't repeat it. What still
+  holds: NO revenue share/yield/dividends (the carve-out), NO automated/marketed fee→buyback→burn (legal carve-out +
+  Danny's market argument, which the FAQ doesn't touch). $NEXUS nuance: it's a meme token, not the network's token —
+  its best argument is CONSUMPTIVE use (x402 payment unit, PRO discount, hold-to-unlock). **Draft policy for counsel:
+  `docs/treasury-buyback-policy.md`** (discretionary, revenue-funded, hold-not-burn, disclosed onchain after the fact,
+  say/never-say list). **NO buyback until counsel answers its §7 question.** ⚠️ `marketing/lab-article.md` still says
+  "fees → treasury → buyback → burn" — conflicts; rewrite before it's ever reused.
 - **Narrative pivot:** burn counter → **treasury-accumulation counter** ("treasury holds X $NEXUS" = conviction,
   not "X burned" = scarcity). Transparency pillar makes the stacking a feature.
 - **Relationship:** Bankr connecting borst to their devs (facu & edit) + dev-console access → path to deeper
