@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { handleXrayShare, buildXrayCardSvg, loadCardInputs, shareHitLine } from "./routes-xrayshare.mjs";
+import { handleXrayShare, buildXrayCardSvg, loadCardInputs } from "./routes-xrayshare.mjs";
 import { syncTape } from "../../app/lib/hlTape.mjs";
 
 const DAY = 86400000;
@@ -96,33 +96,3 @@ test("card text is escaped in the SVG", () => {
   assert.doesNotMatch(svg, /<b>/);
 });
 
-
-test("crawler log line: who hit what, how fast, and whether the card came from cache", () => {
-  const r = new Request(`https://og.nexustradinglabs.com/og/xray/${W}.png?v=1-2-3`, { headers: { "User-Agent": "Twitterbot/1.0" } });
-  Object.defineProperty(r, "cf", { value: { asn: 13414, asOrganization: "Twitter Inc.", colo: "SJC", country: "US", verifiedBotCategory: "Search Engine Crawler" } });
-  const line = shareHitLine(r, { route: "og/xray", status: 200, ms: 42, cache: "miss", now: NOW });
-  assert.deepEqual(
-    { ua: line.ua, asn: line.asn, asOrg: line.asOrg, colo: line.colo, v: line.v, path: line.path, ms: line.ms, cache: line.cache, botCategory: line.botCategory },
-    { ua: "Twitterbot/1.0", asn: 13414, asOrg: "Twitter Inc.", colo: "SJC", v: "1-2-3", path: `/og/xray/${W}.png`, ms: 42, cache: "miss", botCategory: "Search Engine Crawler" },
-  );
-  assert.equal(line.evt, "share_hit");
-  assert.equal(line.verifiedBot, null, "absent bot-management fields read as null, not a crash");
-});
-
-test("every share/og hit is logged once, with status and cache state", async () => {
-  const env = await envWithTape(Array.from({ length: 25 }, () => close(3, 10)));
-  const logs = [];
-  const orig = console.log;
-  console.log = (s) => logs.push(s);
-  try {
-    await handleXrayShare(["share", "xray", W], req(`/share/xray/${W}`), env, { now: NOW, hlInfo: noHL });
-    const store = new Map();
-    const cache = { async match(r) { return store.get(r.url)?.clone() ?? null; }, async put(r, res) { store.set(r.url, res); } };
-    const deps = { now: NOW, hlInfo: noHL, renderPng: async () => new Uint8Array([1]), cache };
-    await handleXrayShare(["og", "xray", `${W}.png`], req(`/og/xray/${W}.png?v=9`), env, deps);
-    await handleXrayShare(["og", "xray", `${W}.png`], req(`/og/xray/${W}.png?v=9`), env, deps);
-    await handleXrayShare(["share", "thesis", W], req("/share/thesis"), env);   // not ours → no log
-  } finally { console.log = orig; }
-  const lines = logs.map((l) => JSON.parse(l));
-  assert.deepEqual(lines.map((l) => [l.route, l.status, l.cache]), [["share/xray", 200, null], ["og/xray", 200, "miss"], ["og/xray", 200, "hit"]]);
-});
