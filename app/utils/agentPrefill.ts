@@ -21,6 +21,10 @@ export function toPerpSymbol(s: string): string {
 export const EXPERIMENTAL_FILTERS_OFF: Partial<AgentConfig> = {
   invertSignal: false, respectRegime: false, respectSmartMoney: false, volScaledStops: false,
   tradeSessions: undefined, minVolAtrPct: undefined, maxVolAtrPct: undefined, breakevenTriggerPct: undefined,
+  // The basis confirm is part of a WHOLE strategy too: loading "Basis Extreme Fade" (no confirm) over an editor
+  // that had CVD on must not silently keep trading Basis × CVD under the wrong name. The loaded config's own
+  // basisConfirm (if any) comes back in after this reset.
+  basisConfirm: undefined,
 };
 
 export type AgentPrefill = {

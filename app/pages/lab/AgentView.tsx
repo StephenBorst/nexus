@@ -328,7 +328,7 @@ export function AgentView() {
     } catch (e: any) { setError(e.message); } finally { setSaving(false); }
   }
   function loadStrategy(s: any) {
-    setConfig({ ...DEFAULT_CONFIG, ...s.config });
+    setConfig({ ...DEFAULT_CONFIG, ...EXPERIMENTAL_FILTERS_OFF, ...s.config }); // whole strategy: no default/leftover filter rides along
     setSuccess(`Loaded "${s.name}". Review and activate.`); setTimeout(() => setSuccess(null), 3000);
   }
   async function deleteStrategy(id: string) {
@@ -365,7 +365,7 @@ export function AgentView() {
     } catch { setCommunity([]); }
   }
   function copyStrategy(s: any) {
-    setConfig({ ...DEFAULT_CONFIG, ...s.config });
+    setConfig({ ...DEFAULT_CONFIG, ...EXPERIMENTAL_FILTERS_OFF, ...s.config }); // whole strategy: no default/leftover filter rides along
     setSuccess(`Copied "${s.name}" into your editor. Set your own risk and save.`); setTimeout(() => setSuccess(null), 4000);
   }
 

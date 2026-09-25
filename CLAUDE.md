@@ -127,7 +127,12 @@ is everything built on top:
   pushing to GitHub does not deploy; run wrangler manually. CF auth via `CLOUDFLARE_API_TOKEN` env.
 
 ## Agent paper mode details
-- Frontend default mode = PAPER (new users start risk-free). PAPER needs no trading key.
+- Frontend default mode = PAPER (new users start risk-free). PAPER needs no trading key. **Default STRATEGY (2026-09-25) =
+  the Basis × CVD Stack preset** — `DEFAULT_CONFIG` in `app/pages/lab/types.ts` spreads `presetById("basis-cvd-stack")`
+  over a `BASE_CONFIG`, so the default can't drift from the preset (was FUNDING_ONLY, a read /proof grades NOISE).
+  ⚠️ `basisConfirm` is in `EXPERIMENTAL_FILTERS_OFF`: every WHOLE-strategy load (preset, sweep row, saved/copied
+  strategy — `loadStrategy`/`copyStrategy` now reset filters too) clears it, so "Basis Extreme Fade" can't silently
+  keep a leftover CVD confirm.
 - Track records are kept strictly separate: LIVE (Supabase) vs PAPER (`state.paper_trades`, capped 50).
 - **⚠️ The 50-cap is a WINDOW, not the record (fixed 2026-09-20).** exec pops past 50, so the card's
   TRADES stuck at 50 and "since" slid forward as rows fell off. Lifetime is now accrued ONCE at close
@@ -1234,5 +1239,6 @@ network effects from the social layer. Positioning: "The trading terminal that m
 - **CEO pass (2026-09-25, borst + Ember agreed):** (1) hardening first — tests gate CI + prod deploy (done);
   (2) the paid x402 `nexus-signals` feed sells the funding+OI read the scoreboard grades NOISE → label it honestly
   NOW, swap to graded basis reads AFTER Oct-15 (a 30-trade grade is too thin to sell); (3) new agents default to the
-  Basis × CVD Stack in PAPER (presets + the 12h/24h A/B untouched). Vision: the only trading terminal that grades
+  Basis × CVD Stack in PAPER (presets + the 12h/24h A/B untouched) — DONE, x402 label DONE (needs the manual
+  `bankr x402 deploy nexus-signals`). Vision: the only trading terminal that grades
   itself in public — every read, agent and caller carries a verdict you can check.

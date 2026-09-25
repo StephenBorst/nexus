@@ -1,3 +1,4 @@
+import { presetById } from "@/config/strategyPresets";
 export type ThesisStatus = "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED";
 
 /** One append-only entry on a thesis's lifecycle timeline (app/lib/lifecycle.mjs). */
@@ -219,7 +220,7 @@ export interface AgentPendingThesis {
   status: string;
 }
 
-export const DEFAULT_CONFIG: AgentConfig = {
+const BASE_CONFIG: AgentConfig = {
   symbols: ["PERP_BTC_USDC"],
   leverage: 5,
   capitalPerTrade: 50,
@@ -240,4 +241,15 @@ export const DEFAULT_CONFIG: AgentConfig = {
   oiChangeThreshold: 0, // any OI move counts by default
   priceChangeThreshold: 0.5, // % tick move to trigger momentum / mean-reversion
   mode: "PAPER", // new users start in risk-free simulation by default
+};
+
+// New agents start on the scoreboard's lead read, traded exactly as its preset (Basis × CVD Stack,
+// PAPER). Before 2026-09-25 they started on FUNDING_ONLY — a read /proof grades NOISE. The preset is
+// the single source (strategyPresets.ts only type-imports this file, so no runtime cycle); BASE_CONFIG
+// keeps sane values for the fields the preset doesn't set (e.g. the funding knobs, used if the user
+// switches mode). Changing the lead preset changes the default with it — they can't drift.
+export const DEFAULT_CONFIG: AgentConfig = {
+  ...BASE_CONFIG,
+  ...(presetById("basis-cvd-stack")?.config ?? {}),
+  mode: "PAPER", // always: a new agent never starts with real money
 };
