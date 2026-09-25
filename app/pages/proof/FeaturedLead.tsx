@@ -32,10 +32,12 @@ const ANCHOR_EXPLORER = "https://arbiscan.io/address/0x57a698df84a44F3dA3dac3E08
 const LEAD = STRATEGY_PRESETS.find((p) => p.id === "basis-cvd-stack");
 
 // The receipts — each one true of this preset as deployed. Backtest-derived rows are
-// labelled as such; none of this is a live track record.
+// labelled as such; none of this is a live track record. The backtest rows are the PORTFOLIO
+// replay (one position across BTC/ETH/SOL, daily caps — what the agent can actually take);
+// the older per-market figure (+$22.62 · 14T) counted overlapping trades it never could.
 const RECEIPTS: { label: string; value: string; tone?: string }[] = [
-  { label: "backtest · 33d", value: "+$22.62", tone: POS },
-  { label: "win rate", value: "78.6% · 14T", tone: POS },
+  { label: "backtest · 33d · as traded", value: "+$14.18", tone: POS },
+  { label: "win rate", value: "80% · 10T", tone: POS },
   { label: "walk-forward", value: "NOT ROBUST", tone: NEG },
   { label: "markets green", value: "4 of 6", tone: AMBER },
 ];
@@ -86,8 +88,9 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
 
       {/* Honest label + self-funding line */}
       <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
-        A <b style={{ color: FOG }}>lead</b>, not an edge. The walk-forward came back <b style={{ color: NEG }}>NOT ROBUST</b>: net
-        +$32.06 across six markets, four of them green, but only 42% of time folds positive — too few trades per window to
+        A <b style={{ color: FOG }}>lead</b>, not an edge. The backtest counts only the trades the agent could take — one
+        position at a time, inside its daily caps. The walk-forward came back <b style={{ color: NEG }}>NOT ROBUST</b>: four of six
+        markets green on their own (+$32.06 summed), but only 42% of time folds positive — too few trades per window to
         call it. Printed here rather than buried, and re-run as the history grows. Measured Sept 25 on the preset exactly as it deploys.
         Run it in <b style={{ color: FOG }}>PAPER</b> to start its forward clock, risk-free — that record is yours,
         not this board. Take it <b style={{ color: FOG }}>live</b> and it joins the graded, on-chain-verifiable agents

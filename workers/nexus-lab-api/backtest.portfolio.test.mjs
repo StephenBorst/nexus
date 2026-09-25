@@ -78,3 +78,50 @@ test("per-symbol breakdown sums to the total", () => {
   const port = runPortfolioBacktest([mk("PERP_BTC_USDC", tape(80, [5, 40])), mk("PERP_ETH_USDC", tape(80, [20, 60]))], cfg());
   assert.equal(port.perSymbol.reduce((s, x) => s + x.trades, 0), port.trades);
 });
+
+// ── Sweep + walk-forward on the portfolio replay (market data stubbed) ─────────
+import { runSweep, walkForwardValidate } from "./backtest.mjs";
+const NOW_S = T0 + 400 * H;
+function stubMarkets(bySymbol, fn) {
+  const realFetch = globalThis.fetch, realNow = Date.now;
+  Date.now = () => NOW_S * 1000;
+  globalThis.fetch = async (url) => {
+    const u = new URL(String(url));
+    if (u.pathname.includes("/tv/history")) {
+      const c = bySymbol[u.searchParams.get("symbol")] || [];
+      const from = +u.searchParams.get("from"), to = +u.searchParams.get("to");
+      const rows = c.filter((x) => x.t >= from && x.t < to);
+      return { json: async () => ({ s: "ok", t: rows.map((x) => x.t), o: rows.map((x) => x.o), h: rows.map((x) => x.h), l: rows.map((x) => x.l), c: rows.map((x) => x.c) }) };
+    }
+    return { json: async () => ({ data: { rows: [] } }) };
+  };
+  return fn().finally(() => { globalThis.fetch = realFetch; Date.now = realNow; });
+}
+// Two markets whose moves overlap: the per-market sum counts both, the agent can take one.
+const overlapping = () => {
+  const jumps = Array.from({ length: 20 }, (_, k) => 20 + k * 18);
+  return { PERP_BTC_USDC: tape(400, jumps), PERP_ETH_USDC: tape(400, jumps.map((j) => j + 1)) };
+};
+
+test("sweep: ranked by the portfolio net; the per-market sum is kept for reference", async () => {
+  await stubMarkets(overlapping(), async () => {
+    const out = await runSweep({ maxTradesPerDay: 9 }, { symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC"], days: 16 });
+    assert.equal(out.rankedBy, "portfolio");
+    for (let i = 1; i < out.results.length; i++) assert.ok(out.results[i - 1].netUsd >= out.results[i].netUsd);
+    assert.ok(out.results.every((r) => Number.isFinite(r.indepNetUsd) && Number.isFinite(r.indepTrades)));
+    assert.ok(out.results.some((r) => r.trades < r.indepTrades), "overlap removed at least somewhere");
+  });
+});
+
+test("walk-forward: verdict stays per-market; the portfolio stream replays the config's own watchlist", async () => {
+  await stubMarkets(overlapping(), async () => {
+    const cfg = { ...CFG, symbols: ["PERP_BTC_USDC"] };
+    const v = await walkForwardValidate(cfg, { symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC"], days: 16, folds: 4 });
+    assert.equal(v.totalSymbols, 2, "breadth across the whole validate universe");
+    assert.deepEqual(v.portfolio.watchlist, ["PERP_BTC_USDC"]);
+    assert.equal(v.portfolio.folds.length, 4);
+    assert.equal(v.portfolio.foldTrades.reduce((a, b) => a + b, 0), v.portfolio.trades);
+    const btcOnly = v.perSymbol.find((s) => s.symbol === "PERP_BTC_USDC");
+    assert.equal(v.portfolio.trades, btcOnly.trades, "one market, no competition → same trades as its own replay");
+  });
+});

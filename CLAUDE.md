@@ -665,8 +665,17 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   (extracted from runBacktest, which now calls it) + `stepExit` + the exec's own `dailyCapBlocked`/`shouldResetDaily`.
   Returns aggregate + perSymbol + `blocked {busy, otherMarket, dailyCap, cooldown}`. `backtestConfig` returns
   `portfolio`; Backtest card shows "AS THE AGENT TRADES IT" under the per-market tiles ("EACH MARKET ON ITS OWN").
-  Tests (`backtest.portfolio.test.mjs`): one market + no caps == runBacktest trade-for-trade. Sweep + walk-forward
-  still replay per market (not yet portfolio). `maxTradesPerDay` IS now simulated in the portfolio replay.
+  Tests (`backtest.portfolio.test.mjs`): one market + no caps == runBacktest trade-for-trade. `maxTradesPerDay` IS
+  simulated in the portfolio replay. **Sweeps (`runSweep`/`runBasisSweep`) are RANKED by the portfolio net** (+ the
+  user's daily caps via `agentCaps`; per-market sum kept as `indepNetUsd`/`indepTrades`, shown on hover) — ranking by
+  the per-market sum rewarded overlap (long holds on several markets at once). **Walk-forward verdict stays PER-MARKET**
+  (breadth × time — "does the edge exist on each market on its own" — unchanged + comparable with Sept-25 baselines) and
+  now also returns `portfolio` {watchlist = the config's own symbols ∩ validate universe, netUsd, trades, folds,
+  foldsPositive} via `portfolioFolds`.
+  **📊 Portfolio baselines (Ember, Sept 25, 33d):** Basis × CVD 12h +$14.18 · 80% · 10T · PF 3.14 (old per-market
+  +$22.62/14T: 9 signals while in a position, 1 lost to another market) · 24h +$14.36 · 77.8% · 9T · PF 3.39 (old
+  +$31.35/13T). **12h vs 24h = a WASH in backtest** — the 24h "edge" was phantom overlap; the hold decision rests on the
+  paper A/B + `oos` exit grades. /proof hero receipts updated to the portfolio numbers.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 

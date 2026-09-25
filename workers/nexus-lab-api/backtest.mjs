@@ -393,6 +393,28 @@ export const DEFAULT_FEE_BPS = 3;
 // Sweep: fetch each symbol's data ONCE, then run a grid of backtestable configs
 // (mode × threshold × exit style) reusing that data, ranked by net P&L. This is the
 // terminal sweep, in-app. Bounded (~36 configs) to stay within a request's budget.
+// The agent's daily risk caps, carried from the user's config into every replay variant so a
+// sweep row is graded under the same caps the agent would run with.
+function agentCaps(base) {
+  const out = {};
+  if (Number(base?.maxTradesPerDay) > 0) out.maxTradesPerDay = Number(base.maxTradesPerDay);
+  if (Number(base?.maxDailyLossUsdc) > 0) out.maxDailyLossUsdc = Number(base.maxDailyLossUsdc);
+  return out;
+}
+
+// Bucket a portfolio's trades into `folds` equal time windows over [t0, tN] by ENTRY time.
+export function portfolioFolds(trades, t0, tN, config, folds) {
+  const span = (tN - t0) / folds || 1;
+  const notional = (config.capitalPerTrade || 50) * (config.leverage || 1);
+  const feePct = ((config.feeBps || 0) / 100) * 2;
+  const net = new Array(folds).fill(0), cnt = new Array(folds).fill(0);
+  for (const t of trades || []) {
+    const k = Math.min(folds - 1, Math.max(0, Math.floor((t.entryT - t0) / span)));
+    net[k] += ((t.pnlPct - feePct) / 100) * notional; cnt[k]++;
+  }
+  return { net: net.map((n) => Math.round(n * 100) / 100), cnt };
+}
+
 export async function runSweep(base, { symbols, days }, oiHistBySymbol = {}) {
   const data = {};
   for (const s of symbols) {
@@ -408,7 +430,8 @@ export async function runSweep(base, { symbols, days }, oiHistBySymbol = {}) {
     "scale-out 1/2.5": { tpPercent: 1, slPercent: 1, takeProfits: [{ pct: 1, sizePct: 50 }, { pct: 2.5, sizePct: 50 }] },
     "trail 0.5": { tpPercent: 1.5, slPercent: 0.75, trailingStopPct: 0.5 },
   };
-  const common = { leverage: base.leverage || 5, capitalPerTrade: base.capitalPerTrade || 50, maxHoldHours: base.maxHoldHours || 4, oiChangeThreshold: 0, feeBps: DEFAULT_FEE_BPS };
+  const common = { leverage: base.leverage || 5, capitalPerTrade: base.capitalPerTrade || 50, maxHoldHours: base.maxHoldHours || 4, oiChangeThreshold: 0, feeBps: DEFAULT_FEE_BPS, ...agentCaps(base) };
+  const markets = symbols.map((s) => ({ symbol: s, candles: data[s].candles, feeds: { fundingAt: data[s].fundingAt, fundingPctAt: data[s].fundingPctAt, oiChangeAt: data[s].oiChangeAt } }));
   // Only fold the OI-driven modes (CONFLUENCE / OI_ONLY) into the grid when EVERY
   // symbol has usable recorded OI — otherwise they'd contribute empty rows. The
   // endpoint only passes oiHistBySymbol once it's judged mature, so this lights up
@@ -426,11 +449,15 @@ export async function runSweep(base, { symbols, days }, oiHistBySymbol = {}) {
     }
   }
   const results = configs.map(({ name, config }) => {
-    let net = 0, trades = 0, wins = 0;
+    // Ranked AS THE AGENT TRADES IT (one position across the watchlist, best signal per tick,
+    // daily caps). Ranking by the per-market sum rewarded overlap — long holds on several
+    // markets at once that the agent can never take — so it biased the grid toward them.
+    let indepNet = 0, indepTrades = 0;
     for (const s of symbols) {
       const r = runBacktest(data[s].candles, data[s].fundingAt, config, data[s].fundingPctAt, data[s].oiChangeAt);
-      net += r.netUsd; trades += r.trades; wins += Math.round((r.winRate / 100) * r.trades);
+      indepNet += r.netUsd; indepTrades += r.trades;
     }
+    const pf = runPortfolioBacktest(markets, { ...config, symbols });
     // Include the strategy-defining params so the UI can one-click APPLY a winner.
     const applied = {
       signalMode: config.signalMode, priceChangeThreshold: config.priceChangeThreshold,
@@ -439,9 +466,9 @@ export async function runSweep(base, { symbols, days }, oiHistBySymbol = {}) {
       tpPercent: config.tpPercent, slPercent: config.slPercent,
       takeProfits: config.takeProfits || null, trailingStopPct: config.trailingStopPct || 0,
     };
-    return { name, trades, winRate: trades ? Math.round((wins / trades) * 1000) / 10 : 0, netUsd: Math.round(net * 100) / 100, config: applied };
+    return { name, trades: pf.trades, winRate: pf.winRate, netUsd: pf.netUsd, indepNetUsd: Math.round(indepNet * 100) / 100, indepTrades, config: applied };
   }).sort((a, b) => b.netUsd - a.netUsd);
-  return { days, symbols, notional: common.capitalPerTrade * common.leverage, results };
+  return { days, symbols, notional: common.capitalPerTrade * common.leverage, rankedBy: "portfolio", results };
 }
 
 // ── BASIS sweep: the exits × confirm grid for the basis stack ─────────────────
@@ -471,22 +498,25 @@ export async function runBasisSweep(base, { symbols, days }, flowBySymbol = {}, 
     }
   }
   const liveConfirms = confirms.filter((cf) => symbols.every((s) => data[s].basisAt[String(cf)]));
-  const common = { signalMode: "BASIS_FADE", leverage: base.leverage || 5, capitalPerTrade: base.capitalPerTrade || 50, feeBps: DEFAULT_FEE_BPS };
+  const common = { signalMode: "BASIS_FADE", leverage: base.leverage || 5, capitalPerTrade: base.capitalPerTrade || 50, feeBps: DEFAULT_FEE_BPS, ...agentCaps(base) };
   const label = (cf) => (cf === "CVD" ? "Basis × CVD" : cf === "SMART" ? "Basis × Smart" : "Basis Extreme");
   const results = [];
   for (const cf of liveConfirms) {
     for (const [exName, ex] of Object.entries(BASIS_SWEEP_EXITS)) {
       for (const hold of BASIS_SWEEP_HOLDS) {
         const config = { ...common, ...ex, maxHoldHours: hold, ...(cf ? { basisConfirm: cf } : {}) };
-        let net = 0, trades = 0, wins = 0, posSymbols = 0;
+        // Breadth stays per-market (does the edge exist on each market on its own?); the P&L,
+        // trades and win rate — and the RANK — are the portfolio stream the agent can take.
+        let indepNet = 0, indepTrades = 0, posSymbols = 0;
         for (const s of symbols) {
           const r = runBacktest(data[s].candles, data[s].fundingAt, config, null, null, null, data[s].basisAt[String(cf)]);
-          net += r.netUsd; trades += r.trades; wins += Math.round((r.winRate / 100) * r.trades);
+          indepNet += r.netUsd; indepTrades += r.trades;
           if (r.netUsd > 0) posSymbols++;
         }
+        const pf = runPortfolioBacktest(symbols.map((s) => ({ symbol: s, candles: data[s].candles, feeds: { fundingAt: data[s].fundingAt, basisAt: data[s].basisAt[String(cf)] } })), { ...config, symbols });
         results.push({
-          name: `${label(cf)} · ${exName} · ${hold}h`, trades, posSymbols, totalSymbols: symbols.length,
-          winRate: trades ? Math.round((wins / trades) * 1000) / 10 : 0, netUsd: Math.round(net * 100) / 100,
+          name: `${label(cf)} · ${exName} · ${hold}h`, trades: pf.trades, posSymbols, totalSymbols: symbols.length,
+          winRate: pf.winRate, netUsd: pf.netUsd, indepNetUsd: Math.round(indepNet * 100) / 100, indepTrades,
           config: {
             signalMode: "BASIS_FADE", basisConfirm: cf || null, tpPercent: ex.tpPercent, slPercent: ex.slPercent,
             takeProfits: ex.takeProfits || null, trailingStopPct: 0, maxHoldHours: hold,
@@ -496,7 +526,7 @@ export async function runBasisSweep(base, { symbols, days }, flowBySymbol = {}, 
     }
   }
   results.sort((a, b) => b.netUsd - a.netUsd);
-  return { days, symbols, notional: common.capitalPerTrade * common.leverage, results, confirmsTested: liveConfirms.map((c) => c || "NONE") };
+  return { days, symbols, notional: common.capitalPerTrade * common.leverage, rankedBy: "portfolio", results, confirmsTested: liveConfirms.map((c) => c || "NONE") };
 }
 
 // Orchestrator: run one config across symbols, return per-symbol + combined stats.
@@ -561,11 +591,15 @@ export async function walkForwardValidate(config, { symbols, days, folds = 4 }, 
   const cfg = { feeBps: DEFAULT_FEE_BPS, ...config };
   const perSymbol = [];
   let posSymbols = 0, foldPos = 0, foldTotal = 0, totNet = 0, totTrades = 0;
+  const markets = [];
   for (const symbol of symbols) {
     const [candles, funding] = await Promise.all([fetchCandles(symbol, days), fetchFundingAt(symbol)]);
     const oiRows = oiHistBySymbol[symbol];
     const oiChangeAt = oiRows && oiRows.length >= 2 ? makeOiChangeAt(oiRows) : null;
-    const res = runBacktest(candles, funding.at, cfg, makeFundingPctAt(funding.rows), oiChangeAt, null, basisAtForConfig(cfg, flowBySymbol[symbol]));
+    const fundingPctAt = makeFundingPctAt(funding.rows);
+    const basisAt = basisAtForConfig(cfg, flowBySymbol[symbol]);
+    const res = runBacktest(candles, funding.at, cfg, fundingPctAt, oiChangeAt, null, basisAt);
+    markets.push({ symbol, candles, feeds: { fundingAt: funding.at, fundingPctAt, oiChangeAt, basisAt } });
     const { net, cnt } = foldsByEntry(res, candles, cfg, folds);
     const symNet = Math.round(net.reduce((a, b) => a + b, 0) * 100) / 100;
     const symTrades = cnt.reduce((a, b) => a + b, 0);
@@ -576,11 +610,26 @@ export async function walkForwardValidate(config, { symbols, days, folds = 4 }, 
     perSymbol.push({ symbol, net: symNet, trades: symTrades, foldsPositive: foldsPos, folds: net });
   }
   const foldConsistency = foldTotal ? Math.round((foldPos / foldTotal) * 100) : 0;
+  // The verdict stays PER-MARKET breadth × time (unchanged, comparable with earlier baselines):
+  // "does the edge exist on each market on its own" is a per-market question. What the agent can
+  // actually book is a different number — its own watchlist, one position at a time, daily caps —
+  // so that stream is replayed too and bucketed into the same time folds.
+  const own = (Array.isArray(config.symbols) ? config.symbols : []).filter((s) => markets.some((m) => m.symbol === s));
+  const watch = own.length ? own : symbols;
+  const wm = markets.filter((m) => watch.includes(m.symbol));
+  const pf = runPortfolioBacktest(wm, { ...cfg, symbols: watch });
+  const t0 = Math.min(...wm.map((m) => m.candles[0]?.t ?? Infinity));
+  const tN = Math.max(...wm.map((m) => m.candles[m.candles.length - 1]?.t ?? -Infinity));
+  const pfFolds = portfolioFolds(pf._trades, t0, tN, cfg, folds);
   return {
     days, folds, symbols,
     verdict: robustnessVerdict(posSymbols, symbols.length, foldConsistency),
     posSymbols, totalSymbols: symbols.length, foldConsistency,
     totalNet: Math.round(totNet * 100) / 100, totalTrades: totTrades,
     perSymbol,
+    portfolio: {
+      watchlist: watch, netUsd: pf.netUsd, trades: pf.trades, winRate: pf.winRate, profitFactor: pf.profitFactor,
+      folds: pfFolds.net, foldTrades: pfFolds.cnt, foldsPositive: pfFolds.net.filter((n) => n > 0).length, blocked: pf.blocked,
+    },
   };
 }

@@ -224,6 +224,27 @@ export function AgentBacktestCard({
                         ))}
                       </div>
                     </div>
+                    {validation.portfolio && (() => {
+                      // The verdict above is per-market breadth × time. This is what the agent can book:
+                      // its own watchlist on one timeline, one position at a time, daily caps.
+                      const p = validation.portfolio;
+                      return (
+                        <div style={{ marginTop: 10, padding: "7px 9px", border: "1px solid #33333a", borderRadius: 4, background: "#0f0f11" }}
+                          title="The verdict is judged per market (does the edge exist on each market on its own). This line is the stream your agent can actually take on its own watchlist — one position at a time, daily caps — split into the same time folds.">
+                          <div style={{ ...agentLabelStyle, fontSize: 8.5, color: "#ededf0", marginBottom: 5 }}>
+                            AS THE AGENT TRADES IT · {(p.watchlist || []).map((x: string) => bareTicker(x)).join("·")}
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 14px", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>
+                            <span style={{ color: p.netUsd >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: 600 }}>{p.netUsd >= 0 ? "+" : ""}${p.netUsd}</span>
+                            <span style={{ color: "#d4d4d8" }}>{p.trades} trades · {p.winRate}% win</span>
+                            <span style={{ color: "#a1a1aa" }}>{p.foldsPositive}/{validation.folds} folds positive</span>
+                            <span style={{ display: "flex", gap: 2 }}>
+                              {(p.folds || []).map((n: number, i: number) => <span key={i} title={`fold ${i + 1}: ${n >= 0 ? "+" : ""}$${n} · ${p.foldTrades?.[i] ?? 0} trades`} style={{ width: 8, height: 12, borderRadius: 1, background: n > 0 ? "#3ecf8e" : n < 0 ? "#f7525f" : "#33333a" }} />)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div style={{ color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 8, lineHeight: 1.5 }}>
                       The honest test: an edge that only works on one market in one window is NOT robust. We hold our own presets to this — nothing wears "proven" until it passes. Past performance ≠ future results.
                     </div>
@@ -240,7 +261,7 @@ export function AgentBacktestCard({
             return (
             <div style={{ marginTop: 14 }}>
               <div style={{ ...agentLabelStyle, fontSize: 9, marginBottom: 6 }}>
-                RANKED — {sweep.results.length} configs · {sweep.symbols.map((s: string) => bareTicker(s)).join("/")} · {sweep.days}d · ${sweep.notional} notional
+                RANKED{sweep.rankedBy === "portfolio" ? " AS THE AGENT TRADES IT" : ""} — {sweep.results.length} configs · {sweep.symbols.map((s: string) => bareTicker(s)).join("/")} · {sweep.days}d · ${sweep.notional} notional
               </div>
               <div style={{ overflowX: "auto" }}>
                 <div style={{ minWidth: 340 }}>
@@ -252,7 +273,8 @@ export function AgentBacktestCard({
                       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "#141416"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
                       <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{i === 0 ? "★ " : ""}{r.name}</span>
-                      <span style={{ textAlign: "right", color: r.netUsd >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: 600 }}>{r.netUsd >= 0 ? "+" : ""}{r.netUsd}</span>
+                      <span title={Number.isFinite(r.indepNetUsd) ? `One position at a time across ${sweep.symbols.length} markets, daily caps. Each market on its own: ${r.indepNetUsd >= 0 ? "+" : ""}$${r.indepNetUsd} over ${r.indepTrades} trades.` : undefined}
+                        style={{ textAlign: "right", color: r.netUsd >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: 600 }}>{r.netUsd >= 0 ? "+" : ""}{r.netUsd}</span>
                       {hasMkts && <span style={{ textAlign: "right", color: r.posSymbols * 2 > r.totalSymbols ? "#d4d4d8" : "#71717a" }}>{r.posSymbols}/{r.totalSymbols}</span>}
                       <span style={{ textAlign: "right" }}>{r.winRate}</span>
                       <span style={{ textAlign: "right" }}>{r.trades}</span>
