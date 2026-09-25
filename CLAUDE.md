@@ -704,6 +704,23 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
+## Wallet X-Ray — windows, copy gate, live positions (2026-09-25)
+`/analyze` (`app/pages/analyze/index.tsx` + `XrayPanels.tsx`); ALL rules in **`app/lib/xrayGrade.mjs`** (tested).
+- **Time windows 24H/7D/30D/ALL**, each graded by the SAME code on fills filtered by close time (AnalyticsView gets
+  the windowed trades). **Minimums 5/10/20/20 closed trades** — below that the window reads **ACCRUING** (no PF/win%,
+  no AnalyticsView). Default 30D; falls back to ALL only if 30D is accruing and ALL isn't. Truncated HL tapes flag
+  every window the held slice doesn't reach back to. **Edge decay row** = PF ALL → 30D → 7D.
+- **Orderly can't be windowed per trade** (indexer = per-market totals) → windows read off the WATCHED record:
+  `/smart/xray/history` now also returns `series` (daily `{t,realized}`, additive); a window only reads if a snapshot
+  exists at/before its start, else "watched Nd, not enough to cover".
+- **Copy gate (`edgeGate`) — EVERY ⚡ COPY on the page goes through it** (hero CTA, positions panel, Orderly per-market
+  rows; they were ungated before). Pass = graded 30D HL window net>0 AND PF>1, OR watched record ≥20 graded days net>0.
+  Veto = ANY graded evidence negative. Locked state lists the reasons. ◆ draft-thesis stays open (planning, not copying).
+  Gate reads 30D regardless of the tab shown. No 0–100 score — the grade is its parts.
+- **Open positions:** HL `clearinghouseState` (leverage, entry, uPnL, venue-reported `liquidationPx`; mark =
+  positionValue/|szi|). Orderly rows = indexer side/entry/uPnL + public futures mark; **leverage + liq = "—", never
+  estimated** (not public). HL copy only if `hlCoinToOrderly(coin)` is a listed `PERP_*_USDC` (futures list = listed set).
+
 ## Nexus PRO — subscriptions / revenue (freemium model)
 The business-model layer. **PRO is a SOFTWARE subscription** (ordinary commerce, real USDC revenue) — NOT a
 token-value scheme. $NEXUS only adds **consumptive use** (pay-in-$NEXUS discount) + **access** (hold-to-unlock).
