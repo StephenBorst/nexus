@@ -115,7 +115,7 @@ export function WindowGradeCard({
 
       {hasTape && partialKeys.includes(active) && (
         <div style={{ fontFamily: MONO, fontSize: 10, color: WARN, marginTop: 10 }}>
-          partial tape — this wallet&apos;s history exceeds our paging budget; {active} is graded on the most recent fills we hold
+          partial tape — Hyperliquid serves only a wallet&apos;s 10,000 most recent fills, and {active} reaches back before them. Graded on what&apos;s served.
         </div>
       )}
 
@@ -182,7 +182,7 @@ export function EdgeGateCard({ gate, children }: { gate: Gate; children?: ReactN
 // ── OPEN POSITIONS ────────────────────────────────────────────────────────────
 export type PosRow = {
   key: string; venue: string; sym: string; side: "LONG" | "SHORT";
-  leverage: number | null; entry: number; mark: number | null; uPnl: number; valueUsd: number;
+  leverage: number | null; isolated?: boolean; entry: number; mark: number | null; uPnl: number; valueUsd: number;
   liq: number | null; liqReported: boolean; // liqReported=false → venue doesn't publish it (Orderly)
   copySym: string | null;                    // Orderly coin when copyable, else null
 };
@@ -190,11 +190,11 @@ export type PosRow = {
 const COLS = "124px 90px 64px 52px 1fr 1fr 96px 80px 112px";
 
 export function PositionsPanel({
-  rows, gatePass, onCopy, onDraft, hlFailed, hasOrderly,
+  rows, gatePass, onCopy, onDraft, hlFailed, hasOrderly, failedDexes = [],
 }: {
   rows: PosRow[]; gatePass: boolean;
   onCopy: (r: PosRow) => void; onDraft: (r: PosRow) => void;
-  hlFailed: boolean; hasOrderly: boolean;
+  hlFailed: boolean; hasOrderly: boolean; failedDexes?: string[];
 }) {
   return (
     <div className="nx-fade-in" style={card}>
@@ -218,7 +218,9 @@ export function PositionsPanel({
                 <span style={{ color: MUTED, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.venue}>{r.venue}</span>
                 <span style={{ color: BRIGHT }}>{r.sym}</span>
                 <span style={{ color: r.side === "LONG" ? POS : NEG }}>{r.side === "LONG" ? "↑ LONG" : "↓ SHORT"}</span>
-                <span style={{ color: r.leverage ? FOG : FAINT }}>{r.leverage ? `${r.leverage}x` : "—"}</span>
+                <span style={{ color: r.leverage ? FOG : FAINT }} title={r.leverage ? (r.isolated ? "isolated margin" : "cross margin") : undefined}>
+                  {r.leverage ? `${r.leverage}x` : "—"}{r.leverage && r.isolated ? <span style={{ color: MUTED, fontSize: 9 }}> ISO</span> : null}
+                </span>
                 <span style={{ color: FOG, textAlign: "right" }}>{px(r.entry)}</span>
                 <span style={{ color: FOG, textAlign: "right" }}>{px(r.mark)}</span>
                 <span style={{ color: r.uPnl >= 0 ? POS : NEG, textAlign: "right" }}>{signed(r.uPnl)}</span>
@@ -239,6 +241,12 @@ export function PositionsPanel({
               </div>
             );
           })}
+        </div>
+      )}
+      {/* A partial book must say so — never pass it off as every open position. */}
+      {failedDexes.length > 0 && (
+        <div style={{ fontFamily: MONO, fontSize: 10, color: WARN, marginTop: 10 }}>
+          Couldn&apos;t read Hyperliquid positions on: {failedDexes.join(", ")} — this list may be incomplete.
         </div>
       )}
       {hasOrderly && (
