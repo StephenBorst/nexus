@@ -149,7 +149,7 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
           </div>
         )}
         {/* The GRADED, WATCHED record — the number that can't be faked, not lifetime PnL. */}
-        <div style={{ border: "1px solid #232327", borderRadius: 8, padding: "10px 12px", marginBottom: 14, background: "#0c0c0e" }}>
+        <div style={{ border: "1px solid #232327", borderRadius: 8, padding: "10px 12px", marginBottom: 14, background: "#0f0f11" }}>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase", marginBottom: 6 }}>What you're tracking</div>
           {loading ? (
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>reading graded record…</div>

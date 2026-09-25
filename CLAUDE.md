@@ -1028,6 +1028,16 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
 Canonical system = **`app/config/theme.ts`** (`C` tokens), mirrored 1:1 by the landing (`nexus-landing/index.html` `:root`). Pull colors from these — never invent.
 - **Palette (Linear-discipline monochrome):** canvas `#0a0a0b` · surface `#141416` · borders `#232327`/`#33333a` · text bone `#f4f4f5` / fog `#a1a1aa` / muted `#71717a` / faint `#52525b`. **THE accent = bone/white `#ededf0`** (CTAs, headlines, interaction). **Green `#3ecf8e` = DATA role — profit/up/live ONLY, never the brand color.** neg `#f7525f`, warn `#fbbf24`. Elevation = hairline border + surface tier, NOT heavy shadow; ONE rationed accent; 4px spacing scale.
   - ⚠️ **NOT neon green.** "near-black + acid-green pop" is the exact AI-cliché to AVOID. It's bone-on-near-black, green rationed to data.
+  - **Signal colours (2026-09-25) — each means ONE thing, never decoration.** Beyond bone + data colours, a few
+    colours earned a job and live NAMED in `theme.ts`: `SIGNAL.caution` soft amber `#e0a458` (caution/experimental/
+    "watch" — softer than `C.warn`, which stays for real danger) · `SIGNAL.follow` gold `#f5c451` (someone you follow)
+    · `SIGNAL.heat` orange `#f7931a` (🔥 engagement, never price) · `SIGNAL.posSoft` (moderate conviction) ·
+    `SIGNAL.posMuted`/`negMuted` (DEMOTED context P&L under a graded headline) · `SIGNAL.sim.*` purple family
+    (SIMULATED, not real money — Sim Composer) · `LINE.pos/neg/warn` agree/oppose/caution hairlines ·
+    `C.text.disabled`. **New colour = name its one job in theme.ts, or use an existing token.**
+  - **Palette guard:** `node tools/check-palette.mjs` (allows everything in theme.ts; ratchet baseline
+    `tools/palette-baseline.json` — shrink, never grow). Runs on every PR via `.github/workflows/pr-checks.yml`
+    (never blocks the deploy). It drifted to ~25 strays Sept 19–24 because nothing ran it.
 - **⭐ WRITTEN VOICE = `marketing/VOICE.md`** (borst's brief, Sept 25 2026) — read it before writing ANY post, QT, article
   or launch copy as @nexustradinglab. A terminal that speaks: short end-stopped lines, fact → rule → action, numbers over
   adjectives, no hype words/emoji, no em-dash brochure clauses, default closer = nothing. Rewrites return 1 primary + 1

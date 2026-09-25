@@ -1,0 +1,21 @@
+# Checks on pull requests only. Separate from deploy.yml on purpose: a red check here
+# shows on the PR and never blocks the production deploy (deploy runs on push to main).
+name: PR checks
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  palette:
+    name: Palette drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Dependency-free: fails if a PR adds a colour that isn't in app/config/theme.ts
+      # (or grows a baselined legacy colour). Fix = use a theme token, or name a new
+      # SIGNAL colour in theme.ts with its one job.
+      - run: node tools/check-palette.mjs

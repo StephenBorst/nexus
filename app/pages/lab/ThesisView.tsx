@@ -27,6 +27,7 @@ import { PnlChart, EmptyState, Coachmark } from "./components";
 import { Collapsible } from "./Collapsible";
 import { SharePoster, type PosterData } from "./SharePoster";
 import { bareTicker } from "@/utils/utils";
+import { SIGNAL } from "@/config/theme";
 
 // Crash-proof number formatting — a partial thesis (e.g. a systematic house call with
 // no leverage/positionSize/fundingCost) must NEVER take the whole app down with
@@ -1601,7 +1602,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 {/* WATCH gate (Grok): a weak base rate un-arms the direction so the trader
                     overrides a bad setup on purpose, not by our pre-check. Direction stays visible. */}
                 {!dirArmed && weakSetup && (
-                  <div className="nx-fade-in" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 4, border: "1px solid #e0a45855", background: "#1c1710", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#e0a458", lineHeight: 1.55 }}>
+                  <div className="nx-fade-in" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 4, border: `1px solid ${SIGNAL.caution}55`, background: SIGNAL.cautionBg, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: SIGNAL.caution, lineHeight: 1.55 }}>
                     ⚠ WATCH — fading {form.symbol.toUpperCase()} has historically underperformed{weakSetup.histPct != null ? ` (reverted only ${weakSetup.histPct}% of recent stretched-funding instances)` : ""}. The {form.direction.toLowerCase()} side is shown, not pre-selected — tap it to commit.
                   </div>
                 )}

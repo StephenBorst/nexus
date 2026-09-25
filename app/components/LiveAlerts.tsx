@@ -17,11 +17,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useAccount } from "@orderly.network/hooks";
 import { bareTicker } from "@/utils/utils";
+import { SIGNAL } from "@/config/theme";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const green = "#ededf0";
 const red = "#f7525f";
-const star = "#f5c451"; // "someone you follow" accent — reads as a favorite, distinct from the pulse
+const star = SIGNAL.follow; // "someone you follow" — the theme's follow colour
 const NOTIF_KEY = "nexus_live_notif"; // "on" once the user enables OS notifications
 const CALL_FRESH_MS = 15 * 60 * 1000; // only alert on a call posted within this window (guards feed reordering)
 
@@ -156,7 +157,7 @@ export default function LiveAlerts() {
         <a
           key={t.id}
           href={t.href}
-          style={{ textDecoration: "none", background: "#141416", border: `1px solid ${t.followed ? star : t.direction === "LONG" ? "#33333a" : "#4a1e22"}`, borderRadius: 6, padding: "9px 11px", fontFamily: "var(--nx-font-mono)", display: "flex", alignItems: "center", gap: 8, boxShadow: t.followed ? `0 4px 16px rgba(245,196,81,0.18)` : "0 4px 16px rgba(0,0,0,0.5)" }}
+          style={{ textDecoration: "none", background: "#141416", border: `1px solid ${t.followed ? star : t.direction === "LONG" ? "#33333a" : "#4a1e22"}`, borderRadius: 6, padding: "9px 11px", fontFamily: "var(--nx-font-mono)", display: "flex", alignItems: "center", gap: 8, boxShadow: t.followed ? `0 4px 16px ${star}2e` : "0 4px 16px rgba(0,0,0,0.5)" }}
         >
           <span style={{ fontSize: 13 }}>{t.kind === "call" ? "◆" : t.followed ? "★" : "●"}</span>
           <span style={{ fontSize: 11, color: "#f4f4f5" }}>

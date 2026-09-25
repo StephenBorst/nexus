@@ -116,7 +116,7 @@ const TIMEFRAMES: { label: string; tf: string; agg: number }[] = [
 // Congruent with the Lab QuickTrade chart (TradeChart): grid + right price axis + time axis +
 // volume strip + MA(20/50) + crosshair, dependency-free SVG, measured width (no stretch). Fed by
 // the pool's OHLCV so it works for any spot token, listed or not.
-const CH_MA = [{ p: 20, c: "#ededf0" }, { p: 50, c: "#9aa2b4" }] as const;
+const CH_MA = [{ p: 20, c: "#ededf0" }, { p: 50, c: "#a1a1aa" /* C.text.fog */ }] as const;
 const chFmtPx = (v: number) => (v >= 1000 ? v.toLocaleString("en-US", { maximumFractionDigits: 0 }) : v >= 1 ? v.toFixed(2) : v >= 0.01 ? v.toFixed(4) : v.toPrecision(4));
 // Small caller avatar for the graded-call markers (mirrors the Lab chart) — pfp with a monogram
 // fallback so a broken image never leaves a blank marker.

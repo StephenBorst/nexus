@@ -4,6 +4,7 @@
 // traders link to the full wallet x-ray (/analyze), which reads their fills.
 import { useEffect, useState } from "react";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
+import { SIGNAL } from "@/config/theme";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -78,9 +79,9 @@ export function TraderDetail({ source, address, accountId, myAddress, onClose }:
                   clocks (realized · profitable-mkts · W/L) sit together here so they stop
                   competing with the watched grade above. */}
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase", marginBottom: 8 }}>Lifetime · all-time, public indexer</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 16, padding: "10px 12px", border: "1px solid #1d1d21", borderRadius: 8, background: "#0c0c0e" }}>
-                <div><div style={label}>Realized (all-time)</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: 600, color: d.totalRealized >= 0 ? "#7fb89a" : "#b5727a" }}>{d.totalRealized >= 0 ? "+" : ""}{usd(d.totalRealized)}</div></div>
-                <div><div style={label}>Unrealized</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: 600, color: d.totalUnrealized === 0 ? "#52525b" : d.totalUnrealized > 0 ? "#7fb89a" : "#b5727a" }}>{d.totalUnrealized >= 0 ? "+" : ""}{usd(d.totalUnrealized)}</div></div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginBottom: 16, padding: "10px 12px", border: "1px solid #232327", borderRadius: 8, background: "#0f0f11" }}>
+                <div><div style={label}>Realized (all-time)</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: 600, color: d.totalRealized >= 0 ? SIGNAL.posMuted : SIGNAL.negMuted }}>{d.totalRealized >= 0 ? "+" : ""}{usd(d.totalRealized)}</div></div>
+                <div><div style={label}>Unrealized</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: 600, color: d.totalUnrealized === 0 ? "#52525b" : d.totalUnrealized > 0 ? SIGNAL.posMuted : SIGNAL.negMuted }}>{d.totalUnrealized >= 0 ? "+" : ""}{usd(d.totalUnrealized)}</div></div>
                 <div><div style={label}>Profitable Mkts</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: 600, color: "#a1a1aa" }}>{d.profitableMarketsPct}%</div></div>
                 <div><div style={label}>Markets</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: 600, color: "#a1a1aa" }}>{d.markets} <span style={{ fontSize: 10, color: "#52525b" }}>{d.wins}W/{d.losses}L</span></div></div>
               </div>
