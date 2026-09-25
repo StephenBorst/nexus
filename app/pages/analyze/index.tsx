@@ -81,6 +81,13 @@ const usd = (n: number) => {
   return `${n < 0 ? "-" : ""}$${s}`;
 };
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+// "Jul 3" (or "Jul 3 2025" when not this year) — where a partial tape becomes complete.
+const sinceLabel = (ts: number | null | undefined) => {
+  if (!ts || !Number.isFinite(ts)) return "—";
+  const d = new Date(ts);
+  const sameYear = d.getUTCFullYear() === new Date().getUTCFullYear();
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }), timeZone: "UTC" });
+};
 
 // Shared with the Lab's Smart Money watchlist, ON PURPOSE — starring a wallet
 // here makes it show up (and alert) over there. Same key, one list.
@@ -140,10 +147,12 @@ export default function AnalyzePage() {
   const [track, setTrack] = useState<XrayTrack | null>(null); // the graded, WATCHED record (settlement deltas over time)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [partialTape, setPartialTape] = useState(false); // fills hit HL_FILLS_MAX — oldest history not graded
+  const [partialTape, setPartialTape] = useState(false); // we hold HL's 10k serving cap — older history isn't public
+  const [tape, setTape] = useState<{ fills: number; oldestTs: number | null } | null>(null);
   const [watch, setWatch] = useState<string[]>(loadWatch);
   const [hlPos, setHlPos] = useState<HLPosition[]>([]);
   const [hlPosFailed, setHlPosFailed] = useState(false);
+  const [hlDexFailed, setHlDexFailed] = useState<string[]>([]);
   const [series, setSeries] = useState<SeriesPt[] | null>(null); // watched Orderly record, daily points
   const [marks, setMarks] = useState<Record<string, number> | null>(null);
   const [win, setWin] = useState<WindowKey | null>(null);        // null = use the default (30D, or ALL fallback)
@@ -196,17 +205,20 @@ export default function AnalyzePage() {
   // allSettled and only surfaces an error when NEITHER venue returned anything.
   const run = useCallback(async (addr: string) => {
     if (!isAddress(addr)) { setError("Enter a valid 0x… wallet address"); return; }
-    setLoading(true); setError(null); setTrades(null); setOrderly(null); setTrack(null); setPartialTape(false);
+    setLoading(true); setError(null); setTrades(null); setOrderly(null); setTrack(null); setPartialTape(false); setTape(null); setHlDexFailed([]);
     setHlPos([]); setHlPosFailed(false); setSeries(null); setWin(null); setLoadedAt(Date.now());
     const [hl, ord, pf] = await Promise.allSettled([fetchHLFillsPaged(addr), fetchOrderlyXray(addr), fetchHLPortfolio(addr)]);
     // Live positions + marks are context, never a blocker — fail-soft, off the critical path.
-    fetchHLPositions(addr).then(setHlPos).catch(() => setHlPosFailed(true));
+    fetchHLPositions(addr)
+      .then((r) => { setHlPos(r.positions); setHlDexFailed(r.failedDexes); })
+      .catch(() => setHlPosFailed(true));
     fetchOrderlyMarks().then(setMarks).catch(() => setMarks({}));
 
     const fills = hl.status === "fulfilled" ? hl.value.fills : [];
     const t = fillsToTrades(fills);
     setTrades(t);
     setPartialTape(hl.status === "fulfilled" && hl.value.truncated);
+    setTape(hl.status === "fulfilled" ? { fills: fills.length, oldestTs: hl.value.oldestTs } : null);
     const ox = ord.status === "fulfilled" ? ord.value : null;
     setOrderly(ox);
 
@@ -272,9 +284,10 @@ export default function AnalyzePage() {
   const activeWin: WindowKey = win ?? dflt.key;
   const partialKeys = useMemo(() => {
     if (!partialTape || !trades || !trades.length) return [] as WindowKey[];
-    const oldestTs = trades[0].timestamp;
+    // Coverage starts at the oldest FILL we hold (not the oldest closed trade).
+    const oldestTs = tape?.oldestTs ?? trades[0].timestamp;
     return WINDOW_KEYS.filter((k) => !windowComplete(k, loadedAt, { truncated: true, oldestTs }));
-  }, [partialTape, trades, loadedAt]);
+  }, [partialTape, trades, tape, loadedAt]);
   const watchedWins = useMemo(() => {
     if (!series || series.length < 2) return null;
     const out = {} as Record<WindowKey, WatchedWin>;
@@ -299,8 +312,8 @@ export default function AnalyzePage() {
     const rows: PosRow[] = hlPos.map((p) => {
       const oc = hlCoinToOrderly(p.coin);
       return {
-        key: `hl:${p.coin}`, venue: "Hyperliquid", sym: p.coin, side: p.side,
-        leverage: p.leverage, entry: p.entry, mark: p.mark, uPnl: p.unrealizedPnl, valueUsd: p.valueUsd,
+        key: `hl:${p.coin}`, venue: p.dex ? `Hyperliquid · ${p.dex}` : "Hyperliquid", sym: p.coin, side: p.side,
+        leverage: p.leverage, isolated: p.leverageType === "isolated", entry: p.entry, mark: p.mark, uPnl: p.unrealizedPnl, valueUsd: p.valueUsd,
         liq: p.liquidationPx, liqReported: true,
         copySym: oc && marks && marks[`PERP_${oc}_USDC`] ? oc : null,
       };
@@ -421,7 +434,9 @@ export default function AnalyzePage() {
                 <span style={{ fontFamily: UI, fontSize: 24, fontWeight: 700, color: good ? POS : NEG, letterSpacing: "-0.01em" }}>{good ? "Net profitable" : "Underwater"}</span>
                 <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: good ? POS : NEG }}>{usd(combined)}</span>
                 <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
-                  {partialTape ? `partial tape · most recent ${(trades?.length ?? HL_FILLS_MAX).toLocaleString()} fills · ` : "all-time realized · "}{srcs}
+                  {partialTape
+                    ? `partial tape · ${(tape?.fills ?? HL_FILLS_MAX).toLocaleString()} most recent fills (all Hyperliquid serves) · complete from ${sinceLabel(tape?.oldestTs)} · `
+                    : "all-time realized · "}{srcs}
                   {orderly?.marketsCapped ? " · Orderly markets capped at 100/venue" : ""}
                 </span>
               </div>
@@ -480,6 +495,7 @@ export default function AnalyzePage() {
             onCopy={copyRow}
             onDraft={draftRow}
             hlFailed={hlPosFailed}
+            failedDexes={hlDexFailed}
             hasOrderly={posRows.some((r) => !r.liqReported)}
           />
         </>
@@ -489,8 +505,10 @@ export default function AnalyzePage() {
         <div className="nx-fade-in">
           <div style={{ fontFamily: MONO, fontSize: 11, color: FOG, marginBottom: 10 }}>
             <span style={{ color: BONE }}>{windowTrades.length}</span> closed perp trades · {activeWin} · source: Hyperliquid · {address?.slice(0, 6)}…{address?.slice(-4)}
-            {partialTape && (
-              <span style={{ color: MUTED }}> · partial tape — history exceeds the {HL_FILLS_MAX.toLocaleString()}-fill paging budget; grading the most recent {trades.length.toLocaleString()}</span>
+            {/* Only when THIS window reaches past what Hyperliquid serves — a 30D view that the
+                10k tape fully covers is complete, and saying "partial" there would be wrong. */}
+            {partialKeys.includes(activeWin) && (
+              <span style={{ color: MUTED }}> · partial tape — Hyperliquid serves only the {HL_FILLS_MAX.toLocaleString()} most recent fills ({(tape?.fills ?? 0).toLocaleString()} held · complete from {sinceLabel(tape?.oldestTs)})</span>
             )}
           </div>
           {/* Same grading code, fills filtered to the window. Below the window's minimum

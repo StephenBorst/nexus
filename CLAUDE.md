@@ -720,6 +720,16 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
 - **Open positions:** HL `clearinghouseState` (leverage, entry, uPnL, venue-reported `liquidationPx`; mark =
   positionValue/|szi|). Orderly rows = indexer side/entry/uPnL + public futures mark; **leverage + liq = "—", never
   estimated** (not public). HL copy only if `hlCoinToOrderly(coin)` is a listed `PERP_*_USDC` (futures list = listed set).
+- **⚠️ HL positions span EVERY perp dex (fixed 2026-09-25, Ember/Flood).** Equities (NVDA/AMD/MSFT/INTC…) live on
+  builder-deployed HIP-3 dexes (`xyz:`, `flx:`…); `clearinghouseState` WITHOUT `dex` returns ONLY the main dex → the
+  panel showed BTC and missed the stocks. `fetchHLPositions` lists `perpDexs` and reads each (`{dex}`), tags the row
+  "Hyperliquid · xyz", shows ISO, and NAMES any dex it couldn't read ("list may be incomplete").
+- **⚠️ HL serves only a wallet's 10,000 MOST RECENT fills — no public endpoint pages further back.** Full history
+  = HL's S3 node-fills archive (all wallets, global crawl) — not per-wallet on-demand. `app/lib/hlTape.mjs`
+  (`mergeFills`/`tapeStatus`, tested): every slice is MERGED + tid-deduped, never swapped (the old code threw away
+  the 10k it paged for the newest ~2k whenever a busy wallet traded mid-read). Partial ⇔ we hold the 10k cap; labels
+  say "N most recent fills (all Hyperliquid serves) · complete from <date>", and the analytics line flags partial
+  ONLY on windows that reach past it (the old label printed CLOSED-TRADE count as "fills" → Ember's "~300 fills").
 
 ## Nexus PRO — subscriptions / revenue (freemium model)
 The business-model layer. **PRO is a SOFTWARE subscription** (ordinary commerce, real USDC revenue) — NOT a
