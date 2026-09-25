@@ -1,6 +1,9 @@
 # $NEXUS Treasury Buyback Policy — DRAFT for counsel
 
-**Status:** draft · not adopted · no buyback happens until counsel signs off on the question in §7.
+**Status:** draft for counsel · **writes down existing practice.** The treasury has bought $NEXUS on the open market,
+at its own discretion, since the June 2026 "buy the lows" pivot, and holds it (10.93B $NEXUS ≈ 10.93% of supply, as
+posted publicly Sept 25, 2026). Buys continue under §3. Counsel is asked to confirm (§7); if counsel says stop or
+change something, buys pause until it's fixed.
 **Prompted by:** SEC Division of Corporation Finance staff FAQ, *Application of the Federal Securities Laws to
 Certain Types of Crypto Assets and Certain Transactions Involving Crypto Assets* (issued Sept 25, 2026), building on
 the Commission's March 2026 interpretation. Staff guidance — not law, not approved by the Commission, can be withdrawn.
@@ -25,8 +28,9 @@ the Commission's March 2026 interpretation. Staff guidance — not law, not appr
 | Product | Nexus Trading Labs — live, functional, non-custodial trading terminal on Orderly (Arbitrum). Runs without $NEXUS. |
 | Treasury | Safe `0x4Fe2c01bbeFaFFa35706C994646a3F8493B1C733` (Arbitrum + Base), public. |
 | Treasury inflows | Earned revenue: PRO subscriptions (USDC / $NEXUS) and x402 data sales (paid in $NEXUS). |
+| Treasury $NEXUS | 10.93B (~10.93% of supply) as of Sept 25, 2026, from discretionary open-market buys and $NEXUS received as revenue. Held, never burned. |
 
-## 3. The policy (if adopted)
+## 3. The policy (current practice, written down)
 
 1. **Discretionary only.** The treasury MAY buy $NEXUS on the open market when it judges the price attractive.
    No schedule, no trigger, no bot, no fixed percentage of revenue or fees. There is no obligation to buy, ever.
@@ -43,7 +47,8 @@ the Commission's March 2026 interpretation. Staff guidance — not law, not appr
    announcements, no buys while in possession of undisclosed material news (e.g. a pending listing or partnership).
    Size each buy to the pool's liquidity (~$63K today); no single buy intended to move price.
 7. **Sign-off.** Each buy executed from the Safe by the signer of record; a one-line log entry (date, amount,
-   tx hash, reason: "discretionary treasury accumulation") kept in the repo.
+   tx hash, reason: "discretionary treasury accumulation") kept in the repo. **Backfill** the log for every buy made
+   before this document from the Safe's Base history, so the record starts at the first buy, not today.
 
 ## 4. Language — what we say / never say
 
@@ -51,6 +56,9 @@ the Commission's March 2026 interpretation. Staff guidance — not law, not appr
 - "The treasury holds X $NEXUS it earned from data sales and subscriptions."
 - "$NEXUS is how you pay for Nexus data and PRO."
 - "Every treasury transaction is onchain. Open the Safe and look."
+- The status line `10.93B $NEXUS in the Treasury Safe. ~10.93% of supply. Fees in. Buys on the open market. Held.`
+  is fine as a factual, past-tense report: no percentage of fees promised, no price, no "for holders". Keep it that
+  way (never "X% of fees buy $NEXUS", never "more fees → more buys"). Counsel follow-up below.
 
 **Never say (returns, promises, price):**
 - "Buybacks support / pump the price." · "Revenue flows to holders." · "Fees → buyback → burn."
@@ -75,12 +83,14 @@ the Commission's March 2026 interpretation. Staff guidance — not law, not appr
 
 > $NEXUS is a community meme token (no sale, no holder rights) that is also the payment unit for Nexus's x402 data
 > endpoints and a discount rail for PRO. Nexus's product is live and runs without it. Under the SEC staff FAQ of
-> Sept 25, 2026, does a **discretionary, undisclosed-in-advance, revenue-funded, hold-not-burn** treasury buyback
-> — disclosed onchain after the fact and never marketed as a return — keep $NEXUS outside the investment-contract
-> analysis? What, if anything, in §3 or §4 should change?
+> Sept 25, 2026, does our **existing** practice — **discretionary, undisclosed-in-advance, revenue-funded,
+> hold-not-burn** treasury buys, disclosed onchain after the fact and never marketed as a return — keep $NEXUS
+> outside the investment-contract analysis? Does anything about the buys made to date need correcting, and what, if
+> anything, in §3 or §4 should change?
 
 Follow-ups worth asking in the same call: does the $NEXUS pay-for-PRO discount or the 100M hold-to-unlock create
-any "expectation of profit" issue; and does paying Season rewards from treasury $NEXUS change the analysis.
+any "expectation of profit" issue; does paying Season rewards from treasury $NEXUS change the analysis; and is the
+public status line "Fees in. Buys on the open market. Held." acceptable wording, or should it say "Revenue in".
 
 ---
 *Draft by the Nexus team for discussion with counsel. Not legal advice.*
