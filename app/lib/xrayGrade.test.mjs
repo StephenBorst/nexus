@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   tradesInWindow, windowComplete, gradeWindow, gradeAllWindows, defaultWindow, decayRow,
-  edgeGate, watchedWindow, liqDistancePct, fmtPf, hlCoinToOrderly,
+  edgeGate, watchedWindow, liqDistancePct, fmtPf, hlCoinToOrderly, xraySummary, fillsToClosedTrades,
 } from "./xrayGrade.mjs";
 
 const DAY = 86400000;
@@ -142,4 +142,27 @@ test("hlCoinToOrderly mirrors the worker mapping", () => {
   assert.equal(hlCoinToOrderly("kPEPE"), "1000PEPE");
   assert.equal(hlCoinToOrderly("xyz:TSLA"), null);
   assert.equal(hlCoinToOrderly(""), null);
+});
+
+
+test("xraySummary composes exactly what the page composes", () => {
+  const fill = (daysAgo, pnl, i) => ({ tid: i, coin: "BTC", px: "1", sz: "1", side: "A", time: NOW - daysAgo * DAY, dir: "Close Long", closedPnl: String(pnl), fee: "0" });
+  const fills = [...Array.from({ length: 30 }, (_, i) => fill(40 + i, 20, i)), ...Array.from({ length: 22 }, (_, i) => fill(2, i % 3 ? 30 : -15, 100 + i))];
+  const track = { building: false, netRealized: 500, gradedWindows: 25, daysTracked: 26 };
+  const s = xraySummary({ fills, completeFrom: NOW - 20 * DAY, track, now: NOW });
+  const trades = fillsToClosedTrades(fills);
+  assert.deepEqual(s.grades, gradeAllWindows(trades, NOW));
+  assert.deepEqual(s.gate, edgeGate({ hl30: gradeAllWindows(trades, NOW)["30D"], watched: track }));
+  assert.equal(s.gate.pass, true);
+  assert.deepEqual(s.defaultWindow, { key: "30D", fellBack: false });
+  assert.deepEqual(s.partialWindows, ["30D", "ALL"], "tape complete from 20d ago can't cover 30D or ALL");
+  assert.equal(s.decay.length, 3);
+});
+
+test("xraySummary with no tape: no grades, gate falls to the watched record", () => {
+  const s = xraySummary({ fills: [], track: { building: false, netRealized: -5, gradedWindows: 30 }, now: NOW });
+  assert.equal(s.grades, null);
+  assert.equal(s.decay, null);
+  assert.deepEqual(s.partialWindows, []);
+  assert.equal(s.gate.pass, false, "an underwater watched record locks copy");
 });
