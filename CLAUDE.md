@@ -1090,7 +1090,11 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   cryptic `◆`); the sync/operational status dot is hidden on mobile to reclaim space. Feed nav mirrors this
   (equal `flex:1` tabs, glyphs+divider dropped, "N theses" count hidden on mobile — no awkward gap).
 - Aesthetic: **see "## Brand & voice" below** — canonical system is `app/config/theme.ts`. Bone/white `#ededf0` is the ONE accent; green `#3ecf8e` is DEMOTED to profit-data only. **NOT neon `#00ff88`** (that was a wrong note that misled a build). Ownable brand — don't "SaaS-ify".
-- Commit trailer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`. Commit/push when asked.
+- Commit trailer: `Co-Authored-By: Claude <model> <noreply@anthropic.com>` + the `Claude-Session: <url>` line —
+  name the model that ACTUALLY did the work, using the exact lines the harness's attribution reminder supplies
+  (recent commits: Opus 5, Opus 5.5). ⚠️ Don't hard-code a model name here: this line said "Opus 4.8" long after
+  sessions had moved on, and because a CLAUDE.md rule OUTRANKS the harness reminder, a stale name here makes every
+  session misattribute its own commits. Commit/push when asked.
 - Env is **Windows PowerShell** — no `&&` chaining; use `;`. `gh` CLI is NOT installed.
 - `tsc --noEmit` baseline is now **0 errors** (cleaned up 2026-08-24 — the old walletConnector
   `EvmInitialProps` mismatch fixed via a `walletConfig` appMetadata.name fallback; useNav
@@ -1174,5 +1178,12 @@ into PRO rail. Open call: free-forever BYOK vs gate behind PRO.
 ## Strategic framing (for partner/Orderly convos)
 The DEX is a commodity (anyone can clone the Orderly template). The moat is the Lab + social graph:
 plan→automate→grade retention loop, autonomous agent driving net-new volume into Orderly's book, and
-network effects from the social layer. Biggest risk = cold-start / Feed liveness (user is recruiting
-seed users). Positioning: "The trading terminal that makes you a better trader."
+network effects from the social layer. Positioning: "The trading terminal that makes you a better trader."
+- **Biggest risk = the engine has no proven edge yet** — the file's own "#1 real constraint" (Strategy
+  workbench). Every grade says so: the scoreboard graded the old flagship (funding fade) NOISE; the first 60d
+  sweep was net-negative across the board; Regime-Gated Invert's walk-forward VALIDATE came back NOT ROBUST
+  (4 markets, Sept 2026); `basis_extreme` is the first PREDICTIVE read but thin, and PREDICTIVE grades a READ,
+  not a strategy. The carry sleeve is the one +EV structure — paper-only, maker-dependent, fill quality
+  unproven. Honest grading is the moat, so this is survivable; the failure mode is copy shipping ahead of the
+  grade ("proven", "validated lead" — both already walked back once). Next gate: the Oct 15 2026 basis-stack
+  re-validation Routine. Cold-start is SETTLED (see "⚠️ Settled" above) — don't re-raise it.
