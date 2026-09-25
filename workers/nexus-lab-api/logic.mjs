@@ -1104,7 +1104,7 @@ const MAX_WINDOW_DAYS = 2.5;
 // Collapse to at most one snapshot per UTC day (the last wins), sorted ascending.
 // The read-seeder + the cron can both write on the same day; without this a busy day
 // would manufacture zero-length windows and dilute every rate.
-function dedupeDaily(snaps) {
+export function dedupeDaily(snaps) {
   const byDay = new Map();
   for (const s of (snaps || [])) {
     if (!s || !Number.isFinite(s.t)) continue;

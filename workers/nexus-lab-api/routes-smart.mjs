@@ -14,7 +14,7 @@
 // Contract: handleSmart returns a Response when it owns the path, or null so the
 // remaining routes in index.js get their turn. Never throws for "not mine".
 import { json, normalizeAddress, recoverEthAddress } from "./shared.mjs";
-import { orderlyAccountId, xrayTrack } from "./logic.mjs";
+import { orderlyAccountId, xrayTrack, dedupeDaily } from "./logic.mjs";
 
 // ── Smart Money (Phase 1) ─────────────────────────────────────────────────────
 // Curated seed of top Hyperliquid traders (snapshotted from the public HL
@@ -562,7 +562,10 @@ export async function handleSmart(parts, request, env, ctx) {
     const last = hist[hist.length - 1];
     const stale = !last || !Number.isFinite(last.t) || Date.now() - last.t >= XRAY_SNAP_MIN_MS;
     if (stale) { try { hist = await snapshotXray(env, address); } catch { /* keep stored */ } }
-    return json({ address, snapshots: hist.length, track: xrayTrack(hist), updatedAt: Date.now() }, request);
+    // `series` = the daily realized points behind the track, so the X-Ray can read
+    // time windows (24H/7D/30D) off the watched record. Additive; old clients ignore it.
+    const series = dedupeDaily(hist).map((s) => ({ t: s.t, realized: s.realized || 0 }));
+    return json({ address, snapshots: hist.length, track: xrayTrack(hist), series, updatedAt: Date.now() }, request);
   }
 
   if (parts[0] === "smart" && parts[1] === "xray" && parts[2] === "events" && request.method === "GET") {

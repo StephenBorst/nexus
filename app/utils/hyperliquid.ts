@@ -103,3 +103,44 @@ export async function fetchHLFillsPaged(address: string): Promise<{ fills: HLFil
   }
   return { fills: fills.slice(0, HL_FILLS_MAX), truncated };
 }
+
+// Live open perp positions from `clearinghouseState`. Everything here is what
+// Hyperliquid REPORTS — leverage, entry, uPnL, and liquidationPx (null when the venue
+// reports none, e.g. cross margin with no liq in range). Mark is positionValue/|size|,
+// which Hyperliquid computes at the mark price; nothing is estimated.
+export type HLPosition = {
+  coin: string; side: "LONG" | "SHORT"; size: number; entry: number; mark: number | null;
+  valueUsd: number; unrealizedPnl: number; leverage: number | null; leverageType: string | null;
+  liquidationPx: number | null;
+};
+
+export async function fetchHLPositions(address: string): Promise<HLPosition[]> {
+  const data = (await postInfo({ type: "clearinghouseState", user: address.trim().toLowerCase() })) as {
+    assetPositions?: Array<{ position?: {
+      coin: string; szi: string; entryPx: string | null; positionValue: string; unrealizedPnl: string;
+      liquidationPx: string | null; leverage?: { type?: string; value?: number };
+    } }>;
+  };
+  const num = (s: unknown) => { const n = parseFloat(String(s ?? "")); return Number.isFinite(n) ? n : null; };
+  const out: HLPosition[] = [];
+  for (const ap of data?.assetPositions ?? []) {
+    const p = ap?.position;
+    const szi = num(p?.szi);
+    if (!p || !szi) continue;
+    const value = Math.abs(num(p.positionValue) ?? 0);
+    const liq = num(p.liquidationPx);
+    out.push({
+      coin: p.coin,
+      side: szi > 0 ? "LONG" : "SHORT",
+      size: Math.abs(szi),
+      entry: num(p.entryPx) ?? 0,
+      mark: value > 0 ? value / Math.abs(szi) : null,
+      valueUsd: value,
+      unrealizedPnl: num(p.unrealizedPnl) ?? 0,
+      leverage: num(p.leverage?.value),
+      leverageType: p.leverage?.type ?? null,
+      liquidationPx: liq && liq > 0 ? liq : null,
+    });
+  }
+  return out.sort((a, b) => b.valueUsd - a.valueUsd);
+}
