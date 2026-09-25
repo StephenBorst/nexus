@@ -730,6 +730,15 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   the 10k it paged for the newest ~2k whenever a busy wallet traded mid-read). Partial ⇔ we hold the 10k cap; labels
   say "N most recent fills (all Hyperliquid serves) · complete from <date>", and the analytics line flags partial
   ONLY on windows that reach past it (the old label printed CLOSED-TRADE count as "fills" → Ember's "~300 fills").
+- **✅ FORWARD FILL COLLECTION (2026-09-25).** lab-api **`GET /xray/hltape?address=`** (`routes-hltape.mjs`, tested):
+  first view SEEDS KV `xray:hltape:{addr}` (LAB_STORE) with everything HL serves; later views + the 12h cron
+  (`sweepHlTapes`, ≤30 WATCHED wallets from `sm:wl:*`) sync forward from the newest stored fill (startTime inclusive)
+  + `userFills`, merged via `syncTape` in `hlTape.mjs`. The tape GROWS PAST HL's 10k (cap `TAPE_STORE_CAP=50k`, compact
+  rows). **Gap rule:** the forward page must return our newest stored fill; no overlap ⇒ >10k fills happened between
+  syncs ⇒ `completeFrom` moves forward (disclosed, never papered over). A failed first page never writes/never claims a
+  gap. Throttles: ≤1 HL sync/wallet/min (cached reads free), 20 syncs/min/IP (over → stored tape served `stale`, or 429).
+  Page reads via `fetchHLTape` (falls back to direct HL if the worker is down); labels "N fills collected · complete
+  from X · tape collected since Y". `completeFrom:null` = complete from the wallet's first fill.
 
 ## Nexus PRO — subscriptions / revenue (freemium model)
 The business-model layer. **PRO is a SOFTWARE subscription** (ordinary commerce, real USDC revenue) — NOT a

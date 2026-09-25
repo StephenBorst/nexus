@@ -64,6 +64,7 @@ import { twapSchedule, twapProgress } from "../nexus-agent-exec/logic.mjs";
 // Route families lifted out of the 74-route fetch handler (see shared.mjs for the
 // migration rules — one family per commit, read-only families first).
 import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus } from "./routes-smart.mjs";
+import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
 import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
@@ -979,6 +980,11 @@ export default {
         try { const r = await sweepTrackedXray(env); console.log(`[xray] snapshotted ${r.snapped}/${r.watched} watched wallets`); }
         catch (e) { console.error("[xray] sweep failed:", String(e)); }
       })());
+      // Grow every watched wallet's Hyperliquid fill tape before HL's 10k window drops fills.
+      ctx.waitUntil((async () => {
+        try { const r = await sweepHlTapes(env); console.log(`[hltape] synced ${r.synced}/${r.watched} watched · +${r.added} fills · ${r.gaps} gaps · ${r.failed} failed`); }
+        catch (e) { console.error("[hltape] sweep failed:", String(e)); }
+      })());
     }
   },
 
@@ -997,6 +1003,11 @@ export default {
     // positions copyable) + HYPERLIQUID secondary (wider discovery). Unified shape
     // with a `source` tag. KV-cached 10min so browsers get a light payload.
     // Smart Money family → routes-smart.mjs (migration rules in shared.mjs).
+    // GET /xray/hltape — the stored, forward-collected Hyperliquid fill tape (routes-hltape.mjs).
+    {
+      const tapeRes = await handleHlTape(parts, request, env);
+      if (tapeRes) return tapeRes;
+    }
     {
       const smartRes = await handleSmart(parts, request, env, ctx);
       if (smartRes) return smartRes;

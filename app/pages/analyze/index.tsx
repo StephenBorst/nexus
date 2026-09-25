@@ -28,7 +28,7 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import type { ProcessedTrade } from "@/pages/lab/types";
 import { deployDirectiveFromThesis } from "@/utils/agentPrefill";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
-import { fetchHLFillsPaged, fetchHLPortfolio, fetchHLPositions, HL_FILLS_MAX, type HLFill, type HLPosition } from "@/utils/hyperliquid";
+import { fetchHLTape, fetchHLPortfolio, fetchHLPositions, HL_FILLS_MAX, type HLFill, type HLPosition } from "@/utils/hyperliquid";
 import {
   gradeAllWindows, defaultWindow, decayRow, tradesInWindow, windowComplete, edgeGate, watchedWindow,
   hlCoinToOrderly,
@@ -148,7 +148,7 @@ export default function AnalyzePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [partialTape, setPartialTape] = useState(false); // we hold HL's 10k serving cap — older history isn't public
-  const [tape, setTape] = useState<{ fills: number; oldestTs: number | null } | null>(null);
+  const [tape, setTape] = useState<{ fills: number; oldestTs: number | null; source: "stored" | "direct"; seededAt: number | null } | null>(null);
   const [watch, setWatch] = useState<string[]>(loadWatch);
   const [hlPos, setHlPos] = useState<HLPosition[]>([]);
   const [hlPosFailed, setHlPosFailed] = useState(false);
@@ -207,7 +207,7 @@ export default function AnalyzePage() {
     if (!isAddress(addr)) { setError("Enter a valid 0x… wallet address"); return; }
     setLoading(true); setError(null); setTrades(null); setOrderly(null); setTrack(null); setPartialTape(false); setTape(null); setHlDexFailed([]);
     setHlPos([]); setHlPosFailed(false); setSeries(null); setWin(null); setLoadedAt(Date.now());
-    const [hl, ord, pf] = await Promise.allSettled([fetchHLFillsPaged(addr), fetchOrderlyXray(addr), fetchHLPortfolio(addr)]);
+    const [hl, ord, pf] = await Promise.allSettled([fetchHLTape(addr), fetchOrderlyXray(addr), fetchHLPortfolio(addr)]);
     // Live positions + marks are context, never a blocker — fail-soft, off the critical path.
     fetchHLPositions(addr)
       .then((r) => { setHlPos(r.positions); setHlDexFailed(r.failedDexes); })
@@ -218,7 +218,9 @@ export default function AnalyzePage() {
     const t = fillsToTrades(fills);
     setTrades(t);
     setPartialTape(hl.status === "fulfilled" && hl.value.truncated);
-    setTape(hl.status === "fulfilled" ? { fills: fills.length, oldestTs: hl.value.oldestTs } : null);
+    setTape(hl.status === "fulfilled"
+      ? { fills: fills.length, oldestTs: hl.value.oldestTs, source: hl.value.source, seededAt: hl.value.seededAt }
+      : null);
     const ox = ord.status === "fulfilled" ? ord.value : null;
     setOrderly(ox);
 
@@ -435,7 +437,9 @@ export default function AnalyzePage() {
                 <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: good ? POS : NEG }}>{usd(combined)}</span>
                 <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
                   {partialTape
-                    ? `partial tape · ${(tape?.fills ?? HL_FILLS_MAX).toLocaleString()} most recent fills (all Hyperliquid serves) · complete from ${sinceLabel(tape?.oldestTs)} · `
+                    ? tape?.source === "stored"
+                      ? `partial tape · ${tape.fills.toLocaleString()} fills collected · complete from ${sinceLabel(tape.oldestTs)} · `
+                      : `partial tape · ${(tape?.fills ?? HL_FILLS_MAX).toLocaleString()} most recent fills (all Hyperliquid serves) · complete from ${sinceLabel(tape?.oldestTs)} · `
                     : "all-time realized · "}{srcs}
                   {orderly?.marketsCapped ? " · Orderly markets capped at 100/venue" : ""}
                 </span>
@@ -508,7 +512,15 @@ export default function AnalyzePage() {
             {/* Only when THIS window reaches past what Hyperliquid serves — a 30D view that the
                 10k tape fully covers is complete, and saying "partial" there would be wrong. */}
             {partialKeys.includes(activeWin) && (
-              <span style={{ color: MUTED }}> · partial tape — Hyperliquid serves only the {HL_FILLS_MAX.toLocaleString()} most recent fills ({(tape?.fills ?? 0).toLocaleString()} held · complete from {sinceLabel(tape?.oldestTs)})</span>
+              <span style={{ color: MUTED }}>
+                {tape?.source === "stored"
+                  ? ` · partial tape — complete from ${sinceLabel(tape.oldestTs)} (${tape.fills.toLocaleString()} fills collected; older history is past what Hyperliquid serves)`
+                  : ` · partial tape — Hyperliquid serves only the ${HL_FILLS_MAX.toLocaleString()} most recent fills (${(tape?.fills ?? 0).toLocaleString()} held · complete from ${sinceLabel(tape?.oldestTs)})`}
+              </span>
+            )}
+            {/* The stored tape keeps growing past HL's window from the day it was first seeded. */}
+            {tape?.source === "stored" && tape.seededAt && (
+              <span style={{ color: FAINT }}> · tape collected since {sinceLabel(tape.seededAt)}</span>
             )}
           </div>
           {/* Same grading code, fills filtered to the window. Below the window's minimum

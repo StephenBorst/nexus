@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mergeFills, fillKey, tapeStatus, HL_SERVED_MAX } from "./hlTape.mjs";
+import {
+  mergeFills, fillKey, tapeStatus, HL_SERVED_MAX,
+  syncTape, compactFill, expandFill, tapeNewest, TAPE_STORE_CAP,
+} from "./hlTape.mjs";
 
 const f = (tid, time, extra = {}) => ({ tid, time, coin: "BTC", px: "1", sz: "1", side: "B", dir: "Open Long", ...extra });
 
@@ -43,4 +46,71 @@ test("tapeStatus: partial exactly at HL's serving cap", () => {
   assert.equal(s.oldestTs, 1);
   assert.equal(s.newestTs, HL_SERVED_MAX);
   assert.deepEqual(tapeStatus([]), { fills: 0, truncated: false, oldestTs: null, newestTs: null });
+});
+
+
+const range = (from, n) => Array.from({ length: n }, (_, i) => f(from + i, 1000 + from + i));
+
+test("compact/expand round-trips a fill", () => {
+  const x = { tid: 7, time: 5, coin: "xyz:NVDA", px: "180", sz: "2", side: "B", dir: "Close Short", closedPnl: "3.1", fee: "0.02" };
+  assert.deepEqual(expandFill(compactFill(x)), x);
+  const noTid = { ...x }; delete noTid.tid;
+  assert.deepEqual(expandFill(compactFill(noTid)), noTid);
+});
+
+test("seed: under HL's cap → complete from the first fill (completeFrom null)", () => {
+  const { record, added, gap } = syncTape(null, [range(0, 50)], { now: 1 });
+  assert.equal(record.fills.length, 50);
+  assert.equal(record.completeFrom, null);
+  assert.equal(added, 50);
+  assert.equal(gap, false);
+  assert.equal(record.seededAt, 1);
+});
+
+test("seed: at HL's cap → complete only from the oldest fill held", () => {
+  const { record } = syncTape(null, [range(0, HL_SERVED_MAX)]);
+  assert.equal(record.completeFrom, 1000);
+});
+
+test("incremental sync appends new fills; overlap proves continuity", () => {
+  const seed = syncTape(null, [range(0, HL_SERVED_MAX)], { now: 1 }).record;
+  // forward page from the newest stored fill (inclusive) + 30 new
+  const page = range(HL_SERVED_MAX - 1, 31);
+  const { record, added, gap } = syncTape(seed, [page], { now: 2 });
+  assert.equal(added, 30);
+  assert.equal(gap, false);
+  assert.equal(record.completeFrom, 1000, "continuity kept — completeFrom unchanged");
+  assert.equal(record.seededAt, 1);
+  assert.equal(record.syncedAt, 2);
+  assert.equal(tapeNewest(record), 1000 + HL_SERVED_MAX + 29);
+});
+
+test("the stored tape outgrows HL's 10k window — that's the point", () => {
+  let rec = syncTape(null, [range(0, HL_SERVED_MAX)]).record;
+  rec = syncTape(rec, [range(HL_SERVED_MAX - 1, 5001)]).record;
+  assert.equal(rec.fills.length, HL_SERVED_MAX + 5000);
+});
+
+test("no overlap ⇒ gap: completeFrom moves to the oldest fresh fill", () => {
+  const seed = syncTape(null, [range(0, 100)]).record;        // complete (null)
+  const later = range(20_000, HL_SERVED_MAX);                   // HL moved past our newest
+  const { record, gap } = syncTape(seed, [later]);
+  assert.equal(gap, true);
+  assert.equal(record.completeFrom, 1000 + 20_000);
+  assert.equal(record.fills.length, 100 + HL_SERVED_MAX, "old fills kept, flagged partial");
+});
+
+test("an empty fresh read is not a gap and changes nothing", () => {
+  const seed = syncTape(null, [range(0, 10)]).record;
+  const { record, added, gap } = syncTape(seed, [[]]);
+  assert.equal(gap, false);
+  assert.equal(added, 0);
+  assert.equal(record.completeFrom, null);
+});
+
+test("store cap keeps the newest and marks the tape partial from there", () => {
+  const { record } = syncTape(null, [range(0, 120)], { cap: 100 });
+  assert.equal(record.fills.length, 100);
+  assert.equal(record.completeFrom, 1020);
+  assert.ok(TAPE_STORE_CAP >= HL_SERVED_MAX * 5);
 });
