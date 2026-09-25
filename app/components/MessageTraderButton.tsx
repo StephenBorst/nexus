@@ -7,8 +7,7 @@
 // query param, which the Messages thread consumes. Renders nothing unless the viewer
 // is connected and looking at someone else (you can't DM yourself).
 import { useNavigate } from "react-router-dom";
-
-const bareTicker = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+import { bareTicker } from "@/utils/utils";
 
 export function MessageTraderButton({
   wallet,

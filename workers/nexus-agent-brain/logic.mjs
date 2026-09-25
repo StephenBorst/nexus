@@ -7,6 +7,7 @@
 //   FUNDING_ONLY                    — fade funding extremes only.
 //   OI_ONLY                         — OI-divergence only.
 //   BASIS_FADE                      — fade an extreme spot-perp basis (EXPERIMENTAL, paper).
+//                                     basisConfirm:"CVD" | "SMART" | "LIQ" = only when that same-hour read agrees.
 //   MOMENTUM                        — trade WITH a tick price move > priceChangeThreshold (trend-follow).
 //   MEAN_REVERSION                  — FADE a tick price move > priceChangeThreshold (buy dip / sell rip).
 // Thresholds (per user): fundingThreshold (%), oiChangeThreshold (% min OI move to count).
@@ -109,7 +110,34 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
       // drift from the graded one. Absent/stale basis ⇒ no signal, never a fallback
       // to funding or OI.
       if (raw.basisSide === "LONG" || raw.basisSide === "SHORT") {
-        direction = raw.basisSide; confidence = 70; why = "basis-extreme fade";
+        if (config.basisConfirm === "CVD") {
+          // The basis×CVD STACK (opt-in): take the fade only when aggressor flow in the SAME
+          // hour diverges the SAME way — the intersection the scoreboard grades as basis_x_cvd
+          // (rule in app/lib/basisStack.mjs). Absent/failed CVD read ⇒ sit out, never a pass.
+          if (raw.basisCvdConfirmed === true && raw.basisCvdSide === raw.basisSide) {
+            direction = raw.basisSide; confidence = 78; why = "basis-extreme fade · CVD confirms";
+          } else {
+            why = `basis extreme, ${raw.basisCvdReason || "CVD not read"} — sat out`;
+          }
+        } else if (config.basisConfirm === "SMART") {
+          // The basis×SMART-MONEY stack: take the fade only when the same-hour smart-money
+          // lean agrees — the scoreboard's basis_x_smart (rule in app/lib/basisStack.mjs).
+          if (raw.basisSmartConfirmed === true && raw.basisSmartSide === raw.basisSide) {
+            direction = raw.basisSide; confidence = 78; why = "basis-extreme fade · smart money agrees";
+          } else {
+            why = `basis extreme, ${raw.basisSmartReason || "smart money not read"} — sat out`;
+          }
+        } else if (config.basisConfirm === "LIQ") {
+          // The basis×LIQUIDATION-FLUSH stack: take the fade only when a same-hour cascade
+          // reverts to the same side — the scoreboard's basis_x_liqflush (app/lib/basisStack.mjs).
+          if (raw.basisLiqConfirmed === true && raw.basisLiqSide === raw.basisSide) {
+            direction = raw.basisSide; confidence = 78; why = "basis-extreme fade · liq flush confirms";
+          } else {
+            why = `basis extreme, ${raw.basisLiqReason || "liquidations not read"} — sat out`;
+          }
+        } else {
+          direction = raw.basisSide; confidence = 70; why = "basis-extreme fade";
+        }
       } else if (typeof raw.basisReason === "string" && raw.basisReason) {
         // Surface WHY it sat out ("accruing (12/48h)" / "basis stale (5h)" / "basis not
         // extreme") instead of a bare "no signal" — this is the read the operator needs

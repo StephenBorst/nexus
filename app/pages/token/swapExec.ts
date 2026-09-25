@@ -292,7 +292,7 @@ export async function planSell(dsChain: string, tokenIn: string, inSym: string, 
 
 // Make sure the wallet is on the plan's chain before sending chain-specific calldata. A declined
 // switch must abort, never fire the tx on the wrong chain.
-async function ensureChain(provider: Eip1193, chainId: number): Promise<void> {
+export async function ensureChain(provider: Eip1193, chainId: number): Promise<void> {
   const want = toHexQty(BigInt(chainId));
   const cur = (await provider.request({ method: "eth_chainId" })) as string;
   if (typeof cur === "string" && cur.toLowerCase() === want.toLowerCase()) return;

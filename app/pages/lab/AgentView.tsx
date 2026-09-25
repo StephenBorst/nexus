@@ -11,7 +11,7 @@ import { STRATEGY_PRESETS } from "@/config/strategyPresets";
 import { fmtUsdExact } from "@/lib/fmtUsd.mjs";
 import { paperSummary } from "@/lib/paperStats.mjs";
 import { STYLE_PRESETS, deriveStyle, type TradingStyle } from "@/config/agentStyles";
-import { AGENT_PREFILL_KEY, DIRECTIVE_PREFILL_KEY, type AgentPrefill, type DirectiveDraft } from "@/utils/agentPrefill";
+import { AGENT_PREFILL_KEY, DIRECTIVE_PREFILL_KEY, EXPERIMENTAL_FILTERS_OFF, type AgentPrefill, type DirectiveDraft } from "@/utils/agentPrefill";
 import { PnlChart, CountUp, TableSkeleton, Coachmark } from "./components";
 import { Collapsible } from "./Collapsible";
 import { SharePoster, type PosterData } from "./SharePoster";
@@ -26,6 +26,7 @@ import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter } from "./
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
+import { bareTicker } from "@/utils/utils";
 
 export function AgentView() {
   const [config, setConfig] = useState<AgentConfig>(DEFAULT_CONFIG);
@@ -130,8 +131,8 @@ export function AgentView() {
       setActiveDirective(data.directive || null);
       setDirectiveDraft(null);
       setSuccess(directiveMode === "AUTONOMOUS"
-        ? "Directive armed — LIVE market order fires within ~1 min, then managed to your levels."
-        : "Directive armed in PAPER — simulated fill within ~1 min.");
+        ? "Directive armed. LIVE market order fires within ~1 min, then managed to your levels."
+        : "Directive armed in PAPER. Simulated fill within ~1 min.");
       setTimeout(() => setSuccess(null), 6000);
       fetchAgentData();
     } catch (e) {
@@ -178,9 +179,9 @@ export function AgentView() {
             window.localStorage.removeItem(AGENT_PREFILL_KEY);
             const p: AgentPrefill = JSON.parse(raw);
             if (p?.config && typeof p.config === "object") {
-              setConfig((prev) => ({ ...prev, ...p.config }));
+              setConfig((prev) => ({ ...prev, ...(p.replaceFilters ? EXPERIMENTAL_FILTERS_OFF : {}), ...p.config }));
               setTab("config");
-              setSuccess(`Config prefilled${p.source ? ` from ${p.source}` : ""} — review, then Save or Backtest.`);
+              setSuccess(`Config prefilled${p.source ? ` from ${p.source}` : ""}. Review, then Save or Backtest.`);
               setTimeout(() => setSuccess(null), 5000);
               // Persistent expectation (e.g. thesis → signal-bot direction mismatch).
               if (p.notice) setPrefillNotice(p.notice);
@@ -295,9 +296,16 @@ export function AgentView() {
   // symbols/leverage/capital/mode; swaps mode/threshold/exits). The bridge that
   // turns "here's what worked" into "now it's my config."
   function applySweepConfig(cfg: any) {
-    const clean = Object.fromEntries(Object.entries(cfg).filter(([, v]) => v !== undefined));
-    setConfig((prev) => ({ ...prev, ...clean }));
-    setSuccess("Config applied to the editor — review, then Save or Backtest."); setTimeout(() => setSuccess(null), 4000);
+    const clean: Record<string, unknown> = Object.fromEntries(Object.entries(cfg).filter(([, v]) => v !== undefined));
+    // A basis sweep row carries basisConfirm:null for the plain fade — that must CLEAR a
+    // previously chosen confirm, so map it to "off" rather than dropping it.
+    if (clean.basisConfirm === null) clean.basisConfirm = undefined;
+    // A sweep row was graded WITHOUT the experimental filters (the sweep grid never sets
+    // them). Applying the row on top of them saved a config the sweep never tested — with
+    // INVERT on it traded the mirror image (+$12 → −$21 in the first real run). So the row
+    // replaces the whole filter set: what you apply is exactly what was graded.
+    setConfig((prev) => ({ ...prev, ...EXPERIMENTAL_FILTERS_OFF, ...clean }));
+    setSuccess("Row applied as graded. Experimental filters reset to off. Review, then Save or Backtest."); setTimeout(() => setSuccess(null), 5000);
   }
 
   // Strategy library — save the current composed config under a name, load one
@@ -321,7 +329,7 @@ export function AgentView() {
   }
   function loadStrategy(s: any) {
     setConfig({ ...DEFAULT_CONFIG, ...s.config });
-    setSuccess(`Loaded "${s.name}" — review + activate`); setTimeout(() => setSuccess(null), 3000);
+    setSuccess(`Loaded "${s.name}". Review and activate.`); setTimeout(() => setSuccess(null), 3000);
   }
   async function deleteStrategy(id: string) {
     if (!walletAddress) return;
@@ -358,7 +366,7 @@ export function AgentView() {
   }
   function copyStrategy(s: any) {
     setConfig({ ...DEFAULT_CONFIG, ...s.config });
-    setSuccess(`Copied "${s.name}" into your editor — set your own risk & save.`); setTimeout(() => setSuccess(null), 4000);
+    setSuccess(`Copied "${s.name}" into your editor. Set your own risk and save.`); setTimeout(() => setSuccess(null), 4000);
   }
 
   // Signal webhook (TradingView / external). enable & rotate mint a fresh secret
@@ -382,7 +390,7 @@ export function AgentView() {
         const info = { url: data.url, passphrase: data.passphrase };
         setWebhookEnabled(true); setWebhookInfo(info);
         sessionStorage.setItem(key, JSON.stringify(info));
-        setSuccess(op === "rotate" ? "Webhook rotated — old URL revoked" : "Webhook enabled");
+        setSuccess(op === "rotate" ? "Webhook rotated. Old URL revoked." : "Webhook enabled");
       }
       setTimeout(() => setSuccess(null), 3000);
     } catch (e: any) { setError(e.message); } finally { setSaving(false); }
@@ -400,7 +408,7 @@ export function AgentView() {
       });
       if (!res.ok) throw new Error("Failed to deactivate");
       setAgentState((prev) => prev ? { ...prev, active: false, current_position: null } : null);
-      setSuccess("Agent deactivated — trading key removed");
+      setSuccess("Agent deactivated. Trading key removed.");
       setTimeout(() => setSuccess(null), 3000);
     } catch (e: any) {
       setError(e.message);
@@ -450,7 +458,7 @@ export function AgentView() {
       if (!res.ok) throw new Error("Failed to update autocopy");
       setSuccess(following
         ? "Stopped autocopying"
-        : agentState?.active ? "Autocopying — your agent will mirror their trades" : "Autocopy set — activate your agent to start mirroring");
+        : agentState?.active ? "Autocopying. Your agent mirrors their trades." : "Autocopy set. Activate your agent to start.");
       setTimeout(() => setSuccess(null), 3500);
     } catch (e: any) { setError(e.message); } finally { setSaving(false); }
   }
@@ -489,7 +497,7 @@ export function AgentView() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to inject test signal");
-      setSuccess("Test signal injected — paper trade fires within ~1 min");
+      setSuccess("Test signal injected. Paper trade fires within ~1 min.");
       setTimeout(() => setSuccess(null), 4000);
     } catch (e: any) {
       setError(e.message);
@@ -538,13 +546,13 @@ export function AgentView() {
     }));
     setTab("config");
     const who = entry.displayName || `${entry.wallet.slice(0, 6)}…${entry.wallet.slice(-4)}`;
-    setSuccess(`Copied ${who}'s strategy → running in PAPER. Review & activate below.`);
+    setSuccess(`Copied ${who}'s strategy. Running in PAPER. Review and activate below.`);
     setTimeout(() => setSuccess(null), 5000);
   }
 
   async function killSwitch() {
     if (!walletAddress) return;
-    if (!window.confirm("KILL SWITCH — This will immediately close any open position and deactivate the agent. Continue?")) return;
+    if (!window.confirm("KILL SWITCH. Closes any open position and deactivates the agent. Continue?")) return;
     setSaving(true);
     try {
       const walletSig = await getAgentSig(walletAddress);
@@ -555,7 +563,7 @@ export function AgentView() {
       });
       if (!res.ok) throw new Error("Kill switch failed");
       setAgentState((prev) => prev ? { ...prev, active: false, current_position: null } : null);
-      setSuccess("Agent killed — position closed, key removed");
+      setSuccess("Agent killed. Position closed. Key removed.");
       setTimeout(() => setSuccess(null), 5000);
     } catch (e: any) {
       setError(e.message);
@@ -599,21 +607,21 @@ export function AgentView() {
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 8 }}>Automate</div>
           <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 26, fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1, letterSpacing: "-0.01em" }}>Autonomous Trading Agent</div>
           <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#a1a1aa", lineHeight: 1.6, maxWidth: 560, margin: "12px auto 0" }}>
-            An agent that runs <strong style={{ color: "#d4d4d8" }}>your</strong> strategy 24/7 within hard guardrails — and grades every trade objectively on-chain, no self-reporting. Non-custodial, order-only (it can <strong style={{ color: "#d4d4d8" }}>never withdraw</strong>), killable anytime. Start risk-free in 🧪 PAPER.
+            Runs <strong style={{ color: "#d4d4d8" }}>your</strong> strategy 24/7 inside hard limits. Every trade graded from public price. Order-only keys. It can <strong style={{ color: "#d4d4d8" }}>never withdraw</strong>. Kill it anytime. Start in PAPER.
           </div>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 16, fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", border: "1px solid #33333a", background: "#1a1a1e", borderRadius: 4, padding: "9px 16px", letterSpacing: "0.04em" }}>
             <span className="nx-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: "#ededf0", boxShadow: "0 0 8px #ededf0" }} />
-            Connect your wallet (top right) to configure &amp; deploy
+            Connect a wallet to configure it
           </div>
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 10 }}>Here&apos;s the full arsenal you&apos;ll get ↓</div>
+          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 10 }}>What it does ↓</div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8, marginTop: 8 }}>
-          {feature("EXECUTION MODES", "🧪 PAPER — simulated, no key, zero risk. ASSISTED — it surfaces signals you place yourself. AUTONOMOUS — it trades within your risk limits.")}
-          {feature("SIGNAL STRATEGIES", "Funding-fade, OI-divergence, and confluence — plus momentum & mean-reversion, or bring your own signal via webhook.", "5 modes")}
-          {feature("HARD GUARDRAILS", "Daily-loss cap, max trades/day, take-profit, stop-loss, max-hold — and a one-tap KILL switch. Order-only keys cannot withdraw a cent.")}
-          {feature("ADVANCED EXITS", "Multi-level scale-out, trailing stop, and breakeven — the agent manages the whole exit for you, then grades each slice on-chain.")}
-          {feature("BACKTEST + VALIDATE", "Replay any config on 60d of real price + a walk-forward across markets — prove an edge before you risk a cent.", "◆ PRO")}
-          {feature("TRUSTLESS RECORD", "Every trade settles on Orderly with an on-chain order ID, graded objectively and ranked on the TOP AGENTS board — a record nobody can fake.")}
+          {feature("EXECUTION MODES", "PAPER: simulated fills, no key. ASSISTED: signals you place yourself. AUTONOMOUS: trades inside your limits.")}
+          {feature("SIGNAL STRATEGIES", "Basis fade with a CVD, smart-money or liq-flush confirm. Funding, OI and confluence. Momentum and mean-reversion. Or your own signal by webhook.", "6 modes")}
+          {feature("HARD GUARDRAILS", "Daily-loss cap. Max trades per day. Take-profit, stop-loss, max hold. One-tap KILL. Order-only keys can't withdraw.")}
+          {feature("ADVANCED EXITS", "Scale-out, trailing stop, breakeven. The agent manages the exit. Each slice is graded.")}
+          {feature("BACKTEST + VALIDATE", "Replay a config on recorded history. Walk-forward across markets. Tested against random entries.", "◆ PRO")}
+          {feature("TRUSTLESS RECORD", "Every trade settles on Orderly with an order ID. Graded from public price. Ranked on TOP AGENTS.")}
         </div>
       </div>
     );
@@ -696,12 +704,12 @@ export function AgentView() {
         <div style={{ ...agentCardStyle, marginBottom: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", color: tgLinked ? "#ededf0" : "#a1a1aa", flexShrink: 0 }}>
-              {tgLinked ? "✓ TELEGRAM LINKED" : "🔔 TELEGRAM ALERTS"}
+              {tgLinked ? "✓ TELEGRAM LINKED" : "TELEGRAM ALERTS"}
             </span>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", lineHeight: 1.4, flex: 1, minWidth: 150 }}>
               {tgLinked
-                ? "You get a DM whenever your agent opens or closes a trade."
-                : "Get a DM whenever your agent opens or closes a trade — no need to watch the app."}
+                ? "A DM on every open and close."
+                : "A DM on every open and close."}
             </span>
             <a href={`https://t.me/${TG_BOT}?start=${walletAddress.toLowerCase()}`} target="_blank" rel="noopener noreferrer"
               style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, fontWeight: "bold", letterSpacing: "0.05em", textDecoration: "none",
@@ -730,7 +738,7 @@ export function AgentView() {
 
       {/* ── DIRECTIVE: review a draft from a thesis, then arm it ─────────── */}
       {directiveDraft && (() => {
-        const tk = directiveDraft.symbol.replace("PERP_", "").replace("_USDC", "");
+        const tk = bareTicker(directiveDraft.symbol);
         const isLong = directiveDraft.direction === "LONG";
         const rr = Math.abs(directiveDraft.entryPrice - directiveDraft.stopLoss) > 0
           ? Math.abs(directiveDraft.takeProfit1 - directiveDraft.entryPrice) / Math.abs(directiveDraft.entryPrice - directiveDraft.stopLoss)
@@ -739,10 +747,10 @@ export function AgentView() {
         const num = (n?: number) => (n && n > 0 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: n < 10 ? 4 : 2 })}` : "—");
         return (
           <div style={{ ...agentCardStyle, borderColor: "#ededf0", background: "#0f0f11", marginBottom: 12 }}>
-            <div style={agentLabelStyle}>▶ TRADE THIS THESIS <span style={{ color: "#71717a" }}>— one-shot, managed by the agent</span></div>
+            <div style={agentLabelStyle}>▶ TRADE THIS THESIS <span style={{ color: "#71717a" }}>· one shot, managed by the agent</span></div>
             <div style={{ marginTop: 10 }}>
               <Coachmark storageKey="nexus_coach_arm_v1" badge="STEP 2 / 2" title="Arm in PAPER first">
-                This hands the agent <strong style={{ color: "#d4d4d8" }}>this exact trade</strong> — your direction, your stops and targets — and it manages the exit for you (scale-out, trailing, breakeven, timeout). Start in <strong style={{ color: "#d4d4d8" }}>PAPER</strong> to watch it work risk-free, then flip to GO LIVE once you trust it. Every close is graded on-chain.
+                The agent takes <strong style={{ color: "#d4d4d8" }}>this exact trade</strong>. Your direction, stops and targets. It manages the exit: scale-out, trailing, breakeven, timeout. Start in <strong style={{ color: "#d4d4d8" }}>PAPER</strong>. Go live when you trust it. Every close is graded.
               </Coachmark>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 12, marginTop: 10, marginBottom: 10, fontFamily: "var(--nx-font-mono)" }}>
@@ -832,7 +840,7 @@ export function AgentView() {
 
       {/* ── DIRECTIVE: currently armed / live ────────────────────────────── */}
       {!directiveDraft && activeDirective && (activeDirective.status === "ARMED" || activeDirective.status === "LIVE") && (() => {
-        const tk = activeDirective.symbol.replace("PERP_", "").replace("_USDC", "");
+        const tk = bareTicker(activeDirective.symbol);
         const isLong = activeDirective.direction === "LONG";
         const armed = activeDirective.status === "ARMED";
         const num = (n?: number) => (n && n > 0 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: n < 10 ? 4 : 2 })}` : "—");
@@ -902,7 +910,7 @@ export function AgentView() {
               starting config. Day/Swing are the agent's honest home (hourly data +
               1-min cron + funding edge); scalping/position are intentionally absent. */}
           <div style={agentCardStyle}>
-            <div style={agentLabelStyle}>TRADING STYLE <span style={{ color: "#71717a" }}>— pick your horizon to start</span></div>
+            <div style={agentLabelStyle}>TRADING STYLE <span style={{ color: "#71717a" }}>· pick a horizon</span></div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
               {(Object.keys(STYLE_PRESETS) as TradingStyle[]).map((k) => {
                 const p = STYLE_PRESETS[k];
@@ -910,7 +918,7 @@ export function AgentView() {
                 return (
                   <button key={k} onClick={() => {
                     setConfig((prev) => ({ ...prev, ...p.config }));
-                    setSuccess(`${p.label} style loaded — review params & Save below.`);
+                    setSuccess(`${p.label} style loaded. Review and Save below.`);
                     setTimeout(() => setSuccess(null), 5000);
                   }} style={{
                     flex: "1 1 200px", textAlign: "left", cursor: "pointer",
@@ -924,14 +932,14 @@ export function AgentView() {
               })}
             </div>
             <div style={{ color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 8, lineHeight: 1.5 }}>
-              Nexus's agent lives in the day-to-swing middle. Scalping (seconds) needs sub-minute data the funding edge doesn't use; position trading is buy-and-hold — neither fits this tool, so we don't fake them.
+              The agent works day to swing. Scalping needs sub-minute data it doesn't use. Position trading is buy-and-hold. Neither fits, so we don't fake them.
             </div>
           </div>
 
           {/* Quick-start preset templates. Loads into config for review; user still
               saves explicitly. PRO presets gated by isPro. */}
           <div style={agentCardStyle}>
-            <div style={agentLabelStyle}>QUICK-START PRESETS <span style={{ color: "#71717a" }}>— load a preset, review, save</span></div>
+            <div style={agentLabelStyle}>QUICK-START PRESETS <span style={{ color: "#71717a" }}>· load, review, save</span></div>
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginTop: 10 }}>
               {STRATEGY_PRESETS.map((p) => {
                 const locked = !!p.pro && !isPro;
@@ -940,8 +948,10 @@ export function AgentView() {
                     onClick={() => {
                       if (locked) { setProNote(true); return; }
                       setProNote(false);
-                      setConfig((prev) => ({ ...prev, ...p.config }));
-                      setSuccess(`Loaded "${p.name}" — review params & Save below.`);
+                      // A preset is a whole strategy — it replaces the filter set (its own filters,
+                      // if any, come back in via p.config), so nothing ungraded rides along.
+                      setConfig((prev) => ({ ...prev, ...EXPERIMENTAL_FILTERS_OFF, ...p.config }));
+                      setSuccess(`Loaded "${p.name}" exactly. Filters reset to the preset's. Review and Save below.`);
                       setTimeout(() => setSuccess(null), 5000);
                     }}
                     style={{
@@ -967,7 +977,7 @@ export function AgentView() {
             <>
               {/* summary = the LIFETIME aggregate exec accrues at close; the trades prop is
                   the rolling last-50 window. The card shows lifetime totals + names the window. */}
-              <AgentTrackRecord title="🧪 PAPER TRACK RECORD" accent="#d4d4d8" trades={agentState?.paper_trades ?? []} paper onReset={resetPaperRecord}
+              <AgentTrackRecord title="PAPER TRACK RECORD" accent="#d4d4d8" trades={agentState?.paper_trades ?? []} paper onReset={resetPaperRecord}
                 summary={paperSummary((agentState as unknown as { paper_agg?: unknown } | null)?.paper_agg ?? null)} />
               <PaperBlotter trades={agentState?.paper_trades ?? []} currentNotional={(config.capitalPerTrade || 0) * (config.leverage || 1)} maxHoldHours={config.maxHoldHours ?? null} />
             </>
@@ -985,20 +995,20 @@ export function AgentView() {
             if (pt.length < 5 || net <= 0) return null;
             return (
               <div style={{ ...agentCardStyle, borderColor: "#33333a", background: "#1a1a1e" }}>
-                <div style={{ ...agentLabelStyle, color: "#ededf0" }}>🎓 READY TO GO LIVE?</div>
+                <div style={{ ...agentLabelStyle, color: "#ededf0" }}>READY TO GO LIVE?</div>
                 <div style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, lineHeight: 1.6, marginTop: 8 }}>
                   Your paper agent is up <strong style={{ color: "#ededf0" }}>{fmtUsdExact(net)}</strong> over{" "}
                   <strong style={{ color: "#fff" }}>{pt.length}</strong> simulated trades ({wr}% win rate)
-                  {rolling ? " — the rolling last 50, not a lifetime record" : ""}. Paper fills don&apos;t slip, and nothing
+                  {rolling ? " · the rolling last 50, not a lifetime record" : ""}. Paper fills don&apos;t slip, and nothing
                   is graded until it trades live: a reason to look closer, not proof. Same strategy, same guardrails —
                   switch it to live when you&apos;re ready.
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                  <button onClick={() => { setConfig({ ...config, mode: "ASSISTED" }); setSuccess("Mode → ASSISTED. Review params + hit Update below."); setTimeout(() => setSuccess(null), 4000); }}
+                  <button onClick={() => { setConfig({ ...config, mode: "ASSISTED" }); setSuccess("Mode → ASSISTED. Review, then Update below."); setTimeout(() => setSuccess(null), 4000); }}
                     style={{ background: "#ededf015", border: "1px solid #ededf0", borderRadius: 4, color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 11, padding: "8px 16px", cursor: "pointer" }}>
                     → GO ASSISTED
                   </button>
-                  <button onClick={() => { setConfig({ ...config, mode: "AUTONOMOUS" }); setSuccess("Mode → AUTONOMOUS. Needs a trading key — review below."); setTimeout(() => setSuccess(null), 4000); }}
+                  <button onClick={() => { setConfig({ ...config, mode: "AUTONOMOUS" }); setSuccess("Mode → AUTONOMOUS. Needs a trading key. Review below."); setTimeout(() => setSuccess(null), 4000); }}
                     style={{ background: "#fbbf2415", border: "1px solid #fbbf24", borderRadius: 4, color: "#fbbf24", fontFamily: "var(--nx-font-mono)", fontSize: 11, padding: "8px 16px", cursor: "pointer" }}>
                     → GO AUTONOMOUS
                   </button>
@@ -1019,10 +1029,10 @@ export function AgentView() {
               The agent is a disciplined operator of <strong style={{ color: "#d4d4d8" }}>your</strong> edge — you choose the strategy and risk limits, it runs them tirelessly and <strong style={{ color: "#d4d4d8" }}>every call is graded objectively on-chain</strong>. It doesn't promise alpha; it proves what actually worked.
             </p>
             <ol style={{ margin: "8px 0 0", paddingLeft: 18, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 11, lineHeight: 1.7 }}>
-              <li>Place at least one manual trade on Nexus — this generates your Orderly trading key (order-only, <strong style={{ color: "#d4d4d8" }}>cannot withdraw funds</strong>).</li>
+              <li>Place one manual trade on Nexus. That generates your Orderly trading key. Order-only. It <strong style={{ color: "#d4d4d8" }}>cannot withdraw funds</strong>.</li>
               <li>Pick your symbols, risk params, and mode below.</li>
               <li><strong style={{ color: "#d4d4d8" }}>ASSISTED</strong> = the agent surfaces signals for you to place yourself. <strong style={{ color: "#d4d4d8" }}>AUTONOMOUS</strong> = it trades within your risk limits.</li>
-              <li>Activate. You can DEACTIVATE or KILL anytime — and its record is public and verifiable either way.</li>
+              <li>Activate. DEACTIVATE or KILL anytime. The record stays public either way.</li>
             </ol>
             <div style={{
               marginTop: 10, padding: "8px 10px", borderRadius: 3,
@@ -1032,8 +1042,8 @@ export function AgentView() {
               color: tradingKey ? "#ededf0" : "#fbbf24",
             }}>
               {tradingKey
-                ? "● TRADING KEY DETECTED — ready to activate. Your key is encrypted at rest and can only place orders, never withdraw."
-                : "○ NO TRADING KEY YET — place one manual trade first to generate it, then refresh this tab."}
+                ? "● TRADING KEY DETECTED. Encrypted at rest. Places orders only. Never withdraws."
+                : "○ NO TRADING KEY YET. Place one manual trade to generate it, then refresh."}
             </div>
           </div>
 
@@ -1041,8 +1051,8 @@ export function AgentView() {
             <div style={agentLabelStyle}>EXECUTION MODE</div>
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               {([
-                { mode: "PAPER" as const,      color: "#d4d4d8", desc: "Simulated — no real orders, no key needed. Test risk-free." },
-                { mode: "ASSISTED" as const,   color: "#ededf0", desc: "Agent generates thesis → you review + deploy" },
+                { mode: "PAPER" as const,      color: "#d4d4d8", desc: "Simulated fills. No orders. No key." },
+                { mode: "ASSISTED" as const,   color: "#ededf0", desc: "Agent drafts the trade. You review and deploy." },
                 { mode: "AUTONOMOUS" as const, color: "#fbbf24", desc: "Agent executes automatically within your risk params" },
               ]).map(({ mode, color, desc }) => {
                 const sel = config.mode === mode;
@@ -1055,7 +1065,7 @@ export function AgentView() {
                     color: sel ? color : "#71717a",
                     fontFamily: "var(--nx-font-mono)", fontSize: 12, letterSpacing: "0.05em",
                   }}>
-                    <div style={{ fontWeight: 600 }}>{mode === "PAPER" ? "🧪 PAPER" : mode}</div>
+                    <div style={{ fontWeight: 600 }}>{mode}</div>
                     <div style={{ fontSize: 9, marginTop: 4, opacity: 0.7 }}>{desc}</div>
                   </button>
                 );
@@ -1071,7 +1081,7 @@ export function AgentView() {
             {config.mode === "PAPER" && (
               <div style={{ marginTop: 8, padding: 8, background: "#1a1a1e", border: "1px solid #d4d4d830", borderRadius: 3 }}>
                 <span style={{ color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 10 }}>
-                  🧪 PAPER MODE — The agent runs its full strategy against live prices but places <strong>zero real orders</strong>. No trading key required. Results are recorded to a separate paper track record below so you can prove it out before risking a cent.
+                  PAPER MODE. The agent runs its full strategy against live prices and places <strong>zero real orders</strong>. No key. Results go to a separate paper record below.
                 </span>
               </div>
             )}
@@ -1081,12 +1091,12 @@ export function AgentView() {
             <div style={agentLabelStyle}>STRATEGY — SIGNAL MODE</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {([
-                { v: "CONFLUENCE", label: "CONFLUENCE", hint: "Funding AND OI must agree — the strictest filter, so the fewest entries" },
+                { v: "CONFLUENCE", label: "CONFLUENCE", hint: "Funding AND OI must agree. Strictest filter. Fewest entries." },
                 { v: "FUNDING_ONLY", label: "FUNDING", hint: "Fade funding extremes only" },
                 { v: "OI_ONLY", label: "OI DIVERGENCE", hint: "Open-interest divergence only" },
                 { v: "MOMENTUM", label: "MOMENTUM", hint: "Trade WITH the move (trend-follow)" },
                 { v: "MEAN_REVERSION", label: "MEAN REVERSION", hint: "Fade the move (buy dip / sell rip)" },
-                { v: "BASIS_FADE", label: "BASIS FADE", hint: "Fade an extreme spot-perp basis — EXPERIMENTAL, paper only" },
+                { v: "BASIS_FADE", label: "BASIS FADE", hint: "Fade an extreme spot-perp basis. EXPERIMENTAL. Paper only." },
               ] as const).map(({ v, label, hint }) => {
                 const sel = (config.signalMode ?? "FUNDING_ONLY") === v;
                 const locked = isProStrategy(v) && !isPro;
@@ -1110,28 +1120,63 @@ export function AgentView() {
             )}
             <div style={{ ...agentLabelStyle, fontSize: 9, marginTop: 8, color: "#71717a" }}>
               {({
-                CONFLUENCE: "Strictest filter — the agent only acts when the crowd is offside TWO ways at once: paying up to hold one side (funding) AND piling into it (open interest). Fewest trades, highest bar.",
-                FUNDING_ONLY: "Acts when traders are paying an extreme rate to hold one side (funding) — a crowded, one-sided book the agent fades. More trades, less selective than CONFLUENCE.",
-                OI_ONLY: "Acts on open interest alone — a fast pile-in of new positions that the funding read can miss. Funding ignored.",
-                MOMENTUM: "Trades WITH a price move once it clears your threshold — rides strength instead of fighting it. Noisy on small moves; PAPER it first.",
-                MEAN_REVERSION: "Fades a sharp move once it clears your threshold — buy the dip, sell the rip, betting it snaps back. PAPER it first.",
-                BASIS_FADE: "Fades an extreme spot-perp basis: a perp trading far above spot is froth (short it), far below is capitulation (long it). Extreme is measured against this market's own last week, not a fixed number. This read grades PREDICTIVE on the signal scoreboard — which rates the READ, not a strategy: entries, exits and fees are unproven. EXPERIMENTAL, PAPER only.",
+                CONFLUENCE: "Strictest filter. Acts only when the crowd is offside two ways at once: paying to hold one side (funding) and piling into it (open interest). Fewest trades.",
+                FUNDING_ONLY: "Acts when traders pay an extreme rate to hold one side. The agent fades the crowded book. More trades than CONFLUENCE.",
+                OI_ONLY: "Acts on open interest alone. A fast pile-in of new positions. Funding ignored.",
+                MOMENTUM: "Trades with a price move once it clears your threshold. Noisy on small moves. PAPER it first.",
+                MEAN_REVERSION: "Fades a sharp move once it clears your threshold. Bets it snaps back. PAPER it first.",
+                BASIS_FADE: "Fades an extreme spot-perp basis: a perp trading far above spot is froth (short it), far below is capitulation (long it). Extreme is measured against this market's own last week, not a fixed number. The scoreboard grades the read PREDICTIVE. That rates the read, not a strategy. Entries, exits and fees are unproven. EXPERIMENTAL. PAPER only.",
               } as Record<string, string>)[config.signalMode ?? "FUNDING_ONLY"]}
             </div>
           </div>
+
+          {/* Basis STACK — only meaningful on BASIS_FADE. Take the fade only when a second,
+              harder-to-arb read agrees in the SAME hour — the scoreboard's basis_x_cvd /
+              basis_x_smart intersections (shared rules: app/lib/basisStack.mjs, parity-tested). */}
+          {config.signalMode === "BASIS_FADE" && (
+            <div style={agentCardStyle}>
+              <div style={agentLabelStyle}>CONFIRM THE FADE <span style={{ color: "#71717a" }}>— the basis stack</span></div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+                {([
+                  { v: undefined, label: "OFF", hint: "Plain basis fade. Trade every extreme." },
+                  { v: "CVD" as const, label: "CVD", hint: "Only when aggressor flow in the same hour diverges the same way (price up on net selling → short; down on net buying → long). Graded as Basis extreme × CVD divergence." },
+                  { v: "SMART" as const, label: "SMART MONEY", hint: "Only when the tracked smart-money wallets lean the same side in the same hour. Graded as Basis extreme × smart money agrees. Pending the Oct-15 re-validation." },
+                  { v: "LIQ" as const, label: "LIQ FLUSH", hint: "Only when a same-hour liquidation cascade reverts to the same side (longs flushed → long, shorts squeezed → short). Graded as Basis extreme × liq-flush timing. Pending the Oct-15 re-validation." },
+                ]).map((o) => {
+                  const on = (config.basisConfirm ?? undefined) === o.v;
+                  return (
+                    <button key={o.label} title={o.hint} onClick={() => setConfig({ ...config, basisConfirm: o.v })} style={{
+                      flex: "1 1 90px", cursor: "pointer", fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+                      padding: "8px 10px", borderRadius: 4, background: on ? "#ededf010" : "#0a0a0b",
+                      border: `1px solid ${on ? "#ededf0" : "#232327"}`, color: on ? "#ededf0" : "#a1a1aa",
+                    }}>{o.label}{on ? " ✓" : ""}</button>
+                  );
+                })}
+              </div>
+              <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 11, lineHeight: 1.5, marginTop: 8 }}>
+                {config.basisConfirm === "CVD"
+                  ? "Takes the basis fade only when same-hour CVD divergence agrees. Rarer entries. When it sits out, the status says why."
+                  : config.basisConfirm === "SMART"
+                    ? "Takes the basis fade only when the same-hour smart-money lean agrees. Rarer entries. When it sits out, the status says why. Pending the Oct-15 re-validation. PAPER it."
+                    : config.basisConfirm === "LIQ"
+                    ? "Takes the basis fade only when a same-hour liquidation cascade reverts the same way. Rarer entries. When it sits out, the status says why. Pending the Oct-15 re-validation. PAPER it."
+                    : "Off. The plain basis fade. Pick a confirm to trade only the stacked reads the scoreboard grades."}
+              </div>
+            </div>
+          )}
 
           {/* The experimental FILTERS & CONDITIONING cluster (invert, tape, smart-money,
               regime/session/vol, vol-scaled stops) — all opt-in, off by default, validate
               on Test/Sweep. Tucked behind disclosure so the config flows mode → strategy →
               symbols → risk; auto-opens if any filter is already active. */}
-          <Collapsible title="◆ FILTERS & CONDITIONING" subtitle="experimental — validate on Test / Sweep first"
+          <Collapsible title="◆ FILTERS & CONDITIONING" subtitle="experimental · validate on Test / Sweep first"
             defaultOpen={!!(config.invertSignal || config.respectRegime || config.respectSmartMoney || config.volScaledStops || (config.tradeSessions && config.tradeSessions.length) || config.minVolAtrPct || config.maxVolAtrPct)}
             storageKey="nx_agent_filters">
           {/* Opt-in INVERT — the "fade your own signal" lever. If a config is
               systematically wrong, the edge is the opposite trade. */}
           <AgentToggleCard
             label="INVERT SIGNAL — fade the edge"
-            description={<>Flip every entry to the OPPOSITE direction — short when the signal says long, and vice-versa. If a config is systematically WRONG (net-negative in the direction it fires), the edge IS the fade. <b style={{ color: "#ededf0" }}>Prove it first:</b> run Test / Sweep with this on and compare the net R against it off. Off by default.</>}
+            description={<>Flip every entry. Short when the signal says long, and the reverse. If a config is reliably wrong, the edge is the fade. <b style={{ color: "#ededf0" }}>Prove it first:</b> run Test / Sweep with this on and compare the net R against it off. Off by default.</>}
             on={!!config.invertSignal}
             onToggle={() => setConfig({ ...config, invertSignal: !config.invertSignal })}
           />
@@ -1143,14 +1188,14 @@ export function AgentView() {
               agents. Only the LABEL moved to "tape" (see MarketTape.tsx on the naming). */}
           <AgentToggleCard
             label="MARKET TAPE FILTER"
-            description={<>Skip NEW entries that fight a strong tape — RISK-ON gates shorts, RISK-OFF gates longs. Never flips direction or touches open positions. Test in PAPER first. (See the live tape in Market Intel.)</>}
+            description={<>Skip new entries that fight a strong tape. RISK-ON gates shorts. RISK-OFF gates longs. Never flips direction or touches open positions. Test in PAPER first.</>}
             on={!!config.respectRegime}
             onToggle={() => setConfig({ ...config, respectRegime: !config.respectRegime })}
           />
 
           <AgentToggleCard
             label="SMART-MONEY FILTER"
-            description={<>Skip a NEW entry that fights a strong consensus (3+) of top on-chain traders on that symbol — see it live in the Smart Money tab. A guardrail, not a signal (smart money is often early AND often wrong). Test in PAPER first.</>}
+            description={<>Skip a new entry that fights a 3+ consensus of top on-chain traders on that symbol. A guardrail, not a signal. Smart money is often early and often wrong. Test in PAPER first.</>}
             on={!!config.respectSmartMoney}
             onToggle={() => setConfig({ ...config, respectSmartMoney: !config.respectSmartMoney })}
           />
@@ -1173,7 +1218,7 @@ export function AgentView() {
             };
             return (
               <div style={agentCardStyle}>
-                <div style={agentLabelStyle}>REGIME CONDITIONING <span style={{ color: "#52525b", fontSize: 8 }}>— experimental, opt-in</span></div>
+                <div style={agentLabelStyle}>REGIME CONDITIONING <span style={{ color: "#52525b", fontSize: 8 }}>· experimental, opt-in</span></div>
                 <div style={{ ...agentLabelStyle, fontSize: 9, marginTop: 6, color: "#71717a", letterSpacing: 0 }}>
                   Only enter where a signal actually works. Backtest finding: inverted-confluence hits ~<b style={{ color: "#3ecf8e" }}>60%</b> in high volatility and bleeds in the Asia session. <b style={{ color: "#ededf0" }}>Prove it on Test / Sweep first.</b>
                 </div>
@@ -1210,7 +1255,7 @@ export function AgentView() {
 
           <AgentToggleCard
             label="VOLATILITY-SCALED STOPS"
-            description={<>Sizes TP/SL to each symbol&apos;s recent ATR instead of a flat % — so a high-vol coin (SOL) isn&apos;t noise-stopped and a calm one isn&apos;t over-given. Keeps your R:R ratio. Test in PAPER first.</>}
+            description={<>Sizes TP/SL to each symbol&apos;s recent ATR instead of a flat %. A high-vol coin isn&apos;t noise-stopped. A calm one isn&apos;t over-given. Keeps your R:R. Test in PAPER first.</>}
             on={!!config.volScaledStops}
             onToggle={() => setConfig({ ...config, volScaledStops: !config.volScaledStops })}
           />
@@ -1221,7 +1266,7 @@ export function AgentView() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {AVAILABLE_SYMBOLS.map((sym) => {
                 const selected = config.symbols.includes(sym);
-                const label = sym.replace("PERP_", "").replace("_USDC", "");
+                const label = bareTicker(sym);
                 return (
                   <button key={sym} onClick={() => {
                     setConfig({
@@ -1297,7 +1342,7 @@ export function AgentView() {
                   background: showAdvanced || advancedActive ? "#ededf015" : "transparent",
                   border: `1px solid ${showAdvanced || advancedActive ? "#ededf0" : "#232327"}`,
                   color: showAdvanced || advancedActive ? "#ededf0" : "#71717a",
-                }}>{showAdvanced ? "▾ HIDE ADVANCED SETTINGS" : advancedActive ? "▸ ADVANCED SETTINGS · ON — scale-out, DCA, webhooks" : "▸ ADVANCED SETTINGS — scale-out, DCA, webhooks"}</button>
+                }}>{showAdvanced ? "▾ HIDE ADVANCED SETTINGS" : advancedActive ? "▸ ADVANCED SETTINGS · ON · scale-out, DCA, webhooks" : "▸ ADVANCED SETTINGS · scale-out, DCA, webhooks"}</button>
               </div>
             );
           })()}
@@ -1385,10 +1430,10 @@ export function AgentView() {
 
                 <div style={{ ...agentLabelStyle, fontSize: 9, marginTop: 10, color: "#71717a", lineHeight: 1.5 }}>
                   {scaleOut
-                    ? "Scale-out takes partial profit at TP1 and lets the runner ride to TP2 — each slice is graded on its own."
-                    : "Single take-profit at the TAKE PROFIT % above. Turn on SCALE-OUT to bank partial profit early."}
+                    ? "Scale-out takes partial profit at TP1 and runs the rest to TP2. Each slice is graded on its own."
+                    : "Single take-profit at the TAKE PROFIT % above. SCALE-OUT banks partial profit early."}
                   {(config.trailingStopPct ?? 0) > 0 && " Trailing stop arms at TP1 and locks gains as price runs."}
-                  {(config.breakevenTriggerPct ?? 0) > 0 && ` Breakeven stop arms at +${config.breakevenTriggerPct}% and moves the SL to +${config.breakevenBufferPct ?? 0}% — once armed, the trade can no longer close at a real loss.`}
+                  {(config.breakevenTriggerPct ?? 0) > 0 && ` Breakeven stop arms at +${config.breakevenTriggerPct}% and moves the SL to +${config.breakevenBufferPct ?? 0}%. Once armed, the trade can't close at a real loss.`}
                 </div>
               </div>
             );
@@ -1541,8 +1586,8 @@ export function AgentView() {
             <div style={{ marginTop: 16, padding: "8px 10px", borderRadius: 3, background: "#0a0a0b", border: "1px solid #232327" }}>
               <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 10, color: "#71717a", lineHeight: 1.6 }}>
                 {config.mode === "PAPER"
-                  ? <>🧪 Paper mode is fully simulated — <strong style={{ color: "#a1a1aa" }}>no key stored, no orders placed, no funds at risk</strong>. Activate to start building a paper track record against live prices.</>
-                  : <>🔒 By activating, your order-only Orderly key is stored encrypted to let the agent trade on your behalf. It <strong style={{ color: "#a1a1aa" }}>cannot withdraw or transfer funds</strong>. Trading is risky — only deploy capital you can afford to lose. Deactivate anytime.</>}
+                  ? <>Paper is fully simulated. <strong style={{ color: "#a1a1aa" }}>No key stored. No orders placed. No funds at risk.</strong> Activate to start a paper record against live prices.</>
+                  : <>Activating stores your order-only Orderly key, encrypted, so the agent can trade for you. It <strong style={{ color: "#a1a1aa" }}>cannot withdraw or transfer funds</strong>. Trading is risky. Only deploy what you can afford to lose. Deactivate anytime.</>}
               </span>
             </div>
           )}
@@ -1594,7 +1639,7 @@ export function AgentView() {
           {!tradingKey && config.mode !== "PAPER" && (
             <div style={{ marginTop: 12, padding: 10, background: "#2a1a00", border: "1px solid #fbbf2430", borderRadius: 3 }}>
               <span style={{ color: "#fbbf24", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>
-                ⚠ No Orderly trading key detected. Place at least one manual trade on Nexus first — the SDK generates your trading key on first trade. This key allows order placement only and cannot withdraw funds. <strong style={{ color: "#d4d4d8" }}>Or try 🧪 PAPER mode — no key needed.</strong>
+                ⚠ No Orderly trading key detected. Place one manual trade on Nexus first. That generates your trading key. It places orders only and cannot withdraw. <strong style={{ color: "#d4d4d8" }}>Or run PAPER. No key needed.</strong>
               </span>
             </div>
           )}
@@ -1627,7 +1672,7 @@ export function AgentView() {
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
                     <span style={{ color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 600 }}>
-                      {t.symbol.replace("PERP_", "").replace("_USDC", "")}
+                      {bareTicker(t.symbol)}
                     </span>
                     <span style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 600 }}>
                       {t.direction}
@@ -1678,7 +1723,7 @@ export function AgentView() {
               <div>
                 <div style={{ ...agentLabelStyle, fontSize: 9 }}>MODE</div>
                 <div style={{ color: config.mode === "AUTONOMOUS" ? "#fbbf24" : config.mode === "PAPER" ? "#d4d4d8" : "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 16, fontWeight: 600 }}>
-                  {config.mode === "PAPER" ? "🧪 PAPER" : config.mode}
+                  {config.mode}
                 </div>
               </div>
               <div>
@@ -1748,7 +1793,7 @@ export function AgentView() {
             const barColor = (pct: number) => pct >= 90 ? "#f7525f" : pct >= 60 ? "#fbbf24" : "#3ecf8e";
             return (
               <div style={{ ...agentCardStyle, borderColor: lossPct >= 90 ? "#f7525f60" : "#232327" }}>
-                <div style={agentLabelStyle}>🛡 ACTIVE GUARDRAILS</div>
+                <div style={agentLabelStyle}>ACTIVE GUARDRAILS</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16, marginTop: 10 }}>
                   {/* Daily loss limit */}
                   <div>
@@ -1787,7 +1832,7 @@ export function AgentView() {
                   ))}
                 </div>
                 <div style={{ marginTop: 12, fontFamily: "var(--nx-font-ui)", fontSize: 10, color: "#71717a", lineHeight: 1.5 }}>
-                  🔒 Order-only key — the agent <strong style={{ color: "#a1a1aa" }}>cannot withdraw or transfer funds</strong>. Hit ⚡ KILL on the config tab to flatten and stop instantly.
+                  Order-only key. The agent <strong style={{ color: "#a1a1aa" }}>cannot withdraw or transfer funds</strong>. ⚡ KILL on the config tab flattens and stops it.
                 </div>
               </div>
             );
@@ -1798,14 +1843,14 @@ export function AgentView() {
               <div style={{ ...agentLabelStyle, display: "flex", alignItems: "center", gap: 8 }}>
                 // CURRENT POSITION
                 {agentState.current_position.paper && (
-                  <span style={{ color: "#d4d4d8", border: "1px solid #d4d4d840", borderRadius: 3, padding: "1px 6px", fontSize: 8 }}>🧪 PAPER</span>
+                  <span style={{ color: "#d4d4d8", border: "1px solid #d4d4d840", borderRadius: 3, padding: "1px 6px", fontSize: 8 }}>PAPER</span>
                 )}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 12, marginTop: 8 }}>
                 <div>
                   <div style={{ ...agentLabelStyle, fontSize: 9 }}>SYMBOL</div>
                   <div style={{ color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: 600 }}>
-                    {agentState.current_position.symbol.replace("PERP_", "").replace("_USDC", "")}
+                    {bareTicker(agentState.current_position.symbol)}
                   </div>
                 </div>
                 <div>
@@ -1857,7 +1902,7 @@ export function AgentView() {
                 <div>
                   <div style={{ ...agentLabelStyle, fontSize: 9 }}>SYMBOL</div>
                   <div style={{ color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 13 }}>
-                    {(agentState.last_signal.symbol || "").replace("PERP_", "").replace("_USDC", "")}
+                    {bareTicker(agentState.last_signal.symbol)}
                   </div>
                 </div>
                 <div>
@@ -1890,7 +1935,7 @@ export function AgentView() {
                   background: "#141416", border: "1px solid #232327", borderRadius: 3,
                   padding: "3px 8px", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa",
                 }}>
-                  {sym.replace("PERP_", "").replace("_USDC", "")}
+                  {bareTicker(sym)}
                 </span>
               ))}
             </div>
@@ -1907,7 +1952,7 @@ export function AgentView() {
           <div style={agentCardStyle}>
             <div style={{ ...agentLabelStyle, display: "flex", alignItems: "center", gap: 8 }}>
               // AGENT TRADE HISTORY
-              {isPaperHist && <span style={{ color: "#d4d4d8", border: "1px solid #d4d4d840", borderRadius: 3, padding: "1px 6px", fontSize: 8 }}>🧪 PAPER</span>}
+              {isPaperHist && <span style={{ color: "#d4d4d8", border: "1px solid #d4d4d840", borderRadius: 3, padding: "1px 6px", fontSize: 8 }}>PAPER</span>}
             </div>
             {histTrades.length === 0 ? (
               <div style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 12, padding: 20, textAlign: "center" }}>
@@ -1925,7 +1970,7 @@ export function AgentView() {
                 {histTrades.map((trade, i) => {
                   const rowId = trade.id || String(i);
                   const open = expandedTrade === rowId;
-                  const asset = trade.symbol.replace("PERP_", "").replace("_USDC", "");
+                  const asset = bareTicker(trade.symbol);
                   const qty = trade.qty ?? 0;
                   const notional = qty * (trade.entry_price || 0);
                   const openedMs = trade.opened_at ? new Date(trade.opened_at).getTime() : 0;
@@ -2066,7 +2111,7 @@ export function AgentView() {
               <div style={agentCardStyle} className="nx-fade-in">
                 <div style={{ ...agentLabelStyle, display: "flex", alignItems: "center", gap: 8 }}>
                   // AGENT PERFORMANCE
-                  {isPaperHist && <span style={{ color: "#d4d4d8", border: "1px solid #d4d4d840", borderRadius: 3, padding: "1px 6px", fontSize: 8 }}>🧪 PAPER</span>}
+                  {isPaperHist && <span style={{ color: "#d4d4d8", border: "1px solid #d4d4d840", borderRadius: 3, padding: "1px 6px", fontSize: 8 }}>PAPER</span>}
                 </div>
                 {equityPoints.length >= 2 && (
                   <div style={{ marginTop: 10, marginBottom: 4 }}>
@@ -2123,7 +2168,7 @@ export function AgentView() {
             </div>
             {ledgerInfo && (
               <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #232327", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0" }}>🔗 LEDGER SHA-256</span>
+                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0" }}>LEDGER SHA-256</span>
                 <code style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#a1a1aa", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3, padding: "2px 6px" }}>
                   {ledgerInfo.hash.slice(0, 10)}…{ledgerInfo.hash.slice(-8)}
                 </code>
@@ -2172,7 +2217,7 @@ export function AgentView() {
                         <div style={{ display: "flex", gap: 3, marginTop: 2, flexWrap: "wrap" }}>
                           {(e.config?.symbols ?? []).slice(0, 4).map((s) => (
                             <span key={s} style={{ fontSize: 8, color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", background: "#1a1a1e", border: "1px solid #1a1a1e", borderRadius: 2, padding: "1px 4px" }}>
-                              {s.replace("PERP_", "").replace("_USDC", "")}
+                              {bareTicker(s)}
                             </span>
                           ))}
                         </div>

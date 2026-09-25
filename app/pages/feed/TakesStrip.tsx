@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchCallerMerit, type CallerMerit } from "@/pages/token/data";
+import { SIGNAL, LINE } from "@/config/theme";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const green = "#3ecf8e";
@@ -52,7 +53,7 @@ export default function TakesStrip() {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontFamily: mono, fontSize: 11, fontWeight: "bold", color: "#ededf0", letterSpacing: "0.12em" }}>🔥 HOT TAKES</span>
+        <span style={{ fontFamily: mono, fontSize: 11, fontWeight: "bold", color: "#ededf0", letterSpacing: "0.12em" }}>HOT TAKES</span>
         <span style={{ fontFamily: mono, fontSize: 9, color: "#52525b" }}>ungraded conviction on Spot tokens · tap to open</span>
       </div>
 
@@ -66,7 +67,7 @@ export default function TakesStrip() {
               onClick={() => navigate(`/token/${t.ca}`)}
               style={{
                 flex: "1 1 190px", minWidth: 190, maxWidth: 240, background: "#0a0a0b",
-                border: `1px solid ${bull ? "#1c3a2e" : "#4a1e22"}`, borderRadius: 5,
+                border: `1px solid ${bull ? LINE.pos : "#4a1e22"}`, borderRadius: 5,
                 padding: "9px 11px", fontFamily: mono, cursor: "pointer",
               }}
             >
@@ -74,7 +75,7 @@ export default function TakesStrip() {
                 <span style={{ fontSize: 12, fontWeight: "bold", color: "#fff" }}>${t.sym || "—"}</span>
                 <span style={{ fontSize: 8.5, fontWeight: "bold", letterSpacing: "0.04em", color: bull ? green : red }}>{t.direction}</span>
                 <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
-                  {t.fire ? <span style={{ fontSize: 8.5, color: "#f7931a" }}>🔥 {t.fire}</span> : null}
+                  {t.fire ? <span style={{ fontSize: 8.5, color: SIGNAL.heat }}>🔥 {t.fire}</span> : null}
                   <span style={{ fontSize: 8, color: "#52525b" }}>{ago(t.createdAt)}</span>
                 </span>
               </div>
@@ -82,7 +83,7 @@ export default function TakesStrip() {
               <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6, overflow: "hidden" }}>
                 <span style={{ fontSize: 8, color: "#52525b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.displayName || shortAddr(t.wallet)}</span>
                 {m && <span title={`${m.title} caller · ${m.hitRate}% hit`} style={{ flexShrink: 0, fontSize: 7.5, fontWeight: "bold", letterSpacing: "0.03em", color: green, border: `1px solid ${green}44`, borderRadius: 4, padding: "1px 4px" }}>{m.glyph} {m.hitRate}%</span>}
-                {t.target ? <span style={{ flexShrink: 0, fontSize: 8, color: "#52525b" }}>🎯 {t.target}</span> : null}
+                {t.target ? <span style={{ flexShrink: 0, fontSize: 8, color: "#52525b" }}>target {t.target}</span> : null}
               </div>
             </div>
           );

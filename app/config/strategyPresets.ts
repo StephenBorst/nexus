@@ -33,6 +33,21 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     },
   },
   {
+    id: "basis-cvd-stack",
+    name: "Basis × CVD Stack",
+    tag: "EXPERIMENTAL · PAPER",
+    accent: "#e0a458",
+    blurb: "The stack method, traded: take the basis-extreme fade ONLY when aggressor flow in the same hour diverges the same way (price up on net selling → short; down on net buying → long). This is exactly the intersection the scoreboard grades as \"Basis extreme × CVD divergence\" — one shared rule, graded and traded, with a parity test pinning them together. Rarer than the plain basis fade by design; it sits out more than it trades. ⚠️ The scoreboard grades the READ, not this strategy — exits, sizing and fees are unvalidated. PAPER only until it has a record of its own.",
+    config: {
+      symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC"],
+      signalMode: "BASIS_FADE", basisConfirm: "CVD",
+      mode: "PAPER",
+      leverage: 5, capitalPerTrade: 50,
+      tpPercent: 2.5, slPercent: 2, maxHoldHours: 12,
+      maxTradesPerDay: 3, maxDailyLossUsdc: 10,
+    },
+  },
+  {
     id: "regime-gated-invert",
     name: "Regime-Gated Invert",
     tag: "LEAD · NOT YET ROBUST",
@@ -141,3 +156,17 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     },
   },
 ];
+
+// Scoreboard read (axisbt axis `name`) → the preset that trades THAT SAME rule. Only reads
+// whose live signal is literally the graded rule belong here (shared module + parity test);
+// a read without an agent mode stays research-only rather than borrowing a look-alike.
+export const AXIS_PRESET: Record<string, string> = {
+  basis_extreme: "basis-extreme-fade",   // app/lib/basisFade.mjs
+  basis_x_cvd: "basis-cvd-stack",        // app/lib/basisStack.mjs
+};
+// Reads whose preset is PAUSED: the scoreboard keeps grading them (the exit grade still feeds the
+// Oct-15 re-validation), but /proof stops offering the one-tap Load. Reversible — delete the line.
+export const AXIS_PAUSED: Record<string, string> = {
+  basis_extreme: "preset paused Sept 25 — its 12h exit grades NOISE (−10 bps, n148); 24h only PROMISING. Still graded.",
+};
+export const presetById = (id: string) => STRATEGY_PRESETS.find((p) => p.id === id);

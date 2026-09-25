@@ -15,9 +15,9 @@ import { recordFlag, coachingInsight } from "@/lib/coaching.mjs";
 import { buildOperatorProfile, profileNarrative } from "@/lib/operatorProfile.mjs";
 import { tiltRead, sessionEdge, overtradingRead, sizingRead } from "@/lib/behavioral.mjs";
 import { computeEdge } from "@/config/edge";
+import { bareTicker } from "@/utils/utils";
 
 // Bare ticker for the briefing's symbol dedup (BTC, not PERP_BTC_USDC).
-const bareTicker = (sym: string) => String(sym || "").toUpperCase().replace("PERP_", "").replace("_USDC", "");
 
 const FLAGS_KEY = "nexus_flagged_setups";
 const money = (n: number) => `${n < 0 ? "-" : "+"}$${Math.abs(n) >= 1000 ? `${(Math.abs(n) / 1000).toFixed(1)}K` : Math.abs(n).toFixed(2)}`;
@@ -205,9 +205,9 @@ export function NexusBriefing({
     // idea. Sort FIRST so the survivor per symbol is the highest-priority read of it, not
     // whichever builder happened to run first. Symbol-less reads (the tape, your record, the
     // session edge) always pass — they aren't about a coin.
-    const known = new Set((signals || []).map((s) => bareTicker(s.symbol)));
+    const known = new Set((signals || []).map((s) => bareTicker(s.symbol).toUpperCase()));
     const symbolOf = (i: Insight): string | null => {
-      if (i.meta?.symbol) return bareTicker(i.meta.symbol);
+      if (i.meta?.symbol) return bareTicker(i.meta.symbol).toUpperCase();
       for (const tok of i.title.toUpperCase().match(/[A-Z0-9]{2,6}/g) || []) if (known.has(tok)) return tok;
       return null;
     };
@@ -261,7 +261,7 @@ export function NexusBriefing({
       />
 
       {!collapsed && (
-        <div style={{ border: "1px solid #1c1c20", borderRadius: 8, overflow: "hidden", background: "#0c0c0e", marginTop: -6 }}>
+        <div style={{ border: "1px solid #1c1c20", borderRadius: 8, overflow: "hidden", background: "#0f0f11", marginTop: -6 }}>
           {/* ⭐ THE OPERATOR READ — who you are + your single costliest habit, leading the
               briefing so the you-engine greets you here, not just in Analytics. */}
           {operator && (

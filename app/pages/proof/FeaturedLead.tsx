@@ -1,9 +1,14 @@
 // ── FEATURED LEAD — the best config we have, and its real verdict ─────────────
-// The booth hero. Regime-Gated Invert is the best-performing config the engine has
-// surfaced; the cross-market walk-forward still returns NOT ROBUST (net-positive on
-// 1 of 4 markets, net negative overall). We publish that here rather than bury it —
-// this board exists to grade our own work the way it grades everyone else's. Deploy
-// it and it earns a graded, on-chain-verifiable record like every agent below.
+// The booth hero. Basis × CVD Stack is the current lead: the basis-extreme fade taken
+// ONLY when same-hour CVD divergence leans the same way. We print its backtest AND its
+// walk-forward (NOT ROBUST) side by side rather than bury the second — this board grades
+// our own work the way it grades everyone else's.
+//
+// ⚠️ RECEIPTS RULE: every number here must be measured on the EXACT preset the Deploy
+// button loads, unedited (Load → TESTED AS "Basis × CVD Stack" → Test / Validate). The
+// first cut printed figures from an edited config with INVERT + tape filter still on —
+// the clean run flipped XRP from −$5.90 to +$11.86. Re-measure and re-date on change.
+// Measured 2026-09-25 · 33d of recorded basis + CVD history · $250 notional · fees in.
 //
 // Self-contained on purpose: reads NO endpoint (its identity + config come from the
 // same preset the Lab/Bankr skill deploy), so it always renders crisp for a 90-second
@@ -11,6 +16,8 @@
 // the same funding signals are sold as data via x402, priced in $NEXUS.
 import { useNavigate } from "react-router-dom";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
+import { deployToAgent } from "@/utils/agentPrefill";
+import { bareTicker } from "@/utils/utils";
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
@@ -22,22 +29,24 @@ const BORDER = "#232327", SURFACE_ALT = "#0f0f11", INSET = "#08080a";
 // root). Cleaner on-stage proof than raw ledger JSON, and screenshot-able offline.
 const ANCHOR_EXPLORER = "https://arbiscan.io/address/0x57a698df84a44F3dA3dac3E08CA455a55A4eff84";
 
-const LEAD = STRATEGY_PRESETS.find((p) => p.id === "regime-gated-invert");
+const LEAD = STRATEGY_PRESETS.find((p) => p.id === "basis-cvd-stack");
 
-// The walk-forward receipts — what the engine ACTUALLY returns for this config.
-// Backtest results, labeled as such, verdict included. Not a live track record.
+// The receipts — each one true of this preset as deployed. Backtest-derived rows are
+// labelled as such; none of this is a live track record. The backtest rows are the PORTFOLIO
+// replay (one position across BTC/ETH/SOL, daily caps — what the agent can actually take);
+// the older per-market figure (+$22.62 · 14T) counted overlapping trades it never could.
 const RECEIPTS: { label: string; value: string; tone?: string }[] = [
+  { label: "backtest · 33d · as traded", value: "+$14.18", tone: POS },
+  { label: "win rate", value: "80% · 10T", tone: POS },
   { label: "walk-forward", value: "NOT ROBUST", tone: NEG },
-  { label: "net-positive", value: "1 of 4 mkts", tone: NEG },
-  { label: "vs raw confluence", value: "better, still −", tone: AMBER },
-  { label: "live record", value: "none yet", tone: AMBER },
+  { label: "markets green", value: "4 of 6", tone: AMBER },
 ];
 
 export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
   const navigate = useNavigate();
   if (!LEAD) return null;
   const c = LEAD.config;
-  const syms = (c.symbols || []).map((s) => s.replace("PERP_", "").replace("_USDC", "")).join(" · ");
+  const syms = (c.symbols || []).map((s) => bareTicker(s)).join(" · ");
 
   const receipt = (r: { label: string; value: string; tone?: string }) => (
     <div key={r.label} style={{ display: "flex", flexDirection: "column", gap: 2, background: INSET, border: `1px solid ${BORDER}`, borderRadius: 5, padding: "8px 11px", flex: isMobile ? "1 1 44%" : "0 1 auto" }}>
@@ -62,25 +71,27 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
       </div>
 
       <div style={{ fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.6, maxWidth: 640, marginBottom: 14 }}>
-        The best-performing config the engine has surfaced, and still not good enough. It <b style={{ color: BRIGHT }}>fades</b> the
-        confluence signal (funding + open-interest agree) — but only in the regimes where fading has paid:
-        high volatility and outside the Asia session, where these signals bleed. It beats raw confluence.
-        It does not beat zero.
+        It takes the basis-extreme fade — a perp far above spot is froth, far below is capitulation — <b style={{ color: BRIGHT }}>only</b> when
+        same-hour CVD divergence leans the same way. The read underneath grades <span style={{ color: POS }}>◆ PREDICTIVE</span> on the
+        signal scoreboard. Choosy by design: fourteen trades in 33 days of recorded history, fees in.
       </div>
 
-      {/* Walk-forward receipts — the honest numbers */}
+      {/* Backtest receipts — the honest numbers */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
         {RECEIPTS.map(receipt)}
       </div>
 
       {/* Config line — exactly what deploys */}
       <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, lineHeight: 1.6, marginBottom: 14 }}>
-        CONFLUENCE · inverted &nbsp;·&nbsp; {syms} &nbsp;·&nbsp; ATR% ≥ {c.minVolAtrPct} &nbsp;·&nbsp; {(c.tradeSessions || []).join("/")} sessions &nbsp;·&nbsp; {c.leverage}x &nbsp;·&nbsp; TP {c.tpPercent}% / SL {c.slPercent}% &nbsp;·&nbsp; fresh signals only (≤{Math.round((c.maxSignalAgeSec || 180) / 60)}m)
+        BASIS FADE + CVD CONFIRM &nbsp;·&nbsp; {syms} &nbsp;·&nbsp; {c.leverage}x &nbsp;·&nbsp; TP {c.tpPercent}% / SL {c.slPercent}% &nbsp;·&nbsp; {c.maxHoldHours}h max hold &nbsp;·&nbsp; ≤{c.maxTradesPerDay} trades/day
       </div>
 
       {/* Honest label + self-funding line */}
       <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
-        A <b style={{ color: FOG }}>lead</b>, not an edge. The walk-forward says NOT ROBUST and that is printed above rather than buried.
+        A <b style={{ color: FOG }}>lead</b>, not an edge. The backtest counts only the trades the agent could take — one
+        position at a time, inside its daily caps. The walk-forward came back <b style={{ color: NEG }}>NOT ROBUST</b>: four of six
+        markets green on their own (+$32.06 summed), but only 42% of time folds positive — too few trades per window to
+        call it. Printed here rather than buried, and re-run as the history grows. Measured Sept 25 on the preset exactly as it deploys.
         Run it in <b style={{ color: FOG }}>PAPER</b> to start its forward clock, risk-free — that record is yours,
         not this board. Take it <b style={{ color: FOG }}>live</b> and it joins the graded, on-chain-verifiable agents
         below: real settled trades, never a paper sim. Either way the edge funds itself — the same signals sell as data
@@ -90,7 +101,7 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
       {/* CTAs — deploy + verify */}
       <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button
-          onClick={() => navigate("/lab?tab=agent")}
+          onClick={() => (LEAD ? deployToAgent({ ...LEAD.config, mode: "PAPER" }, `the ${LEAD.name} preset (PAPER)`, undefined, navigate, { replaceFilters: true }) : navigate("/lab?tab=agent"))}
           style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "#08080a", background: BONE, border: "none", borderRadius: 4, padding: "8px 16px", cursor: "pointer" }}
         >
           Deploy in the Lab →

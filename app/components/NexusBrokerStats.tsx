@@ -70,7 +70,7 @@ export function NexusBrokerStats({ compact = false }: { compact?: boolean }) {
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontSize: 8, letterSpacing: "0.12em", color: "#52525b" }}>📊 NEXUS ON ORDERLY</span>
+        <span style={{ fontSize: 8, letterSpacing: "0.12em", color: "#52525b" }}>NEXUS ON ORDERLY</span>
         <span style={{ fontSize: compact ? 12 : 13, color: "#a1a1aa" }}>
           {vol != null ? <>vol <b style={{ color: "#fff" }}>{fmtUsd(vol)}</b></> : <span style={{ color: "#ededf0" }}>network stats</span>}
           {fees != null && <> · fees <b style={{ color: "#fff" }}>{fmtUsd(fees)}</b></>}

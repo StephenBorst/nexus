@@ -15,7 +15,7 @@ window.__RUNTIME_CONFIG__ = {
   "VITE_DISABLE_SOLANA_WALLETS": "false",
   "VITE_WALLETCONNECT_PROJECT_ID": "6289cbd1ecc3fe027bc0bd206b7cb86a",
   "VITE_APP_NAME": "Nexus Trading Labs",
-  "VITE_APP_DESCRIPTION": "The trading terminal that makes you a better trader.",
+  "VITE_APP_DESCRIPTION": "An onchain trading terminal. Plan it. Run it. Prove it.",
   "VITE_HAS_PRIMARY_LOGO": "true",
   "VITE_HAS_SECONDARY_LOGO": "true",
 
@@ -28,7 +28,7 @@ window.__RUNTIME_CONFIG__ = {
   "VITE_DISCORD_URL": "https://discord.gg/JFy9YkPM",
   "VITE_TWITTER_URL": "https://x.com/nexustradinglab",
   "VITE_SEO_SITE_NAME": "Nexus Trading Labs",
-  "VITE_SEO_SITE_DESCRIPTION": "The trading terminal that makes you a better trader.",
+  "VITE_SEO_SITE_DESCRIPTION": "An onchain trading terminal. Plan it. Run it. Prove it.",
   "VITE_SEO_SITE_URL": "https://nexustradinglabs.com",
   "VITE_SEO_SITE_LANGUAGE": "en",
   "VITE_SEO_SITE_LOCALE": "en_US",

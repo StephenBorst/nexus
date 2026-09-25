@@ -17,6 +17,7 @@
 
 import { deriveSignal, computeRegime, atrPct, oiSnapshotDue } from "./logic.mjs";
 import { basisFadeFromHistory } from "../../app/lib/basisFade.mjs";
+import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 
 // The markets we ALWAYS record oi:hist for. ⚠️ Keep this in step with
 // VALIDATE_UNIVERSE in nexus-lab-api/strategies.mjs — a symbol the walk-forward asks
@@ -113,10 +114,14 @@ export default {
       // Only read basis:hist when somebody is actually trading BASIS_FADE — one KV get
       // per symbol, and zero cost for every other agent.
       const needBasis = Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE");
+      // The basis×CVD stack gate reads cvd:hist + oi:hist too — only when someone opted in.
+      const needBasisCvd = Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisConfirm === "CVD");
+      const needBasisSmart = Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisConfirm === "SMART");
+      const needBasisLiq = Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisConfirm === "LIQ");
       const rawBySymbol = {};
       for (const symbol of symbolSet) {
         try {
-          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis);
+          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis, needBasisCvd, needBasisSmart, needBasisLiq);
         } catch (e) {
           console.error(`[brain] ${symbol} eval error:`, e.message);
         }
@@ -183,7 +188,7 @@ export default {
 // Fetch one symbol's market data and compute RAW deltas vs last cycle.
 // No strategy interpretation here — deriveSignal() applies each user's mode +
 // thresholds. `market:prev:{symbol}` is stored so price/OI deltas are real.
-async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false) {
+async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false, computeBasisCvd = false, computeBasisSmart = false, computeBasisLiq = false) {
   const json = await orderlyPublicGet(`${ORDERLY_API}/v1/public/futures/${symbol}`);
   const d = json.data;
 
@@ -256,9 +261,62 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
     }
   }
 
+  // ── Basis × CVD stack (opt-in conditioner) ─────────────────────────────────
+  // Only when the base read actually fired: is the CVD read in the SAME hour on the
+  // SAME side? Shared rule (app/lib/basisStack.mjs) = the exact intersection axisbt's
+  // basis_x_cvd grades. Two KV gets (cvd:hist from lab-api's flow cron, oi:hist that
+  // this brain records) — no external fetch. Any failure ⇒ unconfirmed, never a pass.
+  let basisCvd = null;
+  if (computeBasisCvd && basis && (basis.side === "LONG" || basis.side === "SHORT")) {
+    try {
+      const bare = symbol.replace(/^PERP_/, "").replace(/_USDC$/, "");
+      const [cRaw, oRaw] = await Promise.all([
+        env.NEXUS_AGENT.get(`cvd:hist:${bare}`),
+        env.NEXUS_AGENT.get(`oi:hist:${symbol}`),
+      ]);
+      basisCvd = basisCvdConfirm({ basisT: basis.t, side: basis.side, cvdHist: cRaw ? JSON.parse(cRaw) : [], oiHist: oRaw ? JSON.parse(oRaw) : [] });
+    } catch (e) {
+      console.error(`[brain] ${symbol} basis×cvd read failed:`, e.message);
+      basisCvd = { confirmed: false, cvdSide: null, reason: "CVD read failed" };
+    }
+  }
+
+  // ── Basis × smart money (opt-in conditioner) ───────────────────────────────
+  // Same pattern: is lab-api's hourly smart-money lean (sm:hist, same KV) on the SAME
+  // side in the SAME hour? = the intersection axisbt's basis_x_smart grades.
+  let basisSmart = null;
+  if (computeBasisSmart && basis && (basis.side === "LONG" || basis.side === "SHORT")) {
+    try {
+      const bare = symbol.replace(/^PERP_/, "").replace(/_USDC$/, "");
+      const sRaw = await env.NEXUS_AGENT.get(`sm:hist:${bare}`);
+      basisSmart = basisSmartConfirm({ basisT: basis.t, side: basis.side, smHist: sRaw ? JSON.parse(sRaw) : [] });
+    } catch (e) {
+      console.error(`[brain] ${symbol} basis×smart read failed:`, e.message);
+      basisSmart = { confirmed: false, smartSide: null, reason: "smart-money read failed" };
+    }
+  }
+
+  // ── Basis × liquidation flush (opt-in conditioner) ─────────────────────────
+  // Same pattern: did a liquidation cascade in the SAME hour revert to the SAME side?
+  // liq:hist is lab-api's hourly OKX snapshot (same KV) = axisbt's basis_x_liqflush.
+  let basisLiq = null;
+  if (computeBasisLiq && basis && (basis.side === "LONG" || basis.side === "SHORT")) {
+    try {
+      const bare = symbol.replace(/^PERP_/, "").replace(/_USDC$/, "");
+      const lRaw = await env.NEXUS_AGENT.get(`liq:hist:${bare}`);
+      basisLiq = basisLiqConfirm({ basisT: basis.t, side: basis.side, liqHist: lRaw ? JSON.parse(lRaw) : [] });
+    } catch (e) {
+      console.error(`[brain] ${symbol} basis×liq read failed:`, e.message);
+      basisLiq = { confirmed: false, liqSide: null, reason: "liquidation read failed" };
+    }
+  }
+
   return {
     symbol, price: markPrice, oi: openInterest, fundingRate, priceChange, oiChange, hasPrev: !!prev, fundingPct,
     ...(basis ? { basisSide: basis.side, basisPct: basis.basisPct, basisThr: basis.thr, basisReason: basis.reason } : {}),
+    ...(basisCvd ? { basisCvdConfirmed: basisCvd.confirmed, basisCvdSide: basisCvd.cvdSide, basisCvdReason: basisCvd.reason } : {}),
+    ...(basisSmart ? { basisSmartConfirmed: basisSmart.confirmed, basisSmartSide: basisSmart.smartSide, basisSmartReason: basisSmart.reason } : {}),
+    ...(basisLiq ? { basisLiqConfirmed: basisLiq.confirmed, basisLiqSide: basisLiq.liqSide, basisLiqReason: basisLiq.reason } : {}),
     // Regime-conditioning inputs for the opt-in session/vol gates in deriveSignal.
     hourUtc: new Date().getUTCHours(),
     ...(atrPctVal !== undefined ? { atrPct: atrPctVal } : {}),

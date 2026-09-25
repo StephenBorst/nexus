@@ -7,6 +7,7 @@
  * is grounded in fact, not vibes. Pure + typed; the copilot (get_my_edge) reads it
  * and does the human synthesis under the causation/advice guardrails.
  */
+import { bareTicker } from "@/utils/utils";
 
 export interface EdgeTrade {
   symbol: string;
@@ -43,7 +44,7 @@ export interface EdgeReadout {
 }
 
 const MIN_SAMPLE = 3; // per-symbol / per-side trades before we'll make a claim
-const clean = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+const clean = (s: string) => bareTicker(s);
 const round = (n: number) => Math.round(n * 100) / 100;
 const money = (n: number) => `${n >= 0 ? "+" : "-"}$${Math.abs(round(n))}`;
 

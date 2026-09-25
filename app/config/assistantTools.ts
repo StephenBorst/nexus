@@ -9,6 +9,7 @@
  */
 
 import { deployDirectiveFromThesis } from "@/utils/agentPrefill";
+import { bareTicker } from "@/utils/utils";
 // Same synthesis the Lab renders — the copilot must speak with ONE point of view,
 // not answer from an older, narrower readout while the terminal shows another.
 import { buildOperatorProfile, profileNarrative, PUBLIC_READS } from "@/lib/operatorProfile.mjs";
@@ -16,6 +17,8 @@ import { bookConcentration } from "@/lib/bookRisk.mjs";
 import { fusePositioning, positioningRead } from "@/lib/positioning.mjs";
 import { rankConviction, convictionLevel } from "@/lib/conviction.mjs";
 import { fetchDeribitTerm } from "@/lib/deribit.mjs";
+import { fetchHLTape, fetchHLPortfolio } from "@/utils/hyperliquid";
+import { xraySummary, fmtPf } from "@/lib/xrayGrade.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const AGENT_API = "https://og.nexustradinglabs.com";
@@ -541,7 +544,7 @@ export const TOOLS: ToolDef[] = [
       let consensus = [...byCoin.values()].filter((c) => c.traders.size >= 2)
         .map((c) => ({ coin: c.sym, side: c.side, traders: c.traders.size, netUsd: Math.round(c.netUsd) }))
         .sort((a, b) => b.traders - a.traders || b.netUsd - a.netUsd);
-      const focus = String(args.symbol ?? "").replace("PERP_", "").replace("_USDC", "").toUpperCase();
+      const focus = bareTicker(String(args.symbol ?? "")).toUpperCase();
       if (focus) consensus = consensus.filter((c) => c.coin.toUpperCase() === focus);
       const topTraders = traders.slice(0, 8).map((t: { address: string; source: string; pnl: number; pnlLabel: string; positions?: { side: string; sym: string; szUsd: number }[] }) => ({
         address: t.address, source: t.source, pnl: t.pnl, pnlLabel: t.pnlLabel,
@@ -660,8 +663,10 @@ export const TOOLS: ToolDef[] = [
       const res = await fetch(`${AGENT_API}/theses/contested`);
       if (!res.ok) return JSON.stringify({ error: `contested failed (${res.status})` });
       const d = await res.json();
-      const party = (p: Record<string, any>) => ({ name: p.displayName || p.wallet, rank: p.meritRank?.title ?? null, record: p.record ?? null, contrarian: p.contrarian ?? null });
-      const rows = (d?.contested ?? []).slice(0, 8).map((r: Record<string, any>) => ({
+      type Party = { displayName?: string; wallet?: string; meritRank?: { title?: string } | null; record?: unknown; contrarian?: unknown };
+      type ContestedRow = { symbol: string; balance?: unknown; edge?: unknown; longs?: Party[]; shorts?: Party[] };
+      const party = (p: Party) => ({ name: p.displayName || p.wallet, rank: p.meritRank?.title ?? null, record: p.record ?? null, contrarian: p.contrarian ?? null });
+      const rows = ((d?.contested ?? []) as ContestedRow[]).slice(0, 8).map((r) => ({
         symbol: r.symbol, split: r.balance, edge: r.edge ?? null,
         longs: (r.longs ?? []).map(party),
         shorts: (r.shorts ?? []).map(party),
@@ -678,7 +683,11 @@ export const TOOLS: ToolDef[] = [
       const res = await fetch(`${AGENT_API}/theses/contrarians`);
       if (!res.ok) return JSON.stringify({ error: `contrarians failed (${res.status})` });
       const d = await res.json();
-      const rows = (d?.contrarians ?? []).slice(0, 10).map((r: Record<string, any>) => ({
+      type ContrarianRow = {
+        displayName?: string; wallet?: string; meritRank?: { title?: string } | null;
+        contrarianCalls?: unknown; contrarianAvgR?: unknown; contrarianWinRate?: unknown; edge?: unknown;
+      };
+      const rows = ((d?.contrarians ?? []) as ContrarianRow[]).slice(0, 10).map((r) => ({
         name: r.displayName || r.wallet, rank: r.meritRank?.title ?? null,
         contrarianCalls: r.contrarianCalls, contrarianAvgR: r.contrarianAvgR, contrarianWinRate: r.contrarianWinRate,
         edgeVsCrowd: r.edge,
@@ -689,7 +698,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "xray_wallet",
     description:
-      "X-ray ANY wallet's perp record from public data — no login, works on wallets that have never touched Nexus. Reads BOTH Hyperliquid (trade-by-trade history) and the Orderly network incl. Nexus (per-market settled PnL + live open positions), PLUS the wallet's Tracked Record — a graded consistency read (Consistency Score / trend / green-day rate) that separates a lucky single print from a wallet that's consistently profitable over time. Use when the user pastes a wallet address, asks 'is this trader any good', or wants to vet someone before copying them.",
+      "X-ray ANY wallet's perp record from public data — no login, works on wallets that have never touched Nexus. Returns the SAME grade the /analyze page shows: Hyperliquid graded per window (24H/7D/30D/ALL, each ACCRUING until it has enough closed trades), the edge-decay row, the copy gate (whether the page lets anyone copy this wallet, and why not), the Orderly network incl. Nexus (per-market settled PnL + live open positions), and the Tracked Record (graded consistency over time). Use when the user pastes a wallet address, asks 'is this trader any good', or wants to vet someone before copying them.",
     input_schema: {
       type: "object",
       properties: { wallet: { type: "string", description: "0x… wallet address." } },
@@ -699,57 +708,84 @@ export const TOOLS: ToolDef[] = [
       const w = String(args.wallet ?? "").trim();
       if (!/^0x[0-9a-fA-F]{40}$/.test(w)) return JSON.stringify({ error: "invalid wallet address" });
 
-      const [hlRes, ordRes, trkRes] = await Promise.allSettled([
-        fetch("https://api.hyperliquid.xyz/info", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "userFills", user: w.toLowerCase() }),
-        }).then((r) => r.json()),
+      const [hlRes, ordRes, trkRes, pfRes] = await Promise.allSettled([
+        // The SAME tape the page grades: the worker's stored, forward-collected tape
+        // (falls back to reading Hyperliquid directly if the worker is down).
+        fetchHLTape(w),
         fetch(`${AGENT_API}/smart/xray?address=${encodeURIComponent(w)}`).then((r) => r.json()),
         // Self-seeding: reading the history also begins/extends this wallet's Tracked
         // Record, so vetting a wallet starts grading its consistency over time.
         fetch(`${AGENT_API}/smart/xray/history?address=${encodeURIComponent(w)}`).then((r) => r.json()),
+        // Total vs perp-only lifetime PnL — the HL leaderboard ranks TOTAL PnL, so a
+        // wallet can show $445M there with $0 from perps (vault/spot).
+        fetchHLPortfolio(w),
       ]);
 
-      // Hyperliquid: closed fills only → count / net pnl / win rate.
-      let hyperliquid: Record<string, unknown> = { closed_trades: 0 };
-      if (hlRes.status === "fulfilled" && Array.isArray(hlRes.value)) {
-        const closed = hlRes.value.filter(
-          (f: { dir?: string; closedPnl?: string }) =>
-            /^Close/.test(String(f.dir ?? "")) || parseFloat(f.closedPnl ?? "0") !== 0,
-        );
-        const pnls = closed.map(
-          (f: { closedPnl?: string; fee?: string }) =>
-            parseFloat(f.closedPnl ?? "0") - Math.abs(parseFloat(f.fee ?? "0")),
-        );
-        const wins = pnls.filter((p: number) => p > 0).length;
-        hyperliquid = {
-          closed_trades: closed.length,
-          net_pnl: Math.round(pnls.reduce((s: number, p: number) => s + p, 0)),
-          win_rate_pct: pnls.length ? Math.round((wins / pnls.length) * 100) : null,
-        };
+      // Tracked Record first — the copy gate reads it, same as the page.
+      const trk = trkRes.status === "fulfilled" ? (trkRes.value?.track as Record<string, unknown> | undefined) : undefined;
+
+      // Hyperliquid: graded by xraySummary — the exact composition the /analyze page shows
+      // (windows, ACCRUING minimums, decay, partial-tape windows, copy gate). The assistant
+      // must never compute its own grade: a win rate on a window the page calls ACCRUING,
+      // or "worth copying" on a wallet whose copy is locked, would contradict the page.
+      // A rejected fills read is NOT "no history" — it stays distinguishable so the agent
+      // never vets a real trader as a blank wallet during an outage.
+      type Grade = { status: string; trades: number; min: number; net: number; winRate?: number; pf?: number; expectancy?: number };
+      const shapeWindow = (g: Grade) => g.status === "GRADED"
+        ? { status: "GRADED", closed_trades: g.trades, net_pnl: Math.round(g.net), win_rate_pct: Math.round(g.winRate ?? 0),
+            profit_factor: fmtPf(g.pf), expectancy_per_trade: Math.round((g.expectancy ?? 0) * 100) / 100 }
+        : { status: "ACCRUING", closed_trades: g.trades, needs_trades: g.min, net_so_far: Math.round(g.net) };
+      const iso = (t: number | null | undefined) => (t ? new Date(t).toISOString().slice(0, 10) : null);
+      let hyperliquid: Record<string, unknown> = { fills_fetch_failed: true, closed_trades: null };
+      let summary: ReturnType<typeof xraySummary> | null = null;
+      if (hlRes.status === "fulfilled") {
+        const tape = hlRes.value;
+        summary = xraySummary({ fills: tape.fills, completeFrom: tape.truncated ? tape.oldestTs : null, track: trk ?? null });
+        const grades = summary.grades as Record<string, Grade> | null;
+        hyperliquid = grades
+          ? {
+              headline_window: summary.defaultWindow.key,
+              headline_fell_back_to_all: summary.defaultWindow.fellBack,
+              windows: Object.fromEntries(Object.entries(grades).map(([k, g]) => [k, shapeWindow(g)])),
+              edge_decay_pf: (summary.decay ?? []).map((d: { key: string; status: string; pf: number | null }) =>
+                `${d.key} ${d.status === "GRADED" ? fmtPf(d.pf) : "accruing"}`).join(" → "),
+              partial_windows: summary.partialWindows,
+              tape: {
+                source: tape.source, fills: tape.fills.length,
+                complete_from: tape.truncated ? iso(tape.oldestTs) : "wallet's first fill",
+                collected_since: iso(tape.seededAt), stale: tape.stale,
+              },
+            }
+          : { closed_trades: 0, tape: { source: tape.source, fills: tape.fills.length } };
       }
+      // The copy gate — identical to the page's. When it's locked, the page offers no copy.
+      const g = summary ? summary.gate : null;
+      const copy_gate = g
+        ? { pass: g.pass, evidence: g.evidence.map((e: { label: string }) => e.label), locked_reasons: g.reasons }
+        : null;
 
       // Orderly: per-market aggregates per broker (ours flagged). NO per-trade tape
       // exists publicly, so never claim hold-time/timing stats from this side.
       const ord = ordRes.status === "fulfilled" ? ordRes.value : null;
+      const orderlyFailed = ordRes.status === "rejected";
       const orderly = ord?.venues?.length
         ? {
             venues: ord.venues.map((v: Record<string, unknown>) => ({
               broker: v.brokerId, is_nexus: v.isNexus, realized: v.realized,
-              unrealized: v.unrealized, markets: v.markets,
+              unrealized: v.unrealized, markets: v.markets, markets_capped: !!v.marketsCapped,
               profitable_markets_pct: v.profitableMarketsPct, open_positions: v.openPositions,
               top_markets: (v.bySymbol as Record<string, unknown>[] ?? []).slice(0, 5)
                 .map((s) => ({ sym: s.sym, realized: s.realized, open: s.open, side: s.side })),
             })),
             total_realized: ord.totalRealized,
+            markets_capped: !!ord.marketsCapped,
+            brokers_failed: ord.brokersFailed ?? [],
           }
         : null;
 
       // Tracked Record: the accruing, self-grading consistency read (realized-PnL
       // DELTAS between daily snapshots, not lifetime). Lets the AI separate a lucky
       // single print from a wallet that is consistently profitable over time.
-      const trk = trkRes.status === "fulfilled" ? (trkRes.value?.track as Record<string, unknown> | undefined) : undefined;
       const tracked_record = trk
         ? (trk.building
             ? { status: "tracking_started", snapshots: trk.points }
@@ -764,12 +800,47 @@ export const TOOLS: ToolDef[] = [
               })
         : null;
 
-      return JSON.stringify({
-        wallet: w, hyperliquid, orderly, tracked_record,
-        note: orderly
+      // Portfolio split: total vs perp-only lifetime PnL. A wallet with a big
+      // all-time number and zero perp PnL is a vault/spot record — no perp tape
+      // to grade, and it must be reported as such, never as "no history".
+      const pf = pfRes.status === "fulfilled" ? pfRes.value : null;
+      const hl_portfolio = pf
+        ? { all_time_pnl: Math.round(pf.allTime), perp_all_time_pnl: Math.round(pf.perpAllTime) }
+        : null;
+      const nonPerpRecord = !!hl_portfolio && hl_portfolio.all_time_pnl > 0 && hl_portfolio.perp_all_time_pnl === 0;
+
+      // Compact $ formatter matching the /analyze page's usd() style.
+      const usdShort = (n: number) => {
+        const a = Math.abs(n);
+        const s = a >= 1e6 ? `${(a / 1e6).toFixed(2)}M` : a >= 1e3 ? `${(a / 1e3).toFixed(1)}K` : a.toFixed(2);
+        return `${n < 0 ? "-" : ""}$${s}`;
+      };
+
+      const notes = [
+        orderly
           ? "Orderly figures are per-MARKET settled totals (no public per-trade tape), so hold-time/timing stats are Hyperliquid-only. tracked_record grades the CHANGE in realized PnL between daily snapshots — consistency_score/tier are EARNED from consistency over time and stay null until enough daily windows accrue; long gaps in watching are excluded so a month can't pose as a green day."
-          : "No Orderly-network history found for this wallet (sub-accounts aren't resolvable from an address).",
+          : orderlyFailed
+            ? "Orderly-network read failed (indexer error) — retry; do not report this as no history."
+            : "No Orderly-network history found for this wallet on the venues probed.",
+      ];
+      if (nonPerpRecord)
+        notes.push(`Hyperliquid shows ${usdShort(hl_portfolio!.all_time_pnl)} all-time PnL that is entirely NON-perp (vault/spot) — this wallet has no perp tape to grade. Report that explicitly; never call it "no trading history".`);
+      if (hlRes.status === "rejected" && !nonPerpRecord)
+        notes.push("Hyperliquid fills failed to load (API error) — do NOT report this wallet as having no perp history; tell the user to retry.");
+      if (orderly?.markets_capped)
+        notes.push("Orderly per-venue market lists cap at 100 — total_realized may understate for diversified wallets.");
+      if (orderly && (orderly.brokers_failed as string[]).length > 0)
+        notes.push(`Orderly venues failed to read (${(orderly.brokers_failed as string[]).join(", ")}) — treat as unread, not empty.`);
+      if (summary && summary.partialWindows.length)
+        notes.push(`Partial tape: Hyperliquid serves only a wallet's 10,000 most recent fills; the tape is complete from ${(hyperliquid.tape as { complete_from?: string })?.complete_from}. Windows ${summary.partialWindows.join("/")} reach back past that — say so when quoting them.`);
+      if (summary && summary.grades)
+        notes.push("Grading rules (same as the /analyze page): lead with headline_window. A window marked ACCRUING has NO grade — never quote a win rate or profit factor for it. The grade is its parts (net, trades, win rate, PF); there is no single score. If copy_gate.pass is false, the page will not let the user copy this wallet — relay locked_reasons and never suggest copying it.");
+
+      return JSON.stringify({
+        wallet: w, hyperliquid, copy_gate, hl_portfolio, orderly, tracked_record,
+        note: notes.join(" "),
         full_report: `/analyze?address=${w}`,
+        share_link: `https://og.nexustradinglabs.com/share/xray/${w.toLowerCase()}`,
       });
     },
   },

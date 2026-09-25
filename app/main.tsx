@@ -4,6 +4,8 @@ import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { PageMeta } from "./components/PageMeta";
+import NotFoundPage from "./pages/notfound";
 import { withBasePath } from './utils/base-path';
 import { getRuntimeConfig } from './utils/runtime-config';
 
@@ -131,7 +133,7 @@ const router = createBrowserRouter([
       // ✅ LAB ROUTE ADDED
       {
         path: 'lab',
-        element: <LabLayout />,
+        element: <><PageMeta title="The Lab" description="Plan it. Run it. Prove it. Theses, an agent and a graded record in one terminal." /><LabLayout /></>,
         children: [
           { index: true, element: <TheLabPage /> },
         ],
@@ -140,7 +142,7 @@ const router = createBrowserRouter([
       // ✅ ANALYZE ROUTE (public wallet x-ray)
       {
         path: 'analyze',
-        element: <AnalyzeLayout />,
+        element: <><PageMeta title="Wallet X-Ray" description="Read any Hyperliquid wallet from public data. Positions. P&L. Habits." /><AnalyzeLayout /></>,
         children: [
           { index: true, element: <AnalyzePage /> },
         ],
@@ -149,7 +151,7 @@ const router = createBrowserRouter([
       // ✅ ARENA ROUTE (open proving ground for AI trading agents)
       {
         path: 'arena',
-        element: <ArenaLayout />,
+        element: <><PageMeta title="Arena" description="An open proving ground for AI trading agents. Every close graded from public price." /><ArenaLayout /></>,
         children: [
           { index: true, element: <ArenaPage /> },
         ],
@@ -158,7 +160,7 @@ const router = createBrowserRouter([
       // ✅ PROOF ROUTE (unified track-records hub)
       {
         path: 'proof',
-        element: <ProofLayout />,
+        element: <><PageMeta title="Proof" description="Records for callers, agents and desks. Graded from public price. Anchored on Arbitrum." /><ProofLayout /></>,
         children: [
           { index: true, element: <ProofPage /> },
         ],
@@ -167,7 +169,7 @@ const router = createBrowserRouter([
       // ✅ FEED ROUTE
       {
         path: 'feed',
-        element: <FeedLayout />,
+        element: <><PageMeta title="Feed" description="Live calls, verified callers and the signal scoreboard." /><FeedLayout /></>,
         children: [
           { index: true, element: <FeedPage /> },
           { path: 'trader/:wallet', element: <TraderPage /> },
@@ -248,7 +250,7 @@ const router = createBrowserRouter([
       // ✅ INTEL ROUTE
       {
         path: 'intel',
-        element: <IntelLayout />,
+        element: <><PageMeta title="Market Intel" description="Funding, open interest and smart-money positioning. Live." /><IntelLayout /></>,
         children: [
           { index: true, element: <IntelPage /> },
         ],
@@ -257,11 +259,14 @@ const router = createBrowserRouter([
       // ✅ MESSAGES ROUTE (XMTP encrypted wallet-to-wallet DMs)
       {
         path: 'messages',
-        element: <MessagesLayout />,
+        element: <><PageMeta title="Messages" description="Encrypted wallet-to-wallet messages over XMTP." /><MessagesLayout /></>,
         children: [
           { index: true, element: <MessagesPage /> },
         ],
       },
+
+      // Anything else → a calm 404 inside the app shell (was: the router's crash screen).
+      { path: '*', element: <NotFoundPage /> },
     ],
   },
   // Farcaster Mini App route — outside <App /> so it loads light, no Orderly chrome.

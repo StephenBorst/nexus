@@ -3,7 +3,7 @@ import { fusePositioning, positioningRead } from "@/lib/positioning.mjs";
 import { fetchDeribitTerm } from "@/lib/deribit.mjs";
 import { Simulate } from "./Simulate";
 import type { ProcessedTrade } from "./types";
-import { C } from "@/config/theme";
+import { C, LINE, SIGNAL } from "@/config/theme";
 
 // ── THE READ — the pre-trade fusion panel (Phase-3 synthesis) ────────────────
 // The decision moment used to be intelligence-blind: the Thesis Engine showed funding
@@ -18,7 +18,7 @@ const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", NEG = "#f7525f", WARN = "#e0a458", BORDER = "#232327", INSET = "#0c0c0e";
+const POS = "#3ecf8e", NEG = "#f7525f", WARN = SIGNAL.caution, BORDER = "#232327", INSET = C.surfaceAlt;
 
 const bare = (s: string) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
 
@@ -276,7 +276,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
   const agree = voteReads.filter((r) => r.ok).length;
   const pushback = voteReads.filter((r) => r.side && r.side !== direction).length;
   const convLevel = voteReads.length >= 3 && agree >= 3 && agree > pushback ? "HIGH" : agree >= 2 && agree > pushback ? "MODERATE" : pushback > agree ? "AGAINST" : "LOW";
-  const convColor = convLevel === "HIGH" ? POS : convLevel === "MODERATE" ? "#8fdcb8" : convLevel === "AGAINST" ? NEG : WARN;
+  const convColor = convLevel === "HIGH" ? POS : convLevel === "MODERATE" ? SIGNAL.posSoft : convLevel === "AGAINST" ? NEG : WARN;
   // "HIGH CONVICTION" is banned language app-wide (the loudest word must be the graded one) — the
   // HIGH case is a STRONG READ, and it only survives the dock below over a PROVEN reversion clock.
   const convWord = convLevel === "HIGH" ? "STRONG READ" : convLevel === "MODERATE" ? "MODERATE" : convLevel === "AGAINST" ? "READS DISAGREE" : "LOW CONVICTION";
@@ -316,7 +316,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
   const provenEdge = !!(
     fused && fused.crowdFade === direction && fused.smartSide === direction &&
     fused.fundingAnnualPct != null && Math.abs(fused.fundingAnnualPct) >= 10 &&
-    revProven   // the fade has actually reverted here (the ONE clock, edgeQuality PROVEN) — never over a weak/unproven one
+    revProven   // the fade has actually reverted here (the ONE clock, edgeQuality PROVEN). Never over a weak/unproven one
   );
 
   const loading = fused === undefined;
@@ -332,27 +332,27 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
     const px = (n: number) => (n >= 1000 ? n.toLocaleString() : String(n));
     const bits: string[] = [];
     if (term) bits.push(term.structure === "backwardation"
-      ? "options are backwardated — the volatile, mean-reverting regime fades work best in"
+      ? "options are backwardated. The volatile, mean-reverting regime fades work best in"
       : term.structure === "contango"
-      ? "vol is calm — a trend regime, so fades are lower-odds"
+      ? "vol is calm. A trend regime, so fades are lower-odds"
       : "vol curve is neutral");
     const mag = magnets && (direction === "SHORT" ? magnets.below?.[0] : magnets.above?.[0]);
-    if (mag) bits.push(`a liquidation magnet sits at $${px(mag.price)} ${direction === "SHORT" ? "below" : "above"} — a natural target`);
+    if (mag) bits.push(`a liquidation magnet sits at $${px(mag.price)} ${direction === "SHORT" ? "below" : "above"}. A natural target`);
     if (record?.side) bits.push(`your ${direction.toLowerCase()} record on ${coin} is ${record.side.net >= 0 ? "+" : "-"}$${Math.abs(record.side.net)} over ${record.side.n} (${record.side.wr}%)`);
     else if (record) bits.push(`your ${coin} record is ${record.net >= 0 ? "+" : "-"}$${Math.abs(record.net)} over ${record.n}`);
     const alignLine = `${agree} of ${voteReads.length} reads align ${direction}`;
-    const head = provenEdge ? `◆ Proven-edge setup — the funding-fade ${direction} on ${coin}, confirmed by smart money and a hist that's reverted ${revPct}% of the time. The one confluence that's held up in testing.`
-      : weakBase ? `${alignLine}, but the hist says it loses — it reverted only ${revPct}% of recent stretched-funding instances. Aligned lenses aren't a paying edge; trust your own thesis, not the fade.`
-      : convLevel === "AGAINST" ? `Heads up — the reads lean against your ${direction} (${pushback} push back).`
-      : (convLevel === "HIGH" && revProven) ? `◆ Strong read ${direction} — ${alignLine}, and the fade has paid here (${revPct}% reverted).`
-      : (convLevel === "HIGH" || convLevel === "MODERATE") ? `${alignLine}${revUnproven ? " — but the fade is unproven here, so trust your own thesis over the tally" : ""}.`
-      : `Thin read on ${coin} — trust your own thesis.`;
+    const head = provenEdge ? `◆ Aligned setup. Funding fade ${direction} on ${coin}, with smart money, where the fade has reverted ${revPct}% of the time. Rare by design. Not a guarantee.`
+      : weakBase ? `${alignLine}, but the hist says it loses. It reverted only ${revPct}% of recent stretched-funding instances. Aligned lenses aren't a paying edge; trust your own thesis, not the fade.`
+      : convLevel === "AGAINST" ? `Heads up. The reads lean against your ${direction} (${pushback} push back).`
+      : (convLevel === "HIGH" && revProven) ? `◆ Strong read ${direction}. ${alignLine}, and the fade has paid here (${revPct}% reverted).`
+      : (convLevel === "HIGH" || convLevel === "MODERATE") ? `${alignLine}${revUnproven ? ". But the fade is unproven here, so trust your own thesis over the tally" : ""}.`
+      : `Thin read on ${coin}. Trust your own thesis.`;
     return bits.length ? `${head} ${bits.join("; ")}.` : head;
   })();
 
   const tone = aligned ? POS : against ? WARN : FOG;
   return (
-    <div style={{ border: `1px solid ${aligned ? "#2a3a30" : against ? "#3a3320" : BORDER}`, borderLeft: `2px solid ${tone}`, background: C.surfaceAlt, borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+    <div style={{ border: `1px solid ${aligned ? LINE.pos : against ? LINE.warn : BORDER}`, borderLeft: `2px solid ${tone}`, background: C.surfaceAlt, borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: tone, boxShadow: `0 0 8px ${tone}88` }} />
         <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>THE READ · {coin}</span>
@@ -362,26 +362,26 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
       {loading ? (
         <div style={{ fontFamily: MONO, fontSize: 10.5, color: FAINT }}>Reading {coin}…</div>
       ) : nothing ? (
-        <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTED, lineHeight: 1.5 }}>No strong read on {coin} right now — no funding extreme, no sharp cluster, no record here yet. Trust your own thesis.</div>
+        <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTED, lineHeight: 1.5 }}>No strong read on {coin} right now. No funding extreme, no sharp cluster, no record here yet. Trust your own thesis.</div>
       ) : (
         <>
           {/* CONVICTION VERDICT — how many INDEPENDENT, orthogonal reads agree with your
               direction. Verdict leads (tinted hero); the evidence is ONE self-contained grid
-              below — each read shows its value AND its alignment (✓ aligns / ✗ against / ·
+              below. Each read shows its value AND its alignment (✓ aligns / ✗ against / ·
               neutral), colored by alignment. Never a black-box score. */}
           {reads.length > 0 && (
             <>
               <div style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 8, background: `${convColorFinal}12`, border: `1px solid ${convColorFinal}33` }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: convColorFinal }}>◆ {convWordFinal}</span>
-                  {provenEdge && <span title="Funding-fade + smart-money + a positive base rate all align — the one configuration that survived backtesting" style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.1em", color: POS, border: `1px solid ${POS}55`, borderRadius: 3, padding: "1px 6px" }}>◆ PROVEN-EDGE SETUP</span>}
+                  {provenEdge && <span title="Funding fade, smart money and a positive base rate all agree. Rare by design. Not graded PREDICTIVE on the scoreboard." style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.1em", color: POS, border: `1px solid ${POS}55`, borderRadius: 3, padding: "1px 6px" }}>◆ ALIGNED SETUP</span>}
                   <span style={{ fontFamily: MONO, fontSize: 10.5, color: FOG }}>{agree}/{voteReads.length} independent reads align {direction}{pushback > 0 ? ` · ${pushback} against` : ""}</span>
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 6, marginBottom: 10 }}>
                 {voteReads.map((r) => {
                   const c = r.ok ? POS : (r.side && r.side !== direction ? NEG : FAINT);
-                  const bd = r.ok ? "#2a3a30" : (r.side && r.side !== direction ? "#3a2530" : BORDER);
+                  const bd = r.ok ? LINE.pos : (r.side && r.side !== direction ? LINE.neg : BORDER);
                   return (
                     <div key={r.label} style={{ display: "flex", alignItems: "baseline", gap: 7, border: `1px solid ${bd}`, borderRadius: 5, padding: "6px 9px", background: INSET }}>
                       <span style={{ fontFamily: MONO, fontSize: 10, color: c, flexShrink: 0 }}>{r.ok ? "✓" : r.side && r.side !== direction ? "✗" : "·"}</span>
@@ -395,7 +395,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               </div>
             </>
           )}
-          {synth && <div style={{ fontFamily: UI, fontSize: 12.5, color: convColorFinal === POS ? "#8fdcb8" : convColorFinal, lineHeight: 1.55 }}>{synth}</div>}
+          {synth && <div style={{ fontFamily: UI, fontSize: 12.5, color: convColorFinal === POS ? SIGNAL.posSoft : convColorFinal, lineHeight: 1.55 }}>{synth}</div>}
 
           {/* SETUP MOMENTUM — persistence/decay: the ONLY time-derivative read. Is the crowded
               funding-fade still building (early) or already unwinding (late)? From oi:hist. */}
@@ -418,14 +418,14 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
           {/* HIST — the ONE reversion clock (the SAME series the card / ticket / scanner cite):
               how often fading this stretch has actually reverted here. Green when proven, amber
               when it has bled, muted when there isn't enough history to prove it. The separate
-              /intel/baserate backtest is NOT shown here — one fade, one clock (Grok). */}
+              /intel/baserate backtest is NOT shown here. One fade, one clock (Grok). */}
           {reversion && (
             <div style={{ marginTop: 8, fontFamily: UI, fontSize: 11.5, color: FOG, lineHeight: 1.5 }}>
               <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: MUTED }}>HIST · </span>
               {revPct != null
                 ? <>fading {coin} here has reverted <b style={{ color: revProven ? POS : revWeak ? WARN : MUTED }}>{revPct}%</b> of the last {reversion.samples} stretched-funding instances.{" "}
-                    <span style={{ color: MUTED }}>{revProven ? "A real edge here — still size for variance." : revWeak ? "This setup has bled here — lean on your own thesis, not the fade." : "Not proven yet — trust your own read over the fade."}</span></>
-                : <span style={{ color: MUTED }}>no reversion history for {coin} yet — the fade is unproven; trust your own read.</span>}
+                    <span style={{ color: MUTED }}>{revProven ? "A real edge here. Still size for variance." : revWeak ? "This setup has bled here. Lean on your own thesis, not the fade." : "Not proven yet. Trust your own read over the fade."}</span></>
+                : <span style={{ color: MUTED }}>no reversion history for {coin} yet. The fade is unproven; trust your own read.</span>}
             </div>
           )}
 
@@ -437,7 +437,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               {magnets.below[0] && <>downside pull <b style={{ color: NEG }}>${magnets.below[0].price >= 1000 ? magnets.below[0].price.toLocaleString() : magnets.below[0].price}</b> <span style={{ color: FAINT }}>(long liqs)</span></>}
               {magnets.below[0] && magnets.above[0] ? " · " : ""}
               {magnets.above[0] && <>upside pull <b style={{ color: POS }}>${magnets.above[0].price >= 1000 ? magnets.above[0].price.toLocaleString() : magnets.above[0].price}</b> <span style={{ color: FAINT }}>(short liqs)</span></>}
-              <span style={{ color: MUTED }}> — estimated, where cascades sit.</span>
+              <span style={{ color: MUTED }}>. Estimated, where cascades sit.</span>
             </div>
           )}
 
@@ -447,7 +447,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
             <div style={{ marginTop: 8, fontFamily: UI, fontSize: 11.5, color: FOG, lineHeight: 1.5 }}>
               <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: MUTED }}>VOL REGIME · </span>
               options are in <b style={{ color: term.structure === "backwardation" ? WARN : term.structure === "contango" ? POS : FOG }}>{term.structure}</b> ({term.frontIv}v front / {term.backIv}v back).{" "}
-              <span style={{ color: MUTED }}>{term.structure === "backwardation" ? "Acute near-term stress — fades work best here, but size for the move." : term.structure === "contango" ? "Calm/complacent — trends over fades." : "Neutral vol curve."}</span>
+              <span style={{ color: MUTED }}>{term.structure === "backwardation" ? "Acute near-term stress. Fades work best here, but size for the move." : term.structure === "contango" ? "Calm/complacent. Trends over fades." : "Neutral vol curve."}</span>
             </div>
           )}
 
@@ -459,7 +459,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               {breadth.crowdLong >= breadth.crowdShort ? breadth.crowdLong : breadth.crowdShort} of {breadth.total} markets have crowds leaning <b style={{ color: breadth.crowdLong >= breadth.crowdShort ? POS : NEG }}>{breadth.crowdLong >= breadth.crowdShort ? "long" : "short"}</b>
               {breadth.lean
                 ? <> — <b style={{ color: breadth.lean === "LONG" ? POS : WARN }}>{breadth.lean === "SHORT" ? "risk-on froth" : "broad capitulation"}</b>, a market-wide fade-{breadth.lean.toLowerCase()} backdrop. <span style={{ color: breadth.lean === direction ? POS : WARN }}>Your {direction.toLowerCase()} runs {breadth.lean === direction ? "with" : "against"} the tape.</span></>
-                : <span style={{ color: MUTED }}> — mixed, no broad tilt to fight or ride.</span>}
+                : <span style={{ color: MUTED }}>. Mixed, no broad tilt to fight or ride.</span>}
             </div>
           )}
 
@@ -470,9 +470,9 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: MUTED }}>BTC BETA · </span>
               {coin}'s move is <b style={{ color: beta.verdict === "BTC_DRIVEN" ? WARN : beta.verdict === "IDIOSYNCRATIC" ? POS : FOG }}>{beta.drivenPct}% BTC-driven</b> (β {beta.beta}).{" "}
               <span style={{ color: MUTED }}>{beta.verdict === "BTC_DRIVEN"
-                ? `A ${direction.toLowerCase()} here is largely a BTC bet — the ${coin}-specific reads mean less; check BTC first.`
+                ? `A ${direction.toLowerCase()} here is largely a BTC bet. The ${coin}-specific reads mean less; check BTC first.`
                 : beta.verdict === "IDIOSYNCRATIC"
-                ? `Trading on its own — this is a real ${coin}-specific read, not market beta.`
+                ? `Trading on its own. This is a real ${coin}-specific read, not market beta.`
                 : "Part market beta, part its own move."}</span>
             </div>
           )}
@@ -485,7 +485,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               {advice.regime && (
                 <div style={{ fontFamily: UI, fontSize: 12, color: FOG, lineHeight: 1.5 }}>
                   {coin} is in a {TREND_WORD[advice.regime.trend || ""] || (advice.regime.trend || "").toLowerCase()} · {VOL_WORD[advice.regime.vol || ""] || (advice.regime.vol || "").toLowerCase()} tape
-                  {advice.alignment === "AGAINST_TREND" ? <span style={{ color: WARN }}> — you're fighting the trend</span> : advice.alignment === "WITH_TREND" ? <span style={{ color: POS }}> — with the trend</span> : null}
+                  {advice.alignment === "AGAINST_TREND" ? <span style={{ color: WARN }}>. You're fighting the trend</span> : advice.alignment === "WITH_TREND" ? <span style={{ color: POS }}>. With the trend</span> : null}
                   {advice.yourRecord?.trend && advice.regime.trend ? <span style={{ color: FAINT }}> · your {TREND_WORD[advice.regime.trend] || ""} record {advice.yourRecord.trend.avgR >= 0 ? "+" : ""}{advice.yourRecord.trend.avgR}R/{advice.yourRecord.trend.calls}</span> : null}
                 </div>
               )}
@@ -496,7 +496,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
                   ))}
                 </div>
               ) : (
-                <div style={{ fontFamily: MONO, fontSize: 10.5, color: POS, marginTop: 7 }}>✓ plan reads clean — grades on first touch of target vs stop.</div>
+                <div style={{ fontFamily: MONO, fontSize: 10.5, color: POS, marginTop: 7 }}>✓ plan reads clean. Grades on first touch of target vs stop.</div>
               )}
             </div>
           )}
@@ -509,14 +509,14 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               <Simulate
                 label="◆ Pressure-test this trade →"
                 wallet={wallet}
-                body={{ kind: "thesis", coin, direction, notes: synth || `${direction} ${coin} — ${convWordFinal}, ${agree}/${voteReads.length} reads align.` }}
+                body={{ kind: "thesis", coin, direction, notes: synth || `${direction} ${coin}. ${convWordFinal}, ${agree}/${voteReads.length} reads align.` }}
               />
             </div>
             {reads.length >= 2 && (() => {
               // Share the read — on-brand content ("multi-axis, graded, not advice"), pulls eyes
               // back to the Lab. Frames it as a READ, never a call/signal.
               const conf = reads.filter((r) => r.ok).map((r) => r.label).slice(0, 4).join(", ");
-              const text = `◆ Nexus read — ${convWordFinal}, ${direction} ${coin}: ${agree}/${voteReads.length} independent reads align${conf ? ` (${conf})` : ""}. Multi-axis, graded on-chain, not advice. The full breakdown 👇`;
+              const text = `Nexus read. ${direction} ${coin}, ${convWordFinal}.\n\n${agree}/${voteReads.length} independent reads align${conf ? ` (${conf})` : ""}.\n\nNot advice.`;
               const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent("https://trade.nexustradinglabs.com/lab")}`;
               return (
                 <a href={xUrl} target="_blank" rel="noopener noreferrer" title="Share this read on X" className="nx-press"
@@ -525,7 +525,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
             })()}
           </div>
 
-          <div style={{ fontFamily: MONO, fontSize: 8, color: FAINT, marginTop: 8, lineHeight: 1.5 }}>A read, not a green light — it tightens the odds, it doesn't guarantee them.</div>
+          <div style={{ fontFamily: MONO, fontSize: 8, color: FAINT, marginTop: 8, lineHeight: 1.5 }}>A read, not a green light. It tightens the odds, it doesn't guarantee them.</div>
         </>
       )}
     </div>

@@ -29,7 +29,6 @@ import { Collapsible } from "./Collapsible";
 import { SectionHeader } from "./components";
 import { Simulate } from "./Simulate";
 import { ProjectionBand } from "@/components/ProjectionBand";
-import { fmtFunding8h, isThinBook, FUNDING_PERIODS_PER_YEAR } from "@/lib/funding.mjs";
 
 // The board's /intel/mispriced call gates the "loading board…" spinner, so a hung connection
 // would strand a guest on it forever. Cap it (the SAME abort pattern as DecisionBoard) so it
@@ -53,7 +52,7 @@ type EdgeQuality = { tier: "PROVEN" | "TRAP" | "MIXED" | "UNPROVEN"; revertedPct
 type SmartMoney = { side: "LONG" | "SHORT"; count: number; long: number | null; short: number | null };
 type Market = {
   symbol: string; coin: string; markPrice: number;
-  funding8hPct?: number; fundingAnnualPct: number; oiUsd: number;
+  funding8hPct: number; fundingAnnualPct: number; oiUsd: number;
   change24hPct: number | null; direction: "LONG" | "SHORT" | "NONE";
   edge: number; status: "MISPRICED" | "PRICED_FAIR";
   reversion?: { revertedPct: number; avgReversionPct: number; samples: number; horizonDays: number } | null;
@@ -65,6 +64,24 @@ type Market = {
   stretched?: boolean | null;
   verdict?: "FADE" | "WATCH" | "NONE";
 };
+
+// ── Funding: the PERIOD rate beside the annualized one ─────────────────────────
+// %/yr is per-8h × 1095 — arithmetically real, but on a thin FX perp a −0.19%/8h print
+// annualizes to −206%/yr and reads like a bug. Show both so the reader sees the source.
+// Never clamp: the number is the number.
+const signed = (n: number, body: string) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${body}`;
+function fmt8h(pct8h: number): string {
+  const a = Math.abs(pct8h);
+  const body = a === 0 ? "0" : a >= 0.1 ? a.toFixed(2) : Number(a.toPrecision(2)).toString();
+  return `${signed(pct8h, body)}%/8h`;
+}
+function fmtYr(pctYr: number): string { return `${signed(pctYr, String(Math.abs(pctYr)))}%/yr`; }
+// Low-confidence liquidity band. The server floor is $50k OI (below it a market never
+// reaches the board); between $50k and this, a wide funding print is real but THIN —
+// a few positions can set it. Flagged, not hidden.
+const THIN_OI_USD = 250_000;
+const isThinOi = (m: { oiUsd: number }) => Number.isFinite(m.oiUsd) && m.oiUsd < THIN_OI_USD;
+const THIN_TITLE = `Under $${THIN_OI_USD / 1000}k open interest. A handful of positions can set this funding rate. Low confidence.`;
 type BoardResp = { asOf?: string; scanned?: number; mispricedCount?: number; markets?: Market[] };
 type Lean = { side: "LONG" | "SHORT" | "SPLIT"; lean: number; longCount: number; shortCount: number; participants: number };
 type ConsensusResp = { consensus?: Record<string, Lean> };
@@ -77,12 +94,6 @@ const fmtPrice = (n: number) => n >= 1000 ? n.toLocaleString(undefined, { maximu
 
 const stanceLabel = (dir: string) => dir === "SHORT" ? "Crowd over-long" : dir === "LONG" ? "Crowd over-short" : "Balanced";
 
-// Funding display + liquidity confidence come from the TESTED shared module so the rule
-// can't drift between here, the copilot's board tool, and the tests that pin it.
-// ⚠️ The annualized figure is never clamped — see app/lib/funding.mjs for why.
-const thinBook = (m: Market) => isThinBook(m.oiUsd);
-const THIN_BOOK_TITLE = `Open interest is under $1M — the funding print clears the board's $50k floor, but a book this thin can hold an extreme rate without a crowd behind it. Treat the edge as low-confidence.`;
-
 // Plain-English translation — the readability layer. A first-timer reads this; a pro
 // reads the numbers above it. Both are true, neither is dumbed down. verdict === "WATCH"
 // tells the truth Grok flagged: funding can be HIGH in absolute terms yet not STRETCHED
@@ -94,17 +105,17 @@ const plainRead = (m: Market, verdict?: "FADE" | "WATCH" | "NONE", weakEdge?: bo
   // the magnitude or edge. The badge stays WATCHING and we NEVER also call it "stretched" — the
   // "within range" vs "stretched" contradiction on one scroll was the ORDER bug.
   if (stretched !== true && m.direction !== "NONE")
-    return `Funding on ${m.coin} is ${pct >= 10 ? "elevated" : "modest"} (${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr) but sitting within its own typical range — the crowd isn't stretched right now, so there's no clean fade yet. Watch for it to pierce out of the band.`;
+    return `Funding on ${m.coin} is ${pct >= 10 ? "elevated" : "modest"} (${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr) but sitting within its own typical range. The crowd isn't stretched right now, so there's no clean fade yet. Watch for it to pierce out of the band.`;
   // Pierced, but the annualized cost is trivial — the crowd is barely paying to hold.
   if (tooSmall && m.direction !== "NONE")
-    return `Funding on ${m.coin} is only ${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr — even poking out of its recent range, the crowd is barely paying to hold ${crowd}, so there's no meaningful fade to take. Watch for a bigger stretch.`;
+    return `Funding on ${m.coin} is only ${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr. Even poking out of its recent range, the crowd is barely paying to hold ${crowd}, so there's no meaningful fade to take. Watch for a bigger stretch.`;
   // Pierced + large, but the reversion clock says fading it has bled.
   if (weakEdge && m.direction !== "NONE")
-    return `Funding on ${m.coin} is stretched (the crowd is one-sided ${crowd}), but the last times it ran this hot the fade mostly DIDN'T pay — historically it has underperformed here. Treat it as a watch; draft only on your own read, not the fade.`;
+    return `Funding on ${m.coin} is stretched (the crowd is one-sided ${crowd}), but the last times it ran this hot the fade mostly DIDN'T pay. Historically it has underperformed here. Treat it as a watch; draft only on your own read, not the fade.`;
   // Pierced + large + not weak → the clean fade. The PLAY word, not "lean" (banned).
-  if (m.direction === "SHORT") return `Traders are paying ${pct}%/yr to stay long ${m.coin} — the crowd is stretched one-sided; that crowding usually unwinds, so the play is FADE SHORT.`;
-  if (m.direction === "LONG") return `Shorts are paying ${pct}%/yr to stay short ${m.coin} — the crowd is stretched one-sided the other way, so the play is FADE LONG.`;
-  return `${m.coin} funding is close to balanced — no clear crowd to fade right now.`;
+  if (m.direction === "SHORT") return `Traders are paying ${pct}%/yr to stay long ${m.coin}. The crowd is stretched one-sided; that crowding usually unwinds, so the play is FADE SHORT.`;
+  if (m.direction === "LONG") return `Shorts are paying ${pct}%/yr to stay short ${m.coin}. The crowd is stretched one-sided the other way, so the play is FADE LONG.`;
+  return `${m.coin} funding is close to balanced. No clear crowd to fade right now.`;
 };
 
 // ── THE HONEST EDGE TEST (Grok) — funding is a FADE only when it's stretched vs its OWN
@@ -299,10 +310,10 @@ function SynthChart({ points, price, direction, smartMoney, markPrice, fundingAn
       <div style={{ fontFamily: MONO, fontSize: 8.5, color: C.text.faint, marginTop: 8, lineHeight: 1.5 }}>
         {hasFunding
           ? (stretchedEnough
-              ? "Funding has pierced its typical range — the crowd is stretched. Watch whether price gives it back."
+              ? "Funding has pierced its typical range. The crowd is stretched. Watch whether price gives it back."
               : badgePierced
-              ? `Funding poked out of its range, but at ${fundingAnnualPct >= 0 ? "+" : ""}${fundingAnnualPct}%/yr the cost to hold is trivial — not stretched enough to fade.`
-              : "Funding is within its typical range — no crowd extreme to fade right now.")
+              ? `Funding poked out of its range, but at ${fundingAnnualPct >= 0 ? "+" : ""}${fundingAnnualPct}%/yr the cost to hold is trivial. Not stretched enough to fade.`
+              : "Funding is within its typical range. No crowd extreme to fade right now.")
           : "Price over the window. Funding history is still accumulating for this market."}
       </div>
     </div>
@@ -316,8 +327,8 @@ function synthVerdict(m: Market): { tone: "aligned" | "conflict"; text: string }
   const sm = m.smartMoney;
   if (m.direction === "NONE" || !sm || !sm.side) return null;
   if (sm.side === m.direction)
-    return { tone: "aligned", text: `The crowd is offside and the sharp money is already positioned ${sm.side.toLowerCase()} — the smart money is fading it with you.` };
-  return { tone: "conflict", text: `The crowd is offside, but the sharp money is riding ${sm.side.toLowerCase()} WITH them. Not a clean fade — the real money is on the crowd's side here.` };
+    return { tone: "aligned", text: `The crowd is offside and the sharp money is already positioned ${sm.side.toLowerCase()}. The smart money is fading it with you.` };
+  return { tone: "conflict", text: `The crowd is offside, but the sharp money is riding ${sm.side.toLowerCase()} WITH them. Not a clean fade. The real money is on the crowd's side here.` };
 }
 
 // The reversion proof stat (tier 2), phrased plainly — and HONESTLY when the fade
@@ -326,8 +337,8 @@ function reversionSentence(coin: string, r: Reversion): string {
   const mag = Math.abs(r.avgReversionPct);
   const d = `${r.horizonDays} day${r.horizonDays === 1 ? "" : "s"}`;
   if (r.avgReversionPct > 0)
-    return `The last ${r.samples} times ${coin} funding ran this hot, price gave back an average of ${mag}% over ${d} — it reverted ${r.revertedPct}% of the time.`;
-  return `Careful: the last ${r.samples} times ${coin} funding ran this hot, price kept going the crowd's way by ${mag}% on average over ${d} — the fade only worked ${r.revertedPct}% of the time.`;
+    return `The last ${r.samples} times ${coin} funding ran this hot, price gave back an average of ${mag}% over ${d}. It reverted ${r.revertedPct}% of the time.`;
+  return `Careful: the last ${r.samples} times ${coin} funding ran this hot, price kept going the crowd's way by ${mag}% on average over ${d}. The fade only worked ${r.revertedPct}% of the time.`;
 }
 
 // Share the READ as a branded, verifiable card (verdict only — no fake R/stops). ONE helper so
@@ -359,10 +370,10 @@ function shareRead(m: Market, isFade: boolean, draftAnyway: boolean) {
 function EdgeQualityChip({ q }: { q?: EdgeQuality }) {
   if (!q) return null;
   const map: Record<string, { color: string; text: string }> = {
-    PROVEN:   { color: C.accent,     text: `◆ Fade has paid here — reverted ${q.revertedPct}%` },
-    TRAP:     { color: C.warn,       text: `⚠ Trap — fading this has FAILED (reverted only ${q.revertedPct}%)` },
-    MIXED:    { color: C.text.fog,   text: `Coin-flip so far — reverted ${q.revertedPct}%` },
-    UNPROVEN: { color: C.text.faint, text: `Unproven — not enough funding history yet` },
+    PROVEN:   { color: C.accent,     text: `◆ Fade has paid here. Reverted ${q.revertedPct}%` },
+    TRAP:     { color: C.warn,       text: `⚠ Trap. Fading this has FAILED (reverted only ${q.revertedPct}%)` },
+    MIXED:    { color: C.text.fog,   text: `Coin-flip so far. Reverted ${q.revertedPct}%` },
+    UNPROVEN: { color: C.text.faint, text: `Unproven. Not enough funding history yet` },
   };
   const s = map[q.tier];
   if (!s) return null;
@@ -435,7 +446,7 @@ function SynthesisRead({ m, lean, active }: { m: Market; lean?: Lean; active: bo
         <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.text.muted }}>◆ The read · three lenses</span>
         {!active && <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, color: C.text.faint }}>current positioning · no fade yet</span>}
       </div>
-      <LensRow first label="Crowd" value={<>{m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%/yr{fmtFunding8h(m.funding8hPct) ? <span style={{ color: C.text.faint }}> ({fmtFunding8h(m.funding8hPct)}/8h)</span> : null} · paying to be {crowdSide}{thinBook(m) ? <span title={THIN_BOOK_TITLE} style={{ color: C.warn }}> · thin book</span> : null}</>} tag={active ? `FADE ${fadeDir}` : "within range"} tagTone={active ? C.text.bright : C.text.faint} />
+      <LensRow first label="Crowd" value={<>{m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%/yr · paying to be {crowdSide}</>} tag={active ? `FADE ${fadeDir}` : "within range"} tagTone={active ? C.text.bright : C.text.faint} />
       <LensRow label="Smart $"
         value={sm?.side ? `${sm.count} sharp${sm.count === 1 ? "" : "s"} ${sm.side}${sm.long != null && sm.short != null ? ` · ${sm.long}L/${sm.short}S` : ""}` : "no read"}
         tag={active && sm?.side ? (sm.side === fadeDir ? withTag : againstTag) : undefined}
@@ -511,7 +522,7 @@ export function MispricedBoard() {
         .catch(() => { if (live) { setBoard((prev) => (prev && prev.markets && prev.markets.length ? prev : { markets: [] })); setErr(true); } });
       fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json())
         .then((d: ConsensusResp) => { if (live) setLean(d?.consensus || {}); })
-        .catch(() => { /* fail-soft — board still renders */ });
+        .catch(() => { /* fail-soft. Board still renders */ });
     };
     load();
     // Hard deadline (belt-and-suspenders): never leave the spinner gated on null past the cap.
@@ -601,13 +612,13 @@ export function MispricedBoard() {
       takeProfit1: String(takeProfit1),
       catalyst: `Funding fade · ${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr stretched, crowd offside ${crowd}`,
       targetWindow: "7d",
-      notes: `${m.coin} funding has pierced its typical range (${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr) — the crowd is stretched ${crowd}${m.smartMoney?.side ? `; smart money ${m.smartMoney.count} ${m.smartMoney.side}` : ""}. Fading the mean-revert. Frozen levels: entry at mark, stop 1.2× ${atrSource}, TP +${RR}R, 7-day time-stop. ATR-based — NOT sized off funding.`,
+      notes: `${m.coin} funding has pierced its typical range (${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr). The crowd is stretched ${crowd}${m.smartMoney?.side ? `; smart money ${m.smartMoney.count} ${m.smartMoney.side}` : ""}. Fading the mean-revert. Frozen levels: entry at mark, stop 1.2× ${atrSource}, TP +${RR}R, 7-day time-stop. ATR-based. NOT sized off funding.`,
     };
     try { window.localStorage.setItem("nexus_thesis_draft", JSON.stringify(draft)); } catch { /* private mode */ }
     try {
       window.dispatchEvent(new CustomEvent("nexus:lab-tab", { detail: { tab: "thesis" } }));
       window.dispatchEvent(new CustomEvent("nexus:thesis-draft"));
-    } catch { /* non-browser — ignore */ }
+    } catch { /* non-browser. Ignore */ }
   };
 
   // Execution row on a board card. Spot shows on EVERY card — any FADE/WATCH read is buyable on
@@ -667,7 +678,7 @@ export function MispricedBoard() {
     // SAME verdict object the badge and the Draft gate read, so the head cannot disagree.
     const verdictLabel = verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? "⚠ WATCH" : "◆ WATCHING";
     const verdictColor = isFade ? C.accent : draftAnyway ? C.warn : C.text.muted;
-    const fundingLabel = `${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr`;
+    const fundingLabel = `${fmt8h(m.funding8hPct)} → ${fmtYr(m.fundingAnnualPct)}`;
     // HIST is the canonical edgeQuality record (the source the share card already cites); absent
     // when the coin has no graded reversion history yet — then it simply isn't drawn.
     const histTag = m.edgeQuality && m.edgeQuality.revertedPct != null && m.edgeQuality.samples > 0
@@ -681,16 +692,11 @@ export function MispricedBoard() {
             <div style={{ margin: "18px 0 4px" }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontFamily: MONO, fontSize: 10, marginBottom: 8 }}>
                 <span style={{ color: C.text.muted, textTransform: "uppercase", letterSpacing: "0.14em", fontSize: 8.5 }}>Funding edge</span>
-                <span style={{ marginLeft: "auto", textAlign: "right" }}>
-                  <span style={{ display: "block", fontFamily: MONO, fontSize: 22, fontWeight: 600, color: C.text.bright }}>
-                    {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%<span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontSize: 11, color: C.text.faint, marginLeft: 3 }}>/yr</span>
-                  </span>
-                  {fmtFunding8h(m.funding8hPct) ? (
-                    <span style={{ display: "block", fontFamily: MONO, fontSize: 9.5, color: C.text.faint, marginTop: 2 }}>
-                      {fmtFunding8h(m.funding8hPct)} every 8h · charged {FUNDING_PERIODS_PER_YEAR}×/yr
-                    </span>
-                  ) : null}
+                <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 22, fontWeight: 600, color: C.text.bright }}>
+                  <span title="The raw rate paid each 8h funding period." style={{ fontSize: 11, fontWeight: 400, color: C.text.muted, marginRight: 8 }}>{fmt8h(m.funding8hPct)} →</span>
+                  {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%<span title="Annualized. Per-8h rate × 1095 (three periods a day). What it adds up to over a year if today's rate held." style={{ fontSize: 11, color: C.text.faint, marginLeft: 3 }}>/yr</span>
                 </span>
+                {isThinOi(m) && <span title={THIN_TITLE} style={{ fontSize: 8.5, color: C.warn, letterSpacing: "0.08em" }}>THIN OI · LOW CONFIDENCE</span>}
               </div>
               <SynthChart points={pos?.points ?? []} price={price ?? []} direction={m.direction}
                 smartMoney={m.smartMoney} markPrice={m.markPrice} fundingAnnualPct={m.fundingAnnualPct} maxEdge={maxEdge} m={m} />
@@ -729,10 +735,10 @@ export function MispricedBoard() {
             <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: C.text.muted, marginBottom: 14 }}>Reading the card</div>
             {[
               ["The price, big", "Where the market is now, and today's move. No decoding."],
-              ["The stance", "Which way the crowd is piled. “Over-long” means too many are betting up — the setup to fade."],
+              ["The stance", "Which way the crowd is piled. “Over-long” means too many are betting up. The setup to fade."],
               ["The edge + poles", "How far the crowd is from balanced, and which way to fade it. Bigger = more stretched."],
               ["The second opinion", "Where the graded, credible callers lean. When they disagree with the fade, that tension is flagged."],
-              ["The move", "One tap turns it into a trade plan you review and grade — nothing fires on its own."],
+              ["The move", "One tap turns it into a trade plan you review and grade. Nothing fires on its own."],
             ].map(([t, d], i) => (
               <div key={i} style={{ position: "relative", paddingLeft: 34, paddingBottom: 15 }}>
                 <span style={{ position: "absolute", left: 0, top: -2, width: 22, height: 22, border: `1px solid ${C.borderStrong}`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 10, color: C.text.fog }}>{i + 1}</span>
@@ -742,7 +748,7 @@ export function MispricedBoard() {
             ))}
             {pos && pos.points.length < 8 && !pos.reversion && (
               <div style={{ fontFamily: MONO, fontSize: 9, color: C.text.faint, letterSpacing: "0.05em", marginTop: 4, lineHeight: 1.6 }}>
-                Not enough funding history recorded for {m.coin} yet — the story-line and reversion stat light up as it accumulates.
+                Not enough funding history recorded for {m.coin} yet. The story-line and reversion stat light up as it accumulates.
               </div>
             )}
       </>
@@ -824,7 +830,7 @@ export function MispricedBoard() {
               }}>↗ SHARE</button>
               {/* One primary action, and it answers the page's one question: is there a fade NOW?
                   FADE → greenlight Draft. WATCH/NONE → Draft disabled (Simulate stays below). */}
-              <button onClick={() => canDraft && draftFade(m)} disabled={!canDraft} title={isFade ? "Draft this fade into the Thesis Engine" : draftAnyway ? "Funding is stretched but fading it has historically underperformed — draft it anyway on your own read, not the base rate" : "No fade edge right now — funding isn't stretched vs its range"} className="nx-card-interactive" style={{
+              <button onClick={() => canDraft && draftFade(m)} disabled={!canDraft} title={isFade ? "Draft this fade into the Thesis Engine" : draftAnyway ? "Funding is stretched but fading it has historically underperformed. Draft it anyway on your own read, not the base rate" : "No fade edge right now. Funding isn't stretched vs its range"} className="nx-card-interactive" style={{
                 fontFamily: MONO, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em",
                 color: isFade ? C.accent : draftAnyway ? C.warn : C.text.faint, background: "none",
                 border: `1px solid ${isFade ? C.borderStrong : draftAnyway ? `${C.warn}88` : C.border}`, borderRadius: RADIUS.md, padding: "9px 15px",
@@ -837,7 +843,7 @@ export function MispricedBoard() {
               <div style={{ marginTop: 12 }}>
                 <Simulate label="◆ Simulate this fade" wallet={wallet} body={{
                   kind: "thesis", coin: m.coin, direction: m.direction, entry: m.markPrice,
-                  notes: `Funding fade — ${m.coin} funding is ${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr, the crowd is offside ${m.direction === "SHORT" ? "long" : "short"}; fading for the mean-revert.`,
+                  notes: `Funding fade. ${m.coin} funding is ${m.fundingAnnualPct >= 0 ? "+" : ""}${m.fundingAnnualPct}%/yr, the crowd is offside ${m.direction === "SHORT" ? "long" : "short"}; fading for the mean-revert.`,
                 }} />
               </div>
             )}
@@ -884,7 +890,7 @@ export function MispricedBoard() {
         <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "12px 2px" }}>loading board…</div>
       ) : markets.length === 0 ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "12px 2px" }}>
-          {err ? "Market data unavailable — retrying." : "No liquid markets to price right now."}
+          {err ? "Market data unavailable. Retrying." : "No liquid markets to price right now."}
         </div>
       ) : (
         <>
@@ -908,27 +914,19 @@ export function MispricedBoard() {
                     <div key={m.symbol} ref={(el: HTMLDivElement | null) => { rowRefs.current[m.coin] = el; }} onClick={() => setOpenCoin(m.coin)} title="Open this market"
                       className="nx-card-interactive"
                       style={{ position: "relative", border: `1px solid ${C.borderStrong}`, borderLeft: `2px solid ${isFade ? C.accent : draftAnyway ? C.warn : C.borderStrong}`, borderRadius: RADIUS.lg, padding: "13px 15px 12px", background: "linear-gradient(180deg,#161619 0%,#101012 100%)", cursor: "pointer", overflow: "hidden", scrollMarginTop: 80, boxShadow: markedCoin === m.coin ? `0 0 0 2px ${C.accent}` : undefined }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11 }}>
                         <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.text.bright }}>{m.coin}</span>
                         <span style={{ fontFamily: MONO, fontSize: 8.5, color: C.text.faint }}>{fmtUsd(m.oiUsd)} open interest</span>
-                        {thinBook(m) ? (
-                          <span title={THIN_BOOK_TITLE} style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: C.warn, border: `1px solid ${C.warn}44`, borderRadius: RADIUS.sm, padding: "1px 5px" }}>THIN BOOK · LOW CONFIDENCE</span>
-                        ) : null}
+                        {isThinOi(m) && <span title={THIN_TITLE} style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: C.warn, border: `1px solid ${C.warn}55`, borderRadius: 2, padding: "0 4px" }}>THIN · LOW CONF</span>}
                         <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: badgeColor }}>{verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? `⚠ WATCH · ${m.edgeQuality?.revertedPct}% HIST` : "◆ WATCHING"}</span>
                       </div>
                       <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
                         <div>
                           <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: C.text.muted, marginBottom: 3 }}>Funding edge</div>
                           <div style={{ fontFamily: MONO, fontSize: 31, fontWeight: 600, color: C.text.bright, lineHeight: 0.9, letterSpacing: "-0.02em" }}>
-                            {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}<span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontSize: 13, color: C.text.faint, marginLeft: 4 }}>%/yr</span>
+                            {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}<span title="Annualized. Per-8h rate × 1095 (three periods a day). What it adds up to over a year if today's rate held." style={{ fontSize: 13, color: C.text.faint, marginLeft: 4 }}>%/yr</span>
                           </div>
-                          {/* The same rate at the horizon it is actually charged at. An extreme
-                              annualized print stops reading as a glitch once the ×1095 is on screen. */}
-                          {fmtFunding8h(m.funding8hPct) ? (
-                            <div style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint, marginTop: 6 }}>
-                              {fmtFunding8h(m.funding8hPct)} every 8h · charged {FUNDING_PERIODS_PER_YEAR}×/yr
-                            </div>
-                          ) : null}
+                          <div title="The raw rate paid each 8h funding period. The annualized figure is this × 1095." style={{ fontFamily: MONO, fontSize: 10, color: C.text.muted, marginTop: 6 }}>{fmt8h(m.funding8hPct)} × 1095</div>
                         </div>
                       </div>
                       <EdgeQualityChip q={m.edgeQuality} />
@@ -947,11 +945,11 @@ export function MispricedBoard() {
                       </div>
                       {/* Actions — the whole loop on one card, guest-safe. Row 1: FADE → Draft the
                           frozen-R thesis right here (no wallet; wallet only on Publish); WATCH → open
-                          to read, never Draft-as-fade. Row 2: execution — Spot on EVERY card, plus
+                          to read, never Draft-as-fade. Row 2: execution. Spot on EVERY card, plus
                           Long/Short on our book for a listed perp (additive, never instead of Spot). */}
                       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 11 }}>
                         {isFade ? (
-                          <button onClick={(e) => { e.stopPropagation(); draftFade(m); }} title="Draft this fade into the Thesis Engine — no wallet needed (wallet only on Publish)" style={{
+                          <button onClick={(e) => { e.stopPropagation(); draftFade(m); }} title="Draft this fade into the Thesis Engine. No wallet needed (wallet only on Publish)" style={{
                             width: "100%", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
                             color: C.accent, border: `1px solid ${C.borderStrong}`, borderRadius: RADIUS.md, padding: 8, background: "transparent", cursor: "pointer",
                           }}>Draft this fade →</button>
@@ -982,18 +980,13 @@ export function MispricedBoard() {
                 {fair.map((m, i) => (
                   <div key={m.symbol} onClick={() => setOpenCoin(m.coin)}
                     className="nx-card-interactive"
-                    style={{ display: "grid", gridTemplateColumns: isMobile ? "70px 1fr 84px" : "90px 1fr 96px 84px", gap: 12, alignItems: "center", padding: "9px 13px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
+                    style={{ display: "grid", gridTemplateColumns: isMobile ? "56px 1fr 138px" : "90px 1fr 190px 84px", gap: 12, alignItems: "center", padding: "9px 13px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
                     <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: C.text.fog }}>{m.coin}</span>
                     {!isMobile && <div style={{ height: 4, borderRadius: 3, background: C.inset, border: `1px solid ${C.border}`, position: "relative" }}>
                       <div style={{ position: "absolute", top: 0, bottom: 0, background: C.borderStrong, ...(m.direction === "LONG" ? { right: "50%" } : { left: "50%" }), width: `${Math.min(46, (m.edge / maxEdge) * 46)}%` }} />
                     </div>}
                     {isMobile && <span />}
-                    <span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontFamily: MONO, fontSize: 10.5, color: C.text.muted, textAlign: "right" }}>
-                      {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%/yr
-                      {/* Second line, not a wider cell — the rail's fixed-px columns are the
-                          documented mobile-clip culprit, so height is the only axis we spend. */}
-                      {fmtFunding8h(m.funding8hPct) ? <span style={{ display: "block", fontSize: 8.5, color: C.text.faint }}>{fmtFunding8h(m.funding8hPct)}/8h</span> : null}
-                    </span>
+                    <span title={`Per-8h rate → annualized (× 1095).${isThinOi(m) ? " " + THIN_TITLE : ""}`} style={{ fontFamily: MONO, fontSize: isMobile ? 9.5 : 10.5, color: C.text.muted, textAlign: "right", whiteSpace: "nowrap" }}>{isThinOi(m) && <span style={{ color: C.warn }}>· </span>}<span style={{ color: C.text.faint }}>{fmt8h(m.funding8hPct)} → </span>{fmtYr(m.fundingAnnualPct)}</span>
                     <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.08em", color: C.text.faint, textAlign: "right" }}>FAIR</span>
                   </div>
                 ))}
@@ -1004,8 +997,8 @@ export function MispricedBoard() {
       )}
 
       <p style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint, lineHeight: 1.6, marginTop: 18, letterSpacing: "0.02em" }}>
-        Funding annualized (per-8h × 1095). |edge| ≥ 12%/yr on a market with ≥ $50k open interest ⇒ Mispriced · Watching; else priced fair.
-        Caller lean is merit-weighted from open positions + active public calls. A read on positioning, not advice — a stretched market can stay stretched.
+        Funding shown per 8h → annualized (× 1095, not clamped). |edge| ≥ 12%/yr on a market with ≥ $50k open interest ⇒ Mispriced · Watching; else priced fair. Under $250k open interest is marked thin · low confidence.
+        Caller lean is merit-weighted from open positions + active public calls. A read on positioning, not advice. A stretched market can stay stretched.
       </p>
     </div>
   );

@@ -15,6 +15,7 @@ import { TraderDetail } from "./TraderDetail";
 import type { XrayTrack } from "@/components/TrackedRecordCard";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { ConvictionScanner } from "./ConvictionScanner";
+import { bareTicker } from "@/utils/utils";
 
 interface SmConsensus { sym: string; side: "LONG" | "SHORT"; count: number; netUsd: number; refPrice: number; }
 
@@ -73,7 +74,7 @@ export function sharpCluster(
   };
 }
 
-const TRACKED = "#ededf0"; // watchlist/tracked accent — bone, NOT blue (blue is teaching copy only)
+const TRACKED = "#ededf0"; // watchlist/tracked accent. Bone, NOT blue (blue is teaching copy only)
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const usd = (n: number | null | undefined) => {
   // Coerce first: several callers pass fields straight off external (HL / Orderly)
@@ -110,7 +111,7 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
     let off = false;
     fetch(`${AGENT_API}/smart/xray/history?address=${leader}`).then((r) => r.json())
       .then((x) => { if (!off) setTrack(x && x.track ? x.track : null); })
-      .catch(() => { /* no record — honest empty state */ })
+      .catch(() => { /* no record. Honest empty state */ })
       .finally(() => { if (!off) setLoading(false); });
     return () => { off = true; };
   }, [leader]);
@@ -122,7 +123,7 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
     const bare = sym.replace(/^PERP_/, "").replace(/_USDC$/, "").toUpperCase();
     fetch(`${AGENT_API}/smart/consensus`).then((r) => r.json())
       .then((d) => { const s = d?.consensus?.[bare]; if (!off) setSmart(s && (s.side === "LONG" || s.side === "SHORT") ? { side: s.side, count: s.count ?? 0, long: s.long ?? 0, short: s.short ?? 0 } : null); })
-      .catch(() => { /* no read — the line just hides */ });
+      .catch(() => { /* no read. The line just hides */ });
     return () => { off = true; };
   }, [sym]);
   const graded = !!track && !track.building && (track.daysTracked ?? 0) > 0;
@@ -148,7 +149,7 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
           </div>
         )}
         {/* The GRADED, WATCHED record — the number that can't be faked, not lifetime PnL. */}
-        <div style={{ border: "1px solid #232327", borderRadius: 8, padding: "10px 12px", marginBottom: 14, background: "#0c0c0e" }}>
+        <div style={{ border: "1px solid #232327", borderRadius: 8, padding: "10px 12px", marginBottom: 14, background: "#0f0f11" }}>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase", marginBottom: 6 }}>What you're tracking</div>
           {loading ? (
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>reading graded record…</div>
@@ -160,7 +161,7 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 5, lineHeight: 1.5 }}>This is the window you've been watching, not lifetime.</div>
             </>
           ) : (
-            <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a", lineHeight: 1.55 }}>No graded watched record yet — the agent grades this copy on-chain from here.</div>
+            <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a", lineHeight: 1.55 }}>No graded watched record yet. The agent grades this copy on-chain from here.</div>
           )}
         </div>
         <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", lineHeight: 1.5, marginBottom: 14 }}>The agent enters your direction and manages the exit (PAPER-first, graded on-chain). You set the levels next. Not financial advice.</div>
@@ -312,7 +313,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
     for (const p of (myPositions || [])) {
       const qty = parseFloat(String(p.position_qty ?? 0));
       if (!p.symbol || Math.abs(qty) < 1e-9) continue;
-      const coin = p.symbol.replace("PERP_", "").replace("_USDC", "");
+      const coin = bareTicker(p.symbol);
       const bias = smartBias.get(coin);
       if (!bias || (bias.longUsd === 0 && bias.shortUsd === 0)) continue;
       const smartSide: "LONG" | "SHORT" = bias.longUsd >= bias.shortUsd ? "LONG" : "SHORT";
@@ -423,14 +424,14 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
   };
 
   const tradeBtn = (onClick: () => void) => (
-    <button onClick={onClick} title="Copy this move — the agent enters your direction and manages the exit (PAPER-first, graded on-chain)"
+    <button onClick={onClick} title="Copy this move. The agent enters your direction and manages the exit (PAPER-first, graded on-chain)"
       style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.04em", color: "#ededf0", background: "none", border: "1px solid #33333a", borderRadius: 3, padding: "3px 8px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
       ⚡ TRADE
     </button>
   );
 
   const thesisBtn = (onClick: () => void) => (
-    <button onClick={onClick} title="Turn this into a reasoned thesis — sized, R:R'd, and gradeable in the Thesis Engine"
+    <button onClick={onClick} title="Turn this into a reasoned thesis. Sized, R:R'd, and gradeable in the Thesis Engine"
       style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#a1a1aa", background: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
       ◆ plan
     </button>
@@ -474,9 +475,9 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 12, padding: "11px 13px", border: "1px solid #232327", borderLeft: "2px solid #71717a", borderRadius: 6, background: "#0f0f11" }}>
         <span style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 12, flexShrink: 0 }}>?</span>
         <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12.5, lineHeight: 1.55, color: "#a1a1aa" }}>
-          <b style={{ color: "#f4f4f5" }}>How to read this:</b> the strongest signal isn't one whale — it's <b style={{ color: "#f4f4f5" }}>agreement</b>. Consensus
+          <b style={{ color: "#f4f4f5" }}>How to read this:</b> the strongest signal isn't one whale. It's <b style={{ color: "#f4f4f5" }}>agreement</b>. Consensus
           shows the coins several top traders are positioned the same way on. Smart money is often early and often wrong, so treat it as
-          context — then copy a move into a trade your agent manages and grades.
+          context. Then copy a move into a trade your agent manages and grades.
         </span>
       </div>
 
@@ -486,7 +487,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
       {/* #3 convert-loop framing — one-time */}
       <Coachmark storageKey="nexus_coach_smart_v1" badge="THE LOOP" title="From watcher to ranked trader">
         Copy any move → the agent manages the exit → every close joins <strong style={{ color: "#d4d4d8" }}>your</strong> on-chain track record.
-        That's how you go from watching smart money to <strong style={{ color: "#d4d4d8" }}>being</strong> graded next to them — a record nobody can fake.
+        That's how you go from watching smart money to <strong style={{ color: "#d4d4d8" }}>being</strong> graded next to them.
       </Coachmark>
 
       {/* Bounded by the paint deadline above — this line can no longer stand forever. */}
@@ -522,7 +523,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
             ))}
           </div>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 8 }}>
-            Context, not a signal — smart money is often early AND often wrong. Know which side you're on.
+            Context, not a signal. Smart money is often early AND often wrong. Know which side you're on.
           </div>
         </div>
       )}
@@ -536,7 +537,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
             {" "}independently opened{" "}
             <b style={{ color: shovel.side === "LONG" ? "#3ecf8e" : "#f7525f" }}>{shovel.side} {shovel.sym}</b>
             {" "}in the last {shovel.minutes}m
-            {shovel.szUsd > 0 && <span style={{ color: "#71717a" }}> — ${Math.round(shovel.szUsd).toLocaleString()} of size</span>}.
+            {shovel.szUsd > 0 && <span style={{ color: "#71717a" }}>. ${Math.round(shovel.szUsd).toLocaleString()} of size</span>}.
           </span>
           <button
             title={`Ask Nexus about the ${shovel.sym} cluster`}
@@ -561,7 +562,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                   <button
                     type="button"
                     title="Ask Nexus to analyze this consensus"
-                    onClick={() => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: `${c.count} tracked smart-money traders are ${c.side} ${c.sym}. Use get_smart_money and explain_move — is this consensus worth following, what's driving it, and how does it fit my edge?` } }))}
+                    onClick={() => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: `${c.count} tracked smart-money traders are ${c.side} ${c.sym}. Use get_smart_money and explain_move. Is this consensus worth following, what's driving it, and how does it fit my edge?` } }))}
                     style={{ background: "transparent", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "2px 6px", cursor: "pointer" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#ededf0"; e.currentTarget.style.borderColor = "#33333a"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#232327"; }}
@@ -574,7 +575,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
             ))}
           </div>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 8 }}>
-            Agreement across independent top traders — stronger than any single whale. ⚡ opens the copy at market (set your own levels).
+            Agreement across independent top traders. Stronger than any single whale. ⚡ opens the copy at market (set your own levels).
           </div>
         </div>
       )}
@@ -700,11 +701,11 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                     const tk = trackMap[t.address.toLowerCase()];
                     if (!tk) return null;
                     if (tk.tier) return (
-                      <span onClick={() => openDetail(t.address, t.source, t.accountId)} title={`Consistency Score ${tk.operatorScore} — graded from ${tk.daysTracked}d of realized-PnL consistency. Click for the full Tracked Record.`}
+                      <span onClick={() => openDetail(t.address, t.source, t.accountId)} title={`Consistency Score ${tk.operatorScore}. Graded from ${tk.daysTracked}d of realized-PnL consistency. Click for the full Tracked Record.`}
                         style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#3ecf8e", border: "1px solid #33333a", borderRadius: 3, padding: "1px 5px", flexShrink: 0, cursor: "pointer" }}>{tk.tier.glyph} {tk.operatorScore}</span>
                     );
                     return (
-                      <span title={`Tracking — ${tk.points} snapshots. A graded Consistency Score unlocks after ~4 daily windows.`}
+                      <span title={`Tracking. ${tk.points} snapshots. A graded Consistency Score unlocks after ~4 daily windows.`}
                         style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", flexShrink: 0 }}>▪ tracking</span>
                     );
                   })()}

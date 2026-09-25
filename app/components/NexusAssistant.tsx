@@ -14,6 +14,7 @@ import { useAccount, usePrivateQuery, usePositionStream } from "@orderly.network
 import { useLabStorage } from "@/hooks/useLabStorage";
 import { computeEdge } from "@/config/edge";
 import { tiltRead, sessionEdge, overtradingRead, sizingRead } from "@/lib/behavioral.mjs";
+import { bareTicker } from "@/utils/utils";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { useSubscription } from "@/hooks/useSubscription";
 import {
@@ -137,11 +138,11 @@ export default function NexusAssistant() {
     const worst = trades.reduce<{ symbol: string; pnl: number } | null>((a, t) => (!a || t.pnl < a.pnl ? t : a), null);
     const bySym: Record<string, { trades: number; pnl: number }> = {};
     for (const t of trades) {
-      const k = t.symbol.replace("PERP_", "").replace("_USDC", "");
+      const k = bareTicker(t.symbol);
       bySym[k] = bySym[k] || { trades: 0, pnl: 0 };
       bySym[k].trades += 1; bySym[k].pnl += t.pnl;
     }
-    const clean = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+    const clean = (s: string) => bareTicker(s);
     return {
       closed_trades: trades.length, wins, losses,
       win_rate_pct: wins + losses ? Math.round((wins / (wins + losses)) * 100) : null,
@@ -235,7 +236,7 @@ export default function NexusAssistant() {
   const onLauncherMove = (e: React.PointerEvent) => {
     const d = dragRef.current; if (!d.active) return;
     const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
-    if (!d.moved && Math.hypot(dx, dy) < 4) return; // tap threshold — below this it's a click
+    if (!d.moved && Math.hypot(dx, dy) < 4) return; // tap threshold. Below this it's a click
     d.moved = true;
     const el = launcherRef.current;
     const w = el?.offsetWidth ?? 52, h = el?.offsetHeight ?? 52;
@@ -264,7 +265,7 @@ export default function NexusAssistant() {
         return nx === p.x && ny === p.y ? p : { x: nx, y: ny };
       });
     };
-    clamp(); // clamp immediately too — mount/orientation change fires no resize event
+    clamp(); // clamp immediately too. Mount/orientation change fires no resize event
     window.addEventListener("resize", clamp);
     return () => window.removeEventListener("resize", clamp);
   }, [pos]);
@@ -365,23 +366,23 @@ export default function NexusAssistant() {
     // Edge-derived insight is the strongest signal — lead with it when present.
     const edge = performance?.edge as { strengths: string[]; weaknesses: string[] } | null | undefined;
     if (edge?.weaknesses?.length) {
-      return { text: `${edge.weaknesses[0]} Ask me how to fix it.`, prompt: "Use get_my_edge — where am I losing money, and exactly how do I fix it?" };
+      return { text: `${edge.weaknesses[0]} Ask me how to fix it.`, prompt: "Use get_my_edge. Where am I losing money, and exactly how do I fix it?" };
     }
     if (edge?.strengths?.length) {
-      return { text: `${edge.strengths[0]} Ask me how to lean into it.`, prompt: "Use get_my_edge — what am I best at, and how do I trade to my strengths?" };
+      return { text: `${edge.strengths[0]} Ask me how to lean into it.`, prompt: "Use get_my_edge. What am I best at, and how do I trade to my strengths?" };
     }
     const wr = performance?.win_rate_pct as number | null | undefined;
     const pnl = performance?.total_pnl as number | undefined;
     const worst = performance?.worst_trade as { symbol: string; pnl: number } | null | undefined;
     if (wr != null && wr >= 50 && typeof pnl === "number" && pnl < 0) {
       return {
-        text: `You win ${wr}% of trades but you're down $${Math.abs(pnl).toFixed(0)} overall — ask me why.`,
-        prompt: "I win more often than I lose but I'm down overall — analyze my closed trades and tell me exactly what to fix.",
+        text: `You win ${wr}% of trades but you're down $${Math.abs(pnl).toFixed(0)} overall. Ask me why.`,
+        prompt: "I win more often than I lose but I'm down overall. Analyze my closed trades and tell me exactly what to fix.",
       };
     }
     if (worst && typeof pnl === "number" && worst.pnl < 0 && Math.abs(worst.pnl) > Math.abs(pnl) && pnl < 0) {
       return {
-        text: `One ${worst.symbol} trade (-$${Math.abs(worst.pnl).toFixed(0)}) is sinking your record — ask me how to fix it.`,
+        text: `One ${worst.symbol} trade (-$${Math.abs(worst.pnl).toFixed(0)}) is sinking your record. Ask me how to fix it.`,
         prompt: `My worst trade was ${worst.symbol}. Analyze my closed trades and tell me how to stop single positions from blowing up my account.`,
       };
     }
@@ -395,8 +396,8 @@ export default function NexusAssistant() {
     if (trader) return ["Analyze this trader's track record", "How do they compare to the top callers?", "What's their best setup?"];
     const sym = p.match(/\/perp\/PERP_([A-Z0-9]+)_USDC/i);
     if (sym) { const s = sym[1].toUpperCase(); return [`Why is ${s} moving right now?`, `Draft me a thesis on ${s}`, `What's ${s}'s funding & OI right now?`]; }
-    if (p.startsWith("/lab")) return ["Where's my edge — what am I best at?", "Why is BTC moving right now?", "What's my agent doing right now?"];
-    return ["Why is BTC moving right now?", "Where's my edge — what am I best at?", "Who are the top agents on the leaderboard?"];
+    if (p.startsWith("/lab")) return ["Where's my edge? What am I best at?", "Why is BTC moving right now?", "What's my agent doing right now?"];
+    return ["Why is BTC moving right now?", "Where's my edge? What am I best at?", "Who are the top agents on the leaderboard?"];
   })();
 
   async function send(explicit?: string) {
@@ -507,7 +508,7 @@ export default function NexusAssistant() {
             >
               <div style={{ fontFamily: mono, fontSize: 10, color: GREEN, fontWeight: "bold", letterSpacing: "0.06em" }}>✦ Meet Nexus</div>
               <div style={{ fontFamily: mono, fontSize: 8.5, color: "#a1a1aa", lineHeight: 1.5, marginTop: 2 }}>
-                Ask Nexus anything — the market, a token, your positions, your track record.
+                Ask Nexus anything. The market, a token, your positions, your track record.
               </div>
             </div>
           </>
@@ -517,8 +518,8 @@ export default function NexusAssistant() {
           onPointerMove={onLauncherMove}
           onPointerUp={onLauncherUp}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPanel(); } }}
-          aria-label="Nexus — ask anything (drag to move, tap to open)"
-          title="Nexus — tap to open, hold & drag to move"
+          aria-label="Nexus. Ask anything (drag to move, tap to open)"
+          title="Nexus. Tap to open, hold & drag to move"
           style={{
             width: 52, height: 52, borderRadius: "50%",
             background: "#141416", border: `1px solid ${GREEN}`,
@@ -589,7 +590,7 @@ export default function NexusAssistant() {
               <div style={{ fontFamily: mono, fontSize: 10, color: "#71717a", lineHeight: 1.7 }}>
                 {ready
                   ? "Ask about your theses, agent, the market, or a trade idea. I can see your live session context."
-                  : "Start with Nexus Hosted (PRO — no key needed) or bring your own API key. Tap ⚙ to set it up."}
+                  : "Start with Nexus Hosted (PRO, no key needed) or bring your own API key. Tap ⚙ to set it up."}
                 {personalInsight && (
                   <div
                     onClick={() => ready && setInput(personalInsight.prompt)}
@@ -666,7 +667,7 @@ export default function NexusAssistant() {
             )}
           </div>
           <div style={{ fontFamily: mono, fontSize: 7.5, color: "#52525b", textAlign: "center", padding: "0 8px 6px" }}>
-            Analysis & education only — not financial advice. Key stays on your device.
+            Analysis & education only. Not financial advice. Key stays on your device.
           </div>
         </>
       )}
@@ -716,7 +717,7 @@ function SettingsView({
           <div>
             <div style={{ fontFamily: mono, fontSize: 11, color: GREEN, fontWeight: "bold" }}>◆ NEXUS HOSTED <span style={{ color: "#a1a1aa", fontWeight: "normal" }}>· PRO</span></div>
             <div style={{ fontFamily: mono, fontSize: 9, color: "#a1a1aa", lineHeight: 1.5, marginTop: 3 }}>
-              {isPro ? "Run Nexus with no API key — we host it. One wallet signature per session." : "Hosted AI is a PRO benefit. Subscribe or hold ARCHITECT $NEXUS to enable."}
+              {isPro ? "Run Nexus with no API key. We host it. One wallet signature per session." : "Hosted AI is a PRO benefit. Subscribe or hold ARCHITECT $NEXUS to enable."}
             </div>
           </div>
           <button
@@ -763,8 +764,8 @@ function SettingsView({
 
       <div style={{ fontFamily: mono, fontSize: 10, color: "#a1a1aa", lineHeight: 1.6 }}>
         {useHosted && isPro
-          ? "Hosted is ON — no key needed. Or bring your own key below to use a different provider/model."
-          : <>Bring your own model key. It's stored only in this browser (localStorage) and sent <b style={{ color: GREEN }}>directly</b> to the provider — never to Nexus servers.</>}
+          ? "Hosted is ON. No key needed. Or bring your own key below to use a different provider/model."
+          : <>Bring your own model key. It's stored only in this browser (localStorage) and sent <b style={{ color: GREEN }}>directly</b> to the provider. Never to Nexus servers.</>}
       </div>
 
       <Field label="PROVIDER">

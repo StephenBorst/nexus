@@ -91,7 +91,7 @@ export function NexusTreasury({ compact = false }: { compact?: boolean }) {
       fontFamily: "var(--nx-font-mono)",
     }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontSize: 8, letterSpacing: "0.12em", color: C.text.faint }}>🏦 TREASURY (PUBLIC SAFE)</span>
+        <span style={{ fontSize: 8, letterSpacing: "0.12em", color: C.text.faint }}>TREASURY · PUBLIC SAFE</span>
         <span style={{ fontSize: compact ? 14 : 18, fontWeight: "bold", color: C.text.bright }}>{bal}</span>
       </div>
       <div style={{ width: 1, alignSelf: "stretch", background: C.border }} />

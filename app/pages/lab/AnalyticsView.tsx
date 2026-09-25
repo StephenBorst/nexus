@@ -6,11 +6,12 @@ import { cardStyle, labelStyle } from "./styles";
 import { ProcessSection } from "./ProcessView";
 import { OperatorProfileCard } from "./OperatorProfile";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
-import { formatPnl } from "./helpers";
+import { formatPnl, formatPnlCompact, formatUsdCompact } from "./helpers";
 import { PnlChart, PnlBars, EmptyState, CountUp, SectionHeader } from "./components";
 import { Collapsible } from "./Collapsible";
 import { useIsMobile } from "./useIsMobile";
 import { computeEdge } from "@/config/edge";
+import { bareTicker } from "@/utils/utils";
 
 // ─── Radar Chart ─────────────────────────────────────────
 function RadarChart({ scores }: { scores: { label: string; value: number }[] }) {
@@ -101,7 +102,7 @@ function TradingScoreSection({ orders, winRate }: { orders: ProcessedTrade[]; wi
     };
   }, [orders, winRate]);
 
-  if (!metrics) return <EmptyState message="no trading score yet" unlock="Your score is computed from closed trades — connect your wallet and it fills in from your real history." />;
+  if (!metrics) return <EmptyState message="no trading score yet" unlock="Your score is computed from closed trades. Connect your wallet and it fills in from your real history." />;
 
   return (
     <div style={{ ...cardStyle, marginTop: 12 }}>
@@ -274,7 +275,7 @@ function TopAssets({ orders }: { orders: ProcessedTrade[] }) {
   const assets = useMemo(() => {
     const map: Record<string, { pnl: number; trades: number; wins: number }> = {};
     orders.forEach((o) => {
-      const sym = o.symbol.replace("PERP_", "").replace("_USDC", "");
+      const sym = bareTicker(o.symbol);
       if (!map[sym]) map[sym] = { pnl: 0, trades: 0, wins: 0 };
       map[sym].pnl += o.pnl; map[sym].trades++;
       if (o.pnl > 0) map[sym].wins++;
@@ -296,7 +297,7 @@ function TopAssets({ orders }: { orders: ProcessedTrade[] }) {
                 <span style={{ fontSize: 13, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{sym}</span>
                 <span style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{data.trades}</span>
               </div>
-              <div style={{ fontSize: 16, color: data.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", fontWeight: "bold", marginBottom: 8 }}>{formatPnl(data.pnl)}</div>
+              <div style={{ fontSize: 16, color: data.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", fontWeight: "bold", marginBottom: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{formatPnlCompact(data.pnl)}</div>
               <div style={{ height: 3, background: "#232327", borderRadius: 2, marginBottom: 4 }}>
                 <div style={{ height: 3, background: wr > 50 ? "#3ecf8e" : "#f7525f", borderRadius: 2, width: `${wr}%` }} />
               </div>
@@ -391,7 +392,7 @@ function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {
         {gated ? (
           <div style={{ fontSize: 11, color: "#52525b", fontFamily: "var(--nx-font-ui)", lineHeight: 1.7 }}>
             need <span style={{ color: "#ededf0" }}>{RISK_SAMPLE_GATE - stats.n}</span> more closed trades<br />
-            <span style={{ color: "#33333a" }}>ratios are meaningless under {RISK_SAMPLE_GATE} samples — we won&apos;t fake them</span>
+            <span style={{ color: "#33333a" }}>ratios are meaningless under {RISK_SAMPLE_GATE} samples. We won&apos;t fake them</span>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -416,7 +417,7 @@ function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {
           {stats.hours.map((b) => {
             const wr = b.trades ? Math.round((b.wins / b.trades) * 100) : 0;
             return (
-              <div key={b.h} title={`${fmtHr(b.h)} — ${b.trades} trades, ${wr}% WR`} style={{
+              <div key={b.h} title={`${fmtHr(b.h)}. ${b.trades} trades, ${wr}% WR`} style={{
                 height: 22, borderRadius: 2, background: hourWinColor(wr, b.trades),
                 border: "1px solid #141416", opacity: b.trades ? Math.max(0.4, b.trades / maxHourTrades) : 1,
               }} />
@@ -454,8 +455,8 @@ function PerformanceAnalysis({ orders }: { orders: ProcessedTrade[] }) {
 
   if (!data) return null;
 
-  const bestSym = data.best.symbol.replace("PERP_", "").replace("_USDC", "");
-  const worstSym = data.worst.symbol.replace("PERP_", "").replace("_USDC", "");
+  const bestSym = bareTicker(data.best.symbol);
+  const worstSym = bareTicker(data.worst.symbol);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8, marginTop: 8 }}>
@@ -532,7 +533,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
         <>
           <div style={{ fontSize: 18, color: "#f4f4f5", fontFamily: "var(--nx-font-mono)", marginTop: 2 }}>{s.symbol}</div>
           <div style={{ fontSize: 11, color: tone === "pos" ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", marginTop: 2 }}>
-            {s.winRatePct}% · {s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl)} · {s.trades} trades
+            {s.winRatePct}% · {formatPnlCompact(s.pnl)} · {s.trades} trades
           </div>
         </>
       ) : <div style={{ fontSize: 13, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginTop: 4 }}>—</div>}
@@ -546,7 +547,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
       <div style={{ flex: 1, minWidth: 0, border: `1px solid ${on ? "#33333a" : "#232327"}`, borderRadius: 6, padding: "10px 12px", background: on ? "rgba(237,237,240,0.03)" : "transparent" }}>
         <div style={{ fontSize: 9, color: on ? "#ededf0" : "#52525b", letterSpacing: "0.08em", fontFamily: "var(--nx-font-mono)" }}>{label}{on ? " ◂ stronger" : ""}</div>
         <div style={{ fontSize: 18, color: "#f4f4f5", fontFamily: "var(--nx-font-mono)", marginTop: 2 }}>{se.trades ? `${se.winRatePct}%` : "—"}</div>
-        <div style={{ fontSize: 11, color: se.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", marginTop: 2 }}>{se.trades ? `${se.pnl >= 0 ? "+" : "-"}$${Math.abs(se.pnl)} · ${se.trades} trades` : "no data"}</div>
+        <div style={{ fontSize: 11, color: se.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", marginTop: 2 }}>{se.trades ? `${formatPnlCompact(se.pnl)} · ${se.trades} trades` : "no data"}</div>
       </div>
     );
   };
@@ -554,7 +555,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
   return (
     <div className="nx-fade-in nx-spotlight" style={{ ...cardStyle, marginBottom: 8 }}>
       <div style={labelStyle}>&#9670; YOUR EDGE</div>
-      <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", marginTop: -2, marginBottom: 10 }}>where you actually make money — from your own graded record</div>
+      <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", marginTop: -2, marginBottom: 10 }}>where you actually make money. From your own graded record</div>
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 8, marginBottom: 8 }}>
         {symTile("STRONGEST SYMBOL", best_symbol, "pos")}
         {symTile("WEAKEST SYMBOL", worst_symbol, "neg")}
@@ -574,7 +575,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 10 }}>
         <button
           type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: "Use get_my_edge — break down my edge, tell me exactly what to trade more of, what to cut, and how to fix my weak spots." } }))}
+          onClick={() => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: "Use get_my_edge. Break down my edge, tell me exactly what to trade more of, what to cut, and how to fix my weak spots." } }))}
           style={{ background: "transparent", border: "1px solid #232327", borderRadius: 6, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 11, letterSpacing: "0.04em", padding: "7px 11px", cursor: "pointer" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "#ededf0"; e.currentTarget.style.borderColor = "#33333a"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#232327"; }}
@@ -613,7 +614,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 8 }}>
         <div style={cardStyle}>
           <div style={labelStyle}>TOTAL PNL</div>
-          <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: totalPnl >= 0 ? "#3ecf8e" : "#f7525f", fontVariantNumeric: "tabular-nums" }}>{orders.length ? <CountUp value={totalPnl} format={formatPnl} /> : "—"}</div>
+          <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: totalPnl >= 0 ? "#3ecf8e" : "#f7525f", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{orders.length ? <CountUp value={totalPnl} format={formatPnlCompact} /> : "—"}</div>
           <div style={{ fontSize: 10, color: "#52525b", marginTop: 4, fontFamily: "var(--nx-font-mono)" }}>realized</div>
         </div>
         <div style={cardStyle}>
@@ -628,7 +629,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
         </div>
         <div style={cardStyle}>
           <div style={labelStyle}>BALANCE</div>
-          <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: "#f4f4f5", fontVariantNumeric: "tabular-nums" }}>{collateral > 0 ? <CountUp value={collateral} format={(v) => `$${v.toFixed(2)}`} /> : "—"}</div>
+          <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: "#f4f4f5", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{collateral > 0 ? <CountUp value={collateral} format={formatUsdCompact} /> : "—"}</div>
           <div style={{ fontSize: 10, color: "#52525b", marginTop: 4, fontFamily: "var(--nx-font-mono)" }}>usdc</div>
         </div>
       </div>
@@ -665,7 +666,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
           <PnlBars
             values={orders.map((o) => o.pnl)}
             labels={orders.map((o) => {
-              const sym = o.symbol.replace("PERP_", "").replace("_USDC", "");
+              const sym = bareTicker(o.symbol);
               const d = o.timestamp ? new Date(o.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
               return `${sym} ${o.direction}${d ? ` · ${d}` : ""} · ${o.pnl >= 0 ? "+" : "-"}$${Math.abs(o.pnl).toFixed(2)}`;
             })}
@@ -690,7 +691,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
         </Collapsible>
       )}
 
-      {orders.length === 0 && <EmptyState message="no closed trades found" unlock="Connect the wallet you trade with — the Lab reads your Orderly history directly, nothing to import." />}
+      {orders.length === 0 && <EmptyState message="no closed trades found" unlock="Connect the wallet you trade with. The Lab reads your Orderly history directly, nothing to import." />}
     </div>
   );
 }

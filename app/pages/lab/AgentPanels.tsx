@@ -5,10 +5,12 @@
 //
 // ⚠️ Mechanical move: markup and behavior are unchanged from what shipped.
 import { useEffect, useState } from "react";
+import { Collapsible } from "./Collapsible";
 import type { AgentTrade } from "./types";
 import { agentCardStyle, agentLabelStyle, agentInputStyle, navBtnStyle } from "./styles";
 import { fmtUsdCompact, fmtUsdCompactAbs, fmtUsdExact } from "@/lib/fmtUsd.mjs";
 import { paperBlotter, tradeNotional, holdHours } from "@/lib/paperStats.mjs";
+import { bareTicker } from "@/utils/utils";
 
 /**
  * Number input that holds its own text state so you can clear/edit freely
@@ -135,8 +137,8 @@ export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onR
       {tr === 0 ? (
         <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>
           {paper
-            ? <>No paper trades yet — switch to 🧪 PAPER and activate to build a simulated track record against live prices. Risk-free.</>
-            : <>No live track record yet — this agent hasn&apos;t traded for you. Stats build here transparently from its first trade. <strong style={{ color: "#a1a1aa" }}>Start small.</strong></>}
+            ? <>No paper trades yet. Switch to PAPER and activate. Simulated fills against live prices.</>
+            : <>No live record yet. Stats start at the first trade. <strong style={{ color: "#a1a1aa" }}>Start small.</strong></>}
         </div>
       ) : (
         <>
@@ -165,11 +167,11 @@ export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onR
           <div style={{ marginTop: 10, fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#52525b", lineHeight: 1.5 }}>
             {paper
               ? (lifetime
-                  ? "🧪 Simulated results — LIFETIME totals, accrued once per close so they survive the rolling window. Paper never touches the exchange; encouraging, not a guarantee."
+                  ? "Simulated. LIFETIME totals, accrued once per close. Paper never touches the exchange. Not a guarantee."
                   : rolling
-                  ? "🧪 Simulated results — the most recent 50 paper trades (rolling window), not a lifetime total. Paper never touches the exchange; encouraging, not a guarantee."
-                  : "🧪 Simulated results — paper trades never touch the exchange. A great paper record is encouraging, not a guarantee.")
-              : "⚠ Past performance does not guarantee future results. Markets are risky — only deploy capital you can afford to lose, and start small."}
+                  ? "Simulated. The last 50 paper trades, not a lifetime total. Paper never touches the exchange. Not a guarantee."
+                  : "Simulated. Paper never touches the exchange. Not a guarantee.")
+              : "⚠ Past performance does not guarantee future results. Only deploy what you can afford to lose. Start small."}
           </div>
         </>
       )}
@@ -201,14 +203,12 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
     </div>
   );
 
+  // Tucked behind a toggle like the Lab's other deep sections (collapsed by default, remembered).
+  // The one-line summary rides in the subtitle so the closed state still says something.
   return (
+    <Collapsible title="PAPER BLOTTER" subtitle={`how trades end · ${b.n} closed · ${b.winRate}% win · window`}
+      shortTitle="PAPER BLOTTER" shortSub={`${b.n} closed · ${b.winRate}% win`} storageKey="nx_paper_blotter_open">
     <div style={agentCardStyle}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <div style={{ ...agentLabelStyle, color: "#ededf0" }}>🧾 PAPER BLOTTER — how trades end</div>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>
-          {b.n} closed · {b.winRate}% win · window
-        </span>
-      </div>
 
       {b.staleWindow && b.sizeDrift && (
         <div style={{ marginTop: 8, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3, color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5 }}>
@@ -277,7 +277,7 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
             const lvl = Number.isFinite(Number(t.tp_level)) ? `TP${Number(t.tp_level)}` : null;
             return (
               <div key={t.id} style={{ display: "grid", gridTemplateColumns: "1fr 0.5fr 0.7fr 0.7fr 0.9fr 0.5fr", gap: 6, padding: "4px 0", borderBottom: "1px solid #141416", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
-                <span style={{ color: "#d4d4d8" }}>{t.symbol.replace("PERP_", "").replace("_USDC", "")}</span>
+                <span style={{ color: "#d4d4d8" }}>{bareTicker(t.symbol)}</span>
                 <span style={{ color: t.direction === "LONG" ? "#3ecf8e" : "#f7525f" }}>{t.direction === "LONG" ? "L" : "S"}</span>
                 <span style={{ textAlign: "right" }}>{n == null ? "—" : fmtUsdCompactAbs(n)}</span>
                 <span style={{ textAlign: "right", color: t.pnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{fmtUsdCompact(t.pnl)}</span>
@@ -295,5 +295,6 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
         stop / time / trail / breakeven / take-profit / scale-out, plus external-flip for a webhook close.
       </div>
     </div>
+    </Collapsible>
   );
 }

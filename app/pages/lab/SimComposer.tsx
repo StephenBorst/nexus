@@ -7,12 +7,13 @@
 // credits-gated, poll-to-completion runner). Synthetic red-team — never a signal.
 // Placed in the highest-leverage decision spots: Quick Trade + the Thesis Engine.
 import { useState } from "react";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 import { Simulate } from "./Simulate";
 
 const MF = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
-const ACCENT = "#8b7fd4";
+const SIM = SIGNAL.sim; // simulated, not real money — its own colour family
+const ACCENT = SIM.accent;
 
 export type SimSeed = { coin?: string; direction?: "LONG" | "SHORT"; entry?: string; target?: string; notes?: string };
 
@@ -45,24 +46,24 @@ export function SimComposer({ wallet, seed, compact = false }: { wallet: string 
   const canRun = mode === "trade" ? !!c : query.trim().length >= 8;
 
   return (
-    <div style={{ border: `1px solid #2b2740`, borderLeft: `2px solid ${ACCENT}`, borderRadius: 8, background: "linear-gradient(180deg,#15131c,#111015)", padding: compact ? "12px 14px" : "14px 16px" }}>
+    <div style={{ border: `1px solid ${SIM.border}`, borderLeft: `2px solid ${ACCENT}`, borderRadius: 8, background: `linear-gradient(180deg,${SIM.bg},${C.surfaceAlt})`, padding: compact ? "12px 14px" : "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-        <span style={{ fontFamily: MF, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.12em", color: "#c7bdf0" }}>◆ SIM</span>
-        <span style={{ fontFamily: MF, fontSize: 8, letterSpacing: "0.14em", color: ACCENT, border: `1px solid #3a3358`, borderRadius: 3, padding: "1px 6px" }}>PREMIUM</span>
-        <span style={{ marginLeft: "auto", fontFamily: MF, fontSize: 8.5, color: "#6f6a86" }}>powered by Miroshark</span>
+        <span style={{ fontFamily: MF, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.12em", color: SIM.text }}>◆ SIM</span>
+        <span style={{ fontFamily: MF, fontSize: 8, letterSpacing: "0.14em", color: ACCENT, border: `1px solid ${SIM.border}`, borderRadius: 3, padding: "1px 6px" }}>PREMIUM</span>
+        <span style={{ marginLeft: "auto", fontFamily: MF, fontSize: 8.5, color: SIM.muted }}>powered by Miroshark</span>
       </div>
-      <div style={{ fontFamily: UI, fontSize: 12, color: "#b8b2cc", lineHeight: 1.55, marginBottom: 11 }}>
-        Set up <b style={{ color: "#ded8f0" }}>any trade or scenario</b> and pressure-test it — a crowd of grounded AI agents debates and trades it across 10 rounds, surfacing the bull case, the bear case, the invalidation, and where consensus lands. <span style={{ color: "#8b8299" }}>A thinking tool, never a signal.</span>
+      <div style={{ fontFamily: UI, fontSize: 12, color: SIM.body, lineHeight: 1.55, marginBottom: 11 }}>
+        Set up <b style={{ color: SIM.text }}>any trade or scenario</b> and pressure-test it. A crowd of grounded AI agents debates and trades it across 10 rounds, surfacing the bull case, the bear case, the invalidation, and where consensus lands. <span style={{ color: SIM.muted }}>A thinking tool, never a signal.</span>
       </div>
 
       {/* Mode toggle: structured trade vs free-form scenario */}
-      <div style={{ display: "inline-flex", gap: 0, marginBottom: 11, border: `1px solid #3a3358`, borderRadius: 4, overflow: "hidden" }}>
+      <div style={{ display: "inline-flex", gap: 0, marginBottom: 11, border: `1px solid ${SIM.border}`, borderRadius: 4, overflow: "hidden" }}>
         {([["trade", "TRADE SETUP"], ["free", "FREE SCENARIO"]] as const).map(([m, lbl]) => {
           const on = mode === m;
           return (
             <button key={m} onClick={() => setMode(m)} style={{
               background: on ? `${ACCENT}22` : "transparent", border: "none", cursor: "pointer",
-              color: on ? "#ded8f0" : "#8b8299", fontFamily: MF, fontSize: 9.5, fontWeight: on ? 700 : 400,
+              color: on ? SIM.text : SIM.muted, fontFamily: MF, fontSize: 9.5, fontWeight: on ? 700 : 400,
               letterSpacing: "0.08em", padding: "5px 12px",
             }}>{lbl}</button>
           );
@@ -84,8 +85,8 @@ export function SimComposer({ wallet, seed, compact = false }: { wallet: string 
                   const col = d === "LONG" ? C.pos : C.neg;
                   return (
                     <button key={d} onClick={() => setDirection(d)} style={{
-                      flex: 1, background: on ? `${col}1e` : "transparent", border: `1px solid ${on ? col : "#3a3358"}`,
-                      borderRadius: 4, cursor: "pointer", color: on ? col : "#8b8299", fontFamily: MF, fontSize: 10.5, fontWeight: on ? 700 : 400, padding: "7px 0",
+                      flex: 1, background: on ? `${col}1e` : "transparent", border: `1px solid ${on ? col : SIM.border}`,
+                      borderRadius: 4, cursor: "pointer", color: on ? col : SIM.muted, fontFamily: MF, fontSize: 10.5, fontWeight: on ? 700 : 400, padding: "7px 0",
                     }}>{d === "LONG" ? "↑ LONG" : "↓ SHORT"}</button>
                   );
                 })}
@@ -94,17 +95,17 @@ export function SimComposer({ wallet, seed, compact = false }: { wallet: string 
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
             <div>
-              <div style={miniLabel}>ENTRY <span style={{ color: "#4a4658" }}>(optional)</span></div>
+              <div style={miniLabel}>ENTRY <span style={{ color: C.text.faint }}>(optional)</span></div>
               <input value={entry} onChange={(e) => setEntry(e.target.value)} placeholder="entry price" spellCheck={false} style={fieldStyle} />
             </div>
             <div>
-              <div style={miniLabel}>TARGET <span style={{ color: "#4a4658" }}>(optional)</span></div>
+              <div style={miniLabel}>TARGET <span style={{ color: C.text.faint }}>(optional)</span></div>
               <input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="target price" spellCheck={false} style={fieldStyle} />
             </div>
           </div>
           <div>
-            <div style={miniLabel}>THESIS / CONTEXT <span style={{ color: "#4a4658" }}>(optional — sharpens the sim)</span></div>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 400))} rows={2} placeholder="why this trade — catalyst, level, timeframe…"
+            <div style={miniLabel}>THESIS / CONTEXT <span style={{ color: C.text.faint }}>(optional · sharpens the sim)</span></div>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 400))} rows={2} placeholder="Why this trade? Catalyst, level, timeframe…"
               style={{ ...fieldStyle, resize: "vertical", lineHeight: 1.4 }} />
           </div>
         </div>
@@ -112,7 +113,7 @@ export function SimComposer({ wallet, seed, compact = false }: { wallet: string 
         <div style={{ marginBottom: 11 }}>
           <div style={miniLabel}>SCENARIO</div>
           <textarea value={query} onChange={(e) => setQuery(e.target.value.slice(0, 500))} rows={3} spellCheck={false}
-            placeholder="Describe anything to simulate — e.g. “BTC reclaims 80k on ETF inflows while funding stays negative — do alts follow or does BTC dominance rip?”"
+            placeholder="Describe anything to simulate. E.g. “BTC reclaims 80k on ETF inflows while funding stays negative. Do alts follow or does BTC dominance rip?”"
             style={{ ...fieldStyle, resize: "vertical", lineHeight: 1.45 }} />
         </div>
       )}

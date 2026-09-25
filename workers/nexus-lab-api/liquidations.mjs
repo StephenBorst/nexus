@@ -152,17 +152,6 @@ export async function snapshotLiquidations(env, coins) {
 // history — a flush = this hour's liquidation magnitude on a side >> its trailing
 // median (a spike of forced unwinding). Returns the dominant side + how extreme.
 // side "DOWN" = longs capitulating (fade-short entry window); "UP" = shorts squeezed.
-export function classifyFlush(hist, current) {
-  const pts = (hist || []).filter((p) => Number.isFinite(p?.longMag) && Number.isFinite(p?.shortMag));
-  if (pts.length < 12 || !current) return null;
-  const longs = pts.map((p) => p.longMag).sort((a, b) => a - b);
-  const shorts = pts.map((p) => p.shortMag).sort((a, b) => a - b);
-  const med = (arr) => arr[Math.floor(arr.length / 2)] || 0;
-  const lMed = med(longs), sMed = med(shorts);
-  const lRatio = lMed > 0 ? current.longMag / lMed : (current.longMag > 0 ? 99 : 0);
-  const sRatio = sMed > 0 ? current.shortMag / sMed : (current.shortMag > 0 ? 99 : 0);
-  const FLUSH = 2.5; // 2.5x the trailing median = a genuine cascade
-  if (lRatio < FLUSH && sRatio < FLUSH) return null;
-  const side = lRatio >= sRatio ? "DOWN" : "UP"; // DOWN = longs liquidated
-  return { side, ratio: Math.round((side === "DOWN" ? lRatio : sRatio) * 10) / 10 };
-}
+// classifyFlush lives in app/lib/basisStack.mjs — shared with the scoreboard's liq axes and
+// the brain's live basis×liq-flush gate, so the three can't drift.
+export { classifyFlush } from "../../app/lib/basisStack.mjs";

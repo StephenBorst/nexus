@@ -5,6 +5,7 @@
 // renders nothing when there are no open positions, so it never shows an empty
 // band. Polls so PnL ticks. Horizontal-scroll row → never clips on mobile.
 import { useEffect, useState } from "react";
+import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const green = "#ededf0";
@@ -24,7 +25,7 @@ type LivePos = {
   opened_at: number | null;
 };
 
-const tk = (s: string) => s.replace("PERP_", "").replace("_USDC", "");
+const tk = (s: string) => bareTicker(s);
 const shortAddr = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
 const ago = (ms: number | null) => {
   if (!ms) return "";
@@ -86,7 +87,7 @@ export default function LiveNow() {
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: "bold", color: "#fff" }}>{tk(p.symbol)}</span>
                 <span style={{ fontSize: 9, color: long ? green : red }}>{long ? "↑ LONG" : "↓ SHORT"}</span>
-                <span style={{ marginLeft: "auto", fontSize: 8, color: p.agent ? "#d4d4d8" : "#ededf0", border: "1px solid #33333a", borderRadius: 3, padding: "0 4px" }}>{p.agent ? "🤖" : "👤"}</span>
+                <span style={{ marginLeft: "auto", fontSize: 8, color: p.agent ? "#d4d4d8" : "#ededf0", border: "1px solid #33333a", borderRadius: 3, padding: "0 4px" }}>{p.agent ? "AGENT" : "HUMAN"}</span>
               </div>
               <div style={{ fontSize: 15, fontWeight: "bold", color: pnlColor, marginTop: 5 }}>
                 {pct == null ? "—" : `${up ? "+" : ""}${pct.toFixed(2)}%`}

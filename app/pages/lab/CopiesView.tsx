@@ -8,6 +8,7 @@ import type { ThesisTrade } from "./types";
 import { STATUS_CONFIG } from "./styles";
 import { effectiveStatus } from "./helpers";
 import { EmptyState } from "./components";
+import { bareTicker } from "@/utils/utils";
 
 export function CopiesView() {
   const isMobile = useIsMobile();
@@ -37,7 +38,7 @@ export function CopiesView() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {copiedTheses.map((t) => {
-            const ticker = t.symbol.replace("PERP_", "").replace("_USDC", "");
+            const ticker = bareTicker(t.symbol);
             const cfg = STATUS_CONFIG[effectiveStatus(t)] ?? STATUS_CONFIG.ACTIVE;
             const shortWallet = t.copiedFromWallet
               ? `${t.copiedFromWallet.slice(0, 6)}...${t.copiedFromWallet.slice(-4)}`
@@ -90,7 +91,7 @@ export function CopiesView() {
                         (e.currentTarget as HTMLButtonElement).style.borderColor = "#232327";
                       }}
                     >
-                      📋 {shortWallet} ↗
+                      {shortWallet} ↗
                     </button>
                   )}
                 </div>

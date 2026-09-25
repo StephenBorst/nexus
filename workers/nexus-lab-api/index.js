@@ -49,10 +49,13 @@ async function prevCopyLeaders(env, address) {
   catch { return []; }
 }
 
-import { backtestConfig, runSweep, oiSeriesInfo, walkForwardValidate, runBacktest, fetchCandles, fetchFundingAt, makeFundingPctAt } from "./backtest.mjs";
+import { backtestConfig, runSweep, runBasisSweep, oiSeriesInfo, walkForwardValidate, runBacktest, fetchCandles, fetchFundingAt, makeFundingPctAt, evidenceAcrossMarkets, basisAtForConfig } from "./backtest.mjs";
+import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
-import { runScorecard } from "./axisbt.mjs";
+import { runScorecard, AXES, priceByHour } from "./axisbt.mjs";
+import { keyProxyOriginOk, makeRateLimiter } from "./keyProxy.mjs";
+import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
 // TWAP planner/status — reuse the exec worker's tested logic (wrangler bundles the
 // cross-dir import, same as backtest.mjs). ONE planner, so start-validation and the
@@ -61,11 +64,13 @@ import { twapSchedule, twapProgress } from "../nexus-agent-exec/logic.mjs";
 // Route families lifted out of the 74-route fetch handler (see shared.mjs for the
 // migration rules — one family per commit, read-only families first).
 import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus } from "./routes-smart.mjs";
+import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
+import { handleXrayShare, logShareHit } from "./routes-xrayshare.mjs";
 import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
 import { handleFeed } from "./routes-feed.mjs";
-import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols } from "./strategies.mjs";
+import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
 import { json, cors, normalizeAddress, recoverEthAddress, ALLOWED_ORIGINS, holdersRoomMessage, appendNotification } from "./shared.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, REGIME_PAD_S, ADVICE_FLAG_TEXT } from "./grading.mjs";
@@ -166,6 +171,13 @@ async function getMonoFont() {
 
 
 
+
+// SVG → PNG with the shared mono font (the same path every OG card here uses).
+async function renderMonoPng(svg) {
+  await ensureResvg();
+  const font = await getMonoFont();
+  return new Resvg(svg, { font: { loadSystemFonts: false, fontBuffers: [font], defaultFontFamily: "JetBrains Mono" } }).render().asPng();
+}
 
 // ── Agent key encryption at rest (AES-256-GCM via Web Crypto) ──────────────────
 // Trading keys are encrypted before being written to KV so a KV dump alone is
@@ -877,6 +889,17 @@ async function generateCatalystHouseCalls(env, { dryRun = false, max = 2 } = {})
   return { house: houseAddr, posted: toPost.map((c) => ({ id: c.id, symbol: c.symbol, direction: c.direction, entry: c.entryPrice, tp: c.takeProfit1, sl: c.stopLoss, catalyst: c.catalyst })) };
 }
 
+// Per-IP budgets for the routes that spend OUR API keys (see keyProxy.mjs). Isolate-local.
+const flashLimiter = makeRateLimiter({ limit: 30, windowMs: 60000 });
+const jupLimiter = makeRateLimiter({ limit: 120, windowMs: 60000 });
+// Gate for a key-carrying proxy: our own origin only, within the per-IP budget. Returns a
+// Response to send (refusal) or null to proceed.
+function keyProxyGate(request, limiter) {
+  if (!keyProxyOriginOk(request.headers.get("Origin"))) return json({ error: "origin_not_allowed" }, request, 403);
+  if (limiter(request.headers.get("CF-Connecting-IP") || "unknown")) return json({ error: "rate_limited", retryAfterSec: 60 }, request, 429);
+  return null;
+}
+
 export default {
   // Cron (wrangler.toml [triggers]) — best-effort refresh of the Smart Money
   // tracked set from the live HL leaderboard. Fails safe: on error the routes
@@ -965,6 +988,11 @@ export default {
         try { const r = await sweepTrackedXray(env); console.log(`[xray] snapshotted ${r.snapped}/${r.watched} watched wallets`); }
         catch (e) { console.error("[xray] sweep failed:", String(e)); }
       })());
+      // Grow every watched wallet's Hyperliquid fill tape before HL's 10k window drops fills.
+      ctx.waitUntil((async () => {
+        try { const r = await sweepHlTapes(env); console.log(`[hltape] synced ${r.synced}/${r.watched} watched · +${r.added} fills · ${r.gaps} gaps · ${r.failed} failed`); }
+        catch (e) { console.error("[hltape] sweep failed:", String(e)); }
+      })());
     }
   },
 
@@ -983,6 +1011,16 @@ export default {
     // positions copyable) + HYPERLIQUID secondary (wider discovery). Unified shape
     // with a `source` tag. KV-cached 10min so browsers get a light payload.
     // Smart Money family → routes-smart.mjs (migration rules in shared.mjs).
+    // GET /xray/hltape — the stored, forward-collected Hyperliquid fill tape (routes-hltape.mjs).
+    {
+      const tapeRes = await handleHlTape(parts, request, env);
+      if (tapeRes) return tapeRes;
+    }
+    // GET /share/xray/:address + /og/xray/:address(.png) — X-Ray share links (routes-xrayshare.mjs).
+    {
+      const shareRes = await handleXrayShare(parts, request, env, { renderPng: renderMonoPng });
+      if (shareRes) return shareRes;
+    }
     {
       const smartRes = await handleSmart(parts, request, env, ctx);
       if (smartRes) return smartRes;
@@ -1309,6 +1347,7 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
 
     // ── Ph22: /og/thesis/:wallet/:id(.png)? → thesis OG image ─
     if (parts[0] === "og" && parts[1] === "thesis" && parts[2] && parts[3]) {
+      logShareHit(request, { route: "og/thesis", status: 200, ms: 0 });
       if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
       const isPng = parts[3].endsWith(".png");
       const thesisId = isPng ? parts[3].slice(0, -4) : parts[3];
@@ -1503,6 +1542,8 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
     // the generic site card. This route returns real per-thesis OG meta a crawler can
     // read, and redirects humans to the actual app page. Share links point here.
     if (parts[0] === "share" && parts[1] === "thesis" && parts[2] && parts[3]) {
+      // Same crawler log as /share/xray — the baseline to compare X-Ray unfurls against.
+      logShareHit(request, { route: "share/thesis", status: 200, ms: 0 });
       const wallet = normalizeAddress(parts[2]);
       const thesisId = parts[3];
       const appUrl = `https://trade.nexustradinglabs.com/feed/thesis/${wallet}/${thesisId}`;
@@ -4689,6 +4730,43 @@ document.getElementById("btn").addEventListener("click",go);
       if (!(await walletIsPro(caller, env))) return json({ error: "pro_backtest_locked", hint: "Strategy backtesting is a Nexus PRO feature — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
       const symbols = (Array.isArray(config?.symbols) && config.symbols.length ? config.symbols : ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC"]).slice(0, 3);
       const days = Math.min(90, Math.max(7, Number(body.days) || 60));
+      // BASIS_FADE → the basis sweep: confirm (none / CVD / smart) × exits × hold, over the
+      // markets + window the recorded basis history actually covers.
+      if (config?.signalMode === "BASIS_FADE") {
+        try {
+          const [base, cvd, smart] = await Promise.all([
+            loadFlowHistForBacktest(symbols, env),
+            loadFlowHistForBacktest(symbols, env, { needCvd: true }),
+            loadFlowHistForBacktest(symbols, env, { needSmart: true }),
+          ]);
+          const runSymbols = base.matureSymbols;
+          if (!runSymbols.length) {
+            return json({ days, symbols, results: [], untestable: true, basisCoverage: base.perSymbol, note: `No market has enough recorded basis history yet (${flowCoverageText(base.perSymbol)}; needs ${BASIS_BACKTEST_MIN_DAYS}d + ${BASIS_BACKTEST_MIN_SAMPLES} samples).` }, request);
+          }
+          const cvdOk = runSymbols.every((s) => cvd.flowBySymbol[s]);
+          const smartOk = runSymbols.every((s) => smart.flowBySymbol[s]);
+          const flowBySymbol = {};
+          for (const s of runSymbols) {
+            flowBySymbol[s] = {
+              basisHist: base.flowBySymbol[s].basisHist,
+              cvdHist: cvdOk ? cvd.flowBySymbol[s].cvdHist : [], oiHist: cvdOk ? cvd.flowBySymbol[s].oiHist : [],
+              smHist: smartOk ? smart.flowBySymbol[s].smHist : [],
+            };
+          }
+          const confirms = [null, ...(cvdOk ? ["CVD"] : []), ...(smartOk ? ["SMART"] : [])];
+          const windows = [base.windowDays, ...(cvdOk ? [cvd.windowDays] : []), ...(smartOk ? [smart.windowDays] : [])];
+          const bDays = Math.max(7, Math.min(days, ...windows));
+          const sweep = await runBasisSweep(config, { symbols: runSymbols, days: bDays }, flowBySymbol, { confirms });
+          const skippedConfirms = [...(cvdOk ? [] : ["CVD"]), ...(smartOk ? [] : ["SMART"])];
+          return json({
+            ...sweep, basisWindowDays: bDays, basisCoverage: base.perSymbol, excludedSymbols: base.staleSymbols,
+            note: `Basis sweep over ${bDays}d of recorded history on ${shortSymbols(runSymbols)} — ${sweep.results.length} variants (confirm × exits × hold), fees included. Ranked by net; prefer rows net-positive on most markets (posSymbols), not the single best.${skippedConfirms.length ? ` Not in the grid (confirm series not deep enough on every market yet): ${skippedConfirms.join(", ")}.` : ""}`,
+          }, request);
+        } catch (e) {
+          console.error("[sweep] basis error:", e);
+          return json({ error: "sweep failed", detail: String(e.message || e) }, request, 500);
+        }
+      }
       try {
         // Fold CONFLUENCE / OI_ONLY into the discovery grid only once recorded OI is
         // deep enough; until then the sweep stays funding/price-only (still honest).
@@ -4718,6 +4796,31 @@ document.getElementById("btn").addEventListener("click",go);
       const UNIVERSE = ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC", "PERP_BNB_USDC", "PERP_XRP_USDC", "PERP_LINK_USDC"];
       const days = Math.min(90, Math.max(28, Number(body.days) || 60));
       const folds = Math.min(6, Math.max(3, Number(body.folds) || 4));
+      // BASIS_FADE: walk-forward over the markets with mature recorded basis (+ confirm)
+      // history, window sized to that history so empty pre-history can't read as losing folds.
+      if (config.signalMode === "BASIS_FADE") {
+        const label = strategyLabel(config);
+        const flow = await loadFlowHistForBacktest(UNIVERSE, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART", needLiq: config.basisConfirm === "LIQ" });
+        if (flow.matureSymbols.length < MIN_VALIDATE_SYMBOLS) {
+          return json({
+            days, folds, symbols: flow.matureSymbols, totalSymbols: flow.matureSymbols.length, perSymbol: [],
+            untestable: true, strategyLabel: label, basisCoverage: flow.perSymbol, excludedSymbols: flow.staleSymbols,
+            note: `${label} needs at least ${MIN_VALIDATE_SYMBOLS} markets with ${BASIS_BACKTEST_MIN_DAYS}d+ recorded basis history to walk-forward — ${flow.matureSymbols.length} qualify (${flowCoverageText(flow.perSymbol)}).`,
+          }, request);
+        }
+        const bDays = Math.max(14, Math.min(days, flow.windowDays));
+        try {
+          const result = await walkForwardValidate(config, { symbols: flow.matureSymbols, days: bDays, folds }, {}, flow.flowBySymbol);
+          return json({
+            ...result, untestable: false, strategyLabel: label, gatesSkipped: backtestGateSupport(config).skipped,
+            basisCoverage: flow.perSymbol, excludedSymbols: flow.staleSymbols, basisWindowDays: bDays,
+            note: `${label} walk-forwarded on ${flow.matureSymbols.length} markets over ${bDays}d of recorded basis history, ${folds} folds, fees included.${flow.staleSymbols.length ? ` Excluded — not enough recorded history: ${shortSymbols(flow.staleSymbols)}.` : ""}`,
+          }, request);
+        } catch (e) {
+          console.error("[validate] basis error:", e);
+          return json({ error: "validate failed", detail: String(e.message || e) }, request, 500);
+        }
+      }
       const needsOi = ["CONFLUENCE", "OI_ONLY"].includes(config.signalMode);
       const oi = needsOi ? await loadOiHistForBacktest(UNIVERSE, env) : null;
       // ⚠️ Validate the markets that ACTUALLY have mature recorded OI. This used to gate on
@@ -4771,15 +4874,32 @@ document.getElementById("btn").addEventListener("click",go);
       // OI-dependent modes (CONFLUENCE / OI_ONLY) become testable once the brain's
       // recorded oi:hist has matured — load it, gate on coverage, feed the engine
       // only when deep enough; otherwise stay honestly "untestable".
-      // BASIS_FADE replays as a silent zero: the engine feeds price + funding (+ recorded
-      // OI), and spot-perp basis history is NOT wired into the replay. Say that instead of
-      // returning "0 trades" and letting it read as a result.
+      // BASIS_FADE replays off RECORDED basis history (+ the CVD / smart-money series its
+      // confirm needs), evaluated exactly as the brain would at each bar close (shared rules,
+      // prefix-only — no lookahead). Only markets whose recorded series clear the maturity
+      // bar run; the rest are NAMED. The window is sized to the data that exists.
       if (config.signalMode === "BASIS_FADE") {
-        return json({
-          days, symbols, untestable: true, strategyLabel: strategyLabel(config),
-          combined: { trades: 0, winRate: 0, netUsd: 0 }, perSymbol: [],
-          note: "BASIS_FADE can't be backtested here — the replay feeds price, funding and recorded OI, but not spot-perp basis history. The read itself is graded on the signal scoreboard (/proof); grade the STRATEGY forward in PAPER.",
-        }, request);
+        const label = strategyLabel(config);
+        const flow = await loadFlowHistForBacktest(symbols, env, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART", needLiq: config.basisConfirm === "LIQ" });
+        if (!flow.anyMature) {
+          return json({
+            days, symbols, untestable: true, strategyLabel: label, basisCoverage: flow.perSymbol,
+            combined: { trades: 0, winRate: 0, netUsd: 0 }, perSymbol: [],
+            note: `${label} replays off recorded basis history — no market here qualifies yet (${flowCoverageText(flow.perSymbol)}; needs ${BASIS_BACKTEST_MIN_DAYS}d + ${BASIS_BACKTEST_MIN_SAMPLES} samples).`,
+          }, request);
+        }
+        const bDays = Math.max(7, Math.min(days, flow.windowDays));
+        try {
+          const result = await backtestConfig(config, { symbols: flow.matureSymbols, days: bDays }, {}, flow.flowBySymbol);
+          return json({
+            ...result, untestable: false, strategyLabel: label, gatesSkipped: backtestGateSupport(config).skipped,
+            basisCoverage: flow.perSymbol, excludedSymbols: flow.staleSymbols, basisWindowDays: bDays,
+            note: `${label} replayed over ${bDays}d of recorded basis history${config.basisConfirm ? ` + the ${config.basisConfirm === "CVD" ? "CVD" : config.basisConfirm === "SMART" ? "smart-money" : "liquidation"} series` : ""}, bar by bar as the agent would have seen it (first ~2d are warm-up). Fees included.${flow.staleSymbols.length ? ` Excluded — not enough recorded history yet: ${shortSymbols(flow.staleSymbols)}.` : ""}`,
+          }, request);
+        } catch (e) {
+          console.error("[backtest] basis error:", e);
+          return json({ error: "backtest failed", detail: String(e.message || e) }, request, 500);
+        }
       }
       const needsOi = ["CONFLUENCE", "OI_ONLY"].includes(config.signalMode);
       const oi = needsOi ? await loadOiHistForBacktest(symbols, env) : null;
@@ -4984,7 +5104,7 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "intel" && parts[1] === "axis-backtest" && request.method === "GET") {
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
-      const CACHE = `axisbt:v1:min${min}`;
+      const CACHE = `axisbt:v3:min${min}`; // v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
@@ -5009,10 +5129,71 @@ document.getElementById("btn").addEventListener("click",go);
         asOf: new Date().toISOString(),
         config: { horizonsHours: [4, 12, 24], minSamples: min, coins: coinSets.map((c) => c.coin) },
         ...scorecard,
-        note: "Walk-forward event study on self-logged history — forward returns, no lookahead, first/second-half stability. Axes read INSUFFICIENT until the series matures. A read is not an edge until it's PREDICTIVE here.",
+        note: "Walk-forward event study on self-logged history — forward returns, no lookahead, first/second-half stability. Axes read INSUFFICIENT until the series matures. A read is not an edge until it's PREDICTIVE here. `exit` (on reads a preset trades) grades the read through that preset's own TP/SL/max-hold along the logged candles, one position per market, net of a 3 bps/side taker fee; `exit24h` is the same exit with a 24h hold on the same entry window; `oos` counts only trades entered after 2026-09-25 04:00 UTC. Informational — they do not change the read's verdict.",
       };
       try { await env.LAB_STORE.put(CACHE, JSON.stringify(out), { expirationTtl: 3600 }); } catch { /* best-effort */ }
       return json(out, request);
+    }
+
+    // ── GET /intel/evidence?axis=basis_x_cvd&hold=12|24 — does the SIGNAL carry information? ──
+    // The preset's exact signal (AXIS_EXITS: signal, confirm, sizing, exit) replayed on EVERY market
+    // with mature recorded history, each on its own, trades pooled, then the random-entry baseline
+    // on the pool (+ how many trades a verdict still needs). Public + read-only (recorded series +
+    // public candles), cached 1h — so the Oct-15 routine can read it without a wallet signature.
+    // ⚠️ Markets move together: the pool is an honest aggregate, not independent tests.
+    if (parts[0] === "intel" && parts[1] === "evidence" && request.method === "GET") {
+      const q = new URL(request.url).searchParams;
+      const axis = q.get("axis") || "basis_x_cvd";
+      const contract = AXIS_EXITS[axis];
+      if (!contract) return json({ ok: false, error: "unknown_axis", axes: Object.keys(AXIS_EXITS) }, request, 400);
+      const hold = [contract.maxHoldHours, 24].includes(Number(q.get("hold"))) ? Number(q.get("hold")) : contract.maxHoldHours;
+      const CACHE = `evidence:v1:${axis}:${hold}`;
+      try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
+      const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
+      const symbols = COINS.map((c) => `PERP_${c}_USDC`);
+      const config = {
+        signalMode: contract.signalMode, ...(contract.basisConfirm ? { basisConfirm: contract.basisConfirm } : {}),
+        tpPercent: contract.tpPercent, slPercent: contract.slPercent, maxHoldHours: hold,
+        leverage: contract.leverage, capitalPerTrade: contract.capitalPerTrade,
+      };
+      try {
+        const flow = await loadFlowHistForBacktest(symbols, env, { needCvd: contract.basisConfirm === "CVD", needSmart: contract.basisConfirm === "SMART", needLiq: contract.basisConfirm === "LIQ" });
+        if (!flow.anyMature) return json({ ok: false, axis, hold, note: `No market has enough recorded history yet (${flowCoverageText(flow.perSymbol)}).` }, request);
+        const days = Math.max(7, Math.min(60, flow.windowDays));
+        // Candles from the brain's RECORDED hourly series (candle:hist, the same tape the scoreboard
+        // grades on) — no burst of Orderly calls (12 markets × 3 chunks tripped a Cloudflare challenge).
+        // Orderly only as a per-market fallback when the recorded series is short; a market that
+        // still fails is EXCLUDED and named, never allowed to sink the whole run.
+        const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
+        const since = Math.floor(Date.now() / 1000) - days * 86400;
+        const markets = [], failed = [];
+        for (const symbol of flow.matureSymbols) {
+          let candles = [];
+          try {
+            const raw = await AGENT_KV.get(`candle:hist:${symbol}`);
+            candles = (raw ? JSON.parse(raw) : [])
+              .map((c) => ({ t: Math.floor(Number(c.t) / 1000), o: +c.o, h: +c.h, l: +c.l, c: +c.c }))
+              .filter((c) => c.t >= since && c.c > 0 && Number.isFinite(c.h) && Number.isFinite(c.l))
+              .sort((a, b) => a.t - b.t);
+          } catch { candles = []; }
+          if (candles.length < days * 24 * 0.8) {
+            try { candles = await fetchCandles(symbol, days); } catch { /* keep whatever was recorded */ }
+          }
+          if (candles.length < 48) { failed.push(symbol); continue; }
+          markets.push({ symbol, candles, feeds: { fundingAt: () => 0, basisAt: basisAtForConfig(config, flow.flowBySymbol[symbol]) } });
+        }
+        if (!markets.length) return json({ ok: false, axis, hold, note: "No market had usable candles for the replay window.", failedSymbols: failed }, request);
+        const ev = evidenceAcrossMarkets(markets, config);
+        const out = {
+          ok: true, asOf: new Date().toISOString(), axis, preset: contract.preset, hold, days, config,
+          excludedSymbols: [...flow.staleSymbols, ...failed], strategyLabel: strategyLabel(config), ...ev,
+        };
+        try { await env.LAB_STORE.put(CACHE, JSON.stringify(out), { expirationTtl: 3600 }); } catch { /* best-effort */ }
+        return json(out, request);
+      } catch (e) {
+        console.error("[evidence]", e);
+        return json({ ok: false, error: "evidence_failed", detail: String(e?.message || e) }, request, 500);
+      }
     }
 
     // ── GET /intel/baserate/:symbol — the honest "base rate at the decision" ──────
@@ -5289,6 +5470,57 @@ document.getElementById("btn").addEventListener("click",go);
           ? null
           : json({ error: "walletSig_required", hint: "This agent action requires walletSig = sign_message('nexus-trading-key-v1') from the agent's own wallet." }, request, 401);
 
+      // GET /agent/:address/parity — LIVE-vs-GRADED parity (public, read-only)
+      // Pairs every paper entry with the scoreboard event it traded (same market, side, basis
+      // hour) and lists every graded event the agent was free to take but didn't. Explained
+      // misses (position open, cooldown, daily caps, brain picked another market) are listed;
+      // anything left is DRIFT between the live path and the grade. ?since=&until= (ISO or ms);
+      // since defaults to the last paper reset, else the oldest retained entry, else 24h. Same KV series the
+      // scoreboard reads, same axis generator — see app/lib/paperParity.mjs.
+      if (request.method === "GET" && parts[2] === "parity") {
+        const [configRaw, stateRaw] = await Promise.all([AGENT_KV.get(`agent:config:${address}`), AGENT_KV.get(`agent:state:${address}`)]);
+        const config = configRaw ? JSON.parse(configRaw) : null;
+        const state = stateRaw ? JSON.parse(stateRaw) : {};
+        const axis = axisForConfig(config);
+        if (!axis) return json({ ok: false, error: "no_graded_axis", note: "Parity applies to BASIS_FADE configs (plain, CVD, SMART or LIQ confirm, not inverted) — the modes the scoreboard grades." }, request);
+        const q = new URL(request.url).searchParams;
+        const when = (v) => (v == null || v === "" ? null : (/^\d+$/.test(v) ? Number(v) : Date.parse(v)));
+        const now = Date.now();
+        // Window start: explicit ?since, else the last paper reset, else the oldest retained paper
+        // entry, else the last 24h. (A reset done before paper_reset_at existed leaves no stamp, and
+        // judging events from before the run began would count them all as misses.)
+        const oldestOpen = (state.paper_trades || []).reduce((m, t) => { const o = Date.parse(t?.opened_at); return Number.isFinite(o) ? Math.min(m, o) : m; }, Infinity);
+        const qSince = when(q.get("since"));
+        const [since, sinceSource] = qSince != null ? [qSince, "query"]
+          : state.paper_reset_at ? [state.paper_reset_at, "paper_reset"]
+          : Number.isFinite(oldestOpen) ? [oldestOpen, "oldest_retained_entry"]
+          : [now - 86400000, "last_24h"];
+        const until = Math.min(when(q.get("until")) ?? now, now);
+        if (!Number.isFinite(since) || !Number.isFinite(until) || since >= until) return json({ ok: false, error: "bad_window" }, request, 400);
+        const gen = AXES.find((a) => a.name === axis)?.gen;
+        const readJson = async (key) => { try { const r = await AGENT_KV.get(key); return r ? JSON.parse(r) : []; } catch { return []; } };
+        const coins = [...new Set((config.symbols || []).map((s) => String(s).toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "")))];
+        const events = [];
+        for (const coin of coins) {
+          const [oiHist, basisHist, cvdHist, smHist, liqHist] = await Promise.all([
+            readJson(`oi:hist:PERP_${coin}_USDC`),
+            readJson(`basis:hist:${coin}`),
+            axis === "basis_x_cvd" ? readJson(`cvd:hist:${coin}`) : [],
+            axis === "basis_x_smart" ? readJson(`sm:hist:${coin}`) : [],
+            axis === "basis_x_liqflush" ? readJson(`liq:hist:${coin}`) : [],
+          ]);
+          const cs = { coin, oiHist, basisHist, cvdHist, smHist, liqHist, candleHist: [] };
+          for (const e of gen(cs, priceByHour(oiHist), {}) || []) events.push({ coin, t: e.t, side: e.side });
+        }
+        const report = paperParity({ trades: state.paper_trades || [], events, config, since, until });
+        return json({
+          ok: true, address, axis, mode: config.mode, maxHoldHours: config.maxHoldHours ?? null,
+          paperResetAt: state.paper_reset_at ? new Date(state.paper_reset_at).toISOString() : null, sinceSource,
+          ledgerWindowNote: "Checks the retained paper ledger (last 50 rows). Entries older than the oldest retained row can't be checked.",
+          ...report,
+        }, request);
+      }
+
       // GET /agent/:address
       if (request.method === "GET" && !parts[2]) {
         const [configRaw, stateRaw, pendingRaw, signalRaw, whMetaRaw, directiveRaw] = await Promise.all([
@@ -5438,6 +5670,8 @@ document.getElementById("btn").addEventListener("click",go);
         if (state.current_position?.paper) state.current_position = null;
         state.daily_pnl = 0;
         state.trades_today = 0;
+        // When the clean record starts — the parity check's default window opens here.
+        state.paper_reset_at = Date.now();
         await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
         return json({ ok: true, cleared }, request);
       }
@@ -5895,6 +6129,7 @@ document.getElementById("btn").addEventListener("click",go);
     // A 401 here means the key is a Portfolio key, not a Flash key — surfaced verbatim so the op
     // knows to regenerate. Adds no trust: the browser still confirms the ticket before signing.
     if (parts[0] === "flash" && (parts[1] === "quote" || parts[1] === "order") && request.method === "POST") {
+      const gated = keyProxyGate(request, flashLimiter); if (gated) return gated;
       const key = env.FLASH_API_KEY || "";
       if (!key) return json({ error: "flash_not_configured", detail: "FLASH_API_KEY secret is not set" }, request, 503);
       try {
@@ -5919,6 +6154,7 @@ document.getElementById("btn").addEventListener("click",go);
     // returned bytes before any signature, so this relay adds no trust. Key from env.JUP_API_KEY
     // (JUPITER_API_KEY honored as an alt); with no key it still forwards and Jupiter decides.
     if (parts[0] === "swap" && parts[1] === "jup" && (parts[2] === "quote" || parts[2] === "swap")) {
+      const gated = keyProxyGate(request, jupLimiter); if (gated) return gated;
       const jupKey = env.JUP_API_KEY || env.JUPITER_API_KEY || "";
       const jupHdr = { Accept: "application/json" };
       if (jupKey) jupHdr["x-api-key"] = jupKey;

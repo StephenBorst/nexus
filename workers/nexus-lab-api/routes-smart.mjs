@@ -14,7 +14,7 @@
 // Contract: handleSmart returns a Response when it owns the path, or null so the
 // remaining routes in index.js get their turn. Never throws for "not mine".
 import { json, normalizeAddress, recoverEthAddress } from "./shared.mjs";
-import { orderlyAccountId, xrayTrack } from "./logic.mjs";
+import { orderlyAccountId, xrayTrack, dedupeDaily } from "./logic.mjs";
 
 // ── Smart Money (Phase 1) ─────────────────────────────────────────────────────
 // Curated seed of top Hyperliquid traders (snapshotted from the public HL
@@ -75,7 +75,9 @@ async function xrayAggregate(address) {
   const coin = (s) => String(s).replace("PERP_", "").replace("_USDC", "");
   const probed = await Promise.all(ORDERLY_BROKERS.map(async (brokerId) => {
     let accountId;
-    try { accountId = orderlyAccountId(address, brokerId); } catch { return null; }
+    // Derivation failure and indexer failure are both "couldn't read this venue" —
+    // never silently counted as an empty venue downstream.
+    try { accountId = orderlyAccountId(address, brokerId); } catch { return { brokerId, failed: true }; }
     try {
       const d = await orderlyDashboard(`/ranking/realized_pnl?account_id=${accountId}&limit=100`);
       const rows = d?.data?.rows || [];
@@ -100,14 +102,17 @@ async function xrayAggregate(address) {
       return {
         brokerId, accountId, isNexus: brokerId === NEXUS_BROKER_ID,
         realized: Math.round(realized), unrealized: Math.round(unrealized),
-        markets: rows.length, wins, losses,
+        // limit=100: a full page means markets exist beyond the cap, so the summed
+        // realized UNDERSTATES. Flag it; the page/tool disclose instead of hiding it.
+        markets: rows.length, marketsCapped: rows.length >= 100, wins, losses,
         profitableMarketsPct: graded ? Math.round((wins / graded) * 1000) / 10 : 0,
         openPositions: bySymbol.filter((s) => s.open).length,
         bySymbol,
       };
-    } catch { return null; }
+    } catch { return { brokerId, failed: true }; }
   }));
-  const venues = probed.filter(Boolean)
+  const brokersFailed = probed.filter((p) => p && p.failed).map((p) => p.brokerId);
+  const venues = probed.filter((p) => p && !p.failed)
     .sort((a, b) => (b.isNexus ? 1 : 0) - (a.isNexus ? 1 : 0) || b.realized - a.realized);
   return {
     address, venues,
@@ -118,6 +123,8 @@ async function xrayAggregate(address) {
     totalLosses: venues.reduce((s, v) => s + v.losses, 0),
     totalOpen: venues.reduce((s, v) => s + v.openPositions, 0),
     brokersChecked: ORDERLY_BROKERS.length,
+    brokersFailed,
+    marketsCapped: venues.some((v) => v.marketsCapped),
   };
 }
 
@@ -131,7 +138,7 @@ const XRAY_SNAP_MIN_MS = 20 * 3600 * 1000; // ≥20h between stored snapshots (�
 const XRAY_HIST_CAP = 240;                  // ~8 months of daily points
 const XRAY_HIST_TTL = 400 * 86400;
 
-async function readXrayHist(env, address) {
+export async function readXrayHist(env, address) {
   const raw = await env.LAB_STORE.get(XRAY_HIST_PREFIX + address.toLowerCase());
   if (!raw) return [];
   try { const a = JSON.parse(raw); return Array.isArray(a) ? a : []; } catch { return []; }
@@ -555,7 +562,10 @@ export async function handleSmart(parts, request, env, ctx) {
     const last = hist[hist.length - 1];
     const stale = !last || !Number.isFinite(last.t) || Date.now() - last.t >= XRAY_SNAP_MIN_MS;
     if (stale) { try { hist = await snapshotXray(env, address); } catch { /* keep stored */ } }
-    return json({ address, snapshots: hist.length, track: xrayTrack(hist), updatedAt: Date.now() }, request);
+    // `series` = the daily realized points behind the track, so the X-Ray can read
+    // time windows (24H/7D/30D) off the watched record. Additive; old clients ignore it.
+    const series = dedupeDaily(hist).map((s) => ({ t: s.t, realized: s.realized || 0 }));
+    return json({ address, snapshots: hist.length, track: xrayTrack(hist), series, updatedAt: Date.now() }, request);
   }
 
   if (parts[0] === "smart" && parts[1] === "xray" && parts[2] === "events" && request.method === "GET") {

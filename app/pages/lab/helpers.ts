@@ -9,6 +9,23 @@ export function formatPnl(val: number) {
   return `${val >= 0 ? "+" : "-"}$${Math.abs(val).toFixed(2)}`;
 }
 
+// Compact twin of formatPnl for tight card layouts (mobile): +$3.07M, -$5.22.
+// Same sign rule — never drop it — and same M/K thresholds as the analyze
+// page's usd(), so the verdict, stat cards and asset tiles all read alike.
+export function formatPnlCompact(val: number) {
+  const a = Math.abs(val);
+  const s = a >= 1e6 ? `${(a / 1e6).toFixed(2)}M` : a >= 1e3 ? `${(a / 1e3).toFixed(1)}K` : a.toFixed(2);
+  return `${val >= 0 ? "+" : "-"}$${s}`;
+}
+
+// Sign-less compact USD for balances — same M/K thresholds as formatPnlCompact,
+// but no +/-: a balance isn't a P&L figure.
+export function formatUsdCompact(val: number) {
+  const a = Math.abs(val);
+  const s = a >= 1e6 ? `${(a / 1e6).toFixed(2)}M` : a >= 1e3 ? `${(a / 1e3).toFixed(1)}K` : a.toFixed(2);
+  return `$${s}`;
+}
+
 export function getDayKey(ts: number) {
   const d = new Date(ts);
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;

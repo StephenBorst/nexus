@@ -43,7 +43,7 @@ export default function Desks({ walletAddress }: { walletAddress: string | null 
       const res = await fn();
       const d = await res.json();
       if (res.ok && d.ok) { setMsg(okMsg); setMyDeskId(d?.desk?.id ?? myDeskId); setName(""); await load(); }
-      else if (d.error === "already_in_desk") { setMyDeskId(d.deskId || null); setMsg("You're already in a desk — leave it first."); }
+      else if (d.error === "already_in_desk") { setMyDeskId(d.deskId || null); setMsg("You're already in a desk. Leave it first."); }
       else setMsg(d.message || d.error || "action failed");
     } catch (e) { setMsg((e as Error)?.message || "error"); }
     finally { setBusy(false); }
@@ -54,7 +54,7 @@ export default function Desks({ walletAddress }: { walletAddress: string | null 
     return { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress, walletSig: sig, ...extra }) };
   };
 
-  const create = () => name.trim() && act(async () => fetch(`${API_BASE}/desks`, await sigBody({ name: name.trim() })), `Created “${name.trim()}” — recruit your desk.`);
+  const create = () => name.trim() && act(async () => fetch(`${API_BASE}/desks`, await sigBody({ name: name.trim() })), `Created “${name.trim()}”. Recruit your desk.`);
   const join = (id: string) => act(async () => fetch(`${API_BASE}/desks/${id}/join`, await sigBody()), "Joined the desk.");
   const leave = (id: string) => act(async () => fetch(`${API_BASE}/desks/${id}/leave`, await sigBody()), "Left the desk.");
 
@@ -78,7 +78,7 @@ export default function Desks({ walletAddress }: { walletAddress: string | null 
 
       {/* Leaderboard */}
       {desks === null && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#33333a" }}>loading desks…</div>}
-      {desks && desks.length === 0 && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#33333a" }}>no desks yet — start one and recruit 🟢</div>}
+      {desks && desks.length === 0 && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#33333a" }}>No desks yet. Start one.</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {desks?.map((d) => (
           <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#0a0a0b", border: "1px solid #232327", borderRadius: 5, padding: "8px 10px", overflowX: "auto" }}>

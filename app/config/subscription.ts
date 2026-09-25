@@ -55,13 +55,13 @@ export type ProFeatureKey =
 
 /** What PRO unlocks — the public benefits list (additive value, not paywalling core). */
 export const PRO_FEATURES: { key: ProFeatureKey; label: string; desc: string }[] = [
-  { key: "agentStrategies",   label: "Full agent arsenal",   desc: "All strategy modes, more concurrent agent slots & higher capital caps." },
-  { key: "qSignals",          label: "Q Signals",            desc: "Quotient's model fair value vs the live market on liquid prediction markets. You pay per pull in USDC — no Nexus markup." },
-  { key: "advancedAnalytics", label: "Advanced analytics",   desc: "Deeper breakdowns, exports, and longer history on your track record." },
-  { key: "priorityCopy",      label: "Priority copy",        desc: "Early access to copy hot traders & top agents before slots fill." },
-  { key: "dataApi",           label: "Verified data API",    desc: "Programmatic access to the trustless, on-chain-anchored leaderboard." },
-  { key: "unlimitedTheses",   label: "Unlimited theses",     desc: "No cap on saved/published theses in the Nexus Thesis Engine." },
-  { key: "prioritySupport",   label: "Priority support",     desc: "Front-of-line help + early access to new Lab features." },
+  { key: "agentStrategies",   label: "Full agent arsenal",   desc: "Momentum and mean-reversion modes. DCA. TradingView webhooks. Backtest and sweep." },
+  { key: "qSignals",          label: "Q Signals",            desc: "Quotient fair value vs the live prediction market. $0.01 USDC per pull. Your wallet. No markup." },
+  { key: "advancedAnalytics", label: "Advanced analytics",   desc: "Deeper breakdowns, exports and longer history on your record." },
+  { key: "priorityCopy",      label: "Priority copy",        desc: "Early access to copy top traders and agents." },
+  { key: "dataApi",           label: "Verified data API",    desc: "Programmatic access to the anchored leaderboard." },
+  { key: "unlimitedTheses",   label: "Unlimited theses",     desc: "No cap on saved or published theses." },
+  { key: "prioritySupport",   label: "Priority support",     desc: "Front of the line for help and new Lab features." },
 ];
 
 export const nexusDiscountedPrice = () =>

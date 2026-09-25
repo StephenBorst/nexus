@@ -26,6 +26,8 @@ import { ThesisAdvisor } from "./ThesisAdvisor";
 import { PnlChart, EmptyState, Coachmark } from "./components";
 import { Collapsible } from "./Collapsible";
 import { SharePoster, type PosterData } from "./SharePoster";
+import { bareTicker } from "@/utils/utils";
+import { SIGNAL } from "@/config/theme";
 
 // Crash-proof number formatting — a partial thesis (e.g. a systematic house call with
 // no leverage/positionSize/fundingCost) must NEVER take the whole app down with
@@ -134,7 +136,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "flex-start", justifyContent: "space-between", marginBottom: 10, gap: isMobile ? 10 : 0 }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: 1, minWidth: 0 }}>
           <div style={{ minWidth: 52 }}>
-            <div style={{ fontSize: 16, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{t.symbol.replace("PERP_","").replace("_USDC","")}</div>
+            <div style={{ fontSize: 16, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{bareTicker(t.symbol)}</div>
             <div style={{ fontSize: 10, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>
               {t.direction === "LONG" ? "↑" : "↓"} {t.direction} · {nf(t.leverage, 1)}x
             </div>
@@ -165,19 +167,19 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
                 rel="noopener noreferrer"
                 style={{ ...navBtnStyle, fontSize: 10, color: "#6cb6ff", borderColor: "#1a1a1e", textDecoration: "none", display: "inline-block", textAlign: "center", minHeight: 36, lineHeight: "22px", padding: "6px 12px" }}
               >
-                🔔 ALERTS
+                ALERTS
               </a>
             )}
             {t.isPublic && walletAddress && (() => {
               // Share your own public call → pulls external eyes back to the feed.
-              const tk = t.symbol.replace("PERP_", "").replace("_USDC", "");
+              const tk = bareTicker(t.symbol);
               // Share via the worker OG proxy so the per-thesis card unfurls on X/etc
               // (the SPA's JS-injected OG tags are invisible to crawlers). It redirects
               // humans straight to the app page.
               const url = `https://og.nexustradinglabs.com/share/thesis/${walletAddress.toLowerCase()}/${t.id}`;
               // Use the NaN/undefined-safe formatter (nf) — a public call missing any numeric
               // field (older/partial theses) otherwise crashed the whole card on render (undefined.toFixed).
-              const text = `📡 ${tk} ${t.direction} ${nf(t.leverage, 1)}x\n\nEntry $${nf(t.entryPrice, 2)} · Stop $${nf(t.stopLoss, 2)} · TP $${nf(t.takeProfit1, 2)} (R:R 1:${nf(t.riskReward, 2)})\n\nGraded on-chain vs public price on Nexus Trading Labs 👇`;
+              const text = `${tk} ${t.direction} ${nf(t.leverage, 1)}x.\n\nEntry $${nf(t.entryPrice, 2)}. Stop $${nf(t.stopLoss, 2)}. TP $${nf(t.takeProfit1, 2)}. R:R 1:${nf(t.riskReward, 2)}.\n\nGraded against public price on Nexus Trading Labs.`;
               const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
               return (
                 <a href={xUrl} target="_blank" rel="noopener noreferrer" title="Share this call on X"
@@ -206,8 +208,8 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
                 ? { isPublic: false, holdersOnly: true }
                 : { isPublic: false, holdersOnly: false };
               const meta = {
-                PRIVATE: { label: "📡 PRIVATE", color: "#52525b", border: "#232327", bg: "transparent" },
-                PUBLIC:  { label: "📡 PUBLIC",  color: "#ededf0", border: "#33333a", bg: "#1a1a1e" },
+                PRIVATE: { label: "PRIVATE", color: "#52525b", border: "#232327", bg: "transparent" },
+                PUBLIC:  { label: "PUBLIC",  color: "#ededf0", border: "#33333a", bg: "#1a1a1e" },
                 HOLDERS: { label: "◆ HOLDERS",  color: "#ededf0", border: "#33333a", bg: "#1a1a1e" },
               }[vis];
               return (
@@ -225,11 +227,11 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
             })()}
             <button onClick={() => deployToAgent(
                 thesisToAgentConfig(t),
-                `your ${t.symbol.replace("PERP_", "").replace("_USDC", "")} thesis`,
+                `your ${bareTicker(t.symbol)} thesis`,
                 thesisAgentNotice(t),
                 navigate,
               )}
-              title="Prefill the agent to trade this symbol on funding/OI signals, using this thesis's TP/SL and leverage as risk bounds. The agent is signal-driven — it may enter either direction."
+              title="Prefill the agent for this symbol with this thesis's TP/SL and leverage as risk bounds. The agent follows its signal. It may enter either direction."
               style={{ ...navBtnStyle, fontSize: 10, color: "#ededf0", borderColor: "#33333a", minHeight: 36, padding: "6px 12px" }}>
               ⚡ AUTOMATE
             </button>
@@ -242,7 +244,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
                 // excluded server-side in the earnings calc (wallet_address === leader).
                 source: t.copiedFromWallet || undefined,
               }, navigate)}
-              title="Hand the agent THIS exact trade: it enters your direction and manages to your stop/targets with the agent's full exit engine (scale-out, trailing, breakeven, timeout). One-shot."
+              title="Hand the agent this exact trade. Your direction, stop and targets. It manages the exit: scale-out, trailing, breakeven, timeout. One shot."
               style={{ ...navBtnStyle, fontSize: 10, color: "#ededf0", borderColor: "#33333a", minHeight: 36, padding: "6px 12px" }}>
               ▶ TRADE
             </button>
@@ -293,8 +295,8 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
         if (eff === "INVALIDATED") {
           return (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-              <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>◌ INVALIDATED — you abandoned this thesis before it resolved (excluded from your graded record)</span>
-              <button onClick={() => handleStatusClick("INVALIDATED")} title="Reopen — put this thesis back live so Nexus grades it from public price on resolution"
+              <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>◌ INVALIDATED · abandoned before it resolved. Excluded from your graded record.</span>
+              <button onClick={() => handleStatusClick("INVALIDATED")} title="Reopen. Put it back live so Nexus grades it from public price."
                 style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#71717a", cursor: "pointer" }}>↺ REOPEN</button>
             </div>
           );
@@ -308,16 +310,16 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
           return (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: `1px solid ${color}33`, background: `${color}0c`, borderRadius: 4, padding: "8px 10px", marginBottom: 10 }}>
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: 700, color }}>● {win ? "WIN" : "LOSS"} <span style={{ color: "#52525b", fontWeight: 400 }}>· self-marked</span></span>
-              <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>Nexus grades every public call from public price — the objective grade lands automatically.</span>
-              <button onClick={() => handleStatusClick(eff)} title="Reopen — clear this self-mark and let Nexus grade it from public price"
+              <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>Every public call is graded from public price. The grade lands on its own.</span>
+              <button onClick={() => handleStatusClick(eff)} title="Reopen. Clear the self-mark and let Nexus grade it from public price."
                 style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#71717a", cursor: "pointer" }}>↺ REOPEN</button>
             </div>
           );
         }
         return (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>◷ LIVE — Nexus grades this automatically from public price the moment it resolves. Nothing to mark.</span>
-            <button onClick={() => handleStatusClick("INVALIDATED")} title="Abandon this thesis early — it's no longer valid. The grader can't infer this, so it's the one call that's yours to make."
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>◷ LIVE · graded from public price the moment it resolves. Nothing to mark.</span>
+            <button onClick={() => handleStatusClick("INVALIDATED")} title="Abandon this thesis. It's no longer valid. The grader can't infer that, so it's your call."
               style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#52525b", cursor: "pointer" }}>◌ INVALIDATE</button>
           </div>
         );
@@ -678,7 +680,7 @@ export function ThesisAnalyticsView() {
   const assetStats = useMemo(() => {
     const map = new Map<string, { wins: number; total: number; rrSum: number }>();
     for (const t of closed) {
-      const sym = t.symbol.replace("PERP_", "").replace("_USDC", "");
+      const sym = bareTicker(t.symbol);
       if (!map.has(sym)) map.set(sym, { wins: 0, total: 0, rrSum: 0 });
       const s = map.get(sym)!;
       s.total++;
@@ -880,7 +882,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
       const patch: Record<string, { hitRate: number; expectancyR: number; samples: number }> = {};
       for (const t of need) {
         try {
-          const coin = t.symbol.replace("PERP_", "").replace("_USDC", "").toUpperCase();
+          const coin = bareTicker(t.symbol).toUpperCase();
           const d = await (await fetch(`${AGENT_API}/intel/baserate/${coin}`)).json();
           if (d && d.available && Number.isFinite(d.hitRate) && Number.isFinite(d.expectancyR)) patch[t.id] = { hitRate: d.hitRate, expectancyR: d.expectancyR, samples: d.samples };
         } catch { /* skip this one */ }
@@ -969,7 +971,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
       try {
         const d = await (await fetch("https://api-evm.orderly.org/v1/public/info")).json();
         const rows = d?.data?.rows ?? [];
-        const tickers = rows.map((x: { symbol?: string }) => String(x.symbol || "").replace("PERP_", "").replace("_USDC", "")).filter(Boolean);
+        const tickers = rows.map((x: { symbol?: string }) => bareTicker(String(x.symbol || ""))).filter(Boolean);
         if (alive && tickers.length) setMarketTickers([...new Set<string>(tickers)].sort());
       } catch { /* fail-soft — no validation rather than a false warning */ }
     })();
@@ -1106,7 +1108,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
       if (form.direction === "SHORT" && tp >= e) w.push("TP1 is at/above entry on a SHORT — your target should be below entry.");
     }
     if (calc && Number.isFinite(calc.riskReward) && calc.riskReward > 0 && calc.riskReward < 1)
-      w.push(`R:R is 1:${calc.riskReward.toFixed(2)} — you're risking more than the target pays.`);
+      w.push(`R:R is 1:${calc.riskReward.toFixed(2)}. You're risking more than the target pays.`);
     return w;
   })();
 
@@ -1303,7 +1305,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
 
     if (snappedQty <= 0) {
       setLiveStatus("error");
-      setLiveError(`Position too small — minimum order size for ${form.symbol.toUpperCase()} is ${baseTick}`);
+      setLiveError(`Position too small. Minimum order size for ${form.symbol.toUpperCase()} is ${baseTick}.`);
       return;
     }
 
@@ -1337,7 +1339,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
       setTimeout(() => setLiveStatus("idle"), 4000);
     } catch (err: unknown) {
       setLiveStatus("error");
-      setLiveError(err instanceof Error ? err.message : "order failed — check console");
+      setLiveError(err instanceof Error ? err.message : "Order failed. Try again.");
     }
   };
 
@@ -1495,7 +1497,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
               <div style={{ fontSize: 20, color: thesisAccuracy >= 50 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{thesisAccuracy}%</div>
             </div>
             <div style={{ width: 1, background: "#232327" }} />
-            <div title="Calls Nexus objectively graded from public price — first-touch TP vs stop. The trustless record that builds your caller rank.">
+            <div title="Calls graded from public price. First touch of TP vs stop. This record builds your caller rank.">
               <div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>GRADED</div>
               <div style={{ fontSize: 20, color: gradedCount > 0 ? "#3ecf8e" : "#52525b", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{gradedCount}</div>
             </div>
@@ -1567,7 +1569,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 </div>
                 {published && (
                   <div className="nx-fade-in" style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 4, border: "1px solid #3ecf8e55", background: "#0f2318", fontFamily: "var(--nx-font-mono)", fontSize: 10.5, color: "#3ecf8e", lineHeight: 1.5 }}>
-                    ◆ Call posted on-chain — it&apos;s grading itself against public price now. Fire off another. 🎯
+                    ◆ Call posted on-chain. It is being graded against public price.
                   </div>
                 )}
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 210px", gap: 8 }}>
@@ -1600,7 +1602,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 {/* WATCH gate (Grok): a weak base rate un-arms the direction so the trader
                     overrides a bad setup on purpose, not by our pre-check. Direction stays visible. */}
                 {!dirArmed && weakSetup && (
-                  <div className="nx-fade-in" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 4, border: "1px solid #e0a45855", background: "#1c1710", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#e0a458", lineHeight: 1.55 }}>
+                  <div className="nx-fade-in" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 4, border: `1px solid ${SIGNAL.caution}55`, background: SIGNAL.cautionBg, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: SIGNAL.caution, lineHeight: 1.55 }}>
                     ⚠ WATCH — fading {form.symbol.toUpperCase()} has historically underperformed{weakSetup.histPct != null ? ` (reverted only ${weakSetup.histPct}% of recent stretched-funding instances)` : ""}. The {form.direction.toLowerCase()} side is shown, not pre-selected — tap it to commit.
                   </div>
                 )}
@@ -1621,7 +1623,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                   <button onClick={() => { const sp = atrStopPct ?? quickStopPct; setQuickStopPct(sp); quickSetup(sp, quickTpR); }} disabled={!canBuild || quickBusy || !dirArmed}
                     style={{ marginTop: 12, width: "100%", padding: "11px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", cursor: canBuild && dirArmed && !quickBusy ? "pointer" : "not-allowed", borderRadius: 4,
                       border: `1px solid ${canBuild && dirArmed ? "#33333a" : "#232327"}`, background: canBuild && dirArmed ? "#1a1a1e" : "#0a0a0b", color: canBuild && dirArmed ? "#ededf0" : "#52525b" }}>
-                    {quickBusy ? "BUILDING…" : !dirArmed ? "⚠ PICK A SIDE TO BUILD" : atrStopPct != null ? `⚡ BUILD IT — stop 1.2× H4 ATR (${atrStopPct}%)` : "⚡ BUILD IT — auto-fill from live price"}
+                    {quickBusy ? "BUILDING…" : !dirArmed ? "⚠ PICK A SIDE TO BUILD" : atrStopPct != null ? `⚡ BUILD IT · stop 1.2× H4 ATR (${atrStopPct}%)` : "⚡ BUILD IT · fill from live price"}
                   </button>
                 ) : (
                   <>
@@ -1645,7 +1647,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                       <span style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>STOP</span>
                       {/* The real-ATR stop leads (1.2× live H4 ATR); the flat %s are overrides. */}
                       {atrStopPct != null && (
-                        <button onClick={() => { setQuickStopPct(atrStopPct); rebuildLevels(atrStopPct, quickTpR); }} title={`Snap the stop to 1.2× the live H4 ATR — H4 ATR is ${atrPct}%, so the stop is ${atrStopPct}% (1.2×). Real volatility, not a flat %`} style={knob(Math.abs(quickStopPct - atrStopPct) < 0.05, "#f7525f")}>1.2×ATR {atrStopPct}%</button>
+                        <button onClick={() => { setQuickStopPct(atrStopPct); rebuildLevels(atrStopPct, quickTpR); }} title={`Stop at 1.2× the live H4 ATR. ATR is ${atrPct}%, so the stop is ${atrStopPct}%. Real volatility, not a flat %.`} style={knob(Math.abs(quickStopPct - atrStopPct) < 0.05, "#f7525f")}>1.2×ATR {atrStopPct}%</button>
                       )}
                       {[1, 2, 3].map((p) => (
                         <button key={p} onClick={() => { setQuickStopPct(p); rebuildLevels(p, quickTpR); }} style={knob(Math.abs(quickStopPct - p) < 0.01, "#f7525f")}>−{p}%</button>
@@ -1659,7 +1661,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     {!(parseFloat(form.accountSize) > 0) ? (
                       <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: 10 }}>
                         <div style={{ flex: 1 }}>
-                          <span style={fieldLabelStyle}>ACCOUNT SIZE (USDC) — sizes your call</span>
+                          <span style={fieldLabelStyle}>ACCOUNT SIZE (USDC) · sizes your call</span>
                           <input style={inputStyle} type="number" placeholder="10000" value={form.accountSize} onChange={(e) => set("accountSize", e.target.value)} />
                         </div>
                         {Number(availableBalance) > 0 && (
@@ -1684,7 +1686,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                         border: `1px solid ${formValid || published ? "#3ecf8e" : "#232327"}`,
                         background: published ? "#0f2318" : formValid ? "#12241a" : "#0a0a0b",
                         color: formValid || published ? "#3ecf8e" : "#52525b" }}>
-                      {published ? "◆ PUBLISHED — NOW GRADED" : publishing ? "PUBLISHING…" : "◆ POST CALL — grades itself"}
+                      {published ? "◆ PUBLISHED · NOW GRADED" : publishing ? "PUBLISHING…" : "◆ POST CALL"}
                     </button>
                     <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8.5, color: "#52525b", textAlign: "center", marginTop: 6, lineHeight: 1.5 }}>
                       Posts on-chain + public. Nexus grades it from public price — first-touch TP vs stop. You never mark it yourself.
@@ -1714,7 +1716,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
             <button
               onClick={() => setPasteOpen((o) => !o)}
               style={{ ...navBtnStyle, width: "100%", textAlign: "left", fontSize: 10, letterSpacing: "0.08em", color: pasteOpen ? "#ededf0" : "#a1a1aa", borderColor: pasteOpen ? "#33333a" : "#232327", padding: "8px 10px" }}
-              title="Paste a thesis from TradingView (or anywhere) — Nexus prefills the fields it can read"
+              title="Paste a thesis from TradingView or anywhere. Nexus fills the fields it can read."
             >
               {pasteOpen ? "▾" : "▸"} PASTE THESIS TO AUTOFILL
             </button>
@@ -1735,8 +1737,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                   {pasteResult && (
                     <span style={{ fontSize: 9, color: pasteResult.length ? "#a1a1aa" : "#71717a", fontFamily: "var(--nx-font-mono)" }}>
                       {pasteResult.length
-                        ? `filled ${pasteResult.join(" · ")} — review below, then adjust`
-                        : "couldn't read fields — fill them in manually"}
+                        ? `filled ${pasteResult.join(" · ")}. Review below.`
+                        : "Couldn't read fields. Fill them in manually."}
                     </span>
                   )}
                 </div>
@@ -1752,7 +1754,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
               detailed builder folds behind disclosure. Auto-opens when a draft (catalyst /
               notes prefilled) is in play, so the "draft this fade → thesis" flow shows its
               levels; collapsed for a fresh quick call. */}
-          <Collapsible title="◆ FINE-TUNE THE CALL" subtitle="levels, sizing, catalyst, charts — for a full plan or a live order" defaultOpen={!!(form.catalyst || form.notes)} storageKey="nx_thesis_finetune">
+          <Collapsible title="◆ FINE-TUNE THE CALL" subtitle="levels, sizing, catalyst, charts" defaultOpen={!!(form.catalyst || form.notes)} storageKey="nx_thesis_finetune">
           <div style={cardStyle}>
             <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.1em", marginBottom: 12 }}>&#9632; INSTRUMENT</div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 160px", gap: 8 }}>
@@ -1948,14 +1950,14 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 e.preventDefault();
                 const file = item.getAsFile();
                 if (!file) return;
-                if (file.size > 2 * 1024 * 1024) { setChartErr("Image too large — 2MB max."); return; }
+                if (file.size > 2 * 1024 * 1024) { setChartErr("Image too large. 2MB max."); return; }
                 setChartErr(null); setChartBusy(i);
                 (async () => {
                   try {
                     const r = await fetch(`${AGENT_API}/upload/chart`, { method: "POST", headers: { "Content-Type": file.type }, body: file });
                     const d = await r.json();
-                    if (d?.url) setAt(i, d.url); else setChartErr("Upload failed — paste a hosted link instead.");
-                  } catch { setChartErr("Upload failed — paste a hosted link instead."); }
+                    if (d?.url) setAt(i, d.url); else setChartErr("Upload failed. Paste a hosted link instead.");
+                  } catch { setChartErr("Upload failed. Paste a hosted link instead."); }
                   finally { setChartBusy(null); }
                 })();
               };
@@ -2106,7 +2108,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                         flex: 2, padding: "8px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11,
                         cursor: "pointer", borderRadius: 3, border: "1px solid #fbbf24",
                         background: "#2a1a00", color: "#fbbf24", letterSpacing: "0.08em", fontWeight: "bold",
-                      }}>&#9632; CONFIRM — DEPLOY LIVE</button>
+                      }}>&#9632; CONFIRM · DEPLOY LIVE</button>
                     </div>
                   </div>
                 )}
@@ -2180,7 +2182,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                       color: published ? "#ededf0" : formValid ? "#0a0a0b" : "#33333a",
                       fontWeight: 700, letterSpacing: "0.08em", marginBottom: 6,
                     }}>
-                      {published ? "◆ PUBLISHED — NOW GRADED" : publishing ? "PUBLISHING…" : "◆ PUBLISH AS CALL"}
+                      {published ? "◆ PUBLISHED · NOW GRADED" : publishing ? "PUBLISHING…" : "◆ PUBLISH AS CALL"}
                     </button>
                     <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9.5, color: "#52525b", lineHeight: 1.45, marginBottom: 8 }}>
                       Publishing registers the call on-chain (one wallet signature, no funds moved) and
@@ -2196,7 +2198,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     }}>
                       {/* NB: "&#9632;" as a JS string is NOT decoded by JSX — it rendered
                           literally on the old DEPLOY (PAPER) button. Use the character. */}
-                      {deployed ? "■ SAVED (PRIVATE)" : "■ SAVE PRIVATE — NOT GRADED"}
+                      {deployed ? "■ SAVED (PRIVATE)" : "■ SAVE PRIVATE · NOT GRADED"}
                     </button>
                     <button
                       onClick={() => { if (formValid) setLiveConfirm(true); }}
@@ -2255,7 +2257,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
               </span>
               {gradedReady > 0 && (
                 <button onClick={syncGraded}
-                  title="Sync every call Nexus has already graded from public price, and auto-fill their P&L"
+                  title="Sync every graded call and fill in its P&L."
                   style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 12px", borderRadius: 3, border: "1px solid #3ecf8e", background: "transparent", color: "#3ecf8e", cursor: "pointer", whiteSpace: "nowrap" }}>
                   SYNC {gradedReady} GRADED →
                 </button>
@@ -2277,7 +2279,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
 
       {trades.length === 0 && (
         <div style={{ marginTop: 24 }}>
-          <EmptyState message="no theses deployed yet" unlock="Write your first one above. Post it public and it grades itself against real price — that graded record is the only thing that ranks here." />
+          <EmptyState message="no theses deployed yet" unlock="Write one above. Post it public and it is graded against public price. Only graded calls rank." />
         </div>
       )}
     </div>

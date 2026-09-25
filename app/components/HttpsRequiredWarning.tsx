@@ -50,7 +50,7 @@ export const HttpsRequiredWarning = () => {
                 onClick={handleSwitchToHttps}
                 className="w-full px-8 py-4 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white font-semibold text-lg rounded-xl transition-all transform hover:scale-105 shadow-lg"
               >
-                🔒 Switch to HTTPS Now
+                Switch to HTTPS
               </button>
               
               <p className="text-center text-sm text-gray-500 mt-3">

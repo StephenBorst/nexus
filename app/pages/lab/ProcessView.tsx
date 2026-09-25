@@ -114,7 +114,7 @@ export function RegimeEdgeCard({ wallet, data, state }: { wallet: string | null;
 
       {state === "idle" && !data?.calls && (
         <div style={{ ...hint, padding: "10px 0" }}>
-          No resolved public calls yet. Post theses publicly and they grade themselves against public price — the regime split appears as they resolve.
+          No resolved public calls yet. Post theses publicly and they grade themselves against public price. The regime split appears as they resolve.
         </div>
       )}
 
@@ -128,11 +128,11 @@ export function RegimeEdgeCard({ wallet, data, state }: { wallet: string | null;
                 Your edge lives in <strong style={{ color: C.pos }}>{bucketLabel(edge.best.bucket).toLowerCase()}</strong> ({edge.best.avgR > 0 ? "+" : ""}{edge.best.avgR}R over {edge.best.calls} calls).
                 {" "}It disappears in <strong style={{ color: C.neg }}>{bucketLabel(edge.worst.bucket).toLowerCase()}</strong> ({edge.worst.avgR > 0 ? "+" : ""}{edge.worst.avgR}R over {edge.worst.calls}).
               </div>
-              <div style={{ ...hint, marginTop: 6 }}>a {edge.gapR}R spread between the two — the single highest-leverage filter available to you</div>
+              <div style={{ ...hint, marginTop: 6 }}>a {edge.gapR}R spread between the two. The single highest-leverage filter available to you</div>
             </div>
           ) : (
             <div style={{ ...hint, margin: "10px 0 14px", padding: "10px 12px", background: C.inset, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm }}>
-              No verdict yet — a regime needs 5+ resolved calls on both sides and a real gap between them before it means anything. The breakdown below is still forming.
+              No verdict yet. A regime needs 5+ resolved calls on both sides and a real gap between them before it means anything. The breakdown below is still forming.
             </div>
           )}
 
@@ -184,7 +184,7 @@ export function PlanQualityCard({ discipline }: { discipline: ProcessData["disci
           ))}
         </div>
       ) : (
-        <div style={{ ...hint, marginTop: 8 }}>Every call was well-formed when posted — obtainable entry, a real stop, honest R:R.</div>
+        <div style={{ ...hint, marginTop: 8 }}>Every call was well-formed when posted. Obtainable entry, a real stop, honest R:R.</div>
       )}
     </div>
   );
@@ -215,7 +215,7 @@ export function ExpectancyCard({ data }: { data: ProcessData | null }) {
     <div style={{ ...cardStyle, marginBottom: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
         <div style={labelStyle}>&#9632; EXPECTANCY</div>
-        <div style={{ ...hint, letterSpacing: "0.08em" }}>what the board ranks on — not hit rate</div>
+        <div style={{ ...hint, letterSpacing: "0.08em" }}>what the board ranks on. Not hit rate</div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))", gap: 14, marginTop: 10 }}>
@@ -240,9 +240,9 @@ export function ExpectancyCard({ data }: { data: ProcessData | null }) {
         <div style={{ marginTop: 10, padding: "10px 12px", background: C.inset, border: `1px solid ${cal.inverted ? "#4a3a00" : C.borderStrong}`, borderRadius: RADIUS.sm }}>
           <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.bright, lineHeight: 1.5 }}>
             {cal.calibrated ? (
-              <>◎ <strong>Calibrated.</strong> Your higher-conviction calls average <strong style={{ color: C.pos }}>+{cal.gap}R more</strong> than your smaller ones — you size up on the right ideas.</>
+              <>◎ <strong>Calibrated.</strong> Your higher-conviction calls average <strong style={{ color: C.pos }}>+{cal.gap}R more</strong> than your smaller ones. You size up on the right ideas.</>
             ) : (
-              <>⚠ <strong style={{ color: C.warn }}>Inverted sizing.</strong> Your bigger bets average <strong style={{ color: C.neg }}>{cal.gap}R</strong> vs your smaller ones — conviction is pointing the wrong way, and it's expensive.</>
+              <>⚠ <strong style={{ color: C.warn }}>Inverted sizing.</strong> Your bigger bets average <strong style={{ color: C.neg }}>{cal.gap}R</strong> vs your smaller ones. Conviction is pointing the wrong way, and it's expensive.</>
             )}
           </div>
           <div style={{ ...hint, marginTop: 6 }}>{cal.highN} high-conviction vs {cal.lowN} low, split at your median position size</div>
@@ -291,7 +291,7 @@ export function PlanAdherenceCard({ theses, orders }: { theses: ThesisTrade[]; o
                 <div style={{ padding: "10px 12px", background: C.inset, border: `1px solid ${C.borderStrong}`, borderRadius: RADIUS.sm, marginBottom: 10 }}>
                   <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.bright, lineHeight: 1.5 }}>
                     Your biggest leak is <strong>{leakInfo.label.toLowerCase()}</strong>
-                    {leak.costUsd ? <> — it has cost you <strong style={{ color: C.neg }}>{money(leak.costUsd)}</strong> across {leak.count} trade{leak.count === 1 ? "" : "s"}.</> : <> — {leak.count} time{leak.count === 1 ? "" : "s"}.</>}
+                    {leak.costUsd ? <>. It has cost you <strong style={{ color: C.neg }}>{money(leak.costUsd)}</strong> across {leak.count} trade{leak.count === 1 ? "" : "s"}.</> : <> — {leak.count} time{leak.count === 1 ? "" : "s"}.</>}
                   </div>
                   <div style={{ ...hint, marginTop: 6 }}>{leakInfo.why}</div>
                 </div>
@@ -316,7 +316,7 @@ export function PlanAdherenceCard({ theses, orders }: { theses: ThesisTrade[]; o
           </div>
 
           <div style={{ ...hint, marginTop: 10 }}>
-            A win off a broken plan is a bad trade that got paid; a loss that respected its stop is a good one. Scored against your own written levels — never shown publicly, never ranked.
+            A win off a broken plan is a bad trade that got paid; a loss that respected its stop is a good one. Scored against your own written levels. Never shown publicly, never ranked.
           </div>
         </>
       )}
@@ -345,7 +345,7 @@ export function LeakProfileCard({ theses }: { theses: ThesisTrade[] }) {
 
       {!profile.tagged ? (
         <div style={{ ...hint, padding: "10px 0" }}>
-          {pending} losing {pending === 1 ? "thesis" : "theses"} untagged. Tag why each one lost (one tap on the thesis card) and the pattern shows up here — the failure mode costing you the most.
+          {pending} losing {pending === 1 ? "thesis" : "theses"} untagged. Tag why each one lost (one tap on the thesis card) and the pattern shows up here. The failure mode costing you the most.
         </div>
       ) : (
         <>

@@ -114,6 +114,11 @@ export interface AgentConfig {
   priceChangeThreshold: number; // % price move on the tick that triggers MOMENTUM / MEAN_REVERSION
   respectRegime?: boolean; // opt-in: brain skips NEW entries that fight a strong market regime
   respectSmartMoney?: boolean; // opt-in: brain skips NEW entries that fight strong smart-money consensus
+  // BASIS_FADE only — opt-in stack conditioner: take the basis fade ONLY when the same-hour
+  // CVD divergence agrees (the scoreboard's basis_x_cvd read; rule in app/lib/basisStack.mjs).
+  // "SMART" = same-hour smart-money lean agrees (basis_x_smart).
+  // "LIQ" = same-hour liquidation flush reverts to the same side (basis_x_liqflush).
+  basisConfirm?: "CVD" | "SMART" | "LIQ";
   invertSignal?: boolean; // opt-in: flip every entry to the OPPOSITE direction (fade a systematically-wrong signal)
   tradeSessions?: ("ASIA" | "EUROPE" | "US")[]; // opt-in regime gate: only enter in these UTC sessions (unset = all)
   minVolAtrPct?: number; // opt-in regime gate: only enter when recent ATR% ≥ this (fades want high vol)

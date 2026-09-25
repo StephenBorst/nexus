@@ -11,20 +11,16 @@
 // hour); the CVD + liq-flush ones REUSE the deployed classifiers so the backtest scores
 // live behavior. Pure + tested. Fed entirely by the self-logged series (oi/cvd/sm/basis/
 // liq:hist) — which is why it only becomes meaningful as that history matures (~Sept 14).
-import { classifyCvdDivergence } from "./flow.mjs";
-import { classifyFlush } from "./liquidations.mjs";
+import { hourBucket, priceByHour, cvdSideForRow, smByHour, liqFlushEventsFromHist } from "../../app/lib/basisStack.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
 import { trailingPct, basisExtremeSide } from "../../app/lib/basisFade.mjs";
+import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
+import { openPosition, stepExit, closedPnlPct, DEFAULT_FEE_BPS } from "./backtest.mjs";
 
-export function hourBucket(t) { return Math.round(Number(t) / 3600000); }
-
-// Price spine: hour → price, from oi:hist ({t, price, oi, funding}).
-export function priceByHour(oiHist) {
-  const m = new Map();
-  for (const p of oiHist || []) if (p && Number.isFinite(p.price) && p.price > 0) m.set(hourBucket(p.t), p.price);
-  return m;
-}
+// hourBucket + the oi:hist price spine live in app/lib/basisStack.mjs (shared with the
+// brain's basis×CVD gate); re-exported so existing importers keep working.
+export { hourBucket, priceByHour };
 
 // Forward return over `h` hours — NO LOOKAHEAD (outcome strictly after the signal).
 export function forwardReturn(pmap, t, h) {
@@ -54,20 +50,14 @@ export function cvdDivergenceEvents(cs, pmap) {
   const ev = [];
   for (const c of cs.cvdHist || []) {
     if (!c) continue;
-    const h0 = hourBucket(c.t), p0 = pmap.get(h0), pPrev = pmap.get(h0 - 1);
-    if (!(p0 > 0) || !(pPrev > 0)) continue;
-    const sig = classifyCvdDivergence(((p0 - pPrev) / pPrev) * 100, c);
+    const sig = cvdSideForRow(c, pmap); // shared with the brain's live basis×CVD gate
     if (sig) ev.push({ t: c.t, side: sig.side });
   }
   return ev;
 }
 
-// Smart lean by hour (from sm:hist {t, side}).
-function smByHour(smHist) {
-  const m = new Map();
-  for (const s of smHist || []) if (s && (s.side === "LONG" || s.side === "SHORT")) m.set(hourBucket(s.t), s.side);
-  return m;
-}
+// Smart lean by hour (from sm:hist {t, side}) — smByHour lives in app/lib/basisStack.mjs,
+// shared with the brain's live basis×smart gate.
 
 // The "one open door": the funding fade CONDITIONED on smart money agreeing.
 export function smartFadeEvents(cs, _pmap, { threshold = 0.0001 } = {}) {
@@ -116,14 +106,8 @@ export function basisExtremeEvents(cs, _pmap, { window = 168, minWarmup = 48, pc
 // strictly PRIOR to the event bar (no lookahead). The continuation read (DOWN→SHORT) is the
 // exact inverse — a one-line follow-up if this reverts negative.
 export function liqFlushEvents(cs, _pmap, { minHist = 12 } = {}) {
-  const rows = (cs.liqHist || []).filter((p) => p && Number.isFinite(p.longMag) && Number.isFinite(p.shortMag)).sort((a, b) => (a.t || 0) - (b.t || 0));
-  const ev = [];
-  for (let i = minHist; i < rows.length; i++) {
-    const flush = classifyFlush(rows.slice(0, i), rows[i]); // history strictly before the event bar
-    if (!flush) continue;
-    ev.push({ t: rows[i].t, side: flush.side === "DOWN" ? "LONG" : "SHORT" }); // revert the cascade
-  }
-  return ev;
+  // Shared with the brain's live basis×liq-flush gate (app/lib/basisStack.mjs).
+  return liqFlushEventsFromHist(cs.liqHist, { minHist });
 }
 
 // ── BASIS × conditioner CONFLUENCE (the Sept-14 stack) ────────────────────────
@@ -473,6 +457,106 @@ export function gradeEventR(cbh, eventHour, side, entry, opts = R_CONTRACT) {
   }
   return 0; // time-stop / no touch → flat, credit no unrealized drift (frozen contract)
 }
+// ── EXIT-MATCHED grading — the read, traded through a PRESET's own exit ──────────
+// The horizons above answer "where was price N hours later?" and the R contract grades a
+// frozen 1.5R/168h exit. Neither is what a preset trades. This walks the SAME hourly
+// candles through the backtest's stepExit (→ the exec's evaluateExit): tp% / sl% /
+// maxHoldHours, adverse-extreme-first inside a bar (same-bar stop + target = stop), the
+// timeout closing on the bar where the hold is reached. Entry = the price-spine price at
+// the event hour (the same entry the horizons and R use). Right-censored: a trade that has
+// not exited by the end of the logged candles (or across a data gap past the hold + grace)
+// returns null — it is left out, never credited.
+export const EXIT_GRACE_H = 6;
+export function gradeEventExit(cbh, eventHour, side, entry, exit) {
+  if (!cbh || !cbh.size || !(entry > 0) || !exit) return null;
+  const config = { tpPercent: exit.tpPercent, slPercent: exit.slPercent, maxHoldHours: exit.maxHoldHours };
+  const maxH = (Number(exit.maxHoldHours) > 0 ? Number(exit.maxHoldHours) : R_CONTRACT.maxHoldH) + EXIT_GRACE_H;
+  const pos = openPosition(config, side, entry, eventHour * 3600);
+  for (let h = eventHour + 1; h <= eventHour + maxH; h++) {
+    const c = cbh.get(h); if (!c || !Number.isFinite(c.h) || !Number.isFinite(c.l)) continue;
+    const hit = stepExit(pos, c, (h - eventHour) * 3600000, config);
+    if (hit) return { pnlPct: closedPnlPct(pos, hit.px), reason: hit.reason, holdH: h - eventHour };
+  }
+  return null;
+}
+// The hold-horizon finding (12h preset exit graded NOISE while 24h graded PREDICTIVE) was
+// made on data up to here. The 24h variant was CHOSEN from that data, so its in-sample grade
+// flatters it by construction; `oos` counts only trades entered after this instant — the
+// honest test of the choice.
+export const EXIT_OOS_CUTOFF_MS = Date.parse("2026-09-25T04:00:00Z");
+// Exit variants graded side by side for every preset-traded read. Display only — the presets
+// and the running agent configs are untouched.
+export const EXIT_VARIANTS = Object.freeze([
+  Object.freeze({ key: "exit", override: {}, preset: true }),
+  Object.freeze({ key: "exit24h", override: { maxHoldHours: 24 }, preset: false }),
+]);
+
+// Trades the agent could actually take: ONE position per market (the next entry needs the
+// last one closed — same bar re-entry refused, as the backtest's cooldown), and only entries
+// at least `windowH` hours before the end of that market's candles, so every variant compared
+// sees the same entry window (a 24h trade near the end can't resolve yet; a 12h one could).
+export function tradeableExitTrades(all, exit, windowH = Number(exit?.maxHoldHours) || 0) {
+  const byMkt = new Map();
+  for (const e of all || []) {
+    const k = e.coin ?? e.cbh;
+    if (!byMkt.has(k)) byMkt.set(k, []);
+    byMkt.get(k).push(e);
+  }
+  const out = [];
+  for (const evs of byMkt.values()) {
+    const cbh = evs[0].cbh;
+    if (!cbh || !cbh.size) continue;
+    let lastH = -Infinity;
+    for (const h of cbh.keys()) if (h > lastH) lastH = h;
+    evs.sort((a, b) => a.t - b.t);
+    let busyThrough = -Infinity;
+    for (const e of evs) {
+      const h0 = hourBucket(e.t);
+      if (h0 > lastH - windowH || h0 <= busyThrough) continue;
+      const g = gradeEventExit(cbh, h0, e.side, e.pmap.get(h0), exit);
+      if (!g) continue;
+      busyThrough = h0 + g.holdH;
+      out.push({ t: e.t, ...g });
+    }
+  }
+  return out;
+}
+
+// Pool exit-graded trades → the same verdict discipline as the horizons, but on NET bps
+// (round-trip taker fee deducted — the agent pays it; the horizons are gross).
+export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS, windowH = Number(exit?.maxHoldHours) || 0, oosCutoff = EXIT_OOS_CUTOFF_MS) {
+  const feePct = (feeBps / 100) * 2;
+  const net = [], fst = [], snd = [], oos = [], exits = { TP: 0, SL: 0, TIMEOUT: 0 };
+  let holdSum = 0;
+  for (const g of tradeableExitTrades(all, exit, windowH)) {
+    const n = (g.pnlPct - feePct) / 100; // fraction, same unit agg() expects
+    net.push(n); (g.t <= medT ? fst : snd).push(n);
+    if (g.t > oosCutoff) oos.push(n);
+    exits[g.reason] = (exits[g.reason] || 0) + 1;
+    holdSum += g.holdH;
+  }
+  const a = agg(net), f = agg(fst), s = agg(snd), o = agg(oos);
+  const stable = f.samples >= 5 && s.samples >= 5 && (f.meanBps > 0) === (s.meanBps > 0);
+  let verdict = "INSUFFICIENT";
+  if (a.samples >= minSamples) verdict = a.meanBps > 0 && stable ? "PREDICTIVE" : a.meanBps > 0 ? "PROMISING" : "NOISE";
+  return {
+    preset: exit.preset, tpPercent: exit.tpPercent, slPercent: exit.slPercent, maxHoldHours: exit.maxHoldHours, feeBps,
+    samples: a.samples, hitRate: a.hitRate, netBps: a.meanBps, stable, verdict, exits,
+    avgHoldH: a.samples ? Math.round((holdSum / a.samples) * 10) / 10 : 0,
+    oos: { since: new Date(oosCutoff).toISOString(), samples: o.samples, hitRate: o.hitRate, netBps: o.meanBps },
+  };
+}
+
+// Every exit variant for a preset-traded read, on the SAME entry window (the longest hold).
+export function scoreExitVariants(all, exit, medT, minSamples) {
+  const out = {};
+  if (!exit) { for (const v of EXIT_VARIANTS) out[v.key] = null; return out; }
+  const variants = EXIT_VARIANTS.map((v) => ({ ...v, cfg: { ...exit, ...v.override } }));
+  const windowH = Math.max(...variants.map((v) => Number(v.cfg.maxHoldHours) || 0));
+  for (const v of variants) out[v.key] = { ...scoreExit(all, v.cfg, medT, minSamples, DEFAULT_FEE_BPS, windowH), presetExit: v.preset };
+  return out;
+}
+
 function aggR(arr) {
   if (!arr.length) return { samples: 0, hitRate: 0, meanR: 0 };
   const wins = arr.reduce((n, x) => n + (x > 0 ? 1 : 0), 0);
@@ -480,7 +564,7 @@ function aggR(arr) {
   return { samples: arr.length, hitRate: Math.round((wins / arr.length) * 100), meanR: Math.round(mean * 100) / 100 };
 }
 
-export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20 } = {}) {
+export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null } = {}) {
   // BTC context (regime map + price map) for the RS/veto gens — built once, passed to every gen.
   const btcCs = (coinSets || []).find((c) => String(c.coin || "").toUpperCase() === "BTC");
   // BTC context off the DEEPEST btc series (candle closes preferred) so the RS/veto reaches
@@ -492,9 +576,9 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
     const pmap = priceByHour(cs.oiHist);
     if (pmap.size < 2) continue;
     const cbh = candlesByHour(cs.candleHist); // for R grading (first-touch needs highs/lows)
-    for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, pmap, cbh, rs: typeof e.rs === "number" ? e.rs : null });
+    for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, pmap, cbh, rs: typeof e.rs === "number" ? e.rs : null });
   }
-  if (!all.length) return { samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null };
+  if (!all.length) return { samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples) };
   // rs_quartile written on EVERY event row that carries an rs — from closes, NOT candle-gated
   // (Grok #4). Cross-sectional rank → quartile (Q1 = strongest). Exposed so Sept-14 can
   // condition on it; a top-quartile-only axis is a one-line follow-up once these matter.
@@ -540,7 +624,11 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
   // Headline = R once we have enough R-graded samples (the right object); forward-bps is the
   // fallback until candles mature, and stays as a secondary read either way.
   const useR = rA.samples >= minSamples;
-  return { samples: all.length, horizons: horizonsOut, r, rsQuartileDist, headline: useR ? "R" : "bps", verdict: useR ? rVerdict : (bestHorizon ? bestHorizon.verdict : "INSUFFICIENT"), bestHorizon };
+  // The preset's own exit, when a preset trades this read (AXIS_EXITS). Informational: it
+  // does NOT change the axis verdict (that grades the READ); it says whether the read
+  // survives the exit the agent actually uses.
+  const exitGrades = scoreExitVariants(all, exit, medT, minSamples);
+  return { samples: all.length, horizons: horizonsOut, r, rsQuartileDist, headline: useR ? "R" : "bps", verdict: useR ? rVerdict : (bestHorizon ? bestHorizon.verdict : "INSUFFICIENT"), bestHorizon, ...exitGrades };
 }
 
 // The full scorecard across every registered axis, ranked by best-horizon mean return.
@@ -577,8 +665,8 @@ export function rsQuartiles(universe) {
 
 export function runScorecard(coinSets, cfg = {}) {
   const axes = AXES.map((a) => {
-    const s = scoreEvents(coinSets, a.gen, cfg);
-    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons };
+    const s = scoreEvents(coinSets, a.gen, { ...cfg, exit: AXIS_EXITS[a.name] || null });
+    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit, exit24h: s.exit24h };
   });
   // rank: PREDICTIVE > PROMISING > NOISE > INSUFFICIENT, then by the HEADLINE metric —
   // meanR once R-graded (the right object), else forward-bps until candles mature.

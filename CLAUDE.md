@@ -29,7 +29,7 @@ is everything built on top:
   $NEXUS ERC-20 (no withdraw step). To route to treasury: **sweep `0xd9f7…b449` → the Safe on the same cadence**
   (do NOT redeploy from the Safe — a multisig can't be the Bankr deployer; or ask Bankr support to migrate
   `payTo`). Narrative: treasury accumulates $NEXUS from EARNED, recurring revenue (stronger than "buy the lows");
-  agents needing $NEXUS to pay = token demand from usage. x402 challenge verified live (402 + correct amounts).
+  agents needing $NEXUS to pay = token demand from usage (internal analysis ONLY — never public copy; see buyback policy §4). x402 challenge verified live (402 + correct amounts).
 - **PRO payment rail LIVE** (`PAYMENTS_LIVE=true`): `POST /sub/verify {txHash,chain}` verifies ONE tx receipt
   → grants 30d PRO to the tx's `from` (spoof-proof, replay-guarded). USDC/Arbitrum $20 · $NEXUS/Base $15
   (DexScreener-priced, 12% tolerance, fails closed). `walletIsPro` reads `sub:{addr}`. Logic+tests in lab-api `logic.mjs`.
@@ -330,9 +330,125 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   under warmup ⇒ no signal, **never a fallback to funding/OI** (tested). Preset `basis-extreme-fade`
   (EXPERIMENTAL · PAPER, $50/5x, 12h hold, 3 trades/day, $10 daily stop). ⚠️ `POST /agent/backtest` REFUSES
   BASIS_FADE with an honest note — basis history is not in the replay, so it would return a silent "0 trades".
+  **→ SUPERSEDED 2026-09-24: BASIS_FADE IS BACKTESTABLE (see "Basis replay" below).**
   ⚠️ **Bug the tests caught: `{ ...DEFAULTS, minWarmup, pct }` spreads `undefined` OVER the defaults when the caller
   omits opts → thr `undefined` → the signal NEVER fires. Coalesce per field.** ⚠️ PREDICTIVE grades the READ, not a
   strategy — exits/sizing/fees are unvalidated and it is NOT walk-forward robust. PAPER, second wallet, own record.
+- **✅ BASIS × CVD STACK WIRED (2026-09-24): `BASIS_FADE` + `basisConfirm:"CVD"`.** Conditioner rules live ONCE in
+  **`app/lib/basisStack.mjs`** (`hourBucket`/`priceByHour`/`classifyCvdDivergence`/`cvdSideForRow`/`basisCvdConfirm`) —
+  axisbt's `cvdDivergenceEvents` and lab-api `flow.mjs` (re-export) use it, and the brain calls `basisCvdConfirm` with the
+  basis obs hour (`basisFadeFromHistory` now returns `t`). Brain reads `cvd:hist:{BARE}` + `oi:hist:{PERP}` (same KV) only
+  when someone opted in (`needBasisCvd`). Absent/failed CVD ⇒ sits out with the reason, never a pass. **Parity test**
+  (`app/lib/basisStack.test.mjs`) proves live gate == scoreboard `basis_x_cvd` hour-by-hour on a synthetic tape. Preset
+  `basis-cvd-stack` (PAPER). `AXIS_PRESET` (strategyPresets.ts) maps scoreboard axis → preset trading the EXACT rule
+  (basis_extreme, basis_x_cvd only) — the /proof SignalRow shows "Load … in the agent →" (forces PAPER via
+  `deployToAgent`); unmapped PREDICTIVE reads say "research read — not an agent mode yet".
+- **✅ BASIS × SMART MONEY WIRED (2026-09-24): `basisConfirm:"SMART"`.** `basisSmartConfirm` + shared `smByHour` in
+  basisStack.mjs (axisbt's smart_fade/basis_x_smart import it); brain reads `sm:hist:{BARE}` (lab-api's hourly
+  smart-money cron, same KV) only when opted in (`needBasisSmart`). Agent config = 3-way CONFIRM selector (OFF / CVD /
+  SMART MONEY) on BASIS FADE. **Deliberately NOT a preset and NOT in `AXIS_PRESET` yet** — gated on the Oct-15
+  re-validation; if it holds, add a `basis-smart-stack` preset + `basis_x_smart` entry (2 lines).
+- **✅ BASIS × LIQ-FLUSH WIRED (2026-09-25): `basisConfirm:"LIQ"`.** `classifyFlush` MOVED (unchanged) from lab-api
+  `liquidations.mjs` (now re-exports it) into `app/lib/basisStack.mjs`, plus `liqFlushEventsFromHist` (axisbt's
+  `liqFlushEvents` delegates to it) and `basisLiqConfirm` (classifies only the rows in the basis hour, each vs its own
+  prior history, last-event-wins — same answer as the grader, cheap per bar). Brain reads `liq:hist:{BARE}` only when
+  opted in (`needBasisLiq`); replay `makeBasisAt(...,{needLiq})`; loader `needLiq`; label "Basis × Liq-Flush Stack".
+  Agent CONFIRM selector = OFF / CVD / SMART MONEY / LIQ FLUSH. **MANUAL only — no preset, not in `AXIS_PRESET`, not in
+  the basis sweep grid** until Oct-15 rules. Parity tests: 3 seeds × with/without same-hour rewrites + coverage guard.
+- **✅ BASIS REPLAY — BASIS_FADE is backtestable / sweepable / walk-forwardable (2026-09-24).** `backtest.mjs`
+  `makeBasisAt(flow,{needCvd,needSmart})` evaluates the SAME shared rules the brain calls (`basisFadeFromHistory` →
+  `basisCvdConfirm`/`basisSmartConfirm`) on each series' PREFIX `t <= barClose` (binary-search, memoized per bar) —
+  no lookahead, no second implementation. `runBacktest(..., basisAt)` merges it into `raw` at the bar CLOSE (entry
+  fills at `c.c`). `backtestConfig`/`walkForwardValidate` take `flowBySymbol`; `runBasisSweep` = confirm (none/CVD/
+  SMART) × 4 exits × holds 4/12/24h, ranked by net with per-row `posSymbols` (breadth — prefer it over best-net).
+  `strategies.mjs loadFlowHistForBacktest` reads basis/cvd/oi/sm hist, per-symbol maturity
+  (`BASIS_BACKTEST_MIN_DAYS=14`, `…_MIN_SAMPLES=200`, binding = thinnest series the config needs), names excluded
+  markets, returns `windowDays` → routes SIZE THE REPLAY to recorded coverage (empty pre-history would read as losing
+  folds). Routes: `/agent/backtest`, `/agent/backtest/sweep`, `/agent/validate`, + publish-time `revalidateStrategy`
+  (`pending_basis` badge). Labels: "Basis Extreme Fade" / "Basis × CVD Stack" / "Basis × Smart Stack". Tests:
+  `backtest.basis.test.mjs` (poisoned-future no-lookahead, equals-the-brain, subset, stale, sweep, loader). Perf: full
+  3-mkt×60d×36-variant sweep ≈1s CPU. ⚠️ `maxTradesPerDay` is NOT simulated by runBacktest (true for all modes).
+- **📊 FIRST REAL BASIS RESULTS (2026-09-24, run in-browser by Ember, 33d of recorded history, fees on).** Sweep
+  (BTC/ETH/SOL, 36 variants): Basis × CVD owns the top; best row +$47.78 · 76.9% win · **13 trades** · 3/3 mkts.
+  Plain Basis Extreme also nets positive but needs 61–84 trades (churn + fee drag). Walk-forward (6 mkts × 4 folds)
+  on a *gated* basis variant: **NOT ROBUST** — +$3.72, 3/6 markets green, 25% folds positive; SOL carries it,
+  XRP/LINK zero positive folds. ⚠️ Read with the sample size: 9–13 trades over 33d is a THIN, in-sample result —
+  the best sweep row is the overfit a sweep invites. Don't curate the market list to SOL (that's curve-fitting);
+  let the window grow (Oct-15 re-validation ≈ 54d).
+- **⚠️ Sweep-apply bug (FIXED 2026-09-24):** applying a sweep row merged onto the editor's experimental filters, so a
+  saved config with INVERT still on tested the mirror image (+$12.04 → −$21.33). Sweep rows are graded WITHOUT
+  filters → `applySweepConfig` resets `EXPERIMENTAL_FILTERS_OFF` (invert/regime/smart/session/vol/volScaled/
+  breakeven; lives in `app/utils/agentPrefill.ts`) before applying the row. **Same rule for EVERY whole-strategy load
+  (fixed 2026-09-25 after Ember hit it on a preset):** Quick-start presets, scoreboard "Load", Proof "Deploy", and
+  trader COPY all replace the filter set; `deployToAgent(..., { replaceFilters: true })` sets a flag the RECEIVER
+  applies (JSON drops `undefined`, so the sender can't clear fields). Partial hand-offs (Intel symbol, thesis) keep
+  the user's filters. `strategyLabel` now names filtered/inverted basis runs ("Gated …"/"Inverted …")
+  and the Backtest card prints **TESTED AS: <label>** (amber when inverted).
+- **⚠️ Proof hero receipts rule:** every receipt on `FeaturedLead` must be true of the EXACT preset its Deploy button
+  loads. Ember's first cut printed $ figures from a user-EDITED config next to the preset's button — replaced with
+  preset-true receipts. **✅ Clean preset run (2026-09-25, Ember, TESTED AS "Basis × CVD Stack", no edits, 33d, fees
+  in):** backtest +$22.62 · 78.6% · 14T (BTC 2T +$2.39 · ETH 8T +$10.32 · SOL 4T +$9.91); walk-forward (6 mkts × 4
+  folds) **NOT ROBUST** — +$32.06, 4/6 mkts green, 42% folds (BTC 1/4 · ETH 3/4 · SOL 3/4 · BNB 0 trades · XRP 3/4
+  +$11.86 · LINK 0/4 −$2.43). These are on the hero now, dated. The dirty run's "XRP fails" was config contamination.
+  ⚠️ Fold consistency counts EMPTY folds as non-positive (BNB = 4 empty folds) — conservative by design; at 14 trades
+  the verdict is sample-limited, not a clean fail. Don't loosen the math to make it pass; let history grow.
+- **⚠️ HOLD-HORIZON MISMATCH (found 2026-09-25, Ember's catch) + the EXIT-MATCHED GRADE.** Both wired presets exit
+  TP 2.5 / SL 2 / **maxHoldHours 12**. Sept-25 per-horizon grades for basis_x_cvd: **4h PREDICTIVE (+23.4bps n29) ·
+  12h NOISE (−4.6bps, n32, NOT stable) · 24h PREDICTIVE (+168.3bps, 76%, n25)** — the presets time out in the one
+  window the scoreboard grades NOISE (basis_extreme 12h = PROMISING, not stable). And the headline R PREDICTIVE is
+  graded on the FROZEN R contract (1.2×ATR stop, 1.5R, 168h), NOT the preset exit. Non-monotonic at n≈30/bucket →
+  may be noise, but it's a real live/graded mismatch. **Fix = measurement, not a preset edit:** the scorecard now
+  carries a per-axis **`exit`** block for reads a preset trades — the read walked through the PRESET's own exit on
+  the logged hourly candles via the backtest's **`stepExit`** (extracted from `runBacktest`, which now calls it — ONE
+  exit path → exec `evaluateExit`), adverse-extreme-first, right-censored (no exit by end of data ⇒ left out), NET of
+  3bps/side → `{verdict, samples, hitRate, netBps, stable, exits:{TP,SL,TIMEOUT}, avgHoldH}`. Informational — does NOT
+  change the read's verdict. Contracts in **`app/lib/axisExits.mjs`** (`AXIS_EXITS`), pinned to strategyPresets.ts by
+  `axisExits.test.mjs` (text-parsed; also asserts every `AXIS_PRESET` has a contract). Cache key `axisbt:v2`. /proof
+  SignalRow now shows every horizon (not just best) + an "AS THE PRESET TRADES IT" line. **The live Basis × CVD Stack
+  paper run stays 12h = the control group — don't edit it;** a 24h variant is a Lab test (Load → 24h → Test+Validate),
+  decided at Oct-15. Tests: `workers/nexus-lab-api/axisbt.exit.test.mjs`.
+  **First live exit read (Sept 25):** basis_x_cvd via preset exit = PROMISING +3.2bps net, 48%, n33, NOT stable, exits
+  TP4/SL6/TIMEOUT23 · basis_extreme via preset exit = **NOISE −8.3bps net, n299**, TP50/SL66/TIMEOUT183. The 12h cap,
+  not the TP, decides most trades — the mismatch bites.
+  **+ `exit24h` (same day):** a 24h-hold copy of the preset exit (same TP/SL) graded BESIDE the 12h `exit`. Both now
+  graded as the agent trades: `tradeableExitTrades` = ONE position per market (skip events while open), a SHARED
+  entry window (entries ≥24h before each market's last candle, so neither variant sees trades the other can't), and
+  an **`oos`** sub-block = trades entered after `EXIT_OOS_CUTOFF_MS` (2026-09-25 04:00 UTC) — 24h was PICKED from this
+  data, so its in-sample grade flatters it; oos is the honest test. Cache `axisbt:v3`. Baseline (07:26 UTC):
+  basis_x_cvd 12h PROMISING +11.9bps n28 not stable (TIMEOUT 19/28) vs **24h PREDICTIVE +57.8bps 63% n27 stable**
+  (TP11/SL8/TIME8); basis_extreme 12h NOISE −10.0 n148 vs 24h PROMISING +6.4 n127 not stable. Decide at Oct-15 on oos.
+  **24h Lab run (borst, Sept 25, only maxHoldHours 12→24):** backtest +$31.35 · 84.6% · 13T (vs 12h +$22.62/14T);
+  walk-forward **NOT ROBUST** +$45.46, 4/6 mkts, 42% folds (vs 12h +$32.06) — better capture, same robustness, tiny
+  n, in-sample. Routine compares Oct-15 reads against this datapoint (doesn't re-recommend the test).
+  **Forward PAPER A/B (from Sept 25):** 12h control `0x9A30…cB28` vs 24h variant `0xa77c…a9a7`, identical config
+  except maxHoldHours. Both ledgers RESET Sept 25 (old CONFLUENCE-era ledgers archived in `docs/paper-archive/`) —
+  reset, not date-filter, because `paper_agg` is accrued at close and can't be split by date. Oct-15 routine reads
+  both via public `GET /agent/:addr` (step 2c) with a guard if `firstTradeAt` predates the reset.
+  ⚠️ The 12h wallet also has `fundingPercentileMin:95` (leftover) — INERT on BASIS_FADE (brain applies it to
+  FUNDING_ONLY/CONFLUENCE only), so the A/B still differs only in hold.
+- **✅ LIVE-vs-GRADED PARITY (2026-09-25):** `app/lib/paperParity.mjs` (`paperParity`/`axisForConfig`/
+  `entriesFromPaperTrades`/`unsimulatedFilters`, tested) + public **`GET /agent/:addr/parity?since=&until=`**. Pairs
+  each paper entry (scale-out slices collapsed by `parent_id`) with the graded event it traded (same coin + side,
+  entry 0–3h after the basis obs) and lists every graded event the agent was FREE to take but didn't. A miss is
+  "explained" only if the agent had NO free moment in the event's ~1h action window (walk of [open, close+15m
+  cooldown) intervals — one position at a time across ALL markets), or a daily cap (trailing 24h, "likely"), or
+  another market won the brain's single per-wallet signal. Leftovers = DRIFT; regime/smart/session/vol filters →
+  UNVERIFIABLE (not simulated by the grader). `fundingPercentileMin` + `maxSignalAgeSec` deliberately NOT counted
+  (inert on BASIS_FADE / latency-only). `paper/reset` now stamps `state.paper_reset_at` → default window start.
+- **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
+  AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
+- **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
+  and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
+  doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one
+  rounded hour. `sideAtHour` in basisStack.mjs mirrors the grader exactly. Parity tests now run 3 seeds × with/without
+  same-hour rewrites for BOTH gates + a coverage guard so parity can't pass vacuously.
+- **✅ Cloud env now reaches `og.nexustradinglabs.com`** (borst allowlisted it 2026-09-25; verified HTTP 200 from a
+  cloud container) — sessions/routines can read the scorecard directly. The Oct-15 routine was created via http_api so
+  agents can't edit it; its prompt lives in `docs/routines/revalidate-basis-2026-10-15.md` (Sept-25 scorecard
+  checkpoint + clean-preset baseline inside). **Sept-25 scorecard:** basis_extreme PREDICTIVE (R +0.13, n315, stable) ·
+  basis_x_cvd PREDICTIVE (R +0.31, n35, stable) · basis_x_liqflush PREDICTIVE (R +0.11, n93, stable) · basis_x_smart
+  **slipped to PROMISING** (R +0.14, n141, NOT stable) — confirms keeping SMART off the presets. Backtest/validate
+  routes need a PRO walletSig → routines can't run them (never put a wallet key in a routine).
 - **⚠️ Scoreboard reads are NOT agent signalModes yet.** The agent trades CONFLUENCE/FUNDING/OI/MOMENTUM/
   MEAN_REVERSION only; basis/CVD/RSI reads are the research/proof layer. Findings feed house defaults + manual
   Thesis Engine use. ~~Wiring a PREDICTIVE read → a one-click agent strategy = roadmap~~ **→ DONE for basis (see above); CVD/RSI still research-only.**
@@ -442,7 +558,7 @@ grading (the moat they can't copy). 5 shipped this session (#3 Arena/Seasons def
 ## $NEXUS token & holder perks (pure-meme + flywheel UI)
 $NEXUS = pure community meme token on **Base** (`0x3D958634ab725B627919EF8F2Ed59227309fDba3`, 100B supply,
 18 decimals). **Zero built-in utility / revenue share** — perks are cosmetic/access only; the framing is
-baked into the code comments. Keep it that way (Howey). The real lawyer-gate is the first buyback→burn.
+baked into the code comments. Keep it that way (Howey). The real lawyer-gate is the first buyback (see the Sept-25 SEC FAQ note + `docs/treasury-buyback-policy.md`).
 - **Tier hook** (`app/hooks/useNexusTier.ts`): reads $NEXUS balance on Base via viem with a CORS-friendly
   RPC `fallback()` (llamarpc/publicnode/drpc — the default `mainnet.base.org` 403s/CORS-blocks the browser,
   which silently hid badges). Module-cached, fail-soft. **Tiers (low→high): ▪ OPERATOR 50M / ◇ ARCHITECT 100M
@@ -522,6 +638,124 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   Confirm modal shows pay/receive-est/min-received/slippage/impact; nothing signs until "Confirm swap". ⚠️ First live
   test: confirm Fabric's `taker` param name (we send `taker`; if unhonored the takerless tx still binds recipient to
   msg.sender) and run a small real buy on a Fabric-listed token (e.g. WETH/BNKR on Base) before trusting.
+
+## ✅ Flash (Definitive) spot router — HARDENED 2026-09-25 (read before touching FlashSpotButton)
+- Flash = the THIRD EVM spot router on /token (beside Fabric + the Uniswap deep-link), `app/pages/token/FlashSpotButton.tsx`,
+  worker proxy `POST /flash/quote|order` (adds secret `FLASH_API_KEY`). Market BUY/SELL; SL/TP bracket attaches only when
+  the quote echoes one back.
+- **⚠️ Flash's quote returns an UNLIMITED approve** (`approve(0x5d00…8f78, 2^256-1)`, verified live) + an EIP-712
+  `FlashOrder` {swapper, vault, recipient, fromToken, toToken, fromAmount (base units), salt, deadline}, domain
+  `DefinitiveFlashAllowance` v1, verifyingContract = the SAME `0x5d00000873b6bf41539e6f5365b0ff7d3c368f78` (pinned as
+  `FLASH_ALLOWANCE`). Before the fix both went to the wallet unchecked (setup-tx ETH value forwarded as-is).
+- **Guards (`app/lib/flashGuards.mjs`, tested incl. a live Base quote), all BEFORE any wallet prompt:** `ensureChain`
+  first → `checkFlashOrder` (FlashOrder, this chain, pinned contract, **swapper AND recipient = wallet**, the trade's
+  tokens, `fromAmount ≤ typed size + 1 base unit`, deadline within 1h) → each setup tx must pass `checkFlashSetupTx`
+  (zero-ETH `approve` of fromToken to the pinned spender) and we send **OUR exact-amount `encodeApprove(FLASH_ALLOWANCE,
+  fromAmount)`** instead of Flash's unlimited one (0-amount resets pass through) → any `permitTypedData` is REFUSED →
+  bracket must pass `checkFlashBracket` (wallet-bound FlashOrder selling the bought token; no amount/deadline bound —
+  it rests). Approval receipts must be status 0x1; pending/reverted stops the flow. Decimals via `eth_call decimals()`.
+- **Key proxies gated** (`workers/nexus-lab-api/keyProxy.mjs`, tested): `/flash/*` + `/swap/jup/*` accept only our
+  origins (ALLOWED_ORIGINS + `*.nexus-trading-lab.pages.dev`, https) and a per-IP isolate-local budget (flash 30/min,
+  jup 120/min) → 403 `origin_not_allowed` / 429. Verified live. Only browser code calls them.
+
+## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
+- `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the
+  brain's single best signal per tick (ties → first in `config.symbols`), and is gated by daily caps. Now
+  `runPortfolioBacktest(markets, config)` walks all markets on one merged hourly timeline with the SHARED `entryAt`
+  (extracted from runBacktest, which now calls it) + `stepExit` + the exec's own `dailyCapBlocked`/`shouldResetDaily`.
+  Returns aggregate + perSymbol + `blocked {busy, otherMarket, dailyCap, cooldown}`. `backtestConfig` returns
+  `portfolio`; Backtest card shows "AS THE AGENT TRADES IT" under the per-market tiles ("EACH MARKET ON ITS OWN").
+  Tests (`backtest.portfolio.test.mjs`): one market + no caps == runBacktest trade-for-trade. `maxTradesPerDay` IS
+  simulated in the portfolio replay. **Sweeps (`runSweep`/`runBasisSweep`) are RANKED by the portfolio net** (+ the
+  user's daily caps via `agentCaps`; per-market sum kept as `indepNetUsd`/`indepTrades`, shown on hover) — ranking by
+  the per-market sum rewarded overlap (long holds on several markets at once). **Walk-forward verdict stays PER-MARKET**
+  (breadth × time — "does the edge exist on each market on its own" — unchanged + comparable with Sept-25 baselines) and
+  now also returns `portfolio` {watchlist = the config's own symbols ∩ validate universe, netUsd, trades, folds,
+  foldsPositive} via `portfolioFolds`.
+  **📊 Portfolio baselines (Ember, Sept 25, 33d):** Basis × CVD 12h +$14.18 · 80% · 10T · PF 3.14 (old per-market
+  +$22.62/14T: 9 signals while in a position, 1 lost to another market) · 24h +$14.36 · 77.8% · 9T · PF 3.39 (old
+  +$31.35/13T). **12h vs 24h = a WASH in backtest** — the 24h "edge" was phantom overlap; the hold decision rests on the
+  paper A/B + `oos` exit grades. /proof hero receipts updated to the portfolio numbers.
+  **Portfolio-ranked basis sweep (Ember, Sept 25):** Basis × CVD = 5 of the top 8, green 2–3/3 mkts, across TP settings;
+  top row Basis Extreme +$21.85 but 1/3 mkts (ignored); Smart best = 9th. ⚠️ All CVD rows share the SAME ~10 entries
+  (only exits vary) → proves exit-robustness, NOT entry edge.
+- **✅ RANDOM-ENTRY BASELINE (2026-09-25):** `randomEntryBaseline(markets, config, realTrades, {runs:300, seed:7})` in
+  backtest.mjs — replays the real portfolio trades' markets + count + per-market long/short mix through the SAME exit
+  path (`openPosition`/`stepExit`, vol-scaled levels honored, fees) at RANDOM entry bars (room left for the time exit;
+  right-censored dropped), seeded mulberry32 → `{pctBeaten, realNetUsd, randomMedianUsd, randomP5Usd, randomP95Usd,
+  verdict}`: BEATS_RANDOM ≥95 · LEANS_ABOVE ≥80 · NOT_DISTINGUISHABLE; <5 trades → TOO_FEW_TRADES. Attached as
+  `portfolio.baseline` by `backtestConfig`; Backtest card prints "vs random entries: beat X% of 300 replays". Tests
+  (`backtest.baseline.test.mjs`): foresight ≥95, worst timing ≤5, random entries mid-pack, reproducible, per-market.
+  `tradesToSeparate(pct, n)` (≈ n·(z95/z)², Acklam `probit`) → `tradesNeeded`/`moreTradesNeeded` on every baseline
+  (rough guide; null at/below random). **First readings (Sept 25, 3 mkts, 33d):** 12h control 86.7% (random median
+  $0.33, ~22 trades needed) · 24h 79.3% (median $1.13, ~37) — neither decisive; longer hold = more drift in random.
+- **✅ EVIDENCE ACROSS ALL RECORDED MARKETS (2026-09-25):** public **`GET /intel/evidence?axis=basis_x_cvd&hold=12|24`**
+  (cached 1h `evidence:v1:{axis}:{hold}`) — `evidenceAcrossMarkets` replays the preset's EXACT config (built from
+  `AXIS_EXITS`, which now also carries signalMode/basisConfirm/leverage/capitalPerTrade, all pinned to strategyPresets.ts
+  by `axisExits.test.mjs`) on every one of the 12 scorecard coins with mature basis+CVD history, EACH ON ITS OWN (the
+  entry question, not agent P&L), pools the trades, runs `randomEntryBaseline` on the pool. /proof basis_x_cvd row shows
+  "ACROSS N RECORDED MARKETS …" (EvidenceLine). ⚠️ Markets move together → pooled ≠ independent (stated in UI + API).
+  The Oct-15 routine reads it (step 2e) — no wallet signature needed. Candles come from recorded `candle:hist` (KV, ~95d) — a burst
+  of 36 Orderly tv/history calls tripped a Cloudflare challenge (HTML → JSON parse fail); Orderly is only a per-market
+  fallback, failures are excluded + named. **First reading (Sept 25, 9 mature mkts, 33d):** 12h +$8.13 · 30T · 53% ·
+  PF 1.15 · vs random 75.7% (median −$13.37) · ~138 more trades · 24h +$52.27 · 29T · 62% · PF 1.80 · 6/7 green ·
+  vs random **89.3% LEANS_ABOVE** (median +$0.46) · ~22 more trades. HYPE the consistent loser (8T, 25%) — don't curate.
+  The hold ranking FLIPS vs the 3-market read → noise still dominates the hold question.
+- Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
+  Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
+
+## Wallet X-Ray — windows, copy gate, live positions (2026-09-25)
+`/analyze` (`app/pages/analyze/index.tsx` + `XrayPanels.tsx`); ALL rules in **`app/lib/xrayGrade.mjs`** (tested).
+- **Time windows 24H/7D/30D/ALL**, each graded by the SAME code on fills filtered by close time (AnalyticsView gets
+  the windowed trades). **Minimums 5/10/20/20 closed trades** — below that the window reads **ACCRUING** (no PF/win%,
+  no AnalyticsView). Default 30D; falls back to ALL only if 30D is accruing and ALL isn't. Truncated HL tapes flag
+  every window the held slice doesn't reach back to. **Edge decay row** = PF ALL → 30D → 7D.
+- **Orderly can't be windowed per trade** (indexer = per-market totals) → windows read off the WATCHED record:
+  `/smart/xray/history` now also returns `series` (daily `{t,realized}`, additive); a window only reads if a snapshot
+  exists at/before its start, else "watched Nd, not enough to cover".
+- **Copy gate (`edgeGate`) — EVERY ⚡ COPY on the page goes through it** (hero CTA, positions panel, Orderly per-market
+  rows; they were ungated before). Pass = graded 30D HL window net>0 AND PF>1, OR watched record ≥20 graded days net>0.
+  Veto = ANY graded evidence negative. Locked state lists the reasons. ◆ draft-thesis stays open (planning, not copying).
+  Gate reads 30D regardless of the tab shown. No 0–100 score — the grade is its parts.
+- **Open positions:** HL `clearinghouseState` (leverage, entry, uPnL, venue-reported `liquidationPx`; mark =
+  positionValue/|szi|). Orderly rows = indexer side/entry/uPnL + public futures mark; **leverage + liq = "—", never
+  estimated** (not public). HL copy only if `hlCoinToOrderly(coin)` is a listed `PERP_*_USDC` (futures list = listed set).
+- **⚠️ HL positions span EVERY perp dex (fixed 2026-09-25, Ember/Flood).** Equities (NVDA/AMD/MSFT/INTC…) live on
+  builder-deployed HIP-3 dexes (`xyz:`, `flx:`…); `clearinghouseState` WITHOUT `dex` returns ONLY the main dex → the
+  panel showed BTC and missed the stocks. `fetchHLPositions` lists `perpDexs` and reads each (`{dex}`), tags the row
+  "Hyperliquid · xyz", shows ISO, and NAMES any dex it couldn't read ("list may be incomplete").
+- **⚠️ HL serves only a wallet's 10,000 MOST RECENT fills — no public endpoint pages further back.** Full history
+  = HL's S3 node-fills archive (all wallets, global crawl) — not per-wallet on-demand. `app/lib/hlTape.mjs`
+  (`mergeFills`/`tapeStatus`, tested): every slice is MERGED + tid-deduped, never swapped (the old code threw away
+  the 10k it paged for the newest ~2k whenever a busy wallet traded mid-read). Partial ⇔ we hold the 10k cap; labels
+  say "N most recent fills (all Hyperliquid serves) · complete from <date>", and the analytics line flags partial
+  ONLY on windows that reach past it (the old label printed CLOSED-TRADE count as "fills" → Ember's "~300 fills").
+- **✅ FORWARD FILL COLLECTION (2026-09-25).** lab-api **`GET /xray/hltape?address=`** (`routes-hltape.mjs`, tested):
+  first view SEEDS KV `xray:hltape:{addr}` (LAB_STORE) with everything HL serves; later views + the 12h cron
+  (`sweepHlTapes`, ≤30 WATCHED wallets from `sm:wl:*`) sync forward from the newest stored fill (startTime inclusive)
+  + `userFills`, merged via `syncTape` in `hlTape.mjs`. The tape GROWS PAST HL's 10k (cap `TAPE_STORE_CAP=50k`, compact
+  rows). **Gap rule:** the forward page must return our newest stored fill; no overlap ⇒ >10k fills happened between
+  syncs ⇒ `completeFrom` moves forward (disclosed, never papered over). A failed first page never writes/never claims a
+  gap. Throttles: ≤1 HL sync/wallet/min (cached reads free), 20 syncs/min/IP (over → stored tape served `stale`, or 429).
+  Page reads via `fetchHLTape` (falls back to direct HL if the worker is down); labels "N fills collected · complete
+  from X · tape collected since Y". `completeFrom:null` = complete from the wallet's first fill.
+
+- **✅ SHARE (2026-09-25).** `↗ SHARE` on the verdict card shares **`og.nexustradinglabs.com/share/xray/:address`**
+  (NOT the SPA URL — its meta is JS-injected, crawlers never run it); mobile = `navigator.share`, else clipboard.
+  Worker `routes-xrayshare.mjs`: `/share/xray/:a` = real OG/Twitter meta + forwards to `/analyze?address=`;
+  `/og/xray/:a.png?v=` = 1200×630 card (resvg, same mono font). **ONE grade, every surface:** card content =
+  `app/lib/xrayCard.mjs` (`xrayCard`) graded with `xrayGrade.mjs` on the STORED tape via `fillsToClosedTrades` —
+  the SAME function the page now imports. Card rules: always **30D in parts** (net/trades/win%/PF) + lifetime
+  context; **ACCRUING** below 20 trades (no PF/win%); Orderly-only → **watched record**; dated ("Sep 25 · 14:00
+  UTC"); partial tape disclosed; NO copy/trade prompt. Image URL versioned by `cardVersion` (newest fill + counts)
+  so a re-share after new fills gets a fresh image (X caches by URL); versioned PNGs edge-cached 24h. Unseeded
+  wallet → seeds via `syncHlTape` under a 10/min/IP budget, else honest "no record" card.
+
+- **✅ COPILOT = SAME GRADE (2026-09-25).** The AI copilot's `xray_wallet` tool no longer computes its own lifetime
+  win rate from a raw HL read. It reads the STORED tape (`fetchHLTape`) and returns `xraySummary` (xrayGrade.mjs —
+  the page's exact composition: per-window grades with ACCRUING, headline window, decay row, partial windows, copy
+  gate) + `copy_gate {pass, evidence, locked_reasons}` + `share_link`. Its note tells the model: lead with the
+  headline window, never quote win rate/PF on an ACCRUING window, never suggest copying when the gate is locked.
 
 ## Nexus PRO — subscriptions / revenue (freemium model)
 The business-model layer. **PRO is a SOFTWARE subscription** (ordinary commerce, real USDC revenue) — NOT a
@@ -620,6 +854,16 @@ The Safe is **LIVE** (`0x4Fe2…C733`, 1/1 Arbitrum+Base) and the PRO USDC payme
   (from buying lows) FUNDS retroactive Season drops to top **verifiable** contributors. Quality-weighted via our
   trustless grading (reward being RIGHT, not loud) = built-in anti-wash-farming. Hold $NEXUS = points multiplier
   (aligned, not pay-to-win). Retroactive + merit-based + from a treasury = clean.
+- **⚖️ SEC staff FAQ (Sept 25, 2026) — updates the legal half of the drop above.** CorpFin FAQ on crypto assets
+  (builds on the March 2026 interpretation): a buyback of a NON-security token on an ALREADY-FUNCTIONAL network is not,
+  by itself, a promise of managerial effort under Howey — UNLESS it's presented as yield/returns. Staff guidance only
+  (not law, not Commission-approved, reversible). So "buyback = automatic Howey" is STALE — don't repeat it. What still
+  holds: NO revenue share/yield/dividends (the carve-out), NO automated/marketed fee→buyback→burn (legal carve-out +
+  Danny's market argument, which the FAQ doesn't touch). $NEXUS nuance: it's a meme token, not the network's token —
+  its best argument is CONSUMPTIVE use (x402 payment unit, PRO discount, hold-to-unlock). **Draft policy for counsel:
+  `docs/treasury-buyback-policy.md`** (discretionary, revenue-funded, hold-not-burn, disclosed onchain after the fact,
+  say/never-say list). **Buys ARE already happening** (discretionary, since the June pivot; 10.93B $NEXUS ≈10.93% of supply held as of Sept 25) — the policy writes that practice down; counsel confirms via §7, and buys pause only if counsel says so. `marketing/lab-article.md`'s old
+  "fees → treasury → buyback → burn" line was rewritten (Sept 25) to "the treasury holds what it earns".
 - **Narrative pivot:** burn counter → **treasury-accumulation counter** ("treasury holds X $NEXUS" = conviction,
   not "X burned" = scarcity). Transparency pillar makes the stacking a feature.
 - **Relationship:** Bankr connecting borst to their devs (facu & edit) + dev-console access → path to deeper
@@ -784,8 +1028,29 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
 Canonical system = **`app/config/theme.ts`** (`C` tokens), mirrored 1:1 by the landing (`nexus-landing/index.html` `:root`). Pull colors from these — never invent.
 - **Palette (Linear-discipline monochrome):** canvas `#0a0a0b` · surface `#141416` · borders `#232327`/`#33333a` · text bone `#f4f4f5` / fog `#a1a1aa` / muted `#71717a` / faint `#52525b`. **THE accent = bone/white `#ededf0`** (CTAs, headlines, interaction). **Green `#3ecf8e` = DATA role — profit/up/live ONLY, never the brand color.** neg `#f7525f`, warn `#fbbf24`. Elevation = hairline border + surface tier, NOT heavy shadow; ONE rationed accent; 4px spacing scale.
   - ⚠️ **NOT neon green.** "near-black + acid-green pop" is the exact AI-cliché to AVOID. It's bone-on-near-black, green rationed to data.
+  - **Signal colours (2026-09-25) — each means ONE thing, never decoration.** Beyond bone + data colours, a few
+    colours earned a job and live NAMED in `theme.ts`: `SIGNAL.caution` soft amber `#e0a458` (caution/experimental/
+    "watch" — softer than `C.warn`, which stays for real danger) · `SIGNAL.follow` gold `#f5c451` (someone you follow)
+    · `SIGNAL.heat` orange `#f7931a` (🔥 engagement, never price) · `SIGNAL.posSoft` (moderate conviction) ·
+    `SIGNAL.posMuted`/`negMuted` (DEMOTED context P&L under a graded headline) · `SIGNAL.sim.*` purple family
+    (SIMULATED, not real money — Sim Composer) · `LINE.pos/neg/warn` agree/oppose/caution hairlines ·
+    `C.text.disabled`. **New colour = name its one job in theme.ts, or use an existing token.**
+  - **Palette guard:** `node tools/check-palette.mjs` (allows everything in theme.ts; ratchet baseline
+    `tools/palette-baseline.json` — shrink, never grow). Runs on every PR via `.github/workflows/pr-checks.yml`
+    (never blocks the deploy). It drifted to ~25 strays Sept 19–24 because nothing ran it.
+- **⭐ WRITTEN VOICE = `marketing/VOICE.md`** (borst's brief, Sept 25 2026) — read it before writing ANY post, QT, article
+  or launch copy as @nexustradinglab. A terminal that speaks: short end-stopped lines, fact → rule → action, numbers over
+  adjectives, no hype words/emoji, no em-dash brochure clauses, default closer = nothing. Rewrites return 1 primary + 1
+  tighter alt. @borstxbt (founder) is a separate, personal voice — the brand account never copies it.
+  **Applied app-wide + landing (Sept 25 2026):** meta/SEO, PRO card + `PRO_FEATURES`, onboarding + connect modal, Lab
+  hero ("Plan it. Run it. Prove it."), Proof, Feed, Agent, Thesis Engine, Intel, Arena, X-Ray, token/spot, mini app,
+  share texts (X/Farcaster: fact → rule, no emoji). Brand labels carry NO pictographic emoji (glyphs ◆ ◇ ▪ ✓ ✕ ⛓ ⚡ →
+  are fine); the top-nav bell is a line SVG matching the envelope. User SOCIAL REACTIONS (🔥💎📉 in SocialBar/
+  CommentsPanel) are left as-is — they're stored data, not brand copy. "Welcome to The Lab" is retired (the brief bans
+  "Welcome to"). LiveRead's "PROVEN-EDGE SETUP" is now "ALIGNED SETUP" — the scoreboard hasn't graded it PREDICTIVE;
+  never label a read "proven" unless the scoreboard does.
 - **Type:** IBM Plex Mono (labels/terminal) + Manrope (sans — headlines/CTAs) + Libre Baskerville (serif — editorial accent). Landing loads all three.
-- **Voice / cadence (match the landing):** calm, declarative, confident, short sentences. Identity lines — **"an onchain trading terminal" · "Welcome to The Lab" · "Plan it. Run it. Prove it." · "From idea to an onchain call."** Agent: "hand an agent your rules · paper first, live when you say so · order-only keys + kill switch · 24/7." Intel: "funding edge intelligence · where the smart money is actually positioned · the edge the desk trades on."
+- **Voice / cadence (match the landing):** calm, declarative, confident, short sentences. Identity lines — **"an onchain trading terminal" · "Plan it. Run it. Prove it." · "From idea to an onchain call."** Agent: "hand an agent your rules · paper first, live when you say so · order-only keys + kill switch · 24/7." Intel: "funding edge intelligence · where the smart money is actually positioned · the edge the desk trades on."
   - ⚠️ **Verifiability is stated CALMLY, once, as fact** ("graded from public price · the ledger's on Arbitrum · open the contract and look") — NEVER a "can't fake" war-cry. Blockchain-can't-fake is table stakes; the onchain terminal (The Lab) OWNS verifiability inherently, so don't lead with it or preach it. It's a quiet supporting fact, not the thesis.
   - ⚠️ No filler ("in plain English", "the leaderboard you can't fake"). Say the thing, in the landing's register.
 - **"Video demos"** = self-playing / animated **design artifacts** (branded HTML you screen-record), the same medium as the Claude Design "video demo" projects — there is NO rendered-MP4 export from Claude. Build these on the palette + voice above. Current demo motion kit: artifact `KuNRnRrDJ3Q9GDLwBP3Eai` (V2, on-brand: bone/near-black, green whisper).
@@ -825,6 +1090,11 @@ into PRO rail. Open call: free-forever BYOK vs gate behind PRO.
   card, ContributePrompt (feed<12), and **outbound 𝕏/Farcaster share** on theses (Lab ThesisView +
   thesis detail page) → links unfurl via existing `/og/thesis/:wallet/:id(.png)` cards. The
   create→distribute→recruit loop = the real fix for thin supply (rest is go-to-market).
+
+## ⚠️ Settled — do NOT re-raise as "next moves" (borst, 2026-09-24)
+- **Cold-start / feed liveness** is behind us — don't pitch it as the #1 risk or a next move.
+- **Fabric in-app buy is LIVE and tested** — don't pitch "run a small live test" again.
+- Current focus = **the engine and its signals** (basis stack, scoreboard → one-click strategies, mobile polish).
 
 ## Strategic framing (for partner/Orderly convos)
 The DEX is a commodity (anyone can clone the Orderly template). The moat is the Lab + social graph:

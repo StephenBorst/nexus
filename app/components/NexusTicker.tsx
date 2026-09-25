@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { C, MONO } from "@/config/theme";
+import { bareTicker } from "@/utils/utils";
 
 const PROXY = "https://orderly-proxy.stephenpatrick24.workers.dev";
 const NEXUS_TOKEN = "0x3D958634ab725B627919EF8F2Ed59227309fDba3";
@@ -90,7 +91,7 @@ export function NexusTicker() {
           .slice(0, 18)
           .map((m) => ({
             key: m.symbol,
-            sym: m.symbol.replace("PERP_", "").replace("_USDC", ""),
+            sym: bareTicker(m.symbol),
             price: fmtPrice(parseFloat(String(m.mark_price ?? 0))),
             chg: chgPct(m["24h_open"], m["24h_close"]),
           }));

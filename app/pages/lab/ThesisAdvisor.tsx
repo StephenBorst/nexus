@@ -13,6 +13,7 @@
 // while incomplete, on error, or when there's nothing worth saying.
 import { useEffect, useRef, useState } from "react";
 import { C, MONO, RADIUS } from "@/config/theme";
+import { bareTicker } from "@/utils/utils";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 
@@ -79,7 +80,7 @@ export function ThesisAdvisor({ symbol, direction, entryPrice, stopLoss, takePro
   if (compact) {
     return (
       <div style={{ background: C.inset, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, padding: "8px 11px", fontFamily: "var(--nx-font-ui)", fontSize: 11.5, color: C.text.muted, lineHeight: 1.55 }}>
-        <strong style={{ color: C.text.fog }}>{symbol.replace("PERP_", "").replace("_USDC", "")}</strong> is{" "}
+        <strong style={{ color: C.text.fog }}>{bareTicker(symbol)}</strong> is{" "}
         {TREND_WORD[regime.trend] ?? regime.trend.toLowerCase()} ({VOL_WORD[regime.vol] ?? regime.vol.toLowerCase()}).
         {rec
           ? <> Your record in this market: <strong style={{ color: recTone }}>{rec.avgR > 0 ? "+" : ""}{rec.avgR}R</strong> over {rec.calls}.</>
