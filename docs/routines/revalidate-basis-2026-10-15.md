@@ -55,6 +55,11 @@ KNOWN MISMATCH — HOLD HORIZON (found Sept 25, keep an eye on it):
   - 24h variant: beat 79.3% (random median $1.13) — NOT_DISTINGUISHABLE (a hair under 80); +$14.36 / 77.8% / 9T; folds 4/4 positive; ~37 trades needed.
   - Read: neither decisive. The 24h's higher random median shows longer holds soak up drift any entry would catch — part of its P&L isn't timing. The 12h leaning further above random fits that.
 - EVIDENCE ACROSS ALL RECORDED MARKETS (built Sept 25): public GET https://og.nexustradinglabs.com/intel/evidence?axis=basis_x_cvd&hold=12 (and &hold=24) — the preset's exact signal/exit replayed on EVERY market with mature recorded history (up to 12), each on its own, trades pooled, random-entry baseline on the pool. Returns {markets, marketsGreen, trades, netUsd, winRate, baseline:{verdict, pctBeaten, randomMedianUsd, tradesNeeded, moreTradesNeeded}, perMarket[], excludedSymbols}. ⚠️ Markets move together — the pool is an honest aggregate, not independent tests.
+- EVIDENCE — FIRST READING (Sept 25, 9 markets with mature history, each on its own, 33d; ARB/SUI/WLD excluded as not yet mature):
+  - 12h: +$8.13 · 30 trades · 53.3% win · PF 1.15 · green 5/7 traded · vs random 75.7% (NOT_DISTINGUISHABLE; random median −$13.37) · ~138 more trades needed.
+  - 24h: +$52.27 · 29 trades · 62.1% win · PF 1.80 · green 6/7 traded · vs random 89.3% (LEANS_ABOVE; random median +$0.46) · ~22 more trades needed.
+  - HYPE is the one consistent loser (8 trades, 25% win, −$28.83 at 12h / −$21.87 at 24h). Do NOT drop it from the set (that's curve-fitting) — note whether it keeps failing.
+  - On the wider set the ranking FLIPS vs the 3-market reading (there 12h 86.7% > 24h 79.3%; here 24h 89.3% > 12h 75.7%). Noise still dominates the hold question. The 24h is the arm closest to a verdict (~22 more trades ≈ 3–4 weeks at the current pace across 9 markets).
 - The live "Basis × CVD Stack" paper run is deliberately left on 12h as the control group. Do not change it; judge it.
 
 TASK:

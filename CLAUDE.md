@@ -695,7 +695,12 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   by `axisExits.test.mjs`) on every one of the 12 scorecard coins with mature basis+CVD history, EACH ON ITS OWN (the
   entry question, not agent P&L), pools the trades, runs `randomEntryBaseline` on the pool. /proof basis_x_cvd row shows
   "ACROSS N RECORDED MARKETS …" (EvidenceLine). ⚠️ Markets move together → pooled ≠ independent (stated in UI + API).
-  The Oct-15 routine reads it (step 2e) — no wallet signature needed.
+  The Oct-15 routine reads it (step 2e) — no wallet signature needed. Candles come from recorded `candle:hist` (KV, ~95d) — a burst
+  of 36 Orderly tv/history calls tripped a Cloudflare challenge (HTML → JSON parse fail); Orderly is only a per-market
+  fallback, failures are excluded + named. **First reading (Sept 25, 9 mature mkts, 33d):** 12h +$8.13 · 30T · 53% ·
+  PF 1.15 · vs random 75.7% (median −$13.37) · ~138 more trades · 24h +$52.27 · 29T · 62% · PF 1.80 · 6/7 green ·
+  vs random **89.3% LEANS_ABOVE** (median +$0.46) · ~22 more trades. HYPE the consistent loser (8T, 25%) — don't curate.
+  The hold ranking FLIPS vs the 3-market read → noise still dominates the hold question.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
