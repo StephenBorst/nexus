@@ -191,6 +191,12 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
 }) {
   const isMobile = useIsMobile();
   const [signals, setSignals] = useState<MarketSignal[] | null>(null);
+  // An empty board has two very different causes and they must not read the same.
+  // "no rows this tick" ASSERTS the tick came back with nothing — a live, quiet read.
+  // When the /signals call is capped or errors we also settle to [], and saying "no rows"
+  // there states something we never learned. This flag keeps the claim honest: the fetch
+  // did not come back, so we say that instead of inventing a quiet tape.
+  const [signalsStale, setSignalsStale] = useState(false);
   const [tape, setTape] = useState<Record<string, { price: number; change: number }>>({});
   const [tapeRead, setTapeRead] = useState<{ score: number; label: string } | null>(null); // RISK-OFF/ON breadth — context for the fade tag
   const [consensus, setConsensus] = useState<Consensus | null>(null);
@@ -247,14 +253,18 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
   }, [positions]);
   const hasLoop = Object.keys(liveCallBy).length > 0 || Object.keys(inPosBy).length > 0;
 
+  // Did the FIRST /signals call resolve either way? The hard deadline below only claims
+  // "stale" when it did not — a ref, because the deadline closure would otherwise read a
+  // stale `signals` (the effect mounts once).
+  const settled = useRef(false);
   useEffect(() => {
     let alive = true;
     const load = () => {
       // /signals gates the table spinner — timeout-cap it and fail soft to last-good
       // (or empty on the very first load) so the board can never hang on "loading…".
       fetchJsonTimeout(`${AGENT_API}/signals`, SIGNALS_TIMEOUT_MS)
-        .then((j) => { if (alive) setSignals(Array.isArray(j?.signals) ? j.signals : []); })
-        .catch(() => { if (alive) setSignals((prev) => prev ?? []); });
+        .then((j) => { settled.current = true; if (!alive) return; setSignals(Array.isArray(j?.signals) ? j.signals : []); setSignalsStale(false); })
+        .catch(() => { settled.current = true; if (!alive) return; setSignals((prev) => prev ?? []); setSignalsStale(true); });
       fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json()).then((j) => { if (alive) setConsensus(j?.consensus ?? null); }).catch(() => { /* no crowd lean */ });
       // Three more INDEPENDENT lenses to fuse into the read — smart money, catalysts,
       // forecasters. Each fail-soft (an absent lens just shows "·", never blocks the board).
@@ -289,7 +299,13 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
     // the fetch or its abort, never leave the table gated on `null` past the cap: resolve to
     // empty within ~2s so the board settles to rows or "no rows this tick", never an infinite
     // spinner. Last-good is preserved (prev is replaced ONLY while it is still null).
-    const deadline = setTimeout(() => { if (alive) setSignals((prev) => (prev == null ? [] : prev)); }, SIGNALS_TIMEOUT_MS + 300);
+    const deadline = setTimeout(() => {
+      if (!alive || settled.current) return;
+      // Neither branch of the first /signals call ever resolved. Settle the spinner, but mark
+      // it stale so the empty state says "did not come back", never "no rows this tick".
+      setSignals((prev) => (prev == null ? [] : prev));
+      setSignalsStale(true);
+    }, SIGNALS_TIMEOUT_MS + 300);
     const iv = setInterval(load, 30000);
     return () => { alive = false; clearTimeout(deadline); clearInterval(iv); };
   }, []);
@@ -455,7 +471,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       <SectionHeader
         eyebrow="THE BOARD"
         title="Every market, one read"
-        note={<span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""} · every column verifiable</span>}
+        note={<span>{signals ? (rows.length ? `${rows.length} markets` : signalsStale ? "read didn’t return" : "no rows this tick") : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""} · every column verifiable</span>}
       />
 
       {/* Honesty framing — the whole point of the moat. On a phone it is ONE sentence (Grok):
@@ -509,9 +525,12 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       {!signals ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>loading the board…</div>
       ) : rows.length === 0 ? (
-        // Real empty state (never vanish, never hang): the /signals cap resolved to no rows —
-        // a live-but-quiet tick, not a broken board. Refreshes on the 30s interval.
-        <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>no rows this tick — the read refreshes every 30s.</div>
+        // Real empty state (never vanish, never hang) — and it tells you WHICH empty it is.
+        // Stale = the /signals call was capped or errored, so we never learned the tape; a
+        // plain empty = the tick genuinely returned nothing. Both refresh on the 30s interval.
+        <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>{signalsStale
+          ? "the read didn’t come back this tick — retrying in 30s."
+          : "no rows this tick — the read refreshes every 30s."}</div>
       ) : isMobile ? (
         // Mobile — the 720px table hid THE PLAY behind a side-swipe. Instead, one 2-line card per
         // row so the DECISION is the first paint: line 1 = market · funding/yr · the play · → ;

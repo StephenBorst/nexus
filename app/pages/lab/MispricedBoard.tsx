@@ -29,6 +29,7 @@ import { Collapsible } from "./Collapsible";
 import { SectionHeader } from "./components";
 import { Simulate } from "./Simulate";
 import { ProjectionBand } from "@/components/ProjectionBand";
+import { fmtFunding8h, isThinBook, FUNDING_PERIODS_PER_YEAR } from "@/lib/funding.mjs";
 
 // The board's /intel/mispriced call gates the "loading board…" spinner, so a hung connection
 // would strand a guest on it forever. Cap it (the SAME abort pattern as DecisionBoard) so it
@@ -52,7 +53,7 @@ type EdgeQuality = { tier: "PROVEN" | "TRAP" | "MIXED" | "UNPROVEN"; revertedPct
 type SmartMoney = { side: "LONG" | "SHORT"; count: number; long: number | null; short: number | null };
 type Market = {
   symbol: string; coin: string; markPrice: number;
-  funding8hPct: number; fundingAnnualPct: number; oiUsd: number;
+  funding8hPct?: number; fundingAnnualPct: number; oiUsd: number;
   change24hPct: number | null; direction: "LONG" | "SHORT" | "NONE";
   edge: number; status: "MISPRICED" | "PRICED_FAIR";
   reversion?: { revertedPct: number; avgReversionPct: number; samples: number; horizonDays: number } | null;
@@ -75,6 +76,12 @@ const fmtUsd = (n: number) =>
 const fmtPrice = (n: number) => n >= 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) : n >= 1 ? n.toFixed(2) : n.toPrecision(4);
 
 const stanceLabel = (dir: string) => dir === "SHORT" ? "Crowd over-long" : dir === "LONG" ? "Crowd over-short" : "Balanced";
+
+// Funding display + liquidity confidence come from the TESTED shared module so the rule
+// can't drift between here, the copilot's board tool, and the tests that pin it.
+// ⚠️ The annualized figure is never clamped — see app/lib/funding.mjs for why.
+const thinBook = (m: Market) => isThinBook(m.oiUsd);
+const THIN_BOOK_TITLE = `Open interest is under $1M — the funding print clears the board's $50k floor, but a book this thin can hold an extreme rate without a crowd behind it. Treat the edge as low-confidence.`;
 
 // Plain-English translation — the readability layer. A first-timer reads this; a pro
 // reads the numbers above it. Both are true, neither is dumbed down. verdict === "WATCH"
@@ -428,7 +435,7 @@ function SynthesisRead({ m, lean, active }: { m: Market; lean?: Lean; active: bo
         <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: C.text.muted }}>◆ The read · three lenses</span>
         {!active && <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, color: C.text.faint }}>current positioning · no fade yet</span>}
       </div>
-      <LensRow first label="Crowd" value={<>{m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%/yr · paying to be {crowdSide}</>} tag={active ? `FADE ${fadeDir}` : "within range"} tagTone={active ? C.text.bright : C.text.faint} />
+      <LensRow first label="Crowd" value={<>{m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%/yr{fmtFunding8h(m.funding8hPct) ? <span style={{ color: C.text.faint }}> ({fmtFunding8h(m.funding8hPct)}/8h)</span> : null} · paying to be {crowdSide}{thinBook(m) ? <span title={THIN_BOOK_TITLE} style={{ color: C.warn }}> · thin book</span> : null}</>} tag={active ? `FADE ${fadeDir}` : "within range"} tagTone={active ? C.text.bright : C.text.faint} />
       <LensRow label="Smart $"
         value={sm?.side ? `${sm.count} sharp${sm.count === 1 ? "" : "s"} ${sm.side}${sm.long != null && sm.short != null ? ` · ${sm.long}L/${sm.short}S` : ""}` : "no read"}
         tag={active && sm?.side ? (sm.side === fadeDir ? withTag : againstTag) : undefined}
@@ -674,8 +681,15 @@ export function MispricedBoard() {
             <div style={{ margin: "18px 0 4px" }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontFamily: MONO, fontSize: 10, marginBottom: 8 }}>
                 <span style={{ color: C.text.muted, textTransform: "uppercase", letterSpacing: "0.14em", fontSize: 8.5 }}>Funding edge</span>
-                <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 22, fontWeight: 600, color: C.text.bright }}>
-                  {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%<span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontSize: 11, color: C.text.faint, marginLeft: 3 }}>/yr</span>
+                <span style={{ marginLeft: "auto", textAlign: "right" }}>
+                  <span style={{ display: "block", fontFamily: MONO, fontSize: 22, fontWeight: 600, color: C.text.bright }}>
+                    {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%<span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontSize: 11, color: C.text.faint, marginLeft: 3 }}>/yr</span>
+                  </span>
+                  {fmtFunding8h(m.funding8hPct) ? (
+                    <span style={{ display: "block", fontFamily: MONO, fontSize: 9.5, color: C.text.faint, marginTop: 2 }}>
+                      {fmtFunding8h(m.funding8hPct)} every 8h · charged {FUNDING_PERIODS_PER_YEAR}×/yr
+                    </span>
+                  ) : null}
                 </span>
               </div>
               <SynthChart points={pos?.points ?? []} price={price ?? []} direction={m.direction}
@@ -894,9 +908,12 @@ export function MispricedBoard() {
                     <div key={m.symbol} ref={(el: HTMLDivElement | null) => { rowRefs.current[m.coin] = el; }} onClick={() => setOpenCoin(m.coin)} title="Open this market"
                       className="nx-card-interactive"
                       style={{ position: "relative", border: `1px solid ${C.borderStrong}`, borderLeft: `2px solid ${isFade ? C.accent : draftAnyway ? C.warn : C.borderStrong}`, borderRadius: RADIUS.lg, padding: "13px 15px 12px", background: "linear-gradient(180deg,#161619 0%,#101012 100%)", cursor: "pointer", overflow: "hidden", scrollMarginTop: 80, boxShadow: markedCoin === m.coin ? `0 0 0 2px ${C.accent}` : undefined }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11, flexWrap: "wrap" }}>
                         <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.text.bright }}>{m.coin}</span>
                         <span style={{ fontFamily: MONO, fontSize: 8.5, color: C.text.faint }}>{fmtUsd(m.oiUsd)} open interest</span>
+                        {thinBook(m) ? (
+                          <span title={THIN_BOOK_TITLE} style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: C.warn, border: `1px solid ${C.warn}44`, borderRadius: RADIUS.sm, padding: "1px 5px" }}>THIN BOOK · LOW CONFIDENCE</span>
+                        ) : null}
                         <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: badgeColor }}>{verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? `⚠ WATCH · ${m.edgeQuality?.revertedPct}% HIST` : "◆ WATCHING"}</span>
                       </div>
                       <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
@@ -905,6 +922,13 @@ export function MispricedBoard() {
                           <div style={{ fontFamily: MONO, fontSize: 31, fontWeight: 600, color: C.text.bright, lineHeight: 0.9, letterSpacing: "-0.02em" }}>
                             {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}<span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontSize: 13, color: C.text.faint, marginLeft: 4 }}>%/yr</span>
                           </div>
+                          {/* The same rate at the horizon it is actually charged at. An extreme
+                              annualized print stops reading as a glitch once the ×1095 is on screen. */}
+                          {fmtFunding8h(m.funding8hPct) ? (
+                            <div style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint, marginTop: 6 }}>
+                              {fmtFunding8h(m.funding8hPct)} every 8h · charged {FUNDING_PERIODS_PER_YEAR}×/yr
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                       <EdgeQualityChip q={m.edgeQuality} />
@@ -964,7 +988,12 @@ export function MispricedBoard() {
                       <div style={{ position: "absolute", top: 0, bottom: 0, background: C.borderStrong, ...(m.direction === "LONG" ? { right: "50%" } : { left: "50%" }), width: `${Math.min(46, (m.edge / maxEdge) * 46)}%` }} />
                     </div>}
                     {isMobile && <span />}
-                    <span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontFamily: MONO, fontSize: 10.5, color: C.text.muted, textAlign: "right" }}>{m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%/yr</span>
+                    <span title="Annualized — what the funding rate adds up to over a year if today's rate held. 'yr' = per year." style={{ fontFamily: MONO, fontSize: 10.5, color: C.text.muted, textAlign: "right" }}>
+                      {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%/yr
+                      {/* Second line, not a wider cell — the rail's fixed-px columns are the
+                          documented mobile-clip culprit, so height is the only axis we spend. */}
+                      {fmtFunding8h(m.funding8hPct) ? <span style={{ display: "block", fontSize: 8.5, color: C.text.faint }}>{fmtFunding8h(m.funding8hPct)}/8h</span> : null}
+                    </span>
                     <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.08em", color: C.text.faint, textAlign: "right" }}>FAIR</span>
                   </div>
                 ))}
