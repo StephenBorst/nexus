@@ -63,7 +63,7 @@ export function AgentStrategyLibrary({
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                  <button onClick={() => togglePublish(s)} title={s.public ? "Public — click to make private" : "Share to the community board"} style={{ ...navBtnStyle, fontSize: 9, padding: "5px 10px", color: s.public ? "#ededf0" : "#a1a1aa", borderColor: s.public ? "#ededf050" : "#232327" }}>{s.public ? "🌐 PUBLIC" : "SHARE"}</button>
+                  <button onClick={() => togglePublish(s)} title={s.public ? "Public — click to make private" : "Share to the community board"} style={{ ...navBtnStyle, fontSize: 9, padding: "5px 10px", color: s.public ? "#ededf0" : "#a1a1aa", borderColor: s.public ? "#ededf050" : "#232327" }}>{s.public ? "PUBLIC" : "SHARE"}</button>
                   <button onClick={() => loadStrategy(s)} style={{ ...navBtnStyle, fontSize: 9, padding: "5px 12px" }}>LOAD</button>
                   <button onClick={() => deleteStrategy(s.id)} style={{ ...navBtnStyle, fontSize: 9, padding: "5px 10px", color: "#f7525f", borderColor: "#f7525f50" }}>✕</button>
                 </div>

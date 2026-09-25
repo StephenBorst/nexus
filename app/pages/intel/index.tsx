@@ -166,11 +166,11 @@ function computeRegime(
   const tw    = weights.reduce((a, b) => a + b, 0);
   const score = Math.round(scores.reduce((s, v, i) => s + v * weights[i], 0) / tw);
 
-  if (score >= 68) return { score, label: "BULLISH",          color: GREEN,  description: "Risk-on conditions — momentum favors longs. Stay cautious near extremes." };
-  if (score >= 54) return { score, label: "SLIGHTLY BULLISH", color: TEAL,   description: "Mild bullish lean — upside bias with limited conviction." };
-  if (score >= 46) return { score, label: "NEUTRAL",          color: MUTED,  description: "Mixed signals — no clear directional edge. Size down and wait for clarity." };
-  if (score >= 32) return { score, label: "SLIGHTLY BEARISH", color: TEAL,   description: "Mild bearish lean — defensive positioning warranted." };
-  return              { score, label: "BEARISH",           color: RED,    description: "Risk-off — longs crowded or sentiment deteriorating sharply." };
+  if (score >= 68) return { score, label: "BULLISH",          color: GREEN,  description: "Risk-on. Momentum favors longs; be careful near extremes." };
+  if (score >= 54) return { score, label: "SLIGHTLY BULLISH", color: TEAL,   description: "Slight bullish lean. Upside bias, limited conviction." };
+  if (score >= 46) return { score, label: "NEUTRAL",          color: MUTED,  description: "Mixed signals. No clear edge; size down and wait." };
+  if (score >= 32) return { score, label: "SLIGHTLY BEARISH", color: TEAL,   description: "Slight bearish lean. Defensive positioning." };
+  return              { score, label: "BEARISH",           color: RED,    description: "Risk-off. Longs crowded or sentiment falling fast." };
 }
 
 // ─── Formatters ───────────────────────────────────────────────
