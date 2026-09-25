@@ -102,7 +102,7 @@ function TradingScoreSection({ orders, winRate }: { orders: ProcessedTrade[]; wi
     };
   }, [orders, winRate]);
 
-  if (!metrics) return <EmptyState message="no trading score yet" unlock="Your score is computed from closed trades — connect your wallet and it fills in from your real history." />;
+  if (!metrics) return <EmptyState message="no trading score yet" unlock="Your score is computed from closed trades. Connect your wallet and it fills in from your real history." />;
 
   return (
     <div style={{ ...cardStyle, marginTop: 12 }}>
@@ -392,7 +392,7 @@ function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {
         {gated ? (
           <div style={{ fontSize: 11, color: "#52525b", fontFamily: "var(--nx-font-ui)", lineHeight: 1.7 }}>
             need <span style={{ color: "#ededf0" }}>{RISK_SAMPLE_GATE - stats.n}</span> more closed trades<br />
-            <span style={{ color: "#33333a" }}>ratios are meaningless under {RISK_SAMPLE_GATE} samples — we won&apos;t fake them</span>
+            <span style={{ color: "#33333a" }}>ratios are meaningless under {RISK_SAMPLE_GATE} samples. We won&apos;t fake them</span>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -417,7 +417,7 @@ function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {
           {stats.hours.map((b) => {
             const wr = b.trades ? Math.round((b.wins / b.trades) * 100) : 0;
             return (
-              <div key={b.h} title={`${fmtHr(b.h)} — ${b.trades} trades, ${wr}% WR`} style={{
+              <div key={b.h} title={`${fmtHr(b.h)}. ${b.trades} trades, ${wr}% WR`} style={{
                 height: 22, borderRadius: 2, background: hourWinColor(wr, b.trades),
                 border: "1px solid #141416", opacity: b.trades ? Math.max(0.4, b.trades / maxHourTrades) : 1,
               }} />
@@ -555,7 +555,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
   return (
     <div className="nx-fade-in nx-spotlight" style={{ ...cardStyle, marginBottom: 8 }}>
       <div style={labelStyle}>&#9670; YOUR EDGE</div>
-      <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", marginTop: -2, marginBottom: 10 }}>where you actually make money — from your own graded record</div>
+      <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", marginTop: -2, marginBottom: 10 }}>where you actually make money. From your own graded record</div>
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 8, marginBottom: 8 }}>
         {symTile("STRONGEST SYMBOL", best_symbol, "pos")}
         {symTile("WEAKEST SYMBOL", worst_symbol, "neg")}
@@ -575,7 +575,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 10 }}>
         <button
           type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: "Use get_my_edge — break down my edge, tell me exactly what to trade more of, what to cut, and how to fix my weak spots." } }))}
+          onClick={() => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: "Use get_my_edge. Break down my edge, tell me exactly what to trade more of, what to cut, and how to fix my weak spots." } }))}
           style={{ background: "transparent", border: "1px solid #232327", borderRadius: 6, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 11, letterSpacing: "0.04em", padding: "7px 11px", cursor: "pointer" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "#ededf0"; e.currentTarget.style.borderColor = "#33333a"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#232327"; }}
@@ -691,7 +691,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
         </Collapsible>
       )}
 
-      {orders.length === 0 && <EmptyState message="no closed trades found" unlock="Connect the wallet you trade with — the Lab reads your Orderly history directly, nothing to import." />}
+      {orders.length === 0 && <EmptyState message="no closed trades found" unlock="Connect the wallet you trade with. The Lab reads your Orderly history directly, nothing to import." />}
     </div>
   );
 }

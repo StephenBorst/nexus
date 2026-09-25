@@ -236,7 +236,7 @@ export default function MiniApp() {
         setMmr(Number(info.base_mmr) || 0);
         setLev((l) => Math.min(l, ml)); // clamp to this market's real max
       })
-      .catch(() => { /* leave — backend still guards */ });
+      .catch(() => { /* leave. Backend still guards */ });
     return () => { cancelled = true; };
   }, [sym]);
 
@@ -296,7 +296,7 @@ export default function MiniApp() {
     setSym(tk(t.symbol));
     setTradeOpen(true);
     setPrefillSide(t.direction);
-    setTradeMsg({ ok: true, text: `${tk(t.symbol)} ${t.direction} staged — set size, then tap ${t.direction}.` });
+    setTradeMsg({ ok: true, text: `${tk(t.symbol)} ${t.direction} staged. Set size, then tap ${t.direction}.` });
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
     setTimeout(() => setPrefillSide((s) => (s === t.direction ? null : s)), 6000);
   }
@@ -317,7 +317,7 @@ export default function MiniApp() {
     }
   }
   async function shareApp() {
-    try { await sdk.actions.composeCast({ text: "trading on Nexus 🟢 verifiable track records, autonomous agents & one-tap perps — the terminal that makes you better.", embeds: [`${APP}/mini`] }); } catch { /* ignore */ }
+    try { await sdk.actions.composeCast({ text: "Trading on Nexus.\n\nGraded records. Autonomous agents. Perps in-frame.", embeds: [`${APP}/mini`] }); } catch { /* ignore */ }
   }
   // Share the autonomous agent — honestly labeled PAPER (forward-test), on-brand.
   async function shareAgent() {
@@ -325,12 +325,12 @@ export default function MiniApp() {
     const net = paper.reduce((s, t) => s + (Number(t.pnl) || 0), 0);
     const strat = agentStatus?.config?.signalMode ?? "funding-fade";
     const text = paper.length > 0
-      ? `My Nexus agent is forward-testing a ${strat} strategy — ${net >= 0 ? "+" : ""}$${net.toFixed(2)} over ${paper.length} PAPER trade${paper.length === 1 ? "" : "s"} 🧪. Verifiable track record before a cent of real capital. verify, don't trust 🟢`
-      : `Deployed an autonomous ${strat} agent on Nexus — forward-testing in PAPER before real capital 🧪. Verifiable track records, not vibes 🟢`;
+      ? `My Nexus agent is forward-testing ${strat} in PAPER.\n\n${net >= 0 ? "+" : ""}$${net.toFixed(2)} over ${paper.length} trade${paper.length === 1 ? "" : "s"}. Graded before real capital.`
+      : `Deployed a ${strat} agent on Nexus.\n\nPaper first. Graded before real capital.`;
     try { await sdk.actions.composeCast({ text, embeds: [`${APP}/mini`] }); } catch { /* ignore */ }
   }
   async function shareThesis(t: Thesis) {
-    try { await sdk.actions.composeCast({ text: `${tk(t.symbol)} ${t.direction} — ${t.displayName || shortAddr(t.wallet)}'s call on Nexus. graded on-chain, not vibes 🟢`, embeds: [`${APP}/feed/thesis/${t.wallet}/${t.id}`] }); } catch { /* ignore */ }
+    try { await sdk.actions.composeCast({ text: `${tk(t.symbol)} ${t.direction}. ${t.displayName || shortAddr(t.wallet)}'s call on Nexus.\n\nGraded from public price.`, embeds: [`${APP}/feed/thesis/${t.wallet}/${t.id}`] }); } catch { /* ignore */ }
   }
   // Share an open position to a cast — the PnL flex viral loop. Each cast embeds /mini
   // so readers can one-tap into the same trade panel.
@@ -344,7 +344,7 @@ export default function MiniApp() {
     const win = Number.isFinite(pnl) && pnl >= 0;
     const move = `entry $${fmtPrice(entry)} → $${fmtPrice(mark)}`;
     const pnlTxt = Number.isFinite(pnl) ? `${win ? "+" : ""}$${pnl.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)` : "";
-    const text = `${win ? "🟢" : "🔴"} ${tk(p.symbol)} ${long ? "LONG" : "SHORT"} ${pnlTxt} on Nexus\n\n${move}\n\nperps in-frame — verify, don't trust 👇`;
+    const text = `${tk(p.symbol)} ${long ? "LONG" : "SHORT"} ${pnlTxt} on Nexus.\n\n${move}\n\nPerps in-frame.`;
     try { await sdk.actions.composeCast({ text, embeds: [`${APP}/mini`] }); } catch { /* ignore */ }
   }
 
@@ -393,7 +393,7 @@ export default function MiniApp() {
       const r = await fetch(`${API}/agent/${addr.toLowerCase()}`);
       const d = await r.json();
       setAgentStatus(d && (d.config || d.state) ? d : null);
-    } catch { /* fail-soft — card just shows the deploy CTA */ }
+    } catch { /* fail-soft. Card just shows the deploy CTA */ }
   }
 
   // Deploy the flagship preset risk-free (PAPER = simulated, no funds/key move).
@@ -409,7 +409,7 @@ export default function MiniApp() {
       });
       const d = await r.json();
       if (r.ok && d.ok) {
-        setAgentMsg({ ok: true, text: "✓ Deployed in PAPER — it now paper-trades the regime-gated invert edge. Track its graded record in the full terminal." });
+        setAgentMsg({ ok: true, text: "✓ Deployed in PAPER. It paper-trades the Regime-Gated Invert. The graded record is in the full terminal." });
         await loadAgent(s.addr);
       } else {
         setAgentMsg({ ok: false, text: d.hint || d.error || "deploy failed" });
@@ -481,7 +481,7 @@ export default function MiniApp() {
         body: JSON.stringify({ symbol: sym, side: side === "LONG" ? "BUY" : "SELL", notional, leverage: lev, walletSig: s.sig, walletAddress: s.addr }),
       });
       const d = await r.json();
-      if (r.ok && !d.error) { setTradeMsg({ ok: true, text: `✓ ${side} ${sym} placed — $${notional} @ ${lev}x` }); await refreshStatus(s); }
+      if (r.ok && !d.error) { setTradeMsg({ ok: true, text: `✓ ${side} ${sym} placed. $${notional} @ ${lev}x` }); await refreshStatus(s); }
       else if (d.error === "wallet_not_registered") setTradeMsg({ ok: false, text: "This wallet isn't enabled for trading yet.", cta: true });
       else setTradeMsg({ ok: false, text: d.message || d.error || "trade failed" });
     } catch (e) {
@@ -495,7 +495,7 @@ export default function MiniApp() {
   // sign → /derive-key → EIP-712 AddOrderlyKey → /proxy/register-key (writes user:{addr}).
   async function enableTrading() {
     if (enabling) return;
-    setEnabling(true); setTradeMsg({ ok: true, text: "enabling — approve the signature prompts…" });
+    setEnabling(true); setTradeMsg({ ok: true, text: "Enabling. Approve the signature prompts…" });
     try {
       const provider = await sdk.wallet.getEthereumProvider();
       if (!provider) throw new Error("no wallet");
@@ -551,8 +551,8 @@ export default function MiniApp() {
       };
       const signature = (await provider.request({ method: "eth_signTypedData_v4", params: [addr as `0x${string}`, JSON.stringify(typedData)] })) as string;
       const reg = await fetch(`${API}/proxy/register-key`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, signature, userAddress: addr.toLowerCase(), orderlyKey: dk.orderlyKey }) }).then((r) => r.json());
-      if (reg.success || reg.data || reg.accountId) { setTradeMsg({ ok: true, text: "✓ Trading enabled — place your trade now." }); refreshStatus({ addr, sig: walletSig }); }
-      else setTradeMsg({ ok: false, text: reg.message || reg.error || "couldn't enable — this wallet may need an Orderly account + USDC deposit first" });
+      if (reg.success || reg.data || reg.accountId) { setTradeMsg({ ok: true, text: "✓ Trading enabled. Place your trade now." }); refreshStatus({ addr, sig: walletSig }); }
+      else setTradeMsg({ ok: false, text: reg.message || reg.error || "Couldn't enable. This wallet may need an Orderly account and a USDC deposit first." });
     } catch (e) {
       setTradeMsg({ ok: false, text: (e as Error)?.message || "enable error" });
     } finally {
@@ -572,7 +572,7 @@ export default function MiniApp() {
       const accts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
       const addr = accts?.[0];
       if (!addr) throw new Error("connect a wallet");
-      try { await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0xa4b1" }] }); } catch { /* may already be on Arbitrum, or the switch was declined — verified below */ }
+      try { await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0xa4b1" }] }); } catch { /* may already be on Arbitrum, or the switch was declined. Verified below */ }
       // HARD guard: the deposit txs (approve + deposit) target Arbitrum contracts, so
       // never send them if the wallet isn't actually on Arbitrum. Without this, a declined
       // switch would fire USDC-approve/deposit calls on whatever chain is active (wrong
@@ -591,10 +591,10 @@ export default function MiniApp() {
 
       setDepositMsg({ ok: true, text: "confirm the deposit…" });
       await provider.request({ method: "eth_sendTransaction", params: [tx(prep.steps[1])] });
-      setDepositMsg({ ok: true, text: `✓ Depositing $${depositAmt} — lands in ~30s, then you can trade.` });
+      setDepositMsg({ ok: true, text: `✓ Depositing $${depositAmt}. Lands in ~30s, then you can trade.` });
     } catch (e) {
       const m = (e as Error)?.message || "deposit error";
-      setDepositMsg({ ok: false, text: /insufficient|exceeds balance/i.test(m) ? "Not enough USDC (+ a little ETH for gas) on Arbitrum in this wallet — fund it first." : m });
+      setDepositMsg({ ok: false, text: /insufficient|exceeds balance/i.test(m) ? "Not enough USDC (+ a little ETH for gas) on Arbitrum in this wallet. Fund it first." : m });
     } finally {
       setDepositing(false);
     }
@@ -617,7 +617,7 @@ export default function MiniApp() {
           body: JSON.stringify({ walletSig: s.sig, walletAddress: s.addr, amount: withdrawAmt, settle }),
         }).then((r) => r.json());
         if (prep.error === "wallet_not_registered") { setWithdrawMsg({ ok: false, text: "Enable trading first." }); return null; }
-        if (prep.error === "insufficient_free_collateral") { setWithdrawMsg({ ok: false, text: `Free collateral too low ($${Number(prep.freeCollateral ?? 0).toFixed(2)}) — close positions first.` }); return null; }
+        if (prep.error === "insufficient_free_collateral") { setWithdrawMsg({ ok: false, text: `Free collateral too low ($${Number(prep.freeCollateral ?? 0).toFixed(2)}). Close positions first.` }); return null; }
         if (!prep.typedData) throw new Error(prep.hint || prep.error || "couldn't prepare withdrawal");
         setWithdrawMsg({ ok: true, text: "approve the withdrawal in your wallet…" });
         const signature = (await provider.request({ method: "eth_signTypedData_v4", params: [s.addr as `0x${string}`, JSON.stringify(prep.typedData)] })) as string;
@@ -629,10 +629,10 @@ export default function MiniApp() {
       };
 
       let out = await submitOnce(false);
-      if (out && out.res?.needsSettle) { setWithdrawMsg({ ok: true, text: "settling PnL — re-sign when prompted…" }); out = await submitOnce(true); }
+      if (out && out.res?.needsSettle) { setWithdrawMsg({ ok: true, text: "Settling PnL. Re-sign when prompted…" }); out = await submitOnce(true); }
       if (!out) return;
       if (out.res?.ok) {
-        setWithdrawMsg({ ok: true, text: `✓ Withdrawing $${out.sentAmount.toFixed(2)} USDC to your wallet — lands in ~1–3 min.` });
+        setWithdrawMsg({ ok: true, text: `✓ Withdrawing $${out.sentAmount.toFixed(2)} USDC to your wallet. Lands in ~1–3 min.` });
         await refreshStatus(s);
       } else {
         setWithdrawMsg({ ok: false, text: out.res?.raw?.message || out.res?.hint || out.res?.error || "withdrawal failed" });
@@ -713,13 +713,13 @@ export default function MiniApp() {
           {/* Account status + open positions (read-back) */}
           <div style={{ borderTop: "1px solid #232327", paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 8, color: "#71717a", letterSpacing: "0.1em" }}>📊 ACCOUNT</span>
+              <span style={{ fontSize: 8, color: "#71717a", letterSpacing: "0.1em" }}>ACCOUNT</span>
               {acct && <span style={{ fontSize: 10, color: "#a1a1aa" }}>free <b style={{ color: "#fff" }}>${acct.free.toFixed(2)}</b> · value <b style={{ color: "#fff" }}>${acct.total.toFixed(2)}</b></span>}
               <button onClick={() => refreshStatus()} disabled={statusBusy} style={{ marginLeft: "auto", background: "#1a1a1e", color: green, border: "1px solid #33333a", borderRadius: 4, padding: "5px 11px", fontFamily: mono, fontSize: 10, fontWeight: "bold", cursor: statusBusy ? "wait" : "pointer", letterSpacing: "0.05em", opacity: statusBusy ? 0.6 : 1 }}>{statusBusy ? "…" : acct ? "↻ REFRESH" : "↻ LOAD"}</button>
             </div>
             <button onClick={toggleBroadcast} style={{ display: "flex", alignItems: "center", gap: 6, background: broadcast ? "#1a1a1e" : "#0a0a0b", border: `1px solid ${broadcast ? "#33333a" : "#232327"}`, borderRadius: 4, padding: "6px 9px", fontFamily: mono, fontSize: 9, cursor: "pointer", color: broadcast ? green : "#a1a1aa", textAlign: "left" }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: broadcast ? green : "#33333a", boxShadow: broadcast ? `0 0 6px ${green}` : "none", flexShrink: 0 }} />
-              📡 {broadcast ? "BROADCASTING to LIVE NOW — your open positions are public" : "Broadcast my positions to the public LIVE NOW feed"}
+              {broadcast ? "BROADCASTING to LIVE NOW. Your open positions are public." : "Broadcast my positions to LIVE NOW"}
             </button>
             {positions && positions.length === 0 && <div style={{ fontSize: 10, color: "#71717a" }}>no open positions.</div>}
             {positions && positions.map((p) => {
@@ -776,7 +776,7 @@ export default function MiniApp() {
               ))}
               {!MARKETS.includes(sym) && <button style={mktChip(true)}>{sym}</button>}
             </div>
-            <input value={mktSearch} onChange={(e) => setMktSearch(e.target.value.toUpperCase())} placeholder={markets ? `🔍 search ${markets.length} markets…` : "loading markets…"} style={{ width: "100%", boxSizing: "border-box", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 4, color: "#f4f4f5", fontFamily: mono, fontSize: 11, padding: "6px 9px" }} />
+            <input value={mktSearch} onChange={(e) => setMktSearch(e.target.value.toUpperCase())} placeholder={markets ? `search ${markets.length} markets…` : "loading markets…"} style={{ width: "100%", boxSizing: "border-box", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 4, color: "#f4f4f5", fontFamily: mono, fontSize: 11, padding: "6px 9px" }} />
             {mktSearch && markets && (() => {
               const hits = markets.filter((m) => m.includes(mktSearch));
               return (
@@ -823,7 +823,7 @@ export default function MiniApp() {
           </div>
           {tradeMsg && (
             <div style={{ fontSize: 10, color: tradeMsg.ok ? green : "#fbbf24", lineHeight: 1.5 }}>
-              {tradeMsg.text}{tradeMsg.cta ? " — use ◆ ENABLE TRADING above (1-time)." : ""}
+              {tradeMsg.text}{tradeMsg.cta ? ". Use ◆ ENABLE TRADING above (1-time)." : ""}
             </div>
           )}
 
@@ -837,7 +837,7 @@ export default function MiniApp() {
           {fundsOpen && (<>
           {/* Fund / deposit */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: 8, color: "#71717a", letterSpacing: "0.1em" }}>💰 FUND ACCOUNT (USDC · Arbitrum)</div>
+            <div style={{ fontSize: 8, color: "#71717a", letterSpacing: "0.1em" }}>FUND ACCOUNT · USDC on Arbitrum</div>
             <div style={{ display: "flex", gap: 8 }}>
               <input type="number" inputMode="decimal" min={1} value={depositAmt} onChange={(e) => setDepositAmt(Math.max(0, parseFloat(e.target.value) || 0))} style={{ flex: 1, minWidth: 0, background: "#0a0a0b", border: "1px solid #232327", borderRadius: 4, color: "#f4f4f5", fontFamily: mono, fontSize: 13, padding: "8px 9px" }} />
               <button onClick={deposit} disabled={depositing || depositAmt <= 0} style={{ flexShrink: 0, background: "#1a1a1e", color: "#d4d4d8", border: "1px solid #33333a", borderRadius: 4, padding: "8px 16px", fontFamily: mono, fontSize: 12, fontWeight: "bold", cursor: depositing ? "wait" : "pointer", letterSpacing: "0.05em", opacity: depositing ? 0.6 : 1 }}>{depositing ? "…" : "DEPOSIT"}</button>
@@ -848,7 +848,7 @@ export default function MiniApp() {
           {/* Withdraw */}
           <div style={{ borderTop: "1px solid #232327", paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 8, color: "#71717a", letterSpacing: "0.1em" }}>🏧 WITHDRAW (USDC · to your wallet)</span>
+              <span style={{ fontSize: 8, color: "#71717a", letterSpacing: "0.1em" }}>WITHDRAW · USDC to your wallet</span>
               {acct && <button onClick={() => setWithdrawAmt(Math.max(0, Math.floor(acct.free * 100) / 100))} style={{ marginLeft: "auto", background: "none", border: "1px solid #232327", borderRadius: 3, color: "#a1a1aa", fontFamily: mono, fontSize: 9, padding: "2px 7px", cursor: "pointer" }}>MAX ${acct.free.toFixed(2)}</button>}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
@@ -865,7 +865,7 @@ export default function MiniApp() {
 
       {/* Buy / Share */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        <button onClick={buyNexus} disabled={buying} style={{ background: "#1a1a1e", color: green, border: "1px solid #33333a", borderRadius: 5, padding: "10px 0", fontFamily: mono, fontSize: 11, fontWeight: "bold", cursor: buying ? "wait" : "pointer", letterSpacing: "0.04em", opacity: buying ? 0.6 : 1 }}>{buying ? "OPENING…" : "🪙 BUY $NEXUS"}</button>
+        <button onClick={buyNexus} disabled={buying} style={{ background: "#1a1a1e", color: green, border: "1px solid #33333a", borderRadius: 5, padding: "10px 0", fontFamily: mono, fontSize: 11, fontWeight: "bold", cursor: buying ? "wait" : "pointer", letterSpacing: "0.04em", opacity: buying ? 0.6 : 1 }}>{buying ? "OPENING…" : "BUY $NEXUS"}</button>
         <button onClick={shareApp} style={{ background: "#1a1a1e", color: green, border: "1px solid #33333a", borderRadius: 5, padding: "10px 0", fontFamily: mono, fontSize: 11, fontWeight: "bold", cursor: "pointer", letterSpacing: "0.04em" }}>↗ SHARE</button>
       </div>
 
@@ -878,7 +878,7 @@ export default function MiniApp() {
         return (
           <div style={{ ...card, display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 9, color: "#71717a", letterSpacing: "0.12em" }}>🤖 AUTONOMOUS AGENT</span>
+              <span style={{ fontSize: 9, color: "#71717a", letterSpacing: "0.12em" }}>AUTONOMOUS AGENT</span>
               {active && <span style={{ flexShrink: 0, fontSize: 8, color: mode === "AUTONOMOUS" ? "#fbbf24" : mode === "ASSISTED" ? green : "#d4d4d8", border: "1px solid #232327", borderRadius: 3, padding: "1px 6px", marginLeft: "auto" }}>{mode}</span>}
             </div>
             {active ? (
@@ -895,9 +895,9 @@ export default function MiniApp() {
             ) : (
               <>
                 <div style={{ fontSize: 11, color: "#a1a1aa", lineHeight: 1.5 }}>
-                  Try the <span style={{ color: "#e0a458" }}>Regime-Gated Invert</span> — our best config so far, and still not robust: it beats raw confluence but the cross-market walk-forward comes back net negative. It fades confluence only in high volatility, outside the Asia session. <span style={{ color: "#fff" }}>PAPER only</span> — watch it build a graded record. No funds, no key.
+                  Try the <span style={{ color: "#e0a458" }}>Regime-Gated Invert</span>. Our best config so far, and still not robust: it beats raw confluence but the cross-market walk-forward comes back net negative. It fades confluence only in high volatility, outside the Asia session. <span style={{ color: "#fff" }}>PAPER only</span>. Watch it build a graded record. No funds, no key.
                 </div>
-                <button onClick={deployPaperAgent} disabled={agentBusy} style={{ background: "#2a1a00", color: "#fbbf24", border: "1px solid #4a3a00", borderRadius: 5, padding: "10px 0", fontFamily: mono, fontSize: 11, fontWeight: "bold", cursor: agentBusy ? "wait" : "pointer", letterSpacing: "0.04em", opacity: agentBusy ? 0.6 : 1 }}>{agentBusy ? "DEPLOYING…" : "🧪 PAPER-TEST THE REGIME-GATED EDGE"}</button>
+                <button onClick={deployPaperAgent} disabled={agentBusy} style={{ background: "#2a1a00", color: "#fbbf24", border: "1px solid #4a3a00", borderRadius: 5, padding: "10px 0", fontFamily: mono, fontSize: 11, fontWeight: "bold", cursor: agentBusy ? "wait" : "pointer", letterSpacing: "0.04em", opacity: agentBusy ? 0.6 : 1 }}>{agentBusy ? "DEPLOYING…" : "PAPER-TEST REGIME-GATED INVERT"}</button>
               </>
             )}
             {agentMsg && <div style={{ fontSize: 10, color: agentMsg.ok ? green : "#fbbf24", lineHeight: 1.5 }}>{agentMsg.text}</div>}
@@ -907,18 +907,18 @@ export default function MiniApp() {
 
       {/* Live calls feed */}
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 2 }}>
-        <span style={{ fontSize: 9, color: "#71717a", letterSpacing: "0.12em" }}>📡 LIVE CALLS</span>
+        <span style={{ fontSize: 9, color: "#71717a", letterSpacing: "0.12em" }}>LIVE CALLS</span>
         {liveCount > 0 && <span style={{ fontSize: 9, color: profit }}>{liveCount} active</span>}
       </div>
       {feed === null && <div style={{ ...card, color: "#71717a", fontSize: 11 }}>loading feed…</div>}
-      {feed && feed.length === 0 && <div style={{ ...card, color: "#71717a", fontSize: 11 }}>no calls yet — be the first 🟢</div>}
+      {feed && feed.length === 0 && <div style={{ ...card, color: "#71717a", fontSize: 11 }}>No calls yet.</div>}
       {feed && feed.map((t) => {
         const sc = STATUS_COLOR[t.status] ?? "#a1a1aa";
         return (
           <div key={t.id} style={{ ...card, display: "flex", flexDirection: "column", gap: 7, padding: "10px 12px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 10, color: "#a1a1aa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{t.agent ? "Nexus Agent" : (t.displayName || shortAddr(t.wallet))}</span>
-              {t.agent && <span style={{ flexShrink: 0, fontSize: 8, color: "#d4d4d8", border: "1px solid #33333a", borderRadius: 3, padding: "0 4px" }}>🤖</span>}
+              {t.agent && <span style={{ flexShrink: 0, fontSize: 8, color: "#d4d4d8", border: "1px solid #33333a", borderRadius: 3, padding: "0 4px" }}>AGENT</span>}
               <span style={{ flexShrink: 0, fontSize: 8, color: sc, border: `1px solid ${sc}33`, borderRadius: 3, padding: "1px 6px", marginLeft: "auto" }}>{t.status}</span>
               <button onClick={() => shareThesis(t)} title="Share to cast" style={{ flexShrink: 0, background: "none", border: "1px solid #232327", borderRadius: 3, color: "#a1a1aa", fontFamily: mono, fontSize: 10, padding: "2px 7px", cursor: "pointer" }}>↗</button>
             </div>

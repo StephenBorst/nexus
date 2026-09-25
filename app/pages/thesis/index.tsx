@@ -38,7 +38,7 @@ type FeedThesis = {
   actualPnl: number | null;
   createdAt: number;
   notes: string;
-  chartUrls?: string[];  // optional charts — render via chartImageList()
+  chartUrls?: string[];  // optional charts. Render via chartImageList()
   chartUrl?: string;     // legacy single-chart field, still honoured
   wallet: string;
   pfp: string | null;
@@ -266,11 +266,11 @@ export default function ThesisPage() {
   const shareText =
     (thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS")
       // Resolved → lead with the TRUSTLESS RESULT, not the planned R:R.
-      ? `📡 ${ticker} ${thesis.direction} — ✓ NEXUS GRADED ${thesis.gradedOutcome}${typeof thesis.gradedR === "number" ? ` ${thesis.gradedR >= 0 ? "+" : ""}${thesis.gradedR.toFixed(2)}R` : ""}\n\n` +
-        `First-touch vs public price — the tape marked this, not me.\n\nEvery call graded on-chain on Nexus Trading Labs 👇`
-      : `📡 ${ticker} ${thesis.direction} ${thesis.leverage.toFixed(1)}x\n\n` +
-        `Entry $${thesis.entryPrice.toFixed(2)} · Stop $${thesis.stopLoss.toFixed(2)} · TP $${thesis.takeProfit1.toFixed(2)} (R:R 1:${thesis.riskReward.toFixed(2)})\n\n` +
-        `Graded on-chain vs public price on Nexus Trading Labs 👇`;
+      ? `${ticker} ${thesis.direction}. Graded ${thesis.gradedOutcome}${typeof thesis.gradedR === "number" ? ` ${thesis.gradedR >= 0 ? "+" : ""}${thesis.gradedR.toFixed(2)}R` : ""}.\n\n` +
+        `First touch vs public price. The tape marked it, not me.\n\nGraded on Nexus Trading Labs.`
+      : `${ticker} ${thesis.direction} ${thesis.leverage.toFixed(1)}x.\n\n` +
+        `Entry $${thesis.entryPrice.toFixed(2)}. Stop $${thesis.stopLoss.toFixed(2)}. TP $${thesis.takeProfit1.toFixed(2)}. R:R 1:${thesis.riskReward.toFixed(2)}.\n\n` +
+        `Graded against public price on Nexus Trading Labs.`;
   const shareX = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
   const shareFc = `https://warpcast.com/~/compose?text=${encodeURIComponent(shareText + "\n\n" + shareUrl)}&embeds[]=${encodeURIComponent(shareUrl)}`;
 
@@ -290,7 +290,7 @@ export default function ThesisPage() {
           myWallet={myWallet}
           context={{ symbol: thesis.symbol, direction: thesis.direction }}
           label="⬡ DISCUSS"
-          title="Discuss this call with the trader — encrypted DM"
+          title="Discuss this call with the trader. Encrypted DM"
           style={{ border: "1px solid #232327", borderRadius: 4, background: "none", color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 12px", letterSpacing: "0.05em", cursor: "pointer", minWidth: 82, textAlign: "center" }}
         />
         {/* Outbound share — X / Farcaster / copy link */}
@@ -325,7 +325,7 @@ export default function ThesisPage() {
           <div style={{ marginBottom: 12, border: "1px solid #232327", borderLeft: "2px solid #ededf0", borderRadius: 6, background: "#0f0f11", padding: "14px 16px" }}>
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: "#71717a", marginBottom: 6 }}>NEXUS TRADING LABS</div>
             <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 13.5, color: "#a1a1aa", lineHeight: 1.6, marginBottom: 12 }}>
-              This call is graded <b style={{ color: "#f4f4f5" }}>on-chain vs public price</b> — the tape decides the outcome, not the trader. Explore live calls from verified callers, or x-ray any wallet's real record. <span style={{ color: "#71717a" }}>No login to look.</span>
+              This call is graded <b style={{ color: "#f4f4f5" }}>on-chain vs public price</b>. The tape decides the outcome, not the trader. Explore live calls from verified callers, or x-ray any wallet's real record. <span style={{ color: "#71717a" }}>No login to look.</span>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button onClick={() => navigate("/feed")} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, letterSpacing: "0.04em", color: "#0a0a0b", background: "#ededf0", border: "1px solid #ededf0", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontWeight: 700 }}>Explore the live feed →</button>
@@ -382,7 +382,7 @@ export default function ThesisPage() {
                   ✓ NEXUS GRADED · {win ? "WIN" : "LOSS"}{rTxt}
                 </span>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>
-                  first-touch {win ? "TP1" : "stop"} vs public price — the tape marked this, not the trader
+                  first-touch {win ? "TP1" : "stop"} vs public price. The tape marked this, not the trader
                 </span>
               </div>
             );
@@ -514,7 +514,7 @@ export default function ThesisPage() {
                     </div>
                     {!verifyResult.verified && (
                       <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>
-                        price data does not confirm recorded outcome — outcome may have been manually set
+                        price data does not confirm recorded outcome. Outcome may have been manually set
                       </div>
                     )}
                   </div>

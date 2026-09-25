@@ -68,9 +68,9 @@ function LockScreen() {
   const minOperator = TIER_THRESHOLDS[TIER_THRESHOLDS.length - 1].min;
   return (
     <div style={{ textAlign: "center", padding: "48px 20px", maxWidth: 480, margin: "0 auto" }}>
-      <div style={{ fontSize: 28, marginBottom: 12 }}>🔒</div>
+      <div style={{ fontSize: 28, marginBottom: 12 }}>◆</div>
       <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, color: "#ededf0", letterSpacing: "0.1em", marginBottom: 10 }}>
-        HOLDERS ROOM — LOCKED
+        HOLDERS ROOM · LOCKED
       </div>
       <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#a1a1aa", lineHeight: 1.7, marginBottom: 18 }}>
         A private room for $NEXUS holders. Theses from holders, for holders.
@@ -79,7 +79,7 @@ function LockScreen() {
         {" "}<span style={{ color: TIER_META.OPERATOR.color }}>{TIER_META.OPERATOR.glyph} OPERATOR</span> tier and enter.
       </div>
       <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#33333a", lineHeight: 1.6 }}>
-        $NEXUS is a pure community meme token — zero built-in utility or revenue share.
+        $NEXUS is a community token. It pays for Nexus data and PRO. No yield. No revenue share.
         <br />
         Tiers unlock access &amp; status inside the Lab, nothing more.
       </div>

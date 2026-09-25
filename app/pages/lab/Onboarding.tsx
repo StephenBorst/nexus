@@ -20,11 +20,11 @@ export function LabWelcome() {
       <div style={{ textAlign: "center", marginBottom: 32 }}>
         <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#ededf0", letterSpacing: "0.3em", marginBottom: 12, textShadow: "0 0 12px rgba(237,237,240,0.5)" }}>THE LAB</div>
         <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 34, color: "#fff", fontWeight: 700, marginBottom: 14, lineHeight: 1.2, letterSpacing: "-0.01em" }}>
-          The trading terminal that<br />makes you a <span style={{ fontStyle: "italic" }}>better trader.</span>
+          Plan it. Run it. <span style={{ fontStyle: "italic" }}>Prove it.</span>
         </div>
         <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13.5, color: "#a1a1aa", maxWidth: 580, margin: "0 auto", lineHeight: 1.6 }}>
-          Plan it, automate it, grade it. Most apps just let you trade — The Lab turns every
-          position into a repeatable process. Connect your wallet to load your data and unlock every tool.
+          Plan the trade. Run it yourself or hand it to an agent. Every call graded from public price.
+          Connect a wallet to load your data.
         </div>
       </div>
       {/* .nx-feature-grid carries grid-auto-rows:1fr so the 2-card second row can't
@@ -102,7 +102,7 @@ export function OnboardingChecklist({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#ededf0", letterSpacing: "0.12em" }}>
-            {allDone ? "🎉 YOU'RE SET UP" : "GET STARTED"}
+            {allDone ? "SET UP" : "GET STARTED"}
           </span>
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b" }}>{doneCount}/{steps.length}</span>
         </div>

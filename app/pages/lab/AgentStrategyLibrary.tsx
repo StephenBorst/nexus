@@ -47,7 +47,7 @@ export function AgentStrategyLibrary({
             style={{ ...agentInputStyle, flex: 1, minWidth: 160 }}
           />
           <button onClick={saveStrategy} disabled={saving || !stratName.trim()} style={{ ...btnPrimary, fontSize: 10, padding: "6px 16px", opacity: (saving || !stratName.trim()) ? 0.5 : 1 }}>
-            💾 SAVE
+            SAVE
           </button>
         </div>
         {strategies.length > 0 && (
@@ -105,7 +105,7 @@ export function AgentStrategyLibrary({
                       if (v.status === "pending_basis") return <span title="Awaiting enough recorded basis history to walk-forward the basis stack" style={{ fontSize: 8, color: "#d4d4d8", border: "1px solid #33333a", borderRadius: 3, padding: "1px 5px" }}>⏳ BASIS PENDING</span>;
                       if (v.status !== "done") return null;
                       const vc = v.verdict === "ROBUST" ? "#3ecf8e" : v.verdict === "FRAGILE" ? "#fbbf24" : "#f7525f";
-                      const lbl = v.verdict === "ROBUST" ? "✅ ROBUST" : v.verdict === "FRAGILE" ? "🟨 FRAGILE" : "❌ NOT ROBUST";
+                      const lbl = v.verdict === "ROBUST" ? "✓ ROBUST" : v.verdict === "FRAGILE" ? "◐ FRAGILE" : "✕ NOT ROBUST";
                       return <span title={`Walk-forward: net-positive on ${v.posSymbols}/${v.totalSymbols} markets, ${v.foldConsistency}% of folds`} style={{ fontSize: 8, color: vc, border: `1px solid ${vc}55`, borderRadius: 3, padding: "1px 5px" }}>{lbl}</span>;
                     })()}
                   </div>

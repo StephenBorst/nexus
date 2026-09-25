@@ -1819,7 +1819,7 @@ export default function TokenTerminal() {
                           {mine && <button onClick={() => removeTake(tk.id)} title="Delete" style={{ background: "none", border: "none", color: FAINT, cursor: "pointer", fontFamily: MONO, fontSize: 11, padding: 0 }}>✕</button>}
                         </div>
                         <div style={{ fontFamily: UI, fontSize: 13, color: BRIGHT, lineHeight: 1.55, wordBreak: "break-word" }}>{tk.text}</div>
-                        {tk.target ? <div style={{ fontFamily: MONO, fontSize: 10, color: MUT, marginTop: 6 }}>🎯 target {fmtPrice(tk.target)}</div> : null}
+                        {tk.target ? <div style={{ fontFamily: MONO, fontSize: 10, color: MUT, marginTop: 6 }}>target {fmtPrice(tk.target)}</div> : null}
                         <SocialBar autoload thesisId={tk.id} walletAddress={wallet} authorWallet={tk.wallet} symbol={pair.baseSymbol} direction={bull ? "LONG" : "SHORT"} />
                       </div>
                     );

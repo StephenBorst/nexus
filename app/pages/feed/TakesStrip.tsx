@@ -82,7 +82,7 @@ export default function TakesStrip() {
               <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6, overflow: "hidden" }}>
                 <span style={{ fontSize: 8, color: "#52525b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.displayName || shortAddr(t.wallet)}</span>
                 {m && <span title={`${m.title} caller · ${m.hitRate}% hit`} style={{ flexShrink: 0, fontSize: 7.5, fontWeight: "bold", letterSpacing: "0.03em", color: green, border: `1px solid ${green}44`, borderRadius: 4, padding: "1px 4px" }}>{m.glyph} {m.hitRate}%</span>}
-                {t.target ? <span style={{ flexShrink: 0, fontSize: 8, color: "#52525b" }}>🎯 {t.target}</span> : null}
+                {t.target ? <span style={{ flexShrink: 0, fontSize: 8, color: "#52525b" }}>target {t.target}</span> : null}
               </div>
             </div>
           );

@@ -64,7 +64,7 @@ interface Row {
   trendOi: number | null;
   consensus: { side: "LONG" | "SHORT" | "SPLIT"; participants: number } | null;
   play: { klass: "FADE" | "WATCH" | null; dir: Dir | null; label: string; strong: boolean };
-  fundingAnnual: number;                 // funding ×1095 — the ticket's %/yr language
+  fundingAnnual: number;                 // funding ×1095. The ticket's %/yr language
   // The independent-lens strip: four PUBLIC reads that either confirm or contradict the
   // mechanical play — graded callers, smart money, catalysts, forecasters. agree = how many
   // point the SAME way as the play (the "agreement = signal" fusion, kept explainable).
@@ -192,7 +192,7 @@ type SortMode = "actionable" | "confluence" | "funding" | "movers" | "mine";
 
 export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }: {
   onSelectTab?: (tab: TabId) => void;
-  trades?: Trade[];          // the user's closed trades — powers the personal edge lens
+  trades?: Trade[];          // the user's closed trades. Powers the personal edge lens
   wallet?: string | null;
   theses?: { symbol?: string; direction?: string; gradedOutcome?: string; status?: string }[]; // your active calls (PLAN leg)
   positions?: { symbol?: string; direction?: "LONG" | "SHORT" }[];                              // your open positions (EXECUTE leg)
@@ -201,7 +201,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
   const [signals, setSignals] = useState<MarketSignal[] | null>(null);
   const [signalsFailed, setSignalsFailed] = useState(false); // last /signals attempt errored/timed out (≠ an empty tick)
   const [tape, setTape] = useState<Record<string, { price: number; change: number }>>({});
-  const [tapeRead, setTapeRead] = useState<{ score: number; label: string } | null>(null); // RISK-OFF/ON breadth — context for the fade tag
+  const [tapeRead, setTapeRead] = useState<{ score: number; label: string } | null>(null); // RISK-OFF/ON breadth. Context for the fade tag
   const [consensus, setConsensus] = useState<Consensus | null>(null);
   const [smart, setSmart] = useState<Record<string, Dir>>({});       // smart-money lean per coin
   const [catalyst, setCatalyst] = useState<Record<string, Dir>>({}); // catalyst lean per coin
@@ -264,7 +264,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       // /signals gates the table — timeout-capped. Success (even an empty array) is the
       // only thing that sets rows; a failure keeps last-good and retries quickly instead of
       // pretending the tick was empty.
-      if (inflight) return; // a slow fetch is still running — don't stack a second one
+      if (inflight) return; // a slow fetch is still running. Don't stack a second one
       inflight = true;
       clearTimeout(retry);
       fetchJsonTimeout(`${AGENT_API}/signals`, SIGNALS_TIMEOUT_MS)
@@ -400,7 +400,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
           entryPrice: String(lv.entryPrice), stopLoss: String(lv.stopLoss), takeProfit1: String(lv.takeProfit1),
           targetWindow: `${lv.holdDays}d`,
           catalyst: why,
-          notes: `${r.play.label} — the crowd is stretched ${crowd}. Frozen: entry at mark, stop ${R_CONTRACT.atrMult}× H4 ATR(14), TP +${lv.riskReward}R, ${lv.holdDays}-day time-stop. Graded first-touch vs the tape.${confNote}`,
+          notes: `${r.play.label}. The crowd is stretched ${crowd}. Frozen: entry at mark, stop ${R_CONTRACT.atrMult}× H4 ATR(14), TP +${lv.riskReward}R, ${lv.holdDays}-day time-stop. Graded first-touch vs the tape.${confNote}`,
         }
       : {
           symbol: r.sym, direction: dir,
@@ -408,7 +408,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
           // the engine's BUILD sets the frozen stop from live volatility, the trader sets target.
           entryPrice: r.price != null ? String(r.price) : "",
           catalyst: why,
-          notes: `${r.play.label} — the crowd is stretched ${crowd}. BUILD sets a 1.2× H4 ATR stop from live volatility; set your target, then it grades first-touch vs the tape.${confNote}`,
+          notes: `${r.play.label}. The crowd is stretched ${crowd}. BUILD sets a 1.2× H4 ATR stop from live volatility; set your target, then it grades first-touch vs the tape.${confNote}`,
         };
     try { window.localStorage.setItem("nexus_thesis_draft", JSON.stringify(draft)); } catch { /* private mode */ }
     try {
@@ -448,7 +448,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
         const v = shareRow.play.klass === "FADE" && shareRow.play.dir ? `FADE ${shareRow.play.dir}`
           : shareRow.play.klass === "WATCH" ? "WATCH" : "NO READ";
         const fund = `${shareRow.fundingAnnual >= 0 ? "+" : ""}${shareRow.fundingAnnual.toFixed(1)}%/yr`;
-        const text = `${shareRow.sym} · ${v} · funding ${fund} — the crowd's positioning, graded from public price on Nexus.`;
+        const text = `${shareRow.sym} · ${v} · funding ${fund}. The crowd's positioning, graded from public price on Nexus.`;
         const url = `https://og.nexustradinglabs.com/share/read/${encodeURIComponent(shareRow.sym)}`;
         window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank", "noopener");
       }}
@@ -482,19 +482,19 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
 
       {/* Honesty framing — the whole point of the moat. On a phone it is ONE sentence (Grok):
           the full doctrine is five sentences plus two conditionals, and on a 390px screen it
-          pushed the actual board below the fold. It is compressed, not dropped — cut it entirely
+          pushed the actual board below the fold. It is compressed, not dropped. Cut it entirely
           and the board reads like a signal service, which is exactly what it is not. Desktop,
           where there is room for the argument, keeps it in full. */}
       {isMobile ? (
         <div style={{ fontFamily: UI, fontSize: 11, lineHeight: 1.5, color: C.text.muted, marginTop: -8, marginBottom: 12 }}>
-          <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range — public facts, graded from the tape after, never advice.
+          <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range. Public facts, graded from the tape after, never advice.
         </div>
       ) : (
       <div style={{ fontFamily: UI, fontSize: 11, lineHeight: 1.5, color: C.text.muted, marginTop: -8, marginBottom: 14 }}>
-        Funding and positioning are <b style={{ color: C.text.bright }}>public facts</b>. <b style={{ color: C.text.bright }}>The play</b> is one verdict word — <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range, <b style={{ color: C.text.muted }}>WATCH</b> when it's merely elevated — the SAME read as the ticket. It grades <b style={{ color: C.text.bright }}>from the tape</b> after, like every call. No score to trust; a record to verify.
-        {" "}<b style={{ color: C.text.bright }}>Confluence</b> shows four INDEPENDENT reads — <span style={{ color: C.text.muted }}>callers · smart money · catalysts · forecasters</span> — and how many <b style={{ color: C.text.bright }}>agree with the play</b> (<span style={{ color: C.accent }}>◆</span> marks where separate signals converge). Agreement is a reason to look, still graded after.
+        Funding and positioning are <b style={{ color: C.text.bright }}>public facts</b>. <b style={{ color: C.text.bright }}>The play</b> is one verdict word — <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range, <b style={{ color: C.text.muted }}>WATCH</b> when it's merely elevated. The SAME read as the ticket. It grades <b style={{ color: C.text.bright }}>from the tape</b> after, like every call. No score to trust; a record to verify.
+        {" "}<b style={{ color: C.text.bright }}>Confluence</b> shows four INDEPENDENT reads — <span style={{ color: C.text.muted }}>callers · smart money · catalysts · forecasters</span>. And how many <b style={{ color: C.text.bright }}>agree with the play</b> (<span style={{ color: C.accent }}>◆</span> marks where separate signals converge). Agreement is a reason to look, still graded after.
         {hasLens && <> Each play is also matched against <b style={{ color: C.pos }}>your own graded edge</b> — <span style={{ color: C.pos }}>◆ your side/class</span> vs <span style={{ color: C.warn }}>△ off your edge</span>.</>}
-        {hasLoop && <> Your loop state rides on the ticker: <b style={{ color: C.text.bright }}>● a live call</b> (planned) · <b style={{ color: C.text.bright }}>▸ an open position</b> (executing) — the graded record closes it.</>}
+        {hasLoop && <> Your loop state rides on the ticker: <b style={{ color: C.text.bright }}>● a live call</b> (planned) · <b style={{ color: C.text.bright }}>▸ an open position</b> (executing). The graded record closes it.</>}
       </div>
       )}
 
@@ -529,11 +529,11 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       )}
 
       {!signals ? (
-        <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>{signalsFailed ? "the read didn't come back — retrying…" : "loading the board…"}</div>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>{signalsFailed ? "the read didn't come back. Retrying…" : "loading the board…"}</div>
       ) : rows.length === 0 ? (
         // Real empty state (never vanish): /signals RESPONDED with no rows — a live-but-quiet
         // tick, not a slow load (that stays "loading…" above). Refreshes on the 30s interval.
-        <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>no rows this tick — the read refreshes every 30s.</div>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>no rows this tick. The read refreshes every 30s.</div>
       ) : isMobile ? (
         // Mobile — the 720px table hid THE PLAY behind a side-swipe. Instead, one 2-line card per
         // row so the DECISION is the first paint: line 1 = market · funding/yr · the play · → ;
@@ -575,7 +575,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                   </div>
                   {r.play.strong && r.play.dir && (
                     <button onClick={() => draftPlay(r)} disabled={!!draftingSym}
-                      title="Draft this fade as a graded thesis — mark · 1.2× H4 ATR stop · 1.5R · 7d"
+                      title="Draft this fade as a graded thesis. Mark · 1.2× H4 ATR stop · 1.5R · 7d"
                       style={{ flexShrink: 0, background: "#1a1a1e", border: `1px solid ${C.border}`, color: C.accent, fontFamily: MONO, fontSize: 13, width: 34, height: 30, borderRadius: RADIUS.sm, cursor: draftingSym ? "default" : "pointer", lineHeight: 1, opacity: draftingSym && !busy ? 0.4 : 1 }}>
                       {busy ? "…" : "→"}
                     </button>
@@ -626,8 +626,8 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                   {/* Market + YOUR loop state: ● live call (plan) · ◆ in position (execute) */}
                   <div style={{ ...cell, fontSize: 13, fontWeight: 700, color: C.text.bright, gap: 5 }}>
                     <span>{r.sym}</span>
-                    {liveCallBy[r.sym] && <span title={`Your live call here: ${liveCallBy[r.sym].toLowerCase()} — a plan already staked`} style={{ fontSize: 8, color: dirColor(liveCallBy[r.sym]), lineHeight: 1 }}>●</span>}
-                    {inPosBy[r.sym] && <span title={`You're in a ${inPosBy[r.sym].toLowerCase()} position here — executing`} style={{ fontSize: 9, color: dirColor(inPosBy[r.sym]), lineHeight: 1 }}>▸</span>}
+                    {liveCallBy[r.sym] && <span title={`Your live call here: ${liveCallBy[r.sym].toLowerCase()}. A plan already staked`} style={{ fontSize: 8, color: dirColor(liveCallBy[r.sym]), lineHeight: 1 }}>●</span>}
+                    {inPosBy[r.sym] && <span title={`You're in a ${inPosBy[r.sym].toLowerCase()} position here. Executing`} style={{ fontSize: 9, color: dirColor(inPosBy[r.sym]), lineHeight: 1 }}>▸</span>}
                   </div>
                   {/* Last / 24h */}
                   <div style={{ ...cell, flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
@@ -647,7 +647,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                     : <span style={{ color: C.text.faint }}>chop</span>}
                   </div>
                   {/* CONFLUENCE — how many of the four INDEPENDENT reads (callers · smart ·
-                      catalyst · forecast) confirm THE PLAY, as a legible "2/4" — not glyph soup
+                      catalyst · forecast) confirm THE PLAY, as a legible "2/4". Not glyph soup
                       (Grok). A lens FIGHTING the play is named "✗ callers" so an ETH-style
                       conflict is visible without decoding abbreviations. No E[R] in this cell. */}
                   <div style={{ ...cell, gap: 6, flexWrap: "wrap" }}>
@@ -660,7 +660,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                       ] as { k: string; v: Dir | null }[];
                       if (!r.play.dir) {
                         const n = lensList.filter((l) => l.v).length;
-                        return <span style={{ fontFamily: MONO, fontSize: 10, color: C.text.faint }} title="No play — lenses with any read">{n ? `${n}/4 reads` : "—"}</span>;
+                        return <span style={{ fontFamily: MONO, fontSize: 10, color: C.text.faint }} title="No play. Lenses with any read">{n ? `${n}/4 reads` : "—"}</span>;
                       }
                       const against = lensList.filter((l) => l.v && l.v !== r.play.dir);
                       const col = r.agree >= 3 ? C.accent : r.agree >= 2 ? C.text.bright : C.text.muted;
@@ -668,7 +668,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                         <>
                           <span title="Independent reads confirming THE PLAY: graded callers · smart money · catalysts · forecasters" style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 700, color: col }}>{r.agree}/4</span>
                           {against.map((l) => (
-                            <span key={l.k} title={`${l.k} is ${l.v?.toLowerCase()} — against the play`} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 600, color: C.warn, whiteSpace: "nowrap" }}>✗ {l.k}</span>
+                            <span key={l.k} title={`${l.k} is ${l.v?.toLowerCase()}. Against the play`} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 600, color: C.warn, whiteSpace: "nowrap" }}>✗ {l.k}</span>
                           ))}
                         </>
                       );
@@ -682,10 +682,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                       ? <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
                           <span style={{ color: C.text.bright, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.03em" }}>{r.play.label}</span>
                           {tapeFadeTag && (
-                            <span title={`Broad tape is ${tapeFadeTag} — this stretched fade is the mean-reversion book that tape favors (context, not a vote)`} style={{ fontSize: 8, color: C.accent, border: `1px solid ${C.accent}55`, borderRadius: 3, padding: "0 4px", lineHeight: 1.6, letterSpacing: "0.04em" }}>{tapeFadeTag} · FADE</span>
+                            <span title={`Broad tape is ${tapeFadeTag}. This stretched fade is the mean-reversion book that tape favors (context, not a vote)`} style={{ fontSize: 8, color: C.accent, border: `1px solid ${C.accent}55`, borderRadius: 3, padding: "0 4px", lineHeight: 1.6, letterSpacing: "0.04em" }}>{tapeFadeTag} · FADE</span>
                           )}
                           {r.lens.smart && r.play.dir && r.lens.smart !== r.play.dir && (
-                            <span title="Smart money is positioned WITH the crowd, against the fade — not a clean fade" style={{ fontSize: 9, color: C.warn, fontWeight: 600 }}>· SMART {r.lens.smart}</span>
+                            <span title="Smart money is positioned WITH the crowd, against the fade. Not a clean fade" style={{ fontSize: 9, color: C.warn, fontWeight: 600 }}>· SMART {r.lens.smart}</span>
                           )}
                         </span>
                       : r.play.klass === "WATCH"
@@ -708,7 +708,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                       const busy = draftingSym === r.sym;
                       return (
                         <button onClick={() => draftPlay(r)} disabled={!!draftingSym}
-                          title="Draft this fade as a graded thesis — mark · 1.2× H4 ATR stop · 1.5R · 7d" style={{
+                          title="Draft this fade as a graded thesis. Mark · 1.2× H4 ATR stop · 1.5R · 7d" style={{
                           background: "#1a1a1e", border: `1px solid ${C.border}`, color: C.accent, fontFamily: MONO, fontSize: 11,
                           width: 26, height: 24, borderRadius: RADIUS.sm, cursor: draftingSym ? "default" : "pointer", lineHeight: 1,
                           opacity: draftingSym && !busy ? 0.4 : 1,

@@ -173,7 +173,7 @@ function ThesisRow({
               background: "#1a1a1e", border: "1px solid #232327",
               borderRadius: 3, padding: "1px 5px",
             }}>
-              📋 {thesis.copyCount}
+              {thesis.copyCount}
             </span>
           )}
         </div>
@@ -366,7 +366,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
         leverage: calc.leverage, riskReward: calc.riskReward,
         fundingCost8h: calc.fundingPerPeriod, fundingCost24h: calc.fundingPerPeriod * 3,
         fundingCost72h: calc.fundingPerPeriod * 9,
-        notes: `📋 Copied from ${traderName}${thesis.notes ? `\n\n${thesis.notes}` : ""}`,
+        notes: `Copied from ${traderName}${thesis.notes ? `\n\n${thesis.notes}` : ""}`,
         createdAt: Date.now(), status: "ACTIVE", actualPnl: null, isPublic: false,
         copiedFromWallet: thesis.wallet,
       };
@@ -383,7 +383,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
       });
       setSaved(true);
       setTimeout(onClose, 1200);
-    } catch { setErr("failed to save — check connection"); }
+    } catch { setErr("failed to save. Check connection"); }
     finally { setSaving(false); }
   }
 
@@ -398,7 +398,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 15, fontWeight: "bold", color: "#fff" }}>
               {ticker} <span style={{ fontSize: 11, color: thesis.direction === "LONG" ? "#3ecf8e" : "#f7525f" }}>{thesis.direction}</span>
             </div>
-            <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 2 }}>📋 copying from {traderName}</div>
+            <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 2 }}>copying from {traderName}</div>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: 16 }}>✕</button>
         </div>
@@ -628,7 +628,7 @@ export default function TraderPage() {
     setMeta("og:title", title);
     setMeta("og:description", description);
     // The PREMIUM identity card (merit rank + graded record), not the legacy /og/trader.
-    setMeta("og:image", `${OG_BASE}/og/identity/${wallet}`);          // SVG — Discord, Telegram, iMessage
+    setMeta("og:image", `${OG_BASE}/og/identity/${wallet}`);          // SVG. Discord, Telegram, iMessage
     setMeta("twitter:card", "summary_large_image");
     setMeta("twitter:title", title);
     setMeta("twitter:description", description);
@@ -681,7 +681,7 @@ export default function TraderPage() {
           <button
             onClick={toggleFollow}
             disabled={followBusy}
-            title={isFollowing ? "Unfollow — stop starred alerts when they open a position" : "Follow — their next open pings you in Live Alerts"}
+            title={isFollowing ? "Unfollow. Stop starred alerts when they open a position" : "Follow. Their next open pings you in Live Alerts"}
             style={{
               background: isFollowing ? "#f5c45114" : "none", border: `1px solid ${isFollowing ? "#f5c451" : "#232327"}`, borderRadius: 4,
               color: isFollowing ? "#f5c451" : "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10,
@@ -718,7 +718,7 @@ export default function TraderPage() {
 
         {error && !loading && (
           <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#f7525f" }}>
-            failed to load — check connection
+            failed to load. Check connection
           </div>
         )}
 
@@ -741,14 +741,14 @@ export default function TraderPage() {
                 </div>
               </div>
               {/* Cross-check: this board ranks GRADED CALLS, but a caller's real
-                  venue record is separate evidence. New tab on purpose — verifying
+                  venue record is separate evidence. New tab on purpose. Verifying
                   shouldn't cost you your place on the profile. */}
               {wallet && (
                 <a
                   href={`/analyze?address=${wallet}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title="X-ray this wallet's actual perp record on Hyperliquid + Orderly — verify before you copy"
+                  title="X-ray this wallet's actual perp record on Hyperliquid + Orderly. Verify before you copy"
                   style={{
                     flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 10,
                     color: "#ededf0", textDecoration: "none", border: "1px solid #33333a",
@@ -789,7 +789,7 @@ export default function TraderPage() {
                 <VenueEvidence wallet={wallet ?? null} openCalls={openCalls} />
 
                 {/* The accruing, self-grading on-chain record (Consistency Score, trend,
-                    copy record) — same surface as the Smart Money x-ray, so a trader's
+                    copy record). Same surface as the Smart Money x-ray, so a trader's
                     public page and their x-ray can never tell a different story. */}
                 {wallet && <TrackedRecordCard address={wallet} />}
 
@@ -840,7 +840,7 @@ export default function TraderPage() {
                 {/* Hub: this trader's graded autonomous-agent record */}
                 {agentRec && (
                   <div style={{ marginBottom: 16, border: "1px solid #232327", borderRadius: 6, padding: 14, background: "#0a0a0b" }}>
-                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>AUTONOMOUS AGENT — GRADED RECORD</div>
+                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>AUTONOMOUS AGENT. GRADED RECORD</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(80px,1fr))", gap: 12 }}>
                       {[
                         { l: "NET P&L", v: `${agentRec.netPnl >= 0 ? "+" : ""}$${agentRec.netPnl}`, c: agentRec.netPnl >= 0 ? "#3ecf8e" : "#f7525f" },
@@ -860,7 +860,7 @@ export default function TraderPage() {
                 {/* Hub: this trader's published strategies — copyable to your own agent */}
                 {pubStrats.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>PUBLISHED STRATEGIES — copy to your agent</div>
+                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>PUBLISHED STRATEGIES. Copy to your agent</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {pubStrats.map((s) => (
                         <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "8px 10px", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3 }}>
@@ -877,7 +877,7 @@ export default function TraderPage() {
 
                 {/* Thesis list */}
                 <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>
-                  THESES — click to expand
+                  THESES. Click to expand
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {theses

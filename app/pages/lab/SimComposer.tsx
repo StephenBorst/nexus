@@ -52,7 +52,7 @@ export function SimComposer({ wallet, seed, compact = false }: { wallet: string 
         <span style={{ marginLeft: "auto", fontFamily: MF, fontSize: 8.5, color: "#6f6a86" }}>powered by Miroshark</span>
       </div>
       <div style={{ fontFamily: UI, fontSize: 12, color: "#b8b2cc", lineHeight: 1.55, marginBottom: 11 }}>
-        Set up <b style={{ color: "#ded8f0" }}>any trade or scenario</b> and pressure-test it — a crowd of grounded AI agents debates and trades it across 10 rounds, surfacing the bull case, the bear case, the invalidation, and where consensus lands. <span style={{ color: "#8b8299" }}>A thinking tool, never a signal.</span>
+        Set up <b style={{ color: "#ded8f0" }}>any trade or scenario</b> and pressure-test it. A crowd of grounded AI agents debates and trades it across 10 rounds, surfacing the bull case, the bear case, the invalidation, and where consensus lands. <span style={{ color: "#8b8299" }}>A thinking tool, never a signal.</span>
       </div>
 
       {/* Mode toggle: structured trade vs free-form scenario */}
@@ -103,8 +103,8 @@ export function SimComposer({ wallet, seed, compact = false }: { wallet: string 
             </div>
           </div>
           <div>
-            <div style={miniLabel}>THESIS / CONTEXT <span style={{ color: "#4a4658" }}>(optional — sharpens the sim)</span></div>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 400))} rows={2} placeholder="why this trade — catalyst, level, timeframe…"
+            <div style={miniLabel}>THESIS / CONTEXT <span style={{ color: "#4a4658" }}>(optional · sharpens the sim)</span></div>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 400))} rows={2} placeholder="Why this trade? Catalyst, level, timeframe…"
               style={{ ...fieldStyle, resize: "vertical", lineHeight: 1.4 }} />
           </div>
         </div>
@@ -112,7 +112,7 @@ export function SimComposer({ wallet, seed, compact = false }: { wallet: string 
         <div style={{ marginBottom: 11 }}>
           <div style={miniLabel}>SCENARIO</div>
           <textarea value={query} onChange={(e) => setQuery(e.target.value.slice(0, 500))} rows={3} spellCheck={false}
-            placeholder="Describe anything to simulate — e.g. “BTC reclaims 80k on ETF inflows while funding stays negative — do alts follow or does BTC dominance rip?”"
+            placeholder="Describe anything to simulate. E.g. “BTC reclaims 80k on ETF inflows while funding stays negative. Do alts follow or does BTC dominance rip?”"
             style={{ ...fieldStyle, resize: "vertical", lineHeight: 1.45 }} />
         </div>
       )}

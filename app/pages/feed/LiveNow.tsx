@@ -87,7 +87,7 @@ export default function LiveNow() {
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: "bold", color: "#fff" }}>{tk(p.symbol)}</span>
                 <span style={{ fontSize: 9, color: long ? green : red }}>{long ? "↑ LONG" : "↓ SHORT"}</span>
-                <span style={{ marginLeft: "auto", fontSize: 8, color: p.agent ? "#d4d4d8" : "#ededf0", border: "1px solid #33333a", borderRadius: 3, padding: "0 4px" }}>{p.agent ? "🤖" : "👤"}</span>
+                <span style={{ marginLeft: "auto", fontSize: 8, color: p.agent ? "#d4d4d8" : "#ededf0", border: "1px solid #33333a", borderRadius: 3, padding: "0 4px" }}>{p.agent ? "AGENT" : "HUMAN"}</span>
               </div>
               <div style={{ fontSize: 15, fontWeight: "bold", color: pnlColor, marginTop: 5 }}>
                 {pct == null ? "—" : `${up ? "+" : ""}${pct.toFixed(2)}%`}

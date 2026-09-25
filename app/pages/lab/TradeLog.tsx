@@ -150,7 +150,7 @@ export function TradeLogAllView({
     return (
       <div>
         {viewToggle}
-        <EmptyState message="no closed trades found" unlock="Connect the wallet you trade with — your Orderly history loads automatically, no import step." />
+        <EmptyState message="no closed trades found" unlock="Connect the wallet you trade with. Your Orderly history loads automatically, no import step." />
       </div>
     );
   }
@@ -215,7 +215,7 @@ export function TradeLogAllView({
               {/* date */}
               <div>
                 <div style={{ fontSize: 12, color: "#fff", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{formatKey(key)}</div>
-                {notes[key] && <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginTop: 2, fontStyle: "italic" }}>📝 note</div>}
+                {notes[key] && <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginTop: 2, fontStyle: "italic" }}>≡ note</div>}
               </div>
               {/* symbols */}
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>

@@ -78,7 +78,7 @@ export function WindowGradeCard({
 
       {fellBack && active === "ALL" && (
         <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED, marginBottom: 10 }}>
-          30D has too few trades to grade — showing ALL. Tap 30D to see it accruing.
+          30D has too few trades to grade. Showing ALL. Tap 30D to see it accruing.
         </div>
       )}
 
@@ -110,13 +110,13 @@ export function WindowGradeCard({
         )
       ) : (
         <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED }}>
-          No Hyperliquid tape — per-trade grading needs one. Orderly publishes per-market totals only.
+          No Hyperliquid tape. Per-trade grading needs one. Orderly publishes per-market totals only.
         </div>
       )}
 
       {hasTape && partialKeys.includes(active) && (
         <div style={{ fontFamily: MONO, fontSize: 10, color: WARN, marginTop: 10 }}>
-          partial tape — Hyperliquid serves only a wallet&apos;s 10,000 most recent fills, and {active} reaches back before them. Graded on what&apos;s served.
+          partial tape. Hyperliquid serves only a wallet&apos;s 10,000 most recent fills, and {active} reaches back before them. Graded on what&apos;s served.
         </div>
       )}
 
@@ -181,7 +181,7 @@ export function ShareXrayButton({ address, isMobile }: { address: string; isMobi
   };
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-      <button onClick={onShare} className="nx-btn" title="Share this x-ray — the link unfurls with the 30D grade card"
+      <button onClick={onShare} className="nx-btn" title="Share this x-ray. The link unfurls with the 30D grade card"
         style={{ background: "none", border: `1px solid ${state === "copied" ? BONE : BORDER}`, borderRadius: 3, cursor: "pointer",
           fontFamily: MONO, fontSize: 9, letterSpacing: "0.08em", padding: "3px 9px", color: state === "copied" ? BONE : MUTED }}>
         {state === "copied" ? "LINK COPIED ✓" : "↗ SHARE"}
@@ -210,7 +210,7 @@ export function EdgeGateCard({ gate, children }: { gate: Gate; children?: ReactN
           </ul>
           <div style={{ fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.6, marginBottom: 12, maxWidth: 640 }}>
             Copy opens once the recent record clears the bar: {GATE_WINDOW} with ≥20 closed trades, net positive,
-            profit factor above 1 — or {WATCHED_MIN_DAYS}+ graded days of a watched Orderly record, net positive.
+            profit factor above 1. Or {WATCHED_MIN_DAYS}+ graded days of a watched Orderly record, net positive.
             Any graded record that&apos;s negative keeps it locked.
           </div>
         </>
@@ -242,7 +242,7 @@ export function PositionsPanel({
       <div style={{ ...label, marginBottom: 10 }}>◆ OPEN POSITIONS · LIVE</div>
       {rows.length === 0 ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED }}>
-          No open positions{hlFailed ? " found — Hyperliquid positions couldn't be read right now" : ""}.
+          No open positions{hlFailed ? " found. Hyperliquid positions couldn't be read right now" : ""}.
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
@@ -269,13 +269,13 @@ export function PositionsPanel({
                   {dist == null ? "—" : `${dist.toFixed(1)}%`}
                 </span>
                 <span style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
-                  <button onClick={() => onDraft(r)} title="Draft a thesis from this position — plan it yourself"
+                  <button onClick={() => onDraft(r)} title="Draft a thesis from this position. Plan it yourself"
                     style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: MUTED, fontFamily: MONO, fontSize: 9, padding: "2px 7px", cursor: "pointer" }}>◆</button>
                   {gatePass && r.copySym ? (
-                    <button onClick={() => onCopy(r)} className="nx-btn" title="Copy this position — the agent enters your direction, manages the exit, and grades it on-chain"
+                    <button onClick={() => onCopy(r)} className="nx-btn" title="Copy this position. The agent enters your direction, manages the exit, and grades it on-chain"
                       style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: BONE, fontFamily: MONO, fontSize: 9, letterSpacing: "0.04em", padding: "2px 7px", cursor: "pointer", whiteSpace: "nowrap" }}>⚡ COPY</button>
                   ) : (
-                    <span title={!gatePass ? "Copy locked — the wallet's grade hasn't cleared the bar" : "Not listed on Orderly — nothing to copy into"}
+                    <span title={!gatePass ? "Copy locked. The wallet's grade hasn't cleared the bar" : "Not listed on Orderly. Nothing to copy into"}
                       style={{ color: FAINT, fontSize: 9, padding: "2px 4px", whiteSpace: "nowrap" }}>{!gatePass ? "🔒" : "not listed"}</span>
                   )}
                 </span>
@@ -287,12 +287,12 @@ export function PositionsPanel({
       {/* A partial book must say so — never pass it off as every open position. */}
       {failedDexes.length > 0 && (
         <div style={{ fontFamily: MONO, fontSize: 10, color: WARN, marginTop: 10 }}>
-          Couldn&apos;t read Hyperliquid positions on: {failedDexes.join(", ")} — this list may be incomplete.
+          Couldn&apos;t read Hyperliquid positions on: {failedDexes.join(", ")}. This list may be incomplete.
         </div>
       )}
       {hasOrderly && (
         <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 10, lineHeight: 1.6 }}>
-          Orderly doesn&apos;t publish an account&apos;s leverage or liquidation price publicly — shown as —, never estimated.
+          Orderly doesn&apos;t publish an account&apos;s leverage or liquidation price publicly. Shown as —, never estimated.
           Liq distance is how far the mark must move against the position to reach the venue-reported liquidation price.
         </div>
       )}

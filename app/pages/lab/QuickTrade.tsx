@@ -273,7 +273,7 @@ export function QuickTrade() {
       <input
         value={mktSearch}
         onChange={(e) => setMktSearch(e.target.value.toUpperCase())}
-        placeholder={allMarkets.length ? `🔍 search ${allMarkets.length} markets…` : "loading markets…"}
+        placeholder={allMarkets.length ? `search ${allMarkets.length} markets…` : "loading markets…"}
         style={{ ...input, marginTop: 8, fontSize: 12 }}
       />
       {mktSearch && allMarkets.length > 0 && (() => {

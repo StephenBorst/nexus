@@ -49,9 +49,9 @@ export function Simulate({ body, label = "◆ Simulate", wallet }: { body: Recor
         const su = d?.job?.status_url || d?.job?.data?.status_url;
         if (d?.ran === "queued" && su) { setStatusUrl(su); return; } // → polling effect
         if (status === 402) { setCredits(0); setNeedBuy(true); setState("preview"); return; } // out of credits → buy
-        setDone({ error: d?.error || "simulation didn't queue — try again" }); setState("done");
+        setDone({ error: d?.error || "simulation didn't queue. Try again" }); setState("done");
       })
-      .catch(() => { setDone({ error: "simulation failed — try again" }); setState("done"); });
+      .catch(() => { setDone({ error: "simulation failed. Try again" }); setState("done"); });
   };
 
   const verifyBuy = () => {
@@ -61,10 +61,10 @@ export function Simulate({ body, label = "◆ Simulate", wallet }: { body: Recor
     fetch(`${AGENT_API}/sim/credits/verify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ txHash: tx, chain: buyChain }) })
       .then((r) => r.json()).then((d) => {
         setBusy(false);
-        if (d?.ok) { setCredits(Number(d.credits) || 0); setBuyMsg(`✓ Added ${d.added} credit${d.added === 1 ? "" : "s"} — ${d.credits} total. Run it.`); setNeedBuy(false); setBuyTx(""); }
+        if (d?.ok) { setCredits(Number(d.credits) || 0); setBuyMsg(`✓ Added ${d.added} credit${d.added === 1 ? "" : "s"}. ${d.credits} total. Run it.`); setNeedBuy(false); setBuyTx(""); }
         else setBuyMsg(d?.error || d?.hint || "verification failed");
       })
-      .catch(() => { setBusy(false); setBuyMsg("verify failed — try again"); });
+      .catch(() => { setBusy(false); setBuyMsg("verify failed. Try again"); });
   };
 
   useEffect(() => { refreshCredits(); }, [wallet]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -81,8 +81,8 @@ export function Simulate({ body, label = "◆ Simulate", wallet }: { body: Recor
         setProg({ stage: x.current_stage, progress: x.progress, message: x.message });
         if (x.status === "completed" || x.completed_at) { setDone({ shareUrl: x.share_url, message: x.message }); setState("done"); refreshCredits(); return; }
         if (x.status === "failed" || x.error) { setDone({ error: x.error || "simulation failed" }); setState("done"); return; }
-      } catch { /* transient — keep polling */ }
-      if (++tries > 90) { setDone({ error: "simulation timed out — check back" }); setState("done"); return; }
+      } catch { /* transient. Keep polling */ }
+      if (++tries > 90) { setDone({ error: "simulation timed out. Check back" }); setState("done"); return; }
       if (!stop) setTimeout(tick, 5000);
     };
     tick();
@@ -134,7 +134,7 @@ export function Simulate({ body, label = "◆ Simulate", wallet }: { body: Recor
 
       {state === "preview" && (res?.enabled
         ? <button type="button" onClick={runPaid} className="nx-press" style={{ ...linkBtn, cursor: "pointer" }}>▶ Run simulation{credits != null && credits > 0 ? " (1 credit)" : ""}</button>
-        : <div style={{ color: C.text.faint, fontFamily: MF, fontSize: 9.5, lineHeight: 1.5 }}>Live simulation is switching on shortly — check back.</div>)}
+        : <div style={{ color: C.text.faint, fontFamily: MF, fontSize: 9.5, lineHeight: 1.5 }}>Live simulation is switching on shortly. Check back.</div>)}
 
       {state === "running" && (
         <div>
@@ -162,7 +162,7 @@ export function Simulate({ body, label = "◆ Simulate", wallet }: { body: Recor
           </div>
         ))}
 
-      <div style={{ color: C.text.faint, fontFamily: MF, fontSize: 8.5, lineHeight: 1.5, marginTop: 8 }}>{res?.disclaimer || "Synthetic simulation — a thinking tool to pressure-test the trade, not a signal."}</div>
+      <div style={{ color: C.text.faint, fontFamily: MF, fontSize: 8.5, lineHeight: 1.5, marginTop: 8 }}>{res?.disclaimer || "Synthetic simulation. A thinking tool to pressure-test the trade, not a signal."}</div>
     </div>
   );
 }

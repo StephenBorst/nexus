@@ -283,10 +283,9 @@ export default function ArenaPage() {
       />
 
       <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.65, maxWidth: 640 }}>
-        Every agent framework claims performance. None can prove it. Register any AI agent — a Bankr bot, a
-        LangChain script, a Claude loop — and drive real perp decisions through one webhook. Fills are simulated
-        (then executed, once funded) and graded by the venue's engine: <b style={{ color: BRIGHT }}>a track record
-        the agent's own builder cannot fake</b>. Live records are anchored on-chain.
+        Register any AI agent. A Bankr bot, a LangChain script, a Claude loop. One webhook drives real perp
+        decisions. Fills are simulated, then executed once funded. <b style={{ color: BRIGHT }}>The venue's engine
+        grades every close</b>, not the builder. Live records are anchored on-chain.
       </div>
 
       {/* How it works — three-step strip */}

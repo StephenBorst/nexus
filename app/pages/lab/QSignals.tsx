@@ -173,7 +173,7 @@ export function QSignals({ address }: { address?: string | null }) {
   const [phase, setPhase] = useState<"idle" | "loading">("idle");
   const [status, setStatus] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const [perpOnly, setPerpOnly] = useState(true); // perp focus by default — the tradeable slice
+  const [perpOnly, setPerpOnly] = useState(true); // perp focus by default. The tradeable slice
 
   // Hydrate the last paid pull (≤15 min old) so re-opening the lens doesn't re-charge.
   useEffect(() => {
@@ -211,7 +211,7 @@ export function QSignals({ address }: { address?: string | null }) {
       direction: s.perp.direction,
       catalyst: `Quotient fair value ${s.qProbPct}% vs venue ${s.marketProbPct}% (${s.spreadPp}pp edge)`,
       targetWindow: s.windowDays ? `${s.windowDays}d` : "7d",
-      notes: `Quotient's model prices "${s.question}" at ${s.qProbPct}% vs the venue's ${s.marketProbPct}% — a ${s.spreadPp}pp gap.${s.thesis ? ` ${s.thesis}` : ""} Trading the convergence as a directional ${s.perp.coin} view (${s.perp.direction})${s.perp.targetUsd ? `, price ~$${s.perp.targetUsd.toLocaleString()}` : ""}. Q's read — your call: add entry/stop/targets. Graded from public price.`,
+      notes: `Quotient's model prices "${s.question}" at ${s.qProbPct}% vs the venue's ${s.marketProbPct}%. A ${s.spreadPp}pp gap.${s.thesis ? ` ${s.thesis}` : ""} Trading the convergence as a directional ${s.perp.coin} view (${s.perp.direction})${s.perp.targetUsd ? `, price ~$${s.perp.targetUsd.toLocaleString()}` : ""}. Q's read. Your call: add entry/stop/targets. Graded from public price.`,
     };
     try { localStorage.setItem("nexus_thesis_draft", JSON.stringify(draft)); } catch { /* private mode */ }
     try {
@@ -240,7 +240,7 @@ export function QSignals({ address }: { address?: string | null }) {
               <span style={{ color: FOG, fontSize: 12 }}>Q Signals is a {TIER_NAME} lens.</span>
             </div>
             <div style={{ color: DIM, fontSize: 11.5, lineHeight: 1.65 }}>
-              Quotient's model fair value vs the live market on liquid prediction markets — a prompt to stake a graded
+              Quotient's model fair value vs the live market on liquid prediction markets. A prompt to stake a graded
               thesis, priced against the venue. Each pull is paid by your wallet (~$0.01 USDC on Base); Nexus takes no cut.
             </div>
             <div style={{ marginTop: 10, color: FAINT, fontSize: 10.5, fontFamily: MF, lineHeight: 1.7 }}>
@@ -268,7 +268,7 @@ export function QSignals({ address }: { address?: string | null }) {
               </>
             ) : (
               <div style={{ color: DIM, fontSize: 11.5, fontFamily: MF, lineHeight: 1.65 }}>
-                No Q signal cleared the conviction bar right now — sparse by design (Quotient publishes only where its fair value diverges enough from the venue). Your pull went through; check back later.
+                No Q signal cleared the conviction bar right now. Sparse by design (Quotient publishes only where its fair value diverges enough from the venue). Your pull went through; check back later.
               </div>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
@@ -300,7 +300,7 @@ export function QSignals({ address }: { address?: string | null }) {
           <div>
             <div style={{ color: DIM, fontSize: 11.5, lineHeight: 1.65, marginBottom: 12 }}>
               Load Quotient's live fair-value signals. Your wallet pays Quotient <b style={{ color: FOG }}>~$0.01 USDC on Base</b> per
-              pull (an off-chain, gasless authorization — no Nexus markup, nothing stored). Nothing loads until you sign; there's no auto-refresh.
+              pull (off-chain, gasless, no Nexus markup, nothing stored). Nothing loads until you sign; there's no auto-refresh.
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <LoadButton label={loading ? "loading…" : "Load signals · $0.01"} onClick={load} disabled={loading || !provider} />

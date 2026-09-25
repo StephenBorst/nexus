@@ -333,7 +333,7 @@ export default function ProofPage() {
       {/* Ledger trust strip — the primitive that unifies everything. */}
       {ledger?.ledgerHash && (
         <div style={{ marginTop: 20, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${BONE}`, borderRadius: 6, background: SURFACE_ALT, padding: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: BONE }}>🔗 LEDGER SHA-256</span>
+          <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: BONE }}>LEDGER SHA-256</span>
           <code style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, background: INSET, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "3px 8px" }}>
             {ledger.ledgerHash.slice(0, 12)}…{ledger.ledgerHash.slice(-10)}
           </code>
@@ -462,7 +462,7 @@ export default function ProofPage() {
                 <div key={d.id} onClick={() => navigate("/feed")} style={rowStyle(true)}>
                   <span style={rankCell}>#{d.rank}</span>
                   <span style={nameCell}>{d.name}</span>
-                  <span style={statCell}>{d.members}👤 · {d.calls} calls · {d.hitRate}% · {d.totalR >= 0 ? "+" : ""}{d.totalR}R</span>
+                  <span style={statCell}>{d.members} members · {d.calls} calls · {d.hitRate}% · {d.totalR >= 0 ? "+" : ""}{d.totalR}R</span>
                   <span style={{ ...scoreCell, color: d.score > 0 ? BONE : FAINT }}>{d.score || "—"}</span>
                 </div>
               ))}

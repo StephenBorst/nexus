@@ -166,7 +166,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
                 rel="noopener noreferrer"
                 style={{ ...navBtnStyle, fontSize: 10, color: "#6cb6ff", borderColor: "#1a1a1e", textDecoration: "none", display: "inline-block", textAlign: "center", minHeight: 36, lineHeight: "22px", padding: "6px 12px" }}
               >
-                🔔 ALERTS
+                ALERTS
               </a>
             )}
             {t.isPublic && walletAddress && (() => {
@@ -207,8 +207,8 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
                 ? { isPublic: false, holdersOnly: true }
                 : { isPublic: false, holdersOnly: false };
               const meta = {
-                PRIVATE: { label: "📡 PRIVATE", color: "#52525b", border: "#232327", bg: "transparent" },
-                PUBLIC:  { label: "📡 PUBLIC",  color: "#ededf0", border: "#33333a", bg: "#1a1a1e" },
+                PRIVATE: { label: "PRIVATE", color: "#52525b", border: "#232327", bg: "transparent" },
+                PUBLIC:  { label: "PUBLIC",  color: "#ededf0", border: "#33333a", bg: "#1a1a1e" },
                 HOLDERS: { label: "◆ HOLDERS",  color: "#ededf0", border: "#33333a", bg: "#1a1a1e" },
               }[vis];
               return (
@@ -1568,7 +1568,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 </div>
                 {published && (
                   <div className="nx-fade-in" style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 4, border: "1px solid #3ecf8e55", background: "#0f2318", fontFamily: "var(--nx-font-mono)", fontSize: 10.5, color: "#3ecf8e", lineHeight: 1.5 }}>
-                    ◆ Call posted on-chain — it&apos;s grading itself against public price now. Fire off another. 🎯
+                    ◆ Call posted on-chain. It is being graded against public price.
                   </div>
                 )}
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 210px", gap: 8 }}>

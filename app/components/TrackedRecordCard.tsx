@@ -108,7 +108,7 @@ export function TrackedRecordCard({ address, myAddress }: { address: string; myA
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase" }}>Tracked Record</span>
           {track.tier && (
-            <span title={`${track.tier.title} — earned from ${track.gradedWindows} graded daily windows`} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#3ecf8e", border: "1px solid #33333a", borderRadius: 3, padding: "1px 5px" }}>{track.tier.glyph} {track.tier.title.toUpperCase()}</span>
+            <span title={`${track.tier.title}. Earned from ${track.gradedWindows} graded daily windows`} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#3ecf8e", border: "1px solid #33333a", borderRadius: 3, padding: "1px 5px" }}>{track.tier.glyph} {track.tier.title.toUpperCase()}</span>
           )}
           {typeof track.operatorScore === "number" && (
             <span style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>CONSISTENCY SCORE <span style={{ color: "#ededf0", fontWeight: 700, fontSize: 12 }}>{track.operatorScore}</span></span>
@@ -117,7 +117,7 @@ export function TrackedRecordCard({ address, myAddress }: { address: string; myA
 
         {track.building ? (
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a", lineHeight: 1.6, padding: "6px 0" }}>
-            Tracking started. A graded record accrues each day this wallet is watched — realized-PnL trend, consistency and drawdown, computed from public settlement. Check back.
+            Tracking started. A graded record accrues each day this wallet is watched. Realized-PnL trend, consistency and drawdown, computed from public settlement. Check back.
           </div>
         ) : (
           <>
@@ -132,11 +132,11 @@ export function TrackedRecordCard({ address, myAddress }: { address: string; myA
             </div>
             {!track.scored && (
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", marginTop: 8, lineHeight: 1.5 }}>
-                Consistency score unlocks after ~4 days of daily snapshots{track.gapWindows ? " — sparse gaps in watching don't count toward it" : ""}. The net total above is already real.
+                Consistency score unlocks after ~4 days of daily snapshots{track.gapWindows ? ". Sparse gaps in watching don't count toward it" : ""}. The net total above is already real.
               </div>
             )}
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 8, lineHeight: 1.5 }}>
-              Graded from the change in realized PnL between daily snapshots — the P&amp;L earned while watched, not lifetime history.{track.gapWindows ? " Long gaps between snapshots are excluded from the consistency read so a month can't pose as a green day." : " Score is earned from a track length, so a short streak can't inflate it."}
+              Graded from the change in realized PnL between daily snapshots. The P&amp;L earned while watched, not lifetime history.{track.gapWindows ? " Long gaps between snapshots are excluded from the consistency read so a month can't pose as a green day." : " Score is earned from a track length, so a short streak can't inflate it."}
             </div>
           </>
         )}
@@ -164,7 +164,7 @@ export function TrackedRecordCard({ address, myAddress }: { address: string; myA
               </div>
             ))}
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 8, lineHeight: 1.5 }}>
-              Both graded the same way — realized-PnL consistency over the days each was tracked. A dash means not enough daily data yet.
+              Both graded the same way. Realized-PnL consistency over the days each was tracked. A dash means not enough daily data yet.
             </div>
           </div>
         );
@@ -181,7 +181,7 @@ export function TrackedRecordCard({ address, myAddress }: { address: string; myA
             <div><div style={label}>Copiers</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: "#ededf0" }}>{copyRec.copiers}</div></div>
           </div>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 8, lineHeight: 1.5 }}>
-            Realized P&amp;L of Nexus agent trades that copied this wallet — graded from on-chain-auditable closes, not their self-reported number. The agent manages every exit.
+            Realized P&amp;L of Nexus agent trades that copied this wallet. Graded from on-chain-auditable closes, not their self-reported number. The agent manages every exit.
           </div>
         </div>
       )}

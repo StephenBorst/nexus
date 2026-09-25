@@ -1789,7 +1789,7 @@ export default function FeedPage() {
             )}
             {error && !loading && (
               <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#f7525f" }}>
-                failed to load feed — check connection
+                Feed didn't load. Check your connection.
               </div>
             )}
             {/* VERIFIED CALLERS is the headline of this tab — the ranked, publicly-graded
@@ -1922,7 +1922,7 @@ export default function FeedPage() {
 
             {error && !loading && (
               <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#f7525f" }}>
-                failed to load feed — check connection
+                Feed didn't load. Check your connection.
               </div>
             )}
 

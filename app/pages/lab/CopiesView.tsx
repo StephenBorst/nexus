@@ -91,7 +91,7 @@ export function CopiesView() {
                         (e.currentTarget as HTMLButtonElement).style.borderColor = "#232327";
                       }}
                     >
-                      📋 {shortWallet} ↗
+                      {shortWallet} ↗
                     </button>
                   )}
                 </div>
