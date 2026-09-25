@@ -186,6 +186,9 @@ export function AgentBacktestCard({
                           style={{ fontFamily: "var(--nx-font-ui)", fontSize: 10, color: "#71717a", marginTop: 5, lineHeight: 1.5, cursor: "help" }}>
                           vs random entries: beat <b style={{ color: tone, fontFamily: "var(--nx-font-mono)" }}>{bl.pctBeaten}%</b> of {bl.runs} replays
                           <span style={{ color: "#52525b" }}> (random median ${bl.randomMedianUsd})</span> — {read}.
+                          {bl.verdict !== "BEATS_RANDOM" && bl.moreTradesNeeded != null && (
+                            <span style={{ color: "#52525b" }}> At this edge, ~{bl.moreTradesNeeded} more trade{bl.moreTradesNeeded === 1 ? "" : "s"} to separate from random (rough guide).</span>
+                          )}
                         </div>
                       );
                     })()}

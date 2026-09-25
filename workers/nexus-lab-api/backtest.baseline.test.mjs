@@ -86,3 +86,43 @@ test(`fewer than ${BASELINE_MIN_TRADES} trades → TOO_FEW_TRADES (no verdict fr
   assert.equal(b.verdict, "TOO_FEW_TRADES");
   assert.equal(b.runs, 0);
 });
+
+// ── trades-needed + evidence across markets ──────────────────────────────────
+import { probit, tradesToSeparate, evidenceAcrossMarkets } from "./backtest.mjs";
+
+test("probit matches known quantiles; tradesToSeparate scales with (z95/z)^2", () => {
+  assert.ok(Math.abs(probit(0.5)) < 1e-9);
+  assert.ok(Math.abs(probit(0.95) - 1.6448536) < 1e-6);
+  assert.ok(Math.abs(probit(0.025) + 1.959964) < 1e-5);
+  assert.equal(tradesToSeparate(95, 20), 20, "already at the line → the same n");
+  assert.ok(tradesToSeparate(80, 10) > 10);
+  assert.ok(tradesToSeparate(70, 10) > tradesToSeparate(85, 10), "weaker reading needs more trades");
+  assert.equal(tradesToSeparate(50, 10), null, "no edge to scale");
+  assert.equal(tradesToSeparate(30, 10), null);
+  assert.equal(tradesToSeparate(80, 0), null);
+});
+
+test("baseline reports how many more trades a verdict needs", () => {
+  const pumps = [40, 90, 140, 190, 240, 290];
+  const c = tape(400, 8, pumps);
+  const real = pumps.map((i) => trade("PERP_BTC_USDC", c, i, "LONG"));
+  const b = randomEntryBaseline([{ symbol: "PERP_BTC_USDC", candles: c }], CFG, real, { runs: 100 });
+  if (b.pctBeaten > 50) {
+    assert.ok(Number.isInteger(b.tradesNeeded));
+    assert.equal(b.moreTradesNeeded, Math.max(0, b.tradesNeeded - b.trades));
+  } else assert.equal(b.tradesNeeded, null);
+});
+
+test("evidence: each market replayed on its own, trades pooled, baseline on the pool, caveat stated", () => {
+  // MOMENTUM on pump tapes: every market fires; pooled trades = the sum of per-market trades
+  const M = { signalMode: "MOMENTUM", priceChangeThreshold: 1, tpPercent: 1, slPercent: 1, maxHoldHours: 6, capitalPerTrade: 50, leverage: 1 };
+  const mk = (sym, seed) => ({ symbol: sym, candles: tape(400, seed, Array.from({ length: 10 }, (_, k) => 20 + k * 35)), feeds: {} });
+  const markets = [mk("PERP_BTC_USDC", 11), mk("PERP_ETH_USDC", 12), mk("PERP_SOL_USDC", 13)];
+  const ev = evidenceAcrossMarkets(markets, M, { runs: 80 });
+  assert.equal(ev.markets, 3);
+  assert.equal(ev.trades, ev.perMarket.reduce((s, x) => s + x.trades, 0));
+  assert.ok(ev.trades >= BASELINE_MIN_TRADES);
+  assert.equal(ev.baseline.trades, ev.trades, "baseline tests the whole pool");
+  assert.match(ev.caveat, /not independent/);
+  assert.ok(ev.perMarket[0].netUsd >= ev.perMarket[ev.perMarket.length - 1].netUsd, "sorted by net");
+});

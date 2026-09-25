@@ -73,6 +73,36 @@ function Stat({ v, unit, l, color, title, align = "end" }: { v: string; unit?: s
 // column, never clipped), inline right on desktop. When the read has an agent mode that
 // trades the EXACT graded rule (AXIS_PRESET — shared module + parity test), a third line
 // loads it into the agent in PAPER. Reads without one say so rather than borrow a look-alike.
+// The preset signal replayed on EVERY recorded market (each on its own), pooled, vs random entries.
+type Evidence = { ok: boolean; hold: number; markets: number; marketsGreen: number; trades: number; netUsd: number; winRate: number; caveat?: string;
+  baseline?: { verdict: string; pctBeaten?: number; moreTradesNeeded?: number | null; runs?: number; trades?: number; minTrades?: number } };
+
+function EvidenceLine({ axis }: { axis: string }) {
+  const [ev, setEv] = useState<Evidence | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetch(`${API}/intel/evidence?axis=${axis}`).then((r) => r.json()).then((d) => { if (live && d?.ok) setEv(d); }).catch(() => { /* fail-soft */ });
+    return () => { live = false; };
+  }, [axis]);
+  if (!ev) return null;
+  const bl = ev.baseline;
+  const tone = bl?.verdict === "BEATS_RANDOM" ? POS : bl?.verdict === "LEANS_ABOVE" ? "#fbbf24" : FOG;
+  return (
+    <div title={`The preset's own signal and ${ev.hold}h exit, replayed on every market with recorded history — each on its own — and the trades pooled. ${ev.caveat || ""}`}
+      style={{ marginTop: 6, fontFamily: MONO, fontSize: 9, color: FOG, lineHeight: 1.6, cursor: "help" }}>
+      <span style={{ color: MUTED, letterSpacing: "0.08em" }}>ACROSS {ev.markets} RECORDED MARKETS</span>{" "}
+      <span style={{ color: ev.netUsd >= 0 ? POS : NEG }}>{ev.netUsd >= 0 ? "+" : ""}${ev.netUsd}</span> · {ev.trades} trades · green on {ev.marketsGreen}/{ev.markets}
+      {bl && bl.verdict === "TOO_FEW_TRADES" && <span style={{ color: FAINT }}> · too few trades to test vs random</span>}
+      {bl && bl.verdict !== "TOO_FEW_TRADES" && (
+        <> · vs random entries <b style={{ color: tone }}>{bl.pctBeaten}%</b>
+          {bl.verdict !== "BEATS_RANDOM" && bl.moreTradesNeeded != null && <span style={{ color: FAINT }}> · ~{bl.moreTradesNeeded} more trades for a verdict</span>}
+        </>
+      )}
+      <span style={{ color: FAINT }}> · markets move together — pooled, not independent</span>
+    </div>
+  );
+}
+
 function SignalRow({ a }: { a: AxisRow }) {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -142,6 +172,7 @@ function SignalRow({ a }: { a: AxisRow }) {
               </div>
             );
           })}
+          {!AXIS_PAUSED[a.name] && <EvidenceLine axis={a.name} />}
         </div>
       )}
       {preset ? (

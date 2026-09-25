@@ -26,6 +26,11 @@ test("every axis exit contract matches its preset's tp / sl / max hold", () => {
     assert.equal(num(b, "tpPercent"), x.tpPercent, `${axis} tpPercent`);
     assert.equal(num(b, "slPercent"), x.slPercent, `${axis} slPercent`);
     assert.equal(num(b, "maxHoldHours"), x.maxHoldHours, `${axis} maxHoldHours`);
+    assert.equal(num(b, "leverage"), x.leverage, `${axis} leverage`);
+    assert.equal(num(b, "capitalPerTrade"), x.capitalPerTrade, `${axis} capitalPerTrade`);
+    assert.match(b, new RegExp(`signalMode:\\s*"${x.signalMode}"`), `${axis} signalMode`);
+    const conf = b.match(/basisConfirm:\s*"(\w+)"/);
+    assert.equal(conf ? conf[1] : null, x.basisConfirm, `${axis} basisConfirm`);
     assert.ok(!/takeProfits:|trailingStopPct:|breakevenTriggerPct:|dcaEnabled:/.test(b), `${axis}: preset uses an exit feature the contract doesn't carry`);
   }
 });

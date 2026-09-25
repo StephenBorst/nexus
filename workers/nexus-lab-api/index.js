@@ -49,7 +49,8 @@ async function prevCopyLeaders(env, address) {
   catch { return []; }
 }
 
-import { backtestConfig, runSweep, runBasisSweep, oiSeriesInfo, walkForwardValidate, runBacktest, fetchCandles, fetchFundingAt, makeFundingPctAt } from "./backtest.mjs";
+import { backtestConfig, runSweep, runBasisSweep, oiSeriesInfo, walkForwardValidate, runBacktest, fetchCandles, fetchFundingAt, makeFundingPctAt, evidenceAcrossMarkets, basisAtForConfig } from "./backtest.mjs";
+import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
 import { runScorecard, AXES, priceByHour } from "./axisbt.mjs";
@@ -5105,6 +5106,49 @@ document.getElementById("btn").addEventListener("click",go);
       };
       try { await env.LAB_STORE.put(CACHE, JSON.stringify(out), { expirationTtl: 3600 }); } catch { /* best-effort */ }
       return json(out, request);
+    }
+
+    // ── GET /intel/evidence?axis=basis_x_cvd&hold=12|24 — does the SIGNAL carry information? ──
+    // The preset's exact signal (AXIS_EXITS: signal, confirm, sizing, exit) replayed on EVERY market
+    // with mature recorded history, each on its own, trades pooled, then the random-entry baseline
+    // on the pool (+ how many trades a verdict still needs). Public + read-only (recorded series +
+    // public candles), cached 1h — so the Oct-15 routine can read it without a wallet signature.
+    // ⚠️ Markets move together: the pool is an honest aggregate, not independent tests.
+    if (parts[0] === "intel" && parts[1] === "evidence" && request.method === "GET") {
+      const q = new URL(request.url).searchParams;
+      const axis = q.get("axis") || "basis_x_cvd";
+      const contract = AXIS_EXITS[axis];
+      if (!contract) return json({ ok: false, error: "unknown_axis", axes: Object.keys(AXIS_EXITS) }, request, 400);
+      const hold = [contract.maxHoldHours, 24].includes(Number(q.get("hold"))) ? Number(q.get("hold")) : contract.maxHoldHours;
+      const CACHE = `evidence:v1:${axis}:${hold}`;
+      try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
+      const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
+      const symbols = COINS.map((c) => `PERP_${c}_USDC`);
+      const config = {
+        signalMode: contract.signalMode, ...(contract.basisConfirm ? { basisConfirm: contract.basisConfirm } : {}),
+        tpPercent: contract.tpPercent, slPercent: contract.slPercent, maxHoldHours: hold,
+        leverage: contract.leverage, capitalPerTrade: contract.capitalPerTrade,
+      };
+      try {
+        const flow = await loadFlowHistForBacktest(symbols, env, { needCvd: contract.basisConfirm === "CVD", needSmart: contract.basisConfirm === "SMART", needLiq: contract.basisConfirm === "LIQ" });
+        if (!flow.anyMature) return json({ ok: false, axis, hold, note: `No market has enough recorded history yet (${flowCoverageText(flow.perSymbol)}).` }, request);
+        const days = Math.max(7, Math.min(60, flow.windowDays));
+        const markets = [];
+        for (const symbol of flow.matureSymbols) {
+          const candles = await fetchCandles(symbol, days);
+          markets.push({ symbol, candles, feeds: { fundingAt: () => 0, basisAt: basisAtForConfig(config, flow.flowBySymbol[symbol]) } });
+        }
+        const ev = evidenceAcrossMarkets(markets, config);
+        const out = {
+          ok: true, asOf: new Date().toISOString(), axis, preset: contract.preset, hold, days, config,
+          excludedSymbols: flow.staleSymbols, strategyLabel: strategyLabel(config), ...ev,
+        };
+        try { await env.LAB_STORE.put(CACHE, JSON.stringify(out), { expirationTtl: 3600 }); } catch { /* best-effort */ }
+        return json(out, request);
+      } catch (e) {
+        console.error("[evidence]", e);
+        return json({ ok: false, error: "evidence_failed", detail: String(e?.message || e) }, request, 500);
+      }
     }
 
     // ── GET /intel/baserate/:symbol — the honest "base rate at the decision" ──────

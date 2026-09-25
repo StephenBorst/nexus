@@ -397,11 +397,61 @@ export function randomEntryBaseline(markets, config, realTrades, { runs = BASELI
   nets.sort((a, b) => a - b);
   const below = nets.filter((n) => n < real.netUsd).length, ties = nets.filter((n) => n === real.netUsd).length;
   const pctBeaten = Math.round(((below + ties / 2) / nets.length) * 1000) / 10;
+  const need = tradesToSeparate(pctBeaten, plan.length);
   const q = (f) => nets[Math.min(nets.length - 1, Math.max(0, Math.floor(f * (nets.length - 1))))];
   return {
     verdict: pctBeaten >= 95 ? "BEATS_RANDOM" : pctBeaten >= 80 ? "LEANS_ABOVE" : "NOT_DISTINGUISHABLE",
     runs, seed, trades: plan.length, realNetUsd: real.netUsd, pctBeaten,
     randomMedianUsd: q(0.5), randomP5Usd: q(0.05), randomP95Usd: q(0.95),
+    tradesNeeded: need, moreTradesNeeded: need == null ? null : Math.max(0, need - plan.length),
+  };
+}
+
+// Inverse standard-normal CDF (Acklam's rational approximation, |err| < 1.2e-9).
+export function probit(p) {
+  if (!(p > 0 && p < 1)) return p <= 0 ? -Infinity : Infinity;
+  const a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.357751867269, -30.66479806614716, 2.506628277459239];
+  const b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771720, -13.28068155288572];
+  const c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+  const d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416];
+  const lo = 0.02425, hi = 1 - lo;
+  if (p < lo) { const q = Math.sqrt(-2 * Math.log(p)); return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1); }
+  if (p > hi) { const q = Math.sqrt(-2 * Math.log(1 - p)); return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1); }
+  const q = p - 0.5, r = q * q;
+  return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+
+// Roughly how many trades the SAME per-trade edge needs to clear the 95% line: separation grows
+// with √n, so n95 ≈ n·(z95/z)². A ROUGH guide — it assumes the edge holds and trades are
+// independent — and null when the reading is at or below random (no edge to scale).
+export function tradesToSeparate(pctBeaten, n) {
+  if (!(n > 0) || !(pctBeaten > 50)) return null;
+  const z = probit(Math.min(pctBeaten, 99.9) / 100);
+  return Math.ceil(n * (probit(0.95) / z) ** 2);
+}
+
+// ── EVIDENCE across every recorded market — more trades per day for the entry question ──
+// The agent trades 3 markets; the scoreboard records ~12. To test whether the SIGNAL carries
+// information, replay it on every recorded market ON ITS OWN (runBacktest per market — the
+// question here is the entry, not what one agent could book), pool the trades, and run the
+// random-entry baseline on the pool. ⚠️ Markets move together, so the pool is an honest
+// aggregate but NOT n independent tests — say so wherever it's shown.
+export function evidenceAcrossMarkets(markets, config, { runs = BASELINE_RUNS, seed = 7 } = {}) {
+  const cfg = { feeBps: DEFAULT_FEE_BPS, ...config };
+  const perMarket = [], pooled = [];
+  for (const m of markets) {
+    const r = runBacktest(m.candles, m.feeds?.fundingAt || (() => 0), cfg, m.feeds?.fundingPctAt || null, m.feeds?.oiChangeAt || null, null, m.feeds?.basisAt || null);
+    for (const t of r._trades || []) pooled.push({ ...t, symbol: m.symbol });
+    perMarket.push({ symbol: m.symbol, trades: r.trades, netUsd: r.netUsd, winRate: r.winRate });
+  }
+  const agg = aggregate(pooled, cfg);
+  return {
+    markets: markets.length, marketsTraded: perMarket.filter((x) => x.trades > 0).length,
+    marketsGreen: perMarket.filter((x) => x.netUsd > 0).length,
+    trades: agg.trades, winRate: agg.winRate, netUsd: agg.netUsd, profitFactor: agg.profitFactor,
+    baseline: randomEntryBaseline(markets, cfg, pooled, { runs, seed }),
+    perMarket: perMarket.sort((a, b) => b.netUsd - a.netUsd),
+    caveat: "Markets move together — the pooled result is an honest aggregate, not independent tests.",
   };
 }
 

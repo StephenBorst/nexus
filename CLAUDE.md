@@ -686,6 +686,16 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   verdict}`: BEATS_RANDOM ≥95 · LEANS_ABOVE ≥80 · NOT_DISTINGUISHABLE; <5 trades → TOO_FEW_TRADES. Attached as
   `portfolio.baseline` by `backtestConfig`; Backtest card prints "vs random entries: beat X% of 300 replays". Tests
   (`backtest.baseline.test.mjs`): foresight ≥95, worst timing ≤5, random entries mid-pack, reproducible, per-market.
+  `tradesToSeparate(pct, n)` (≈ n·(z95/z)², Acklam `probit`) → `tradesNeeded`/`moreTradesNeeded` on every baseline
+  (rough guide; null at/below random). **First readings (Sept 25, 3 mkts, 33d):** 12h control 86.7% (random median
+  $0.33, ~22 trades needed) · 24h 79.3% (median $1.13, ~37) — neither decisive; longer hold = more drift in random.
+- **✅ EVIDENCE ACROSS ALL RECORDED MARKETS (2026-09-25):** public **`GET /intel/evidence?axis=basis_x_cvd&hold=12|24`**
+  (cached 1h `evidence:v1:{axis}:{hold}`) — `evidenceAcrossMarkets` replays the preset's EXACT config (built from
+  `AXIS_EXITS`, which now also carries signalMode/basisConfirm/leverage/capitalPerTrade, all pinned to strategyPresets.ts
+  by `axisExits.test.mjs`) on every one of the 12 scorecard coins with mature basis+CVD history, EACH ON ITS OWN (the
+  entry question, not agent P&L), pools the trades, runs `randomEntryBaseline` on the pool. /proof basis_x_cvd row shows
+  "ACROSS N RECORDED MARKETS …" (EvidenceLine). ⚠️ Markets move together → pooled ≠ independent (stated in UI + API).
+  The Oct-15 routine reads it (step 2e) — no wallet signature needed.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
