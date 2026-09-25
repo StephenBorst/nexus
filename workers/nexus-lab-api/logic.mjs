@@ -5,6 +5,9 @@ import { hexToBytes, bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 // API as WATCH, matching the client Board/ticket. Cross-dir import bundles like axisbt's atr.mjs.
 import { FADE_FUNDING_FLOOR_PCT_YR } from "../../app/lib/conviction.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
+// The ×1095 funding cadence — ONE literal, shared with the Lab so an annualized figure
+// can never mean two different things on the two sides of the wire.
+import { FUNDING_PERIODS_PER_YEAR, annualFundingPct } from "../../app/lib/funding.mjs";
 
 // ═══════════════════════════════════════════════════════════
 // Pure, testable logic for nexus-lab-api.
@@ -559,7 +562,7 @@ export function contestedBoard(entries, cfg = CONTESTED) {
 // rows: Orderly /v1/public/futures rows (symbol, mark_price, last_funding_rate,
 //       open_interest, 24h_open). Pure + tested — the route just feeds it live rows.
 export const MISPRICED = {
-  fundingPeriodsPerYear: 3 * 365, // Orderly funds every 8h → 1095 periods/yr
+  fundingPeriodsPerYear: FUNDING_PERIODS_PER_YEAR, // Orderly funds every 8h → 1095 periods/yr
   minEdgePct: 12,    // |annualized funding| ≥ this ⇒ flagged MISPRICED · WATCHING. 12%/yr
                      // (~0.011%/8h) is the noise floor on this venue — below it "mispriced"
                      // means nothing; scarcity is the point (few, genuine, over many, mild).
@@ -2287,7 +2290,7 @@ export function boardCardPlay(s) {
   const dir = s.fade_dir === "SHORT" || s.fade_dir === "LONG" ? s.fade_dir : null;
   // Magnitude floor: a pierce of a trivial band is not a crowded fade — it needs an economically
   // large annualized cost too, so a stretched-but-small FADE reads WATCH here, same as the glass.
-  const annual = Math.abs(Number(s.funding_annual_pct ?? (Number(s.funding_rate_8h) || 0) * 1095 * 100));
+  const annual = Math.abs(Number(s.funding_annual_pct ?? annualFundingPct(s.funding_rate_8h) ?? 0));
   const bigEnough = annual >= FADE_FUNDING_FLOOR_PCT_YR;
   if (s.verdict === "FADE" && dir && bigEnough) return { dir, label: `FADE ${dir}`, klass: "FADE", strong: true };
   if (s.verdict === "FADE" && dir) return { dir, label: "WATCH", klass: "WATCH", strong: false };

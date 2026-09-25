@@ -29,6 +29,9 @@ import { Collapsible } from "./Collapsible";
 import { SectionHeader } from "./components";
 import { Simulate } from "./Simulate";
 import { ProjectionBand } from "@/components/ProjectionBand";
+// The ×1095 cadence, from the one shared literal. The surrounding tooltips/footer state it
+// in prose; this one RENDERS it as part of the shown arithmetic, so it reads the constant.
+import { FUNDING_PERIODS_PER_YEAR } from "@/lib/funding.mjs";
 
 // The board's /intel/mispriced call gates the "loading board…" spinner, so a hung connection
 // would strand a guest on it forever. Cap it (the SAME abort pattern as DecisionBoard) so it
@@ -926,7 +929,7 @@ export function MispricedBoard() {
                           <div style={{ fontFamily: MONO, fontSize: 31, fontWeight: 600, color: C.text.bright, lineHeight: 0.9, letterSpacing: "-0.02em" }}>
                             {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}<span title="Annualized. Per-8h rate × 1095 (three periods a day). What it adds up to over a year if today's rate held." style={{ fontSize: 13, color: C.text.faint, marginLeft: 4 }}>%/yr</span>
                           </div>
-                          <div title="The raw rate paid each 8h funding period. The annualized figure is this × 1095." style={{ fontFamily: MONO, fontSize: 10, color: C.text.muted, marginTop: 6 }}>{fmt8h(m.funding8hPct)} × 1095</div>
+                          <div title="The raw rate paid each 8h funding period. The annualized figure is this × 1095." style={{ fontFamily: MONO, fontSize: 10, color: C.text.muted, marginTop: 6 }}>{fmt8h(m.funding8hPct)} × {FUNDING_PERIODS_PER_YEAR}</div>
                         </div>
                       </div>
                       <EdgeQualityChip q={m.edgeQuality} />

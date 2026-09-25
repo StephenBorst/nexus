@@ -4,6 +4,7 @@
  * fail-soft (renders a thin skeleton until it loads). Velo-style, on-brand.
  */
 import { useEffect, useState } from "react";
+import { annualFundingPct } from "@/lib/funding.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const MONO = "var(--nx-font-mono)";
@@ -57,7 +58,9 @@ export function MarketStatStrip({ symbol }: { symbol: string }) {
   const up = d.changePct >= 0;
   // Funding: positive = longs pay shorts (crowd leaning long). Shown per-8h + annualized.
   const fundPct = d.funding * 100;
-  const fundAnnual = d.funding * 3 * 365 * 100;
+  // ?? NaN keeps the previous behaviour for an unreadable rate: annualFundingPct returns
+  // null for absent data, and rendering a flat 0%/yr would assert a rate we never read.
+  const fundAnnual = annualFundingPct(d.funding) ?? NaN;
   return (
     <div style={row}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>

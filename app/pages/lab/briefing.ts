@@ -10,6 +10,7 @@
 // neutral info. Red is reserved for realized loss elsewhere — a risk *warning* is
 // amber, not red.
 import { bookConcentration } from "@/lib/bookRisk.mjs";
+import { annualFundingPct } from "@/lib/funding.mjs";
 
 export type InsightTone = "positive" | "caution" | "info";
 
@@ -189,7 +190,9 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
   const conf = (signals || []).find((s) => s.confluence !== "NONE");
   if (conf) {
     const dir = conf.fade_dir === "LONG" || conf.fade_dir === "SHORT" ? conf.fade_dir : conf.confluence;
-    const annual = Number(conf.funding_annual_pct ?? conf.funding_rate_8h * 1095 * 100);
+    // The ×1095 comes from app/lib/funding.mjs (one literal, not eight). `?? NaN` preserves
+    // the old absent-rate behaviour — a missing rate must not read as a flat 0%/yr.
+    const annual = Number(conf.funding_annual_pct ?? annualFundingPct(conf.funding_rate_8h) ?? NaN);
     // FADE only when the server says STRETCHED and the band is economically large — the SAME
     // gate THE BOARD's THE PLAY applies; a confluence that isn't stretched reads WATCH, not a setup.
     const isFade = conf.verdict === "FADE" && Math.abs(annual) >= FADE_FUNDING_FLOOR_PCT_YR && (dir === "LONG" || dir === "SHORT");
@@ -214,7 +217,7 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
   const hot = byFund.find((s) => !conf || s.symbol !== conf.symbol);
   if (hot && Math.abs(hot.funding_rate_8h) >= 0.0004) {
     const heavy = hot.funding_rate_8h > 0 ? "long" : "short";
-    const hAnnual = Number(hot.funding_annual_pct ?? hot.funding_rate_8h * 1095 * 100);
+    const hAnnual = Number(hot.funding_annual_pct ?? annualFundingPct(hot.funding_rate_8h) ?? NaN);
     const hDir = hot.fade_dir === "LONG" || hot.fade_dir === "SHORT" ? hot.fade_dir : (hot.funding_rate_8h > 0 ? "SHORT" : "LONG");
     // "stretched" is the SERVER pierce, not a raw threshold (one verdict): FADE only when funding
     // pierced its own range AND the band is economically large; else it's merely elevated (a WATCH).

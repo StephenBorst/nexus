@@ -18,6 +18,7 @@ import { C, MONO, UI, RADIUS } from "@/config/theme";
 import { SectionHeader } from "./components";
 import { useIsMobile } from "./useIsMobile";
 import { computeTape, FADE_FUNDING_FLOOR_PCT_YR, type MarketSignal } from "./briefing";
+import { annualFundingPct } from "@/lib/funding.mjs";
 import type { TabId } from "./types";
 import { R_CONTRACT } from "@/lib/rContract.mjs";
 import { frozenLevelsFor } from "@/lib/frozenDraft";
@@ -119,7 +120,9 @@ function derivePlay(s: MarketSignal): Row["play"] {
   const dir: Dir | null = s.fade_dir === "SHORT" || s.fade_dir === "LONG" ? s.fade_dir : null;
   // Magnitude floor (Grok): a stretch on a trivial band isn't a crowded fade — it needs an
   // economically large annualized cost too. A stretched-but-small server FADE reads WATCH here.
-  const annual = Math.abs(Number(s.funding_annual_pct ?? s.funding_rate_8h * 1095 * 100));
+  // ×1095 lives in app/lib/funding.mjs. `?? NaN` keeps the old absent-rate behaviour
+  // (NaN fails the floor, same as before) rather than asserting a flat 0%/yr.
+  const annual = Math.abs(Number(s.funding_annual_pct ?? annualFundingPct(s.funding_rate_8h) ?? NaN));
   const bigEnough = annual >= FADE_FUNDING_FLOOR_PCT_YR;
   if (s.verdict === "FADE" && dir && bigEnough) return { klass: "FADE", dir, label: `FADE ${dir}`, strong: true };
   if (s.verdict === "FADE" && dir) return { klass: "WATCH", dir, label: "WATCH", strong: false };  // stretched but not economically large
@@ -336,7 +339,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
         price: t?.price ?? null,
         change24h: t?.change ?? null,
         funding: s.funding_rate_8h,
-        fundingAnnual: Number(s.funding_annual_pct ?? s.funding_rate_8h * 1095 * 100),
+        fundingAnnual: Number(s.funding_annual_pct ?? annualFundingPct(s.funding_rate_8h) ?? NaN),
         oiChange: s.oi_change_pct,
         trend: s.trend ?? null,
         trendMove: s.trend_move_pct ?? null,

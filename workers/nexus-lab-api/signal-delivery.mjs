@@ -6,6 +6,7 @@
 import { confluenceSignal, consensusBySymbol, classifyRegime, fundingStretched, readVerdict } from "./logic.mjs";
 import { gatherStanceEntries } from "./grading.mjs";
 import { buildSignals } from "../../app/lib/signals.mjs";
+import { annualFundingPct } from "../../app/lib/funding.mjs";
 
 const SIGNAL_SYMS = ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC", "PERP_ARB_USDC", "PERP_HYPE_USDC", "PERP_XRP_USDC", "PERP_DOGE_USDC"];
 
@@ -103,7 +104,7 @@ export async function computeSignalRows(env) {
       const fs = histRaw ? (JSON.parse(histRaw) || []).map((h) => Number(h.funding)).filter(Number.isFinite) : [];
       const stretched = fundingStretched(fs);
       const fadeDir = funding > 0 ? "SHORT" : funding < 0 ? "LONG" : "NONE";
-      const fundingAnnualPct = Number((funding * 1095 * 100).toFixed(2));
+      const fundingAnnualPct = Number((annualFundingPct(funding) ?? 0).toFixed(2));
       const verdict = readVerdict(fadeDir, stretched, fundingAnnualPct); // FADE only if pierce AND |annual| ≥ floor
       return {
         symbol: bare,
