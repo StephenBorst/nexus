@@ -740,6 +740,17 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   Page reads via `fetchHLTape` (falls back to direct HL if the worker is down); labels "N fills collected · complete
   from X · tape collected since Y". `completeFrom:null` = complete from the wallet's first fill.
 
+- **✅ SHARE (2026-09-25).** `↗ SHARE` on the verdict card shares **`og.nexustradinglabs.com/share/xray/:address`**
+  (NOT the SPA URL — its meta is JS-injected, crawlers never run it); mobile = `navigator.share`, else clipboard.
+  Worker `routes-xrayshare.mjs`: `/share/xray/:a` = real OG/Twitter meta + forwards to `/analyze?address=`;
+  `/og/xray/:a.png?v=` = 1200×630 card (resvg, same mono font). **ONE grade, every surface:** card content =
+  `app/lib/xrayCard.mjs` (`xrayCard`) graded with `xrayGrade.mjs` on the STORED tape via `fillsToClosedTrades` —
+  the SAME function the page now imports. Card rules: always **30D in parts** (net/trades/win%/PF) + lifetime
+  context; **ACCRUING** below 20 trades (no PF/win%); Orderly-only → **watched record**; dated ("Sep 25 · 14:00
+  UTC"); partial tape disclosed; NO copy/trade prompt. Image URL versioned by `cardVersion` (newest fill + counts)
+  so a re-share after new fills gets a fresh image (X caches by URL); versioned PNGs edge-cached 24h. Unseeded
+  wallet → seeds via `syncHlTape` under a 10/min/IP budget, else honest "no record" card.
+
 ## Nexus PRO — subscriptions / revenue (freemium model)
 The business-model layer. **PRO is a SOFTWARE subscription** (ordinary commerce, real USDC revenue) — NOT a
 token-value scheme. $NEXUS only adds **consumptive use** (pay-in-$NEXUS discount) + **access** (hold-to-unlock).

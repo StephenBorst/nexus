@@ -138,7 +138,7 @@ const XRAY_SNAP_MIN_MS = 20 * 3600 * 1000; // â‰¥20h between stored snapshots (â
 const XRAY_HIST_CAP = 240;                  // ~8 months of daily points
 const XRAY_HIST_TTL = 400 * 86400;
 
-async function readXrayHist(env, address) {
+export async function readXrayHist(env, address) {
   const raw = await env.LAB_STORE.get(XRAY_HIST_PREFIX + address.toLowerCase());
   if (!raw) return [];
   try { const a = JSON.parse(raw); return Array.isArray(a) ? a : []; } catch { return []; }

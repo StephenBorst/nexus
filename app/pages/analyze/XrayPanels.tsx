@@ -1,6 +1,7 @@
 // Wallet X-Ray panels: the time-window grade, the decay row, the copy gate, and the
 // open-positions panel. All grading rules live in @/lib/xrayGrade.mjs (tested) — this
 // file only renders them. The grade is shown as its parts; there is no single score.
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { XRAY_WINDOWS, GATE_WINDOW, WATCHED_MIN_DAYS, fmtPf, liqDistancePct } from "@/lib/xrayGrade.mjs";
 
@@ -150,6 +151,46 @@ export function WindowGradeCard({
         </div>
       )}
     </div>
+  );
+}
+
+// ── SHARE ─────────────────────────────────────────────────────────────────────
+// Shares the crawler-friendly /share/xray link (real meta + the 30D card), not the SPA URL:
+// X/Discord/Telegram don't run JS, so the SPA's own tags never unfurl. Humans who open the
+// link land straight on /analyze. Mobile → the OS share sheet; everywhere else → clipboard.
+// No tracking params, no auto-posting.
+export const xrayShareUrl = (address: string) => `https://og.nexustradinglabs.com/share/xray/${address.toLowerCase()}`;
+
+export function ShareXrayButton({ address, isMobile }: { address: string; isMobile: boolean }) {
+  const [state, setState] = useState<"idle" | "copied" | "manual">("idle");
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const url = xrayShareUrl(address);
+  const flash = (s: "copied" | "manual") => {
+    setState(s);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setState("idle"), s === "copied" ? 2000 : 8000);
+  };
+  const onShare = async () => {
+    if (isMobile && typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try { await navigator.share({ title: "Wallet X-Ray", url }); return; }
+      catch (e) { if ((e as { name?: string })?.name === "AbortError") return; /* else fall through to copy */ }
+    }
+    try { await navigator.clipboard.writeText(url); flash("copied"); }
+    catch { flash("manual"); } // no clipboard permission → show the link to copy by hand
+  };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <button onClick={onShare} className="nx-btn" title="Share this x-ray — the link unfurls with the 30D grade card"
+        style={{ background: "none", border: `1px solid ${state === "copied" ? BONE : BORDER}`, borderRadius: 3, cursor: "pointer",
+          fontFamily: MONO, fontSize: 9, letterSpacing: "0.08em", padding: "3px 9px", color: state === "copied" ? BONE : MUTED }}>
+        {state === "copied" ? "LINK COPIED ✓" : "↗ SHARE"}
+      </button>
+      {state === "manual" && (
+        <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} aria-label="Share link"
+          style={{ fontFamily: MONO, fontSize: 10, color: FOG, background: "#08080a", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "3px 6px", width: 260, maxWidth: "70vw" }} />
+      )}
+    </span>
   );
 }
 

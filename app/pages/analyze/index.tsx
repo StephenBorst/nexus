@@ -31,9 +31,9 @@ import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { fetchHLTape, fetchHLPortfolio, fetchHLPositions, HL_FILLS_MAX, type HLFill, type HLPosition } from "@/utils/hyperliquid";
 import {
   gradeAllWindows, defaultWindow, decayRow, tradesInWindow, windowComplete, edgeGate, watchedWindow,
-  hlCoinToOrderly,
+  hlCoinToOrderly, fillsToClosedTrades,
 } from "@/lib/xrayGrade.mjs";
-import { WindowGradeCard, EdgeGateCard, PositionsPanel, type WindowKey, type WindowGrade, type WatchedWin, type DecayCell, type Gate, type PosRow, WINDOW_KEYS } from "./XrayPanels";
+import { WindowGradeCard, EdgeGateCard, PositionsPanel, type WindowKey, type WindowGrade, type WatchedWin, type DecayCell, type Gate, type PosRow, WINDOW_KEYS, ShareXrayButton } from "./XrayPanels";
 
 // Shared design tokens — same set the Arena uses, so the two pages read as one system.
 const MONO = "var(--nx-font-mono)";
@@ -119,24 +119,8 @@ type SeriesPt = { t: number; realized: number };
 
 const isAddress = (s: string) => /^0x[a-fA-F0-9]{40}$/.test(s.trim());
 
-function fillsToTrades(fills: HLFill[]): ProcessedTrade[] {
-  return fills
-    .filter((f) => /^Close/.test(f.dir) || parseFloat(f.closedPnl || "0") !== 0)
-    .map((f) => {
-      const pnl = parseFloat(f.closedPnl || "0") - Math.abs(parseFloat(f.fee || "0"));
-      const direction: "LONG" | "SHORT" = /Long/.test(f.dir) ? "LONG" : "SHORT";
-      return {
-        symbol: f.coin,
-        direction,
-        side: f.side,
-        pnl,
-        qty: parseFloat(f.sz || "0"),
-        price: parseFloat(f.px || "0"),
-        timestamp: f.time,
-      } as ProcessedTrade;
-    })
-    .sort((a, b) => a.timestamp - b.timestamp);
-}
+// Same conversion the worker's share card uses (xrayGrade.mjs) — one grade, every surface.
+const fillsToTrades = (fills: HLFill[]): ProcessedTrade[] => fillsToClosedTrades(fills) as ProcessedTrade[];
 
 export default function AnalyzePage() {
   const [params, setParams] = useSearchParams();
@@ -420,7 +404,10 @@ export default function AnalyzePage() {
         ].filter(Boolean)) as { l: string; v: string; c: string }[];
         return (
           <div className="nx-fade-in" style={{ border: `1px solid ${BORDER}`, borderLeft: `3px solid ${(hasWatched ? wGood : good) ? POS : NEG}`, borderRadius: 8, background: SURFACE_ALT, padding: "18px 20px", marginBottom: 22 }}>
-            <div style={{ ...label, marginBottom: 12 }}>◆ X-RAY VERDICT · {short(address)}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+              <div style={label}>◆ X-RAY VERDICT · {short(address)}</div>
+              <ShareXrayButton address={address} isMobile={isMobile} />
+            </div>
             {hasWatched ? (
               // Watched grade leads; lifetime is a demoted context line beneath it (Grok).
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
