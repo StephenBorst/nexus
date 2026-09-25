@@ -90,3 +90,9 @@ Be honest and specific with the numbers. A null or declining result is a valid a
   the market's usual level, so it can short). Report them beside basis_extreme / basis_x_cvd: verdict, samples, and
   whether both sides fired. If basis_dev_x_cvd grades PREDICTIVE with shorts in the sample, flag it as the candidate
   to wire next — don't recommend swapping the live preset on one read.
+- FIRST READ (Sept 25 22:25 UTC, same data as the others, 12 coins):
+  - basis_dev_x_cvd: PREDICTIVE (R +0.27, n32, stable) · 4h PREDICTIVE +23.7bps n27 stable · 12h PROMISING +18.7 n27 ·
+    24h PROMISING +80.9 n22. (vs basis_x_cvd: R +0.27 n37 · 12h NOISE −4.6 · 24h PREDICTIVE +168.3 n25.)
+  - basis_dev: PROMISING (R +0.05, n288, NOT stable) · 24h PREDICTIVE +59.2 n230 (vs basis_extreme R +0.15 n329 stable).
+  - Sides (last 72h per coin, 9 coins with history): two-sided fired 10 LONG / 11 SHORT; the old rule 20 LONG / 0 SHORT.
+    The short side is real. No exit grade on the new axes (no preset trades them).

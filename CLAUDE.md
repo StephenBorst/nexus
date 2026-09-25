@@ -723,6 +723,9 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   it — /proof shows it as a research read. Tests: `axisbt.basisdev.test.mjs` (old axis long-only vs new both sides on a
   persistent-discount tape, poisoned-future no-lookahead, registered) + basisFade.test.mjs. Promote only if it grades
   PREDICTIVE with BOTH sides represented — then it needs its own brain wiring + parity test like basis_x_cvd.
+  **First read (Sept 25):** basis_dev_x_cvd PREDICTIVE (R +0.27 n32 stable; 4h PREDICTIVE; unlike basis_x_cvd its 12h
+  is PROMISING, not NOISE) · basis_dev PROMISING (R +0.05 n288, not stable). Last-72h side check: two-sided 10L/11S vs
+  old 20L/0S — shorts are real. Same 33d, in-sample-adjacent → Oct-15 decides.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
