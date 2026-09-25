@@ -379,8 +379,12 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   and the Backtest card prints **TESTED AS: <label>** (amber when inverted).
 - **⚠️ Proof hero receipts rule:** every receipt on `FeaturedLead` must be true of the EXACT preset its Deploy button
   loads. Ember's first cut printed $ figures from a user-EDITED config next to the preset's button — replaced with
-  preset-true receipts (read PREDICTIVE · ~9 trades/33d · walk-forward NOT ROBUST · no live record). $ receipts
-  return only when measured on the preset unedited (Load → Test / Validate, no changes).
+  preset-true receipts. **✅ Clean preset run (2026-09-25, Ember, TESTED AS "Basis × CVD Stack", no edits, 33d, fees
+  in):** backtest +$22.62 · 78.6% · 14T (BTC 2T +$2.39 · ETH 8T +$10.32 · SOL 4T +$9.91); walk-forward (6 mkts × 4
+  folds) **NOT ROBUST** — +$32.06, 4/6 mkts green, 42% folds (BTC 1/4 · ETH 3/4 · SOL 3/4 · BNB 0 trades · XRP 3/4
+  +$11.86 · LINK 0/4 −$2.43). These are on the hero now, dated. The dirty run's "XRP fails" was config contamination.
+  ⚠️ Fold consistency counts EMPTY folds as non-positive (BNB = 4 empty folds) — conservative by design; at 14 trades
+  the verdict is sample-limited, not a clean fail. Don't loosen the math to make it pass; let history grow.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
   and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
   doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one

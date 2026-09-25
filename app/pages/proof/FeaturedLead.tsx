@@ -1,15 +1,14 @@
 // ── FEATURED LEAD — the best config we have, and its real verdict ─────────────
 // The booth hero. Basis × CVD Stack is the current lead: the basis-extreme fade taken
-// ONLY when same-hour CVD divergence leans the same way. Its read grades PREDICTIVE on
-// the signal scoreboard; the strategy around it is thin (≈9 trades over 33d of recorded
-// history in the 2026-09-24 replays) and the walk-forward came back NOT ROBUST. We print
-// that rather than bury it — this board grades our own work the way it grades everyone
-// else's.
+// ONLY when same-hour CVD divergence leans the same way. We print its backtest AND its
+// walk-forward (NOT ROBUST) side by side rather than bury the second — this board grades
+// our own work the way it grades everyone else's.
 //
-// ⚠️ Every receipt here must be true of the EXACT preset the Deploy button loads. The
-// first cut printed $ figures from a user-edited config (different exits/hold, and a
-// walk-forward run with extra filters on) next to the preset's button. Dollar receipts
-// come back only when measured on this preset, unedited (Load → Test/Validate, no changes).
+// ⚠️ RECEIPTS RULE: every number here must be measured on the EXACT preset the Deploy
+// button loads, unedited (Load → TESTED AS "Basis × CVD Stack" → Test / Validate). The
+// first cut printed figures from an edited config with INVERT + tape filter still on —
+// the clean run flipped XRP from −$5.90 to +$11.86. Re-measure and re-date on change.
+// Measured 2026-09-25 · 33d of recorded basis + CVD history · $250 notional · fees in.
 //
 // Self-contained on purpose: reads NO endpoint (its identity + config come from the
 // same preset the Lab/Bankr skill deploy), so it always renders crisp for a 90-second
@@ -35,10 +34,10 @@ const LEAD = STRATEGY_PRESETS.find((p) => p.id === "basis-cvd-stack");
 // The receipts — each one true of this preset as deployed. Backtest-derived rows are
 // labelled as such; none of this is a live track record.
 const RECEIPTS: { label: string; value: string; tone?: string }[] = [
-  { label: "the read", value: "◆ PREDICTIVE", tone: POS },
-  { label: "sample", value: "~9 trades · 33d", tone: AMBER },
+  { label: "backtest · 33d", value: "+$22.62", tone: POS },
+  { label: "win rate", value: "78.6% · 14T", tone: POS },
   { label: "walk-forward", value: "NOT ROBUST", tone: NEG },
-  { label: "live record", value: "none yet", tone: AMBER },
+  { label: "markets green", value: "4 of 6", tone: AMBER },
 ];
 
 export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
@@ -72,7 +71,7 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
       <div style={{ fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.6, maxWidth: 640, marginBottom: 14 }}>
         It takes the basis-extreme fade — a perp far above spot is froth, far below is capitulation — <b style={{ color: BRIGHT }}>only</b> when
         same-hour CVD divergence leans the same way. The read underneath grades <span style={{ color: POS }}>◆ PREDICTIVE</span> on the
-        signal scoreboard. The strategy around it is choosy and still thin: about nine trades in 33 days of recorded history.
+        signal scoreboard. Choosy by design: fourteen trades in 33 days of recorded history, fees in.
       </div>
 
       {/* Backtest receipts — the honest numbers */}
@@ -87,9 +86,9 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
 
       {/* Honest label + self-funding line */}
       <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
-        A <b style={{ color: FOG }}>lead</b>, not an edge. The walk-forward came back <b style={{ color: NEG }}>NOT ROBUST</b>: it
-        held on some markets and failed on others, over too few weeks to say which is signal. That verdict is printed here
-        rather than buried, and it gets re-run as the history grows.
+        A <b style={{ color: FOG }}>lead</b>, not an edge. The walk-forward came back <b style={{ color: NEG }}>NOT ROBUST</b>: net
+        +$32.06 across six markets, four of them green, but only 42% of time folds positive — too few trades per window to
+        call it. Printed here rather than buried, and re-run as the history grows. Measured Sept 25 on the preset exactly as it deploys.
         Run it in <b style={{ color: FOG }}>PAPER</b> to start its forward clock, risk-free — that record is yours,
         not this board. Take it <b style={{ color: FOG }}>live</b> and it joins the graded, on-chain-verifiable agents
         below: real settled trades, never a paper sim. Either way the edge funds itself — the same signals sell as data
