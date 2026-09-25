@@ -767,6 +767,10 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   keys are ALREADY hour buckets and `hourBucket(hourBucket(t))` = 0, so passing keys back through `forwardReturn`
   silently emptied the baseline (and "excess ≈ 0" passed vacuously) — coinDrift reads the map directly; the test now
   asserts the baseline covers every graded event. bps horizons only (no R drift).
+  **First drift read (Sept 25):** window drifted up (avg long +6/+14/+23bps at 4/12/24h). Above drift: basis_extreme
+  24h **+67.0 stable** (n259) · basis_x_cvd 24h **+144.7 stable** (n25) but **12h −20.5** (the preset's hold) · basis_dev
+  24h **+58.8 stable** (n230), its shorts +25.3 at 24h (flat raw only because the market rose) · basis_dev_x_cvd 4h
+  +24.9 / 12h +17.8 stable (small n) · rsi_reset_held 24h −18.1 (was drift) · funding/liq/cvd negative (noise).
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 

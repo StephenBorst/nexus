@@ -110,3 +110,14 @@ Be honest and specific with the numbers. A null or declining result is a valid a
     Oct-15 check: if shorts are still ≤0 R on ≥30 samples, the two-sided rule is not a candidate — say so plainly.
 - Since Sept 25 every horizon carries `drift.excessBps` (move above the coin's own average drift) + `drift.bySide`. For
   the basis axes, report EXCESS, not raw bps: an edge that is ~0 above drift is the market, not the read.
+- FIRST DRIFT READ (Sept 25 22:51 UTC). The window drifted UP: an average long on these coins made +6 / +14 / +23 bps
+  at 4 / 12 / 24h. Excess = the read's move minus that (raw → excess):
+  - basis_extreme 24h +89.6 → **+67.0 stable** (n259) · 4h +9.1 / 12h +5.5 unstable.
+  - basis_x_cvd 24h +168.3 → **+144.7 stable** (n25) · **12h −4.6 → −20.5** (the live preset's hold) · 4h +6.4.
+  - basis_dev 24h +59.2 → **+58.8 stable** (n230); its SHORTS at 24h: raw ≈ +6 but baseline −19 → **excess +25.3 (n119)**
+    — the shorts looked flat only because the market rose; above drift they add value at 24h (−5.3 at 12h).
+  - basis_dev_x_cvd 4h **+24.9 stable**, 12h **+17.8 stable**, 24h +84.7 unstable (n22–27; shorts +82.8 / +18.1 / −75.0).
+  - Sanity rows: rsi_reset_held 24h raw +20.8 → excess −18.1 (a long-only read that was mostly drift) · funding_fade,
+    liq_flush, cvd_divergence negative excess (confirmed noise).
+  - Read: basis survives the drift test at 24h on the big samples. The 12h hold the live preset uses is where basis_x_cvd
+    goes negative above drift. Decide the hold at Oct-15 on oos + paper A/B + these excess numbers together.
