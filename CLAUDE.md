@@ -450,6 +450,11 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   except maxHoldHours. Both ledgers RESET Sept 25 (old CONFLUENCE-era ledgers archived in `docs/paper-archive/`) —
   reset, not date-filter, because `paper_agg` is accrued at close and can't be split by date. Oct-15 routine reads
   both via public `GET /agent/:addr` (step 2c) with a guard if `firstTradeAt` predates the reset.
+  **Third arm (Sept 25):** `0x325da3ed…95de` — PAPER Basis × CVD, 24h, meant for all 9 mature markets; reset 23:09:29Z.
+  ⚠️ **An EMPTY `config.symbols` = the brain evaluates NOTHING** (it loops the listed symbols; there is no "all" default) —
+  the arm was set up with `symbols: []`. ⚠️ All three paper wallets carried a leftover `takeProfits` scale-out
+  [1%×75%, 2%×25%] that OVERRIDES `tpPercent` in exec (`normTakeProfits`) → they trade a different exit than the graded
+  contract (single TP 2.5). The preset itself has no takeProfits.
   ⚠️ The 12h wallet also has `fundingPercentileMin:95` (leftover) — INERT on BASIS_FADE (brain applies it to
   FUNDING_ONLY/CONFLUENCE only), so the A/B still differs only in hold.
 - **✅ LIVE-vs-GRADED PARITY (2026-09-25):** `app/lib/paperParity.mjs` (`paperParity`/`axisForConfig`/
