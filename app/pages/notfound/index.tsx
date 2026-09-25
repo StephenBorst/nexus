@@ -7,7 +7,7 @@ import { PageMeta } from "@/components/PageMeta";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const LINKS: [string, string, string][] = [
-  ["/lab", "The Lab", "plan it, run it, prove it"],
+  ["/lab", "The Lab", "Plan it. Run it. Prove it."],
   ["/perp/PERP_BTC_USDC", "Trade", "perps on Orderly"],
   ["/proof", "Proof", "graded track records"],
   ["/markets", "Markets", "every listed pair"],
@@ -22,7 +22,7 @@ export default function NotFoundPage() {
         <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.22em", color: "#71717a", marginBottom: 14 }}>// 404</div>
         <h1 style={{ fontFamily: UI, fontSize: 28, fontWeight: 700, color: "#f4f4f5", margin: "0 0 10px", lineHeight: 1.2 }}>Nothing lives at this address.</h1>
         <p style={{ fontFamily: UI, fontSize: 14, color: "#a1a1aa", lineHeight: 1.6, margin: "0 0 24px", overflowWrap: "anywhere" }}>
-          <span style={{ fontFamily: MONO, fontSize: 12.5, color: "#71717a" }}>{pathname}</span> isn't a page on Nexus. It may have moved, or the link was mistyped.
+          <span style={{ fontFamily: MONO, fontSize: 12.5, color: "#71717a" }}>{pathname}</span> is not a page on Nexus. It moved, or the link is wrong.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
           {LINKS.map(([to, label, sub]) => (

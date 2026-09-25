@@ -52,7 +52,7 @@ export default function TakesStrip() {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontFamily: mono, fontSize: 11, fontWeight: "bold", color: "#ededf0", letterSpacing: "0.12em" }}>🔥 HOT TAKES</span>
+        <span style={{ fontFamily: mono, fontSize: 11, fontWeight: "bold", color: "#ededf0", letterSpacing: "0.12em" }}>HOT TAKES</span>
         <span style={{ fontFamily: mono, fontSize: 9, color: "#52525b" }}>ungraded conviction on Spot tokens · tap to open</span>
       </div>
 

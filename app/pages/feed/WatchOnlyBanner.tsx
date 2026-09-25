@@ -17,10 +17,9 @@ export default function WatchOnlyBanner() {
   if (hidden) return null;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#141416", border: "1px solid #232327", borderRadius: 6, padding: "9px 12px", marginBottom: 12, fontFamily: "var(--nx-font-mono)", flexWrap: "wrap", rowGap: 8 }}>
-      <span style={{ fontSize: 14 }}>👁</span>
-      <div style={{ flex: 1, minWidth: 160 }}>
-        <div style={{ fontSize: 11, color: "#f4f4f5", fontWeight: "bold" }}>Watch-only — you&apos;re exploring without a wallet.</div>
-        <div style={{ fontSize: 9, color: "#a1a1aa", marginTop: 2 }}>Live positions, verified callers &amp; desks are open to everyone. Connect to trade, copy &amp; join a desk.</div>
+            <div style={{ flex: 1, minWidth: 160 }}>
+        <div style={{ fontSize: 11, color: "#f4f4f5", fontWeight: "bold" }}>Watch-only. No wallet connected.</div>
+        <div style={{ fontSize: 9, color: "#a1a1aa", marginTop: 2 }}>Live positions, verified callers and desks are public. Connect to trade, copy or join a desk.</div>
       </div>
       <button
         onClick={() => { try { connect(); } catch { /* SDK not ready */ } }}

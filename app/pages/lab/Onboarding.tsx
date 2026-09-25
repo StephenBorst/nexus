@@ -8,12 +8,12 @@ export function LabWelcome() {
   // looks like an afterthought. Ordered by the trader's lifecycle: scout → plan →
   // automate → validate → grade → record.
   const features = [
-    { icon: "◆", title: "The Briefing · Live Signals", desc: "The terminal reads the market, the graded caller crowd, and your own record — then tells you which setups are actually yours. A live signals bell (and Telegram) so you never miss one." },
-    { icon: "◎", title: "Smart Money", desc: "See what proven on-chain traders are holding right now across Orderly and Hyperliquid — with a graded Consistency Score on any wallet — then copy any move into a risk-managed trade." },
-    { icon: "◈", title: "The Nexus Thesis Engine", desc: "Plan every trade — position sizing, R:R, funding cost, live P&L tracking, on-chain proof." },
-    { icon: "⬢", title: "Autonomous Trading Agent", desc: "Runs your strategy hands-free and grades every close on-chain. Scale-out & trailing exits, DCA, TradingView signals. Hard risk caps, kill switch, order-only keys." },
-    { icon: "◇", title: "Strategy Workbench", desc: "Build a strategy by trading style, backtest it on real history, then publish it — every result graded on-chain. Verify, don't trust." },
-    { icon: "▣", title: "Analytics & Journal", desc: "Trading score, win-rate & hold-time breakdowns, leverage analysis, and a full journal with a calendar heatmap — grade yourself like a desk." },
+    { icon: "◆", title: "The Briefing · Live Signals", desc: "The market, the graded caller crowd and your own record, read together. It names the setups that fit you. Alerts in-app and on Telegram." },
+    { icon: "◎", title: "Smart Money", desc: "What graded on-chain traders hold right now on Orderly and Hyperliquid. A Consistency Score on any wallet. Copy a move into a sized trade." },
+    { icon: "◈", title: "The Nexus Thesis Engine", desc: "Size. R:R. Funding cost. Live P&L. Publish it and the call is timestamped on-chain." },
+    { icon: "⬢", title: "Autonomous Trading Agent", desc: "Runs your strategy. Grades every close. Scale-outs, trailing exits, DCA, TradingView signals. Hard caps. Kill switch. Order-only keys." },
+    { icon: "◇", title: "Strategy Workbench", desc: "Build by trading style. Backtest on recorded history. Publish it. Every result graded." },
+    { icon: "▣", title: "Analytics & Journal", desc: "Trading score. Win rate and hold time. Leverage. A journal with a calendar heatmap." },
   ];
   return (
     <div style={{ padding: "32px 8px" }}>
@@ -80,13 +80,13 @@ export function OnboardingChecklist({
   if (dismissed) return null;
 
   const steps = [
-    { key: "connect", label: "Connect your wallet", hint: "Your data is loading — you're in.", done: true, action: null },
-    { key: "thesis",  label: "Plan your first thesis", hint: "Size a trade with R:R, stops & funding in the Nexus Thesis Engine.", done: hasThesis, action: onGoThesis, cta: "OPEN NEXUS THESIS ENGINE" },
-    { key: "trade",   label: "Place your first trade", hint: "Trade anywhere on Nexus — it flows back here automatically.", done: hasTrade, action: null },
+    { key: "connect", label: "Connect your wallet", hint: "Connected. Your data is loading.", done: true, action: null },
+    { key: "thesis",  label: "Plan your first thesis", hint: "Size a trade. Stop, targets, funding cost.", done: hasThesis, action: onGoThesis, cta: "OPEN NEXUS THESIS ENGINE" },
+    { key: "trade",   label: "Place your first trade", hint: "Trade anywhere on Nexus. It lands here.", done: hasTrade, action: null },
     // The flagship, and the lowest-friction "wow": PAPER needs no funds and no key, so a
     // brand-new user can watch the agent hunt funding edges hands-free on their first visit.
-    { key: "agent",   label: "Meet your autonomous agent", hint: "PAPER mode — no funds, no key, zero risk. Watch it hunt funding edges hands-free.", done: hasAgent, action: onGoAgent, cta: "OPEN AGENT" },
-    { key: "grade",   label: "Grade your performance", hint: "See your trading score, breakdowns & journal.", done: hasTrade, action: onGoAnalytics, cta: "VIEW ANALYTICS" },
+    { key: "agent",   label: "Run an agent in paper", hint: "No funds. No key. Your rules, on simulated fills.", done: hasAgent, action: onGoAgent, cta: "OPEN AGENT" },
+    { key: "grade",   label: "Grade your performance", hint: "Trading score, breakdowns and journal.", done: hasTrade, action: onGoAnalytics, cta: "VIEW ANALYTICS" },
   ];
   const doneCount = steps.filter((s) => s.done).length;
   const allDone = doneCount === steps.length;

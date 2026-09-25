@@ -88,7 +88,7 @@ function EvidenceLine({ axis }: { axis: string }) {
   const bl = ev.baseline;
   const tone = bl?.verdict === "BEATS_RANDOM" ? POS : bl?.verdict === "LEANS_ABOVE" ? "#fbbf24" : FOG;
   return (
-    <div title={`The preset's own signal and ${ev.hold}h exit, replayed on every market with recorded history — each on its own — and the trades pooled. ${ev.caveat || ""}`}
+    <div title={`The preset's own signal and ${ev.hold}h exit, replayed on every market with recorded history. Each market on its own. Trades pooled. ${ev.caveat || ""}`}
       style={{ marginTop: 6, fontFamily: MONO, fontSize: 9, color: FOG, lineHeight: 1.6, cursor: "help" }}>
       <span style={{ color: MUTED, letterSpacing: "0.08em" }}>ACROSS {ev.markets} RECORDED MARKETS</span>{" "}
       <span style={{ color: ev.netUsd >= 0 ? POS : NEG }}>{ev.netUsd >= 0 ? "+" : ""}${ev.netUsd}</span> · {ev.trades} trades · green on {ev.marketsGreen}/{ev.markets}
@@ -98,7 +98,7 @@ function EvidenceLine({ axis }: { axis: string }) {
           {bl.verdict !== "BEATS_RANDOM" && bl.moreTradesNeeded != null && <span style={{ color: FAINT }}> · ~{bl.moreTradesNeeded} more trades for a verdict</span>}
         </>
       )}
-      <span style={{ color: FAINT }}> · markets move together — pooled, not independent</span>
+      <span style={{ color: FAINT }}> · markets move together. Pooled, not independent</span>
     </div>
   );
 }
@@ -112,10 +112,10 @@ function SignalRow({ a }: { a: AxisRow }) {
   const preset = AXIS_PRESET[a.name] && !paused ? presetById(AXIS_PRESET[a.name]) : undefined;
   const align = isMobile ? "start" : "end";
   const stats = rated && a.best ? [
-    <Stat key="h" align={align} v={`${a.best.h}h`} l="horizon" title="How far ahead we measure the move — this read's best window." />,
+    <Stat key="h" align={align} v={`${a.best.h}h`} l="horizon" title="How far ahead we measure. This read's best window." />,
     <Stat key="hr" align={align} v={`${a.best.hitRate}%`} l="hit rate" title="Share of times it moved the predicted way." />,
     <Stat key="e" align={align} v={`${a.best.meanBps >= 0 ? "+" : ""}${a.best.meanBps}`} unit={isMobile ? undefined : "bps"} l={isMobile ? "edge · bps" : "avg edge"} color={a.best.meanBps >= 0 ? POS : NEG} title="Average forward move it caught, in basis points (100 bps = 1%)." />,
-    <Stat key="n" align={align} v={`${a.best.samples}`} l="samples" title="How many times this read has fired — more samples = more trustworthy." />,
+    <Stat key="n" align={align} v={`${a.best.samples}`} l="samples" title="Times this read has fired. More samples, more weight." />,
     <Stat key="s" align={align} v={a.best.stable ? "✓" : "—"} l="stable" color={a.best.stable ? POS : FAINT} title="Held up in BOTH halves of the record (walk-forward) — not a fluke of one stretch." />,
   ] : null;
   // Every horizon, not just the best — a preset holding into a NOISE window is invisible
@@ -131,11 +131,11 @@ function SignalRow({ a }: { a: AxisRow }) {
         <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: v.color, border: `1px solid ${v.color}55`, borderRadius: 3, padding: "1px 6px", flexShrink: 0, whiteSpace: "nowrap" }}>{v.label}</span>
         {!isMobile && (stats
           ? <span style={{ marginLeft: "auto", display: "flex", gap: 16, alignItems: "flex-end", flexShrink: 0 }}>{stats}</span>
-          : <span style={{ ...statCell, marginLeft: "auto", color: FAINT }}>accruing — not yet rated</span>)}
+          : <span style={{ ...statCell, marginLeft: "auto", color: FAINT }}>accruing · not yet rated</span>)}
       </div>
       {isMobile && (stats
         ? <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>{stats}</div>
-        : <div style={{ ...statCell, color: FAINT, marginTop: 6 }}>accruing — not yet rated</div>)}
+        : <div style={{ ...statCell, color: FAINT, marginTop: 6 }}>accruing · not yet rated</div>)}
       {hz.length > 1 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 8, fontFamily: MONO, fontSize: 9 }} title="Forward move after the read fired, by horizon (gross, close-to-close).">
           {hz.map((h) => {
@@ -186,7 +186,7 @@ function SignalRow({ a }: { a: AxisRow }) {
       ) : paused ? (
         <div style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT, marginTop: 8 }}>{paused}</div>
       ) : rated && (a.verdict === "PREDICTIVE" || a.verdict === "PROMISING") ? (
-        <div style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT, marginTop: 8 }}>research read — not an agent mode yet</div>
+        <div style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT, marginTop: 8 }}>research read · not an agent mode yet</div>
       ) : null}
     </div>
   );
@@ -316,7 +316,7 @@ export default function ProofPage() {
     <div style={{ maxWidth: 980, margin: "0 auto", padding: isMobile ? "20px 14px 60px" : "32px 24px 80px" }}>
       <SectionHeader
         eyebrow="THE PROOF"
-        title="Every track record on Nexus — graded, not claimed"
+        title="Every record on Nexus. Graded, not claimed."
         note={totalRecords > 0 ? `${totalRecords} RANKED` : "TRUSTLESS BY DESIGN"}
       />
 
@@ -428,7 +428,7 @@ export default function ProofPage() {
 
       {/* ARENA — external AI agents, paper + live */}
       {show("arena") && (
-        <BoardShell title="🏟️ ARENA — EXTERNAL AI AGENTS" count={arena?.length}>
+        <BoardShell title="ARENA · EXTERNAL AI AGENTS" count={arena?.length}>
           {arena === null ? empty("loading…") : arena.length === 0 ? (
             <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "6px 2px" }}>
               The open proving ground is live — no agents registered yet. <span onClick={() => navigate("/arena")} style={{ color: BONE, cursor: "pointer" }}>Enter the Arena →</span>
@@ -474,12 +474,12 @@ export default function ProofPage() {
       {/* SIGNALS — we grade our OWN reads by the same trustless standard. The part nobody
           else does: publishing which of our signals work and which don't, walk-forward. */}
       {show("signals") && (
-        <BoardShell title="◆ SIGNAL SCOREBOARD — OUR OWN READS, GRADED" count={scorecard?.axes?.length}>
+        <BoardShell title="◆ SIGNAL SCOREBOARD · OUR OWN READS, GRADED" count={scorecard?.axes?.length}>
           <div style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.6, maxWidth: 660, marginBottom: 12 }}>
-            Every read in the engine, scored the way we grade traders — <b style={{ color: BRIGHT }}>forward returns, no lookahead</b>, pooled across the core markets, with a walk-forward stability check.
-            A read is not an edge until it's <span style={{ color: POS }}>◆ PREDICTIVE</span> here. Most sit at <span style={{ color: FAINT }}>ACCRUING</span> until the self-logged history matures and the sample clears the bar.
+            Every read in the engine, graded the way we grade traders. <b style={{ color: BRIGHT }}>Forward returns. No lookahead.</b> Pooled across the core markets. Walk-forward stability check.
+            A read is not an edge until it's <span style={{ color: POS }}>◆ PREDICTIVE</span> here. Most sit at <span style={{ color: FAINT }}>ACCRUING</span> until the history matures and the sample clears the bar.
             <span style={{ display: "block", marginTop: 8, color: MUTED, fontSize: 11.5 }}>
-              Reading a row — <b style={{ color: FOG }}>horizon</b> (how far ahead) · <b style={{ color: FOG }}>hit rate</b> (share that went the right way) · <b style={{ color: FOG }}>edge</b> (avg move caught, 100 bps = 1%) · <b style={{ color: FOG }}>samples</b> (times it&rsquo;s fired) · <b style={{ color: FOG }}>stable</b> (held up in both halves).
+              Reading a row: <b style={{ color: FOG }}>horizon</b> (how far ahead) · <b style={{ color: FOG }}>hit rate</b> (share that went the right way) · <b style={{ color: FOG }}>edge</b> (avg move caught, 100 bps = 1%) · <b style={{ color: FOG }}>samples</b> (times it&rsquo;s fired) · <b style={{ color: FOG }}>stable</b> (held up in both halves).
             </span>
           </div>
           {scorecard === null ? empty("loading…") : !scorecard.axes?.length ? empty("scorecard warming up…") : (

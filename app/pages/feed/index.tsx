@@ -216,7 +216,7 @@ function CopyModal({
       const existing = resp.ok ? await resp.json() : { theses: [], notes: {} };
       const existingTheses: ThesisTrade[] = existing.theses ?? [];
 
-      const attribution = `📋 Copied from ${traderName}${thesis.notes ? `\n\n${thesis.notes}` : ""}${extraNotes ? `\n\n${extraNotes}` : ""}`;
+      const attribution = `Copied from ${traderName}${thesis.notes ? `\n\n${thesis.notes}` : ""}${extraNotes ? `\n\n${extraNotes}` : ""}`;
 
       const newThesis: ThesisTrade = {
         id: `copy_${Date.now()}`,
@@ -260,7 +260,7 @@ function CopyModal({
       setSaved(true);
       setTimeout(onClose, 1200);
     } catch {
-      setErr("failed to save — check connection");
+      setErr("Save failed. Check your connection.");
     } finally {
       setSaving(false);
     }
@@ -296,7 +296,7 @@ function CopyModal({
               </span>
             </div>
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 2 }}>
-              📋 copying from {traderName}
+              copying from {traderName}
             </div>
           </div>
           <button
@@ -405,7 +405,7 @@ function CopyModal({
         <div style={{ marginBottom: 14, padding: 8, background: "#0f0f11", borderRadius: 3, border: "1px solid #232327" }}>
           <div style={labelStyle}>ATTRIBUTION (auto-added to notes)</div>
           <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#a1a1aa", lineHeight: 1.5 }}>
-            📋 Copied from {traderName}
+            Copied from {traderName}
           </div>
         </div>
 
@@ -527,13 +527,13 @@ function FeedCard({
               {thesis.agent ? "Nexus Agent" : (thesis.displayName ?? shortAddr)}
             </span>
             {thesis.agent ? (
-              <span style={{ flexShrink: 0, fontSize: 8, letterSpacing: "0.08em", padding: "2px 5px", borderRadius: 3, background: "#1a1a1e", border: "1px solid #33333a", color: "#d4d4d8" }}>🤖 AGENT</span>
+              <span style={{ flexShrink: 0, fontSize: 8, letterSpacing: "0.08em", padding: "2px 5px", borderRadius: 3, background: "#1a1a1e", border: "1px solid #33333a", color: "#d4d4d8" }}>AGENT</span>
             ) : (
               <span style={{ flexShrink: 0 }}><NexusTierBadge address={thesis.wallet} /></span>
             )}
           </div>
           {!thesis.agent && thesis.displayName && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>{shortAddr}</div>}
-          {thesis.agent && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>autonomous · funding-edge bot</div>}
+          {thesis.agent && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>autonomous agent</div>}
         </div>
         <div style={{
           fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em",
@@ -600,7 +600,7 @@ function FeedCard({
             background: "#141416", border: "1px solid #232327",
             borderRadius: 3, padding: "2px 6px",
           }}>
-            📋 {thesis.copyCount} {thesis.copyCount === 1 ? "copy" : "copies"}
+            {thesis.copyCount} {thesis.copyCount === 1 ? "copy" : "copies"}
           </span>
         )}
         {(thesis.copyCount ?? 0) >= 3 && (
@@ -609,7 +609,7 @@ function FeedCard({
             background: "#141416", border: "1px solid #33333a",
             borderRadius: 3, padding: "2px 6px",
           }}>
-            🔥 HOT
+            HOT
           </span>
         )}
       </div>
@@ -686,7 +686,7 @@ function FeedCard({
           gone (the status badge above already reflects the objective grade). */}
       {(thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS") && (
         <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", marginBottom: 8 }}>
-          ✓ graded {thesis.gradedOutcome} · first-touch vs public price — the tape marked this, not the trader
+          ✓ graded {thesis.gradedOutcome} · first touch vs public price. The tape marked it, not the trader.
         </div>
       )}
 
@@ -759,12 +759,12 @@ function FeedCard({
         shareHref={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
           (thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS")
             // Resolved → lead with the TRUSTLESS RESULT, not the planned R:R.
-            ? `📡 ${ticker} ${thesis.direction} — ✓ NEXUS GRADED ${thesis.gradedOutcome}${typeof thesis.gradedR === "number" ? ` ${thesis.gradedR >= 0 ? "+" : ""}${thesis.gradedR.toFixed(2)}R` : ""}\n\nFirst-touch vs public price — the tape marked this, not me.\n\nEvery call graded on-chain on Nexus Trading Labs 👇`
-            : `📡 ${ticker} ${thesis.direction} ${thesis.leverage.toFixed(1)}x\n\nEntry $${thesis.entryPrice.toFixed(2)} · Stop $${thesis.stopLoss.toFixed(2)} · TP $${thesis.takeProfit1.toFixed(2)} (R:R 1:${thesis.riskReward.toFixed(2)})\n\nGraded on-chain vs public price on Nexus Trading Labs 👇`
+            ? `${ticker} ${thesis.direction}. Graded ${thesis.gradedOutcome}${typeof thesis.gradedR === "number" ? ` ${thesis.gradedR >= 0 ? "+" : ""}${thesis.gradedR.toFixed(2)}R` : ""}.\n\nFirst touch vs public price. The tape marked it, not me.\n\nGraded on Nexus Trading Labs.`
+            : `${ticker} ${thesis.direction} ${thesis.leverage.toFixed(1)}x.\n\nEntry $${thesis.entryPrice.toFixed(2)}. Stop $${thesis.stopLoss.toFixed(2)}. TP $${thesis.takeProfit1.toFixed(2)}. R:R 1:${thesis.riskReward.toFixed(2)}.\n\nGraded against public price on Nexus Trading Labs.`
         )}&url=${encodeURIComponent(`https://og.nexustradinglabs.com/share/thesis/${thesis.wallet.toLowerCase()}/${thesis.id}`)}`}
         onCopy={() => onCopy(thesis)}
         canCopy={!!walletAddress && !isOwnThesis}
-        onMessage={() => navigate(`/messages?dm=${thesis.wallet}&re=${encodeURIComponent(`Re: your ${ticker} ${thesis.direction} call — `)}`)}
+        onMessage={() => navigate(`/messages?dm=${thesis.wallet}&re=${encodeURIComponent(`Re: your ${ticker} ${thesis.direction} call. `)}`)}
         canMessage={!!walletAddress && !isOwnThesis}
       />
       </div>
@@ -845,7 +845,6 @@ function buildLeaderboard(feed: FeedThesis[]): TraderStats[] {
   });
 }
 
-const RANK_MEDALS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
 function LeaderboardView({ feed, walletAddress, onCopy }: {
   feed: FeedThesis[];
@@ -881,7 +880,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
     try {
       const cur = await fetch(`${API_BASE}/agent/${walletAddress}`).then((r) => r.json()).catch(() => null);
       const config = cur?.config;
-      if (!config) { setCopyMsg("Set up your agent in the Lab first — Autocopy runs through it."); return; }
+      if (!config) { setCopyMsg("Set up your agent in the Lab first. Autocopy runs through it."); return; }
       const leaders = (config.autocopy?.leaders || []).map((w: string) => w.toLowerCase());
       const following = leaders.includes(lw);
       const next = following ? leaders.filter((w: string) => w !== lw) : [...leaders, lw];
@@ -892,7 +891,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
       });
       if (!res.ok) throw new Error();
       setCopyLeaders(new Set(next));
-      setCopyMsg(following ? "Stopped copying" : cur?.state?.active ? "Autocopying — your agent will mirror their next call" : "Autocopy set — activate your agent to start");
+      setCopyMsg(following ? "Stopped copying" : cur?.state?.active ? "Autocopying. Your agent mirrors their next call." : "Autocopy set. Activate your agent to start.");
       setTimeout(() => setCopyMsg(null), 3500);
     } catch { setCopyMsg("Couldn't update autocopy"); } finally { setCopyBusy(null); }
   }
@@ -993,7 +992,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
       </div>
       {callLedger?.ledgerHash && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10, paddingLeft: 2 }}>
-          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0" }}>🔗 CALL LEDGER</span>
+          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0" }}>CALL LEDGER</span>
           <code style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#a1a1aa", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3, padding: "2px 6px" }}>
             {callLedger.ledgerHash.slice(0, 10)}…{callLedger.ledgerHash.slice(-8)}
           </code>
@@ -1034,8 +1033,8 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
               style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, overflowX: "auto" }}
             >
               {/* Rank */}
-              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: RANK_MEDALS[rank] ? 16 : 12, minWidth: 28, flexShrink: 0, textAlign: "center", color: "#52525b" }}>
-                {RANK_MEDALS[rank] ?? `#${rank}`}
+              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, minWidth: 28, flexShrink: 0, textAlign: "center", color: rank <= 3 ? "#ededf0" : "#52525b" }}>
+                {`#${rank}`}
               </div>
 
               {/* Avatar */}
@@ -1052,13 +1051,13 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                 </div>
                 {/* Badge line — never clipped, wraps if needed */}
                 <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
-                  {trader.graded && <span title="Calls graded from public price — trustless" style={{ fontSize: 8, color: "#ededf0", border: "1px solid #33333a", borderRadius: 2, padding: "1px 4px", background: "#1a1a1e" }}>✓ VERIFIED</span>}
-                  {trader.graded?.meritRank && <span title={`${trader.graded.meritRank.title} — merit rank earned from your graded calls (not bought)`} style={{ fontSize: 8, color: "#141416", fontWeight: "bold", border: "1px solid #ededf0", borderRadius: 2, padding: "1px 5px", background: "#ededf0", letterSpacing: "0.04em" }}>{trader.graded.meritRank.glyph} {trader.graded.meritRank.title.toUpperCase()}</span>}
+                  {trader.graded && <span title="Calls graded from public price." style={{ fontSize: 8, color: "#ededf0", border: "1px solid #33333a", borderRadius: 2, padding: "1px 4px", background: "#1a1a1e" }}>✓ VERIFIED</span>}
+                  {trader.graded?.meritRank && <span title={`${trader.graded.meritRank.title}. Earned from graded calls. Not bought.`} style={{ fontSize: 8, color: "#141416", fontWeight: "bold", border: "1px solid #ededf0", borderRadius: 2, padding: "1px 5px", background: "#ededf0", letterSpacing: "0.04em" }}>{trader.graded.meritRank.glyph} {trader.graded.meritRank.title.toUpperCase()}</span>}
                   {/* CALIBRATED — earned: their bigger-conviction calls genuinely
                       did better. Sizing skill, invisible in hit rate or P&L. */}
-                  {trader.graded?.calibration?.calibrated && <span title={`Calibrated — higher-conviction calls average +${trader.graded.calibration.gap}R more than smaller ones. Sizes up on the right ideas.`} style={{ fontSize: 8, color: "#3ecf8e", border: "1px solid #33333a", borderRadius: 2, padding: "1px 4px", background: "#1a1a1e" }}>◎ CALIBRATED</span>}
+                  {trader.graded?.calibration?.calibrated && <span title={`Calibrated. Higher-conviction calls average +${trader.graded.calibration.gap}R more than smaller ones.`} style={{ fontSize: 8, color: "#3ecf8e", border: "1px solid #33333a", borderRadius: 2, padding: "1px 4px", background: "#1a1a1e" }}>◎ CALIBRATED</span>}
                   {!trader.graded && emerging.has(trader.wallet.toLowerCase()) && (
-                    <span title="Resolved public-price-graded calls — 5 needed to become a Verified Caller" style={{ fontSize: 8, color: "#fbbf24", border: "1px solid #4a3a00", borderRadius: 2, padding: "1px 4px", background: "#2a1a00" }}>
+                    <span title="Resolved graded calls. 5 to become a Verified Caller." style={{ fontSize: 8, color: "#fbbf24", border: "1px solid #4a3a00", borderRadius: 2, padding: "1px 4px", background: "#2a1a00" }}>
                       ◆ EMERGING · {emerging.get(trader.wallet.toLowerCase())!.toQualify} to verify
                     </span>
                   )}
@@ -1068,7 +1067,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                       by anyone. Amber below 70 = caution, never decoration. */}
                   {trader.graded?.discipline && (
                     <span
-                      title={`Plan quality ${trader.graded.discipline.score}/100 across ${trader.graded.discipline.scored} calls — scored at post time from public price: obtainable entry, a stop outside the noise, R:R matching the posted levels. Reported, not ranked on.`}
+                      title={`Plan quality ${trader.graded.discipline.score}/100 across ${trader.graded.discipline.scored} calls. Scored at post time from public price: obtainable entry, a stop outside the noise, R:R matching the posted levels. Reported, not ranked on.`}
                       style={{ fontSize: 8, color: trader.graded.discipline.score >= 70 ? "#a1a1aa" : "#fbbf24", border: `1px solid ${trader.graded.discipline.score >= 70 ? "#33333a" : "#4a3a00"}`, borderRadius: 2, padding: "1px 4px", background: trader.graded.discipline.score >= 70 ? "#1a1a1e" : "#2a1a00" }}
                     >
                       PLAN {trader.graded.discipline.score}
@@ -1089,9 +1088,9 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                 </div>
                 {trader.graded ? (
                   <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", marginTop: 2 }}>
-                    {trader.graded.hitRate.toFixed(0)}% hit · <span title="R = profit per call measured in multiples of what they risked. +1R = they made what they put at risk; +2R = twice that. Averaged across every graded call.">{trader.graded.avgR > 0 ? "+" : ""}{trader.graded.avgR.toFixed(2)}R avg</span> · {trader.graded.calls} graded calls
+                    {trader.graded.hitRate.toFixed(0)}% hit · <span title="R = profit per call in multiples of what was risked. +1R made the risk back. +2R made twice it. Averaged across every graded call.">{trader.graded.avgR > 0 ? "+" : ""}{trader.graded.avgR.toFixed(2)}R avg</span> · {trader.graded.calls} graded calls
                     {trader.graded.regimeEdge && (
-                      <span title="The market this caller's graded record is actually strongest in — classified from the candles before each call.">
+                      <span title="The regime this caller's record is strongest in. Classified from the candles before each call.">
                         {" "}· best in {REGIME_LABEL[trader.graded.regimeEdge.best.bucket] ?? trader.graded.regimeEdge.best.bucket}
                       </span>
                     )}
@@ -1105,7 +1104,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   not just a number. Only for graded callers with ≥2 resolved calls. */}
               {trader.graded && trader.graded.rSeries.length >= 2 && (
                 <div style={{ flex: "1 1 72px", minWidth: 72, textAlign: "center" }}>
-                  <div title="Their running profit across graded calls, in multiples of risk (R). Up and to the right = consistently right over time — the track record as a shape, not just a number." style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)", marginBottom: 2 }}>R CURVE</div>
+                  <div title="Running profit across graded calls, in R. Up and to the right = right, consistently." style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)", marginBottom: 2 }}>R CURVE</div>
                   <Sparkline points={trader.graded.rSeries} width={72} height={22} />
                 </div>
               )}
@@ -1178,7 +1177,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleCopyCaller(trader.wallet); }}
                   disabled={copyBusy === trader.wallet.toLowerCase()}
-                  title="Your agent mirrors this caller's next public call — at your own size, mode & guardrails"
+                  title="Your agent mirrors this caller's next public call. Your size, mode and guardrails."
                   style={{
                     flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 9, fontWeight: 600, letterSpacing: "0.03em",
                     background: copyLeaders.has(trader.wallet.toLowerCase()) ? "#ededf0" : "#ededf015",
@@ -1211,7 +1210,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    title="X-ray this wallet's actual perp record on Hyperliquid + Orderly"
+                    title="X-Ray this wallet's perp record on Hyperliquid and Orderly."
                     className="nx-btn nx-btn-icon"
                     style={{ textDecoration: "none" }}
                   >
@@ -1285,9 +1284,9 @@ function FeedEmptyState({ variant }: { variant: "feed" | "ranks" }) {
   const navigate = useNavigate();
   const isRanks = variant === "ranks";
   const steps = [
-    { n: "01", title: "Plan a thesis", desc: "Size a trade in the Nexus Thesis Engine — entry, stop, targets, R:R." },
-    { n: "02", title: "Publish it", desc: "Hit 📡 to push it live here, registered on-chain." },
-    { n: "03", title: "Build your rep", desc: "Others follow, copy, and grade it — your track record compounds." },
+    { n: "01", title: "Plan a thesis", desc: "Size it in the Nexus Thesis Engine. Entry, stop, targets, R:R." },
+    { n: "02", title: "Publish it", desc: "Publish it to the feed. Timestamped on-chain." },
+    { n: "03", title: "Build your rep", desc: "It gets graded from public price. The record is yours." },
   ];
   return (
     <div style={{ textAlign: "center", padding: "48px 16px", maxWidth: 620, margin: "0 auto" }}>
@@ -1295,12 +1294,12 @@ function FeedEmptyState({ variant }: { variant: "feed" | "ranks" }) {
         {isRanks ? "◆" : "⬡"}
       </div>
       <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 20, color: "#fff", fontWeight: "bold", marginBottom: 8, letterSpacing: "0.02em" }}>
-        {isRanks ? "The leaderboard is wide open." : "The signal starts here."}
+        {isRanks ? "No ranked traders yet." : "No public calls yet."}
       </div>
       <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.6, marginBottom: 26 }}>
         {isRanks
-          ? "No traders ranked yet — rankings build as theses get published and closed out. Publish yours and claim rank #1."
-          : "No public theses yet. Publish one from your Lab and it lands in the live feed — others can follow, copy, and grade it. Be the first signal."}
+          ? "Rankings build as theses are published and resolved."
+          : "Publish a thesis from the Lab. It lands here and gets graded from public price."}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 26, textAlign: "left" }}>
         {steps.map((s) => (
@@ -1339,12 +1338,12 @@ function ContributePrompt({ prominent = false }: { prominent?: boolean }) {
     }}>
       <div style={{ flex: 1, minWidth: 200 }}>
         <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: prominent ? 14 : 12, color: "#ededf0", fontWeight: "bold", marginBottom: 4 }}>
-          {prominent ? "📡 Be the first verified caller on Nexus" : "📡 The feed's still early — claim your spot"}
+          Post a call. Get graded.
         </div>
         <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: prominent ? 11 : 10, color: "#a1a1aa", lineHeight: 1.6 }}>
           {prominent
-            ? "Post a call (symbol · direction · entry/stop/target) — it's graded against public price on-chain, not self-reported. 5 graded calls = Verified Caller. Get in before the board fills up."
-            : "Publish a thesis and it's graded against public price, on-chain. Early callers build rep fastest — get to 5 graded calls and you're a Verified Caller."}
+            ? "Symbol. Direction. Entry, stop, target. Graded against public price, not self-reported. 5 graded calls = Verified Caller."
+            : "Publish a thesis. It is graded against public price. 5 graded calls = Verified Caller."}
         </div>
       </div>
       <button
@@ -1386,9 +1385,9 @@ function AgentTrackRecord() {
       style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "12px 16px", background: "linear-gradient(180deg,#141416,#0a0a0b)", border: "1px solid #33333a", borderRadius: 6, marginBottom: 14 }}
     >
       <div style={{ flexShrink: 0 }}>
-        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", fontWeight: "bold" }}>🤖 NEXUS AUTONOMOUS AGENT</div>
+        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", fontWeight: "bold" }}>NEXUS AUTONOMOUS AGENT</div>
         <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8.5, color: "#71717a", marginTop: 2 }}>
-          {s.anchored ? "⛓ trustless · on-chain-anchored track record" : "trustless · publicly graded track record"}
+          {s.anchored ? "⛓ graded record · anchored on Arbitrum" : "graded from public price"}
         </div>
       </div>
       <div style={{ display: "flex", gap: 16, marginLeft: "auto", flexWrap: "wrap" }}>
@@ -1436,7 +1435,7 @@ function FeedPulse({ feed }: { feed: FeedThesis[] }) {
     { label: "PUBLIC CALLS", val: String(feed.length) },
     { label: "LIVE", val: String(live), color: "#d4d4d8" },
     { label: "GRADED", val: String(graded) },
-    ...(agents > 0 ? [{ label: "🤖 AGENT", val: String(agents), color: "#ededf0" }] : []),
+    ...(agents > 0 ? [{ label: "AGENT", val: String(agents), color: "#ededf0" }] : []),
     { label: "LAST CALL", val: ageStr },
   ];
   return (
@@ -1640,7 +1639,7 @@ export default function FeedPage() {
   // eyebrow → serif headline → fading bone rule). The eyebrow is stable brand;
   // the headline tracks the active view so the page reads as one place.
   const feedHead = {
-    feed:      { eyebrow: "THE FEED", title: "Every call, graded by the tape" },
+    feed:      { eyebrow: "THE FEED", title: "Every call. Graded by the tape." },
     ranks:     { eyebrow: "THE FEED", title: "Verified callers, ranked" },
     following: { eyebrow: "THE FEED", title: "Traders you follow" },
   }[view];

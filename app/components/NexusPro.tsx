@@ -95,7 +95,7 @@ export function NexusPro({ walletAddress }: { walletAddress: string | null }) {
         setSubMsg(d.error || "Verification failed.");
       }
     } catch {
-      setSubStatus("err"); setSubMsg("Network error — try again.");
+      setSubStatus("err"); setSubMsg("Network error. Try again.");
     }
   };
 
@@ -125,7 +125,7 @@ export function NexusPro({ walletAddress }: { walletAddress: string | null }) {
     <div style={{ ...card }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
         <span style={{ fontFamily: mono, fontSize: 13, fontWeight: "bold", color: "#ededf0", letterSpacing: "0.1em" }}>◆ {TIER_NAME.toUpperCase()}</span>
-        <span style={{ fontFamily: mono, fontSize: 10, color: "#a1a1aa" }}>the operator tier — unlock the full terminal</span>
+        <span style={{ fontFamily: mono, fontSize: 10, color: "#a1a1aa" }}>the full terminal</span>
         {proProof}
         <button
           onClick={dismiss}
@@ -157,7 +157,7 @@ export function NexusPro({ walletAddress }: { walletAddress: string | null }) {
             HOLD <span style={{ color: TIER_META[PRO_HOLDER_TIER].color }}>{TIER_META[PRO_HOLDER_TIER].glyph} {PRO_HOLDER_TIER}</span>
           </div>
           <div style={{ fontFamily: mono, fontSize: 9, color: "#a1a1aa" }}>
-            Hold {holderMin.toLocaleString()} $NEXUS → PRO unlocked, free. <span style={{ color: "#ededf0" }}>Live now.</span>
+            Hold {holderMin.toLocaleString()} $NEXUS. PRO is free while you hold. <span style={{ color: "#ededf0" }}>Live.</span>
           </div>
           <BuyNexusButton size="sm" />
         </div>
@@ -172,7 +172,7 @@ export function NexusPro({ walletAddress }: { walletAddress: string | null }) {
           {!PAYMENTS_LIVE ? (
             <div style={{ fontFamily: mono, fontSize: 9, color: "#71717a", border: "1px solid #232327", borderRadius: 3, padding: "5px 10px", textAlign: "center" }}>coming soon</div>
           ) : !subOpen ? (
-            <button onClick={() => setSubOpen(true)} style={{ fontFamily: mono, fontSize: 10, color: "#141416", background: "#ededf0", border: "none", borderRadius: 3, padding: "7px 10px", cursor: "pointer", fontWeight: "bold", letterSpacing: "0.06em" }}>SUBSCRIBE — USDC</button>
+            <button onClick={() => setSubOpen(true)} style={{ fontFamily: mono, fontSize: 10, color: "#141416", background: "#ededf0", border: "none", borderRadius: 3, padding: "7px 10px", cursor: "pointer", fontWeight: "bold", letterSpacing: "0.06em" }}>SUBSCRIBE · USDC</button>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", gap: 4 }}>
@@ -205,7 +205,7 @@ export function NexusPro({ walletAddress }: { walletAddress: string | null }) {
       </div>
 
       <div style={{ fontFamily: mono, fontSize: 8, color: "#33333a", marginTop: 10, lineHeight: 1.4 }}>
-        {TIER_NAME} is a software subscription. $NEXUS pays for it (consumptive use) or unlocks it by holdings (access) — no revenue share, no yield.
+        {TIER_NAME} is a software subscription. $NEXUS pays for it or unlocks it by holding. No yield. No revenue share.
       </div>
     </div>
   );
