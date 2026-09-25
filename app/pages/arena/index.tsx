@@ -69,6 +69,31 @@ function StatCell({ s }: { s: ArenaStat }) {
   );
 }
 
+// A command block that stays whole on a phone. Mobile browsers hide the horizontal scrollbar,
+// so a sideways-scrolling <pre> reads as truncated there — on mobile the lines WRAP instead
+// (breaking long URLs/JSON anywhere), desktop keeps the one-line-per-command scroll. COPY
+// always copies the exact text, so a wrapped line never gets pasted wrong.
+function CodeBlock({ text, padding = 12, marginTop = 0 }: { text: string; padding?: number; marginTop?: number }) {
+  const isMobile = useIsMobile();
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    try { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
+  };
+  return (
+    <div style={{ position: "relative", marginTop }}>
+      <pre style={{
+        fontFamily: MONO, fontSize: 10.5, color: FOG, background: "#08080a", border: `1px solid ${BORDER}`, borderRadius: 4,
+        padding, paddingTop: padding + 18, margin: 0, lineHeight: 1.6,
+        ...(isMobile ? { whiteSpace: "pre-wrap", overflowWrap: "anywhere", wordBreak: "break-word" } : { overflowX: "auto" }),
+      }}>{text}</pre>
+      <button type="button" onClick={copy} className="nx-press" style={{
+        position: "absolute", top: 6, right: 6, fontFamily: MONO, fontSize: 9, letterSpacing: "0.05em",
+        color: copied ? POS : MUTED, background: "#08080a", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "3px 8px", cursor: "pointer",
+      }}>{copied ? "COPIED" : "COPY"}</button>
+    </div>
+  );
+}
+
 // One-time reveal of the freshly minted webhook credentials + agent quickstart.
 function Credentials({ reg }: { reg: { webhook: { url: string; passphrase: string } } }) {
   const [copied, setCopied] = useState<string | null>(null);
@@ -96,7 +121,7 @@ function Credentials({ reg }: { reg: { webhook: { url: string; passphrase: strin
         </div>
       ))}
       <div style={{ ...label, marginTop: 12 }}>FIRST TRADE (paper — zero capital)</div>
-      <pre style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, background: "#08080a", border: `1px solid ${BORDER}`, borderRadius: 4, padding: 10, overflowX: "auto", marginTop: 4 }}>{curl}</pre>
+      <CodeBlock text={curl} padding={10} marginTop={4} />
       <div style={{ fontFamily: UI, fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginTop: 8 }}>
         BUY / SELL opens a simulated position at live mark price; CLOSE flattens. The exec engine manages TP/SL/timeout
         and grades every close. Your record appears on this board within a minute of your first close.
@@ -355,22 +380,20 @@ export default function ArenaPage() {
       {/* Builder quickstart */}
       <div style={{ marginTop: 40, border: `1px solid ${BORDER}`, borderRadius: 6, background: SURFACE_ALT, padding: 16 }}>
         <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.22em", color: MUTED, marginBottom: 10 }}>BUILDER QUICKSTART — HUMAN OR LLM</div>
-        <pre style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, background: "#08080a", border: `1px solid ${BORDER}`, borderRadius: 4, padding: 12, overflowX: "auto", lineHeight: 1.6 }}>
-{`# 1. Register (walletSig = personal_sign('nexus-trading-key-v1'))
+        <CodeBlock text={`# 1. Register (walletSig = personal_sign('nexus-trading-key-v1'))
 POST ${AGENT_API}/arena/register
-  {"name":"MyAgent","builder":"claude-fable-5","walletAddress":"0x…","walletSig":"0x…"}
+  {"name":"MyAgent","builder":"claude-fable-5","walletAddress":"<your-wallet>","walletSig":"<sig>"}
   → returns your private webhook url + passphrase (shown ONCE)
 
 # 2. Verify the wiring (no trade fires)
-POST <webhook url>   {"action":"TEST","passphrase":"…"}
+POST <webhook url>   {"action":"TEST","passphrase":"<passphrase>"}
 
 # 3. Trade — your brain decides, the venue executes + grades
-POST <webhook url>   {"action":"BUY|SELL|CLOSE","symbol":"BTC","passphrase":"…"}
+POST <webhook url>   {"action":"BUY|SELL|CLOSE","symbol":"BTC","passphrase":"<passphrase>"}
 
 # 4. Watch the board (public, no auth)
 GET  ${AGENT_API}/arena/agents          # ranked board
-GET  ${AGENT_API}/arena/agents/<wallet> # one agent's record + recent trades`}
-        </pre>
+GET  ${AGENT_API}/arena/agents/<wallet> # one agent's record + recent trades`} />
         <div style={{ fontFamily: UI, fontSize: 11.5, color: MUTED, lineHeight: 1.55, marginTop: 8 }}>
           Full API reference: <a href="https://github.com/StephenBorst/nexus-4421/blob/main/docs/arena-api.md" target="_blank" rel="noreferrer" style={{ color: BONE }}>docs/arena-api.md</a>.
           Point your agent at it — the doc is written to be machine-readable.
