@@ -14,7 +14,7 @@
 import { hourBucket, priceByHour, cvdSideForRow, smByHour, liqFlushEventsFromHist } from "../../app/lib/basisStack.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
-import { trailingPct, basisExtremeSide } from "../../app/lib/basisFade.mjs";
+import { trailingPct, basisExtremeSide, basisDeviationSide } from "../../app/lib/basisFade.mjs";
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { openPosition, stepExit, closedPnlPct, DEFAULT_FEE_BPS } from "./backtest.mjs";
 
@@ -136,6 +136,23 @@ export function basisConfluenceEvents(cs, pmap, sideByHour) {
 export function basisXsmartEvents(cs, pmap) { return basisConfluenceEvents(cs, pmap, smByHour(cs.smHist)); }
 export function basisXliqEvents(cs, pmap) { return basisConfluenceEvents(cs, pmap, liqFlushSideByHour(cs)); }
 export function basisXcvdEvents(cs, pmap) { return basisConfluenceEvents(cs, pmap, cvdSideByHour(cs, pmap)); }
+
+// ── TWO-SIDED basis (vs the trailing mean, not zero) — see basisDeviationSide ──
+// Graded BESIDE basis_extreme so the two can be compared on the same data. No preset trades it.
+export function basisDevEvents(cs, _pmap, { window = 168, minWarmup = 48, pct = 0.9 } = {}) {
+  const rows = (cs.basisHist || []).filter((b) => b && Number.isFinite(b.basisPct)).sort((a, b) => (a.t || 0) - (b.t || 0));
+  const ev = [];
+  for (let i = 0; i < rows.length; i++) {
+    const trail = rows.slice(Math.max(0, i - window), i).map((r) => r.basisPct); // raw, strictly before i
+    const side = basisDeviationSide(trail, rows[i].basisPct, { minWarmup, pct });
+    if (side) ev.push({ t: rows[i].t, side });
+  }
+  return ev;
+}
+export function basisDevXcvdEvents(cs, pmap) {
+  const cond = cvdSideByHour(cs, pmap);
+  return basisDevEvents(cs).filter((e) => cond.get(hourBucket(e.t)) === e.side);
+}
 
 // ── RSI momentum-cooldown continuation (Stoic's H4 study, done rigorously) ────
 // EMA of a numeric series.
@@ -640,6 +657,8 @@ export const AXES = [
   { name: "basis_x_smart", label: "Basis extreme × smart money agrees", gen: basisXsmartEvents },
   { name: "basis_x_liqflush", label: "Basis extreme × liq-flush timing", gen: basisXliqEvents },
   { name: "basis_x_cvd", label: "Basis extreme × CVD divergence", gen: basisXcvdEvents },
+  { name: "basis_dev", label: "Basis vs its usual level (two-sided)", gen: basisDevEvents },
+  { name: "basis_dev_x_cvd", label: "Basis vs usual (two-sided) × CVD divergence", gen: basisDevXcvdEvents },
   { name: "smart_fade", label: "Funding fade × smart money", gen: smartFadeEvents },
   { name: "smart_follow", label: "Follow smart money", gen: smartFollowEvents },
   { name: "rsi_reset_held", label: "RSI reset held 45+ (A: uptrend)", gen: rsiResetEvents },

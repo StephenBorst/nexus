@@ -702,6 +702,30 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   PF 1.15 · vs random 75.7% (median −$13.37) · ~138 more trades · 24h +$52.27 · 29T · 62% · PF 1.80 · 6/7 green ·
   vs random **89.3% LEANS_ABOVE** (median +$0.46) · ~22 more trades. HYPE the consistent loser (8T, 25%) — don't curate.
   The hold ranking FLIPS vs the 3-market read → noise still dominates the hold question.
+  **Per-market `diag` (2026-09-25, `marketDiag`, cache `evidence:v2`):** exits by reason, longs/shorts, avg hold,
+  median hourly range, `stopInRanges` (SL % ÷ typical hourly range). **HYPE check result: the data is CLEAN** (no
+  zeros/stale repeats, jumps like XRP) — HYPE loses on EXITS: 6/8 SL at 24h, its 2% stop sits only ~2.0 typical
+  hourly ranges away (tightest in the set; LINK 2.07 also red) vs ETH 3.3× / BTC 4.4×. Exit sizing, not bad data →
+  keep it in; `volScaledStops` is the existing lever (a Lab test, not a preset edit).
+  **⚠️ BIGGER FINDING — BASIS_FADE IS LONG-ONLY IN PRACTICE.** Every trade in both holds (30/30) is LONG, and every
+  recorded basis row checked (72h × BTC/ETH/SOL/XRP/HYPE) is NEGATIVE: the OKX USDT perp sits at a persistent
+  ~−0.05% discount to spot. `basisExtremeSide` thresholds |basis| vs its own trailing p90 and takes the SIGN from
+  zero — so an "extreme" is always the deepest discount → always LONG. The "premium → SHORT" half of the rule never
+  fires. So the graded basis reads = "buy when the discount is widest" (timing among longs beats random longs
+  89.3% — the baseline preserves the long mix, so that part stands), NOT a two-sided fade. Untested in a sustained
+  downtrend. Candidate fix = measure the extreme vs the trailing MEAN (demeaned basis) so both sides can fire —
+  a RULE change, so it must be graded as a NEW axis beside the current one (parity), never swapped in silently.
+  **✅ BUILT (2026-09-25): two-sided basis, graded only.** `basisDeviationSide` in `app/lib/basisFade.mjs` (extreme =
+  |basis − trailing MEAN| > trailing p90 of those deviations; wider-than-usual discount → LONG, narrower → SHORT; same
+  168/48/p90, strictly-prior trail, `DEV_EPS` float floor — a flat series' mean is off by ~1e-17 and the test caught it
+  "detecting" an extreme in rounding noise). Scoreboard axes **`basis_dev`** + **`basis_dev_x_cvd`** (axisbt
+  `basisDevEvents`/`basisDevXcvdEvents`), cache `axisbt:v4`. NOT in `AXIS_PRESET`, no preset, the brain doesn't trade
+  it — /proof shows it as a research read. Tests: `axisbt.basisdev.test.mjs` (old axis long-only vs new both sides on a
+  persistent-discount tape, poisoned-future no-lookahead, registered) + basisFade.test.mjs. Promote only if it grades
+  PREDICTIVE with BOTH sides represented — then it needs its own brain wiring + parity test like basis_x_cvd.
+  **First read (Sept 25):** basis_dev_x_cvd PREDICTIVE (R +0.27 n32 stable; 4h PREDICTIVE; unlike basis_x_cvd its 12h
+  is PROMISING, not NOISE) · basis_dev PROMISING (R +0.05 n288, not stable). Last-72h side check: two-sided 10L/11S vs
+  old 20L/0S — shorts are real. Same 33d, in-sample-adjacent → Oct-15 decides.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 

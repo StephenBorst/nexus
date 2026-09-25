@@ -73,3 +73,21 @@ test("basisFadeFromHistory: empty / garbage in, honest null out", () => {
 test("defaults match the scoreboard's graded parameters", () => {
   assert.deepEqual({ ...BASIS_FADE_DEFAULTS }, { window: 168, minWarmup: 48, pct: 0.9 });
 });
+
+// ── two-sided variant (vs the trailing mean) ──────────────────────────────────
+import { basisDeviationSide, basisExtremeSide as extremeSide } from "./basisFade.mjs";
+test("persistent discount: the zero-anchored rule is LONG-only, the two-sided rule fires both ways", () => {
+  // a market that always trades ~−0.05% with small wiggle (the real OKX shape)
+  const trail = Array.from({ length: 100 }, (_, i) => -0.05 + 0.005 * Math.sin(i));
+  const wider = -0.08, narrower = -0.02;
+  assert.equal(extremeSide(trail.map(Math.abs), wider), "LONG");
+  assert.equal(extremeSide(trail.map(Math.abs), narrower), null, "old rule: a narrower discount is never extreme");
+  assert.equal(basisDeviationSide(trail, wider), "LONG", "discount wider than usual → LONG");
+  assert.equal(basisDeviationSide(trail, narrower), "SHORT", "discount narrower than usual (relative premium) → SHORT");
+  assert.equal(basisDeviationSide(trail, -0.05), null, "usual level → no signal");
+});
+test("two-sided: thin warmup and flat regimes never fire", () => {
+  assert.equal(basisDeviationSide(Array(10).fill(-0.05), -0.2), null, "under warmup");
+  assert.equal(basisDeviationSide(Array(100).fill(-0.05), -0.2), null, "flat trail → thr 0 → no extreme claimed");
+  assert.equal(basisDeviationSide(Array(100).fill(-0.05), NaN), null);
+});
