@@ -51,7 +51,7 @@ export function MarketStatStrip({ symbol }: { symbol: string }) {
     return () => { off = true; clearInterval(iv); };
   }, [coin]);
 
-  const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", padding: "9px 12px", background: "#0c0c0e", border: `1px solid ${BORDER}`, borderRadius: 5, marginBottom: 10 };
+  const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", padding: "9px 12px", background: "#0f0f11", border: `1px solid ${BORDER}`, borderRadius: 5, marginBottom: 10 };
   if (!d) return <div style={{ ...row, color: FAINT, fontFamily: MONO, fontSize: 10 }}>loading {coin}…</div>;
 
   const up = d.changePct >= 0;

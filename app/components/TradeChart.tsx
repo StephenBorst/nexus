@@ -43,8 +43,8 @@ const MIN_CANDLES = 12;
 // longest, so we fetch that many warmup bars BEFORE the display window (see the fetch).
 const MA_DEFS = [
   { p: 20, c: "#ededf0" },
-  { p: 50, c: "#9aa2b4" },
-  { p: 150, c: "#646b7d" },
+  { p: 50, c: "#a1a1aa" }, // C.text.fog
+  { p: 150, c: "#71717a" }, // C.text.muted
 ] as const;
 const MA_MAX = 150;
 
