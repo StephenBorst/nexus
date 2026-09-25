@@ -158,7 +158,7 @@ export function CatalystBoard() {
       </div>
 
       {err || (board && board.catalysts.length === 0)
-        ? <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "10px 2px" }}>No tradeable catalysts on the board right now — quiet event tape.</div>
+        ? <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "10px 2px" }}>No tradeable catalysts right now. Quiet event tape.</div>
         : !board
         ? <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "10px 2px" }}>reading the event tape…</div>
         : (

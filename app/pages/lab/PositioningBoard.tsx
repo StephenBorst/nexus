@@ -143,8 +143,8 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
       ) : shown.length === 0 ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, lineHeight: 1.6, background: INSET, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "12px 14px" }}>
           {mineOnly
-            ? "No positioning reads on the markets you're proven on right now — switch to ALL, or open the deep boards below."
-            : "No clear positioning reads right now — no market is both crowd-stretched and clustered by the sharp wallets. Sparse by design; the deep boards below still have the raw reads."}
+            ? "No positioning reads on your proven markets right now. Switch to ALL or open the deep boards below."
+            : "No clear positioning reads right now. No market is both crowd-stretched and clustered by sharp wallets. Sparse by design; raw reads are in the deep boards below."}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

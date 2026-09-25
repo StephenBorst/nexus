@@ -61,10 +61,10 @@ export function MarketTape({ compact = false }: { compact?: boolean }) {
     const color = score >= 60 ? "#ededf0" : score >= 42 ? "#a1a1aa" : "#f7525f";
     const agentNote =
       label === "RISK-ON"
-        ? "Broad strength — momentum/trend presets favored; funding fades are riskier into strength."
+        ? "Broad strength. Momentum/trend presets favored; funding fades are riskier here."
         : label === "RISK-OFF"
-        ? "Broad weakness — mean-reversion fades + tighter stops; consider cutting agent size."
-        : "Rangebound tape — confluence / funding-harvest presets fit best.";
+        ? "Broad weakness. Mean-reversion fades and tighter stops; consider smaller agent size."
+        : "Rangebound tape. Confluence and funding-harvest presets fit best.";
     return { score, label, color, breadth, btcChg, fundSkew, agentNote };
   }, [rows]);
 
