@@ -760,7 +760,13 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   axisbt.exit.test.mjs.
   **First per-side read (Sept 25):** basis_dev_x_cvd longs R +0.50 n18 vs **shorts R −0.04 n14**; basis_dev longs +0.19
   n139 vs **shorts −0.07 n149**. The short side shows no edge on this window — the pooled PREDICTIVE is long-carried.
-  Open question: how much of the long edge is the window's upward drift (no drift baseline on the board yet).
+  **✅ DRIFT BASELINE (2026-09-25, cache `axisbt:v6`):** every horizon now carries `drift {baseBps, excessBps,
+  excessHitRate, excessStable, bySide{LONG,SHORT:{baseBps,excessBps,samples}}}` — `coinDrift(pmap,h)` = the coin's average
+  h-hour move over EVERY recorded hour; a long's baseline = +drift, a short's = −drift; excess = the read's move minus it.
+  /proof shows "above drift 4h … 12h … 24h (L · S)". Informational — verdicts unchanged. ⚠️ Bug the test caught: pmap
+  keys are ALREADY hour buckets and `hourBucket(hourBucket(t))` = 0, so passing keys back through `forwardReturn`
+  silently emptied the baseline (and "excess ≈ 0" passed vacuously) — coinDrift reads the map directly; the test now
+  asserts the baseline covers every graded event. bps horizons only (no R drift).
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 

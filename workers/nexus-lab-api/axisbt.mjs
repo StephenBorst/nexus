@@ -32,6 +32,19 @@ export function forwardReturn(pmap, t, h) {
 // P&L of a directional call given the forward return.
 export function callPnl(fwdRet, side) { return side === "SHORT" ? -fwdRet : fwdRet; }
 
+// DRIFT BASELINE — what a plain long on this coin made over h hours, averaged over EVERY
+// recorded hour (not just the hours a signal fired). A read that only buys in a rising window
+// looks good for a reason that has nothing to do with the read; subtracting the coin's own
+// drift (a short's baseline = −drift) leaves the part the SIGNAL earned. Same forwardReturn
+// as the events, same pmap, so the two can't disagree on what "the move" was. Fraction units.
+export function coinDrift(pmap, h) {
+  let sum = 0, n = 0;
+  // pmap keys are ALREADY hour buckets — don't pass them back through forwardReturn (it re-buckets
+  // a timestamp; hourBucket(hourBucket(t)) = 0, which silently emptied the baseline — test caught it).
+  for (const [h0, p0] of pmap) { const p1 = pmap.get(h0 + h); if (p0 > 0 && p1 > 0) { sum += (p1 - p0) / p0; n++; } }
+  return n ? sum / n : null;
+}
+
 // ── Signal generators: (coinSet, priceByHourMap) → [{ t, side }] ──────────────
 // coinSet = { coin, oiHist, cvdHist, smHist, candleHist, basisHist, liqHist }.
 
@@ -629,8 +642,29 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
     let verdict = "INSUFFICIENT";
     if (a.samples >= minSamples) verdict = a.meanBps > 0 && stable ? "PREDICTIVE" : a.meanBps > 0 ? "PROMISING" : "NOISE";
     const bySide = { LONG: [], SHORT: [] };
-    for (const e of all) { const fr = forwardReturn(e.pmap, e.t, h); if (fr != null) bySide[e.side].push(callPnl(fr, e.side)); }
-    return { h, ...a, stable, verdict, bySide: sideSplit(bySide) };
+    const base = [], ex = [], exF = [], exS = [], exBySide = { LONG: [], SHORT: [] }, baseBySide = { LONG: [], SHORT: [] };
+    const driftOf = new Map(); // per coin, once per horizon
+    for (const e of all) {
+      const fr = forwardReturn(e.pmap, e.t, h);
+      if (fr == null) continue;
+      const pnl = callPnl(fr, e.side);
+      bySide[e.side].push(pnl);
+      if (!driftOf.has(e.pmap)) driftOf.set(e.pmap, coinDrift(e.pmap, h));
+      const d = driftOf.get(e.pmap);
+      if (d == null) continue;
+      const b = callPnl(d, e.side), x = pnl - b;
+      base.push(b); ex.push(x); (e.t <= medT ? exF : exS).push(x);
+      baseBySide[e.side].push(b); exBySide[e.side].push(x);
+    }
+    const eA = agg(ex), eF = agg(exF), eS = agg(exS), bA = agg(base);
+    const drift = {
+      baseBps: bA.meanBps,                    // what the same side on the same coins made on an average hour
+      excessBps: eA.meanBps,                  // the signal's move MINUS that — the part the read earned
+      excessHitRate: eA.hitRate,
+      excessStable: eF.samples >= 5 && eS.samples >= 5 && (eF.meanBps > 0) === (eS.meanBps > 0),
+      bySide: Object.fromEntries(["LONG", "SHORT"].map((s) => [s, { baseBps: agg(baseBySide[s]).meanBps, excessBps: agg(exBySide[s]).meanBps, samples: exBySide[s].length }])),
+    };
+    return { h, ...a, stable, verdict, bySide: sideSplit(bySide), drift };
   });
   const bestHorizon = horizonsOut.reduce((b, x) => (x.meanBps > (b ? b.meanBps : -Infinity) ? x : b), null);
   // THESIS-IN-R headline (Grok #2): grade every event first-touch in R off the logged candles.

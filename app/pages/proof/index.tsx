@@ -40,7 +40,7 @@ type ProofCard = {
   regimeTrend?: string | null; planScore?: number | null;
 };
 type ProofOfEdge = { cards: ProofCard[]; summary?: { resolved: number; wins: number; hitRate: number; avgR: number } };
-type Horizon = { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean; verdict: string };
+type Horizon = { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean; verdict: string; drift?: { baseBps: number; excessBps: number; excessStable: boolean; bySide: Record<"LONG" | "SHORT", { baseBps: number; excessBps: number; samples: number }> } };
 type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; feeBps: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number; presetExit?: boolean; shadowOf?: string; bySide?: Record<"LONG" | "SHORT", SideStat>; oos?: { since: string; samples: number; hitRate: number; netBps: number } };
 type SideStat = { samples: number; hitRate: number; meanBps: number };
 type AxisSides = Record<"LONG" | "SHORT", { events: number; r: { samples: number; hitRate: number; meanR: number } }>;
@@ -149,6 +149,20 @@ function SignalRow({ a }: { a: AxisRow }) {
               </span>
             );
           })}
+        </div>
+      )}
+      {hz.some((h) => h.drift) && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 6, fontFamily: MONO, fontSize: 9, color: FOG }}
+          title="The read's move MINUS what the same side made on an average hour for the same coins (the market's own drift). A read that only buys in a rising window scores well raw and ~0 here.">
+          <span style={{ color: MUTED }}>above drift</span>
+          {hz.filter((h) => h.drift).map((h) => (
+            <span key={h.h} style={{ whiteSpace: "nowrap" }}>
+              {h.h}h <span style={{ color: h.drift!.excessBps >= 0 ? POS : NEG }}>{h.drift!.excessBps >= 0 ? "+" : ""}{h.drift!.excessBps}</span>
+              <span style={{ color: FAINT, marginLeft: 4 }}>
+                {(["LONG", "SHORT"] as const).filter((sd) => h.drift!.bySide[sd].samples > 0).map((sd) => `${sd === "LONG" ? "L" : "S"} ${h.drift!.bySide[sd].excessBps >= 0 ? "+" : ""}${h.drift!.bySide[sd].excessBps}`).join(" · ")}
+              </span>
+            </span>
+          ))}
         </div>
       )}
       {rated && a.sides && (a.sides.LONG.events + a.sides.SHORT.events) > 0 && (

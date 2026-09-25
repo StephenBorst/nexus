@@ -108,3 +108,5 @@ Be honest and specific with the numbers. A null or declining result is a valid a
   - Read: on this 33d window the SHORT side of basis has no edge; every basis "edge" so far is long-side. Unresolved:
     how much of the long edge is just the window's upward drift (no unconditional drift baseline on the board yet).
     Oct-15 check: if shorts are still ≤0 R on ≥30 samples, the two-sided rule is not a candidate — say so plainly.
+- Since Sept 25 every horizon carries `drift.excessBps` (move above the coin's own average drift) + `drift.bySide`. For
+  the basis axes, report EXCESS, not raw bps: an edge that is ~0 above drift is the market, not the read.

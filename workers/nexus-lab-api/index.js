@@ -5101,7 +5101,7 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "intel" && parts[1] === "axis-backtest" && request.method === "GET") {
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
-      const CACHE = `axisbt:v5:min${min}`; // v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
+      const CACHE = `axisbt:v6:min${min}`; // v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
