@@ -11,7 +11,7 @@ import { STRATEGY_PRESETS } from "@/config/strategyPresets";
 import { fmtUsdExact } from "@/lib/fmtUsd.mjs";
 import { paperSummary } from "@/lib/paperStats.mjs";
 import { STYLE_PRESETS, deriveStyle, type TradingStyle } from "@/config/agentStyles";
-import { AGENT_PREFILL_KEY, DIRECTIVE_PREFILL_KEY, type AgentPrefill, type DirectiveDraft } from "@/utils/agentPrefill";
+import { AGENT_PREFILL_KEY, DIRECTIVE_PREFILL_KEY, EXPERIMENTAL_FILTERS_OFF, type AgentPrefill, type DirectiveDraft } from "@/utils/agentPrefill";
 import { PnlChart, CountUp, TableSkeleton, Coachmark } from "./components";
 import { Collapsible } from "./Collapsible";
 import { SharePoster, type PosterData } from "./SharePoster";
@@ -27,12 +27,6 @@ import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
 import { bareTicker } from "@/utils/utils";
-
-// Every experimental filter a sweep row is graded WITHOUT — applying a row resets them.
-const SWEEP_UNGRADED_FILTERS_OFF = {
-  invertSignal: false, respectRegime: false, respectSmartMoney: false, volScaledStops: false,
-  tradeSessions: undefined, minVolAtrPct: undefined, maxVolAtrPct: undefined, breakevenTriggerPct: undefined,
-} as const;
 
 export function AgentView() {
   const [config, setConfig] = useState<AgentConfig>(DEFAULT_CONFIG);
@@ -185,7 +179,7 @@ export function AgentView() {
             window.localStorage.removeItem(AGENT_PREFILL_KEY);
             const p: AgentPrefill = JSON.parse(raw);
             if (p?.config && typeof p.config === "object") {
-              setConfig((prev) => ({ ...prev, ...p.config }));
+              setConfig((prev) => ({ ...prev, ...(p.replaceFilters ? EXPERIMENTAL_FILTERS_OFF : {}), ...p.config }));
               setTab("config");
               setSuccess(`Config prefilled${p.source ? ` from ${p.source}` : ""} — review, then Save or Backtest.`);
               setTimeout(() => setSuccess(null), 5000);
@@ -310,7 +304,7 @@ export function AgentView() {
     // them). Applying the row on top of them saved a config the sweep never tested — with
     // INVERT on it traded the mirror image (+$12 → −$21 in the first real run). So the row
     // replaces the whole filter set: what you apply is exactly what was graded.
-    setConfig((prev) => ({ ...prev, ...SWEEP_UNGRADED_FILTERS_OFF, ...clean }));
+    setConfig((prev) => ({ ...prev, ...EXPERIMENTAL_FILTERS_OFF, ...clean }));
     setSuccess("Row applied exactly as graded — experimental filters reset to off. Review, then Save or Backtest."); setTimeout(() => setSuccess(null), 5000);
   }
 
@@ -954,8 +948,10 @@ export function AgentView() {
                     onClick={() => {
                       if (locked) { setProNote(true); return; }
                       setProNote(false);
-                      setConfig((prev) => ({ ...prev, ...p.config }));
-                      setSuccess(`Loaded "${p.name}" — review params & Save below.`);
+                      // A preset is a whole strategy — it replaces the filter set (its own filters,
+                      // if any, come back in via p.config), so nothing ungraded rides along.
+                      setConfig((prev) => ({ ...prev, ...EXPERIMENTAL_FILTERS_OFF, ...p.config }));
+                      setSuccess(`Loaded "${p.name}" exactly — experimental filters reset to the preset's. Review params & Save below.`);
                       setTimeout(() => setSuccess(null), 5000);
                     }}
                     style={{

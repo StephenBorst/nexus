@@ -14,8 +14,20 @@ export function toPerpSymbol(s: string): string {
   return s.startsWith("PERP_") ? s : `PERP_${s.toUpperCase()}_USDC`;
 }
 
+// Every experimental filter a WHOLE strategy (preset, sweep row, copied strategy) replaces.
+// A whole strategy is a complete composition: merging it onto the editor's leftover filters
+// saved configs nobody graded — a preset loaded on top of INVERT traded the mirror image.
+// Partial hand-offs (a symbol from Intel, a thesis direction) leave the user's filters alone.
+export const EXPERIMENTAL_FILTERS_OFF: Partial<AgentConfig> = {
+  invertSignal: false, respectRegime: false, respectSmartMoney: false, volScaledStops: false,
+  tradeSessions: undefined, minVolAtrPct: undefined, maxVolAtrPct: undefined, breakevenTriggerPct: undefined,
+};
+
 export type AgentPrefill = {
   config: Partial<AgentConfig>;
+  // True for a WHOLE strategy: the receiver resets EXPERIMENTAL_FILTERS_OFF before applying
+  // `config` (done receiver-side because JSON drops the undefined values that clear a field).
+  replaceFilters?: boolean;
   source?: string;
   // Optional persistent expectation the receiving tab surfaces as a dismissible
   // banner. Used to set correct expectations when the source's semantics differ
@@ -30,9 +42,9 @@ export type AgentPrefill = {
 // Pass `navigate` (react-router's useNavigate) so the jump is CLIENT-SIDE — a full
 // reload re-mounts OrderlyProvider and forces the wallet-reconnect/deposit intro,
 // which is jarring mid-flow. Falls back to a hard nav only if navigate is absent.
-export function deployToAgent(config: Partial<AgentConfig>, source?: string, notice?: string, navigate?: (to: string) => void) {
+export function deployToAgent(config: Partial<AgentConfig>, source?: string, notice?: string, navigate?: (to: string) => void, opts: { replaceFilters?: boolean } = {}) {
   try {
-    const payload: AgentPrefill = { config, source, notice, ts: Date.now() };
+    const payload: AgentPrefill = { config, source, notice, ts: Date.now(), ...(opts.replaceFilters ? { replaceFilters: true } : {}) };
     window.localStorage.setItem(AGENT_PREFILL_KEY, JSON.stringify(payload));
   } catch { /* ignore quota/availability */ }
   goAgentTab(navigate);

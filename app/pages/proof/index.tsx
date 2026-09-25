@@ -85,7 +85,7 @@ function SignalRow({ a }: { a: AxisRow }) {
     <Stat key="n" align={align} v={`${a.best.samples}`} l="samples" title="How many times this read has fired — more samples = more trustworthy." />,
     <Stat key="s" align={align} v={a.best.stable ? "✓" : "—"} l="stable" color={a.best.stable ? POS : FAINT} title="Held up in BOTH halves of the record (walk-forward) — not a fluke of one stretch." />,
   ] : null;
-  const load = () => preset && deployToAgent({ ...preset.config, mode: "PAPER" }, `the ${preset.name} preset (PAPER)`, undefined, navigate);
+  const load = () => preset && deployToAgent({ ...preset.config, mode: "PAPER" }, `the ${preset.name} preset (PAPER)`, undefined, navigate, { replaceFilters: true });
   return (
     <div style={{ background: INSET, border: `1px solid ${BORDER}`, borderRadius: 5, padding: isMobile ? "10px 12px" : "9px 12px" }}>
       <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", gap: 10 }}>

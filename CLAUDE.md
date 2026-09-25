@@ -370,8 +370,12 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   let the window grow (Oct-15 re-validation ≈ 54d).
 - **⚠️ Sweep-apply bug (FIXED 2026-09-24):** applying a sweep row merged onto the editor's experimental filters, so a
   saved config with INVERT still on tested the mirror image (+$12.04 → −$21.33). Sweep rows are graded WITHOUT
-  filters → `applySweepConfig` now resets `SWEEP_UNGRADED_FILTERS_OFF` (invert/regime/smart/session/vol/volScaled/
-  breakeven) before applying the row. `strategyLabel` now names filtered/inverted basis runs ("Gated …"/"Inverted …")
+  filters → `applySweepConfig` resets `EXPERIMENTAL_FILTERS_OFF` (invert/regime/smart/session/vol/volScaled/
+  breakeven; lives in `app/utils/agentPrefill.ts`) before applying the row. **Same rule for EVERY whole-strategy load
+  (fixed 2026-09-25 after Ember hit it on a preset):** Quick-start presets, scoreboard "Load", Proof "Deploy", and
+  trader COPY all replace the filter set; `deployToAgent(..., { replaceFilters: true })` sets a flag the RECEIVER
+  applies (JSON drops `undefined`, so the sender can't clear fields). Partial hand-offs (Intel symbol, thesis) keep
+  the user's filters. `strategyLabel` now names filtered/inverted basis runs ("Gated …"/"Inverted …")
   and the Backtest card prints **TESTED AS: <label>** (amber when inverted).
 - **⚠️ Proof hero receipts rule:** every receipt on `FeaturedLead` must be true of the EXACT preset its Deploy button
   loads. Ember's first cut printed $ figures from a user-EDITED config next to the preset's button — replaced with
