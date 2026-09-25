@@ -5147,7 +5147,7 @@ document.getElementById("btn").addEventListener("click",go);
       const contract = AXIS_EXITS[axis];
       if (!contract) return json({ ok: false, error: "unknown_axis", axes: Object.keys(AXIS_EXITS) }, request, 400);
       const hold = [contract.maxHoldHours, 24].includes(Number(q.get("hold"))) ? Number(q.get("hold")) : contract.maxHoldHours;
-      const CACHE = `evidence:v1:${axis}:${hold}`;
+      const CACHE = `evidence:v2:${axis}:${hold}`;
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
       const symbols = COINS.map((c) => `PERP_${c}_USDC`);
