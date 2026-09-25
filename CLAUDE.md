@@ -862,8 +862,8 @@ The Safe is **LIVE** (`0x4Fe2…C733`, 1/1 Arbitrum+Base) and the PRO USDC payme
   Danny's market argument, which the FAQ doesn't touch). $NEXUS nuance: it's a meme token, not the network's token —
   its best argument is CONSUMPTIVE use (x402 payment unit, PRO discount, hold-to-unlock). **Draft policy for counsel:
   `docs/treasury-buyback-policy.md`** (discretionary, revenue-funded, hold-not-burn, disclosed onchain after the fact,
-  say/never-say list). **NO buyback until counsel answers its §7 question.** ⚠️ `marketing/lab-article.md` still says
-  "fees → treasury → buyback → burn" — conflicts; rewrite before it's ever reused.
+  say/never-say list). **NO buyback until counsel answers its §7 question.** `marketing/lab-article.md`'s old
+  "fees → treasury → buyback → burn" line was rewritten (Sept 25) to "the treasury holds what it earns".
 - **Narrative pivot:** burn counter → **treasury-accumulation counter** ("treasury holds X $NEXUS" = conviction,
   not "X burned" = scarcity). Transparency pillar makes the stacking a feature.
 - **Relationship:** Bankr connecting borst to their devs (facu & edit) + dev-console access → path to deeper

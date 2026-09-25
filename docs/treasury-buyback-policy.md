@@ -66,8 +66,8 @@ the Commission's March 2026 interpretation. Staff guidance — not law, not appr
 
 ## 6. Existing copy that conflicts (fix before adopting)
 
-- `marketing/lab-article.md` line ~63: "fees → treasury → buyback → burn" — rewrite to accumulation-from-revenue
-  language (§4).
+- ~~`marketing/lab-article.md` line ~63: "fees → treasury → buyback → burn"~~ — rewritten Sept 25 to
+  accumulation-from-revenue language (§4).
 - `CLAUDE.md` x402 note "agents needing $NEXUS to pay = token demand from usage" — internal note, fine as analysis,
   but must never ship as public copy.
 

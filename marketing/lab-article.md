@@ -60,7 +60,7 @@ That's the loop a real trading desk runs. We put it in one non-custodial termina
 
 No utility theater. No "revenue share" wink that summons a regulator. **$NEXUS is a pure community token** — a flag for the people who showed up early and get the bit. Holding it unlocks the **Holders Room** and a tier badge next to your name on the boards. Cosmetic. Cultural. That's it, on purpose.
 
-The honest north star is simple and public: fees → treasury → buyback → burn, provable on-chain, starting at zero and only ever going up from real activity. No promises. Just a number anyone can watch.
+The treasury is public too. Nexus earns from subscriptions and data sales, and the treasury holds what it earns — in a Safe anyone can open. No burn schedule. No promises about price. Just a balance anyone can watch.
 
 ---
 
