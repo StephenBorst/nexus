@@ -392,6 +392,21 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   +$11.86 · LINK 0/4 −$2.43). These are on the hero now, dated. The dirty run's "XRP fails" was config contamination.
   ⚠️ Fold consistency counts EMPTY folds as non-positive (BNB = 4 empty folds) — conservative by design; at 14 trades
   the verdict is sample-limited, not a clean fail. Don't loosen the math to make it pass; let history grow.
+- **⚠️ HOLD-HORIZON MISMATCH (found 2026-09-25, Ember's catch) + the EXIT-MATCHED GRADE.** Both wired presets exit
+  TP 2.5 / SL 2 / **maxHoldHours 12**. Sept-25 per-horizon grades for basis_x_cvd: **4h PREDICTIVE (+23.4bps n29) ·
+  12h NOISE (−4.6bps, n32, NOT stable) · 24h PREDICTIVE (+168.3bps, 76%, n25)** — the presets time out in the one
+  window the scoreboard grades NOISE (basis_extreme 12h = PROMISING, not stable). And the headline R PREDICTIVE is
+  graded on the FROZEN R contract (1.2×ATR stop, 1.5R, 168h), NOT the preset exit. Non-monotonic at n≈30/bucket →
+  may be noise, but it's a real live/graded mismatch. **Fix = measurement, not a preset edit:** the scorecard now
+  carries a per-axis **`exit`** block for reads a preset trades — the read walked through the PRESET's own exit on
+  the logged hourly candles via the backtest's **`stepExit`** (extracted from `runBacktest`, which now calls it — ONE
+  exit path → exec `evaluateExit`), adverse-extreme-first, right-censored (no exit by end of data ⇒ left out), NET of
+  3bps/side → `{verdict, samples, hitRate, netBps, stable, exits:{TP,SL,TIMEOUT}, avgHoldH}`. Informational — does NOT
+  change the read's verdict. Contracts in **`app/lib/axisExits.mjs`** (`AXIS_EXITS`), pinned to strategyPresets.ts by
+  `axisExits.test.mjs` (text-parsed; also asserts every `AXIS_PRESET` has a contract). Cache key `axisbt:v2`. /proof
+  SignalRow now shows every horizon (not just best) + an "AS THE PRESET TRADES IT" line. **The live Basis × CVD Stack
+  paper run stays 12h = the control group — don't edit it;** a 24h variant is a Lab test (Load → 24h → Test+Validate),
+  decided at Oct-15. Tests: `workers/nexus-lab-api/axisbt.exit.test.mjs`.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
   and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
   doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one

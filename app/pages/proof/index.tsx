@@ -40,7 +40,9 @@ type ProofCard = {
   regimeTrend?: string | null; planScore?: number | null;
 };
 type ProofOfEdge = { cards: ProofCard[]; summary?: { resolved: number; wins: number; hitRate: number; avgR: number } };
-type AxisRow = { name: string; label: string; verdict: string; best: { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean } | null };
+type Horizon = { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean; verdict: string };
+type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; feeBps: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number };
+type AxisRow = { name: string; label: string; verdict: string; best: { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean } | null; horizons?: Horizon[]; exit?: ExitGrade | null };
 type Scorecard = { axes: AxisRow[]; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; note?: string; asOf?: string };
 
 // Verdict tone — green ONLY for a proven-predictive signal; NOISE/INSUFFICIENT stay
@@ -85,6 +87,10 @@ function SignalRow({ a }: { a: AxisRow }) {
     <Stat key="n" align={align} v={`${a.best.samples}`} l="samples" title="How many times this read has fired — more samples = more trustworthy." />,
     <Stat key="s" align={align} v={a.best.stable ? "✓" : "—"} l="stable" color={a.best.stable ? POS : FAINT} title="Held up in BOTH halves of the record (walk-forward) — not a fluke of one stretch." />,
   ] : null;
+  // Every horizon, not just the best — a preset holding into a NOISE window is invisible
+  // if only the best one is shown.
+  const hz = rated ? (a.horizons || []).filter((h) => h.verdict !== "INSUFFICIENT") : [];
+  const x = rated && a.exit && a.exit.verdict !== "INSUFFICIENT" ? a.exit : null;
   const load = () => preset && deployToAgent({ ...preset.config, mode: "PAPER" }, `the ${preset.name} preset (PAPER)`, undefined, navigate, { replaceFilters: true });
   return (
     <div style={{ background: INSET, border: `1px solid ${BORDER}`, borderRadius: 5, padding: isMobile ? "10px 12px" : "9px 12px" }}>
@@ -98,6 +104,34 @@ function SignalRow({ a }: { a: AxisRow }) {
       {isMobile && (stats
         ? <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>{stats}</div>
         : <div style={{ ...statCell, color: FAINT, marginTop: 6 }}>accruing — not yet rated</div>)}
+      {hz.length > 1 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 8, fontFamily: MONO, fontSize: 9 }} title="Forward move after the read fired, by horizon (gross, close-to-close).">
+          {hz.map((h) => {
+            const tone = VERDICT[h.verdict] || VERDICT.INSUFFICIENT;
+            return (
+              <span key={h.h} style={{ whiteSpace: "nowrap", color: FOG }}>
+                {h.h}h <span style={{ color: h.meanBps >= 0 ? POS : NEG }}>{h.meanBps >= 0 ? "+" : ""}{h.meanBps}</span>
+                <span style={{ color: tone.color, marginLeft: 4, fontSize: 8 }}>{h.verdict === "PREDICTIVE" ? "◆" : h.verdict.toLowerCase()}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {x && (
+        <div style={{ marginTop: 8, padding: "7px 9px", border: `1px solid ${BORDER}`, borderRadius: 4, background: SURFACE_ALT, fontFamily: MONO, fontSize: 9, color: FOG, lineHeight: 1.6 }}
+          title="The read, traded through the preset's own exit along the logged hourly candles: first touch of stop or target (a bar touching both = stop), else closed at the max hold. Net of a taker fee each side. Informational — it doesn't change the read's grade.">
+          <span style={{ color: MUTED, letterSpacing: "0.08em" }}>AS THE PRESET TRADES IT</span>{" "}
+          <span style={{ color: FAINT }}>TP {x.tpPercent}% · SL {x.slPercent}% · {x.maxHoldHours}h max</span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px", marginTop: 2 }}>
+            <span style={{ color: (VERDICT[x.verdict] || VERDICT.INSUFFICIENT).color, fontWeight: 700 }}>{(VERDICT[x.verdict] || VERDICT.INSUFFICIENT).label}</span>
+            <span><span style={{ color: x.netBps >= 0 ? POS : NEG }}>{x.netBps >= 0 ? "+" : ""}{x.netBps}</span> bps net</span>
+            <span>{x.hitRate}% win</span>
+            <span>n{x.samples}</span>
+            <span>{x.stable ? "stable" : "not stable"}</span>
+            <span style={{ color: FAINT }}>exits TP {x.exits.TP || 0} · SL {x.exits.SL || 0} · time {x.exits.TIMEOUT || 0} · avg {x.avgHoldH}h</span>
+          </div>
+        </div>
+      )}
       {preset ? (
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
           <button type="button" onClick={load} className="nx-press"

@@ -137,6 +137,55 @@ export function basisAtForConfig(config, flow) {
   return makeBasisAt(flow, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART", needLiq: config.basisConfirm === "LIQ" });
 }
 
+// ── The exit path, ONE implementation ─────────────────────────────────────────
+// A held position walked bar by bar through the exec's own evaluateExit. Exported so the
+// scoreboard's exit-matched grade (axisbt gradeEventExit) replays a preset's TP/SL/timeout
+// with the SAME code the backtest uses — so a graded read and a backtested preset can't
+// disagree about how a trade ends.
+// Vol-scaled stops (opt-in) override the single tp/sl per-position; an explicit
+// takeProfits ladder still takes over TP — exactly matching the live exec, which
+// vol-scales the SL + single-TP fallback but passes config.takeProfits through.
+export function openPosition(config, direction, price, t, lvl = null) {
+  return {
+    direction, entry: price, entryT: t, remaining: 1, realized: 0,
+    state: {
+      tpPercent: lvl ? lvl.tpPercent : config.tpPercent,
+      slPercent: lvl ? lvl.slPercent : config.slPercent,
+      takeProfits: config.takeProfits, tp_hits: [], peak_pnl_pct: 0,
+    },
+  };
+}
+// Realized % of a position closed at `exitPrice` (scale-out slices included).
+export function closedPnlPct(pos, exitPrice) {
+  const { pnlPct } = computePnl(pos.direction, pos.entry, exitPrice, 1);
+  return pos.realized + pnlPct * pos.remaining;
+}
+// One bar of exit management. Intrabar order is conservative: the ADVERSE extreme first,
+// then the favourable one, then the close (so a bar that touches both stop and target
+// stops out). Mutates pos (trail / scale-out state); returns { px, reason } when the
+// position is fully closed on this bar, else null.
+export function stepExit(pos, c, holdMs, config) {
+  const adv = pos.direction === "LONG" ? c.l : c.h;
+  const fav = pos.direction === "LONG" ? c.h : c.l;
+  for (const px of [adv, fav, c.c]) {
+    const { pnlPct } = computePnl(pos.direction, pos.entry, px, 1);
+    pos.state.be_armed = breakevenArmed(pos.state, pnlPct, config.breakevenTriggerPct);
+    const action = evaluateExit(pos.state, pnlPct, holdMs, config);
+    if (!action) continue;
+    if (action.type === "TRAIL_UPDATE") {
+      pos.state.peak_pnl_pct = action.peak; pos.state.trail_stop = action.trailStop;
+    } else if (action.type === "PARTIAL_TP") {
+      pos.realized += pnlPct * (action.sizePct / 100);
+      pos.remaining -= action.sizePct / 100;
+      pos.state.tp_hits = [...pos.state.tp_hits, action.level];
+      if (pos.remaining <= 1e-9) return { px, reason: "TP" };
+    } else if (action.type === "FULL_CLOSE") {
+      return { px, reason: action.reason };
+    }
+  }
+  return null;
+}
+
 // candles: [{ t(sec), o, h, l, c }] ascending. fundingAt(tsSec) → funding rate
 // (decimal) at/before ts. oiChangeAt(tsSec) → fractional OI change (or null) —
 // pass it to make CONFLUENCE/OI_ONLY testable; omit for funding/price-only modes.
@@ -154,47 +203,17 @@ export function runBacktest(candles, fundingAt, config, fundingPctAt = null, oiC
   let lastExitIdx = -Infinity;
   const cooldownBars = Number.isFinite(config.cooldownBars) ? config.cooldownBars : 1;
 
-  const openTrade = (direction, price, t, lvl = null) => ({
-    direction, entry: price, entryT: t, remaining: 1, realized: 0,
-    // Vol-scaled stops (opt-in) override the single tp/sl per-position; an explicit
-    // takeProfits ladder still takes over TP — exactly matching the live exec, which
-    // vol-scales the SL + single-TP fallback but passes config.takeProfits through.
-    state: {
-      tpPercent: lvl ? lvl.tpPercent : config.tpPercent,
-      slPercent: lvl ? lvl.slPercent : config.slPercent,
-      takeProfits: config.takeProfits, tp_hits: [], peak_pnl_pct: 0,
-    },
-  });
+  const openTrade = (direction, price, t, lvl = null) => openPosition(config, direction, price, t, lvl);
   const record = (p, exitPrice, reason, exitT) => {
-    const { pnlPct } = computePnl(p.direction, p.entry, exitPrice, 1);
-    trades.push({ direction: p.direction, entry: p.entry, exit: exitPrice, reason, pnlPct: p.realized + pnlPct * p.remaining, holdH: (exitT - p.entryT) / 3600, entryT: p.entryT });
+    trades.push({ direction: p.direction, entry: p.entry, exit: exitPrice, reason, pnlPct: closedPnlPct(p, exitPrice), holdH: (exitT - p.entryT) / 3600, entryT: p.entryT });
   };
 
   for (let i = 1; i < candles.length; i++) {
     const c = candles[i], prev = candles[i - 1];
     if (pos) {
-      const holdMs = (c.t - pos.entryT) * 1000;
-      const adv = pos.direction === "LONG" ? c.l : c.h;
-      const fav = pos.direction === "LONG" ? c.h : c.l;
-      let closed = false;
-      for (const px of [adv, fav, c.c]) {
-        const { pnlPct } = computePnl(pos.direction, pos.entry, px, 1);
-        pos.state.be_armed = breakevenArmed(pos.state, pnlPct, config.breakevenTriggerPct);
-        const action = evaluateExit(pos.state, pnlPct, holdMs, config);
-        if (!action) continue;
-        if (action.type === "TRAIL_UPDATE") {
-          pos.state.peak_pnl_pct = action.peak; pos.state.trail_stop = action.trailStop;
-        } else if (action.type === "PARTIAL_TP") {
-          pos.realized += pnlPct * (action.sizePct / 100);
-          pos.remaining -= action.sizePct / 100;
-          pos.state.tp_hits = [...pos.state.tp_hits, action.level];
-          if (pos.remaining <= 1e-9) { record(pos, px, "TP", c.t); pos = null; closed = true; break; }
-        } else if (action.type === "FULL_CLOSE") {
-          record(pos, px, action.reason, c.t); pos = null; closed = true; break;
-        }
-      }
-      if (closed) { lastExitIdx = i; continue; }
-      if (pos) continue;
+      const hit = stepExit(pos, c, (c.t - pos.entryT) * 1000, config);
+      if (hit) { record(pos, hit.px, hit.reason, c.t); pos = null; lastExitIdx = i; }
+      continue;
     }
     if (!pos && (i - lastExitIdx) > cooldownBars) {
       const priceChange = (c.c - prev.c) / prev.c;
@@ -291,7 +310,7 @@ export async function fetchFundingAt(symbol) {
 
 // Realistic taker fee (bps/side) applied to every user-facing backtest so results
 // are honest by default. Verified the Proven-Edge config survives it with margin.
-const DEFAULT_FEE_BPS = 3;
+export const DEFAULT_FEE_BPS = 3;
 
 // Sweep: fetch each symbol's data ONCE, then run a grid of backtestable configs
 // (mode × threshold × exit style) reusing that data, ranked by net P&L. This is the
