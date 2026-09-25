@@ -44,8 +44,21 @@ type Horizon = { h: number; samples: number; hitRate: number; meanBps: number; s
 type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; feeBps: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number; presetExit?: boolean; shadowOf?: string; bySide?: Record<"LONG" | "SHORT", SideStat>; oos?: { since: string; samples: number; hitRate: number; netBps: number } };
 type SideStat = { samples: number; hitRate: number; meanBps: number };
 type AxisSides = Record<"LONG" | "SHORT", { events: number; r: { samples: number; hitRate: number; meanR: number } }>;
-type AxisRow = { sides?: AxisSides; name: string; label: string; verdict: string; best: { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean } | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null };
-type Scorecard = { axes: AxisRow[]; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; note?: string; asOf?: string };
+// The random-entry baseline (axisbt randomEntryBaselineR): the same read, each event replayed at a
+// random hour — same market, same side, same frozen R contract, only from the window it fired in.
+type RandomSide = { verdict: string; n: number; pctBeaten?: number; realMeanR?: number; randomMedianR?: number; excessR?: number; moreTradesNeeded?: number | null; minN?: number };
+type RandomBaseline = { metric: string; runs: number; window: { from: string; to: string; hours: number }; pooled: RandomSide; bySide: Record<"LONG" | "SHORT", RandomSide> };
+// The tide: what a random long vs a random short earned across every recorded market-hour (R).
+// Named apart from each horizon's `drift` (mean-adjusted bps) — different measures, different words.
+type Tide = { metric: string; from: string; to: string; markets: number; LONG: { n: number; meanR: number }; SHORT: { n: number; meanR: number } };
+type AxisRow = { sides?: AxisSides; random?: RandomBaseline | null; name: string; label: string; verdict: string; best: { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean } | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null };
+type Scorecard = { axes: AxisRow[]; tide?: Tide | null; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; note?: string; asOf?: string };
+
+// vs-random tone — ONE mapping for the ONE ladder (baselineVerdict in backtest.mjs), used by the
+// preset evidence line AND the scoreboard's per-side baseline, so the same verdict word can never
+// render in two colours on one page. Green only when random entries are actually beaten.
+const baselineTone = (verdict?: string) => (verdict === "BEATS_RANDOM" ? POS : verdict === "LEANS_ABOVE" ? "#fbbf24" : FOG);
+const signR = (x: number) => `${x >= 0 ? "+" : ""}${x}R`;
 
 // Verdict tone — green ONLY for a proven-predictive signal; NOISE/INSUFFICIENT stay
 // muted (no edge ≠ a loss), PROMISING is neutral-bone (positive but unconfirmed).
@@ -88,7 +101,7 @@ function EvidenceLine({ axis }: { axis: string }) {
   }, [axis]);
   if (!ev) return null;
   const bl = ev.baseline;
-  const tone = bl?.verdict === "BEATS_RANDOM" ? POS : bl?.verdict === "LEANS_ABOVE" ? "#fbbf24" : FOG;
+  const tone = baselineTone(bl?.verdict);
   return (
     <div title={`The preset's own signal and ${ev.hold}h exit, replayed on every market with recorded history. Each market on its own. Trades pooled. ${ev.caveat || ""}`}
       style={{ marginTop: 6, fontFamily: MONO, fontSize: 9, color: FOG, lineHeight: 1.6, cursor: "help" }}>
@@ -167,13 +180,21 @@ function SignalRow({ a }: { a: AxisRow }) {
       )}
       {rated && a.sides && (a.sides.LONG.events + a.sides.SHORT.events) > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 6, fontFamily: MONO, fontSize: 9, color: FOG }}
-          title="Each side graded on its own, in R (first touch of the frozen 1.2×ATR stop vs 1.5R target). A read that only ever fires one side shows 0 here.">
+          title={"Each side graded on its own, in R (first touch of the frozen 1.2×ATR stop vs 1.5R target). A read that only ever fires one side shows 0 here."
+            + " 'random' = the same events re-entered at random hours in the same window, same market, same side, same contract (300 seeded replays): what ANY entry on that side earned."
+            + " 'beat X%' = share of those replays the real read out-earned. Under 95% it can't be told apart from the window."}>
           {(["LONG", "SHORT"] as const).map((sd) => {
             const s = a.sides![sd];
+            const rb = a.random?.bySide?.[sd];
             return (
               <span key={sd} style={{ whiteSpace: "nowrap" }}>
                 {sd === "LONG" ? "longs" : "shorts"} {s.events}
-                {s.r.samples > 0 && <> · <span style={{ color: s.r.meanR >= 0 ? POS : NEG }}>{s.r.meanR >= 0 ? "+" : ""}{s.r.meanR}R</span> · {s.r.hitRate}%</>}
+                {s.r.samples > 0 && <> · <span style={{ color: s.r.meanR >= 0 ? POS : NEG }}>{signR(s.r.meanR)}</span> · {s.r.hitRate}%</>}
+                {rb && rb.verdict !== "TOO_FEW" && rb.randomMedianR != null && (
+                  <> · random <span style={{ color: rb.randomMedianR >= 0 ? POS : NEG }}>{signR(rb.randomMedianR)}</span>
+                    {" "}→ <span style={{ color: baselineTone(rb.verdict) }}>beat {rb.pctBeaten}%</span></>
+                )}
+                {rb && rb.verdict === "TOO_FEW" && rb.n > 0 && <span style={{ color: FAINT }}> · too few to test vs random</span>}
               </span>
             );
           })}
@@ -516,9 +537,21 @@ export default function ProofPage() {
             Every read in the engine, graded the way we grade traders. <b style={{ color: BRIGHT }}>Forward returns. No lookahead.</b> Pooled across the core markets. Walk-forward stability check.
             A read is not an edge until it's <span style={{ color: POS }}>◆ PREDICTIVE</span> here. Most sit at <span style={{ color: FAINT }}>ACCRUING</span> until the history matures and the sample clears the bar.
             <span style={{ display: "block", marginTop: 8, color: MUTED, fontSize: 11.5 }}>
-              Reading a row: <b style={{ color: FOG }}>horizon</b> (how far ahead) · <b style={{ color: FOG }}>hit rate</b> (share that went the right way) · <b style={{ color: FOG }}>edge</b> (avg move caught, 100 bps = 1%) · <b style={{ color: FOG }}>samples</b> (times it&rsquo;s fired) · <b style={{ color: FOG }}>stable</b> (held up in both halves).
+              Reading a row: <b style={{ color: FOG }}>horizon</b> (how far ahead) · <b style={{ color: FOG }}>hit rate</b> (share that went the right way) · <b style={{ color: FOG }}>edge</b> (avg move caught, 100 bps = 1%) · <b style={{ color: FOG }}>samples</b> (times it&rsquo;s fired) · <b style={{ color: FOG }}>stable</b> (held up in both halves) · <b style={{ color: FOG }}>random</b> (the same side entered at random hours in the same window. The read has to beat it, not zero).
             </span>
           </div>
+          {scorecard?.tide && (
+            // THE TIDE — the reference every row's positive grade has to clear. If random longs
+            // earn and random shorts lose, the window rose, and a long-leaning read's edge is
+            // only what it earns ABOVE this.
+            <div title="Every recorded market-hour, entered at random, under the same frozen R contract the rows use (first touch of a 1.2×ATR stop vs a 1.5R target, 7-day max). Not a sample: the whole population."
+              style={{ marginBottom: 10, padding: "7px 10px", border: `1px solid ${BORDER}`, borderRadius: 4, background: SURFACE_ALT, fontFamily: MONO, fontSize: 9.5, color: FOG, lineHeight: 1.6, cursor: "help" }}>
+              <span style={{ color: MUTED, letterSpacing: "0.08em" }}>THE TIDE</span>{" "}
+              a random long earned <span style={{ color: scorecard.tide.LONG.meanR >= 0 ? POS : NEG }}>{signR(scorecard.tide.LONG.meanR)}</span>,
+              a random short <span style={{ color: scorecard.tide.SHORT.meanR >= 0 ? POS : NEG }}>{signR(scorecard.tide.SHORT.meanR)}</span>
+              <span style={{ color: FAINT }}> · {scorecard.tide.markets} markets · {new Date(scorecard.tide.from).toLocaleDateString(undefined, { month: "short", day: "numeric" })} to {new Date(scorecard.tide.to).toLocaleDateString(undefined, { month: "short", day: "numeric" })}. A read has to beat its side&rsquo;s tide, not zero.</span>
+            </div>
+          )}
           {scorecard === null ? empty("loading…") : !scorecard.axes?.length ? empty("scorecard warming up…") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {scorecard.axes.map((a) => <SignalRow key={a.name} a={a} />)}

@@ -770,6 +770,26 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   24h **+67.0 stable** (n259) · basis_x_cvd 24h **+144.7 stable** (n25) but **12h −20.5** (the preset's hold) · basis_dev
   24h **+58.8 stable** (n230), its shorts +25.3 at 24h (flat raw only because the market rose) · basis_dev_x_cvd 4h
   +24.9 / 12h +17.8 stable (small n) · rsi_reset_held 24h −18.1 (was drift) · funding/liq/cvd negative (noise).
+  **✅ RANDOM-ENTRY BASELINE per read + side (2026-09-25, cache `axisbt:v7`)** — the R-side complement to the bps
+  drift above (built in parallel; BOTH ship). Every axis carries `random {metric:"R", runs:300, seed:7, window,
+  pooled, bySide{LONG,SHORT}}`: each R-graded event re-entered at a random hour — same market, same side, same frozen
+  R contract — 300 seeded replays → `pctBeaten` → **BEATS_RANDOM ≥95 / LEANS_ABOVE ≥80 / NOT_DISTINGUISHABLE /
+  TOO_FEW (<5)**, plus `realMeanR`/`randomMedianR`/`excessR`/`moreTradesNeeded`. How it differs from `drift`, and why
+  both exist: (1) it grades **R — the metric every verdict uses**, not bps; (2) it's **WINDOW-MATCHED** — random hours
+  come only from [first, last] hour the read fired, whereas coinDrift averages the coin's WHOLE recorded history. A
+  basis×CVD read can only fire while cvd:hist exists; a whole-history control compares it with a different regime
+  (a mutation test proves it: remove window-matching and a rally-only read falsely BEATS_RANDOM); (3) it's a
+  **significance test**, not a mean — it says whether the excess is distinguishable from luck at this n.
+  Scorecard-level **`tide`** = what a random long / short earned in R over every recorded market-hour (population, no
+  sampling) — /proof "THE TIDE" box. ⚠️ Named `tide`, NOT `drift`: `drift` already means the per-horizon bps measure;
+  one word, one meaning. ⚠️ ONE verdict ladder: `baselineVerdict` + `mulberry32` + `tradesToSeparate` are EXPORTED
+  from backtest.mjs and imported by axisbt — the Lab backtest and the scoreboard can't disagree on "BEATS_RANDOM".
+  Cost: a random entry's R depends only on (market, side, hour), so `buildRandomPools` grades the universe ONCE per
+  scorecard (~0.5s at 12 mkts × 2.2k h) and every replay is a lookup (+1–39ms/axis); R is now graded once per event
+  (it was graded twice). The copilot's `get_signal_scoreboard` gets `vs_random` per side + `tide`, and its prompt no
+  longer calls PREDICTIVE "a real, stable edge" — an edge = BEATS_RANDOM on its side. Informational: no verdict
+  changes. Tests: `axisbt.random.test.mjs` (drift-alone → NOT_DISTINGUISHABLE, trough-timing → BEATS_RANDOM,
+  window-matched, side-preserved, seeded, measurement-only).
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
@@ -1043,11 +1063,10 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
 - **nexus-carry-engine** (42 tests) does NOT follow the one-`logic.mjs` convention — it is split by
   concern (`carryBasket` / `carryPaper` / `carryLive` / `carryExec` / `carryLiveExec` `.test.mjs`), so
   `node --test workers/nexus-carry-engine/logic.test.mjs` finds nothing. Glob the dir instead.
-- **⚠️ Whole-suite run — EXCLUDE node_modules or you get phantom failures:**
-  `node --test $(find app/lib workers -name '*.test.mjs' -not -path '*/node_modules/*' | sort)`
-  (861 tests as of 2026-09-25). Without the `-not -path`, `find` picks up third-party test files
-  shipped inside `workers/nexus-lab-api/node_modules` (@metamask/safe-event-emitter, thread-stream)
-  which fail on a missing `tap` dependency — 3 red results that are NOT our code. Bit us once.
+- **Whole suite = `node tools/run-tests.mjs`** (what CI runs; skips node_modules by design). Don't hand-roll a
+  `find … -name '*.test.mjs'`: without excluding node_modules it picks up third-party test files vendored in
+  `workers/nexus-lab-api/node_modules` (@metamask/safe-event-emitter, thread-stream) that fail on a missing `tap`
+  dep — 3 red results that are NOT our code. Bit us once.
 - **Monitoring (DONE):** `nexus-ledger-anchor` runs an hourly `runMonitor` (after `runAnchor`) → Telegram
   ops alerts for ⛽ anchor-signer gas low (<0.0004 ETH), ⚓ ledger drifted from on-chain anchor >6h,
   🧠 brain down (via `ops:brain:heartbeat` KV the brain stamps every run; >15min = down). 3h per-issue

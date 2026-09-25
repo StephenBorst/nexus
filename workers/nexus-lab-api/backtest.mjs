@@ -338,7 +338,14 @@ export function runPortfolioBacktest(markets, config) {
 // Seeded (mulberry32) so a result is reproducible. Pure: no fetch.
 export const BASELINE_RUNS = 300;
 export const BASELINE_MIN_TRADES = 5;
-function mulberry32(seed) {
+// The ONE verdict ladder for a random-entry baseline. Shared with the scoreboard's per-signal
+// baseline (axisbt.mjs) so "BEATS_RANDOM" can never mean two different thresholds on two
+// surfaces that both claim to answer "does the signal pick good moments?".
+export function baselineVerdict(pctBeaten) {
+  return pctBeaten >= 95 ? "BEATS_RANDOM" : pctBeaten >= 80 ? "LEANS_ABOVE" : "NOT_DISTINGUISHABLE";
+}
+// Seeded PRNG, exported so the scoreboard's replays are reproducible the same way.
+export function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -400,7 +407,7 @@ export function randomEntryBaseline(markets, config, realTrades, { runs = BASELI
   const need = tradesToSeparate(pctBeaten, plan.length);
   const q = (f) => nets[Math.min(nets.length - 1, Math.max(0, Math.floor(f * (nets.length - 1))))];
   return {
-    verdict: pctBeaten >= 95 ? "BEATS_RANDOM" : pctBeaten >= 80 ? "LEANS_ABOVE" : "NOT_DISTINGUISHABLE",
+    verdict: baselineVerdict(pctBeaten),
     runs, seed, trades: plan.length, realNetUsd: real.netUsd, pctBeaten,
     randomMedianUsd: q(0.5), randomP5Usd: q(0.05), randomP95Usd: q(0.95),
     tradesNeeded: need, moreTradesNeeded: need == null ? null : Math.max(0, need - plan.length),

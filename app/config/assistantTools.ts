@@ -489,12 +489,16 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_signal_scoreboard",
     description:
-      "Get the SIGNAL SCOREBOARD — how our OWN reads perform when graded by the same trustless standard we grade traders: forward returns, no lookahead, pooled across the core markets, with a walk-forward stability check (first half vs second half must agree). Each axis gets a verdict: PREDICTIVE (a real, stable edge), PROMISING (positive but unconfirmed), NOISE (no edge), or INSUFFICIENT/ACCRUING (not enough self-logged history yet). Use for 'do your signals actually work', 'which reads have an edge', 'is the funding fade profitable', 'how's the backtest looking'. IMPORTANT framing: most axes read ACCRUING right now — until the self-logged history matures and the sample clears the bar. Be honest that a read is NOT an edge until it's PREDICTIVE here — publishing the misses is the whole point (radical transparency). Not advice.",
+      "Get the SIGNAL SCOREBOARD — how our OWN reads perform when graded by the same trustless standard we grade traders: forward returns, no lookahead, pooled across the core markets, with a walk-forward stability check (first half vs second half must agree). Each axis gets a verdict graded against ZERO: PREDICTIVE (positive and stable), PROMISING (positive but unconfirmed), NOISE (no edge), or INSUFFICIENT/ACCRUING (not enough self-logged history yet). Each axis ALSO carries vs_random per side: the same events re-entered at random hours in the same window, same market, same side, same contract. That is the test of whether the read picks good moments or the window did the work — in a window that rose, any long grades positive. A read is only an edge if it BEATS_RANDOM on its side; PREDICTIVE alone is NOT enough, and `tide` shows what a random long/short earned. Never call a read an edge, proven or validated unless vs_random says BEATS_RANDOM. Use for 'do your signals actually work', 'which reads have an edge', 'is the funding fade profitable', 'how's the backtest looking'. IMPORTANT framing: most axes read ACCRUING right now — until the self-logged history matures and the sample clears the bar. Be honest that a read is NOT an edge until it's PREDICTIVE here — publishing the misses is the whole point (radical transparency). Not advice.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
       const sc = await fetch(`${AGENT_API}/intel/axis-backtest`).then((r) => r.json()).catch(() => null);
       if (!sc?.axes?.length) return JSON.stringify({ error: "scorecard warming up — check back" });
-      type Ax = { name: string; label: string; verdict: string; best: { h: number; hitRate: number; meanBps: number; samples: number; stable: boolean } | null };
+      type RSide = { verdict: string; n: number; pctBeaten?: number; realMeanR?: number; randomMedianR?: number };
+      type Ax = { name: string; label: string; verdict: string; best: { h: number; hitRate: number; meanBps: number; samples: number; stable: boolean } | null; random?: { bySide?: Record<"LONG" | "SHORT", RSide> } | null };
+      // Per side: the read's mean R, a random entry's mean R in the same window, and the verdict.
+      const vsRandom = (r?: RSide) => !r ? null : r.verdict === "TOO_FEW" ? { verdict: "TOO_FEW", events: r.n }
+        : { verdict: r.verdict, beat_pct_of_random: r.pctBeaten, read_mean_r: r.realMeanR, random_entry_mean_r: r.randomMedianR, events: r.n };
       return JSON.stringify({
         as_of: sc.asOf, pooled_markets: sc.config?.coins?.length ?? null, min_samples_to_rate: sc.config?.minSamples ?? null,
         axes: (sc.axes as Ax[]).map((a) => ({
@@ -502,8 +506,10 @@ export const TOOLS: ToolDef[] = [
           best: a.best && a.verdict !== "INSUFFICIENT"
             ? { horizon_h: a.best.h, hit_rate_pct: a.best.hitRate, mean_forward_bps: a.best.meanBps, observations: a.best.samples, walk_forward_stable: a.best.stable }
             : "accruing — not yet rated",
+          vs_random: a.random?.bySide ? { long: vsRandom(a.random.bySide.LONG), short: vsRandom(a.random.bySide.SHORT) } : null,
         })),
-        note: "Forward-return event study, no lookahead. A read is not an edge until it's PREDICTIVE + stable. We publish the misses too — that's the standard.",
+        tide: sc.tide ? { random_long_mean_r: sc.tide.LONG?.meanR, random_short_mean_r: sc.tide.SHORT?.meanR, from: sc.tide.from, to: sc.tide.to } : null,
+        note: "Forward-return event study, no lookahead. PREDICTIVE is graded against zero; vs_random is graded against the same side entered at random in the same window. A read is not an edge until it BEATS_RANDOM on its side. We publish the misses too — that's the standard.",
       });
     },
   },

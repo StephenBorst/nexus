@@ -16,7 +16,7 @@ import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
 import { trailingPct, basisExtremeSide, basisDeviationSide } from "../../app/lib/basisFade.mjs";
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
-import { openPosition, stepExit, closedPnlPct, DEFAULT_FEE_BPS } from "./backtest.mjs";
+import { openPosition, stepExit, closedPnlPct, DEFAULT_FEE_BPS, BASELINE_RUNS, BASELINE_MIN_TRADES, baselineVerdict, mulberry32, tradesToSeparate } from "./backtest.mjs";
 
 // hourBucket + the oi:hist price spine live in app/lib/basisStack.mjs (shared with the
 // brain's basis×CVD gate); re-exported so existing importers keep working.
@@ -606,7 +606,130 @@ function aggR(arr) {
   return { samples: arr.length, hitRate: Math.round((wins / arr.length) * 100), meanR: Math.round(mean * 100) / 100 };
 }
 
-export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null } = {}) {
+// ── RANDOM-ENTRY BASELINE, per signal and per side ───────────────────────────
+// Every verdict above is graded against ZERO. In a window that rose, any long "predicts" and
+// any short loses — which is exactly the pattern the per-side split showed on every two-sided
+// read. This separates the two stories: did the SIGNAL pick good moments, or did the WINDOW do
+// the work? Each graded event is replayed at a random hour, keeping everything else: the same
+// market, the same side, the same frozen R contract, and the SAME WINDOW the read fired in.
+//
+// ⚠️ Window-matched on purpose. candle:hist is backfilled far deeper than the young series
+// (cvd:hist, basis:hist), so a basis×CVD read can only fire in the last few weeks. Drawing its
+// random entries from the whole candle history would compare it with a different market
+// regime. Random hours come only from [first, last] hour the read actually fired.
+//
+// Same method, runs, seed and verdict ladder as the Lab backtest's randomEntryBaseline —
+// baselineVerdict / mulberry32 / tradesToSeparate are imported from backtest.mjs, never copied.
+// Informational: it does NOT change the read's verdict.
+//
+// Cost: a random entry's R depends only on (market, side, hour), never on the read — so the
+// whole universe is graded ONCE per scorecard (buildRandomPools) and every replay of every
+// read is a table lookup, instead of 300 × 168h first-touch walks per event.
+export const RANDOM_BASELINE_SEED = 7;
+export const mktKey = (cs, i) => cs?.coin ?? `#${i}`;
+
+export function buildRandomPools(coinSets) {
+  const pools = new Map();
+  (coinSets || []).forEach((cs, i) => {
+    const pmap = priceByHour(cs?.oiHist);
+    if (pmap.size < 2) return;
+    const cbh = candlesByHour(cs?.candleHist);
+    if (!cbh.size) return;
+    const L = { hs: [], rs: [] }, S = { hs: [], rs: [] };
+    for (const h of [...pmap.keys()].sort((a, b) => a - b)) {
+      const px = pmap.get(h);
+      if (!(px > 0)) continue;
+      const rl = gradeEventR(cbh, h, "LONG", px); if (rl != null) { L.hs.push(h); L.rs.push(rl); }
+      const rsh = gradeEventR(cbh, h, "SHORT", px); if (rsh != null) { S.hs.push(h); S.rs.push(rsh); }
+    }
+    pools.set(mktKey(cs, i), { LONG: L, SHORT: S });
+  });
+  return pools;
+}
+
+// First index with hs[i] >= x / first index with hs[i] > x (hs sorted ascending).
+function lowerBound(hs, x) { let lo = 0, hi = hs.length; while (lo < hi) { const m = (lo + hi) >> 1; if (hs[m] < x) lo = m + 1; else hi = m; } return lo; }
+function upperBound(hs, x) { let lo = 0, hi = hs.length; while (lo < hi) { const m = (lo + hi) >> 1; if (hs[m] <= x) lo = m + 1; else hi = m; } return lo; }
+
+const r2 = (x) => Math.round(x * 100) / 100;
+
+// One comparison: the real graded sample vs `runs` replays that redraw every event's hour.
+function baselineOne(sample, runs, seed, minN) {
+  const n = sample.length;
+  if (n < minN) return { verdict: "TOO_FEW", n, minN, runs: 0 };
+  let realSum = 0;
+  for (const x of sample) realSum += x.r;
+  const realMean = realSum / n;
+  const rnd = mulberry32(seed); // fresh stream per comparison: LONG's result never depends on SHORT's draws
+  const means = new Array(runs);
+  for (let k = 0; k < runs; k++) {
+    let sum = 0;
+    for (const x of sample) sum += x.rs[x.lo + Math.floor(rnd() * (x.hi - x.lo))];
+    means[k] = sum / n;
+  }
+  means.sort((a, b) => a - b);
+  let below = 0, ties = 0;
+  for (const m of means) { if (m < realMean) below++; else if (m === realMean) ties++; }
+  const pctBeaten = Math.round(((below + ties / 2) / runs) * 1000) / 10;
+  const q = (f) => means[Math.min(runs - 1, Math.max(0, Math.floor(f * (runs - 1))))];
+  const need = tradesToSeparate(pctBeaten, n);
+  return {
+    verdict: baselineVerdict(pctBeaten), n, runs, pctBeaten,
+    realMeanR: r2(realMean), randomMedianR: r2(q(0.5)), randomP5R: r2(q(0.05)), randomP95R: r2(q(0.95)),
+    excessR: r2(realMean - q(0.5)),
+    tradesNeeded: need, moreTradesNeeded: need == null ? null : Math.max(0, need - n),
+  };
+}
+
+// `all` = scoreEvents' events ({ t, side, mkt, _r }); `pools` = buildRandomPools(coinSets).
+export function randomEntryBaselineR(all, pools, { runs = BASELINE_RUNS, seed = RANDOM_BASELINE_SEED, minN = BASELINE_MIN_TRADES } = {}) {
+  if (!pools || !(all || []).length) return null;
+  let spanLo = Infinity, spanHi = -Infinity;
+  for (const e of all) { const h = hourBucket(e.t); if (h < spanLo) spanLo = h; if (h > spanHi) spanHi = h; }
+  const slices = new Map();
+  const matched = [];
+  for (const e of all) {
+    if (e._r == null) continue;                       // not gradeable → not in the real sample either
+    const pool = pools.get(e.mkt)?.[e.side];
+    if (!pool || !pool.hs.length) continue;
+    const key = `${e.mkt}|${e.side}`;
+    let sl = slices.get(key);
+    if (!sl) { sl = [lowerBound(pool.hs, spanLo), upperBound(pool.hs, spanHi)]; slices.set(key, sl); }
+    if (sl[1] <= sl[0]) continue;                     // nothing to redraw from inside the window
+    matched.push({ side: e.side, r: e._r, rs: pool.rs, lo: sl[0], hi: sl[1] });
+  }
+  return {
+    metric: "R", runs, seed,
+    window: { from: new Date(spanLo * 3600000).toISOString(), to: new Date(spanHi * 3600000).toISOString(), hours: spanHi - spanLo },
+    pooled: baselineOne(matched, runs, seed, minN),
+    bySide: {
+      LONG: baselineOne(matched.filter((x) => x.side === "LONG"), runs, seed, minN),
+      SHORT: baselineOne(matched.filter((x) => x.side === "SHORT"), runs, seed, minN),
+    },
+  };
+}
+
+// The TIDE (named apart from the per-horizon `drift` — a DIFFERENT, mean-adjusted measure): what
+// a random long vs a random short earned under the frozen R contract, averaged
+// over every gradeable market-hour in the universe. Not a sample — the whole population, so no
+// runs and no seed. If longs earn and shorts lose here, the window rose, and a long-leaning
+// read's positive grade has to beat THIS, not zero.
+export function windowTide(pools) {
+  let lo = Infinity, hi = -Infinity;
+  const acc = { LONG: [0, 0], SHORT: [0, 0] };
+  for (const p of pools.values()) {
+    for (const side of ["LONG", "SHORT"]) {
+      const { hs, rs } = p[side];
+      for (let i = 0; i < rs.length; i++) { acc[side][0] += rs[i]; acc[side][1]++; }
+      if (hs.length) { lo = Math.min(lo, hs[0]); hi = Math.max(hi, hs[hs.length - 1]); }
+    }
+  }
+  if (!Number.isFinite(lo)) return null;
+  const side = (k) => ({ n: acc[k][1], meanR: acc[k][1] ? r2(acc[k][0] / acc[k][1]) : 0 });
+  return { metric: "R", from: new Date(lo * 3600000).toISOString(), to: new Date(hi * 3600000).toISOString(), markets: pools.size, LONG: side("LONG"), SHORT: side("SHORT") };
+}
+
+export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null } = {}) {
   // BTC context (regime map + price map) for the RS/veto gens — built once, passed to every gen.
   const btcCs = (coinSets || []).find((c) => String(c.coin || "").toUpperCase() === "BTC");
   // BTC context off the DEEPEST btc series (candle closes preferred) so the RS/veto reaches
@@ -614,13 +737,14 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
   const btcSeries = btcCs ? priceSeries(btcCs) : [];
   const ctx = btcCs ? { btcMap: btcRegimeByHour(btcSeries), btcPrice: priceByHour(btcSeries), btcCandles: candlesByHour(btcCs.candleHist) } : {};
   const all = [];
-  for (const cs of coinSets || []) {
+  (coinSets || []).forEach((cs, i) => {
     const pmap = priceByHour(cs.oiHist);
-    if (pmap.size < 2) continue;
+    if (pmap.size < 2) return;
     const cbh = candlesByHour(cs.candleHist); // for R grading (first-touch needs highs/lows)
-    for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, pmap, cbh, rs: typeof e.rs === "number" ? e.rs : null });
-  }
-  if (!all.length) return { sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples) };
+    const mkt = mktKey(cs, i); // the SAME key buildRandomPools uses, so a replay redraws on this market
+    for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, mkt, pmap, cbh, rs: typeof e.rs === "number" ? e.rs : null });
+  });
+  if (!all.length) return { random: null, sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples) };
   // rs_quartile written on EVERY event row that carries an rs — from closes, NOT candle-gated
   // (Grok #4). Cross-sectional rank → quartile (Q1 = strongest). Exposed so Sept-14 can
   // condition on it; a top-quartile-only axis is a one-line follow-up once these matter.
@@ -672,6 +796,7 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
   for (const e of all) {
     const entry = e.pmap.get(hourBucket(e.t));
     const r = gradeEventR(e.cbh, hourBucket(e.t), e.side, entry);
+    e._r = r; // graded once; the side split and the random baseline reuse it
     if (r == null) continue;
     rSamples.push({ t: e.t, r }); (e.t <= medT ? rFst : rSnd).push(r);
   }
@@ -694,15 +819,13 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
   // survives the exit the agent actually uses.
   const exitGrades = scoreExitVariants(all, exit, medT, minSamples);
   const rBySide = { LONG: [], SHORT: [] };
-  for (const e of all) {
-    const rv = gradeEventR(e.cbh, hourBucket(e.t), e.side, e.pmap.get(hourBucket(e.t)));
-    if (rv != null) rBySide[e.side].push(rv);
-  }
+  for (const e of all) if (e._r != null) rBySide[e.side].push(e._r);
   const sides = {
     LONG: { events: all.filter((e) => e.side === "LONG").length, r: aggR(rBySide.LONG) },
     SHORT: { events: all.filter((e) => e.side === "SHORT").length, r: aggR(rBySide.SHORT) },
   };
-  return { sides, samples: all.length, horizons: horizonsOut, r, rsQuartileDist, headline: useR ? "R" : "bps", verdict: useR ? rVerdict : (bestHorizon ? bestHorizon.verdict : "INSUFFICIENT"), bestHorizon, ...exitGrades };
+  const random = randomPools ? randomEntryBaselineR(all, randomPools) : null;
+  return { random, sides, samples: all.length, horizons: horizonsOut, r, rsQuartileDist, headline: useR ? "R" : "bps", verdict: useR ? rVerdict : (bestHorizon ? bestHorizon.verdict : "INSUFFICIENT"), bestHorizon, ...exitGrades };
 }
 
 // The full scorecard across every registered axis, ranked by best-horizon mean return.
@@ -747,11 +870,13 @@ export function rsQuartiles(universe) {
 }
 
 export function runScorecard(coinSets, cfg = {}) {
+  const randomPools = buildRandomPools(coinSets); // every (market, side, hour) graded ONCE, shared by all reads
+  const tide = windowTide(randomPools);
   const axes = AXES.map((a) => {
     const shadow = !AXIS_EXITS[a.name] && SHADOW_EXITS[a.name];
-    const s = scoreEvents(coinSets, a.gen, { ...cfg, exit: AXIS_EXITS[a.name] || (shadow ? shadow.exit : null) });
+    const s = scoreEvents(coinSets, a.gen, { ...cfg, randomPools, exit: AXIS_EXITS[a.name] || (shadow ? shadow.exit : null) });
     if (shadow) for (const g of [s.exit, s.exit24h]) if (g) { g.presetExit = false; g.shadowOf = shadow.shadowOf; }
-    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, sides: s.sides, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit, exit24h: s.exit24h };
+    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, sides: s.sides, random: s.random, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit, exit24h: s.exit24h };
   });
   // rank: PREDICTIVE > PROMISING > NOISE > INSUFFICIENT, then by the HEADLINE metric —
   // meanR once R-graded (the right object), else forward-bps until candles mature.
@@ -764,5 +889,5 @@ export function runScorecard(coinSets, cfg = {}) {
   const universe = btc
     ? rsQuartiles(coinSets.filter((c) => c !== btc).map((c) => ({ coin: c.coin, rs: relStrength(c.oiHist, btc.oiHist) })).filter((x) => x.rs != null).sort((a, b) => b.rs - a.rs))
     : [];
-  return { axes, coins: coinSets.length, universe };
+  return { axes, tide, coins: coinSets.length, universe };
 }
