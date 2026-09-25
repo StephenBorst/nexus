@@ -639,6 +639,37 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   test: confirm Fabric's `taker` param name (we send `taker`; if unhonored the takerless tx still binds recipient to
   msg.sender) and run a small real buy on a Fabric-listed token (e.g. WETH/BNKR on Base) before trusting.
 
+## ✅ Flash (Definitive) spot router — HARDENED 2026-09-25 (read before touching FlashSpotButton)
+- Flash = the THIRD EVM spot router on /token (beside Fabric + the Uniswap deep-link), `app/pages/token/FlashSpotButton.tsx`,
+  worker proxy `POST /flash/quote|order` (adds secret `FLASH_API_KEY`). Market BUY/SELL; SL/TP bracket attaches only when
+  the quote echoes one back.
+- **⚠️ Flash's quote returns an UNLIMITED approve** (`approve(0x5d00…8f78, 2^256-1)`, verified live) + an EIP-712
+  `FlashOrder` {swapper, vault, recipient, fromToken, toToken, fromAmount (base units), salt, deadline}, domain
+  `DefinitiveFlashAllowance` v1, verifyingContract = the SAME `0x5d00000873b6bf41539e6f5365b0ff7d3c368f78` (pinned as
+  `FLASH_ALLOWANCE`). Before the fix both went to the wallet unchecked (setup-tx ETH value forwarded as-is).
+- **Guards (`app/lib/flashGuards.mjs`, tested incl. a live Base quote), all BEFORE any wallet prompt:** `ensureChain`
+  first → `checkFlashOrder` (FlashOrder, this chain, pinned contract, **swapper AND recipient = wallet**, the trade's
+  tokens, `fromAmount ≤ typed size + 1 base unit`, deadline within 1h) → each setup tx must pass `checkFlashSetupTx`
+  (zero-ETH `approve` of fromToken to the pinned spender) and we send **OUR exact-amount `encodeApprove(FLASH_ALLOWANCE,
+  fromAmount)`** instead of Flash's unlimited one (0-amount resets pass through) → any `permitTypedData` is REFUSED →
+  bracket must pass `checkFlashBracket` (wallet-bound FlashOrder selling the bought token; no amount/deadline bound —
+  it rests). Approval receipts must be status 0x1; pending/reverted stops the flow. Decimals via `eth_call decimals()`.
+- **Key proxies gated** (`workers/nexus-lab-api/keyProxy.mjs`, tested): `/flash/*` + `/swap/jup/*` accept only our
+  origins (ALLOWED_ORIGINS + `*.nexus-trading-lab.pages.dev`, https) and a per-IP isolate-local budget (flash 30/min,
+  jup 120/min) → 403 `origin_not_allowed` / 429. Verified live. Only browser code calls them.
+
+## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
+- `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the
+  brain's single best signal per tick (ties → first in `config.symbols`), and is gated by daily caps. Now
+  `runPortfolioBacktest(markets, config)` walks all markets on one merged hourly timeline with the SHARED `entryAt`
+  (extracted from runBacktest, which now calls it) + `stepExit` + the exec's own `dailyCapBlocked`/`shouldResetDaily`.
+  Returns aggregate + perSymbol + `blocked {busy, otherMarket, dailyCap, cooldown}`. `backtestConfig` returns
+  `portfolio`; Backtest card shows "AS THE AGENT TRADES IT" under the per-market tiles ("EACH MARKET ON ITS OWN").
+  Tests (`backtest.portfolio.test.mjs`): one market + no caps == runBacktest trade-for-trade. Sweep + walk-forward
+  still replay per market (not yet portfolio). `maxTradesPerDay` IS now simulated in the portfolio replay.
+- Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
+  Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
+
 ## Nexus PRO — subscriptions / revenue (freemium model)
 The business-model layer. **PRO is a SOFTWARE subscription** (ordinary commerce, real USDC revenue) — NOT a
 token-value scheme. $NEXUS only adds **consumptive use** (pay-in-$NEXUS discount) + **access** (hold-to-unlock).
