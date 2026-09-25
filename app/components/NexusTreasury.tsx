@@ -73,6 +73,9 @@ export function NexusTreasury({ compact = false }: { compact?: boolean }) {
     return () => { cancelled = true; };
   }, [configured]);
 
+  // Before the early return: a hook after it would change the hook count when `failed` flips (React throws).
+  const isMobile = useIsMobile();
+
   // No Safe yet, or read failed → render nothing.
   if (!configured || failed) return null;
 
@@ -82,7 +85,6 @@ export function NexusTreasury({ compact = false }: { compact?: boolean }) {
     ? `$${usdc.toLocaleString(undefined, { maximumFractionDigits: usdc < 1000 ? 2 : 0 })}`
     : "—";
 
-  const isMobile = useIsMobile();
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: compact ? 12 : 20, flexWrap: "wrap",

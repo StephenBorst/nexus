@@ -229,6 +229,17 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
     };
   }, [trades, coin, direction]);
 
+  // Hooks MUST run before the `!coin` early return — a hook after a conditional return changes the
+  // hook count when the coin changes (React throws). Both depend only on `reversion` (state).
+  const revPct = reversion ? reversion.revertedPct : null;
+  const revWeak = reversion ? (reversion.tier === "TRAP" || (revPct != null && revPct <= 42)) : false;
+  // The WATCH/arming gate is the reversion clock (one clock ticket↔read↔thesis, no fork).
+  useEffect(() => { onWeakEdge?.({ weak: revWeak, histPct: revPct }); }, [revWeak, revPct, onWeakEdge]);
+  // FREEZE the odds at the click from the ONE reversion clock the ticket shows (Grok's ruling):
+  // a new publish stamps {revertedPct, samples, tier} onto the card, labeled "taken vs" — the same
+  // book as the live HIST line, just past tense. Old cards stay frozen on their backtest number.
+  useEffect(() => { onBaseRate?.(reversion ? { revertedPct: reversion.revertedPct, samples: reversion.samples, tier: reversion.tier } : null); }, [reversion, onBaseRate]);
+
   if (!coin) return null;
 
   // The market's lean the intelligence favors (the fade side; confluence when smart agrees).
@@ -287,8 +298,6 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
   //              force WATCH — you may draft an unproven fade on your own read).
   //   proven   = the fade has actually reverted here (edgeQuality PROVEN) → HIGH/PROVEN allowed.
   // The /intel/baserate BACKTEST is NO LONGER a second clock on the glass — one fade, one clock.
-  const revPct = reversion ? reversion.revertedPct : null;
-  const revWeak = reversion ? (reversion.tier === "TRAP" || (revPct != null && revPct <= 42)) : false;
   const revProven = reversion ? reversion.tier === "PROVEN" : false;
   const revUnproven = !reversion || reversion.tier === "UNPROVEN";
   const weakBase = revWeak;                                                               // the losing-clock dock (amber)
@@ -298,12 +307,6 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
   const cappedHigh = convLevel === "HIGH" && !revProven;
   const convWordFinal = (weakBase || cappedHigh) ? `${agree}/${voteReads.length} ALIGNED · HIST ${histLabel}` : convWord;
   const convColorFinal = weakBase ? WARN : cappedHigh ? MUTED : convColor;
-  // The WATCH/arming gate is the reversion clock (one clock ticket↔read↔thesis, no fork).
-  useEffect(() => { onWeakEdge?.({ weak: revWeak, histPct: revPct }); }, [revWeak, revPct, onWeakEdge]);
-  // FREEZE the odds at the click from the ONE reversion clock the ticket shows (Grok's ruling):
-  // a new publish stamps {revertedPct, samples, tier} onto the card, labeled "taken vs" — the same
-  // book as the live HIST line, just past tense. Old cards stay frozen on their backtest number.
-  useEffect(() => { onBaseRate?.(reversion ? { revertedPct: reversion.revertedPct, samples: reversion.samples, tier: reversion.tier } : null); }, [reversion, onBaseRate]);
 
   // ── PROVEN-EDGE PATTERN — not "more reads agree," but the SPECIFIC orthogonal stack the
   // backtests + live grading actually validated: the funding-fade CONDITIONED on smart-money

@@ -17,9 +17,14 @@ module.exports = {
   env: {
     browser: true,
     commonjs: true,
-    es6: true,
+    // es2022 (not es6): BigInt/globalThis are real globals in every runtime we ship to.
+    es2022: true,
   },
-  ignorePatterns: ["!**/.server", "!**/.client"],
+  ignorePatterns: [
+    "!**/.server", "!**/.client",
+    // Snippets pasted into the Bankr skill's own page (its `$`/`bankr`/`load` globals), not our runtime.
+    "bankr-skill/app-scripts/**",
+  ],
 
   // Base config
   extends: ["eslint:recommended"],
@@ -71,6 +76,14 @@ module.exports = {
         "plugin:import/recommended",
         "plugin:import/typescript",
       ],
+    },
+
+    // Cloudflare Workers + tools: not React. The hooks rule only knows "starts with use"
+    // (lab-api's useEnvSecrets is a plain helper); Node/worker globals are real here.
+    {
+      files: ["workers/**/*.{js,mjs}", "tools/**/*.{js,mjs}"],
+      env: { node: true, worker: true },
+      rules: { "react-hooks/rules-of-hooks": "off" },
     },
 
     // Node

@@ -1071,8 +1071,13 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   app/ tools/ workers/ (47 files, 874 tests at add-time). Runs on every PR (`pr-checks.yml` job "Tests + typecheck",
   + `tsc --noEmit`) AND gates the prod deploy (`deploy.yml` "Test" step before Build — red test = nothing ships).
   Worker tests need their deps: `npm ci` in workers/nexus-lab-api, nexus-agent-exec, nexus-carry-engine. A new test
-  file is picked up automatically. ⚠️ Lint is NOT enforced yet: 359 errors across 67 files (incl. `no-undef` 39 and
-  `react-hooks/rules-of-hooks` 4 — possible real bugs); cleanup = its own PR.
+  file is picked up automatically. **Lint RATCHET (2026-09-25):** `node tools/check-lint.mjs` (`yarn lint:check`, runs in
+  the PR "Tests + typecheck" job, never blocks deploy) — legacy style/a11y debt baselined PER RULE in
+  `tools/lint-baseline.json` (323 at add-time: a11y click handlers, `any`, apostrophes, unused vars); a PR fails only
+  if a rule's count GROWS. `no-undef` + `react-hooks/rules-of-hooks` are pinned at 0 (crash class). The 43 old
+  hits were 39 lint-config false alarms (worker/Bankr-script globals, fixed in `.eslintrc.cjs`) + 3 REAL
+  hooks-after-early-return crashes (NexusTreasury on RPC failure, LiveRead on coin change) — fixed. Fix old
+  errors freely, then `node tools/check-lint.mjs --update` (only lowers). Use ’ not ' in JSX copy.
 - Pure logic is extracted into `logic.mjs` next to each worker's `index.js` (which imports it, so
   tests cover the REAL deployed code, not a copy). Tests = zero-dep `node:test`. The per-file counts below are
   historical.
