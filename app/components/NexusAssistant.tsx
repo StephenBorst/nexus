@@ -765,7 +765,7 @@ function SettingsView({
       <div style={{ fontFamily: mono, fontSize: 10, color: "#a1a1aa", lineHeight: 1.6 }}>
         {useHosted && isPro
           ? "Hosted is ON. No key needed. Or bring your own key below to use a different provider/model."
-          : <>Bring your own model key. It's stored only in this browser (localStorage) and sent <b style={{ color: GREEN }}>directly</b> to the provider. Never to Nexus servers.</>}
+          : <>Bring your own model key. It’s stored only in this browser (localStorage) and sent <b style={{ color: GREEN }}>directly</b> to the provider. Never to Nexus servers.</>}
       </div>
 
       <Field label="PROVIDER">
@@ -798,7 +798,7 @@ function SettingsView({
         </div>
         {!availableModels.length && (
           <div style={{ fontFamily: mono, fontSize: 8, color: "#71717a" }}>
-            Enter your key below to load your account's exact model list.
+            Enter your key below to load your account’s exact model list.
           </div>
         )}
         <input

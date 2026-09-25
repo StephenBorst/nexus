@@ -12,7 +12,7 @@
 //
 // ⚠️ Pure move — logic byte-identical to what shipped.
 import { json } from "./shared.mjs";
-import { AGENT_BOARD, aggregateAgentTrades, agentStanding, rankCaller } from "./logic.mjs";
+import { AGENT_BOARD, aggregateAgentTrades, agentStanding } from "./logic.mjs";
 // Shared with the agent-config route in index.js, so it lives there and is imported
 // back here rather than duplicated.
 import { revalidateStrategy } from "./strategies.mjs";

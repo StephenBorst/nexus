@@ -19,7 +19,7 @@ export default function NotFoundPage() {
     <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "48px 16px", background: "#0a0a0b" }}>
       <PageMeta title="Not found" noindex />
       <div style={{ width: "100%", maxWidth: 520 }}>
-        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.22em", color: "#71717a", marginBottom: 14 }}>// 404</div>
+        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.22em", color: "#71717a", marginBottom: 14 }}>{"// 404"}</div>
         <h1 style={{ fontFamily: UI, fontSize: 28, fontWeight: 700, color: "#f4f4f5", margin: "0 0 10px", lineHeight: 1.2 }}>Nothing lives at this address.</h1>
         <p style={{ fontFamily: UI, fontSize: 14, color: "#a1a1aa", lineHeight: 1.6, margin: "0 0 24px", overflowWrap: "anywhere" }}>
           <span style={{ fontFamily: MONO, fontSize: 12.5, color: "#71717a" }}>{pathname}</span> is not a page on Nexus. It moved, or the link is wrong.

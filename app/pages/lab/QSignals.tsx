@@ -240,7 +240,7 @@ export function QSignals({ address }: { address?: string | null }) {
               <span style={{ color: FOG, fontSize: 12 }}>Q Signals is a {TIER_NAME} lens.</span>
             </div>
             <div style={{ color: DIM, fontSize: 11.5, lineHeight: 1.65 }}>
-              Quotient's model fair value vs the live market on liquid prediction markets. A prompt to stake a graded
+              Quotient’s model fair value vs the live market on liquid prediction markets. A prompt to stake a graded
               thesis, priced against the venue. Each pull is paid by your wallet (~$0.01 USDC on Base); Nexus takes no cut.
             </div>
             <div style={{ marginTop: 10, color: FAINT, fontSize: 10.5, fontFamily: MF, lineHeight: 1.7 }}>
@@ -287,7 +287,7 @@ export function QSignals({ address }: { address?: string | null }) {
             </div>
             {err ? <div style={{ marginTop: 8, color: C.neg, fontSize: 10.5, fontFamily: MF }}>{err}</div> : null}
             <div style={{ marginTop: 12, color: FAINT, fontSize: 9, fontFamily: MF, lineHeight: 1.6 }}>
-              Fair value + conviction from Quotient, priced against the live venue. A spread = Q's model and the market disagree —
+              Fair value + conviction from Quotient, priced against the live venue. A spread = Q’s model and the market disagree —
               a prompt to investigate and stake a graded call, not a fair-value oracle. Not advice.
             </div>
           </>
@@ -299,8 +299,8 @@ export function QSignals({ address }: { address?: string | null }) {
           /* ── PRO, nothing loaded yet — explicit pay-to-load (no auto-poll) ── */
           <div>
             <div style={{ color: DIM, fontSize: 11.5, lineHeight: 1.65, marginBottom: 12 }}>
-              Load Quotient's live fair-value signals. Your wallet pays Quotient <b style={{ color: FOG }}>~$0.01 USDC on Base</b> per
-              pull (off-chain, gasless, no Nexus markup, nothing stored). Nothing loads until you sign; there's no auto-refresh.
+              Load Quotient’s live fair-value signals. Your wallet pays Quotient <b style={{ color: FOG }}>~$0.01 USDC on Base</b> per
+              pull (off-chain, gasless, no Nexus markup, nothing stored). Nothing loads until you sign; there’s no auto-refresh.
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <LoadButton label={loading ? "loading…" : "Load signals · $0.01"} onClick={load} disabled={loading || !provider} />

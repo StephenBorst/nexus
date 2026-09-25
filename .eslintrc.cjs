@@ -28,6 +28,12 @@ module.exports = {
 
   // Base config
   extends: ["eslint:recommended"],
+  rules: {
+    // `_x` = unused on purpose; `const { a, b, ...rest } = obj` drops a/b by design (exec's trade logger).
+    "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_", ignoreRestSiblings: true }],
+    // Block-level function declarations are standard since ES2015 (strict modules); the rule predates that.
+    "no-inner-declarations": "off",
+  },
 
   overrides: [
     // React
@@ -40,6 +46,10 @@ module.exports = {
         "plugin:react-hooks/recommended",
         "plugin:jsx-a11y/recommended",
       ],
+      rules: {
+        // Props are typed by TypeScript; runtime PropTypes would be a second, drifting copy.
+        "react/prop-types": "off",
+      },
       settings: {
         react: {
           version: "detect",
@@ -76,6 +86,11 @@ module.exports = {
         "plugin:import/recommended",
         "plugin:import/typescript",
       ],
+      rules: {
+        // The TS-aware rule replaces the base one in TS files (the base one double-reports type imports).
+        "no-unused-vars": "off",
+        "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_", ignoreRestSiblings: true }],
+      },
     },
 
     // Cloudflare Workers + tools: not React. The hooks rule only knows "starts with use"

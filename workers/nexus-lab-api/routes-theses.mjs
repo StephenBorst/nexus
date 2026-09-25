@@ -21,7 +21,7 @@ import {
   planQuality, normalizeSymbol, REGIME, postmortemSummary, isLossReason, LOSS_REASONS,
   estimateResolution, aggregateSideRecord, standoffVerdict,
 } from "./logic.mjs";
-import { computeCallerStats, gatherStanceEntries, REGIME_PAD_S, ADVICE_FLAG_TEXT } from "./grading.mjs";
+import { computeCallerStats, gatherStanceEntries, ADVICE_FLAG_TEXT } from "./grading.mjs";
 
 export async function handleTheses(parts, request, env) {
   if (parts[0] !== "theses") return null;

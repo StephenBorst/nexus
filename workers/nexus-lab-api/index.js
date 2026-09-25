@@ -20,10 +20,8 @@
 import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
-import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { keccak_256 } from "@noble/hashes/sha3.js";
-import { hexToBytes, bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, AGENT_BOARD, aggregateAgentTrades, agentStanding, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, orderlyAccountId, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { hexToBytes } from "@noble/hashes/utils.js";
+import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
 // Keep copy:copiers:{leader} = [followers] in sync when a follower's config
@@ -49,7 +47,7 @@ async function prevCopyLeaders(env, address) {
   catch { return []; }
 }
 
-import { backtestConfig, runSweep, runBasisSweep, oiSeriesInfo, walkForwardValidate, runBacktest, fetchCandles, fetchFundingAt, makeFundingPctAt, evidenceAcrossMarkets, basisAtForConfig } from "./backtest.mjs";
+import { backtestConfig, runSweep, runBasisSweep, walkForwardValidate, runBacktest, fetchCandles, fetchFundingAt, makeFundingPctAt, evidenceAcrossMarkets, basisAtForConfig } from "./backtest.mjs";
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
@@ -72,8 +70,8 @@ import { handleArena } from "./routes-arena.mjs";
 import { handleFeed } from "./routes-feed.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
-import { json, cors, normalizeAddress, recoverEthAddress, ALLOWED_ORIGINS, holdersRoomMessage, appendNotification } from "./shared.mjs";
-import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, REGIME_PAD_S, ADVICE_FLAG_TEXT } from "./grading.mjs";
+import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
+import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances } from "./grading.mjs";
 import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signal-delivery.mjs";
 // The SAME synthesis the Lab + trader page render (pure, dependency-free), so the
 // shareable card can never disagree with the profile it depicts. Bundled cross-dir by
@@ -388,7 +386,7 @@ function buildBoardOgSvg(rows, asOf, { fontFamily = "'Courier New', Courier, mon
 // ticket → the card can't drift from what the user sees.
 function buildReadOgSvg(p, { fontFamily = "'Courier New', Courier, monospace" } = {}) {
   const BONE = "#ededf0", MUT = "#71717a", FAINT = "#52525b", FOG = "#a1a1aa", BG = "#0a0a0b", BORD = "#232327", POS = "#3ecf8e", NEG = "#f7525f";
-  const isFade = p.verdict === "FADE", isWatch = p.verdict === "WATCH";
+  const isFade = p.verdict === "FADE";
   const accent = isFade ? BONE : MUT;                 // FADE = bone, WATCH = muted (looks like WATCH)
   const fadeDir = p.direction === "SHORT" ? "SHORT" : p.direction === "LONG" ? "LONG" : null;
   const crowdSide = p.direction === "SHORT" ? "long" : p.direction === "LONG" ? "short" : null;
@@ -2299,7 +2297,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           posQty = Math.abs(rawQty);
           closeSide2 = rawQty >= 0 ? "SELL" : "BUY"; // LONG → SELL to close; SHORT → BUY to close
         }
-      } catch (_) {}
+      } catch { /* best-effort */ }
       if (!posQty) {
         return json({ error: "no_open_position", symbol: sym2, hint: "No open position found for this symbol — open a position first" }, request, 400);
       }
@@ -3653,7 +3651,6 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       // Orderly vault constants (Arbitrum One)
       const VAULT    = "0x816f722424B49Cf1275cc86DA9840Fbd5a6167e9";
       const USDC     = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
-      const ARB_RPC  = getArbRpc(env);
 
       // Pre-computed hashes via solidityPackedKeccak256(["string"], [input])
       const BROKER_HASH = "69729be60357fd58653e988388922e200193543b4328eda1b9b9bdaaef2f1a70";
@@ -3666,17 +3663,6 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       }
 
       // Make an eth_call to Arbitrum RPC
-      async function ethCall(to, data) {
-        const res = await fetch(ARB_RPC, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] }),
-        });
-        const out = await res.json();
-        if (out.error) throw new Error(out.error.message);
-        return out.result;
-      }
-
       // USDC has 6 decimals on Arbitrum
       const tokenAmountBig = BigInt(Math.round(Number(amount) * 1_000_000));
       const accountIdHex = pad32(accountId);
@@ -3979,7 +3965,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
               // already imported; TextDecoder is a Workers global.
               const bytes = hexToBytes(msgHex.slice(64, 64 + msgLen * 2));
               reason = new TextDecoder().decode(bytes);
-            } catch (_) {}
+            } catch { /* best-effort */ }
           }
           return json({
             ok: false, step: "simulate",
@@ -4419,7 +4405,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         try {
           const ar = await fetch(`${ORDERLY_BASE}/v1/get_account?address=${walletNorm}&broker_id=${BROKER}`);
           accountId = (await ar.json())?.data?.account_id ?? null;
-        } catch (_) {}
+        } catch { /* best-effort */ }
 
         // ── No account: register via REST (no on-chain tx needed) ──
         if (!accountId) {
@@ -4605,7 +4591,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           try {
             const ar = await fetch("https://api-evm.orderly.org/v1/get_account?address=" + walletNorm + "&broker_id=nexus_trading");
             accountId = (await ar.json())?.data?.account_id ?? null;
-          } catch (_) {}
+          } catch { /* best-effort */ }
         }
         const rh = { "Content-Type": "application/json" };
         if (accountId) rh["X-Account-Id"] = accountId;

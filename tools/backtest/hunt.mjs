@@ -11,7 +11,7 @@
 // the flagship signal we could never validate is finally in the grid.
 //
 // Run: node tools/backtest/hunt.mjs
-import { runBacktest, makeFundingPctAt, makeOiChangeAt, oiSeriesInfo, foldsByEntry, robustnessVerdict, aggregate } from "../../workers/nexus-lab-api/backtest.mjs";
+import { runBacktest, makeFundingPctAt, makeOiChangeAt, oiSeriesInfo, foldsByEntry, robustnessVerdict } from "../../workers/nexus-lab-api/backtest.mjs";
 
 const API = "https://api-evm.orderly.org";
 const LAB_API = "https://og.nexustradinglabs.com";

@@ -298,7 +298,7 @@ export function MacroEvents() {
               </div>
             ) : (
               <div style={{ color: DIM, fontSize: 11, fontFamily: "var(--nx-font-mono)", lineHeight: 1.6 }}>
-                No actionable macro reads right now — the liquid events don't carry a clean directional lens. Context below.
+                No actionable macro reads right now — the liquid events don’t carry a clean directional lens. Context below.
               </div>
             )}
 

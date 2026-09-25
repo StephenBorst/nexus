@@ -58,7 +58,6 @@ function run(data, syms, mode, K, P, feeBps=FEE_BPS, rebalH=REBAL_H){
   const base=data[syms[0]]; const t0=base.candles[0].t, tN=base.candles[base.candles.length-1].t;
   const step=rebalH*3600, oosCut=tN-20*86400;
   let held=new Map(), net=0, fund=0, price=0, fees=0, isNet=0, oosNet=0; const rets=[];
-  const secList=[...new Set(syms.map(s=>sectorOf[s]))];
   for(let t=t0;t+step<=tN;t+=step){
     const tMs=t*1000;
     const avail=syms.map(s=>{const c0=closeAt(data[s].candles,t),c1=closeAt(data[s].candles,t+step),f=fundingAt(data[s].funding,tMs);return {s,sec:sectorOf[s],f,c0,c1,ok:c0!=null&&c1!=null&&c0>0};}).filter(x=>x.ok);

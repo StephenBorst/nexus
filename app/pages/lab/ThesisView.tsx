@@ -94,7 +94,6 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
   const [poster, setPoster] = useState<PosterData | null>(null);
   const navigate = useNavigate();
   const eff = effectiveStatus(t); // objective grade wins over self-report — used everywhere the card branches on outcome
-  const cfg = STATUS_CONFIG[eff] ?? STATUS_CONFIG.ACTIVE;
   const isClosed = CLOSED_STATUSES.includes(eff);
   // 2px state left-rule (Proof/feed card signature). Win/loss carry the only
   // chroma; active/other stay a quiet neutral.
@@ -1540,7 +1539,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
         <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12.5, lineHeight: 1.55, color: "#a1a1aa" }}>
           <b style={{ color: "#f4f4f5" }}>A good call is a Signal, not a guess</b>. It names three things: an <b style={{ color: "#f4f4f5" }}>edge</b> (why
           the market is wrong — your levels + the funding read), a <b style={{ color: "#f4f4f5" }}>catalyst</b> (why it moves now), and a{" "}
-          <b style={{ color: "#f4f4f5" }}>defined exit</b> (target, stop, and when you'll know). Fill those in and it grades itself against real price.
+          <b style={{ color: "#f4f4f5" }}>defined exit</b> (target, stop, and when you’ll know). Fill those in and it grades itself against real price.
         </span>
       </div>
 

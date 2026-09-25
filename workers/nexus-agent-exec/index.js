@@ -14,7 +14,7 @@
 import * as ed from "@noble/ed25519";
 import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, dcaTakeProfitPrice, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress } from "./logic.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const COOLDOWN_MS = 15 * 60 * 1000; // 15 min between trades
@@ -413,7 +413,7 @@ async function processTwap(address, env, cache) {
 // TP/SL/timeout instead of letting it sit unmanaged. AUTONOMOUS-only (the only mode
 // that places real orders) and rate-limited so flat agents don't poll positions every
 // tick. Returns true if a position was adopted (caller manages it next tick).
-async function adoptOrphanPosition(address, state, config, env, cache) {
+async function adoptOrphanPosition(address, state, config, env, _cache) {
   const now = Date.now();
   // Probed every flat tick — a ghost is urgent (an unmanaged live position), so we
   // don't defer it. Cost is 1 authed GET per configured symbol until one hits; at
@@ -1335,7 +1335,7 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
   } else {
     try {
       exitPrice = resolveExitPrice({ paper, decisionPrice, fetchedPrice: await getMarkPrice(pos.symbol, env, cache) });
-    } catch (e) {}
+    } catch { /* best-effort */ }
   }
 
   // DCA positions realize P&L against the BLENDED average entry (the honest cost

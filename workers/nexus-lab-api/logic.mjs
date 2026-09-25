@@ -1206,7 +1206,7 @@ export function normalizeSymbol(raw) {
   if (!raw) return null;
   let s = String(raw).trim().toUpperCase().replace(/\s+/g, "");
   if (/^PERP_[A-Z0-9]+_USDC$/.test(s)) return s;          // already canonical
-  s = s.replace(/[\/\-_]/g, "").replace(/^PERP/, "");      // strip separators + PERP prefix
+  s = s.replace(/[/\-_]/g, "").replace(/^PERP/, "");      // strip separators + PERP prefix
   s = s.replace(/(USDC|USDT|USD)$/g, "");                  // strip quote suffix
   if (!/^[A-Z0-9]{1,15}$/.test(s)) return null;
   return `PERP_${s}_USDC`;
@@ -1636,7 +1636,7 @@ export function validateArenaRegistration(body = {}) {
   if (name.length < ARENA.nameMin || name.length > ARENA.nameMax) {
     return { ok: false, error: `name required (${ARENA.nameMin}-${ARENA.nameMax} chars)` };
   }
-  if (!/^[\w .\-\[\]()]+$/.test(name)) {
+  if (!/^[\w .\-[\]()]+$/.test(name)) {
     return { ok: false, error: "name: letters, numbers, spaces, . - _ [ ] ( ) only" };
   }
   const description = typeof body.description === "string" ? body.description.trim().slice(0, ARENA.descMax) : "";

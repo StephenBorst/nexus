@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { AgentConfig, AgentState, AgentTrade, AgentLeaderboardEntry, AgentPendingThesis } from "./types";
 import { DEFAULT_CONFIG } from "./types";
-import { agentCardStyle, agentLabelStyle, agentInputStyle, agentBtnStyle, btnPrimary, navBtnStyle } from "./styles";
+import { agentCardStyle, agentLabelStyle, agentBtnStyle, btnPrimary, navBtnStyle } from "./styles";
 import { useSubscription } from "@/hooks/useSubscription";
 import { isProStrategy } from "@/config/subscription";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
@@ -847,7 +847,7 @@ export function AgentView() {
         return (
           <div style={{ ...agentCardStyle, borderColor: armed ? "#d4d4d8" : "#ededf0", background: armed ? "#0f0f11" : "#0f0f11", marginBottom: 12 }}>
             <div style={agentLabelStyle}>
-              // DIRECTIVE <span style={{ color: armed ? "#d4d4d8" : "#ededf0" }}>{armed ? "◷ ARMED" : "● LIVE"}</span>
+              {"// "}DIRECTIVE <span style={{ color: armed ? "#d4d4d8" : "#ededf0" }}>{armed ? "◷ ARMED" : "● LIVE"}</span>
               <span style={{ color: "#71717a" }}> — {armed
                 ? (activeDirective.entryType === "LIMIT" ? `waiting for ${num(activeDirective.entryPrice)}` : "waiting to fill (next tick ~1 min)")
                 : "position open, managed by the agent"}</span>
@@ -932,7 +932,7 @@ export function AgentView() {
               })}
             </div>
             <div style={{ color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 8, lineHeight: 1.5 }}>
-              The agent works day to swing. Scalping needs sub-minute data it doesn't use. Position trading is buy-and-hold. Neither fits, so we don't fake them.
+              The agent works day to swing. Scalping needs sub-minute data it doesn’t use. Position trading is buy-and-hold. Neither fits, so we don’t fake them.
             </div>
           </div>
 
@@ -1014,7 +1014,7 @@ export function AgentView() {
                   </button>
                 </div>
                 <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#52525b", marginTop: 10, lineHeight: 1.5 }}>
-                  Paper results don't guarantee live results — live trades face real fills, slippage, and funding. Start with size you can afford to lose.
+                  Paper results don’t guarantee live results — live trades face real fills, slippage, and funding. Start with size you can afford to lose.
                 </div>
               </div>
             );
@@ -1026,7 +1026,7 @@ export function AgentView() {
           <div style={{ ...agentCardStyle, borderColor: tradingKey ? "#232327" : "#4a3a00" }}>
             <div style={agentLabelStyle}>HOW THE AGENT WORKS</div>
             <p style={{ margin: "8px 0 0", color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 11, lineHeight: 1.6 }}>
-              The agent is a disciplined operator of <strong style={{ color: "#d4d4d8" }}>your</strong> edge — you choose the strategy and risk limits, it runs them tirelessly and <strong style={{ color: "#d4d4d8" }}>every call is graded objectively on-chain</strong>. It doesn't promise alpha; it proves what actually worked.
+              The agent is a disciplined operator of <strong style={{ color: "#d4d4d8" }}>your</strong> edge — you choose the strategy and risk limits, it runs them tirelessly and <strong style={{ color: "#d4d4d8" }}>every call is graded objectively on-chain</strong>. It doesn’t promise alpha; it proves what actually worked.
             </p>
             <ol style={{ margin: "8px 0 0", paddingLeft: 18, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 11, lineHeight: 1.7 }}>
               <li>Place one manual trade on Nexus. That generates your Orderly trading key. Order-only. It <strong style={{ color: "#d4d4d8" }}>cannot withdraw funds</strong>.</li>
@@ -1841,7 +1841,7 @@ export function AgentView() {
           {hasPosition && agentState?.current_position && (
             <div style={{ ...agentCardStyle, borderColor: agentState.current_position.direction === "LONG" ? "#3ecf8e40" : "#f7525f40" }}>
               <div style={{ ...agentLabelStyle, display: "flex", alignItems: "center", gap: 8 }}>
-                // CURRENT POSITION
+                {"// "}CURRENT POSITION
                 {agentState.current_position.paper && (
                   <span style={{ color: "#d4d4d8", border: "1px solid #d4d4d840", borderRadius: 3, padding: "1px 6px", fontSize: 8 }}>PAPER</span>
                 )}
@@ -1887,7 +1887,7 @@ export function AgentView() {
           {isActive && !hasPosition && (
             <div style={{ ...agentCardStyle, textAlign: "center", padding: 24 }}>
               <div style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>
-                // SCANNING FOR SIGNALS ON {config.symbols.map(s => s.replace("PERP_", "").replace("_USDC", "")).join(", ")}
+                {"// "}SCANNING FOR SIGNALS ON {config.symbols.map(s => s.replace("PERP_", "").replace("_USDC", "")).join(", ")}
               </div>
               <div style={{ color: "#33333a", fontFamily: "var(--nx-font-mono)", fontSize: 10, marginTop: 6 }}>
                 Funding threshold: {config.fundingThreshold}% · Checking every 5 minutes
@@ -1951,7 +1951,7 @@ export function AgentView() {
         <div>
           <div style={agentCardStyle}>
             <div style={{ ...agentLabelStyle, display: "flex", alignItems: "center", gap: 8 }}>
-              // AGENT TRADE HISTORY
+              {"// "}AGENT TRADE HISTORY
               {isPaperHist && <span style={{ color: "#d4d4d8", border: "1px solid #d4d4d840", borderRadius: 3, padding: "1px 6px", fontSize: 8 }}>PAPER</span>}
             </div>
             {histTrades.length === 0 ? (
@@ -2110,7 +2110,7 @@ export function AgentView() {
             return (
               <div style={agentCardStyle} className="nx-fade-in">
                 <div style={{ ...agentLabelStyle, display: "flex", alignItems: "center", gap: 8 }}>
-                  // AGENT PERFORMANCE
+                  {"// "}AGENT PERFORMANCE
                   {isPaperHist && <span style={{ color: "#d4d4d8", border: "1px solid #d4d4d840", borderRadius: 3, padding: "1px 6px", fontSize: 8 }}>PAPER</span>}
                 </div>
                 {equityPoints.length >= 2 && (
@@ -2148,7 +2148,7 @@ export function AgentView() {
             </div>
             <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 10, color: "#52525b", marginTop: 6, lineHeight: 1.5 }}>
               Ranked by risk-adjusted score (win rate + profit factor, weighted by sample size) over <strong style={{ color: "#a1a1aa" }}>≥10 live trades spanning ≥3 days</strong>. Paper excluded.
-              {" "}<strong style={{ color: "#a1a1aa" }}>⚡ Autocopy</strong> mirrors an agent's trades with YOUR agent — at your size, mode &amp; guardrails. Trustless: their record is graded on-chain.
+              {" "}<strong style={{ color: "#a1a1aa" }}>⚡ Autocopy</strong> mirrors an agent’s trades with YOUR agent — at your size, mode &amp; guardrails. Trustless: their record is graded on-chain.
             </div>
             {(config.autocopy?.leaders?.length ?? 0) > 0 && (
               <div style={{ marginTop: 8, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#ededf0", letterSpacing: "0.02em" }}>

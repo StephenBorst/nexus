@@ -145,12 +145,12 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
             <span style={{ fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase" }}>Smart money</span>
             <b style={{ color: "#a1a1aa" }}>{smart.long}L/{smart.short}S</b>
             <span style={{ color: smart.side === "LONG" ? "#3ecf8e" : "#f7525f" }}>{smart.side}</span>
-            {smart.side !== side && <span style={{ color: "#52525b" }}>· you're copying the other way</span>}
+            {smart.side !== side && <span style={{ color: "#52525b" }}>· you’re copying the other way</span>}
           </div>
         )}
         {/* The GRADED, WATCHED record — the number that can't be faked, not lifetime PnL. */}
         <div style={{ border: "1px solid #232327", borderRadius: 8, padding: "10px 12px", marginBottom: 14, background: "#0f0f11" }}>
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase", marginBottom: 6 }}>What you're tracking</div>
+          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase", marginBottom: 6 }}>What you’re tracking</div>
           {loading ? (
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>reading graded record…</div>
           ) : graded ? (
@@ -158,7 +158,7 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.6 }}>
                 watched <b style={{ color: net >= 0 ? "#3ecf8e" : "#f7525f", fontSize: 14 }}>{net >= 0 ? "+" : ""}{usd(net)}</b> · {track!.daysTracked}d tracked{track!.winWindowRate != null ? <> · <b style={{ color: "#ededf0" }}>{track!.winWindowRate}%</b> green days</> : null}
               </div>
-              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 5, lineHeight: 1.5 }}>This is the window you've been watching, not lifetime.</div>
+              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 5, lineHeight: 1.5 }}>This is the window you’ve been watching, not lifetime.</div>
             </>
           ) : (
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a", lineHeight: 1.55 }}>No graded watched record yet. The agent grades this copy on-chain from here.</div>
@@ -465,7 +465,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
         <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 5 }}>Scout</div>
         <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 24, fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1 }}>Smart Money</div>
         <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", marginTop: 6, lineHeight: 1.5, maxWidth: 660 }}>
-          The top traders on <strong style={{ color: "#a1a1aa" }}>Orderly</strong> and Hyperliquid, and what they're holding right now —
+          The top traders on <strong style={{ color: "#a1a1aa" }}>Orderly</strong> and Hyperliquid, and what they’re holding right now —
           indexed live from public on-chain data. Copy any move into a <strong style={{ color: "#a1a1aa" }}>risk-managed trade</strong> the
           agent manages and grades on-chain, or star ★ the wallets you trust to track them.
         </div>
@@ -475,7 +475,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 12, padding: "11px 13px", border: "1px solid #232327", borderLeft: "2px solid #71717a", borderRadius: 6, background: "#0f0f11" }}>
         <span style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 12, flexShrink: 0 }}>?</span>
         <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12.5, lineHeight: 1.55, color: "#a1a1aa" }}>
-          <b style={{ color: "#f4f4f5" }}>How to read this:</b> the strongest signal isn't one whale. It's <b style={{ color: "#f4f4f5" }}>agreement</b>. Consensus
+          <b style={{ color: "#f4f4f5" }}>How to read this:</b> the strongest signal isn’t one whale. It’s <b style={{ color: "#f4f4f5" }}>agreement</b>. Consensus
           shows the coins several top traders are positioned the same way on. Smart money is often early and often wrong, so treat it as
           context. Then copy a move into a trade your agent manages and grades.
         </span>
@@ -487,7 +487,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
       {/* #3 convert-loop framing — one-time */}
       <Coachmark storageKey="nexus_coach_smart_v1" badge="THE LOOP" title="From watcher to ranked trader">
         Copy any move → the agent manages the exit → every close joins <strong style={{ color: "#d4d4d8" }}>your</strong> on-chain track record.
-        That's how you go from watching smart money to <strong style={{ color: "#d4d4d8" }}>being</strong> graded next to them.
+        That’s how you go from watching smart money to <strong style={{ color: "#d4d4d8" }}>being</strong> graded next to them.
       </Coachmark>
 
       {/* Bounded by the paint deadline above — this line can no longer stand forever. */}
@@ -523,7 +523,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
             ))}
           </div>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 8 }}>
-            Context, not a signal. Smart money is often early AND often wrong. Know which side you're on.
+            Context, not a signal. Smart money is often early AND often wrong. Know which side you’re on.
           </div>
         </div>
       )}
@@ -584,7 +584,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
       {events && events.length > 0 && (
         <div style={{ ...agentCardStyle, marginBottom: 12 }}>
           <div style={{ ...agentLabelStyle, display: "flex", alignItems: "center", gap: 8 }}>
-            // LIVE SIGNAL FEED
+            {"// "}LIVE SIGNAL FEED
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3ecf8e", boxShadow: "0 0 6px #3ecf8e" }} />
           </div>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b", marginTop: 3, lineHeight: 1.5 }}>

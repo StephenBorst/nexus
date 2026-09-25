@@ -389,7 +389,7 @@ function EdgeQualityChip({ q }: { q?: EdgeQuality }) {
 
 // The sharp callers' second opinion (merit-weighted lean), phrased plainly.
 function Callers({ m, lean }: { m: Market; lean?: Lean }) {
-  if (!lean) return <span style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint }}>— no one's called it yet</span>;
+  if (!lean) return <span style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint }}>— no one’s called it yet</span>;
   const diverges = lean.side !== "SPLIT" && m.direction !== "NONE" && lean.side !== m.direction;
   return (
     <>
@@ -875,7 +875,7 @@ export function MispricedBoard() {
       />
 
       <p style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, lineHeight: 1.6, maxWidth: 680, margin: "0 0 14px" }}>
-        Funding is the crowd's mispricing made explicit. When one side pays to hold, the book is lopsided —
+        Funding is the crowd’s mispricing made explicit. When one side pays to hold, the book is lopsided —
         and the mean-revert edge is to <b style={{ color: C.text.bright }}>fade it</b>. Annualized and ranked, so the top is where
         positioning is most stretched right now. Open a market to understand it; tap to draft the fade.
       </p>
@@ -885,7 +885,7 @@ export function MispricedBoard() {
         <span style={{ fontFamily: MONO, fontSize: 12, color: C.text.muted, flexShrink: 0 }}>?</span>
         <span style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, color: C.text.fog }}>
           <b style={{ color: C.text.bright }}>How to read this:</b> a big number means one side of the crowd is paying a lot to stay in the trade.
-          That crowding usually unwinds, so the <b style={{ color: C.text.bright }}>edge is to bet the other way</b>. Green/red is just today's price move.
+          That crowding usually unwinds, so the <b style={{ color: C.text.bright }}>edge is to bet the other way</b>. Green/red is just today’s price move.
         </span>
       </div>
 

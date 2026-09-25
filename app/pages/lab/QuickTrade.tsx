@@ -368,7 +368,7 @@ export function QuickTrade() {
       )}
       {tooSmall && notional > 0 && (
         <div style={{ ...label, color: "#fbbf24", marginTop: 8 }}>
-          Below this market's minimum size{minNotional ? ` ($${minNotional} notional)` : ""}.
+          Below this market’s minimum size{minNotional ? ` ($${minNotional} notional)` : ""}.
         </div>
       )}
       {/* One-tap LONG / SHORT — kept in the same card as size/leverage so the whole

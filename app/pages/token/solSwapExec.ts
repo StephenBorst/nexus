@@ -62,7 +62,6 @@ const ALLOWED_PROGRAMS = new Set<string>([
   "11111111111111111111111111111111",                // System (wrap SOL + ATA rent)
   "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",     // Memo (Jupiter sometimes tags a route)
 ]);
-const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
 // The Privy-exposed Solana wallet provider (from useWalletConnector().wallet.provider). We only ever
 // call signTransaction (preferred, so we submit the exact simulated bytes) or sendTransaction.

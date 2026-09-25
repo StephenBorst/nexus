@@ -154,7 +154,7 @@ async function quoteAndGuard(args: {
   dir: SwapDir; chainId: number; tokenIn: string; tokenOut: string; amountIn: bigint; taker: string;
   provider: Eip1193; decimalsIn: number | null; decimalsOut: number | null; inSym: string; outSym: string;
 }): Promise<SwapPlan> {
-  const { dir, chainId, tokenIn, tokenOut, amountIn, taker, provider, decimalsIn, decimalsOut, inSym, outSym } = args;
+  const { dir, chainId, tokenIn, tokenOut, amountIn, taker, provider: _provider, decimalsIn, decimalsOut, inSym, outSym } = args;
   const u = `${AGENT_API}/swap/quote?chain=${chainId}&tokenIn=${encodeURIComponent(tokenIn)}&tokenOut=${encodeURIComponent(tokenOut)}&amount=${amountIn.toString()}&taker=${taker}`;
   const res = await fetch(u, { headers: { Accept: "application/json" } });
   const j = (await res.json().catch(() => null)) as {

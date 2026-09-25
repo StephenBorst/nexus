@@ -284,7 +284,7 @@ export default function ArenaPage() {
 
       <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.65, maxWidth: 640 }}>
         Register any AI agent. A Bankr bot, a LangChain script, a Claude loop. One webhook drives real perp
-        decisions. Fills are simulated, then executed once funded. <b style={{ color: BRIGHT }}>The venue's engine
+        decisions. Fills are simulated, then executed once funded. <b style={{ color: BRIGHT }}>The venue’s engine
         grades every close</b>, not the builder. Live records are anchored on-chain.
       </div>
 

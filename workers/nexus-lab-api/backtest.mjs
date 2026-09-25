@@ -243,7 +243,7 @@ export function runBacktest(candles, fundingAt, config, fundingPctAt = null, oiC
   };
 
   for (let i = 1; i < candles.length; i++) {
-    const c = candles[i], prev = candles[i - 1];
+    const c = candles[i];
     if (pos) {
       const hit = stepExit(pos, c, (c.t - pos.entryT) * 1000, config);
       if (hit) { record(pos, hit.px, hit.reason, c.t); pos = null; lastExitIdx = i; }

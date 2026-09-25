@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { fusePositioning, positioningRead } from "@/lib/positioning.mjs";
+import { fusePositioning } from "@/lib/positioning.mjs";
 import { fetchDeribitTerm } from "@/lib/deribit.mjs";
 import { Simulate } from "./Simulate";
 import type { ProcessedTrade } from "./types";
@@ -471,7 +471,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
           {beta && (
             <div style={{ marginTop: 8, fontFamily: UI, fontSize: 11.5, color: FOG, lineHeight: 1.5 }}>
               <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: MUTED }}>BTC BETA · </span>
-              {coin}'s move is <b style={{ color: beta.verdict === "BTC_DRIVEN" ? WARN : beta.verdict === "IDIOSYNCRATIC" ? POS : FOG }}>{beta.drivenPct}% BTC-driven</b> (β {beta.beta}).{" "}
+              {coin}’s move is <b style={{ color: beta.verdict === "BTC_DRIVEN" ? WARN : beta.verdict === "IDIOSYNCRATIC" ? POS : FOG }}>{beta.drivenPct}% BTC-driven</b> (β {beta.beta}).{" "}
               <span style={{ color: MUTED }}>{beta.verdict === "BTC_DRIVEN"
                 ? `A ${direction.toLowerCase()} here is largely a BTC bet. The ${coin}-specific reads mean less; check BTC first.`
                 : beta.verdict === "IDIOSYNCRATIC"
@@ -488,7 +488,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               {advice.regime && (
                 <div style={{ fontFamily: UI, fontSize: 12, color: FOG, lineHeight: 1.5 }}>
                   {coin} is in a {TREND_WORD[advice.regime.trend || ""] || (advice.regime.trend || "").toLowerCase()} · {VOL_WORD[advice.regime.vol || ""] || (advice.regime.vol || "").toLowerCase()} tape
-                  {advice.alignment === "AGAINST_TREND" ? <span style={{ color: WARN }}>. You're fighting the trend</span> : advice.alignment === "WITH_TREND" ? <span style={{ color: POS }}>. With the trend</span> : null}
+                  {advice.alignment === "AGAINST_TREND" ? <span style={{ color: WARN }}>. You’re fighting the trend</span> : advice.alignment === "WITH_TREND" ? <span style={{ color: POS }}>. With the trend</span> : null}
                   {advice.yourRecord?.trend && advice.regime.trend ? <span style={{ color: FAINT }}> · your {TREND_WORD[advice.regime.trend] || ""} record {advice.yourRecord.trend.avgR >= 0 ? "+" : ""}{advice.yourRecord.trend.avgR}R/{advice.yourRecord.trend.calls}</span> : null}
                 </div>
               )}
@@ -528,7 +528,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
             })()}
           </div>
 
-          <div style={{ fontFamily: MONO, fontSize: 8, color: FAINT, marginTop: 8, lineHeight: 1.5 }}>A read, not a green light. It tightens the odds, it doesn't guarantee them.</div>
+          <div style={{ fontFamily: MONO, fontSize: 8, color: FAINT, marginTop: 8, lineHeight: 1.5 }}>A read, not a green light. It tightens the odds, it doesn’t guarantee them.</div>
         </>
       )}
     </div>

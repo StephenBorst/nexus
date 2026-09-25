@@ -45,7 +45,7 @@ export default function LeakReport() {
         </span>
       </div>
       <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.55, marginBottom: 10 }}>
-        The most common reason a call lost here is <strong style={{ color: "#ededf0" }}>{labelOf(summary.top.reason).toLowerCase()}</strong> ({summary.top.rate}% of tagged losses). Anonymous, self-reported, and never part of anyone's rank.
+        The most common reason a call lost here is <strong style={{ color: "#ededf0" }}>{labelOf(summary.top.reason).toLowerCase()}</strong> ({summary.top.rate}% of tagged losses). Anonymous, self-reported, and never part of anyone’s rank.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>

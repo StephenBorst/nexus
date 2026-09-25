@@ -119,7 +119,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
       />
       <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.6, maxWidth: 640, marginBottom: 14 }}>
         Two boards, one read. The funding board says where the <b style={{ color: BONE }}>crowd</b> is over-extended and which way to fade it;
-        the sharp wallets say where the <b style={{ color: BONE }}>smart money</b> sits. When they agree it's <b style={{ color: BONE }}>confluence</b>;
+        the sharp wallets say where the <b style={{ color: BONE }}>smart money</b> sits. When they agree it’s <b style={{ color: BONE }}>confluence</b>;
         when the smart money is with the crowd, the fade is <span style={{ color: WARN }}>contested</span>. The deep boards are below.
       </div>
 
@@ -134,7 +134,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
               }}>{label}</button>
             );
           })}
-          {mineOnly && <span style={{ fontFamily: UI, fontSize: 10.5, color: FAINT, alignSelf: "center" }}>markets you're proven on, whichever way the read leans</span>}
+          {mineOnly && <span style={{ fontFamily: UI, fontSize: 10.5, color: FAINT, alignSelf: "center" }}>markets you’re proven on, whichever way the read leans</span>}
         </div>
       )}
 
@@ -179,7 +179,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
       )}
 
       <div style={{ marginTop: 12, color: FAINT, fontSize: 9, fontFamily: MONO, lineHeight: 1.6 }}>
-        Crowd lean = annualized funding (fade the one-sided side). Smart lean = the dominant side among tracked sharp wallets (≥2). A read on positioning, not advice — confluence tightens the odds, it doesn't guarantee them.
+        Crowd lean = annualized funding (fade the one-sided side). Smart lean = the dominant side among tracked sharp wallets (≥2). A read on positioning, not advice — confluence tightens the odds, it doesn’t guarantee them.
       </div>
       <div style={{ height: 1, background: BORDER, marginTop: 20 }} />
     </div>

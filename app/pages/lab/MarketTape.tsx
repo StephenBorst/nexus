@@ -147,7 +147,7 @@ export function MarketTape({ compact = false }: { compact?: boolean }) {
         onMouseEnter={(e) => { e.currentTarget.style.color = "#ededf0"; e.currentTarget.style.borderColor = "#33333a"; }}
         onMouseLeave={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#232327"; }}
       >
-        ◆ ask nexus — what's my play in this tape?
+        ◆ ask nexus — what’s my play in this tape?
       </button>
     </div>
   );

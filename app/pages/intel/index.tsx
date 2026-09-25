@@ -778,7 +778,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
           )}
 
           <div style={{ color: DIM, fontSize: "10px", marginTop: "12px", letterSpacing: "0.05em" }}>
-            // VIA OKX · ORDERLY NETWORK
+            {"// "}VIA OKX · ORDERLY NETWORK
           </div>
         </Card>
 
@@ -831,7 +831,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
           </div>
 
           <div style={{ color: DIM, fontSize: "10px", marginTop: "12px", letterSpacing: "0.05em" }}>
-            // VIA COINGECKO
+            {"// "}VIA COINGECKO
           </div>
         </Card>
 
@@ -860,7 +860,6 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
             const longLiq  = totalLiq * (status === "LONG FLUSH" ? 0.75 : status === "SHORT SQUEEZE" ? 0.25 : 0.5);
             const shortLiq = totalLiq - longLiq;
             const fmtLiq   = (v: number) => v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v/1e6).toFixed(0)}M` : `$${v.toFixed(0)}`;
-            const lsBar = ls !== null ? Math.round(Math.min(longPct, 0.9) * 14) : 7;
             return (
               <div key={sym} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
@@ -894,7 +893,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
           })}
         </div>
         <div style={{ color: DIM, fontSize: "10px", marginTop: "8px", letterSpacing: "0.05em" }}>
-          // EST. = ESTIMATED FROM OI × TYPICAL DAILY LIQ RATE · L/S FROM OKX ACCOUNT RATIO
+          {"// "}EST. = ESTIMATED FROM OI × TYPICAL DAILY LIQ RATE · L/S FROM OKX ACCOUNT RATIO
         </div>
       </Card>
 
@@ -943,7 +942,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
           })}
         </div>
         <div style={{ color: DIM, fontSize: "10px", marginTop: "8px" }}>
-          // LONG FLUSH = longs crowded, squeeze risk. SHORT SQUEEZE = shorts crowded, unwind risk. BALANCED = no dominant bias.
+          {"// "}LONG FLUSH = longs crowded, squeeze risk. SHORT SQUEEZE = shorts crowded, unwind risk. BALANCED = no dominant bias.
         </div>
       </Card>
 
