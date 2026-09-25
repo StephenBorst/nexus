@@ -164,4 +164,9 @@ export const AXIS_PRESET: Record<string, string> = {
   basis_extreme: "basis-extreme-fade",   // app/lib/basisFade.mjs
   basis_x_cvd: "basis-cvd-stack",        // app/lib/basisStack.mjs
 };
+// Reads whose preset is PAUSED: the scoreboard keeps grading them (the exit grade still feeds the
+// Oct-15 re-validation), but /proof stops offering the one-tap Load. Reversible — delete the line.
+export const AXIS_PAUSED: Record<string, string> = {
+  basis_extreme: "preset paused Sept 25 — its 12h exit grades NOISE (−10 bps, n148); 24h only PROMISING. Still graded.",
+};
 export const presetById = (id: string) => STRATEGY_PRESETS.find((p) => p.id === id);

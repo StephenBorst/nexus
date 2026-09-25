@@ -10,7 +10,7 @@ import { SectionHeader } from "@/pages/lab/components";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import CarrySleeve from "./CarrySleeve";
 import FeaturedLead from "./FeaturedLead";
-import { AXIS_PRESET, presetById } from "@/config/strategyPresets";
+import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
 
 const API = "https://og.nexustradinglabs.com";
@@ -78,7 +78,8 @@ function SignalRow({ a }: { a: AxisRow }) {
   const navigate = useNavigate();
   const v = VERDICT[a.verdict] || VERDICT.INSUFFICIENT;
   const rated = !!a.best && a.verdict !== "INSUFFICIENT";
-  const preset = AXIS_PRESET[a.name] ? presetById(AXIS_PRESET[a.name]) : undefined;
+  const paused = AXIS_PAUSED[a.name];
+  const preset = AXIS_PRESET[a.name] && !paused ? presetById(AXIS_PRESET[a.name]) : undefined;
   const align = isMobile ? "start" : "end";
   const stats = rated && a.best ? [
     <Stat key="h" align={align} v={`${a.best.h}h`} l="horizon" title="How far ahead we measure the move — this read's best window." />,
@@ -151,6 +152,8 @@ function SignalRow({ a }: { a: AxisRow }) {
           </button>
           <span style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT }}>PAPER · same rule the board grades · review, then Save</span>
         </div>
+      ) : paused ? (
+        <div style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT, marginTop: 8 }}>{paused}</div>
       ) : rated && (a.verdict === "PREDICTIVE" || a.verdict === "PROMISING") ? (
         <div style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT, marginTop: 8 }}>research read — not an agent mode yet</div>
       ) : null}

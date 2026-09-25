@@ -52,7 +52,8 @@ async function prevCopyLeaders(env, address) {
 import { backtestConfig, runSweep, runBasisSweep, oiSeriesInfo, walkForwardValidate, runBacktest, fetchCandles, fetchFundingAt, makeFundingPctAt } from "./backtest.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
-import { runScorecard } from "./axisbt.mjs";
+import { runScorecard, AXES, priceByHour } from "./axisbt.mjs";
+import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
 // TWAP planner/status — reuse the exec worker's tested logic (wrangler bundles the
 // cross-dir import, same as backtest.mjs). ONE planner, so start-validation and the
@@ -5368,6 +5369,49 @@ document.getElementById("btn").addEventListener("click",go);
           ? null
           : json({ error: "walletSig_required", hint: "This agent action requires walletSig = sign_message('nexus-trading-key-v1') from the agent's own wallet." }, request, 401);
 
+      // GET /agent/:address/parity — LIVE-vs-GRADED parity (public, read-only)
+      // Pairs every paper entry with the scoreboard event it traded (same market, side, basis
+      // hour) and lists every graded event the agent was free to take but didn't. Explained
+      // misses (position open, cooldown, daily caps, brain picked another market) are listed;
+      // anything left is DRIFT between the live path and the grade. ?since=&until= (ISO or ms);
+      // since defaults to the last paper reset, else 14 days back. Same KV series the
+      // scoreboard reads, same axis generator — see app/lib/paperParity.mjs.
+      if (request.method === "GET" && parts[2] === "parity") {
+        const [configRaw, stateRaw] = await Promise.all([AGENT_KV.get(`agent:config:${address}`), AGENT_KV.get(`agent:state:${address}`)]);
+        const config = configRaw ? JSON.parse(configRaw) : null;
+        const state = stateRaw ? JSON.parse(stateRaw) : {};
+        const axis = axisForConfig(config);
+        if (!axis) return json({ ok: false, error: "no_graded_axis", note: "Parity applies to BASIS_FADE configs (plain, CVD, SMART or LIQ confirm, not inverted) — the modes the scoreboard grades." }, request);
+        const q = new URL(request.url).searchParams;
+        const when = (v) => (v == null || v === "" ? null : (/^\d+$/.test(v) ? Number(v) : Date.parse(v)));
+        const now = Date.now();
+        const since = when(q.get("since")) ?? state.paper_reset_at ?? now - 14 * 86400000;
+        const until = Math.min(when(q.get("until")) ?? now, now);
+        if (!Number.isFinite(since) || !Number.isFinite(until) || since >= until) return json({ ok: false, error: "bad_window" }, request, 400);
+        const gen = AXES.find((a) => a.name === axis)?.gen;
+        const readJson = async (key) => { try { const r = await AGENT_KV.get(key); return r ? JSON.parse(r) : []; } catch { return []; } };
+        const coins = [...new Set((config.symbols || []).map((s) => String(s).toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "")))];
+        const events = [];
+        for (const coin of coins) {
+          const [oiHist, basisHist, cvdHist, smHist, liqHist] = await Promise.all([
+            readJson(`oi:hist:PERP_${coin}_USDC`),
+            readJson(`basis:hist:${coin}`),
+            axis === "basis_x_cvd" ? readJson(`cvd:hist:${coin}`) : [],
+            axis === "basis_x_smart" ? readJson(`sm:hist:${coin}`) : [],
+            axis === "basis_x_liqflush" ? readJson(`liq:hist:${coin}`) : [],
+          ]);
+          const cs = { coin, oiHist, basisHist, cvdHist, smHist, liqHist, candleHist: [] };
+          for (const e of gen(cs, priceByHour(oiHist), {}) || []) events.push({ coin, t: e.t, side: e.side });
+        }
+        const report = paperParity({ trades: state.paper_trades || [], events, config, since, until });
+        return json({
+          ok: true, address, axis, mode: config.mode, maxHoldHours: config.maxHoldHours ?? null,
+          paperResetAt: state.paper_reset_at ? new Date(state.paper_reset_at).toISOString() : null,
+          ledgerWindowNote: "Checks the retained paper ledger (last 50 rows). Entries older than the oldest retained row can't be checked.",
+          ...report,
+        }, request);
+      }
+
       // GET /agent/:address
       if (request.method === "GET" && !parts[2]) {
         const [configRaw, stateRaw, pendingRaw, signalRaw, whMetaRaw, directiveRaw] = await Promise.all([
@@ -5517,6 +5561,8 @@ document.getElementById("btn").addEventListener("click",go);
         if (state.current_position?.paper) state.current_position = null;
         state.daily_pnl = 0;
         state.trades_today = 0;
+        // When the clean record starts — the parity check's default window opens here.
+        state.paper_reset_at = Date.now();
         await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
         return json({ ok: true, cleared }, request);
       }

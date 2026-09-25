@@ -5,6 +5,7 @@
 //
 // ⚠️ Mechanical move: markup and behavior are unchanged from what shipped.
 import { useEffect, useState } from "react";
+import { Collapsible } from "./Collapsible";
 import type { AgentTrade } from "./types";
 import { agentCardStyle, agentLabelStyle, agentInputStyle, navBtnStyle } from "./styles";
 import { fmtUsdCompact, fmtUsdCompactAbs, fmtUsdExact } from "@/lib/fmtUsd.mjs";
@@ -202,14 +203,12 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
     </div>
   );
 
+  // Tucked behind a toggle like the Lab's other deep sections (collapsed by default, remembered).
+  // The one-line summary rides in the subtitle so the closed state still says something.
   return (
+    <Collapsible title="🧾 PAPER BLOTTER" subtitle={`how trades end · ${b.n} closed · ${b.winRate}% win · window`}
+      shortTitle="🧾 PAPER BLOTTER" shortSub={`${b.n} closed · ${b.winRate}% win`} storageKey="nx_paper_blotter_open">
     <div style={agentCardStyle}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <div style={{ ...agentLabelStyle, color: "#ededf0" }}>🧾 PAPER BLOTTER — how trades end</div>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>
-          {b.n} closed · {b.winRate}% win · window
-        </span>
-      </div>
 
       {b.staleWindow && b.sizeDrift && (
         <div style={{ marginTop: 8, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3, color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5 }}>
@@ -296,5 +295,6 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
         stop / time / trail / breakeven / take-profit / scale-out, plus external-flip for a webhook close.
       </div>
     </div>
+    </Collapsible>
   );
 }
