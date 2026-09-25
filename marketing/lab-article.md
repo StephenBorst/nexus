@@ -56,11 +56,16 @@ Plan → automate → grade on a record nobody can forge → copy what's working
 
 That's the loop a real trading desk runs. We put it in one non-custodial terminal on top of deep on-chain liquidity.
 
-#### And then there's $NEXUS.
+#### $NEXUS.
 
-No utility theater. No "revenue share" wink that summons a regulator. **$NEXUS is a pure community token** — a flag for the people who showed up early and get the bit. Holding it unlocks the **Holders Room** and a tier badge next to your name on the boards. It's also how you pay for Nexus data and PRO. No yield. No rights. That's it, on purpose.
+A community token on Base.
+No yield. No revenue share. No rights.
 
-The treasury is public too. Nexus earns from subscriptions and data sales, and the treasury holds what it earns — in a Safe anyone can open. No burn schedule. No promises about price. Just a balance anyone can watch.
+It pays for Nexus data and PRO.
+Hold 50M for the Holders Room. Hold 100M for PRO.
+
+The Treasury Safe holds what Nexus earns.
+Every transaction is on-chain.
 
 ---
 
@@ -131,7 +136,7 @@ Meet the Nexus Agent 👇
 - Closer above CTA: **The DEX is a commodity. The Lab is the moat. The proof is on-chain.**
 
 ### Editor formatting notes
-- H2 the section headers (Plan it. / Automate it. / Prove it. / And then there's $NEXUS.) for rhythm + clickable outline.
+- H2 the section headers (Plan it. / Automate it. / Prove it. / $NEXUS.) for rhythm + clickable outline.
 - Keep "We literally cannot fake a number." as its own standalone quote block with empty lines around it.
 - Bold the inline lead-ins (Order-only keys., Keys encrypted at rest.) so the guardrail list scans fast.
 - The → arrows render cleaner than default bullets in X Articles.
