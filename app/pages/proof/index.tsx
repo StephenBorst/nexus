@@ -41,8 +41,8 @@ type ProofCard = {
 };
 type ProofOfEdge = { cards: ProofCard[]; summary?: { resolved: number; wins: number; hitRate: number; avgR: number } };
 type Horizon = { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean; verdict: string };
-type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; feeBps: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number };
-type AxisRow = { name: string; label: string; verdict: string; best: { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean } | null; horizons?: Horizon[]; exit?: ExitGrade | null };
+type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; feeBps: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number; presetExit?: boolean; oos?: { since: string; samples: number; hitRate: number; netBps: number } };
+type AxisRow = { name: string; label: string; verdict: string; best: { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean } | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null };
 type Scorecard = { axes: AxisRow[]; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; note?: string; asOf?: string };
 
 // Verdict tone — green ONLY for a proven-predictive signal; NOISE/INSUFFICIENT stay
@@ -90,7 +90,8 @@ function SignalRow({ a }: { a: AxisRow }) {
   // Every horizon, not just the best — a preset holding into a NOISE window is invisible
   // if only the best one is shown.
   const hz = rated ? (a.horizons || []).filter((h) => h.verdict !== "INSUFFICIENT") : [];
-  const x = rated && a.exit && a.exit.verdict !== "INSUFFICIENT" ? a.exit : null;
+  // The preset's own exit, and a 24h-hold copy of it (same TP/SL) on the same entry window.
+  const exitsShown = rated ? [a.exit, a.exit24h].filter((g): g is ExitGrade => !!g && g.verdict !== "INSUFFICIENT") : [];
   const load = () => preset && deployToAgent({ ...preset.config, mode: "PAPER" }, `the ${preset.name} preset (PAPER)`, undefined, navigate, { replaceFilters: true });
   return (
     <div style={{ background: INSET, border: `1px solid ${BORDER}`, borderRadius: 5, padding: isMobile ? "10px 12px" : "9px 12px" }}>
@@ -117,19 +118,29 @@ function SignalRow({ a }: { a: AxisRow }) {
           })}
         </div>
       )}
-      {x && (
+      {exitsShown.length > 0 && (
         <div style={{ marginTop: 8, padding: "7px 9px", border: `1px solid ${BORDER}`, borderRadius: 4, background: SURFACE_ALT, fontFamily: MONO, fontSize: 9, color: FOG, lineHeight: 1.6 }}
-          title="The read, traded through the preset's own exit along the logged hourly candles: first touch of stop or target (a bar touching both = stop), else closed at the max hold. Net of a taker fee each side. Informational — it doesn't change the read's grade.">
-          <span style={{ color: MUTED, letterSpacing: "0.08em" }}>AS THE PRESET TRADES IT</span>{" "}
-          <span style={{ color: FAINT }}>TP {x.tpPercent}% · SL {x.slPercent}% · {x.maxHoldHours}h max</span>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px", marginTop: 2 }}>
-            <span style={{ color: (VERDICT[x.verdict] || VERDICT.INSUFFICIENT).color, fontWeight: 700 }}>{(VERDICT[x.verdict] || VERDICT.INSUFFICIENT).label}</span>
-            <span><span style={{ color: x.netBps >= 0 ? POS : NEG }}>{x.netBps >= 0 ? "+" : ""}{x.netBps}</span> bps net</span>
-            <span>{x.hitRate}% win</span>
-            <span>n{x.samples}</span>
-            <span>{x.stable ? "stable" : "not stable"}</span>
-            <span style={{ color: FAINT }}>exits TP {x.exits.TP || 0} · SL {x.exits.SL || 0} · time {x.exits.TIMEOUT || 0} · avg {x.avgHoldH}h</span>
-          </div>
+          title="The read, traded the way the agent trades it: one position per market, first touch of stop or target along the logged hourly candles (a bar touching both = stop), else closed at the max hold. Net of a taker fee each side. Both exits use the same entry window. Informational — it doesn't change the read's grade.">
+          <div style={{ color: MUTED, letterSpacing: "0.08em" }}>AS THE AGENT TRADES IT <span style={{ color: FAINT, letterSpacing: 0 }}>· TP {exitsShown[0].tpPercent}% · SL {exitsShown[0].slPercent}%</span></div>
+          {exitsShown.map((x) => {
+            const tone = VERDICT[x.verdict] || VERDICT.INSUFFICIENT;
+            return (
+              <div key={x.maxHoldHours} style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px", marginTop: 4 }}>
+                <span style={{ color: BRIGHT, minWidth: 92 }}>{x.maxHoldHours}h {x.presetExit ? "preset exit" : "exit"}</span>
+                <span style={{ color: tone.color, fontWeight: 700 }}>{tone.label}</span>
+                <span><span style={{ color: x.netBps >= 0 ? POS : NEG }}>{x.netBps >= 0 ? "+" : ""}{x.netBps}</span> bps net</span>
+                <span>{x.hitRate}% win</span>
+                <span>n{x.samples}</span>
+                <span>{x.stable ? "stable" : "not stable"}</span>
+                <span style={{ color: FAINT }}>TP {x.exits.TP || 0} · SL {x.exits.SL || 0} · time {x.exits.TIMEOUT || 0} · avg {x.avgHoldH}h</span>
+                {x.oos && (
+                  <span style={{ color: FAINT }} title="Only trades entered after the 12h-vs-24h question was raised — the out-of-sample test of that choice.">
+                    since {x.oos.since.slice(5, 10)}: {x.oos.samples ? <>n{x.oos.samples} · <span style={{ color: x.oos.netBps >= 0 ? POS : NEG }}>{x.oos.netBps >= 0 ? "+" : ""}{x.oos.netBps}</span> bps</> : "no trades yet"}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
       {preset ? (

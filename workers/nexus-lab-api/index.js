@@ -5063,7 +5063,7 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "intel" && parts[1] === "axis-backtest" && request.method === "GET") {
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
-      const CACHE = `axisbt:v2:min${min}`; // v2 = per-axis `exit` (preset exit-matched grade)
+      const CACHE = `axisbt:v3:min${min}`; // v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
@@ -5088,7 +5088,7 @@ document.getElementById("btn").addEventListener("click",go);
         asOf: new Date().toISOString(),
         config: { horizonsHours: [4, 12, 24], minSamples: min, coins: coinSets.map((c) => c.coin) },
         ...scorecard,
-        note: "Walk-forward event study on self-logged history — forward returns, no lookahead, first/second-half stability. Axes read INSUFFICIENT until the series matures. A read is not an edge until it's PREDICTIVE here. `exit` (on reads a preset trades) grades the read through that preset's own TP/SL/max-hold along the logged candles, net of a 3 bps/side taker fee — informational, it does not change the read's verdict.",
+        note: "Walk-forward event study on self-logged history — forward returns, no lookahead, first/second-half stability. Axes read INSUFFICIENT until the series matures. A read is not an edge until it's PREDICTIVE here. `exit` (on reads a preset trades) grades the read through that preset's own TP/SL/max-hold along the logged candles, one position per market, net of a 3 bps/side taker fee; `exit24h` is the same exit with a 24h hold on the same entry window; `oos` counts only trades entered after 2026-09-25 04:00 UTC. Informational — they do not change the read's verdict.",
       };
       try { await env.LAB_STORE.put(CACHE, JSON.stringify(out), { expirationTtl: 3600 }); } catch { /* best-effort */ }
       return json(out, request);

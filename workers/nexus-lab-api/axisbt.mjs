@@ -479,21 +479,63 @@ export function gradeEventExit(cbh, eventHour, side, entry, exit) {
   }
   return null;
 }
-// Pool exit-graded events → the same verdict discipline as the horizons, but on NET bps
+// The hold-horizon finding (12h preset exit graded NOISE while 24h graded PREDICTIVE) was
+// made on data up to here. The 24h variant was CHOSEN from that data, so its in-sample grade
+// flatters it by construction; `oos` counts only trades entered after this instant — the
+// honest test of the choice.
+export const EXIT_OOS_CUTOFF_MS = Date.parse("2026-09-25T04:00:00Z");
+// Exit variants graded side by side for every preset-traded read. Display only — the presets
+// and the running agent configs are untouched.
+export const EXIT_VARIANTS = Object.freeze([
+  Object.freeze({ key: "exit", override: {}, preset: true }),
+  Object.freeze({ key: "exit24h", override: { maxHoldHours: 24 }, preset: false }),
+]);
+
+// Trades the agent could actually take: ONE position per market (the next entry needs the
+// last one closed — same bar re-entry refused, as the backtest's cooldown), and only entries
+// at least `windowH` hours before the end of that market's candles, so every variant compared
+// sees the same entry window (a 24h trade near the end can't resolve yet; a 12h one could).
+export function tradeableExitTrades(all, exit, windowH = Number(exit?.maxHoldHours) || 0) {
+  const byMkt = new Map();
+  for (const e of all || []) {
+    const k = e.coin ?? e.cbh;
+    if (!byMkt.has(k)) byMkt.set(k, []);
+    byMkt.get(k).push(e);
+  }
+  const out = [];
+  for (const evs of byMkt.values()) {
+    const cbh = evs[0].cbh;
+    if (!cbh || !cbh.size) continue;
+    let lastH = -Infinity;
+    for (const h of cbh.keys()) if (h > lastH) lastH = h;
+    evs.sort((a, b) => a.t - b.t);
+    let busyThrough = -Infinity;
+    for (const e of evs) {
+      const h0 = hourBucket(e.t);
+      if (h0 > lastH - windowH || h0 <= busyThrough) continue;
+      const g = gradeEventExit(cbh, h0, e.side, e.pmap.get(h0), exit);
+      if (!g) continue;
+      busyThrough = h0 + g.holdH;
+      out.push({ t: e.t, ...g });
+    }
+  }
+  return out;
+}
+
+// Pool exit-graded trades → the same verdict discipline as the horizons, but on NET bps
 // (round-trip taker fee deducted — the agent pays it; the horizons are gross).
-export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS) {
+export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS, windowH = Number(exit?.maxHoldHours) || 0, oosCutoff = EXIT_OOS_CUTOFF_MS) {
   const feePct = (feeBps / 100) * 2;
-  const net = [], fst = [], snd = [], exits = { TP: 0, SL: 0, TIMEOUT: 0 };
+  const net = [], fst = [], snd = [], oos = [], exits = { TP: 0, SL: 0, TIMEOUT: 0 };
   let holdSum = 0;
-  for (const e of all) {
-    const g = gradeEventExit(e.cbh, hourBucket(e.t), e.side, e.pmap.get(hourBucket(e.t)), exit);
-    if (!g) continue;
+  for (const g of tradeableExitTrades(all, exit, windowH)) {
     const n = (g.pnlPct - feePct) / 100; // fraction, same unit agg() expects
-    net.push(n); (e.t <= medT ? fst : snd).push(n);
+    net.push(n); (g.t <= medT ? fst : snd).push(n);
+    if (g.t > oosCutoff) oos.push(n);
     exits[g.reason] = (exits[g.reason] || 0) + 1;
     holdSum += g.holdH;
   }
-  const a = agg(net), f = agg(fst), s = agg(snd);
+  const a = agg(net), f = agg(fst), s = agg(snd), o = agg(oos);
   const stable = f.samples >= 5 && s.samples >= 5 && (f.meanBps > 0) === (s.meanBps > 0);
   let verdict = "INSUFFICIENT";
   if (a.samples >= minSamples) verdict = a.meanBps > 0 && stable ? "PREDICTIVE" : a.meanBps > 0 ? "PROMISING" : "NOISE";
@@ -501,7 +543,18 @@ export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS)
     preset: exit.preset, tpPercent: exit.tpPercent, slPercent: exit.slPercent, maxHoldHours: exit.maxHoldHours, feeBps,
     samples: a.samples, hitRate: a.hitRate, netBps: a.meanBps, stable, verdict, exits,
     avgHoldH: a.samples ? Math.round((holdSum / a.samples) * 10) / 10 : 0,
+    oos: { since: new Date(oosCutoff).toISOString(), samples: o.samples, hitRate: o.hitRate, netBps: o.meanBps },
   };
+}
+
+// Every exit variant for a preset-traded read, on the SAME entry window (the longest hold).
+export function scoreExitVariants(all, exit, medT, minSamples) {
+  const out = {};
+  if (!exit) { for (const v of EXIT_VARIANTS) out[v.key] = null; return out; }
+  const variants = EXIT_VARIANTS.map((v) => ({ ...v, cfg: { ...exit, ...v.override } }));
+  const windowH = Math.max(...variants.map((v) => Number(v.cfg.maxHoldHours) || 0));
+  for (const v of variants) out[v.key] = { ...scoreExit(all, v.cfg, medT, minSamples, DEFAULT_FEE_BPS, windowH), presetExit: v.preset };
+  return out;
 }
 
 function aggR(arr) {
@@ -523,9 +576,9 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
     const pmap = priceByHour(cs.oiHist);
     if (pmap.size < 2) continue;
     const cbh = candlesByHour(cs.candleHist); // for R grading (first-touch needs highs/lows)
-    for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, pmap, cbh, rs: typeof e.rs === "number" ? e.rs : null });
+    for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, pmap, cbh, rs: typeof e.rs === "number" ? e.rs : null });
   }
-  if (!all.length) return { samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, exit: exit ? scoreExit([], exit, 0, minSamples) : null };
+  if (!all.length) return { samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples) };
   // rs_quartile written on EVERY event row that carries an rs — from closes, NOT candle-gated
   // (Grok #4). Cross-sectional rank → quartile (Q1 = strongest). Exposed so Sept-14 can
   // condition on it; a top-quartile-only axis is a one-line follow-up once these matter.
@@ -574,8 +627,8 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
   // The preset's own exit, when a preset trades this read (AXIS_EXITS). Informational: it
   // does NOT change the axis verdict (that grades the READ); it says whether the read
   // survives the exit the agent actually uses.
-  const exitGrade = exit ? scoreExit(all, exit, medT, minSamples) : null;
-  return { samples: all.length, horizons: horizonsOut, r, rsQuartileDist, headline: useR ? "R" : "bps", verdict: useR ? rVerdict : (bestHorizon ? bestHorizon.verdict : "INSUFFICIENT"), bestHorizon, exit: exitGrade };
+  const exitGrades = scoreExitVariants(all, exit, medT, minSamples);
+  return { samples: all.length, horizons: horizonsOut, r, rsQuartileDist, headline: useR ? "R" : "bps", verdict: useR ? rVerdict : (bestHorizon ? bestHorizon.verdict : "INSUFFICIENT"), bestHorizon, ...exitGrades };
 }
 
 // The full scorecard across every registered axis, ranked by best-horizon mean return.
@@ -613,7 +666,7 @@ export function rsQuartiles(universe) {
 export function runScorecard(coinSets, cfg = {}) {
   const axes = AXES.map((a) => {
     const s = scoreEvents(coinSets, a.gen, { ...cfg, exit: AXIS_EXITS[a.name] || null });
-    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit };
+    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit, exit24h: s.exit24h };
   });
   // rank: PREDICTIVE > PROMISING > NOISE > INSUFFICIENT, then by the HEADLINE metric —
   // meanR once R-graded (the right object), else forward-bps until candles mature.
