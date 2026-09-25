@@ -80,9 +80,9 @@ is everything built on top:
 - **Redundant builds:** the "pages build and deployment" runs in the repo's GitHub Actions are **GitHub
   Pages** (GitHub's own built-in workflow), NOT Cloudflare. There is NO Cloudflare zombie project —
   `nexus-trading-lab` has no Git connection and is the only app Pages project. Fix = repo **Settings →
-  Pages → Source: None** to stop them. Zero impact on Cloudflare/prod/code. (Cloudflare account has 7
-  apps total: nexus-lab-api, nexus-trading-lab, nexus-agent-exec, nexus-agent-brain, nexus-landing,
-  nexus-lab-alerts, orderly-proxy — all legit, none Git-connected to nexus-4421.)
+  Pages → Source: None** to stop them. Zero impact on Cloudflare/prod/code. (Cloudflare account apps:
+  nexus-lab-api, nexus-trading-lab, nexus-agent-exec, nexus-agent-brain, nexus-carry-engine,
+  nexus-landing, nexus-lab-alerts, orderly-proxy — all legit, none Git-connected to nexus-4421.)
 - A "Build & Deploy" Action run failing fast (~21s) is almost always a transient `yarn install` flake,
   not a real break — the next push's superset deploy covers it.
 
@@ -94,6 +94,29 @@ is everything built on top:
   PAPER mode simulates fills (no key, no real order) and records to `state.paper_trades` (separate from
   the live Supabase `agent_trades` table). KV namespace `NEXUS_AGENT` = c3c0582ec71c4d049d0795872f39f033.
 - **nexus-agent-brain** → cron, generates funding/OI signals into `agent:signal:<addr>`.
+- **nexus-carry-engine** (`workers/nexus-carry-engine`) → the sector-neutral **funding-carry basket**
+  sleeve (long the most-negative-funding name, short the most-positive, WITHIN each sector, so sector
+  co-movement cancels and the carry survives). Two crons: hourly = the PAPER record (funding accrual,
+  MTM, 24h rebalance); `*/5` = the LIVE maker re-quote, a **no-op unless `CARRY_LIVE=true`**. KV binding
+  `CARRY` = `b34f3af62cfe4bc2b5d03ce9c7b55868` (state at `carry:state`). 42 tests. Full detail + the
+  arming runbook live in `workers/nexus-carry-engine/README.md` — read it before touching this.
+  - **⚠️ It is reached on its `*.workers.dev` subdomain, NOT a custom domain** —
+    `https://nexus-carry-engine.stephenpatrick24.workers.dev` (`CARRY_API` in BOTH
+    `app/pages/proof/CarrySleeve.tsx` and `app/config/assistantTools.ts`). `wrangler.toml` configures
+    NO routes. This does NOT contradict the AGENT_API note above: that gotcha is lab-api-specific (its
+    workers.dev is unrouted, so the custom domain is mandatory THERE). Do not "fix" the carry URL to
+    an og./custom domain — none is pointed at this worker, and you'd 404 two live surfaces.
+  - **⚠️ The live money path is BUILT but deployed DISARMED, and arming is OWNER-ONLY.** Guardrails:
+    `CARRY_LIVE!=="true"` ⇒ no-op · no key ⇒ no-op · KV `carry:kill` ⇒ no-op · `planIsBalanced` aborts
+    a skewed (directional) book · per-order notional cap · order-only key (cannot withdraw). Orders are
+    **POST_ONLY** by construction. `GET /carry/live/status` → `{armed,hasKey,killed,lastLive}`. Don't
+    arm it, don't set `CARRY_LIVE`, don't add the key secrets — that's borst's call, per the runbook.
+  - **The finding it rests on (RV-v4):** sector-neutral at `perSide=1` is carry-dominant (85% carry,
+    OOS-positive) but **the blocker is FEES, not signal** — 24h taker ≈ breakeven, 24h maker ≈
+    +$19/$1000/60d (~12%/yr). Maker execution is mandatory; on taker fees the sleeve is not deployable.
+  - Read routes: `/carry/health`, `/carry/status`, `/carry/record` (the public track record).
+    `POST /carry/tick|reset|kill|unkill` are ops, gated by the `x-carry-token` header (never a query
+    string). `carryBasket.mjs` is shared with `tools/backtest/relvalue4.mjs`, so research == deployed.
 - **nexus-lab-alerts** → alerts worker.
 - **nexus-landing** → `landing.nexustradinglabs.com`, separate repo `StephenBorst/nexus-landing`.
   ⚠️ NOT a Pages project (the only Pages project is `nexus-trading-lab`) — it's a **Workers
@@ -184,10 +207,11 @@ Migrated the single-user bot → full multi-user, non-custodial, autonomous agen
 - **Verified live:** TP/SL/TIMEOUT closes, signing, reconcile self-heal, encrypted-key round-trip, Supabase logging
   + History read (lab-api also needs `SUPABASE_URL`/`SUPABASE_ANON_KEY` secrets — was missing, caused empty History).
 - **Deploy:** frontend → push `main` (CI → Cloudflare Pages). ⚠️ CI's deploy.yml now redeploys **nexus-lab-api,
-  nexus-agent-exec, AND nexus-agent-brain** from committed source on every push to main — so COMMIT worker changes
-  or CI overwrites manual deploys (secrets persist; wrangler deploy only pushes code). The other workers
-  (nexus-ledger-anchor, nexus-lab-alerts) are still manual `npx wrangler deploy` per dir. Worker observability
-  logs enabled in each wrangler.toml (`[observability.logs] enabled=true`).
+  nexus-agent-exec, nexus-agent-brain, AND nexus-carry-engine** from committed source on every push to main — so
+  COMMIT worker changes or CI overwrites manual deploys (secrets persist; wrangler deploy only pushes code; a
+  var like `CARRY_LIVE` set ONLY in the dashboard is overwritten by the committed wrangler.toml — set it in the
+  file). The other workers (nexus-ledger-anchor, nexus-lab-alerts) are still manual `npx wrangler deploy`
+  per dir. Worker observability logs enabled in each wrangler.toml (`[observability.logs] enabled=true`).
 
 ## Bankr agent control (chat-deploy the agent — Phase A+B SHIPPED, 2026-06-02)
 Bankr/Farcaster users can deploy/control the autonomous agent by chat. Two additive lab-api routes
@@ -989,6 +1013,14 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
 - **nexus-lab-api/logic.mjs** (9 tests): `gradeCall` — trustless first-touch TP-vs-SL grading
   (same-candle=loss, short inversion, pre-call candles ignored). Ledger hashing left inline (anchored
   on-chain — don't risk it).
+- **nexus-carry-engine** (42 tests) does NOT follow the one-`logic.mjs` convention — it is split by
+  concern (`carryBasket` / `carryPaper` / `carryLive` / `carryExec` / `carryLiveExec` `.test.mjs`), so
+  `node --test workers/nexus-carry-engine/logic.test.mjs` finds nothing. Glob the dir instead.
+- **⚠️ Whole-suite run — EXCLUDE node_modules or you get phantom failures:**
+  `node --test $(find app/lib workers -name '*.test.mjs' -not -path '*/node_modules/*' | sort)`
+  (861 tests as of 2026-09-25). Without the `-not -path`, `find` picks up third-party test files
+  shipped inside `workers/nexus-lab-api/node_modules` (@metamask/safe-event-emitter, thread-stream)
+  which fail on a missing `tap` dependency — 3 red results that are NOT our code. Bit us once.
 - **Monitoring (DONE):** `nexus-ledger-anchor` runs an hourly `runMonitor` (after `runAnchor`) → Telegram
   ops alerts for ⛽ anchor-signer gas low (<0.0004 ETH), ⚓ ledger drifted from on-chain anchor >6h,
   🧠 brain down (via `ops:brain:heartbeat` KV the brain stamps every run; >15min = down). 3h per-issue
