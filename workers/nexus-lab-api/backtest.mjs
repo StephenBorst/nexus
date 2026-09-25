@@ -329,6 +329,82 @@ export function runPortfolioBacktest(markets, config) {
   return { ...aggregate(trades, config), perSymbol, blocked, _trades: trades };
 }
 
+// ── RANDOM-ENTRY BASELINE — did the SIGNAL pick good moments, or did the exits + drift? ──
+// A strategy's trades are compared with replays that keep EVERYTHING except the entry timing:
+// the same markets, the same number of trades per market, the same long/short split per
+// market, the same exit code (openPosition + stepExit), the same fees. Only WHEN they enter is
+// random. If the real strategy doesn't beat most of those replays, its entries carried no
+// information this window — a fade with these exits would have won (or lost) anyway.
+// Seeded (mulberry32) so a result is reproducible. Pure: no fetch.
+export const BASELINE_RUNS = 300;
+export const BASELINE_MIN_TRADES = 5;
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// One trade from bar i through the shared exit path. Right-censored → null (never credited).
+function simulateFrom(candles, i, direction, config) {
+  const c = candles[i];
+  let lvl = null;
+  if (config.volScaledStops) {
+    const atr = atrPctAt(candles, i);
+    if (Number.isFinite(atr) && atr > 0) lvl = volScaledLevels(atr, config);
+  }
+  const pos = openPosition(config, direction, c.c, c.t, lvl);
+  for (let k = i + 1; k < candles.length; k++) {
+    const hit = stepExit(pos, candles[k], (candles[k].t - c.t) * 1000, config);
+    if (hit) return closedPnlPct(pos, hit.px);
+  }
+  return null;
+}
+export function randomEntryBaseline(markets, config, realTrades, { runs = BASELINE_RUNS, seed = 7 } = {}) {
+  const trades = Array.isArray(realTrades) ? realTrades : [];
+  const real = aggregate(trades, config);
+  if (trades.length < BASELINE_MIN_TRADES) {
+    return { verdict: "TOO_FEW_TRADES", trades: trades.length, minTrades: BASELINE_MIN_TRADES, runs: 0 };
+  }
+  const bySym = new Map(markets.map((m) => [m.symbol, m.candles]));
+  // What to reproduce: per market, how many longs and shorts.
+  const plan = [];
+  for (const t of trades) {
+    const candles = bySym.get(t.symbol);
+    if (!candles || candles.length < 3) continue;
+    plan.push({ candles, direction: t.direction });
+  }
+  // Entries only where a trade has room to reach its time exit before the data ends.
+  const room = Math.max(1, Number(config.maxHoldHours) || 0) + 1;
+  const rnd = mulberry32(seed);
+  const nets = [];
+  for (let r = 0; r < runs; r++) {
+    const sim = [];
+    for (const p of plan) {
+      const hi = p.candles.length - 1 - room;
+      if (hi < 1) continue;
+      for (let tries = 0; tries < 8; tries++) {
+        const i = 1 + Math.floor(rnd() * hi);
+        const pnlPct = simulateFrom(p.candles, i, p.direction, config);
+        if (pnlPct != null) { sim.push({ pnlPct }); break; }
+      }
+    }
+    nets.push(aggregate(sim, config).netUsd);
+  }
+  nets.sort((a, b) => a - b);
+  const below = nets.filter((n) => n < real.netUsd).length, ties = nets.filter((n) => n === real.netUsd).length;
+  const pctBeaten = Math.round(((below + ties / 2) / nets.length) * 1000) / 10;
+  const q = (f) => nets[Math.min(nets.length - 1, Math.max(0, Math.floor(f * (nets.length - 1))))];
+  return {
+    verdict: pctBeaten >= 95 ? "BEATS_RANDOM" : pctBeaten >= 80 ? "LEANS_ABOVE" : "NOT_DISTINGUISHABLE",
+    runs, seed, trades: plan.length, realNetUsd: real.netUsd, pctBeaten,
+    randomMedianUsd: q(0.5), randomP5Usd: q(0.05), randomP95Usd: q(0.95),
+  };
+}
+
 export function aggregate(trades, config = {}) {
   const n = trades.length;
   const notional = (config.capitalPerTrade || 50) * (config.leverage || 1);
@@ -551,7 +627,9 @@ export async function backtestConfig(config, { symbols, days }, oiHistBySymbol =
   }
   // The same markets under the agent's real constraints (one position, best signal per tick,
   // daily caps) — `combined` above is each market replayed on its own.
-  const { _trades: _pt, ...portfolio } = runPortfolioBacktest(markets, { ...cfg, symbols });
+  const { _trades: pTrades, ...portfolio } = runPortfolioBacktest(markets, { ...cfg, symbols });
+  // Would random entries with the same exits have done as well? (see randomEntryBaseline)
+  portfolio.baseline = randomEntryBaseline(markets, cfg, pTrades);
   return {
     days, symbols,
     combined: { trades, winRate: trades ? Math.round((wins / trades) * 1000) / 10 : 0, netUsd: Math.round(net * 100) / 100 },

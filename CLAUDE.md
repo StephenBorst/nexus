@@ -676,6 +676,16 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   +$22.62/14T: 9 signals while in a position, 1 lost to another market) · 24h +$14.36 · 77.8% · 9T · PF 3.39 (old
   +$31.35/13T). **12h vs 24h = a WASH in backtest** — the 24h "edge" was phantom overlap; the hold decision rests on the
   paper A/B + `oos` exit grades. /proof hero receipts updated to the portfolio numbers.
+  **Portfolio-ranked basis sweep (Ember, Sept 25):** Basis × CVD = 5 of the top 8, green 2–3/3 mkts, across TP settings;
+  top row Basis Extreme +$21.85 but 1/3 mkts (ignored); Smart best = 9th. ⚠️ All CVD rows share the SAME ~10 entries
+  (only exits vary) → proves exit-robustness, NOT entry edge.
+- **✅ RANDOM-ENTRY BASELINE (2026-09-25):** `randomEntryBaseline(markets, config, realTrades, {runs:300, seed:7})` in
+  backtest.mjs — replays the real portfolio trades' markets + count + per-market long/short mix through the SAME exit
+  path (`openPosition`/`stepExit`, vol-scaled levels honored, fees) at RANDOM entry bars (room left for the time exit;
+  right-censored dropped), seeded mulberry32 → `{pctBeaten, realNetUsd, randomMedianUsd, randomP5Usd, randomP95Usd,
+  verdict}`: BEATS_RANDOM ≥95 · LEANS_ABOVE ≥80 · NOT_DISTINGUISHABLE; <5 trades → TOO_FEW_TRADES. Attached as
+  `portfolio.baseline` by `backtestConfig`; Backtest card prints "vs random entries: beat X% of 300 replays". Tests
+  (`backtest.baseline.test.mjs`): foresight ≥95, worst timing ≤5, random entries mid-pack, reproducible, per-market.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 

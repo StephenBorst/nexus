@@ -166,6 +166,29 @@ export function AgentBacktestCard({
                         ? <>Couldn't take {skipped} signal{skipped === 1 ? "" : "s"}: {why.join(" · ")}.</>
                         : <>Every signal was takeable — no overlap between markets in this window.</>}
                     </div>
+                    {p.baseline && (() => {
+                      // Same markets, trade count, long/short mix and exits — only the entry timing is
+                      // random. Says whether the SIGNAL picked good moments or the exits + drift did.
+                      const bl = p.baseline;
+                      if (bl.verdict === "TOO_FEW_TRADES") {
+                        return (
+                          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 10, color: "#52525b", marginTop: 5, lineHeight: 1.5 }}>
+                            vs random entries: too few trades to test ({bl.trades} — needs {bl.minTrades}).
+                          </div>
+                        );
+                      }
+                      const tone = bl.verdict === "BEATS_RANDOM" ? "#3ecf8e" : bl.verdict === "LEANS_ABOVE" ? "#fbbf24" : "#a1a1aa";
+                      const read = bl.verdict === "BEATS_RANDOM" ? "the timing carries information"
+                        : bl.verdict === "LEANS_ABOVE" ? "leans above random — not conclusive"
+                        : "indistinguishable from random timing this window";
+                      return (
+                        <div title={`${bl.runs} replays with the same markets, number of trades, long/short split and exits — only the entry times are random (seed ${bl.seed}). Random P&L: median $${bl.randomMedianUsd}, 5th–95th pct $${bl.randomP5Usd} to $${bl.randomP95Usd}.`}
+                          style={{ fontFamily: "var(--nx-font-ui)", fontSize: 10, color: "#71717a", marginTop: 5, lineHeight: 1.5, cursor: "help" }}>
+                          vs random entries: beat <b style={{ color: tone, fontFamily: "var(--nx-font-mono)" }}>{bl.pctBeaten}%</b> of {bl.runs} replays
+                          <span style={{ color: "#52525b" }}> (random median ${bl.randomMedianUsd})</span> — {read}.
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
