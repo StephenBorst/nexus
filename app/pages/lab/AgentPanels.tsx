@@ -137,8 +137,8 @@ export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onR
       {tr === 0 ? (
         <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>
           {paper
-            ? <>No paper trades yet — switch to 🧪 PAPER and activate to build a simulated track record against live prices. Risk-free.</>
-            : <>No live track record yet — this agent hasn&apos;t traded for you. Stats build here transparently from its first trade. <strong style={{ color: "#a1a1aa" }}>Start small.</strong></>}
+            ? <>No paper trades yet. Switch to PAPER and activate. Simulated fills against live prices.</>
+            : <>No live record yet. Stats start at the first trade. <strong style={{ color: "#a1a1aa" }}>Start small.</strong></>}
         </div>
       ) : (
         <>
@@ -167,11 +167,11 @@ export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onR
           <div style={{ marginTop: 10, fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#52525b", lineHeight: 1.5 }}>
             {paper
               ? (lifetime
-                  ? "🧪 Simulated results — LIFETIME totals, accrued once per close so they survive the rolling window. Paper never touches the exchange; encouraging, not a guarantee."
+                  ? "Simulated. LIFETIME totals, accrued once per close. Paper never touches the exchange. Not a guarantee."
                   : rolling
-                  ? "🧪 Simulated results — the most recent 50 paper trades (rolling window), not a lifetime total. Paper never touches the exchange; encouraging, not a guarantee."
-                  : "🧪 Simulated results — paper trades never touch the exchange. A great paper record is encouraging, not a guarantee.")
-              : "⚠ Past performance does not guarantee future results. Markets are risky — only deploy capital you can afford to lose, and start small."}
+                  ? "Simulated. The last 50 paper trades, not a lifetime total. Paper never touches the exchange. Not a guarantee."
+                  : "Simulated. Paper never touches the exchange. Not a guarantee.")
+              : "⚠ Past performance does not guarantee future results. Only deploy what you can afford to lose. Start small."}
           </div>
         </>
       )}
@@ -206,8 +206,8 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
   // Tucked behind a toggle like the Lab's other deep sections (collapsed by default, remembered).
   // The one-line summary rides in the subtitle so the closed state still says something.
   return (
-    <Collapsible title="🧾 PAPER BLOTTER" subtitle={`how trades end · ${b.n} closed · ${b.winRate}% win · window`}
-      shortTitle="🧾 PAPER BLOTTER" shortSub={`${b.n} closed · ${b.winRate}% win`} storageKey="nx_paper_blotter_open">
+    <Collapsible title="PAPER BLOTTER" subtitle={`how trades end · ${b.n} closed · ${b.winRate}% win · window`}
+      shortTitle="PAPER BLOTTER" shortSub={`${b.n} closed · ${b.winRate}% win`} storageKey="nx_paper_blotter_open">
     <div style={agentCardStyle}>
 
       {b.staleWindow && b.sizeDrift && (

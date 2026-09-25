@@ -21,7 +21,7 @@ function OiCoverage({ rows }: { rows?: any[] }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
       {rows.map((r: any) => (
-        <span key={r.symbol} title={r.mature ? "mature — included in the run" : "not enough recorded history — excluded"}
+        <span key={r.symbol} title={r.mature ? "mature · included in the run" : "not enough recorded history · excluded"}
           style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "2px 7px", borderRadius: 2, border: `1px solid ${r.mature ? "#3ecf8e44" : "#33333a"}`, color: r.mature ? "#3ecf8e" : "#71717a" }}>
           {bareTicker(String(r.symbol))} {r.days}d/{r.samples}
         </span>
@@ -91,7 +91,7 @@ export function AgentBacktestCard({
             <button onClick={runConfigSweep} disabled={backtesting || sweeping || validating} style={{ ...navBtnStyle, fontSize: 10, padding: "6px 16px", opacity: (backtesting || sweeping || validating) ? 0.5 : 1 }}>
               {sweeping ? "SWEEPING…" : "⊞ SWEEP CONFIGS"}
             </button>
-            <button onClick={runValidation} disabled={backtesting || sweeping || validating} title="Walk-forward across markets + time — the honest robustness test" style={{ ...navBtnStyle, fontSize: 10, padding: "6px 16px", color: "#ededf0", borderColor: "#33333a", opacity: (backtesting || sweeping || validating) ? 0.5 : 1 }}>
+            <button onClick={runValidation} disabled={backtesting || sweeping || validating} title="Walk-forward across markets and time. The robustness test." style={{ ...navBtnStyle, fontSize: 10, padding: "6px 16px", color: "#ededf0", borderColor: "#33333a", opacity: (backtesting || sweeping || validating) ? 0.5 : 1 }}>
               {validating ? "VALIDATING…" : "✓ VALIDATE"}
             </button>
           </div>
@@ -164,7 +164,7 @@ export function AgentBacktestCard({
                     <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 10, color: "#71717a", marginTop: 5, lineHeight: 1.5 }}>
                       {skipped
                         ? <>Couldn't take {skipped} signal{skipped === 1 ? "" : "s"}: {why.join(" · ")}.</>
-                        : <>Every signal was takeable — no overlap between markets in this window.</>}
+                        : <>Every signal was takeable. No overlap between markets in this window.</>}
                     </div>
                     {p.baseline && (() => {
                       // Same markets, trade count, long/short mix and exits — only the entry timing is
@@ -179,7 +179,7 @@ export function AgentBacktestCard({
                       }
                       const tone = bl.verdict === "BEATS_RANDOM" ? "#3ecf8e" : bl.verdict === "LEANS_ABOVE" ? "#fbbf24" : "#a1a1aa";
                       const read = bl.verdict === "BEATS_RANDOM" ? "the timing carries information"
-                        : bl.verdict === "LEANS_ABOVE" ? "leans above random — not conclusive"
+                        : bl.verdict === "LEANS_ABOVE" ? "leans above random · not conclusive"
                         : "indistinguishable from random timing this window";
                       return (
                         <div title={`${bl.runs} replays with the same markets, number of trades, long/short split and exits — only the entry times are random (seed ${bl.seed}). Random P&L: median $${bl.randomMedianUsd}, 5th–95th pct $${bl.randomP5Usd} to $${bl.randomP95Usd}.`}
@@ -211,7 +211,7 @@ export function AgentBacktestCard({
           {validation && (() => {
             const v = validation.verdict;
             const vc = v === "ROBUST" ? "#3ecf8e" : v === "FRAGILE" ? "#fbbf24" : "#f7525f";
-            const vlabel = v === "ROBUST" ? "✅ ROBUST" : v === "FRAGILE" ? "🟨 FRAGILE" : "❌ NOT ROBUST";
+            const vlabel = v === "ROBUST" ? "✓ ROBUST" : v === "FRAGILE" ? "◐ FRAGILE" : "✕ NOT ROBUST";
             return (
               <div style={{ marginTop: 14 }}>
                 <div style={{ ...agentLabelStyle, fontSize: 9, marginBottom: 6 }}>
@@ -311,7 +311,7 @@ export function AgentBacktestCard({
               <div style={{ color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 8, lineHeight: 1.5 }}>
                 ↑ Click any row to apply that config to the editor. {sweep.note ? sweep.note : sweep.oiTested
                   ? `CONFLUENCE + OI-divergence are now in the sweep${sweep.oiCoverage?.minDays ? `, graded on ${sweep.oiCoverage.minDays}d of recorded OI history` : ""}.`
-                  : "CONFLUENCE/OI aren't in the sweep yet — they fold in automatically once recorded OI history is deep enough."} Every config here was graded on real price — apply a winner, then paper-test before going live.
+                  : "CONFLUENCE/OI aren't in the sweep yet. They fold in once recorded OI history is deep enough."} Every config here was graded on real price — apply a winner, then paper-test before going live.
               </div>
               {sweep.basisCoverage && <OiCoverage rows={sweep.basisCoverage} />}
             </div>
