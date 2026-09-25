@@ -417,6 +417,9 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   data, so its in-sample grade flatters it; oos is the honest test. Cache `axisbt:v3`. Baseline (07:26 UTC):
   basis_x_cvd 12h PROMISING +11.9bps n28 not stable (TIMEOUT 19/28) vs **24h PREDICTIVE +57.8bps 63% n27 stable**
   (TP11/SL8/TIME8); basis_extreme 12h NOISE −10.0 n148 vs 24h PROMISING +6.4 n127 not stable. Decide at Oct-15 on oos.
+  **24h Lab run (borst, Sept 25, only maxHoldHours 12→24):** backtest +$31.35 · 84.6% · 13T (vs 12h +$22.62/14T);
+  walk-forward **NOT ROBUST** +$45.46, 4/6 mkts, 42% folds (vs 12h +$32.06) — better capture, same robustness, tiny
+  n, in-sample. Routine compares Oct-15 reads against this datapoint (doesn't re-recommend the test).
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
   and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
   doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one
