@@ -62,6 +62,12 @@ function fmtEnds(iso: string | null): string {
 // gets profit/loss chroma only as directional data (consistent with the P&L rule).
 const leanColor = (l: string | null) => (l === "UP" ? POS : l === "DOWN" ? NEG : DIM);
 
+// The floor on how much of the plot the PRICE series is guaranteed. A forecast target joins
+// the y-domain only while the tape still owns at least this share of the height; past that it
+// is pinned to the edge and labelled "off scale", so a distant strike can never squash the one
+// mark the chart exists to show.
+const TAPE_MIN_SHARE = 0.55;
+
 // Client-side Orderly candle fetch (same public endpoint the Mispriced Board uses).
 // Fail-soft: null until loaded, [] on error — the chart simply doesn't render.
 function useOrderlyPrice(coin: string, days: number): { t: number; c: number }[] | null {
@@ -105,7 +111,17 @@ function ForecastChart({ coin, markPrice, target, forecastLean }: {
   const mk = markPrice != null && Number.isFinite(markPrice) ? markPrice : cs[cs.length - 1];
   const vals = [...cs, mk];
   const lo = Math.min(...vals), hi = Math.max(...vals), sp = (hi - lo) || hi * 0.01 || 1, pad = sp * 0.1;
-  const yLo = lo - pad, yHi = hi + pad;
+  const pLo = lo - pad, pHi = hi + pad, pSpan = (pHi - pLo) || 1;
+  // Fitting the domain to price ONLY is right for a far strike, but it also pinned NEAR-money
+  // ones: a target 3% above the 21d high fell outside a range that only spans 8%, so the
+  // commonest case on this card — a strike just out of reach — read "off scale". So widen the
+  // domain to take the target in, but only while the tape still owns TAPE_MIN_SHARE of the
+  // height. Near strike ⇒ drawn at its true level; far strike ⇒ still pinned, price intact.
+  const wLo = tgt != null ? Math.min(pLo, tgt) : pLo;
+  const wHi = tgt != null ? Math.max(pHi, tgt) : pHi;
+  const room = (wHi - wLo) * 0.04;                       // breathing room the target rule needs
+  const fits = tgt != null && wHi > wLo && pSpan / ((wHi - wLo) * 1.08) >= TAPE_MIN_SHARE;
+  const yLo = fits ? wLo - room : pLo, yHi = fits ? wHi + room : pHi;
   const py = (c: number) => plotBot - ((c - yLo) / (yHi - yLo)) * (plotBot - top);
   const t0 = pc[0].t, t1 = pc[pc.length - 1].t, tspan = (t1 - t0) || 1;
   const X = (t: number) => padL + ((t - t0) / tspan) * plotW;
@@ -123,16 +139,23 @@ function ForecastChart({ coin, markPrice, target, forecastLean }: {
     return { x: X(tt), label: new Date(tt).toLocaleDateString(undefined, { month: "short", day: "numeric" }), anchor };
   });
   const MF = "var(--nx-font-mono)";
-  const tgtLabel = tgt == null ? "" : `${tgtOff === "above" ? "↑ " : tgtOff === "below" ? "↓ " : ""}TARGET ${fmtPrice(tgt)}${tgtDist != null ? ` · ${tgtDist >= 0 ? "+" : ""}${tgtDist.toFixed(1)}%` : ""}`;
   // Label sits on the inside of the plot so an edge-pinned target never clips.
   const tgtLabelY = tgtY == null ? 0 : tgtOff === "below" ? tgtY - 3.5 : tgtOff === "above" ? tgtY + 9 : (tgtY - 3.5 < top + 6 ? tgtY + 9 : tgtY - 3.5);
   return (
     <svg viewBox={`0 0 ${VB_W} ${H}`} style={{ display: "block", width: "100%", height: "auto", margin: "2px 0 8px", background: C.canvas, borderRadius: 2 }} role="img" aria-label={`${coin} price over 21 days with the forecast target ${fmtPrice(tgt)}.`}>
-      {/* faint implied-move wash: last price → target (clipped to the plot), never a wall */}
-      {tgtY != null && <rect x={padL} y={Math.min(lastY, tgtY)} width={plotW - padL} height={Math.max(1, Math.abs(tgtY - lastY))} fill={lc} opacity="0.08" />}
+      {/* Implied-move band: last price → target. Neutral BONE, not the lean colour — the band
+          measures the DISTANCE to a level, and a red wash across a downside forecast read as a
+          loss. Direction is carried by the dashed rule, the arrow and the header chips. Drawn
+          only while the target shares the plot; pinned to an edge it would BE the whole plot. */}
+      {tgtY != null && tgtOff == null && <rect x={padL} y={Math.min(lastY, tgtY)} width={plotW} height={Math.max(1, Math.abs(tgtY - lastY))} fill={BONE} opacity="0.05" />}
       {tgtY != null && <>
         <line x1={padL} y1={tgtY} x2={plotW} y2={tgtY} stroke={lc} strokeWidth="1" strokeDasharray="4 3" opacity="0.85" />
-        <text x={padL + 2} y={tgtLabelY} fill={lc} fontFamily={MF} fontSize="7.5" opacity="0.95">{tgtLabel}</text>
+        <text x={padL + 2} y={tgtLabelY} fontFamily={MF} fontSize="7.5">
+          <tspan fill={lc}>{tgtOff === "above" ? "\u2191 " : tgtOff === "below" ? "\u2193 " : ""}</tspan>
+          <tspan fill={FAINT}>TARGET </tspan><tspan fill={BONE} fontWeight="700">{fmtPrice(tgt)}</tspan>
+          {tgtDist != null ? <tspan fill={FOG}> {tgtDist >= 0 ? "+" : ""}{tgtDist.toFixed(1)}%</tspan> : null}
+          {tgtOff ? <tspan fill={FAINT}> · off scale</tspan> : null}
+        </text>
       </>}
       <polyline points={line} fill="none" stroke={BONE} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
       <circle cx={X(t1)} cy={lastY} r="2.5" fill={BONE} />
