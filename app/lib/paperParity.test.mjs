@@ -119,6 +119,8 @@ test("duplicate events in the same hour count once", () => {
 test("unsimulated filters make free misses UNVERIFIABLE rather than drift; an unmatched ENTRY is still drift", () => {
   const cfg = { ...CFG, tradeSessions: ["US"] };
   assert.deepEqual(unsimulatedFilters(cfg), ["session"]);
+  // inert on BASIS_FADE / latency-only → not a reason to call a miss unverifiable
+  assert.deepEqual(unsimulatedFilters({ ...CFG, fundingPercentileMin: 95, maxSignalAgeSec: 180 }), []);
   assert.equal(run([], [{ coin: "ETH", t: T0 + H, side: "LONG" }], cfg).verdict, "UNVERIFIABLE");
   assert.equal(run([row("1", "BTC", "LONG", T0 + 5 * H, T0 + 9 * H)], [], cfg).verdict, "DRIFT");
 });

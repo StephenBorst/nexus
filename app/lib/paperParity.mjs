@@ -34,8 +34,11 @@ export function axisForConfig(config) {
   return null;
 }
 
-// Filters the grader does not simulate. When any is on, a "miss" may just be the filter
-// doing its job, so parity reports them instead of calling those misses drift.
+// Filters the grader does not simulate AND that can suppress a BASIS_FADE entry. When any is
+// on, a free miss may just be the filter doing its job, so parity says UNVERIFIABLE rather than
+// calling it drift. Deliberately NOT listed: fundingPercentileMin (the brain applies it to
+// FUNDING_ONLY / CONFLUENCE only — inert on BASIS_FADE) and maxSignalAgeSec (a latency guard;
+// the brain re-stamps its signal every 5 min, so it only delays an entry by minutes).
 export function unsimulatedFilters(config) {
   const c = config || {};
   const on = [];
@@ -43,8 +46,6 @@ export function unsimulatedFilters(config) {
   if (c.respectSmartMoney) on.push("smart-money");
   if (Array.isArray(c.tradeSessions) && c.tradeSessions.length) on.push("session");
   if (c.minVolAtrPct || c.maxVolAtrPct) on.push("volatility");
-  if (c.maxSignalAgeSec) on.push("signal-age");
-  if (c.fundingPercentileMin) on.push("funding-percentile");
   return on;
 }
 

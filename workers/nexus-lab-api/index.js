@@ -5374,7 +5374,7 @@ document.getElementById("btn").addEventListener("click",go);
       // hour) and lists every graded event the agent was free to take but didn't. Explained
       // misses (position open, cooldown, daily caps, brain picked another market) are listed;
       // anything left is DRIFT between the live path and the grade. ?since=&until= (ISO or ms);
-      // since defaults to the last paper reset, else 14 days back. Same KV series the
+      // since defaults to the last paper reset, else the oldest retained entry, else 24h. Same KV series the
       // scoreboard reads, same axis generator — see app/lib/paperParity.mjs.
       if (request.method === "GET" && parts[2] === "parity") {
         const [configRaw, stateRaw] = await Promise.all([AGENT_KV.get(`agent:config:${address}`), AGENT_KV.get(`agent:state:${address}`)]);
@@ -5385,7 +5385,15 @@ document.getElementById("btn").addEventListener("click",go);
         const q = new URL(request.url).searchParams;
         const when = (v) => (v == null || v === "" ? null : (/^\d+$/.test(v) ? Number(v) : Date.parse(v)));
         const now = Date.now();
-        const since = when(q.get("since")) ?? state.paper_reset_at ?? now - 14 * 86400000;
+        // Window start: explicit ?since, else the last paper reset, else the oldest retained paper
+        // entry, else the last 24h. (A reset done before paper_reset_at existed leaves no stamp, and
+        // judging events from before the run began would count them all as misses.)
+        const oldestOpen = (state.paper_trades || []).reduce((m, t) => { const o = Date.parse(t?.opened_at); return Number.isFinite(o) ? Math.min(m, o) : m; }, Infinity);
+        const qSince = when(q.get("since"));
+        const [since, sinceSource] = qSince != null ? [qSince, "query"]
+          : state.paper_reset_at ? [state.paper_reset_at, "paper_reset"]
+          : Number.isFinite(oldestOpen) ? [oldestOpen, "oldest_retained_entry"]
+          : [now - 86400000, "last_24h"];
         const until = Math.min(when(q.get("until")) ?? now, now);
         if (!Number.isFinite(since) || !Number.isFinite(until) || since >= until) return json({ ok: false, error: "bad_window" }, request, 400);
         const gen = AXES.find((a) => a.name === axis)?.gen;
@@ -5406,7 +5414,7 @@ document.getElementById("btn").addEventListener("click",go);
         const report = paperParity({ trades: state.paper_trades || [], events, config, since, until });
         return json({
           ok: true, address, axis, mode: config.mode, maxHoldHours: config.maxHoldHours ?? null,
-          paperResetAt: state.paper_reset_at ? new Date(state.paper_reset_at).toISOString() : null,
+          paperResetAt: state.paper_reset_at ? new Date(state.paper_reset_at).toISOString() : null, sinceSource,
           ledgerWindowNote: "Checks the retained paper ledger (last 50 rows). Entries older than the oldest retained row can't be checked.",
           ...report,
         }, request);

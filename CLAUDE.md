@@ -424,6 +424,19 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   except maxHoldHours. Both ledgers RESET Sept 25 (old CONFLUENCE-era ledgers archived in `docs/paper-archive/`) —
   reset, not date-filter, because `paper_agg` is accrued at close and can't be split by date. Oct-15 routine reads
   both via public `GET /agent/:addr` (step 2c) with a guard if `firstTradeAt` predates the reset.
+  ⚠️ The 12h wallet also has `fundingPercentileMin:95` (leftover) — INERT on BASIS_FADE (brain applies it to
+  FUNDING_ONLY/CONFLUENCE only), so the A/B still differs only in hold.
+- **✅ LIVE-vs-GRADED PARITY (2026-09-25):** `app/lib/paperParity.mjs` (`paperParity`/`axisForConfig`/
+  `entriesFromPaperTrades`/`unsimulatedFilters`, tested) + public **`GET /agent/:addr/parity?since=&until=`**. Pairs
+  each paper entry (scale-out slices collapsed by `parent_id`) with the graded event it traded (same coin + side,
+  entry 0–3h after the basis obs) and lists every graded event the agent was FREE to take but didn't. A miss is
+  "explained" only if the agent had NO free moment in the event's ~1h action window (walk of [open, close+15m
+  cooldown) intervals — one position at a time across ALL markets), or a daily cap (trailing 24h, "likely"), or
+  another market won the brain's single per-wallet signal. Leftovers = DRIFT; regime/smart/session/vol filters →
+  UNVERIFIABLE (not simulated by the grader). `fundingPercentileMin` + `maxSignalAgeSec` deliberately NOT counted
+  (inert on BASIS_FADE / latency-only). `paper/reset` now stamps `state.paper_reset_at` → default window start.
+- **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
+  AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
   and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
   doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one
