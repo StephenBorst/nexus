@@ -750,6 +750,14 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   **First read (Sept 25):** basis_dev_x_cvd PREDICTIVE (R +0.27 n32 stable; 4h PREDICTIVE; unlike basis_x_cvd its 12h
   is PROMISING, not NOISE) · basis_dev PROMISING (R +0.05 n288, not stable). Last-72h side check: two-sided 10L/11S vs
   old 20L/0S — shorts are real. Same 33d, in-sample-adjacent → Oct-15 decides.
+  **+ Per-side splits + shadow exit (2026-09-25, cache `axisbt:v5`).** Every scoreboard axis now carries `sides`
+  {LONG/SHORT: events + R}, every horizon a `bySide` {samples, hitRate, meanBps}, every exit grade a `bySide`
+  (net bps) — so a one-sided read can't hide in a pooled number (/proof shows "longs N · +xR · shorts N"). **`SHADOW_EXITS`**
+  (axisbt) grades `basis_dev_x_cvd` with the Basis × CVD Stack's exits (TP 2.5/SL 2, 12h + 24h, oos) for a like-for-like
+  compare — flagged `presetExit:false` + `shadowOf`, /proof labels it "WITH THE BASIS × CVD STACK'S EXITS · no preset
+  trades this". ⚠️ Deliberately NOT in `AXIS_EXITS`: `/intel/evidence` turns AXIS_EXITS into a LIVE replay config, and a
+  shadow there would replay the OLD (zero-anchored) rule under the new axis's name. Tests in axisbt.basisdev.test.mjs +
+  axisbt.exit.test.mjs.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
