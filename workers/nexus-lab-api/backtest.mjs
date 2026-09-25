@@ -442,7 +442,7 @@ export function evidenceAcrossMarkets(markets, config, { runs = BASELINE_RUNS, s
   for (const m of markets) {
     const r = runBacktest(m.candles, m.feeds?.fundingAt || (() => 0), cfg, m.feeds?.fundingPctAt || null, m.feeds?.oiChangeAt || null, null, m.feeds?.basisAt || null);
     for (const t of r._trades || []) pooled.push({ ...t, symbol: m.symbol });
-    perMarket.push({ symbol: m.symbol, trades: r.trades, netUsd: r.netUsd, winRate: r.winRate });
+    perMarket.push({ symbol: m.symbol, trades: r.trades, netUsd: r.netUsd, winRate: r.winRate, diag: marketDiag(m.candles, r._trades || [], cfg) });
   }
   const agg = aggregate(pooled, cfg);
   return {
@@ -452,6 +452,30 @@ export function evidenceAcrossMarkets(markets, config, { runs = BASELINE_RUNS, s
     baseline: randomEntryBaseline(markets, cfg, pooled, { runs, seed }),
     perMarket: perMarket.sort((a, b) => b.netUsd - a.netUsd),
     caveat: "Markets move together — the pooled result is an honest aggregate, not independent tests.",
+  };
+}
+
+// Why a market wins or loses, in parts: how its trades ENDED, which side they took, and how
+// wide the stop sits against the market's own typical hourly range. A stop ≈ 1–2 hourly
+// ranges away gets taken by ordinary noise — an exit-sizing fact about the market, not a
+// verdict on the signal. Median range = median of (high − low) / close over the window.
+export function marketDiag(candles, trades, config = {}) {
+  const ranges = (candles || []).filter((c) => c && c.c > 0).map((c) => ((c.h - c.l) / c.c) * 100).sort((a, b) => a - b);
+  const medRangePct = ranges.length ? ranges[Math.floor(ranges.length / 2)] : null;
+  const exits = {};
+  let longs = 0, shorts = 0, hold = 0;
+  for (const t of trades) {
+    exits[t.reason] = (exits[t.reason] || 0) + 1;
+    if (t.direction === "LONG") longs++; else shorts++;
+    hold += t.holdH || 0;
+  }
+  const r2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
+  return {
+    exits, longs, shorts,
+    avgHoldH: trades.length ? r2(hold / trades.length) : null,
+    medHourlyRangePct: r2(medRangePct),
+    // how many typical hourly ranges the stop sits from entry (config.slPercent is a price %)
+    stopInRanges: medRangePct && config.slPercent ? r2(config.slPercent / medRangePct) : null,
   };
 }
 

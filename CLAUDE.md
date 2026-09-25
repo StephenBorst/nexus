@@ -981,6 +981,14 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   maintainability pain than the Lab was). Split routes/agent|theses|feed only if it starts hurting.
 
 ## Conventions
+- **⚠️ BROWSER-FIRST TRIAGE — rule out borst's browser BEFORE touching code (bit us TWICE; 2nd = 2026-09-25).**
+  borst browses in **Brave**. Brave Shields (tracker/ad/fingerprint blocking) silently breaks third-party
+  embeds, previews and fetches IN HIS BROWSER ONLY — e.g. the X composer's link preview showed "no card" while
+  the server chain was fine (Cloudflare logs: Twitterbot fetched the share page AND the PNG, 17 events / 0
+  errors, even on a never-shared wallet). A whole logging PR (#30) + a diagnosis round went into a non-bug.
+  **Before any "X/embed/preview/widget/wallet-popup/fetch doesn't work" investigation:** (1) ask borst to retry
+  with Shields DOWN for the site (lion icon → off) or in a clean Chrome/incognito window; (2) check the SERVER
+  side from logs/curl (crawler hit? 200?) — if the server served it, it's the client. Only then open a PR.
 - **⚠️ After creating new files, `git add` them + verify `git status` is clean BEFORE trusting a build.**
   A local `vite build`/`tsc` passes with untracked files (they exist in the working tree), but CI builds
   from a clean checkout and fails to resolve them (Build step → Pages deploy skipped). The CI result is the

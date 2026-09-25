@@ -65,7 +65,7 @@ import { twapSchedule, twapProgress } from "../nexus-agent-exec/logic.mjs";
 // migration rules — one family per commit, read-only families first).
 import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus } from "./routes-smart.mjs";
 import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
-import { handleXrayShare, logShareHit } from "./routes-xrayshare.mjs";
+import { handleXrayShare } from "./routes-xrayshare.mjs";
 import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
@@ -1347,7 +1347,6 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
 
     // ── Ph22: /og/thesis/:wallet/:id(.png)? → thesis OG image ─
     if (parts[0] === "og" && parts[1] === "thesis" && parts[2] && parts[3]) {
-      logShareHit(request, { route: "og/thesis", status: 200, ms: 0 });
       if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
       const isPng = parts[3].endsWith(".png");
       const thesisId = isPng ? parts[3].slice(0, -4) : parts[3];
@@ -1542,8 +1541,6 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
     // the generic site card. This route returns real per-thesis OG meta a crawler can
     // read, and redirects humans to the actual app page. Share links point here.
     if (parts[0] === "share" && parts[1] === "thesis" && parts[2] && parts[3]) {
-      // Same crawler log as /share/xray — the baseline to compare X-Ray unfurls against.
-      logShareHit(request, { route: "share/thesis", status: 200, ms: 0 });
       const wallet = normalizeAddress(parts[2]);
       const thesisId = parts[3];
       const appUrl = `https://trade.nexustradinglabs.com/feed/thesis/${wallet}/${thesisId}`;
@@ -5147,7 +5144,7 @@ document.getElementById("btn").addEventListener("click",go);
       const contract = AXIS_EXITS[axis];
       if (!contract) return json({ ok: false, error: "unknown_axis", axes: Object.keys(AXIS_EXITS) }, request, 400);
       const hold = [contract.maxHoldHours, 24].includes(Number(q.get("hold"))) ? Number(q.get("hold")) : contract.maxHoldHours;
-      const CACHE = `evidence:v1:${axis}:${hold}`;
+      const CACHE = `evidence:v2:${axis}:${hold}`;
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
       const symbols = COINS.map((c) => `PERP_${c}_USDC`);

@@ -126,3 +126,20 @@ test("evidence: each market replayed on its own, trades pooled, baseline on the 
   assert.match(ev.caveat, /not independent/);
   assert.ok(ev.perMarket[0].netUsd >= ev.perMarket[ev.perMarket.length - 1].netUsd, "sorted by net");
 });
+
+import { marketDiag } from "./backtest.mjs";
+test("marketDiag: exits by reason, sides, and the stop measured in typical hourly ranges", () => {
+  const candles = [{ h: 101, l: 99, c: 100 }, { h: 102, l: 100, c: 101 }, { h: 100.5, l: 99.5, c: 100 }]; // ranges 2%, ~1.98%, 1%
+  const trades = [
+    { reason: "SL", direction: "LONG", holdH: 2 },
+    { reason: "SL", direction: "SHORT", holdH: 4 },
+    { reason: "TP", direction: "SHORT", holdH: 6 },
+  ];
+  const d = marketDiag(candles, trades, { slPercent: 2 });
+  assert.deepEqual(d.exits, { SL: 2, TP: 1 });
+  assert.equal(d.longs, 1); assert.equal(d.shorts, 2);
+  assert.equal(d.avgHoldH, 4);
+  assert.equal(d.medHourlyRangePct, 1.98);
+  assert.equal(d.stopInRanges, 1.01);
+  assert.equal(marketDiag([], [], {}).stopInRanges, null, "no candles → no claim");
+});

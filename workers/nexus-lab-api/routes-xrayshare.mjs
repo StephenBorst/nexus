@@ -126,56 +126,12 @@ Opening the x-ray… <a style="color:#ededf0" href="${appUrl}">view on Nexus →
 </body></html>`;
 }
 
-// ── Crawler reachability log ──────────────────────────────────────────────────
-// One JSON line per share-page / card-image hit, so we can see WHICH crawlers actually
-// reach the worker (Discord unfurls, X doesn't — is Twitterbot arriving? is it slow?).
-// Cloudflare fills request.cf: asn/asOrganization/colo always; the verified-bot fields
-// only on plans with bot management (null otherwise). Read in Workers → Logs, filter
-// `evt:"share_hit"`. Cheap (share routes only) — remove once the X question is settled.
-export function shareHitLine(request, { route, status, ms, cache = null, now = Date.now() }) {
-  const cf = request.cf || {};
-  const url = new URL(request.url);
-  return {
-    evt: "share_hit",
-    t: new Date(now).toISOString(),
-    route,
-    path: url.pathname,
-    v: url.searchParams.get("v"),
-    status,
-    ms,
-    cache,
-    ua: (request.headers.get("User-Agent") || "").slice(0, 200),
-    asn: cf.asn ?? null,
-    asOrg: cf.asOrganization ?? null,
-    colo: cf.colo ?? null,
-    country: cf.country ?? null,
-    verifiedBot: cf.botManagement?.verifiedBot ?? null,
-    botCategory: cf.verifiedBotCategory ?? null,
-    botScore: cf.botManagement?.score ?? null,
-  };
-}
-export function logShareHit(request, fields) {
-  try { console.log(JSON.stringify(shareHitLine(request, fields))); } catch { /* never break a response for a log */ }
-}
-
 // deps.renderPng(svg) → Uint8Array (index.js supplies resvg + the mono font).
 export async function handleXrayShare(parts, request, env, deps = {}) {
   const isShare = parts[0] === "share" && parts[1] === "xray" && parts[2];
   const isOg = parts[0] === "og" && parts[1] === "xray" && parts[2];
   if (!isShare && !isOg) return null;
-  const t0 = Date.now();
-  let res;
-  try {
-    res = await serveXrayShare(parts, request, env, deps, { isShare, isOg });
-    return res;
-  } finally {
-    logShareHit(request, {
-      route: isShare ? "share/xray" : "og/xray",
-      status: res ? res.status : 500,
-      ms: Date.now() - t0,
-      cache: res ? res.headers.get("X-Card-Cache") : null,
-    });
-  }
+  return serveXrayShare(parts, request, env, deps, { isShare, isOg });
 }
 
 async function serveXrayShare(parts, request, env, deps, { isShare, isOg }) {
