@@ -2813,7 +2813,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // trades attributed to them (source_leader) × the creator share. Computed from the
     // same on-chain-auditable rows as copy-record; recomputable from public order data.
     // A COMMISSION for being copied, not a P&L or revenue share. Read-only (MVP); payout
-    // is the follow-on. Fail-soft {available:false} if the source_leader column is absent.
+    // is the follow-on. Fail-soft {available:false} if the Supabase query fails.
     if (parts[0] === "creator" && parts[1] === "earnings" && parts[2]) {
       if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
       const leader = String(parts[2]).toLowerCase();
@@ -2829,7 +2829,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           { headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${env.SUPABASE_ANON_KEY}` } }
         );
         if (res.ok) rows = await res.json();
-        else available = false; // source_leader column not migrated / query rejected
+        else available = false; // query rejected / Supabase down
       } catch (e) { console.error("[creator-earnings] supabase error:", e); available = false; }
       // Guardrail: a caller can't earn from their OWN trades (copier === leader).
       rows = rows.filter((r) => String(r.wallet_address || "").toLowerCase() !== leader);

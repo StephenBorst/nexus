@@ -228,8 +228,8 @@ export async function handleAgents(parts, request, env, ctx) {
   // mirrored this leader (source_leader tagged at entry from a smart-money ⚡ copy
   // or autocopy). So a trader-detail can answer "copies of this whale returned Y",
   // graded on-chain-auditable closes — not the leader's self-reported number.
-  // Degrades gracefully: if the source_leader column isn't migrated the query 400s,
-  // res.ok is false, and we return an honest {available:false} instead of throwing.
+  // Degrades gracefully: if the Supabase query fails, res.ok is false and we return
+  // an honest {available:false} instead of throwing. (source_leader verified present 2026-09-25.)
   if (parts[0] === "agents" && parts[1] === "copy-record" && parts[2]) {
     if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
     const leader = String(parts[2]).toLowerCase();
@@ -245,7 +245,7 @@ export async function handleAgents(parts, request, env, ctx) {
         { headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${env.SUPABASE_ANON_KEY}` } }
       );
       if (res.ok) rows = await res.json();
-      else available = false; // column not migrated yet, or query rejected
+      else available = false; // query rejected / Supabase down
     } catch (e) { console.error("[copy-record] supabase error:", e); available = false; }
     let net = 0, wins = 0; const copiers = new Set();
     for (const r of rows) { const p = parseFloat(r.pnl || 0); net += p; if (p > 0) wins++; if (r.wallet_address) copiers.add(String(r.wallet_address).toLowerCase()); }
