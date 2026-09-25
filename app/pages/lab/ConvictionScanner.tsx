@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { C } from "@/config/theme";
+import { C, LINE, SIGNAL } from "@/config/theme";
 import { rankConviction, convictionLevel } from "@/lib/conviction.mjs";
 
 // ── CONVICTION SCANNER — the engine, market-wide ─────────────────────────────
@@ -57,7 +57,7 @@ export function ConvictionScanner() {
 
   const CONV: Record<string, { word: string; color: string }> = {
     HIGH: { word: "HIGH", color: C.pos },
-    MODERATE: { word: "MODERATE", color: "#8fdcb8" },
+    MODERATE: { word: "MODERATE", color: SIGNAL.posSoft },
     CONFLICTED: { word: "CONFLICTED", color: C.warn },
     FUNDING_ONLY: { word: "FUNDING-ONLY", color: C.text.muted },
   };
@@ -93,7 +93,7 @@ export function ConvictionScanner() {
                 : <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: conv.color, minWidth: 92 }}>◆ {conv.word}</span>}
               <span style={{ display: "flex", gap: 4, flexWrap: "wrap", flex: 1 }}>
                 {r.reads.map((rd) => (
-                  <span key={rd.label} title={!rd.ok && rd.side ? `${rd.label} lean ${rd.side} — opposes this ${r.direction} fade` : undefined} style={{ fontFamily: MONO, fontSize: 8.5, color: rd.ok ? C.pos : C.neg, border: `1px solid ${rd.ok ? "#2a3a30" : "#3a2530"}`, borderRadius: 3, padding: "1px 5px" }}>{rd.ok ? "✓" : "✗"} {rd.label}{!rd.ok && rd.side ? ` ${rd.side}` : ""}</span>
+                  <span key={rd.label} title={!rd.ok && rd.side ? `${rd.label} lean ${rd.side} — opposes this ${r.direction} fade` : undefined} style={{ fontFamily: MONO, fontSize: 8.5, color: rd.ok ? C.pos : C.neg, border: `1px solid ${rd.ok ? LINE.pos : LINE.neg}`, borderRadius: 3, padding: "1px 5px" }}>{rd.ok ? "✓" : "✗"} {rd.label}{!rd.ok && rd.side ? ` ${rd.side}` : ""}</span>
                 ))}
               </span>
               <span style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.fog }}>{r.fundingAnnualPct >= 0 ? "+" : ""}{r.fundingAnnualPct}%/yr</span>

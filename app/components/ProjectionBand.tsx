@@ -206,7 +206,7 @@ export function ProjectionBand({ symbol, height = 216, horizonHours, fill }: { s
             </svg>
 
             {/* outlook summary — two lines so nothing clips at narrow widths */}
-            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: OUTLOOK_H, zIndex: 3, display: "flex", flexDirection: "column", justifyContent: "center", gap: 2, padding: "0 10px", borderTop: `1px solid ${BORDER}`, background: "#0c0c0e", boxSizing: "border-box", overflow: "hidden" }}>
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: OUTLOOK_H, zIndex: 3, display: "flex", flexDirection: "column", justifyContent: "center", gap: 2, padding: "0 10px", borderTop: `1px solid ${BORDER}`, background: "#0f0f11", boxSizing: "border-box", overflow: "hidden" }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 6, fontFamily: UI, fontSize: 11, color: FOG, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {/* The RANGE is the projection, not a point target (Grok): a "→ $83 (+0.3%)"
                     next to a 1.5R contract is a cousin of fake E[R]. The lean names the play's

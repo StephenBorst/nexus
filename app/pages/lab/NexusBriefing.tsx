@@ -261,7 +261,7 @@ export function NexusBriefing({
       />
 
       {!collapsed && (
-        <div style={{ border: "1px solid #1c1c20", borderRadius: 8, overflow: "hidden", background: "#0c0c0e", marginTop: -6 }}>
+        <div style={{ border: "1px solid #1c1c20", borderRadius: 8, overflow: "hidden", background: "#0f0f11", marginTop: -6 }}>
           {/* ⭐ THE OPERATOR READ — who you are + your single costliest habit, leading the
               briefing so the you-engine greets you here, not just in Analytics. */}
           {operator && (

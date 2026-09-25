@@ -19,6 +19,7 @@ import { deriveStyle } from "@/config/agentStyles";
 import { PublicOperatorProfile, InFlightCalls, VenueEvidence } from "./ProfileSynthesis";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
 import { bareTicker } from "@/utils/utils";
+import { SIGNAL } from "@/config/theme";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -683,8 +684,8 @@ export default function TraderPage() {
             disabled={followBusy}
             title={isFollowing ? "Unfollow — stop starred alerts when they open a position" : "Follow — their next open pings you in Live Alerts"}
             style={{
-              background: isFollowing ? "#f5c45114" : "none", border: `1px solid ${isFollowing ? "#f5c451" : "#232327"}`, borderRadius: 4,
-              color: isFollowing ? "#f5c451" : "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10,
+              background: isFollowing ? `${SIGNAL.follow}14` : "none", border: `1px solid ${isFollowing ? SIGNAL.follow : "#232327"}`, borderRadius: 4,
+              color: isFollowing ? SIGNAL.follow : "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10,
               padding: "6px 14px", cursor: followBusy ? "default" : "pointer", letterSpacing: "0.05em", minWidth: 108,
             }}
           >

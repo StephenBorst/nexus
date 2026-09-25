@@ -3,7 +3,7 @@ import { fusePositioning, positioningRead } from "@/lib/positioning.mjs";
 import { fetchDeribitTerm } from "@/lib/deribit.mjs";
 import { Simulate } from "./Simulate";
 import type { ProcessedTrade } from "./types";
-import { C } from "@/config/theme";
+import { C, LINE, SIGNAL } from "@/config/theme";
 
 // ── THE READ — the pre-trade fusion panel (Phase-3 synthesis) ────────────────
 // The decision moment used to be intelligence-blind: the Thesis Engine showed funding
@@ -18,7 +18,7 @@ const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", NEG = "#f7525f", WARN = "#e0a458", BORDER = "#232327", INSET = "#0c0c0e";
+const POS = "#3ecf8e", NEG = "#f7525f", WARN = SIGNAL.caution, BORDER = "#232327", INSET = C.surfaceAlt;
 
 const bare = (s: string) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
 
@@ -276,7 +276,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
   const agree = voteReads.filter((r) => r.ok).length;
   const pushback = voteReads.filter((r) => r.side && r.side !== direction).length;
   const convLevel = voteReads.length >= 3 && agree >= 3 && agree > pushback ? "HIGH" : agree >= 2 && agree > pushback ? "MODERATE" : pushback > agree ? "AGAINST" : "LOW";
-  const convColor = convLevel === "HIGH" ? POS : convLevel === "MODERATE" ? "#8fdcb8" : convLevel === "AGAINST" ? NEG : WARN;
+  const convColor = convLevel === "HIGH" ? POS : convLevel === "MODERATE" ? SIGNAL.posSoft : convLevel === "AGAINST" ? NEG : WARN;
   // "HIGH CONVICTION" is banned language app-wide (the loudest word must be the graded one) — the
   // HIGH case is a STRONG READ, and it only survives the dock below over a PROVEN reversion clock.
   const convWord = convLevel === "HIGH" ? "STRONG READ" : convLevel === "MODERATE" ? "MODERATE" : convLevel === "AGAINST" ? "READS DISAGREE" : "LOW CONVICTION";
@@ -352,7 +352,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
 
   const tone = aligned ? POS : against ? WARN : FOG;
   return (
-    <div style={{ border: `1px solid ${aligned ? "#2a3a30" : against ? "#3a3320" : BORDER}`, borderLeft: `2px solid ${tone}`, background: C.surfaceAlt, borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+    <div style={{ border: `1px solid ${aligned ? LINE.pos : against ? LINE.warn : BORDER}`, borderLeft: `2px solid ${tone}`, background: C.surfaceAlt, borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: tone, boxShadow: `0 0 8px ${tone}88` }} />
         <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>THE READ · {coin}</span>
@@ -381,7 +381,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 6, marginBottom: 10 }}>
                 {voteReads.map((r) => {
                   const c = r.ok ? POS : (r.side && r.side !== direction ? NEG : FAINT);
-                  const bd = r.ok ? "#2a3a30" : (r.side && r.side !== direction ? "#3a2530" : BORDER);
+                  const bd = r.ok ? LINE.pos : (r.side && r.side !== direction ? LINE.neg : BORDER);
                   return (
                     <div key={r.label} style={{ display: "flex", alignItems: "baseline", gap: 7, border: `1px solid ${bd}`, borderRadius: 5, padding: "6px 9px", background: INSET }}>
                       <span style={{ fontFamily: MONO, fontSize: 10, color: c, flexShrink: 0 }}>{r.ok ? "✓" : r.side && r.side !== direction ? "✗" : "·"}</span>
@@ -395,7 +395,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               </div>
             </>
           )}
-          {synth && <div style={{ fontFamily: UI, fontSize: 12.5, color: convColorFinal === POS ? "#8fdcb8" : convColorFinal, lineHeight: 1.55 }}>{synth}</div>}
+          {synth && <div style={{ fontFamily: UI, fontSize: 12.5, color: convColorFinal === POS ? SIGNAL.posSoft : convColorFinal, lineHeight: 1.55 }}>{synth}</div>}
 
           {/* SETUP MOMENTUM — persistence/decay: the ONLY time-derivative read. Is the crowded
               funding-fade still building (early) or already unwinding (late)? From oi:hist. */}

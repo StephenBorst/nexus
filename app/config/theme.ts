@@ -56,12 +56,53 @@ export const C = {
     fog: "#a1a1aa",    // secondary text
     muted: "#71717a",  // labels
     faint: "#52525b",  // hints / captions
+    disabled: "#3f3f46", // inert / disabled controls, separators — deliberately below faint
   },
   accent: "#ededf0", // bone/white — CTA + interaction, NOT P&L
   pos: "#3ecf8e",    // profit / up / live
   neg: "#f7525f",    // loss / down
   warn: "#fbbf24",
   info: "#d4d4d8",   // neutral status (active/closed) — stays monochrome
+} as const;
+
+// ── Signal colours — each means ONE thing, never decoration ─────────────────
+// The monochrome rule is "one accent + data colours". These are the few extra colours
+// the product earned because each carries a meaning a user learns once and reads
+// everywhere. Adding a colour here means naming its ONE job; if it has no job, it
+// doesn't get a colour. (tools/check-palette.mjs allows everything in this file.)
+export const SIGNAL = {
+  // Soft amber — caution / experimental / "watch this". Softer than C.warn, which stays
+  // reserved for real danger (liquidation risk, hard errors).
+  caution: "#e0a458",
+  cautionBg: "#1c1710",
+  // Gold ★ — someone you follow. Only for follow state + followed-trader alerts.
+  follow: "#f5c451",
+  // 🔥 orange — heat / attention (engagement counts). Never a price direction.
+  heat: "#f7931a",
+  // Soft positive — moderate conviction / supportive text; lighter than C.pos so it
+  // doesn't read as realized profit.
+  posSoft: "#8fdcb8",
+  // Demoted P&L — context numbers deliberately quieter than the graded headline
+  // (e.g. lifetime totals under a watched grade). Never the headline number itself.
+  posMuted: "#7fb89a",
+  negMuted: "#b5727a",
+  // Purple — SIMULATED, not real money (Sim Composer). Its own family so a simulation
+  // can never be mistaken for a live position.
+  sim: {
+    accent: "#8b7fd4",
+    text: "#ded8f0",   // headings / emphasis
+    body: "#b8b2cc",   // prose
+    muted: "#8b8299",  // secondary / idle controls
+    border: "#3a3358",
+    bg: "#15131c",
+  },
+} as const;
+
+// Hairlines that say agree / oppose / caution without shouting (read chips, cards).
+export const LINE = {
+  pos: "#2a3a30",
+  neg: "#3a2530",
+  warn: "#3a3320",
 } as const;
 
 // Status tints (thesis/agent states) — surface + border + text, from the palette.
