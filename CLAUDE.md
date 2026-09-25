@@ -1032,8 +1032,15 @@ Canonical system = **`app/config/theme.ts`** (`C` tokens), mirrored 1:1 by the l
   or launch copy as @nexustradinglab. A terminal that speaks: short end-stopped lines, fact → rule → action, numbers over
   adjectives, no hype words/emoji, no em-dash brochure clauses, default closer = nothing. Rewrites return 1 primary + 1
   tighter alt. @borstxbt (founder) is a separate, personal voice — the brand account never copies it.
+  **Applied app-wide + landing (Sept 25 2026):** meta/SEO, PRO card + `PRO_FEATURES`, onboarding + connect modal, Lab
+  hero ("Plan it. Run it. Prove it."), Proof, Feed, Agent, Thesis Engine, Intel, Arena, X-Ray, token/spot, mini app,
+  share texts (X/Farcaster: fact → rule, no emoji). Brand labels carry NO pictographic emoji (glyphs ◆ ◇ ▪ ✓ ✕ ⛓ ⚡ →
+  are fine); the top-nav bell is a line SVG matching the envelope. User SOCIAL REACTIONS (🔥💎📉 in SocialBar/
+  CommentsPanel) are left as-is — they're stored data, not brand copy. "Welcome to The Lab" is retired (the brief bans
+  "Welcome to"). LiveRead's "PROVEN-EDGE SETUP" is now "ALIGNED SETUP" — the scoreboard hasn't graded it PREDICTIVE;
+  never label a read "proven" unless the scoreboard does.
 - **Type:** IBM Plex Mono (labels/terminal) + Manrope (sans — headlines/CTAs) + Libre Baskerville (serif — editorial accent). Landing loads all three.
-- **Voice / cadence (match the landing):** calm, declarative, confident, short sentences. Identity lines — **"an onchain trading terminal" · "Welcome to The Lab" · "Plan it. Run it. Prove it." · "From idea to an onchain call."** Agent: "hand an agent your rules · paper first, live when you say so · order-only keys + kill switch · 24/7." Intel: "funding edge intelligence · where the smart money is actually positioned · the edge the desk trades on."
+- **Voice / cadence (match the landing):** calm, declarative, confident, short sentences. Identity lines — **"an onchain trading terminal" · "Plan it. Run it. Prove it." · "From idea to an onchain call."** Agent: "hand an agent your rules · paper first, live when you say so · order-only keys + kill switch · 24/7." Intel: "funding edge intelligence · where the smart money is actually positioned · the edge the desk trades on."
   - ⚠️ **Verifiability is stated CALMLY, once, as fact** ("graded from public price · the ledger's on Arbitrum · open the contract and look") — NEVER a "can't fake" war-cry. Blockchain-can't-fake is table stakes; the onchain terminal (The Lab) OWNS verifiability inherently, so don't lead with it or preach it. It's a quiet supporting fact, not the thesis.
   - ⚠️ No filler ("in plain English", "the leaderboard you can't fake"). Say the thing, in the landing's register.
 - **"Video demos"** = self-playing / animated **design artifacts** (branded HTML you screen-record), the same medium as the Claude Design "video demo" projects — there is NO rendered-MP4 export from Claude. Build these on the palette + voice above. Current demo motion kit: artifact `KuNRnRrDJ3Q9GDLwBP3Eai` (V2, on-brand: bone/near-black, green whisper).
