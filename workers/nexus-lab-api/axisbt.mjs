@@ -533,7 +533,7 @@ export function tradeableExitTrades(all, exit, windowH = Number(exit?.maxHoldHou
       const g = gradeEventExit(cbh, h0, e.side, e.pmap.get(h0), exit);
       if (!g) continue;
       busyThrough = h0 + g.holdH;
-      out.push({ t: e.t, ...g });
+      out.push({ t: e.t, side: e.side, ...g });
     }
   }
   return out;
@@ -544,11 +544,13 @@ export function tradeableExitTrades(all, exit, windowH = Number(exit?.maxHoldHou
 export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS, windowH = Number(exit?.maxHoldHours) || 0, oosCutoff = EXIT_OOS_CUTOFF_MS) {
   const feePct = (feeBps / 100) * 2;
   const net = [], fst = [], snd = [], oos = [], exits = { TP: 0, SL: 0, TIMEOUT: 0 };
+  const bySideNet = { LONG: [], SHORT: [] };
   let holdSum = 0;
   for (const g of tradeableExitTrades(all, exit, windowH)) {
     const n = (g.pnlPct - feePct) / 100; // fraction, same unit agg() expects
     net.push(n); (g.t <= medT ? fst : snd).push(n);
     if (g.t > oosCutoff) oos.push(n);
+    if (bySideNet[g.side]) bySideNet[g.side].push(n);
     exits[g.reason] = (exits[g.reason] || 0) + 1;
     holdSum += g.holdH;
   }
@@ -561,7 +563,17 @@ export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS,
     samples: a.samples, hitRate: a.hitRate, netBps: a.meanBps, stable, verdict, exits,
     avgHoldH: a.samples ? Math.round((holdSum / a.samples) * 10) / 10 : 0,
     oos: { since: new Date(oosCutoff).toISOString(), samples: o.samples, hitRate: o.hitRate, netBps: o.meanBps },
+    bySide: sideSplit(bySideNet),
   };
+}
+
+// LONG vs SHORT, graded separately — "does it make money on its shorts, or do the longs carry
+// it?" A read that only ever fires one side (basis_extreme on OKX's persistent discount) shows
+// up here as SHORT: 0 instead of hiding inside a pooled number. Informational only.
+function sideSplit(bySide) {
+  const out = {};
+  for (const s of ["LONG", "SHORT"]) { const a = agg(bySide[s] || []); out[s] = { samples: a.samples, hitRate: a.hitRate, meanBps: a.meanBps }; }
+  return out;
 }
 
 // Every exit variant for a preset-traded read, on the SAME entry window (the longest hold).
@@ -595,7 +607,7 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
     const cbh = candlesByHour(cs.candleHist); // for R grading (first-touch needs highs/lows)
     for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, pmap, cbh, rs: typeof e.rs === "number" ? e.rs : null });
   }
-  if (!all.length) return { samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples) };
+  if (!all.length) return { sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples) };
   // rs_quartile written on EVERY event row that carries an rs — from closes, NOT candle-gated
   // (Grok #4). Cross-sectional rank → quartile (Q1 = strongest). Exposed so Sept-14 can
   // condition on it; a top-quartile-only axis is a one-line follow-up once these matter.
@@ -616,7 +628,9 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
     const stable = f.samples >= 5 && s.samples >= 5 && (f.meanBps > 0) === (s.meanBps > 0);
     let verdict = "INSUFFICIENT";
     if (a.samples >= minSamples) verdict = a.meanBps > 0 && stable ? "PREDICTIVE" : a.meanBps > 0 ? "PROMISING" : "NOISE";
-    return { h, ...a, stable, verdict };
+    const bySide = { LONG: [], SHORT: [] };
+    for (const e of all) { const fr = forwardReturn(e.pmap, e.t, h); if (fr != null) bySide[e.side].push(callPnl(fr, e.side)); }
+    return { h, ...a, stable, verdict, bySide: sideSplit(bySide) };
   });
   const bestHorizon = horizonsOut.reduce((b, x) => (x.meanBps > (b ? b.meanBps : -Infinity) ? x : b), null);
   // THESIS-IN-R headline (Grok #2): grade every event first-touch in R off the logged candles.
@@ -645,10 +659,26 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
   // does NOT change the axis verdict (that grades the READ); it says whether the read
   // survives the exit the agent actually uses.
   const exitGrades = scoreExitVariants(all, exit, medT, minSamples);
-  return { samples: all.length, horizons: horizonsOut, r, rsQuartileDist, headline: useR ? "R" : "bps", verdict: useR ? rVerdict : (bestHorizon ? bestHorizon.verdict : "INSUFFICIENT"), bestHorizon, ...exitGrades };
+  const rBySide = { LONG: [], SHORT: [] };
+  for (const e of all) {
+    const rv = gradeEventR(e.cbh, hourBucket(e.t), e.side, e.pmap.get(hourBucket(e.t)));
+    if (rv != null) rBySide[e.side].push(rv);
+  }
+  const sides = {
+    LONG: { events: all.filter((e) => e.side === "LONG").length, r: aggR(rBySide.LONG) },
+    SHORT: { events: all.filter((e) => e.side === "SHORT").length, r: aggR(rBySide.SHORT) },
+  };
+  return { sides, samples: all.length, horizons: horizonsOut, r, rsQuartileDist, headline: useR ? "R" : "bps", verdict: useR ? rVerdict : (bestHorizon ? bestHorizon.verdict : "INSUFFICIENT"), bestHorizon, ...exitGrades };
 }
 
 // The full scorecard across every registered axis, ranked by best-horizon mean return.
+// SHADOW exit contracts: a read NO preset trades, graded with a preset's exits so it can be
+// compared like-for-like. It does NOT create a preset and is NOT in AXIS_EXITS (which the
+// /intel/evidence replay turns into a live config — a shadow there would replay the WRONG rule).
+export const SHADOW_EXITS = Object.freeze({
+  basis_dev_x_cvd: Object.freeze({ shadowOf: "basis-cvd-stack", exit: Object.freeze({ ...AXIS_EXITS.basis_x_cvd, preset: "shadow:basis-cvd-stack" }) }),
+});
+
 export const AXES = [
   { name: "funding_fade", label: "Funding fade (baseline)", gen: fundingFadeEvents },
   { name: "cvd_divergence", label: "CVD divergence", gen: cvdDivergenceEvents },
@@ -684,8 +714,10 @@ export function rsQuartiles(universe) {
 
 export function runScorecard(coinSets, cfg = {}) {
   const axes = AXES.map((a) => {
-    const s = scoreEvents(coinSets, a.gen, { ...cfg, exit: AXIS_EXITS[a.name] || null });
-    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit, exit24h: s.exit24h };
+    const shadow = !AXIS_EXITS[a.name] && SHADOW_EXITS[a.name];
+    const s = scoreEvents(coinSets, a.gen, { ...cfg, exit: AXIS_EXITS[a.name] || (shadow ? shadow.exit : null) });
+    if (shadow) for (const g of [s.exit, s.exit24h]) if (g) { g.presetExit = false; g.shadowOf = shadow.shadowOf; }
+    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, sides: s.sides, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit, exit24h: s.exit24h };
   });
   // rank: PREDICTIVE > PROMISING > NOISE > INSUFFICIENT, then by the HEADLINE metric —
   // meanR once R-graded (the right object), else forward-bps until candles mature.

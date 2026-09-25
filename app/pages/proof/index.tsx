@@ -41,8 +41,10 @@ type ProofCard = {
 };
 type ProofOfEdge = { cards: ProofCard[]; summary?: { resolved: number; wins: number; hitRate: number; avgR: number } };
 type Horizon = { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean; verdict: string };
-type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; feeBps: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number; presetExit?: boolean; oos?: { since: string; samples: number; hitRate: number; netBps: number } };
-type AxisRow = { name: string; label: string; verdict: string; best: { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean } | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null };
+type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; feeBps: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number; presetExit?: boolean; shadowOf?: string; bySide?: Record<"LONG" | "SHORT", SideStat>; oos?: { since: string; samples: number; hitRate: number; netBps: number } };
+type SideStat = { samples: number; hitRate: number; meanBps: number };
+type AxisSides = Record<"LONG" | "SHORT", { events: number; r: { samples: number; hitRate: number; meanR: number } }>;
+type AxisRow = { sides?: AxisSides; name: string; label: string; verdict: string; best: { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean } | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null };
 type Scorecard = { axes: AxisRow[]; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; note?: string; asOf?: string };
 
 // Verdict tone — green ONLY for a proven-predictive signal; NOISE/INSUFFICIENT stay
@@ -149,10 +151,24 @@ function SignalRow({ a }: { a: AxisRow }) {
           })}
         </div>
       )}
+      {rated && a.sides && (a.sides.LONG.events + a.sides.SHORT.events) > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 6, fontFamily: MONO, fontSize: 9, color: FOG }}
+          title="Each side graded on its own, in R (first touch of the frozen 1.2×ATR stop vs 1.5R target). A read that only ever fires one side shows 0 here.">
+          {(["LONG", "SHORT"] as const).map((sd) => {
+            const s = a.sides![sd];
+            return (
+              <span key={sd} style={{ whiteSpace: "nowrap" }}>
+                {sd === "LONG" ? "longs" : "shorts"} {s.events}
+                {s.r.samples > 0 && <> · <span style={{ color: s.r.meanR >= 0 ? POS : NEG }}>{s.r.meanR >= 0 ? "+" : ""}{s.r.meanR}R</span> · {s.r.hitRate}%</>}
+              </span>
+            );
+          })}
+        </div>
+      )}
       {exitsShown.length > 0 && (
         <div style={{ marginTop: 8, padding: "7px 9px", border: `1px solid ${BORDER}`, borderRadius: 4, background: SURFACE_ALT, fontFamily: MONO, fontSize: 9, color: FOG, lineHeight: 1.6 }}
           title="The read, traded the way the agent trades it: one position per market, first touch of stop or target along the logged hourly candles (a bar touching both = stop), else closed at the max hold. Net of a taker fee each side. Both exits use the same entry window. Informational — it doesn't change the read's grade.">
-          <div style={{ color: MUTED, letterSpacing: "0.08em" }}>AS THE AGENT TRADES IT <span style={{ color: FAINT, letterSpacing: 0 }}>· TP {exitsShown[0].tpPercent}% · SL {exitsShown[0].slPercent}%</span></div>
+          <div style={{ color: MUTED, letterSpacing: "0.08em" }}>{exitsShown[0].shadowOf ? "WITH THE BASIS × CVD STACK'S EXITS" : "AS THE AGENT TRADES IT"} <span style={{ color: FAINT, letterSpacing: 0 }}>· TP {exitsShown[0].tpPercent}% · SL {exitsShown[0].slPercent}%{exitsShown[0].shadowOf ? " · no preset trades this" : ""}</span></div>
           {exitsShown.map((x) => {
             const tone = VERDICT[x.verdict] || VERDICT.INSUFFICIENT;
             return (
@@ -164,6 +180,13 @@ function SignalRow({ a }: { a: AxisRow }) {
                 <span>n{x.samples}</span>
                 <span>{x.stable ? "stable" : "not stable"}</span>
                 <span style={{ color: FAINT }}>TP {x.exits.TP || 0} · SL {x.exits.SL || 0} · time {x.exits.TIMEOUT || 0} · avg {x.avgHoldH}h</span>
+                {x.bySide && (
+                  <span style={{ color: FAINT }}>
+                    {(["LONG", "SHORT"] as const).map((sd, i) => (
+                      <span key={sd}>{i ? " · " : ""}{sd === "LONG" ? "L" : "S"} n{x.bySide![sd].samples}{x.bySide![sd].samples ? <> <span style={{ color: x.bySide![sd].meanBps >= 0 ? POS : NEG }}>{x.bySide![sd].meanBps >= 0 ? "+" : ""}{x.bySide![sd].meanBps}</span></> : null}</span>
+                    ))}
+                  </span>
+                )}
                 {x.oos && (
                   <span style={{ color: FAINT }} title="Only trades entered after the 12h-vs-24h question was raised — the out-of-sample test of that choice.">
                     since {x.oos.since.slice(5, 10)}: {x.oos.samples ? <>n{x.oos.samples} · <span style={{ color: x.oos.netBps >= 0 ? POS : NEG }}>{x.oos.netBps >= 0 ? "+" : ""}{x.oos.netBps}</span> bps</> : "no trades yet"}
@@ -172,7 +195,7 @@ function SignalRow({ a }: { a: AxisRow }) {
               </div>
             );
           })}
-          {!AXIS_PAUSED[a.name] && <EvidenceLine axis={a.name} />}
+          {!AXIS_PAUSED[a.name] && !exitsShown[0].shadowOf && <EvidenceLine axis={a.name} />}
         </div>
       )}
       {preset ? (

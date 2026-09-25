@@ -3,7 +3,7 @@
 // Run: node --test workers/nexus-lab-api/axisbt.exit.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { gradeEventExit, scoreExit, scoreExitVariants, tradeableExitTrades, scoreEvents, runScorecard, candlesByHour, hourBucket, EXIT_GRACE_H, EXIT_OOS_CUTOFF_MS } from "./axisbt.mjs";
+import { gradeEventExit, scoreExit, scoreExitVariants, tradeableExitTrades, scoreEvents, runScorecard, candlesByHour, hourBucket, EXIT_GRACE_H, EXIT_OOS_CUTOFF_MS, SHADOW_EXITS } from "./axisbt.mjs";
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 
 const HR = 3600 * 1000;
@@ -154,6 +154,10 @@ test("runScorecard: axes with a trading preset carry the preset's exit grade; th
       assert.equal(a.exit24h.maxHoldHours, 24);
       assert.equal(a.exit.preset, AXIS_EXITS[a.name].preset);
       assert.equal(a.exit.maxHoldHours, AXIS_EXITS[a.name].maxHoldHours);
+    } else if (SHADOW_EXITS[a.name]) {
+      // graded with a preset's exits for comparison — flagged, never a preset exit
+      assert.ok(a.exit && a.exit24h, `${a.name} shadow exit`);
+      assert.equal(a.exit.presetExit, false); assert.equal(a.exit.shadowOf, SHADOW_EXITS[a.name].shadowOf);
     } else { assert.equal(a.exit, null, a.name); assert.equal(a.exit24h, null, a.name); }
   }
   assert.ok(sc.axes.some((a) => a.name === "basis_x_cvd" && a.exit));

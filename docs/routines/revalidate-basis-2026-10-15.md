@@ -96,3 +96,7 @@ Be honest and specific with the numbers. A null or declining result is a valid a
   - basis_dev: PROMISING (R +0.05, n288, NOT stable) · 24h PREDICTIVE +59.2 n230 (vs basis_extreme R +0.15 n329 stable).
   - Sides (last 72h per coin, 9 coins with history): two-sided fired 10 LONG / 11 SHORT; the old rule 20 LONG / 0 SHORT.
     The short side is real. No exit grade on the new axes (no preset trades them).
+- Since Sept 25 the scorecard carries LONG/SHORT splits on every axis (`sides`, `horizons[].bySide`, `exit.bySide`), and
+  basis_dev_x_cvd has a SHADOW exit grade (`exit`/`exit24h` with `shadowOf:"basis-cvd-stack"`). Report, for basis_x_cvd vs
+  basis_dev_x_cvd: shorts' R vs longs' R, and the 12h/24h exit grades + `oos` side by side. A candidate needs its SHORTS
+  to hold up on their own, not just be carried by the longs.
