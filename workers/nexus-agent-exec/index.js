@@ -1100,11 +1100,12 @@ async function monitorPosition(address, state, config, env, cache) {
 }
 
 // Insert a closed-trade (or scale-out slice) row into Supabase agent_trades.
-// Tries the full auditable row (order IDs + ladder parent_id/exit_seq); if those
-// optional columns aren't migrated yet PostgREST 400s, so it retries with just the
-// core columns and logging never breaks. SERVICE key = least privilege (anon RLS
-// blocks forged inserts). Shared by closePosition + partialClose so the write path
-// (and its fallback) can't drift.
+// Writes the full auditable row (order IDs + ladder parent_id/exit_seq + strategy +
+// source_leader — all six columns verified present 2026-09-25). If that row is ever
+// rejected, it retries with just the core columns so a real trade never vanishes from
+// the ledger/leaderboard — but that row is UNAUDITABLE (no order IDs), so it logs an
+// error, not a warning. SERVICE key = least privilege (anon RLS blocks forged
+// inserts). Shared by closePosition + partialClose so the write path can't drift.
 async function logAgentTrade(address, env, auditable) {
   const writeKey = env.SUPABASE_SERVICE_KEY || env.SUPABASE_ANON_KEY;
   const insert = async (payload) => fetch(`${env.SUPABASE_URL}/rest/v1/agent_trades`, {
@@ -1118,7 +1119,7 @@ async function logAgentTrade(address, env, auditable) {
     let res = await insert({ wallet_address: address, ...auditable });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
-      console.warn(`[exec] ${address.slice(0, 10)} auditable insert failed (${res.status}) — retrying core row:`, detail.slice(0, 120));
+      console.error(`[exec] ${address.slice(0, 10)} auditable insert REJECTED (${res.status}) — logging core row WITHOUT order IDs:`, detail.slice(0, 200));
       res = await insert({ wallet_address: address, ...core });
       if (!res.ok) console.error(`[exec] ${address.slice(0, 10)} core insert also failed (${res.status})`);
     }
