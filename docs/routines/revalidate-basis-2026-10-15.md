@@ -100,3 +100,11 @@ Be honest and specific with the numbers. A null or declining result is a valid a
   basis_dev_x_cvd has a SHADOW exit grade (`exit`/`exit24h` with `shadowOf:"basis-cvd-stack"`). Report, for basis_x_cvd vs
   basis_dev_x_cvd: shorts' R vs longs' R, and the 12h/24h exit grades + `oos` side by side. A candidate needs its SHORTS
   to hold up on their own, not just be carried by the longs.
+- FIRST PER-SIDE READ (Sept 25 22:41 UTC):
+  - basis_dev_x_cvd: longs R +0.50 (n18, 56%) · shorts R −0.04 (n14, 36%). The pooled PREDICTIVE is carried by the longs.
+    Shadow exit 12h: L +18.4 n14 · S +27.3 n10 · 24h: L +120.1 n14 · S −75.6 n11.
+  - basis_dev: longs R +0.19 (n139) · shorts R −0.07 (n149). Shorts negative at 4h/12h, ~flat at 24h (+6.0bps n119).
+  - basis_extreme: 1 short in 437 events (R −1). basis_x_cvd: 0 shorts in 37.
+  - Read: on this 33d window the SHORT side of basis has no edge; every basis "edge" so far is long-side. Unresolved:
+    how much of the long edge is just the window's upward drift (no unconditional drift baseline on the board yet).
+    Oct-15 check: if shorts are still ≤0 R on ≥30 samples, the two-sided rule is not a candidate — say so plainly.
