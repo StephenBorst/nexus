@@ -410,6 +410,13 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   **First live exit read (Sept 25):** basis_x_cvd via preset exit = PROMISING +3.2bps net, 48%, n33, NOT stable, exits
   TP4/SL6/TIMEOUT23 · basis_extreme via preset exit = **NOISE −8.3bps net, n299**, TP50/SL66/TIMEOUT183. The 12h cap,
   not the TP, decides most trades — the mismatch bites.
+  **+ `exit24h` (same day):** a 24h-hold copy of the preset exit (same TP/SL) graded BESIDE the 12h `exit`. Both now
+  graded as the agent trades: `tradeableExitTrades` = ONE position per market (skip events while open), a SHARED
+  entry window (entries ≥24h before each market's last candle, so neither variant sees trades the other can't), and
+  an **`oos`** sub-block = trades entered after `EXIT_OOS_CUTOFF_MS` (2026-09-25 04:00 UTC) — 24h was PICKED from this
+  data, so its in-sample grade flatters it; oos is the honest test. Cache `axisbt:v3`. Baseline (07:26 UTC):
+  basis_x_cvd 12h PROMISING +11.9bps n28 not stable (TIMEOUT 19/28) vs **24h PREDICTIVE +57.8bps 63% n27 stable**
+  (TP11/SL8/TIME8); basis_extreme 12h NOISE −10.0 n148 vs 24h PROMISING +6.4 n127 not stable. Decide at Oct-15 on oos.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
   and `.set()`-ing only rows WITH a side → **the LAST row in a rounded hour that has a side wins**; a later neutral row
   doesn't erase it. The first CVD gate used `.find` (FIRST row) — it diverged whenever a cron wrote twice in one
