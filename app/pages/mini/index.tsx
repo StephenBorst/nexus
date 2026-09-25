@@ -20,9 +20,10 @@ import { bareTicker } from "@/utils/utils";
 
 // The flagship "Proven Edge" preset — single source of truth with the Lab, so the
 // mini-app one-tap deploy can never drift from the web preset.
-// The one-tap deploy uses the FEATURED strategy — the regime-gated invert (the first
-// config to clear our cross-market walk-forward), not the disproven funding fade.
-const LEAD_STRATEGY = STRATEGY_PRESETS.find((p) => p.id === "regime-gated-invert")?.config ?? {};
+// The one-tap deploy uses the CURRENT LEAD — the Basis × CVD Stack, the same preset the
+// /proof hero loads (FeaturedLead). /bankr/activate REPLACES the config ({...defaults, ...config}),
+// so filters left by an older Regime-Gated Invert deploy can't ride along.
+const LEAD_STRATEGY = STRATEGY_PRESETS.find((p) => p.id === "basis-cvd-stack")?.config ?? {};
 
 const bg = "#0a0a0b";
 // Color law (monochrome editorial rebrand): accent = bone #ededf0 (CTAs, interaction,
@@ -409,7 +410,7 @@ export default function MiniApp() {
       });
       const d = await r.json();
       if (r.ok && d.ok) {
-        setAgentMsg({ ok: true, text: "✓ Deployed in PAPER. It paper-trades the Regime-Gated Invert. The graded record is in the full terminal." });
+        setAgentMsg({ ok: true, text: "✓ Deployed in PAPER. It paper-trades the Basis × CVD Stack. The graded record is in the full terminal." });
         await loadAgent(s.addr);
       } else {
         setAgentMsg({ ok: false, text: d.hint || d.error || "deploy failed" });
@@ -895,9 +896,9 @@ export default function MiniApp() {
             ) : (
               <>
                 <div style={{ fontSize: 11, color: "#a1a1aa", lineHeight: 1.5 }}>
-                  Try the <span style={{ color: "#e0a458" }}>Regime-Gated Invert</span>. Our best config so far, and still not robust: it beats raw confluence but the cross-market walk-forward comes back net negative. It fades confluence only in high volatility, outside the Asia session. <span style={{ color: "#fff" }}>PAPER only</span>. Watch it build a graded record. No funds, no key.
+                  The current lead: <span style={{ color: "#e0a458" }}>Basis × CVD Stack</span>. It fades an extreme spot-perp basis only when same-hour order flow agrees. Graded PREDICTIVE as a read. Not yet robust as a strategy. <span style={{ color: "#fff" }}>PAPER only</span>. No funds. No key.
                 </div>
-                <button onClick={deployPaperAgent} disabled={agentBusy} style={{ background: "#2a1a00", color: "#fbbf24", border: "1px solid #4a3a00", borderRadius: 5, padding: "10px 0", fontFamily: mono, fontSize: 11, fontWeight: "bold", cursor: agentBusy ? "wait" : "pointer", letterSpacing: "0.04em", opacity: agentBusy ? 0.6 : 1 }}>{agentBusy ? "DEPLOYING…" : "PAPER-TEST REGIME-GATED INVERT"}</button>
+                <button onClick={deployPaperAgent} disabled={agentBusy} style={{ background: "#2a1a00", color: "#fbbf24", border: "1px solid #4a3a00", borderRadius: 5, padding: "10px 0", fontFamily: mono, fontSize: 11, fontWeight: "bold", cursor: agentBusy ? "wait" : "pointer", letterSpacing: "0.04em", opacity: agentBusy ? 0.6 : 1 }}>{agentBusy ? "DEPLOYING…" : "PAPER-TEST BASIS × CVD STACK"}</button>
               </>
             )}
             {agentMsg && <div style={{ fontSize: 10, color: agentMsg.ok ? green : "#fbbf24", lineHeight: 1.5 }}>{agentMsg.text}</div>}

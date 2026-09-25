@@ -1093,6 +1093,8 @@ into PRO rail. Open call: free-forever BYOK vs gate behind PRO.
   create→distribute→recruit loop = the real fix for thin supply (rest is go-to-market).
 
 ## ⚠️ Settled — do NOT re-raise as "next moves" (borst, 2026-09-24)
+- **Farcaster mini app (`/mini`) is PARKED (borst, 2026-09-25).** Don't work on it, audit it or pitch it until borst
+  says so. Last change: its one-tap PAPER deploy loads the Basis × CVD Stack (same as the /proof lead).
 - **Cold-start / feed liveness** is behind us — don't pitch it as the #1 risk or a next move.
 - **Fabric in-app buy is LIVE and tested** — don't pitch "run a small live test" again.
 - Current focus = **the engine and its signals** (basis stack, scoreboard → one-click strategies, mobile polish).
