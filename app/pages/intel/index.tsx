@@ -191,10 +191,10 @@ const signalColor = (sig: string) =>
 
 function assetDescription(a: HLAsset): string {
   const ratio = a.volume > 0 ? (a.oi / a.volume).toFixed(1) : "N/A";
-  if (a.signal === "CROWDED LONGS")      return `Extreme long crowding — high squeeze risk if price reverses`;
-  if (a.signal === "CROWDED SHORTS")     return `Heavy short bias — watch for short squeeze on any rally`;
-  if (a.signal === "HIGH CONCENTRATION") return `${ratio}x OI/vol ratio — low liquidity relative to positions`;
-  if (a.signal === "ELEVATED OI")        return `${ratio}x OI/vol ratio — positions building vs volume`;
+  if (a.signal === "CROWDED LONGS")      return `Extreme long crowding. Squeeze risk if price reverses.`;
+  if (a.signal === "CROWDED SHORTS")     return `Heavy short bias. Watch for a squeeze on any rally.`;
+  if (a.signal === "HIGH CONCENTRATION") return `${ratio}x OI/vol ratio. Thin liquidity vs positions.`;
+  if (a.signal === "ELEVATED OI")        return `${ratio}x OI/vol ratio. Positions building vs volume.`;
   return `Neutral positioning at ${fmtOI(a.oi)} OI`;
 }
 
@@ -220,10 +220,10 @@ function alertMetric(a: HLAsset): { n: string; label: string } {
 }
 function alertRead(a: HLAsset): string {
   const ratio = a.volume > 0 ? (a.oi / a.volume).toFixed(1) : "—";
-  if (a.signal === "CROWDED LONGS")      return `Almost everyone is long ${a.name}. If price turns, those longs get forced out fast — a sharp drop. Trail your stops if you're long, or watch for the flush.`;
-  if (a.signal === "CROWDED SHORTS")     return `The crowd is short ${a.name}. Any rally can force those shorts to buy back — fuel for a squeeze up. Careful pressing shorts here.`;
-  if (a.signal === "HIGH CONCENTRATION") return `Big positions, little trading (${ratio}× open interest vs 24h volume). Moves here can be violent and gappy — size down.`;
-  if (a.signal === "ELEVATED OI")        return `Positions are building faster than volume (${ratio}× OI vs 24h volume) — watch for a resolution.`;
+  if (a.signal === "CROWDED LONGS")      return `Almost everyone is long ${a.name}. If price turns, those longs get forced out fast. Trail stops if you're long, or watch for the flush.`;
+  if (a.signal === "CROWDED SHORTS")     return `The crowd is short ${a.name}. Any rally can force those shorts to buy back. Careful pressing shorts here.`;
+  if (a.signal === "HIGH CONCENTRATION") return `Big positions, little trading (${ratio}× open interest vs 24h volume). Moves here can gap. Size down.`;
+  if (a.signal === "ELEVATED OI")        return `Positions are building faster than volume (${ratio}× OI vs 24h volume). Watch for a resolution.`;
   return assetDescription(a);
 }
 
@@ -444,7 +444,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
           <span style={{ color: BRIGHT, fontWeight: 700, width: "40px" }}>{sym}</span>
           <span style={{ color: sigC, fontSize: "11px" }}>{sig}</span>
           <button onClick={() => deployToAgent({ symbols: [`PERP_${sym}_USDC`] }, `the ${sym} funding read`, undefined, navigate)}
-            title={`Set the trading agent to watch ${sym} — the same funding/OI edge it trades on`}
+            title={`Set the agent to watch ${sym}. It trades your rules.`}
             style={{ marginLeft: "auto", background: "none", border: "1px solid #33333a", color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: "9px", letterSpacing: "0.05em", padding: "3px 8px", borderRadius: "3px", cursor: "pointer" }}>
             ⚡ AGENT
           </button>
@@ -512,7 +512,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
           </div>
           {/* Plain translation — what the tape means for the trade you're about to take. */}
           <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: "13px", lineHeight: 1.55, color: DIM, padding: "9px 11px", background: "rgba(237,237,240,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px" }}>
-            <b style={{ color: BRIGHT }}>{regime.score >= 54 ? "Risk-on tape — the wind is behind longs." : regime.score <= 46 ? "Risk-off tape — longs are swimming upstream." : "Mixed tape — no clear edge either way."}</b>{" "}
+            <b style={{ color: BRIGHT }}>{regime.score >= 54 ? "Risk-on tape. The wind is behind longs." : regime.score <= 46 ? "Risk-off tape. Longs swim upstream." : "Mixed tape. No clear edge either way."}</b>{" "}
             {regime.description}
           </div>
         </div>
@@ -578,7 +578,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
       {signals.length > 0 && (
         <div style={{ marginBottom: "10px" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "2px 0 10px" }}>
-            <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontSize: "12px", fontWeight: 700, letterSpacing: "0.12em" }}>◆ ALERTS — WORTH A LOOK</span>
+            <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontSize: "12px", fontWeight: 700, letterSpacing: "0.12em" }}>◆ ALERTS · WORTH A LOOK</span>
             <span style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px" }}>{signals.length}</span>
             <span style={{ flex: 1, height: 1, background: C.border }} />
           </div>
@@ -634,9 +634,9 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
               {majors.map(({ sym, f, data }) => {
                 const pct = Math.max(0, Math.min(100, f.pct));
                 const stretched = f.pct >= 85 || f.pct <= 15;
-                const cap = f.pct >= 85 ? "unusually high — the crowd is stretched long"
-                  : f.pct <= 15 ? "unusually low — stretched short"
-                  : "normal — nothing stretched here";
+                const cap = f.pct >= 85 ? "unusually high · the crowd is stretched long"
+                  : f.pct <= 15 ? "unusually low · stretched short"
+                  : "normal · nothing stretched";
                 return (
                   <div key={sym} style={{ border: `1px solid ${C.border}`, borderRadius: "10px", padding: "14px", background: C.surfaceAlt }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -672,31 +672,31 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
 
         let tensionColor = YELLOW;
         let tensionLabel = "ALIGNED";
-        let tensionMsg   = "Your exposure aligns with the current market regime. Stay disciplined.";
+        let tensionMsg   = "Your exposure aligns with the current regime.";
 
         if (regimeBearish && youLong) {
           tensionColor = RED;
-          tensionLabel = "RISK — TAPE BEARISH, YOU ARE LONG";
+          tensionLabel = "RISK · TAPE BEARISH, YOU ARE LONG";
           tensionMsg   = `Regime score ${regScore} signals bearish conditions. Your portfolio is ${netLong}% long. Tighten stops or reduce exposure.`;
         } else if (regimeBullish && youShort) {
           tensionColor = RED;
-          tensionLabel = "RISK — TAPE BULLISH, YOU ARE SHORT";
+          tensionLabel = "RISK · TAPE BULLISH, YOU ARE SHORT";
           tensionMsg   = `Regime score ${regScore} signals bullish conditions. Your portfolio is ${netShort}% short. Watch for forced unwind.`;
         } else if (crowdedLong && youLong && netLong >= 65) {
           tensionColor = YELLOW;
           tensionLabel = "CAUTION — CROWDED SIDE";
-          tensionMsg   = `You are ${netLong}% long and the market signal shows crowded longs. Squeeze risk elevated if price reverses.`;
+          tensionMsg   = `You are ${netLong}% long and the market signal shows crowded longs. Squeeze risk if price reverses.`;
         } else if (crowdedShort && youShort && netLong <= 35) {
           tensionColor = YELLOW;
           tensionLabel = "CAUTION — CROWDED SIDE";
-          tensionMsg   = `You are ${netShort}% short and the market signal shows crowded shorts. Upside unwind risk if price rips.`;
+          tensionMsg   = `You are ${netShort}% short and the market signal shows crowded shorts. Unwind risk if price rips.`;
         } else if (regimeBullish && youLong) {
           tensionColor = GREEN;
-          tensionLabel = "ALIGNED — TAPE CONFIRMS LONG BIAS";
+          tensionLabel = "ALIGNED · TAPE CONFIRMS LONG BIAS";
           tensionMsg   = `Regime score ${regScore} supports bullish positioning. Your ${netLong}% long exposure is with the trend.`;
         } else if (regimeBearish && youShort) {
           tensionColor = GREEN;
-          tensionLabel = "ALIGNED — TAPE CONFIRMS SHORT BIAS";
+          tensionLabel = "ALIGNED · TAPE CONFIRMS SHORT BIAS";
           tensionMsg   = `Regime score ${regScore} supports bearish positioning. Your ${netShort}% short exposure is with the trend.`;
         }
 
@@ -759,7 +759,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
 
         {/* ── Derivatives Intelligence ──────────────────────── */}
         <Card>
-          <SectionTitle>DERIVATIVES INTELLIGENCE — ORDERLY NETWORK</SectionTitle>
+          <SectionTitle>DERIVATIVES INTELLIGENCE · ORDERLY NETWORK</SectionTitle>
 
           {renderDeriv("BTC", btcD, lsRatios["BTC"] ?? null)}
           {renderDeriv("ETH", ethD, lsRatios["ETH"] ?? null)}
@@ -912,9 +912,9 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
             const longPct  = ls !== null ? Math.min(0.92, ls / (ls + 1)) : 0.5;
             const shortPct = 1 - longPct;
             const desc =
-              status === "LONG FLUSH"    ? "Longs dominant — elevated squeeze risk on reversal" :
-              status === "SHORT SQUEEZE" ? "Shorts dominant — watch for violent upside unwind"  :
-              status === "BALANCED"      ? "Positioning balanced — no clear crowding signal"    : "Fetching ratio…";
+              status === "LONG FLUSH"    ? "Longs dominant. Squeeze risk on reversal." :
+              status === "SHORT SQUEEZE" ? "Shorts dominant. Watch for an upside unwind."  :
+              status === "BALANCED"      ? "Positioning balanced. No crowding signal."    : "Fetching ratio…";
             return (
               <div key={sym} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", border: `1px solid ${ls === null ? "rgba(255,255,255,0.05)" : (ls > 1.35 || ls < 0.75) ? "rgba(251,191,36,0.18)" : "rgba(255,255,255,0.06)"}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>

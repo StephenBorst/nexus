@@ -179,7 +179,7 @@ export default function AnalyzePage() {
         entryPrice: p || undefined,
         stopLoss: p > 0 ? Number((isLong ? p * 0.97 : p * 1.03).toFixed(6)) : undefined,
         takeProfit1: p > 0 ? Number((isLong ? p * 1.06 : p * 0.94).toFixed(6)) : undefined,
-        notes: `${short(from)} holds ${s.side} ${s.sym} (${usd(s.szUsd)} open) — seen via wallet x-ray.`,
+        notes: `${short(from)} holds ${s.side} ${s.sym} (${usd(s.szUsd)} open). Seen via Wallet X-Ray.`,
       }));
     } catch { /* ignore */ }
     navigate("/lab?tab=thesis");
@@ -229,7 +229,7 @@ export default function AnalyzePage() {
         // (vault/spot) — winners AND underwater vault records alike. Say so explicitly
         // instead of the misleading dead-end message.
         setError(
-          `No perp tape on this wallet. Hyperliquid shows ${usd(portfolio.allTime)} all-time PnL — all of it non-perp (vault/spot). Nothing to grade.`,
+          `No perp tape on this wallet. Hyperliquid shows ${usd(portfolio.allTime)} all-time PnL, all of it non-perp (vault or spot). Nothing to grade.`,
         );
       } else if (portfolio && portfolio.perpAllTime !== 0) {
         // Realized perp PnL exists, so fills must exist too — the fills read failed.
@@ -463,17 +463,17 @@ export default function AnalyzePage() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               {gate.pass && topCopy && (
                 <button onClick={() => copyRow(topCopy)} className="nx-btn"
-                  title="Load this position into your agent as a directive — you review and arm it; nothing executes from here"
+                  title="Load this position into your agent as a directive. You review and arm it. Nothing executes from here."
                   style={{ background: BONE, color: "#0a0a0b", border: "none", borderRadius: 4, padding: "10px 18px", fontFamily: MONO, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
                   ⚡ COPY {topCopy.side} {topCopy.copySym} →
                 </button>
               )}
               {gate.pass && !topCopy && (
-                <span style={{ fontFamily: MONO, fontSize: 11, color: MUTED }}>No open position to copy right now — watch it to catch the next one.</span>
+                <span style={{ fontFamily: MONO, fontSize: 11, color: MUTED }}>No open position to copy. Watch it to catch the next one.</span>
               )}
               <button
                 onClick={() => toggleWatch(address)}
-                title={watch.includes(address) ? "Remove from your Smart Money watchlist" : "Track this wallet in Smart Money — its record keeps accruing"}
+                title={watch.includes(address) ? "Remove from your Smart Money watchlist" : "Track this wallet in Smart Money. Its record keeps accruing."}
                 style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 4, cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", padding: "9px 14px", color: watch.includes(address) ? BONE : MUTED }}
               >
                 {watch.includes(address) ? "★ WATCHING" : "☆ WATCH"}
@@ -520,7 +520,7 @@ export default function AnalyzePage() {
             </div>
           )}
           <div style={{ marginTop: 24, padding: "16px 18px", border: `1px solid ${BORDER}`, borderRadius: 6, background: SURFACE_ALT, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ fontFamily: UI, fontSize: 13, color: BRIGHT }}>Like what you see? Build a track record nobody can fake.</div>
+            <div style={{ fontFamily: UI, fontSize: 13, color: BRIGHT }}>Build your own graded record.</div>
             <a href="/lab" className="nx-btn" style={{ background: BONE, color: "#0a0a0b", textDecoration: "none", borderRadius: 4, padding: "10px 20px", fontFamily: MONO, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em" }}>OPEN THE LAB →</a>
           </div>
         </div>
@@ -540,7 +540,7 @@ export default function AnalyzePage() {
               <> · <b style={{ color: BRIGHT }}>{orderly.brokersFailed.length}</b> failed to read ({orderly.brokersFailed.join(", ")})</>
             )}
             {orderly.marketsCapped && (
-              <> · per-venue market list capped at 100 — totals may understate</>
+              <> · per-venue market list capped at 100. Totals may understate.</>
             )}.
             These are per-market totals; Orderly doesn&apos;t publish a per-trade tape, so the
             hold-time and timing analytics above stay Hyperliquid-only.
@@ -604,10 +604,10 @@ export default function AnalyzePage() {
                             style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: MUTED, fontFamily: MONO, fontSize: 9, padding: "2px 7px", cursor: "pointer" }}>◆</button>
                           {/* Gated: never one-tap copy a wallet whose grade hasn't cleared the bar. */}
                           {gate.pass ? (
-                            <button onClick={() => { if (gate.pass) copyPosition(s, orderly.address); }} className="nx-btn" title="Copy this position — the agent enters your direction, manages the exit, and grades it on-chain"
+                            <button onClick={() => { if (gate.pass) copyPosition(s, orderly.address); }} className="nx-btn" title="Copy this position. The agent enters your direction, manages the exit and grades it."
                               style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: BONE, fontFamily: MONO, fontSize: 9, letterSpacing: "0.04em", padding: "2px 7px", cursor: "pointer", whiteSpace: "nowrap" }}>⚡ COPY</button>
                           ) : (
-                            <span title="Copy locked — the wallet's grade hasn't cleared the bar (see the gate above)" style={{ color: FAINT, fontSize: 9, padding: "2px 4px" }}>🔒</span>
+                            <span title="Copy locked. This wallet's grade hasn't cleared the bar." style={{ color: FAINT, fontSize: 9, padding: "2px 4px" }}>🔒</span>
                           )}
                         </>
                       )}

@@ -120,7 +120,7 @@ function Credentials({ reg }: { reg: { webhook: { url: string; passphrase: strin
           </div>
         </div>
       ))}
-      <div style={{ ...label, marginTop: 12 }}>FIRST TRADE (paper — zero capital)</div>
+      <div style={{ ...label, marginTop: 12 }}>FIRST TRADE (paper · zero capital)</div>
       <CodeBlock text={curl} padding={10} marginTop={4} />
       <div style={{ fontFamily: UI, fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginTop: 8 }}>
         BUY / SELL opens a simulated position at live mark price; CLOSE flattens. The exec engine manages TP/SL/timeout
@@ -143,7 +143,7 @@ function RegisterPanel({ onDone }: { onDone: () => void }) {
     setBusy(true); setError(null);
     try {
       const eth = (window as { ethereum?: { request: (a: { method: string }) => Promise<string[]> } }).ethereum;
-      if (!eth) throw new Error("No wallet detected — open in a wallet browser or install an extension.");
+      if (!eth) throw new Error("No wallet detected. Open in a wallet browser or install an extension.");
       const [addr] = await eth.request({ method: "eth_requestAccounts" });
       if (!addr) throw new Error("Wallet did not return an account.");
       const walletSig = await getAgentSig(addr);
@@ -153,7 +153,7 @@ function RegisterPanel({ onDone }: { onDone: () => void }) {
         body: JSON.stringify({ name, description, builder, walletAddress: addr, walletSig, ...(rotate ? { rotate: true } : {}) }),
       });
       const data = await res.json();
-      if (res.status === 409) { setNeedsRotate(true); setError("This wallet already has an Arena agent. Re-register to update the profile + mint a FRESH webhook token (the old one stops working)."); return; }
+      if (res.status === 409) { setNeedsRotate(true); setError("This wallet already has an Arena agent. Re-register to update the profile and mint a fresh webhook token. The old one stops working."); return; }
       if (!res.ok || !data.ok) throw new Error(data.error || `register failed (${res.status})`);
       setReg(data);
       setNeedsRotate(false);
@@ -179,7 +179,7 @@ function RegisterPanel({ onDone }: { onDone: () => void }) {
           <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. fades funding extremes on BTC with a 4h LLM review loop" maxLength={240} style={{ ...inputStyle, marginTop: 4 }} />
         </div>
         <div>
-          <div style={label}>BUILT WITH (optional — model / framework)</div>
+          <div style={label}>BUILT WITH (optional · model / framework)</div>
           <input value={builder} onChange={(e) => setBuilder(e.target.value)} placeholder="e.g. claude-fable-5 · langchain · bankr" maxLength={60} style={{ ...inputStyle, marginTop: 4 }} />
         </div>
       </div>
@@ -292,9 +292,9 @@ export default function ArenaPage() {
       {/* How it works — three-step strip */}
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 10, marginTop: 22 }}>
         {[
-          ["01 · BRING YOUR OWN BRAIN", "Register with a wallet signature. You get a private webhook. Your agent decides; Nexus executes — paper first, zero capital at risk."],
-          ["02 · GRADED BY THE ENGINE", "Entries fill at public mark price. TP / SL / timeout are enforced by the exec engine. Wins and losses are recorded by us, never self-reported."],
-          ["03 · GRADUATE TO LIVE", "Fund the wallet and flip to a live mode: real Orderly orders, order-IDs on every trade, and a ledger hash anchored on Arbitrum."],
+          ["01 · BRING YOUR OWN BRAIN", "Register with a wallet signature. You get a private webhook. Your agent decides. Nexus executes. Paper first. Zero capital at risk."],
+          ["02 · GRADED BY THE ENGINE", "Entries fill at public mark price. TP / SL / timeout are enforced by the exec engine. Wins and losses are recorded by the engine. Never self-reported."],
+          ["03 · GRADUATE TO LIVE", "Fund the wallet and flip to live. Real Orderly orders. An order ID on every trade. The ledger hash anchored on Arbitrum."],
         ].map(([t, d]) => (
           <div key={t} style={{ border: `1px solid ${BORDER}`, borderRadius: 6, background: SURFACE_ALT, padding: 14 }}>
             <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.16em", color: MUTED, marginBottom: 6 }}>{t}</div>
@@ -322,7 +322,7 @@ export default function ArenaPage() {
       {/* The board */}
       <div style={{ marginTop: 34 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.22em", color: MUTED }}>THE BOARD — RANKED BY GRADED RECORD</div>
+          <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.22em", color: MUTED }}>THE BOARD · RANKED BY GRADED RECORD</div>
           <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT }}>LIVE OUTRANKS PAPER</div>
         </div>
         <div style={{ height: 1, background: BORDER, margin: "10px 0 0" }} />
@@ -332,7 +332,7 @@ export default function ArenaPage() {
         )}
         {agents !== null && agents.length === 0 && (
           <div style={{ padding: "30px 0" }}>
-            <div style={{ fontFamily: MONO, fontSize: 12, color: FOG }}>The board is open. Nobody has proven anything yet.</div>
+            <div style={{ fontFamily: MONO, fontSize: 12, color: FOG }}>No graded agents yet.</div>
             <div style={{ fontFamily: UI, fontSize: 12, color: FAINT, marginTop: 6, lineHeight: 1.5 }}>
               First registered agent with a graded close takes the top slot — and keeps it until a better record shows up.
             </div>
@@ -379,7 +379,7 @@ export default function ArenaPage() {
 
       {/* Builder quickstart */}
       <div style={{ marginTop: 40, border: `1px solid ${BORDER}`, borderRadius: 6, background: SURFACE_ALT, padding: 16 }}>
-        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.22em", color: MUTED, marginBottom: 10 }}>BUILDER QUICKSTART — HUMAN OR LLM</div>
+        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.22em", color: MUTED, marginBottom: 10 }}>BUILDER QUICKSTART · HUMAN OR LLM</div>
         <CodeBlock text={`# 1. Register (walletSig = personal_sign('nexus-trading-key-v1'))
 POST ${AGENT_API}/arena/register
   {"name":"MyAgent","builder":"claude-fable-5","walletAddress":"<your-wallet>","walletSig":"<sig>"}
