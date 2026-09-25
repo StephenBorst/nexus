@@ -124,6 +124,9 @@ export function AgentBacktestCard({
               )}
               <TestedAs label={backtest.strategyLabel} />
               <GatesNote skipped={backtest.gatesSkipped ?? backtestGateSupport(config).skipped} />
+              {backtest.portfolio && (
+                <div style={{ ...agentLabelStyle, fontSize: 8.5, color: "#52525b", marginBottom: 4 }}>EACH MARKET ON ITS OWN</div>
+              )}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12 }}>
                 {[
                   { label: `NET P&L (${backtest.basisWindowDays ?? backtest.days ?? 60}d)`, value: `${backtest.combined.netUsd >= 0 ? "+" : ""}$${backtest.combined.netUsd}`, color: backtest.combined.netUsd >= 0 ? "#3ecf8e" : "#f7525f" },
@@ -136,6 +139,36 @@ export function AgentBacktestCard({
                   </div>
                 ))}
               </div>
+              {backtest.portfolio && (() => {
+                // The same markets under the agent's real rules: one position at a time across the
+                // watchlist, the brain's single best signal per tick, the daily trade/loss caps.
+                const p = backtest.portfolio;
+                const b = p.blocked || {};
+                const why = [
+                  b.busy ? `${b.busy} while already in a position` : null,
+                  b.otherMarket ? `${b.otherMarket} lost to another market the same hour` : null,
+                  b.dailyCap ? `${b.dailyCap} over the daily cap` : null,
+                  b.cooldown ? `${b.cooldown} in the cooldown` : null,
+                ].filter(Boolean);
+                const skipped = (b.busy || 0) + (b.otherMarket || 0) + (b.dailyCap || 0) + (b.cooldown || 0);
+                return (
+                  <div style={{ marginTop: 12, padding: "8px 10px", border: "1px solid #33333a", borderRadius: 4, background: "#0f0f11" }}
+                    title="Replayed on one timeline the way the exec runs it: one position at a time across all markets, the brain's single best signal per tick (ties → first in your list), your daily trade and loss caps. Same entry and exit code as the numbers above.">
+                    <div style={{ ...agentLabelStyle, fontSize: 8.5, color: "#ededf0", marginBottom: 6 }}>AS THE AGENT TRADES IT · one position at a time · daily caps</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 16px", fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>
+                      <span style={{ color: p.netUsd >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: 600 }}>{p.netUsd >= 0 ? "+" : ""}${p.netUsd}</span>
+                      <span style={{ color: "#d4d4d8" }}>{p.winRate}% win</span>
+                      <span style={{ color: "#d4d4d8" }}>{p.trades} trades</span>
+                      <span style={{ color: "#71717a" }}>PF {p.profitFactor}</span>
+                    </div>
+                    <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 10, color: "#71717a", marginTop: 5, lineHeight: 1.5 }}>
+                      {skipped
+                        ? <>Couldn't take {skipped} signal{skipped === 1 ? "" : "s"}: {why.join(" · ")}.</>
+                        : <>Every signal was takeable — no overlap between markets in this window.</>}
+                    </div>
+                  </div>
+                );
+              })()}
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
                 {backtest.perSymbol.map((s: any) => (
                   <div key={s.symbol} style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", borderTop: "1px solid #232327", paddingTop: 4 }}>

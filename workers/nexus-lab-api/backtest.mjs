@@ -12,7 +12,7 @@
 // is null → CONFLUENCE / OI_ONLY simply don't fire there (no fabricated divergence).
 // MOMENTUM / MEAN_REVERSION / FUNDING_ONLY + the full exit toolkit are always backtestable.
 import { deriveSignal } from "../nexus-agent-brain/logic.mjs";
-import { computePnl, evaluateExit, breakevenArmed, volScaledLevels } from "../nexus-agent-exec/logic.mjs";
+import { computePnl, evaluateExit, breakevenArmed, volScaledLevels, dailyCapBlocked, shouldResetDaily } from "../nexus-agent-exec/logic.mjs";
 import { percentileRank } from "./logic.mjs";
 import { basisFadeFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
@@ -186,6 +186,40 @@ export function stepExit(pos, c, holdMs, config) {
   return null;
 }
 
+// ── The entry decision at bar i, ONE implementation ────────────────────────────
+// What the brain would have decided when bar i closed: the raw inputs (price/OI/funding deltas,
+// session hour, ATR, basis stack) → deriveSignal → optional research entryFilter → vol-scaled
+// levels. Shared by runBacktest (one market) and runPortfolioBacktest (the agent's whole
+// watchlist), so the two replays cannot disagree about WHEN a signal fires — only about which
+// signals the agent is free to take. Returns { direction, confidence, lvl } or null.
+export function entryAt(candles, i, { fundingAt, fundingPctAt = null, oiChangeAt = null, entryFilter = null, basisAt = null }, config) {
+  const c = candles[i], prev = candles[i - 1];
+  if (!c || !prev) return null;
+  const priceChange = (c.c - prev.c) / prev.c;
+  // OI change from the recorded series when available (null → 0, so the OI
+  // rule / CONFLUENCE stays inert exactly where we have no history).
+  const oiChange = oiChangeAt ? (oiChangeAt(c.t) ?? 0) : 0;
+  const raw = { priceChange, oiChange, fundingRate: fundingAt(c.t) || 0, hasPrev: true };
+  if (fundingPctAt && (config.fundingPercentileMin || 0) > 0) raw.fundingPct = fundingPctAt(c.t, raw.fundingRate);
+  // Regime-conditioning inputs (opt-in gates in deriveSignal read these) — computed
+  // with NO lookahead so sim matches the live brain: session from the bar's UTC hour,
+  // ATR% from bars strictly before i.
+  raw.hourUtc = new Date(c.t * 1000).getUTCHours();
+  const atr = atrPctAt(candles, i);
+  if (Number.isFinite(atr)) raw.atrPct = atr;
+  // Basis stack: what the brain would have seen when this bar closed (the entry fills
+  // at c.c). Candles are hourly; the close is the next bar's open (or +1h on the last).
+  if (basisAt) Object.assign(raw, basisAt(((candles[i + 1]?.t) ?? (c.t + 3600)) * 1000));
+  const sig = deriveSignal(raw, config);
+  if (!sig.direction || sig.direction === "NONE" || (sig.confidence ?? 0) < 50) return null;
+  if (entryFilter && !entryFilter(candles, i, sig, config)) return null;
+  // Vol-scaled stops: size the stop to recent ATR at entry (no lookahead),
+  // preserving the configured reward:risk. Falls back to fixed when ATR unavailable.
+  let lvl = null;
+  if (config.volScaledStops && Number.isFinite(atr) && atr > 0) lvl = volScaledLevels(atr, config);
+  return { direction: sig.direction, confidence: sig.confidence ?? 0, lvl };
+}
+
 // candles: [{ t(sec), o, h, l, c }] ascending. fundingAt(tsSec) → funding rate
 // (decimal) at/before ts. oiChangeAt(tsSec) → fractional OI change (or null) —
 // pass it to make CONFLUENCE/OI_ONLY testable; omit for funding/price-only modes.
@@ -216,39 +250,83 @@ export function runBacktest(candles, fundingAt, config, fundingPctAt = null, oiC
       continue;
     }
     if (!pos && (i - lastExitIdx) > cooldownBars) {
-      const priceChange = (c.c - prev.c) / prev.c;
-      // OI change from the recorded series when available (null → 0, so the OI
-      // rule / CONFLUENCE stays inert exactly where we have no history).
-      const oiChange = oiChangeAt ? (oiChangeAt(c.t) ?? 0) : 0;
-      const raw = { priceChange, oiChange, fundingRate: fundingAt(c.t) || 0, hasPrev: true };
-      if (fundingPctAt && (config.fundingPercentileMin || 0) > 0) raw.fundingPct = fundingPctAt(c.t, raw.fundingRate);
-      // Regime-conditioning inputs (opt-in gates in deriveSignal read these) — computed
-      // with NO lookahead so sim matches the live brain: session from the bar's UTC hour,
-      // ATR% from bars strictly before i.
-      raw.hourUtc = new Date(c.t * 1000).getUTCHours();
-      const atr = atrPctAt(candles, i);
-      if (Number.isFinite(atr)) raw.atrPct = atr;
-      // Basis stack: what the brain would have seen when this bar closed (the entry fills
-      // at c.c). Candles are hourly; the close is the next bar's open (or +1h on the last).
-      if (basisAt) Object.assign(raw, basisAt(((candles[i + 1]?.t) ?? (c.t + 3600)) * 1000));
-      const sig = deriveSignal(raw, config);
-      if (sig.direction && sig.direction !== "NONE" && (sig.confidence ?? 0) >= 50
-          && (!entryFilter || entryFilter(candles, i, sig, config))) {
-        // Vol-scaled stops: size the stop to recent ATR at entry (no lookahead),
-        // preserving the configured reward:risk. Falls back to fixed when ATR unavailable.
-        let lvl = null;
-        if (config.volScaledStops) {
-          const atrPct = atrPctAt(candles, i);
-          if (Number.isFinite(atrPct) && atrPct > 0) lvl = volScaledLevels(atrPct, config);
-        }
-        pos = openTrade(sig.direction, c.c, c.t, lvl);
-      }
+      const e = entryAt(candles, i, { fundingAt, fundingPctAt, oiChangeAt, entryFilter, basisAt }, config);
+      if (e) pos = openTrade(e.direction, c.c, c.t, e.lvl);
     }
   }
   // Attach the per-trade detail (entryT + %) so a walk-forward validator can bucket
   // REAL trades by entry time — no fold-boundary artifacts. Additive; existing callers
   // read the summary fields and ignore _trades.
   return { ...aggregate(trades, config), _trades: trades };
+}
+
+// ── PORTFOLIO replay — the backtest of what the AGENT actually does ─────────────
+// runBacktest replays each market on its own, as if the agent could hold BTC, ETH and SOL at
+// once. It can't: the exec holds ONE position at a time across the whole watchlist, the brain
+// hands each wallet only its single best signal per tick (highest confidence; ties go to the
+// first symbol in config.symbols), and the daily trade/loss caps gate every entry. This walks
+// every market on ONE merged hourly timeline under exactly those rules — entries from the
+// shared entryAt, exits from the shared stepExit, caps from the exec's own dailyCapBlocked /
+// shouldResetDaily — so the number printed is the number the agent could have made.
+// markets: [{ symbol, candles, feeds }] (feeds as entryAt takes them). Returns aggregate() +
+// perSymbol + `blocked` (signals the per-market replay would take that the agent can't).
+export function runPortfolioBacktest(markets, config) {
+  const order = (config.symbols && config.symbols.length ? config.symbols : markets.map((m) => m.symbol));
+  const mk = markets
+    .filter((m) => Array.isArray(m.candles) && m.candles.length > 1)
+    .map((m) => ({ ...m, idx: new Map(m.candles.map((c, i) => [c.t, i])), rank: order.indexOf(m.symbol) < 0 ? 999 : order.indexOf(m.symbol) }))
+    .sort((a, b) => a.rank - b.rank);
+  const times = [...new Set(mk.flatMap((m) => m.candles.map((c) => c.t)))].sort((a, b) => a - b);
+  const cooldownBars = Number.isFinite(config.cooldownBars) ? config.cooldownBars : 1;
+  const notional = (config.capitalPerTrade || 50) * (config.leverage || 1);
+  const feePct = ((config.feeBps || 0) / 100) * 2;
+  const trades = [];
+  const blocked = { busy: 0, otherMarket: 0, dailyCap: 0, cooldown: 0 };
+  let pos = null, lastExitT = -Infinity;
+  const day = { trades_today: 0, daily_pnl: 0, last_reset: times.length ? times[0] * 1000 : 0 };
+
+  for (const t of times) {
+    if (shouldResetDaily(day.last_reset, t * 1000)) { day.trades_today = 0; day.daily_pnl = 0; day.last_reset = t * 1000; }
+    if (pos) {
+      const i = pos.m.idx.get(t);
+      if (i != null) {
+        const hit = stepExit(pos, pos.m.candles[i], (t - pos.entryT) * 1000, config);
+        if (hit) {
+          const pnlPct = closedPnlPct(pos, hit.px);
+          trades.push({ symbol: pos.m.symbol, direction: pos.direction, entry: pos.entry, exit: hit.px, reason: hit.reason, pnlPct, holdH: (t - pos.entryT) / 3600, entryT: pos.entryT });
+          day.daily_pnl += ((pnlPct - feePct) / 100) * notional;
+          pos = null; lastExitT = t;
+          continue; // no re-entry on the exit bar (same as runBacktest)
+        }
+      }
+    }
+    // Every market's signal at this bar, in watchlist order.
+    const sigs = [];
+    for (const m of mk) {
+      const i = m.idx.get(t);
+      if (i == null || i < 1) continue;
+      const e = entryAt(m.candles, i, m.feeds || {}, config);
+      if (e) sigs.push({ m, i, e });
+    }
+    if (!sigs.length) continue;
+    if (pos) { blocked.busy += sigs.length; continue; }
+    if ((t - lastExitT) <= cooldownBars * 3600) { blocked.cooldown += sigs.length; continue; }
+    if (dailyCapBlocked(day, config).blocked) { blocked.dailyCap += sigs.length; continue; }
+    // The brain's pick: highest confidence, first-listed wins a tie.
+    let best = sigs[0];
+    for (const x of sigs) if (x.e.confidence > best.e.confidence) best = x;
+    blocked.otherMarket += sigs.length - 1;
+    const c = best.m.candles[best.i];
+    pos = openPosition(config, best.e.direction, c.c, c.t, best.e.lvl);
+    pos.m = best.m;
+    day.trades_today += 1;
+  }
+
+  const perSymbol = mk.map((m) => {
+    const ts = trades.filter((x) => x.symbol === m.symbol);
+    return { symbol: m.symbol, ...aggregate(ts, config) };
+  });
+  return { ...aggregate(trades, config), perSymbol, blocked, _trades: trades };
 }
 
 export function aggregate(trades, config = {}) {
@@ -426,20 +504,28 @@ export async function runBasisSweep(base, { symbols, days }, flowBySymbol = {}, 
 // recorded oi:hist — pass it to make CONFLUENCE/OI_ONLY testable (the endpoint reads
 // it from KV and gates on maturity first).
 export async function backtestConfig(config, { symbols, days }, oiHistBySymbol = {}, flowBySymbol = {}) {
-  const perSymbol = [];
+  const perSymbol = [], markets = [];
   let net = 0, trades = 0, wins = 0;
+  const cfg = { feeBps: DEFAULT_FEE_BPS, ...config };
   for (const symbol of symbols) {
     const [candles, funding] = await Promise.all([fetchCandles(symbol, days), fetchFundingAt(symbol)]);
     const oiRows = oiHistBySymbol[symbol];
     const oiChangeAt = oiRows && oiRows.length >= 2 ? makeOiChangeAt(oiRows) : null;
-    const r = runBacktest(candles, funding.at, { feeBps: DEFAULT_FEE_BPS, ...config }, makeFundingPctAt(funding.rows), oiChangeAt, null, basisAtForConfig(config, flowBySymbol[symbol]));
+    const fundingPctAt = makeFundingPctAt(funding.rows);
+    const basisAt = basisAtForConfig(config, flowBySymbol[symbol]);
+    const r = runBacktest(candles, funding.at, cfg, fundingPctAt, oiChangeAt, null, basisAt);
     const { _trades, ...summary } = r; // don't leak the full trade list into the API response
     perSymbol.push({ symbol, candles: candles.length, ...summary });
     net += r.netUsd; trades += r.trades; wins += Math.round((r.winRate / 100) * r.trades);
+    markets.push({ symbol, candles, feeds: { fundingAt: funding.at, fundingPctAt, oiChangeAt, basisAt } });
   }
+  // The same markets under the agent's real constraints (one position, best signal per tick,
+  // daily caps) — `combined` above is each market replayed on its own.
+  const { _trades: _pt, ...portfolio } = runPortfolioBacktest(markets, { ...cfg, symbols });
   return {
     days, symbols,
     combined: { trades, winRate: trades ? Math.round((wins / trades) * 1000) / 10 : 0, netUsd: Math.round(net * 100) / 100 },
+    portfolio,
     perSymbol,
   };
 }
