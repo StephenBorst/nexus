@@ -3,7 +3,7 @@
 // Run: node --test app/lib/funding.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { FUNDING_PERIODS_PER_YEAR, annualFundingPct } from "./funding.mjs";
+import { FUNDING_PERIODS_PER_YEAR, annualFundingPct, finiteOrNull } from "./funding.mjs";
 
 test("the multiplier is three periods a day", () => {
   assert.equal(FUNDING_PERIODS_PER_YEAR, 1095);
@@ -42,5 +42,30 @@ test("it reproduces the hand-written sites it replaces", () => {
   for (const r of [0.0001, -0.00188, 0.01, -0.0005, 0]) {
     assert.equal(annualFundingPct(r), r * 1095 * 100, `exact vs the x1095 form, rate ${r}`);
     assert.ok(Math.abs(annualFundingPct(r) - r * 3 * 365 * 100) < 1e-9, `within a ULP of the x3x365 form, rate ${r}`);
+  }
+});
+
+// ── finiteOrNull — the guard that keeps NaN out of the UI entirely ───────────
+// The board's funding cell used to render the literal string "NaN%/yr" when a rate was
+// unreadable, and a NaN also poisoned the row score and both sort comparators. These pin
+// the coercion that fix rests on: absent/garbage becomes null (checkable), never 0 (a lie)
+// and never NaN (contagious).
+test("finiteOrNull: a real number passes through untouched", () => {
+  assert.equal(finiteOrNull(0.0001), 0.0001);
+  assert.equal(finiteOrNull(-206), -206);
+  assert.equal(finiteOrNull(0), 0, "a genuine zero is DATA, not absence");
+  assert.equal(finiteOrNull("0.5"), 0.5, "numeric strings are readable rates");
+});
+
+test("finiteOrNull: absent or unreadable becomes null, never 0 and never NaN", () => {
+  for (const v of [null, undefined, "", NaN, "abc", {}, Infinity, -Infinity]) {
+    assert.equal(finiteOrNull(v), null, `${String(v)} is not a readable rate`);
+  }
+});
+
+test("finiteOrNull is the same guard annualFundingPct applies", () => {
+  // If these ever diverge, "is there a readable rate" means two things again.
+  for (const v of [null, undefined, "", NaN, "abc", 0, 0.0001, -0.00188]) {
+    assert.equal(annualFundingPct(v) == null, finiteOrNull(v) == null, `agreement on ${String(v)}`);
   }
 });

@@ -58,9 +58,10 @@ export function MarketStatStrip({ symbol }: { symbol: string }) {
   const up = d.changePct >= 0;
   // Funding: positive = longs pay shorts (crowd leaning long). Shown per-8h + annualized.
   const fundPct = d.funding * 100;
-  // ?? NaN keeps the previous behaviour for an unreadable rate: annualFundingPct returns
-  // null for absent data, and rendering a flat 0%/yr would assert a rate we never read.
-  const fundAnnual = annualFundingPct(d.funding) ?? NaN;
+  // The coalesce is unreachable, not a fallback: d.funding is already forced finite where it
+  // is read (`Number(x.last_funding_rate) || 0`), so annualFundingPct always returns a number
+  // here. It exists to satisfy the nullable return type, which is why 0 and not NaN.
+  const fundAnnual = annualFundingPct(d.funding) ?? 0;
   return (
     <div style={row}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>

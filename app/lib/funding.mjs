@@ -19,6 +19,23 @@
 export const FUNDING_PERIODS_PER_YEAR = 3 * 365; // 1095
 
 /**
+ * A readable rate, or null. The ONE guard for "is there actually a number here".
+ * ⚠️ Number(null) is 0 and Number("") is 0, so both must be rejected BEFORE Number() —
+ * a missing rate that reads as 0 reports a paying crowd as a free one. Returns null
+ * rather than NaN because null is checkable at a call site while NaN propagates: it
+ * renders as the string "NaN%", it poisons any arithmetic it touches, and inside a sort
+ * comparator it compares false against everything, corrupting the ORDER of a whole table
+ * rather than the position of one row.
+ * @param {unknown} v
+ * @returns {number|null}
+ */
+export function finiteOrNull(v) {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * Annualize a per-8h funding rate into PERCENT.
  * Takes the raw decimal rate as the venue reports it (0.0001 = 0.01% per 8h) and returns
  * percent per year (10.95). Absent/garbage input returns null rather than 0 — Number(null)
@@ -27,8 +44,6 @@ export const FUNDING_PERIODS_PER_YEAR = 3 * 365; // 1095
  * @returns {number|null} percent per year, or null when there is no rate
  */
 export function annualFundingPct(rate8h) {
-  if (rate8h == null || rate8h === "") return null;
-  const v = Number(rate8h);
-  if (!Number.isFinite(v)) return null;
-  return v * FUNDING_PERIODS_PER_YEAR * 100;
+  const v = finiteOrNull(rate8h);
+  return v == null ? null : v * FUNDING_PERIODS_PER_YEAR * 100;
 }

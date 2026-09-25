@@ -18,7 +18,7 @@ import { C, MONO, UI, RADIUS } from "@/config/theme";
 import { SectionHeader } from "./components";
 import { useIsMobile } from "./useIsMobile";
 import { computeTape, FADE_FUNDING_FLOOR_PCT_YR, type MarketSignal } from "./briefing";
-import { annualFundingPct } from "@/lib/funding.mjs";
+import { annualFundingPct, finiteOrNull } from "@/lib/funding.mjs";
 import type { TabId } from "./types";
 import { R_CONTRACT } from "@/lib/rContract.mjs";
 import { frozenLevelsFor } from "@/lib/frozenDraft";
@@ -58,14 +58,14 @@ interface Row {
   sym: string;
   price: number | null;
   change24h: number | null;
-  funding: number;                       // /8h decimal
+  funding: number | null;                // /8h decimal. null = no readable rate (never NaN)
   oiChange: number;                      // % (from signals)
   trend: "TREND_UP" | "TREND_DOWN" | "CHOP" | null;
   trendMove: number | null;
   trendOi: number | null;
   consensus: { side: "LONG" | "SHORT" | "SPLIT"; participants: number } | null;
   play: { klass: "FADE" | "WATCH" | null; dir: Dir | null; label: string; strong: boolean };
-  fundingAnnual: number;                 // funding ×1095. The ticket's %/yr language
+  fundingAnnual: number | null;          // funding ×1095. The ticket's %/yr language. null = no rate
   // The independent-lens strip: four PUBLIC reads that either confirm or contradict the
   // mechanical play — graded callers, smart money, catalysts, forecasters. agree = how many
   // point the SAME way as the play (the "agreement = signal" fusion, kept explainable).
@@ -120,10 +120,10 @@ function derivePlay(s: MarketSignal): Row["play"] {
   const dir: Dir | null = s.fade_dir === "SHORT" || s.fade_dir === "LONG" ? s.fade_dir : null;
   // Magnitude floor (Grok): a stretch on a trivial band isn't a crowded fade — it needs an
   // economically large annualized cost too. A stretched-but-small server FADE reads WATCH here.
-  // ×1095 lives in app/lib/funding.mjs. `?? NaN` keeps the old absent-rate behaviour
-  // (NaN fails the floor, same as before) rather than asserting a flat 0%/yr.
-  const annual = Math.abs(Number(s.funding_annual_pct ?? annualFundingPct(s.funding_rate_8h) ?? NaN));
-  const bigEnough = annual >= FADE_FUNDING_FLOOR_PCT_YR;
+  // ×1095 lives in app/lib/funding.mjs. An unreadable rate is null, and null can never clear
+  // the floor — so a market whose funding we could not read is never called a FADE on it.
+  const annual = finiteOrNull(s.funding_annual_pct ?? annualFundingPct(s.funding_rate_8h));
+  const bigEnough = annual != null && Math.abs(annual) >= FADE_FUNDING_FLOOR_PCT_YR;
   if (s.verdict === "FADE" && dir && bigEnough) return { klass: "FADE", dir, label: `FADE ${dir}`, strong: true };
   if (s.verdict === "FADE" && dir) return { klass: "WATCH", dir, label: "WATCH", strong: false };  // stretched but not economically large
   if (s.verdict === "WATCH") return { klass: "WATCH", dir, label: "WATCH", strong: false };
@@ -133,11 +133,25 @@ function derivePlay(s: MarketSignal): Row["play"] {
   return { klass: null, dir: null, label: "—", strong: false };
 }
 
+// ── One coercion, at the boundary where the payload becomes a Row ───────────
+// A rate we cannot read becomes null here, never NaN. NaN is the dangerous shape: it
+// renders as the literal string "NaN%/yr", it makes `score` NaN, and inside a sort
+// comparator it returns false for every comparison — which corrupts the ORDER of the
+// whole table, not just the place of one row. null is checkable; NaN propagates.
+// The guard is finiteOrNull from app/lib/funding.mjs — the same one annualFundingPct uses,
+// imported rather than re-copied so "is there a readable rate" can't mean two things.
+// The board's one funding label. "—" is the same no-data glyph price and OI change use,
+// so an unreadable rate looks like every other absent value instead of a broken render.
+const fundLabel = (v: number | null, unit: string) =>
+  v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}${unit}`;
+
 // Actionability (Grok): a real FADE ranks first, then rows where ≥2 independent lenses agree,
 // then everything else. Chop + empty lenses falls to the bottom (use FUNDING/MOVERS for those).
-function scoreOf(play: Row["play"], funding: number, agree: number): number {
+function scoreOf(play: Row["play"], funding: number | null, agree: number): number {
   const base = play.klass === "FADE" ? 300 : play.klass === "WATCH" ? (agree >= 2 ? 100 : 0) : 0;
-  return base + (play.strong ? agree * 25 : 0) + Math.min(49, Math.abs(funding) * 100000);
+  // `?? 0` keeps score FINITE when the rate is missing — a NaN score would break the
+  // actionable comparator the same way a NaN funding breaks the funding one.
+  return base + (play.strong ? agree * 25 : 0) + Math.min(49, Math.abs(funding ?? 0) * 100000);
 }
 
 // ── The personal edge lens ───────────────────────────────────────────────────
@@ -338,8 +352,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
         sym: s.symbol,
         price: t?.price ?? null,
         change24h: t?.change ?? null,
-        funding: s.funding_rate_8h,
-        fundingAnnual: Number(s.funding_annual_pct ?? annualFundingPct(s.funding_rate_8h) ?? NaN),
+        funding: finiteOrNull(s.funding_rate_8h),
+        // ×1095 from app/lib/funding.mjs. Prefer the server's own annualized figure; fall back
+        // to computing it; null if neither is readable.
+        fundingAnnual: finiteOrNull(s.funding_annual_pct ?? annualFundingPct(s.funding_rate_8h)),
         oiChange: s.oi_change_pct,
         trend: s.trend ?? null,
         trendMove: s.trend_move_pct ?? null,
@@ -361,7 +377,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
     const cmp: Record<SortMode, (a: Row, b: Row) => number> = {
       actionable: (a, b) => b.score - a.score,
       confluence: (a, b) => (confRank(b) - confRank(a)) || (b.score - a.score),
-      funding: (a, b) => Math.abs(b.funding) - Math.abs(a.funding),
+      funding: (a, b) => Math.abs(b.funding ?? 0) - Math.abs(a.funding ?? 0), // no rate ⇒ |0| ⇒ last
       movers: (a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0),
       mine: (a, b) => (mineRank(a) - mineRank(b)) || (b.score - a.score),
     };
@@ -389,7 +405,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
     const agreeing = (["callers", "smart", "catalyst", "forecast"] as const).filter((k) => r.lens[k] === dir);
     const confNote = r.agree >= 2 ? ` ${r.agree} independent reads confirm this: ${agreeing.map((k) => lensName[k]).join(", ")}.` : "";
     // why = the board verdict + funding (the same object the ticket shows).
-    const why = `${r.play.label} · funding ${r.fundingAnnual >= 0 ? "+" : ""}${r.fundingAnnual.toFixed(1)}%/yr, crowd offside ${crowd}`;
+    // No readable rate ⇒ drop the funding clause entirely. A graded thesis records what was
+    // actually observed; "funding —%/yr" in a permanent record is worse than not saying it.
+    const fundWhy = r.fundingAnnual != null ? ` · funding ${fundLabel(r.fundingAnnual, "%/yr")}` : "";
+    const why = `${r.play.label}${fundWhy}, crowd offside ${crowd}`;
     // Fill the FROZEN object from the SAME shared helper the Catalyst card uses (mark + 1.2× H4
     // ATR-14 stop + 1.5R + 7d, levels from rContract.mjs) so the fade lands one tap from the row
     // as a complete graded thesis — no second schema, no hunting the engine. If the candles can't
@@ -450,8 +469,9 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
         if (!shareRow) return;
         const v = shareRow.play.klass === "FADE" && shareRow.play.dir ? `FADE ${shareRow.play.dir}`
           : shareRow.play.klass === "WATCH" ? "WATCH" : "NO READ";
-        const fund = `${shareRow.fundingAnnual >= 0 ? "+" : ""}${shareRow.fundingAnnual.toFixed(1)}%/yr`;
-        const text = `${shareRow.sym} · ${v} · funding ${fund}. The crowd's positioning, graded from public price on Nexus.`;
+        // Same rule as the drafted thesis: a public card never states a rate we couldn't read.
+        const fund = shareRow.fundingAnnual != null ? ` · funding ${fundLabel(shareRow.fundingAnnual, "%/yr")}` : "";
+        const text = `${shareRow.sym} · ${v}${fund}. The crowd's positioning, graded from public price on Nexus.`;
         const url = `https://og.nexustradinglabs.com/share/read/${encodeURIComponent(shareRow.sym)}`;
         window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank", "noopener");
       }}
@@ -544,7 +564,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
         // clipped. Desktop keeps the full verifiable table (the `else` branch below, unchanged).
         <div style={{ display: "flex", flexDirection: "column" }}>
           {rows.map((r) => {
-            const fundHot = Math.abs(r.funding) >= CROWDED;
+            const fundHot = r.funding != null && Math.abs(r.funding) >= CROWDED;
             const confluent = r.play.strong && !!r.play.dir && r.agree >= 3;
             const busy = draftingSym === r.sym;
             const deepHit = !!deepCoin && r.sym === deepCoin;   // arrived from a shared verdict card
@@ -568,7 +588,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                       {inPosBy[r.sym] && <span title={`You're ${inPosBy[r.sym].toLowerCase()} here`} style={{ fontSize: 9, color: dirColor(inPosBy[r.sym]) }}>▸</span>}
                     </span>
                     {dot}
-                    <span style={{ fontSize: 11, color: fundHot ? C.warn : C.text.muted, whiteSpace: "nowrap" }}>{r.fundingAnnual >= 0 ? "+" : ""}{r.fundingAnnual.toFixed(1)}%/yr</span>
+                    <span style={{ fontSize: 11, color: fundHot ? C.warn : C.text.muted, whiteSpace: "nowrap" }}>{fundLabel(r.fundingAnnual, "%/yr")}</span>
                     {dot}
                     {r.play.klass === "FADE"
                       ? <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text.bright, letterSpacing: "0.03em", whiteSpace: "nowrap" }}>{r.play.label}</span>
@@ -610,7 +630,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
               <div style={head} />
             </div>
             {rows.map((r) => {
-              const fundHot = Math.abs(r.funding) >= CROWDED;
+              const fundHot = r.funding != null && Math.abs(r.funding) >= CROWDED;
               // A confirmed setup = a real play with ≥3 independent lenses agreeing. The whole
               // moat in one glance: not one indicator, but where separate verifiable reads converge.
               const confluent = r.play.strong && !!r.play.dir && r.agree >= 3;
@@ -639,7 +659,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                   </div>
                   {/* Funding — annualized (%/yr) to match the ticket + share card; amber when the crowd is hot */}
                   <div style={{ ...cell }}>
-                    <span style={{ color: fundHot ? C.warn : C.text.muted }}>{r.fundingAnnual >= 0 ? "+" : ""}{r.fundingAnnual.toFixed(1)}%</span>
+                    <span style={{ color: fundHot ? C.warn : C.text.muted }}>{fundLabel(r.fundingAnnual, "%")}</span>
                   </div>
                   {/* OI change — hidden when ~0 (a dead 0.0% column looked fake); "—" until it moves */}
                   <div style={{ ...cell, color: Math.abs(r.oiChange) >= 3 ? C.text.bright : C.text.faint }}>{Math.abs(r.oiChange) < 0.05 ? <span style={{ color: C.text.faint }}>—</span> : `${r.oiChange >= 0 ? "+" : ""}${r.oiChange.toFixed(1)}%`}</div>

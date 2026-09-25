@@ -187,11 +187,16 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
   // (FADE X / WATCH) + the annualized funding + caller CONFLICT grammar ("FADE X · CALLERS Y").
   // Never "LONG HYPE", "strongest setup", "highest-conviction", or "exactly what the agent
   // fades" — the loudest word on the row must be the GRADED verdict, not a flattering one.
+  // A rate we could not read must never reach a headline as the literal string "NaN%/yr".
+  // Omit the clause instead: the briefing states what was observed, and silence about funding
+  // is honest where a fabricated number is not. Number.isFinite rejects NaN and null alike.
+  const yrClause = (v: number) => (Number.isFinite(v) ? ` · ${v >= 0 ? "+" : ""}${v.toFixed(0)}%/yr` : "");
   const conf = (signals || []).find((s) => s.confluence !== "NONE");
   if (conf) {
     const dir = conf.fade_dir === "LONG" || conf.fade_dir === "SHORT" ? conf.fade_dir : conf.confluence;
-    // The ×1095 comes from app/lib/funding.mjs (one literal, not eight). `?? NaN` preserves
-    // the old absent-rate behaviour — a missing rate must not read as a flat 0%/yr.
+    // The ×1095 comes from app/lib/funding.mjs (one literal, not eight). NaN when the rate is
+    // unreadable — a missing rate must not read as a flat 0%/yr, which would report a paying
+    // crowd as a free one. yrClause() below keeps that NaN out of the headline text.
     const annual = Number(conf.funding_annual_pct ?? annualFundingPct(conf.funding_rate_8h) ?? NaN);
     // FADE only when the server says STRETCHED and the band is economically large — the SAME
     // gate THE BOARD's THE PLAY applies; a confluence that isn't stretched reads WATCH, not a setup.
@@ -203,7 +208,7 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
       id: "read-confluence",
       priority: 78,
       tone: callerFights ? "caution" : "info",
-      title: `${conf.symbol} · ${play} · ${annual >= 0 ? "+" : ""}${annual.toFixed(0)}%/yr`,
+      title: `${conf.symbol} · ${play}${yrClause(annual)}`,
       detail: isFade
         ? `Funding and open interest agree the crowd is stretched${callerFights ? ` · CALLERS ${lean!.side} (they fight the fade)` : ""}. The mechanical fade. Graded from the tape after, like every call.`
         : `Funding and open interest agree, but it's elevated rather than stretched vs its own range. A watch, not a fade yet.`,
@@ -227,8 +232,8 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
       priority: 68,
       tone: "info",
       title: hFade
-        ? `${hot.symbol} · FADE ${hDir} · ${hAnnual >= 0 ? "+" : ""}${hAnnual.toFixed(0)}%/yr`
-        : `${hot.symbol} funding is elevated (${hAnnual >= 0 ? "+" : ""}${hAnnual.toFixed(0)}%/yr). Within its range`,
+        ? `${hot.symbol} · FADE ${hDir}${yrClause(hAnnual)}`
+        : `${hot.symbol} funding is elevated${Number.isFinite(hAnnual) ? ` (${hAnnual >= 0 ? "+" : ""}${hAnnual.toFixed(0)}%/yr)` : ""}. Within its range`,
       detail: hFade
         ? `The crowd is heavily ${heavy} and stretched vs its own funding range. The mechanical fade. Graded from the tape after, like every call.`
         : `The crowd is heavily ${heavy}, but funding is within its typical range. Where fades set up, once it pierces out. A watch, not a fade yet.`,
