@@ -203,3 +203,25 @@ export function fillsToClosedTrades(fills) {
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
 }
+
+// ── The whole X-Ray read, composed once ───────────────────────────────────────
+// Everything the /analyze page derives from a fill tape, in one call: the closed trades,
+// the per-window grades, the default window, the decay row, which windows a partial tape
+// can't fully cover, and the copy gate. The copilot's xray_wallet tool uses THIS, so the
+// assistant can never quote a grade the page wouldn't show (e.g. a win rate on a window
+// the page calls ACCRUING, or "worth copying" on a wallet whose copy is locked).
+//   fills        — HL fills, oldest → newest (the stored tape or a direct read)
+//   completeFrom — tape complete from (null = from the wallet's first fill)
+//   track        — the watched Orderly record (xrayTrack) or null
+/** @param {{ fills?: any[], completeFrom?: number | null, track?: any, now?: number }} [input] */
+export function xraySummary({ fills = [], completeFrom = null, track = null, now = Date.now() } = {}) {
+  const trades = fillsToClosedTrades(fills);
+  const grades = trades.length ? gradeAllWindows(trades, now) : null;
+  const dflt = grades ? defaultWindow(grades) : { key: "30D", fellBack: false };
+  const oldestTs = completeFrom ?? (fills.length ? Number(fills[0].time) : null);
+  const partialWindows = completeFrom != null && trades.length
+    ? XRAY_WINDOWS.map((w) => w.key).filter((k) => !windowComplete(k, now, { truncated: true, oldestTs }))
+    : [];
+  const gate = edgeGate({ hl30: grades ? grades["30D"] : null, watched: track && !track.building ? track : null });
+  return { trades, grades, defaultWindow: dflt, decay: grades ? decayRow(grades) : null, partialWindows, gate, completeFrom, oldestTs };
+}

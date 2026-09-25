@@ -751,6 +751,12 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   so a re-share after new fills gets a fresh image (X caches by URL); versioned PNGs edge-cached 24h. Unseeded
   wallet → seeds via `syncHlTape` under a 10/min/IP budget, else honest "no record" card.
 
+- **✅ COPILOT = SAME GRADE (2026-09-25).** The AI copilot's `xray_wallet` tool no longer computes its own lifetime
+  win rate from a raw HL read. It reads the STORED tape (`fetchHLTape`) and returns `xraySummary` (xrayGrade.mjs —
+  the page's exact composition: per-window grades with ACCRUING, headline window, decay row, partial windows, copy
+  gate) + `copy_gate {pass, evidence, locked_reasons}` + `share_link`. Its note tells the model: lead with the
+  headline window, never quote win rate/PF on an ACCRUING window, never suggest copying when the gate is locked.
+
 ## Nexus PRO — subscriptions / revenue (freemium model)
 The business-model layer. **PRO is a SOFTWARE subscription** (ordinary commerce, real USDC revenue) — NOT a
 token-value scheme. $NEXUS only adds **consumptive use** (pay-in-$NEXUS discount) + **access** (hold-to-unlock).
