@@ -6112,7 +6112,7 @@ document.getElementById("btn").addEventListener("click",go);
       const signals = await computeSignalRows(env);
       return json({
         generated_at: new Date().toISOString(),
-        note: "Funding-extreme (fade the crowd) + OI-divergence reads, same rules as the Nexus autonomous agent. confluence = both rules agree (strongest). Deltas vs ~5-min prior snapshot.",
+        note: "Funding-extreme (fade the crowd) + OI-divergence reads, same rules as the Nexus autonomous agent. confluence = both rules agree. Deltas vs ~5-min prior snapshot. Our scoreboard grades this read in public (funding_fade on /intel/axis-backtest, shown on /proof); it is not a proven edge.",
         signals,
       }, request);
     }
