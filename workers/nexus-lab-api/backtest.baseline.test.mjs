@@ -52,7 +52,9 @@ test("the worst timing (shorting right before each pump) loses to nearly every r
   const real = pumps.map((i) => trade("PERP_BTC_USDC", c, i, "SHORT"));
   const b = randomEntryBaseline([{ symbol: "PERP_BTC_USDC", candles: c }], CFG, real, { runs: 200 });
   assert.ok(b.pctBeaten <= 5, String(b.pctBeaten));
-  assert.equal(b.verdict, "NOT_DISTINGUISHABLE");
+  // This line used to assert NOT_DISTINGUISHABLE — pinning a label that contradicted the test's
+  // own title. Losing to ~every random replay IS distinguishable: it's reliably worse.
+  assert.equal(b.verdict, "BELOW_RANDOM");
 });
 
 test("entries that ARE random land mid-pack — the baseline doesn't flatter noise", () => {

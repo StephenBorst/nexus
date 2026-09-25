@@ -177,9 +177,10 @@ export function AgentBacktestCard({
                           </div>
                         );
                       }
-                      const tone = bl.verdict === "BEATS_RANDOM" ? "#3ecf8e" : bl.verdict === "LEANS_ABOVE" ? "#fbbf24" : "#a1a1aa";
+                      const tone = bl.verdict === "BEATS_RANDOM" ? "#3ecf8e" : bl.verdict === "LEANS_ABOVE" ? "#fbbf24" : bl.verdict === "BELOW_RANDOM" ? "#f7525f" : "#a1a1aa";
                       const read = bl.verdict === "BEATS_RANDOM" ? "the timing carries information"
                         : bl.verdict === "LEANS_ABOVE" ? "leans above random · not conclusive"
+                        : bl.verdict === "BELOW_RANDOM" ? "worse than random timing this window. Inverting it is a new rule, untested"
                         : "indistinguishable from random timing this window";
                       return (
                         <div title={`${bl.runs} replays with the same markets, number of trades, long/short split and exits — only the entry times are random (seed ${bl.seed}). Random P&L: median $${bl.randomMedianUsd}, 5th–95th pct $${bl.randomP5Usd} to $${bl.randomP95Usd}.`}

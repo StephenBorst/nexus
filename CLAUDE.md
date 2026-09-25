@@ -719,7 +719,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   backtest.mjs — replays the real portfolio trades' markets + count + per-market long/short mix through the SAME exit
   path (`openPosition`/`stepExit`, vol-scaled levels honored, fees) at RANDOM entry bars (room left for the time exit;
   right-censored dropped), seeded mulberry32 → `{pctBeaten, realNetUsd, randomMedianUsd, randomP5Usd, randomP95Usd,
-  verdict}`: BEATS_RANDOM ≥95 · LEANS_ABOVE ≥80 · NOT_DISTINGUISHABLE; <5 trades → TOO_FEW_TRADES. Attached as
+  verdict}`: BEATS_RANDOM ≥95 · LEANS_ABOVE ≥80 · BELOW_RANDOM ≤5 · NOT_DISTINGUISHABLE; <5 trades → TOO_FEW_TRADES. Attached as
   `portfolio.baseline` by `backtestConfig`; Backtest card prints "vs random entries: beat X% of 300 replays". Tests
   (`backtest.baseline.test.mjs`): foresight ≥95, worst timing ≤5, random entries mid-pack, reproducible, per-market.
   `tradesToSeparate(pct, n)` (≈ n·(z95/z)², Acklam `probit`) → `tradesNeeded`/`moreTradesNeeded` on every baseline
@@ -786,7 +786,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   drift above (built in parallel; BOTH ship). Every axis carries `random {metric:"R", runs:300, seed:7, window,
   pooled, bySide{LONG,SHORT}}`: each R-graded event re-entered at a random hour — same market, same side, same frozen
   R contract — 300 seeded replays → `pctBeaten` → **BEATS_RANDOM ≥95 / LEANS_ABOVE ≥80 / NOT_DISTINGUISHABLE /
-  TOO_FEW (<5)**, plus `realMeanR`/`randomMedianR`/`excessR`/`moreTradesNeeded`. How it differs from `drift`, and why
+  BELOW_RANDOM ≤5 / TOO_FEW (<5)**, plus `realMeanR`/`randomMedianR`/`excessR`/`moreTradesNeeded`. How it differs from `drift`, and why
   both exist: (1) it grades **R — the metric every verdict uses**, not bps; (2) it's **WINDOW-MATCHED** — random hours
   come only from [first, last] hour the read fired, whereas coinDrift averages the coin's WHOLE recorded history. A
   basis×CVD read can only fire while cvd:hist exists; a whole-history control compares it with a different regime
@@ -801,7 +801,17 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   (it was graded twice). The copilot's `get_signal_scoreboard` gets `vs_random` per side + `tide`, and its prompt no
   longer calls PREDICTIVE "a real, stable edge" — an edge = BEATS_RANDOM on its side. Informational: no verdict
   changes. Tests: `axisbt.random.test.mjs` (drift-alone → NOT_DISTINGUISHABLE, trough-timing → BEATS_RANDOM,
-  window-matched, side-preserved, seeded, measurement-only).
+  peak-timing → BELOW_RANDOM, window-matched, side-preserved, seeded, measurement-only).
+  **✅ BELOW_RANDOM rung (2026-09-25, cache `axisbt:v8` / `evidence:v3`)** — the ladder was one-sided: a result that
+  lost to ≥95% of random replays read NOT_DISTINGUISHABLE, i.e. the opposite of what the data said (the live
+  funding fade beat 0.3% of replays on BOTH sides and was labelled "not distinguishable"). `baselineVerdict` is now
+  symmetric — **≤5% beaten ⇒ BELOW_RANDOM** (reliably WORSE than random entries on the same markets/sides/exits). ONE
+  function, so it reaches the Lab backtest (AgentBacktestCard, red), the /proof evidence line and the scoreboard's
+  per-side baseline (red) together. The Lab test "worst timing loses to nearly every random replay" used to ASSERT
+  NOT_DISTINGUISHABLE — it pinned the mislabel against its own title; now asserts BELOW_RANDOM. Mutation-checked: drop
+  the rung and 3 tests fail across both surfaces. ⚠️ **BELOW_RANDOM is NOT a licence to invert.** "Fading the fade" is
+  a DIFFERENT rule and must be graded as its own read first (the copilot prompt forbids suggesting it; Regime-Gated
+  Invert — the last invert idea — came back NOT ROBUST).
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 

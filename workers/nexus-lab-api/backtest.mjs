@@ -341,8 +341,18 @@ export const BASELINE_MIN_TRADES = 5;
 // The ONE verdict ladder for a random-entry baseline. Shared with the scoreboard's per-signal
 // baseline (axisbt.mjs) so "BEATS_RANDOM" can never mean two different thresholds on two
 // surfaces that both claim to answer "does the signal pick good moments?".
+// SYMMETRIC at both tails. BELOW_RANDOM (≤5% of replays beaten) = the real result lost to at
+// least 95% of random entries on the same markets, sides and exits: its timing is reliably
+// WORSE than random, not merely unproven. Before this rung existed such a result read
+// NOT_DISTINGUISHABLE, which told the reader the opposite of what the data showed (the live
+// funding fade beat 0.3% of replays on BOTH sides and was labelled "not distinguishable").
+// ⚠️ BELOW_RANDOM is NOT a licence to invert the rule. The inverse is a DIFFERENT rule and has
+// to be graded as its own read before anyone trades it (Regime-Gated Invert: NOT ROBUST).
 export function baselineVerdict(pctBeaten) {
-  return pctBeaten >= 95 ? "BEATS_RANDOM" : pctBeaten >= 80 ? "LEANS_ABOVE" : "NOT_DISTINGUISHABLE";
+  if (pctBeaten >= 95) return "BEATS_RANDOM";
+  if (pctBeaten >= 80) return "LEANS_ABOVE";
+  if (pctBeaten <= 5) return "BELOW_RANDOM";
+  return "NOT_DISTINGUISHABLE";
 }
 // Seeded PRNG, exported so the scoreboard's replays are reproducible the same way.
 export function mulberry32(seed) {

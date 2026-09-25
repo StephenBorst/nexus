@@ -56,6 +56,20 @@ test("the tide: in a window that rose, a random long earns and a random short lo
 const wave = market("ETH", Array.from({ length: 1200 }, (_, i) => 100 + 8 * Math.sin((2 * Math.PI * i) / 48)));
 const troughGen = () => range(132, 1140, 48).map((i) => ({ t: at(i), side: "LONG" })); // sin minimum at i ≡ 36 (mod 48)
 
+// The mirror image: buying the PEAKS of the same wave. Every entry stops out; random entries on
+// the same wave do far better. That is not "indistinguishable from random" — it is reliably
+// worse, and before the BELOW_RANDOM rung the ladder said the former.
+const peakGen = () => range(108, 1116, 48).map((i) => ({ t: at(i), side: "LONG" })); // sin maximum at i ≡ 12 (mod 48)
+
+test("reliably bad timing: buying the peaks of a trendless wave is BELOW_RANDOM, not 'indistinguishable'", () => {
+  const s = scoreEvents([wave], peakGen, { horizons: [4], minSamples: 5, randomPools: buildRandomPools([wave]) });
+  const L = s.random.bySide.LONG;
+  assert.equal(L.realMeanR, -1, "every peak long stopped out");
+  assert.ok(L.pctBeaten <= 5, `beat ${L.pctBeaten}% of replays`);
+  assert.equal(L.verdict, "BELOW_RANDOM");
+  assert.ok(L.excessR < -0.5, `timing cost ${L.excessR}R vs random entries`);
+});
+
 test("real timing: buying the troughs of a trendless wave BEATS_RANDOM", () => {
   const s = scoreEvents([wave], troughGen, { horizons: [4], minSamples: 5, randomPools: buildRandomPools([wave]) });
   const L = s.random.bySide.LONG;
@@ -115,7 +129,11 @@ test("ONE verdict ladder: the scoreboard and the Lab backtest can't disagree on 
   assert.equal(baselineVerdict(94.9), "LEANS_ABOVE");
   assert.equal(baselineVerdict(80), "LEANS_ABOVE");
   assert.equal(baselineVerdict(79.9), "NOT_DISTINGUISHABLE");
-  for (const gen of [driftGen, troughGen]) {
+  assert.equal(baselineVerdict(50), "NOT_DISTINGUISHABLE", "the middle of the pack is the honest 'can't tell'");
+  assert.equal(baselineVerdict(5.1), "NOT_DISTINGUISHABLE");
+  assert.equal(baselineVerdict(5), "BELOW_RANDOM", "symmetric with the ≥95 top rung");
+  assert.equal(baselineVerdict(0), "BELOW_RANDOM");
+  for (const gen of [driftGen, troughGen, peakGen]) {
     const cs = gen === driftGen ? uptrend : wave;
     const r = scoreEvents([cs], gen, { horizons: [4], minSamples: 5, randomPools: buildRandomPools([cs]) }).random;
     for (const x of [r.pooled, r.bySide.LONG, r.bySide.SHORT]) if (x.verdict !== "TOO_FEW") assert.equal(x.verdict, baselineVerdict(x.pctBeaten));

@@ -56,8 +56,9 @@ type Scorecard = { axes: AxisRow[]; tide?: Tide | null; config?: { minSamples: n
 
 // vs-random tone — ONE mapping for the ONE ladder (baselineVerdict in backtest.mjs), used by the
 // preset evidence line AND the scoreboard's per-side baseline, so the same verdict word can never
-// render in two colours on one page. Green only when random entries are actually beaten.
-const baselineTone = (verdict?: string) => (verdict === "BEATS_RANDOM" ? POS : verdict === "LEANS_ABOVE" ? "#fbbf24" : FOG);
+// render in two colours on one page. Green only when random entries are actually beaten; red
+// when the read is reliably WORSE than random (BELOW_RANDOM, ≤5% of replays beaten).
+const baselineTone = (verdict?: string) => (verdict === "BEATS_RANDOM" ? POS : verdict === "LEANS_ABOVE" ? "#fbbf24" : verdict === "BELOW_RANDOM" ? NEG : FOG);
 const signR = (x: number) => `${x >= 0 ? "+" : ""}${x}R`;
 
 // Verdict tone — green ONLY for a proven-predictive signal; NOISE/INSUFFICIENT stay
@@ -182,7 +183,7 @@ function SignalRow({ a }: { a: AxisRow }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 6, fontFamily: MONO, fontSize: 9, color: FOG }}
           title={"Each side graded on its own, in R (first touch of the frozen 1.2×ATR stop vs 1.5R target). A read that only ever fires one side shows 0 here."
             + " 'random' = the same events re-entered at random hours in the same window, same market, same side, same contract (300 seeded replays): what ANY entry on that side earned."
-            + " 'beat X%' = share of those replays the real read out-earned. Under 95% it can't be told apart from the window."}>
+            + " 'beat X%' = share of those replays the real read out-earned. 95%+ beats random; under 95% it can't be told apart from the window; 5% or under (red) it is reliably WORSE than random entries."}>
           {(["LONG", "SHORT"] as const).map((sd) => {
             const s = a.sides![sd];
             const rb = a.random?.bySide?.[sd];
