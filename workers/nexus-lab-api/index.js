@@ -5133,15 +5133,33 @@ document.getElementById("btn").addEventListener("click",go);
         const flow = await loadFlowHistForBacktest(symbols, env, { needCvd: contract.basisConfirm === "CVD", needSmart: contract.basisConfirm === "SMART", needLiq: contract.basisConfirm === "LIQ" });
         if (!flow.anyMature) return json({ ok: false, axis, hold, note: `No market has enough recorded history yet (${flowCoverageText(flow.perSymbol)}).` }, request);
         const days = Math.max(7, Math.min(60, flow.windowDays));
-        const markets = [];
+        // Candles from the brain's RECORDED hourly series (candle:hist, the same tape the scoreboard
+        // grades on) — no burst of Orderly calls (12 markets × 3 chunks tripped a Cloudflare challenge).
+        // Orderly only as a per-market fallback when the recorded series is short; a market that
+        // still fails is EXCLUDED and named, never allowed to sink the whole run.
+        const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
+        const since = Math.floor(Date.now() / 1000) - days * 86400;
+        const markets = [], failed = [];
         for (const symbol of flow.matureSymbols) {
-          const candles = await fetchCandles(symbol, days);
+          let candles = [];
+          try {
+            const raw = await AGENT_KV.get(`candle:hist:${symbol}`);
+            candles = (raw ? JSON.parse(raw) : [])
+              .map((c) => ({ t: Math.floor(Number(c.t) / 1000), o: +c.o, h: +c.h, l: +c.l, c: +c.c }))
+              .filter((c) => c.t >= since && c.c > 0 && Number.isFinite(c.h) && Number.isFinite(c.l))
+              .sort((a, b) => a.t - b.t);
+          } catch { candles = []; }
+          if (candles.length < days * 24 * 0.8) {
+            try { candles = await fetchCandles(symbol, days); } catch { /* keep whatever was recorded */ }
+          }
+          if (candles.length < 48) { failed.push(symbol); continue; }
           markets.push({ symbol, candles, feeds: { fundingAt: () => 0, basisAt: basisAtForConfig(config, flow.flowBySymbol[symbol]) } });
         }
+        if (!markets.length) return json({ ok: false, axis, hold, note: "No market had usable candles for the replay window.", failedSymbols: failed }, request);
         const ev = evidenceAcrossMarkets(markets, config);
         const out = {
           ok: true, asOf: new Date().toISOString(), axis, preset: contract.preset, hold, days, config,
-          excludedSymbols: flow.staleSymbols, strategyLabel: strategyLabel(config), ...ev,
+          excludedSymbols: [...flow.staleSymbols, ...failed], strategyLabel: strategyLabel(config), ...ev,
         };
         try { await env.LAB_STORE.put(CACHE, JSON.stringify(out), { expirationTtl: 3600 }); } catch { /* best-effort */ }
         return json(out, request);
