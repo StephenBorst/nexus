@@ -479,6 +479,13 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   another market won the brain's single per-wallet signal. Leftovers = DRIFT; regime/smart/session/vol filters →
   UNVERIFIABLE (not simulated by the grader). `fundingPercentileMin` + `maxSignalAgeSec` deliberately NOT counted
   (inert on BASIS_FADE / latency-only). `paper/reset` now stamps `state.paper_reset_at` → default window start.
+  **⚠️ Parity counts the OPEN position (fixed 2026-09-26).** The ledger (`paper_trades`) holds CLOSED rows only, so the
+  trade the agent was IN read as an "unexplained miss" → false DRIFT (Sept 26: LINK LONG graded 16:17 UTC, agent entered
+  16:21 and was still holding). The route now passes `state.current_position` (paper) as an entry with `closedAt:null`
+  (`open:true` in the report). Entries are keyed by (market, side, opened_at), so paper TP_PARTIAL slices — which carry NO
+  `parent_id` — collapse with their position. Before calling DRIFT a brain problem, check the open position.
+  **Full paper wallets:** 12h control `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
+  `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE`.
 - **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
   AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array

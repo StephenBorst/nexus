@@ -142,3 +142,65 @@ test("another market winning the brain's single signal explains a miss", () => {
   assert.equal(p.missed.explained[0].code, "OTHER_MARKET");
   assert.equal(p.verdict, "CLEAN");
 });
+
+// ── The open position (Sept-26 LINK false alarm) ────────────────────────────────────────────
+// The ledger only holds CLOSED rows. The trade the agent is in right now must count as an entry,
+// or the event it is trading reads as an unexplained miss.
+test("the open position matches its graded event — not a miss (the Sept-26 LINK case, real numbers)", () => {
+  const cfg = { ...CFG, symbols: ["PERP_AVAX_USDC", "PERP_LINK_USDC"], maxHoldHours: 24 };
+  const avaxEv = 1790399862996, linkEv = 1790439445765;
+  const trades = [row("paper_1790422596597", "AVAX", "LONG", 1790400095018, 1790422596597, 6.4)];
+  const events = [{ coin: "AVAX", t: avaxEv, side: "LONG" }, { coin: "LINK", t: linkEv, side: "LONG" }];
+  const openPosition = { symbol: "PERP_LINK_USDC", direction: "LONG", opened_at: 1790439678488, paper: true };
+  const args = { trades, events, config: cfg, since: 1790381056000, until: linkEv + 6 * H };
+
+  const before = paperParity(args); // what the route did before: closed rows only
+  assert.equal(before.counts.missedUnexplained, 1);
+  assert.equal(before.verdict, "DRIFT");
+
+  const r = paperParity({ ...args, openPosition });
+  assert.equal(r.verdict, "CLEAN");
+  assert.equal(r.counts.matched, 2);
+  assert.equal(r.counts.missedUnexplained, 0);
+  const link = r.matched.find((m) => m.entry.coin === "LINK");
+  assert.equal(link.entry.open, true);
+  assert.equal(link.entry.closedAt, null);
+  assert.equal(link.lagMin, 4);
+});
+
+test("an event while the open position occupies the agent is explained, not drift", () => {
+  const openPosition = { symbol: "PERP_ETH_USDC", direction: "LONG", opened_at: T0 + H, paper: true };
+  const events = [{ coin: "ETH", t: T0 + H - 60000, side: "LONG" }, { coin: "BTC", t: T0 + 3 * H, side: "SHORT" }];
+  const r = paperParity({ trades: [], events, config: CFG, since: T0, until, openPosition });
+  assert.equal(r.counts.matched, 1);
+  assert.equal(r.counts.missedUnexplained, 0);
+  assert.equal(r.missed.explained[0].code, "BUSY");
+});
+
+test("paper scale-out: slices WITHOUT parent_id and a final close WITH one collapse to one position", () => {
+  // exec's paper TP_PARTIAL rows carry no parent_id; the laddered final close does.
+  const e = entriesFromPaperTrades([
+    row("paper_1", "SOL", "LONG", T0, T0 + 2 * H, 1, { reason: "TP_PARTIAL" }),
+    row("paper_2", "SOL", "LONG", T0, T0 + 5 * H, 2, { parent_id: "agent_abc_1" }),
+  ]);
+  assert.equal(e.length, 1);
+  assert.equal(e[0].pnl, 3);
+  assert.equal(e[0].closedAt, T0 + 5 * H);
+});
+
+test("an open position with a slice already closed stays OPEN (slices merge into it)", () => {
+  const e = entriesFromPaperTrades(
+    [row("paper_1", "BTC", "SHORT", T0, T0 + 2 * H, 1.5, { reason: "TP_PARTIAL" })],
+    { symbol: "PERP_BTC_USDC", direction: "SHORT", opened_at: T0, paper: true },
+  );
+  assert.equal(e.length, 1);
+  assert.equal(e[0].closedAt, null);
+  assert.equal(e[0].open, true);
+  assert.equal(e[0].pnl, 1.5);
+});
+
+test("no open position (or a malformed one) changes nothing", () => {
+  const trades = [row("a", "ETH", "LONG", T0, T0 + H)];
+  assert.deepEqual(entriesFromPaperTrades(trades, null), entriesFromPaperTrades(trades));
+  assert.deepEqual(entriesFromPaperTrades(trades, { symbol: "PERP_ETH_USDC", direction: "FLAT", opened_at: T0 }), entriesFromPaperTrades(trades));
+});
