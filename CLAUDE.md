@@ -1102,8 +1102,9 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   errors freely, then `node tools/check-lint.mjs --update` (only lowers). Use ’ not ' in JSX copy.
   **✅ Lint at 0 (2026-09-26, PRs #41–#43):** the baseline is `{}` — ANY new lint error fails the PR check. Clickable
   divs use `role` + `tabIndex` + `pressKey()` and modals use `useEscapeKey()` (`app/utils/a11y.ts`); caught errors →
-  `errText(e)` (lab/helpers.ts). Six files still carry a file-level `no-explicit-any` disable for broad server payloads
-  (AgentBacktestCard, AgentStrategyLibrary, token/data, useXMTP, orderlyProvider, runtime-config) — typing those is its own change.
+  `errText(e)` (lab/helpers.ts). No `no-explicit-any` suppressions remain in app/ (the last six were typed
+  2026-09-26): backtest/sweep/validate responses live in `app/pages/lab/backtestTypes.ts`, saved/community strategies
+  in `agentTypes.ts` — rename a worker field and tsc now flags the card that reads it.
 - Pure logic is extracted into `logic.mjs` next to each worker's `index.js` (which imports it, so
   tests cover the REAL deployed code, not a copy). Tests = zero-dep `node:test`. The per-file counts below are
   historical.

@@ -33,14 +33,27 @@ export type AgentStanding = {
   stats: { trades: number; daysActive: number; winRate: number; netPnl: number; profitFactor: number; score: number; avgWin: number; avgLoss: number; firstTradeAt: number } | null;
 };
 
-/** A server JSON payload the Lab renders but doesn't restructure (backtest/sweep/validate). */
-export type ApiPayload = Record<string, unknown>;
+/** Publish-time walk-forward badge (strategies.mjs revalidateStrategy). */
+export type StrategyValidation = {
+  status: "validating" | "pending_oi" | "pending_basis" | "done" | "error";
+  verdict?: "ROBUST" | "FRAGILE" | "NOT_ROBUST";
+  posSymbols?: number; totalSymbols?: number; foldConsistency?: number; totalNet?: number; note?: string;
+};
 
-/** A saved or community strategy from `/agent/:addr/strategies` — the config IS the strategy. */
+/** A saved strategy from `/agent/:addr/strategies` — the config IS the strategy. */
 export type SavedStrategy = {
   id: string;
   name: string;
   config: Partial<import("./types").AgentConfig>;
   public?: boolean;
-  [k: string]: unknown;
+  stats?: { netUsd: number } | null;
+  validation?: StrategyValidation;
+};
+
+/** A public strategy from `/agents/strategies/public`, ranked by its author's GRADED record. */
+export type CommunityStrategy = SavedStrategy & {
+  owner: string;
+  style?: string;
+  author?: { trades: number; winRate: number; netPnl: number };
+  backtest?: { netUsd: number } | null;
 };

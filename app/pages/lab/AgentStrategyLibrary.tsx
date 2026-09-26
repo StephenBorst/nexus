@@ -6,11 +6,8 @@
 // Not the money path: these mutate saved-strategy records, never orders or agent
 // state. Mutations are still owner-authed server-side; the handlers stay in AgentView
 // because they own the wallet signature.
-//
-// ⚠️ Mechanical move: markup unchanged. `any` on the strategy shapes is inherited
-// from the original state declarations.
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { deriveStyle } from "@/config/agentStyles";
+import type { SavedStrategy, CommunityStrategy } from "./agentTypes";
 import { agentCardStyle, agentLabelStyle, agentInputStyle, btnPrimary, navBtnStyle } from "./styles";
 
 export function AgentStrategyLibrary({
@@ -20,15 +17,15 @@ export function AgentStrategyLibrary({
   stratName: string;
   setStratName: (v: string) => void;
   saving: boolean;
-  strategies: any[];
+  strategies: SavedStrategy[];
   saveStrategy: () => void;
-  loadStrategy: (s: any) => void;
+  loadStrategy: (s: SavedStrategy) => void;
   deleteStrategy: (id: string) => void;
-  togglePublish: (s: any) => void;
-  community: any[] | null;
+  togglePublish: (s: SavedStrategy) => void;
+  community: CommunityStrategy[] | null;
   communityStyle: string;
   loadCommunity: (style: string) => void;
-  copyStrategy: (s: any) => void;
+  copyStrategy: (s: CommunityStrategy) => void;
 }) {
   // ── STRATEGY LIBRARY — save / load composed configs (free) ──
   return (

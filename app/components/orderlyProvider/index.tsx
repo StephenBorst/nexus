@@ -158,13 +158,12 @@ const OrderlyProvider = (props: { children: ReactNode }) => {
 
 	const appProvider = (
 		<OrderlyAppProvider
-			brokerId={getRuntimeConfig('VITE_ORDERLY_BROKER_ID')}
+			brokerId={getRuntimeConfig('VITE_ORDERLY_BROKER_ID') ?? 'demo'}
 			brokerName={getRuntimeConfig('VITE_ORDERLY_BROKER_NAME')}
 			networkId={networkId}
 			onChainChanged={onChainChanged}
 			appIcons={config.orderlyAppProvider.appIcons}
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			{...(chainFilter && { chainFilter } as any)}
+			{...(chainFilter && { chainFilter })}
 			defaultChain={defaultChain}
 			dataAdapter={dataAdapter}
 			restrictedInfo={{
