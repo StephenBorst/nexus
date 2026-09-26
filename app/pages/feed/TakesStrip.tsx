@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchCallerMerit, type CallerMerit } from "@/pages/token/data";
 import { SIGNAL, LINE } from "@/config/theme";
+import { pressKey } from "@/utils/a11y";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const green = "#3ecf8e";
@@ -62,9 +63,9 @@ export default function TakesStrip() {
           const bull = t.direction === "BULL";
           const m = merit[t.wallet.toLowerCase()];
           return (
-            <div
+            <div role="link" tabIndex={0}
               key={t.id}
-              onClick={() => navigate(`/token/${t.ca}`)}
+              onClick={() => navigate(`/token/${t.ca}`)} onKeyDown={pressKey(() => navigate(`/token/${t.ca}`))}
               style={{
                 flex: "1 1 190px", minWidth: 190, maxWidth: 240, background: "#0a0a0b",
                 border: `1px solid ${bull ? LINE.pos : "#4a1e22"}`, borderRadius: 5,

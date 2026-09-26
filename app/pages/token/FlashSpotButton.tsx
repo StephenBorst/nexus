@@ -5,10 +5,11 @@
 // so we never promise it). The FLASH_API_KEY stays on our worker proxy; the user signs the
 // EIP-712 order in their OWN wallet — the SAME sign path as Fabric. Confirm modal always gates
 // the signature — never auto-submit. EVM chains only (Solana uses the app's Jupiter path).
-import { useState } from "react";
+import { useId, useState } from "react";
 import { parseTransaction } from "viem";
 import { EVM_USDC, ensureChain } from "./swapExec";
 import { checkFlashOrder, checkFlashSetupTx, checkFlashBracket, encodeApprove, toBaseUnits, FLASH_ALLOWANCE } from "@/lib/flashGuards.mjs";
+import { useEscapeKey } from "@/utils/a11y";
 
 const FLASH = "https://og.nexustradinglabs.com/flash";
 type Eip1193 = { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> };
@@ -58,6 +59,9 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
   const [busy, setBusy] = useState(false); const [status, setStatus] = useState("");
   const [err, setErr] = useState<string | null>(null); const [done, setDone] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const fid = useId();
+  // Escape = the backdrop click: never while a signature is pending.
+  useEscapeKey(() => { if (!busy) setOpen(false); }, open);
 
   if (!FLASH_EVM.has(chainId) || !usdc) return null; // EVM + known USDC only
 
@@ -192,8 +196,8 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
         ◇ {side === "sell" ? "Sell" : "Buy"} {symbol} via Flash
       </button>
       {open && (
-        <div onClick={() => !busy && setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 380, background: CARD, border: "1px solid #33333a", borderRadius: 12, padding: 20, fontFamily: MONO }}>
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) !busy && setOpen(false); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div role="dialog" aria-modal="true" aria-label="Flash swap" style={{ width: "100%", maxWidth: 380, background: CARD, border: "1px solid #33333a", borderRadius: 12, padding: 20, fontFamily: MONO }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: BRIGHT, letterSpacing: "0.06em", marginBottom: 4 }}>◇ FLASH · {side === "sell" ? "SELL" : "BUY"} {symbol}</div>
             <div style={{ fontFamily: UI, fontSize: 11, color: FOG, lineHeight: 1.5, marginBottom: 14 }}>Market {side} on Definitive Flash — MEV-protected, non-custodial: you sign it in your own wallet.</div>
             <label style={{ display: "block", fontSize: 9, letterSpacing: "0.1em", color: MUT, marginBottom: 5 }}>SIZE ({side === "buy" ? "USDC" : symbol})</label>
@@ -201,10 +205,10 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
               style={{ ...inStyle, fontSize: 15, padding: "9px 12px", marginBottom: 12 }} />
             {side === "buy" && (
               <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                <div style={{ flex: 1 }}><label style={{ display: "block", fontSize: 8.5, letterSpacing: "0.08em", color: MUT, marginBottom: 4 }}>STOP $ (opt)</label>
-                  <input value={sl} onChange={(e) => setSl(e.target.value.replace(/[^0-9.]/g, ""))} onBlur={() => fetchPreview(size)} inputMode="decimal" placeholder="—" style={{ ...inStyle, color: NEG, border: `1px solid ${BORD}`, fontSize: 12, padding: "7px 9px" }} /></div>
-                <div style={{ flex: 1 }}><label style={{ display: "block", fontSize: 8.5, letterSpacing: "0.08em", color: MUT, marginBottom: 4 }}>TP $ (opt)</label>
-                  <input value={tp} onChange={(e) => setTp(e.target.value.replace(/[^0-9.]/g, ""))} onBlur={() => fetchPreview(size)} inputMode="decimal" placeholder="—" style={{ ...inStyle, color: POS, border: `1px solid ${BORD}`, fontSize: 12, padding: "7px 9px" }} /></div>
+                <div style={{ flex: 1 }}><label style={{ display: "block", fontSize: 8.5, letterSpacing: "0.08em", color: MUT, marginBottom: 4 }} htmlFor={`${fid}-sl`}>STOP $ (opt)</label>
+                  <input id={`${fid}-sl`} value={sl} onChange={(e) => setSl(e.target.value.replace(/[^0-9.]/g, ""))} onBlur={() => fetchPreview(size)} inputMode="decimal" placeholder="—" style={{ ...inStyle, color: NEG, border: `1px solid ${BORD}`, fontSize: 12, padding: "7px 9px" }} /></div>
+                <div style={{ flex: 1 }}><label style={{ display: "block", fontSize: 8.5, letterSpacing: "0.08em", color: MUT, marginBottom: 4 }} htmlFor={`${fid}-tp`}>TP $ (opt)</label>
+                  <input id={`${fid}-tp`} value={tp} onChange={(e) => setTp(e.target.value.replace(/[^0-9.]/g, ""))} onBlur={() => fetchPreview(size)} inputMode="decimal" placeholder="—" style={{ ...inStyle, color: POS, border: `1px solid ${BORD}`, fontSize: 12, padding: "7px 9px" }} /></div>
               </div>
             )}
             {preview && (

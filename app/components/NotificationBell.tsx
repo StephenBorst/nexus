@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
+import { pressKey } from "@/utils/a11y";
 
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
@@ -202,9 +203,9 @@ export default function NotificationBell() {
               </div>
             ) : (
               notifications.map((n) => (
-                <div
+                <div role="button" tabIndex={0}
                   key={n.id}
-                  onClick={() => openNotif(n)}
+                  onClick={() => openNotif(n)} onKeyDown={pressKey(() => openNotif(n))}
                   style={{
                     padding: "10px 14px",
                     borderBottom: "1px solid #141416",

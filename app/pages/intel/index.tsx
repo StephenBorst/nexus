@@ -5,6 +5,7 @@ import { deployToAgent } from "@/utils/agentPrefill";
 import { Sparkline } from "@/pages/lab/components";
 import { C } from "@/config/theme";
 import { bareTicker } from "@/utils/utils";
+import { pressKey } from "@/utils/a11y";
 
 // ─── Constants ────────────────────────────────────────────────
 // Palette is DERIVED from the shared design tokens, never re-typed as hex — that's
@@ -586,7 +587,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
             {signals.map(a => {
               const sev = alertMetric(a), sv = alertSeverity(a.signal);
               return (
-                <div key={a.name} className="nx-card-interactive" onClick={() => navigate(`/perp/${a.symbol}`)} title={`Open ${a.name}`}
+                <div role="link" tabIndex={0} key={a.name} className="nx-card-interactive" onClick={() => navigate(`/perp/${a.symbol}`)} onKeyDown={pressKey(() => navigate(`/perp/${a.symbol}`))} title={`Open ${a.name}`}
                   style={{ position: "relative", border: `1px solid ${C.border}`, borderLeft: `2px solid ${sv.hot ? YELLOW : C.borderStrong}`, borderRadius: "8px", padding: "14px", background: `linear-gradient(180deg, ${C.surface}, ${C.surfaceAlt})`, cursor: "pointer" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
                     <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontWeight: 700, fontSize: "14px" }}>{a.name}</span>

@@ -6,6 +6,7 @@
 // (GET /theses/contrarians), fail-soft, sparse until stance history accrues.
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { pressKey } from "@/utils/a11y";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -47,7 +48,7 @@ export default function Contrarians() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {rows.map((r) => (
-          <div key={r.wallet} onClick={() => navigate(`/feed/trader/${r.wallet}`)} title="Open this caller's profile"
+          <div role="link" tabIndex={0} key={r.wallet} onClick={() => navigate(`/feed/trader/${r.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${r.wallet}`))} title="Open this caller's profile"
             style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", cursor: "pointer", background: "#0f0f11", border: "1px solid #232327", borderRadius: 6, padding: "9px 12px" }}>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#52525b", width: 20, flexShrink: 0 }}>#{r.rank}</span>
             {r.meritRank && <span title={r.meritRank.title} style={{ fontSize: 10, color: "#ededf0", flexShrink: 0 }}>{r.meritRank.glyph}</span>}

@@ -12,6 +12,7 @@ import { SectionHeader } from "@/pages/lab/components";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { getAgentSig } from "@/pages/lab/agentKeys";
 import { bareTicker } from "@/utils/utils";
+import { pressKey } from "@/utils/a11y";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -348,7 +349,7 @@ export default function ArenaPage() {
               </div>
               {agents.map((a, i) => (
                 <React.Fragment key={a.wallet}>
-                <div className="nx-row" onClick={() => setExpanded((e) => (e === a.wallet ? null : a.wallet))} style={{ display: "grid", gridTemplateColumns: "34px 1.6fr 1fr 90px 1.1fr 1.1fr", gap: 10, alignItems: "center", padding: "11px 4px", borderBottom: `1px solid ${SURFACE_ALT}`, cursor: "pointer" }}>
+                <div role="button" tabIndex={0} className="nx-row" onClick={() => setExpanded((e) => (e === a.wallet ? null : a.wallet))} onKeyDown={pressKey(() => setExpanded((e) => (e === a.wallet ? null : a.wallet)))} style={{ display: "grid", gridTemplateColumns: "34px 1.6fr 1fr 90px 1.1fr 1.1fr", gap: 10, alignItems: "center", padding: "11px 4px", borderBottom: `1px solid ${SURFACE_ALT}`, cursor: "pointer" }}>
                   <div style={{ fontFamily: MONO, fontSize: 11, color: i === 0 ? BRIGHT : FAINT }}>{i + 1}</div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>

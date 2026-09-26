@@ -30,6 +30,7 @@ import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // EVM slot). The Privy connector exposes walletEVM/walletSOL separately — walletSOL carries the Solana
 // signer (provider.signTransaction/sendTransaction). Safe outside the provider (useContext default).
 import { useWalletConnectorPrivy } from "@orderly.network/wallet-connector-privy";
+import { useEscapeKey } from "@/utils/a11y";
 
 // WooFi majors-swap widget — the in-app fill for the majors WooFi routes (BTC/ETH/SOL/USDC etc.),
 // restored as an additive Spot panel (the old standalone /swap now redirects to /token). Lazy so its
@@ -1178,6 +1179,10 @@ export default function TokenTerminal() {
     if (solBusy) return; // never yank the modal mid-signature
     setSolModalOpen(false); setSolPlan(null); setSolErr(null); setSolDone(null);
   }, [solBusy]);
+  // Escape = the backdrop click (closeSwap/closeSolModal already refuse mid-signature).
+  useEscapeKey(() => setWooFiOpen(false), wooFiOpen);
+  useEscapeKey(closeSwap, modalOpen);
+  useEscapeKey(closeSolModal, solModalOpen);
 
   // A changed token/amount invalidates a captured Solana plan (buy inputs solAmt/solPayWith, sell
   // inputs sellAmt/sellMax) so the modal never signs a plan that no longer matches the ticket.
@@ -1891,8 +1896,8 @@ export default function TokenTerminal() {
           switch + execution. Additive: mounted lazily on open, never touches the Fabric/Jupiter
           per-token routing. Backdrop-click / ✕ closes; the widget keeps its own confirm flow. ── */}
       {wooFiOpen && (
-        <div onClick={() => setWooFiOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 460, marginTop: "6vh", background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 16 }}>
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setWooFiOpen(false); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
+          <div role="dialog" aria-modal="true" aria-label="Swap majors" style={{ width: "100%", maxWidth: 460, marginTop: "6vh", background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div>
                 <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", color: BRIGHT }}>SWAP MAJORS</div>
@@ -1909,8 +1914,8 @@ export default function TokenTerminal() {
 
       {/* ── swap confirm modal (in-app EVM/Fabric buy) — nothing signs until "Confirm swap" ── */}
       {modalOpen && plan && pair && (
-        <div onClick={closeSwap} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) closeSwap(); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div role="dialog" aria-modal="true" aria-label="Confirm swap" style={{ width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", color: BRIGHT }}>CONFIRM SWAP</span>
               <button onClick={closeSwap} disabled={swapBusy} style={{ background: "none", border: "none", color: swapBusy ? FAINT : MUT, fontSize: 16, cursor: swapBusy ? "default" : "pointer", lineHeight: 1 }}>✕</button>
@@ -1980,8 +1985,8 @@ export default function TokenTerminal() {
       {/* ── Solana in-app BUY confirm modal (Jupiter · wSOL→token) — nothing signs until "Confirm swap".
           The plan is re-fetched + re-guarded + simulated on fresh bytes at confirm time. ── */}
       {solModalOpen && solPlan && pair && (
-        <div onClick={closeSolModal} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) closeSolModal(); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div role="dialog" aria-modal="true" aria-label="Confirm Solana swap" style={{ width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", color: BRIGHT }}>CONFIRM {solPlanDir === "sell" ? "SELL" : "SWAP"} · SOLANA</span>
               <button onClick={closeSolModal} disabled={solBusy} style={{ background: "none", border: "none", color: solBusy ? FAINT : MUT, fontSize: 16, cursor: solBusy ? "default" : "pointer", lineHeight: 1 }}>✕</button>

@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { TabId } from "./types";
+import { pressKey } from "@/utils/a11y";
 
 export interface Command {
   id: string;
@@ -104,7 +105,7 @@ export function CommandPalette({ onSelectTab }: { onSelectTab: (t: TabId) => voi
 
   return (
     <div
-      onClick={() => setOpen(false)}
+      role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
       style={{
         position: "fixed", inset: 0, zIndex: 9000,
         background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)",
@@ -113,8 +114,8 @@ export function CommandPalette({ onSelectTab }: { onSelectTab: (t: TabId) => voi
     >
       <div
         className="nx-fade-in"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={onListKey}
+        role="dialog" aria-modal="true"
+        aria-label="Command palette"
         style={{
           width: "min(560px, 92vw)", background: "#0f0f11",
           border: "1px solid #33333a", borderRadius: 8,
@@ -127,6 +128,8 @@ export function CommandPalette({ onSelectTab }: { onSelectTab: (t: TabId) => voi
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onListKey}
+            aria-label="Jump to"
             placeholder="Jump to…"
             style={{
               flex: 1, background: "none", border: "none", outline: "none",
@@ -152,7 +155,7 @@ export function CommandPalette({ onSelectTab }: { onSelectTab: (t: TabId) => voi
             ESC
           </button>
         </div>
-        <div style={{ maxHeight: 340, overflowY: "auto", padding: 6 }}>
+        <div role="listbox" aria-label="Commands" style={{ maxHeight: 340, overflowY: "auto", padding: 6 }}>
           {results.length === 0 ? (
             <div style={{ padding: "18px 12px", textAlign: "center", color: "#52525b", fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>
               no matches
@@ -161,8 +164,12 @@ export function CommandPalette({ onSelectTab }: { onSelectTab: (t: TabId) => voi
             results.map((c, i) => (
               <div
                 key={c.id}
+                role="option"
+                aria-selected={i === active}
+                tabIndex={-1}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => runAt(i)}
+                onKeyDown={pressKey(() => runAt(i))}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "space-between",
                   padding: "9px 10px", borderRadius: 4, cursor: "pointer",

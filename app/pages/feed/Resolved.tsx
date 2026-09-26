@@ -8,6 +8,7 @@
 // the card and skew the "N traders" counts. It also reads better as a ticker.
 import { useNavigate } from "react-router-dom";
 import { C, MONO, RADIUS } from "@/config/theme";
+import { pressKey } from "@/utils/a11y";
 
 export type ResolutionEvent = {
   kind: "RESOLUTION";
@@ -48,9 +49,9 @@ export default function Resolved({ events }: { events: ResolutionEvent[] }) {
             // the share buttons + conversion strip) rather than the general profile;
             // fall back to the trader page when there's no thesisId. ⚠️ Both routes are
             // CHILDREN of /feed — a bare /trader|/thesis hard-404s (verified on prod).
-            <div
+            <div role="link" tabIndex={0}
               key={`${e.wallet}-${e.thesisId ?? i}`}
-              onClick={() => navigate(e.thesisId ? `/feed/thesis/${e.wallet}/${e.thesisId}` : `/feed/trader/${e.wallet}`)}
+              onClick={() => navigate(e.thesisId ? `/feed/thesis/${e.wallet}/${e.thesisId}` : `/feed/trader/${e.wallet}`)} onKeyDown={pressKey(() => navigate(e.thesisId ? `/feed/thesis/${e.wallet}/${e.thesisId}` : `/feed/trader/${e.wallet}`))}
               style={{ cursor: "pointer" }}
             >
               <div style={{

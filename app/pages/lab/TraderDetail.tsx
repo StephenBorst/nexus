@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
 import { SIGNAL } from "@/config/theme";
+import { useEscapeKey } from "@/utils/a11y";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -22,6 +23,7 @@ export function TraderDetail({ source, address, accountId, myAddress, onClose }:
 }) {
   const [d, setD] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(source === "orderly");
+  useEscapeKey(onClose);
 
   useEffect(() => {
     if (source !== "orderly" || !accountId) { setLoading(false); return; }
@@ -37,8 +39,8 @@ export function TraderDetail({ source, address, accountId, myAddress, onClose }:
   const label = { fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase" as const, marginBottom: 3 };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div className="nx-fade-in" onClick={(e) => e.stopPropagation()} style={{ width: "min(620px, 96vw)", maxHeight: "88vh", overflowY: "auto", background: "#0f0f11", border: "1px solid #33333a", borderRadius: 10 }}>
+    <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div className="nx-fade-in" role="dialog" aria-modal="true" aria-label="Trader detail" style={{ width: "min(620px, 96vw)", maxHeight: "88vh", overflowY: "auto", background: "#0f0f11", border: "1px solid #33333a", borderRadius: 10 }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: "1px solid #232327", position: "sticky", top: 0, background: "#0f0f11" }}>
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.05em", color: source === "orderly" ? "#3ecf8e" : "#71717a", border: `1px solid ${source === "orderly" ? "#33333a" : "#232327"}`, borderRadius: 3, padding: "1px 5px" }}>{source === "orderly" ? "◆ ORDERLY" : "HL"}</span>

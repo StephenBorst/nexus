@@ -33,6 +33,7 @@ import Desks from "./Desks";
 import ArenaStrip from "./ArenaStrip";
 import WatchOnlyBanner from "./WatchOnlyBanner";
 import { bareTicker } from "@/utils/utils";
+import { pressKey, useEscapeKey } from "@/utils/a11y";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -139,6 +140,7 @@ function CopyModal({
   accountBalance?: number | null;
   onClose: () => void;
 }) {
+  useEscapeKey(onClose);
   const ticker = bareTicker(thesis.symbol);
   const traderName = thesis.displayName ?? `${thesis.wallet.slice(0, 6)}…${thesis.wallet.slice(-4)}`;
 
@@ -267,6 +269,7 @@ function CopyModal({
 
   return (
     <div
+      role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: "fixed", inset: 0, zIndex: 1000,
@@ -1026,8 +1029,8 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
             overflow: "hidden",
           }}>
             {/* Trader row */}
-            <div
-              onClick={() => setExpandedWallet(isExpanded ? null : trader.wallet.toLowerCase())}
+            <div role="button" tabIndex={0}
+              onClick={() => setExpandedWallet(isExpanded ? null : trader.wallet.toLowerCase())} onKeyDown={pressKey(() => setExpandedWallet(isExpanded ? null : trader.wallet.toLowerCase()))}
               style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, overflowX: "auto" }}
             >
               {/* Rank */}
@@ -1199,7 +1202,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                 {/* Profile link */}
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 4 }}>
                   {/* Message this caller — wrapped so it doesn't toggle the row */}
-                  <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex" }}>
+                  <span role="presentation" onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex" }}>
                     <MessageTraderButton wallet={trader.wallet} myWallet={walletAddress} variant="full" label="⬡ MESSAGE" />
                   </span>
                   {/* Verify the caller's real venue record before copying them. */}
@@ -1753,7 +1756,7 @@ export default function FeedPage() {
             {/* Bridge to the unified Proof hub — /proof is every trustless record (callers,
                 agents, arena, desks) under the on-chain ledger, in one place. */}
             {!loading && !error && (
-              <div onClick={() => navigate("/proof")} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "#0f0f11", border: "1px solid #232327", borderLeft: "2px solid #ededf0", borderRadius: 6, padding: "10px 12px", margin: "14px 0", cursor: "pointer" }}>
+              <div role="link" tabIndex={0} onClick={() => navigate("/proof")} onKeyDown={pressKey(() => navigate("/proof"))} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "#0f0f11", border: "1px solid #232327", borderLeft: "2px solid #ededf0", borderRadius: 6, padding: "10px 12px", margin: "14px 0", cursor: "pointer" }}>
                 <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.5 }}>
                   <b style={{ color: "#f4f4f5" }}>The Proof</b> — every track record on Nexus (callers, agents, Arena, desks) under the on-chain ledger, in one place.
                 </span>
@@ -1763,7 +1766,7 @@ export default function FeedPage() {
             {/* Q Signals discovery — Quotient fair value vs the market, mapped to perp reads.
                 PRO + pay-per-pull, so we LINK to the lens (never show paid data on a public surface). */}
             {!loading && !error && (
-              <div onClick={() => navigate("/lab?tab=intel")} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "#0f0f11", border: "1px solid #232327", borderLeft: "2px solid #ededf0", borderRadius: 6, padding: "10px 12px", margin: "14px 0", cursor: "pointer" }}>
+              <div role="link" tabIndex={0} onClick={() => navigate("/lab?tab=intel")} onKeyDown={pressKey(() => navigate("/lab?tab=intel"))} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "#0f0f11", border: "1px solid #232327", borderLeft: "2px solid #ededf0", borderRadius: 6, padding: "10px 12px", margin: "14px 0", cursor: "pointer" }}>
                 <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.5 }}>
                   <b style={{ color: "#f4f4f5" }}>Q Signals</b> — Quotient&rsquo;s model fair value vs the live market, mapped to perp reads. PRO &middot; your wallet pays per pull.
                 </span>
