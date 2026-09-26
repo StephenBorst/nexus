@@ -467,7 +467,7 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   parity/`since` must be passed explicitly. ⚠️ **The routine prompt is NOT read from the repo doc** — the trigger stores its
   own copy, and agents can't edit an http_api routine. After editing `docs/routines/revalidate-basis-2026-10-15.md`,
   borst must PASTE it into the routine (claude.ai/code/routines/trig_01E1U5mnh4qcNMqFDxQKzJcx). Until Sept 26 it ran a
-  Sept-25-17:18 copy with no third arm / two-sided basis / drift notes.
+  Sept-25-17:18 copy with no third arm / two-sided basis / drift notes. **Re-synced by borst 2026-09-26 05:27 UTC — routine prompt == the doc (verified char-for-char).**
   ⚠️ The 12h wallet also has `fundingPercentileMin:95` (leftover) — INERT on BASIS_FADE (brain applies it to
   FUNDING_ONLY/CONFLUENCE only), so the A/B still differs only in hold.
 - **✅ LIVE-vs-GRADED PARITY (2026-09-25):** `app/lib/paperParity.mjs` (`paperParity`/`axisForConfig`/
