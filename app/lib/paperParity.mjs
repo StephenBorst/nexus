@@ -52,22 +52,34 @@ export function unsimulatedFilters(config) {
 const bare = (sym) => String(sym || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
 const ms = (v) => (typeof v === "number" ? v : Date.parse(v));
 
-// Paper rows → entries. A scale-out writes one row per slice with a shared parent_id; the
-// entry is the parent (first open, last close, summed P&L).
-export function entriesFromPaperTrades(trades) {
+// Paper rows → entries. A position is (market, side, open time): exec stamps every row of one
+// position with the position's opened_at — scale-out slices (TP_PARTIAL, which on PAPER rows carry
+// NO parent_id) and the final close (which may) — so that key collapses them whatever ids they
+// carry: first open, last close, summed P&L.
+// `openPosition` = state.current_position. The ledger only holds CLOSED rows, so without it the
+// trade the agent is in right now reads as a graded event it "missed" (the Sept-26 LINK false
+// alarm). It joins as an entry with closedAt null (its closed slices, if any, merge into it).
+export function entriesFromPaperTrades(trades, openPosition = null) {
   const by = new Map();
+  const add = (sym, side, o, c, pnl, id) => {
+    const coin = bare(sym), key = `${coin}:${side}:${o}`;
+    const cur = by.get(key);
+    if (!cur) { by.set(key, { id: id || key, coin, side, openedAt: o, closedAt: Number.isFinite(c) ? c : null, pnl }); return by.get(key); }
+    if (Number.isFinite(c)) cur.closedAt = Math.max(cur.closedAt ?? c, c);
+    cur.pnl += pnl;
+    return cur;
+  };
   for (const t of trades || []) {
     if (!t) continue;
-    const o = ms(t.opened_at), c = ms(t.closed_at);
+    const o = ms(t.opened_at);
     if (!Number.isFinite(o)) continue;
-    const key = t.parent_id || t.id || `${t.symbol}:${o}`;
-    const cur = by.get(key);
-    if (!cur) by.set(key, { id: key, coin: bare(t.symbol), side: t.direction, openedAt: o, closedAt: Number.isFinite(c) ? c : null, pnl: Number(t.pnl) || 0 });
-    else {
-      cur.openedAt = Math.min(cur.openedAt, o);
-      if (Number.isFinite(c)) cur.closedAt = Math.max(cur.closedAt ?? c, c);
-      cur.pnl += Number(t.pnl) || 0;
-    }
+    add(t.symbol, t.direction, o, ms(t.closed_at), Number(t.pnl) || 0, t.parent_id || t.id);
+  }
+  const po = openPosition && ms(openPosition.opened_at);
+  if (openPosition && Number.isFinite(po) && (openPosition.direction === "LONG" || openPosition.direction === "SHORT")) {
+    const e = add(openPosition.symbol, openPosition.direction, po, NaN, 0, "open");
+    e.closedAt = null; // still open: slices that already closed don't end it
+    e.open = true;
   }
   return [...by.values()].sort((a, b) => a.openedAt - b.openedAt);
 }
@@ -124,10 +136,10 @@ function explainMiss(ev, entries, config) {
 
 // The check. `events` = the axis's graded events [{coin, t, side}]; `trades` = paper ledger
 // rows; judged over [since, until − settle]. Returns counts, the pairs, and every mismatch.
-export function paperParity({ trades, events, config, since = 0, until = Date.now() }) {
+export function paperParity({ trades, events, config, since = 0, until = Date.now(), openPosition = null }) {
   const coins = new Set((config?.symbols || []).map(bare));
   const cutoff = until - PARITY_SETTLE_MS;
-  const entries = entriesFromPaperTrades(trades).filter((x) => coins.has(x.coin));
+  const entries = entriesFromPaperTrades(trades, openPosition).filter((x) => coins.has(x.coin));
   const judgedEntries = entries.filter((x) => x.openedAt >= since && x.openedAt <= cutoff);
   const evs = normEvents(events, coins).filter((e) => e.t >= since && e.t <= cutoff);
 

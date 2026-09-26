@@ -5495,11 +5495,15 @@ document.getElementById("btn").addEventListener("click",go);
           const cs = { coin, oiHist, basisHist, cvdHist, smHist, liqHist, candleHist: [] };
           for (const e of gen(cs, priceByHour(oiHist), {}) || []) events.push({ coin, t: e.t, side: e.side });
         }
-        const report = paperParity({ trades: state.paper_trades || [], events, config, since, until });
+        // The position the agent is in right now isn't in the (closed-only) ledger yet — pass it,
+        // or the event it's trading reads as an unexplained miss.
+        const openPosition = state.current_position?.paper ? state.current_position : null;
+        const report = paperParity({ trades: state.paper_trades || [], events, config, since, until, openPosition });
         return json({
           ok: true, address, axis, mode: config.mode, maxHoldHours: config.maxHoldHours ?? null,
           paperResetAt: state.paper_reset_at ? new Date(state.paper_reset_at).toISOString() : null, sinceSource,
           ledgerWindowNote: "Checks the retained paper ledger (last 50 rows). Entries older than the oldest retained row can't be checked.",
+          openPosition: openPosition ? { symbol: openPosition.symbol, direction: openPosition.direction, openedAt: new Date(openPosition.opened_at).toISOString() } : null,
           ...report,
         }, request);
       }
