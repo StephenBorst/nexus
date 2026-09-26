@@ -86,12 +86,15 @@ export function AgentToggleCard({ label, description, on, onToggle }: {
 }
 
 // ─── Agent Track Record (shared by live + paper) ─────────
-export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onReset, summary }: {
+export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onReset, summary, resetAt }: {
   title: string;
   accent: string;
   trades?: AgentTrade[] | null;
   paper?: boolean;
   onReset?: () => void;
+  // state.paper_reset_at — when the clean record starts. An empty record with no stamp
+  // still needs RESET, or the parity check has no start time to count from.
+  resetAt?: number | null;
   // Server-side FULL aggregate (all trades, not the last-50 the GET ships). When
   // present it drives the headline numbers so a long-running agent's record isn't
   // undercounted; falls back to computing from `trades` (paper has no server side).
@@ -114,6 +117,7 @@ export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onR
     ? summary!.firstTradeAt
     : (trades.length ? Math.min(...trades.map((t) => new Date(t.opened_at).getTime() || Date.now())) : 0);
   const since = sinceMs ? new Date(sinceMs).toLocaleDateString() : null;
+  const startsAt = !since && resetAt ? new Date(resetAt).toLocaleString() : null;
   // Paper has no server-side aggregate, so `trades` IS the record — but exec caps
   // paper_trades at the last 50 (rolling). Past the cap, these stats are a rolling
   // window (and `since` is just the oldest RETAINED trade, not the record start), so
@@ -129,7 +133,8 @@ export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onR
         <div style={{ ...agentLabelStyle, color: accent }}>{title}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {since && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>{lifetime ? `lifetime · since ${since}` : rolling ? `last 50 · since ${since}` : `since ${since}`}</span>}
-          {onReset && tr > 0 && (
+          {startsAt && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>record starts {startsAt}</span>}
+          {onReset && (tr > 0 || !resetAt) && (
             <button onClick={onReset} style={{ ...navBtnStyle, fontSize: 9, padding: "3px 10px", color: "#d4d4d8", borderColor: "#33333a" }}>RESET</button>
           )}
         </div>

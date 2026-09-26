@@ -461,6 +461,13 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   the arm was set up with `symbols: []`. ⚠️ All three paper wallets carried a leftover `takeProfits` scale-out
   [1%×75%, 2%×25%] that OVERRIDES `tpPercent` in exec (`normTakeProfits`) → they trade a different exit than the graded
   contract (single TP 2.5). The preset itself has no takeProfits.
+  **✅ FIXED + CLEAN START = 2026-09-26T00:04:16Z (epoch 1790381056000) for ALL THREE** — borst removed the scale-out
+  on all three, set the third arm to the nine, re-reset; verified live (0 trades each). The 12h wallet has NO
+  `paper_reset_at` (the Lab hid RESET on an empty record — fixed: RESET now also shows when there's no start stamp), so
+  parity/`since` must be passed explicitly. ⚠️ **The routine prompt is NOT read from the repo doc** — the trigger stores its
+  own copy, and agents can't edit an http_api routine. After editing `docs/routines/revalidate-basis-2026-10-15.md`,
+  borst must PASTE it into the routine (claude.ai/code/routines/trig_01E1U5mnh4qcNMqFDxQKzJcx). Until Sept 26 it ran a
+  Sept-25-17:18 copy with no third arm / two-sided basis / drift notes.
   ⚠️ The 12h wallet also has `fundingPercentileMin:95` (leftover) — INERT on BASIS_FADE (brain applies it to
   FUNDING_ONLY/CONFLUENCE only), so the A/B still differs only in hold.
 - **✅ LIVE-vs-GRADED PARITY (2026-09-25):** `app/lib/paperParity.mjs` (`paperParity`/`axisForConfig`/
