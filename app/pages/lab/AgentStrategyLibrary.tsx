@@ -84,7 +84,7 @@ export function AgentStrategyLibrary({
           </div>
         </div>
         <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 10, marginTop: 6, lineHeight: 1.5 }}>
-          Strategies shared by the community, ranked by the author's <strong style={{ color: "#a1a1aa" }}>graded live/paper record</strong> — not backtest (shown only as a hypothesis). Copy one to your editor and make it yours.
+          Strategies shared by the community, ranked by the author’s <strong style={{ color: "#a1a1aa" }}>graded live/paper record</strong> — not backtest (shown only as a hypothesis). Copy one to your editor and make it yours.
         </div>
         {community === null ? (
           <button onClick={() => loadCommunity("")} style={{ ...btnPrimary, fontSize: 10, padding: "6px 16px", marginTop: 10 }}>▤ BROWSE STRATEGIES</button>
@@ -120,7 +120,7 @@ export function AgentStrategyLibrary({
                 <button onClick={() => copyStrategy(s)} style={{ ...navBtnStyle, fontSize: 9, padding: "5px 14px", flexShrink: 0 }}>COPY</button>
               </div>
             ))}
-            <div style={{ color: "#52525b", fontFamily: "var(--nx-font-mono)", fontSize: 9, marginTop: 4 }}>*bt = backtest hypothesis; ranking uses the author's real graded record. Badge = our walk-forward verdict (net-positive across markets + time). ✅ is rare by design.</div>
+            <div style={{ color: "#52525b", fontFamily: "var(--nx-font-mono)", fontSize: 9, marginTop: 4 }}>*bt = backtest hypothesis; ranking uses the author’s real graded record. Badge = our walk-forward verdict (net-positive across markets + time). ✅ is rare by design.</div>
           </div>
         )}
       </div>

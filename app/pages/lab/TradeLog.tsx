@@ -196,7 +196,7 @@ export function TradeLogAllView({
       <div style={{ display: "flex", flexDirection: "column", gap: 6, overflowX: isMobile ? "auto" : "visible" }}>
         {filtered.map(([key, g]) => {
           const winRate = g.trades ? Math.round((g.wins / g.trades) * 100) : 0;
-          const [, m, d] = key.split("-").map(Number);
+          const [, , d] = key.split("-").map(Number);
           return (
             <div
               key={key}

@@ -8,7 +8,7 @@ import {
   classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets, regimeEdge,
   planQuality, planSummary,
   expectancyStats, callerScore, convictionCalibration, contestedBoard,
-  mispricedBoard, consensusBySymbol, MISPRICED, fundingReversion, edgeQuality, mergeFundingPrice,
+  mispricedBoard, consensusBySymbol, fundingReversion, edgeQuality, mergeFundingPrice,
   LOSS_REASONS, isLossReason, postmortemSummary,
   validateArenaRegistration, arenaAgentConfig,
   parsePriceTarget, forecastDivergence, FORECAST,
@@ -1818,7 +1818,7 @@ test("wargameScenario: thesis + macro + freeform build directional red-team prom
 });
 
 // ── creatorEarnings (#2 per-thesis fee-share) ──────────────────────────────────
-import { creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { creatorEarnings } from "./logic.mjs";
 test("creatorEarnings: fee = notional × bps × round-trip × share; dedupes copiers", () => {
   const rows = [
     { entry_price: 100, qty: 10, symbol: "PERP_BTC_USDC", wallet_address: "0xAAA" }, // notional 1000

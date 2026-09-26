@@ -276,7 +276,6 @@ export const useOrderlyConfig = () => {
   const proofMenu    = [{ name: "Proof",    href: "/proof"    }];
   const analyzeMenu  = [{ name: "Wallet X-Ray",  href: "/analyze"  }];
   const tokenMenu    = [{ name: "Spot",     href: "/token"    }];
-  const messagesMenu = [{ name: "MESSAGES", href: "/messages" }];
   // INTEL lives as a tab inside LAB — not in the top nav
 
 const byHref = (href: string): SdkNavItem | undefined => translatedEnabledMenus.find(m => m.href === href);

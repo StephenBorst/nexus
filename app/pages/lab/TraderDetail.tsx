@@ -35,7 +35,6 @@ export function TraderDetail({ source, address, accountId, myAddress, onClose }:
   }, [source, accountId]);
 
   const label = { fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase" as const, marginBottom: 3 };
-  const statVal = (n: number) => ({ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: n >= 0 ? "#3ecf8e" : "#f7525f" });
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -100,7 +99,7 @@ export function TraderDetail({ source, address, accountId, myAddress, onClose }:
                 ))}
               </div>
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 10 }}>
-                From the public Orderly settlement indexer. Realized PnL is cumulative; profitable-markets % is the share of markets they're net-green on.
+                From the public Orderly settlement indexer. Realized PnL is cumulative; profitable-markets % is the share of markets they’re net-green on.
               </div>
             </>
           )}

@@ -154,7 +154,6 @@ export function ProjectionBand({ symbol, height = 216, horizonHours, fill }: { s
         const dir = lean?.dir;
         const tgtColor = dir === "LONG" ? POS : dir === "SHORT" ? NEG : BONE;
         const settleStr = new Date(settle).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-        const pct = (v: number) => `${v >= price ? "+" : ""}${(((v - price) / price) * 100).toFixed(1)}%`;
 
         return (
           <>

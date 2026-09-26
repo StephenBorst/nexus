@@ -163,7 +163,7 @@ export function AgentBacktestCard({
                     </div>
                     <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 10, color: "#71717a", marginTop: 5, lineHeight: 1.5 }}>
                       {skipped
-                        ? <>Couldn't take {skipped} signal{skipped === 1 ? "" : "s"}: {why.join(" · ")}.</>
+                        ? <>Couldn’t take {skipped} signal{skipped === 1 ? "" : "s"}: {why.join(" · ")}.</>
                         : <>Every signal was takeable. No overlap between markets in this window.</>}
                     </div>
                     {p.baseline && (() => {
@@ -273,7 +273,7 @@ export function AgentBacktestCard({
                       );
                     })()}
                     <div style={{ color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 8, lineHeight: 1.5 }}>
-                      The honest test: an edge that only works on one market in one window is NOT robust. We hold our own presets to this — nothing wears "proven" until it passes. Past performance ≠ future results.
+                      The honest test: an edge that only works on one market in one window is NOT robust. We hold our own presets to this — nothing wears &quot;proven&quot; until it passes. Past performance ≠ future results.
                     </div>
                   </>
                 )}

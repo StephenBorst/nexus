@@ -24,7 +24,6 @@ type Filter = "all" | "callers" | "agents" | "arena" | "desks" | "signals";
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const usd = (n: number) => `${n < 0 ? "-" : "+"}$${Math.abs(n) >= 1000 ? `${(Math.abs(n) / 1000).toFixed(1)}K` : Math.abs(n).toFixed(2)}`;
-const label: React.CSSProperties = { fontFamily: MONO, fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: MUTED };
 
 // ── data types (only the fields we render) ──
 type Caller = { wallet: string; displayName?: string; pfp?: string; hitRate: number; avgR: number; calls: number; score: number; meritRank?: { glyph: string; title: string } | null };
@@ -313,7 +312,7 @@ function ProofEdgeCard({ c, onClick }: { c: ProofCard; onClick: () => void }) {
       {/* Thesis */}
       {c.thesis && (
         <div style={{ fontFamily: UI, fontSize: 12, color: FOG, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-          "{c.thesis}"
+          &quot;{c.thesis}&quot;
         </div>
       )}
       {/* Catalyst + exit window (the Signal framing) */}
@@ -383,7 +382,7 @@ export default function ProofPage() {
         Humans, machines, and teams — all ranked on <b style={{ color: BRIGHT }}>one standard</b>. Every record here is
         graded from public price (first-touch target vs. stop for calls; settled trades for agents), never
         self-reported, and hashed into a ledger anyone can recompute and check against the chain. This is the part
-        competitors can't copy: being <i>right</i> is the only thing that ranks.
+        competitors can’t copy: being <i>right</i> is the only thing that ranks.
       </div>
 
       {/* FEATURED LEAD — the engine's validated edge, front and center (booth hero). */}
@@ -536,7 +535,7 @@ export default function ProofPage() {
         <BoardShell title="◆ SIGNAL SCOREBOARD · OUR OWN READS, GRADED" count={scorecard?.axes?.length}>
           <div style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.6, maxWidth: 660, marginBottom: 12 }}>
             Every read in the engine, graded the way we grade traders. <b style={{ color: BRIGHT }}>Forward returns. No lookahead.</b> Pooled across the core markets. Walk-forward stability check.
-            A read is not an edge until it's <span style={{ color: POS }}>◆ PREDICTIVE</span> here. Most sit at <span style={{ color: FAINT }}>ACCRUING</span> until the history matures and the sample clears the bar.
+            A read is not an edge until it’s <span style={{ color: POS }}>◆ PREDICTIVE</span> here. Most sit at <span style={{ color: FAINT }}>ACCRUING</span> until the history matures and the sample clears the bar.
             <span style={{ display: "block", marginTop: 8, color: MUTED, fontSize: 11.5 }}>
               Reading a row: <b style={{ color: FOG }}>horizon</b> (how far ahead) · <b style={{ color: FOG }}>hit rate</b> (share that went the right way) · <b style={{ color: FOG }}>edge</b> (avg move caught, 100 bps = 1%) · <b style={{ color: FOG }}>samples</b> (times it&rsquo;s fired) · <b style={{ color: FOG }}>stable</b> (held up in both halves) · <b style={{ color: FOG }}>random</b> (the same side entered at random hours in the same window. The read has to beat it, not zero).
             </span>
@@ -561,7 +560,7 @@ export default function ProofPage() {
           <div style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT, marginTop: 10, lineHeight: 1.5 }}>
             {scorecard?.config?.coins?.length ? `pooled across ${scorecard.config.coins.length} markets · min ${scorecard.config.minSamples} obs to rate` : "self-graded · walk-forward"}
             {scorecard?.asOf ? ` · updated ${new Date(scorecard.asOf).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
-            {" "}· we publish the misses too — that's the point.
+            {" "}· we publish the misses too — that’s the point.
           </div>
         </BoardShell>
       )}

@@ -822,7 +822,6 @@ export default function TokenTerminal() {
   })();
   // Amount in the INPUT token's units + that token's wallet balance.
   const solInputHuman = solPayWith === "usdc" ? Math.max(0, parseFloat(solAmt) || 0) : solInSol;
-  const solInputBal = solPayWith === "usdc" ? usdcBal : solBalance;
   // USD value of the input (USDC ≈ $; SOL via solUsd) → est tokens out.
   const solInUsd = solPayWith === "usdc" ? solInputHuman : (solUsd ? solInSol * solUsd : null);
   const solEstOut = (isSolToken && solInputHuman > 0 && solInUsd != null && (pair?.priceUsd || 0) > 0) ? (solInUsd as number) / (pair!.priceUsd as number) : null;

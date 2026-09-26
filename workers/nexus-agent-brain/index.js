@@ -180,7 +180,7 @@ export default {
       // Liveness heartbeat — stamps every completed run regardless of whether
       // any signals were emitted (e.g. all active users hold open positions, so
       // the brain correctly emits nothing). The ops monitor watches this.
-      try { await env.NEXUS_AGENT.put("ops:brain:heartbeat", String(Date.now())); } catch {}
+      try { await env.NEXUS_AGENT.put("ops:brain:heartbeat", String(Date.now())); } catch { /* best-effort heartbeat */ }
     }
   },
 };

@@ -140,7 +140,7 @@ function PosterSVG({ data, svgRef }: { data: PosterData; svgRef: React.Ref<SVGSV
 
       {/* Footer */}
       <line x1="60" y1="560" x2={W - 60} y2="560" stroke="#1a1a1e" strokeWidth="1" />
-      <text x="60" y="596" fill={ACCENT} fontFamily={MONO} fontSize="15" letterSpacing="1" fillOpacity="0.7">◆ VERIFY, DON'T TRUST</text>
+      <text x="60" y="596" fill={ACCENT} fontFamily={MONO} fontSize="15" letterSpacing="1" fillOpacity="0.7">◆ VERIFY, DON’T TRUST</text>
       <text x={RX} y="596" fill={FAINT} fontFamily={MONO} fontSize="15" letterSpacing="1" textAnchor="end">nexustradinglabs.com</text>
     </svg>
   );

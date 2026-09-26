@@ -167,14 +167,13 @@ function NewsTab() {
       )}
 
       <div style={{ color: DIM, fontSize: 10, marginTop: 12, letterSpacing: "0.05em" }}>
-        // COINDESK · COINTELEGRAPH · DECRYPT · YAHOO FINANCE · AUTO-REFRESH 5MIN
+        {"// "}COINDESK · COINTELEGRAPH · DECRYPT · YAHOO FINANCE · AUTO-REFRESH 5MIN
       </div>
     </div>
   );
 }
 
 // ─── AgentView ───────────────────────────────────────────
-import { AgentView } from "./AgentView";
 
 // ─── Main Page ───────────────────────────────────────────
 // ─── Market Intel (Intel + News merged) ──────────────────

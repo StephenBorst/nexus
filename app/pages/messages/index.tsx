@@ -612,7 +612,7 @@ export default function MessagesPage() {
             wallet-to-wallet encrypted DMs powered by XMTP
             <br />
             <span style={{ color: "#33333a", fontSize: 9 }}>
-              you'll sign twice — once for the encryption key, once to register
+              you’ll sign twice — once for the encryption key, once to register
             </span>
           </div>
           {error && <div style={S.errText}>{error}</div>}

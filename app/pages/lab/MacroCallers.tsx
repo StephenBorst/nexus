@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
 const BONE = "#ededf0", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", BORDER = "#232327", INSET = "#08080a";
+const BORDER = "#232327", INSET = "#08080a";
 
 type MacroCaller = {
   rank?: number; wallet: string; displayName?: string | null; pfp?: string | null;

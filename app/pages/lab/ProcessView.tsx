@@ -242,7 +242,7 @@ export function ExpectancyCard({ data }: { data: ProcessData | null }) {
             {cal.calibrated ? (
               <>◎ <strong>Calibrated.</strong> Your higher-conviction calls average <strong style={{ color: C.pos }}>+{cal.gap}R more</strong> than your smaller ones. You size up on the right ideas.</>
             ) : (
-              <>⚠ <strong style={{ color: C.warn }}>Inverted sizing.</strong> Your bigger bets average <strong style={{ color: C.neg }}>{cal.gap}R</strong> vs your smaller ones. Conviction is pointing the wrong way, and it's expensive.</>
+              <>⚠ <strong style={{ color: C.warn }}>Inverted sizing.</strong> Your bigger bets average <strong style={{ color: C.neg }}>{cal.gap}R</strong> vs your smaller ones. Conviction is pointing the wrong way, and it’s expensive.</>
             )}
           </div>
           <div style={{ ...hint, marginTop: 6 }}>{cal.highN} high-conviction vs {cal.lowN} low, split at your median position size</div>

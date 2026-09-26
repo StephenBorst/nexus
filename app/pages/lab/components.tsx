@@ -295,7 +295,7 @@ export function PnlBars({ values, labels }: { values: number[]; labels?: string[
           const bh = Math.max(1, Math.abs(v) * scale);
           const yy = v >= 0 ? zeroY - bh : zeroY;
           // Semantic P&L color: profit = green (the one sanctioned chroma), loss =
-          // canonical red. Was bone-white/​drifted-red, which contradicted the legend.
+          // canonical red. Was bone-white/drifted-red, which contradicted the legend.
           const col = v >= 0 ? C.pos : C.neg;
           const tip = labels?.[i] ?? `${v >= 0 ? "+" : "-"}$${Math.abs(v).toFixed(2)}`;
           const delay = Math.round((i / n) * 320); // left→right grow-in sweep

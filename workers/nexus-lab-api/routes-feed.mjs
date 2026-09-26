@@ -9,14 +9,11 @@
 // line-count win is not worth the risk without a staging environment.
 //
 // ⚠️ Pure move — logic byte-identical to what shipped.
-import { json, normalizeAddress, recoverEthAddress, holdersRoomMessage, appendNotification } from "./shared.mjs";
-import { safeChartUrl } from "./logic.mjs";
+import { json, recoverEthAddress, holdersRoomMessage, appendNotification } from "./shared.mjs";
 import { RESOLVED_FEED_KEY } from "./resolutions.mjs";
 
 export async function handleFeed(parts, request, env) {
   if (!["feed", "comments", "reactions", "takes"].includes(parts[0])) return null;
-  const url = new URL(request.url);
-
   if (parts[0] === "feed" && !parts[1]) {
     if (request.method !== "GET") {
       return json({ error: "method not allowed" }, request, 405);

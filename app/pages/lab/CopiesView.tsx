@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLabStorage } from "@/hooks/useLabStorage";
 import { useIsMobile } from "./useIsMobile";
-import type { ThesisTrade } from "./types";
 import { STATUS_CONFIG } from "./styles";
 import { effectiveStatus } from "./helpers";
 import { EmptyState } from "./components";

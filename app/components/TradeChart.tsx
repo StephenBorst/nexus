@@ -292,7 +292,7 @@ export function TradeChart({ symbol, height = 240, positionEntry, tfIndex, onTf,
   const applyZoom = (factor: number) => {
     const curLo = vp ? vp.lo : 0, curHi = vp ? vp.hi : n - 1;
     const count = curHi - curLo + 1;
-    let newCount = Math.max(MIN_CANDLES, Math.min(n, Math.round(count * factor)));
+    const newCount = Math.max(MIN_CANDLES, Math.min(n, Math.round(count * factor)));
     if (newCount >= n) { setVp(null); return; }
     const center = (curLo + curHi) / 2;
     let newLo = Math.round(center - newCount / 2);

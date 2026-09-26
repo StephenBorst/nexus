@@ -19,7 +19,6 @@ import { NexusBuyBar } from "@/components/NexusBuyBar";
 import type { ThesisTrade } from "@/pages/lab/types";
 import { SocialBar } from "@/components/SocialBar";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
-import { fmtUsdCompact } from "@/lib/fmtUsd.mjs";
 import { Sparkline, SectionHeader } from "@/pages/lab/components";
 import { getAgentSig } from "@/pages/lab/agentKeys";
 import { chartImageList, effectiveStatus } from "@/pages/lab/helpers";
@@ -112,7 +111,7 @@ function calcCopy(
   accountSize: number,
   riskPct: number,
   fundingRate: number,
-  direction: "LONG" | "SHORT",
+  _direction: "LONG" | "SHORT",
 ) {
   if (!entry || !sl || !tp1 || !accountSize || !riskPct) return null;
   const stopDistancePct = Math.abs(entry - sl) / entry;
@@ -1006,7 +1005,6 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {sortedBoard.map((trader, i) => {
         const rank = i + 1;
-        const isOnChainVerified = onChainStats.has(trader.wallet.toLowerCase());
         // Trustless columns: show the GRADED record so the stats match the verified /
         // emerging tier. Self-reported / agent-exec statuses are a DIFFERENT metric —
         // showing an "80% win rate · 8/2" next to an "emerging, 1 graded call" badge is
@@ -1356,52 +1354,6 @@ function ContributePrompt({ prominent = false }: { prominent?: boolean }) {
       >
         → POST YOUR FIRST CALL
       </button>
-    </div>
-  );
-}
-
-// ─── Autonomous agent track-record card ──────────────────────────────────────
-// Surfaces the bot's REAL, trustless-anchored closed-trade history as social
-// proof on the default feed — "this platform runs a working autonomous agent".
-function AgentTrackRecord() {
-  const navigate = useNavigate();
-  const [s, setS] = useState<{ trades: number; winRate: number; net: number; anchored: boolean } | null>(null);
-  useEffect(() => {
-    let cancel = false;
-    fetch(`${API_BASE}/agents/ledger`).then((r) => r.json()).then((d) => {
-      if (cancel) return;
-      const recs: { pnl?: number }[] = d?.records || [];
-      if (!recs.length) return;
-      const wins = recs.filter((r) => Number(r.pnl) > 0).length;
-      const net = recs.reduce((a, r) => a + Number(r.pnl || 0), 0);
-      setS({ trades: recs.length, winRate: Math.round((wins / recs.length) * 100), net, anchored: !!d?.onChain?.verified });
-    }).catch(() => {});
-    return () => { cancel = true; };
-  }, []);
-  if (!s) return null;
-  return (
-    <div
-      onClick={() => navigate("/lab?tab=agent")}
-      style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "12px 16px", background: "linear-gradient(180deg,#141416,#0a0a0b)", border: "1px solid #33333a", borderRadius: 6, marginBottom: 14 }}
-    >
-      <div style={{ flexShrink: 0 }}>
-        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", fontWeight: "bold" }}>NEXUS AUTONOMOUS AGENT</div>
-        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8.5, color: "#71717a", marginTop: 2 }}>
-          {s.anchored ? "⛓ graded record · anchored on Arbitrum" : "graded from public price"}
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 16, marginLeft: "auto", flexWrap: "wrap" }}>
-        {[
-          { label: "TRADES", val: String(s.trades), color: "#fff" },
-          { label: "WIN RATE", val: `${s.winRate}%`, color: s.winRate >= 50 ? "#ededf0" : "#fbbf24" },
-          { label: "NET P&L", val: fmtUsdCompact(s.net), color: s.net >= 0 ? "#3ecf8e" : "#f7525f" },
-        ].map((x) => (
-          <div key={x.label} style={{ textAlign: "right", lineHeight: 1.25 }}>
-            <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: "bold", color: x.color }}>{x.val}</div>
-            <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 7.5, color: "#52525b", letterSpacing: "0.06em" }}>{x.label}</div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1789,7 +1741,7 @@ export default function FeedPage() {
             )}
             {error && !loading && (
               <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#f7525f" }}>
-                Feed didn't load. Check your connection.
+                Feed didn’t load. Check your connection.
               </div>
             )}
             {/* VERIFIED CALLERS is the headline of this tab — the ranked, publicly-graded
@@ -1922,7 +1874,7 @@ export default function FeedPage() {
 
             {error && !loading && (
               <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#f7525f" }}>
-                Feed didn't load. Check your connection.
+                Feed didn’t load. Check your connection.
               </div>
             )}
 
