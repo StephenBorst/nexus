@@ -104,14 +104,32 @@ export function quotientPerpMap(sig: { question?: string | null; side?: string |
 const REQUIRE_ACTIONABLE = true;
 const MAX_SIGNALS = 24;
 
+// Quotient's raw signal row — only the fields the shaper reads, all optional (upstream
+// is untrusted; every read below already guards). Type-only: no runtime change.
+type QRawMarket = {
+  question?: string; market_odds?: unknown; marketKey?: string; venue?: string;
+  marketUrl?: string; polymarketUrl?: string; sourceUrl?: string; quotientUrl?: string;
+  end_date?: string; volume_24h?: unknown;
+};
+type QRawSignal = {
+  market?: QRawMarket; question?: string; id?: string;
+  is_active?: boolean; suppression_reason?: unknown; grounding_status?: string;
+  latest_q?: unknown; entry_q?: unknown; entry_pm?: unknown; entry_spread_pp?: unknown;
+  venue_quote?: { selected_probability?: unknown; venue?: string };
+  conviction_tier?: unknown; conviction?: unknown; q_side?: string; side?: string;
+  converge_upside_pct?: unknown; max_roi_pct?: unknown; thesis?: unknown; window_days?: unknown;
+  capacity_usd_at_2c?: unknown; is_fresh?: unknown; is_new_today?: unknown;
+  forecast_status?: { state?: string; adverse_move_pct?: unknown };
+};
+
 // Mirror of logic.mjs quotientSignals. Takes the raw `signals` array from Quotient.
 export function shapeQuotientSignals(rawSignals: unknown): QBoard {
   const rows = Array.isArray(rawSignals) ? rawSignals : [];
   const out: QSignal[] = [];
   for (const raw of rows) {
-    const s = raw as Record<string, any>;
+    const s = raw as QRawSignal;
     if (!s || typeof s !== "object") continue;
-    const market = s.market || {};
+    const market: QRawMarket = s.market || {};
     const question = market.question || s.question || null;
     if (!question) continue;
     if (REQUIRE_ACTIONABLE) {

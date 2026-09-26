@@ -1,8 +1,9 @@
 import process from "process";
 import { Buffer } from "buffer";
 
-(process as any).env ??= {};
+(process as { env?: NodeJS.ProcessEnv }).env ??= {};
 
-(globalThis as any).process ??= process;
-(globalThis as any).Buffer ??= Buffer;
-(globalThis as any).global ??= globalThis;
+const g = globalThis as typeof globalThis & { process?: typeof process; Buffer?: typeof Buffer; global?: typeof globalThis };
+g.process ??= process;
+g.Buffer ??= Buffer;
+g.global ??= globalThis;

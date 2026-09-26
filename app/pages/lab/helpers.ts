@@ -123,3 +123,8 @@ export function resolveSuggestion(
   if (isSl) return { outcome: "STOPPED_OUT", graded: false };
   return null;
 }
+
+/** A caught value as display text: an Error's message, anything else stringified. */
+export function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}

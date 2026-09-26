@@ -32,3 +32,15 @@ export type AgentStanding = {
   criteria: AgentStandingCriterion[];
   stats: { trades: number; daysActive: number; winRate: number; netPnl: number; profitFactor: number; score: number; avgWin: number; avgLoss: number; firstTradeAt: number } | null;
 };
+
+/** A server JSON payload the Lab renders but doesn't restructure (backtest/sweep/validate). */
+export type ApiPayload = Record<string, unknown>;
+
+/** A saved or community strategy from `/agent/:addr/strategies` — the config IS the strategy. */
+export type SavedStrategy = {
+  id: string;
+  name: string;
+  config: Partial<import("./types").AgentConfig>;
+  public?: boolean;
+  [k: string]: unknown;
+};

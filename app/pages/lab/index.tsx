@@ -34,6 +34,7 @@ import { NexusBriefing } from "./NexusBriefing";
 import { DecisionBoard } from "./DecisionBoard";
 import { CountUp } from "./components";
 import { pressKey } from "@/utils/a11y";
+import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
 
 // Legacy alias: the old MISPRICED/GAPS tab was folded into SMART MONEY (Phase 1 re-slice),
 // so any ?tab=mispriced deep-link, shared OG link, or copilot nav resolves to smart.
@@ -136,12 +137,13 @@ export default function TheLabPage() {
   // Orderly's /v1/positions returns a row for every symbol the account has state on —
   // including CLOSED ones (position_qty 0) that linger until settled. Counting raw rows
   // showed "OPEN 2" while actually flat, so keep only rows with real size.
-  const openPositions: any[] = ((posData as any)?.rows ?? []).filter((p: any) => Math.abs(parseFloat(p?.position_qty ?? 0)) > 1e-9);
+  const posRows = (posData as { rows?: OrderlyPositionRow[] } | null | undefined)?.rows ?? [];
+  const openPositions = posRows.filter((p) => Math.abs(Number(p?.position_qty ?? 0)) > 1e-9);
   const openCount = openPositions.length;
-  const unrealizedPnl = openPositions.reduce((s: number, p: any) => s + (p.unsettled_pnl ?? 0), 0);
+  const unrealizedPnl = openPositions.reduce((s: number, p) => s + (p.unsettled_pnl ?? 0), 0);
   // Positions in the shape The Briefing reads (direction from signed qty).
   const briefingPositions = openPositions
-    .map((p: any) => ({ symbol: String(p.symbol ?? ""), direction: (parseFloat(p.position_qty ?? 0) >= 0 ? "LONG" : "SHORT") as "LONG" | "SHORT" }))
+    .map((p) => ({ symbol: String(p.symbol ?? ""), direction: (Number(p.position_qty ?? 0) >= 0 ? "LONG" : "SHORT") as "LONG" | "SHORT" }))
     .filter((p) => p.symbol);
 
   // ── The loop, made visible ────────────────────────────────────────────────
