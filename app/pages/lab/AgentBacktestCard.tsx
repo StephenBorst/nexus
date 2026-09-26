@@ -12,6 +12,7 @@ import type { AgentConfig } from "./types";
 import { strategyLabel, backtestGateSupport } from "@/lib/strategyLabel.mjs";
 import { agentCardStyle, agentLabelStyle, btnPrimary, navBtnStyle } from "./styles";
 import { bareTicker } from "@/utils/utils";
+import { pressKey } from "@/utils/a11y";
 
 // Per-symbol recorded-OI coverage. A bare "0/14d" hid WHICH market was short — and since
 // the brain only records OI for core BTC/ETH/SOL + watchlisted symbols, that was usually a
@@ -296,7 +297,7 @@ export function AgentBacktestCard({
                     <span>STRATEGY</span><span style={{ textAlign: "right" }}>NET$</span>{hasMkts && <span title="Markets it was net-positive on" style={{ textAlign: "right" }}>MKTS+</span>}<span style={{ textAlign: "right" }}>WIN%</span><span style={{ textAlign: "right" }}>TRADES</span>
                   </div>
                   {sweep.results.slice(0, 12).map((r: any, i: number) => (
-                    <div key={i} onClick={() => r.config && applySweepConfig(r.config)} title="Apply this config to the editor above" style={{ display: "grid", gridTemplateColumns: sweepCols, gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 4px", borderBottom: "1px solid #141416", color: "#a1a1aa", cursor: r.config ? "pointer" : "default", borderRadius: 3 }}
+                    <div role="button" tabIndex={0} key={i} onClick={() => r.config && applySweepConfig(r.config)} onKeyDown={pressKey(() => r.config && applySweepConfig(r.config))} title="Apply this config to the editor above" style={{ display: "grid", gridTemplateColumns: sweepCols, gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 4px", borderBottom: "1px solid #141416", color: "#a1a1aa", cursor: r.config ? "pointer" : "default", borderRadius: 3 }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "#141416"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
                       <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{i === 0 ? "★ " : ""}{r.name}</span>

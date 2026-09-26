@@ -147,6 +147,10 @@ html, body {
 .nx-btn:hover { color: var(--nx-fog); border-color: var(--nx-border-strong); }
 .nx-btn:active { transform: scale(0.97); }
 .nx-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nx-border-accent); }
+/* Clickable rows/cards made keyboard-reachable (role="button"/"link" + tabIndex) get a bone
+   ring — on KEYBOARD focus only (:focus-visible), so mouse users see no change. */
+[role="button"][tabindex]:focus-visible, [role="link"][tabindex]:focus-visible,
+[role="option"]:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--nx-accent); }
 .nx-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
 
 .nx-btn-primary {

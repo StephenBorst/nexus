@@ -12,6 +12,7 @@ import CarrySleeve from "./CarrySleeve";
 import FeaturedLead from "./FeaturedLead";
 import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
+import { pressKey } from "@/utils/a11y";
 
 const API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -290,7 +291,7 @@ function ProofEdgeCard({ c, onClick }: { c: ProofCard; onClick: () => void }) {
   const tone = win ? POS : NEG;
   const chip: React.CSSProperties = { fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.05em", color: BRIGHT, background: "#141416", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "2px 6px", whiteSpace: "nowrap" };
   return (
-    <div onClick={onClick} style={{
+    <div role="button" tabIndex={0} onClick={onClick} onKeyDown={pressKey(onClick)} style={{
       background: SURFACE_ALT, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${tone}`,
       borderRadius: 6, padding: 12, cursor: "pointer", display: "flex", flexDirection: "column", gap: 8,
     }}>
@@ -451,7 +452,7 @@ export default function ProofPage() {
           {callers === null ? empty("loading…") : callers.length === 0 ? empty("No qualified callers yet — 5+ graded calls to rank.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {callers.slice(0, 15).map((c, i) => (
-                <div key={c.wallet} onClick={() => navigate(`/feed/trader/${c.wallet}`)} style={rowStyle(true)}>
+                <div role="link" tabIndex={0} key={c.wallet} onClick={() => navigate(`/feed/trader/${c.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${c.wallet}`))} style={rowStyle(true)}>
                   <span style={rankCell}>{i + 1}</span>
                   <Pfp src={c.pfp} />
                   <span style={nameCell}>{c.displayName || short(c.wallet)}</span>
@@ -471,7 +472,7 @@ export default function ProofPage() {
           {agents === null ? empty("loading…") : agents.length === 0 ? empty("No ranked agents yet — 10 live trades over 3+ days to qualify.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {agents.slice(0, 15).map((a) => (
-                <div key={a.wallet} onClick={() => navigate(`/feed/trader/${a.wallet}`)} style={rowStyle(true)}>
+                <div role="link" tabIndex={0} key={a.wallet} onClick={() => navigate(`/feed/trader/${a.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${a.wallet}`))} style={rowStyle(true)}>
                   <span style={rankCell}>{a.rank}</span>
                   <Pfp src={a.pfp} />
                   <span style={nameCell}>{a.displayName || short(a.wallet)}</span>
@@ -489,14 +490,14 @@ export default function ProofPage() {
         <BoardShell title="ARENA · EXTERNAL AI AGENTS" count={arena?.length}>
           {arena === null ? empty("loading…") : arena.length === 0 ? (
             <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "6px 2px" }}>
-              The open proving ground is live — no agents registered yet. <span onClick={() => navigate("/arena")} style={{ color: BONE, cursor: "pointer" }}>Enter the Arena →</span>
+              The open proving ground is live — no agents registered yet. <span role="link" tabIndex={0} onClick={() => navigate("/arena")} onKeyDown={pressKey(() => navigate("/arena"))} style={{ color: BONE, cursor: "pointer" }}>Enter the Arena →</span>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {arena.slice(0, 15).map((a, i) => {
                 const s = a.live || a.paper;
                 return (
-                  <div key={a.wallet} onClick={() => navigate("/arena")} style={rowStyle(true)}>
+                  <div role="link" tabIndex={0} key={a.wallet} onClick={() => navigate("/arena")} onKeyDown={pressKey(() => navigate("/arena"))} style={rowStyle(true)}>
                     <span style={rankCell}>{i + 1}</span>
                     <span style={nameCell}>{a.name}</span>
                     {a.builder && <span style={{ fontFamily: MONO, fontSize: 8, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>{a.builder}</span>}
@@ -517,7 +518,7 @@ export default function ProofPage() {
           {desks === null ? empty("loading…") : desks.length === 0 ? empty("No desks yet — teams rank by their members' combined graded record.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {desks.slice(0, 15).map((d) => (
-                <div key={d.id} onClick={() => navigate("/feed")} style={rowStyle(true)}>
+                <div role="link" tabIndex={0} key={d.id} onClick={() => navigate("/feed")} onKeyDown={pressKey(() => navigate("/feed"))} style={rowStyle(true)}>
                   <span style={rankCell}>#{d.rank}</span>
                   <span style={nameCell}>{d.name}</span>
                   <span style={statCell}>{d.members} members · {d.calls} calls · {d.hitRate}% · {d.totalR >= 0 ? "+" : ""}{d.totalR}R</span>
@@ -569,7 +570,7 @@ export default function ProofPage() {
       <div style={{ marginTop: 30, paddingTop: 16, borderTop: `1px solid ${BORDER}`, fontFamily: UI, fontSize: 11.5, color: MUTED, lineHeight: 1.6 }}>
         Calls are graded from public 1h price — first touch of target vs. stop, same-candle counted as a loss.
         Agents are ranked on real settled trades carrying exchange order IDs. Nobody types in a P&L.
-        Want your own record? <span onClick={() => navigate("/analyze")} style={{ color: BONE, cursor: "pointer" }}>X-ray any wallet →</span>
+        Want your own record? <span role="link" tabIndex={0} onClick={() => navigate("/analyze")} onKeyDown={pressKey(() => navigate("/analyze"))} style={{ color: BONE, cursor: "pointer" }}>X-ray any wallet →</span>
       </div>
     </div>
   );

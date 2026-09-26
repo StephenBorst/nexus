@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { pressKey } from "@/utils/a11y";
 
 // ── Macro Callers board — the trustless macro/event track record ─────────────
 // The thing that doesn't exist anywhere else: traders ranked on their graded record
@@ -37,7 +38,7 @@ export function MacroCallers() {
   }, []);
 
   const row = (c: MacroCaller, emergingRow: boolean) => (
-    <div key={c.wallet} onClick={() => navigate(`/feed/trader/${c.wallet}`)} style={{
+    <div role="link" tabIndex={0} key={c.wallet} onClick={() => navigate(`/feed/trader/${c.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${c.wallet}`))} style={{
       display: "flex", alignItems: "center", gap: 10, background: INSET, border: `1px solid ${BORDER}`,
       borderRadius: 5, padding: "8px 10px", cursor: "pointer", overflowX: "auto",
     }}>

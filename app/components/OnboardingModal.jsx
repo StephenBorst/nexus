@@ -127,12 +127,11 @@ export default function OnboardingModal({ onComplete, onSkip }) {
       `}</style>
       <div
         className={`ntl-ov ${visible ? "v" : ""} ${exiting ? "x" : ""}`}
-        role="dialog"
-        aria-modal="true"
+        role="presentation"
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="ntl-m" ref={modalRef} tabIndex={-1} style={{ outline: "none" }}>
+        <div className="ntl-m" ref={modalRef} role="dialog" aria-modal="true" aria-label="Nexus onboarding" tabIndex={-1} style={{ outline: "none" }}>
           <div className="ntl-sc" />
           <div className="ntl-co tl" /><div className="ntl-co tr" />
           <div className="ntl-co bl" /><div className="ntl-co br" />

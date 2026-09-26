@@ -16,6 +16,7 @@ import type { XrayTrack } from "@/components/TrackedRecordCard";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { ConvictionScanner } from "./ConvictionScanner";
 import { bareTicker } from "@/utils/utils";
+import { pressKey, useEscapeKey } from "@/utils/a11y";
 
 interface SmConsensus { sym: string; side: "LONG" | "SHORT"; count: number; netUsd: number; refPrice: number; }
 
@@ -105,6 +106,7 @@ const ago = (ts: number) => {
 function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
   leader: string; sym: string; side: "LONG" | "SHORT"; onConfirm: () => void; onCancel: () => void;
 }) {
+  useEscapeKey(onCancel);
   const [track, setTrack] = useState<XrayTrack | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -130,8 +132,8 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
   const net = track?.netRealized ?? 0;
   const sideCol = side === "LONG" ? "#3ecf8e" : "#f7525f";
   return (
-    <div onClick={onCancel} style={{ position: "fixed", inset: 0, zIndex: 9100, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div className="nx-fade-in" onClick={(e) => e.stopPropagation()} style={{ width: "min(420px, 96vw)", background: "#0f0f11", border: "1px solid #33333a", borderRadius: 10, padding: 18 }}>
+    <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }} style={{ position: "fixed", inset: 0, zIndex: 9100, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div className="nx-fade-in" role="dialog" aria-modal="true" aria-label="Copy this move" style={{ width: "min(420px, 96vw)", background: "#0f0f11", border: "1px solid #33333a", borderRadius: 10, padding: 18 }}>
         <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase", marginBottom: 8 }}>Copy this move</div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: smart ? 6 : 14 }}>
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: "#ededf0" }}>{sym}</span>
@@ -604,7 +606,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                   {/* primary line — reads like a sentence: who · action · side · market */}
                   <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", fontFamily: "var(--nx-font-mono)" }}>
                     {watched && <span style={{ color: TRACKED, fontSize: 10 }}>★</span>}
-                    <span onClick={() => openDetail(e.addr, e.source)} title="View trader detail" style={{ fontSize: 11, color: watched ? TRACKED : "#a1a1aa", cursor: "pointer", textDecoration: "underline", textDecorationColor: "#33333a" }}>{short(e.addr)}</span>
+                    <span role="button" tabIndex={0} onClick={() => openDetail(e.addr, e.source)} onKeyDown={pressKey(() => openDetail(e.addr, e.source))} title="View trader detail" style={{ fontSize: 11, color: watched ? TRACKED : "#a1a1aa", cursor: "pointer", textDecoration: "underline", textDecorationColor: "#33333a" }}>{short(e.addr)}</span>
                     <span style={{ fontSize: 11, color: isOpen ? "#d4d4d8" : "#71717a" }}>{isOpen ? "opened" : "closed"}</span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: sideColor }}>{long ? "LONG" : "SHORT"}</span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "#ededf0" }}>{e.sym}</span>
@@ -649,7 +651,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
             {trackedSignals.map((s, i) => {
               const up = s.kind === "TIER_UP";
               return (
-                <div key={i} onClick={() => openDetail(s.wallet, "orderly")} title="Open the wallet's Tracked Record"
+                <div role="button" tabIndex={0} key={i} onClick={() => openDetail(s.wallet, "orderly")} onKeyDown={pressKey(() => openDetail(s.wallet, "orderly"))} title="Open the wallet's Tracked Record"
                   style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", cursor: "pointer", padding: "5px 0", borderTop: i ? "1px solid #1a1a1e" : "none" }}>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: up ? "#3ecf8e" : "#71717a", width: 16, flexShrink: 0 }}>{up ? "▲" : "▽"}</span>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", flexShrink: 0, textDecoration: "underline", textDecorationColor: "#33333a" }}>{short(s.wallet)}</span>
@@ -693,7 +695,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                     {starred ? "★" : "☆"}
                   </button>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.05em", color: t.source === "orderly" ? "#3ecf8e" : "#71717a", border: `1px solid ${t.source === "orderly" ? "#33333a" : "#232327"}`, borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>{t.source === "orderly" ? "◆ ORDERLY" : "HL"}</span>
-                  <span onClick={() => openDetail(t.address, t.source, t.accountId)} title="View trader detail" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", flexShrink: 0, cursor: "pointer", textDecoration: "underline", textDecorationColor: "#33333a" }}>{short(t.address)}</span>
+                  <span role="button" tabIndex={0} onClick={() => openDetail(t.address, t.source, t.accountId)} onKeyDown={pressKey(() => openDetail(t.address, t.source, t.accountId))} title="View trader detail" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", flexShrink: 0, cursor: "pointer", textDecoration: "underline", textDecorationColor: "#33333a" }}>{short(t.address)}</span>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: t.pnl >= 0 ? "#3ecf8e" : "#f7525f", flexShrink: 0 }}>{usd(t.pnl)} <span style={{ color: "#52525b" }}>{t.pnlLabel}</span></span>
                   {t.roi != null && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", flexShrink: 0 }}>{(t.roi * 100).toFixed(0)}% ROI</span>}
                   {t.accountValue != null && t.accountValue > 0 && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", flexShrink: 0 }}>{usd(t.accountValue)} acct</span>}
@@ -701,7 +703,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                     const tk = trackMap[t.address.toLowerCase()];
                     if (!tk) return null;
                     if (tk.tier) return (
-                      <span onClick={() => openDetail(t.address, t.source, t.accountId)} title={`Consistency Score ${tk.operatorScore}. Graded from ${tk.daysTracked}d of realized-PnL consistency. Click for the full Tracked Record.`}
+                      <span role="button" tabIndex={0} onClick={() => openDetail(t.address, t.source, t.accountId)} onKeyDown={pressKey(() => openDetail(t.address, t.source, t.accountId))} title={`Consistency Score ${tk.operatorScore}. Graded from ${tk.daysTracked}d of realized-PnL consistency. Click for the full Tracked Record.`}
                         style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#3ecf8e", border: "1px solid #33333a", borderRadius: 3, padding: "1px 5px", flexShrink: 0, cursor: "pointer" }}>{tk.tier.glyph} {tk.operatorScore}</span>
                     );
                     return (

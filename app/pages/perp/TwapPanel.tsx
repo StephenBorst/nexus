@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { getWalletAddress, getAgentSig } from "@/pages/lab/agentKeys";
 
 // ── TWAP execution panel (our own, on-infra) ─────────────────────────────────
@@ -29,6 +29,7 @@ const fmtDur = (min: number) => (min >= 60 ? `${(min / 60).toFixed(min % 60 ? 1 
 
 export function TwapPanel({ symbol }: { symbol: string }) {
   const [open, setOpen] = useState(false);
+  const fid = useId();
   const [side, setSide] = useState<Side>("BUY");
   const [notional, setNotional] = useState("500");
   const [duration, setDuration] = useState("30");
@@ -174,10 +175,10 @@ export function TwapPanel({ symbol }: { symbol: string }) {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10, marginBottom: 14 }}>
-                <div><label style={labelStyle}>Total size (USDC)</label><input inputMode="decimal" value={notional} onChange={(e) => setNotional(e.target.value)} style={inputStyle} /></div>
-                <div><label style={labelStyle}>Duration (min)</label><input inputMode="decimal" value={duration} onChange={(e) => setDuration(e.target.value)} style={inputStyle} /></div>
-                <div><label style={labelStyle}>Slices</label><input inputMode="numeric" value={slices} onChange={(e) => setSlices(e.target.value)} style={inputStyle} /></div>
-                <div><label style={labelStyle}>Leverage</label><input inputMode="numeric" value={leverage} onChange={(e) => setLeverage(e.target.value)} style={inputStyle} /></div>
+                <div><label htmlFor={`${fid}-size`} style={labelStyle}>Total size (USDC)</label><input id={`${fid}-size`} inputMode="decimal" value={notional} onChange={(e) => setNotional(e.target.value)} style={inputStyle} /></div>
+                <div><label htmlFor={`${fid}-dur`} style={labelStyle}>Duration (min)</label><input id={`${fid}-dur`} inputMode="decimal" value={duration} onChange={(e) => setDuration(e.target.value)} style={inputStyle} /></div>
+                <div><label htmlFor={`${fid}-slices`} style={labelStyle}>Slices</label><input id={`${fid}-slices`} inputMode="numeric" value={slices} onChange={(e) => setSlices(e.target.value)} style={inputStyle} /></div>
+                <div><label htmlFor={`${fid}-lev`} style={labelStyle}>Leverage</label><input id={`${fid}-lev`} inputMode="numeric" value={leverage} onChange={(e) => setLeverage(e.target.value)} style={inputStyle} /></div>
               </div>
 
               <div style={{ background: "#0d0d0f", border: `1px solid ${LINE}`, borderRadius: 2, padding: "10px 12px", marginBottom: 14 }}>

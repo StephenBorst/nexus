@@ -11,6 +11,7 @@ import { useAccount } from "@orderly.network/hooks";
 import { useXMTP } from "@/hooks/useXMTP";
 import type { Conversation, DecodedMessage } from "@/hooks/useXMTP";
 import { markConvoRead } from "@/utils/xmtpUnread";
+import { pressKey } from "@/utils/a11y";
 
 // ─── Responsive hook ───────────────────────────────────────────────────────────
 function useIsMobile(breakpoint = 768) {
@@ -294,7 +295,7 @@ function ConvoItem({
   }, [convo, myInboxId]);
 
   return (
-    <div style={S.convoItem(active)} onClick={onClick}>
+    <div role="button" tabIndex={0} style={S.convoItem(active)} onClick={onClick} onKeyDown={pressKey(onClick)}>
       <div style={S.convoName}>{peerDisplay}</div>
       {lastMsg && (
         <div style={S.convoPreview}>

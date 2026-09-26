@@ -20,6 +20,8 @@ import { PublicOperatorProfile, InFlightCalls, VenueEvidence } from "./ProfileSy
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
 import { bareTicker } from "@/utils/utils";
 import { SIGNAL } from "@/config/theme";
+import { pressKey } from "@/utils/a11y";
+import { useEscapeKey } from "@/utils/a11y";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -155,8 +157,8 @@ function ThesisRow({
       opacity: thesis.status === "INVALIDATED" ? 0.65 : 1,
     }}>
       {/* Main row */}
-      <div
-        onClick={() => setExpanded(!expanded)}
+      <div role="button" tabIndex={0}
+        onClick={() => setExpanded(!expanded)} onKeyDown={pressKey(() => setExpanded(!expanded))}
         style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}
       >
         {/* Ticker + direction */}
@@ -283,7 +285,7 @@ function ThesisRow({
         </div>
       )}
       {/* Same native social layer as the feed — one-tap like, inline comments. */}
-      <div style={{ padding: "0 12px" }} onClick={(e) => e.stopPropagation()}>
+      <div role="presentation" style={{ padding: "0 12px" }} onClick={(e) => e.stopPropagation()}>
         <SocialBar
           thesisId={thesis.id}
           walletAddress={walletAddress}
@@ -302,6 +304,7 @@ const COPY_PREFS_KEY = "nexus-copy-prefs";
 function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; walletAddress: string; onClose: () => void }) {
   const ticker = bareTicker(thesis.symbol);
   const traderName = thesis.displayName ?? `${thesis.wallet.slice(0, 6)}…${thesis.wallet.slice(-4)}`;
+  useEscapeKey(onClose);
 
   const [accountSize, setAccountSize] = useState(() => {
     try { return JSON.parse(localStorage.getItem(COPY_PREFS_KEY) ?? "{}").accountSize ?? ""; }
@@ -389,7 +392,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
   }
 
   return (
-    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
+    <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.75)",
       display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
     }}>

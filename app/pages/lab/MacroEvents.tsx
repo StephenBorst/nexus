@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { C } from "@/config/theme";
 import { Simulate } from "./Simulate";
+import { pressKey } from "@/utils/a11y";
 
 // ── Macro / Events card — the intelligence corner for event traders ──────────
 // Sibling of Forecast Divergence, but for MACRO & geopolitical events (Fed, recession,
@@ -321,7 +322,7 @@ export function MacroEvents() {
               Macro & geopolitical markets from Polymarket. The RISK-ON / RISK-OFF lens is a textbook directional read
               (risk-on = crypto-supportive), not a fair value and not advice — a prompt to stake a graded thesis. You pick the expression.
               {" "}
-              <span onClick={() => navigate("/proof")} style={{ color: DIM, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}>
+              <span role="link" tabIndex={0} onClick={() => navigate("/proof")} onKeyDown={pressKey(() => navigate("/proof"))} style={{ color: DIM, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2 }}>
                 See who calls these right →
               </span>
             </div>

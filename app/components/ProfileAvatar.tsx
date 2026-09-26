@@ -5,7 +5,7 @@
  * On click, shows a small popover to paste a PFP URL + set a display name.
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useId } from "react";
 import { useAccount } from "@orderly.network/hooks";
 import { useProfile } from "@/hooks/useProfile";
 
@@ -26,6 +26,7 @@ export default function ProfileAvatar() {
   const { pfp, displayName, saveProfile, saving } = useProfile(walletAddress);
 
   const [open, setOpen] = useState(false);
+  const fid = useId();
   const [pfpInput, setPfpInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [imgError, setImgError] = useState(false);
@@ -153,10 +154,11 @@ export default function ProfileAvatar() {
           </div>
 
           {/* Display name input */}
-          <label style={{ display: "block", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.1em", marginBottom: 4 }}>
+          <label htmlFor={`${fid}-name`} style={{ display: "block", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.1em", marginBottom: 4 }}>
             DISPLAY NAME
           </label>
           <input
+            id={`${fid}-name`}
             type="text"
             value={nameInput}
             onChange={(e) => setNameInput(e.target.value)}
@@ -178,10 +180,11 @@ export default function ProfileAvatar() {
           />
 
           {/* PFP URL input */}
-          <label style={{ display: "block", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.1em", marginBottom: 4 }}>
+          <label htmlFor={`${fid}-pfp`} style={{ display: "block", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.1em", marginBottom: 4 }}>
             PFP IMAGE URL
           </label>
           <input
+            id={`${fid}-pfp`}
             type="url"
             value={pfpInput}
             onChange={(e) => { setPfpInput(e.target.value); setImgError(false); }}

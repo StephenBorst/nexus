@@ -8,6 +8,7 @@ import { EmptyState } from "./components";
 import { useIsMobile } from "./useIsMobile";
 import { C } from "@/config/theme";
 import { bareTicker } from "@/utils/utils";
+import { pressKey } from "@/utils/a11y";
 
 function CalendarView({ dayGroups, onDayClick, viewMonth, viewYear, onPrevMonth, onNextMonth, totalPnl }: { dayGroups: Record<string, DayGroup>; onDayClick: (key: string, day: number) => void; viewMonth: number; viewYear: number; onPrevMonth: () => void; onNextMonth: () => void; totalPnl: number; }) {
   const isMobile = useIsMobile();
@@ -198,9 +199,9 @@ export function TradeLogAllView({
           const winRate = g.trades ? Math.round((g.wins / g.trades) * 100) : 0;
           const [, , d] = key.split("-").map(Number);
           return (
-            <div
+            <div role="button" tabIndex={0}
               key={key}
-              onClick={() => onDaySelect(key, d)}
+              onClick={() => onDaySelect(key, d)} onKeyDown={pressKey(() => onDaySelect(key, d))}
               style={{
                 ...cardStyle, cursor: "pointer", display: "grid",
                 gridTemplateColumns: "180px 1fr repeat(4, 90px) 28px",

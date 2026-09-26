@@ -33,6 +33,7 @@ import { CreatorEarnings } from "./CreatorEarnings";
 import { NexusBriefing } from "./NexusBriefing";
 import { DecisionBoard } from "./DecisionBoard";
 import { CountUp } from "./components";
+import { pressKey } from "@/utils/a11y";
 
 // Legacy alias: the old MISPRICED/GAPS tab was folded into SMART MONEY (Phase 1 re-slice),
 // so any ?tab=mispriced deep-link, shared OG link, or copilot nav resolves to smart.
@@ -300,9 +301,10 @@ export default function TheLabPage() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, marginLeft: 8 }}>
           {!isMobile && <SimCreditsBadge />}
-          <span
+          <span role="button" tabIndex={0}
             title="Command palette"
-            onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}
+            aria-label="Open command palette"
+            onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))} onKeyDown={pressKey(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true })))}
             style={{ fontFamily: "var(--nx-font-mono)", fontSize: isMobile ? 12 : 9, color: "#52525b", border: "1px solid #232327", borderRadius: 3, padding: isMobile ? "6px 9px" : "2px 6px", cursor: "pointer", letterSpacing: "0.05em", minHeight: isMobile ? 36 : "auto", display: "flex", alignItems: "center" }}
           >{isMobile ? "⌘" : "⌘K"}</span>
           {!isMobile && (

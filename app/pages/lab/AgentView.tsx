@@ -27,6 +27,7 @@ import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
 import { bareTicker } from "@/utils/utils";
+import { pressKey } from "@/utils/a11y";
 
 export function AgentView() {
   const [config, setConfig] = useState<AgentConfig>(DEFAULT_CONFIG);
@@ -683,7 +684,7 @@ export function AgentView() {
       {error && (
         <div style={{ ...agentCardStyle, borderColor: "#f7525f", background: "#241012", marginBottom: 12 }}>
           <span style={{ color: "#f7525f", fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>⚠ {error}</span>
-          <span onClick={() => setError(null)} style={{ float: "right", cursor: "pointer", color: "#f7525f" }}>✕</span>
+          <span role="button" tabIndex={0} aria-label="Dismiss error" onClick={() => setError(null)} onKeyDown={pressKey(() => setError(null))} style={{ float: "right", cursor: "pointer", color: "#f7525f" }}>✕</span>
         </div>
       )}
       {success && (
@@ -695,7 +696,7 @@ export function AgentView() {
         <div style={{ ...agentCardStyle, borderColor: "#fbbf24", background: "#2a1a00", marginBottom: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
           <span style={{ color: "#fbbf24", fontFamily: "var(--nx-font-mono)", fontSize: 13, flexShrink: 0 }}>⚠</span>
           <span style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, lineHeight: 1.5, flex: 1 }}>{prefillNotice}</span>
-          <span onClick={() => setPrefillNotice(null)} title="Dismiss" style={{ cursor: "pointer", color: "#fbbf24", flexShrink: 0 }}>✕</span>
+          <span role="button" tabIndex={0} aria-label="Dismiss" onClick={() => setPrefillNotice(null)} onKeyDown={pressKey(() => setPrefillNotice(null))} title="Dismiss" style={{ cursor: "pointer", color: "#fbbf24", flexShrink: 0 }}>✕</span>
         </div>
       )}
 

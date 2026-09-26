@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { bareTicker } from "@/utils/utils";
+import { pressKey } from "@/utils/a11y";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const green = "#ededf0";
@@ -53,7 +54,7 @@ export default function ArenaStrip() {
           const s = a.live || a.paper;
           const isLive = !!a.live;
           return (
-            <div key={a.wallet} onClick={() => navigate("/arena")} style={{ display: "flex", alignItems: "center", gap: 8, background: "#0a0a0b", border: "1px solid #232327", borderRadius: 5, padding: "8px 10px", overflowX: "auto", cursor: "pointer" }}>
+            <div role="link" tabIndex={0} key={a.wallet} onClick={() => navigate("/arena")} onKeyDown={pressKey(() => navigate("/arena"))} style={{ display: "flex", alignItems: "center", gap: 8, background: "#0a0a0b", border: "1px solid #232327", borderRadius: 5, padding: "8px 10px", overflowX: "auto", cursor: "pointer" }}>
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#52525b", flexShrink: 0, width: 22 }}>#{i + 1}</span>
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: "bold", color: "#fff", flexShrink: 0 }}>{a.name}</span>
               {a.builder && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.05em", color: "#71717a", border: "1px solid #232327", borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>{a.builder}</span>}

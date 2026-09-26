@@ -32,6 +32,7 @@ import { ProjectionBand } from "@/components/ProjectionBand";
 // The ×1095 cadence, from the one shared literal. The surrounding tooltips/footer state it
 // in prose; this one RENDERS it as part of the shown arithmetic, so it reads the constant.
 import { FUNDING_PERIODS_PER_YEAR } from "@/lib/funding.mjs";
+import { pressKey } from "@/utils/a11y";
 
 // The board's /intel/mispriced call gates the "loading board…" spinner, so a hung connection
 // would strand a guest on it forever. Cap it (the SAME abort pattern as DecisionBoard) so it
@@ -914,7 +915,7 @@ export function MispricedBoard() {
                   const { verdict, isFade, draftAnyway, weakEdge, tooSmall } = ticketVerdict(m, m.stretched ?? null);
                   const badgeColor = isFade ? C.accent : draftAnyway ? C.warn : C.text.muted;
                   return (
-                    <div key={m.symbol} ref={(el: HTMLDivElement | null) => { rowRefs.current[m.coin] = el; }} onClick={() => setOpenCoin(m.coin)} title="Open this market"
+                    <div role="button" tabIndex={0} key={m.symbol} ref={(el: HTMLDivElement | null) => { rowRefs.current[m.coin] = el; }} onClick={() => setOpenCoin(m.coin)} onKeyDown={pressKey(() => setOpenCoin(m.coin))} title="Open this market"
                       className="nx-card-interactive"
                       style={{ position: "relative", border: `1px solid ${C.borderStrong}`, borderLeft: `2px solid ${isFade ? C.accent : draftAnyway ? C.warn : C.borderStrong}`, borderRadius: RADIUS.lg, padding: "13px 15px 12px", background: "linear-gradient(180deg,#161619 0%,#101012 100%)", cursor: "pointer", overflow: "hidden", scrollMarginTop: 80, boxShadow: markedCoin === m.coin ? `0 0 0 2px ${C.accent}` : undefined }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11 }}>
@@ -981,7 +982,7 @@ export function MispricedBoard() {
               </div>
               <div style={{ border: `1px solid ${C.border}`, borderRadius: RADIUS.md, overflow: "hidden", background: C.surfaceAlt }}>
                 {fair.map((m, i) => (
-                  <div key={m.symbol} onClick={() => setOpenCoin(m.coin)}
+                  <div role="button" tabIndex={0} key={m.symbol} onClick={() => setOpenCoin(m.coin)} onKeyDown={pressKey(() => setOpenCoin(m.coin))}
                     className="nx-card-interactive"
                     style={{ display: "grid", gridTemplateColumns: isMobile ? "56px 1fr 138px" : "90px 1fr 190px 84px", gap: 12, alignItems: "center", padding: "9px 13px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
                     <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: C.text.fog }}>{m.coin}</span>

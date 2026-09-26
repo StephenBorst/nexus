@@ -6,6 +6,7 @@
 // monospace, rationed green, "verify — don't trust".
 import { useRef, useState, useEffect } from "react";
 import { bareTicker } from "@/utils/utils";
+import { useEscapeKey } from "@/utils/a11y";
 
 const GREEN = "#3ecf8e";   // profit ONLY (realized) — never decoration or a planned metric
 const ACCENT = "#ededf0";  // bone/white — the brand accent (labels, brand column, plan metrics)
@@ -169,6 +170,7 @@ async function svgToPngBlob(svg: SVGSVGElement): Promise<Blob> {
 export function SharePoster({ data, onClose }: { data: PosterData; onClose: () => void }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [busy, setBusy] = useState(false);
+  useEscapeKey(onClose);
   const [copied, setCopied] = useState(false);
 
   // Pin the overlay to the VISUAL viewport, not the layout viewport. In a phone's
@@ -245,14 +247,14 @@ export function SharePoster({ data, onClose }: { data: PosterData; onClose: () =
 
   return (
     <div
-      onClick={onClose}
+      role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: "fixed", left: 0, zIndex: 9100, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 20, boxSizing: "border-box",
         ...(vv ? { top: vv.top, width: "100vw", height: vv.height } : { inset: 0 }),
       }}
     >
-      <div className="nx-fade-in" onClick={(e) => e.stopPropagation()} style={{ width: "min(720px, 96vw)", maxHeight: "100%", overflowY: "auto", background: "#0f0f11", border: "1px solid #33333a", borderRadius: 10 }}>
+      <div className="nx-fade-in" role="dialog" aria-modal="true" aria-label="Share poster" style={{ width: "min(720px, 96vw)", maxHeight: "100%", overflowY: "auto", background: "#0f0f11", border: "1px solid #33333a", borderRadius: 10 }}>
         <div style={{ padding: 16 }}>
           <PosterSVG data={data} svgRef={svgRef} />
         </div>

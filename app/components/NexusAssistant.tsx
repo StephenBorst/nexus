@@ -22,6 +22,7 @@ import {
   HOSTED_TIERS, loadHostedModel,
   buildContextBlock, runChatStream, listModels, getHostedAccess, type ProviderId, type ChatMsg,
 } from "@/config/assistant";
+import { pressKey } from "@/utils/a11y";
 
 function pickDefaultModel(provider: ProviderId, ids: string[]): string {
   if (provider === "anthropic") return ids.find((i) => /sonnet/.test(i)) || ids.find((i) => /opus/.test(i)) || ids[0];
@@ -499,8 +500,8 @@ export default function NexusAssistant() {
         {!seen && !pos && !isMobile && (
           <>
             <style>{`@keyframes nexAiPulse{0%,100%{box-shadow:0 0 14px rgba(255,255,255,0.18)}50%{box-shadow:0 0 22px rgba(255,255,255,0.4)}}`}</style>
-            <div
-              onClick={openPanel}
+            <div role="button" tabIndex={0}
+              onClick={openPanel} onKeyDown={pressKey(openPanel)}
               style={{
                 cursor: "pointer", background: "#141416", border: `1px solid ${GREEN}`, borderRadius: 6,
                 padding: "8px 12px", maxWidth: 200, boxShadow: "0 0 16px rgba(0,0,0,0.5)",
@@ -592,8 +593,8 @@ export default function NexusAssistant() {
                   ? "Ask about your theses, agent, the market, or a trade idea. I can see your live session context."
                   : "Start with Nexus Hosted (PRO, no key needed) or bring your own API key. Tap ⚙ to set it up."}
                 {personalInsight && (
-                  <div
-                    onClick={() => ready && setInput(personalInsight.prompt)}
+                  <div role="button" tabIndex={0}
+                    onClick={() => ready && setInput(personalInsight.prompt)} onKeyDown={pressKey(() => ready && setInput(personalInsight.prompt))}
                     style={{
                       marginTop: 12, padding: "9px 11px", borderRadius: 5,
                       background: "#2a1a00", border: "1px solid #4a3a00",
