@@ -21,7 +21,8 @@ import { SharePoster, type PosterData } from "./SharePoster";
 // Constants/local types, leaf components, and the Orderly key + ownership-proof
 // readers now live beside this file. Behavior is unchanged — the move was purely
 // mechanical, which matters because this is the agent MONEY PATH.
-import { AGENT_API, TG_BOT, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentStanding } from "./agentTypes";
+import { AGENT_API, TG_BOT, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentStanding, type ApiPayload, type SavedStrategy } from "./agentTypes";
+import { errText } from "./helpers";
 import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter } from "./AgentPanels";
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
@@ -73,13 +74,13 @@ export function AgentView() {
   // by default — the agent runs on sensible defaults; this is opt-in tuning.
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [standing, setStanding] = useState<AgentStanding | null>(null);
-  const [backtest, setBacktest] = useState<any | null>(null);
+  const [backtest, setBacktest] = useState<ApiPayload | null>(null);
   const [backtesting, setBacktesting] = useState(false);
-  const [sweep, setSweep] = useState<any | null>(null);
+  const [sweep, setSweep] = useState<ApiPayload | null>(null);
   const [sweeping, setSweeping] = useState(false);
-  const [validation, setValidation] = useState<any | null>(null);
+  const [validation, setValidation] = useState<ApiPayload | null>(null);
   const [validating, setValidating] = useState(false);
-  const [strategies, setStrategies] = useState<any[]>([]);
+  const [strategies, setStrategies] = useState<SavedStrategy[]>([]);
   const [stratName, setStratName] = useState("");
   const [webhookEnabled, setWebhookEnabled] = useState(false);
   const [webhookInfo, setWebhookInfo] = useState<{ url: string; passphrase: string } | null>(() => {
@@ -236,8 +237,8 @@ export function AgentView() {
       setSuccess("Agent activated");
       setAgentState((prev) => prev ? { ...prev, active: true } : { active: true, daily_pnl: 0, trades_today: 0, current_position: null, last_signal: null });
       setTimeout(() => setSuccess(null), 3000);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errText(e));
     } finally {
       setSaving(false);
     }
@@ -257,7 +258,7 @@ export function AgentView() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.hint || data.error || "Backtest failed");
       setBacktest(data);
-    } catch (e: any) { setError(e.message); } finally { setBacktesting(false); }
+    } catch (e) { setError(errText(e)); } finally { setBacktesting(false); }
   }
 
   // Sweep a grid of configs (mode × threshold × exit) and rank by net P&L — the
@@ -273,7 +274,7 @@ export function AgentView() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.hint || data.error || "Sweep failed");
       setSweep(data);
-    } catch (e: any) { setError(e.message); } finally { setSweeping(false); }
+    } catch (e) { setError(errText(e)); } finally { setSweeping(false); }
   }
   // Walk-forward VALIDATE — the honest layer. Replays the config across a diverse
   // symbol universe AND multiple time folds and returns ROBUST / FRAGILE / NOT_ROBUST.
@@ -290,13 +291,13 @@ export function AgentView() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.hint || data.error || "Validation failed");
       setValidation(data);
-    } catch (e: any) { setError(e.message); } finally { setValidating(false); }
+    } catch (e) { setError(errText(e)); } finally { setValidating(false); }
   }
 
   // Apply a swept winner's strategy params into the editor (keeps the user's
   // symbols/leverage/capital/mode; swaps mode/threshold/exits). The bridge that
   // turns "here's what worked" into "now it's my config."
-  function applySweepConfig(cfg: any) {
+  function applySweepConfig(cfg: Record<string, unknown>) {
     const clean: Record<string, unknown> = Object.fromEntries(Object.entries(cfg).filter(([, v]) => v !== undefined));
     // A basis sweep row carries basisConfirm:null for the plain fade — that must CLEAR a
     // previously chosen confirm, so map it to "off" rather than dropping it.
@@ -326,9 +327,9 @@ export function AgentView() {
       setStrategies(data.strategies || []);
       setStratName("");
       setSuccess("Strategy saved"); setTimeout(() => setSuccess(null), 3000);
-    } catch (e: any) { setError(e.message); } finally { setSaving(false); }
+    } catch (e) { setError(errText(e)); } finally { setSaving(false); }
   }
-  function loadStrategy(s: any) {
+  function loadStrategy(s: SavedStrategy) {
     setConfig({ ...DEFAULT_CONFIG, ...EXPERIMENTAL_FILTERS_OFF, ...s.config }); // whole strategy: no default/leftover filter rides along
     setSuccess(`Loaded "${s.name}". Review and activate.`); setTimeout(() => setSuccess(null), 3000);
   }
@@ -343,7 +344,7 @@ export function AgentView() {
       if (res.ok) setStrategies(data.strategies || []);
     } catch { /* ignore */ }
   }
-  async function togglePublish(s: any) {
+  async function togglePublish(s: SavedStrategy) {
     if (!walletAddress) return;
     try {
       const walletSig = await getAgentSig(walletAddress);
@@ -356,7 +357,7 @@ export function AgentView() {
   }
 
   // Community strategy browse (public, ranked by author graded record).
-  const [community, setCommunity] = useState<any[] | null>(null);
+  const [community, setCommunity] = useState<SavedStrategy[] | null>(null);
   const [communityStyle, setCommunityStyle] = useState<string>("");
   async function loadCommunity(style: string) {
     setCommunityStyle(style);
@@ -365,7 +366,7 @@ export function AgentView() {
       if (res.ok) setCommunity((await res.json()).strategies || []);
     } catch { setCommunity([]); }
   }
-  function copyStrategy(s: any) {
+  function copyStrategy(s: SavedStrategy) {
     setConfig({ ...DEFAULT_CONFIG, ...EXPERIMENTAL_FILTERS_OFF, ...s.config }); // whole strategy: no default/leftover filter rides along
     setSuccess(`Copied "${s.name}" into your editor. Set your own risk and save.`); setTimeout(() => setSuccess(null), 4000);
   }
@@ -394,7 +395,7 @@ export function AgentView() {
         setSuccess(op === "rotate" ? "Webhook rotated. Old URL revoked." : "Webhook enabled");
       }
       setTimeout(() => setSuccess(null), 3000);
-    } catch (e: any) { setError(e.message); } finally { setSaving(false); }
+    } catch (e) { setError(errText(e)); } finally { setSaving(false); }
   }
 
   async function deactivateAgent() {
@@ -411,8 +412,8 @@ export function AgentView() {
       setAgentState((prev) => prev ? { ...prev, active: false, current_position: null } : null);
       setSuccess("Agent deactivated. Trading key removed.");
       setTimeout(() => setSuccess(null), 3000);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errText(e));
     } finally {
       setSaving(false);
     }
@@ -431,8 +432,8 @@ export function AgentView() {
       if (!res.ok) throw new Error("Failed to save config");
       setSuccess("Config saved");
       setTimeout(() => setSuccess(null), 3000);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errText(e));
     } finally {
       setSaving(false);
     }
@@ -461,7 +462,7 @@ export function AgentView() {
         ? "Stopped autocopying"
         : agentState?.active ? "Autocopying. Your agent mirrors their trades." : "Autocopy set. Activate your agent to start.");
       setTimeout(() => setSuccess(null), 3500);
-    } catch (e: any) { setError(e.message); } finally { setSaving(false); }
+    } catch (e) { setError(errText(e)); } finally { setSaving(false); }
   }
 
   async function resetPaperRecord() {
@@ -479,8 +480,8 @@ export function AgentView() {
       setSuccess("Paper record cleared");
       await fetchAgentData();
       setTimeout(() => setSuccess(null), 3000);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errText(e));
     } finally {
       setSaving(false);
     }
@@ -500,8 +501,8 @@ export function AgentView() {
       if (!res.ok) throw new Error(data?.error || "Failed to inject test signal");
       setSuccess("Test signal injected. Paper trade fires within ~1 min.");
       setTimeout(() => setSuccess(null), 4000);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errText(e));
     } finally {
       setSaving(false);
     }
@@ -566,8 +567,8 @@ export function AgentView() {
       setAgentState((prev) => prev ? { ...prev, active: false, current_position: null } : null);
       setSuccess("Agent killed. Position closed. Key removed.");
       setTimeout(() => setSuccess(null), 5000);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errText(e));
     } finally {
       setSaving(false);
     }
@@ -1294,7 +1295,7 @@ export function AgentView() {
           <div style={agentCardStyle}>
             <div style={agentLabelStyle}>RISK PARAMETERS</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginTop: 8 }}>
-              {[
+              {([
                 { key: "leverage", label: "LEVERAGE", suffix: "x", min: 1, max: 20, step: 1 },
                 { key: "capitalPerTrade", label: "CAPITAL / TRADE", suffix: "USDC", min: 10, max: 10000, step: 10 },
                 { key: "tpPercent", label: "TAKE PROFIT", suffix: "%", min: 0.25, max: 10, step: 0.25 },
@@ -1307,12 +1308,12 @@ export function AgentView() {
                 { key: "volTargetPct", label: "VOL-TARGET SIZE", suffix: "% (0=off)", min: 0, max: 8, step: 0.5 },
                 { key: "oiChangeThreshold", label: "OI MOVE THRESHOLD", suffix: "%", min: 0, max: 10, step: 0.05 },
                 { key: "priceChangeThreshold", label: "PRICE MOVE THRESHOLD", suffix: "%", min: 0.1, max: 10, step: 0.1 },
-              ].map(({ key, label, suffix, min, max, step }) => (
+              ] as { key: keyof AgentConfig; label: string; suffix: string; min: number; max: number; step: number }[]).map(({ key, label, suffix, min, max, step }) => (
                 <div key={key}>
                   <div style={{ ...agentLabelStyle, fontSize: 9 }}>{label}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <NumberField
-                      value={(config as any)[key] ?? 0}
+                      value={Number(config[key] ?? 0)}
                       min={min} max={max} step={step}
                       onCommit={(n) => setConfig({ ...config, [key]: n })}
                     />
@@ -1473,16 +1474,16 @@ export function AgentView() {
                 ) : on && (
                   <>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 10 }}>
-                      {[
+                      {([
                         { key: "maxSafetyOrders", label: "MAX SAFETY ORDERS", min: 1, max: 8, step: 1, suffix: "" },
                         { key: "safetyOrderStepPct", label: "FIRST STEP", min: 0.25, max: 10, step: 0.25, suffix: "%" },
                         { key: "safetyOrderStepScale", label: "STEP SCALE", min: 1, max: 3, step: 0.1, suffix: "×" },
                         { key: "safetyOrderVolumeScale", label: "VOLUME SCALE", min: 1, max: 3, step: 0.1, suffix: "×" },
-                      ].map(({ key, label, min, max, step, suffix }) => (
+                      ] as { key: keyof typeof dca; label: string; min: number; max: number; step: number; suffix: string }[]).map(({ key, label, min, max, step, suffix }) => (
                         <div key={key}>
                           <div style={{ ...agentLabelStyle, fontSize: 9 }}>{label}</div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <NumberField value={(dca as any)[key]} min={min} max={max} step={step} onCommit={(n) => setDca(key, n)} />
+                            <NumberField value={dca[key]} min={min} max={max} step={step} onCommit={(n) => setDca(key, n)} />
                             <span style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10 }}>{suffix}</span>
                           </div>
                         </div>
@@ -1653,7 +1654,7 @@ export function AgentView() {
         <div>
           {/* DEV-only: force a paper signal so the open→close loop can be tested
               in minutes instead of waiting for real funding/OI confluence. */}
-          {(import.meta as any).env?.DEV && isActive && config.mode === "PAPER" && (
+          {import.meta.env.DEV && isActive && config.mode === "PAPER" && (
             <div style={{ ...agentCardStyle, borderColor: "#33333a", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#d4d4d8" }}>
                 ⚡ DEV — inject a synthetic PAPER signal (refused outside paper mode)

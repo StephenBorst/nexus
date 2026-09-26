@@ -22,6 +22,7 @@ import { bareTicker } from "@/utils/utils";
 import { SIGNAL } from "@/config/theme";
 import { pressKey } from "@/utils/a11y";
 import { useEscapeKey } from "@/utils/a11y";
+import type { SavedStrategy } from "@/pages/lab/agentTypes";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -483,8 +484,8 @@ export default function TraderPage() {
   const [copied, setCopied] = useState(false);
   // Ph26: on-chain Rep Score from NexusRepScore contract
   const [onChainRep, setOnChainRep] = useState<number | null>(null);
-  const [agentRec, setAgentRec] = useState<any | null>(null);
-  const [pubStrats, setPubStrats] = useState<any[]>([]);
+  const [agentRec, setAgentRec] = useState<{ netPnl: number; winRate: number; trades: number; score: number } | null>(null);
+  const [pubStrats, setPubStrats] = useState<SavedStrategy[]>([]);
 
   const { state: accountState } = useAccount();
   const walletAddress = (accountState as { address?: string })?.address ?? null;
@@ -551,7 +552,7 @@ export default function TraderPage() {
     // Hub: this trader's graded AGENT record + their published strategies.
     setAgentRec(null); setPubStrats([]);
     fetch(`${API_BASE}/agents/standing/${wallet}`).then((r) => r.ok ? r.json() : null).then((d) => setAgentRec(d?.stats && d.stats.trades > 0 ? d.stats : null)).catch(() => {});
-    fetch(`${API_BASE}/agent/${wallet}/strategies`).then((r) => r.ok ? r.json() : null).then((d) => setPubStrats((d?.strategies || []).filter((s: any) => s.public))).catch(() => {});
+    fetch(`${API_BASE}/agent/${wallet}/strategies`).then((r) => r.ok ? r.json() : null).then((d) => setPubStrats((d?.strategies || []).filter((s: SavedStrategy) => s.public))).catch(() => {});
   }, [wallet]);
 
   // Live prices for active theses

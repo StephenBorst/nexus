@@ -6,6 +6,7 @@ import { Sparkline } from "@/pages/lab/components";
 import { C } from "@/config/theme";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
+import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
 
 // ─── Constants ────────────────────────────────────────────────
 // Palette is DERIVED from the shared design tokens, never re-typed as hex — that's
@@ -72,17 +73,19 @@ async function fetchMovers(): Promise<{ gainers: Mover[]; losers: Mover[] }> {
   const STABLES = new Set(["USDT", "USDC", "DAI", "USDE", "FDUSD", "TUSD", "BUSD", "USDS", "PYUSD", "USDD", "GUSD", "FRAX", "LUSD"]);
   // CoinGecko's 7d sparkline is hourly (~168 pts); downsample to ~24 for a crisp
   // small line. Fails soft to [] if the field is absent.
-  const toSpark = (c: any): number[] => {
+  // CoinGecko /coins/markets row — only the fields read here.
+  type CgCoin = { symbol?: string; price_change_percentage_24h?: number | null; sparkline_in_7d?: { price?: number[] } };
+  const toSpark = (c: CgCoin): number[] => {
     const arr: number[] = Array.isArray(c?.sparkline_in_7d?.price) ? c.sparkline_in_7d.price : [];
     if (arr.length <= 24) return arr;
     const step = Math.ceil(arr.length / 24);
     return arr.filter((_, i) => i % step === 0);
   };
-  const toMover = (c: any): Mover => ({ symbol: c.symbol.toUpperCase(), change24h: c.price_change_percentage_24h ?? 0, spark: toSpark(c) });
-  const notStable = (c: any) => !STABLES.has(String(c.symbol || "").toUpperCase());
+  const toMover = (c: CgCoin): Mover => ({ symbol: String(c.symbol ?? "").toUpperCase(), change24h: c.price_change_percentage_24h ?? 0, spark: toSpark(c) });
+  const notStable = (c: CgCoin) => !STABLES.has(String(c.symbol || "").toUpperCase());
   return {
-    gainers: gData.filter((c: any) => c.price_change_percentage_24h > 0 && notStable(c)).slice(0, 6).map(toMover),
-    losers:  lData.filter((c: any) => c.price_change_percentage_24h < 0 && notStable(c)).slice(0, 6).map(toMover),
+    gainers: (gData as CgCoin[]).filter((c) => (c.price_change_percentage_24h ?? 0) > 0 && notStable(c)).slice(0, 6).map(toMover),
+    losers:  (lData as CgCoin[]).filter((c) => (c.price_change_percentage_24h ?? 0) < 0 && notStable(c)).slice(0, 6).map(toMover),
   };
 }
 
@@ -95,7 +98,7 @@ async function fetchHyperliquid(): Promise<HLAsset[]> {
   // Pass 1 — raw USD metrics per symbol.
   // 24h_amount is USD notional; 24h_volume is BASE units. The old code divided USD OI
   // by BASE volume → ratio ~markPx too big → EVERY symbol tripped HIGH CONCENTRATION.
-  const raw = (d.data.rows as any[]).map((row: any) => {
+  const raw = (d.data.rows as Record<string, string | undefined>[]).map((row) => {
     const sym     = row.symbol as string;
     const name    = bareTicker(sym);
     const markPx  = parseFloat(row.mark_price  || row.index_price || "0");
@@ -314,13 +317,13 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
   const [loading,    setLoading]    = useState(true);
   const [countdown,  setCountdown]  = useState(REFRESH_INTERVAL);
   const [timestamp,  setTimestamp]  = useState("");
-  const [contexts,   setContexts]   = useState<Record<string, any>>({});
+  const [contexts,   setContexts]   = useState<Record<string, { funding?: { pct?: number | null } }>>({});
 
   // Funding/OI percentile-vs-history (Brighter-Data-style context) for the majors.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const out: Record<string, any> = {};
+      const out: Record<string, { funding?: { pct?: number | null } }> = {};
       await Promise.all(["BTC", "ETH", "SOL"].map(async (sym) => {
         try {
           const r = await fetch(`https://og.nexustradinglabs.com/signals/context/PERP_${sym}_USDC`);
@@ -333,11 +336,11 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
   }, []);
 
   // ── Live positions from Orderly (wallet must be connected) ──
-  const { data: posData } = usePrivateQuery("/v1/positions", { revalidateOnFocus: false }) as { data: { rows?: any[] } | null };
-  const openPositions: any[] = (posData as any)?.rows ?? [];
+  const { data: posData } = usePrivateQuery("/v1/positions", { revalidateOnFocus: false }) as { data: { rows?: OrderlyPositionRow[] } | null };
+  const openPositions: OrderlyPositionRow[] = posData?.rows ?? [];
 
-  const longNotional  = openPositions.filter(p => p.position_qty > 0).reduce((s: number, p: any) => s + Math.abs(p.position_value ?? p.position_qty * (p.mark_price ?? 0)), 0);
-  const shortNotional = openPositions.filter(p => p.position_qty < 0).reduce((s: number, p: any) => s + Math.abs(p.position_value ?? p.position_qty * (p.mark_price ?? 0)), 0);
+  const longNotional  = openPositions.filter(p => p.position_qty > 0).reduce((s: number, p) => s + Math.abs(p.position_value ?? p.position_qty * (p.mark_price ?? 0)), 0);
+  const shortNotional = openPositions.filter(p => p.position_qty < 0).reduce((s: number, p) => s + Math.abs(p.position_value ?? p.position_qty * (p.mark_price ?? 0)), 0);
   const totalNotional = longNotional + shortNotional;
   const portfolioLongPct: number | null = totalNotional > 0 ? Math.round((longNotional / totalNotional) * 100) : null;
 
@@ -622,7 +625,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
       {(() => {
         const majors = (["BTC", "ETH", "SOL"] as const)
           .map((sym) => ({ sym, f: contexts[sym]?.funding, data: getDerivData(sym) }))
-          .filter((m) => m.f && m.f.pct != null);
+          .filter((m): m is typeof m & { f: { pct: number } } => m.f?.pct != null);
         if (!majors.length) return null;
         return (
           <div style={{ marginBottom: "10px" }}>
@@ -729,8 +732,8 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
                 <div style={{ fontSize: "12px", color: MUTED, lineHeight: 1.6 }}>
                   {openPositions.length === 0
                     ? <span style={{ color: DIM }}>No open positions</span>
-                    : openPositions.slice(0, 4).map((p: any) => {
-                        const sym  = bareTicker((p.symbol as string));
+                    : openPositions.slice(0, 4).map((p) => {
+                        const sym  = bareTicker(p.symbol);
                         const dir  = p.position_qty > 0 ? "LONG" : "SHORT";
                         const pnl  = p.unsettled_pnl ?? 0;
                         const pnlC = pnl >= 0 ? GREEN : RED;
