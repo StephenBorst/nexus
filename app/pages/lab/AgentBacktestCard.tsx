@@ -4,11 +4,9 @@
 // nothing here places an order or mutates agent state — which is why it was the right
 // ~140 lines to lift out first.
 //
-// ⚠️ Mechanical move: markup unchanged. `any` on the result shapes is inherited from
-// the original state declarations (the payloads are broad and server-shaped); typing
-// them properly is a separate change, not a silent rider on a refactor.
-/* eslint-disable @typescript-eslint/no-explicit-any */
+// Result shapes are typed in ./backtestTypes (the worker's response contract).
 import type { AgentConfig } from "./types";
+import type { BacktestResult, SweepResult, ValidationResult, OiCoverage as OiCoverageField } from "./backtestTypes";
 import { strategyLabel, backtestGateSupport } from "@/lib/strategyLabel.mjs";
 import { agentCardStyle, agentLabelStyle, btnPrimary, navBtnStyle } from "./styles";
 import { bareTicker } from "@/utils/utils";
@@ -17,11 +15,11 @@ import { pressKey } from "@/utils/a11y";
 // Per-symbol recorded-OI coverage. A bare "0/14d" hid WHICH market was short — and since
 // the brain only records OI for core BTC/ETH/SOL + watchlisted symbols, that was usually a
 // market the user never asked about zeroing a min() across the whole universe.
-function OiCoverage({ rows }: { rows?: any[] }) {
+function OiCoverage({ rows }: { rows?: OiCoverageField }) {
   if (!Array.isArray(rows) || !rows.length) return null;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
-      {rows.map((r: any) => (
+      {rows.map((r) => (
         <span key={r.symbol} title={r.mature ? "mature · included in the run" : "not enough recorded history · excluded"}
           style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "2px 7px", borderRadius: 2, border: `1px solid ${r.mature ? "#3ecf8e44" : "#33333a"}`, color: r.mature ? "#3ecf8e" : "#71717a" }}>
           {bareTicker(String(r.symbol))} {r.days}d/{r.samples}
@@ -62,16 +60,16 @@ export function AgentBacktestCard({
 }: {
   isPro: boolean;
   config: AgentConfig;
-  backtest: any | null;
+  backtest: BacktestResult | null;
   backtesting: boolean;
-  sweep: any | null;
+  sweep: SweepResult | null;
   sweeping: boolean;
-  validation: any | null;
+  validation: ValidationResult | null;
   validating: boolean;
   runConfigBacktest: () => void;
   runConfigSweep: () => void;
   runValidation: () => void;
-  applySweepConfig: (cfg: any) => void;
+  applySweepConfig: (cfg: Record<string, unknown>) => void;
 }) {
   // ── BACKTEST — test this exact config on real history (PRO) ──
   return (
@@ -198,7 +196,7 @@ export function AgentBacktestCard({
                 );
               })()}
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-                {backtest.perSymbol.map((s: any) => (
+                {backtest.perSymbol.map((s) => (
                   <div key={s.symbol} style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", borderTop: "1px solid #232327", paddingTop: 4 }}>
                     <span>{bareTicker(s.symbol)}</span>
                     <span>{s.trades} trades · {s.winRate}% win · PF {s.profitFactor} · <span style={{ color: s.netUsd >= 0 ? "#3ecf8e" : "#f7525f" }}>{s.netUsd >= 0 ? "+" : ""}${s.netUsd}</span></span>
@@ -240,7 +238,7 @@ export function AgentBacktestCard({
                     )}
                     <div style={{ marginTop: 8, overflowX: "auto" }}>
                       <div style={{ minWidth: 320 }}>
-                        {validation.perSymbol.map((s: any) => (
+                        {validation.perSymbol.map((s) => (
                           <div key={s.symbol} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "3px 0", borderTop: "1px solid #141416" }}>
                             <span style={{ width: 46, color: "#d4d4d8" }}>{bareTicker(s.symbol)}</span>
                             <span style={{ width: 66, textAlign: "right", color: s.net >= 0 ? "#3ecf8e" : "#f7525f" }}>{s.net >= 0 ? "+" : ""}${s.net}</span>
@@ -284,7 +282,7 @@ export function AgentBacktestCard({
           {sweep && (() => {
             // The basis sweep reports per-row market breadth (posSymbols) — show it, because
             // "best net on one market" is exactly the overfit a sweep invites.
-            const hasMkts = sweep.results.some((r: any) => Number.isFinite(r.posSymbols));
+            const hasMkts = sweep.results.some((r) => Number.isFinite(r.posSymbols));
             const sweepCols = hasMkts ? "1fr 62px 44px 44px 50px" : "1fr 70px 52px 56px";
             return (
             <div style={{ marginTop: 14 }}>
@@ -296,14 +294,14 @@ export function AgentBacktestCard({
                   <div style={{ display: "grid", gridTemplateColumns: sweepCols, gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", padding: "0 0 4px", borderBottom: "1px solid #232327" }}>
                     <span>STRATEGY</span><span style={{ textAlign: "right" }}>NET$</span>{hasMkts && <span title="Markets it was net-positive on" style={{ textAlign: "right" }}>MKTS+</span>}<span style={{ textAlign: "right" }}>WIN%</span><span style={{ textAlign: "right" }}>TRADES</span>
                   </div>
-                  {sweep.results.slice(0, 12).map((r: any, i: number) => (
+                  {sweep.results.slice(0, 12).map((r, i: number) => (
                     <div role="button" tabIndex={0} key={i} onClick={() => r.config && applySweepConfig(r.config)} onKeyDown={pressKey(() => r.config && applySweepConfig(r.config))} title="Apply this config to the editor above" style={{ display: "grid", gridTemplateColumns: sweepCols, gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 4px", borderBottom: "1px solid #141416", color: "#a1a1aa", cursor: r.config ? "pointer" : "default", borderRadius: 3 }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "#141416"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
                       <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{i === 0 ? "★ " : ""}{r.name}</span>
-                      <span title={Number.isFinite(r.indepNetUsd) ? `One position at a time across ${sweep.symbols.length} markets, daily caps. Each market on its own: ${r.indepNetUsd >= 0 ? "+" : ""}$${r.indepNetUsd} over ${r.indepTrades} trades.` : undefined}
+                      <span title={Number.isFinite(r.indepNetUsd) ? `One position at a time across ${sweep.symbols.length} markets, daily caps. Each market on its own: ${(r.indepNetUsd ?? 0) >= 0 ? "+" : ""}$${r.indepNetUsd} over ${r.indepTrades} trades.` : undefined}
                         style={{ textAlign: "right", color: r.netUsd >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: 600 }}>{r.netUsd >= 0 ? "+" : ""}{r.netUsd}</span>
-                      {hasMkts && <span style={{ textAlign: "right", color: r.posSymbols * 2 > r.totalSymbols ? "#d4d4d8" : "#71717a" }}>{r.posSymbols}/{r.totalSymbols}</span>}
+                      {hasMkts && <span style={{ textAlign: "right", color: (r.posSymbols ?? 0) * 2 > (r.totalSymbols ?? 0) ? "#d4d4d8" : "#71717a" }}>{r.posSymbols}/{r.totalSymbols}</span>}
                       <span style={{ textAlign: "right" }}>{r.winRate}</span>
                       <span style={{ textAlign: "right" }}>{r.trades}</span>
                     </div>
@@ -312,7 +310,7 @@ export function AgentBacktestCard({
               </div>
               <div style={{ color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 8, lineHeight: 1.5 }}>
                 ↑ Click any row to apply that config to the editor. {sweep.note ? sweep.note : sweep.oiTested
-                  ? `CONFLUENCE + OI-divergence are now in the sweep${sweep.oiCoverage?.minDays ? `, graded on ${sweep.oiCoverage.minDays}d of recorded OI history` : ""}.`
+                  ? `CONFLUENCE + OI-divergence are now in the sweep${sweep.oiCoverage && !Array.isArray(sweep.oiCoverage) && sweep.oiCoverage.minDays ? `, graded on ${sweep.oiCoverage.minDays}d of recorded OI history` : ""}.`
                   : "CONFLUENCE/OI aren't in the sweep yet. They fold in once recorded OI history is deep enough."} Every config here was graded on real price — apply a winner, then paper-test before going live.
               </div>
               {sweep.basisCoverage && <OiCoverage rows={sweep.basisCoverage} />}

@@ -92,8 +92,7 @@ export function useXMTP() {
 
       const identifier = { identifier: signerAddr, identifierKind: IdentifierKind.Ethereum };
       const signMessage = async (msg: string): Promise<Uint8Array> => hexToBytes(await sign(msg));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const opts: any = { env: "production", dbEncryptionKey: encryptionKey };
+      const opts = { env: "production" as const, dbEncryptionKey: encryptionKey };
 
       let client: Client;
       try {

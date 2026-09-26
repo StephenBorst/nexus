@@ -81,10 +81,21 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toPair(p: any): TokenPair | null {
+// DexScreener pair — only the fields read below. Untrusted upstream: every read is guarded.
+type DsPair = {
+  chainId?: string | number; dexId?: string; url?: string; pairAddress?: string;
+  baseToken?: { symbol?: string; name?: string; address?: string };
+  quoteToken?: { symbol?: string };
+  priceUsd?: unknown; fdv?: unknown; marketCap?: unknown; pairCreatedAt?: unknown;
+  priceChange?: { h24?: unknown }; liquidity?: { usd?: unknown };
+  volume?: { h24?: unknown; h1?: unknown }; txns?: { h24?: { buys?: unknown; sells?: unknown } };
+  info?: { imageUrl?: string; websites?: { url: string }[]; socials?: { type?: string; platform?: string; url?: string; handle?: string }[] };
+};
+
+function toPair(raw: unknown): TokenPair | null {
+  const p = raw as DsPair | null | undefined;
   if (!p || !p.baseToken || !p.chainId) return null;
-  const info = p.info || {};
+  const info: NonNullable<DsPair["info"]> = p.info || {};
   return {
     chainId: String(p.chainId),
     dexId: String(p.dexId || ""),
@@ -105,8 +116,7 @@ function toPair(p: any): TokenPair | null {
     sells24h: num(p.txns?.h24?.sells),
     imageUrl: info.imageUrl || null,
     websites: Array.isArray(info.websites) ? info.websites.map((w: { url: string }) => w.url).filter(Boolean) : [],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    socials: Array.isArray(info.socials) ? info.socials.map((s: any) => ({ type: String(s.type || s.platform || "link"), url: String(s.url || s.handle || "") })).filter((s: TokenSocial) => s.url) : [],
+    socials: Array.isArray(info.socials) ? info.socials.map((s) => ({ type: String(s.type || s.platform || "link"), url: String(s.url || s.handle || "") })).filter((s: TokenSocial) => s.url) : [],
     createdAt: num(p.pairCreatedAt),
   };
 }
@@ -284,8 +294,9 @@ export async function poolTrades(network: string, pool: string): Promise<Trade[]
   const url = `${GT_BASE}/networks/${gtNetwork(network)}/pools/${pool}/trades`;
   const j = (await getJson(url)) as { data?: unknown[] } | null;
   if (!Array.isArray(j?.data)) return [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (j!.data as any[])
+  // GeckoTerminal trade row — only the attributes read below.
+  type GtTrade = { attributes?: { kind?: string; block_timestamp?: string; volume_in_usd?: unknown; price_to_in_usd?: unknown; price_from_in_usd?: unknown; tx_from_address?: string; tx_hash?: string } };
+  return (j!.data as GtTrade[])
     .map((d) => {
       const a = d?.attributes || {};
       const kind = a.kind === "sell" ? "sell" : "buy";
@@ -500,8 +511,8 @@ export async function deleteTake(chain: string, ca: string, id: string, wallet: 
 export async function nexusSignal(symbol: string): Promise<NexusSignal | null> {
   const j = (await getJson(`${AGENT_API}/signals`)) as { signals?: unknown[] } | null;
   const rows = Array.isArray(j?.signals) ? j!.signals! : [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const r = (rows as any[]).find((x) => String(x?.symbol || "").toUpperCase() === symbol.toUpperCase());
+  type SignalRow = { symbol?: string; verdict?: string; fade_dir?: string; funding_annual_pct?: unknown; stretched?: unknown };
+  const r = (rows as SignalRow[]).find((x) => String(x?.symbol || "").toUpperCase() === symbol.toUpperCase());
   if (!r) return null;
   return {
     symbol: symbol.toUpperCase(),

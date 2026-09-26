@@ -21,7 +21,8 @@ import { SharePoster, type PosterData } from "./SharePoster";
 // Constants/local types, leaf components, and the Orderly key + ownership-proof
 // readers now live beside this file. Behavior is unchanged — the move was purely
 // mechanical, which matters because this is the agent MONEY PATH.
-import { AGENT_API, TG_BOT, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentStanding, type ApiPayload, type SavedStrategy } from "./agentTypes";
+import { AGENT_API, TG_BOT, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentStanding, type SavedStrategy, type CommunityStrategy } from "./agentTypes";
+import type { BacktestResult, SweepResult, ValidationResult } from "./backtestTypes";
 import { errText } from "./helpers";
 import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter } from "./AgentPanels";
 import { AgentBacktestCard } from "./AgentBacktestCard";
@@ -74,11 +75,11 @@ export function AgentView() {
   // by default — the agent runs on sensible defaults; this is opt-in tuning.
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [standing, setStanding] = useState<AgentStanding | null>(null);
-  const [backtest, setBacktest] = useState<ApiPayload | null>(null);
+  const [backtest, setBacktest] = useState<BacktestResult | null>(null);
   const [backtesting, setBacktesting] = useState(false);
-  const [sweep, setSweep] = useState<ApiPayload | null>(null);
+  const [sweep, setSweep] = useState<SweepResult | null>(null);
   const [sweeping, setSweeping] = useState(false);
-  const [validation, setValidation] = useState<ApiPayload | null>(null);
+  const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [validating, setValidating] = useState(false);
   const [strategies, setStrategies] = useState<SavedStrategy[]>([]);
   const [stratName, setStratName] = useState("");
@@ -357,7 +358,7 @@ export function AgentView() {
   }
 
   // Community strategy browse (public, ranked by author graded record).
-  const [community, setCommunity] = useState<SavedStrategy[] | null>(null);
+  const [community, setCommunity] = useState<CommunityStrategy[] | null>(null);
   const [communityStyle, setCommunityStyle] = useState<string>("");
   async function loadCommunity(style: string) {
     setCommunityStyle(style);

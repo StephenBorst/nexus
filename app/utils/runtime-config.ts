@@ -19,8 +19,7 @@ export function getRuntimeConfig(key: string): string | undefined {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const envValue = (import.meta.env as any)[key];
+  const envValue: string | undefined = import.meta.env[key];
 
   if (key === "VITE_ORDERLY_BROKER_ID" && (!envValue || envValue === "")) {
     return "demo";
@@ -67,8 +66,7 @@ export function getRuntimeConfigArray(key: string): string[] {
 /**
  * Get parsed JSON config (for complex configurations)
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getRuntimeConfigJSON<T = any>(key: string): T | undefined {
+export function getRuntimeConfigJSON<T = unknown>(key: string): T | undefined {
   const value = getRuntimeConfig(key);
   if (!value) return undefined;
 
