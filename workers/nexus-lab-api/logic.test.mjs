@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  gradeCall, resolveAiUpstream, bankrGatewayModel, rankCaller, confluenceSignal,
+  gradeCall, callR, resolveAiUpstream, bankrGatewayModel, rankCaller, confluenceSignal,
   orderlyAccountId, safeChartUrl, symbolToQuery,
   classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets, regimeEdge,
   planQuality, planSummary,
@@ -77,9 +77,36 @@ test("INVALID on missing levels or candles", () => {
   assert.equal(gradeCall(baseLong, null).outcome, "INVALID");
 });
 
-test("default R is 1 when riskReward missing/invalid", () => {
+test("R comes from the call's own levels, never the stored riskReward", () => {
+  // 100 → TP 110 over a 5-point stop = 2R, whatever the record claims.
   const noRR = { direction: "LONG", entryPrice: 100, stopLoss: 95, takeProfit1: 110, createdAt: t0 * 1000 };
-  assert.equal(gradeCall(noRR, series(t0, [{ h: 111, l: 99 }])).r, 1);
+  assert.equal(gradeCall(noRR, series(t0, [{ h: 111, l: 99 }])).r, 2);
+  // The caller writes riskReward. A record claiming 50R still wins 2R.
+  const inflated = { ...noRR, riskReward: 50 };
+  assert.deepEqual(gradeCall(inflated, series(t0, [{ h: 111, l: 99 }])), { outcome: "WIN", r: 2 });
+  // A loss is −1R either way.
+  assert.equal(gradeCall(inflated, series(t0, [{ h: 101, l: 94 }])).r, -1);
+});
+
+test("stop or target on the wrong side of entry = INVALID, never a free win", () => {
+  const bar = series(t0, [{ h: 101, l: 99 }]); // price sits at entry
+  // A LONG whose "target" is below entry would have won on its first candle.
+  assert.equal(gradeCall({ ...baseLong, takeProfit1: 99.5 }, bar).outcome, "INVALID");
+  assert.equal(gradeCall({ ...baseLong, stopLoss: 100.5 }, bar).outcome, "INVALID", "LONG stop above entry");
+  assert.equal(gradeCall({ ...baseLong, stopLoss: 100 }, bar).outcome, "INVALID", "zero risk");
+  const short = { direction: "SHORT", entryPrice: 100, stopLoss: 105, takeProfit1: 90, createdAt: t0 * 1000 };
+  assert.equal(gradeCall({ ...short, takeProfit1: 100.5 }, bar).outcome, "INVALID", "SHORT target above entry");
+  assert.equal(gradeCall({ ...short, stopLoss: 99 }, bar).outcome, "INVALID", "SHORT stop below entry");
+  assert.equal(gradeCall(short, series(t0, [{ h: 101, l: 89 }])).r, 2, "a well-formed SHORT still wins its geometric R: (100-90)/(105-100)");
+});
+
+test("callR: reward ÷ risk from the levels, 2dp; null when the levels aren't a call", () => {
+  assert.equal(callR({ direction: "LONG", entryPrice: 100, stopLoss: 97, takeProfit1: 104.5 }), 1.5);
+  assert.equal(callR({ direction: "SHORT", entryPrice: 100, stopLoss: 103, takeProfit1: 95.5 }), 1.5);
+  assert.equal(callR({ direction: "long", entryPrice: 100, stopLoss: 95, takeProfit1: 110 }), 2, "case-insensitive");
+  for (const bad of [{}, null, { direction: "LONG", entryPrice: 0, stopLoss: 95, takeProfit1: 110 }, { direction: "LONG", entryPrice: 100, stopLoss: 105, takeProfit1: 110 }, { direction: "SHORT", entryPrice: 100, stopLoss: 105, takeProfit1: 101 }]) {
+    assert.equal(callR(bad), null, JSON.stringify(bad));
+  }
 });
 
 // ── verifyErc20Payment (PRO subscription rail) ──────────────

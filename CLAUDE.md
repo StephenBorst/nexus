@@ -594,7 +594,9 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   written). Not the 'nexus-trading-key-v1' sig (that seeds agent keys). A new writer of `lab:`/`profile:` MUST sign.
 - A human thesis = a **call**. Outcomes are graded OBJECTIVELY from PUBLIC price (Orderly `GET /tv/history`,
   1h OHLC, first-touch TP1-vs-SL; same-candle = LOSS conservative) — NOT self-reported. So `actualPnl`/status
-  the user types is ignored for ranking.
+  the user types is ignored for ranking. **A WIN pays the call's GEOMETRIC R (`callR`, from entry/stop/TP1), never
+  the stored `riskReward`** (the caller writes that field; paying it let a record claim any R), and a stop or target
+  on the wrong side of entry = INVALID (2026-09-27; live impact that day: none, 0 of 366 public calls affected).
 - `GET /theses/leaderboard`: ranks public-thesis authors by hit-rate + avg-R over ≥5 resolved calls
   (net-positive-R gate, sample-confidence shrink). `GET /theses/ledger`: canonical SHA-256 of the public
   call set (proof-of-call fields + createdAt), recomputable, prev-linked chain (`/theses/ledger/chain`),
