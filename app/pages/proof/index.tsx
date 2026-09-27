@@ -335,6 +335,10 @@ function ProofEdgeCard({ c, onClick }: { c: ProofCard; onClick: () => void }) {
 
 export default function ProofPage() {
   const isMobile = useIsMobile();
+  // Phone: a ranks row wraps instead of scrolling sideways — rank · name · score stay on line 1
+  // (the score is the number that matters), the stats drop to line 2 under the name.
+  const rowM: React.CSSProperties = isMobile ? { flexWrap: "wrap", rowGap: 4, overflowX: "visible" } : {};
+  const statM: React.CSSProperties = isMobile ? { order: 10, flexBasis: "100%", paddingLeft: 32, marginLeft: 0 } : {};
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>("all");
   const [callers, setCallers] = useState<Caller[] | null>(null);
@@ -452,12 +456,12 @@ export default function ProofPage() {
           {callers === null ? empty("loading…") : callers.length === 0 ? empty("No qualified callers yet — 5+ graded calls to rank.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {callers.slice(0, 15).map((c, i) => (
-                <div role="link" tabIndex={0} key={c.wallet} onClick={() => navigate(`/feed/trader/${c.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${c.wallet}`))} style={rowStyle(true)}>
+                <div role="link" tabIndex={0} key={c.wallet} onClick={() => navigate(`/feed/trader/${c.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${c.wallet}`))} style={{ ...rowStyle(true), ...rowM }}>
                   <span style={rankCell}>{i + 1}</span>
                   <Pfp src={c.pfp} />
                   <span style={nameCell}>{c.displayName || short(c.wallet)}</span>
                   {c.meritRank?.glyph && <span title={c.meritRank.title} style={{ fontFamily: MONO, fontSize: 10, color: BONE, flexShrink: 0 }}>{c.meritRank.glyph}</span>}
-                  <span style={statCell}>{c.calls} calls · {c.hitRate}% · {c.avgR >= 0 ? "+" : ""}{c.avgR}R</span>
+                  <span style={{ ...statCell, ...statM }}>{c.calls} calls · {c.hitRate}% · {c.avgR >= 0 ? "+" : ""}{c.avgR}R</span>
                   <span style={{ ...scoreCell, color: c.score > 0 ? BONE : FAINT }}>{c.score || "—"}</span>
                 </div>
               ))}
@@ -472,11 +476,11 @@ export default function ProofPage() {
           {agents === null ? empty("loading…") : agents.length === 0 ? empty("No ranked agents yet — 10 live trades over 3+ days to qualify.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {agents.slice(0, 15).map((a) => (
-                <div role="link" tabIndex={0} key={a.wallet} onClick={() => navigate(`/feed/trader/${a.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${a.wallet}`))} style={rowStyle(true)}>
+                <div role="link" tabIndex={0} key={a.wallet} onClick={() => navigate(`/feed/trader/${a.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${a.wallet}`))} style={{ ...rowStyle(true), ...rowM }}>
                   <span style={rankCell}>{a.rank}</span>
                   <Pfp src={a.pfp} />
                   <span style={nameCell}>{a.displayName || short(a.wallet)}</span>
-                  <span style={statCell}>{a.trades}T · {a.winRate}% · PF {a.profitFactor} · <span style={{ color: a.netPnl >= 0 ? POS : NEG }}>{usd(a.netPnl)}</span></span>
+                  <span style={{ ...statCell, ...statM }}>{a.trades}T · {a.winRate}% · PF {a.profitFactor} · <span style={{ color: a.netPnl >= 0 ? POS : NEG }}>{usd(a.netPnl)}</span></span>
                   <span style={{ ...scoreCell, color: a.score > 0 ? BONE : FAINT }}>{a.score || "—"}</span>
                 </div>
               ))}
@@ -497,13 +501,13 @@ export default function ProofPage() {
               {arena.slice(0, 15).map((a, i) => {
                 const s = a.live || a.paper;
                 return (
-                  <div role="link" tabIndex={0} key={a.wallet} onClick={() => navigate("/arena")} onKeyDown={pressKey(() => navigate("/arena"))} style={rowStyle(true)}>
+                  <div role="link" tabIndex={0} key={a.wallet} onClick={() => navigate("/arena")} onKeyDown={pressKey(() => navigate("/arena"))} style={{ ...rowStyle(true), ...rowM }}>
                     <span style={rankCell}>{i + 1}</span>
                     <span style={nameCell}>{a.name}</span>
                     {a.builder && <span style={{ fontFamily: MONO, fontSize: 8, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>{a.builder}</span>}
                     <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.06em", color: a.live ? BONE : FAINT, flexShrink: 0 }}>{a.live ? "⛓ LIVE" : "PAPER"}</span>
-                    {s ? <span style={{ ...scoreCell, fontSize: 9.5, color: FOG }}>{s.trades}T · {s.winRate}% · <span style={{ color: s.netPnl >= 0 ? POS : NEG }}>{usd(s.netPnl)}</span></span>
-                       : <span style={{ ...scoreCell, fontSize: 9.5, color: FAINT }}>no graded trades yet</span>}
+                    {s ? <span style={{ ...scoreCell, fontSize: 9.5, color: FOG, ...statM }}>{s.trades}T · {s.winRate}% · <span style={{ color: s.netPnl >= 0 ? POS : NEG }}>{usd(s.netPnl)}</span></span>
+                       : <span style={{ ...scoreCell, fontSize: 9.5, color: FAINT, ...statM }}>no graded trades yet</span>}
                   </div>
                 );
               })}
@@ -518,7 +522,7 @@ export default function ProofPage() {
           {desks === null ? empty("loading…") : desks.length === 0 ? empty("No desks yet — teams rank by their members' combined graded record.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {desks.slice(0, 15).map((d) => (
-                <div role="link" tabIndex={0} key={d.id} onClick={() => navigate("/feed")} onKeyDown={pressKey(() => navigate("/feed"))} style={rowStyle(true)}>
+                <div role="link" tabIndex={0} key={d.id} onClick={() => navigate("/feed")} onKeyDown={pressKey(() => navigate("/feed"))} style={{ ...rowStyle(true), ...rowM }}>
                   <span style={rankCell}>#{d.rank}</span>
                   <span style={nameCell}>{d.name}</span>
                   <span style={statCell}>{d.members} members · {d.calls} calls · {d.hitRate}% · {d.totalR >= 0 ? "+" : ""}{d.totalR}R</span>

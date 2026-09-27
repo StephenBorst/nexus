@@ -4,7 +4,7 @@ import { SectionHeader } from "./components";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { fusePositioning, positioningRead } from "@/lib/positioning.mjs";
 import type { ProcessedTrade } from "./types";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 
 // ── POSITIONING — the crowd (funding) fused with the smart money (wallets) ────
 // Phase 2 of the OBSERVE re-slice. Leads the Smart Money tab: one read per coin that
@@ -30,7 +30,7 @@ const bare = (s: string) => String(s || "").toUpperCase().replace(/^PERP_/, "").
 const dirColor = (d: string | null) => (d === "LONG" ? POS : d === "SHORT" ? NEG : MUTED);
 const verdictStyle: Record<string, { label: string; color: string; bg: string }> = {
   CONFLUENCE: { label: "◆ CONFLUENCE", color: BONE, bg: "#1a1a1e" },
-  SPLIT: { label: "⚡ SPLIT", color: WARN, bg: "#1c1608" },
+  SPLIT: { label: "⚡ SPLIT", color: WARN, bg: SIGNAL.cautionBg },
   CROWD: { label: "CROWD", color: FOG, bg: "#141416" },
   SMART: { label: "SMART", color: FOG, bg: "#141416" },
 };

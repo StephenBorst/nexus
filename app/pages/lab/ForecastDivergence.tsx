@@ -237,7 +237,7 @@ const chip = (color: string, border: string): CSSProperties => ({
 });
 
 // The PRIMARY divergence — the one full chart. Lab surface (not the old olive/brown
-// #1c1608), a hairline warn border as the only flag tint, YES % + pt-change as header chips.
+// tint), a hairline warn border as the only flag tint, YES % + pt-change as header chips.
 function DivergentCard({ m, onDraft }: { m: ForecastMarket; onDraft: (m: ForecastMarket) => void }) {
   const hist = useProbHistory(m.clobTokenId);
   const chg = probChange(hist);

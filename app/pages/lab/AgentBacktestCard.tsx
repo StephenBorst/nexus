@@ -11,6 +11,7 @@ import { strategyLabel, backtestGateSupport } from "@/lib/strategyLabel.mjs";
 import { agentCardStyle, agentLabelStyle, btnPrimary, navBtnStyle } from "./styles";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
+import { useIsMobile } from "./useIsMobile";
 
 // Per-symbol recorded-OI coverage. A bare "0/14d" hid WHICH market was short — and since
 // the brain only records OI for core BTC/ETH/SOL + watchlisted symbols, that was usually a
@@ -71,6 +72,7 @@ export function AgentBacktestCard({
   runValidation: () => void;
   applySweepConfig: (cfg: Record<string, unknown>) => void;
 }) {
+  const isMobile = useIsMobile();
   // ── BACKTEST — test this exact config on real history (PRO) ──
   return (
     <div style={agentCardStyle}>
@@ -241,7 +243,7 @@ export function AgentBacktestCard({
                         {validation.perSymbol.map((s) => (
                           <div key={s.symbol} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "3px 0", borderTop: "1px solid #141416" }}>
                             <span style={{ width: 46, color: "#d4d4d8" }}>{bareTicker(s.symbol)}</span>
-                            <span style={{ width: 66, textAlign: "right", color: s.net >= 0 ? "#3ecf8e" : "#f7525f" }}>{s.net >= 0 ? "+" : ""}${s.net}</span>
+                            <span style={{ width: 66, textAlign: "right", color: s.net >= 0 ? "#3ecf8e" : "#f7525f" }}>{s.net >= 0 ? "+" : "−"}${Math.abs(s.net)}</span>
                             <span style={{ width: 54, textAlign: "right", color: "#a1a1aa" }}>{s.foldsPositive}/{validation.folds}f</span>
                             <span style={{ display: "flex", gap: 2, marginLeft: 6 }}>
                               {s.folds.map((n: number, i: number) => <span key={i} title={`fold ${i + 1}: ${n >= 0 ? "+" : ""}$${n}`} style={{ width: 8, height: 12, borderRadius: 1, background: n > 0 ? "#3ecf8e" : n < 0 ? "#f7525f" : "#33333a" }} />)}
@@ -283,22 +285,26 @@ export function AgentBacktestCard({
             // The basis sweep reports per-row market breadth (posSymbols) — show it, because
             // "best net on one market" is exactly the overfit a sweep invites.
             const hasMkts = sweep.results.some((r) => Number.isFinite(r.posSymbols));
-            const sweepCols = hasMkts ? "1fr 62px 44px 44px 50px" : "1fr 70px 52px 56px";
+            // Phone: the name gets its own full line (truncated, you couldn't tell which exit a row
+            // was) and the numbers sit in fitted columns under it — no sideways scroll.
+            const sweepCols = isMobile ? (hasMkts ? "repeat(4, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))")
+              : hasMkts ? "1fr 62px 44px 44px 50px" : "1fr 70px 52px 56px";
+            const nameCell = isMobile ? { gridColumn: "1 / -1", color: "#d4d4d8", lineHeight: 1.4 } : { whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" };
             return (
             <div style={{ marginTop: 14 }}>
               <div style={{ ...agentLabelStyle, fontSize: 9, marginBottom: 6 }}>
                 RANKED{sweep.rankedBy === "portfolio" ? " AS THE AGENT TRADES IT" : ""} — {sweep.results.length} configs · {sweep.symbols.map((s: string) => bareTicker(s)).join("/")} · {sweep.days}d · ${sweep.notional} notional
               </div>
               <div style={{ overflowX: "auto" }}>
-                <div style={{ minWidth: 340 }}>
+                <div style={{ minWidth: isMobile ? 0 : 340 }}>
                   <div style={{ display: "grid", gridTemplateColumns: sweepCols, gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", padding: "0 0 4px", borderBottom: "1px solid #232327" }}>
-                    <span>STRATEGY</span><span style={{ textAlign: "right" }}>NET$</span>{hasMkts && <span title="Markets it was net-positive on" style={{ textAlign: "right" }}>MKTS+</span>}<span style={{ textAlign: "right" }}>WIN%</span><span style={{ textAlign: "right" }}>TRADES</span>
+                    {!isMobile && <span>STRATEGY</span>}<span style={{ textAlign: "right" }}>NET$</span>{hasMkts && <span title="Markets it was net-positive on" style={{ textAlign: "right" }}>MKTS+</span>}<span style={{ textAlign: "right" }}>WIN%</span><span style={{ textAlign: "right" }}>TRADES</span>
                   </div>
                   {sweep.results.slice(0, 12).map((r, i: number) => (
                     <div role="button" tabIndex={0} key={i} onClick={() => r.config && applySweepConfig(r.config)} onKeyDown={pressKey(() => r.config && applySweepConfig(r.config))} title="Apply this config to the editor above" style={{ display: "grid", gridTemplateColumns: sweepCols, gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 4px", borderBottom: "1px solid #141416", color: "#a1a1aa", cursor: r.config ? "pointer" : "default", borderRadius: 3 }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "#141416"; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
-                      <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{i === 0 ? "★ " : ""}{r.name}</span>
+                      <span style={nameCell}>{i === 0 ? "★ " : ""}{r.name}</span>
                       <span title={Number.isFinite(r.indepNetUsd) ? `One position at a time across ${sweep.symbols.length} markets, daily caps. Each market on its own: ${(r.indepNetUsd ?? 0) >= 0 ? "+" : ""}$${r.indepNetUsd} over ${r.indepTrades} trades.` : undefined}
                         style={{ textAlign: "right", color: r.netUsd >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: 600 }}>{r.netUsd >= 0 ? "+" : ""}{r.netUsd}</span>
                       {hasMkts && <span style={{ textAlign: "right", color: (r.posSymbols ?? 0) * 2 > (r.totalSymbols ?? 0) ? "#d4d4d8" : "#71717a" }}>{r.posSymbols}/{r.totalSymbols}</span>}

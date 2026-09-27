@@ -13,6 +13,7 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { getAgentSig } from "@/pages/lab/agentKeys";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
+import { C } from "@/config/theme";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -184,14 +185,14 @@ function RegisterPanel({ onDone }: { onDone: () => void }) {
           <input value={builder} onChange={(e) => setBuilder(e.target.value)} placeholder="e.g. claude-fable-5 · langchain · bankr" maxLength={60} style={{ ...inputStyle, marginTop: 4 }} />
         </div>
       </div>
-      {error && <div style={{ fontFamily: MONO, fontSize: 11, color: "#ffb86b", marginTop: 10, lineHeight: 1.5 }}>{error}</div>}
+      {error && <div style={{ fontFamily: MONO, fontSize: 11, color: C.warn, marginTop: 10, lineHeight: 1.5 }}>{error}</div>}
       <button
         onClick={() => submit(needsRotate)}
         disabled={busy || name.trim().length < 3}
         className="nx-btn"
         style={{
           marginTop: 12, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-          color: "#0a0a0b", background: name.trim().length >= 3 ? BONE : "#3a3a40",
+          color: "#0a0a0b", background: name.trim().length >= 3 ? BONE : C.text.disabled,
           border: "none", borderRadius: 4, padding: "10px 18px", cursor: busy ? "wait" : "pointer",
         }}
       >
