@@ -86,7 +86,7 @@ function fmtYr(pctYr: number): string { return `${signed(pctYr, String(Math.abs(
 const THIN_OI_USD = 250_000;
 const isThinOi = (m: { oiUsd: number }) => Number.isFinite(m.oiUsd) && m.oiUsd < THIN_OI_USD;
 const THIN_TITLE = `Under $${THIN_OI_USD / 1000}k open interest. A handful of positions can set this funding rate. Low confidence.`;
-type BoardResp = { asOf?: string; scanned?: number; mispricedCount?: number; markets?: Market[] };
+type BoardResp = { asOf?: string; scanned?: number; mispricedCount?: number; markets?: Market[]; error?: string; stale?: boolean };
 type Lean = { side: "LONG" | "SHORT" | "SPLIT"; lean: number; longCount: number; shortCount: number; participants: number };
 type ConsensusResp = { consensus?: Record<string, Lean> };
 type Reversion = { samples: number; horizonDays: number; avgReversionPct: number; medianReversionPct: number; revertedPct: number; crowd: "long" | "short" };
@@ -516,14 +516,28 @@ export function MispricedBoard() {
   }, [openCoin]);
 
   useEffect(() => {
-    let live = true;
+    let live = true, quickRetry = false;
+    // Keep LAST-GOOD rows and say "unavailable, retrying" — never "no liquid markets" on a failed
+    // read. One quick retry per failure streak (the server doesn't cache failures, so the next
+    // read usually lands), then the normal 90s cadence.
+    const failed = () => {
+      setBoard((prev) => (prev && prev.markets && prev.markets.length ? prev : { markets: [] }));
+      setErr(true);
+      if (!quickRetry) { quickRetry = true; setTimeout(() => { if (live) load(); }, 8000); }
+    };
     const load = () => {
       // Cap /intel/mispriced + fail soft to LAST-GOOD so the board settles fast and a later
       // blip never wipes rows already on screen (was setBoard({markets:[]}) on any error). err
       // only surfaces in the empty branch, so it's harmless while last-good rows are shown.
+      // The worker's own fail-soft answer (200 + `error` + no markets, when Orderly hiccups) is a
+      // failure too: it used to land in the success branch and wipe the rows.
       fetchJsonTimeout(`${AGENT_API}/intel/mispriced`, BOARD_TIMEOUT_MS)
-        .then((d: BoardResp) => { if (live) { setBoard(d || {}); setErr(false); } })
-        .catch(() => { if (live) { setBoard((prev) => (prev && prev.markets && prev.markets.length ? prev : { markets: [] })); setErr(true); } });
+        .then((d: BoardResp) => {
+          if (!live) return;
+          if (!d || (d.error && !(d.markets && d.markets.length))) { failed(); return; }
+          quickRetry = false; setBoard(d); setErr(false);
+        })
+        .catch(() => { if (live) failed(); });
       fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json())
         .then((d: ConsensusResp) => { if (live) setLean(d?.consensus || {}); })
         .catch(() => { /* fail-soft. Board still renders */ });
@@ -872,7 +886,7 @@ export function MispricedBoard() {
       <SectionHeader
         eyebrow="MISPRICED BOARD"
         title="Where the crowd is overpaying"
-        note={scanned > 0 ? <span><span style={{ color: C.text.bright }}>{scanned}</span> scanned · <span style={{ color: C.accent }}>{mispricedCount}</span> mispriced</span> : "FUNDING-EDGE LENS"}
+        note={scanned > 0 ? <span><span style={{ color: C.text.bright }}>{scanned}</span> scanned · <span style={{ color: C.accent }}>{mispricedCount}</span> mispriced{board?.stale && board.asOf ? <span style={{ color: C.text.faint }}> · delayed, as of {new Date(board.asOf).toISOString().slice(11, 16)} UTC</span> : null}</span> : "FUNDING-EDGE LENS"}
       />
 
       <p style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, lineHeight: 1.6, maxWidth: 680, margin: "0 0 14px" }}>

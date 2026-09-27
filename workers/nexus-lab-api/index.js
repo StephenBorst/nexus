@@ -2948,11 +2948,13 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       const respond = (payload) => new Response(JSON.stringify(payload), {
         headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=120", ...cors(request) },
       });
+      let lastGood = null;
       try {
         const cached = await env.LAB_STORE.get(CACHE_KEY);
         if (cached) {
           const c = JSON.parse(cached);
           if (c && (Date.now() - (c.asOfMs || 0)) < TTL_MS) return respond(c);
+          lastGood = c; // past 180s but still in KV (≤10 min) — the fallback if the fresh read fails
         }
       } catch { /* cache miss → recompute */ }
       try {
@@ -2962,7 +2964,13 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         // direct call as fallback. Fail-soft WITHOUT caching so the very next request retries fresh
         // (never pin an empty board for the cache TTL).
         const rows = await fetchAllFutures();
-        if (!rows.length) return json({ asOf: new Date().toISOString(), scanned: 0, mispricedCount: 0, markets: [], error: "futures unavailable" }, request);
+        if (!rows.length) {
+          // Both paths fail together in short bursts (seen 2026-09-27: ~1 min of empty boards). Serve
+          // the last good board, marked stale (the Lab prints "delayed · as of"), rather than an
+          // empty one. Not re-cached and not edge-cached, so the next request still tries fresh.
+          if (lastGood && Array.isArray(lastGood.markets) && lastGood.markets.length) return json({ ...lastGood, stale: true }, request);
+          return json({ asOf: new Date().toISOString(), scanned: 0, mispricedCount: 0, markets: [], error: "futures unavailable" }, request);
+        }
         const board = mispricedBoard(rows);
 
         // Self-awareness: enrich each FLAGGED market with whether fading it has
