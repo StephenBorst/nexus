@@ -941,10 +941,14 @@ export const ERC20_TRANSFER_TOPIC =
 // (bigint/string), decimals = token decimals, usdPerToken = USD value per whole token
 // (1 for USDC, live price for $NEXUS), usdPerCredit = price of one sim (default $1). Floors
 // to whole credits so a partial never rounds up. Exported for tests.
-export function simCreditsFor(amountUnits, { decimals, usdPerToken = 1, usdPerCredit = 1 }) {
+// `slack` = a fraction of ONE credit forgiven per payment ($NEXUS only: our price can sit a
+// few % off the one the payer saw). Per payment, not per credit: each credit costs us $1 of
+// real USDC at MiroShark, so a proportional tolerance would be a standing discount. The tiny
+// epsilon keeps a payment at exactly the minimum from flooring to 0 on float noise.
+export function simCreditsFor(amountUnits, { decimals, usdPerToken = 1, usdPerCredit = 1, slack = 0 }) {
   const amt = Number(amountUnits) / Math.pow(10, Number(decimals) || 0);
   const usd = amt * (Number(usdPerToken) || 0);
-  const credits = Math.floor(usd / (Number(usdPerCredit) || 1));
+  const credits = Math.floor(usd / (Number(usdPerCredit) || 1) + (Number(slack) || 0) + 1e-9);
   return credits > 0 ? credits : 0;
 }
 

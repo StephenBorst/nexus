@@ -1852,7 +1852,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
             const price = await getNexusPriceUsd();
             if (!price) return json({ error: "could not price $NEXUS right now — pay with USDC on Arbitrum" }, request, 503);
             usdPerToken = price;
-            minUnits = BigInt(Math.floor((SIM_CREDIT_USD / price / 0.88) * 1e18)); // ≥ ~1 credit of $NEXUS (12% tol)
+            // Same rule as PRO: accept ≥88% of one credit's worth. This divided by 0.88 (asked for
+            // ≥113.6%), so "send ≥ $1 of $NEXUS" as the UI says was rejected with no credit.
+            minUnits = nexusMinUnits(price, SIM_CREDIT_USD, NEXUS_TOLERANCE);
+            if (!minUnits) return json({ error: "could not price $NEXUS right now — pay with USDC on Arbitrum" }, request, 503);
             rpcs = ["https://base-rpc.publicnode.com", "https://mainnet.base.org", "https://base.llamarpc.com"];
           } else return json({ error: "unsupported chain" }, request, 400);
           const redeemed = await redeemedAs(env.LAB_STORE, txHash);
@@ -1868,7 +1871,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           if (!receipt) return json({ error: "tx not found or still pending — wait for confirmation, then retry" }, request, 404);
           const v = verifyErc20Payment(receipt, { token, receiver: SUB_RECEIVER, minAmount: minUnits });
           if (!v.ok) return json({ error: v.reason || "verification failed", hint: chain === "base" ? `Send ≥ $${SIM_CREDIT_USD} of $NEXUS on Base to ${SUB_RECEIVER}` : `Send ≥ ${SIM_CREDIT_USD} USDC on Arbitrum to ${SUB_RECEIVER}` }, request, 400);
-          const bought = simCreditsFor(v.amount, { decimals, usdPerToken, usdPerCredit: SIM_CREDIT_USD });
+          const bought = simCreditsFor(v.amount, { decimals, usdPerToken, usdPerCredit: SIM_CREDIT_USD, slack: chain === "base" ? NEXUS_TOLERANCE : 0 });
           if (bought < 1) return json({ error: `payment below the 1-credit minimum ($${SIM_CREDIT_USD})` }, request, 400);
           const r = await redeemOnce(env.LAB_STORE, txHash, "sim:redeemed:", v.from, async () => {
             const cur = Number(await env.LAB_STORE.get(`sim:credits:${v.from}`)) || 0;

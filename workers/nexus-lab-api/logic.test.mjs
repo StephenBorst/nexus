@@ -144,6 +144,27 @@ test("simCreditsFor: USDC $1=1 credit, $NEXUS priced, floors partials", () => {
   assert.equal(simCreditsFor(500000n, { decimals: 6, usdPerToken: 1, usdPerCredit: 1 }), 0);
 });
 
+test("sim credits in $NEXUS: '≥ $1 of $NEXUS' buys a credit even when our price is up to 12% below the payer's", () => {
+  const price = 0.0000025;                     // $ per $NEXUS
+  const tokensFor = (usd) => BigInt(Math.round(usd / price)) * (10n ** 18n);
+  const min = nexusMinUnits(price, 1, 0.12);    // the minimum the route now uses for one $1 credit
+  assert.ok(min < tokensFor(1), "the minimum sits BELOW $1 of tokens (it used to demand ~$1.14)");
+  assert.ok(min >= tokensFor(0.88) - 10n ** 18n, "…but not below 88% of it");
+  const credits = (usd) => simCreditsFor(tokensFor(usd), { decimals: 18, usdPerToken: price, usdPerCredit: 1, slack: 0.12 });
+  assert.equal(credits(1), 1, "exactly $1 of $NEXUS → 1 credit");
+  assert.equal(credits(0.9), 1, "our price 10% lower than the payer's → still 1 credit");
+  assert.equal(credits(0.88), 1, "at the minimum exactly → 1 credit, not a float-noise 0");
+  assert.equal(credits(0.87), 0, "below the minimum → nothing (the route also refuses it)");
+  assert.equal(credits(10), 10, "slack is per payment, not per credit: $10 buys 10, never 11");
+  assert.equal(credits(1.87), 1, "a partial above a whole credit still floors");
+  assert.equal(credits(1.88), 2);
+});
+
+test("sim credits in USDC: no slack, exact dollars", () => {
+  assert.equal(simCreditsFor(999999n, { decimals: 6, usdPerToken: 1, usdPerCredit: 1 }), 0, "$0.999999 USDC buys nothing");
+  assert.equal(simCreditsFor(1000000n, { decimals: 6, usdPerToken: 1, usdPerCredit: 1 }), 1);
+});
+
 test("nexusMinUnits: $15 at $0.0000005, 12% tol → ~26.4M tokens in 18-dec units", () => {
   const u = nexusMinUnits(0.0000005, 15, 0.12);
   // 15/0.0000005 = 30,000,000 * 0.88 = 26,400,000 tokens
