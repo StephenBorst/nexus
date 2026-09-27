@@ -611,6 +611,23 @@ export function mispricedBoard(rows, cfg = MISPRICED) {
   };
 }
 
+// ── The board's outage fallback ─────────────────────────────────────────────────
+// Orderly refuses Worker reads in bursts that can outlast the 10-min cache (Sept 27: ~30 min
+// of empty boards). When a fresh read fails, /intel/mispriced serves the FRESHEST board it
+// still holds that is at most `maxAgeMs` old, flagged stale (the Lab prints "delayed, as of
+// HH:MM UTC"). Funding moves slowly, so a 2h-old board is still a useful, labeled read.
+// Candidates = the 10-min cache + the route's own 2h last-good copy. Pure; never mutates.
+export const BOARD_LAST_GOOD_MS = 2 * 3600 * 1000;
+export function staleBoardFallback(candidates, now = Date.now(), maxAgeMs = BOARD_LAST_GOOD_MS) {
+  let best = null;
+  for (const c of candidates || []) {
+    if (!c || !Array.isArray(c.markets) || !c.markets.length || !Number.isFinite(c.asOfMs)) continue;
+    if (now - c.asOfMs > maxAgeMs) continue;
+    if (!best || c.asOfMs > best.asOfMs) best = c;
+  }
+  return best ? { ...best, stale: true } : null;
+}
+
 // ── Per-symbol merit-weighted caller LEAN (the consensus companion to the board) ──
 // The mispriced board reads the FUNDING crowd; this reads the graded, credible
 // CALLERS. Same weighted stances as the disagreement board (open positions + active

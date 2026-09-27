@@ -21,7 +21,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
 // Keep copy:copiers:{leader} = [followers] in sync when a follower's config
@@ -2945,6 +2945,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // this stays a fast public read.
     if (parts[0] === "intel" && parts[1] === "mispriced" && request.method === "GET") {
       const CACHE_KEY = "intel:mispriced:v1", TTL_MS = 180 * 1000;
+      // Outage copy, kept 2h. ONLY this route's fallback reads it: CACHE_KEY also feeds house calls
+      // (entry = the board's mark), per-coin cards and the positioning stat, which must never
+      // silently see a 2h-old board — so that key keeps its 10-min life.
+      const LAST_GOOD_KEY = "intel:mispriced:lastgood";
       const respond = (payload) => new Response(JSON.stringify(payload), {
         headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=120", ...cors(request) },
       });
@@ -2957,6 +2961,14 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           lastGood = c; // past 180s but still in KV (≤10 min) — the fallback if the fresh read fails
         }
       } catch { /* cache miss → recompute */ }
+      // No fresh board: serve the freshest held copy ≤2h old, marked stale (staleBoardFallback),
+      // else the empty fail-soft answer. Never re-cached, never edge-cached, so the next request
+      // still tries fresh.
+      const lastGoodOr = async (empty) => {
+        let older = null;
+        try { const raw = await env.LAB_STORE.get(LAST_GOOD_KEY); if (raw) older = JSON.parse(raw); } catch { /* none */ }
+        return json(staleBoardFallback([lastGood, older]) || empty, request);
+      };
       try {
         // All-markets snapshot via the shared proxy-first helper (see fetchAllFutures). The direct
         // api-evm path intermittently served an HTML 403 to header-light Worker fetches and dumped
@@ -2964,13 +2976,8 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         // direct call as fallback. Fail-soft WITHOUT caching so the very next request retries fresh
         // (never pin an empty board for the cache TTL).
         const rows = await fetchAllFutures();
-        if (!rows.length) {
-          // Both paths fail together in short bursts (seen 2026-09-27: ~1 min of empty boards). Serve
-          // the last good board, marked stale (the Lab prints "delayed · as of"), rather than an
-          // empty one. Not re-cached and not edge-cached, so the next request still tries fresh.
-          if (lastGood && Array.isArray(lastGood.markets) && lastGood.markets.length) return json({ ...lastGood, stale: true }, request);
-          return json({ asOf: new Date().toISOString(), scanned: 0, mispricedCount: 0, markets: [], error: "futures unavailable" }, request);
-        }
+        // Both paths fail together in bursts (Sept 27: ~30 min of empty boards, past the 10-min cache).
+        if (!rows.length) return lastGoodOr({ asOf: new Date().toISOString(), scanned: 0, mispricedCount: 0, markets: [], error: "futures unavailable" });
         const board = mispricedBoard(rows);
 
         // Self-awareness: enrich each FLAGGED market with whether fading it has
@@ -3032,10 +3039,12 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           criteria: { note: "Funding annualized (per-8h × 1095) = the crowd's mispricing. Positive funding ⇒ book lopsided LONG ⇒ fade edge is SHORT (and vice-versa). |edge| ≥ 12%/yr on ≥ $50k OI ⇒ MISPRICED · WATCHING. Flagged markets carry an edgeQuality from whether fading them has HISTORICALLY reverted (PROVEN ≥55% / TRAP ≤42% / MIXED / UNPROVEN=no recorded history); ranked proven-first, traps last. Not advice — a mean-reversion lens that says when the fade has paid and when it hasn't." },
         };
         try { await env.LAB_STORE.put(CACHE_KEY, JSON.stringify(payload), { expirationTtl: 600 }); } catch { /* cache write best-effort */ }
+        try { await env.LAB_STORE.put(LAST_GOOD_KEY, JSON.stringify(payload), { expirationTtl: 7200 }); } catch { /* best-effort */ }
         return respond(payload);
       } catch (e) {
-        // Fail-soft: 200 with an empty board so the Lab renders "no data", not an error.
-        return json({ asOf: new Date().toISOString(), scanned: 0, mispricedCount: 0, markets: [], error: String(e) }, request);
+        // Fail-soft: the last good board if one is held, else 200 with an empty board so the Lab
+        // renders "unavailable", not an error.
+        return lastGoodOr({ asOf: new Date().toISOString(), scanned: 0, mispricedCount: 0, markets: [], error: String(e) });
       }
     }
 

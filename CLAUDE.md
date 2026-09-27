@@ -1036,8 +1036,12 @@ credit and pays `x402.miroshark.xyz/run` $1 Base USDC from secret `MIROSHARK_PAY
   `GET /wargame/status?url=` (GET, miroshark hosts only).
 - **Orderly challenge pages (same day):** Orderly's edge answers Worker reads with HTML in bursts (~1 min; the
   Funding Edges board went empty twice on Sept 27). Backtest reads go through `orderlyJson` (backtest.mjs: retry,
-  readable error, never skip a page); `/intel/mispriced` serves its last good board (≤10 min) as `stale:true` and the
-  Lab prints "delayed, as of HH:MM UTC".
+  readable error, never skip a page); `/intel/mispriced` serves the freshest board it holds ≤2h old as `stale:true`
+  (`staleBoardFallback`, logic.mjs) and the Lab prints "delayed, as of HH:MM UTC". The 2h copy has its OWN key
+  `intel:mispriced:lastgood`, read only by that fallback. ⚠️ Don't extend `intel:mispriced:v1` (10 min) instead: it also
+  feeds house calls (entry = the board's mark), per-coin cards and the positioning stat, none of which label staleness.
+  Sept 27: ~30 min of refusals, so 10 min wasn't enough. Whether Orderly blocks Workers on `/v1/public/futures` is with
+  Wuzhong (borst asking); the `orderly-proxy` worker failing too points to network-level blocking.
 
 ## Tokenomics direction — Bankr-informed pivot (2026-06-08) ⭐ CURRENT
 The Safe is **LIVE** (`0x4Fe2…C733`, 1/1 Arbitrum+Base) and the PRO USDC payment rail is **wired**
