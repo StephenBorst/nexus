@@ -1236,6 +1236,25 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   risky logic (gradeCall) is already extracted to logic.mjs + tested, and it's uniform route blocks (lower
   maintainability pain than the Lab was). Split routes/agent|theses|feed only if it starts hurting.
 
+## ⚡ Mobile load — minified + vendor split + real long cache (2026-09-27)
+- **Prod shipped UNMINIFIED until 2026-09-27** (`vite build --no-minify` in deploy.yml since May, an OOM stopgap that
+  didn't matter: minified peaks at the same ~7.3 GB). Entry was 7.5 MB raw / 1.48 MB gz; minified = 3.6 MB / 1.04 MB.
+  ⚠️ Local `yarn build` was ALWAYS minified, so any "measured locally" size before that date flattered prod.
+- **`vendorChunk()` in vite.config.ts:** every node_modules module STATICALLY reachable from the entry → ONE `vendor`
+  chunk (+ Rollup's `\0` helpers so vendor never imports app code). Lazy-only packages stay lazy — never a catch-all
+  node_modules rule (it would drag WooFi/XMTP into first load). Verified: a one-string app change keeps the vendor
+  filename; entry is ~70 KB. Lazy chunks that mix app + lib code still re-hash (e.g. WooFi's 9 MB widget) — only
+  fetched when used.
+- **public/_headers `/assets/*` needs `! Cache-Control`.** Cloudflare applies EVERY matching rule and JOINS a repeated
+  header with commas (docs + `asset-server/handler.ts`): without the detach, assets shipped `no-cache, public,
+  max-age=31536000, immutable` and browsers obeyed no-cache. deploy.yml's "Check live cache headers" step prints the
+  live values after each deploy (cloud sessions can't reach the site; read the Action log).
+- **Measured (Pixel 7 profile: 150 ms, 1.6 Mbps, 4× CPU, /lab, 2 runs):** first visit 11.1 s (old) → 9.9 s; return visit
+  after a deploy 10.4 s / 1.9 MB (minified, unsplit) → **3.9 s / 374 KB**. The split costs ~1 s on a cold first visit
+  vs minified-unsplit (8.9 s) — accepted: deploys land several times a day, so most return visits are post-deploy.
+- Smoke: 10 routes render the same on the new build as the old (same text length per route); the only page error in
+  both is the sandbox blocking Orderly's API. ⚠️ In cloud sessions don't `pkill` servers: it kills your own shell.
+
 ## Conventions
 - **⚠️ BROWSER-FIRST TRIAGE — rule out borst's browser BEFORE touching code (bit us TWICE; 2nd = 2026-09-25).**
   borst browses in **Brave**. Brave Shields (tracker/ad/fingerprint blocking) silently breaks third-party

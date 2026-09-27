@@ -1,4 +1,4 @@
-import { defineConfig, Plugin } from "vite";
+import { defineConfig, Plugin, type Rollup } from "vite";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { cjsInterop } from "vite-plugin-cjs-interop";
@@ -43,6 +43,30 @@ function htmlTitlePlugin(): Plugin {
   };
 }
 
+// One long-lived "vendor" chunk for every library the ENTRY loads up front. Hashed files are
+// cached forever (public/_headers), so a deploy that only touches app code re-downloads the
+// small app chunk, not the ~3 MB SDK tree. Only modules STATICALLY reachable from the entry
+// qualify: a catch-all node_modules rule would drag lazy-only packages (WooFi, XMTP, …) into
+// the first load. Rollup's virtual helpers (\0commonjsHelpers, the preload helper) ride
+// along so the vendor chunk never imports back from app code (no chunk cycle).
+export function vendorChunk(): Rollup.ManualChunksOption {
+  let fromEntry: Set<string> | null = null;
+  return (id, { getModuleIds, getModuleInfo }) => {
+    if (!fromEntry) {
+      fromEntry = new Set();
+      const stack = [...getModuleIds()].filter((m) => getModuleInfo(m)?.isEntry);
+      while (stack.length) {
+        const m = stack.pop() as string;
+        if (fromEntry.has(m)) continue;
+        fromEntry.add(m);
+        for (const dep of getModuleInfo(m)?.importedIds ?? []) stack.push(dep);
+      }
+    }
+    if (fromEntry.has(id) && (id.includes("/node_modules/") || id.startsWith("\0"))) return "vendor";
+    return undefined;
+  };
+}
+
 export default defineConfig(() => {
   const basePath = process.env.PUBLIC_PATH || "/";
 
@@ -65,6 +89,7 @@ export default defineConfig(() => {
     ],
     build: {
       outDir: "build/client",
+      rollupOptions: { output: { manualChunks: vendorChunk() } },
     },
     optimizeDeps: {
       exclude: ["@xmtp/wasm-bindings", "@xmtp/browser-sdk"],

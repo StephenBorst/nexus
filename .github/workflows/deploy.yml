@@ -57,8 +57,11 @@ jobs:
           for d in nexus-lab-api nexus-agent-exec nexus-carry-engine; do (cd "workers/$d" && npm ci); done
           node tools/run-tests.mjs
 
+      # Minified (Vite's default esbuild pass). `--no-minify` was added in May 2026 to dodge a runner OOM; it
+      # didn't matter (minified peaks at the same ~7.3 GB, measured 2026-09-27) and it shipped phones a
+      # 7.5 MB entry instead of 3.6 MB. The swap step above is what keeps the build alive.
       - name: Build
-        run: yarn tsx scripts/generate-manifest.ts && yarn vite build --no-minify && yarn tsx scripts/generate-manifest.ts
+        run: yarn tsx scripts/generate-manifest.ts && yarn vite build && yarn tsx scripts/generate-manifest.ts
         env:
           NODE_OPTIONS: '--max-old-space-size=6144'
 
@@ -68,6 +71,27 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         run: npx wrangler@3 pages deploy build/client --project-name=nexus-trading-lab --branch=main --commit-dirty=true
+
+      # Cache headers, read LIVE after the deploy (cloud dev sessions can't reach the site, so
+      # this log is where they're checked). Hashed /assets must be cache-forever WITHOUT
+      # no-cache — Cloudflare joins header values when two _headers rules match, and browsers
+      # obey the no-cache — while the HTML must revalidate. Warns, never fails: the deploy is done.
+      - name: Check live cache headers
+        continue-on-error: true
+        run: |
+          entry=$(grep -o 'src="/assets/[^"]*\.js"' build/client/index.html | head -1 | sed 's/^src="//;s/"$//')
+          for i in 1 2 3 4 5 6 7 8 9; do
+            curl -s -o /tmp/lab.html -D /tmp/lab.h https://trade.nexustradinglabs.com/lab || true
+            grep -q "$entry" /tmp/lab.html && break
+            sleep 10
+          done
+          html=$(grep -i '^cache-control' /tmp/lab.h | tr -d '\r')
+          asset=$(curl -s -I "https://trade.nexustradinglabs.com$entry" | grep -i '^cache-control' | tr -d '\r')
+          echo "HTML  /lab    → $html"
+          echo "ASSET $entry → $asset"
+          grep -q "$entry" /tmp/lab.html || echo "::warning::live /lab doesn't reference this build's entry yet"
+          if echo "$asset" | grep -qi immutable && ! echo "$asset" | grep -qi no-cache; then echo "assets: cache-forever ✓"; else echo "::warning::hashed assets are not cache-forever: $asset"; fi
+          if echo "$html" | grep -qi no-cache; then echo "html: revalidates ✓"; else echo "::warning::HTML may be cached stale: $html"; fi
 
       - name: Deploy Worker (nexus-lab-api)
         working-directory: workers/nexus-lab-api

@@ -3,11 +3,18 @@
 # /perp/*, /portfolio, …), so ALL of them — not just the literal /index.html — must
 # revalidate to pick up the CURRENT chunk hashes. Wallet in-app browsers (Zerion
 # etc.) cache aggressively, and a rule scoped to /index.html alone never matched
-# /lab, so the HTML went stale there. /* covers every route (incl. config.js, sw.js);
-# /assets/* is more specific and wins, keeping content-hashed assets cacheable forever.
+# /lab, so the HTML went stale there. /* covers every route (incl. config.js, sw.js).
+#
+# ⚠️ A more specific rule does NOT win on Cloudflare: every matching rule applies, in
+# file order, and a header set twice is JOINED with a comma (Pages docs; asset-server
+# handler.ts appends when a key was already set). Without the "! Cache-Control" line,
+# /assets/* shipped "no-cache, public, max-age=31536000, immutable" — and no-cache wins,
+# so every visit re-checked every hashed file. The "!" line deletes the /* value first.
+# Hashed files never change content, so they are safe to keep forever.
 
 /*
   Cache-Control: no-cache
 
 /assets/*
+  ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
