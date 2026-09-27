@@ -32,7 +32,8 @@ const guestParam = (() => {
 // suppression ?guest=1 performs, applied without needing the param. Still READ-ONLY:
 // Buy / Copy / Publish / ARM LIVE gate on a wallet in their own components, untouched.
 // /proof too: it's the page people link to prove the grades — on a phone the modal covered it whole.
-const PUBLIC_ROUTES = ["/token", "/feed", "/proof"];
+// /analyze too: every X-Ray share link (og.…/share/xray/:a) forwards to /analyze?address=.
+const PUBLIC_ROUTES = ["/token", "/feed", "/proof", "/analyze"];
 const isPublicRoute = (() => {
   try { return PUBLIC_ROUTES.some((r) => window.location.pathname.startsWith(r)); }
   catch { return false; }
