@@ -47,3 +47,23 @@ export function annualFundingPct(rate8h) {
   const v = finiteOrNull(rate8h);
   return v == null ? null : v * FUNDING_PERIODS_PER_YEAR * 100;
 }
+
+// ── Who pays — a property of the RATE, never of your trade ───────────────────
+// Positive funding ⇒ longs pay shorts; negative ⇒ shorts pay longs. The Thesis Engine used to
+// name the trader's OWN side as the payer whenever funding was ≥ 0, so a short fading positive
+// funding — the house fade — was shown a "funding cost" it actually collects. The side decides
+// only whether YOU pay or earn.
+
+/**
+ * @param {"LONG"|"SHORT"|string} direction the trader's side
+ * @param {number|string|null|undefined} rate any funding rate; only its sign matters here
+ * @returns {{ payer: "LONG"|"SHORT"|null, youPay: boolean|null }} payer null when the rate is
+ *   zero or unreadable (nobody pays); youPay null when either the payer or the side is unknown
+ */
+export function fundingFlow(direction, rate) {
+  const r = finiteOrNull(rate);
+  if (r == null || r === 0) return { payer: null, youPay: null };
+  const payer = r > 0 ? "LONG" : "SHORT";
+  const side = direction === "LONG" || direction === "SHORT" ? direction : null;
+  return { payer, youPay: side ? side === payer : null };
+}

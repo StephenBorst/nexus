@@ -18,6 +18,7 @@ import { formatPnl, chartImageSrc, chartImageList, effectiveStatus, resolveSugge
 import { LOSS_REASONS, lossReason } from "@/lib/postmortem.mjs";
 import { parseThesis } from "@/lib/thesisParse.mjs";
 import { h4Atr14Frac } from "@/lib/atr.mjs";
+import { fundingFlow } from "@/lib/funding.mjs";
 import { AGENT_API } from "./agentTypes";
 import { FADE_FUNDING_FLOOR_PCT_YR } from "./briefing";
 import { frozenLevelsFor } from "@/lib/frozenDraft";
@@ -98,6 +99,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
   // 2px state left-rule (Proof/feed card signature). Win/loss carry the only
   // chroma; active/other stay a quiet neutral.
   const leftRule = eff === "HIT_TP" ? "#3ecf8e" : eff === "STOPPED_OUT" ? "#f7525f" : eff === "INVALIDATED" ? "#3f3f46" : "#33333a";
+  const cardFunding = fundingFlow(t.direction, t.fundingRate);
 
   // Auto-grade the dollar P&L from the plan the trader already logged, so a HIT TP /
   // STOPPED OUT click fills the number instead of making them do entry→exit × size
@@ -147,7 +149,9 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
               { label: "TP1", val: `$${nf(t.takeProfit1, priceDp(t.takeProfit1))}`, color: "#ededf0" },
               { label: "SIZE", val: (Number(t.positionSize) || 0) > 0 ? `$${nf(t.positionSize, 0)}` : "—" },
               { label: "R:R", val: `1:${nf(t.riskReward, 2)}`, color: (Number(t.riskReward) || 0) >= 2 ? "#ededf0" : "#fbbf24" },
-              { label: "72H FUND", val: (Number(t.fundingCost72h) || 0) !== 0 ? `$${nf(t.fundingCost72h, 3)}` : "—", color: "#a1a1aa" },
+              // Stored as a magnitude; the side comes from the thesis's own rate + direction, so
+              // old cards read right too. −$ = you pay, +$ = you collect.
+              { label: "72H FUND", val: (Number(t.fundingCost72h) || 0) !== 0 ? `${cardFunding.youPay === true ? "−" : cardFunding.youPay === false ? "+" : ""}$${nf(Math.abs(Number(t.fundingCost72h)), 3)}` : "—", color: cardFunding.youPay === false ? "#3ecf8e" : "#a1a1aa" },
             ].map(({ label, val, color }) => (
               <div key={label}>
                 <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>{label}</div>
@@ -886,7 +890,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
           if (d && d.available && Number.isFinite(d.hitRate) && Number.isFinite(d.expectancyR)) patch[t.id] = { hitRate: d.hitRate, expectancyR: d.expectancyR, samples: d.samples };
         } catch { /* skip this one */ }
       }
-      if (Object.keys(patch).length) saveTheses(trades.map((t) => (patch[t.id] ? { ...t, baseRateAtEntry: patch[t.id] } : t)));
+      // Quiet: background bookkeeping never pops the wallet — it syncs with the user's next save.
+      if (Object.keys(patch).length) saveTheses(trades.map((t) => (patch[t.id] ? { ...t, baseRateAtEntry: patch[t.id] } : t)), { quiet: true });
     })();
   }, [trades, walletAddress, saveTheses]);
   const { availableBalance } = useCollateral();
@@ -1391,7 +1396,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
 
   const removeTrade = (id: string) => persist(trades.filter((t) => t.id !== id));
 
-  const fundingIsPositive = parseFloat(form.fundingRate) >= 0;
+  // Who pays is set by the RATE (positive ⇒ longs pay); the direction only decides pay vs collect.
+  const formFunding = fundingFlow(form.direction, form.fundingRate);
 
   // Objective grade drives header stats + the filter — a call Nexus graded from public
   // price counts as resolved even if the trader never self-marked it (raw status ACTIVE).
@@ -1877,13 +1883,14 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
               <div>
                 <span style={fieldLabelStyle}>FUNDING RATE (% per 8h)</span>
                 <input
-                  style={{ ...inputStyle, borderColor: fundingIsPositive ? "#232327" : "#4a1e22", color: fundingIsPositive ? "#3ecf8e" : "#f7525f" }}
+                  style={{ ...inputStyle, ...(formFunding.youPay === true ? { borderColor: "#4a1e22", color: "#f7525f" } : formFunding.youPay === false ? { color: "#3ecf8e" } : {}) }}
                   type="number" placeholder="0.01" step="0.001"
                   value={form.fundingRate} onChange={(e) => set("fundingRate", e.target.value)}
                 />
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginTop: 4 }}>
                   <span style={{ fontSize: 9, color: "#33333a", fontFamily: "var(--nx-font-mono)" }}>
-                    {fundingIsPositive ? "longs pay shorts" : "shorts pay longs"}
+                    {formFunding.payer === "LONG" ? "longs pay shorts" : formFunding.payer === "SHORT" ? "shorts pay longs" : "no funding"}
+                    {formFunding.youPay === true ? " · you pay" : formFunding.youPay === false ? " · you collect" : ""}
                   </span>
                   <button onClick={fillFundingFromLive} disabled={!form.symbol || fundingBusy}
                     title="Fill with the current live 8h funding rate"
@@ -2060,7 +2067,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.08em", marginBottom: 8 }}>
-                    FUNDING COST ({parseFloat(form.fundingRate) >= 0 ? form.direction : form.direction === "LONG" ? "SHORT" : "LONG"} pays)
+                    {formFunding.youPay === false ? "FUNDING YOU COLLECT" : formFunding.youPay === true ? "FUNDING YOU PAY" : "FUNDING"}
+                    {formFunding.payer ? ` (${formFunding.payer === "LONG" ? "longs" : "shorts"} pay)` : ""}
                   </div>
                   {[
                     { label: "8h", val: calc.fundingCost8h },
@@ -2069,7 +2077,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                   ].map(({ label, val }) => (
                     <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                       <span style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</span>
-                      <span style={{ fontSize: 13, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>${val.toFixed(3)}</span>
+                      <span style={{ fontSize: 13, color: formFunding.youPay === false ? "#3ecf8e" : "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{formFunding.youPay === false ? "+" : ""}${val.toFixed(3)}</span>
                     </div>
                   ))}
                 </div>

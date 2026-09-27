@@ -3,7 +3,7 @@
 // Run: node --test app/lib/funding.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { FUNDING_PERIODS_PER_YEAR, annualFundingPct, finiteOrNull } from "./funding.mjs";
+import { FUNDING_PERIODS_PER_YEAR, annualFundingPct, finiteOrNull, fundingFlow } from "./funding.mjs";
 
 test("the multiplier is three periods a day", () => {
   assert.equal(FUNDING_PERIODS_PER_YEAR, 1095);
@@ -68,4 +68,33 @@ test("finiteOrNull is the same guard annualFundingPct applies", () => {
   for (const v of [null, undefined, "", NaN, "abc", 0, 0.0001, -0.00188]) {
     assert.equal(annualFundingPct(v) == null, finiteOrNull(v) == null, `agreement on ${String(v)}`);
   }
+});
+
+// Who pays is a property of the RATE; your side only decides pay vs earn.
+test("fundingFlow: positive funding — longs pay, shorts collect", () => {
+  assert.deepEqual(fundingFlow("LONG", 0.01), { payer: "LONG", youPay: true });
+  // The regression: a short fading positive funding (the house fade) was told it pays.
+  assert.deepEqual(fundingFlow("SHORT", 0.01), { payer: "LONG", youPay: false });
+});
+
+test("fundingFlow: negative funding — shorts pay, longs collect", () => {
+  assert.deepEqual(fundingFlow("SHORT", -0.0123), { payer: "SHORT", youPay: true });
+  assert.deepEqual(fundingFlow("LONG", -0.0123), { payer: "SHORT", youPay: false });
+});
+
+test("fundingFlow: reads the form's string rates", () => {
+  assert.deepEqual(fundingFlow("SHORT", "0.0045"), { payer: "LONG", youPay: false });
+  assert.deepEqual(fundingFlow("LONG", "-0.02"), { payer: "SHORT", youPay: false });
+});
+
+test("fundingFlow: zero or unreadable → nobody pays (never a default side)", () => {
+  for (const v of [0, "0", null, undefined, "", NaN, "abc"]) {
+    assert.deepEqual(fundingFlow("LONG", v), { payer: null, youPay: null }, `${String(v)}`);
+    assert.deepEqual(fundingFlow("SHORT", v), { payer: null, youPay: null }, `${String(v)}`);
+  }
+});
+
+test("fundingFlow: unknown side → the payer is still known, pay-vs-earn isn't", () => {
+  assert.deepEqual(fundingFlow(undefined, 0.01), { payer: "LONG", youPay: null });
+  assert.deepEqual(fundingFlow("long", -0.01), { payer: "SHORT", youPay: null }, "case is not guessed");
 });

@@ -16,6 +16,9 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { hexToBytes, bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import bs58 from "bs58";
+import { verifyLabAuth } from "../../app/lib/labAuth.mjs";
 
 export const ALLOWED_ORIGINS = [
   "https://trade.nexustradinglabs.com",
@@ -75,6 +78,31 @@ export function recoverEthAddress(message, sigHex) {
   } catch (_) {
     return null;
   }
+}
+
+/**
+ * Verify a Solana wallet's ed25519 signature over `message` (UTF-8). The signer is the base58
+ * public key AS THE WALLET REPORTS IT (case matters in base58). The signature arrives as 0x-hex
+ * of the 64 raw bytes. Returns false (never throws) on anything malformed.
+ */
+export function verifySolSignature(message, sigHex, signerB58) {
+  try {
+    const sig = hexToBytes(String(sigHex).replace(/^0x/, ""));
+    const pub = bs58.decode(String(signerB58));
+    if (sig.length !== 64 || pub.length !== 32) return false;
+    return ed25519.verify(sig, utf8ToBytes(message), pub);
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * The owner check for Lab records (app/lib/labAuth.mjs): does `auth` prove the caller owns
+ * `address`? EVM → secp256k1 recover; Solana → ed25519 verify. { ok, signer } | { ok:false, reason }.
+ * ⚠️ Run it BEFORE any side effect of the route it guards.
+ */
+export function checkLabAuth(address, auth, now = Date.now()) {
+  return verifyLabAuth({ address, auth, now, recoverEvm: recoverEthAddress, verifySol: verifySolSignature });
 }
 
 /**

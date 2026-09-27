@@ -35,7 +35,7 @@ import { DecisionBoard } from "./DecisionBoard";
 import { CountUp } from "./components";
 import { pressKey } from "@/utils/a11y";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
-import { C } from "@/config/theme";
+import { C, SIGNAL, LINE } from "@/config/theme";
 
 // Legacy alias: the old MISPRICED/GAPS tab was folded into SMART MONEY (Phase 1 re-slice),
 // so any ?tab=mispriced deep-link, shared OG link, or copilot nav resolves to smart.
@@ -81,7 +81,7 @@ export default function TheLabPage() {
   // ── Persistence (KV + localStorage) ─────────────────────
   const { state: rootAccountState } = useAccount();
   const rootWalletAddress = (rootAccountState as { address?: string })?.address ?? null;
-  const { theses, notes, saveNote, syncing, synced } = useLabStorage(rootWalletAddress);
+  const { theses, notes, saveNote, syncing, synced, authState, signToSync } = useLabStorage(rootWalletAddress);
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [viewYear, setViewYear] = useState(today.getFullYear());
 
@@ -310,6 +310,16 @@ export default function TheLabPage() {
             onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))} onKeyDown={pressKey(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true })))}
             style={{ fontFamily: "var(--nx-font-mono)", fontSize: isMobile ? 12 : 9, color: "#52525b", border: "1px solid #232327", borderRadius: 3, padding: isMobile ? "6px 9px" : "2px 6px", cursor: "pointer", letterSpacing: "0.05em", minHeight: isMobile ? 36 : "auto", display: "flex", alignItems: "center" }}
           >{isMobile ? "⌘" : "⌘K"}</span>
+          {/* Only the wallet can save its Lab: one signature (no funds move) covers ~a day. Until
+              then calls + notes save on this device only, and private calls from other devices
+              stay on the server. Shown on phones too — it's the one thing here that needs a tap. */}
+          {rootWalletAddress && authState !== "ok" && (
+            <button type="button" onClick={() => { void signToSync(); }}
+              title="Sign a message (no funds move) so your calls and notes save to your record. Once a day."
+              style={{ fontFamily: "var(--nx-font-mono)", fontSize: isMobile ? 11 : 9, fontWeight: 700, letterSpacing: "0.08em", color: SIGNAL.caution, background: "transparent", border: `1px solid ${LINE.warn}`, borderRadius: 3, padding: isMobile ? "6px 9px" : "2px 7px", minHeight: isMobile ? 36 : "auto", cursor: "pointer", whiteSpace: "nowrap" }}>
+              {isMobile ? "SIGN TO SYNC" : "◇ SIGN TO SYNC"}
+            </button>
+          )}
           {!isMobile && (
             <span style={{ fontSize: 9, fontFamily: "var(--nx-font-mono)", letterSpacing: "0.1em", color: syncing ? "#fbbf24" : synced ? "#ededf0" : "#33333a", textShadow: synced ? "0 0 8px rgba(237,237,240,0.5)" : "none" }}>
               {syncing ? "⟳" : synced ? "●" : rootWalletAddress ? "○" : "○ CONNECT WALLET"}

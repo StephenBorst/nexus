@@ -15,26 +15,48 @@ import { FUNDING_PERIODS_PER_YEAR, annualFundingPct } from "../../app/lib/fundin
 // ═══════════════════════════════════════════════════════════
 
 /**
+ * A call's R from its own levels: reward to TP1 ÷ risk to the stop, 2dp. null when the levels
+ * don't make a call (missing, or the stop/target on the wrong side of entry for the direction).
+ * @param {{ direction?: string, entryPrice?: number, stopLoss?: number, takeProfit1?: number }} t
+ * @returns {number|null}
+ */
+export function callR(t) {
+  const e = Number(t?.entryPrice), s = Number(t?.stopLoss), tp = Number(t?.takeProfit1);
+  if (!(e > 0 && s > 0 && tp > 0)) return null;
+  const long = String(t.direction).toUpperCase() === "LONG";
+  const risk = long ? e - s : s - e;
+  const reward = long ? tp - e : e - tp;
+  if (!(risk > 0 && reward > 0)) return null;
+  return Math.round((reward / risk) * 100) / 100;
+}
+
+/**
  * Grade a human "call" (thesis) against public OHLC candles, first-touch.
  * Trustless: the outcome is a fact about public price, not self-report.
  * - LONG  wins if a candle high reaches takeProfit1 before a low hits stopLoss
  * - SHORT wins if a candle low reaches takeProfit1 before a high hits stopLoss
  * - Same-candle TP+SL = LOSS (conservative, anti-gaming)
- * - WIN scores +planned R (riskReward, default 1); LOSS = -1R
+ * - WIN scores the call's R measured from its OWN LEVELS (callR); LOSS = -1R
+ * - Stop or target on the wrong side of entry = INVALID (not a call: a LONG with its target
+ *   below entry would "win" on its first candle)
+ * ⚠️ Never the stored `riskReward` (2026-09-27): the caller writes that field, so paying it let a
+ * record claim any R it liked. planQuality still flags a stated R that disagrees (RR_MISMATCH).
  *
- * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, createdAt, riskReward }
+ * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, createdAt }
  * @param {object} cd candles { t:number[] (sec), h:number[], l:number[] } ascending by t
  * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number }}
  */
 export function gradeCall(t, cd) {
-  const { direction, entryPrice, stopLoss, takeProfit1, createdAt, riskReward } = t;
+  const { entryPrice, stopLoss, takeProfit1, createdAt } = t;
   if (!entryPrice || !stopLoss || !takeProfit1 || !cd) return { outcome: "INVALID", r: 0 };
+  const R = callR(t);
+  if (R == null) return { outcome: "INVALID", r: 0 };
+  const long = String(t.direction).toUpperCase() === "LONG";
   const startSec = Math.floor((createdAt || 0) / 1000);
-  const R = (typeof riskReward === "number" && riskReward > 0) ? riskReward : 1;
   for (let i = 0; i < cd.t.length; i++) {
     if (cd.t[i] < startSec) continue;
     const hi = cd.h[i], lo = cd.l[i];
-    if (direction === "LONG") {
+    if (long) {
       const tp = hi >= takeProfit1, sl = lo <= stopLoss;
       if (tp && sl) return { outcome: "LOSS", r: -1 };
       if (tp) return { outcome: "WIN", r: R };
@@ -271,8 +293,8 @@ export function planQuality(t, cd, cfg = PLAN) {
   const tpWrongSide = long ? t.takeProfit1 <= t.entryPrice : t.takeProfit1 >= t.entryPrice;
   if (stopWrongSide || tpWrongSide) flags.push("BAD_LEVELS");
 
-  // Stated vs geometric R:R. gradeCall pays +riskReward on a win, so an inflated
-  // claim is a direct overstatement of the record.
+  // Stated vs geometric R:R. gradeCall pays the GEOMETRIC R (callR) since 2026-09-27; a stated R
+  // that disagrees is still an overstatement on the card, so it's still flagged.
   const rrGeom = Math.abs(t.takeProfit1 - t.entryPrice) / riskDist;
   components.rrGeom = round(rrGeom, 2);
   if (typeof t.riskReward === "number" && t.riskReward > 0) {
@@ -771,6 +793,7 @@ export function fundingReversion(points, cfg = REVERSION) {
     avgReversionPct: round(avg, 2),                 // + = price gave back (reverted) on average
     medianReversionPct: round(sorted[Math.floor((sorted.length - 1) / 2)], 2),
     revertedPct: Math.round((reverted / against.length) * 100),
+    reverted,
     crowd: sign > 0 ? "long" : "short",
   };
 }
@@ -808,13 +831,36 @@ export function mergeFundingPrice(fundingRows, priceData) {
 // UNPROVEN = not enough recorded history to say. Keeps "mispriced by funding" honest
 // about whether the mean-revert actually shows up — most funding tools stop at the
 // number; this pairs the number with its track record.
-export const EDGE_QUALITY = { proven: 55, trap: 42 };
+// ⚠️ PROVEN needs EVIDENCE, not just a rate (2026-09-27). It used to fire at ≥55% on as few as 4
+// samples: 3 of 4 happens 31% of the time by pure chance, and PROVEN ranks the card first, prints
+// "Fade has paid here" and unlocks HIGH conviction in Live Read / the scanner. Now it also needs a
+// one-sided binomial test vs a coin flip at `alpha` (0.05 = the house ladder's 95%, same bar as
+// BEATS_RANDOM). Anything short reads MIXED ("coin-flip so far"). TRAP stays rate-only on purpose:
+// a warning can afford to fire early, a promise needs evidence.
+export const EDGE_QUALITY = { proven: 55, trap: 42, alpha: 0.05 };
+
+// P(X ≥ k) for X ~ Binomial(n, ½) — the chance a coin flip does at least this well.
+export function coinFlipUpperTail(k, n) {
+  n = Math.floor(Number(n)); k = Math.ceil(Number(k));
+  if (!(n > 0) || k <= 0) return 1;
+  if (k > n) return 0;
+  if (n > 1000) return NaN; // 2^-n underflows; far beyond any sample this board sees
+  let p = Math.pow(0.5, n), tail = 0; // p = C(n,i)/2^n, starting at i = 0
+  for (let i = 0; i <= n; i++) { if (i >= k) tail += p; p = (p * (n - i)) / (i + 1); }
+  return Math.min(1, tail);
+}
 
 export function edgeQuality(reversion, cfg = EDGE_QUALITY) {
   if (!reversion || !reversion.samples) return { tier: "UNPROVEN", revertedPct: null, samples: 0 };
   const r = reversion.revertedPct;
-  const tier = r >= cfg.proven ? "PROVEN" : r <= cfg.trap ? "TRAP" : "MIXED";
-  return { tier, revertedPct: r, samples: reversion.samples };
+  const n = reversion.samples;
+  // The raw count when fundingReversion supplied it; else rebuilt from the rounded % (exact for the
+  // sample sizes this board sees — adjacent k/n differ by ≥1%). Older cached boards lack the count.
+  const k = Number.isFinite(reversion.reverted) ? reversion.reverted : Math.round((r * n) / 100);
+  const pValue = coinFlipUpperTail(k, n);
+  const beatsCoin = pValue <= (cfg.alpha ?? 0.05);
+  const tier = r >= cfg.proven && beatsCoin ? "PROVEN" : r <= cfg.trap ? "TRAP" : "MIXED";
+  return { tier, revertedPct: r, samples: n, pValue: Math.round(pValue * 1000) / 1000 };
 }
 
 // Rank order for the board: proven edge first, traps last (avoid fading them).
