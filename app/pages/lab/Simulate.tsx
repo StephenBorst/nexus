@@ -5,8 +5,11 @@
 // so it's self-funding (users buy credits in USDC/$NEXUS; the operator's wallet does the x402).
 // The run is ASYNC → we poll /wargame/status, stream live progress, then link the report.
 // Synthetic — a thinking tool to pressure-test the trade, NEVER a signal. Two-step + gated.
+// A paid run outlives the card (app/lib/simRuns.mjs): reopening it resumes the poll.
 import { useState, useEffect } from "react";
+import { useAccount } from "@orderly.network/hooks";
 import { C } from "@/config/theme";
+import { simRunKey, loadSimRun, saveSimRun } from "@/lib/simRuns.mjs";
 import { AGENT_API } from "./agentTypes";
 import { getAgentSig } from "./agentKeys";
 
@@ -14,13 +17,24 @@ const MF = "var(--nx-font-mono)";
 const SIM_RECEIVER = "0x06cD9c281E6ab09906B46a10e059F2770EfdE49A"; // subs/AI/sim revenue receiver
 type SimResult = { scenario?: string; enabled?: boolean; ran?: unknown; error?: string; disclaimer?: string; job?: { status_url?: string; data?: { status_url?: string } } };
 type Prog = { stage?: string; progress?: number; message?: string };
+type Done = { shareUrl?: string; message?: string; error?: string; note?: string };
+type SavedRun = { statusUrl: string; startedAt: number; done?: Done };
+// localStorage can throw on access (private mode, blocked site data) — never let that break a run.
+const store = (): Storage | null => { try { return window.localStorage; } catch { return null; } };
+const loadRun = (key: string | null) => loadSimRun(store(), key) as SavedRun | null;
+const saveRun = (key: string | null, run: SavedRun) => saveSimRun(store(), key, run);
 
-export function Simulate({ body, label = "◆ Simulate", wallet }: { body: Record<string, unknown>; label?: string; wallet?: string | null }) {
+export function Simulate({ body, label = "◆ Simulate", wallet: walletProp }: { body: Record<string, unknown>; label?: string; wallet?: string | null }) {
+  // Callers that don't pass a wallet (the macro board) still run for a connected user.
+  const { state: acct } = useAccount();
+  const wallet = walletProp || (acct as { address?: string })?.address?.toLowerCase() || null;
+  const key: string | null = simRunKey(wallet, label, body);
+  const [saved, setSaved] = useState<SavedRun | null>(null);
   const [state, setState] = useState<"idle" | "building" | "preview" | "running" | "done">("idle");
   const [res, setRes] = useState<SimResult | null>(null);
   const [statusUrl, setStatusUrl] = useState<string | null>(null);
   const [prog, setProg] = useState<Prog | null>(null);
-  const [done, setDone] = useState<{ shareUrl?: string; message?: string; error?: string } | null>(null);
+  const [done, setDone] = useState<Done | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
   const [price, setPrice] = useState(1);
   const [needBuy, setNeedBuy] = useState(false);
@@ -47,7 +61,7 @@ export function Simulate({ body, label = "◆ Simulate", wallet }: { body: Recor
       .then(async (r) => ({ status: r.status, d: (await r.json()) as SimResult & { credits?: number } }))
       .then(({ status, d }) => {
         const su = d?.job?.status_url || d?.job?.data?.status_url;
-        if (d?.ran === "queued" && su) { setStatusUrl(su); return; } // → polling effect
+        if (d?.ran === "queued" && su) { const run = { statusUrl: su, startedAt: Date.now() }; saveRun(key, run); setSaved(run); setStatusUrl(su); return; } // → polling effect
         if (status === 402) { setCredits(0); setNeedBuy(true); setState("preview"); return; } // out of credits → buy
         setDone({ error: d?.error || "simulation didn't queue. Try again" }); setState("done");
       })
@@ -69,6 +83,13 @@ export function Simulate({ body, label = "◆ Simulate", wallet }: { body: Recor
 
   useEffect(() => { refreshCredits(); }, [wallet]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A run this wallet paid for on this scenario: still going → reopen on its progress.
+  useEffect(() => {
+    const run = loadRun(key);
+    setSaved(run);
+    if (run && !run.done) { setStatusUrl(run.statusUrl); setProg(null); setDone(null); setState("running"); }
+  }, [key]);
+
   // Poll the async run to completion, streaming live progress.
   useEffect(() => {
     if (!statusUrl || state !== "running") return;
@@ -79,21 +100,35 @@ export function Simulate({ body, label = "◆ Simulate", wallet }: { body: Recor
         const j = await fetch(`${AGENT_API}/wargame/status?url=${encodeURIComponent(statusUrl)}`).then((r) => r.json());
         const x = (j && j.data) || {};
         setProg({ stage: x.current_stage, progress: x.progress, message: x.message });
-        if (x.status === "completed" || x.completed_at) { setDone({ shareUrl: x.share_url, message: x.message }); setState("done"); refreshCredits(); return; }
-        if (x.status === "failed" || x.error) { setDone({ error: x.error || "simulation failed" }); setState("done"); return; }
+        const finish = (d: Done) => { const run = { statusUrl, startedAt: saved?.startedAt ?? Date.now(), done: d }; saveRun(key, run); setSaved(run); setDone(d); setState("done"); };
+        if (x.status === "completed" || x.completed_at) { finish({ shareUrl: x.share_url, message: x.message }); refreshCredits(); return; }
+        if (x.status === "failed" || x.error) { finish({ error: x.error || "simulation failed" }); return; }
       } catch { /* transient. Keep polling */ }
-      if (++tries > 90) { setDone({ error: "simulation timed out. Check back" }); setState("done"); return; }
+      // Not an error: the run is still going and stays saved. Reopening the card picks it up.
+      if (++tries > 90) { setDone({ note: "Still running. Reopen this card later to pick it back up." }); setState("done"); return; }
       if (!stop) setTimeout(tick, 5000);
     };
     tick();
     return () => { stop = true; };
   }, [statusUrl, state]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (state === "idle") return (
-    <button type="button" onClick={build} className="nx-press"
-      style={{ color: C.text.fog, background: "transparent", border: `1px solid ${C.borderStrong}`, borderRadius: 3, padding: "3px 10px", fontFamily: MF, fontSize: 10, cursor: "pointer", whiteSpace: "nowrap" }}
-      title="Pressure-test this trade — 25 AI agents react across markets and communities over 10 rounds (1 credit)">{label}</button>
-  );
+  if (state === "idle") {
+    const idleBtn = (
+      <button type="button" onClick={build} className="nx-press"
+        style={{ color: C.text.fog, background: "transparent", border: `1px solid ${C.borderStrong}`, borderRadius: 3, padding: "3px 10px", fontFamily: MF, fontSize: 10, cursor: "pointer", whiteSpace: "nowrap" }}
+        title="Pressure-test this trade — 25 AI agents react across markets and communities over 10 rounds (1 credit)">{label}</button>
+    );
+    if (!saved || saved.done?.error) return idleBtn;
+    const small = { color: C.text.faint, background: "transparent", border: "none", padding: 0, fontFamily: MF, fontSize: 9.5, cursor: "pointer", textDecoration: "none", whiteSpace: "nowrap" } as const;
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {idleBtn}
+        {!saved.done
+          ? <button type="button" onClick={() => { setStatusUrl(saved.statusUrl); setProg(null); setDone(null); setState("running"); }} style={small}>sim running · resume</button>
+          : saved.done.shareUrl ? <a href={saved.done.shareUrl} target="_blank" rel="noopener noreferrer" style={small}>last report ↗</a> : null}
+      </span>
+    );
+  }
 
   const linkBtn = { color: C.text.bright, background: "transparent", border: `1px solid ${C.borderStrong}`, borderRadius: 3, padding: "4px 12px", fontFamily: MF, fontSize: 10.5, cursor: "pointer", textDecoration: "none", display: "inline-block" } as const;
 
@@ -152,7 +187,9 @@ export function Simulate({ body, label = "◆ Simulate", wallet }: { body: Recor
         </div>
       )}
 
-      {state === "done" && (done?.error
+      {state === "done" && (done?.note
+        ? <div style={{ color: C.text.fog, fontFamily: MF, fontSize: 10, lineHeight: 1.5 }}>{done.note}</div>
+        : done?.error
         ? <div style={{ color: C.neg, fontFamily: MF, fontSize: 10 }}>{done.error}</div>
         : (
           <div>

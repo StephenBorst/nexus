@@ -533,6 +533,23 @@ export function aggregate(trades, config = {}) {
 
 // ── Data loading (Cloudflare-Worker + node compatible via global fetch) ──────
 const ORDERLY = "https://api-evm.orderly.org";
+// Orderly's edge intermittently answers header-light Worker fetches (and bursts) with an HTML
+// challenge page. A backtest fetches a dozen pages in one go, and ONE such page used to fail the
+// whole run with "Unexpected token '<'". Send browser-like headers (same as fetchAllFutures), retry
+// a non-JSON answer after a short wait, then fail with a message a person can act on. Never skip a
+// failed page: a silent gap in the candles would change the result.
+const ORDERLY_HEADERS = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36", "Accept": "application/json, text/plain, */*" };
+export async function orderlyJson(url, { retries = 2, waitMs = 600 } = {}) {
+  let last = "";
+  for (let i = 0; i <= retries; i++) {
+    if (i) await new Promise((r) => setTimeout(r, waitMs * i));
+    let r;
+    try { r = await fetch(url, { headers: ORDERLY_HEADERS }); }
+    catch (e) { last = String((e && e.message) || e); continue; }
+    try { return await r.json(); } catch { last = `HTTP ${r.status}, not JSON`; }
+  }
+  throw new Error(`Orderly didn't return market data (${last}). Try again in a minute.`);
+}
 
 export async function fetchCandles(symbol, days) {
   const now = Math.floor(Date.now() / 1000);
@@ -542,8 +559,7 @@ export async function fetchCandles(symbol, days) {
   const step = 20 * 86400;
   while (cursor < now) {
     const to = Math.min(cursor + step, now);
-    const r = await fetch(`${ORDERLY}/tv/history?symbol=${symbol}&resolution=60&from=${cursor}&to=${to}`);
-    const d = await r.json();
+    const d = await orderlyJson(`${ORDERLY}/tv/history?symbol=${symbol}&resolution=60&from=${cursor}&to=${to}`);
     if (d && d.s === "ok" && Array.isArray(d.t)) for (let i = 0; i < d.t.length; i++) out.push({ t: d.t[i], o: d.o[i], h: d.h[i], l: d.l[i], c: d.c[i] });
     cursor = to;
   }
@@ -554,8 +570,7 @@ export async function fetchCandles(symbol, days) {
 export async function fetchFundingAt(symbol) {
   const rows = [];
   for (let page = 1; page <= 3; page++) {
-    const r = await fetch(`${ORDERLY}/v1/public/funding_rate_history?symbol=${symbol}&page=${page}&size=100`);
-    const d = await r.json();
+    const d = await orderlyJson(`${ORDERLY}/v1/public/funding_rate_history?symbol=${symbol}&page=${page}&size=100`);
     const rs = d?.data?.rows || [];
     rows.push(...rs.map((x) => ({ ts: x.funding_rate_timestamp, rate: x.funding_rate })));
     if (rs.length < 100) break;
