@@ -8,7 +8,7 @@ import {
   classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets, regimeEdge,
   planQuality, planSummary,
   expectancyStats, callerScore, convictionCalibration, contestedBoard,
-  mispricedBoard, consensusBySymbol, fundingReversion, edgeQuality, mergeFundingPrice,
+  mispricedBoard, staleBoardFallback, BOARD_LAST_GOOD_MS, consensusBySymbol, fundingReversion, edgeQuality, mergeFundingPrice,
   LOSS_REASONS, isLossReason, postmortemSummary,
   validateArenaRegistration, arenaAgentConfig,
   parsePriceTarget, forecastDivergence, FORECAST,
@@ -2212,4 +2212,32 @@ test("quotientSignals: maxSignals cap is honored", () => {
   const many = Array.from({ length: 30 }, (_, i) => ({ ...qSample(), id: `m${i}` }));
   assert.equal(quotientSignals(many).signals.length, QUOTIENT.maxSignals);
   assert.equal(quotientSignals(many).scanned, 30);
+});
+
+// ── The board's outage fallback (Sept 27: Orderly refused the Worker for ~30 min) ──
+test("staleBoardFallback: serves the freshest held board ≤2h old, flagged stale", () => {
+  const now = 1_790_500_000_000;
+  const mk = (ageMin, n = 3) => ({ asOf: "x", asOfMs: now - ageMin * 60_000, scanned: 24, markets: Array.from({ length: n }, (_, i) => ({ coin: "C" + i })) });
+  const tenMin = mk(9), twoHour = mk(90);
+  const fb = staleBoardFallback([twoHour, tenMin], now);
+  assert.equal(fb.asOfMs, tenMin.asOfMs, "the fresher copy wins, whichever slot it came from");
+  assert.equal(fb.stale, true);
+  assert.equal(tenMin.stale, undefined, "never mutates the cached board");
+  assert.equal(staleBoardFallback([null, twoHour], now).asOfMs, twoHour.asOfMs, "the 10-min copy is gone → the 2h copy");
+  assert.equal(staleBoardFallback([mk(121)], now), null, "older than 2h → nothing (empty fail-soft answer)");
+  assert.equal(staleBoardFallback([mk(119.9)], now).stale, true, "just inside 2h still serves");
+  assert.equal(BOARD_LAST_GOOD_MS, 2 * 3600 * 1000);
+});
+
+test("staleBoardFallback: an empty, malformed or undated board is never served", () => {
+  const now = 1_790_500_000_000;
+  for (const bad of [
+    { asOfMs: now, markets: [] },
+    { asOfMs: now },
+    { markets: [{ coin: "BTC" }] },
+    { asOfMs: "yesterday", markets: [{ coin: "BTC" }] },
+    null, undefined,
+  ]) assert.equal(staleBoardFallback([bad], now), null, JSON.stringify(bad));
+  assert.equal(staleBoardFallback(undefined, now), null);
+  assert.equal(staleBoardFallback([], now), null);
 });
