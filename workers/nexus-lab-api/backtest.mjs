@@ -14,7 +14,7 @@
 import { deriveSignal } from "../nexus-agent-brain/logic.mjs";
 import { computePnl, evaluateExit, breakevenArmed, volScaledLevels, dailyCapBlocked, shouldResetDaily } from "../nexus-agent-exec/logic.mjs";
 import { percentileRank } from "./logic.mjs";
-import { basisFadeFromHistory } from "../../app/lib/basisFade.mjs";
+import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 
 // Rolling ATR% at candle index i, from the `periods` candles BEFORE i (no lookahead).
@@ -94,7 +94,7 @@ function prefixByTime(rows) {
     return sorted.slice(0, lo);
   };
 }
-export function makeBasisAt({ basisHist, cvdHist, smHist, oiHist, liqHist } = {}, { needCvd = false, needSmart = false, needLiq = false } = {}) {
+export function makeBasisAt({ basisHist, cvdHist, smHist, oiHist, liqHist } = {}, { needCvd = false, needSmart = false, needLiq = false, twoSided = false } = {}) {
   const basisUpTo = prefixByTime(basisHist);
   const cvdUpTo = needCvd ? prefixByTime(cvdHist) : null;
   const oiUpTo = needCvd ? prefixByTime(oiHist) : null;
@@ -105,6 +105,18 @@ export function makeBasisAt({ basisHist, cvdHist, smHist, oiHist, liqHist } = {}
   const memo = new Map();
   return (nowMs) => {
     if (memo.has(nowMs)) return memo.get(nowMs);
+    if (twoSided) {
+      // basisAnchor "MEAN": the two-sided read, into the basisDev* fields deriveSignal reads for
+      // it — the brain's exact construction (only the CVD confirm is graded for this read).
+      const d = basisDeviationFromHistory(basisUpTo(nowMs), { now: nowMs });
+      const out = { basisDevSide: d.side, basisDevPct: d.basisPct, basisDevThr: d.thr, basisDevReason: d.reason };
+      if (d.side && cvdUpTo) {
+        const c = basisCvdConfirm({ basisT: d.t, side: d.side, cvdHist: cvdUpTo(nowMs), oiHist: oiUpTo(nowMs) });
+        Object.assign(out, { basisDevCvdConfirmed: c.confirmed, basisDevCvdSide: c.cvdSide, basisDevCvdReason: c.reason });
+      }
+      memo.set(nowMs, out);
+      return out;
+    }
     const b = basisFadeFromHistory(basisUpTo(nowMs), { now: nowMs });
     const out = { basisSide: b.side, basisPct: b.basisPct, basisThr: b.thr, basisReason: b.reason };
     if (b.side && cvdUpTo) {
@@ -134,7 +146,7 @@ export function histSeriesInfo(rows) {
 // Build the per-symbol basis lookup a BASIS_FADE config needs (null for any other mode).
 export function basisAtForConfig(config, flow) {
   if (config?.signalMode !== "BASIS_FADE" || !flow) return null;
-  return makeBasisAt(flow, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART", needLiq: config.basisConfirm === "LIQ" });
+  return makeBasisAt(flow, { needCvd: config.basisConfirm === "CVD", needSmart: config.basisConfirm === "SMART", needLiq: config.basisConfirm === "LIQ", twoSided: config.basisAnchor === "MEAN" });
 }
 
 // ── The exit path, ONE implementation ─────────────────────────────────────────

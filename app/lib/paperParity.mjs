@@ -27,6 +27,8 @@ export function axisForConfig(config) {
   if (!config || config.signalMode !== "BASIS_FADE") return null;
   if (config.invertSignal) return null; // an inverted fade trades the mirror image of every axis
   const c = config.basisConfirm;
+  // basisAnchor "MEAN" = the two-sided read; only plain + CVD have scoreboard rows.
+  if (config.basisAnchor === "MEAN") return !c ? "basis_dev" : c === "CVD" ? "basis_dev_x_cvd" : null;
   if (!c) return "basis_extreme";
   if (c === "CVD") return "basis_x_cvd";
   if (c === "SMART") return "basis_x_smart";

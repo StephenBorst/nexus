@@ -25,6 +25,7 @@ export const EXPERIMENTAL_FILTERS_OFF: Partial<AgentConfig> = {
   // that had CVD on must not silently keep trading Basis × CVD under the wrong name. The loaded config's own
   // basisConfirm (if any) comes back in after this reset.
   basisConfirm: undefined,
+  basisAnchor: undefined,
 };
 
 export type AgentPrefill = {

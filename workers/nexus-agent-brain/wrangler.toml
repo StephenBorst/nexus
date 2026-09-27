@@ -12,3 +12,10 @@ crons = ["*/5 * * * *"]
 [observability.logs]
 enabled = true
 invocation_logs = true
+
+# STAGED (off): the two-sided basis read for configs with basisAnchor = "MEAN"
+# (scoreboard axes basis_dev / basis_dev_x_cvd). Uncomment ONLY after it grades PREDICTIVE
+# with BOTH sides represented (Oct-15 re-validation or later). Off ⇒ a MEAN config sits out.
+# CI redeploys this worker from the committed file, so the flag lives HERE, not the dashboard.
+# [vars]
+# BASIS_TWO_SIDED_LIVE = "true"

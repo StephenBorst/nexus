@@ -120,6 +120,10 @@ export interface AgentConfig {
   // "SMART" = same-hour smart-money lean agrees (basis_x_smart).
   // "LIQ" = same-hour liquidation flush reverts to the same side (basis_x_liqflush).
   basisConfirm?: "CVD" | "SMART" | "LIQ";
+  // BASIS_FADE only — STAGED (the brain honours it only behind BASIS_TWO_SIDED_LIVE, off):
+  // "MEAN" = the two-sided read (basis vs its trailing mean — scoreboard basis_dev /
+  // basis_dev_x_cvd). Unset = the zero-anchored basis_extreme read every preset trades.
+  basisAnchor?: "MEAN";
   invertSignal?: boolean; // opt-in: flip every entry to the OPPOSITE direction (fade a systematically-wrong signal)
   tradeSessions?: ("ASIA" | "EUROPE" | "US")[]; // opt-in regime gate: only enter in these UTC sessions (unset = all)
   minVolAtrPct?: number; // opt-in regime gate: only enter when recent ATR% ≥ this (fades want high vol)
