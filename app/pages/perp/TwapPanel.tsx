@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { getWalletAddress, getAgentSig } from "@/pages/lab/agentKeys";
+import { C, SIGNAL, STATUS_TINT } from "@/config/theme";
 
 // ── TWAP execution panel (our own, on-infra) ─────────────────────────────────
 // The order-panel surface for native TWAP. Instead of sending a whole order at
@@ -101,7 +102,7 @@ export function TwapPanel({ symbol }: { symbol: string }) {
   const pct = twap ? Math.round((twap.progress.filled / Math.max(1, twap.progress.total)) * 100) : 0;
 
   const inputStyle: React.CSSProperties = {
-    width: "100%", background: "#0d0d0f", border: `1px solid ${LINE}`, borderRadius: 2,
+    width: "100%", background: C.surfaceAlt, border: `1px solid ${LINE}`, borderRadius: 2,
     color: BONE, fontFamily: "var(--nx-font-mono)", fontSize: 13, padding: "7px 9px", outline: "none",
   };
   const labelStyle: React.CSSProperties = { color: FAINT, fontSize: 9, fontFamily: "var(--nx-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4, display: "block" };
@@ -135,7 +136,7 @@ export function TwapPanel({ symbol }: { symbol: string }) {
                 <span style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>${twap!.totalNotional.toLocaleString()} · {twap!.leverage}x · {twap!.slices.length} slices</span>
                 <span style={{ marginLeft: "auto", color: BONE, fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700 }}>{pct}%</span>
               </div>
-              <div style={{ height: 6, background: "#0d0d0f", borderRadius: 3, overflow: "hidden", marginBottom: 12 }}>
+              <div style={{ height: 6, background: C.surfaceAlt, borderRadius: 3, overflow: "hidden", marginBottom: 12 }}>
                 <div style={{ width: `${pct}%`, height: "100%", background: POS, transition: "width 0.4s" }} />
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
@@ -143,7 +144,7 @@ export function TwapPanel({ symbol }: { symbol: string }) {
                   <span key={s.seq} title={s.error || (s.done ? `filled ~$${s.filledNotional ?? s.notionalEst}` : "pending")} style={{
                     width: 22, height: 22, borderRadius: 2, display: "inline-flex", alignItems: "center", justifyContent: "center",
                     fontFamily: "var(--nx-font-mono)", fontSize: 9,
-                    background: s.done ? "#0e2a1c" : s.error ? "#2a1408" : "#0d0d0f",
+                    background: s.done ? SIGNAL.posBg : s.error ? STATUS_TINT.warn.bg : C.surfaceAlt,
                     border: `1px solid ${s.done ? POS + "66" : s.error ? WARN + "66" : LINE}`,
                     color: s.done ? POS : s.error ? WARN : FAINT,
                   }}>{s.done ? "✓" : s.error ? "!" : s.seq + 1}</span>
@@ -167,7 +168,7 @@ export function TwapPanel({ symbol }: { symbol: string }) {
                   <button key={s} type="button" onClick={() => setSide(s)} className="nx-press" style={{
                     flex: 1, padding: "8px 0", borderRadius: 2, cursor: "pointer",
                     fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em",
-                    background: side === s ? (s === "BUY" ? "#0e2a1c" : "#2a0e12") : "#0d0d0f",
+                    background: side === s ? (s === "BUY" ? SIGNAL.posBg : STATUS_TINT.neg.bg) : C.surfaceAlt,
                     border: `1px solid ${side === s ? (s === "BUY" ? POS : NEG) + "88" : LINE}`,
                     color: side === s ? (s === "BUY" ? POS : NEG) : DIM,
                   }}>{s === "BUY" ? "BUY / LONG" : "SELL / SHORT"}</button>
@@ -181,10 +182,10 @@ export function TwapPanel({ symbol }: { symbol: string }) {
                 <div><label htmlFor={`${fid}-lev`} style={labelStyle}>Leverage</label><input id={`${fid}-lev`} inputMode="numeric" value={leverage} onChange={(e) => setLeverage(e.target.value)} style={inputStyle} /></div>
               </div>
 
-              <div style={{ background: "#0d0d0f", border: `1px solid ${LINE}`, borderRadius: 2, padding: "10px 12px", marginBottom: 14 }}>
+              <div style={{ background: C.surfaceAlt, border: `1px solid ${LINE}`, borderRadius: 2, padding: "10px 12px", marginBottom: 14 }}>
                 <div style={{ color: FAINT, fontSize: 9, fontFamily: "var(--nx-font-mono)", letterSpacing: "0.12em", marginBottom: 6 }}>PREVIEW</div>
                 {previewOk ? (
-                  <div style={{ color: "#c4c4cc", fontSize: 12, fontFamily: "var(--nx-font-mono)", lineHeight: 1.6 }}>
+                  <div style={{ color: C.text.fog, fontSize: 12, fontFamily: "var(--nx-font-mono)", lineHeight: 1.6 }}>
                     <b style={{ color: BONE }}>{sNum}</b> slices of ~<b style={{ color: BONE }}>${perSlice.toFixed(2)}</b> every{" "}
                     <b style={{ color: BONE }}>{intervalMin < 1 ? `${Math.round(intervalMin * 60)}s` : `${intervalMin.toFixed(1)}m`}</b> over{" "}
                     <b style={{ color: BONE }}>{fmtDur(dNum)}</b> · {side === "BUY" ? "building a long" : "building a short"} in {bare(symbol)}

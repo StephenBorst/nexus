@@ -29,7 +29,9 @@ const guestParam = (() => {
 // posts to X would put it right back. These routes are public BY ROUTE, the same
 // suppression ?guest=1 performs, applied without needing the param. Still READ-ONLY:
 // Buy / Copy / Publish / ARM LIVE gate on a wallet in their own components, untouched.
-const PUBLIC_ROUTES = ["/token", "/feed"];
+// /proof too: it's the page people link to prove the grades — on a phone the modal covered it whole.
+// /analyze too: every X-Ray share link (og.…/share/xray/:a) forwards to /analyze?address=.
+const PUBLIC_ROUTES = ["/token", "/feed", "/proof", "/analyze"];
 const isPublicRoute = (() => {
   try { return PUBLIC_ROUTES.some((r) => window.location.pathname.startsWith(r)); }
   catch { return false; }

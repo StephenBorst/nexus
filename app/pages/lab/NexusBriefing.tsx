@@ -16,6 +16,7 @@ import { buildOperatorProfile, profileNarrative } from "@/lib/operatorProfile.mj
 import { tiltRead, sessionEdge, overtradingRead, sizingRead } from "@/lib/behavioral.mjs";
 import { computeEdge } from "@/config/edge";
 import { bareTicker } from "@/utils/utils";
+import { C } from "@/config/theme";
 
 // Bare ticker for the briefing's symbol dedup (BTC, not PERP_BTC_USDC).
 
@@ -36,7 +37,7 @@ const TONE: Record<Insight["tone"], { bar: string; dot: string }> = {
 
 function InsightRow({ ins, onSelectTab, rank }: { ins: Insight; onSelectTab: (t: TabId) => void; rank?: number }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 11, padding: "10px 14px", borderBottom: "1px solid #131316", borderLeft: `2px solid ${TONE[ins.tone].bar}` }}>
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 11, padding: "10px 14px", borderBottom: `1px solid ${C.surface}`, borderLeft: `2px solid ${TONE[ins.tone].bar}` }}>
       {rank != null ? (
         <span style={{ flexShrink: 0, width: 18, height: 18, marginTop: 1, borderRadius: "50%", border: `1px solid ${TONE[ins.tone].dot}`, color: TONE[ins.tone].dot, fontFamily: "var(--nx-font-mono)", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{rank}</span>
       ) : (
@@ -59,7 +60,7 @@ function InsightRow({ ins, onSelectTab, rank }: { ins: Insight; onSelectTab: (t:
 
 function GroupLabel({ text }: { text: string }) {
   return (
-    <div style={{ padding: "9px 14px 5px", fontFamily: "var(--nx-font-mono)", fontSize: 8.5, letterSpacing: "0.2em", color: "#52525b", textTransform: "uppercase", background: "#0d0d0f" }}>{text}</div>
+    <div style={{ padding: "9px 14px 5px", fontFamily: "var(--nx-font-mono)", fontSize: 8.5, letterSpacing: "0.2em", color: C.text.faint, textTransform: "uppercase", background: C.surfaceAlt }}>{text}</div>
   );
 }
 
@@ -261,11 +262,11 @@ export function NexusBriefing({
       />
 
       {!collapsed && (
-        <div style={{ border: "1px solid #1c1c20", borderRadius: 8, overflow: "hidden", background: "#0f0f11", marginTop: -6 }}>
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", background: C.surfaceAlt, marginTop: -6 }}>
           {/* ⭐ THE OPERATOR READ — who you are + your single costliest habit, leading the
               briefing so the you-engine greets you here, not just in Analytics. */}
           {operator && (
-            <div style={{ padding: "12px 14px", borderBottom: "1px solid #1c1c20", background: "#0e0e12" }}>
+            <div style={{ padding: "12px 14px", borderBottom: `1px solid ${C.border}`, background: C.surfaceAlt }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8.5, letterSpacing: "0.2em", color: "#52525b", textTransform: "uppercase" }}>Your operator read</span>
@@ -290,7 +291,7 @@ export function NexusBriefing({
           {/* Deep-dive hand-off to the copilot */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "9px 14px" }}>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.05em" }}>deterministic — no AI, no key, just the data</span>
-            <button onClick={askAi} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, letterSpacing: "0.05em", color: "#6cb6ff", background: "none", border: "1px solid #23303f", borderRadius: 4, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>
+            <button onClick={askAi} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, letterSpacing: "0.05em", color: "#6cb6ff", background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>
               ◆ Ask Nexus to go deeper →
             </button>
           </div>

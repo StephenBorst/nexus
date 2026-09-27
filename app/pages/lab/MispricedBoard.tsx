@@ -770,7 +770,7 @@ export function MispricedBoard() {
             smushed card + a big empty gap. Capped so it doesn't sprawl on ultra-wide. */}
         <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: "minmax(0,1.75fr) minmax(260px,1fr)", gap: 32, alignItems: "start", maxWidth: 1240 }}>
           {/* The card */}
-          <div style={{ position: "relative", border: `1px solid ${C.border}`, borderLeft: `2px solid ${C.accent}`, borderRadius: RADIUS.lg, padding: "24px 28px", background: "linear-gradient(180deg,#17171a 0%,#0d0d0f 100%)", overflow: "hidden" }}>
+          <div style={{ position: "relative", border: `1px solid ${C.border}`, borderLeft: `2px solid ${C.accent}`, borderRadius: RADIUS.lg, padding: "24px 28px", background: `linear-gradient(180deg,${C.surface} 0%,${C.surfaceAlt} 100%)`, overflow: "hidden" }}>
             {isMobile ? (
               /* Line 1 the verdict, line 2 the action — nothing between them, so a phone answers
                  "is there a fade, and what do I do about it" without a scroll. */
@@ -917,7 +917,7 @@ export function MispricedBoard() {
                   return (
                     <div role="button" tabIndex={0} key={m.symbol} ref={(el: HTMLDivElement | null) => { rowRefs.current[m.coin] = el; }} onClick={() => setOpenCoin(m.coin)} onKeyDown={pressKey(() => setOpenCoin(m.coin))} title="Open this market"
                       className="nx-card-interactive"
-                      style={{ position: "relative", border: `1px solid ${C.borderStrong}`, borderLeft: `2px solid ${isFade ? C.accent : draftAnyway ? C.warn : C.borderStrong}`, borderRadius: RADIUS.lg, padding: "13px 15px 12px", background: "linear-gradient(180deg,#161619 0%,#101012 100%)", cursor: "pointer", overflow: "hidden", scrollMarginTop: 80, boxShadow: markedCoin === m.coin ? `0 0 0 2px ${C.accent}` : undefined }}>
+                      style={{ position: "relative", border: `1px solid ${C.borderStrong}`, borderLeft: `2px solid ${isFade ? C.accent : draftAnyway ? C.warn : C.borderStrong}`, borderRadius: RADIUS.lg, padding: "13px 15px 12px", background: `linear-gradient(180deg,${C.surface} 0%,${C.surfaceAlt} 100%)`, cursor: "pointer", overflow: "hidden", scrollMarginTop: 80, boxShadow: markedCoin === m.coin ? `0 0 0 2px ${C.accent}` : undefined }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11 }}>
                         <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.text.bright }}>{m.coin}</span>
                         <span style={{ fontFamily: MONO, fontSize: 8.5, color: C.text.faint }}>{fmtUsd(m.oiUsd)} open interest</span>
