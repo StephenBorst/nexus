@@ -124,8 +124,10 @@ is everything built on top:
 - **nexus-landing** → `landing.nexustradinglabs.com`, separate repo `StephenBorst/nexus-landing`.
   ⚠️ NOT a Pages project (the only Pages project is `nexus-trading-lab`) — it's a **Workers
   static-assets deploy**: `wrangler.jsonc` (`name: nexus-landing`, `assets.directory: "."`),
-  deploy with **`npx wrangler deploy`** from the repo root (NOT `wrangler pages deploy`). No CI —
-  pushing to GitHub does not deploy; run wrangler manually. CF auth via `CLOUDFLARE_API_TOKEN` env.
+  deploy with **`npx wrangler deploy`** from the repo root (NOT `wrangler pages deploy`). **It HAS CI (verified
+  2026-09-27):** `.github/workflows/deploy.yml` in nexus-landing runs `wrangler deploy` on every push to `main`
+  (repo secrets `CF_API_TOKEN` / `CF_ACCOUNT_ID` are set; 24+ green runs) — so pushing main = deployed; no manual
+  step. Cloud sessions can't fetch nexustradinglabs.com / landing.* (not on the env allowlist) — check the Action run.
 
 ## Agent paper mode details
 - Frontend default mode = PAPER (new users start risk-free). PAPER needs no trading key. **Default STRATEGY (2026-09-25) =
@@ -643,7 +645,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   GeckoTerminal, **client-side fetch** — GeckoTerminal/CoinGecko 403 datacenter IPs; carries the GT link-back) +
   `NexusTreasury` (USDC balance of the Safe on Arbitrum; LIVE — `NEXUS_TREASURY_ADDRESS` is set to the Safe) + `NexusBurnCounter` (on-chain $NEXUS at dead address as % of supply;
   honest at 0 until first burn). All fail-soft.
-- **Landing** (`nexus-landing` repo, static `index.html`, `wrangler deploy` — no CI): has its own $NEXUS market
+- **Landing** (`nexus-landing` repo, static `index.html`, auto-deploys on push to main via its own Action): has its own $NEXUS market
   strip (inline GeckoTerminal fetch). ⚠️ `.assetsignore` excludes `.git` (the assets dir is repo root — was
   publicly serving `.git/`). Announcement-tweet arc drafted: GeckoTerminal verified → Treasury Safe live → flywheel.
 

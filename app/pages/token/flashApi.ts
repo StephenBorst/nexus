@@ -43,11 +43,19 @@ export async function fetchOpenOrders(wallet: string): Promise<unknown[] | null>
   return null; // 500+ open orders: don't size an approval blind
 }
 
-// Recent orders for the panel (first page, every status). Throws on failure.
-export async function fetchRecentOrders(wallet: string): Promise<unknown[]> {
+// Recent orders for the panel (first page, every status). Throws on failure. Cached per wallet
+// for a minute: the panel mounts on every EVM token page, and Flash allows our key 5 req/s per
+// endpoint across ALL users, so browsing between tokens must not refetch. `fresh` (after a
+// place/cancel, or the open panel's poll) skips the cache.
+const RECENT_TTL_MS = 60_000;
+let recentCache: { wallet: string; at: number; rows: unknown[] } | null = null;
+export async function fetchRecentOrders(wallet: string, fresh = false): Promise<unknown[]> {
+  const key = wallet.toLowerCase();
+  if (!fresh && recentCache && recentCache.wallet === key && Date.now() - recentCache.at < RECENT_TTL_MS) return recentCache.rows;
   const r = await getJson(`${FLASH}/orders?funderAddress=${wallet}`);
   if (!r.ok || !Array.isArray(r.body?.orders)) throw new Error(r.status === 429 ? "busy, retrying" : `orders ${r.status}`);
-  return r.body!.orders as unknown[];
+  recentCache = { wallet: key, at: Date.now(), rows: r.body!.orders as unknown[] };
+  return recentCache.rows;
 }
 
 // One order + its fills. null while Flash is still projecting a just-placed order (404).

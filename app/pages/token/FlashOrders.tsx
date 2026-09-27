@@ -29,10 +29,10 @@ export function FlashOrders({ chainId, tokenAddress, symbol, walletAddress, prov
   const [allows, setAllows] = useState<Allow[] | null>(null);
   const [allowNote, setAllowNote] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (fresh = false) => {
     if (!walletAddress) return;
     try {
-      const rows = (await fetchRecentOrders(walletAddress)) as Record<string, unknown>[];
+      const rows = (await fetchRecentOrders(walletAddress, fresh)) as Record<string, unknown>[];
       setOrders(sortFlashOrders(rows)); setErr(null);
     } catch (e) { setErr((e as Error)?.message || "couldn’t load"); }
   }, [walletAddress]);
@@ -41,13 +41,13 @@ export function FlashOrders({ chainId, tokenAddress, symbol, walletAddress, prov
   // panel is expanded and the tab is visible (Flash allows 5 req/s per endpoint on our key).
   useEffect(() => { setOrders(null); setAllows(null); void load(); }, [load]);
   useEffect(() => {
-    const h = () => { void load(); };
+    const h = () => { void load(true); };
     window.addEventListener(FLASH_CHANGED, h);
     return () => window.removeEventListener(FLASH_CHANGED, h);
   }, [load]);
   useEffect(() => {
     if (!open) return;
-    const t = setInterval(() => { if (document.visibilityState === "visible") void load(); }, 30000);
+    const t = setInterval(() => { if (document.visibilityState === "visible") void load(true); }, 30000);
     return () => clearInterval(t);
   }, [open, load]);
 
