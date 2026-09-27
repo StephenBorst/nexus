@@ -723,6 +723,31 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   origins (ALLOWED_ORIGINS + `*.nexus-trading-lab.pages.dev`, https) and a per-IP isolate-local budget (flash 30/min,
   jup 120/min) → 403 `origin_not_allowed` / 429. Verified live. Only browser code calls them.
 
+## ✅ Cross-chain · NEAR Intents 1Click (2026-09-27) — read before touching CrossChainCard
+- `/token` landing card `app/pages/token/CrossChainCard.tsx`: USDC/ETH on Arbitrum · Base · Ethereum → any other
+  pinned asset, incl. SOL / USDC on Solana and BTC. Flow = 1Click quote → user sends ONE plain transfer to the
+  quote's `depositAddress` → solver delivers → status polled (`/v0/status`). Browser-direct (1Click CORS is `*`),
+  no key, no worker hop. Unauthenticated = 1Click adds ~20–25 bps; a partner JWT (via the worker) cuts it.
+- **The deposit address is the whole money path**, so `app/lib/nearIntents.mjs` (`checkQuote`, 18 tests on REAL
+  signed quotes in `app/lib/__fixtures__/oneclick-quote-*.json`) gates it BEFORE any wallet prompt:
+  (1) ed25519 signature vs the key PINNED from the official SDK (`ONE_CLICK_PUBKEY`), same canonical hash as the
+  SDK's `verifyQuoteSignature` (json-stable-stringify → sha256 → base58); (2) **a valid signature is not enough** —
+  anyone can get a quote signed for THEIR recipient, so the signed request must carry the user's recipient + refund
+  address, the pinned assets, the exact amount, ≤100 bps slippage, ORIGIN_CHAIN/DESTINATION_CHAIN types, no memo;
+  (3) deadline = the EARLIER of our request deadline (~10 min, the price window) and the address's life (~3 days).
+  EVM addresses compare case-insensitively; Solana/BTC exactly (base58 is case-sensitive).
+- The tx is built from the PINNED `XC_ASSETS` table (`buildDepositTx`), never the response: ERC-20 = `transfer()`
+  on the pinned USDC contract, value 0, NO approval (nothing left behind); native = value send. Before signing:
+  positive account-mismatch block (`eth_accounts`), `ensureChain`, balance pre-check, `chainId` in the tx params.
+  In-flight transfers persist in `localStorage` `nx_xc_track_v1` and resume polling on return (24h).
+- ⚠️ **BTC's pinned id is the CANONICAL `1cs_v1:btc:native:coin`**, not `nep141:btc.omft.near` — asking with the
+  alias comes back signed as the canonical id and checkQuote (correctly) refuses the changed asset. Found live;
+  pin what 1Click signs, never loosen the asset check. All 6 origins × {USDC.sol, BTC} verified PASS live 2026-09-27.
+- EVM destinations always pay the connected wallet (no typed address); Solana/BTC take a typed, shape-checked one.
+- Local testing: Node's fetch ignores HTTPS_PROXY here — run live checks with `NODE_USE_ENV_PROXY=1`.
+- ⏳ Not yet done: a small REAL transfer by borst (new money path — I can't sign); `appFees` (our fee, 50/50 with
+  1Click when keyed) is a revenue decision for borst; partner API key via the worker.
+
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the
   brain's single best signal per tick (ties → first in `config.symbols`), and is gated by daily caps. Now

@@ -24,6 +24,7 @@ import { SocialBar } from "@/components/SocialBar";
 import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, makeHolding, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
 import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, type SwapPlan, type Eip1193 } from "./swapExec";
 import { FlashSpotButton } from "./FlashSpotButton";
+import { CrossChainCard } from "./CrossChainCard";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -1244,6 +1245,7 @@ export default function TokenTerminal() {
                 ))}
               </div>
             </div>
+            <CrossChainCard walletAddress={wallet} provider={provider} />
           </div>
         )}
 
