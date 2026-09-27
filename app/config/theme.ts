@@ -82,6 +82,9 @@ export const SIGNAL = {
   // Soft positive — moderate conviction / supportive text; lighter than C.pos so it
   // doesn't read as realized profit.
   posSoft: "#8fdcb8",
+  // Quiet green FILL behind a confirmed / filled / ready-to-post state (a buy side, a filled
+  // slice, a call that clears validation). Never a text colour — the text stays C.pos.
+  posBg: "#0f2318",
   // Demoted P&L — context numbers deliberately quieter than the graded headline
   // (e.g. lifetime totals under a watched grade). Never the headline number itself.
   posMuted: "#7fb89a",

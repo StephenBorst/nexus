@@ -30,6 +30,7 @@ import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
+import { C } from "@/config/theme";
 
 export function AgentView() {
   const [config, setConfig] = useState<AgentConfig>(DEFAULT_CONFIG);
@@ -606,7 +607,7 @@ export function AgentView() {
     );
     return (
       <div>
-        <div style={{ ...agentCardStyle, borderColor: "#33333a", background: "linear-gradient(180deg,#15151a 0%,#0f0f11 100%)", textAlign: "center", padding: "28px 22px" }}>
+        <div style={{ ...agentCardStyle, borderColor: "#33333a", background: `linear-gradient(180deg,${C.surface} 0%,${C.surfaceAlt} 100%)`, textAlign: "center", padding: "28px 22px" }}>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 8 }}>Automate</div>
           <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 26, fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1, letterSpacing: "-0.01em" }}>Autonomous Trading Agent</div>
           <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#a1a1aa", lineHeight: 1.6, maxWidth: 560, margin: "12px auto 0" }}>
@@ -1228,7 +1229,7 @@ export function AgentView() {
                 </div>
 
                 <div style={{ marginTop: 12 }}>
-                  <div style={lbl}>TRADING SESSIONS (UTC){!sess.length && <span style={{ color: "#3a3a40" }}> · all allowed</span>}</div>
+                  <div style={lbl}>TRADING SESSIONS (UTC){!sess.length && <span style={{ color: C.text.disabled }}> · all allowed</span>}</div>
                   <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
                     {(["ASIA", "EUROPE", "US"] as const).map((s) => (
                       <button key={s} onClick={() => toggleSess(s)} style={chip(sess.includes(s))}>{s}</button>

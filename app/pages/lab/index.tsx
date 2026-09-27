@@ -35,6 +35,7 @@ import { DecisionBoard } from "./DecisionBoard";
 import { CountUp } from "./components";
 import { pressKey } from "@/utils/a11y";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
+import { C } from "@/config/theme";
 
 // Legacy alias: the old MISPRICED/GAPS tab was folded into SMART MONEY (Phase 1 re-slice),
 // so any ?tab=mispriced deep-link, shared OG link, or copilot nav resolves to smart.
@@ -257,7 +258,7 @@ export default function TheLabPage() {
                 <span style={{
                   fontFamily: "var(--nx-font-mono)", fontSize: 7.5, letterSpacing: "0.24em",
                   color: "#3f3f46", flexShrink: 0, padding: "1px 12px 0 16px", alignSelf: "center",
-                  borderLeft: "1px solid #1c1c20", textTransform: "uppercase",
+                  borderLeft: `1px solid ${C.border}`, textTransform: "uppercase",
                 }}>{group.phase}</span>
               )}
               {group.items.map((tab) => {

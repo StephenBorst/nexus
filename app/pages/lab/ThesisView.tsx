@@ -27,7 +27,7 @@ import { PnlChart, EmptyState, Coachmark } from "./components";
 import { Collapsible } from "./Collapsible";
 import { SharePoster, type PosterData } from "./SharePoster";
 import { bareTicker } from "@/utils/utils";
-import { SIGNAL } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 
 // Crash-proof number formatting — a partial thesis (e.g. a systematic house call with
 // no leverage/positionSize/fundingCost) must NEVER take the whole app down with
@@ -1561,13 +1561,13 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
             });
             const canBuild = !!form.symbol && symbolListed;
             return (
-              <div style={{ ...cardStyle, borderColor: "#33333a", background: "linear-gradient(180deg,#15151a 0%,#0f0f11 100%)" }}>
+              <div style={{ ...cardStyle, borderColor: "#33333a", background: `linear-gradient(180deg,${C.surface} 0%,${C.surfaceAlt} 100%)` }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 700, color: "#ededf0", letterSpacing: "0.04em" }}>⚡ QUICK CALL</span>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>on-chain · graded from public price · no manual marking</span>
                 </div>
                 {published && (
-                  <div className="nx-fade-in" style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 4, border: "1px solid #3ecf8e55", background: "#0f2318", fontFamily: "var(--nx-font-mono)", fontSize: 10.5, color: "#3ecf8e", lineHeight: 1.5 }}>
+                  <div className="nx-fade-in" style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 4, border: "1px solid #3ecf8e55", background: SIGNAL.posBg, fontFamily: "var(--nx-font-mono)", fontSize: 10.5, color: "#3ecf8e", lineHeight: 1.5 }}>
                     ◆ Call posted on-chain. It is being graded against public price.
                   </div>
                 )}
@@ -1683,7 +1683,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     <button onClick={publishAsCall} disabled={!formValid || publishing}
                       style={{ marginTop: 12, width: "100%", padding: "13px 0", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 700, letterSpacing: "0.06em", cursor: formValid && !publishing ? "pointer" : "not-allowed", borderRadius: 4,
                         border: `1px solid ${formValid || published ? "#3ecf8e" : "#232327"}`,
-                        background: published ? "#0f2318" : formValid ? "#12241a" : "#0a0a0b",
+                        background: published || formValid ? SIGNAL.posBg : C.canvas,
                         color: formValid || published ? "#3ecf8e" : "#52525b" }}>
                       {published ? "◆ PUBLISHED · NOW GRADED" : publishing ? "PUBLISHING…" : "◆ POST CALL"}
                     </button>
@@ -2249,7 +2249,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
             </div>
           </div>
           {resolveList.length > 0 && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", border: "1px solid #33333a", background: "#111114", borderRadius: 4, padding: "9px 12px", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", border: "1px solid #33333a", background: C.surfaceAlt, borderRadius: 4, padding: "9px 12px", marginBottom: 10 }}>
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#d4d4d8" }}>
                 ◆ {resolveList.length} call{resolveList.length === 1 ? "" : "s"} ready to resolve
                 {gradedReady > 0 && <span style={{ color: "#71717a" }}> · {gradedReady} already graded by Nexus</span>}
