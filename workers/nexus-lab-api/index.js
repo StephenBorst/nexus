@@ -1979,21 +1979,9 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         return json(raw ? JSON.parse(raw) : [], request);
       }
 
-      // POST /notifications/:wallet — append (internal)
-      if (request.method === "POST" && parts.length === 2) {
-        let body;
-        try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        if (!body.type || !body.message) return json({ error: "missing type or message" }, request, 400);
-        await appendNotification(env, wallet, {
-          id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          type: body.type,
-          message: String(body.message).slice(0, 200),
-          fromWallet: body.fromWallet || undefined,
-          thesisId: body.thesisId || undefined,
-          createdAt: Date.now(),
-        });
-        return json({ ok: true }, request);
-      }
+      // (No public POST: notifications are appended server-side via appendNotification(). The old
+      // "internal" POST was open to anyone and relayed its text through the Telegram bot to any
+      // linked chat. No client ever called it. Removed 2026-09-27.)
 
       // PUT /notifications/:wallet/read — mark all read
       if (request.method === "PUT" && parts.length === 3 && parts[2] === "read") {
