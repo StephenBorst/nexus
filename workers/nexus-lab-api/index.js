@@ -53,6 +53,7 @@ import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePending
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
 import { runScorecard, AXES, priceByHour } from "./axisbt.mjs";
 import { keyProxyOriginOk, makeRateLimiter } from "./keyProxy.mjs";
+import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
 // TWAP planner/status — reuse the exec worker's tested logic (wrangler bundles the
@@ -1781,8 +1782,9 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
             return json({ error: "unsupported chain" }, request, 400);
           }
 
-          // Replay guard — a tx can only ever buy one period.
-          if (await env.LAB_STORE.get(`sub:redeemed:${txHash}`)) return json({ error: "this transaction was already redeemed" }, request, 409);
+          // Replay guard — a tx buys ONE product, once (a PRO period OR sim credits, not both).
+          const redeemed = await redeemedAs(env.LAB_STORE, txHash);
+          if (redeemed) return json({ error: alreadyRedeemedMsg(redeemed) }, request, 409);
 
           // Fetch the receipt (try RPCs in order for reliability).
           let receipt = null;
@@ -1806,14 +1808,17 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
             return json({ error: v.reason || "verification failed", hint }, request, 400);
           }
 
-          const now = Date.now();
-          const existingRaw = await env.LAB_STORE.get(`sub:${v.from}`);
-          const existing = existingRaw ? JSON.parse(existingRaw) : null;
-          const base = existing?.expiresAt && existing.expiresAt > now ? existing.expiresAt : now;
-          const expiresAt = base + SUB_PERIOD_MS;
-          await env.LAB_STORE.put(`sub:${v.from}`, JSON.stringify({ expiresAt, lastTx: txHash, chain, token, amount: v.amount, updatedAt: now }));
-          await env.LAB_STORE.put(`sub:redeemed:${txHash}`, v.from);
-          return json({ ok: true, address: v.from, expiresAt, active: true }, request);
+          const r = await redeemOnce(env.LAB_STORE, txHash, "sub:redeemed:", v.from, async () => {
+            const now = Date.now();
+            const existingRaw = await env.LAB_STORE.get(`sub:${v.from}`);
+            const existing = existingRaw ? JSON.parse(existingRaw) : null;
+            const base = existing?.expiresAt && existing.expiresAt > now ? existing.expiresAt : now;
+            const expiresAt = base + SUB_PERIOD_MS;
+            await env.LAB_STORE.put(`sub:${v.from}`, JSON.stringify({ expiresAt, lastTx: txHash, chain, token, amount: v.amount, updatedAt: now }));
+            return expiresAt;
+          });
+          if (!r.ok) return json({ error: alreadyRedeemedMsg(r.as) }, request, 409);
+          return json({ ok: true, address: v.from, expiresAt: r.value, active: true }, request);
         } catch (e) {
           return json({ error: "verify failed", detail: String((e && e.message) || e) }, request, 500);
         }
@@ -1849,7 +1854,8 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
             minUnits = BigInt(Math.floor((SIM_CREDIT_USD / price / 0.88) * 1e18)); // ≥ ~1 credit of $NEXUS (12% tol)
             rpcs = ["https://base-rpc.publicnode.com", "https://mainnet.base.org", "https://base.llamarpc.com"];
           } else return json({ error: "unsupported chain" }, request, 400);
-          if (await env.LAB_STORE.get(`sim:redeemed:${txHash}`)) return json({ error: "this transaction was already redeemed" }, request, 409);
+          const redeemed = await redeemedAs(env.LAB_STORE, txHash);
+          if (redeemed) return json({ error: alreadyRedeemedMsg(redeemed) }, request, 409);
           let receipt = null;
           for (const rpc of rpcs) {
             try {
@@ -1863,11 +1869,13 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           if (!v.ok) return json({ error: v.reason || "verification failed", hint: chain === "base" ? `Send ≥ $${SIM_CREDIT_USD} of $NEXUS on Base to ${SUB_RECEIVER}` : `Send ≥ ${SIM_CREDIT_USD} USDC on Arbitrum to ${SUB_RECEIVER}` }, request, 400);
           const bought = simCreditsFor(v.amount, { decimals, usdPerToken, usdPerCredit: SIM_CREDIT_USD });
           if (bought < 1) return json({ error: `payment below the 1-credit minimum ($${SIM_CREDIT_USD})` }, request, 400);
-          const cur = Number(await env.LAB_STORE.get(`sim:credits:${v.from}`)) || 0;
-          const credits = cur + bought;
-          await env.LAB_STORE.put(`sim:credits:${v.from}`, String(credits));
-          await env.LAB_STORE.put(`sim:redeemed:${txHash}`, v.from);
-          return json({ ok: true, address: v.from, added: bought, credits }, request);
+          const r = await redeemOnce(env.LAB_STORE, txHash, "sim:redeemed:", v.from, async () => {
+            const cur = Number(await env.LAB_STORE.get(`sim:credits:${v.from}`)) || 0;
+            await env.LAB_STORE.put(`sim:credits:${v.from}`, String(cur + bought));
+            return cur + bought;
+          });
+          if (!r.ok) return json({ error: alreadyRedeemedMsg(r.as) }, request, 409);
+          return json({ ok: true, address: v.from, added: bought, credits: r.value }, request);
         } catch (e) {
           return json({ error: "verify failed", detail: String((e && e.message) || e) }, request, 500);
         }
@@ -2627,15 +2635,25 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       const simWallet = typeof body.walletSig === "string" ? recoverEthAddress("nexus-trading-key-v1", body.walletSig) : null;
       if (!simWallet) return json({ scenario, enabled: true, ran: false, error: "credit_required", priceUsd: simPrice, hint: `Buy sim credits, then sign to run. Each simulation costs 1 credit ($${simPrice}).` }, request, 402);
       const creditKey = `sim:credits:${simWallet}`;
-      let credits = 0;
-      try { credits = Number(await env.LAB_STORE.get(creditKey)) || 0; } catch { /* treat as 0 */ }
-      if (credits < 1) return json({ scenario, enabled: true, ran: false, error: "no_credits", credits: 0, priceUsd: simPrice, hint: `You're out of sim credits — buy more (USDC on Arbitrum or $NEXUS on Base) to run. $${simPrice} = 1 credit.` }, request, 402);
       // Global daily cap stays as an operator backstop (fail-closed) on top of credits.
       const cap = Number(env.MIROSHARK_DAILY_CAP || 20);
       const capKey = `miro:runs:${new Date().toISOString().slice(0, 10)}`;
-      let used = 0;
-      try { used = Number(await env.LAB_STORE.get(capKey)) || 0; } catch { /* treat as 0 */ }
-      if (used >= cap) return json({ scenario, enabled: true, ran: false, error: "daily simulation cap reached — try again tomorrow" }, request, 429);
+      const CAP_TTL = 172800;
+      // Take the credit and the day's slot BEFORE any money moves (payGuards.mjs); both come back
+      // unless the run queues. It used to read, pay (~2s), then write — so parallel requests on one
+      // credit each got a paid run. A KV error here stops the run: nothing has been paid yet.
+      let credit, slot;
+      try { credit = await takeSimCredit(env.LAB_STORE, creditKey); }
+      catch { return json({ scenario, enabled: true, ran: false, error: "couldn't reserve a sim credit — nothing was charged. Try again." }, request, 503); }
+      if (!credit.ok) return json({ scenario, enabled: true, ran: false, error: "no_credits", credits: 0, priceUsd: simPrice, hint: `You're out of sim credits — buy more (USDC on Arbitrum or $NEXUS on Base) to run. $${simPrice} = 1 credit.` }, request, 402);
+      try { slot = await takeCapSlot(env.LAB_STORE, capKey, cap, CAP_TTL); } catch { slot = null; }
+      if (!slot || !slot.ok) {
+        try { await refundSimCredit(env.LAB_STORE, creditKey); } catch { console.error("[wargame] credit refund failed", simWallet); }
+        return slot
+          ? json({ scenario, enabled: true, ran: false, error: "daily simulation cap reached — try again tomorrow" }, request, 429)
+          : json({ scenario, enabled: true, ran: false, error: "couldn't check the daily cap — nothing was charged. Try again." }, request, 503);
+      }
+      let queued = false;
       try {
         const { createSigner } = await import("x402-fetch");
         const { createPaymentHeader } = await import("x402/client");
@@ -2653,7 +2671,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         const chal = await fetch(RUN_URL, reqInit());
         if (chal.status !== 402) {
           const j = await chal.json().catch(() => ({}));
-          if (chal.ok) { try { await env.LAB_STORE.put(capKey, String(used + 1), { expirationTtl: 172800 }); } catch { /* best-effort */ } try { await env.LAB_STORE.put(creditKey, String(Math.max(0, credits - 1))); } catch { /* best-effort */ } return json({ scenario, enabled: true, ran: "queued", job: j.data || j, creditsLeft: Math.max(0, credits - 1), disclaimer: MIRO_DISCLAIMER }, request); }
+          if (chal.ok) { queued = true; return json({ scenario, enabled: true, ran: "queued", job: j.data || j, creditsLeft: credit.left, disclaimer: MIRO_DISCLAIMER }, request); }
           return json({ scenario, enabled: true, ran: false, error: `unexpected ${chal.status} (no 402 challenge)`, detail: j }, request, 502);
         }
         const prb64 = chal.headers.get("payment-required");
@@ -2664,8 +2682,12 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         if (!accepts.length) return json({ scenario, enabled: true, ran: false, error: "challenge had no payment options" }, request, 502);
         // Remap the v2 challenge (CAIP-2 network, `amount`) into the v1 PaymentRequirements
         // shape x402@1.2.0 expects (short network, `maxAmountRequired`, resource/mimeType).
+        // Our key signs ONLY Base USDC, "exact", to MiroShark's published receiver, for no more than
+        // the user paid us for the credit (payGuards.mjs). It used to sign whatever the 402 asked.
+        const pick = pickServerPayment(accepts, { payTo: env.MIROSHARK_PAYTO || MIROSHARK_PAYTO, maxUnits: usdcUnits(Number(env.MIROSHARK_MAX_USD) || simPrice) });
+        if (!pick.ok) return json({ scenario, enabled: true, ran: false, error: `refused to pay MiroShark: ${pick.reason}. Nothing was charged.` }, request, 502);
         const NET_MAP = { "eip155:8453": "base", "eip155:84532": "base-sepolia" };
-        const a = accepts[0], rsrc = challenge.resource || {};
+        const a = pick.accept, rsrc = challenge.resource || {};
         const shortNet = NET_MAP[a.network] || a.network;
         const isBaseMainnet = shortNet === "base";
         // ⚠️ EIP-3009 domain (the 90% bug per Miroshark): the `extra` here becomes the
@@ -2722,7 +2744,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         // their decoder fail → treated as unpaid → verify never ran (no invalidReason).
         try {
           const built = JSON.parse(atob(xPayment));
-          const v2 = { x402Version: challenge.x402Version || 2, accepted: accepts[0], payload: built.payload };
+          const v2 = { x402Version: challenge.x402Version || 2, accepted: a, payload: built.payload };
           xPayment = btoa(JSON.stringify(v2));              // STANDARD base64 (no url-safe, no line breaks)
         } catch { /* send as built */ }
         // Attach X-PAYMENT to the PAID retry via a Headers object (most robust — a plain
@@ -2779,14 +2801,20 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
               sigCheck = { recovered, matchesPayer: recovered.toLowerCase() === String(auth.from).toLowerCase() };
             }
           } catch (e) { sigCheck = { error: String(e.message || e) }; }
-          const debug = { challenge: { x402Version: challenge.x402Version, accept0: accepts[0] }, sent, sigCheck, domainVersionUsed: extra.version, assetUsed: req0.asset, xPaymentLen: xPayment.length, xPaymentStdB64: /^[A-Za-z0-9+/]+={0,2}$/.test(xPayment) };
+          const debug = { challenge: { x402Version: challenge.x402Version, accepted: a }, sent, sigCheck, domainVersionUsed: extra.version, assetUsed: req0.asset, xPaymentLen: xPayment.length, xPaymentStdB64: /^[A-Za-z0-9+/]+={0,2}$/.test(xPayment) };
           return json({ scenario, enabled: true, ran: false, error: `run rejected (${paid.status}) — facilitator reason: ${facStr}`, detail: out, reason, payer: payerAddr, debug }, request, 502);
         }
-        try { await env.LAB_STORE.put(capKey, String(used + 1), { expirationTtl: 172800 }); } catch { /* best-effort */ }
-        try { await env.LAB_STORE.put(creditKey, String(Math.max(0, credits - 1))); } catch { /* best-effort */ }
-        return json({ scenario, enabled: true, ran: "queued", job: out.data || out, creditsLeft: Math.max(0, credits - 1), disclaimer: MIRO_DISCLAIMER }, request);
+        queued = true;
+        return json({ scenario, enabled: true, ran: "queued", job: out.data || out, creditsLeft: credit.left, disclaimer: MIRO_DISCLAIMER }, request);
       } catch (e) {
         return json({ scenario, enabled: true, ran: false, error: `simulation error: ${String(e)}` }, request, 502);
+      } finally {
+        // Anything short of a queued run gives the credit and the day's slot back — the credit is
+        // spent only on a queued run, as before.
+        if (!queued) {
+          try { await refundSimCredit(env.LAB_STORE, creditKey); } catch { console.error("[wargame] credit refund failed", simWallet); }
+          try { await releaseCapSlot(env.LAB_STORE, capKey, CAP_TTL); } catch { /* the cap over-counts: fail closed */ }
+        }
       }
     }
 
