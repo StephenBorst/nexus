@@ -81,6 +81,7 @@ import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 // Directive level validation lives with the exec's money-path logic (single source);
 // wrangler bundles the cross-dir import (same as backtest.mjs).
 import { directiveLevels } from "../nexus-agent-exec/logic.mjs";
+import { handleBasisSignals } from "./basisSignals.mjs";
 
 // Orderly sits behind Cloudflare bot-management, which intermittently serves an HTML
 // 403 challenge to header-light Worker fetches — which would break the mini-app money
@@ -6052,6 +6053,13 @@ document.getElementById("btn").addEventListener("click",go);
     }
     // Ops/verify: what WOULD the Telegram push send right now, and why did/didn't it fire?
     // Dry-run by default (no send, no throttle write); `?send=1` actually delivers.
+    // ── GET /signals/basis — STAGED for Oct-15 (404 until BASIS_SIGNALS_LIVE="true") ──
+    // The graded basis-stack read per market, via the brain's own deriveSignal — the future
+    // source of the paid nexus-signals feed. See basisSignals.mjs.
+    if (parts[0] === "signals" && parts[1] === "basis" && request.method === "GET") {
+      return handleBasisSignals(request, env, json);
+    }
+
     if (parts[0] === "signals" && parts[1] === "deliver-now" && request.method === "GET") {
       const send = url.searchParams.get("send") === "1";
       const result = await deliverSignals(env, { dryRun: !send });

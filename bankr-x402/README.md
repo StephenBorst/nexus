@@ -34,6 +34,21 @@ response (`grade`), and the listing no longer calls it "the edge". Plan: swap th
 basis reads after the Oct-15 re-validation. **Redeploy to make it live:** `bankr x402 deploy nexus-signals`
 (Bankr hosts the handler; pushing to GitHub does not update it).
 
+## Oct-15 basis swap (STAGED — do not run before the verdict)
+`nexus-signals-basis.ts` is the basis × CVD version of `nexus-signals`, pre-built. It is **not** in
+`bankr.x402.json`, so nothing ships it today, and its data route (`GET /signals/basis`) answers 404
+until the lab-api flag is set. Run the swap only if the Oct-15 re-validation holds basis × CVD:
+
+1. lab-api: uncomment `BASIS_SIGNALS_LIVE = "true"` in `workers/nexus-lab-api/wrangler.toml`, merge
+   (CI deploys). Check `curl https://og.nexustradinglabs.com/signals/basis` returns 12 rows.
+2. Replace `nexus-signals.ts` with `nexus-signals-basis.ts` (same service name, so buyers' URL
+   doesn't change) and update the `nexus-signals` description in `bankr.x402.json` to the basis read,
+   keeping "Graded in public on /proof; each response carries the live grade."
+3. `bankr x402 deploy nexus-signals` from the deployer wallet, then pay one call and check the
+   response carries `grade.axis: "basis_x_cvd"`.
+
+If the read does NOT hold on Oct-15: leave all three untouched. The live feed keeps its honest NOISE label.
+
 ## Deploy — two paths
 
 **A) CLI (uses these files):**
