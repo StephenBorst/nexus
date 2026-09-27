@@ -98,3 +98,34 @@ export function basisDeviationSide(trailRaw, basisPct, { minWarmup, pct } = {}) 
   if (!(thr > DEV_EPS) || !(Math.abs(dev) > thr)) return null; // strictly ABOVE — a flat regime has no extreme
   return dev > 0 ? "SHORT" : "LONG";
 }
+
+// The two-sided read as the BRAIN takes it: same series prep, staleness guard and strictly-prior
+// trail as basisFadeFromHistory, with the side from basisDeviationSide — the exact function the
+// scoreboard's basis_dev / basis_dev_x_cvd grade. Returns the same shape (+ `mean`), so stack
+// conditioners join on `t` exactly as they do for the one-sided read. STAGED: the brain only
+// calls this behind BASIS_TWO_SIDED_LIVE (off) for configs with basisAnchor "MEAN".
+export function basisDeviationFromHistory(rows, { now = Date.now(), window, minWarmup, pct, maxAgeMs = 3 * 3600000 } = {}) {
+  const cfg = {
+    window: window ?? BASIS_FADE_DEFAULTS.window,
+    minWarmup: minWarmup ?? BASIS_FADE_DEFAULTS.minWarmup,
+    pct: pct ?? BASIS_FADE_DEFAULTS.pct,
+  };
+  const sorted = (Array.isArray(rows) ? rows : [])
+    .filter((r) => r && Number.isFinite(r.basisPct) && Number.isFinite(r.t))
+    .sort((a, b) => a.t - b.t);
+  if (!sorted.length) return { side: null, basisPct: null, thr: null, mean: null, ageMs: null, reason: "no basis history" };
+  const obs = sorted[sorted.length - 1];
+  const ageMs = now - obs.t;
+  if (ageMs > maxAgeMs) {
+    return { side: null, basisPct: obs.basisPct, thr: null, mean: null, ageMs, t: obs.t, reason: `basis stale (${Math.round(ageMs / 3600000)}h)` };
+  }
+  const trail = sorted.slice(Math.max(0, sorted.length - 1 - cfg.window), sorted.length - 1).map((r) => r.basisPct);
+  const side = basisDeviationSide(trail, obs.basisPct, cfg);
+  // mean / thr are for the operator's reason line only — the verdict is basisDeviationSide's.
+  const mean = trail.length >= cfg.minWarmup ? trail.reduce((s, v) => s + v, 0) / trail.length : null;
+  const thr = mean == null ? null : trailingPct(trail.map((v) => Math.abs(v - mean)), cfg.pct);
+  const reason = side
+    ? `basis ${obs.basisPct.toFixed(3)}% vs usual ${mean.toFixed(3)}% — ${side === "LONG" ? "below" : "above"} usual by more than p${Math.round(cfg.pct * 100)} ${thr.toFixed(3)}%`
+    : (trail.length < cfg.minWarmup ? `accruing (${trail.length}/${cfg.minWarmup}h)` : "basis near its usual level");
+  return { side, basisPct: obs.basisPct, thr, mean, ageMs, t: obs.t, reason };
+}

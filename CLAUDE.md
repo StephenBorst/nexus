@@ -486,6 +486,20 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   `parent_id` — collapse with their position. Before calling DRIFT a brain problem, check the open position.
   **Full paper wallets:** 12h control `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
   `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE`.
+- **⏸ OCT-15 PREP — STAGED, ALL OFF (2026-09-27, PRs #46 + 2/2).** Nothing below trades or serves until a verdict:
+  (1) `tools/oct15/holdDecision.mjs` = the pre-registered 12h-vs-24h rule (oos exit grades + paper A/B since the clean
+  start; `RULES` thresholds). (2) lab-api `GET /signals/basis` = the future x402 source, 404 `not_live` until
+  `BASIS_SIGNALS_LIVE` (commented in lab-api wrangler.toml); `bankr-x402/nexus-signals-basis.ts` + README runbook.
+  (3) **Basis × Smart preset** `STAGED_BASIS_SMART` in strategyPresets.ts behind the code constant
+  `OCT15_BASIS_SMART_LIVE = false` — ON joins the preset list + `AXIS_PRESET.basis_x_smart`; the flip ALSO needs a
+  `basis_x_smart` AXIS_EXITS contract (axisExits.test.mjs fails otherwise). (4) **Two-sided basis wiring:** config
+  `basisAnchor: "MEAN"` → the brain reads `basisDeviationFromHistory` (basisFade.mjs) into `raw.basisDev*` (+ the same
+  CVD gate) ONLY when worker var `BASIS_TWO_SIDED_LIVE="true"` (commented in the BRAIN's wrangler.toml). deriveSignal's
+  `twoSidedBasisView` means a MEAN config never trades the zero-anchored read — flag off ⇒ sits out "staged (off)";
+  MEAN × SMART/LIQ ⇒ "not graded". Backtest replays MEAN faithfully (`makeBasisAt({twoSided})`); label "Two-Sided Basis
+  (× CVD Stack)"; parity axis basis_dev / basis_dev_x_cvd. Parity test `app/lib/basisTwoSided.test.mjs` (3 seeds × same-hour
+  rewrites, both sides must fire) + a guard that FAILS if the flag is set — turning it on means editing that guard in
+  the same reviewed PR, and only after it grades PREDICTIVE with BOTH sides represented. No UI selector yet.
 - **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
   AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array

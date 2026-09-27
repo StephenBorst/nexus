@@ -21,7 +21,9 @@ export function strategyLabel(config = {}) {
   // The basis stack reads by what it trades, matching the presets + the scoreboard rows —
   // and a filtered/inverted variant SAYS so, so a result can't be mistaken for the preset.
   if (mode === "BASIS_FADE") {
-    const base = config.basisConfirm === "CVD" ? "Basis × CVD Stack" : config.basisConfirm === "SMART" ? "Basis × Smart Stack" : config.basisConfirm === "LIQ" ? "Basis × Liq-Flush Stack" : "Basis Extreme Fade";
+    const oneSided = config.basisConfirm === "CVD" ? "Basis × CVD Stack" : config.basisConfirm === "SMART" ? "Basis × Smart Stack" : config.basisConfirm === "LIQ" ? "Basis × Liq-Flush Stack" : "Basis Extreme Fade";
+    // basisAnchor "MEAN" = the two-sided read (scoreboard basis_dev / basis_dev_x_cvd) — a different rule, named so.
+    const base = config.basisAnchor === "MEAN" ? (config.basisConfirm === "CVD" ? "Two-Sided Basis × CVD Stack" : config.basisConfirm ? `Two-Sided Basis × ${config.basisConfirm} (not graded)` : "Two-Sided Basis Fade") : oneSided;
     if (config.invertSignal) return `Inverted ${base}`;
     return hasGates(config) ? `Gated ${base}` : base;
   }
@@ -46,6 +48,7 @@ export function backtestGateSupport(config = {}) {
   if (config.signalMode === "BASIS_FADE" && config.basisConfirm === "CVD") applied.push("CVD confirm");
   if (config.signalMode === "BASIS_FADE" && config.basisConfirm === "SMART") applied.push("smart-money confirm");
   if (config.signalMode === "BASIS_FADE" && config.basisConfirm === "LIQ") applied.push("liq-flush confirm");
+  if (config.signalMode === "BASIS_FADE" && config.basisAnchor === "MEAN") applied.push("two-sided basis");
   if (config.respectRegime) skipped.push("regime (RISK_ON/RISK_OFF tape)");
   if (config.respectSmartMoney) skipped.push("smart-money consensus");
   if ((config.maxSignalAgeSec ?? 0) > 0) skipped.push("signal-age (live latency guard)");

@@ -15,6 +15,33 @@ export interface StrategyPreset {
   config: Partial<AgentConfig>;
 }
 
+// ── STAGED for the Oct-15 re-validation (OFF) ─────────────────────────────────────────────
+// Basis × Smart Money: the same fade as the Basis × CVD Stack, confirmed by the same-hour
+// smart-money lean (scoreboard axis basis_x_smart; rule in app/lib/basisStack.mjs, parity-tested).
+// Kept OUT of the preset list and the /proof one-tap Load until the verdict: on Sept 25 the read
+// slipped PREDICTIVE → PROMISING (R +0.14, n141, NOT stable). Turn on ONLY if Oct-15 grades it
+// PREDICTIVE and stable, in one reviewed PR that:
+//   1. flips OCT15_BASIS_SMART_LIVE to true (adds the preset + the basis_x_smart → preset mapping);
+//   2. adds a matching `basis_x_smart` contract to AXIS_EXITS in app/lib/axisExits.mjs (the
+//      scoreboard's "as the preset trades it" grade; axisExits.test.mjs then pins the two together).
+// Until then the SMART confirm stays a manual option in the Agent config, as today.
+export const OCT15_BASIS_SMART_LIVE = false;
+export const STAGED_BASIS_SMART: StrategyPreset = {
+  id: "basis-smart-stack",
+  name: "Basis × Smart Money Stack",
+  tag: "EXPERIMENTAL · PAPER",
+  accent: "#e0a458",
+  blurb: "The basis-extreme fade, taken only when the smart-money lean in the same hour points the same way. It is the exact intersection the scoreboard grades as \"Basis extreme × smart money\" — one shared rule, graded and traded, pinned by a parity test. ⚠️ The scoreboard grades the READ, not this strategy: exits, sizing and fees are unvalidated. PAPER only until it has a record of its own.",
+  config: {
+    symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC"],
+    signalMode: "BASIS_FADE", basisConfirm: "SMART",
+    mode: "PAPER",
+    leverage: 5, capitalPerTrade: 50,
+    tpPercent: 2.5, slPercent: 2, maxHoldHours: 12,
+    maxTradesPerDay: 3, maxDailyLossUsdc: 10,
+  },
+};
+
 export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: "basis-extreme-fade",
@@ -164,6 +191,12 @@ export const AXIS_PRESET: Record<string, string> = {
   basis_extreme: "basis-extreme-fade",   // app/lib/basisFade.mjs
   basis_x_cvd: "basis-cvd-stack",        // app/lib/basisStack.mjs
 };
+// STAGED (off) — see OCT15_BASIS_SMART_LIVE above. Joined here, not in the literal, so the
+// axisExits contract test only demands an exit contract for mappings that are actually live.
+if (OCT15_BASIS_SMART_LIVE) {
+  STRATEGY_PRESETS.splice(2, 0, STAGED_BASIS_SMART);
+  AXIS_PRESET.basis_x_smart = STAGED_BASIS_SMART.id;
+}
 // Reads whose preset is PAUSED: the scoreboard keeps grading them (the exit grade still feeds the
 // Oct-15 re-validation), but /proof stops offering the one-tap Load. Reversible — delete the line.
 export const AXIS_PAUSED: Record<string, string> = {

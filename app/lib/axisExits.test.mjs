@@ -45,3 +45,26 @@ test("every scoreboard → preset mapping has an exit contract", () => {
     assert.equal(AXIS_EXITS[axis].preset, preset, `${axis} maps to a different preset`);
   }
 });
+
+// STAGED Basis × Smart (OCT15_BASIS_SMART_LIVE): its mapping is joined at runtime, so the literal
+// check above can't see it. Pin the flip here instead — ON demands an exit contract — and keep the
+// staged preset identical to the live Basis × CVD Stack except for its confirm, so turning it on
+// adds exactly one variable to the comparison.
+test("staged Basis × Smart: same trade as the CVD stack except the confirm; ON needs an exit contract", () => {
+  const i = src.indexOf('id: "basis-smart-stack"');
+  assert.ok(i >= 0, "staged preset not found");
+  const staged = src.slice(i, src.indexOf("\n};", i));
+  const cvd = presetBlock("basis-cvd-stack");
+  for (const k of ["tpPercent", "slPercent", "maxHoldHours", "leverage", "capitalPerTrade", "maxTradesPerDay", "maxDailyLossUsdc"]) {
+    assert.equal(num(staged, k), num(cvd, k), `staged ${k}`);
+  }
+  assert.match(staged, /signalMode:\s*"BASIS_FADE",\s*basisConfirm:\s*"SMART"/);
+  const live = /export const OCT15_BASIS_SMART_LIVE = (true|false);/.exec(src);
+  assert.ok(live, "OCT15_BASIS_SMART_LIVE not found");
+  if (live[1] === "true") {
+    assert.ok(AXIS_EXITS.basis_x_smart, "Basis × Smart is live but has no AXIS_EXITS contract");
+    assert.equal(AXIS_EXITS.basis_x_smart.preset, "basis-smart-stack");
+  } else {
+    assert.equal(AXIS_EXITS.basis_x_smart, undefined, "staged read must not change the live scoreboard's exit grades");
+  }
+});

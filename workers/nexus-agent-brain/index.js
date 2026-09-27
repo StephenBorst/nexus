@@ -16,7 +16,7 @@
 // ═══════════════════════════════════════════════════════════
 
 import { deriveSignal, computeRegime, atrPct, oiSnapshotDue } from "./logic.mjs";
-import { basisFadeFromHistory } from "../../app/lib/basisFade.mjs";
+import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 
 // The markets we ALWAYS record oi:hist for. ⚠️ Keep this in step with
@@ -118,10 +118,16 @@ export default {
       const needBasisCvd = Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisConfirm === "CVD");
       const needBasisSmart = Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisConfirm === "SMART");
       const needBasisLiq = Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisConfirm === "LIQ");
+      // STAGED (off): the two-sided basis read (basisAnchor "MEAN" → basis_dev / basis_dev_x_cvd).
+      // Computed ONLY when the worker var BASIS_TWO_SIDED_LIVE = "true" (commented out in
+      // wrangler.toml). Off ⇒ a MEAN config gets no basisDev* fields and sits out with the reason.
+      const twoSidedLive = env.BASIS_TWO_SIDED_LIVE === "true";
+      const needBasisDev = twoSidedLive && Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisAnchor === "MEAN");
+      const needBasisDevCvd = needBasisDev && Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisAnchor === "MEAN" && config.basisConfirm === "CVD");
       const rawBySymbol = {};
       for (const symbol of symbolSet) {
         try {
-          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis, needBasisCvd, needBasisSmart, needBasisLiq);
+          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis, needBasisCvd, needBasisSmart, needBasisLiq, { dev: needBasisDev, devCvd: needBasisDevCvd });
         } catch (e) {
           console.error(`[brain] ${symbol} eval error:`, e.message);
         }
@@ -188,7 +194,7 @@ export default {
 // Fetch one symbol's market data and compute RAW deltas vs last cycle.
 // No strategy interpretation here — deriveSignal() applies each user's mode +
 // thresholds. `market:prev:{symbol}` is stored so price/OI deltas are real.
-async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false, computeBasisCvd = false, computeBasisSmart = false, computeBasisLiq = false) {
+async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false, computeBasisCvd = false, computeBasisSmart = false, computeBasisLiq = false, twoSided = { dev: false, devCvd: false }) {
   const json = await orderlyPublicGet(`${ORDERLY_API}/v1/public/futures/${symbol}`);
   const d = json.data;
 
@@ -251,13 +257,33 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
   // scoreboard grades with; if the series is thin or stale it returns null and
   // BASIS_FADE simply doesn't fire (never a silent fallback to funding/OI).
   let basis = null;
+  let basisDev = null; // STAGED two-sided read — only when twoSided.dev (flag on + a MEAN config)
   if (computeBasis) {
     try {
       const bare = symbol.replace(/^PERP_/, "").replace(/_USDC$/, "");
       const raw = await env.NEXUS_AGENT.get(`basis:hist:${bare}`);
-      basis = basisFadeFromHistory(raw ? JSON.parse(raw) : []);
+      const hist = raw ? JSON.parse(raw) : [];
+      basis = basisFadeFromHistory(hist);
+      if (twoSided.dev) basisDev = basisDeviationFromHistory(hist); // same KV read, no extra get
     } catch (e) {
       console.error(`[brain] ${symbol} basis read failed:`, e.message);
+    }
+  }
+
+  // Two-sided × CVD (STAGED): the SAME shared CVD gate, joined on the two-sided read's hour/side
+  // = the intersection axisbt's basis_dev_x_cvd grades. Failure ⇒ unconfirmed, never a pass.
+  let basisDevCvd = null;
+  if (twoSided.devCvd && basisDev && (basisDev.side === "LONG" || basisDev.side === "SHORT")) {
+    try {
+      const bare = symbol.replace(/^PERP_/, "").replace(/_USDC$/, "");
+      const [cRaw, oRaw] = await Promise.all([
+        env.NEXUS_AGENT.get(`cvd:hist:${bare}`),
+        env.NEXUS_AGENT.get(`oi:hist:${symbol}`),
+      ]);
+      basisDevCvd = basisCvdConfirm({ basisT: basisDev.t, side: basisDev.side, cvdHist: cRaw ? JSON.parse(cRaw) : [], oiHist: oRaw ? JSON.parse(oRaw) : [] });
+    } catch (e) {
+      console.error(`[brain] ${symbol} two-sided basis×cvd read failed:`, e.message);
+      basisDevCvd = { confirmed: false, cvdSide: null, reason: "CVD read failed" };
     }
   }
 
@@ -317,6 +343,8 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
     ...(basisCvd ? { basisCvdConfirmed: basisCvd.confirmed, basisCvdSide: basisCvd.cvdSide, basisCvdReason: basisCvd.reason } : {}),
     ...(basisSmart ? { basisSmartConfirmed: basisSmart.confirmed, basisSmartSide: basisSmart.smartSide, basisSmartReason: basisSmart.reason } : {}),
     ...(basisLiq ? { basisLiqConfirmed: basisLiq.confirmed, basisLiqSide: basisLiq.liqSide, basisLiqReason: basisLiq.reason } : {}),
+    ...(basisDev ? { basisDevSide: basisDev.side, basisDevPct: basisDev.basisPct, basisDevThr: basisDev.thr, basisDevReason: basisDev.reason } : {}),
+    ...(basisDevCvd ? { basisDevCvdConfirmed: basisDevCvd.confirmed, basisDevCvdSide: basisDevCvd.cvdSide, basisDevCvdReason: basisDevCvd.reason } : {}),
     // Regime-conditioning inputs for the opt-in session/vol gates in deriveSignal.
     hourUtc: new Date().getUTCHours(),
     ...(atrPctVal !== undefined ? { atrPct: atrPctVal } : {}),

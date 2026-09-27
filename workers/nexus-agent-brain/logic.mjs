@@ -8,6 +8,7 @@
 //   OI_ONLY                         — OI-divergence only.
 //   BASIS_FADE                      — fade an extreme spot-perp basis (EXPERIMENTAL, paper).
 //                                     basisConfirm:"CVD" | "SMART" | "LIQ" = only when that same-hour read agrees.
+//                                     basisAnchor:"MEAN" = the two-sided read (STAGED, off; plain or CVD only).
 //   MOMENTUM                        — trade WITH a tick price move > priceChangeThreshold (trend-follow).
 //   MEAN_REVERSION                  — FADE a tick price move > priceChangeThreshold (buy dip / sell rip).
 // Thresholds (per user): fundingThreshold (%), oiChangeThreshold (% min OI move to count).
@@ -57,6 +58,24 @@ export function atrPct(candles, periods = 14) {
   return cnt && lastClose > 0 ? (trSum / cnt / lastClose) * 100 : null;
 }
 
+// The two-sided basis read (basisAnchor "MEAN") projected onto the field names the BASIS_FADE
+// branch reads. It carries ONLY the raw.basisDev* fields — so a MEAN config can never trade the
+// zero-anchored basis_extreme verdict by accident (flag off ⇒ no dev fields ⇒ it sits out and
+// says why). Only the graded combinations exist: plain (basis_dev) and CVD (basis_dev_x_cvd);
+// SMART / LIQ on the two-sided read have no scoreboard row, so they sit out.
+function twoSidedBasisView(raw, config) {
+  if (config.basisConfirm === "SMART" || config.basisConfirm === "LIQ") {
+    return { basisReason: `two-sided basis × ${config.basisConfirm} is not graded — sat out` };
+  }
+  if (raw.basisDevSide === undefined && raw.basisDevReason === undefined) {
+    return { basisReason: "two-sided basis is staged (off) — sat out" };
+  }
+  return {
+    basisSide: raw.basisDevSide, basisReason: raw.basisDevReason,
+    basisCvdConfirmed: raw.basisDevCvdConfirmed, basisCvdSide: raw.basisDevCvdSide, basisCvdReason: raw.basisDevCvdReason,
+  };
+}
+
 export function deriveSignal(raw, config = {}, regime = null, smartConsensus = null) {
   const fundingRate = raw.fundingRate || 0;
   const priceChange = raw.priceChange || 0;
@@ -103,48 +122,53 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
         direction = priceChange > 0 ? "SHORT" : "LONG"; confidence = 60; why = "mean-reversion";
       }
       break;
-    case "BASIS_FADE":
+    case "BASIS_FADE": {
       // Fade an extreme spot-perp basis — the scoreboard's PREDICTIVE read, traded.
       // raw.basisSide is the verdict of the SHARED rule (app/lib/basisFade.mjs) that
       // axisbt grades with; nothing is re-derived here, so the traded signal cannot
       // drift from the graded one. Absent/stale basis ⇒ no signal, never a fallback
       // to funding or OI.
-      if (raw.basisSide === "LONG" || raw.basisSide === "SHORT") {
+      // basisAnchor "MEAN" (STAGED, off) = the two-sided read (basis_dev / basis_dev_x_cvd):
+      // its own raw.basisDev* fields, never the zero-anchored ones — see twoSidedBasisView.
+      const b = config.basisAnchor === "MEAN" ? twoSidedBasisView(raw, config) : raw;
+      if (b.basisSide === "LONG" || b.basisSide === "SHORT") {
         if (config.basisConfirm === "CVD") {
           // The basis×CVD STACK (opt-in): take the fade only when aggressor flow in the SAME
           // hour diverges the SAME way — the intersection the scoreboard grades as basis_x_cvd
           // (rule in app/lib/basisStack.mjs). Absent/failed CVD read ⇒ sit out, never a pass.
-          if (raw.basisCvdConfirmed === true && raw.basisCvdSide === raw.basisSide) {
-            direction = raw.basisSide; confidence = 78; why = "basis-extreme fade · CVD confirms";
+          if (b.basisCvdConfirmed === true && b.basisCvdSide === b.basisSide) {
+            direction = b.basisSide; confidence = 78; why = "basis-extreme fade · CVD confirms";
           } else {
-            why = `basis extreme, ${raw.basisCvdReason || "CVD not read"} — sat out`;
+            why = `basis extreme, ${b.basisCvdReason || "CVD not read"} — sat out`;
           }
         } else if (config.basisConfirm === "SMART") {
           // The basis×SMART-MONEY stack: take the fade only when the same-hour smart-money
           // lean agrees — the scoreboard's basis_x_smart (rule in app/lib/basisStack.mjs).
-          if (raw.basisSmartConfirmed === true && raw.basisSmartSide === raw.basisSide) {
-            direction = raw.basisSide; confidence = 78; why = "basis-extreme fade · smart money agrees";
+          if (b.basisSmartConfirmed === true && b.basisSmartSide === b.basisSide) {
+            direction = b.basisSide; confidence = 78; why = "basis-extreme fade · smart money agrees";
           } else {
-            why = `basis extreme, ${raw.basisSmartReason || "smart money not read"} — sat out`;
+            why = `basis extreme, ${b.basisSmartReason || "smart money not read"} — sat out`;
           }
         } else if (config.basisConfirm === "LIQ") {
           // The basis×LIQUIDATION-FLUSH stack: take the fade only when a same-hour cascade
           // reverts to the same side — the scoreboard's basis_x_liqflush (app/lib/basisStack.mjs).
-          if (raw.basisLiqConfirmed === true && raw.basisLiqSide === raw.basisSide) {
-            direction = raw.basisSide; confidence = 78; why = "basis-extreme fade · liq flush confirms";
+          if (b.basisLiqConfirmed === true && b.basisLiqSide === b.basisSide) {
+            direction = b.basisSide; confidence = 78; why = "basis-extreme fade · liq flush confirms";
           } else {
-            why = `basis extreme, ${raw.basisLiqReason || "liquidations not read"} — sat out`;
+            why = `basis extreme, ${b.basisLiqReason || "liquidations not read"} — sat out`;
           }
         } else {
-          direction = raw.basisSide; confidence = 70; why = "basis-extreme fade";
+          direction = b.basisSide; confidence = 70; why = "basis-extreme fade";
         }
-      } else if (typeof raw.basisReason === "string" && raw.basisReason) {
+      } else if (typeof b.basisReason === "string" && b.basisReason) {
         // Surface WHY it sat out ("accruing (12/48h)" / "basis stale (5h)" / "basis not
         // extreme") instead of a bare "no signal" — this is the read the operator needs
         // on day one to tell "not wired" apart from "wired and correctly quiet".
-        why = raw.basisReason;
+        why = b.basisReason;
       }
+      if (config.basisAnchor === "MEAN" && direction !== "NONE") why = why.replace("basis-extreme fade", "two-sided basis fade");
       break;
+    }
     case "EXTERNAL":
       // Arena / bring-your-own-brain — the house brain stays silent for this agent;
       // entries come ONLY from its own webhook intents. Explicit case so it can
