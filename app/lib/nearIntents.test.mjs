@@ -162,3 +162,28 @@ test("toUnits is exact and refuses over-precision; fromUnits formats", () => {
   assert.equal(fromUnits("7324345646481841", 18), "0.007324");
   assert.equal(fromUnits("20000000", 6), "20");
 });
+
+// ── our app fee (off unless configured) ─────────────────────────────────────────
+import { xcAppFees } from "./nearIntents.mjs";
+
+test("xcAppFees: empty/0/invalid/over-cap ⇒ no fee field at all; valid ⇒ one entry", () => {
+  for (const [bps, to] of [["", USER], [undefined, USER], ["0", USER], ["abc", USER], ["2.5", USER], ["101", USER], ["10", ""], ["10", "not an account!"]])
+    assert.deepEqual(xcAppFees(bps, to), [], `${bps} ${to}`);
+  assert.deepEqual(xcAppFees("10", USER), [{ recipient: USER.toLowerCase(), fee: 10 }]);
+  assert.deepEqual(xcAppFees(25, "nexustradinglabs.near"), [{ recipient: "nexustradinglabs.near", fee: 25 }]);
+});
+
+test("a live quote carrying our fee: 1Click echoes HALF for us plus its own 20 bps; guard checks ours", () => {
+  const live = load("fee"); // real signed quote, Sept 27 2026, appFees [{USER,10}] asked
+  const qr = live.quoteRequest;
+  assert.equal(verifyQuoteSignature(live), true);
+  assert.deepEqual(qr.appFees.map((f) => f.fee).sort((a, b) => a - b), [5, 20]);
+  const intent = { ...INTENT, now: Date.parse(live.timestamp) + 1000, appFees: xcAppFees(10, USER) };
+  assert.equal(checkQuote(live, intent).ok, true, checkQuote(live, intent).reason);
+  // asked for less than what came back for us → refused
+  assert.equal(checkQuote(live, { ...intent, appFees: xcAppFees(4, USER) }).reason, "app fee");
+  // asked for a fee but it isn't in the quote → refused
+  assert.equal(checkQuote(load("live"), { ...INTENT, appFees: xcAppFees(10, USER) }).reason, "app fee");
+  // no fee asked → the old quote passes exactly as before
+  assert.equal(checkQuote(load("live"), INTENT).ok, true);
+});

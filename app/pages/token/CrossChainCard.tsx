@@ -19,7 +19,9 @@ import { useEffect, useRef, useState } from "react";
 import {
   ONE_CLICK_API, XC_ASSETS, CHAIN_NAME, STATUS_TEXT, TERMINAL,
   checkQuote, buildDepositTx, recipientFitsChain, toUnits, fromUnits,
+  xcAppFees,
 } from "@/lib/nearIntents.mjs";
+import { getRuntimeConfig } from "@/utils/runtime-config";
 import { ensureChain, explorerTx, type Eip1193 } from "./swapExec";
 import { useEscapeKey } from "@/utils/a11y";
 
@@ -103,6 +105,8 @@ export function CrossChainCard({ walletAddress: connected, provider }: { walletA
     if (!walletAddress || !units) return;
     setErr(null); setBusy("Getting a verified quote…");
     try {
+      // Our fee (public/config.js VITE_XC_FEE_BPS + VITE_XC_FEE_RECIPIENT); empty ⇒ none sent.
+      const appFees = xcAppFees(getRuntimeConfig("VITE_XC_FEE_BPS"), getRuntimeConfig("VITE_XC_FEE_RECIPIENT"));
       const deadline = new Date(Date.now() + 10 * 60_000).toISOString();
       const body = {
         dry: false, swapType: "EXACT_INPUT", slippageTolerance: MAX_SLIPPAGE_BPS,
@@ -110,13 +114,14 @@ export function CrossChainCard({ walletAddress: connected, provider }: { walletA
         destinationAsset: dest.assetId, amount: units.toString(),
         recipient, recipientType: "DESTINATION_CHAIN",
         refundTo: walletAddress, refundType: "ORIGIN_CHAIN", deadline,
+        ...(appFees.length ? { appFees } : {}),
       };
       const r = await fetch(`${ONE_CLICK_API}/v0/quote`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const j = await r.json().catch(() => null);
       if (!r.ok || !j) throw new Error((j && typeof j.message === "string" ? j.message : "No quote") + ". Nothing was sent.");
       const chk = checkQuote(j, {
         originAsset: body.originAsset, destinationAsset: body.destinationAsset, amount: body.amount,
-        recipient, refundTo: walletAddress, originChain: XC_ASSETS[from].chain, maxSlippageBps: MAX_SLIPPAGE_BPS,
+        recipient, refundTo: walletAddress, originChain: XC_ASSETS[from].chain, maxSlippageBps: MAX_SLIPPAGE_BPS, appFees,
       }) as QuoteCheck;
       if (!chk.ok) throw new Error(`Quote refused (${chk.reason}). Nothing was sent.`);
       if (alive.current) setReview({ quote: j, depositAddress: chk.depositAddress, minAmountOut: chk.minAmountOut, deadlineMs: chk.deadlineMs, amount: units, recipient });

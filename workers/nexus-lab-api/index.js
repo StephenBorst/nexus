@@ -52,7 +52,7 @@ import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
 import { runScorecard, AXES, priceByHour } from "./axisbt.mjs";
-import { keyProxyOriginOk, makeRateLimiter, flashUpstream } from "./keyProxy.mjs";
+import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee } from "./keyProxy.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
@@ -6182,7 +6182,8 @@ document.getElementById("btn").addEventListener("click",go);
         const r = await fetch(up.url, {
           method: up.method,
           headers: { "content-type": "application/json", "x-definitive-api-key": key },
-          ...(up.body ? { body: await request.text() } : {}),
+          // quote + order carry OUR fee (FLASH_FEE_BPS; omitted when unset) — see withFlashFee.
+          ...(up.body ? { body: /\/(quote|order)$/.test(up.url) ? withFlashFee(await request.text(), env) : await request.text() } : {}),
         });
         return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
       } catch (e) {

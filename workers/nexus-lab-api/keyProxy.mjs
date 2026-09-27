@@ -71,3 +71,27 @@ export function flashUpstream(method, parts, searchParams) {
   }
   return { url: `${FLASH_V1}/orders?${out.toString()}`, method: "GET", body: false };
 }
+
+// ── Our Flash integrator fee ────────────────────────────────────────────────────
+// Flash wants flashIntegratorFeeBps IDENTICAL on /quote and /order, so the worker sets it on both
+// from one secret-free var (FLASH_FEE_BPS) instead of trusting the browser. Unset / 0 / invalid ⇒
+// the field is omitted and the body goes out exactly as the browser sent it (ships dark). Any value
+// a browser put in is dropped either way, so the fee can only ever be ours. Flash allows up to
+// 1000 bps; we refuse anything above 100 (1%) as a typo guard. Fees land in our Definitive Flash
+// Portfolio (withdraw at app.definitive.fi).
+export const FLASH_FEE_MAX_BPS = 100;
+export function flashFeeBps(env) {
+  const n = Number(env?.FLASH_FEE_BPS);
+  return Number.isInteger(n) && n > 0 && n <= FLASH_FEE_MAX_BPS ? n : 0;
+}
+export function withFlashFee(bodyText, env) {
+  let b;
+  try { b = JSON.parse(bodyText); } catch { return bodyText; } // not JSON: Flash rejects it anyway
+  if (!b || typeof b !== "object" || Array.isArray(b)) return bodyText;
+  const bps = flashFeeBps(env);
+  const hadClientFee = "flashIntegratorFeeBps" in b;
+  delete b.flashIntegratorFeeBps;
+  if (!bps) return hadClientFee ? JSON.stringify(b) : bodyText;
+  b.flashIntegratorFeeBps = String(bps);
+  return JSON.stringify(b);
+}

@@ -745,8 +745,11 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
 - **Testing Flash without our key:** Flash's docs print a PUBLIC integrator key "safe for development" (in every
   order-type page's Prerequisites note) — quotes/list/cancel-404 work with it from a cloud session via curl. Fixture `app/lib/__fixtures__/flash-quotes.json` = real quotes for every type (funder = our subscription
   receiver, nothing signed). Never place an order with it. Rate limit: 5 req/s per endpoint per key (ours).
-- ⏳ borst decisions: `flashIntegratorFeeBps` (our fee on Flash fills, stacks on Definitive's 10bps, sent on quote AND
-  order) and `erc8021AttributionCode` (Base builder code from base.dev, order-only) — both unset. Live test needed:
+- **Our fee — WIRED, OFF (2026-09-27):** worker var `FLASH_FEE_BPS` (commented in lab-api wrangler.toml) →
+  `withFlashFee` (keyProxy.mjs, tested) adds `flashIntegratorFeeBps` to BOTH /quote and /order, drops any browser-sent
+  value, omits the field when unset (byte-identical body). Our cap 100 bps (Flash allows 1000). Stacks on Definitive's
+  10 bps; accrues in our Definitive Flash Portfolio. ⏳ borst: the number (only after live tests) +
+  `erc8021AttributionCode` (Base builder code, order-only, unset). Live test needed:
   one small limit + cancel, one market buy with SL/TP (check the pair's WETH/token approval lands).
 - **Key proxies gated** (`workers/nexus-lab-api/keyProxy.mjs`, tested): `/flash/*` + `/swap/jup/*` accept only our
   origins (ALLOWED_ORIGINS + `*.nexus-trading-lab.pages.dev`, https) and a per-IP isolate-local budget (flash writes
@@ -774,8 +777,14 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   pin what 1Click signs, never loosen the asset check. All 6 origins × {USDC.sol, BTC} verified PASS live 2026-09-27.
 - EVM destinations always pay the connected wallet (no typed address); Solana/BTC take a typed, shape-checked one.
 - Local testing: Node's fetch ignores HTTPS_PROXY here — run live checks with `NODE_USE_ENV_PROXY=1`.
-- ⏳ Not yet done: a small REAL transfer by borst (new money path — I can't sign); `appFees` (our fee, 50/50 with
-  1Click when keyed) is a revenue decision for borst; partner API key via the worker.
+- **Our fee — WIRED, OFF (2026-09-27):** `public/config.js` `VITE_XC_FEE_BPS` + `VITE_XC_FEE_RECIPIENT` (EVM address or
+  NEAR account) → `xcAppFees` → `appFees` on the quote; empty ⇒ field omitted. **Live-checked: 1Click KEEPS HALF** (ask
+  10 → echo lists 5 for us) and adds its own 20 bps regardless, so setting X costs the user X and earns us X/2.
+  `appFees` is NOT covered by the quote signature (tamper test) — checkQuote requires our entry, ≤ what we asked; the
+  user's floor is the SIGNED minAmountOut. Fixture `oneclick-quote-fee.json`. Cap 100 bps.
+- **Fabric's fee is already ON:** `SPOT_FEE_BPS = "10"` (its hard max; Fabric silently ignores more) → `0x34dF…B45c`.
+- ⏳ Not yet done: a small REAL transfer by borst (new money path — I can't sign); the fee numbers (after live tests);
+  partner API key via the worker (drops 1Click's 20 bps).
 
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the

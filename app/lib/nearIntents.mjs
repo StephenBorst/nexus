@@ -133,6 +133,22 @@ export function recipientFitsChain(address, chain) {
 //   { originAsset, destinationAsset, amount (base units string), recipient, refundTo,
 //     originChain, maxSlippageBps, now? }
 // Returns { ok:true, depositAddress, minAmountOut, deadlineMs } or { ok:false, reason }.
+// ── Our 1Click app fee (off unless configured) ───────────────────────────────────
+// appFees = [{recipient, fee(bps)}] on the quote request. Live-checked 2026-09-27: 1Click KEEPS
+// HALF (we ask 10 → the echo lists 5 for us) and adds its own 20 bps entry on top regardless. So
+// a setting of X costs the user X and earns us X/2. Recipient = an EVM address (lowercased) or a
+// NEAR account id; fees accrue to that intents account. 0 / unset / invalid ⇒ [] ⇒ the field is
+// omitted and the request is byte-identical to before. >100 bps (1%) is refused as a typo.
+export const XC_FEE_MAX_BPS = 100;
+const NEAR_ACCOUNT = /^(?=.{2,64}$)(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
+export function xcAppFees(bps, recipient) {
+  const n = Number(bps);
+  if (!Number.isInteger(n) || n <= 0 || n > XC_FEE_MAX_BPS) return [];
+  const r = String(recipient || "").trim();
+  const to = /^0x[0-9a-fA-F]{40}$/.test(r) ? r.toLowerCase() : NEAR_ACCOUNT.test(r) ? r : null;
+  return to ? [{ recipient: to, fee: n }] : [];
+}
+
 export function checkQuote(response, intent) {
   const fail = (reason) => ({ ok: false, reason });
   if (!response || !response.quote || !response.quoteRequest) return fail("malformed");
@@ -149,6 +165,12 @@ export function checkQuote(response, intent) {
   if (!sameAddress(qr.refundTo, intent.refundTo)) return fail("refund address");
   if (!(Number(qr.slippageTolerance) >= 0 && Number(qr.slippageTolerance) <= (intent.maxSlippageBps ?? 100))) return fail("slippage");
   if (qr.virtualChainRecipient || qr.virtualChainRefundRecipient || qr.customRecipientMsg) return fail("unexpected routing fields");
+  // Our fee, if we asked for one, must come back for OUR recipient and no bigger than we asked
+  // (1Click echoes half). The user's output is still bounded by the SIGNED minAmountOut.
+  for (const want of intent.appFees || []) {
+    const got = (Array.isArray(qr.appFees) ? qr.appFees : []).filter((f) => String(f?.recipient).toLowerCase() === String(want.recipient).toLowerCase());
+    if (got.length !== 1 || !(Number(got[0].fee) > 0 && Number(got[0].fee) <= want.fee)) return fail("app fee");
+  }
 
   if (!addressFitsChain(q.depositAddress, intent.originChain)) return fail("deposit address");
   if (q.depositMemo) return fail("memo deposits not supported"); // a memo-less transfer would be lost

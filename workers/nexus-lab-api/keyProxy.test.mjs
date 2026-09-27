@@ -60,3 +60,24 @@ test("flash proxy: anything else is refused (other endpoints, bad ids, bad funde
   ];
   for (const [m, p, q] of bad) assert.equal(flashUpstream(m, p, q), null, `${m} /${p.join("/")}?${q}`);
 });
+
+import { withFlashFee, flashFeeBps } from "./keyProxy.mjs";
+
+test("Flash fee: unset/0/invalid ships the body untouched (dark)", () => {
+  const body = JSON.stringify({ side: "buy", qty: "20" });
+  for (const env of [{}, { FLASH_FEE_BPS: "" }, { FLASH_FEE_BPS: "0" }, { FLASH_FEE_BPS: "abc" }, { FLASH_FEE_BPS: "2.5" }, { FLASH_FEE_BPS: "-5" }, { FLASH_FEE_BPS: "101" }]) {
+    assert.equal(withFlashFee(body, env), body, JSON.stringify(env));
+    assert.equal(flashFeeBps(env), 0);
+  }
+});
+
+test("Flash fee: set ⇒ the same string on every request; a browser-sent fee is always dropped", () => {
+  const env = { FLASH_FEE_BPS: "10" };
+  const q = JSON.parse(withFlashFee(JSON.stringify({ side: "buy", qty: "20" }), env));
+  const o = JSON.parse(withFlashFee(JSON.stringify({ side: "buy", qty: "20", userSignature: "0x1", flashIntegratorFeeBps: "999" }), env));
+  assert.equal(q.flashIntegratorFeeBps, "10");
+  assert.equal(o.flashIntegratorFeeBps, "10");
+  assert.equal(o.userSignature, "0x1");
+  assert.equal("flashIntegratorFeeBps" in JSON.parse(withFlashFee(JSON.stringify({ flashIntegratorFeeBps: "50" }), {})), false);
+  assert.equal(withFlashFee("not json", env), "not json");
+});
