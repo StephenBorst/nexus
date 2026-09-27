@@ -10,6 +10,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { fetchOnChainRepScore } from "@/hooks/useThesisRegistry";
+import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
 import type { ThesisTrade } from "@/pages/lab/types";
@@ -319,6 +320,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
+  const labWallet = useLabWallet();
 
   // Persist prefs on change
   useEffect(() => {
@@ -359,9 +361,6 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
     if (!calc || hasValidationErr) { setErr("check inputs"); return; }
     setSaving(true); setErr("");
     try {
-      const resp = await fetch(`${API_BASE}/lab/${walletAddress}`);
-      const existing = resp.ok ? await resp.json() : { theses: [], notes: {} };
-      const existingTheses: ThesisTrade[] = existing.theses ?? [];
       const newThesis: ThesisTrade = {
         id: `copy_${Date.now()}`, symbol: thesis.symbol, direction: thesis.direction,
         entryPrice: thesis.entryPrice, stopLoss: thesis.stopLoss,
@@ -375,17 +374,14 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
         createdAt: Date.now(), status: "ACTIVE", actualPnl: null, isPublic: false,
         copiedFromWallet: thesis.wallet,
       };
-      await fetch(`${API_BASE}/lab/${walletAddress}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          theses: [newThesis, ...existingTheses],
-          notes: existing.notes ?? {},
-          copiedFromWallet: thesis.wallet,
-          copiedThesisSymbol: thesis.symbol,
-          copiedThesisDirection: thesis.direction,
-          copiedThesisId: thesis.id,
-        }),
+      // Signed by this wallet, appended to its FULL record (nothing is written if that can't be read).
+      const r = await appendToLab(walletAddress, labWallet, newThesis, {
+        copiedFromWallet: thesis.wallet,
+        copiedThesisSymbol: thesis.symbol,
+        copiedThesisDirection: thesis.direction,
+        copiedThesisId: thesis.id,
       });
+      if (!r.ok) { setErr(r.error); return; }
       setSaved(true);
       setTimeout(onClose, 1200);
     } catch { setErr("failed to save. Check connection"); }

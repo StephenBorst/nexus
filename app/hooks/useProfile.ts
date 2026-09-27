@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { getLabAuth, clearLabAuth, useLabWallet } from "@/hooks/useLabAuth";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -28,6 +29,8 @@ export function useProfile(walletAddress?: string | null) {
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const labWallet = useLabWallet();
 
   // ── Fetch profile on wallet connect ──────────────────────
   useEffect(() => {
@@ -51,28 +54,40 @@ export function useProfile(walletAddress?: string | null) {
   }, [addr]);
 
   // ── Save profile ──────────────────────────────────────────
+  // Only the wallet can change its name/pfp: the save carries its Lab signature (the same one that
+  // saves Lab calls, ~a day). If it can't be had, the change is rolled back rather than shown as saved.
   const saveProfile = useCallback(
-    async (updates: Partial<Profile>) => {
-      if (!addr) return;
+    async (updates: Partial<Profile>): Promise<boolean> => {
+      if (!addr) return false;
+      const prev = profile;
       const next: Profile = { ...profile, ...updates };
       // Optimistic update
       setProfile(next);
       profileCache[addr] = next;
 
       setSaving(true);
+      setSaveError(null);
+      const rollback = (msg: string) => { setProfile(prev); profileCache[addr] = prev; setSaveError(msg); };
       try {
-        await fetch(`${API_BASE}/profile/${addr}`, {
+        let why = "";
+        const auth = await getLabAuth(addr, labWallet, "explicit", { fallbackSigner: walletAddress, onError: (m) => { why = m; } });
+        if (!auth) { rollback(why || "Sign the Nexus Lab message to save your profile."); return false; }
+        const res = await fetch(`${API_BASE}/profile/${addr}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(next),
+          body: JSON.stringify({ ...next, labAuth: auth }),
         });
+        if (res.status === 401) { clearLabAuth(addr); rollback("Signature expired. Try again."); return false; }
+        if (!res.ok) { rollback("Profile didn't save. Try again."); return false; }
+        return true;
       } catch {
-        // Silent fail — optimistic state stays
+        rollback("Profile didn't save. Check your connection.");
+        return false;
       } finally {
         setSaving(false);
       }
     },
-    [addr, profile]
+    [addr, profile, labWallet, walletAddress]
   );
 
   return {
@@ -81,6 +96,7 @@ export function useProfile(walletAddress?: string | null) {
     saveProfile,
     loading,
     saving,
+    saveError,
   };
 }
 

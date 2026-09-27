@@ -890,7 +890,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
           if (d && d.available && Number.isFinite(d.hitRate) && Number.isFinite(d.expectancyR)) patch[t.id] = { hitRate: d.hitRate, expectancyR: d.expectancyR, samples: d.samples };
         } catch { /* skip this one */ }
       }
-      if (Object.keys(patch).length) saveTheses(trades.map((t) => (patch[t.id] ? { ...t, baseRateAtEntry: patch[t.id] } : t)));
+      // Quiet: background bookkeeping never pops the wallet — it syncs with the user's next save.
+      if (Object.keys(patch).length) saveTheses(trades.map((t) => (patch[t.id] ? { ...t, baseRateAtEntry: patch[t.id] } : t)), { quiet: true });
     })();
   }, [trades, walletAddress, saveTheses]);
   const { availableBalance } = useCollateral();

@@ -582,6 +582,16 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   the AGENT ledger (`0x1fa8…`) and human CALL ledger are anchored + `verified:true`.
 
 ## Human call leaderboard (trustless — same standard as agents)
+- **⚠️ Lab records are OWNER-SIGNED (2026-09-27).** `PUT /lab/:addr`, `DELETE /lab/:addr/thesis/:id`, `PUT /profile/:addr`
+  and the full read `POST /lab/:addr/read` need `labAuth {ts, sig, signer?}` in the BODY: the wallet's signature over
+  `labSaveMessage` (`app/lib/labAuth.mjs`; EVM personal_sign or Solana ed25519, since Solana wallets own real Lab records),
+  valid 24h, checked BEFORE any side effect (copy count, challenge fan-out, `caller:latest` autocopy stamp), never stored.
+  `GET /lab/:addr` = the PUBLIC view (public, non-holders calls; no notes). These routes used to trust the URL. Client:
+  `useLabAuth` (signs through the Orderly connector's provider, cached ≤23h per wallet, one prompt at a time, no auto
+  re-prompt after a decline, Lab header "SIGN TO SYNC"); `useLabStorage` (open = full read with a cached sig, else the
+  public view; the FIRST signed save folds in the server's full record via `labMerge.mjs`, so a public view can never
+  overwrite private calls; this session's deletes are tombstoned); `appendToLab` (copy modals: full read or NOTHING is
+  written). Not the 'nexus-trading-key-v1' sig (that seeds agent keys). A new writer of `lab:`/`profile:` MUST sign.
 - A human thesis = a **call**. Outcomes are graded OBJECTIVELY from PUBLIC price (Orderly `GET /tv/history`,
   1h OHLC, first-touch TP1-vs-SL; same-candle = LOSS conservative) — NOT self-reported. So `actualPnl`/status
   the user types is ignored for ranking.

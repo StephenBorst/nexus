@@ -23,7 +23,7 @@ function WalletIcon() {
 export default function ProfileAvatar() {
   const { state: accountState } = useAccount();
   const walletAddress = (accountState as { address?: string })?.address ?? null;
-  const { pfp, displayName, saveProfile, saving } = useProfile(walletAddress);
+  const { pfp, displayName, saveProfile, saving, saveError } = useProfile(walletAddress);
 
   const [open, setOpen] = useState(false);
   const fid = useId();
@@ -56,11 +56,11 @@ export default function ProfileAvatar() {
   }, [open]);
 
   const handleSave = async () => {
-    await saveProfile({
+    const ok = await saveProfile({
       pfp: pfpInput.trim() || null,
       displayName: nameInput.trim() || null,
     });
-    setOpen(false);
+    if (ok) setOpen(false); // on failure the popover stays open with the reason
   };
 
   if (!walletAddress) return null;
@@ -204,6 +204,9 @@ export default function ProfileAvatar() {
             }}
           />
 
+          {saveError && (
+            <div role="alert" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, color: "#e0a458", lineHeight: 1.45, marginBottom: 10 }}>{saveError}</div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={handleSave}

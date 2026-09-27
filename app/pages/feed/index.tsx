@@ -11,6 +11,7 @@ import { useAccount, useCollateral } from "@orderly.network/hooks";
 import { useNavigate } from "react-router-dom";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { fetchOnChainRepScore } from "@/hooks/useThesisRegistry";
+import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
 import { TreasuryInventory } from "@/components/TreasuryInventory";
@@ -162,6 +163,7 @@ function CopyModal({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
+  const labWallet = useLabWallet();
 
   // Persist prefs on change
   useEffect(() => {
@@ -213,10 +215,6 @@ function CopyModal({
     setSaving(true);
     setErr("");
     try {
-      const resp = await fetch(`${API_BASE}/lab/${walletAddress}`);
-      const existing = resp.ok ? await resp.json() : { theses: [], notes: {} };
-      const existingTheses: ThesisTrade[] = existing.theses ?? [];
-
       const attribution = `Copied from ${traderName}${thesis.notes ? `\n\n${thesis.notes}` : ""}${extraNotes ? `\n\n${extraNotes}` : ""}`;
 
       const newThesis: ThesisTrade = {
@@ -244,19 +242,14 @@ function CopyModal({
         copiedFromWallet: thesis.wallet,
       };
 
-      const updated = [newThesis, ...existingTheses];
-      await fetch(`${API_BASE}/lab/${walletAddress}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          theses: updated,
-          notes: existing.notes ?? {},
-          copiedFromWallet: thesis.wallet,
-          copiedThesisSymbol: thesis.symbol,
-          copiedThesisDirection: thesis.direction,
-          copiedThesisId: thesis.id,
-        }),
+      // Signed by this wallet, appended to its FULL record (nothing is written if that can't be read).
+      const r = await appendToLab(walletAddress, labWallet, newThesis, {
+        copiedFromWallet: thesis.wallet,
+        copiedThesisSymbol: thesis.symbol,
+        copiedThesisDirection: thesis.direction,
+        copiedThesisId: thesis.id,
       });
+      if (!r.ok) { setErr(r.error); return; }
 
       setSaved(true);
       setTimeout(onClose, 1200);

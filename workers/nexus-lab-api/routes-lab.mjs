@@ -1,10 +1,28 @@
 // ── /profile/:address and /lab/:address — a wallet's profile, calls and journal ──────────────
-// Lifted out of index.js's fetch handler as ONE route family (shared.mjs migration rule): moved
-// byte-for-byte, no behavior change in this step.
-import { json, normalizeAddress, appendNotification } from "./shared.mjs";
+// Only the wallet can change its record. Every write carries `labAuth` in the JSON body (the
+// wallet's signature over app/lib/labAuth.mjs labSaveMessage) and is checked BEFORE any side
+// effect: no write, no copy count, no challenge fan-out, no autocopy stamp. The signature is
+// never stored. (These routes used to trust the URL, so anyone who knew an address could replace,
+// delete or read that wallet's record.)
+//
+//   GET    /lab/:address              → the PUBLIC view: public calls only, no notes
+//   POST   /lab/:address/read         → the full record (private calls + notes), owner only
+//   PUT    /lab/:address              → replace the record, owner only
+//   DELETE /lab/:address/thesis/:id   → remove one call, owner only
+//   PUT    /profile/:address          → display name + pfp, owner only (GET stays public)
+import { json, normalizeAddress, appendNotification, checkLabAuth } from "./shared.mjs";
 import { normalizeSymbol } from "./logic.mjs";
+import { publicLabView } from "../../app/lib/labAuth.mjs";
 
-export async function handleProfile(parts, request, env) {
+// 401 and nothing else happens. `error` tells the client which action to re-sign for.
+const unsigned = (request, error, v) =>
+  json({ error, reason: v.reason, hint: "Sign the Nexus Lab message with this wallet and send it as body.labAuth." }, request, 401);
+
+async function bodyOrNull(request) {
+  try { return await request.json(); } catch { return null; }
+}
+
+export async function handleProfile(parts, request, env, { now = Date.now } = {}) {
   if (!parts[1]) return json({ error: "not found" }, request, 404);
   const address = normalizeAddress(parts[1]);
   const profileKey = `profile:${address}`;
@@ -22,6 +40,8 @@ export async function handleProfile(parts, request, env) {
     } catch {
       return json({ error: "invalid json" }, request, 400);
     }
+    const auth = checkLabAuth(address, body?.labAuth, now());
+    if (!auth.ok) return unsigned(request, "sign_to_save", auth);
     // Only allow pfp (URL string) and displayName
     const profile = {
       pfp: typeof body.pfp === "string" ? body.pfp.trim().slice(0, 500) : null,
@@ -35,7 +55,7 @@ export async function handleProfile(parts, request, env) {
   return json({ error: "method not allowed" }, request, 405);
 }
 
-export async function handleLab(parts, request, env) {
+export async function handleLab(parts, request, env, { now = Date.now } = {}) {
   // ── /lab/:address ──────────────────────────────────────
   if (parts[0] !== "lab" || !parts[1]) {
     return json({ error: "not found" }, request, 404);
@@ -44,13 +64,22 @@ export async function handleLab(parts, request, env) {
   const address = normalizeAddress(parts[1]);
   const kvKey = `lab:${address}`;
 
-  // ── GET /lab/:address ──────────────────────────────────
+  // ── GET /lab/:address — public view (public calls only, no notes) ─
   if (request.method === "GET") {
     const raw = await env.LAB_STORE.get(kvKey);
     if (!raw) {
       return json({ theses: [], notes: {} }, request);
     }
-    return json(JSON.parse(raw), request);
+    return json(publicLabView(JSON.parse(raw)), request);
+  }
+
+  // ── POST /lab/:address/read — the full record, owner only ─
+  if (request.method === "POST" && parts[2] === "read") {
+    const body = await bodyOrNull(request);
+    const auth = checkLabAuth(address, body?.labAuth, now());
+    if (!auth.ok) return unsigned(request, "sign_to_read", auth);
+    const raw = await env.LAB_STORE.get(kvKey);
+    return json(raw ? JSON.parse(raw) : { theses: [], notes: {} }, request);
   }
 
   // ── PUT /lab/:address ──────────────────────────────────
@@ -61,6 +90,11 @@ export async function handleLab(parts, request, env) {
     } catch {
       return json({ error: "invalid json" }, request, 400);
     }
+
+    // Owner check FIRST: everything below (copy count, notifications, autocopy stamp, write) is a
+    // side effect on someone's record.
+    const auth = checkLabAuth(address, body?.labAuth, now());
+    if (!auth.ok) return unsigned(request, "sign_to_save", auth);
 
     if (!Array.isArray(body.theses) || typeof body.notes !== "object") {
       return json({ error: "expected { theses: [], notes: {} }" }, request, 400);
@@ -162,14 +196,16 @@ export async function handleLab(parts, request, env) {
       }
     } catch (e) { console.error("[challenge] fan-out failed", e && e.message); }
 
-    // Strip copy metadata fields before persisting
-    const { copiedFromWallet: _cfw, copiedThesisSymbol: _cts, copiedThesisDirection: _ctd, copiedThesisId: _cti, ...dataToSave } = body;
+    // Strip copy metadata + the signature before persisting (a stored signature is a replayable one)
+    const { labAuth: _la, copiedFromWallet: _cfw, copiedThesisSymbol: _cts, copiedThesisDirection: _ctd, copiedThesisId: _cti, ...dataToSave } = body;
     await env.LAB_STORE.put(kvKey, JSON.stringify(dataToSave));
     return json({ ok: true }, request);
   }
 
   // ── DELETE /lab/:address/thesis/:id ────────────────────
   if (request.method === "DELETE" && parts[2] === "thesis" && parts[3]) {
+    const auth = checkLabAuth(address, (await bodyOrNull(request))?.labAuth, now());
+    if (!auth.ok) return unsigned(request, "sign_to_save", auth);
     const thesisId = parts[3];
     const raw = await env.LAB_STORE.get(kvKey);
     if (!raw) return json({ ok: true }, request);
