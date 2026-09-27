@@ -993,6 +993,27 @@ settlement tx `0xcbd2a8228985db73b26883207c520b23cb86ea28ae7c80879308ef2d97b34b3
   from cloud sessions since 2026-09-25.)
   Launch post: `marketing/q-signals-launch.md`.
 
+## MiroShark sims — the SERVER-pays x402 path (LIVE; hardened 2026-09-27)
+The mirror image of Q Signals: here OUR hot wallet pays. `POST /wargame {run:true, walletSig}` spends one user sim
+credit and pays `x402.miroshark.xyz/run` $1 Base USDC from secret `MIROSHARK_PAYER_KEY` (live: `MIROSHARK_ENABLED`
++ key set). Users buy credits via `POST /sim/credits/verify` (same receiver + rail as PRO). Client = `Simulate.tsx`.
+- **The key signs ONLY what `payGuards.mjs` allows:** Base USDC, "exact", to MiroShark's published receiver
+  `0x6cab…b24f` (override `MIROSHARK_PAYTO`), for ≤ the credit price (`SIM_CREDIT_USD`; override `MIROSHARK_MAX_USD`).
+  It used to sign whatever the 402 asked (a hostile challenge could take the whole wallet). If MiroShark raises the
+  price or rotates the receiver, runs fail closed ("refused to pay MiroShark: …", the new value named) and the credit
+  comes back. Check `x402.miroshark.xyz/.well-known/x402` before overriding. ⚠️ Don't delete the pin to "fix" a run.
+- **One payment tx buys ONE product:** both redeem routes check `sub:redeemed:` AND `sim:redeemed:` (a $20 PRO tx
+  used to also buy 20 sim credits), claim before granting, roll back if the grant fails.
+- **Credit + daily cap are taken BEFORE paying, returned unless the run queues.** KV has no compare-and-set, so a
+  millisecond race remains (a Durable Object closes it; not built). `MIROSHARK_DAILY_CAP` (20) is the backstop.
+- A paid run survives the card (`app/lib/simRuns.mjs`: per wallet + scenario, 24h, resume on reopen).
+- `x402.miroshark.xyz` is egress-blocked from cloud sessions; read its PUBLIC docs through our own
+  `GET /wargame/status?url=` (GET, miroshark hosts only).
+- **Orderly challenge pages (same day):** Orderly's edge answers Worker reads with HTML in bursts (~1 min; the
+  Funding Edges board went empty twice on Sept 27). Backtest reads go through `orderlyJson` (backtest.mjs: retry,
+  readable error, never skip a page); `/intel/mispriced` serves its last good board (≤10 min) as `stale:true` and the
+  Lab prints "delayed, as of HH:MM UTC".
+
 ## Tokenomics direction — Bankr-informed pivot (2026-06-08) ⭐ CURRENT
 The Safe is **LIVE** (`0x4Fe2…C733`, 1/1 Arbitrum+Base) and the PRO USDC payment rail is **wired**
 (`/sub/verify` + `NexusPro` subscribe flow). After pitching $HYPE-style mechanics to the Bankr team, **Danny B
