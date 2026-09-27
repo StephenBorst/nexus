@@ -30,6 +30,36 @@
         background: #ededf0; opacity: .7; animation: nx-boot-sweep 1.4s ease-in-out infinite; }
       @keyframes nx-boot-sweep { to { left: 100%; } }
       @media (prefers-reduced-motion: reduce) { .nx-boot-line::after { animation: none; left: 30%; } }
+      .nx-boot > div { position: relative; z-index: 1; }
+      /* Silk light: the brand atmosphere behind the boot mark. A diagonal ribbon of bone light
+         (wide sheen, tapered core, short hairline edge), a faint lower ribbon, corner glows,
+         fine grain. Gradients only (no blur filters); only transform/opacity animate, which
+         runs on the compositor, so it keeps moving while the app bundle parses. Still under
+         reduced motion. */
+      .nx-boot > .nx-atmos { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0;
+        background: radial-gradient(60% 55% at 86% 6%, rgba(237,237,240,.07), transparent 70%),
+                    radial-gradient(55% 50% at 6% 102%, rgba(237,237,240,.035), transparent 70%); }
+      .nx-atmos i { position: absolute; left: 50%; top: 50%; display: block; }
+      .nx-atmos .nx-sheen { width: 200vmax; height: 40vmax; margin: -20vmax 0 0 -100vmax;
+        background: radial-gradient(ellipse 50% 50% at 52% 50%, rgba(237,237,240,.085), rgba(237,237,240,.025) 52%, transparent 74%);
+        transform: translate(6vmax,-19vmax) rotate(-17deg); animation: nx-silk-a 32s ease-in-out infinite alternate; }
+      .nx-atmos .nx-core { width: 160vmax; height: 8vmax; margin: -4vmax 0 0 -80vmax;
+        background: radial-gradient(ellipse 44% 50% at 47% 50%, rgba(255,255,255,.22), rgba(255,255,255,.06) 48%, transparent 76%);
+        transform: translate(8vmax,-17vmax) rotate(-16deg); animation: nx-silk-b 32s ease-in-out infinite alternate, nx-breathe 12s ease-in-out infinite alternate; }
+      .nx-atmos .nx-edge { width: 90vmax; height: 1.1vmax; margin: -.55vmax 0 0 -45vmax;
+        background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(255,255,255,.34), rgba(255,255,255,.06) 55%, transparent 80%);
+        transform: translate(4vmax,-16vmax) rotate(-17deg); animation: nx-silk-c 32s ease-in-out infinite alternate; }
+      .nx-atmos .nx-low { width: 200vmax; height: 28vmax; margin: -14vmax 0 0 -100vmax;
+        background: radial-gradient(ellipse 50% 50% at 48% 50%, rgba(237,237,240,.05), transparent 72%);
+        transform: translate(-8vmax,26vmax) rotate(-17deg); animation: nx-silk-d 40s ease-in-out infinite alternate; }
+      .nx-atmos::after { content: ""; position: absolute; inset: 0; opacity: .07;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='1' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .7 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+      @keyframes nx-silk-a { from { transform: translate(4vmax,-20vmax) rotate(-17deg); } to { transform: translate(9vmax,-17.5vmax) rotate(-17deg); } }
+      @keyframes nx-silk-b { from { transform: translate(5vmax,-18.5vmax) rotate(-16deg); } to { transform: translate(11vmax,-15.5vmax) rotate(-16deg); } }
+      @keyframes nx-silk-c { from { transform: translate(1vmax,-17.5vmax) rotate(-17deg); } to { transform: translate(8vmax,-14.5vmax) rotate(-17deg); } }
+      @keyframes nx-silk-d { from { transform: translate(-10vmax,27vmax) rotate(-17deg); } to { transform: translate(-4vmax,24.5vmax) rotate(-17deg); } }
+      @keyframes nx-breathe { from { opacity: .75; } to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { .nx-atmos i { animation: none !important; } }
     </style>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -52,7 +82,7 @@
     <meta name="fc:frame" content='{"version":"1","imageUrl":"https://trade.nexustradinglabs.com/embed-mini.png","button":{"title":"⚡ Trade Perps","action":{"type":"launch_frame","name":"Nexus Trading Labs","url":"https://trade.nexustradinglabs.com/mini","splashImageUrl":"https://trade.nexustradinglabs.com/icon-512.png","splashBackgroundColor":"#0a0e0a"}}}' />
   </head>
   <body>
-    <div id="root"><div class="nx-boot" aria-label="Loading"><div class="nx-boot-mark">// NEXUS TRADING LABS</div><div class="nx-boot-line"></div><div class="nx-boot-sub">Plan it. Run it. Prove it.</div></div></div>
+    <div id="root"><div class="nx-boot" aria-label="Loading"><div class="nx-atmos" aria-hidden="true"><i class="nx-sheen"></i><i class="nx-low"></i><i class="nx-core"></i><i class="nx-edge"></i></div><div class="nx-boot-mark">// NEXUS TRADING LABS</div><div class="nx-boot-line"></div><div class="nx-boot-sub">Plan it. Run it. Prove it.</div></div></div>
     <script src="/config.js"></script>
     <script type="module" src="/app/main.tsx"></script>
   </body>

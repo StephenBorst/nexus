@@ -1317,6 +1317,14 @@ Canonical system = **`app/config/theme.ts`** (`C` tokens), mirrored 1:1 by the l
   "Welcome to"). LiveRead's "PROVEN-EDGE SETUP" is now "ALIGNED SETUP" — the scoreboard hasn't graded it PREDICTIVE;
   never label a read "proven" unless the scoreboard does.
 - **Type:** IBM Plex Mono (labels/terminal) + Manrope (sans — headlines/CTAs) + Libre Baskerville (serif — editorial accent). Landing loads all three.
+- **Atmosphere = SILK LIGHT (2026-09-27, from borst's banners — replaces any grid/checkered backdrop).** One diagonal
+  ribbon of bone light on near-black: wide sheen + tapered core + short hairline edge (−16/−17°), a faint lower ribbon,
+  two corner glows, fine grain (inline SVG feTurbulence). Lives in the app boot screen (`index.html` `.nx-atmos`) and
+  the landing hero (`nexus-landing/index.html`, same layers + a `.nx-silk` wrapper). Rules: **gradients only, no
+  `filter: blur`** (cheap on phones); **only transform/opacity animate** (compositor, keeps moving while JS parses),
+  30–40s drift, `prefers-reduced-motion` = still; **text never sits on the crisp hairline** — on phones the landing
+  lifts the ribbon into the headline zone and hides `.nx-edge`. Demo artwork uses the same layers (artifact
+  `5LakNs1gp54Gnj2QNVY5Th`). Calm, never flashy: no neon, no fast motion.
 - **Voice / cadence (match the landing):** calm, declarative, confident, short sentences. Identity lines — **"an onchain trading terminal" · "Plan it. Run it. Prove it." · "From idea to an onchain call."** Agent: "hand an agent your rules · paper first, live when you say so · order-only keys + kill switch · 24/7." Intel: "funding edge intelligence · where the smart money is actually positioned · the edge the desk trades on."
   - ⚠️ **Verifiability is stated CALMLY, once, as fact** ("graded from public price · the ledger's on Arbitrum · open the contract and look") — NEVER a "can't fake" war-cry. Blockchain-can't-fake is table stakes; the onchain terminal (The Lab) OWNS verifiability inherently, so don't lead with it or preach it. It's a quiet supporting fact, not the thesis.
   - ⚠️ No filler ("in plain English", "the leaderboard you can't fake"). Say the thing, in the landing's register.
