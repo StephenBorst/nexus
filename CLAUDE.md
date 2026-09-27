@@ -704,24 +704,51 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   test: confirm Fabric's `taker` param name (we send `taker`; if unhonored the takerless tx still binds recipient to
   msg.sender) and run a small real buy on a Fabric-listed token (e.g. WETH/BNKR on Base) before trusting.
 
-## ✅ Flash (Definitive) spot router — HARDENED 2026-09-25 (read before touching FlashSpotButton)
-- Flash = the THIRD EVM spot router on /token (beside Fabric + the Uniswap deep-link), `app/pages/token/FlashSpotButton.tsx`,
-  worker proxy `POST /flash/quote|order` (adds secret `FLASH_API_KEY`). Market BUY/SELL; SL/TP bracket attaches only when
-  the quote echoes one back.
-- **⚠️ Flash's quote returns an UNLIMITED approve** (`approve(0x5d00…8f78, 2^256-1)`, verified live) + an EIP-712
-  `FlashOrder` {swapper, vault, recipient, fromToken, toToken, fromAmount (base units), salt, deadline}, domain
-  `DefinitiveFlashAllowance` v1, verifyingContract = the SAME `0x5d00000873b6bf41539e6f5365b0ff7d3c368f78` (pinned as
-  `FLASH_ALLOWANCE`). Before the fix both went to the wallet unchecked (setup-tx ETH value forwarded as-is).
-- **Guards (`app/lib/flashGuards.mjs`, tested incl. a live Base quote), all BEFORE any wallet prompt:** `ensureChain`
-  first → `checkFlashOrder` (FlashOrder, this chain, pinned contract, **swapper AND recipient = wallet**, the trade's
-  tokens, `fromAmount ≤ typed size + 1 base unit`, deadline within 1h) → each setup tx must pass `checkFlashSetupTx`
-  (zero-ETH `approve` of fromToken to the pinned spender) and we send **OUR exact-amount `encodeApprove(FLASH_ALLOWANCE,
-  fromAmount)`** instead of Flash's unlimited one (0-amount resets pass through) → any `permitTypedData` is REFUSED →
-  bracket must pass `checkFlashBracket` (wallet-bound FlashOrder selling the bought token; no amount/deadline bound —
-  it rests). Approval receipts must be status 0x1; pending/reverted stops the flow. Decimals via `eth_call decimals()`.
+## ✅ Flash (Definitive) spot router — order types + open orders (2026-09-27; read before touching Flash)
+- Flash = the THIRD EVM spot router on /token (beside Fabric + the Uniswap deep-link). Ticket
+  `app/pages/token/FlashSpotButton.tsx` (tabs **MARKET · LIMIT · TWAP · STOP**; STOP = breakout `stop` on a buy,
+  `stop-loss` on a sell), panel `FlashOrders.tsx` (the wallet's orders, cancel, approvals + revoke), browser helpers
+  `flashApi.ts`. Worker proxy adds secret `FLASH_API_KEY`; routes whitelisted by **`flashUpstream`** (keyProxy.mjs,
+  tested): `POST /flash/quote|order`, `GET /flash/orders?funderAddress=`, `GET /flash/orders/:uuid?funderAddress=`,
+  `POST /flash/orders/:uuid/cancel` — nothing else (no batch cancel, no PATCH, no setup-transaction relay).
+- **Every order type signs the SAME `FlashOrder`** {swapper, vault, recipient, fromToken, toToken, fromAmount, salt,
+  deadline}, domain `DefinitiveFlashAllowance` v1, verifyingContract = `0x5d00000873b6bf41539e6f5365b0ff7d3c368f78`
+  (pinned `FLASH_ALLOWANCE`). **The limit/trigger PRICE is NOT in the signature** — Definitive's engine enforces it
+  off-chain (their docs say so; the ticket says so). The signature binds spend cap + recipient + deadline, so that's
+  what the guards check. Deadline per type (`deadlineOk`): market ≤ now+1h · limit/stop GTC = exactly `2^48−1`
+  (`GTC_DEADLINE`) · GTT = the `expireTime` we sent ±120s · TWAP ≤ start + duration + 60s buffer + 300s slack. Unknown
+  type → refused. Ticket offers expiry 1D/7D/30D/GTC (default 7D) and TWAP 15M/1H/4H/24H.
+- **Approvals (changed 2026-09-27):** one allowance to FLASH_ALLOWANCE is SHARED by every open order spending that token
+  — the old "approve exactly this order" would starve resting orders. Now: quote with `forceMinimalAllowance:true`
+  (Flash returns the cumulative amount, not unlimited — verified live) and cap it ourselves via `approvalPlan`:
+  ≤ this order + `openSpend(open orders on that token)` (from `GET /flash/orders`, every page; unreadable → REFUSE),
+  ≥ this order, 0-resets pass. We always send OUR `encodeApprove(FLASH_ALLOWANCE, amount)`. Flash REJECTS
+  `forceMinimalAllowance` together with `attachedBracket` → there Flash's approve is unlimited and approvalPlan caps it.
+- **🐛 Bracket bug FIXED (2026-09-27):** the SL/TP pair sells the BOUGHT token and needs ITS OWN approval, which Flash
+  returns on `attachedBracket.evm.approveTx` — NOT in `setupTxs` (live-verified: setupTxs = the USDC approve only).
+  The old ticket never sent it → the exits would fail the moment a leg fired (Flash: "the exit fails entirely… the
+  protective order is cancelled"). Now sent, sized by approvalPlan. `checkFlashBracket` also caps the pair's signed max
+  at 1.2× the quoted output (live headroom ≈5%) — it pulls from the WALLET, so a big max could sell tokens held before.
+  Flash takes the pair only as BOTH legs (one leg → "Request validation failed", live-checked) → the ticket blocks a
+  half-set pair, and refuses a "protected" buy if the quote doesn't echo the pair.
+- **Cancel** = `personal_sign` of Flash's exact plaintext `Definitive Flash v1 — Cancel Order\nOrder: <id>` (em dash
+  U+2014; `flashCancelMessage` + `utf8Hex`, tested) → gasless. A cancel leaves the approval in place; the panel's
+  **REVOKE** (approve 0) is the on-chain off switch. Market orders are polled after submit (`GET /flash/orders/:id`
+  → `{order, fills}`) so the card says Filled (with the fill's `transactionId` → explorer) / Not filled + reason —
+  it used to print "Filled ✓" on submit.
+- **Other guards (unchanged):** `ensureChain` first; order swapper AND recipient = wallet; the trade's tokens;
+  `fromAmount ≤ typed size + 1 base unit`; any `permitTypedData` REFUSED; approval receipts must be 0x1. New: the
+  ticket reads the wallet's `balanceOf(fromToken)` and refuses an order the wallet can't fund; a stop whose trigger
+  is already crossed is blocked (Flash would cancel it with REASON_ORDER_TRIGGERED_ON_ENTRY).
+- **Testing Flash without our key:** Flash's docs print a PUBLIC integrator key "safe for development" (in every
+  order-type page's Prerequisites note) — quotes/list/cancel-404 work with it from a cloud session via curl. Fixture `app/lib/__fixtures__/flash-quotes.json` = real quotes for every type (funder = our subscription
+  receiver, nothing signed). Never place an order with it. Rate limit: 5 req/s per endpoint per key (ours).
+- ⏳ borst decisions: `flashIntegratorFeeBps` (our fee on Flash fills, stacks on Definitive's 10bps, sent on quote AND
+  order) and `erc8021AttributionCode` (Base builder code from base.dev, order-only) — both unset. Live test needed:
+  one small limit + cancel, one market buy with SL/TP (check the pair's WETH/token approval lands).
 - **Key proxies gated** (`workers/nexus-lab-api/keyProxy.mjs`, tested): `/flash/*` + `/swap/jup/*` accept only our
-  origins (ALLOWED_ORIGINS + `*.nexus-trading-lab.pages.dev`, https) and a per-IP isolate-local budget (flash 30/min,
-  jup 120/min) → 403 `origin_not_allowed` / 429. Verified live. Only browser code calls them.
+  origins (ALLOWED_ORIGINS + `*.nexus-trading-lab.pages.dev`, https) and a per-IP isolate-local budget (flash writes
+  30/min, flash reads 40/min, jup 120/min) → 403 `origin_not_allowed` / 429. Only browser code calls them.
 
 ## ✅ Cross-chain · NEAR Intents 1Click (2026-09-27) — read before touching CrossChainCard
 - `/token` landing card `app/pages/token/CrossChainCard.tsx`: USDC/ETH on Arbitrum · Base · Ethereum → any other

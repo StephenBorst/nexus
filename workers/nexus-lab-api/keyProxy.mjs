@@ -33,3 +33,41 @@ export function makeRateLimiter({ limit, windowMs, maxKeys = 5000 }) {
     return cur.n > limit;
   };
 }
+
+// ── Flash route whitelist ──────────────────────────────────────────────────────
+// Maps OUR /flash/* route to ONE fixed upstream Flash URL, or null. Everything that reaches the
+// upstream URL is validated here (UUID order ids, EVM funder addresses, known statuses, an
+// opaque-but-charset-bound page token), so a crafted path or query can't steer our key at any
+// other Flash endpoint (no batch cancel, no PATCH, no setup-transaction relay) or anywhere else.
+const FLASH_V1 = "https://flash.definitive.fi/v1";
+const FLASH_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EVM_ADDR = /^0x[0-9a-fA-F]{40}$/;
+const FLASH_STATUSES = new Set(["ORDER_STATUS_PENDING", "ORDER_STATUS_ACCEPTED", "ORDER_STATUS_PARTIALLY_FILLED", "ORDER_STATUS_FILLED", "ORDER_STATUS_CANCELLED", "ORDER_STATUS_REJECTED", "ORDER_STATUS_TERMINATED"]);
+
+export function flashUpstream(method, parts, searchParams) {
+  if (!Array.isArray(parts) || parts[0] !== "flash") return null;
+  const q = searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams();
+  if (method === "POST" && parts.length === 2 && (parts[1] === "quote" || parts[1] === "order"))
+    return { url: `${FLASH_V1}/${parts[1]}`, method: "POST", body: true };
+  if (method === "POST" && parts.length === 4 && parts[1] === "orders" && FLASH_UUID.test(parts[2]) && parts[3] === "cancel")
+    return { url: `${FLASH_V1}/orders/${parts[2]}/cancel`, method: "POST", body: true };
+  if (method !== "GET" || parts[1] !== "orders") return null;
+  const funder = q.get("funderAddress") || "";
+  if (!EVM_ADDR.test(funder)) return null;
+  if (parts.length === 3 && FLASH_UUID.test(parts[2]))
+    return { url: `${FLASH_V1}/orders/${parts[2]}?funderAddress=${funder}`, method: "GET", body: false };
+  if (parts.length !== 2) return null;
+  const out = new URLSearchParams({ funderAddress: funder, pageSize: "100" });
+  const st = q.get("statuses");
+  if (st) {
+    const list = st.split(",");
+    if (!list.every((x) => FLASH_STATUSES.has(x))) return null;
+    out.set("statuses", list.join(","));
+  }
+  const tok = q.get("pageToken");
+  if (tok) {
+    if (!/^[A-Za-z0-9_\-.=+/]{1,512}$/.test(tok)) return null;
+    out.set("pageToken", tok);
+  }
+  return { url: `${FLASH_V1}/orders?${out.toString()}`, method: "GET", body: false };
+}

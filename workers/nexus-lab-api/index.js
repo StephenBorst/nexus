@@ -52,7 +52,7 @@ import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
 import { runScorecard, AXES, priceByHour } from "./axisbt.mjs";
-import { keyProxyOriginOk, makeRateLimiter } from "./keyProxy.mjs";
+import { keyProxyOriginOk, makeRateLimiter, flashUpstream } from "./keyProxy.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
@@ -891,6 +891,7 @@ async function generateCatalystHouseCalls(env, { dryRun = false, max = 2 } = {})
 
 // Per-IP budgets for the routes that spend OUR API keys (see keyProxy.mjs). Isolate-local.
 const flashLimiter = makeRateLimiter({ limit: 30, windowMs: 60000 });
+const flashReadLimiter = makeRateLimiter({ limit: 40, windowMs: 60000 }); // open-orders list + status polls
 const jupLimiter = makeRateLimiter({ limit: 120, windowMs: 60000 });
 // Gate for a key-carrying proxy: our own origin only, within the per-IP budget. Returns a
 // Response to send (refusal) or null to proceed.
@@ -6151,24 +6152,25 @@ document.getElementById("btn").addEventListener("click",go);
       }, request);
     }
 
-    // ── Flash (Definitive) proxy — advanced SPOT orders (Bracket / SL+TP) ────────
-    // The FLASH_API_KEY stays server-side (same model as the Jupiter proxy): the browser POSTs
-    // the quote/order intent here, we add x-definitive-api-key and forward VERBATIM to Flash's
-    // v1 API, returning its body unchanged. Between quote and order the browser signs the
-    // returned EIP-712 orderTypedData with the USER's own wallet (non-custodial — we never
-    // sign, never hold funds). Whitelisted actions only (quote|order), fixed upstream (no SSRF).
-    // A 401 here means the key is a Portfolio key, not a Flash key — surfaced verbatim so the op
-    // knows to regenerate. Adds no trust: the browser still confirms the ticket before signing.
-    if (parts[0] === "flash" && (parts[1] === "quote" || parts[1] === "order") && request.method === "POST") {
-      const gated = keyProxyGate(request, flashLimiter); if (gated) return gated;
+    // ── Flash (Definitive) proxy — Spot orders: market, limit, TWAP, stop, SL/TP ────────
+    // The FLASH_API_KEY stays server-side (same model as the Jupiter proxy): the browser sends
+    // the quote/order/cancel request here, we add x-definitive-api-key and forward VERBATIM to
+    // Flash's v1 API, returning its body unchanged. The USER signs every order (EIP-712) and
+    // every cancel (personal_sign) in their own wallet — we never sign, never hold funds.
+    // flashUpstream (keyProxy.mjs, tested) whitelists the five routes the Spot ticket uses and
+    // maps each to ONE fixed Flash URL (no SSRF, no other Flash endpoint on our key). A 401 here
+    // means the key is a Portfolio key, not a Flash key — surfaced verbatim so the op knows.
+    if (parts[0] === "flash") {
+      const up = flashUpstream(request.method, parts, url.searchParams);
+      if (!up) return json({ error: "flash_route_not_allowed" }, request, 404);
+      const gated = keyProxyGate(request, up.method === "GET" ? flashReadLimiter : flashLimiter); if (gated) return gated;
       const key = env.FLASH_API_KEY || "";
       if (!key) return json({ error: "flash_not_configured", detail: "FLASH_API_KEY secret is not set" }, request, 503);
       try {
-        const body = await request.text();
-        const r = await fetch(`https://flash.definitive.fi/v1/${parts[1]}`, {
-          method: "POST",
+        const r = await fetch(up.url, {
+          method: up.method,
           headers: { "content-type": "application/json", "x-definitive-api-key": key },
-          body,
+          ...(up.body ? { body: await request.text() } : {}),
         });
         return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
       } catch (e) {

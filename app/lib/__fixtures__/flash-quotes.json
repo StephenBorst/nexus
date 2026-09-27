@@ -1,0 +1,268 @@
+{
+ "market": {
+  "quoteId": "b895f841-3c4c-4705-ab44-1bf274c762f1",
+  "bridgeQuoteId": null,
+  "orderType": "market",
+  "side": "buy",
+  "targetAsset": "0x4200000000000000000000000000000000000006",
+  "contraAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "from": {
+   "asset": "contra",
+   "amount": "20",
+   "notional": "20"
+  },
+  "to": {
+   "asset": "target",
+   "amount": "0.007370861063564397",
+   "notional": "19.957654"
+  },
+  "fees": {
+   "estimatedFeeNotional": "0.040307"
+  },
+  "estimatedPriceImpact": "0.0001033",
+  "recommendedSlippage": "0.03",
+  "wrap": null,
+  "evm": {
+   "approveTx": {
+    "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "data": "0x095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f78ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+   },
+   "permitTypedData": "",
+   "orderTypedData": "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"FlashOrder\":[{\"name\":\"swapper\",\"type\":\"address\"},{\"name\":\"vault\",\"type\":\"address\"},{\"name\":\"recipient\",\"type\":\"address\"},{\"name\":\"fromToken\",\"type\":\"address\"},{\"name\":\"toToken\",\"type\":\"address\"},{\"name\":\"fromAmount\",\"type\":\"uint256\"},{\"name\":\"salt\",\"type\":\"uint256\"},{\"name\":\"deadline\",\"type\":\"uint256\"}]},\"primaryType\":\"FlashOrder\",\"domain\":{\"name\":\"DefinitiveFlashAllowance\",\"version\":\"1\",\"chainId\":\"8453\",\"verifyingContract\":\"0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78\"},\"message\":{\"deadline\":\"1790491354\",\"fromAmount\":\"20000000\",\"fromToken\":\"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\",\"recipient\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"salt\":\"49579201280376902422356715228567708683412081551920641649415455198183857307815\",\"swapper\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"toToken\":\"0x4200000000000000000000000000000000000006\",\"vault\":\"0x1074393effFCf1A15e306cD3931F48eDA9ABcd55\"}}"
+  },
+  "svm": null,
+  "setupTxs": [
+   "0x02f87082210580830f486183a7d8c08301092694833589fcd6edb6e08f4c7c32d4f71b54bda0291380b844095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f78ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc0808080"
+  ]
+ },
+ "market_min": {
+  "quoteId": "5cba6f2a-7cb5-408f-bbee-28c1b79d9baa",
+  "bridgeQuoteId": null,
+  "orderType": "market",
+  "side": "buy",
+  "targetAsset": "0x4200000000000000000000000000000000000006",
+  "contraAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "from": {
+   "asset": "contra",
+   "amount": "20",
+   "notional": "20"
+  },
+  "to": {
+   "asset": "target",
+   "amount": "0.007372106461912714",
+   "notional": "19.962183"
+  },
+  "fees": {
+   "estimatedFeeNotional": "0.035282"
+  },
+  "estimatedPriceImpact": "0.00004535",
+  "recommendedSlippage": "0.03",
+  "wrap": null,
+  "evm": {
+   "approveTx": {
+    "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "data": "0x095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f780000000000000000000000000000000000000000000000000000000001312d00"
+   },
+   "permitTypedData": "",
+   "orderTypedData": "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"FlashOrder\":[{\"name\":\"swapper\",\"type\":\"address\"},{\"name\":\"vault\",\"type\":\"address\"},{\"name\":\"recipient\",\"type\":\"address\"},{\"name\":\"fromToken\",\"type\":\"address\"},{\"name\":\"toToken\",\"type\":\"address\"},{\"name\":\"fromAmount\",\"type\":\"uint256\"},{\"name\":\"salt\",\"type\":\"uint256\"},{\"name\":\"deadline\",\"type\":\"uint256\"}]},\"primaryType\":\"FlashOrder\",\"domain\":{\"name\":\"DefinitiveFlashAllowance\",\"version\":\"1\",\"chainId\":\"8453\",\"verifyingContract\":\"0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78\"},\"message\":{\"deadline\":\"1790491356\",\"fromAmount\":\"20000000\",\"fromToken\":\"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\",\"recipient\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"salt\":\"61854993022036121075383850615731071770085626921769170831102912551414900902374\",\"swapper\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"toToken\":\"0x4200000000000000000000000000000000000006\",\"vault\":\"0x1074393effFCf1A15e306cD3931F48eDA9ABcd55\"}}"
+  },
+  "svm": null,
+  "setupTxs": [
+   "0x02f87082210580830f481383a7d8c08301078394833589fcd6edb6e08f4c7c32d4f71b54bda0291380b844095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f780000000000000000000000000000000000000000000000000000000001312d00c0808080"
+  ]
+ },
+ "limit": {
+  "quoteId": "ca93d7d3-6806-4395-b182-13feed01318f",
+  "bridgeQuoteId": null,
+  "orderType": "limit",
+  "side": "buy",
+  "targetAsset": "0x4200000000000000000000000000000000000006",
+  "contraAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "from": {
+   "asset": "contra",
+   "amount": "20",
+   "notional": "20"
+  },
+  "to": {
+   "asset": "target",
+   "amount": "0.019959692",
+   "notional": "19.9596"
+  },
+  "fees": {
+   "estimatedFeeNotional": "0.040308"
+  },
+  "estimatedPriceImpact": "0",
+  "recommendedSlippage": null,
+  "wrap": null,
+  "evm": {
+   "approveTx": {
+    "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "data": "0x095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f780000000000000000000000000000000000000000000000000000000001312d00"
+   },
+   "permitTypedData": "",
+   "orderTypedData": "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"FlashOrder\":[{\"name\":\"swapper\",\"type\":\"address\"},{\"name\":\"vault\",\"type\":\"address\"},{\"name\":\"recipient\",\"type\":\"address\"},{\"name\":\"fromToken\",\"type\":\"address\"},{\"name\":\"toToken\",\"type\":\"address\"},{\"name\":\"fromAmount\",\"type\":\"uint256\"},{\"name\":\"salt\",\"type\":\"uint256\"},{\"name\":\"deadline\",\"type\":\"uint256\"}]},\"primaryType\":\"FlashOrder\",\"domain\":{\"name\":\"DefinitiveFlashAllowance\",\"version\":\"1\",\"chainId\":\"8453\",\"verifyingContract\":\"0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78\"},\"message\":{\"deadline\":\"281474976710655\",\"fromAmount\":\"20000000\",\"fromToken\":\"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\",\"recipient\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"salt\":\"51118729342545246605844285444260406081339480201613093072544085986594956582754\",\"swapper\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"toToken\":\"0x4200000000000000000000000000000000000006\",\"vault\":\"0x1074393effFCf1A15e306cD3931F48eDA9ABcd55\"}}"
+  },
+  "svm": null,
+  "setupTxs": [
+   "0x02f87082210580830f474883a7d8c08301078394833589fcd6edb6e08f4c7c32d4f71b54bda0291380b844095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f780000000000000000000000000000000000000000000000000000000001312d00c0808080"
+  ]
+ },
+ "limit_gtt": {
+  "quoteId": "caa3f794-d5fc-4b2c-adac-a8ddacc9c9c5",
+  "bridgeQuoteId": null,
+  "orderType": "limit",
+  "side": "buy",
+  "targetAsset": "0x4200000000000000000000000000000000000006",
+  "contraAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "from": {
+   "asset": "contra",
+   "amount": "20",
+   "notional": "20"
+  },
+  "to": {
+   "asset": "target",
+   "amount": "0.019958554",
+   "notional": "19.9585"
+  },
+  "fees": {
+   "estimatedFeeNotional": "0.041446"
+  },
+  "estimatedPriceImpact": "0",
+  "recommendedSlippage": null,
+  "wrap": null,
+  "evm": {
+   "approveTx": {
+    "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "data": "0x095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f780000000000000000000000000000000000000000000000000000000001312d00"
+   },
+   "permitTypedData": "",
+   "orderTypedData": "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"FlashOrder\":[{\"name\":\"swapper\",\"type\":\"address\"},{\"name\":\"vault\",\"type\":\"address\"},{\"name\":\"recipient\",\"type\":\"address\"},{\"name\":\"fromToken\",\"type\":\"address\"},{\"name\":\"toToken\",\"type\":\"address\"},{\"name\":\"fromAmount\",\"type\":\"uint256\"},{\"name\":\"salt\",\"type\":\"uint256\"},{\"name\":\"deadline\",\"type\":\"uint256\"}]},\"primaryType\":\"FlashOrder\",\"domain\":{\"name\":\"DefinitiveFlashAllowance\",\"version\":\"1\",\"chainId\":\"8453\",\"verifyingContract\":\"0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78\"},\"message\":{\"deadline\":\"1791072000\",\"fromAmount\":\"20000000\",\"fromToken\":\"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\",\"recipient\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"salt\":\"68834899647537290065444152445965868709448078971929246377608989066107565046732\",\"swapper\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"toToken\":\"0x4200000000000000000000000000000000000006\",\"vault\":\"0x1074393effFCf1A15e306cD3931F48eDA9ABcd55\"}}"
+  },
+  "svm": null,
+  "setupTxs": [
+   "0x02f87082210580830f46d583a7d8c08301078394833589fcd6edb6e08f4c7c32d4f71b54bda0291380b844095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f780000000000000000000000000000000000000000000000000000000001312d00c0808080"
+  ]
+ },
+ "twap": {
+  "quoteId": "a823ada9-7494-4564-81a2-1ef947612960",
+  "bridgeQuoteId": null,
+  "orderType": "twap",
+  "side": "buy",
+  "targetAsset": "0x4200000000000000000000000000000000000006",
+  "contraAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "from": {
+   "asset": "contra",
+   "amount": "20",
+   "notional": "20"
+  },
+  "to": {
+   "asset": "target",
+   "amount": "0.007348246859545985",
+   "notional": "19.898479"
+  },
+  "fees": {
+   "estimatedFeeNotional": "0.100881"
+  },
+  "estimatedPriceImpact": "0.0000765",
+  "recommendedSlippage": null,
+  "wrap": null,
+  "evm": {
+   "approveTx": {
+    "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "data": "0x095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f780000000000000000000000000000000000000000000000000000000001312d00"
+   },
+   "permitTypedData": "",
+   "orderTypedData": "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"FlashOrder\":[{\"name\":\"swapper\",\"type\":\"address\"},{\"name\":\"vault\",\"type\":\"address\"},{\"name\":\"recipient\",\"type\":\"address\"},{\"name\":\"fromToken\",\"type\":\"address\"},{\"name\":\"toToken\",\"type\":\"address\"},{\"name\":\"fromAmount\",\"type\":\"uint256\"},{\"name\":\"salt\",\"type\":\"uint256\"},{\"name\":\"deadline\",\"type\":\"uint256\"}]},\"primaryType\":\"FlashOrder\",\"domain\":{\"name\":\"DefinitiveFlashAllowance\",\"version\":\"1\",\"chainId\":\"8453\",\"verifyingContract\":\"0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78\"},\"message\":{\"deadline\":\"1790494719\",\"fromAmount\":\"20000000\",\"fromToken\":\"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\",\"recipient\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"salt\":\"71105389759925090041861048017284852753403457397655832242335295011166391009728\",\"swapper\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"toToken\":\"0x4200000000000000000000000000000000000006\",\"vault\":\"0x1074393effFCf1A15e306cD3931F48eDA9ABcd55\"}}"
+  },
+  "svm": null,
+  "setupTxs": [
+   "0x02f87082210580830f464b83a7d8c08301078394833589fcd6edb6e08f4c7c32d4f71b54bda0291380b844095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f780000000000000000000000000000000000000000000000000000000001312d00c0808080"
+  ]
+ },
+ "stoploss": {
+  "quoteId": "d670318f-641d-447d-b88e-d4cdd14383e7",
+  "bridgeQuoteId": null,
+  "orderType": "stop-loss",
+  "side": "sell",
+  "targetAsset": "0x4200000000000000000000000000000000000006",
+  "contraAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "from": {
+   "asset": "target",
+   "amount": "0.005",
+   "notional": "10"
+  },
+  "to": {
+   "asset": "contra",
+   "amount": "9.95251514111257692",
+   "notional": "9.9524"
+  },
+  "fees": {
+   "estimatedFeeNotional": "0.0475208738553114"
+  },
+  "estimatedPriceImpact": "0",
+  "recommendedSlippage": null,
+  "wrap": null,
+  "evm": {
+   "approveTx": {
+    "to": "0x4200000000000000000000000000000000000006",
+    "data": "0x095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f780000000000000000000000000000000000000000000000000011c37937e08000"
+   },
+   "permitTypedData": "",
+   "orderTypedData": "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"FlashOrder\":[{\"name\":\"swapper\",\"type\":\"address\"},{\"name\":\"vault\",\"type\":\"address\"},{\"name\":\"recipient\",\"type\":\"address\"},{\"name\":\"fromToken\",\"type\":\"address\"},{\"name\":\"toToken\",\"type\":\"address\"},{\"name\":\"fromAmount\",\"type\":\"uint256\"},{\"name\":\"salt\",\"type\":\"uint256\"},{\"name\":\"deadline\",\"type\":\"uint256\"}]},\"primaryType\":\"FlashOrder\",\"domain\":{\"name\":\"DefinitiveFlashAllowance\",\"version\":\"1\",\"chainId\":\"8453\",\"verifyingContract\":\"0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78\"},\"message\":{\"deadline\":\"281474976710655\",\"fromAmount\":\"5000000000000000\",\"fromToken\":\"0x4200000000000000000000000000000000000006\",\"recipient\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"salt\":\"35782753712348798944514550113429696797902415845609535316128787504032448145943\",\"swapper\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"toToken\":\"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\",\"vault\":\"0x1074393effFCf1A15e306cD3931F48eDA9ABcd55\"}}"
+  },
+  "svm": null,
+  "setupTxs": [
+   "0x02f86f82210580830f467383a7d8c082d97294420000000000000000000000000000000000000680b844095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f780000000000000000000000000000000000000000000000000011c37937e08000c0808080"
+  ]
+ },
+ "bracket": {
+  "quoteId": "6dfda3af-cc78-4d48-bd33-6af1e834b16c",
+  "bridgeQuoteId": null,
+  "orderType": "market",
+  "side": "buy",
+  "targetAsset": "0x4200000000000000000000000000000000000006",
+  "contraAsset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "from": {
+   "asset": "contra",
+   "amount": "20",
+   "notional": "20"
+  },
+  "to": {
+   "asset": "target",
+   "amount": "0.007348068041854153",
+   "notional": "19.895691"
+  },
+  "fees": {
+   "estimatedFeeNotional": "0.102069"
+  },
+  "estimatedPriceImpact": "0.0001126",
+  "recommendedSlippage": "0.03",
+  "wrap": null,
+  "evm": {
+   "approveTx": {
+    "to": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "data": "0x095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f78ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+   },
+   "permitTypedData": "",
+   "orderTypedData": "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"FlashOrder\":[{\"name\":\"swapper\",\"type\":\"address\"},{\"name\":\"vault\",\"type\":\"address\"},{\"name\":\"recipient\",\"type\":\"address\"},{\"name\":\"fromToken\",\"type\":\"address\"},{\"name\":\"toToken\",\"type\":\"address\"},{\"name\":\"fromAmount\",\"type\":\"uint256\"},{\"name\":\"salt\",\"type\":\"uint256\"},{\"name\":\"deadline\",\"type\":\"uint256\"}]},\"primaryType\":\"FlashOrder\",\"domain\":{\"name\":\"DefinitiveFlashAllowance\",\"version\":\"1\",\"chainId\":\"8453\",\"verifyingContract\":\"0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78\"},\"message\":{\"deadline\":\"1790491560\",\"fromAmount\":\"20000000\",\"fromToken\":\"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\",\"recipient\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"salt\":\"97228737680945386478384895672602241975996941806857218274848042122152428627420\",\"swapper\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"toToken\":\"0x4200000000000000000000000000000000000006\",\"vault\":\"0x1074393effFCf1A15e306cD3931F48eDA9ABcd55\"}}"
+  },
+  "svm": null,
+  "attachedBracket": {
+   "evm": {
+    "approveTx": {
+     "to": "0x4200000000000000000000000000000000000006",
+     "data": "0x095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f78ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "permitTypedData": null,
+    "orderTypedData": "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"version\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}],\"FlashOrder\":[{\"name\":\"swapper\",\"type\":\"address\"},{\"name\":\"vault\",\"type\":\"address\"},{\"name\":\"recipient\",\"type\":\"address\"},{\"name\":\"fromToken\",\"type\":\"address\"},{\"name\":\"toToken\",\"type\":\"address\"},{\"name\":\"fromAmount\",\"type\":\"uint256\"},{\"name\":\"salt\",\"type\":\"uint256\"},{\"name\":\"deadline\",\"type\":\"uint256\"}]},\"primaryType\":\"FlashOrder\",\"domain\":{\"name\":\"DefinitiveFlashAllowance\",\"version\":\"1\",\"chainId\":\"8453\",\"verifyingContract\":\"0x5d00000873b6BF41539e6f5365B0Ff7d3c368f78\"},\"message\":{\"deadline\":\"281474976710655\",\"fromAmount\":\"7755048948503100\",\"fromToken\":\"0x4200000000000000000000000000000000000006\",\"recipient\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"salt\":\"50698758113184806408754559828346726169250451800954193097062035656345503587530\",\"swapper\":\"0x06cD9c281E6ab09906B46a10e059F2770EfdE49A\",\"toToken\":\"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\",\"vault\":\"0x1074393effFCf1A15e306cD3931F48eDA9ABcd55\"}}"
+   },
+   "svm": null,
+   "salt": "50698758113184806408754559828346726169250451800954193097062035656345503587530",
+   "deadline": "281474976710655",
+   "signedMaxFromAmount": "0.0077550489485031"
+  },
+  "setupTxs": [
+   "0x02f87082210580830f499a83a7d8c08301092694833589fcd6edb6e08f4c7c32d4f71b54bda0291380b844095ea7b30000000000000000000000005d00000873b6bf41539e6f5365b0ff7d3c368f78ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc0808080"
+  ]
+ }
+}

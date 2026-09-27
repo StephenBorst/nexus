@@ -24,6 +24,7 @@ import { SocialBar } from "@/components/SocialBar";
 import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, makeHolding, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
 import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, type SwapPlan, type Eip1193 } from "./swapExec";
 import { FlashSpotButton } from "./FlashSpotButton";
+import { FlashOrders } from "./FlashOrders";
 import { CrossChainCard } from "./CrossChainCard";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
@@ -1728,13 +1729,17 @@ export default function TokenTerminal() {
                       </div>
                     )}
                     {swapErr && !modalOpen && <div style={{ fontFamily: MONO, fontSize: 10.5, color: NEG, marginTop: 8, textAlign: "center" }}>{swapErr}</div>}
-                    {/* Flash — a third EVM router next to Fabric (self-hides off-EVM). Market buy/sell,
-                        confirm-modal, non-custodial. Fabric stays first, Uniswap stays the no-route link. */}
+                    {/* Flash — a third EVM router next to Fabric (self-hides off-EVM). Market, limit, TWAP
+                        and stop orders, confirm-modal, non-custodial. Fabric stays first, Uniswap stays
+                        the no-route link. */}
                     {/* Prefill in the FLASH unit, not the ticket's label: BUY size = the ticket USDC
                         amount; SELL size = the ticket TOKEN quantity (reuse sellTokens, which already
                         resolves MAX→balance and the USD toggle via $/mark) — never the USD label, and
                         empty ticket → empty (no invented default). */}
-                    <FlashSpotButton chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : (sellTokens > 0 ? sellTokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : "")} defaultSl={spotSl} defaultTp={spotTp} walletAddress={wallet} provider={provider} />
+                    <FlashSpotButton chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : (sellTokens > 0 ? sellTokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : "")} defaultSl={spotSl} defaultTp={spotTp} priceUsd={pair.priceUsd ?? null} walletAddress={wallet} provider={provider} />
+                    {/* The wallet's Flash orders: open first, cancel (gasless signature), and the
+                        standing approvals to Flash with a one-tap revoke. Hidden when there's nothing. */}
+                    <FlashOrders chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} walletAddress={wallet} provider={provider} />
                   </>
                 )}
 

@@ -92,11 +92,145 @@ test("encodeApprove matches viem byte-for-byte (the exact-amount approve we send
 
 test("bracket: must be a wallet-bound FlashOrder selling the bought token for the contra token", async () => {
   const { checkFlashBracket } = await import("./flashGuards.mjs");
-  const X = { chainId: 8453, wallet: ME, boughtToken: WETH, contraToken: USDC };
+  const X = { chainId: 8453, wallet: ME, boughtToken: WETH, contraToken: USDC, maxFromAmount: 10000000000000000n };
   const br = (m = {}, d = {}) => order({ fromToken: WETH, toToken: USDC, deadline: String(NOW + 30 * 86400), fromAmount: "9000000000000000", ...m }, d);
   assert.equal(checkFlashBracket(br(), X).ok, true); // long-lived resting order is fine
   assert.match(checkFlashBracket(br({ recipient: EVIL }), X).reason, /not bound to your wallet/);
   assert.match(checkFlashBracket(br({ fromToken: USDC, toToken: WETH }), X).reason, /different tokens/);
   assert.match(checkFlashBracket(br({}, { verifyingContract: EVIL }), X).reason, /unknown Flash contract/);
   assert.match(checkFlashBracket(br({}, { chainId: "10" }), X).reason, /another chain/);
+  // it pulls from the wallet: a max far above what this trade buys would sell tokens held before
+  assert.match(checkFlashBracket(br({ fromAmount: "5000000000000000000" }), X).reason, /more than this trade buys/);
+  assert.match(checkFlashBracket(br(), { ...X, maxFromAmount: undefined }).reason, /more than this trade buys/);
+  assert.match(checkFlashBracket(br({ fromAmount: "0" }), X).reason, /amount missing/);
+});
+
+// ── resting orders, shared approvals, cancel (live quotes, Base, 2026-09-27) ────────────────
+// Every order type below is a REAL Flash quote (public dev key, funder = our subscription
+// receiver, nothing signed or sent). They all sign the same FlashOrder struct; the deadline is
+// the only thing that differs by type.
+import { readFileSync } from "node:fs";
+import { deadlineOk, openSpend, approvalPlan, flashCancelMessage, utf8Hex, isOrderId, GTC_DEADLINE } from "./flashGuards.mjs";
+
+const LIVE = JSON.parse(readFileSync(new URL("./__fixtures__/flash-quotes.json", import.meta.url)));
+const RECEIVER = "0x06cD9c281E6ab09906B46a10e059F2770EfdE49A";
+const QUOTE_AT = 1790491060; // when these quotes were taken (market deadline − ~300 s)
+const typed = (q) => JSON.parse(q.evm.orderTypedData);
+const setupAmount = (q) => BigInt("0x" + q.evm.approveTx.data.slice(-64));
+
+test("live quotes: every order type signs the same FlashOrder, bound to the wallet", () => {
+  const cases = [
+    ["market", { orderType: "market" }, USDC, WETH, 20000000n],
+    ["limit", { orderType: "limit", expireAtS: null }, USDC, WETH, 20000000n],
+    ["limit_gtt", { orderType: "limit", expireAtS: Date.parse("2026-10-04T00:00:00Z") / 1000 }, USDC, WETH, 20000000n],
+    ["twap", { orderType: "twap", durationS: 3600 }, USDC, WETH, 20000000n],
+    ["stoploss", { orderType: "stop-loss", expireAtS: null }, WETH, USDC, 5000000000000000n],
+  ];
+  for (const [name, rule, from, to, max] of cases) {
+    const r = checkFlashOrder(LIVE[name].evm.orderTypedData, { chainId: 8453, wallet: RECEIVER, fromToken: from, toToken: to, maxFromAmount: max, nowS: QUOTE_AT, ...rule });
+    assert.equal(r.ok, true, `${name}: ${r.reason}`);
+    assert.equal(r.fromAmount, max);
+  }
+});
+
+test("GTC means Flash's 2^48−1 sentinel; GTT means the expiry we asked for — nothing else", () => {
+  assert.equal(Number(typed(LIVE.limit).message.deadline), GTC_DEADLINE);
+  assert.equal(Number(typed(LIVE.stoploss).message.deadline), GTC_DEADLINE);
+  const exp = Date.parse("2026-10-04T00:00:00Z") / 1000;
+  assert.equal(Number(typed(LIVE.limit_gtt).message.deadline), exp);
+  const at = { nowS: QUOTE_AT };
+  assert.equal(deadlineOk(GTC_DEADLINE, { ...at, orderType: "limit" }), true);
+  assert.equal(deadlineOk(GTC_DEADLINE, { ...at, orderType: "limit", expireAtS: exp }), false, "asked GTT, got GTC");
+  assert.equal(deadlineOk(exp, { ...at, orderType: "limit" }), false, "asked GTC, got a date");
+  assert.equal(deadlineOk(exp + 7 * 86400, { ...at, orderType: "limit", expireAtS: exp }), false, "a week longer than asked");
+  assert.equal(deadlineOk(exp + 60, { ...at, orderType: "stop", expireAtS: exp }), true, "rounding slack");
+  assert.equal(deadlineOk(GTC_DEADLINE, { ...at, orderType: "market" }), false, "a market order can't rest forever");
+  assert.equal(deadlineOk(GTC_DEADLINE, { ...at, orderType: "twap", durationS: 3600 }), false);
+  assert.equal(deadlineOk(QUOTE_AT + 600, { ...at, orderType: "bracket" }), false, "unknown type: refuse");
+});
+
+test("TWAP: deadline = start + duration + Flash's 60 s buffer; longer is refused", () => {
+  const dl = Number(typed(LIVE.twap).message.deadline);
+  assert.equal(deadlineOk(dl, { nowS: QUOTE_AT, orderType: "twap", durationS: 3600 }), true);
+  assert.equal(deadlineOk(dl, { nowS: QUOTE_AT, orderType: "twap", durationS: 900 }), false, "signed for an hour, asked for 15 min");
+  assert.equal(deadlineOk(dl, { nowS: QUOTE_AT, orderType: "twap", durationS: 60 }), false, "below Flash's 5-min minimum");
+  const start = QUOTE_AT + 7200;
+  assert.equal(deadlineOk(start + 3660, { nowS: QUOTE_AT, orderType: "twap", durationS: 3600, startAtS: start }), true, "scheduled start");
+});
+
+test("forceMinimalAllowance: Flash's approve is exactly the order (no open orders); without it, unlimited", () => {
+  assert.equal(setupAmount(LIVE.market), maxUint256);
+  for (const n of ["market_min", "limit", "limit_gtt", "twap"]) assert.equal(setupAmount(LIVE[n]), 20000000n, n);
+  assert.equal(setupAmount(LIVE.stoploss), 5000000000000000n);
+});
+
+// A GET /v1/orders row, shaped from Flash's OpenAPI schema.
+const row = (o = {}) => ({
+  orderId: "5d0aaee6-1111-4222-8333-944445555666", orderType: "limit", side: "buy", status: "ORDER_STATUS_ACCEPTED",
+  targetAsset: { address: WETH, ticker: "WETH", chain: { id: "base", name: "base" } },
+  contraAsset: { address: USDC, ticker: "USDC", chain: { id: "base", name: "base" } },
+  qty: "40", filled: { targetAmount: "0", contraAmount: "0" }, ...o,
+});
+const U = { chain: "base", token: USDC, decimals: 6 };
+
+test("openSpend: what the wallet's OPEN orders can still pull from a token", () => {
+  assert.equal(openSpend([], U), 0n);
+  assert.equal(openSpend([row()], U), 40000000n);
+  assert.equal(openSpend([row({ status: "ORDER_STATUS_PARTIALLY_FILLED", filled: { contraAmount: "15.5" } })], U), 24500000n);
+  for (const s of ["ORDER_STATUS_FILLED", "ORDER_STATUS_CANCELLED", "ORDER_STATUS_REJECTED", "ORDER_STATUS_TERMINATED"])
+    assert.equal(openSpend([row({ status: s })], U), 0n, s);
+  // a sell spends the TARGET asset, so it never counts against USDC
+  assert.equal(openSpend([row({ side: "sell", qty: "0.5" })], U), 0n);
+  assert.equal(openSpend([row({ side: "sell", qty: "0.5" })], { chain: "base", token: WETH, decimals: 18 }), 500000000000000000n);
+  // same address on another chain (WETH is 0x4200…0006 on Base AND Optimism) doesn't count
+  assert.equal(openSpend([row({ contraAsset: { address: USDC, chain: { id: "optimism", name: "optimism" } } })], U), 0n);
+  // a pending SL/TP pair will pull the RECEIVED token once live
+  const pend = row({ orderType: "market", attachedBracket: { status: "pending_activation", signedMaxFromAmount: "0.0077550489485031" } });
+  assert.equal(openSpend([pend], { chain: "base", token: WETH, decimals: 18 }), 7755048948503100n);
+  // unreadable rows fail closed
+  assert.equal(openSpend([row({ qty: "lots" })], U), null);
+  assert.equal(openSpend([row({ side: "sideways" })], U), null);
+  assert.equal(openSpend(null, U), null);
+});
+
+test("approvalPlan: never unlimited, never beyond this order + the open ones, never below this order", () => {
+  const f = 20000000n;
+  assert.deepEqual(approvalPlan({ flashAmount: null, fromAmount: f, openAmount: 0n }), { ok: true, amount: null });
+  assert.deepEqual(approvalPlan({ flashAmount: 0n, fromAmount: f, openAmount: 0n }), { ok: true, amount: 0n });
+  // the live unlimited approve (no forceMinimalAllowance, e.g. a bracket entry) → capped to what we can account for
+  assert.deepEqual(approvalPlan({ flashAmount: maxUint256, fromAmount: f, openAmount: 40000000n }), { ok: true, amount: 60000000n, capped: true });
+  // forceMinimalAllowance with a 40-USDC order already open → Flash asks 60, which we can account for
+  assert.deepEqual(approvalPlan({ flashAmount: 60000000n, fromAmount: f, openAmount: 40000000n }), { ok: true, amount: 60000000n, capped: false });
+  assert.equal(approvalPlan({ flashAmount: 19999999n, fromAmount: f, openAmount: 0n }).ok, false);
+  assert.equal(approvalPlan({ flashAmount: 1n, fromAmount: 0n, openAmount: 0n }).ok, false);
+});
+
+test("the live bracket quote: its SL/TP pair needs its OWN approval of the bought token", async () => {
+  const ab = LIVE.bracket.attachedBracket;
+  // Flash puts the pair's approve on attachedBracket.evm — NOT in setupTxs (which only carries the
+  // entry's USDC approve). Missing it = the exits fail the moment a leg fires.
+  assert.equal(LIVE.bracket.setupTxs.length, 1);
+  const pairApprove = checkFlashSetupTx({ ...ab.evm.approveTx, value: 0n }, { fromToken: WETH });
+  assert.equal(pairApprove.ok, true, pairApprove.reason);
+  assert.equal(pairApprove.amount, maxUint256);
+  const pairOrder = typed({ evm: ab.evm }).message;
+  assert.equal(BigInt(pairOrder.fromAmount), toBaseUnits(ab.signedMaxFromAmount, 18));
+  assert.deepEqual(approvalPlan({ flashAmount: pairApprove.amount, fromAmount: BigInt(pairOrder.fromAmount), openAmount: 0n }), { ok: true, amount: 7755048948503100n, capped: true });
+  // the live pair's signed max sits ~5% over the quoted output — inside the 1.2× cap the ticket uses
+  const cap = (toBaseUnits(LIVE.bracket.to.amount, 18) * 6n) / 5n;
+  const { checkFlashBracket } = await import("./flashGuards.mjs");
+  const r = checkFlashBracket(ab.evm.orderTypedData, { chainId: 8453, wallet: RECEIVER, boughtToken: WETH, contraToken: USDC, maxFromAmount: cap });
+  assert.equal(r.ok, true, r.reason);
+});
+
+test("cancel message: Flash's exact bytes (em dash, one newline, the id)", () => {
+  const id = "b895f841-3c4c-4705-ab44-1bf274c762f1";
+  const m = flashCancelMessage(id);
+  assert.equal(m, "Definitive Flash v1 — Cancel Order\nOrder: b895f841-3c4c-4705-ab44-1bf274c762f1");
+  assert.equal(utf8Hex("—\n"), "0xe280940a");
+  assert.equal(Buffer.from(utf8Hex(m).slice(2), "hex").toString("utf8"), m);
+  for (const bad of ["", "x", "b895f841-3c4c-4705-ab44-1bf274c762f", "../orders", null]) {
+    assert.equal(isOrderId(bad), false);
+    assert.throws(() => flashCancelMessage(bad));
+  }
 });
