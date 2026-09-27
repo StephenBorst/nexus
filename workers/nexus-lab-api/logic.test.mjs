@@ -8,7 +8,7 @@ import {
   classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets, regimeEdge,
   planQuality, planSummary,
   expectancyStats, callerScore, convictionCalibration, contestedBoard,
-  mispricedBoard, staleBoardFallback, BOARD_LAST_GOOD_MS, consensusBySymbol, fundingReversion, edgeQuality, mergeFundingPrice,
+  mispricedBoard, staleBoardFallback, BOARD_LAST_GOOD_MS, consensusBySymbol, fundingReversion, edgeQuality, coinFlipUpperTail, mergeFundingPrice,
   LOSS_REASONS, isLossReason, postmortemSummary,
   validateArenaRegistration, arenaAgentConfig,
   parsePriceTarget, forecastDivergence, FORECAST,
@@ -1394,8 +1394,13 @@ test("fundingReversion: short history → null", () => {
 });
 
 // ── Edge quality (the board's self-awareness) ────────────────────────────────
-test("edgeQuality: high revert rate → PROVEN", () => {
-  assert.equal(edgeQuality({ revertedPct: 65, samples: 10 }).tier, "PROVEN");
+test("edgeQuality: a high revert rate is PROVEN only when a coin flip can't explain it", () => {
+  assert.equal(edgeQuality({ revertedPct: 90, samples: 10, reverted: 9 }).tier, "PROVEN", "9/10: p≈0.011");
+  assert.equal(edgeQuality({ revertedPct: 100, samples: 5 }).tier, "PROVEN", "5/5: p≈0.031 (count rebuilt from %)");
+  assert.equal(edgeQuality({ revertedPct: 65, samples: 10 }).tier, "MIXED", "~7/10: p≈0.17 — a coin does this often");
+  assert.equal(edgeQuality({ revertedPct: 75, samples: 4, reverted: 3 }).tier, "MIXED", "3/4 happens 31% of the time by chance");
+  assert.equal(edgeQuality({ revertedPct: 100, samples: 4, reverted: 4 }).tier, "MIXED", "4/4: p=0.0625 — still not 95%");
+  assert.equal(edgeQuality({ revertedPct: 80, samples: 15, reverted: 12 }).tier, "PROVEN", "12/15: p≈0.018");
 });
 test("edgeQuality: low revert rate → TRAP (fading has failed)", () => {
   assert.equal(edgeQuality({ revertedPct: 20, samples: 10 }).tier, "TRAP");
@@ -1403,6 +1408,23 @@ test("edgeQuality: low revert rate → TRAP (fading has failed)", () => {
 test("edgeQuality: middling → MIXED", () => {
   assert.equal(edgeQuality({ revertedPct: 50, samples: 10 }).tier, "MIXED");
 });
+test("edgeQuality: warnings stay quick — TRAP is rate-only, and pValue rides along", () => {
+  assert.equal(edgeQuality({ revertedPct: 25, samples: 4, reverted: 1 }).tier, "TRAP", "caution doesn't wait for significance");
+  const q = edgeQuality({ revertedPct: 75, samples: 4, reverted: 3 });
+  assert.equal(q.pValue, 0.313);
+  assert.equal(q.revertedPct, 75);
+  assert.equal(q.samples, 4);
+});
+
+test("coinFlipUpperTail: exact binomial tails", () => {
+  assert.equal(coinFlipUpperTail(3, 4), 5 / 16);
+  assert.equal(coinFlipUpperTail(4, 4), 1 / 16);
+  assert.equal(coinFlipUpperTail(0, 4), 1);
+  assert.equal(coinFlipUpperTail(5, 4), 0);
+  assert.ok(Math.abs(coinFlipUpperTail(9, 10) - 11 / 1024) < 1e-12);
+  assert.equal(coinFlipUpperTail(1, 0), 1, "no samples → no evidence");
+});
+
 test("edgeQuality: no reversion data → UNPROVEN", () => {
   assert.equal(edgeQuality(null).tier, "UNPROVEN");
   assert.equal(edgeQuality({ samples: 0 }).tier, "UNPROVEN");

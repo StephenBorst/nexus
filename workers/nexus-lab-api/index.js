@@ -3040,7 +3040,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
 
         const payload = {
           asOf: new Date().toISOString(), asOfMs: Date.now(), ...board,
-          criteria: { note: "Funding annualized (per-8h × 1095) = the crowd's mispricing. Positive funding ⇒ book lopsided LONG ⇒ fade edge is SHORT (and vice-versa). |edge| ≥ 12%/yr on ≥ $50k OI ⇒ MISPRICED · WATCHING. Flagged markets carry an edgeQuality from whether fading them has HISTORICALLY reverted (PROVEN ≥55% / TRAP ≤42% / MIXED / UNPROVEN=no recorded history); ranked proven-first, traps last. Not advice — a mean-reversion lens that says when the fade has paid and when it hasn't." },
+          criteria: { note: "Funding annualized (per-8h × 1095) = the crowd's mispricing. Positive funding ⇒ book lopsided LONG ⇒ fade edge is SHORT (and vice-versa). |edge| ≥ 12%/yr on ≥ $50k OI ⇒ MISPRICED · WATCHING. Flagged markets carry an edgeQuality from whether fading them has HISTORICALLY reverted (PROVEN = ≥55% AND a coin flip can't explain it, one-sided p ≤ 0.05 / TRAP ≤42% / MIXED / UNPROVEN=no recorded history); ranked proven-first, traps last. Not advice — a mean-reversion lens that says when the fade has paid and when it hasn't." },
         };
         try { await env.LAB_STORE.put(CACHE_KEY, JSON.stringify(payload), { expirationTtl: 600 }); } catch { /* cache write best-effort */ }
         try { await env.LAB_STORE.put(LAST_GOOD_KEY, JSON.stringify(payload), { expirationTtl: 7200 }); } catch { /* best-effort */ }

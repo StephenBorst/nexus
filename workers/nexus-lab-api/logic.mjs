@@ -771,6 +771,7 @@ export function fundingReversion(points, cfg = REVERSION) {
     avgReversionPct: round(avg, 2),                 // + = price gave back (reverted) on average
     medianReversionPct: round(sorted[Math.floor((sorted.length - 1) / 2)], 2),
     revertedPct: Math.round((reverted / against.length) * 100),
+    reverted,
     crowd: sign > 0 ? "long" : "short",
   };
 }
@@ -808,13 +809,36 @@ export function mergeFundingPrice(fundingRows, priceData) {
 // UNPROVEN = not enough recorded history to say. Keeps "mispriced by funding" honest
 // about whether the mean-revert actually shows up — most funding tools stop at the
 // number; this pairs the number with its track record.
-export const EDGE_QUALITY = { proven: 55, trap: 42 };
+// ⚠️ PROVEN needs EVIDENCE, not just a rate (2026-09-27). It used to fire at ≥55% on as few as 4
+// samples: 3 of 4 happens 31% of the time by pure chance, and PROVEN ranks the card first, prints
+// "Fade has paid here" and unlocks HIGH conviction in Live Read / the scanner. Now it also needs a
+// one-sided binomial test vs a coin flip at `alpha` (0.05 = the house ladder's 95%, same bar as
+// BEATS_RANDOM). Anything short reads MIXED ("coin-flip so far"). TRAP stays rate-only on purpose:
+// a warning can afford to fire early, a promise needs evidence.
+export const EDGE_QUALITY = { proven: 55, trap: 42, alpha: 0.05 };
+
+// P(X ≥ k) for X ~ Binomial(n, ½) — the chance a coin flip does at least this well.
+export function coinFlipUpperTail(k, n) {
+  n = Math.floor(Number(n)); k = Math.ceil(Number(k));
+  if (!(n > 0) || k <= 0) return 1;
+  if (k > n) return 0;
+  if (n > 1000) return NaN; // 2^-n underflows; far beyond any sample this board sees
+  let p = Math.pow(0.5, n), tail = 0; // p = C(n,i)/2^n, starting at i = 0
+  for (let i = 0; i <= n; i++) { if (i >= k) tail += p; p = (p * (n - i)) / (i + 1); }
+  return Math.min(1, tail);
+}
 
 export function edgeQuality(reversion, cfg = EDGE_QUALITY) {
   if (!reversion || !reversion.samples) return { tier: "UNPROVEN", revertedPct: null, samples: 0 };
   const r = reversion.revertedPct;
-  const tier = r >= cfg.proven ? "PROVEN" : r <= cfg.trap ? "TRAP" : "MIXED";
-  return { tier, revertedPct: r, samples: reversion.samples };
+  const n = reversion.samples;
+  // The raw count when fundingReversion supplied it; else rebuilt from the rounded % (exact for the
+  // sample sizes this board sees — adjacent k/n differ by ≥1%). Older cached boards lack the count.
+  const k = Number.isFinite(reversion.reverted) ? reversion.reverted : Math.round((r * n) / 100);
+  const pValue = coinFlipUpperTail(k, n);
+  const beatsCoin = pValue <= (cfg.alpha ?? 0.05);
+  const tier = r >= cfg.proven && beatsCoin ? "PROVEN" : r <= cfg.trap ? "TRAP" : "MIXED";
+  return { tier, revertedPct: r, samples: n, pValue: Math.round(pValue * 1000) / 1000 };
 }
 
 // Rank order for the board: proven edge first, traps last (avoid fading them).
