@@ -1,34 +1,43 @@
+import { C } from "@/config/theme";
+
+// Route / provider loading state. Same calm hairline sweep as the HTML boot screen in
+// index.html, so a page goes boot screen → loader → content without a style jump
+// (it used to be an off-brand bright-blue spinner). Reduced motion honored.
 export const LoadingSpinner = () => (
-  <div className="loading-container">
-    <div className="loading-spinner"></div>
+  <div className="nx-loading" role="status" aria-label="Loading">
+    <div className="nx-loading-line" />
     <style>
       {`
-        .loading-container {
+        .nx-loading {
           display: flex;
           justify-content: center;
           align-items: center;
           width: 100%;
           height: 100vh;
-          background-color: rgba(0, 0, 0, 0.03);
         }
-        .loading-spinner {
-          width: 50px;
-          height: 50px;
-          border: 4px solid rgba(0, 0, 0, 0.1);
-          border-radius: 50%;
-          border-left-color: #09f;
-          animation: spin 1s linear infinite;
+        .nx-loading-line {
+          width: 140px;
+          height: 1px;
+          background: ${C.border};
+          overflow: hidden;
+          position: relative;
         }
-        @keyframes spin {
-          0% {
-            transform: rotate(0deg);
-          }
-          100% {
-            transform: rotate(360deg);
-          }
+        .nx-loading-line::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: -40%;
+          width: 40%;
+          height: 1px;
+          background: ${C.accent};
+          opacity: 0.7;
+          animation: nx-loading-sweep 1.4s ease-in-out infinite;
+        }
+        @keyframes nx-loading-sweep { to { left: 100%; } }
+        @media (prefers-reduced-motion: reduce) {
+          .nx-loading-line::after { animation: none; left: 30%; }
         }
       `}
     </style>
   </div>
 );
-

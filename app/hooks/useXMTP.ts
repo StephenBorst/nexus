@@ -1,7 +1,15 @@
 import { useState, useCallback, useEffect } from "react";
 import { useAccount } from "@orderly.network/hooks";
-import { Client, IdentifierKind } from "@xmtp/browser-sdk";
-import type { Conversation, DecodedMessage } from "@xmtp/browser-sdk";
+import type { Client, Conversation, DecodedMessage } from "@xmtp/browser-sdk";
+
+// The XMTP SDK (and its wasm) loads on first use, not with every page: this hook is
+// mounted by the global Messages nav button, so a static import put the SDK in the
+// entry bundle for every visitor. A client only exists after init() loaded the SDK,
+// so every other call can read the cached module.
+type XmtpSdk = typeof import("@xmtp/browser-sdk");
+let xmtpSdk: XmtpSdk | null = null;
+const loadXmtp = async (): Promise<XmtpSdk> => (xmtpSdk ??= await import("@xmtp/browser-sdk"));
+const ethKind = () => (xmtpSdk as XmtpSdk).IdentifierKind.Ethereum;
 
 // Module-level cache so the client survives re-renders without re-signing
 const clientCache = new Map<string, Client>();
@@ -90,6 +98,7 @@ export function useXMTP() {
       const encSig = await sign("nexus-xmtp-db-key-v1");
       const encryptionKey = hexToBytes(encSig).slice(0, 32);
 
+      const { Client, IdentifierKind } = await loadXmtp();
       const identifier = { identifier: signerAddr, identifierKind: IdentifierKind.Ethereum };
       const signMessage = async (msg: string): Promise<Uint8Array> => hexToBytes(await sign(msg));
       const opts = { env: "production" as const, dbEncryptionKey: encryptionKey };
@@ -128,7 +137,7 @@ export function useXMTP() {
     if (!client) throw new Error("XMTP not initialized");
     const convo = await client.conversations.createDmWithIdentifier({
       identifier: peerAddress.toLowerCase(),
-      identifierKind: IdentifierKind.Ethereum,
+      identifierKind: ethKind(),
     });
     await convo.sendText(text);
   }, [getClient]);
@@ -138,7 +147,7 @@ export function useXMTP() {
     if (!client) throw new Error("XMTP not initialized");
     return client.conversations.createDmWithIdentifier({
       identifier: peerAddress.toLowerCase(),
-      identifierKind: IdentifierKind.Ethereum,
+      identifierKind: ethKind(),
     });
   }, [getClient]);
 
@@ -193,7 +202,7 @@ export function useXMTP() {
     try {
       const identifier = {
         identifier: accountAddress.toLowerCase(),
-        identifierKind: IdentifierKind.Ethereum,
+        identifierKind: ethKind(),
       };
       const result = await client.canMessage([identifier]);
       return result.get(accountAddress.toLowerCase()) ?? false;

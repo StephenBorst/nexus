@@ -12,8 +12,24 @@
     <meta name="theme-color" content="#0a0e0a" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="msapplication-TileColor" content="#000000" />
+    <!-- Warm the two API origins every page talks to, so the first data request
+         skips DNS + TLS setup (~300ms+ on mobile). -->
+    <link rel="preconnect" href="https://api.orderly.org" crossorigin />
+    <link rel="preconnect" href="https://og.nexustradinglabs.com" crossorigin />
     <style>
       html, body { margin: 0; background: #0a0e0a; }
+      /* Boot screen: painted by the HTML itself, before any JS arrives. On a phone the
+         app bundle takes seconds to download, and an empty #root showed a blank screen
+         the whole time. React replaces it on first render. Pure CSS, no fonts, ~1KB. */
+      .nx-boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .nx-boot-mark { color: #ededf0; font-size: 12px; letter-spacing: .22em; }
+      .nx-boot-sub { color: #71717a; font-size: 11px; letter-spacing: .08em; }
+      .nx-boot-line { width: 140px; height: 1px; background: #232327; overflow: hidden; position: relative; }
+      .nx-boot-line::after { content: ""; position: absolute; top: 0; left: -40%; width: 40%; height: 1px;
+        background: #ededf0; opacity: .7; animation: nx-boot-sweep 1.4s ease-in-out infinite; }
+      @keyframes nx-boot-sweep { to { left: 100%; } }
+      @media (prefers-reduced-motion: reduce) { .nx-boot-line::after { animation: none; left: 30%; } }
     </style>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -36,7 +52,7 @@
     <meta name="fc:frame" content='{"version":"1","imageUrl":"https://trade.nexustradinglabs.com/embed-mini.png","button":{"title":"⚡ Trade Perps","action":{"type":"launch_frame","name":"Nexus Trading Labs","url":"https://trade.nexustradinglabs.com/mini","splashImageUrl":"https://trade.nexustradinglabs.com/icon-512.png","splashBackgroundColor":"#0a0e0a"}}}' />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="nx-boot" aria-label="Loading"><div class="nx-boot-mark">// NEXUS TRADING LABS</div><div class="nx-boot-line"></div><div class="nx-boot-sub">Plan it. Run it. Prove it.</div></div></div>
     <script src="/config.js"></script>
     <script type="module" src="/app/main.tsx"></script>
   </body>

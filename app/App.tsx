@@ -1,10 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import OrderlyProvider from "@/components/orderlyProvider";
 import { HttpsRequiredWarning } from "@/components/HttpsRequiredWarning";
-import OnboardingModal from "@/components/OnboardingModal";
-import NexusAssistant from "@/components/NexusAssistant";
 import LiveAlerts from "@/components/LiveAlerts";
 import AmbientTexture from "@/components/AmbientTexture";
 import { withBasePath } from "./utils/base-path";
@@ -45,6 +43,27 @@ if (guestParam || isPublicRoute) {
     localStorage.setItem("orderly_service_disclaimer_accepted", "true");
   } catch { /* private mode / storage disabled — the modal is still one-tap skippable */ }
 }
+// Page weight: the copilot (~150 KB of app code plus its tool libraries) and the
+// first-visit onboarding modal used to ship in the entry bundle, so every page paid for
+// them before its first paint. Both now load as their own chunks; the copilot waits
+// until the page is idle, so it never competes with the route that's rendering.
+const OnboardingModal = lazy(() => import("@/components/OnboardingModal"));
+const NexusAssistant = lazy(() => import("@/components/NexusAssistant"));
+
+function useIdle(timeoutMs = 2500): boolean {
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(() => setIdle(true), { timeout: timeoutMs });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const t = window.setTimeout(() => setIdle(true), 1200);
+    return () => window.clearTimeout(t);
+  }, [timeoutMs]);
+  return idle;
+}
+
 const isOnboarded = () => {
   try { return localStorage.getItem("ntl_onboarded") === "true"; }
   catch { return false; }
@@ -63,6 +82,7 @@ export default function App() {
   // the previous page's scroll onto the new route — clicking a trader from a
   // scrolled-down feed dropped you into the MIDDLE of the profile instead of its top.
   const { pathname } = useLocation();
+  const idle = useIdle();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
 
   return (
@@ -82,6 +102,7 @@ export default function App() {
       <AmbientTexture />
       <HttpsRequiredWarning />
       {showOnboarding && (
+        <Suspense fallback={null}>
         <OnboardingModal
           onComplete={() => {
             localStorage.setItem('ntl_onboarded', 'true');
@@ -94,10 +115,11 @@ export default function App() {
             setShowOnboarding(false);
           }}
         />
+        </Suspense>
       )}
       <OrderlyProvider>
         <Outlet />
-        <NexusAssistant />
+        {idle && <Suspense fallback={null}><NexusAssistant /></Suspense>}
         <LiveAlerts />
       </OrderlyProvider>
     </>
