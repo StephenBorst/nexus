@@ -1413,6 +1413,14 @@ inference is LIVE** as a PRO benefit (`POST /ai/chat`, see "Revenue + AI + Treas
 - **Cold-start / feed liveness** is behind us — don't pitch it as the #1 risk or a next move.
 - **Fabric in-app buy is LIVE and tested** — don't pitch "run a small live test" again.
 - Current focus = **the engine and its signals** (basis stack, scoreboard → one-click strategies, mobile polish).
+- **⛔ ENGINE FREEZE until the Oct 15 2026 re-validation (borst + Ember, 2026-09-28).** The worker/agent engine is
+  hands-off until the Oct 15 re-validation — no changes there, that's a scheduled experiment in progress. Engine =
+  `nexus-agent-brain`, `nexus-agent-exec`, `nexus-carry-engine`, the shared signal/exit rules in `app/lib/` (basisFade,
+  basisStack, axisExits, paperStats, paperParity, strategyLabel), and lab-api's grading/replay code (`axisbt.mjs`,
+  `backtest.mjs`, `strategies.mjs`, the agent routes + `/intel/axis-backtest` + `/intel/evidence`), plus the presets and
+  paper-wallet configs. Changing any of it mid-window changes what the Oct-15 routine measures. NOT frozen: lab-api's
+  non-engine routes (swap/Flash/NEAR proxies, fees, share cards), the frontend outside the agent/strategy surfaces,
+  the landing. A real engine bug (e.g. a crash) = tell borst first, don't patch it on your own.
 
 ## Strategic framing (for partner/Orderly convos)
 The DEX is a commodity (anyone can clone the Orderly template). The moat is the Lab + social graph:
