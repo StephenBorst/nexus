@@ -597,6 +597,15 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   the user types is ignored for ranking. **A WIN pays the call's GEOMETRIC R (`callR`, from entry/stop/TP1), never
   the stored `riskReward`** (the caller writes that field; paying it let a record claim any R), and a stop or target
   on the wrong side of entry = INVALID (2026-09-27; live impact that day: none, 0 of 366 public calls affected).
+- **⚠️ Each call is graded on candles from the hour it was POSTED (fixed 2026-09-28).** The leaderboard used to read ONE
+  fixed window per symbol ([now − 30d − 50h, now], one request), so calls older than ~32 days were graded on candles
+  that started after them (131 of 369 public calls that day): an old WIN could read as a LOSS or drop out as pending.
+  Now EVERY grader (leaderboard/`computeCallerStats`, the hourly cron, the permalink, the share card) reads ONE
+  per-symbol KV store `tvhist:v2:{PERP_…}` (`workers/nexus-lab-api/gradeCandles.mjs`, tested): 20-day pages through
+  `orderlyJson`, contiguous by construction (a failed page stops that symbol for the run — never a hole), tail re-fetched
+  every 30 min, TTL 45d refreshed on write. Page budget per pass: cron 80 (the full cold backfill was 67), board read 24.
+  A call whose window isn't loaded yet is LEFT OUT of that read, never graded on a partial window. Old stamps written
+  before the fix are not revisited (the cron skips resolved calls); the board re-grades every call from candles.
 - `GET /theses/leaderboard`: ranks public-thesis authors by hit-rate + avg-R over ≥5 resolved calls
   (net-positive-R gate, sample-confidence shrink). `GET /theses/ledger`: canonical SHA-256 of the public
   call set (proof-of-call fields + createdAt), recomputable, prev-linked chain (`/theses/ledger/chain`),

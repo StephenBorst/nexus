@@ -1368,7 +1368,7 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
       let ogGradedR = (thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS") && typeof thesis.gradedR === "number" ? thesis.gradedR : null;
       if (ogStatus === "ACTIVE" && thesis.gradedOutcome !== "WIN" && thesis.gradedOutcome !== "LOSS") {
         try {
-          const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt));
+          const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt, env));
           if (g.outcome === "WIN" || g.outcome === "LOSS") { ogStatus = gradedStatusOf(g.outcome); ogGradedR = g.r; }
         } catch { /* keep ACTIVE */ }
       }
@@ -1528,7 +1528,7 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
       // permalink + its OG card should never lag the market by up to an hour.
       if (thesis.gradedOutcome !== "WIN" && thesis.gradedOutcome !== "LOSS") {
         try {
-          const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt));
+          const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt, env));
           if (g.outcome === "WIN" || g.outcome === "LOSS") {
             thesis.gradedOutcome = g.outcome; thesis.gradedR = g.r; thesis.gradedAt = Date.now();
           }
