@@ -10,9 +10,15 @@
 //   PUT    /lab/:address              → replace the record, owner only
 //   DELETE /lab/:address/thesis/:id   → remove one call, owner only
 //   PUT    /profile/:address          → display name + pfp, owner only (GET stays public)
+//
+// Published calls are permanent (callLock.mjs): a save can't change, delete or hide one, and the
+// first save that publishes a call stamps it with the server's clock. PUT answers with the
+// published calls as stored (`published`) so the Lab can show exactly what the server kept.
 import { json, normalizeAddress, appendNotification, checkLabAuth } from "./shared.mjs";
 import { normalizeSymbol } from "./logic.mjs";
 import { publicLabView } from "../../app/lib/labAuth.mjs";
+import { prepareSeal, claimLegacyOwners } from "./labWrite.mjs";
+import { REGISTRY_KEY, readRegistry, bootstrapRegistry, isPublished } from "./callLock.mjs";
 
 // 401 and nothing else happens. `error` tells the client which action to re-sign for.
 const unsigned = (request, error, v) =>
@@ -100,6 +106,15 @@ export async function handleLab(parts, request, env, { now = Date.now } = {}) {
       return json({ error: "expected { theses: [], notes: {} }" }, request, 400);
     }
 
+    // Seal the save BEFORE any side effect: which calls it publishes (and whether it may) decides
+    // the challenge fan-out and the autocopy stamp below.
+    const prevRaw = await env.LAB_STORE.get(kvKey);
+    let prevTheses = [];
+    try { prevTheses = prevRaw ? (JSON.parse(prevRaw).theses || []) : []; } catch { prevTheses = []; }
+    const prep = await prepareSeal(env, address, prevTheses, body.theses, now());
+    if (prep.error) return json({ error: prep.error, hint: "Publish fewer calls in one save." }, request, 400);
+    const { sealed, commit } = prep;
+
     // Ph27/28: notify original author and increment copyCount when a thesis is copied
     if (body.copiedFromWallet && typeof body.copiedFromWallet === "string") {
       const originalWallet = normalizeAddress(body.copiedFromWallet);
@@ -139,13 +154,8 @@ export async function handleLab(parts, request, env, { now = Date.now } = {}) {
     // ways to bound work + spam. (An aggregate symbol→callers index would remove the
     // scan if publish volume ever grows.)
     try {
-      const prevRaw = await env.LAB_STORE.get(kvKey);
-      const prevPublic = new Set(
-        prevRaw ? (JSON.parse(prevRaw).theses || []).filter((t) => t.isPublic).map((t) => t.id) : []
-      );
-      const newlyPublic = (body.theses || []).filter(
-        (t) => t.isPublic && t.id && !prevPublic.has(t.id) && t.symbol && t.direction
-      );
+      // The calls this save published for the first time, as the server stamped them.
+      const newlyPublic = sealed.newlyPublished.filter((t) => t.symbol && t.direction);
       // Autocopy fan-out: stamp the caller's NEWEST just-published call into the
       // agent namespace so followers' agents can mirror it (exec reads
       // caller:latest:{addr}). Self-expiring; the exec gates on stampedAt freshness
@@ -198,8 +208,12 @@ export async function handleLab(parts, request, env, { now = Date.now } = {}) {
 
     // Strip copy metadata + the signature before persisting (a stored signature is a replayable one)
     const { labAuth: _la, copiedFromWallet: _cfw, copiedThesisSymbol: _cts, copiedThesisDirection: _ctd, copiedThesisId: _cti, ...dataToSave } = body;
-    await env.LAB_STORE.put(kvKey, JSON.stringify(dataToSave));
-    return json({ ok: true }, request);
+    await commit(dataToSave);
+    return json({
+      ok: true,
+      published: sealed.theses.filter((t) => isPublished(sealed.registry, t.id)),
+      ...(sealed.refused.length ? { refused: sealed.refused } : {}),
+    }, request);
   }
 
   // ── DELETE /lab/:address/thesis/:id ────────────────────
@@ -211,6 +225,17 @@ export async function handleLab(parts, request, env, { now = Date.now } = {}) {
     if (!raw) return json({ ok: true }, request);
 
     const data = JSON.parse(raw);
+    // A published call is permanent. A wallet without a registry yet gets one from what it has
+    // stored (its public calls, frozen as they are), so its first delete can't remove one either.
+    let reg = readRegistry(await env.LAB_STORE.get(REGISTRY_KEY(address)));
+    if (!reg) {
+      reg = bootstrapRegistry(data.theses);
+      await env.LAB_STORE.put(REGISTRY_KEY(address), JSON.stringify(reg));
+      await claimLegacyOwners(env.LAB_STORE, reg.order, address);
+    }
+    if (reg.calls[thesisId]) {
+      return json({ error: "published_permanent", hint: "A published call is permanent. It can't be deleted or hidden." }, request, 409);
+    }
     data.theses = (data.theses || []).filter((t) => t.id !== thesisId);
     await env.LAB_STORE.put(kvKey, JSON.stringify(data));
     return json({ ok: true }, request);

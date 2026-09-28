@@ -146,7 +146,8 @@ test("Solana: the record is keyed by the lowercased address; the signer keeps it
   assert.deepEqual(stored(env, key), record);
   const ok = await lab(env, "PUT", path, { theses: [{ id: "s", isPublic: true, symbol: "SOL", direction: "LONG", createdAt: T0 }], notes: {}, labAuth: solAuth() });
   assert.equal(ok.status, 200);
-  assert.deepEqual(stored(env, key).theses.map((t) => t.id), ["s"]);
+  // The record's public calls are permanent (callLock.mjs): a save that leaves them out gets them back.
+  assert.deepEqual(stored(env, key).theses.map((t) => t.id), ["s", "pub", "hold"]);
   // The full read works for the Solana owner too.
   assert.equal((await lab(env, "POST", `${path}/read`, { labAuth: solAuth() })).status, 200);
 });
@@ -216,4 +217,66 @@ test("wire, Solana: bytes or {signature} both verify; the record key stays lower
   const auth = await signLabAuth(SOL.toLowerCase(), { provider: solProvider(solSk) }, { fallbackSigner: SOL, now: T0 });
   assert.equal((await lab(envWith(), "PUT", `/lab/${SOL.toLowerCase()}`, { theses: [], notes: {}, labAuth: auth })).status, 200);
   await assert.rejects(signLabAuth(SOL.toLowerCase(), { provider: solProvider(solSk) }, { now: T0 }), /Switch your wallet/);
+});
+
+// ── Published calls are permanent (callLock.mjs), end to end through the real route ──────────
+const draft = (over = {}) => ({ id: "c1", symbol: "BTC", direction: "LONG", entryPrice: 100, stopLoss: 95, takeProfit1: 110, createdAt: T0 - 7 * 86400e3, status: "ACTIVE", ...over });
+
+test("publishing stamps the server's time, registers the call, and answers with what was kept", async () => {
+  const env = envWith();
+  const res = await lab(env, "PUT", `/lab/${A}`, { theses: [draft({ isPublic: true })], notes: {}, labAuth: await evmAuth(alice) });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.published.length, 1);
+  assert.equal(body.published[0].createdAt, now(), "posted now, not the week-old time the client sent");
+  const t = stored(env, `lab:${A}`).theses[0];
+  assert.equal(t.createdAt, now());
+  assert.ok(stored(env, `callreg:${A}`).calls.c1, "registered");
+  assert.equal(env.LAB_STORE.m.get("callowner:c1"), A, "owner index");
+});
+
+test("after publishing: moved levels, a self-written WIN, hiding and deleting all bounce off", async () => {
+  const env = envWith();
+  await lab(env, "PUT", `/lab/${A}`, { theses: [draft({ isPublic: true })], notes: {}, labAuth: await evmAuth(alice) });
+  const kept = stored(env, `lab:${A}`).theses[0];
+  const tamper = { ...kept, stopLoss: 50, takeProfit1: 101, gradedOutcome: "WIN", gradedR: 9, status: "HIT_TP", isPublic: false };
+  assert.equal((await lab(env, "PUT", `/lab/${A}`, { theses: [tamper], notes: {}, labAuth: await evmAuth(alice) })).status, 200);
+  let t = stored(env, `lab:${A}`).theses[0];
+  assert.deepEqual([t.stopLoss, t.takeProfit1, t.gradedOutcome, t.status, t.isPublic], [95, 110, undefined, "ACTIVE", true]);
+  // Left out of the save: back.
+  await lab(env, "PUT", `/lab/${A}`, { theses: [], notes: {}, labAuth: await evmAuth(alice) });
+  assert.deepEqual(stored(env, `lab:${A}`).theses.map((x) => x.id), ["c1"]);
+  // The delete route refuses it.
+  const del = await lab(env, "DELETE", `/lab/${A}/thesis/c1`, { labAuth: await evmAuth(alice) });
+  assert.equal(del.status, 409);
+  assert.equal((await del.json()).error, "published_permanent");
+  t = stored(env, `lab:${A}`).theses[0];
+  assert.equal(t.id, "c1");
+});
+
+test("a private call can still be deleted; a legacy public one can't, from the very first delete", async () => {
+  const env = envWith({ [`lab:${A}`]: record });            // stored before the lock existed: no registry
+  assert.equal((await lab(env, "DELETE", `/lab/${A}/thesis/priv`, { labAuth: await evmAuth(alice) })).status, 200);
+  assert.equal((await lab(env, "DELETE", `/lab/${A}/thesis/pub`, { labAuth: await evmAuth(alice) })).status, 409);
+  assert.deepEqual(stored(env, `lab:${A}`).theses.map((t) => t.id), ["pub", "hold"]);
+  assert.ok(stored(env, `callreg:${A}`).calls.pub.legacy, "bootstrapped as legacy");
+});
+
+test("a call another wallet published can't be published again from a second wallet", async () => {
+  const env = envWith();
+  await lab(env, "PUT", `/lab/${A}`, { theses: [draft({ isPublic: true })], notes: {}, labAuth: await evmAuth(alice) });
+  const M = mallory.address.toLowerCase();
+  const res = await lab(env, "PUT", `/lab/${M}`, { theses: [draft({ isPublic: true })], notes: {}, labAuth: await evmAuth(mallory) });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.deepEqual(body.refused.map((r) => r.id), ["c1"]);
+  assert.equal(stored(env, `lab:${M}`).theses[0].isPublic, false, "kept private in the second wallet");
+  assert.equal(env.LAB_STORE.m.get("callowner:c1"), A);
+});
+
+test("a refused (unsigned) save registers nothing", async () => {
+  const env = envWith();
+  assert.equal((await lab(env, "PUT", `/lab/${A}`, { theses: [draft({ isPublic: true })], notes: {} })).status, 401);
+  assert.equal(env.LAB_STORE.m.has(`callreg:${A}`), false);
+  assert.equal(env.LAB_STORE.m.has("callowner:c1"), false);
 });

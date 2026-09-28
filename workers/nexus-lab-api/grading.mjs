@@ -80,6 +80,18 @@ export function gradedStatusOf(outcome) {
   return outcome === "WIN" ? "HIT_TP" : outcome === "LOSS" ? "STOPPED_OUT" : "ACTIVE";
 }
 
+// The grader that wrote a stamp. Bumped when the rules or the candle window change, so every
+// stamp from an older grader is re-derived once by the next pass. 2 = graded on the call's own
+// window (gradeCandles.mjs, 2026-09-28): before it, calls stamped more than 60 days after they
+// were posted were graded on a window that started after the post, and a client save could write
+// a stamp itself. Cards trust a stamp only when it carries this version.
+export const GRADE_V = 2;
+export const isCurrentStamp = (t) => (t?.gradedOutcome === "WIN" || t?.gradedOutcome === "LOSS") && t?.gradeV === GRADE_V;
+
+// The fields the hourly pass writes on a public call. When it writes back, it copies ONLY these onto
+// a fresh read of the record, so a save that landed during the pass isn't overwritten.
+const PASS_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "planScore", "planFlags", "regimeTrend", "regimeVol", "regimeAlign", "status"];
+
 // 1h OHLC from REGIME_PAD_S before the call to now, for gradeCall. Every grader (this cron, the
 // leaderboard, the permalink and the share card) reads the SAME per-symbol candle store
 // (gradeCandles.mjs), so a call can't be graded one way on its card and another on the board.
@@ -117,7 +129,7 @@ export async function fetchGradeHistory(symbol, createdAt, env, opts = {}) {
 // own edits, and we only write a wallet back when something actually changed.
 export async function gradePublicTheses(env) {
   const listed = await env.LAB_STORE.list({ prefix: "lab:" });
-  let graded = 0, walletsWritten = 0;
+  let graded = 0, regraded = 0, walletsWritten = 0;
   // One candle-store run for the whole pass: each symbol is loaded once and extended back to the
   // oldest call that needs it, within the run's page budget.
   const gc = makeGradeCandles(env, { budget: CRON_PAGE_BUDGET });
@@ -131,7 +143,11 @@ export async function gradePublicTheses(env) {
     const justResolved = [];
     for (const t of (data.theses || [])) {
       if (!t.isPublic || !t.symbol || !t.createdAt) continue;
-      const resolved = t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS"; // resolved = final
+      // A published call's status is the server's grade, never a self-mark (callLock.mjs): a legacy
+      // "HIT_TP" or "INVALIDATED" the owner typed reads as live until the grade lands.
+      const derived = gradedStatusOf(t.gradedOutcome);
+      if (t.status !== derived) { t.status = derived; changed = true; }
+      const resolved = isCurrentStamp(t); // a stamp from this grader is final
       // Plan quality + regime are properties of the MOMENT THE CALL WAS POSTED, so
       // they're stamped once and never revisited — including on already-resolved
       // calls that predate this feature (backfill). Skipped beyond the history
@@ -160,16 +176,37 @@ export async function gradePublicTheses(env) {
 
       if (!resolved) {
         const g = gradeCall(t, cd);
+        const had = t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS";
         if (g.outcome === "WIN" || g.outcome === "LOSS") {
+          if (!had || t.gradedOutcome !== g.outcome) t.gradedAt = Date.now();
           t.gradedOutcome = g.outcome;
           t.gradedR = g.r;
-          t.gradedAt = Date.now();
-          changed = true; graded++;
-          justResolved.push({ t, outcome: g.outcome, r: g.r });
+          t.gradeV = GRADE_V;
+          changed = true;
+          if (had) regraded++;
+          else { graded++; justResolved.push({ t, outcome: g.outcome, r: g.r }); } // corrections aren't announced
+        } else if (had) {
+          // An old stamp the call's own window doesn't support: it goes, and the call grades live.
+          delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV;
+          changed = true; regraded++;
         }
+        t.status = gradedStatusOf(t.gradedOutcome);
       }
     }
     if (changed) {
+      // Write onto a FRESH read, copying only what this pass computes: an owner's save during the
+      // pass (a new call, a timeline note) must not be lost to this older copy.
+      let fresh = null;
+      try { const f = JSON.parse((await env.LAB_STORE.get(key.name)) || "null"); if (f && Array.isArray(f.theses)) fresh = f; } catch { fresh = null; }
+      if (fresh) {
+        const mine = new Map((data.theses || []).filter((x) => x && x.id).map((x) => [x.id, x]));
+        for (const ft of fresh.theses) {
+          const m = ft && ft.isPublic ? mine.get(ft.id) : null;
+          if (!m) continue;
+          for (const k of PASS_FIELDS) { if (m[k] === undefined) delete ft[k]; else ft[k] = m[k]; }
+        }
+        data = fresh;
+      }
       await env.LAB_STORE.put(key.name, JSON.stringify(data)); walletsWritten++;
       // Only now that the grade is durable. If the put throws we skip the fan-out and
       // the next pass re-resolves cleanly — better a late notification than a phantom
@@ -181,7 +218,7 @@ export async function gradePublicTheses(env) {
     }
   }
   await gc.flush();
-  console.log(`[grade] resolved ${graded} calls across ${walletsWritten} wallets · ${gc.pagesUsed()} candle pages`);
+  console.log(`[grade] resolved ${graded} calls (${regraded} older stamps re-derived) across ${walletsWritten} wallets · ${gc.pagesUsed()} candle pages`);
   return graded;
 }
 
