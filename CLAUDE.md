@@ -1421,6 +1421,9 @@ inference is LIVE** as a PRO benefit (`POST /ai/chat`, see "Revenue + AI + Treas
   paper-wallet configs. Changing any of it mid-window changes what the Oct-15 routine measures. NOT frozen: lab-api's
   non-engine routes (swap/Flash/NEAR proxies, fees, share cards), the frontend outside the agent/strategy surfaces,
   the landing. A real engine bug (e.g. a crash) = tell borst first, don't patch it on your own.
+  **Scope = the signal/scoreboard engine** (the grading + replay code the Oct 15 routine measures). The **human caller
+  leaderboard grading stays OPEN** — `gradeCall`/`computeCallerStats`, `/theses/leaderboard`, call grading windows, the
+  wallet-switch double-count fix — another session is shipping those now. Pull main before touching them.
 
 ## Strategic framing (for partner/Orderly convos)
 The DEX is a commodity (anyone can clone the Orderly template). The moat is the Lab + social graph:
