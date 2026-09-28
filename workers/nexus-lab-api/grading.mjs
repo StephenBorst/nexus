@@ -12,11 +12,18 @@
 // ⚠️ Pure move — logic byte-identical to what shipped.
 import { notifyResolution } from "./resolutions.mjs";
 import {
-  gradeCall, REGIME, classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets,
+  gradeCall, classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets,
   regimeEdge, planQuality, planSummary, expectancyStats, convictionCalibration, rankCaller,
   consensusBySymbol, stanceAtPost, classifyContrarian, aggregateSideRecord, contrarianEdgeScore,
-  normalizeSymbol, classifyMacro,
+  classifyMacro,
 } from "./logic.mjs";
+import { REGIME_PAD_S, makeGradeCandles, candlesForCall, callWindow, gradeSymbol, neededFrom } from "./gradeCandles.mjs";
+
+// Candle pages one grading pass may fetch. The hourly cron can take a whole cold backfill (67 pages
+// for the 27 symbols on 2026-09-27); a leaderboard read is a user waiting, so it takes less and
+// leaves the rest to the next read or the cron.
+export const CRON_PAGE_BUDGET = 80;
+export const BOARD_PAGE_BUDGET = 24;
 
 // A call is MACRO/event-driven when its catalyst (the "why now") classifies as a macro or
 // geopolitical event — the same classifier the Macro & Events board uses. No thesis-schema
@@ -73,14 +80,15 @@ export function gradedStatusOf(outcome) {
   return outcome === "WIN" ? "HIT_TP" : outcome === "LOSS" ? "STOPPED_OUT" : "ACTIVE";
 }
 
-// Fetch 1h OHLC from the thesis's createdAt to now, for gradeCall. Shared by the cron
-// stamper and the on-read permalink grade so both use identical inputs.
+// 1h OHLC from REGIME_PAD_S before the call to now, for gradeCall. Every grader (this cron, the
+// leaderboard, the permalink and the share card) reads the SAME per-symbol candle store
+// (gradeCandles.mjs), so a call can't be graded one way on its card and another on the board.
 // ⚠️ The window starts REGIME_PAD_S *before* the call, not at the call. Grading only
 // needs candles from the call forward, but regime attribution + plan quality describe
 // the market the call was posted INTO, which lives entirely in the bars before it.
 // Without the pad, classifyRegime returns null for every call (nothing precedes it).
 // Closes (`c`) are kept for the same reason — gradeCall only reads highs/lows.
-export const REGIME_PAD_S = (REGIME.LOOKBACK + 2) * 3600;
+export { REGIME_PAD_S };
 
 // Plan-quality flags, phrased for a trader looking at a DRAFT (POST /theses/advice)
 // rather than a graded record — present tense, and each one names the fix.
@@ -92,20 +100,14 @@ export const ADVICE_FLAG_TEXT = {
   BAD_LEVELS: "Your target or stop is on the wrong side of entry.",
 };
 
-export async function fetchGradeHistory(symbol, createdAt) {
-  // ⚠️ The thesis FORM stores BARE tickers ("BTC"), but Orderly /tv/history needs the
-  // canonical perp id (PERP_BTC_USDC). Without normalizing, bare-ticker calls fetch
-  // NOTHING → gradeCall gets no candles → they never grade. That silently blocked
-  // caller-grading for basically every form-posted call (only full-symbol theses graded).
-  const sym = normalizeSymbol(symbol) || symbol;
-  const now = Math.floor(Date.now() / 1000);
-  const from = Math.max(Math.floor((createdAt || Date.now()) / 1000) - REGIME_PAD_S, now - 60 * 86400 - REGIME_PAD_S);
-  try {
-    const r = await fetch(`https://api-evm.orderly.org/tv/history?symbol=${sym}&resolution=60&from=${from}&to=${now}`);
-    const d = await r.json();
-    if (d && d.s === "ok" && Array.isArray(d.t)) return { t: d.t, h: d.h, l: d.l, c: d.c };
-  } catch (e) { console.error("[grade] history", symbol, e.message); }
-  return null;
+// Candles for ONE call from the hour it was posted (the old version capped the window at 60 days,
+// in one request). null = not gradeable yet (no candles back to the post, or Orderly refused):
+// callers keep the stored status and try again later. The thesis FORM stores BARE tickers
+// ("BTC"); gradeSymbol maps them to the Orderly perp id, which /tv/history needs.
+export async function fetchGradeHistory(symbol, createdAt, env, opts = {}) {
+  if (!env) return null;
+  try { return await candlesForCall(env, symbol, createdAt, opts); }
+  catch (e) { console.error("[grade] history", symbol, String((e && e.message) || e)); return null; }
 }
 
 // Cron pass: objectively resolve every PUBLIC thesis from public price and STAMP the
@@ -116,8 +118,9 @@ export async function fetchGradeHistory(symbol, createdAt) {
 export async function gradePublicTheses(env) {
   const listed = await env.LAB_STORE.list({ prefix: "lab:" });
   let graded = 0, walletsWritten = 0;
-  // Cache OHLC per symbol across the whole pass so 50 BTC calls fetch history once.
-  const histCache = new Map();
+  // One candle-store run for the whole pass: each symbol is loaded once and extended back to the
+  // oldest call that needs it, within the run's page budget.
+  const gc = makeGradeCandles(env, { budget: CRON_PAGE_BUDGET });
   for (const key of listed.keys) {
     const raw = await env.LAB_STORE.get(key.name);
     if (!raw) continue;
@@ -136,9 +139,10 @@ export async function gradePublicTheses(env) {
       const stampable = t.planScore === undefined && t.createdAt > Date.now() - 60 * 86400 * 1000;
       if (resolved && !stampable) continue;
 
-      const cacheKey = `${t.symbol}|${t.createdAt}`;
-      if (!histCache.has(cacheKey)) histCache.set(cacheKey, await fetchGradeHistory(t.symbol, t.createdAt));
-      const cd = histCache.get(cacheKey);
+      // null = the candles don't reach back to this call yet (budget / Orderly refusal): leave it
+      // for the next run rather than grade or stamp it on a partial window.
+      const cd = await candlesForCall(env, t.symbol, t.createdAt, { gc });
+      if (!cd) continue;
 
       if (stampable) {
         const pq = planQuality(t, cd);
@@ -149,7 +153,7 @@ export async function gradePublicTheses(env) {
           t.regimeVol = reg.vol;
           t.regimeAlign = callAlignment(t.direction, reg);
         }
-        // Stamp even when unscoreable, so a malformed call isn't re-fetched forever.
+        // Stamp even when unscoreable (the candles were there), so a malformed call isn't re-fetched forever.
         if (t.planScore === undefined) t.planScore = null;
         changed = true;
       }
@@ -176,11 +180,14 @@ export async function gradePublicTheses(env) {
       }
     }
   }
-  console.log(`[grade] resolved ${graded} calls across ${walletsWritten} wallets`);
+  await gc.flush();
+  console.log(`[grade] resolved ${graded} calls across ${walletsWritten} wallets · ${gc.pagesUsed()} candle pages`);
   return graded;
 }
 
-export async function computeCallerStats(env, maxHorizonS = 30 * 86400, opts = {}) {
+// `_unusedHorizonS` is kept only so existing callers' arguments still line up: the window is no
+// longer a fixed horizon, it's each call's own (see below).
+export async function computeCallerStats(env, _unusedHorizonS = 30 * 86400, opts = {}) {
   const onlyWallet = opts.onlyWallet ? String(opts.onlyWallet).toLowerCase() : null;
   const listed = await env.LAB_STORE.list({ prefix: "lab:" });
   const calls = [];
@@ -195,58 +202,22 @@ export async function computeCallerStats(env, maxHorizonS = 30 * 86400, opts = {
       if (t.isPublic && t.symbol && t.createdAt) calls.push({ wallet, t });
     }
   }
-  const now = Math.floor(Date.now() / 1000);
-  const symFrom = {};
+  // Each call is graded on the price from the hour it was posted. Every symbol's candle store
+  // (gradeCandles.mjs, shared with the cron, the permalink and the share card) reaches back to that
+  // symbol's OLDEST call. This used to be ONE fixed window per symbol, [now − 30d − 50h, now], so a
+  // call older than that was graded on candles that started after it: an old WIN could read as a
+  // LOSS, or drop out as pending. The stores live in KV (every run warms the same ones, which is
+  // what fixed the old per-read Orderly starvation), grow within a page budget, and a call whose
+  // window isn't loaded yet is left out of this read rather than graded on a partial one.
+  const needs = {};
   for (const { t } of calls) {
-    const start = Math.floor((t.createdAt || Date.now()) / 1000);
-    symFrom[t.symbol] = Math.min(symFrom[t.symbol] ?? start, start);
+    const sym = gradeSymbol(t.symbol), from = neededFrom(t.createdAt);
+    if (!sym || from == null) continue; // not a market / not a real post time: never graded
+    needs[sym] = Math.min(needs[sym] ?? from, from);
   }
-  const history = {};
-  // ⚠️ The ALL-wallets run needs /tv/history for EVERY unique symbol across every caller. Fetching
-  // them all live (even batched) starves the run — Orderly's public endpoint rate-limits/403s a chunk
-  // under the aggregate load → history[sym] undefined → those calls silently graded PENDING → a wallet
-  // with a dozen resolved calls showed as "emerging · N to verify" while its own per-wallet x-ray (few
-  // symbols) graded them all. Fix structurally with a per-symbol KV CACHE (LAB_STORE, ~30min TTL):
-  //   • The window is standardized to the FULL horizon [now - maxHorizonS - PAD, now] so the board and
-  //     the onlyWallet x-ray share ONE cache entry per symbol.
-  //   • The working x-ray runs (which succeed) WARM the same cache the board reads, and repeat board
-  //     loads warm the rest — so live fetches shrink to cache-misses instead of the whole set.
-  const HIST_TTL_S = 1800;
-  const HKEY = (sym) => `tvhist:v1:${normalizeSymbol(sym) || sym}`;
-  const winFrom = now - maxHorizonS - REGIME_PAD_S; // standardized window (same for every run → cacheable)
-  const symList = Object.keys(symFrom);
-  const misses = [];
-  // 1) Serve from cache where we can (KV reads are reliable + not rate-limited, unlike the origin).
-  await Promise.all(symList.map(async (sym) => {
-    try {
-      const cached = await env.LAB_STORE.get(HKEY(sym));
-      if (cached) { const d = JSON.parse(cached); if (d && Array.isArray(d.t)) { history[sym] = d; return; } }
-    } catch { /* miss/parse → fetch below */ }
-    misses.push(sym);
-  }));
-  // 2) Fetch only the misses (bounded batches + one retry) and write each into the shared cache.
-  const fetchOne = async (sym) => {
-    // Normalize the BARE ticker theses store ("BTC") to the Orderly perp id — /tv/history returns
-    // nothing for a bare symbol (same fix as fetchGradeHistory; this fetch is independent).
-    const url = `https://api-evm.orderly.org/tv/history?symbol=${normalizeSymbol(sym) || sym}&resolution=60&from=${winFrom}&to=${now}`;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const r = await fetch(url);
-        if (!r.ok) { if (attempt === 0) { await new Promise((res) => setTimeout(res, 300)); continue; } break; } // 429/5xx → one retry
-        const d = await r.json();
-        if (d && d.s === "ok" && Array.isArray(d.t)) {
-          const rec = { t: d.t, h: d.h, l: d.l, c: d.c };
-          history[sym] = rec;
-          try { await env.LAB_STORE.put(HKEY(sym), JSON.stringify(rec), { expirationTtl: HIST_TTL_S }); } catch { /* cache write best-effort */ }
-        }
-        break;
-      } catch (e) { if (attempt === 1) console.error("[caller-stats] history fetch", sym, e.message); else await new Promise((res) => setTimeout(res, 300)); }
-    }
-  };
-  const HIST_BATCH = 8; // gentle enough to avoid the burst rate-limit, few enough batches to stay fast
-  for (let i = 0; i < misses.length; i += HIST_BATCH) {
-    await Promise.all(misses.slice(i, i + HIST_BATCH).map(fetchOne));
-  }
+  const gc = makeGradeCandles(env, { budget: opts.pageBudget ?? BOARD_PAGE_BUDGET });
+  const stores = await gc.ensureAll(needs);
+  await gc.flush();
   // Contrarian grading is OPT-IN (opts.contrarian) so the hot stance path — gatherStanceEntries
   // → computeCallerStats for merit weights — doesn't pay for the extra KV reads. Only the
   // leaderboard + the contrarians board ask for it. Stance history is keyed by BARE coin.
@@ -258,7 +229,9 @@ export async function computeCallerStats(env, maxHorizonS = 30 * 86400, opts = {
   }
   const byWallet = {};
   for (const { wallet, t } of calls) {
-    const cd = history[t.symbol];
+    const sym = gradeSymbol(t.symbol);
+    const cd = sym ? callWindow(stores[sym], t.createdAt) : null;
+    if (!cd) continue; // candles don't reach back to this call yet: not graded on this read
     const g = gradeCall(t, cd);
     if (g.outcome === "PENDING" || g.outcome === "INVALID") continue;
     const a = byWallet[wallet] || (byWallet[wallet] = { calls: 0, wins: 0, rSum: 0, resolved: [], regimeRows: [], planScored: [], expRows: [], _macro: [], _contra: { calls: 0, wins: 0, rSum: 0 }, _crowd: { calls: 0, wins: 0, rSum: 0 } });
