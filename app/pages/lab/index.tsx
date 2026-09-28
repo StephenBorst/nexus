@@ -276,7 +276,7 @@ export default function TheLabPage() {
                 minHeight: 36, flex: "1 0 21%", flexShrink: 1, whiteSpace: "nowrap",
               } : {
                 background: "none", border: "none",
-                borderBottom: `2px solid ${active ? "#ededf0" : "transparent"}`,
+                borderBottom: `2px solid ${active ? C.amber : "transparent"}`, // amber = the brand accent mark
                 color: active ? "#f4f4f5" : "#71717a",
                 fontFamily: "var(--nx-font-ui)", fontSize: 12.5, letterSpacing: "0.01em",
                 fontWeight: active ? 600 : 500,

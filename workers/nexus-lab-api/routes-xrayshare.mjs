@@ -10,6 +10,7 @@
 // uses (xrayGrade.mjs) on the SAME stored tape (routes-hltape.mjs) — the card can't
 // disagree with the page it links to. The image URL carries a version (newest fill +
 // counts) so a re-share after new fills gets a fresh image; X caches image URLs for days.
+import { BRAND } from "../../app/lib/brand.mjs";
 import { makeRateLimiter } from "./keyProxy.mjs";
 import { readTape, syncHlTape } from "./routes-hltape.mjs";
 import { readXrayHist } from "./routes-smart.mjs";
@@ -53,11 +54,10 @@ export async function loadCardInputs(env, address, { hlInfo, now = Date.now(), i
   return { card, version };
 }
 
-// 1200×630, same grammar as the identity/thesis cards: bone on near-black, green/red
-// ONLY on numbers that mean profit/loss, hairline borders, JetBrains Mono.
+// 1200×630, same grammar as the identity/thesis cards (colours from app/lib/brand.mjs): bone on
+// near-black, an amber top rule, green/red ONLY on numbers that mean profit/loss, JetBrains Mono.
 export function buildXrayCardSvg(card, { fontFamily = "'JetBrains Mono'" } = {}) {
-  const BONE = "#ededf0", BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-  const POS = "#3ecf8e", NEG = "#f7525f", WARN = "#fbbf24", BORDER = "#232327", PANEL = "#0f0f11";
+  const { bone: BONE, bright: BRIGHT, fog: FOG, muted: MUTED, faint: FAINT, win: POS, loss: NEG, border: BORDER, panel: PANEL, canvas: CANVAS, amber: AMBER } = BRAND;
   const toneColor = (t) => (t === "pos" ? POS : t === "neg" ? NEG : BRIGHT);
   const badge = card.status === "GRADED" ? (card.kind === "WATCHED" ? "WATCHED RECORD" : "30D GRADE")
     : card.status === "ACCRUING" ? "ACCRUING" : "NO RECORD";
@@ -69,12 +69,12 @@ export function buildXrayCardSvg(card, { fontFamily = "'JetBrains Mono'" } = {})
   <text x="${colX[i]}" y="472" fill="${toneColor(s.tone)}" font-size="40" font-weight="bold">${esc(s.value)}</text>`).join("");
   const context = esc(String(card.context).slice(0, 96));
   const partial = card.partialNote
-    ? `<text x="48" y="520" fill="${WARN}" font-size="15">${esc(card.partialNote)}</text>` : "";
+    ? `<text x="48" y="520" fill="${FOG}" font-size="15">${esc(card.partialNote)}</text>` : "";
   return `<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
   <defs><style>text { font-family: ${fontFamily}; }</style></defs>
-  <rect width="1200" height="630" fill="#0a0a0b"/>
+  <rect width="1200" height="630" fill="${CANVAS}"/>
   <rect x="16" y="16" width="1168" height="598" fill="${PANEL}" stroke="${BORDER}" stroke-width="1" rx="10"/>
-  <rect x="16" y="16" width="1168" height="3" fill="${BONE}" rx="10" opacity="0.5"/>
+  <rect x="16" y="16" width="1168" height="3" fill="${AMBER}" rx="1"/>
 
   <text x="48" y="86" fill="${BRIGHT}" font-size="24" font-weight="bold" letter-spacing="4">WALLET X-RAY</text>
   <text x="48" y="112" fill="${MUTED}" font-size="15" letter-spacing="2">${esc(card.who)} · PUBLIC DATA · NEXUS</text>

@@ -640,12 +640,12 @@ export default function TraderPage() {
     return () => {
       setMeta("og:title", "Nexus Trading Labs");
       setMeta("og:description", "Non-custodial Perpetual DEX on Arbitrum");
-      setMeta("og:image", "https://nexustradinglabs.com/og.png");
+      setMeta("og:image", "https://trade.nexustradinglabs.com/embed-mini.png");
       setMeta("og:url", "https://trade.nexustradinglabs.com");
       setMeta("twitter:card", "summary_large_image");
       setMeta("twitter:title", "Nexus Trading Labs");
       setMeta("twitter:description", "Non-custodial Perpetual DEX on Arbitrum");
-      setMeta("twitter:image", "https://nexustradinglabs.com/og.png");
+      setMeta("twitter:image", "https://trade.nexustradinglabs.com/embed-mini.png");
       document.title = "Nexus Trading Labs";
     };
   }, [wallet, loading, displayName, shortAddr, stats.wins, stats.losses, stats.avgRR, stats.winRate]);
