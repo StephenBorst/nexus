@@ -5,8 +5,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  planPages, applyPage, barsFrom, callWindow, makeGradeCandles, candlesForCall,
-  REGIME_PAD_S, GRADE_PAGE_S, TAIL_REFRESH_MS, TAIL_OVERLAP_S, STORE_TTL_S,
+  planPages, applyPage, barsFrom, callWindow, makeGradeCandles, candlesForCall, neededFrom, gradeSymbol,
+  REGIME_PAD_S, GRADE_PAGE_S, TAIL_REFRESH_MS, TAIL_OVERLAP_S, STORE_TTL_S, GRADE_FLOOR_MS,
 } from "./gradeCandles.mjs";
 import { gradeCall } from "./logic.mjs";
 import { computeCallerStats, gradePublicTheses } from "./grading.mjs";
@@ -135,6 +135,19 @@ test("callWindow: graded only when the store reaches the post minus the pad and 
 });
 
 // ── Runs: budget, failures, refresh, persistence ────────────────────────────────────────────
+test("neededFrom + gradeSymbol: a malformed post time or symbol is never graded and costs no page", () => {
+  assert.equal(neededFrom(CALL.createdAt), POSTED_S - REGIME_PAD_S);
+  assert.equal(neededFrom(String(CALL.createdAt)), POSTED_S - REGIME_PAD_S, "a numeric string is the same post time");
+  for (const bad of [undefined, null, "", "2026-08-18T00:00:00Z", NaN, Infinity, 1, GRADE_FLOOR_MS - 1]) {
+    assert.equal(neededFrom(bad), null, `createdAt ${String(bad)} can't be a real post`);
+  }
+  assert.equal(gradeSymbol("BTC"), "PERP_BTC_USDC");
+  assert.equal(gradeSymbol("perp_btc_usdc"), "PERP_BTC_USDC");
+  assert.equal(gradeSymbol("BTC/USDT:USDT"), null, "not an Orderly market id: never fetched");
+  const store = { v: 2, from: 0, to: NOW_S, fetchedAt: NOW_MS, t: [NOW_S - 100 * H], h: [1], l: [1], c: [1] };
+  assert.equal(callWindow(store, GRADE_FLOOR_MS - H * 1000), null, "before 2026: never graded, whatever the store holds");
+});
+
 test("a cold run with a small budget gives every symbol its newest page before any goes deeper", async () => {
   const fake = fakeOrderly(flat(100));
   const gc = makeGradeCandles({ LAB_STORE: kv() }, { budget: 4, fetchJson: fake, nowMs: () => NOW_MS });
@@ -193,8 +206,12 @@ test("the tail is re-fetched after 30 minutes, replacing the partial hour; a fre
 
 test("candlesForCall: one call, its own window, written back for the next reader", async () => {
   const store = kv();
-  const cd = await candlesForCall({ LAB_STORE: store }, "BTC", CALL.createdAt, { budget: 6 });
-  assert.equal(cd, null, "the real Orderly isn't reachable in tests: null means not graded, never a guess");
+  // Tests never touch the real Orderly (CI can reach it; the sandbox can't): a refusal is injected.
+  const refused = makeGradeCandles({ LAB_STORE: store }, { budget: 6, fetchJson: async () => { throw new Error("HTTP 403, not JSON"); }, nowMs: () => NOW_MS });
+  const cd = await candlesForCall({ LAB_STORE: store }, "BTC", CALL.createdAt, { gc: refused });
+  assert.equal(cd, null, "Orderly refused: null means not graded, never a guess");
+  await refused.flush();
+  assert.equal(store.m.size, 0, "a refused page writes nothing");
   const gc = makeGradeCandles({ LAB_STORE: store }, { budget: 6, fetchJson: fakeOrderly(winThenCrash()), nowMs: () => NOW_MS });
   const cd2 = await candlesForCall({ LAB_STORE: store }, "BTC", CALL.createdAt, { gc });
   assert.equal(gradeCall(CALL, cd2).outcome, "WIN");
@@ -222,6 +239,27 @@ test("leaderboard: an old call is graded on its own window; with too small a bud
     assert.equal(full[W].calls, 1);
     assert.equal(full[W].wins, 1, "graded WIN on its own window (the old fixed window said LOSS)");
     assert.equal(full[W].rSum, 2);
+  });
+});
+
+test("leaderboard: one malformed call can't block its symbol or send the store back years", () => {
+  const posted = nowS() - 40 * D;
+  const good = { ...CALL, id: "good", createdAt: posted * 1000 };
+  const theses = [
+    good,
+    { ...CALL, id: "epoch", createdAt: 1000 },                        // 1970: would be ~1,000 pages back
+    { ...CALL, id: "iso", createdAt: "2026-08-18T00:00:00Z" },        // not a number
+    { ...CALL, id: "junk", symbol: "BTC/USDT:USDT" },                  // not a market id
+  ];
+  const env = { LAB_STORE: kv({ [`lab:${W}`]: { theses, notes: {} } }) };
+  const fake = fakeOrderly(winThenCrash(nowS(), posted));
+  return withFetch(fake, async () => {
+    const stats = await computeCallerStats(env, 30 * D);
+    assert.equal(stats[W].calls, 1, "only the real call is graded");
+    assert.equal(stats[W].wins, 1);
+    assert.ok(fake.calls.length <= 3, `the good call's window is 2–3 pages (got ${fake.calls.length})`);
+    assert.ok(fake.calls.every((c) => c.sym === "PERP_BTC_USDC"), "the junk symbol is never fetched");
+    assert.ok(Math.min(...fake.calls.map((c) => c.from)) >= posted - REGIME_PAD_S, "no page before the real call needs");
   });
 });
 

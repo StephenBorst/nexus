@@ -606,6 +606,8 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   every 30 min, TTL 45d refreshed on write. Page budget per pass: cron 80 (the full cold backfill was 67), board read 24.
   A call whose window isn't loaded yet is LEFT OUT of that read, never graded on a partial window. Old stamps written
   before the fix are not revisited (the cron skips resolved calls); the board re-grades every call from candles.
+  A `createdAt` that isn't a number or predates 2026 (`GRADE_FLOOR_MS`; the oldest real call is 2026-05-04) is never
+  graded and never fetched, so one bad post time can't block its symbol or walk a store back years.
 - `GET /theses/leaderboard`: ranks public-thesis authors by hit-rate + avg-R over ≥5 resolved calls
   (net-positive-R gate, sample-confidence shrink). `GET /theses/ledger`: canonical SHA-256 of the public
   call set (proof-of-call fields + createdAt), recomputable, prev-linked chain (`/theses/ledger/chain`),
@@ -1247,6 +1249,8 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
 - **nexus-carry-engine** (42 tests) does NOT follow the one-`logic.mjs` convention — it is split by
   concern (`carryBasket` / `carryPaper` / `carryLive` / `carryExec` / `carryLiveExec` `.test.mjs`), so
   `node --test workers/nexus-carry-engine/logic.test.mjs` finds nothing. Glob the dir instead.
+- **⚠️ Tests never touch the real network.** CI's runners CAN reach Orderly; cloud sessions can't. A test that asserts
+  "Orderly is unreachable" passes here and fails on CI (bit us 2026-09-28). Inject `fetchJson` or fake `globalThis.fetch`.
 - **Whole suite = `node tools/run-tests.mjs`** (what CI runs; skips node_modules by design). Don't hand-roll a
   `find … -name '*.test.mjs'`: without excluding node_modules it picks up third-party test files vendored in
   `workers/nexus-lab-api/node_modules` (@metamask/safe-event-emitter, thread-stream) that fail on a missing `tap`

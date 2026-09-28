@@ -17,7 +17,7 @@ import {
   consensusBySymbol, stanceAtPost, classifyContrarian, aggregateSideRecord, contrarianEdgeScore,
   classifyMacro,
 } from "./logic.mjs";
-import { REGIME_PAD_S, makeGradeCandles, candlesForCall, callWindow, gradeSymbol } from "./gradeCandles.mjs";
+import { REGIME_PAD_S, makeGradeCandles, candlesForCall, callWindow, gradeSymbol, neededFrom } from "./gradeCandles.mjs";
 
 // Candle pages one grading pass may fetch. The hourly cron can take a whole cold backfill (67 pages
 // for the 27 symbols on 2026-09-27); a leaderboard read is a user waiting, so it takes less and
@@ -211,8 +211,8 @@ export async function computeCallerStats(env, _unusedHorizonS = 30 * 86400, opts
   // window isn't loaded yet is left out of this read rather than graded on a partial one.
   const needs = {};
   for (const { t } of calls) {
-    const sym = gradeSymbol(t.symbol);
-    const from = Math.floor(t.createdAt / 1000) - REGIME_PAD_S;
+    const sym = gradeSymbol(t.symbol), from = neededFrom(t.createdAt);
+    if (!sym || from == null) continue; // not a market / not a real post time: never graded
     needs[sym] = Math.min(needs[sym] ?? from, from);
   }
   const gc = makeGradeCandles(env, { budget: opts.pageBudget ?? BOARD_PAGE_BUDGET });
@@ -229,7 +229,8 @@ export async function computeCallerStats(env, _unusedHorizonS = 30 * 86400, opts
   }
   const byWallet = {};
   for (const { wallet, t } of calls) {
-    const cd = callWindow(stores[gradeSymbol(t.symbol)], t.createdAt);
+    const sym = gradeSymbol(t.symbol);
+    const cd = sym ? callWindow(stores[sym], t.createdAt) : null;
     if (!cd) continue; // candles don't reach back to this call yet: not graded on this read
     const g = gradeCall(t, cd);
     if (g.outcome === "PENDING" || g.outcome === "INVALID") continue;

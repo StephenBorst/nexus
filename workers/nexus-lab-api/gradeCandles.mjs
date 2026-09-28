@@ -30,8 +30,26 @@ export const PAGE_BATCH = 5;             // pages in flight at once (Orderly all
 const ORDERLY = "https://api-evm.orderly.org";
 const KEY = (sym) => `tvhist:v2:${sym}`;
 
-/** The store key for a thesis symbol: bare "BTC" and "PERP_BTC_USDC" share one store. */
-export const gradeSymbol = (raw) => normalizeSymbol(raw) || String(raw || "");
+/**
+ * The store key for a thesis symbol: bare "BTC" and "PERP_BTC_USDC" share one store. null when the
+ * symbol can't be an Orderly market id (those never had candles), so it costs no page.
+ */
+export const gradeSymbol = (raw) => normalizeSymbol(raw);
+
+// No call on Nexus predates 2026 (the oldest public call is from 2026-05-04). A createdAt before this
+// is malformed, not old: it isn't graded, and it can't send a store walking back years of pages.
+export const GRADE_FLOOR_MS = Date.UTC(2026, 0, 1);
+
+/**
+ * The earliest second a call's grade needs (its post minus the regime pad), or null when createdAt
+ * can't be a real post (not a number, or before GRADE_FLOOR_MS). One bad createdAt must not decide
+ * how far back its symbol's store reaches for everyone else's calls.
+ */
+export function neededFrom(createdAtMs) {
+  const ms = Number(createdAtMs);
+  if (!Number.isFinite(ms) || ms < GRADE_FLOOR_MS) return null;
+  return Math.floor(ms / 1000) - REGIME_PAD_S;
+}
 
 // Index of the last bar at or before `sec` (binary search; t ascending), or -1.
 function lastAtOrBefore(t, sec) {
@@ -49,25 +67,25 @@ function lastAtOrBefore(t, sec) {
  * Returns the whole store; gradeCall / classifyRegime / planQuality all key off createdAt themselves.
  */
 export function callWindow(store, createdAtMs) {
-  if (!store || !Array.isArray(store.t) || !Number.isFinite(Number(createdAtMs))) return null;
-  const at = Math.floor(Number(createdAtMs) / 1000);
-  if (!(store.from <= at - REGIME_PAD_S)) return null;
-  const i = lastAtOrBefore(store.t, at);
-  if (i < 0 || store.t[i] < at - REGIME_PAD_S) return null;
+  const from = neededFrom(createdAtMs);
+  if (!store || !Array.isArray(store.t) || from == null) return null;
+  if (!(store.from <= from)) return null;
+  const i = lastAtOrBefore(store.t, from + REGIME_PAD_S);
+  if (i < 0 || store.t[i] < from) return null;
   return store;
 }
 
 /**
- * The pages still missing for a store to cover [neededFrom, now], in the order to fetch them:
+ * The pages still missing for a store to cover [fromSec, now], in the order to fetch them:
  * the tail first (when stale), then head pages walking back from the store's start. A symbol with
  * no store starts with its newest page, which ends at now.
  * @returns {{kind:"head"|"tail", from:number, to:number, reachesNow:boolean}[]}
  */
-export function planPages(store, neededFrom, nowSec, nowMs) {
+export function planPages(store, fromSec, nowSec, nowMs) {
   const pages = [];
   if (!store) {
-    for (let to = nowSec; to > neededFrom; to -= GRADE_PAGE_S) {
-      pages.push({ kind: "head", from: Math.max(neededFrom, to - GRADE_PAGE_S), to, reachesNow: to === nowSec });
+    for (let to = nowSec; to > fromSec; to -= GRADE_PAGE_S) {
+      pages.push({ kind: "head", from: Math.max(fromSec, to - GRADE_PAGE_S), to, reachesNow: to === nowSec });
     }
     return pages;
   }
@@ -77,8 +95,8 @@ export function planPages(store, neededFrom, nowSec, nowMs) {
       pages.push({ kind: "tail", from, to, reachesNow: to === nowSec });
     }
   }
-  for (let to = store.from; to > neededFrom; to -= GRADE_PAGE_S) {
-    pages.push({ kind: "head", from: Math.max(neededFrom, to - GRADE_PAGE_S), to, reachesNow: false });
+  for (let to = store.from; to > fromSec; to -= GRADE_PAGE_S) {
+    pages.push({ kind: "head", from: Math.max(fromSec, to - GRADE_PAGE_S), to, reachesNow: false });
   }
   return pages;
 }
@@ -158,10 +176,10 @@ export function makeGradeCandles(env, { budget = 24, fetchJson = orderlyJson, no
     return loaded.get(sym);
   }
 
-  function nextPage(sym, neededFrom) {
+  function nextPage(sym, fromSec) {
     if (failed.has(sym)) return null;
     const now = nowMs();
-    return planPages(stores.get(sym) || null, neededFrom, Math.floor(now / 1000), now)[0] || null;
+    return planPages(stores.get(sym) || null, fromSec, Math.floor(now / 1000), now)[0] || null;
   }
 
   async function runPage(sym, page) {
@@ -199,9 +217,9 @@ export function makeGradeCandles(env, { budget = 24, fetchJson = orderlyJson, no
   }
 
   /** One symbol, sequential pages (the cron and on-read paths). Returns the store (maybe partial). */
-  async function ensure(sym, neededFrom) {
+  async function ensure(sym, fromSec) {
     await load(sym);
-    for (let p = nextPage(sym, neededFrom); p && left > 0; p = nextPage(sym, neededFrom)) await runPage(sym, p);
+    for (let p = nextPage(sym, fromSec); p && left > 0; p = nextPage(sym, fromSec)) await runPage(sym, p);
     return stores.get(sym) || null;
   }
 
@@ -222,10 +240,10 @@ export function makeGradeCandles(env, { budget = 24, fetchJson = orderlyJson, no
  * can't be had yet. Callers treat null as "not graded this time".
  */
 export async function candlesForCall(env, symbol, createdAtMs, { budget = 6, gc } = {}) {
+  const sym = gradeSymbol(symbol), from = neededFrom(createdAtMs);
+  if (!sym || from == null) return null;
   const run = gc || makeGradeCandles(env, { budget });
-  const at = Math.floor(Number(createdAtMs) / 1000);
-  if (!Number.isFinite(at)) return null;
-  const store = await run.ensure(gradeSymbol(symbol), at - REGIME_PAD_S);
+  const store = await run.ensure(sym, from);
   if (!gc) await run.flush();
   return callWindow(store, createdAtMs);
 }
