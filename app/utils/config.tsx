@@ -181,10 +181,9 @@ const getPnLBackgroundImages = (): string[] => {
 
     if (isNaN(customPnLCount) || customPnLCount < 1) {
       return [
+        // Only the branded poster (tools/brand/previews.html?card=poster). The other three were
+        // Orderly's stock template art, so no config path may fall back to them.
         withBasePath("/pnl/poster_bg_1.png"),
-        withBasePath("/pnl/poster_bg_2.png"),
-        withBasePath("/pnl/poster_bg_3.png"),
-        withBasePath("/pnl/poster_bg_4.png"),
       ];
     }
 
@@ -196,12 +195,7 @@ const getPnLBackgroundImages = (): string[] => {
     return customPosters;
   }
 
-  return [
-    withBasePath("/pnl/poster_bg_1.png"),
-    withBasePath("/pnl/poster_bg_2.png"),
-    withBasePath("/pnl/poster_bg_3.png"),
-    withBasePath("/pnl/poster_bg_4.png"),
-  ];
+  return [withBasePath("/pnl/poster_bg_1.png")];
 };
 
 const getBottomNavIcon = (menuName: string) => {

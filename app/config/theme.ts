@@ -62,6 +62,10 @@ export const C = {
   pos: "#3ecf8e",    // profit / up / live
   neg: "#f7525f",    // loss / down
   warn: "#fbbf24",
+  // Brand ACCENT MARK (the landing's --amber): a top rule, a section marker, an active tab.
+  // Never a button (buttons are bone) and never body text. Same hue as `warn` on purpose —
+  // the landing uses one amber — so warning TEXT keeps its ⚠ and wording to read as a warning.
+  amber: "#fbbf24",
   info: "#d4d4d8",   // neutral status (active/closed) — stays monochrome
 } as const;
 
