@@ -15,7 +15,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { ThesisTrade } from "@/pages/lab/types";
-import { mergeOnOpen, foldInBeforeSave, removedIds } from "@/lib/labMerge.mjs";
+import { mergeOnOpen, foldInBeforeSave, removedIds, withServerPublished } from "@/lib/labMerge.mjs";
 import { cachedLabAuth, clearLabAuth, getLabAuth, useLabWallet, useLabAuthState, type LabAuth, type LabAuthMode } from "@/hooks/useLabAuth";
 
 const API_BASE = "https://og.nexustradinglabs.com";
@@ -182,6 +182,16 @@ export function useLabStorage(walletAddress?: string | null) {
       if (res.status === 401) { clearLabAuth(addr); return false; }
       if (!res.ok) return false;
       tombsFor(addr).clear();
+      // Published calls are permanent: take them exactly as the server stored them (its post time,
+      // the frozen levels, the grade), and un-publish locally any it refused (labMerge.mjs).
+      const out = await res.json().catch(() => null);
+      const merged = withServerPublished(readLocalTheses(), out);
+      if (merged.changed) {
+        const list = merged.theses as ThesisTrade[];
+        writeLocalTheses(list);
+        setTheses(list);
+        broadcastTheses();
+      }
       setSynced(true);
       return true;
     } catch {
