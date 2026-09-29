@@ -211,8 +211,8 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
   // Tucked behind a toggle like the Lab's other deep sections (collapsed by default, remembered).
   // The one-line summary rides in the subtitle so the closed state still says something.
   return (
-    <Collapsible title="PAPER BLOTTER" subtitle={`how trades end · ${b.n} closed · ${b.winRate}% win · window`}
-      shortTitle="PAPER BLOTTER" shortSub={`${b.n} closed · ${b.winRate}% win`} storageKey="nx_paper_blotter_open">
+    <Collapsible title="Paper blotter" subtitle={`how trades end · ${b.n} closed · ${b.winRate}% win · window`}
+      shortTitle="Paper blotter" shortSub={`${b.n} closed · ${b.winRate}% win`} storageKey="nx_paper_blotter_open">
     <div style={agentCardStyle}>
 
       {b.staleWindow && b.sizeDrift && (

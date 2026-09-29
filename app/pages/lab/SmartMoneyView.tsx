@@ -3,6 +3,7 @@
 // the exit and grades the result on-chain). Data comes from lab-api /smart/*
 // (server-side HL indexing, KV-cached). Discovery + context — NOT "front-run the
 // whale": copy is directional (their symbol + side), executed on Nexus/Orderly.
+import { C } from "@/config/theme";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
@@ -449,7 +450,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
   );
 
   return (
-    <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+    <div>
       {poster && <SharePoster data={poster} onClose={() => setPoster(null)} />}
       {detail && <TraderDetail source={detail.source} address={detail.address} accountId={detail.accountId} myAddress={wallet ?? undefined} onClose={() => setDetail(null)} />}
       {pendingCopy && (
@@ -465,7 +466,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
       {/* Header */}
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 5 }}>Scout</div>
-        <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 24, fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1 }}>Smart Money</div>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 24, fontWeight: 600, color: C.text.bright, lineHeight: 1.1 }}>Smart Money</div>
         <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", marginTop: 6, lineHeight: 1.5, maxWidth: 660 }}>
           The top traders on <strong style={{ color: "#a1a1aa" }}>Orderly</strong> and Hyperliquid, and what they’re holding right now —
           indexed live from public on-chain data. Copy any move into a <strong style={{ color: "#a1a1aa" }}>risk-managed trade</strong> the

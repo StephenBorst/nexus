@@ -909,7 +909,7 @@ export function AgentView() {
           {/* Quick-start (style + presets) is the ONBOARDING on-ramp — collapsed once the
               user has configured (has symbols), so the config opens on the essentials, not
               the onboarding. Open by default for a fresh, unconfigured agent. */}
-          <Collapsible title="◆ QUICK START" subtitle="pick a style or load a preset" defaultOpen={!(config.symbols && config.symbols.length)} storageKey="nx_agent_quickstart">
+          <Collapsible title="Quick start" subtitle="pick a style or load a preset" defaultOpen={!(config.symbols && config.symbols.length)} storageKey="nx_agent_quickstart">
           {/* ── TRADING STYLE — the friendly on-ramp: pick a horizon, get a tuned
               starting config. Day/Swing are the agent's honest home (hourly data +
               1-min cron + funding edge); scalping/position are intentionally absent. */}
@@ -1174,7 +1174,7 @@ export function AgentView() {
               regime/session/vol, vol-scaled stops) — all opt-in, off by default, validate
               on Test/Sweep. Tucked behind disclosure so the config flows mode → strategy →
               symbols → risk; auto-opens if any filter is already active. */}
-          <Collapsible title="◆ FILTERS & CONDITIONING" subtitle="experimental · validate on Test / Sweep first"
+          <Collapsible title="Filters & conditioning" subtitle="experimental · validate on Test / Sweep first"
             defaultOpen={!!(config.invertSignal || config.respectRegime || config.respectSmartMoney || config.volScaledStops || (config.tradeSessions && config.tradeSessions.length) || config.minVolAtrPct || config.maxVolAtrPct)}
             storageKey="nx_agent_filters">
           {/* Opt-in INVERT — the "fade your own signal" lever. If a config is

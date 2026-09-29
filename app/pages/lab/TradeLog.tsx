@@ -120,7 +120,7 @@ export function TradeLogAllView({
    <>
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 5 }}>Record</div>
-      <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 24, fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1, letterSpacing: "-0.01em" }}>The Trading Log</div>
+      <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 24, fontWeight: 600, color: C.text.bright, lineHeight: 1.1, letterSpacing: "-0.02em" }}>The Trading Log</div>
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
       {([

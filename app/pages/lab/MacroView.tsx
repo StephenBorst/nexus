@@ -36,7 +36,7 @@ export function MacroView() {
       </div>
 
       {/* the crypto price-target prediction lens — secondary, collapses under the events + proof */}
-      <Collapsible title="◇ FORECAST DIVERGENCE" subtitle="crypto price-target markets — forecasters vs the leveraged tape" storageKey="nx_forecast_open">
+      <Collapsible title="Forecast divergence" subtitle="crypto price-target markets — forecasters vs the leveraged tape" storageKey="nx_forecast_open">
         <ForecastDivergence />
       </Collapsible>
     </div>

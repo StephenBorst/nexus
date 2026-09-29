@@ -1535,7 +1535,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
           <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 5 }}>
             Plan
           </div>
-          <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 24, fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1, letterSpacing: "-0.01em" }}>
+          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 24, fontWeight: 600, color: C.text.bright, lineHeight: 1.1, letterSpacing: "-0.02em" }}>
             The Nexus Thesis Engine
           </div>
         </div>
@@ -1803,7 +1803,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
               detailed builder folds behind disclosure. Auto-opens when a draft (catalyst /
               notes prefilled) is in play, so the "draft this fade → thesis" flow shows its
               levels; collapsed for a fresh quick call. */}
-          <Collapsible title="◆ FINE-TUNE THE CALL" subtitle="levels, sizing, catalyst, charts" defaultOpen={!!(form.catalyst || form.notes)} storageKey="nx_thesis_finetune">
+          <Collapsible title="Fine-tune the call" subtitle="levels, sizing, catalyst, charts" defaultOpen={!!(form.catalyst || form.notes)} storageKey="nx_thesis_finetune">
           <div style={cardStyle}>
             <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.1em", marginBottom: 12 }}>&#9632; INSTRUMENT</div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 160px", gap: 8 }}>

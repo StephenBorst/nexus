@@ -1,4 +1,5 @@
 // First-run welcome + onboarding checklist. Extracted from index.tsx.
+import { C } from "@/config/theme";
 import { useState } from "react";
 import { cardStyle, navBtnStyle } from "./styles";
 
@@ -19,7 +20,7 @@ export function LabWelcome() {
     <div style={{ padding: "32px 8px" }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
         <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#ededf0", letterSpacing: "0.3em", marginBottom: 12, textShadow: "0 0 12px rgba(237,237,240,0.5)" }}>THE LAB</div>
-        <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 34, color: "#fff", fontWeight: 700, marginBottom: 14, lineHeight: 1.2, letterSpacing: "-0.01em" }}>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 34, color: C.text.bright, fontWeight: 600, marginBottom: 14, lineHeight: 1.2, letterSpacing: "-0.02em" }}>
           Plan it. Run it. <span style={{ fontStyle: "italic" }}>Prove it.</span>
         </div>
         <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13.5, color: "#a1a1aa", maxWidth: 580, margin: "0 auto", lineHeight: 1.6 }}>

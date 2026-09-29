@@ -479,7 +479,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
         {!embedded ? (
           <div>
             <div style={{ fontSize: "9px", color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: "5px" }}>Read the tape</div>
-            <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: "24px", fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1, letterSpacing: "-0.01em" }}>Market Terminal</div>
+            <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: "24px", fontWeight: 600, color: C.text.bright, lineHeight: 1.1, letterSpacing: "-0.02em" }}>Market Terminal</div>
           </div>
         ) : <span />}
         <div style={{ color: DIM, fontSize: "10px", fontFamily: "var(--nx-font-mono)", display: "flex", alignItems: "center", gap: "8px", letterSpacing: "0.05em" }}>

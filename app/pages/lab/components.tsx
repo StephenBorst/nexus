@@ -46,21 +46,20 @@ export function CountUp({ value, format, durationMs = 620 }: {
   return <>{format(display)}</>;
 }
 
-// ─── Editorial section header ────────────────────────────
-// The signature header pattern: mono eyebrow → serif headline → bone hairline
-// rule. Gives every surface editorial gravitas without a heavy hero. Drop-in
-// replacement for the ad-hoc header divs across the Lab/Feed.
+// ─── Section header ──────────────────────────────────────
+// Mono eyebrow → sans headline, the same shape as the page titles (Lab, Proof), so every
+// section on every surface reads as one system. The note sits right on desktop and wraps
+// under the title when there's no room.
 export function SectionHeader({ eyebrow, title, note }: { eyebrow: string; title: string; note?: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "#71717a" }}>{eyebrow}</div>
-          <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: "clamp(22px, 3.4vw, 30px)", fontWeight: 400, color: "#f4f4f5", letterSpacing: "-0.01em", lineHeight: 1.12, marginTop: 6 }}>{title}</div>
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "6px 16px", flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: C.text.muted }}>{eyebrow}</div>
+          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: "clamp(20px, 2.6vw, 26px)", fontWeight: 600, color: C.text.bright, letterSpacing: "-0.02em", lineHeight: 1.15, marginTop: 6 }}>{title}</div>
         </div>
-        {note && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b", letterSpacing: "0.05em", textAlign: "right" }}>{note}</div>}
+        {note && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.muted, paddingBottom: 3 }}>{note}</div>}
       </div>
-      <div style={{ height: 1, background: "linear-gradient(90deg, #ededf0, rgba(237,237,240,0) 60%)", marginTop: 14, maxWidth: 340 }} />
     </div>
   );
 }
@@ -68,8 +67,8 @@ export function SectionHeader({ eyebrow, title, note }: { eyebrow: string; title
 // ─── Coachmark ───────────────────────────────────────────
 // One-time, dismissible teaching callout — makes a flow legible without a heavy
 // tour lib. Gated by a localStorage key so it shows once per browser. Terminal
-// register: sky-blue info left-rule (green is reserved for profit; this is info),
-// mono, "GOT IT" to dismiss. Renders nothing once dismissed or when `when` is false.
+// register: an amber left rule (the accent mark; green is reserved for profit), sans copy,
+// "Got it" to dismiss. Renders nothing once dismissed or when `when` is false.
 export function Coachmark({ storageKey, badge, title, children, when = true }: {
   storageKey: string; badge?: string; title: string; children: React.ReactNode; when?: boolean;
 }) {
@@ -83,23 +82,22 @@ export function Coachmark({ storageKey, badge, title, children, when = true }: {
   };
   return (
     <div className="nx-fade-in" style={{
-      display: "flex", gap: 12, alignItems: "flex-start",
-      background: "linear-gradient(90deg, #0f0f11, #0f0f11)",
-      border: "1px solid #232327", borderLeft: "3px solid #6cb6ff",
-      borderRadius: 6, padding: "12px 14px", marginBottom: 12,
+      display: "flex", gap: 14, alignItems: "flex-start",
+      background: C.surfaceAlt, border: `1px solid ${C.border}`, borderLeft: `2px solid ${C.amber}`,
+      borderRadius: 8, padding: "12px 14px", marginBottom: 12,
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          {badge && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.1em", color: "#0a0a0b", background: "#6cb6ff", borderRadius: 3, padding: "2px 6px", fontWeight: 700 }}>{badge}</span>}
-          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#6cb6ff", fontWeight: 700, letterSpacing: "0.03em" }}>{title}</span>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
+          {badge && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.16em", color: C.amber }}>{badge}</span>}
+          <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 14, color: C.text.bright, fontWeight: 600 }}>{title}</span>
         </div>
-        <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.5 }}>{children}</div>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.fog, lineHeight: 1.55 }}>{children}</div>
       </div>
-      <button onClick={dismiss} style={{
-        flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.05em",
-        color: "#71717a", background: "none", border: "1px solid #232327", borderRadius: 3,
-        padding: "4px 9px", cursor: "pointer",
-      }}>GOT IT</button>
+      <button type="button" onClick={dismiss} style={{
+        flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 500,
+        color: C.text.fog, background: "none", border: `1px solid ${C.border}`, borderRadius: 15,
+        height: 28, padding: "0 12px", cursor: "pointer", whiteSpace: "nowrap",
+      }}>Got it</button>
     </div>
   );
 }

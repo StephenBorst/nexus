@@ -833,7 +833,7 @@ export function MispricedBoard() {
             </div>
 
             {isMobile
-              ? <Collapsible title="WHY" subtitle="the chart, the read, the history" storageKey="nx_ticket_why_open">{deepRead}</Collapsible>
+              ? <Collapsible title="Why" subtitle="the chart, the read, the history" storageKey="nx_ticket_why_open">{deepRead}</Collapsible>
               : deepRead}
 
             {/* Desktop keeps the footer action row. On a phone the SAME verdict-gated buttons are
@@ -872,7 +872,7 @@ export function MispricedBoard() {
               one tap away, never in front of the read. */}
           <div style={{ paddingTop: isMobile ? 4 : 6 }}>
             {isMobile
-              ? <Collapsible title="READING THE CARD" storageKey="nx_ticket_legend_open">{legendBody}</Collapsible>
+              ? <Collapsible title="Reading the card" storageKey="nx_ticket_legend_open">{legendBody}</Collapsible>
               : legendBody}
           </div>
         </div>

@@ -1,4 +1,5 @@
 // Market Intel tab (Intel + News sub-toggle). Extracted from index.tsx.
+import { C } from "@/config/theme";
 import { useState, useEffect } from "react";
 import { navBtnStyle } from "./styles";
 import { useIsMobile } from "./useIsMobile";
@@ -183,7 +184,7 @@ export function MarketIntelView() {
     <div>
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 5 }}>Scout</div>
-        <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 24, fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1, letterSpacing: "-0.01em" }}>The Market Terminal</div>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 24, fontWeight: 600, color: C.text.bright, lineHeight: 1.1, letterSpacing: "-0.02em" }}>The Market Terminal</div>
       </div>
       {/* MarketTape moved to the DECISION tabs (thesis/agent) as a thin regime strip —
           IntelPage below already leads with sentiment, so a second score here was

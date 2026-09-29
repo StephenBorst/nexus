@@ -680,7 +680,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       {/* Core analytics (operator read, key stats, equity curve) stay up top; the deeper
           drill-downs collapse so the tab reads as a synthesis, not an instrument dump. */}
       {orders.length > 0 && (
-        <Collapsible title="◇ DEEPER BREAKDOWNS" subtitle="score, timing, per-symbol & per-regime, top assets, process coaching" storageKey="nx_analytics_deep_open">
+        <Collapsible title="Deeper breakdowns" subtitle="score, timing, per-symbol & per-regime, top assets, process coaching" storageKey="nx_analytics_deep_open">
           <TradingScoreSection orders={orders} winRate={winRate} />
           <BreakdownRow orders={orders} />
           <TimingAndRisk orders={orders} />

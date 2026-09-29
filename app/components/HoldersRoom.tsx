@@ -9,6 +9,7 @@
  * filtered to authors who are themselves holders (alpha-adjacency).
  */
 
+import { C } from "@/config/theme";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { signWithInjected } from "@/utils/injectedWallet";
@@ -146,7 +147,7 @@ export function HoldersRoom({ walletAddress }: { walletAddress: string | null })
         <div>
           <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 5 }}>Hold</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontFamily: "var(--nx-font-serif)", fontSize: 24, fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1, letterSpacing: "-0.01em" }}>The Holders Room</span>
+            <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 24, fontWeight: 600, color: C.text.bright, lineHeight: 1.1, letterSpacing: "-0.02em" }}>The Holders Room</span>
             <NexusTierBadge tier={tier} size="md" />
           </div>
         </div>

@@ -1,4 +1,5 @@
 // Copy Trades tab. Extracted from index.tsx (god-file split).
+import { C } from "@/config/theme";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
@@ -27,7 +28,7 @@ export function CopiesView() {
         <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 5 }}>
           Follow
         </div>
-        <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 24, fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1, letterSpacing: "-0.01em" }}>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 24, fontWeight: 600, color: C.text.bright, lineHeight: 1.1, letterSpacing: "-0.02em" }}>
           Copy Trades <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: 400, color: "#52525b", letterSpacing: "0.06em" }}>· {copiedTheses.length} copied</span>
         </div>
       </div>

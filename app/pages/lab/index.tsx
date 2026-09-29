@@ -28,17 +28,20 @@ import { Collapsible } from "./Collapsible";
 import { LabWelcome, OnboardingChecklist } from "./Onboarding";
 import { LabStanding } from "./LabStanding";
 import { CommandPalette } from "./CommandPalette";
-import { SimCreditsBadge } from "./SimCreditsBadge";
 import { CreatorEarnings } from "./CreatorEarnings";
 import { NexusBriefing } from "./NexusBriefing";
 import { DecisionBoard } from "./DecisionBoard";
-import { CountUp } from "./components";
-import { pressKey } from "@/utils/a11y";
+import { LabTitleBar, LabStats, LabTabs, type LabTab } from "./LabHeader";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
-import { C, SIGNAL, LINE } from "@/config/theme";
+import { C } from "@/config/theme";
 
 // Legacy alias: the old MISPRICED/GAPS tab was folded into SMART MONEY (Phase 1 re-slice),
 // so any ?tab=mispriced deep-link, shared OG link, or copilot nav resolves to smart.
+// One column for the header and every tab, so nothing sits indented against its neighbours.
+const LAB_MAX_W = 1440;
+
+const signedUsd = (v: number) => `${v >= 0 ? "+" : "-"}$${Math.abs(v).toFixed(2)}`;
+
 const normTab = (t: string | null | undefined): TabId | null =>
   !t ? null : (t === "mispriced" || t === "gaps") ? "smart" : (t as TabId);
 
@@ -154,18 +157,18 @@ export default function TheLabPage() {
   // grouped under the phase they belong to, so the structure teaches the workflow.
   // (Holders Room sits outside the loop — it's community access, not a trading step,
   // and pretending otherwise would be the same dishonesty in the other direction.)
-  const tabs: { id: TabId; label: string; short: string; phase: string }[] = [
-    { id: "intel",          label: "Market Intel",       short: "INTEL", phase: "OBSERVE" },
-    { id: "smart",          label: "Smart Money",        short: "SMART", phase: "OBSERVE" },
-    { id: "thesis",         label: "Thesis Engine",      short: "LAB",   phase: "PLAN"    },
-    { id: "agent",          label: "Trading Agent",      short: "AGENT", phase: "RUN"     },
-    { id: "quicktrade",     label: "Quick Trade",        short: "TRADE", phase: "RUN"     },
-    { id: "copies",         label: "Copy Trades",        short: "COPY",  phase: "RUN"     },
+  const tabs: LabTab[] = [
+    { id: "intel",          label: "Market Intel",       short: "Intel",   phase: "OBSERVE" },
+    { id: "smart",          label: "Smart Money",        short: "Smart",   phase: "OBSERVE" },
+    { id: "thesis",         label: "Thesis Engine",      short: "Thesis",  phase: "PLAN"    },
+    { id: "agent",          label: "Trading Agent",      short: "Agent",   phase: "RUN"     },
+    { id: "quicktrade",     label: "Quick Trade",        short: "Trade",   phase: "RUN"     },
+    { id: "copies",         label: "Copy Trades",        short: "Copy",    phase: "RUN"     },
     // Holders Room is community access, not a trading step — it sits between RUN
     // and PROVE so the loop still ENDS on Analytics (which closes it back to the top).
-    { id: "holders",        label: "Holders Room",       short: "ROOM",  phase: ""        },
-    { id: "tradelog",       label: "Trading Log",        short: "LOG",   phase: "PROVE"   },
-    { id: "analytics",      label: "Analytics",          short: "STATS", phase: "PROVE"   },
+    { id: "holders",        label: "Holders Room",       short: "Holders", phase: ""        },
+    { id: "tradelog",       label: "Trading Log",        short: "Log",     phase: "PROVE"   },
+    { id: "analytics",      label: "Analytics",          short: "Stats",   phase: "PROVE"   },
   ];
   // ── Guest Lab IA — three rooms ────────────────────────────────────────────────
   // A guest (no wallet) sees the three read-first rooms — Market Intel · Smart Money · Thesis
@@ -187,13 +190,6 @@ export default function TheLabPage() {
   // (or opening it once) shows the full bar, so the active tab is never orphaned.
   const condensedNav = !showAllTabs && navRooms.includes(activeTab);
   const visibleTabs = condensedNav ? tabs.filter((t) => navRooms.includes(t.id)) : tabs;
-  // Group in declaration order — the array above IS the loop's order.
-  const tabGroups = visibleTabs.reduce<{ phase: string; items: typeof tabs }[]>((acc, t) => {
-    const last = acc[acc.length - 1];
-    if (last && last.phase === t.phase) last.items.push(t);
-    else acc.push({ phase: t.phase, items: [t] });
-    return acc;
-  }, []);
 
   const calendarProps = { dayGroups, onDayClick: handleDayClick, viewMonth, viewYear, onPrevMonth: prevMonth, onNextMonth: nextMonth, totalPnl };
 
@@ -213,35 +209,27 @@ export default function TheLabPage() {
   })();
 
   return (
-    <div style={{ background: "#0a0a0b", padding: 0 }}>
-      <style>{`@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 8px #ededf0}50%{opacity:0.4;box-shadow:0 0 2px #ededf0}}`}</style>
-      {/* ── LIVE MARKET TICKER ── the Wall-Street tape up top (market presence
-          restored to the fold as one thin ambient line, not the old 415px stack). */}
+    <div style={{ background: C.canvas, padding: 0 }}>
+      {/* ── LIVE MARKET TICKER ── one thin ambient line of market presence. */}
       <NexusTicker />
-      {/* ── STATS HEADER ── account P&L stats. Hidden while DISCONNECTED (guest): the whole
-          strip would just be OPEN / CLOSED / WIN RATE / REALIZED / UNREALIZED / BALANCE dashes —
-          chrome over the board. Connect brings it (and the data) back. */}
-      {connected && (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "space-between" : "flex-end", padding: isMobile ? "6px 10px" : "6px 18px", background: "#0f0f11", borderBottom: "1px solid #232327", flexWrap: "wrap", gap: 4 }}>
-        <div style={isMobile
-          ? { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px 6px", width: "100%", marginTop: 4 }
-          : { display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
-          {([
-            { label: "OPEN", num: connected ? openCount : null, fmt: (v: number) => String(Math.round(v)), color: openCount > 0 ? "#fbbf24" : "#71717a" },
-            { label: "CLOSED", num: connected ? processedTrades.length : null, fmt: (v: number) => String(Math.round(v)), color: "#d4d4d8" },
-            { label: "WIN RATE", num: connected && processedTrades.length > 0 ? winRate : null, fmt: (v: number) => `${v.toFixed(1)}%`, color: connected && processedTrades.length > 0 ? (winRate >= 50 ? "#3ecf8e" : "#f7525f") : "#71717a" },
-            { label: "REALIZED P&L", num: connected && processedTrades.length > 0 ? totalPnl : null, fmt: (v: number) => `${v >= 0 ? "+" : "-"}$${Math.abs(v).toFixed(2)}`, color: connected && processedTrades.length > 0 ? (totalPnl >= 0 ? "#3ecf8e" : "#f7525f") : "#71717a" },
-            { label: "UNREALIZED", num: connected && openCount > 0 ? unrealizedPnl : null, fmt: (v: number) => `${v >= 0 ? "+" : "-"}$${Math.abs(v).toFixed(2)}`, color: connected && openCount > 0 ? (unrealizedPnl >= 0 ? "#3ecf8e" : "#f7525f") : "#71717a" },
-            { label: "BALANCE", num: connected && availableBalance != null ? (availableBalance as number) : null, fmt: (v: number) => `$${v.toFixed(2)}`, color: "#f4f4f5" },
-          ] as { label: string; num: number | null; fmt: (v: number) => string; color: string }[]).map(({ label, num, fmt, color }) => (
-            <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: isMobile ? "center" : "flex-start", gap: 1 }}>
-              <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a" }}>{label}</span>
-              <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: isMobile ? 11 : 12, color, fontWeight: "bold", letterSpacing: "0.05em" }}>
-                {num == null ? "—" : <CountUp value={num} format={fmt} />}
-              </span>
-            </div>
-          ))}
+      <header style={{ background: C.surfaceAlt, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ maxWidth: LAB_MAX_W, margin: "0 auto" }}>
+        <LabTitleBar isMobile={isMobile} sync={{ connected, authOk: authState === "ok", syncing, synced, onSign: () => { void signToSync(); } }} />
+        {/* Account numbers, connected only: a guest would see six dashes over the board. */}
+        {connected && (
+          <LabStats isMobile={isMobile} stats={[
+            { label: "OPEN", num: openCount, fmt: (v) => String(Math.round(v)) },
+            { label: "CLOSED", num: processedTrades.length, fmt: (v) => String(Math.round(v)) },
+            { label: "WIN RATE", num: processedTrades.length > 0 ? winRate : null, fmt: (v) => `${v.toFixed(1)}%` },
+            { label: "REALIZED", num: processedTrades.length > 0 ? totalPnl : null, fmt: signedUsd, money: true },
+            { label: "UNREALIZED", num: openCount > 0 ? unrealizedPnl : null, fmt: signedUsd, money: true },
+            { label: "BALANCE", num: availableBalance != null ? (availableBalance as number) : null, fmt: (v) => `$${v.toFixed(2)}` },
+          ]} />
+        )}
+        <LabTabs isMobile={isMobile} tabs={visibleTabs} activeTab={activeTab} onSelect={setActiveTab}
+          canCondense={navRooms.includes(activeTab)} condensed={condensedNav} onToggleMore={setShowAllTabs} />
         </div>
+<<<<<<< Updated upstream
       </div>
       )}
       {/* ── TAB BAR ── */}
@@ -327,9 +315,12 @@ export default function TheLabPage() {
           )}
         </div>
       </div>
+=======
+      </header>
+>>>>>>> Stashed changes
       {/* Extra bottom padding on phones so the last board rows (and their → ) can scroll clear
           of the fixed bottom-right NEXUS FAB, instead of resting under it. */}
-      <div style={{ padding: isMobile ? "12px 12px 88px" : 16 }}>
+      <div style={{ padding: isMobile ? "14px 14px 88px" : "20px 20px 24px", maxWidth: LAB_MAX_W, margin: "0 auto" }}>
         {/* Information hierarchy: the graded record (the moat claim) + onboarding
             lead, then the active tab — the task the user came for. The ambient promo/
             status chrome (market, network-verify, PRO badge) used to stack ~415px
@@ -376,7 +367,7 @@ export default function TheLabPage() {
           <>
             <ThesisView realizedTrades={connected ? processedTrades : undefined} wallet={rootWalletAddress} />
             {/* Lead with the call form + THE READ; the thesis analytics collapse below. */}
-            <Collapsible title="◇ THESIS ANALYTICS" subtitle="how your calls have performed" storageKey="nx_thesis_analytics_open">
+            <Collapsible title="Thesis analytics" subtitle="how your calls have performed" storageKey="nx_thesis_analytics_open">
               <ThesisAnalyticsView />
             </Collapsible>
           </>
@@ -407,7 +398,7 @@ export default function TheLabPage() {
           // read); the deep Market Intel (news, movers, OI, long/short) collapses so the
           // tab opens as a read, not a wall of rows.
           const deep = (
-            <Collapsible title="◇ MARKET INTEL · DEEP DETAIL" subtitle="news, movers, OI, long/short, per-market" shortTitle="◇ MARKET INTEL" shortSub="news · movers · OI · long/short" storageKey="nx_intel_deep_open">
+            <Collapsible title="Market intel · deep detail" subtitle="news, movers, OI, long/short, per-market" shortTitle="Market intel" shortSub="news · movers · OI · long/short" storageKey="nx_intel_deep_open">
               <MarketIntelView />
             </Collapsible>
           );
@@ -422,24 +413,24 @@ export default function TheLabPage() {
           // as the deep read behind the Board's Confluence strip — no more two competing
           // "synthesis" tabs. Each lens is a public read that The Board folds into one line.
           const lensesHeader = (
-            <div style={{ marginTop: 32, marginBottom: 4, paddingTop: 10, borderTop: "1px solid #232327" }}>
-              <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 3 }}>The lenses · the deep why</div>
-              <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 17, fontWeight: 700, color: "#a1a1aa", lineHeight: 1.15, letterSpacing: "-0.01em" }}>What The Board is reading</div>
-              <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", marginTop: 4, lineHeight: 1.5 }}>Each lens is one column on The Board, opened up. Funding &amp; positioning are the tape; catalysts &amp; forecasters are the outside crowd.</div>
+            <div style={{ marginTop: 36, marginBottom: 2 }}>
+              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.18em", color: C.text.muted, marginBottom: 6 }}>THE LENSES</div>
+              <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 20, fontWeight: 600, letterSpacing: "-0.015em", color: C.text.bright, lineHeight: 1.2 }}>What The Board is reading</div>
+              <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.muted, marginTop: 6, lineHeight: 1.5, maxWidth: 620 }}>Each lens is one column on The Board, opened up. Funding and positioning are the tape; catalysts and forecasters are the outside crowd.</div>
             </div>
           );
           const funding = (
-            <Collapsible title="◇ FUNDING EDGES · ALL MARKETS" subtitle="every mispriced perp + which fades PAID vs which were a TRAP" shortTitle="◇ FUNDING EDGES" shortSub="every mispriced perp · paid vs trap" storageKey="nx_funding_board_open">
+            <Collapsible title="Funding edges · all markets" subtitle="every mispriced perp + which fades PAID vs which were a TRAP" shortTitle="Funding edges" shortSub="every mispriced perp · paid vs trap" storageKey="nx_funding_board_open">
               <MispricedBoard />
             </Collapsible>
           );
           const positioning = (
-            <Collapsible title="◇ POSITIONING · CROWD vs SMART MONEY" subtitle="where the leveraged crowd and the sharp wallets disagree — on your edge" shortTitle="◇ POSITIONING" shortSub="crowd vs smart money" storageKey="nx_positioning_open">
+            <Collapsible title="Positioning · crowd vs smart money" subtitle="where the leveraged crowd and the sharp wallets disagree — on your edge" shortTitle="Positioning" shortSub="crowd vs smart money" storageKey="nx_positioning_open">
               <PositioningBoard trades={connected ? processedTrades : undefined} />
             </Collapsible>
           );
           const catalysts = (
-            <Collapsible title="◇ CATALYSTS · WORLD EVENTS" subtitle="liquid prediction-market events mapped to the markets they move on Nexus" shortTitle="◇ CATALYSTS" shortSub="world events on Nexus markets" storageKey="nx_catalysts_open">
+            <Collapsible title="Catalysts · world events" subtitle="liquid prediction-market events mapped to the markets they move on Nexus" shortTitle="Catalysts" shortSub="world events on Nexus markets" storageKey="nx_catalysts_open">
               <CatalystBoard />
             </Collapsible>
           );
@@ -449,7 +440,7 @@ export default function TheLabPage() {
           // Collapsed by default so its charts are OFF the Intel first paint (expand to read) —
           // the first screen after the briefing is the ACTIONABLE board, not a wall of charts.
           const forecast = (
-            <Collapsible title="◇ FORECAST DIVERGENCE" subtitle="where prediction markets disagree with price — our markets only" shortTitle="◇ FORECAST DIVERGENCE" shortSub="preds vs price" storageKey="nx_forecast_open">
+            <Collapsible title="Forecast divergence" subtitle="where prediction markets disagree with price — our markets only" shortTitle="Forecast divergence" shortSub="preds vs price" storageKey="nx_forecast_open">
               <ForecastDivergence />
             </Collapsible>
           );
@@ -459,7 +450,7 @@ export default function TheLabPage() {
           // renders children only when open). Q Signals is a PRO lens: non-PRO wallets see a
           // locked card, and each pull is paid by the USER'S wallet via x402 (no auto-poll).
           const qsignals = (
-            <Collapsible title="◇ Q SIGNALS · QUOTIENT" subtitle="the forecasting desk's fair value vs the market — conviction-ranked" shortTitle="◇ Q SIGNALS" shortSub="fair value vs the market" storageKey="nx_qsignals_open">
+            <Collapsible title="Q Signals · Quotient" subtitle="the forecasting desk's fair value vs the market — conviction-ranked" shortTitle="Q Signals" shortSub="fair value vs the market" storageKey="nx_qsignals_open">
               <QSignals address={rootWalletAddress} />
             </Collapsible>
           );
@@ -492,7 +483,7 @@ export default function TheLabPage() {
         {/* Mobile: the page now sizes to content (no minHeight:100dvh canyon), so the footer sits on
             the last lens. Just a small bottom pad keeps BUY $NEXUS ~24px clear of the floating ◆ — no
             140px black lake. Desktop spacing is unchanged. */}
-        <div style={{ marginTop: isMobile ? 14 : 24, paddingTop: 16, paddingBottom: isMobile ? 24 : 0, borderTop: "1px solid #232327", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ marginTop: isMobile ? 14 : 24, paddingTop: 16, paddingBottom: isMobile ? 24 : 0, borderTop: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 12 }}>
           <NexusBuyBar />
           {connected && <CreatorEarnings address={rootWalletAddress} />}
           {connected && <NexusPro walletAddress={rootWalletAddress} />}

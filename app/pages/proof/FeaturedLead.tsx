@@ -65,7 +65,7 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
       </div>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
-        <span style={{ fontFamily: "var(--nx-font-serif, serif)", fontSize: isMobile ? 22 : 26, fontWeight: 700, color: BRIGHT, letterSpacing: "-0.01em", lineHeight: 1.1 }}>
+        <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: isMobile ? 22 : 26, fontWeight: 600, color: BRIGHT, letterSpacing: "-0.02em", lineHeight: 1.1 }}>
           ◆ {LEAD.name}
         </span>
       </div>

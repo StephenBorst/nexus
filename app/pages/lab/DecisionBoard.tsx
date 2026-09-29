@@ -447,12 +447,11 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
 
   const dirColor = (d: Dir | null) => (d === "LONG" ? C.pos : d === "SHORT" ? C.neg : C.text.faint);
   const sortBtn = (mode: SortMode, label: string) => (
-    <button onClick={() => setSort(mode)} style={{
-      background: sort === mode ? "#1a1a1e" : "none", border: `1px solid ${sort === mode ? C.accent : C.border}`,
-      color: sort === mode ? C.accent : C.text.muted, fontFamily: MONO, fontSize: 9, letterSpacing: "0.08em",
-      padding: isMobile ? "6px 4px" : "4px 9px", borderRadius: RADIUS.sm, cursor: "pointer",
-      // On phones each chip fills its equal grid cell (congruent) and never wraps its label.
-      ...(isMobile ? { width: "100%", textAlign: "center" as const, whiteSpace: "nowrap" as const, minHeight: 30 } : {}),
+    <button onClick={() => setSort(mode)} aria-pressed={sort === mode} style={{
+      background: sort === mode ? C.surface : "none", border: `1px solid ${sort === mode ? C.borderStrong : C.border}`,
+      color: sort === mode ? C.text.bright : C.text.muted, fontFamily: UI, fontSize: 12.5, fontWeight: sort === mode ? 600 : 500,
+      height: isMobile ? 34 : 30, padding: "0 12px", borderRadius: 15, cursor: "pointer", whiteSpace: "nowrap" as const,
+      flexShrink: 0,
     }}>{label}</button>
   );
   // Extracted so the same SHARE control sits in the desktop inline row AND the mobile header
@@ -480,10 +479,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       disabled={!shareRow}
       style={{
         marginLeft: isMobile ? 0 : "auto", background: "none", border: `1px solid ${C.border}`, color: C.text.muted,
-        fontFamily: MONO, fontSize: 9, letterSpacing: "0.08em", padding: "4px 10px", borderRadius: RADIUS.sm,
-        cursor: shareRow ? "pointer" : "default", opacity: shareRow ? 1 : 0.5, flexShrink: 0,
+        fontFamily: UI, fontSize: 12.5, fontWeight: 500, height: isMobile ? 30 : 30, padding: "0 12px", borderRadius: 15,
+        cursor: shareRow ? "pointer" : "default", opacity: shareRow ? 1 : 0.5, flexShrink: 0, whiteSpace: "nowrap",
       }}
-    >{shareRow ? `↗ SHARE ${shareRow.sym}` : "↗ SHARE"}</button>
+    >{shareRow ? `Share ${shareRow.sym} ↗` : "Share ↗"}</button>
   );
 
   const cols = "minmax(60px,0.85fr) minmax(76px,1fr) minmax(84px,1.05fr) 54px minmax(66px,0.8fr) minmax(140px,1.6fr) minmax(118px,1.25fr) 34px";
@@ -509,11 +508,11 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
           and the board reads like a signal service, which is exactly what it is not. Desktop,
           where there is room for the argument, keeps it in full. */}
       {isMobile ? (
-        <div style={{ fontFamily: UI, fontSize: 11, lineHeight: 1.5, color: C.text.muted, marginTop: -8, marginBottom: 12 }}>
+        <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: C.text.muted, marginTop: -4, marginBottom: 14 }}>
           <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range. Public facts, graded from the tape after, never advice.
         </div>
       ) : (
-      <div style={{ fontFamily: UI, fontSize: 11, lineHeight: 1.5, color: C.text.muted, marginTop: -8, marginBottom: 14 }}>
+      <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: C.text.muted, marginTop: -4, marginBottom: 16, maxWidth: 820 }}>
         Funding and positioning are <b style={{ color: C.text.bright }}>public facts</b>. <b style={{ color: C.text.bright }}>The play</b> is one verdict word — <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range, <b style={{ color: C.text.muted }}>WATCH</b> when it’s merely elevated. The SAME read as the ticket. It grades <b style={{ color: C.text.bright }}>from the tape</b> after, like every call. No score to trust; a record to verify.
         {" "}<b style={{ color: C.text.bright }}>Confluence</b> shows four INDEPENDENT reads — <span style={{ color: C.text.muted }}>callers · smart money · catalysts · forecasters</span>. And how many <b style={{ color: C.text.bright }}>agree with the play</b> (<span style={{ color: C.accent }}>◆</span> marks where separate signals converge). Agreement is a reason to look, still graded after.
         {hasLens && <> Each play is also matched against <b style={{ color: C.pos }}>your own graded edge</b> — <span style={{ color: C.pos }}>◆ your side/class</span> vs <span style={{ color: C.warn }}>△ off your edge</span>.</>}
@@ -528,25 +527,25 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       {isMobile ? (
         <div style={{ marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-            <span style={{ fontFamily: MONO, fontSize: 9, color: C.text.faint, letterSpacing: "0.06em" }}>SORT</span>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: C.text.muted, letterSpacing: "0.14em" }}>SORT</span>
             {shareBtn}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-            {hasLens && sortBtn("mine", "◆ MINE")}
-            {sortBtn("actionable", "ACTIONABLE")}
-            {sortBtn("confluence", "◆ CONFLUENCE")}
-            {sortBtn("funding", "FUNDING")}
-            {sortBtn("movers", "MOVERS")}
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" }} className="nx-noscrollbar">
+            {hasLens && sortBtn("mine", "◆ Mine")}
+            {sortBtn("actionable", "Actionable")}
+            {sortBtn("confluence", "◆ Confluence")}
+            {sortBtn("funding", "Funding")}
+            {sortBtn("movers", "Movers")}
           </div>
         </div>
       ) : (
-        <div style={{ display: "flex", gap: 6, marginBottom: 10, alignItems: "center" }}>
-          <span style={{ fontFamily: MONO, fontSize: 9, color: C.text.faint, alignSelf: "center", letterSpacing: "0.06em" }}>SORT</span>
-          {hasLens && sortBtn("mine", "◆ MINE")}
-          {sortBtn("actionable", "ACTIONABLE")}
-          {sortBtn("confluence", "◆ CONFLUENCE")}
-          {sortBtn("funding", "FUNDING")}
-          {sortBtn("movers", "MOVERS")}
+        <div style={{ display: "flex", gap: 6, marginBottom: 12, alignItems: "center" }}>
+          <span style={{ fontFamily: MONO, fontSize: 10, color: C.text.muted, alignSelf: "center", letterSpacing: "0.14em", marginRight: 4 }}>SORT</span>
+          {hasLens && sortBtn("mine", "◆ Mine")}
+          {sortBtn("actionable", "Actionable")}
+          {sortBtn("confluence", "◆ Confluence")}
+          {sortBtn("funding", "Funding")}
+          {sortBtn("movers", "Movers")}
           {shareBtn}
         </div>
       )}

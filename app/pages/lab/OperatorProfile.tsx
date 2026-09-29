@@ -106,7 +106,7 @@ export function OperatorProfileCard({ wallet, theses, orders }: {
       {/* Archetype — who you are, in the words a trader would use. */}
       {profile.archetype && (
         <div style={{ marginTop: 10 }}>
-          <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: "clamp(19px, 2.6vw, 25px)", color: C.text.bright, lineHeight: 1.15, letterSpacing: "-0.01em" }}>
+          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: "clamp(19px, 2.6vw, 25px)", color: C.text.bright, lineHeight: 1.15, letterSpacing: "-0.02em" }}>
             {profile.archetype.label}
           </div>
           <div style={{ fontFamily: MONO, fontSize: 9, color: C.text.faint, marginTop: 4 }}>

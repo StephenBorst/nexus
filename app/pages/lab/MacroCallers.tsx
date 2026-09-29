@@ -65,7 +65,7 @@ export function MacroCallers() {
     <div style={{ marginTop: 20 }}>
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 9, color: FAINT, fontFamily: MONO, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 5 }}>Graded, not claimed</div>
-        <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 19, fontWeight: 700, color: BONE, lineHeight: 1.1, letterSpacing: "-0.01em" }}>Macro Callers</div>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 19, fontWeight: 600, color: BONE, lineHeight: 1.1, letterSpacing: "-0.02em" }}>Macro Callers</div>
       </div>
 
       {ranked === null ? (

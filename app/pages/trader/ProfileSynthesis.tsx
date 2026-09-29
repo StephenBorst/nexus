@@ -65,7 +65,7 @@ export function PublicOperatorProfile({ wallet, isOwn = false }: { wallet: strin
         </span>
       </div>
       {profile.archetype && (
-        <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: "clamp(18px, 2.4vw, 23px)", color: C.text.bright, lineHeight: 1.15, marginTop: 8 }}>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: "clamp(18px, 2.4vw, 23px)", color: C.text.bright, lineHeight: 1.15, letterSpacing: "-0.02em", marginTop: 8 }}>
           {profile.archetype.label}
         </div>
       )}

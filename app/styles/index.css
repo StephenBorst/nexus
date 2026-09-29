@@ -301,3 +301,8 @@ html, body {
   background-image: none !important;
   background-color: #60a5fa !important;
 }
+
+/* Sideways-scrolling rows (Lab tabs on a phone): scroll by touch, no bar. */
+.nx-noscrollbar::-webkit-scrollbar { display: none; }
+/* Collapsible rows stacked one after another read as one list: no gap between them. */
+.nx-collapsible + .nx-collapsible { margin-top: 0 !important; }
