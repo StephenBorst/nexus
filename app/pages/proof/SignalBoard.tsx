@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
-import { C, SIGNAL } from "@/config/theme";
+import { C } from "@/config/theme";
 import { AXIS_BLURB, splitLabel, rankAxes, takeaway, sideBar, isCompact } from "@/lib/signalCard.mjs";
 
 const API = "https://og.nexustradinglabs.com";
