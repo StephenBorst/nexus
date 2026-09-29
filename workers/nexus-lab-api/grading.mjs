@@ -81,11 +81,14 @@ export function gradedStatusOf(outcome) {
 }
 
 // The grader that wrote a stamp. Bumped when the rules or the candle window change, so every
-// stamp from an older grader is re-derived once by the next pass. 2 = graded on the call's own
-// window (gradeCandles.mjs, 2026-09-28): before it, calls stamped more than 60 days after they
-// were posted were graded on a window that started after the post, and a client save could write
-// a stamp itself. Cards trust a stamp only when it carries this version.
-export const GRADE_V = 2;
+// stamp from an older grader is re-derived once by the next pass. Cards trust a stamp only when
+// it carries this version.
+//   2 = graded on the call's own window (gradeCandles.mjs, 2026-09-28): before it, calls stamped
+//       more than 60 days after they were posted were graded on a window that started after the
+//       post, and a client save could write a stamp itself.
+//   3 = the entry must trade (logic.mjs gradeCall, 2026-09-29): an entry away from the market is
+//       graded from the hour price reaches it, and never counts if it never does.
+export const GRADE_V = 3;
 export const isCurrentStamp = (t) => (t?.gradedOutcome === "WIN" || t?.gradedOutcome === "LOSS") && t?.gradeV === GRADE_V;
 
 // The fields the hourly pass writes on a public call. When it writes back, it copies ONLY these onto

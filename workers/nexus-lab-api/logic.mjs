@@ -41,10 +41,17 @@ export function callR(t) {
  *   below entry would "win" on its first candle)
  * ⚠️ Never the stored `riskReward` (2026-09-27): the caller writes that field, so paying it let a
  * record claim any R it liked. planQuality still flags a stated R that disagrees (RR_MISMATCH).
+ * - THE ENTRY MUST TRADE (2026-09-29). A call whose entry is inside the price range of the hour it
+ *   was posted into is filled at the post (the usual case: entry = the market). Any other entry is
+ *   a resting order: the call is graded from the first later hour whose range reaches the entry. In
+ *   that fill hour a stop touch counts (it can't have come before the fill on the way to it) and a
+ *   target touch doesn't (it may have come first). Never filled = PENDING. Before this, an entry
+ *   typed away from the market was graded as if filled: a LONG "entered" 4% under the market won
+ *   2R without price ever trading there.
  *
  * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, createdAt }
  * @param {object} cd candles { t:number[] (sec), h:number[], l:number[] } ascending by t
- * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number }}
+ * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number, awaitingEntry?:true }}
  */
 export function gradeCall(t, cd) {
   const { entryPrice, stopLoss, takeProfit1, createdAt } = t;
@@ -53,8 +60,21 @@ export function gradeCall(t, cd) {
   if (R == null) return { outcome: "INVALID", r: 0 };
   const long = String(t.direction).toUpperCase() === "LONG";
   const startSec = Math.floor((createdAt || 0) / 1000);
-  for (let i = 0; i < cd.t.length; i++) {
-    if (cd.t[i] < startSec) continue;
+  const n = cd.t.length;
+  let i = 0;
+  while (i < n && cd.t[i] < startSec) i++;          // the first hour that starts at or after the post
+  // The market the call was posted into: the hour containing the post, else the first hour after it.
+  const ref = i < n && cd.t[i] === startSec ? i : i > 0 && cd.t[i - 1] > startSec - 3600 ? i - 1 : i;
+  const entry = Number(entryPrice);
+  const traded = (k) => cd.l[k] <= entry && entry <= cd.h[k];
+  if (!(ref < n && traded(ref))) {
+    let f = i;
+    while (f < n && !traded(f)) f++;
+    if (f >= n) return { outcome: "PENDING", r: 0, awaitingEntry: true };
+    if (long ? cd.l[f] <= stopLoss : cd.h[f] >= stopLoss) return { outcome: "LOSS", r: -1 };
+    i = f + 1;                                        // a target in the fill hour doesn't count
+  }
+  for (; i < n; i++) {
     const hi = cd.h[i], lo = cd.l[i];
     if (long) {
       const tp = hi >= takeProfit1, sl = lo <= stopLoss;
@@ -69,6 +89,21 @@ export function gradeCall(t, cd) {
     }
   }
   return { outcome: "PENDING", r: 0 };
+}
+
+/**
+ * Where a draft's entry sits against the market right now (the latest hour's range), for the
+ * advisor: gradeCall only counts a call once price trades its entry, so an entry away from the
+ * market is a resting order and the trader should know before posting. null without candles.
+ * @returns {{ traded: boolean, offPct: number, last: number } | null}
+ */
+export function entryVsMarket(entryPrice, cd) {
+  const e = Number(entryPrice);
+  const n = cd && Array.isArray(cd.t) ? cd.t.length : 0;
+  if (!(e > 0) || !n) return null;
+  const k = n - 1, last = Number(cd.c?.[k] ?? (cd.h[k] + cd.l[k]) / 2);
+  if (!(last > 0)) return null;
+  return { traded: cd.l[k] <= e && e <= cd.h[k], offPct: Math.round(((e - last) / last) * 10000) / 100, last };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

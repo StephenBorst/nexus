@@ -19,7 +19,7 @@ import { json } from "./shared.mjs";
 import {
   rankCaller, callerScore, contestedBoard, consensusBySymbol, classifyRegime, callAlignment,
   planQuality, normalizeSymbol, REGIME, postmortemSummary, isLossReason, LOSS_REASONS,
-  estimateResolution, aggregateSideRecord, standoffVerdict,
+  estimateResolution, aggregateSideRecord, standoffVerdict, entryVsMarket,
 } from "./logic.mjs";
 import { computeCallerStats, gatherStanceEntries, ADVICE_FLAG_TEXT } from "./grading.mjs";
 
@@ -531,6 +531,15 @@ export async function handleTheses(parts, request, env) {
     }
     for (const f of (plan?.flags || [])) {
       warnings.push({ severity: f === "BAD_LEVELS" ? "high" : "medium", kind: f, text: ADVICE_FLAG_TEXT[f] || f });
+    }
+    // The grader counts a call only once price trades its entry (gradeCall): say so before posting.
+    const em = draft.entryPrice ? entryVsMarket(draft.entryPrice, cd) : null;
+    if (em && !em.traded) {
+      const side = em.offPct < 0 ? "below" : "above";
+      warnings.push({
+        severity: "medium", kind: "ENTRY_OFF_MARKET",
+        text: `Your entry is ${Math.abs(em.offPct)}% ${side} the market. The call counts once price trades there, and not before.`,
+      });
     }
 
     return json({

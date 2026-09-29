@@ -636,7 +636,17 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   Lab UI: published = static `PUBLIC · LOCKED` chip, no REMOVE / INVALIDATE / REOPEN; unpublished = PRIVATE ↔ ◆ HOLDERS
   toggle + `PUBLISH` (window.confirm first); `useLabStorage` applies the server's published copies after every save
   (`labMerge.withServerPublished`). Tests: `callLock` / `grading.lock` / `routes-lab` / `labMerge` (.test.mjs).
-  ⏭ Open: the ENTRY price isn't checked against the market at publish, so a stale entry can still inflate R.
+  **Live after deploy (Sept 29):** the first `GRADE_V=2` pass stamped all 328 public results; 3 of the 5 shared old calls
+  flipped (ETH L May-13 LOSS→WIN, BTC L May-4 LOSS→WIN, BTC S May-4 WIN→LOSS); every ranked wallet's card W/L == board W/L.
+- **⚠️ THE ENTRY MUST TRADE (2026-09-29, `gradeCall`, `GRADE_V = 3`).** A call whose entry is inside the price range of
+  the hour it was posted into is filled at the post (the usual case: entry = the market; graded exactly as before). Any
+  other entry is a RESTING order: graded from the first later hour whose range reaches it; in that fill hour a stop touch
+  counts (price passes the entry to reach it) and a target touch doesn't (it may have come first); never filled =
+  PENDING (`awaitingEntry`). Before: an entry typed away from the market was graded as if filled — Sept 29, 17 of 145
+  checkable calls had an off-market entry, 11 in the caller's favour (a BTC LONG "entered" at 61,000 with BTC at
+  63,600–63,800 was a 2R WIN). `/theses/advice` warns on a draft (`ENTRY_OFF_MARKET`, `entryVsMarket`). ⏭ Residual:
+  hourly candles, so the posting hour's range allows up to an hour of hindsight on the entry (a server-recorded mark at
+  publish would close it). The scoreboard (`axisbt.mjs`) has its own grader — not touched (engine freeze).
 - `GET /theses/leaderboard`: ranks public-thesis authors by hit-rate + avg-R over ≥5 resolved calls
   (net-positive-R gate, sample-confidence shrink). `GET /theses/ledger`: canonical SHA-256 of the public
   call set (proof-of-call fields + createdAt), recomputable, prev-linked chain (`/theses/ledger/chain`),
