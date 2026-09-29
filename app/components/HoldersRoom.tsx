@@ -62,7 +62,7 @@ type FeedThesis = {
 
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: "#d4d4d8", HIT_TP: "#3ecf8e", STOPPED_OUT: "#f7525f",
-  INVALIDATED: "#fbbf24", CLOSED: "#a1a1aa",
+  INVALIDATED: "#60a5fa", CLOSED: "#a1a1aa",
 };
 
 function LockScreen() {
@@ -197,7 +197,7 @@ export function HoldersRoom({ walletAddress }: { walletAddress: string | null })
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: t.direction === "LONG" ? "#3ecf8e" : "#f7525f" }}>
               {t.direction === "LONG" ? "↑" : "↓"} {t.direction}
             </span>
-            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: t.riskReward >= 2 ? "#ededf0" : "#fbbf24" }}>
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: t.riskReward >= 2 ? "#ededf0" : "#60a5fa" }}>
               1:{t.riskReward.toFixed(2)}
             </span>
             <span style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em", color: statusColor, border: `1px solid ${statusColor}33`, borderRadius: 3, padding: "2px 8px" }}>

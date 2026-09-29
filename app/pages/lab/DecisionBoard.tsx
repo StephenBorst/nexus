@@ -14,7 +14,7 @@
 // Briefing = "what matters now", Board = "scan the whole book", Intel = "go deep".
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { C, MONO, UI, RADIUS } from "@/config/theme";
+import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
 import { SectionHeader } from "./components";
 import { useIsMobile } from "./useIsMobile";
 import { computeTape, FADE_FUNDING_FLOOR_PCT_YR, type MarketSignal } from "./briefing";
@@ -515,7 +515,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: C.text.muted, marginTop: -4, marginBottom: 16, maxWidth: 820 }}>
         Funding and positioning are <b style={{ color: C.text.bright }}>public facts</b>. <b style={{ color: C.text.bright }}>The play</b> is one verdict word — <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range, <b style={{ color: C.text.muted }}>WATCH</b> when it’s merely elevated. The SAME read as the ticket. It grades <b style={{ color: C.text.bright }}>from the tape</b> after, like every call. No score to trust; a record to verify.
         {" "}<b style={{ color: C.text.bright }}>Confluence</b> shows four INDEPENDENT reads — <span style={{ color: C.text.muted }}>callers · smart money · catalysts · forecasters</span>. And how many <b style={{ color: C.text.bright }}>agree with the play</b> (<span style={{ color: C.accent }}>◆</span> marks where separate signals converge). Agreement is a reason to look, still graded after.
-        {hasLens && <> Each play is also matched against <b style={{ color: C.pos }}>your own graded edge</b> — <span style={{ color: C.pos }}>◆ your side/class</span> vs <span style={{ color: C.warn }}>△ off your edge</span>.</>}
+        {hasLens && <> Each play is also matched against <b style={{ color: C.pos }}>your own graded edge</b> — <span style={{ color: C.pos }}>◆ your side/class</span> vs <span style={{ color: SIGNAL.watch }}>△ off your edge</span>.</>}
         {hasLoop && <> Your loop state rides on the ticker: <b style={{ color: C.text.bright }}>● a live call</b> (planned) · <b style={{ color: C.text.bright }}>▸ an open position</b> (executing). The graded record closes it.</>}
       </div>
       )}
@@ -587,7 +587,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                       {inPosBy[r.sym] && <span title={`You're ${inPosBy[r.sym].toLowerCase()} here`} style={{ fontSize: 9, color: dirColor(inPosBy[r.sym]) }}>▸</span>}
                     </span>
                     {dot}
-                    <span style={{ fontSize: 11, color: fundHot ? C.warn : C.text.muted, whiteSpace: "nowrap" }}>{fundLabel(r.fundingAnnual, "%/yr")}</span>
+                    <span style={{ fontSize: 11, color: fundHot ? SIGNAL.watch : C.text.muted, whiteSpace: "nowrap" }}>{fundLabel(r.fundingAnnual, "%/yr")}</span>
                     {dot}
                     {r.play.klass === "FADE"
                       ? <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text.bright, letterSpacing: "0.03em", whiteSpace: "nowrap" }}>{r.play.label}</span>
@@ -608,7 +608,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                   <span title="Independent reads confirming THE PLAY" style={{ fontWeight: 700, color: r.play.dir ? (r.agree >= 3 ? C.accent : r.agree >= 2 ? C.text.bright : C.text.muted) : C.text.faint }}>{r.play.dir ? `${r.agree}/4` : "—"}</span>
                   {dot}{trendEl}
                   {tapeTag && <>{dot}<span style={{ color: C.accent }}>{tapeTag}</span></>}
-                  {r.mine && <>{dot}<span style={{ color: r.mine.tone === "pos" ? C.pos : C.warn, fontSize: 10 }}>{r.mine.tone === "pos" ? "◆" : "△"} {r.mine.text}</span></>}
+                  {r.mine && <>{dot}<span style={{ color: r.mine.tone === "pos" ? C.pos : SIGNAL.watch, fontSize: 10 }}>{r.mine.tone === "pos" ? "◆" : "△"} {r.mine.text}</span></>}
                 </div>
               </div>
             );
@@ -658,7 +658,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                   </div>
                   {/* Funding — annualized (%/yr) to match the ticket + share card; amber when the crowd is hot */}
                   <div style={{ ...cell }}>
-                    <span style={{ color: fundHot ? C.warn : C.text.muted }}>{fundLabel(r.fundingAnnual, "%")}</span>
+                    <span style={{ color: fundHot ? SIGNAL.watch : C.text.muted }}>{fundLabel(r.fundingAnnual, "%")}</span>
                   </div>
                   {/* OI change — hidden when ~0 (a dead 0.0% column looked fake); "—" until it moves */}
                   <div style={{ ...cell, color: Math.abs(r.oiChange) >= 3 ? C.text.bright : C.text.faint }}>{Math.abs(r.oiChange) < 0.05 ? <span style={{ color: C.text.faint }}>—</span> : `${r.oiChange >= 0 ? "+" : ""}${r.oiChange.toFixed(1)}%`}</div>
@@ -690,7 +690,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                         <>
                           <span title="Independent reads confirming THE PLAY: graded callers · smart money · catalysts · forecasters" style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 700, color: col }}>{r.agree}/4</span>
                           {against.map((l) => (
-                            <span key={l.k} title={`${l.k} is ${l.v?.toLowerCase()}. Against the play`} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 600, color: C.warn, whiteSpace: "nowrap" }}>✗ {l.k}</span>
+                            <span key={l.k} title={`${l.k} is ${l.v?.toLowerCase()}. Against the play`} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 600, color: SIGNAL.watch, whiteSpace: "nowrap" }}>✗ {l.k}</span>
                           ))}
                         </>
                       );
@@ -707,14 +707,14 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                             <span title={`Broad tape is ${tapeFadeTag}. This stretched fade is the mean-reversion book that tape favors (context, not a vote)`} style={{ fontSize: 8, color: C.accent, border: `1px solid ${C.accent}55`, borderRadius: 3, padding: "0 4px", lineHeight: 1.6, letterSpacing: "0.04em" }}>{tapeFadeTag} · FADE</span>
                           )}
                           {r.lens.smart && r.play.dir && r.lens.smart !== r.play.dir && (
-                            <span title="Smart money is positioned WITH the crowd, against the fade. Not a clean fade" style={{ fontSize: 9, color: C.warn, fontWeight: 600 }}>· SMART {r.lens.smart}</span>
+                            <span title="Smart money is positioned WITH the crowd, against the fade. Not a clean fade" style={{ fontSize: 9, color: SIGNAL.watch, fontWeight: 600 }}>· SMART {r.lens.smart}</span>
                           )}
                         </span>
                       : r.play.klass === "WATCH"
                       ? <span style={{ color: C.text.muted, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em" }}>WATCH</span>
                       : <span style={{ color: C.text.faint, fontSize: 11 }}>—</span>}
                     {r.mine ? (
-                      <span style={{ fontSize: 8.5, letterSpacing: "0.02em", color: r.mine.tone === "pos" ? C.pos : C.warn, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ fontSize: 8.5, letterSpacing: "0.02em", color: r.mine.tone === "pos" ? C.pos : SIGNAL.watch, display: "inline-flex", alignItems: "center", gap: 4 }}>
                         <span style={{ fontSize: 9 }}>{r.mine.tone === "pos" ? "◆" : "△"}</span>{r.mine.text}
                       </span>
                     ) : r.record ? (

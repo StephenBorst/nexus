@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ProcessedTrade, ThesisTrade } from "./types";
 import { cardStyle, labelStyle } from "./styles";
 import { useIsMobile } from "./useIsMobile";
-import { C, MONO, S, RADIUS } from "@/config/theme";
+import { C, MONO, S, RADIUS, SIGNAL } from "@/config/theme";
 import { adherenceReport, ADHERENCE_LABELS } from "@/lib/adherence.mjs";
 import { leakProfile, needsPostmortem, lossReason } from "@/lib/postmortem.mjs";
 
@@ -65,7 +65,7 @@ type ProcessData = {
 
 function ScoreDial({ score }: { score: number }) {
   // Monochrome by law — amber only as CAUTION at the low end, never decoration.
-  const tone = score >= 80 ? C.text.bright : score >= 55 ? C.text.fog : C.warn;
+  const tone = score >= 80 ? C.text.bright : score >= 55 ? C.text.fog : SIGNAL.watch;
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
       <span style={{ fontFamily: MONO, fontSize: 28, fontWeight: 700, color: tone, fontVariantNumeric: "tabular-nums" }}>{score}</span>
@@ -179,7 +179,7 @@ export function PlanQualityCard({ discipline }: { discipline: ProcessData["disci
           {flags.map(([flag, count]) => (
             <div key={flag} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
               <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: C.text.fog }}>{PLAN_FLAG_LABEL[flag] ?? flag}</span>
-              <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 11, color: C.warn }}>{count}×</span>
+              <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 11, color: SIGNAL.watch }}>{count}×</span>
             </div>
           ))}
         </div>
@@ -237,12 +237,12 @@ export function ExpectancyCard({ data }: { data: ProcessData | null }) {
 
       {/* Conviction calibration — the "when you bet bigger, were you more right?" read. */}
       {cal && (cal.calibrated || cal.inverted) && (
-        <div style={{ marginTop: 10, padding: "10px 12px", background: C.inset, border: `1px solid ${cal.inverted ? "#4a3a00" : C.borderStrong}`, borderRadius: RADIUS.sm }}>
+        <div style={{ marginTop: 10, padding: "10px 12px", background: C.inset, border: `1px solid ${cal.inverted ? "#1c2a3d" : C.borderStrong}`, borderRadius: RADIUS.sm }}>
           <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.bright, lineHeight: 1.5 }}>
             {cal.calibrated ? (
               <>◎ <strong>Calibrated.</strong> Your higher-conviction calls average <strong style={{ color: C.pos }}>+{cal.gap}R more</strong> than your smaller ones. You size up on the right ideas.</>
             ) : (
-              <>⚠ <strong style={{ color: C.warn }}>Inverted sizing.</strong> Your bigger bets average <strong style={{ color: C.neg }}>{cal.gap}R</strong> vs your smaller ones. Conviction is pointing the wrong way, and it’s expensive.</>
+              <>⚠ <strong style={{ color: SIGNAL.watch }}>Inverted sizing.</strong> Your bigger bets average <strong style={{ color: C.neg }}>{cal.gap}R</strong> vs your smaller ones. Conviction is pointing the wrong way, and it’s expensive.</>
             )}
           </div>
           <div style={{ ...hint, marginTop: 6 }}>{cal.highN} high-conviction vs {cal.lowN} low, split at your median position size</div>

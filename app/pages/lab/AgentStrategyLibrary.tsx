@@ -101,7 +101,7 @@ export function AgentStrategyLibrary({
                       if (v.status === "pending_oi") return <span title="Awaiting OI history to validate the confluence signal" style={{ fontSize: 8, color: "#d4d4d8", border: "1px solid #33333a", borderRadius: 3, padding: "1px 5px" }}>⏳ OI PENDING</span>;
                       if (v.status === "pending_basis") return <span title="Awaiting enough recorded basis history to walk-forward the basis stack" style={{ fontSize: 8, color: "#d4d4d8", border: "1px solid #33333a", borderRadius: 3, padding: "1px 5px" }}>⏳ BASIS PENDING</span>;
                       if (v.status !== "done") return null;
-                      const vc = v.verdict === "ROBUST" ? "#3ecf8e" : v.verdict === "FRAGILE" ? "#fbbf24" : "#f7525f";
+                      const vc = v.verdict === "ROBUST" ? "#3ecf8e" : v.verdict === "FRAGILE" ? "#60a5fa" : "#f7525f";
                       const lbl = v.verdict === "ROBUST" ? "✓ ROBUST" : v.verdict === "FRAGILE" ? "◐ FRAGILE" : "✕ NOT ROBUST";
                       return <span title={`Walk-forward: net-positive on ${v.posSymbols}/${v.totalSymbols} markets, ${v.foldConsistency}% of folds`} style={{ fontSize: 8, color: vc, border: `1px solid ${vc}55`, borderRadius: 3, padding: "1px 5px" }}>{lbl}</span>;
                     })()}

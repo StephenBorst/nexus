@@ -13,7 +13,7 @@
 //     independent evidence. Showing them side by side is the point: agreement is
 //     corroboration, disagreement is the most interesting thing on the page.
 import { useEffect, useMemo, useState } from "react";
-import { C, MONO, RADIUS } from "@/config/theme";
+import { C, MONO, RADIUS, SIGNAL } from "@/config/theme";
 import { buildOperatorProfile, profileNarrative } from "@/lib/operatorProfile.mjs";
 import { callProgress, openCallsSummary, PROGRESS_LABEL } from "@/lib/callProgress.mjs";
 import { openIdentityShare } from "@/utils/shareIdentity";
@@ -223,10 +223,10 @@ export function VenueEvidence({ wallet, openCalls }: { wallet: string | null; op
       )}
 
       {conflicts.length > 0 && (
-        <div style={{ marginTop: 10, padding: "9px 11px", background: C.inset, border: "1px solid #4a3a00", borderRadius: RADIUS.sm }}>
+        <div style={{ marginTop: 10, padding: "9px 11px", background: C.inset, border: "1px solid #1c2a3d", borderRadius: RADIUS.sm }}>
           {conflicts.map((c) => (
             <div key={c.symbol} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: C.text.fog, lineHeight: 1.55 }}>
-              <span style={{ color: C.warn, fontFamily: MONO }}>⚠</span>{" "}
+              <span style={{ color: SIGNAL.watch, fontFamily: MONO }}>⚠</span>{" "}
               Called <strong style={{ color: C.text.bright }}>{c.says}</strong> on {c.symbol}, currently holds{" "}
               <strong style={{ color: C.text.bright }}>{c.holds}</strong>.
             </div>

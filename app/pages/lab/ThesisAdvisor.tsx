@@ -12,7 +12,7 @@
 // Never blocks submission and never nags: it's information, the trader decides. Silent
 // while incomplete, on error, or when there's nothing worth saying.
 import { useEffect, useRef, useState } from "react";
-import { C, MONO, RADIUS } from "@/config/theme";
+import { C, MONO, RADIUS, SIGNAL } from "@/config/theme";
 import { bareTicker } from "@/utils/utils";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
@@ -90,7 +90,7 @@ export function ThesisAdvisor({ symbol, direction, entryPrice, stopLoss, takePro
   }
 
   return (
-    <div style={{ background: C.inset, border: `1px solid ${high.length ? "#4a3a00" : C.border}`, borderRadius: RADIUS.sm, padding: "9px 11px", marginBottom: 8 }}>
+    <div style={{ background: C.inset, border: `1px solid ${high.length ? "#1c2a3d" : C.border}`, borderRadius: RADIUS.sm, padding: "9px 11px", marginBottom: 8 }}>
       <div style={{ fontSize: 8, color: C.text.faint, fontFamily: MONO, letterSpacing: "0.1em", marginBottom: 5 }}>
         BEFORE YOU POST
       </div>
@@ -122,7 +122,7 @@ export function ThesisAdvisor({ symbol, direction, entryPrice, stopLoss, takePro
         <div style={{ marginTop: 7, paddingTop: 7, borderTop: `1px solid ${C.border}` }}>
           {[...high, ...medium].map((w) => (
             <div key={w.kind} style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 3 }}>
-              <span style={{ flexShrink: 0, color: w.severity === "high" ? C.warn : C.text.muted, fontFamily: MONO, fontSize: 10 }}>
+              <span style={{ flexShrink: 0, color: w.severity === "high" ? SIGNAL.watch : C.text.muted, fontFamily: MONO, fontSize: 10 }}>
                 {w.severity === "high" ? "⚠" : "·"}
               </span>
               <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, color: w.severity === "high" ? C.text.fog : C.text.muted, lineHeight: 1.5 }}>

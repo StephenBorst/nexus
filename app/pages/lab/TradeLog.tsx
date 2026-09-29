@@ -280,7 +280,7 @@ export function TradeLogView({ dayKey, data, onBack, initialNote, onSaveNote }: 
           <span style={{ fontSize: 9, color: "#52525b", background: "#141416", border: "1px solid #232327", padding: "3px 8px", borderRadius: 3, fontFamily: "var(--nx-font-mono)" }}>{data.trades} TRADES</span>
           <div style={{ display: "flex", gap: 4 }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f7525f" }} />
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fbbf24" }} />
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#60a5fa" }} />
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#3ecf8e" }} />
           </div>
         </div>

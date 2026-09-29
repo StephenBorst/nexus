@@ -26,7 +26,6 @@ const BASELINE = join(ROOT, "tools/palette-baseline.json");
 
 // Deliberate exceptions — each one needs a reason.
 const APPROVED_EXTRAS = {
-  "#6cb6ff": "teaching/discussion accent — Coachmark + Telegram ONLY, never data or labels",
   "#ffffff": "pure white — occasional hard contrast",
   "#000000": "pure black",
   "#0a0a0f": "PWA manifest background",

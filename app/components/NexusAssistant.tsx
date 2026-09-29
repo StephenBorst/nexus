@@ -597,11 +597,11 @@ export default function NexusAssistant() {
                     onClick={() => ready && setInput(personalInsight.prompt)} onKeyDown={pressKey(() => ready && setInput(personalInsight.prompt))}
                     style={{
                       marginTop: 12, padding: "9px 11px", borderRadius: 5,
-                      background: "#2a1a00", border: "1px solid #4a3a00",
+                      background: "#0e1622", border: "1px solid #1c2a3d",
                       cursor: ready ? "pointer" : "default",
                     }}
                   >
-                    <div style={{ fontFamily: mono, fontSize: 9, color: "#fbbf24", fontWeight: "bold", letterSpacing: "0.04em", marginBottom: 2 }}>⚠ TRADING INSIGHT</div>
+                    <div style={{ fontFamily: mono, fontSize: 9, color: "#60a5fa", fontWeight: "bold", letterSpacing: "0.04em", marginBottom: 2 }}>⚠ TRADING INSIGHT</div>
                     <div style={{ fontFamily: mono, fontSize: 10, color: "#a1a1aa", lineHeight: 1.5 }}>{personalInsight.text}</div>
                   </div>
                 )}

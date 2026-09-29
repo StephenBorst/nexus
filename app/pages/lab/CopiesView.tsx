@@ -102,7 +102,7 @@ export function CopiesView() {
                     { label: "ENTRY",  val: `$${t.entryPrice.toFixed(2)}`,    color: "#a1a1aa" as const },
                     { label: "STOP",   val: `$${t.stopLoss.toFixed(2)}`,      color: "#f7525f" as const },
                     { label: "TP1",    val: `$${t.takeProfit1.toFixed(2)}`,   color: "#ededf0" as const },
-                    { label: "R:R",    val: `1:${t.riskReward.toFixed(2)}`,   color: (t.riskReward >= 2 ? "#ededf0" : "#fbbf24") as string },
+                    { label: "R:R",    val: `1:${t.riskReward.toFixed(2)}`,   color: (t.riskReward >= 2 ? "#ededf0" : "#60a5fa") as string },
                     { label: "MAX LOSS", val: `${t.riskPercent}% · $${(t.accountSize * t.riskPercent / 100).toFixed(0)}`, color: "#a1a1aa" as const },
                   ].map(({ label, val, color }) => (
                     <div key={label}>

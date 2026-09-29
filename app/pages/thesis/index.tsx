@@ -61,7 +61,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   ACTIVE:      { label: "ACTIVE",      color: "#d4d4d8", bg: "#1a1a1e", border: "#33333a" },
   HIT_TP:      { label: "HIT TP",      color: "#ededf0", bg: "#1a1a1e", border: "#33333a" },
   STOPPED_OUT: { label: "STOPPED OUT", color: "#f7525f", bg: "#241012", border: "#4a1e22" },
-  INVALIDATED: { label: "INVALIDATED", color: "#fbbf24", bg: "#2a1a00", border: "#4a3a00" },
+  INVALIDATED: { label: "INVALIDATED", color: "#60a5fa", bg: "#0e1622", border: "#1c2a3d" },
   CLOSED:      { label: "CLOSED",      color: "#a1a1aa", bg: "#1a1a1e", border: "#33333a" },
   PENDING:     { label: "PENDING",     color: "#a1a1aa", bg: "#141416", border: "#33333a" },
 };
@@ -302,7 +302,7 @@ export default function ThesisPage() {
         <a
           href={shareFc} target="_blank" rel="noopener noreferrer"
           title="Share on Farcaster"
-          style={{ textDecoration: "none", border: "1px solid #232327", borderRadius: 4, color: "#6cb6ff", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 12px", letterSpacing: "0.05em", minWidth: 82, textAlign: "center" }}
+          style={{ textDecoration: "none", border: "1px solid #232327", borderRadius: 4, color: "#60a5fa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 12px", letterSpacing: "0.05em", minWidth: 82, textAlign: "center" }}
         >✦ CAST</a>
         <button
           onClick={handleShare}
@@ -394,7 +394,7 @@ export default function ThesisPage() {
               { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`,   color: "#a1a1aa" },
               { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,      color: "#f7525f" },
               { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`,   color: "#ededf0" },
-              { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`,   color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
+              { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`,   color: thesis.riskReward >= 2 ? "#ededf0" : "#60a5fa" },
               { label: "SIZE",  val: `$${thesis.positionSize.toFixed(0)}`,  color: "#a1a1aa" },
             ].map(({ label, val, color }) => (
               <div key={label}>

@@ -216,7 +216,7 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
     <div style={agentCardStyle}>
 
       {b.staleWindow && b.sizeDrift && (
-        <div style={{ marginTop: 8, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3, color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5 }}>
+        <div style={{ marginTop: 8, padding: "6px 8px", border: "1px solid #60a5fa30", borderRadius: 3, color: "#60a5fa", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5 }}>
           ⚠ These rows are not this bot. Typical retained size is {fmtUsdCompactAbs(b.sizeDrift.medianNotional)} notional
           vs {fmtUsdCompactAbs(b.sizeDrift.currentNotional)} now — the window describes an older configuration, so every
           percentage below is about a setup you are no longer running.
@@ -241,7 +241,7 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
           {b.atSize.n === 0 ? (
             // No sample ⇒ say so. An averaged empty set renders "$0.00", which reads as a
             // real measurement of trades that don't exist.
-            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#fbbf24" }}>
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#60a5fa" }}>
               no trades at {fmtUsdCompactAbs(b.atSize.notional)} notional yet
               <span style={{ color: "#52525b" }}> — all {b.atSize.excluded} retained rows are at other sizes</span>
             </span>
@@ -263,7 +263,7 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
             <>
               {" · "}<span style={{ color: "#52525b" }}>cap {b.overHold.cap}h</span>
               {b.overHold.n > 0 && (
-                <span style={{ color: "#fbbf24" }}> · {b.overHold.n} outlived it (max {b.overHold.maxH.toFixed(1)}h)</span>
+                <span style={{ color: "#60a5fa" }}> · {b.overHold.n} outlived it (max {b.overHold.maxH.toFixed(1)}h)</span>
               )}
             </>
           ) : null}

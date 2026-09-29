@@ -8,7 +8,7 @@ import { XRAY_WINDOWS, GATE_WINDOW, WATCHED_MIN_DAYS, fmtPf, liqDistancePct } fr
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0";
-const POS = "#3ecf8e", NEG = "#f7525f", WARN = "#fbbf24";
+const POS = "#3ecf8e", NEG = "#f7525f", WARN = "#fbbf24", WATCH = "#60a5fa"; // WARN = danger only
 const FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b", BRIGHT = "#f4f4f5";
 const BORDER = "#232327", SURFACE = "#141416", SURFACE_ALT = "#0f0f11";
 
@@ -115,7 +115,7 @@ export function WindowGradeCard({
       )}
 
       {hasTape && partialKeys.includes(active) && (
-        <div style={{ fontFamily: MONO, fontSize: 10, color: WARN, marginTop: 10 }}>
+        <div style={{ fontFamily: MONO, fontSize: 10, color: WATCH, marginTop: 10 }}>
           partial tape. Hyperliquid serves only a wallet&apos;s 10,000 most recent fills, and {active} reaches back before them. Graded on what&apos;s served.
         </div>
       )}

@@ -31,7 +31,7 @@ const COLLAPSE_KEY = "nexus_briefing_collapsed";
 
 const TONE: Record<Insight["tone"], { bar: string; dot: string }> = {
   positive: { bar: "#3ecf8e", dot: "#3ecf8e" },
-  caution: { bar: "#fbbf24", dot: "#fbbf24" },
+  caution: { bar: "#60a5fa", dot: "#60a5fa" },
   info: { bar: "#33333a", dot: "#71717a" },
 };
 
@@ -291,7 +291,7 @@ export function NexusBriefing({
           {/* Deep-dive hand-off to the copilot */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "9px 14px" }}>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.05em" }}>deterministic — no AI, no key, just the data</span>
-            <button onClick={askAi} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, letterSpacing: "0.05em", color: "#6cb6ff", background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>
+            <button onClick={askAi} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, letterSpacing: "0.05em", color: "#60a5fa", background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>
               ◆ Ask Nexus to go deeper →
             </button>
           </div>

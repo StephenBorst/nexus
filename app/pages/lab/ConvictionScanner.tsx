@@ -58,7 +58,7 @@ export function ConvictionScanner() {
   const CONV: Record<string, { word: string; color: string }> = {
     HIGH: { word: "HIGH", color: C.pos },
     MODERATE: { word: "MODERATE", color: SIGNAL.posSoft },
-    CONFLICTED: { word: "CONFLICTED", color: C.warn },
+    CONFLICTED: { word: "CONFLICTED", color: SIGNAL.watch },
     FUNDING_ONLY: { word: "FUNDING-ONLY", color: C.text.muted },
   };
   const convOf = (r: Row) => CONV[convictionLevel(r)] || CONV.FUNDING_ONLY;
@@ -81,13 +81,13 @@ export function ConvictionScanner() {
           const weak = r.histWeak;
           const unproven = !weak && (r.histTier === "UNPROVEN" || r.revertedPct == null);
           return (
-            <button key={r.coin} onClick={() => draft(r)} style={{ appearance: "none", WebkitAppearance: "none", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", width: "100%", textAlign: "left", cursor: "pointer", background: C.surfaceAlt, border: `1px solid ${C.border}`, borderLeft: `2px solid ${weak ? C.warn : unproven ? C.border : conv.color}`, borderRadius: 6, padding: "9px 12px" }}>
+            <button key={r.coin} onClick={() => draft(r)} style={{ appearance: "none", WebkitAppearance: "none", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", width: "100%", textAlign: "left", cursor: "pointer", background: C.surfaceAlt, border: `1px solid ${C.border}`, borderLeft: `2px solid ${weak ? SIGNAL.watch : unproven ? C.border : conv.color}`, borderRadius: 6, padding: "9px 12px" }}>
               <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: C.text.bright, minWidth: 52 }}>{r.coin}</span>
               {/* The verdict word (Grok): FADE LONG / FADE SHORT — not "↑ LONG". */}
               <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: dc, minWidth: 70 }}>{r.direction === "LONG" ? "FADE LONG" : "FADE SHORT"}</span>
               {/* Weak clock → amber HIST X%; unproven (n=0) → UNPROVEN; else the (proven-gated) conv word. */}
               {weak && r.revertedPct != null
-                ? <span title="Fading this has historically underperformed — can't read HIGH conviction" style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: C.warn, minWidth: 92 }}>HIST {r.revertedPct}%</span>
+                ? <span title="Fading this has historically underperformed — can't read HIGH conviction" style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: SIGNAL.watch, minWidth: 92 }}>HIST {r.revertedPct}%</span>
                 : unproven
                 ? <span title="No reversion history yet — a fade with an unproven base rate can't read HIGH" style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: C.text.faint, minWidth: 92 }}>UNPROVEN</span>
                 : <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: conv.color, minWidth: 92 }}>◆ {conv.word}</span>}

@@ -158,7 +158,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
               { label: "STOP", val: `$${nf(t.stopLoss, priceDp(t.stopLoss))}`, color: "#f7525f" },
               { label: "TP1", val: `$${nf(t.takeProfit1, priceDp(t.takeProfit1))}`, color: "#ededf0" },
               { label: "SIZE", val: (Number(t.positionSize) || 0) > 0 ? `$${nf(t.positionSize, 0)}` : "—" },
-              { label: "R:R", val: `1:${nf(t.riskReward, 2)}`, color: (Number(t.riskReward) || 0) >= 2 ? "#ededf0" : "#fbbf24" },
+              { label: "R:R", val: `1:${nf(t.riskReward, 2)}`, color: (Number(t.riskReward) || 0) >= 2 ? "#ededf0" : "#60a5fa" },
               // Stored as a magnitude; the side comes from the thesis's own rate + direction, so
               // old cards read right too. −$ = you pay, +$ = you collect.
               { label: "72H FUND", val: (Number(t.fundingCost72h) || 0) !== 0 ? `${cardFunding.youPay === true ? "−" : cardFunding.youPay === false ? "+" : ""}$${nf(Math.abs(Number(t.fundingCost72h)), 3)}` : "—", color: cardFunding.youPay === false ? "#3ecf8e" : "#a1a1aa" },
@@ -178,7 +178,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
                 href={`https://t.me/nexustradinglabs_bot?start=${walletAddress.toLowerCase()}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ ...navBtnStyle, fontSize: 10, color: "#6cb6ff", borderColor: "#1a1a1e", textDecoration: "none", display: "inline-block", textAlign: "center", minHeight: 36, lineHeight: "22px", padding: "6px 12px" }}
+                style={{ ...navBtnStyle, fontSize: 10, color: "#60a5fa", borderColor: "#1a1a1e", textDecoration: "none", display: "inline-block", textAlign: "center", minHeight: 36, lineHeight: "22px", padding: "6px 12px" }}
               >
                 ALERTS
               </a>
@@ -565,9 +565,9 @@ function ThesisAnalyticsSection({ trades }: { trades: ThesisTrade[] }) {
             <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginBottom: 6 }}>STOPPED OUT</div>
             <div style={{ fontSize: 28, color: "#f7525f", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{stoppedOut}</div>
           </div>
-          <div style={{ background: "#2a1a00", border: "1px solid #4a3a00", borderRadius: 4, padding: "10px 12px" }}>
+          <div style={{ background: "#0e1622", border: "1px solid #1c2a3d", borderRadius: 4, padding: "10px 12px" }}>
             <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginBottom: 6 }}>INVALIDATED</div>
-            <div style={{ fontSize: 28, color: "#fbbf24", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{invalidated}</div>
+            <div style={{ fontSize: 28, color: "#60a5fa", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{invalidated}</div>
           </div>
           <div style={{ background: "#0a0a0b", border: "1px solid #33333a", borderRadius: 4, padding: "10px 12px" }}>
             <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginBottom: 6 }}>WIN RATE</div>
@@ -783,7 +783,7 @@ export function ThesisAnalyticsView() {
         {a.winRate.toFixed(0)}%
       </span>
       <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, textAlign: "right", color: "#52525b" }}>{a.total}</span>
-      <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, textAlign: "right", color: a.avgRR >= 2 ? "#ededf0" : "#fbbf24" }}>
+      <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, textAlign: "right", color: a.avgRR >= 2 ? "#ededf0" : "#60a5fa" }}>
         1:{a.avgRR.toFixed(1)}
       </span>
     </div>
@@ -813,7 +813,7 @@ export function ThesisAnalyticsView() {
           {
             label: "AVG R:R",
             val: theses.length > 0 ? `1:${summaryStats.avgRR.toFixed(2)}` : "—",
-            color: (theses.length > 0 ? (summaryStats.avgRR >= 2 ? "#ededf0" : "#fbbf24") : "#52525b") as string,
+            color: (theses.length > 0 ? (summaryStats.avgRR >= 2 ? "#ededf0" : "#60a5fa") : "#52525b") as string,
           },
           {
             label: "TOTAL P&L",
@@ -1684,7 +1684,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                         { l: "SIZE", v: calc ? `$${calc.positionSize.toFixed(0)}` : "set acct ↓", c: calc ? "#d4d4d8" : "#52525b" },
                         // R:R is fixed by the target knob (TP built at exactly tpR·risk), so show it
                         // always — it doesn't need the account size the way position SIZE does.
-                        { l: "R:R", v: `1:${quickTpR.toFixed(2)}`, c: quickTpR >= 2 ? "#3ecf8e" : "#fbbf24" },
+                        { l: "R:R", v: `1:${quickTpR.toFixed(2)}`, c: quickTpR >= 2 ? "#3ecf8e" : "#60a5fa" },
                       ].map(({ l, v, c }) => (
                         <div key={l}>
                           <div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>{l}</div>
@@ -1727,7 +1727,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     )}
                     {planWarnings.length > 0 && (
                       <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 3 }}>
-                        {planWarnings.map((msg, i) => <div key={i} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9.5, color: "#fbbf24", lineHeight: 1.4 }}>⚠ {msg}</div>)}
+                        {planWarnings.map((msg, i) => <div key={i} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9.5, color: "#60a5fa", lineHeight: 1.4 }}>⚠ {msg}</div>)}
                       </div>
                     )}
                     <button onClick={publishAsCall} disabled={!formValid || publishing}
@@ -1898,7 +1898,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
             {planWarnings.length > 0 && (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
                 {planWarnings.map((msg, i) => (
-                  <div key={i} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9.5, color: "#fbbf24", lineHeight: 1.45 }}>⚠ {msg}</div>
+                  <div key={i} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9.5, color: "#60a5fa", lineHeight: 1.45 }}>⚠ {msg}</div>
                 ))}
               </div>
             )}
@@ -2102,7 +2102,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 </div>
                 <div style={{ marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid #232327" }}>
                   <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.08em" }}>RISK / REWARD</div>
-                  <div style={{ fontSize: 22, fontFamily: "var(--nx-font-mono)", fontWeight: "bold", color: calc.riskReward >= 2 ? "#3ecf8e" : calc.riskReward >= 1 ? "#fbbf24" : "#f7525f" }}>
+                  <div style={{ fontSize: 22, fontFamily: "var(--nx-font-mono)", fontWeight: "bold", color: calc.riskReward >= 2 ? "#3ecf8e" : calc.riskReward >= 1 ? "#60a5fa" : "#f7525f" }}>
                     1 : {calc.riskReward.toFixed(2)}
                   </div>
                   <div style={{ fontSize: 10, color: "#33333a", fontFamily: "var(--nx-font-mono)" }}>
@@ -2166,7 +2166,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
 
                 {/* Live status feedback */}
                 {liveStatus === "submitting" && (
-                  <div style={{ padding: "10px 0", textAlign: "center", fontSize: 11, color: "#fbbf24", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.08em" }}>
+                  <div style={{ padding: "10px 0", textAlign: "center", fontSize: 11, color: "#60a5fa", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.08em" }}>
                     &#9632; SUBMITTING TO ORDERLY...
                   </div>
                 )}

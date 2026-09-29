@@ -112,7 +112,7 @@ export default function SignalsNavButton() {
             list.map((s) => (
               <button key={s.id} onClick={() => go(s)} style={{ appearance: "none", WebkitAppearance: "none", display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderBottom: "1px solid #1a1a1e", cursor: "pointer", padding: "11px 14px" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: s.kind === "DIVERGENCE" ? "#fbbf24" : "#3ecf8e", flexShrink: 0 }}>{KIND_GLYPH[s.kind] ?? "◆"}</span>
+                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: s.kind === "DIVERGENCE" ? "#60a5fa" : "#3ecf8e", flexShrink: 0 }}>{KIND_GLYPH[s.kind] ?? "◆"}</span>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#f4f4f5", fontWeight: 600, lineHeight: 1.35 }}>{s.title}</span>
                 </div>
                 <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 11.5, color: "#a1a1aa", lineHeight: 1.5, marginTop: 3, paddingLeft: 19 }}>{s.detail}</div>

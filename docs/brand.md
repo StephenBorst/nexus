@@ -15,8 +15,12 @@ for the app, every share card and every link preview.
    base rate, NOT YET ROBUST. **It is never a button** (buttons are bone, like the landing's) **and
    never body text.** Changed from amber on 2026-09-29 (borst): amber reads as caution, and the
    brand can't look like a caution sign. `#60a5fa` holds 7.8:1 on the canvas.
-4. **Amber `#fbbf24` (`C.warn`) means real danger only:** liquidation risk, a hard error, a
-   failed save. It is not the brand and not "watch this".
+4. **Amber `#fbbf24` (`C.warn`) means real danger only:** a hard error or failed action, a
+   validation that blocks the action, liquidation distance and high leverage, and the real-money
+   live paths (the live-order confirm, AUTONOMOUS mode, the daily-loss cap bar). A weak score, a
+   low R:R, hot funding, FRAGILE, INVALIDATED, a disclosure: blue, never amber.
+   There is ONE blue: the old teaching blue `#6cb6ff` (Coachmark, "ask the AI") was folded into
+   `#60a5fa` on 2026-09-29.
 5. **Green `#3ecf8e` and red `#f7525f` mean money and price, nothing else:**
    - realized or unrealized P&L, a WIN / LOSS result and its R, a W / L tally, expectancy;
    - a price move (24h %, up/down ticks);

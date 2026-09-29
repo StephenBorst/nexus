@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 import { ProjectionBand } from "@/components/ProjectionBand";
 import { SectionHeader } from "./components";
 
@@ -17,7 +17,7 @@ const AGENT_API = "https://og.nexustradinglabs.com";
 // Palette repointed to the canonical design tokens (app/config/theme.ts) — collapses
 // the local-hex drift so this corner matches the Mispriced Board + the rest of the Lab.
 const BONE = C.text.bright, DIM = C.text.muted, FAINT = C.text.faint;
-const WARN = C.warn, POS = C.pos, NEG = C.neg;
+const WATCH = SIGNAL.watch, POS = C.pos, NEG = C.neg;
 const SURFACE = C.surface, BORDER = C.border, BORDER_STRONG = C.borderStrong, FOG = C.text.fog;
 
 interface ForecastMarket {
@@ -243,9 +243,9 @@ function DivergentCard({ m, onDraft }: { m: ForecastMarket; onDraft: (m: Forecas
   const chg = probChange(hist);
   const yes = hist && hist.length >= 4 ? Math.round(hist[hist.length - 1].p * 100) : m.forecastProbPct;
   return (
-    <div style={{ border: `1px solid ${WARN}33`, background: SURFACE, borderRadius: 2, padding: "10px 12px" }}>
+    <div style={{ border: `1px solid ${WATCH}33`, background: SURFACE, borderRadius: 2, padding: "10px 12px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-        <span style={chip(WARN, `${WARN}55`)}>◆ DIVERGENT</span>
+        <span style={chip(WATCH, `${WATCH}55`)}>◆ DIVERGENT</span>
         <span style={{ color: BONE, fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700 }}>{m.coin}</span>
         <span style={{ color: FAINT, fontSize: 10, fontFamily: "var(--nx-font-mono)" }}>{fmtPrice(m.markPrice)}</span>
         <span style={chip(BONE, BORDER_STRONG)}>YES {yes}%</span>
@@ -277,7 +277,7 @@ function DivergentCard({ m, onDraft }: { m: ForecastMarket; onDraft: (m: Forecas
 function DivergentRow({ m, onDraft }: { m: ForecastMarket; onDraft: (m: ForecastMarket) => void }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--nx-font-mono)", fontSize: 10, lineHeight: 1.4, padding: "6px 0", borderTop: `1px solid ${BORDER}` }}>
-      <span style={{ color: WARN, fontSize: 9 }}>◆</span>
+      <span style={{ color: WATCH, fontSize: 9 }}>◆</span>
       <span style={{ color: BONE, fontWeight: 700, minWidth: 34 }}>{m.coin}</span>
       <span style={{ color: BONE, minWidth: 40 }}>{m.forecastProbPct}%</span>
       <span style={{ color: FOG, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.question}</span>

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { usePrivateQuery } from "@orderly.network/hooks";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { Sparkline } from "@/pages/lab/components";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
@@ -14,15 +14,15 @@ import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
 // app/config/theme.ts and this follows automatically.
 const REFRESH_INTERVAL = 60; // seconds
 // `: string` matters — C is `as const`, so its members are NON-widening literal
-// types; without the annotation `let x = YELLOW` locks to "#fbbf24" and any
+// types; without the annotation `let x = WATCHC` locks to a literal and any
 // reassignment fails to compile.
 const TEAL:   string = C.accent; // neutral accent (headers, slight-bullish, bars)
 const GREEN:  string = C.pos;    // genuine UP/positive: gainers, +change, bullish, greed
 const RED:    string = C.neg;    // loss / down
-const YELLOW: string = C.warn;   // CAUTION ONLY — crowding, tension, squeeze risk
+const WATCHC: string = SIGNAL.watch; // watch this — crowding, tension, squeeze risk (amber is danger only)
 // Regime scale reads by TONE, not hue: the label already says bullish/bearish, so only
-// the extremes take colour (GREEN/RED) and the middle stays neutral. No blue — that is
-// reserved for teaching copy (Coachmark/Telegram) and nothing else.
+// the extremes take colour (GREEN/RED) and the middle stays neutral. The brand blue is only
+// the "watch this" mark (WATCHC), never a regime tone.
 const DIM:    string = C.text.muted;
 const MUTED:  string = C.text.fog;
 const BRIGHT: string = C.text.bright;
@@ -591,11 +591,11 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
               const sev = alertMetric(a), sv = alertSeverity(a.signal);
               return (
                 <div role="link" tabIndex={0} key={a.name} className="nx-card-interactive" onClick={() => navigate(`/perp/${a.symbol}`)} onKeyDown={pressKey(() => navigate(`/perp/${a.symbol}`))} title={`Open ${a.name}`}
-                  style={{ position: "relative", border: `1px solid ${C.border}`, borderLeft: `2px solid ${sv.hot ? YELLOW : C.borderStrong}`, borderRadius: "8px", padding: "14px", background: `linear-gradient(180deg, ${C.surface}, ${C.surfaceAlt})`, cursor: "pointer" }}>
+                  style={{ position: "relative", border: `1px solid ${C.border}`, borderLeft: `2px solid ${sv.hot ? WATCHC : C.borderStrong}`, borderRadius: "8px", padding: "14px", background: `linear-gradient(180deg, ${C.surface}, ${C.surfaceAlt})`, cursor: "pointer" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
                     <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontWeight: 700, fontSize: "14px" }}>{a.name}</span>
                     <span style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "8.5px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{alertKind(a.signal)}</span>
-                    <span style={{ marginLeft: "auto", color: sv.hot ? YELLOW : DIM, fontFamily: "var(--nx-font-mono)", fontSize: "8.5px", fontWeight: 700, letterSpacing: "0.08em" }}>{sv.text}</span>
+                    <span style={{ marginLeft: "auto", color: sv.hot ? WATCHC : DIM, fontFamily: "var(--nx-font-mono)", fontSize: "8.5px", fontWeight: 700, letterSpacing: "0.08em" }}>{sv.text}</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
                     <div>
@@ -648,10 +648,10 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
                       <span style={{ color: MUTED, fontFamily: "var(--nx-font-mono)", fontSize: "10px" }}>{data ? `${fmtFunding(data.funding)}/8h` : "—"}</span>
                     </div>
                     <div style={{ position: "relative", height: "6px", borderRadius: "4px", background: C.inset, border: `1px solid ${C.border}`, margin: "11px 0 8px" }}>
-                      <div style={{ position: "absolute", top: "-1px", bottom: "-1px", width: "2px", background: stretched ? YELLOW : C.accent, left: `${pct}%` }} />
+                      <div style={{ position: "absolute", top: "-1px", bottom: "-1px", width: "2px", background: stretched ? WATCHC : C.accent, left: `${pct}%` }} />
                     </div>
                     <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: "11.5px", lineHeight: 1.45, color: MUTED }}>
-                      <b style={{ color: stretched ? YELLOW : BRIGHT }}>{f.pct}th percentile</b> — {cap}
+                      <b style={{ color: stretched ? WATCHC : BRIGHT }}>{f.pct}th percentile</b> — {cap}
                     </div>
                   </div>
                 );
@@ -674,7 +674,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
         const crowdedLong  = signals.some(s => s.signal === "CROWDED LONGS");
         const crowdedShort = signals.some(s => s.signal === "CROWDED SHORTS");
 
-        let tensionColor = YELLOW;
+        let tensionColor = WATCHC;
         let tensionLabel = "ALIGNED";
         let tensionMsg   = "Your exposure aligns with the current regime.";
 
@@ -687,11 +687,11 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
           tensionLabel = "RISK · TAPE BULLISH, YOU ARE SHORT";
           tensionMsg   = `Regime score ${regScore} signals bullish conditions. Your portfolio is ${netShort}% short. Watch for forced unwind.`;
         } else if (crowdedLong && youLong && netLong >= 65) {
-          tensionColor = YELLOW;
+          tensionColor = WATCHC;
           tensionLabel = "CAUTION — CROWDED SIDE";
           tensionMsg   = `You are ${netLong}% long and the market signal shows crowded longs. Squeeze risk if price reverses.`;
         } else if (crowdedShort && youShort && netLong <= 35) {
-          tensionColor = YELLOW;
+          tensionColor = WATCHC;
           tensionLabel = "CAUTION — CROWDED SIDE";
           tensionMsg   = `You are ${netShort}% short and the market signal shows crowded shorts. Unwind risk if price rips.`;
         } else if (regimeBullish && youLong) {

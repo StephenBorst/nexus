@@ -519,7 +519,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", width: 56, flexShrink: 0 }}>{a.coin}</span>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", flexShrink: 0 }}>you <span style={{ color: a.yourSide === "LONG" ? "#3ecf8e" : "#f7525f" }}>{a.yourSide}</span></span>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", flexShrink: 0 }}>smart money <span style={{ color: a.smartSide === "LONG" ? "#3ecf8e" : "#f7525f" }}>{a.smartSide}</span> <span style={{ color: "#52525b" }}>({a.traders})</span></span>
-                <span style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 10, fontWeight: 700, color: a.aligned ? "#3ecf8e" : "#fbbf24", flexShrink: 0 }}>
+                <span style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 10, fontWeight: 700, color: a.aligned ? "#3ecf8e" : "#60a5fa", flexShrink: 0 }}>
                   {a.aligned ? "✓ ALIGNED" : "⚠ FIGHTING THE CROWD"}
                 </span>
               </div>

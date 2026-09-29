@@ -240,7 +240,7 @@ export default function CommentsPanel({
             <span style={{
               position: "absolute", bottom: 6, right: 8,
               fontFamily: "var(--nx-font-mono)", fontSize: 9,
-              color: text.length >= 260 ? "#fbbf24" : "#33333a",
+              color: text.length >= 260 ? "#60a5fa" : "#33333a",
               pointerEvents: "none",
             }}>
               {text.length}/280

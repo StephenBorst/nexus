@@ -129,7 +129,7 @@ function TradingScoreSection({ orders, winRate }: { orders: ProcessedTrade[]; wi
                   <span style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>/100 {d.raw}</span>
                 </div>
                 <div style={{ height: 3, background: "#232327", borderRadius: 2, marginTop: 6 }}>
-                  <div style={{ height: 3, background: d.score > 80 ? "#3ecf8e" : d.score > 50 ? "#fbbf24" : "#f7525f", borderRadius: 2, width: `${d.score}%` }} />
+                  <div style={{ height: 3, background: d.score > 80 ? "#3ecf8e" : d.score > 50 ? "#60a5fa" : "#f7525f", borderRadius: 2, width: `${d.score}%` }} />
                 </div>
               </div>
             ))}
@@ -318,7 +318,7 @@ const RISK_SAMPLE_GATE = 20;
 function hourWinColor(wr: number, trades: number) {
   if (!trades) return "#141416";
   if (wr >= 60) return "#33333a";
-  if (wr >= 40) return "#4a3a00";
+  if (wr >= 40) return "#1c2a3d";
   return "#4a1e22";
 }
 function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {

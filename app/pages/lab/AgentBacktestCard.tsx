@@ -37,8 +37,8 @@ function TestedAs({ label }: { label?: string }) {
   if (!label) return null;
   const inverted = label.startsWith("Inverted");
   return (
-    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, color: inverted ? "#fbbf24" : "#71717a", marginBottom: 8 }}>
-      TESTED AS: <b style={{ color: inverted ? "#fbbf24" : "#d4d4d8" }}>{label}</b>{inverted ? " — INVERT is on: this trades the opposite side of the signal" : ""}
+    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, color: inverted ? "#60a5fa" : "#71717a", marginBottom: 8 }}>
+      TESTED AS: <b style={{ color: inverted ? "#60a5fa" : "#d4d4d8" }}>{label}</b>{inverted ? " — INVERT is on: this trades the opposite side of the signal" : ""}
     </div>
   );
 }
@@ -49,7 +49,7 @@ function TestedAs({ label }: { label?: string }) {
 function GatesNote({ skipped }: { skipped?: string[] }) {
   if (!Array.isArray(skipped) || !skipped.length) return null;
   return (
-    <div style={{ color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 9.5, lineHeight: 1.5, marginTop: 7 }}>
+    <div style={{ color: "#60a5fa", fontFamily: "var(--nx-font-ui)", fontSize: 9.5, lineHeight: 1.5, marginTop: 7 }}>
       ⚠ Not simulated here: {skipped.join(" · ")}. Those apply live only — the numbers above are the un-gated version.
     </div>
   );
@@ -110,7 +110,7 @@ export function AgentBacktestCard({
           {backtest && (
             <div style={{ marginTop: 12 }}>
               {backtest.untestable && (
-                <div style={{ color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, marginBottom: 10, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3 }}>
+                <div style={{ color: "#60a5fa", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, marginBottom: 10, padding: "6px 8px", border: "1px solid #60a5fa30", borderRadius: 3 }}>
                   ⚠ {backtest.note}
                   <OiCoverage rows={backtest.oiCoverage ?? backtest.basisCoverage} />
                 </div>
@@ -178,7 +178,7 @@ export function AgentBacktestCard({
                           </div>
                         );
                       }
-                      const tone = bl.verdict === "BEATS_RANDOM" ? "#3ecf8e" : bl.verdict === "LEANS_ABOVE" ? "#fbbf24" : bl.verdict === "BELOW_RANDOM" ? "#f7525f" : "#a1a1aa";
+                      const tone = bl.verdict === "BEATS_RANDOM" ? "#3ecf8e" : bl.verdict === "LEANS_ABOVE" ? "#60a5fa" : bl.verdict === "BELOW_RANDOM" ? "#f7525f" : "#a1a1aa";
                       const read = bl.verdict === "BEATS_RANDOM" ? "the timing carries information"
                         : bl.verdict === "LEANS_ABOVE" ? "leans above random · not conclusive"
                         : bl.verdict === "BELOW_RANDOM" ? "worse than random timing this window. Inverting it is a new rule, untested"
@@ -212,7 +212,7 @@ export function AgentBacktestCard({
           )}
           {validation && (() => {
             const v = validation.verdict;
-            const vc = v === "ROBUST" ? "#3ecf8e" : v === "FRAGILE" ? "#fbbf24" : "#f7525f";
+            const vc = v === "ROBUST" ? "#3ecf8e" : v === "FRAGILE" ? "#60a5fa" : "#f7525f";
             const vlabel = v === "ROBUST" ? "✓ ROBUST" : v === "FRAGILE" ? "◐ FRAGILE" : "✕ NOT ROBUST";
             return (
               <div style={{ marginTop: 14 }}>
@@ -220,7 +220,7 @@ export function AgentBacktestCard({
                   WALK-FORWARD — {validation.strategyLabel ?? strategyLabel(config)} · {validation.totalSymbols} symbols · {validation.folds} time folds · {validation.days}d · fees on
                 </div>
                 {validation.untestable ? (
-                  <div style={{ color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, padding: "6px 8px", border: "1px solid #fbbf2430", borderRadius: 3 }}>
+                  <div style={{ color: "#60a5fa", fontFamily: "var(--nx-font-ui)", fontSize: 10, lineHeight: 1.5, padding: "6px 8px", border: "1px solid #60a5fa30", borderRadius: 3 }}>
                     ⚠ {validation.note}
                     <OiCoverage rows={validation.oiCoverage ?? validation.basisCoverage} />
                   </div>

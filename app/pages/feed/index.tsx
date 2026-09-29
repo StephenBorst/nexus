@@ -101,7 +101,7 @@ const STATUS_CONFIG = {
   ACTIVE:      { label: "ACTIVE",      color: "#d4d4d8", bg: "#1a1a1e", border: "#33333a" },
   HIT_TP:      { label: "HIT TP",      color: "#ededf0", bg: "#1a1a1e", border: "#33333a" },
   STOPPED_OUT: { label: "STOPPED OUT", color: "#f7525f", bg: "#241012", border: "#4a1e22" },
-  INVALIDATED: { label: "INVALIDATED", color: "#fbbf24", bg: "#2a1a00", border: "#4a3a00" },
+  INVALIDATED: { label: "INVALIDATED", color: "#60a5fa", bg: "#0e1622", border: "#1c2a3d" },
   CLOSED:      { label: "CLOSED",      color: "#a1a1aa", bg: "#1a1a1e", border: "#33333a" },
 };
 
@@ -306,7 +306,7 @@ function CopyModal({
             { label: "ENTRY", val: `$${px(thesis.entryPrice)}`, color: "#a1a1aa" },
             { label: "STOP",  val: `$${px(thesis.stopLoss)}`,   color: "#f7525f" },
             { label: "TP1",   val: `$${px(thesis.takeProfit1)}`, color: "#ededf0" },
-            { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`, color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
+            { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`, color: thesis.riskReward >= 2 ? "#ededf0" : "#60a5fa" },
           ].map(({ label, val, color }) => (
             <div key={label}>
               <div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</div>
@@ -369,7 +369,7 @@ function CopyModal({
               </div>
               <div>
                 <div style={labelStyle}>R:R</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: calc.riskReward >= 2 ? "#ededf0" : "#fbbf24" }}>
+                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: calc.riskReward >= 2 ? "#ededf0" : "#60a5fa" }}>
                   1:{calc.riskReward.toFixed(2)}
                 </div>
               </div>
@@ -616,7 +616,7 @@ function FeedCard({
           { label: "ENTRY", val: `$${px(thesis.entryPrice)}`, color: undefined },
           { label: "STOP",  val: `$${px(thesis.stopLoss)}`,   color: "#f7525f" },
           { label: "TP1",   val: `$${px(thesis.takeProfit1)}`, color: "#ededf0" },
-          { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`, color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
+          { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`, color: thesis.riskReward >= 2 ? "#ededf0" : "#60a5fa" },
           { label: "SIZE",  val: (Number(thesis.positionSize) || 0) > 0 ? `$${thesis.positionSize.toFixed(0)}` : "—", color: undefined },
         ].map(({ label, val, color }) => (
           <div key={label}>
@@ -978,7 +978,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, paddingLeft: 2 }}>
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: graded.size > 0 ? "#ededf0" : "#fbbf24" }} />
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: graded.size > 0 ? "#ededf0" : "#60a5fa" }} />
         <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>
           {graded.size > 0
             ? `✓ ${graded.size} VERIFIED CALLER${graded.size !== 1 ? "S" : ""} · graded from public price`
@@ -1051,7 +1051,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                       did better. Sizing skill, invisible in hit rate or P&L. */}
                   {trader.graded?.calibration?.calibrated && <span title={`Calibrated. Higher-conviction calls average +${trader.graded.calibration.gap}R more than smaller ones.`} style={{ fontSize: 8, color: "#3ecf8e", border: "1px solid #33333a", borderRadius: 2, padding: "1px 4px", background: "#1a1a1e" }}>◎ CALIBRATED</span>}
                   {!trader.graded && emerging.has(trader.wallet.toLowerCase()) && (
-                    <span title="Resolved graded calls. 5 to become a Verified Caller." style={{ fontSize: 8, color: "#fbbf24", border: "1px solid #4a3a00", borderRadius: 2, padding: "1px 4px", background: "#2a1a00" }}>
+                    <span title="Resolved graded calls. 5 to become a Verified Caller." style={{ fontSize: 8, color: "#60a5fa", border: "1px solid #1c2a3d", borderRadius: 2, padding: "1px 4px", background: "#0e1622" }}>
                       ◆ EMERGING · {emerging.get(trader.wallet.toLowerCase())!.toQualify} to verify
                     </span>
                   )}
@@ -1062,7 +1062,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   {trader.graded?.discipline && (
                     <span
                       title={`Plan quality ${trader.graded.discipline.score}/100 across ${trader.graded.discipline.scored} calls. Scored at post time from public price: obtainable entry, a stop outside the noise, R:R matching the posted levels. Reported, not ranked on.`}
-                      style={{ fontSize: 8, color: trader.graded.discipline.score >= 70 ? "#a1a1aa" : "#fbbf24", border: `1px solid ${trader.graded.discipline.score >= 70 ? "#33333a" : "#4a3a00"}`, borderRadius: 2, padding: "1px 4px", background: trader.graded.discipline.score >= 70 ? "#1a1a1e" : "#2a1a00" }}
+                      style={{ fontSize: 8, color: trader.graded.discipline.score >= 70 ? "#a1a1aa" : "#60a5fa", border: `1px solid ${trader.graded.discipline.score >= 70 ? "#33333a" : "#1c2a3d"}`, borderRadius: 2, padding: "1px 4px", background: trader.graded.discipline.score >= 70 ? "#1a1a1e" : "#0e1622" }}
                     >
                       PLAN {trader.graded.discipline.score}
                     </span>
@@ -1108,7 +1108,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                 <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>WIN RATE</div>
                 <div style={{
                   fontFamily: "var(--nx-font-mono)", fontSize: 16, fontWeight: "bold",
-                  color: !g ? "#52525b" : g.hitRate >= 60 ? "#3ecf8e" : g.hitRate >= 40 ? "#fbbf24" : "#f7525f",
+                  color: !g ? "#52525b" : g.hitRate >= 60 ? "#3ecf8e" : g.hitRate >= 40 ? "#60a5fa" : "#f7525f",
                 }}>
                   {g ? `${g.hitRate.toFixed(0)}%` : "—"}
                 </div>
@@ -1131,7 +1131,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
               {/* Avg R:R */}
               <div style={{ textAlign: "center", flex: "1 1 50px", minWidth: 50 }}>
                 <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>AVG R:R</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: trader.avgRR >= 2 ? "#ededf0" : "#fbbf24" }}>
+                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: trader.avgRR >= 2 ? "#ededf0" : "#60a5fa" }}>
                   1:{trader.avgRR.toFixed(1)}
                 </div>
               </div>
@@ -1158,7 +1158,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                     </div>
                     <div style={{
                       fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: "bold",
-                      color: closed === 0 ? "#52525b" : rep >= 70 ? "#3ecf8e" : rep >= 40 ? "#fbbf24" : "#f7525f",
+                      color: closed === 0 ? "#52525b" : rep >= 70 ? "#3ecf8e" : rep >= 40 ? "#60a5fa" : "#f7525f",
                     }}>
                       {closed === 0 ? "—" : rep}
                     </div>
@@ -1237,7 +1237,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                       <div style={{ display: "flex", gap: 16 }}>
                         {[
                           { label: "ENTRY", val: `$${t.entryPrice.toFixed(2)}`, color: "#a1a1aa" },
-                          { label: "R:R",   val: `1:${t.riskReward.toFixed(2)}`, color: t.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
+                          { label: "R:R",   val: `1:${t.riskReward.toFixed(2)}`, color: t.riskReward >= 2 ? "#ededf0" : "#60a5fa" },
                         ].map(({ label, val, color }) => (
                           <div key={label}>
                             <div style={{ fontSize: 7, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</div>

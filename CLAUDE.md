@@ -1493,8 +1493,11 @@ Canonical system = **`app/config/theme.ts`** (`C` tokens), mirrored 1:1 by the l
   tab, the PnL poster hairline, the PREDICTIVE chip; never a button, never body text; buttons stay bone). **Was amber
   until 2026-09-29 — borst: "amber reads as caution", so the brand can't wear it.** The same blue = `SIGNAL.watch`
   (was `SIGNAL.caution` `#e0a458`): experimental / "watch this". Amber `#fbbf24` = `C.warn` = REAL DANGER ONLY.
-  `ogCards.test.mjs` fails if the brand mark is ever set to C.warn. ⚠️ `/mini` (parked) still draws its own amber
-  header rule; `#6cb6ff` (Coachmark/Telegram, APPROVED_EXTRAS) is a near-twin blue — fold it in when touched · **green/red = money + price ONLY** (P&L,
+  `ogCards.test.mjs` fails if the brand mark is ever set to C.warn. **Amber = danger only, applied app-wide 2026-09-29:**
+  it stays on errors/failed actions, blocking validation, liquidation distance + >10x leverage, and real-money live
+  paths (live-order confirm, AUTONOMOUS, daily-loss cap bar); every caution use (weak score, low R:R, hot funding,
+  FRAGILE, INVALIDATED, disclosures) moved to blue. ONE blue: `#6cb6ff` folded into `#60a5fa` (removed from
+  APPROVED_EXTRAS). ⚠️ `/mini` (parked) still draws its own amber header rule · **green/red = money + price ONLY** (P&L,
   WIN/LOSS + its R, W/L tally, expectancy, price moves, Buy/Sell sides) — a LONG label, a TP/stop level, a count, a
   rate, a score, ACTIVE, a live dot are monochrome. Share cards read colours from `app/lib/brand.mjs` (pinned to
   theme.ts) and live in `workers/nexus-lab-api/ogCards.mjs`; `ogCards.test.mjs` renders every card and fails any

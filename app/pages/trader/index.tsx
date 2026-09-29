@@ -65,7 +65,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   ACTIVE:      { label: "ACTIVE",      color: "#d4d4d8", bg: "#1a1a1e", border: "#33333a" },
   HIT_TP:      { label: "HIT TP",      color: "#ededf0", bg: "#1a1a1e", border: "#33333a" },
   STOPPED_OUT: { label: "STOPPED OUT", color: "#f7525f", bg: "#241012", border: "#4a1e22" },
-  INVALIDATED: { label: "INVALIDATED", color: "#fbbf24", bg: "#2a1a00", border: "#4a3a00" },
+  INVALIDATED: { label: "INVALIDATED", color: "#60a5fa", bg: "#0e1622", border: "#1c2a3d" },
   CLOSED:      { label: "CLOSED",      color: "#a1a1aa", bg: "#1a1a1e", border: "#33333a" },
   PENDING:     { label: "PENDING",     color: "#a1a1aa", bg: "#141416", border: "#33333a" },
 };
@@ -189,7 +189,7 @@ function ThesisRow({
             { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`, color: "#a1a1aa" },
             { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,   color: "#f7525f" },
             { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`, color: "#ededf0" },
-            { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`, color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
+            { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`, color: thesis.riskReward >= 2 ? "#ededf0" : "#60a5fa" },
             { label: "SIZE",  val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" },
           ].map(({ label, val, color }) => (
             <div key={label}>
@@ -436,7 +436,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
               </div>
               <div>
                 <div style={{ fontSize: 7, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>R:R</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: calc.riskReward >= 2 ? "#ededf0" : "#fbbf24" }}>1:{calc.riskReward.toFixed(2)}</div>
+                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: calc.riskReward >= 2 ? "#ededf0" : "#60a5fa" }}>1:{calc.riskReward.toFixed(2)}</div>
               </div>
               <div>
                 <div style={{ fontSize: 7, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>MAX LOSS</div>
@@ -655,7 +655,7 @@ export default function TraderPage() {
   // Ph26: pre-compute rep display values to avoid IIFE pattern in JSX (TSC cascade errors)
   const repForDisplay = onChainRep ?? calcRepScore(stats.wins, stats.losses, stats.avgRR);
   const isOnChainRep = onChainRep !== null;
-  const repColor = repForDisplay >= 70 ? "#3ecf8e" : repForDisplay >= 40 ? "#fbbf24" : "#f7525f";
+  const repColor = repForDisplay >= 70 ? "#3ecf8e" : repForDisplay >= 40 ? "#60a5fa" : "#f7525f";
   const showRepBadge = stats.closed > 0 || onChainRep !== null;
 
   return (
@@ -800,13 +800,13 @@ export default function TraderPage() {
                     label="WIN RATE"
                     value={stats.winRate !== null ? `${stats.winRate.toFixed(0)}%` : "—"}
                     sub={stats.closed > 0 ? `${stats.wins}W / ${stats.losses}L` : "no closed trades"}
-                    color={stats.winRate === null ? "#52525b" : stats.winRate >= 60 ? "#3ecf8e" : stats.winRate >= 40 ? "#fbbf24" : "#f7525f"}
+                    color={stats.winRate === null ? "#52525b" : stats.winRate >= 60 ? "#3ecf8e" : stats.winRate >= 40 ? "#60a5fa" : "#f7525f"}
                   />
                   <StatBox
                     label="AVG R:R"
                     value={`1:${stats.avgRR.toFixed(2)}`}
                     sub="all theses"
-                    color={stats.avgRR >= 2 ? "#ededf0" : "#fbbf24"}
+                    color={stats.avgRR >= 2 ? "#ededf0" : "#60a5fa"}
                   />
                   <StatBox
                     label="ACTIVE"

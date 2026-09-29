@@ -21,7 +21,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { orderlyPerpSet } from "@/pages/token/data";
-import { C, MONO, UI, RADIUS } from "@/config/theme";
+import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
 import { AGENT_API } from "./agentTypes";
 import { FADE_FUNDING_FLOOR_PCT_YR } from "./briefing";
 import { useIsMobile } from "./useIsMobile";
@@ -375,7 +375,7 @@ function EdgeQualityChip({ q }: { q?: EdgeQuality }) {
   if (!q) return null;
   const map: Record<string, { color: string; text: string }> = {
     PROVEN:   { color: C.accent,     text: `◆ Fade has paid here. Reverted ${q.revertedPct}%` },
-    TRAP:     { color: C.warn,       text: `⚠ Trap. Fading this has FAILED (reverted only ${q.revertedPct}%)` },
+    TRAP:     { color: SIGNAL.watch,       text: `⚠ Trap. Fading this has FAILED (reverted only ${q.revertedPct}%)` },
     MIXED:    { color: C.text.fog,   text: `Coin-flip so far. Reverted ${q.revertedPct}%` },
     UNPROVEN: { color: C.text.faint, text: `Unproven. Not enough funding history yet` },
   };
@@ -397,7 +397,7 @@ function Callers({ m, lean }: { m: Market; lean?: Lean }) {
       <span style={dirChip(lean.side)}>{lean.side === "SPLIT" ? "SPLIT" : `betting ${lean.side}`}</span>
       <span style={{ fontFamily: MONO, fontSize: 8.5, color: C.text.faint }}>{lean.participants}</span>
       {diverges
-        ? <span title="The sharp callers disagree with the fade" style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 9, fontWeight: 700, color: C.warn }}>⚡ they disagree</span>
+        ? <span title="The sharp callers disagree with the fade" style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 9, fontWeight: 700, color: SIGNAL.watch }}>⚡ they disagree</span>
         : lean.side !== "SPLIT" && <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 9, color: C.text.muted }}>✓ same side as the fade</span>}
     </>
   );
@@ -410,7 +410,7 @@ function SmartMoneyChip({ m }: { m: Market }) {
   if (!sm?.side || m.direction === "NONE") return null;
   const aligned = sm.side === m.direction;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.03em", color: aligned ? C.accent : C.warn }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.03em", color: aligned ? C.accent : SIGNAL.watch }}>
       {aligned ? "◆ Smart money is fading with you" : "⚡ Smart money is riding with the crowd"}
       <span style={{ color: C.text.faint, fontWeight: 400 }}>· {sm.count} {sm.side}</span>
     </div>
@@ -454,14 +454,14 @@ function SynthesisRead({ m, lean, active }: { m: Market; lean?: Lean; active: bo
       <LensRow label="Smart $"
         value={sm?.side ? `${sm.count} sharp${sm.count === 1 ? "" : "s"} ${sm.side}${sm.long != null && sm.short != null ? ` · ${sm.long}L/${sm.short}S` : ""}` : "no read"}
         tag={active && sm?.side ? (sm.side === fadeDir ? withTag : againstTag) : undefined}
-        tagTone={sm?.side ? (sm.side === fadeDir ? C.accent : C.warn) : undefined} />
+        tagTone={sm?.side ? (sm.side === fadeDir ? C.accent : SIGNAL.watch) : undefined} />
       <LensRow label="Callers"
         value={callerSides ? `betting ${lean!.side} · ${lean!.participants}${lean!.participants < 2 ? " (thin)" : ""}` : lean ? `split · ${lean.participants}` : "no one's called it"}
         tag={active && callerConfirms ? (lean!.side === fadeDir ? withTag : againstTag) : undefined}
-        tagTone={callerConfirms ? (lean!.side === fadeDir ? C.accent : C.warn) : undefined} />
+        tagTone={callerConfirms ? (lean!.side === fadeDir ? C.accent : SIGNAL.watch) : undefined} />
       {v && (
         <div style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${C.border}`, display: "flex", gap: 8, alignItems: "flex-start" }}>
-          <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 12, lineHeight: 1.2, color: v.tone === "aligned" ? C.accent : C.warn }}>{v.tone === "aligned" ? "◆" : "⚠"}</span>
+          <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 12, lineHeight: 1.2, color: v.tone === "aligned" ? C.accent : SIGNAL.watch }}>{v.tone === "aligned" ? "◆" : "⚠"}</span>
           <span style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, color: v.tone === "aligned" ? C.text.bright : C.text.fog }}>{v.text}</span>
         </div>
       )}
@@ -695,7 +695,7 @@ export function MispricedBoard() {
     // question below three screens of prose. Desktop is untouched. Every value here reads the
     // SAME verdict object the badge and the Draft gate read, so the head cannot disagree.
     const verdictLabel = verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? "⚠ WATCH" : "◆ WATCHING";
-    const verdictColor = isFade ? C.accent : draftAnyway ? C.warn : C.text.muted;
+    const verdictColor = isFade ? C.accent : draftAnyway ? SIGNAL.watch : C.text.muted;
     const fundingLabel = `${fmt8h(m.funding8hPct)} → ${fmtYr(m.fundingAnnualPct)}`;
     // HIST is the canonical edgeQuality record (the source the share card already cites); absent
     // when the coin has no graded reversion history yet — then it simply isn't drawn.
@@ -714,7 +714,7 @@ export function MispricedBoard() {
                   <span title="The raw rate paid each 8h funding period." style={{ fontSize: 11, fontWeight: 400, color: C.text.muted, marginRight: 8 }}>{fmt8h(m.funding8hPct)} →</span>
                   {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%<span title="Annualized. Per-8h rate × 1095 (three periods a day). What it adds up to over a year if today's rate held." style={{ fontSize: 11, color: C.text.faint, marginLeft: 3 }}>/yr</span>
                 </span>
-                {isThinOi(m) && <span title={THIN_TITLE} style={{ fontSize: 8.5, color: C.warn, letterSpacing: "0.08em" }}>THIN OI · LOW CONFIDENCE</span>}
+                {isThinOi(m) && <span title={THIN_TITLE} style={{ fontSize: 8.5, color: SIGNAL.watch, letterSpacing: "0.08em" }}>THIN OI · LOW CONFIDENCE</span>}
               </div>
               <SynthChart points={pos?.points ?? []} price={price ?? []} direction={m.direction}
                 smartMoney={m.smartMoney} markPrice={m.markPrice} fundingAnnualPct={m.fundingAnnualPct} maxEdge={maxEdge} m={m} />
@@ -798,8 +798,8 @@ export function MispricedBoard() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
                   <button onClick={() => canDraft && draftFade(m)} disabled={!canDraft} className="nx-card-interactive" style={{
                     flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em",
-                    color: isFade ? C.accent : draftAnyway ? C.warn : C.text.faint, background: "none",
-                    border: `1px solid ${isFade ? C.borderStrong : draftAnyway ? `${C.warn}88` : C.border}`, borderRadius: RADIUS.md,
+                    color: isFade ? C.accent : draftAnyway ? SIGNAL.watch : C.text.faint, background: "none",
+                    border: `1px solid ${isFade ? C.borderStrong : draftAnyway ? `${SIGNAL.watch}88` : C.border}`, borderRadius: RADIUS.md,
                     padding: "11px 12px", cursor: canDraft ? "pointer" : "not-allowed", opacity: canDraft ? 1 : 0.55,
                   }}>{isFade ? "Draft this fade →" : draftAnyway ? "Draft anyway →" : "No fade to draft yet"}</button>
                   <button onClick={() => shareRead(m, isFade, draftAnyway)} title="Share this read as a card on X" className="nx-press" style={{
@@ -850,8 +850,8 @@ export function MispricedBoard() {
                   FADE → greenlight Draft. WATCH/NONE → Draft disabled (Simulate stays below). */}
               <button onClick={() => canDraft && draftFade(m)} disabled={!canDraft} title={isFade ? "Draft this fade into the Thesis Engine" : draftAnyway ? "Funding is stretched but fading it has historically underperformed. Draft it anyway on your own read, not the base rate" : "No fade edge right now. Funding isn't stretched vs its range"} className="nx-card-interactive" style={{
                 fontFamily: MONO, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em",
-                color: isFade ? C.accent : draftAnyway ? C.warn : C.text.faint, background: "none",
-                border: `1px solid ${isFade ? C.borderStrong : draftAnyway ? `${C.warn}88` : C.border}`, borderRadius: RADIUS.md, padding: "9px 15px",
+                color: isFade ? C.accent : draftAnyway ? SIGNAL.watch : C.text.faint, background: "none",
+                border: `1px solid ${isFade ? C.borderStrong : draftAnyway ? `${SIGNAL.watch}88` : C.border}`, borderRadius: RADIUS.md, padding: "9px 15px",
                 cursor: canDraft ? "pointer" : "not-allowed", opacity: canDraft ? 1 : 0.55,
               }}>{isFade ? "Draft this fade →" : draftAnyway ? "Draft anyway →" : "No fade to draft yet"}</button>
             </div>}
@@ -927,15 +927,15 @@ export function MispricedBoard() {
                   // + shared gate as the detail ticket it opens — so a Board FADE can't sit over
                   // a "within range · WATCHING" card. FADE badge names the side, matching THE BOARD.
                   const { verdict, isFade, draftAnyway, weakEdge, tooSmall } = ticketVerdict(m, m.stretched ?? null);
-                  const badgeColor = isFade ? C.accent : draftAnyway ? C.warn : C.text.muted;
+                  const badgeColor = isFade ? C.accent : draftAnyway ? SIGNAL.watch : C.text.muted;
                   return (
                     <div role="button" tabIndex={0} key={m.symbol} ref={(el: HTMLDivElement | null) => { rowRefs.current[m.coin] = el; }} onClick={() => setOpenCoin(m.coin)} onKeyDown={pressKey(() => setOpenCoin(m.coin))} title="Open this market"
                       className="nx-card-interactive"
-                      style={{ position: "relative", border: `1px solid ${C.borderStrong}`, borderLeft: `2px solid ${isFade ? C.accent : draftAnyway ? C.warn : C.borderStrong}`, borderRadius: RADIUS.lg, padding: "13px 15px 12px", background: `linear-gradient(180deg,${C.surface} 0%,${C.surfaceAlt} 100%)`, cursor: "pointer", overflow: "hidden", scrollMarginTop: 80, boxShadow: markedCoin === m.coin ? `0 0 0 2px ${C.accent}` : undefined }}>
+                      style={{ position: "relative", border: `1px solid ${C.borderStrong}`, borderLeft: `2px solid ${isFade ? C.accent : draftAnyway ? SIGNAL.watch : C.borderStrong}`, borderRadius: RADIUS.lg, padding: "13px 15px 12px", background: `linear-gradient(180deg,${C.surface} 0%,${C.surfaceAlt} 100%)`, cursor: "pointer", overflow: "hidden", scrollMarginTop: 80, boxShadow: markedCoin === m.coin ? `0 0 0 2px ${C.accent}` : undefined }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11 }}>
                         <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.text.bright }}>{m.coin}</span>
                         <span style={{ fontFamily: MONO, fontSize: 8.5, color: C.text.faint }}>{fmtUsd(m.oiUsd)} open interest</span>
-                        {isThinOi(m) && <span title={THIN_TITLE} style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: C.warn, border: `1px solid ${C.warn}55`, borderRadius: 2, padding: "0 4px" }}>THIN · LOW CONF</span>}
+                        {isThinOi(m) && <span title={THIN_TITLE} style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: SIGNAL.watch, border: `1px solid ${SIGNAL.watch}55`, borderRadius: 2, padding: "0 4px" }}>THIN · LOW CONF</span>}
                         <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: badgeColor }}>{verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? `⚠ WATCH · ${m.edgeQuality?.revertedPct}% HIST` : "◆ WATCHING"}</span>
                       </div>
                       <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
@@ -1004,7 +1004,7 @@ export function MispricedBoard() {
                       <div style={{ position: "absolute", top: 0, bottom: 0, background: C.borderStrong, ...(m.direction === "LONG" ? { right: "50%" } : { left: "50%" }), width: `${Math.min(46, (m.edge / maxEdge) * 46)}%` }} />
                     </div>}
                     {isMobile && <span />}
-                    <span title={`Per-8h rate → annualized (× 1095).${isThinOi(m) ? " " + THIN_TITLE : ""}`} style={{ fontFamily: MONO, fontSize: isMobile ? 9.5 : 10.5, color: C.text.muted, textAlign: "right", whiteSpace: "nowrap" }}>{isThinOi(m) && <span style={{ color: C.warn }}>· </span>}<span style={{ color: C.text.faint }}>{fmt8h(m.funding8hPct)} → </span>{fmtYr(m.fundingAnnualPct)}</span>
+                    <span title={`Per-8h rate → annualized (× 1095).${isThinOi(m) ? " " + THIN_TITLE : ""}`} style={{ fontFamily: MONO, fontSize: isMobile ? 9.5 : 10.5, color: C.text.muted, textAlign: "right", whiteSpace: "nowrap" }}>{isThinOi(m) && <span style={{ color: SIGNAL.watch }}>· </span>}<span style={{ color: C.text.faint }}>{fmt8h(m.funding8hPct)} → </span>{fmtYr(m.fundingAnnualPct)}</span>
                     <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.08em", color: C.text.faint, textAlign: "right" }}>FAIR</span>
                   </div>
                 ))}
