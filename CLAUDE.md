@@ -658,6 +658,11 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   four shared manual limit longs (BTC 61k/62k/64,094, ZEC 452) that never filled — now PENDING — plus a BTC 64,500
   short that filled and stopped out. `/theses/leaderboard` returns empty arrays by design when nobody qualifies: an
   empty board is not an outage — check `/theses/process/:wallet` before debugging.
+  **Feed RANKS never ranks on KV data (borst + Ember, 2026-09-29).** `LeaderboardView` lists ONLY graded callers, in the
+  grader's order (/theses/leaderboard), then EMERGING callers unranked ("—"); nobody else. It used to rank everyone in the
+  feed, falling back to the Lab's own statuses (`buildLeaderboard`/`calcRepScore`) and the on-chain Rep Score (outcomes
+  callers close themselves) under a "RANKED BY KV DATA" label. Now: "No verified callers yet." when nobody's graded, a
+  load error when the board can't be read (never an empty board for a failed read). Don't add a fallback ranking.
 - **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
   (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
   A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from

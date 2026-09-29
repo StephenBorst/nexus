@@ -831,13 +831,9 @@ function buildLeaderboard(feed: FeedThesis[]): TraderStats[] {
       : 0;
   }
 
-  // Ph18: sort by Rep Score (composite: winRate + R:R bonus - sample penalty)
-  return [...map.values()].sort((a, b) => {
-    const aRep = calcRepScore(a.wins, a.losses, a.avgRR);
-    const bRep = calcRepScore(b.wins, b.losses, b.avgRR);
-    if (bRep !== aRep) return bRep - aRep;
-    return b.total - a.total;
-  });
+  // Per-wallet display stats only, unordered: these counts are the Lab's own statuses, so the
+  // board never ranks on them (LeaderboardView ranks graded callers only).
+  return [...map.values()];
 }
 
 
@@ -852,7 +848,6 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
 
   // Ph12/26 -- trustless on-chain stats + Rep Score from NexusRepScore contract
   const [onChainStats, setOnChainStats] = useState<Map<string, { wins: number; losses: number; active: number; repScore: number; avgRR: number }>>(new Map());
-  const [onChainLoading, setOnChainLoading] = useState(false);
 
   // ⚡ Autocopy a verified caller — your agent mirrors their next public call at your
   // own risk (backend reads config.autocopy.leaders → caller:latest). Load who you
@@ -893,7 +888,6 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
 
   useEffect(() => {
     if (board.length === 0) return;
-    setOnChainLoading(true);
     Promise.all(
       board.map(async (trader) => {
         try {
@@ -911,7 +905,6 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
         }
       }
       setOnChainStats(map);
-      setOnChainLoading(false);
     });
   }, [board.length]);
 
@@ -919,6 +912,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
   const [graded, setGraded] = useState<Map<string, { hitRate: number; avgR: number; calls: number; score: number; meritRank: { tier: string; title: string; glyph: string } | null; rSeries: number[]; discipline: { score: number; scored: number } | null; regimeEdge: { best: { bucket: string; avgR: number } } | null; calibration: { calibrated: boolean; inverted: boolean; gap: number } | null; contrarian: { calls: number; avgR: number; edge: number; score: number } | null }>>(new Map());
   const [emerging, setEmerging] = useState<Map<string, { calls: number; toQualify: number }>>(new Map());
   const [callLedger, setCallLedger] = useState<{ ledgerHash?: string; onChain?: { verified?: boolean; explorer?: string } | null } | null>(null);
+  const [gradedState, setGradedState] = useState<"loading" | "ok" | "error">("loading");
   useEffect(() => {
     let cancel = false;
     Promise.all([
@@ -926,6 +920,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
       fetch(`${API_BASE}/theses/ledger`).then((r) => r.json()).catch(() => null),
     ]).then(([lb, led]) => {
       if (cancel) return;
+      setGradedState(lb && Array.isArray(lb.leaderboard) ? "ok" : "error");
       const m = new Map<string, { hitRate: number; avgR: number; calls: number; score: number; meritRank: { tier: string; title: string; glyph: string } | null; rSeries: number[]; discipline: { score: number; scored: number } | null; regimeEdge: { best: { bucket: string; avgR: number } } | null; calibration: { calibrated: boolean; inverted: boolean; gap: number } | null; contrarian: { calls: number; avgR: number; edge: number; score: number } | null }>();
       for (const e of (lb?.leaderboard || [])) {
         if (e.wallet) m.set(e.wallet.toLowerCase(), { hitRate: e.hitRate, avgR: e.avgR, calls: e.calls, score: e.score, meritRank: e.meritRank ?? null, rSeries: Array.isArray(e.rSeries) ? e.rSeries : [], discipline: e.discipline ?? null, regimeEdge: e.regimeEdge ?? null, calibration: e.calibration ?? null, contrarian: e.contrarian ?? null });
@@ -941,48 +936,53 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
     return () => { cancel = true; };
   }, []);
 
-  // Re-rank: VERIFIED CALLERS (public-price graded) float to the top by graded
-  // score; everyone else falls back to on-chain Rep Score, then JS score.
-  const sortedBoard = useMemo(() => {
-    return [...board]
-      .map((trader) => {
-        const g = graded.get(trader.wallet.toLowerCase()) || null;
-        const oc = onChainStats.get(trader.wallet.toLowerCase());
-        if (!oc) return { ...trader, onChainRepScore: null as number | null, graded: g };
-        const closed = oc.wins + oc.losses;
-        return {
-          ...trader,
-          wins: oc.wins,
-          losses: oc.losses,
-          active: oc.active,
-          avgRR: oc.avgRR,
-          winRate: closed > 0 ? (oc.wins / closed) * 100 : 0,
-          onChainRepScore: oc.repScore,
-          graded: g,
-        };
-      })
-      .sort((a, b) => {
-        // Verified callers first, ranked by trustless graded score.
-        if (a.graded && b.graded) return b.graded.score - a.graded.score;
-        if (a.graded && !b.graded) return -1;
-        if (!a.graded && b.graded) return 1;
-        const aRep = a.onChainRepScore ?? calcRepScore(a.wins, a.losses, a.avgRR);
-        const bRep = b.onChainRepScore ?? calcRepScore(b.wins, b.losses, b.avgRR);
-        if (bRep !== aRep) return bRep - aRep;
-        return b.total - a.total;
-      });
-  }, [board, onChainStats, graded]);
+  // Only callers graded from public price are ranked, in the grader's own order
+  // (/theses/leaderboard). EMERGING callers (1–4 graded calls) follow, unranked. Nobody else
+  // is listed, and nothing here is ordered by self-reported Lab statuses or the on-chain
+  // Rep Score (which counts outcomes callers close themselves): until someone is graded, the
+  // board says so. On-chain stats still fill the display columns of the rows shown.
+  const rows = useMemo(() => {
+    const byWallet = new Map(board.map((t) => [t.wallet.toLowerCase(), t]));
+    const row = (w: string) => {
+      const trader: TraderStats = byWallet.get(w) ?? { wallet: w, displayName: null, pfp: null, total: 0, wins: 0, losses: 0, active: 0, invalidated: 0, winRate: 0, avgRR: 0, bestRR: 0, bestTicker: "" };
+      const g = graded.get(w) || null;
+      const oc = onChainStats.get(w);
+      if (!oc) return { ...trader, onChainRepScore: null as number | null, graded: g };
+      const closed = oc.wins + oc.losses;
+      return {
+        ...trader,
+        wins: oc.wins,
+        losses: oc.losses,
+        active: oc.active,
+        avgRR: oc.avgRR,
+        winRate: closed > 0 ? (oc.wins / closed) * 100 : 0,
+        onChainRepScore: oc.repScore,
+        graded: g,
+      };
+    };
+    const verified = [...graded.keys()].map(row);                      // Map order = the grader's rank
+    const building = [...emerging.keys()].filter((w) => !graded.has(w)).map(row);
+    return [...verified, ...building];
+  }, [board, onChainStats, graded, emerging]);
 
-  if (board.length === 0) {
+  if (gradedState === "loading") {
+    return <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", padding: "12px 2px" }}>LOADING VERIFIED CALLERS…</div>;
+  }
+  if (gradedState === "error") {
+    return <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", padding: "12px 2px" }}>The verified callers board didn’t load. Nothing is ranked until it does.</div>;
+  }
+  if (rows.length === 0) {
     return <FeedEmptyState variant="ranks" />;
   }
 
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, paddingLeft: 2 }}>
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: onChainLoading ? "#fbbf24" : graded.size > 0 ? "#ededf0" : emerging.size > 0 ? "#fbbf24" : onChainStats.size > 0 ? "#ededf0" : "#52525b" }} />
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: graded.size > 0 ? "#ededf0" : "#fbbf24" }} />
         <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>
-          {graded.size > 0 ? `✓ ${graded.size} VERIFIED CALLER${graded.size !== 1 ? "S" : ""} · graded from public price` : emerging.size > 0 ? `◆ ${emerging.size} EMERGING CALLER${emerging.size !== 1 ? "S" : ""} · building toward verification (5 graded calls)` : onChainLoading ? "VERIFYING ON-CHAIN STATS..." : onChainStats.size > 0 ? `⛓ ${onChainStats.size} TRADER${onChainStats.size !== 1 ? "S" : ""} VERIFIED ON-CHAIN` : "RANKED BY KV DATA"}
+          {graded.size > 0
+            ? `✓ ${graded.size} VERIFIED CALLER${graded.size !== 1 ? "S" : ""} · graded from public price`
+            : `NO VERIFIED CALLERS YET · ◆ ${rows.length} EMERGING · 5 graded calls to rank`}
         </span>
       </div>
       {callLedger?.ledgerHash && (
@@ -999,8 +999,8 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
       )}
     {copyMsg && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#ededf0", marginBottom: 8, paddingLeft: 2 }}>⚡ {copyMsg}</div>}
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {sortedBoard.map((trader, i) => {
-        const rank = i + 1;
+      {rows.map((trader, i) => {
+        const rank = trader.graded ? i + 1 : null;   // verified rows come first; emerging rows are unranked
         // Trustless columns: show the GRADED record so the stats match the verified /
         // emerging tier. Self-reported / agent-exec statuses are a DIFFERENT metric —
         // showing an "80% win rate · 8/2" next to an "emerging, 1 graded call" badge is
@@ -1027,8 +1027,8 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
               style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, overflowX: "auto" }}
             >
               {/* Rank */}
-              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, minWidth: 28, flexShrink: 0, textAlign: "center", color: rank <= 3 ? "#ededf0" : "#52525b" }}>
-                {`#${rank}`}
+              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, minWidth: 28, flexShrink: 0, textAlign: "center", color: rank != null && rank <= 3 ? "#ededf0" : "#52525b" }}>
+                {rank != null ? `#${rank}` : "—"}
               </div>
 
               {/* Avatar */}
@@ -1288,11 +1288,11 @@ function FeedEmptyState({ variant }: { variant: "feed" | "ranks" }) {
         {isRanks ? "◆" : "⬡"}
       </div>
       <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 20, color: "#fff", fontWeight: "bold", marginBottom: 8, letterSpacing: "0.02em" }}>
-        {isRanks ? "No ranked traders yet." : "No public calls yet."}
+        {isRanks ? "No verified callers yet." : "No public calls yet."}
       </div>
       <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.6, marginBottom: 26 }}>
         {isRanks
-          ? "Rankings build as theses are published and resolved."
+          ? "A caller is ranked after 5 calls graded from public price, with a positive average R. A call counts once price trades at its entry. Nothing here is self-reported."
           : "Publish a thesis from the Lab. It lands here and gets graded from public price."}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 26, textAlign: "left" }}>
