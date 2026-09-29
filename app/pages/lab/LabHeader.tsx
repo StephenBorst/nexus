@@ -6,7 +6,7 @@ import { SimCreditsBadge } from "./SimCreditsBadge";
 
 // ── The Lab's header: title, account read, and the tab bar ─────────────────────
 // One title row (what this page is + account status), the connected account's numbers, then
-// the tabs grouped by the loop's phase. Colour follows docs/brand.md: amber marks the active
+// the tabs grouped by the loop's phase. Colour follows docs/brand.md: brand blue marks the active
 // tab only, green/red appear on money alone (P&L), counts and rates stay monochrome.
 
 const MONO = "var(--nx-font-mono)";
@@ -27,7 +27,7 @@ function SyncStatus({ connected, authOk, syncing, synced, onSign, isMobile }: Sy
     return (
       <button type="button" onClick={onSign}
         title="Sign a message (no funds move) so your calls and notes save to your record. Once a day."
-        style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: SIGNAL.caution, background: SIGNAL.cautionBg, border: `1px solid ${LINE.warn}`, borderRadius: 6, padding: "0 10px", height: isMobile ? 32 : 28, cursor: "pointer", whiteSpace: "nowrap" }}>
+        style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: SIGNAL.watch, background: SIGNAL.watchBg, border: `1px solid ${LINE.watch}`, borderRadius: 6, padding: "0 10px", height: isMobile ? 32 : 28, cursor: "pointer", whiteSpace: "nowrap" }}>
         Sign to sync
       </button>
     );
@@ -46,7 +46,7 @@ export function LabTitleBar({ isMobile, sync }: { isMobile: boolean; sync: SyncS
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: isMobile ? "14px 14px 10px" : "18px 20px 12px" }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.18em", color: C.amber, marginBottom: 4 }}>THE LAB</div>
+        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.18em", color: C.brand, marginBottom: 4 }}>THE LAB</div>
         <h1 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 20 : 24, fontWeight: 600, letterSpacing: "-0.02em", color: C.text.bright, lineHeight: 1.15 }}>
           Plan it. Run it. Prove it.
         </h1>
@@ -144,7 +144,7 @@ export function LabTabs({ isMobile, tabs, activeTab, onSelect, canCondense, cond
 
   const tabStyle = (active: boolean) => ({
     background: "none", border: "none", cursor: "pointer", whiteSpace: "nowrap" as const,
-    borderBottom: `2px solid ${active ? C.amber : "transparent"}`,
+    borderBottom: `2px solid ${active ? C.brand : "transparent"}`,
     color: active ? C.text.bright : C.text.muted,
     fontFamily: UI, fontSize: 13.5, fontWeight: active ? 600 : 500,
     padding: "8px 0 11px", marginBottom: -1, transition: "color 140ms ease",
