@@ -817,8 +817,14 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   `swapFeeRecipient`. `feeApplied` is true ONLY when the provider confirms it (0x: `fees.integratorFee`; Nordstern:
   its `convenienceFee` echo — just our percent repeated — AND our recipient INSIDE the swap calldata) — never assumed.
   **Live-verified 2026-09-29:** 20 USDC→WETH on Base, taker ≠ recipient → `0x34dF…B45c` embedded in Nordstern's
-  calldata as its own field, minOut stated, router `0xC87D…fC3d`. The fee AMOUNT shows only in a real swap's receipt
-  (borst's first live buy). First live call 422'd once (transient); failures now carry the provider's `detail`. A provider that 400s on the fee → one clean
+  calldata as its own field, minOut stated, router `0xC87D…fC3d`. **✅ Real swaps, fee
+  landed both ways (borst, 2026-09-28 ~23:45 MDT, $1 each, USDC ⇄ FAIR `0x7D92…CB07` on Base):** BUY 1 USDC → 116,302.04
+  FAIR (quote said 116,301.09), tx `0xce8d02c1…d9c72b` — fee to `0x34dF…B45c` = raw `115467122561623266638` = **115.467
+  FAIR (18 decimals) = 9.93 bps** of the output (≈$0.001). SELL 117,716.30 FAIR → 0.997294 USDC, tx `0x2800c693…2b8ec7` —
+  fee = **990 raw USDC = 9.92 bps**. ⚠️ The fee is taken ON-CHAIN by Nordstern's router from the OUTPUT token (FAIR on a
+  buy, USDC on a sell); our code only sends the 0.1% setting and never computes an amount, so buy and sell can't differ.
+  ⚠️ Read raw fee amounts with the token's own decimals: the first read of the buy put the decimal 3 places off
+  ("115,467 FAIR ≈ $0.99") — BaseScan's 115.467 was right. Route cleared for real volume. First live call 422'd once (transient); failures now carry the provider's `detail`. A provider that 400s on the fee → one clean
   retry without it (`feeConfigured:true, feeApplied:false`).
 - **Same response shape as Fabric's** so swapExec's guards are unchanged; the worker also drops any quote that spends
   ≠ the asked amount, approves a token we didn't choose, or carries native value. `router: "spanDEX"`, `provider`
@@ -1551,8 +1557,8 @@ inference is LIVE** as a PRO benefit (`POST /ai/chat`, see "Revenue + AI + Treas
 - **Farcaster mini app (`/mini`) is PARKED (borst, 2026-09-25).** Don't work on it, audit it or pitch it until borst
   says so. Last change: its one-tap PAPER deploy loads the Basis × CVD Stack (same as the /proof lead).
 - **Cold-start / feed liveness** is behind us — don't pitch it as the #1 risk or a next move.
-- **Fabric in-app buy was LIVE and tested** until Fabric shut down (Sept 16). Its spanDEX replacement is a new route
-  into the same signing path — one small real buy by borst confirms it (then this line is settled again).
+- **In-app EVM buy/sell is LIVE and tested** — on spanDEX since Fabric shut down (Sept 16); borst's $1 buy + sell
+  (Sept 28) filled and the 10 bps fee landed both ways. Don't pitch "run a small live test" again.
 - Current focus = **the engine and its signals** (basis stack, scoreboard → one-click strategies, mobile polish).
 - **⛔ ENGINE FREEZE until the Oct 15 2026 re-validation (borst + Ember, 2026-09-28).** The worker/agent engine is
   hands-off until the Oct 15 re-validation — no changes there, that's a scheduled experiment in progress. Engine =
