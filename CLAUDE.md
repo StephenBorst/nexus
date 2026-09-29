@@ -797,6 +797,25 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   test: confirm Fabric's `taker` param name (we send `taker`; if unhonored the takerless tx still binds recipient to
   msg.sender) and run a small real buy on a Fabric-listed token (e.g. WETH/BNKR on Base) before trusting.
 
+## ✅ spanDEX replaces Fabric on /swap/quote (2026-09-29) — read before touching the EVM swap
+- **Fabric shut down Sept 16 2026** (their own deprecation notice); `route.withfabric.xyz` 525s. The Fabric notes
+  above are history. `/swap/quote` now runs `workers/nexus-lab-api/spotQuote.mjs` on **`@spandex/core` 0.11.1**
+  (pinned, bundled in the worker, +6 KB gzip): `getRawQuotes` (no simulation, no RPC) over **Nordstern** (keyless,
+  always) + **0x** only when secret `ZEROX_API_KEY` is set (header only, never the URL).
+- **Fee = native spanDEX options** `integratorFeeAddress` + `integratorSwapFeeBps` from `SPOT_FEE_RECIPIENT`/`SPOT_FEE_BPS`
+  (cap 100). On the wire: Nordstern `convenienceFee=0.1` (PERCENT) + `convenienceFeeRecipient`; 0x `swapFeeBps` +
+  `swapFeeRecipient`. `feeApplied` is true ONLY when the provider's response echoes a positive fee (0x
+  `fees.integratorFee`; Nordstern: any fee-named field) — never assumed. A provider that 400s on the fee → one clean
+  retry without it (`feeConfigured:true, feeApplied:false`).
+- **Same response shape as Fabric's** so swapExec's guards are unchanged; the worker also drops any quote that spends
+  ≠ the asked amount, approves a token we didn't choose, or carries native value. `router: "spanDEX"`, `provider`
+  names who filled it. Preview (no taker) quotes for `0x…dEaD` and returns NO calldata. `priceImpact` is null (spanDEX
+  doesn't state one; the client no longer prints Number(null)=0%). `minOut` = the provider's stated floor or null (we
+  never compute one). Client gate: `EVM_SIGNABLE_ROUTERS` in swapExec.ts.
+- Tests: `spotQuote.test.mjs` (fake fetch through the REAL SDK: fee on the wire, key in header, preview has no tx,
+  fee refusal fallback, pick guards). Cloud sessions can't reach Nordstern/0x/spandex.sh — verify live via
+  `og.nexustradinglabs.com/swap/quote?...&taker=`.
+
 ## ✅ Flash (Definitive) spot router — order types + open orders (2026-09-27; read before touching Flash)
 - Flash = the THIRD EVM spot router on /token (beside Fabric + the Uniswap deep-link). Ticket
   `app/pages/token/FlashSpotButton.tsx` (tabs **MARKET · LIMIT · TWAP · STOP**; STOP = breakout `stop` on a buy,
@@ -873,7 +892,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   10 → echo lists 5 for us) and adds its own 20 bps regardless, so setting X costs the user X and earns us X/2.
   `appFees` is NOT covered by the quote signature (tamper test) — checkQuote requires our entry, ≤ what we asked; the
   user's floor is the SIGNED minAmountOut. Fixture `oneclick-quote-fee.json`. Cap 100 bps.
-- **Fabric's fee is already ON:** `SPOT_FEE_BPS = "10"` (its hard max; Fabric silently ignores more) → `0x34dF…B45c`.
+- **Spot fee:** `SPOT_FEE_BPS = "10"` → `0x34dF…B45c` (borst.eth broker wallet), now via spanDEX (see below).
 - ⏳ Not yet done: a small REAL transfer by borst (new money path — I can't sign); the fee numbers (after live tests);
   partner API key via the worker (drops 1Click's 20 bps).
 
@@ -1519,7 +1538,8 @@ inference is LIVE** as a PRO benefit (`POST /ai/chat`, see "Revenue + AI + Treas
 - **Farcaster mini app (`/mini`) is PARKED (borst, 2026-09-25).** Don't work on it, audit it or pitch it until borst
   says so. Last change: its one-tap PAPER deploy loads the Basis × CVD Stack (same as the /proof lead).
 - **Cold-start / feed liveness** is behind us — don't pitch it as the #1 risk or a next move.
-- **Fabric in-app buy is LIVE and tested** — don't pitch "run a small live test" again.
+- **Fabric in-app buy was LIVE and tested** until Fabric shut down (Sept 16). Its spanDEX replacement is a new route
+  into the same signing path — one small real buy by borst confirms it (then this line is settled again).
 - Current focus = **the engine and its signals** (basis stack, scoreboard → one-click strategies, mobile polish).
 - **⛔ ENGINE FREEZE until the Oct 15 2026 re-validation (borst + Ember, 2026-09-28).** The worker/agent engine is
   hands-off until the Oct 15 re-validation — no changes there, that's a scheduled experiment in progress. Engine =

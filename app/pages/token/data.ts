@@ -566,8 +566,9 @@ export async function swapQuote(pair: TokenPair, probeUsd = 100): Promise<SwapQu
   const url = `${AGENT_API}/swap/quote?chain=${evm.chainId}&tokenIn=${evm.usdc}&tokenOut=${encodeURIComponent(pair.baseAddress)}&amount=${amount}`;
   const j = (await getJson(url)) as { ok?: boolean; router?: string; priceImpact?: unknown } | null;
   if (!j || !j.ok) return null; // no route / secret unset / unknown shape → deep-link fallback
-  const impact = Number(j.priceImpact);
-  return { router: j.router || "Fabric", priceImpactPct: Number.isFinite(impact) ? impact : null, probeUsd };
+  // null ⇒ the router didn't state an impact (spanDEX doesn't); Number(null) would print 0%.
+  const impact = j.priceImpact == null ? NaN : Number(j.priceImpact);
+  return { router: j.router || "spanDEX", priceImpactPct: Number.isFinite(impact) ? impact : null, probeUsd };
 }
 
 // ── formatters (compact, terminal register) ──────────────────────────────────

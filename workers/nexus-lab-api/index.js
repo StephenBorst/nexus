@@ -17,6 +17,7 @@
 
 // Ph21: resvg-wasm for PNG generation (Twitter support)
 // Bundled by wrangler esbuild — run `npm install` in this directory before `wrangler deploy`
+import { spotQuote } from "./spotQuote.mjs";
 import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
@@ -6005,111 +6006,16 @@ document.getElementById("btn").addEventListener("click",go);
       return json({ error: "sol_rpc_upstream_failed", status: lastStatus }, request, 502);
     }
 
-    // ── GET /swap/quote — EVM swap quote via Fabric (secret X-App-Id stays server-side) ──
-    // The token terminal's EVM router. Jupiter (Solana) is keyless and quoted client-side; Fabric
-    // needs our App ID, which must NEVER reach the browser — so it is injected HERE and nowhere
-    // else. PREVIEW ONLY: this returns a quote, never a signed transaction. Fail-soft by design —
-    // no secret set, a Fabric error, or an unrecognized shape all return {available|ok:false} and
-    // the client falls back to the honest Uniswap named link, so a wrong guess never breaks the
-    // page. Returns Fabric's RAW body too, so the exact quote + execution-route shape can be
-    // verified from a real response BEFORE any in-app signing pass is built to sign against it.
+    // ── GET /swap/quote — EVM swap quote via spanDEX (spotQuote.mjs) ──
+    // Fabric shut down Sept 16 2026; spanDEX asks Nordstern (keyless) and, when ZEROX_API_KEY is
+    // set, 0x. Same response shape as before, so the Spot terminal's guards are unchanged. Nothing
+    // here signs. Fail-soft: any miss returns ok:false and the client keeps the Uniswap link.
     if (parts[0] === "swap" && parts[1] === "quote") {
       if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
-      const appId = env.FABRIC_APP_ID;
-      if (!appId) return json({ available: false, reason: "no_app_id" }, request);
-      const chain = url.searchParams.get("chain") || "";       // numeric chainId (8453, 1, 42161…)
-      const tokenIn = url.searchParams.get("tokenIn") || "";    // USDC address on that chain
-      const tokenOut = url.searchParams.get("tokenOut") || "";  // the token's contract address
-      const amount = url.searchParams.get("amount") || "";      // base units of tokenIn
-      const taker = url.searchParams.get("taker") || "";        // connected wallet (optional — binds recipient + unlocks the executable tx)
-      if (!chain || !tokenOut || !tokenIn || !amount) return json({ available: true, ok: false, reason: "bad_params" }, request);
       try {
-        // Fabric uses 0x-style param names (verified from a live 400: "missing field `sellToken`"):
-        // sellToken / buyToken / sellAmount + chainId. Our own /swap/quote API keeps the neutral
-        // tokenIn/tokenOut/amount names; the mapping to Fabric's names lives here so the client
-        // never has to know a provider's dialect. `taker` is forwarded only when the client sends
-        // it (the signing pass does) so Fabric binds the swap recipient to the caller; a bare
-        // preview omits it and stays a pure quote.
-        const base = { chainId: chain, sellToken: tokenIn, buyToken: tokenOut, sellAmount: amount };
-        if (/^0x[a-fA-F0-9]{40}$/.test(taker)) base.taker = taker;
-
-        // ── optional Spot fee (Pass B) ── A small integrator fee taken by Fabric INSIDE the same
-        // swap tx — no second transfer, no extra spender. Configured via SPOT_FEE_BPS +
-        // SPOT_FEE_RECIPIENT (OFF unless BOTH set) so with no fee the request is byte-identical to
-        // before (ships DARK). The fee is carved from the SELL token (USDC), so the caller still
-        // approves EXACTLY sellAmount and just receives slightly less of the bought token. Only
-        // applied to EXECUTABLE (taker) quotes so previews stay a single call.
-        // ⚠️ GROUND TRUTH from @spandex/core's FabricAggregator (dist/esm/lib/aggregators/fabric.js
-        // `extractQueryParams`, verified byte-for-byte): Fabric reads the integrator fee as GET query
-        // params `feeRecipient` + `feeBps`, and the reference SDK ALWAYS sends them alongside
-        // `slippageBps` + `receiver` on a complete (executable) request. Earlier tries used the wrong
-        // `integrator*` names, or the right names WITHOUT slippageBps/receiver → Fabric dropped the
-        // fee (fees:[]). This sends that exact complete shape directly — no 715KB SDK, whose wire
-        // call is just this GET. Cap ≤10 bps (Fabric silently ignores more). Regression-proof: if
-        // Fabric 400s on it, the clean-quote fallback (null) keeps the swap working. This is the
-        // FINAL param shape — if fees still come back [], the fee is gated on Fabric's account (app
-        // not provisioned for integrator fees) and B stays dark; no more renaming.
-        const cfgBps = parseInt(env.SPOT_FEE_BPS || "", 10);
-        const cfgRecipient = env.SPOT_FEE_RECIPIENT || "";
-        const takerValid = /^0x[a-fA-F0-9]{40}$/.test(taker);
-        const feeConfigured = Number.isInteger(cfgBps) && cfgBps > 0 && cfgBps <= 10 && /^0x[a-fA-F0-9]{40}$/.test(cfgRecipient);
-        // Caller slippage (bps); default 1%. Fabric only computes the fee on a complete request, so
-        // send slippageBps + receiver (= taker) WITH it, mirroring the SDK's Fabric request exactly.
-        const slipBps = (() => { const s = parseInt(url.searchParams.get("slippageBps") || "", 10); return Number.isInteger(s) && s > 0 && s <= 5000 ? s : 100; })();
-        const feeParams = (feeConfigured && takerValid)
-          ? { feeRecipient: cfgRecipient, feeBps: String(cfgBps), slippageBps: String(slipBps), receiver: taker }
-          : null;
-        const attempts = feeParams ? [feeParams, null] : [null]; // fee first; clean quote is the fallback
-
-        const fetchQuote = async (fee) => {
-          const p = fee ? { ...base, ...fee } : base;
-          const r = await fetch(`https://route.withfabric.xyz/v1/quote?${new URLSearchParams(p).toString()}`, {
-            headers: { "X-App-Id": appId, "Accept": "application/json" },
-          });
-          return { ok: r.ok, status: r.status, body: await r.json().catch(() => null) };
-        };
-        let res = { ok: false, status: 0, body: null };
-        let feeSent = null;
-        for (const fee of attempts) {
-          res = await fetchQuote(fee);
-          if (res.ok && res.body) { feeSent = fee ? Object.keys(fee) : null; break; } // first success wins
-        }
-        const { ok: frOk, status: frStatus, body } = res;
-        if (!frOk || !body) return json({ available: true, ok: false, status: frStatus, raw: body }, request, 200);
-        // Normalization PINNED to Fabric's real 200 shape: amountOut = quote out amount;
-        // priceImpactBps = impact in BASIS POINTS. Normalize bps → percent to match Jupiter.
-        const outAmount = body.amountOut ?? body.buyAmount ?? body.outAmount ?? null;
-        const bps = Number(body.priceImpactBps);
-        const priceImpact = Number.isFinite(bps) ? bps / 100
-          : (body.estimatedPriceImpact ?? body.priceImpact ?? body.priceImpactPct ?? null);
-        // Execution route. Clean normalized fields (client reads fixed names, not `raw`); `raw` kept
-        // for verification. Nothing here decides to sign — the client validates before any prompt.
-        const ra = body.approval || null;
-        const approval = ra && (ra.spender || ra.to) ? {
-          token: ra.token ?? ra.sellToken ?? tokenIn,
-          amount: ra.amount ?? ra.value ?? amount,   // EXACT approve amount — client must never widen this
-          spender: ra.spender ?? ra.to ?? null,
-        } : null;
-        const rt = body.transaction || body.tx || null;
-        const tx = rt && rt.to ? { to: rt.to, data: rt.data ?? "0x", value: rt.value ?? "0" } : null;
-        const minOut = body.minimumAmountOut ?? body.minAmountOut ?? body.minBuyAmount ?? null;
-        // Fee disclosure. Fabric returns `fees` as an ARRAY (seen live: `fees: []`), so read the
-        // first entry when populated; also tolerate an object shape. Disclose ONLY when a fee
-        // request succeeded (feeSent) AND the response actually carries a fee — never assert one the
-        // quote doesn't confirm. `feeConfigured`/`feeSent` are DIAGNOSTIC: on a live quote they
-        // reveal whether the worker read the env + which param variant Fabric accepted — no secret
-        // leak (config state + param KEYS only, never the recipient value).
-        const rf = body.fees;
-        const feeEcho = Array.isArray(rf) ? (rf.length ? rf[0] : null)
-          : (rf?.integratorFee ?? rf?.appFee ?? rf ?? null);
-        const feeApplied = feeSent != null && feeEcho != null;
-        const feeBps = feeApplied ? cfgBps : 0;
-        return json({ available: true, ok: outAmount != null, router: "Fabric", outAmount, priceImpact, approval, tx, minOut, feeBps, feeApplied, feeConfigured, feeSent, raw: body }, request);
+        return json(await spotQuote(env, url.searchParams), request);
       } catch {
-        // Never echo the raw exception (mirrors the Jupiter/Sol proxies' status-only discipline —
-        // the App ID lives in a header, not the URL, but keep the failure shape airtight regardless).
-        // The client reads only `ok` here and falls back to the honest Uniswap deep-link.
-        return json({ available: true, ok: false, reason: "fabric_error" }, request);
+        return json({ available: true, ok: false, reason: "quote_error" }, request);
       }
     }
 

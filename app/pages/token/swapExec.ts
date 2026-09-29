@@ -131,6 +131,10 @@ export async function readWalletTokenBalance(
 // input of a BUY and the OUTPUT of a SELL. `sym` drives the modal label. On Robinhood Chain (4663)
 // the dollar is USDG (6 decimals, like USDC), not USDC — the approve guard binds to THIS address, so
 // a buy there approves exactly USDG and nothing else.
+// Routers whose quotes planBuy/planSell can sign (the worker's /swap/quote names them). Fabric
+// shut down Sept 16 2026; spanDEX replaced it. Anything else stays preview + deep-link only.
+export const EVM_SIGNABLE_ROUTERS: ReadonlySet<string> = new Set(["spanDEX"]);
+
 export const EVM_USDC: Record<string, { chainId: number; usdc: string; sym: string }> = {
   base:      { chainId: 8453,  usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", sym: "USDC" },
   ethereum:  { chainId: 1,     usdc: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", sym: "USDC" },
@@ -192,11 +196,11 @@ async function quoteAndGuard(args: {
   // embedded floor — closing that fully needs state-override simulation injected providers don't offer.)
   if (outAmount != null && outAmount > 0n && minOut != null && (minOut <= 0n || minOut < outAmount / 2n))
     throw new Error("Quote's minimum-received floor looks wrong — refused. Use the deep-link.");
-  const impact = Number(j.priceImpact);
+  const impact = j.priceImpact == null ? NaN : Number(j.priceImpact);
   const feeBps = Number.isInteger(j.feeBps) && (j.feeBps as number) > 0 ? (j.feeBps as number) : 0;
 
   return {
-    dir, router: j.router || "Fabric", chainId, tokenIn, tokenOut, taker,
+    dir, router: j.router || "spanDEX", chainId, tokenIn, tokenOut, taker,
     amountIn, decimalsIn, outAmount, minOut, decimalsOut, inSym, outSym,
     usd: null, priceImpactPct: Number.isFinite(impact) ? impact : null, feeBps,
     spender: j.approval.spender!, tx: { to: j.tx.to!, data: j.tx.data! },

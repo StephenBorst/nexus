@@ -22,7 +22,7 @@ import {
 } from "./data";
 import { SocialBar } from "@/components/SocialBar";
 import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, makeHolding, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
-import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, type SwapPlan, type Eip1193 } from "./swapExec";
+import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, EVM_SIGNABLE_ROUTERS, type SwapPlan, type Eip1193 } from "./swapExec";
 import { FlashSpotButton } from "./FlashSpotButton";
 import { FlashOrders } from "./FlashOrders";
 import { CrossChainCard } from "./CrossChainCard";
@@ -783,7 +783,7 @@ export default function TokenTerminal() {
   // buy/sell panel (showSpot). A non-perp token is spot only. In-app fill is Fabric-on-EVM only.
   const showPerp = isPerp && venue === "perp";
   const showSpot = !isPerp || venue === "spot";
-  const fabricEvm = swapState.kind === "quote" && quote?.router === "Fabric" && !!wallet && !!provider;
+  const fabricEvm = swapState.kind === "quote" && EVM_SIGNABLE_ROUTERS.has(quote?.router ?? "") && !!wallet && !!provider;
   const canInAppBuy = showSpot && side === "buy" && fabricEvm;
   const isSolToken = pair?.chainId === "solana";
   // The wallet's on-chain holding of THIS token — a SELL needs it to mount + size. Resolved from ALL
