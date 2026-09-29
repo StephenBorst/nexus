@@ -932,7 +932,10 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   the SIGNED minAmountOut. Fixture `oneclick-quote-fee.json`. Cap 100 bps. `nearIntents.test.mjs` pins the live
   config (a malformed recipient would silently send no fee). **Baseline live test (no fee, 2026-09-29):** 1.25 USDC
   Arbitrum → 1.247349 USDC Base (est. 1.247346), ~21 bps path cost, deposit `0xc40a0fbc…3faf063`, delivery
-  `0xc43b443d…d21dfd08`. ⏳ One small transfer after this ships to confirm the 5 bps accrues.
+  `0xc43b443d…d21dfd08`. **✅ FEE VERIFIED LIVE (borst, 2026-09-29) — done, no more test transfers:** 2.52 USDC Base →
+  2.511955 USDC Arbitrum, all-in **31.9 bps vs the 21 bps baseline = the 10 bps fee** (half, 5 bps, ours); quote guard
+  held, delivered. Base deposit `0x42b9af30…6c968569`, Arb delivery `0xcf292eee…2a801d29`. The fee stands as configured.
+  Claiming = borst connects borst.eth to the NEAR Intents app when volume makes it worth it (nothing to build).
 - **Spot fee:** `SPOT_FEE_BPS = "10"` → `0x34dF…B45c` (borst.eth broker wallet), now via spanDEX (see below).
 - ⏳ Not yet done: partner API key via the worker (drops 1Click's 20 bps).
 
