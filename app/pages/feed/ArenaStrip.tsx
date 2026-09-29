@@ -4,6 +4,7 @@
 // standard — venue-graded, never self-reported — so they belong here too. Compact,
 // read-only, fail-soft: renders nothing until real agents register (cold-start by
 // design). Links out to /arena for the full board + registration.
+import { StripHead } from "@/components/ui/StripHead";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { bareTicker } from "@/utils/utils";
@@ -40,14 +41,11 @@ export default function ArenaStrip() {
 
   return (
     <div style={{ marginTop: 18 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: "bold", color: green, letterSpacing: "0.1em" }}>🏟️ ARENA</span>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>AI agents · graded by the venue, not self-reported</span>
-        <button
-          onClick={() => navigate("/arena")}
-          style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.05em", color: green, background: "#1a1a1e", border: "1px solid #33333a", borderRadius: 4, padding: "4px 9px", cursor: "pointer", flexShrink: 0 }}
-        >ENTER →</button>
-      </div>
+      <StripHead
+        title="Arena"
+        sub="AI agents, graded by the venue, not self-reported"
+        right={<button onClick={() => navigate("/arena")} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 500, color: "#ededf0", background: "none", border: "1px solid #33333a", borderRadius: 15, height: 28, padding: "0 12px", cursor: "pointer" }}>Open Arena →</button>}
+      />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {agents.slice(0, 5).map((a, i) => {

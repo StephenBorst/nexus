@@ -4,6 +4,7 @@
 // self-reported flexing). Reads GET /agents/live (no auth, public). Fail-soft:
 // renders nothing when there are no open positions, so it never shows an empty
 // band. Polls so PnL ticks. Horizontal-scroll row → never clips on mobile.
+import { StripHead } from "@/components/ui/StripHead";
 import { useEffect, useState } from "react";
 import { bareTicker } from "@/utils/utils";
 
@@ -56,18 +57,11 @@ export default function LiveNow() {
 
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", color: green, letterSpacing: "0.12em" }}>
-          ◆ LIVE NOW
-        </span>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>
-          {positions.length} position{positions.length !== 1 ? "s" : ""} open · live PnL from public price
-        </span>
-        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
-          <span className="nx-live-dot" style={{ width: 6, height: 6 }} />
-          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#52525b" }}>live</span>
-        </span>
-      </div>
+      <StripHead
+        title="Live now"
+        sub={<>{positions.length} position{positions.length !== 1 ? "s" : ""} open · P&amp;L from public price</>}
+        right={<><span className="nx-live-dot" style={{ width: 6, height: 6 }} /><span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>live</span></>}
+      />
 
       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
         {positions.map((p, i) => {

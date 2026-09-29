@@ -810,6 +810,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
   walletAddress: string | null;
   onCopy: (t: FeedThesis) => void;
 }) {
+  const isMobile = useIsMobile();
   const [expandedWallet, setExpandedWallet] = useState<string | null>(null);
   const board = useMemo(() => buildLeaderboard(feed), [feed]);
   const navigate = useNavigate();
@@ -946,22 +947,22 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, paddingLeft: 2 }}>
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: graded.size > 0 ? "#ededf0" : "#fbbf24" }} />
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: graded.size > 0 ? C.text.bright : C.brand }} />
+        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.muted }}>
           {graded.size > 0
-            ? `✓ ${graded.size} VERIFIED CALLER${graded.size !== 1 ? "S" : ""} · graded from public price`
-            : `NO VERIFIED CALLERS YET · ◆ ${rows.length} EMERGING · 5 graded calls to rank`}
+            ? `${graded.size} verified caller${graded.size !== 1 ? "s" : ""} · graded from public price`
+            : `No verified callers yet · ${rows.length} emerging · 5 graded calls to rank`}
         </span>
       </div>
       {callLedger?.ledgerHash && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10, paddingLeft: 2 }}>
-          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0" }}>CALL LEDGER</span>
-          <code style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#a1a1aa", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3, padding: "2px 6px" }}>
+          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.14em", color: C.text.muted }}>CALL LEDGER</span>
+          <code style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.fog, background: C.canvas, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 7px" }}>
             {callLedger.ledgerHash.slice(0, 10)}…{callLedger.ledgerHash.slice(-8)}
           </code>
-          <a href={`${API_BASE}/theses/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#d4d4d8", textDecoration: "none" }}>verify ↗</a>
+          <a href={`${API_BASE}/theses/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.fog, textDecoration: "none" }}>verify ↗</a>
           {callLedger.onChain?.verified && (
-            <a href={callLedger.onChain.explorer || "#"} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0", textDecoration: "none", border: "1px solid #33333a", borderRadius: 3, padding: "2px 6px", background: "#1a1a1e" }}>⛓ ANCHORED ON-CHAIN ↗</a>
+            <a href={callLedger.onChain.explorer || "#"} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.fog, textDecoration: "none" }}>· ⛓ anchored onchain ↗</a>
           )}
         </div>
       )}
@@ -984,18 +985,18 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
 
         return (
           <div key={trader.wallet} style={{
-            background: "#0f0f11",
-            border: `1px solid ${rank === 1 ? "#33333a" : "#232327"}`,
-            borderRadius: 6,
+            background: C.surface,
+            border: `1px solid ${rank === 1 ? C.borderStrong : C.border}`,
+            borderRadius: 12,
             overflow: "hidden",
           }}>
             {/* Trader row */}
             <div role="button" tabIndex={0}
               onClick={() => setExpandedWallet(isExpanded ? null : trader.wallet.toLowerCase())} onKeyDown={pressKey(() => setExpandedWallet(isExpanded ? null : trader.wallet.toLowerCase()))}
-              style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, overflowX: "auto" }}
+              style={{ padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: isMobile ? "12px 10px" : 14, flexWrap: isMobile ? "wrap" : "nowrap", overflowX: isMobile ? "visible" : "auto" }}
             >
               {/* Rank */}
-              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, minWidth: 28, flexShrink: 0, textAlign: "center", color: rank != null && rank <= 3 ? "#ededf0" : "#52525b" }}>
+              <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 15, fontWeight: 600, minWidth: 28, flexShrink: 0, textAlign: "center", color: rank != null ? C.text.bright : C.text.faint }}>
                 {rank != null ? `#${rank}` : "—"}
               </div>
 
@@ -1003,24 +1004,24 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
               <Avatar pfp={trader.pfp} displayName={trader.displayName} size={32} />
 
               {/* Identity */}
-              <div style={{ flexGrow: 1, flexShrink: 0, flexBasis: 150, minWidth: 150, maxWidth: 280 }}>
+              <div style={{ flexGrow: 1, flexShrink: 0, flexBasis: isMobile ? "calc(100% - 96px)" : 150, minWidth: isMobile ? 0 : 150, maxWidth: isMobile ? "none" : 280 }}>
                 {/* Name line — name truncates with ellipsis, YOU stays put */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+                  <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 14, fontWeight: 600, color: C.text.bright, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
                     {trader.displayName ?? shortAddr}
                   </span>
-                  {isOwn && <span style={{ color: "#ededf0", fontSize: 9, flexShrink: 0 }}>YOU</span>}
+                  {isOwn && <span style={{ fontFamily: "var(--nx-font-mono)", color: C.text.muted, fontSize: 10, letterSpacing: "0.1em", flexShrink: 0 }}>YOU</span>}
                 </div>
                 {/* Badge line — never clipped, wraps if needed */}
-                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
-                  {trader.graded && <span title="Calls graded from public price." style={{ fontSize: 8, color: "#ededf0", border: "1px solid #33333a", borderRadius: 2, padding: "1px 4px", background: "#1a1a1e" }}>✓ VERIFIED</span>}
-                  {trader.graded?.meritRank && <span title={`${trader.graded.meritRank.title}. Earned from graded calls. Not bought.`} style={{ fontSize: 8, color: "#141416", fontWeight: "bold", border: "1px solid #ededf0", borderRadius: 2, padding: "1px 5px", background: "#ededf0", letterSpacing: "0.04em" }}>{trader.graded.meritRank.glyph} {trader.graded.meritRank.title.toUpperCase()}</span>}
+                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 4, fontFamily: "var(--nx-font-mono)" }}>
+                  {trader.graded && <span title="Calls graded from public price." style={{ fontSize: 10, color: C.text.bright, border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "1px 6px" }}>✓ Verified</span>}
+                  {trader.graded?.meritRank && <span title={`${trader.graded.meritRank.title}. Earned from graded calls. Not bought.`} style={{ fontSize: 10, color: C.canvas, fontWeight: 700, border: `1px solid ${C.accent}`, borderRadius: 4, padding: "1px 6px", background: C.accent }}>{trader.graded.meritRank.glyph} {trader.graded.meritRank.title}</span>}
                   {/* CALIBRATED — earned: their bigger-conviction calls genuinely
                       did better. Sizing skill, invisible in hit rate or P&L. */}
-                  {trader.graded?.calibration?.calibrated && <span title={`Calibrated. Higher-conviction calls average +${trader.graded.calibration.gap}R more than smaller ones.`} style={{ fontSize: 8, color: "#3ecf8e", border: "1px solid #33333a", borderRadius: 2, padding: "1px 4px", background: "#1a1a1e" }}>◎ CALIBRATED</span>}
+                  {trader.graded?.calibration?.calibrated && <span title={`Calibrated. Higher-conviction calls average +${trader.graded.calibration.gap}R more than smaller ones.`} style={{ fontSize: 10, color: C.text.fog, border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "1px 6px" }}>◎ Calibrated</span>}
                   {!trader.graded && emerging.has(trader.wallet.toLowerCase()) && (
-                    <span title="Resolved graded calls. 5 to become a Verified Caller." style={{ fontSize: 8, color: "#fbbf24", border: "1px solid #4a3a00", borderRadius: 2, padding: "1px 4px", background: "#2a1a00" }}>
-                      ◆ EMERGING · {emerging.get(trader.wallet.toLowerCase())!.toQualify} to verify
+                    <span title="Resolved graded calls. 5 to become a Verified Caller." style={{ fontSize: 10, color: SIGNAL.watch, border: `1px solid ${LINE.watch}`, borderRadius: 4, padding: "1px 6px", background: SIGNAL.watchBg }}>
+                      Emerging · {emerging.get(trader.wallet.toLowerCase())!.toQualify} to verify
                     </span>
                   )}
                   {/* PLAN — process alongside outcome. Were the calls well-formed
@@ -1030,9 +1031,9 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   {trader.graded?.discipline && (
                     <span
                       title={`Plan quality ${trader.graded.discipline.score}/100 across ${trader.graded.discipline.scored} calls. Scored at post time from public price: obtainable entry, a stop outside the noise, R:R matching the posted levels. Reported, not ranked on.`}
-                      style={{ fontSize: 8, color: trader.graded.discipline.score >= 70 ? "#a1a1aa" : "#fbbf24", border: `1px solid ${trader.graded.discipline.score >= 70 ? "#33333a" : "#4a3a00"}`, borderRadius: 2, padding: "1px 4px", background: trader.graded.discipline.score >= 70 ? "#1a1a1e" : "#2a1a00" }}
+                      style={{ fontSize: 10, color: trader.graded.discipline.score >= 70 ? C.text.fog : SIGNAL.watch, border: `1px solid ${trader.graded.discipline.score >= 70 ? C.borderStrong : LINE.watch}`, borderRadius: 4, padding: "1px 6px" }}
                     >
-                      PLAN {trader.graded.discipline.score}
+                      Plan {trader.graded.discipline.score}
                     </span>
                   )}
                   {/* ⚡ FADER — proven right against the crowd. Shown only when their
@@ -1041,15 +1042,15 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   {trader.graded?.contrarian && trader.graded.contrarian.avgR > 0 && (
                     <span
                       title={`Right when fading the crowd: +${trader.graded.contrarian.avgR}R avg over ${trader.graded.contrarian.calls} contrarian calls (made against the consensus lean that preceded them), ${trader.graded.contrarian.edge >= 0 ? "+" : ""}${trader.graded.contrarian.edge}R better than their with-crowd calls.`}
-                      style={{ fontSize: 8, color: "#3ecf8e", border: "1px solid #33333a", borderRadius: 2, padding: "1px 4px", background: "#1a1a1e", letterSpacing: "0.04em" }}
+                      style={{ fontSize: 10, color: C.pos, border: `1px solid ${LINE.pos}`, borderRadius: 4, padding: "1px 6px" }}
                     >
-                      &#9889; FADER +{trader.graded.contrarian.avgR}R
+                      &#9889; Fader +{trader.graded.contrarian.avgR}R
                     </span>
                   )}
                   <NexusTierBadge address={trader.wallet} />
                 </div>
                 {trader.graded ? (
-                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", marginTop: 2 }}>
+                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.muted, marginTop: 4 }}>
                     {trader.graded.hitRate.toFixed(0)}% hit · <span title="R = profit per call in multiples of what was risked. +1R made the risk back. +2R made twice it. Averaged across every graded call.">{trader.graded.avgR > 0 ? "+" : ""}{trader.graded.avgR.toFixed(2)}R avg</span> · {trader.graded.calls} graded calls
                     {trader.graded.regimeEdge && (
                       <span title="The regime this caller's record is strongest in. Classified from the candles before each call.">
@@ -1058,7 +1059,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                     )}
                   </div>
                 ) : (
-                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 2 }}>{shortAddr}</div>
+                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.faint, marginTop: 4 }}>{shortAddr}</div>
                 )}
               </div>
 
@@ -1066,17 +1067,17 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   not just a number. Only for graded callers with ≥2 resolved calls. */}
               {trader.graded && trader.graded.rSeries.length >= 2 && (
                 <div style={{ flex: "1 1 72px", minWidth: 72, textAlign: "center" }}>
-                  <div title="Running profit across graded calls, in R. Up and to the right = right, consistently." style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)", marginBottom: 2 }}>R CURVE</div>
+                  <div title="Running profit across graded calls, in R. Up and to the right = right, consistently." style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.text.muted, fontFamily: "var(--nx-font-mono)", marginBottom: 3 }}>R CURVE</div>
                   <Sparkline points={trader.graded.rSeries} width={72} height={22} />
                 </div>
               )}
 
               {/* Win rate — hero stat */}
               <div style={{ textAlign: "center", flex: "1 1 60px", minWidth: 60 }}>
-                <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>WIN RATE</div>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.text.muted, fontFamily: "var(--nx-font-mono)", marginBottom: 3 }}>WIN RATE</div>
                 <div style={{
-                  fontFamily: "var(--nx-font-mono)", fontSize: 16, fontWeight: "bold",
-                  color: !g ? "#52525b" : g.hitRate >= 60 ? "#3ecf8e" : g.hitRate >= 40 ? "#fbbf24" : "#f7525f",
+                  fontFamily: "var(--nx-font-ui)", fontSize: 17, fontWeight: 600,
+                  color: !g ? C.text.faint : C.text.bright,
                 }}>
                   {g ? `${g.hitRate.toFixed(0)}%` : "—"}
                 </div>
@@ -1084,13 +1085,13 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
 
               {/* W / L */}
               <div style={{ textAlign: "center", flex: "1 1 44px", minWidth: 44 }}>
-                <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>W / L</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.text.muted, fontFamily: "var(--nx-font-mono)", marginBottom: 3 }}>W / L</div>
+                <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 15, fontWeight: 600 }}>
                   {g ? (
                     <>
-                      <span style={{ color: "#ededf0" }}>{gWins}</span>
-                      <span style={{ color: "#52525b" }}> / </span>
-                      <span style={{ color: "#f7525f" }}>{gLosses}</span>
+                      <span style={{ color: C.pos }}>{gWins}</span>
+                      <span style={{ color: C.text.faint }}> / </span>
+                      <span style={{ color: C.neg }}>{gLosses}</span>
                     </>
                   ) : <span style={{ color: "#52525b" }}>—</span>}
                 </div>
@@ -1098,16 +1099,16 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
 
               {/* Avg R:R */}
               <div style={{ textAlign: "center", flex: "1 1 50px", minWidth: 50 }}>
-                <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>AVG R:R</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: trader.avgRR >= 2 ? "#ededf0" : "#fbbf24" }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.text.muted, fontFamily: "var(--nx-font-mono)", marginBottom: 3 }}>AVG R:R</div>
+                <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 15, fontWeight: 600, color: C.text.bright }}>
                   1:{trader.avgRR.toFixed(1)}
                 </div>
               </div>
 
               {/* Active */}
               <div style={{ textAlign: "center", flex: "1 1 40px", minWidth: 40 }}>
-                <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>ACTIVE</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: trader.active > 0 ? "#d4d4d8" : "#52525b" }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.text.muted, fontFamily: "var(--nx-font-mono)", marginBottom: 3 }}>ACTIVE</div>
+                <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 15, fontWeight: 600, color: trader.active > 0 ? C.text.bright : C.text.faint }}>
                   {trader.active}
                 </div>
               </div>
@@ -1121,12 +1122,12 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                 const isOnChain = onChain != null;
                 return (
                   <div style={{ textAlign: "center", flex: "1 1 44px", minWidth: 44 }}>
-                    <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: isOnChain ? "#ededf0" : "#71717a", fontFamily: "var(--nx-font-mono)" }}>
+                    <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: C.text.muted, fontFamily: "var(--nx-font-mono)" }}>
                       {isOnChain ? "⛓REP" : "REP"}
                     </div>
                     <div style={{
-                      fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: "bold",
-                      color: closed === 0 ? "#52525b" : rep >= 70 ? "#3ecf8e" : rep >= 40 ? "#fbbf24" : "#f7525f",
+                      fontFamily: "var(--nx-font-ui)", fontSize: 15, fontWeight: 600,
+                      color: closed === 0 ? C.text.faint : C.text.bright,
                     }}>
                       {closed === 0 ? "—" : rep}
                     </div>
@@ -1141,19 +1142,19 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   disabled={copyBusy === trader.wallet.toLowerCase()}
                   title="Your agent mirrors this caller's next public call. Your size, mode and guardrails."
                   style={{
-                    flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 9, fontWeight: 600, letterSpacing: "0.03em",
-                    background: copyLeaders.has(trader.wallet.toLowerCase()) ? "#ededf0" : "#ededf015",
-                    color: copyLeaders.has(trader.wallet.toLowerCase()) ? "#0a0a0b" : "#ededf0",
-                    border: "1px solid #ededf0", borderRadius: 4, padding: "6px 9px", cursor: "pointer", whiteSpace: "nowrap",
+                    flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600,
+                    background: copyLeaders.has(trader.wallet.toLowerCase()) ? C.accent : "none",
+                    color: copyLeaders.has(trader.wallet.toLowerCase()) ? C.canvas : C.text.bright,
+                    border: `1px solid ${C.accent}`, borderRadius: 15, height: 30, padding: "0 12px", cursor: "pointer", whiteSpace: "nowrap",
                   }}
                 >
-                  {copyLeaders.has(trader.wallet.toLowerCase()) ? "⚡ COPYING" : "⚡ AUTOCOPY"}
+                  {copyLeaders.has(trader.wallet.toLowerCase()) ? "Copying" : "Autocopy"}
                 </button>
               )}
 
               {/* Expand chevron */}
-              <div style={{ color: "#33333a", fontSize: 10, fontFamily: "var(--nx-font-mono)", flexShrink: 0, paddingLeft: 4 }}>
-                {isExpanded ? "▲" : "▼"}
+              <div aria-hidden style={{ color: C.text.muted, fontSize: 12, flexShrink: 0, paddingLeft: 4, transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+                ›
               </div>
             </div>
 
@@ -1198,14 +1199,14 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                     }}>
                       <div style={{ flex: 1, minWidth: 120 }}>
                         <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: "#fff" }}>{ticker}</span>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, marginLeft: 8, color: t.direction === "LONG" ? "#3ecf8e" : "#f7525f" }}>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, marginLeft: 8, color: C.text.fog }}>
                           {t.direction === "LONG" ? "↑" : "↓"} {t.direction}
                         </span>
                       </div>
                       <div style={{ display: "flex", gap: 16 }}>
                         {[
                           { label: "ENTRY", val: `$${t.entryPrice.toFixed(2)}`, color: "#a1a1aa" },
-                          { label: "R:R",   val: `1:${t.riskReward.toFixed(2)}`, color: t.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
+                          { label: "R:R",   val: `1:${t.riskReward.toFixed(2)}`, color: C.text.bright },
                         ].map(({ label, val, color }) => (
                           <div key={label}>
                             <div style={{ fontSize: 7, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</div>
@@ -1346,25 +1347,20 @@ function FeedPulse({ feed }: { feed: FeedThesis[] }) {
     const m = Math.floor(d / 60000);
     return m > 0 ? `${m}m ago` : "just now";
   })();
-  const stats: { label: string; val: string; color?: string }[] = [
+  const stats: { label: string; val: string }[] = [
     { label: "CALLERS", val: String(callers) },
     { label: "PUBLIC CALLS", val: String(feed.length) },
-    { label: "LIVE", val: String(live), color: "#d4d4d8" },
+    { label: "LIVE", val: String(live) },
     { label: "GRADED", val: String(graded) },
-    ...(agents > 0 ? [{ label: "AGENT", val: String(agents), color: "#ededf0" }] : []),
+    ...(agents > 0 ? [{ label: "AGENT", val: String(agents) }] : []),
     { label: "LAST CALL", val: ageStr },
   ];
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", padding: "10px 14px", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 6, marginBottom: 14 }}>
-      <style>{`@keyframes feedPulse{0%,100%{opacity:1;box-shadow:0 0 8px #ededf0}50%{opacity:0.4;box-shadow:0 0 2px #ededf0}}`}</style>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#ededf0", animation: "feedPulse 2s infinite" }} />
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#ededf0", fontWeight: "bold", letterSpacing: "0.1em" }}>LIVE</span>
-      </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(92px, 1fr))", gap: "14px 20px", padding: "14px 16px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 20 }}>
       {stats.map((s) => (
-        <div key={s.label} style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
-          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: s.color || "#fff" }}>{s.val}</span>
-          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 7.5, color: "#52525b", letterSpacing: "0.06em" }}>{s.label}</span>
+        <div key={s.label} style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 17, fontWeight: 600, color: C.text.bright, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{s.val}</div>
+          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.12em", color: C.text.muted, marginTop: 3 }}>{s.label}</div>
         </div>
       ))}
     </div>
@@ -1692,21 +1688,21 @@ export default function FeedPage() {
             {/* Bridge to the unified Proof hub — /proof is every trustless record (callers,
                 agents, arena, desks) under the on-chain ledger, in one place. */}
             {!loading && !error && (
-              <div role="link" tabIndex={0} onClick={() => navigate("/proof")} onKeyDown={pressKey(() => navigate("/proof"))} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "#0f0f11", border: "1px solid #232327", borderLeft: "2px solid #ededf0", borderRadius: 6, padding: "10px 12px", margin: "14px 0", cursor: "pointer" }}>
-                <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.5 }}>
-                  <b style={{ color: "#f4f4f5" }}>The Proof</b> — every track record on Nexus (callers, agents, Arena, desks) under the on-chain ledger, in one place.
+              <div role="link" tabIndex={0} onClick={() => navigate("/proof")} onKeyDown={pressKey(() => navigate("/proof"))} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", margin: "12px 0", cursor: "pointer" }}>
+                <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.fog, lineHeight: 1.55 }}>
+                  <b style={{ color: C.text.bright, fontWeight: 600 }}>The Proof</b> — every track record on Nexus (callers, agents, Arena, desks) under the on-chain ledger, in one place.
                 </span>
-                <span style={{ flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "#ededf0", background: "#1a1a1e", border: "1px solid #33333a", borderRadius: 4, padding: "5px 10px" }}>OPEN PROOF →</span>
+                <span style={{ flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 500, color: C.text.bright, border: `1px solid ${C.borderStrong}`, borderRadius: 15, height: 28, display: "inline-flex", alignItems: "center", padding: "0 12px", whiteSpace: "nowrap" }}>Open Proof →</span>
               </div>
             )}
             {/* Q Signals discovery — Quotient fair value vs the market, mapped to perp reads.
                 PRO + pay-per-pull, so we LINK to the lens (never show paid data on a public surface). */}
             {!loading && !error && (
-              <div role="link" tabIndex={0} onClick={() => navigate("/lab?tab=intel")} onKeyDown={pressKey(() => navigate("/lab?tab=intel"))} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "#0f0f11", border: "1px solid #232327", borderLeft: "2px solid #ededf0", borderRadius: 6, padding: "10px 12px", margin: "14px 0", cursor: "pointer" }}>
-                <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.5 }}>
-                  <b style={{ color: "#f4f4f5" }}>Q Signals</b> — Quotient&rsquo;s model fair value vs the live market, mapped to perp reads. PRO &middot; your wallet pays per pull.
+              <div role="link" tabIndex={0} onClick={() => navigate("/lab?tab=intel")} onKeyDown={pressKey(() => navigate("/lab?tab=intel"))} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", margin: "12px 0", cursor: "pointer" }}>
+                <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.fog, lineHeight: 1.55 }}>
+                  <b style={{ color: C.text.bright, fontWeight: 600 }}>Q Signals</b> — Quotient&rsquo;s model fair value vs the live market, mapped to perp reads. PRO &middot; your wallet pays per pull.
                 </span>
-                <span style={{ flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "#ededf0", background: "#1a1a1e", border: "1px solid #33333a", borderRadius: 4, padding: "5px 10px" }}>OPEN LAB →</span>
+                <span style={{ flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 500, color: C.text.bright, border: `1px solid ${C.borderStrong}`, borderRadius: 15, height: 28, display: "inline-flex", alignItems: "center", padding: "0 12px", whiteSpace: "nowrap" }}>Open Lab →</span>
               </div>
             )}
             {/* Ecosystem context below the ranking — the just-resolved grade tape (proof of
