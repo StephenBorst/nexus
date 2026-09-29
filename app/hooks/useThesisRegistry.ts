@@ -14,10 +14,10 @@ import {
   createPublicClient,
   custom,
   http,
-  parseEventLogs,
 } from "viem";
 import { arbitrum } from "viem/chains";
 import type { ThesisTrade } from "@/pages/lab/types";
+import { registryEvents } from "@/lib/registryEvent.mjs";
 
 export const THESIS_REGISTRY_ADDRESS = "0x2F4EdA890f96a7979d6f26bCB210cEDAD68346Bc" as const;
 
@@ -89,14 +89,9 @@ const ABI = [
       { name: "invalidated", type: "uint256" },
     ],
   },
-  {
-    name: "ThesisRegistered",
-    type: "event",
-    inputs: [
-      { name: "thesisId", type: "uint256", indexed: true },
-      { name: "trader",   type: "address", indexed: true },
-    ],
-  },
+  // No event entry: the one declared here, ThesisRegistered(uint256,address), isn't the contract's,
+  // so no registration ever kept its on-chain id. The event is read by its layout instead
+  // (app/lib/registryEvent.mjs, shared with lab-api).
 ] as const;
 
 function scalePrice(price: number): bigint {
@@ -171,13 +166,9 @@ export function useThesisRegistry() {
       let onChainId: number | undefined;
       try {
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
-        const logs = parseEventLogs({
-          abi: ABI,
-          eventName: "ThesisRegistered",
-          logs: receipt.logs,
-        });
-        if (logs.length > 0) {
-          onChainId = Number(logs[0].args.thesisId);
+        const ev = receipt.status === "success" ? registryEvents(receipt.logs, THESIS_REGISTRY_ADDRESS)[0] : undefined;
+        if (ev && ev.thesisId != null) {
+          onChainId = Number(ev.thesisId);
           console.log("[ThesisRegistry] resolved onChainId:", onChainId);
         }
       } catch (receiptErr) {

@@ -7,7 +7,7 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import {
   sealTheses, bootstrapRegistry, mergeUpdates, publishCandidates, readRegistry, isPublished,
-  registeredBy, THESIS_REGISTERED_TOPIC, SERVER_FIELDS, MAX_PUBLISHED,
+  registeredBy, SERVER_FIELDS, MAX_PUBLISHED,
 } from "./callLock.mjs";
 
 const NOW = Date.UTC(2026, 8, 28, 20, 0, 0);
@@ -174,18 +174,21 @@ test("one copy per id, and the cap on published calls", () => {
   assert.equal(capped.theses[0].isPublic, false);
 });
 
-test("registeredBy: only the registry's own event, for this wallet, in a successful transaction", () => {
-  assert.equal(THESIS_REGISTERED_TOPIC, "0x" + bytesToHex(keccak_256(utf8ToBytes("ThesisRegistered(uint256,address)"))));
+test("registeredBy: the registry's own event, for this wallet, in a successful transaction", () => {
+  // The contract's event isn't the ThesisRegistered(uint256,address) the Lab's ABI declared: a check
+  // pinned to that hash refused every real registration. Any signature, read by its layout.
+  const TOPIC = "0x" + bytesToHex(keccak_256(utf8ToBytes("ThesisRegistered(uint256,address,string)")));
   const REG = "0x2F4EdA890f96a7979d6f26bCB210cEDAD68346Bc", ME = "0x" + "ab".repeat(20), OTHER = "0x" + "cd".repeat(20);
   const pad = (a) => "0x" + "0".repeat(24) + a.slice(2);
-  const log = (over = {}) => ({ address: REG, topics: [THESIS_REGISTERED_TOPIC, "0x" + "0".repeat(63) + "7", pad(ME)], ...over });
+  const log = (over = {}) => ({ address: REG, topics: [TOPIC, "0x" + "0".repeat(63) + "7", pad(ME)], ...over });
   const rc = (logs, status = "0x1") => ({ status, logs, from: "0x" + "99".repeat(20) }); // relayed: `from` is someone else
   assert.equal(registeredBy(rc([log()]), REG, ME), true, "a relayed (smart-account) registration still proves the wallet");
+  assert.equal(registeredBy(rc([log({ topics: ["0x" + "11".repeat(32), "0x7", pad(ME)] })]), REG, ME), true, "whatever the event's signature");
   assert.equal(registeredBy(rc([log()]), REG.toLowerCase(), ME.toUpperCase().replace("0X", "0x")), true, "case doesn't matter");
   assert.equal(registeredBy(rc([log()]), REG, OTHER), false, "someone else's registration");
   assert.equal(registeredBy(rc([log()], "0x0"), REG, ME), false, "a failed transaction");
   assert.equal(registeredBy(rc([log({ address: OTHER })]), REG, ME), false, "another contract's event");
-  assert.equal(registeredBy(rc([log({ topics: ["0x" + "11".repeat(32), "0x1", pad(ME)] })]), REG, ME), false, "another event");
+  assert.equal(registeredBy(rc([log({ topics: [TOPIC, pad(ME)] })]), REG, ME), false, "an event without an indexed trader");
   assert.equal(registeredBy(null, REG, ME), false);
   assert.equal(registeredBy(rc([log()]), REG, "not-an-address"), false);
 });

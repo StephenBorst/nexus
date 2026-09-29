@@ -2205,15 +2205,20 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
 
       // The Bankr key proves nothing about `walletAddress` (it came in the body). Before this call
       // goes into that wallet's record, where once published it's permanent, the registry must have
-      // emitted ThesisRegistered for THAT wallet in a successful transaction (callLock registeredBy).
+      // emitted its registration event for THAT wallet in a successful transaction (callLock
+      // registeredBy, which reads the event by its layout: the signature this route checked from
+      // 2026-09-28 to 09-29 wasn't the contract's, so it refused every registration).
       const walletNormTR = walletAddress.toLowerCase().trim();
       let receiptTR = null;
-      for (let i = 0; i < 3 && !receiptTR; i++) {
+      for (let i = 0; i < 6 && !receiptTR; i++) {
         if (i) await new Promise((r) => setTimeout(r, 1500));
         try {
           const rr = await fetch(getArbRpc(env), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [txHash] }) });
           receiptTR = (await rr.json())?.result || null;
         } catch { receiptTR = null; }
+      }
+      if (!receiptTR) {
+        return json({ error: "receipt_unavailable", txHash, hint: "The registration was sent, but its receipt couldn't be read yet, so nothing was written to the Lab record." }, request, 504);
       }
       if (!registeredBy(receiptTR, THESIS_REGISTRY, walletNormTR)) {
         return json({ error: "wallet_not_proven", txHash, hint: "The registry didn't record this thesis for walletAddress, so nothing was written to its Lab record." }, request, 403);

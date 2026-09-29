@@ -20,6 +20,7 @@
 //
 // Pure: the caller does the KV reads/writes. Tested in callLock.test.mjs.
 import { appendUpdate, MAX_UPDATES } from "../../app/lib/lifecycle.mjs";
+import { registryEvents } from "../../app/lib/registryEvent.mjs";
 
 export const REGISTRY_KEY = (address) => `callreg:${address}`;
 export const MAX_PUBLISHED = 2000;          // per wallet; a publish past this stays private
@@ -217,9 +218,10 @@ export const OWNER_KEY = (id) => `callowner:${id}`;
 /** Is this id a published call in the registry? (The delete route refuses those.) */
 export const isPublished = (registry, id) => !!(readRegistry(registry)?.calls?.[id]);
 
-// ThesisRegistered(uint256 indexed thesisId, address indexed trader): keccak256 of the signature
-// (pinned; callLock.test.mjs recomputes it).
-export const THESIS_REGISTERED_TOPIC = "0x479428a822b44ba9e2a872760d476bb00801bcf1f5cdd1b778afda41a4882998";
+// The registry's registration event is read by its emitter and layout (app/lib/registryEvent.mjs),
+// never by a signature hash: the one this file pinned until 2026-09-29, ThesisRegistered(uint256,
+// address), isn't what the contract emits, so this check refused every Bankr registration and proved
+// none of the copied calls.
 
 /**
  * Did this receipt register a thesis on the registry FOR `wallet`? The event's `trader` is the
@@ -228,30 +230,23 @@ export const THESIS_REGISTERED_TOPIC = "0x479428a822b44ba9e2a872760d476bb00801bc
  * the address it writes to arrives in the request body.
  */
 export function registeredBy(receipt, registryAddress, wallet) {
-  if (!receipt || receipt.status !== "0x1" || !Array.isArray(receipt.logs)) return false;
-  const reg = String(registryAddress || "").toLowerCase(), who = String(wallet || "").toLowerCase();
+  if (!receipt || receipt.status !== "0x1") return false;
+  const who = String(wallet || "").toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(who)) return false;
-  return receipt.logs.some((l) => l && String(l.address || "").toLowerCase() === reg
-    && Array.isArray(l.topics) && l.topics.length >= 3
-    && String(l.topics[0]).toLowerCase() === THESIS_REGISTERED_TOPIC
-    && ("0x" + String(l.topics[2]).slice(-40)).toLowerCase() === who);
+  return registryEvents(receipt.logs, registryAddress).some((e) => e.trader === who);
 }
 
 /**
- * The wallet a registry transaction registered a thesis for (the ThesisRegistered event's trader,
- * i.e. the registry's msg.sender), or null. When `onChainId` is given it must match the event's
- * thesis id too. Used to settle which wallet a copied call belongs to.
+ * The wallet a registry transaction registered a thesis for (the event's trader, i.e. the registry's
+ * msg.sender), or null. When `onChainId` is given it must match the event's thesis id too. Null when
+ * the transaction's registry events name more than one wallet. Used to settle which wallet a copied
+ * call belongs to.
  */
 export function thesisRegistrant(receipt, registryAddress, onChainId = null) {
-  if (!receipt || receipt.status !== "0x1" || !Array.isArray(receipt.logs)) return null;
-  const reg = String(registryAddress || "").toLowerCase();
-  const big = (x) => { try { return BigInt(x); } catch { return null; } };
-  const want = onChainId != null && onChainId !== "" ? big(onChainId) : null;
-  for (const l of receipt.logs) {
-    if (!l || String(l.address || "").toLowerCase() !== reg || !Array.isArray(l.topics) || l.topics.length < 3) continue;
-    if (String(l.topics[0]).toLowerCase() !== THESIS_REGISTERED_TOPIC) continue;
-    if (want != null && big(l.topics[1]) !== want) continue;
-    return ("0x" + String(l.topics[2]).slice(-40)).toLowerCase();
-  }
-  return null;
+  if (!receipt || receipt.status !== "0x1") return null;
+  let want = null;
+  if (onChainId != null && onChainId !== "") { try { want = BigInt(onChainId); } catch { want = null; } }
+  const traders = new Set(registryEvents(receipt.logs, registryAddress)
+    .filter((e) => want == null || e.thesisId === want).map((e) => e.trader));
+  return traders.size === 1 ? [...traders][0] : null;
 }
