@@ -102,5 +102,7 @@ export async function signLabAuth(addr, wallet, { fallbackSigner = null, now = D
 export function publicLabView(record) {
   const theses = Array.isArray(record?.theses) ? record.theses : [];
   // `=== true`, exactly as /feed filters: the public view can't show more than the feed does.
-  return { theses: theses.filter((t) => t && t.isPublic === true && !t.holdersOnly), notes: {} };
+  // A copy of a call another wallet is proven to have made (duplicateOf, lab-api callDedupe.mjs) isn't
+  // this wallet's call: its owner's public view shows it.
+  return { theses: theses.filter((t) => t && t.isPublic === true && !t.holdersOnly && !t.duplicateOf), notes: {} };
 }

@@ -9,6 +9,10 @@
  * PUBLIC view from the server plus this device's cache, and nothing is written back until the user
  * signs. Local data is never lost either way: localStorage is written first, the server second.
  *
+ * The device copy is PER WALLET (app/lib/labCache.mjs). It used to be one copy for the whole
+ * browser, so a second wallet's first save pushed the first wallet's calls into its record (the
+ * double-count). "" = no wallet connected (the guest copy).
+ *
  * Usage:
  *   const { theses, notes, saveTheses, saveNote, syncing, synced, authState, signToSync } = useLabStorage(walletAddress);
  */
@@ -16,11 +20,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { ThesisTrade } from "@/pages/lab/types";
 import { mergeOnOpen, foldInBeforeSave, removedIds, withServerPublished } from "@/lib/labMerge.mjs";
+import { readTheses, writeTheses, readNotes, writeNote } from "@/lib/labCache.mjs";
 import { cachedLabAuth, clearLabAuth, getLabAuth, useLabWallet, useLabAuthState, type LabAuth, type LabAuthMode } from "@/hooks/useLabAuth";
 
 const API_BASE = "https://og.nexustradinglabs.com";
-const LOCAL_THESIS_KEY = "lab_thesis_trades";
-const LOCAL_NOTES_PREFIX = "lab_note_";
 // Cross-instance sync (the return leg, Grok): the Lab mounts MULTIPLE useLabStorage instances
 // — the orchestrator one feeds The Board's live-call ● dots; ThesisView has its own and is
 // where a call is published. Plain per-instance useState meant a freshly published call never
@@ -46,10 +49,10 @@ const tombsFor = (addr: string) => {
   return s;
 };
 
-function readLocalTheses(): ThesisTrade[] {
+// This wallet's device copy ("" = the guest copy). Reads never throw; a bad copy reads as empty.
+function readLocalTheses(addr: string): ThesisTrade[] {
   try {
-    const raw = JSON.parse(localStorage.getItem(LOCAL_THESIS_KEY) || "[]");
-    return raw.map((t: ThesisTrade) => ({
+    return (readTheses(localStorage, addr) as ThesisTrade[]).map((t) => ({
       ...t,
       status: (t.status ?? "ACTIVE") as ThesisTrade["status"],
       actualPnl: t.actualPnl ?? null,
@@ -59,24 +62,20 @@ function readLocalTheses(): ThesisTrade[] {
   }
 }
 
-function readLocalNotes(): Record<string, string> {
-  const notes: Record<string, string> = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key?.startsWith(LOCAL_NOTES_PREFIX)) {
-      const dayKey = key.slice(LOCAL_NOTES_PREFIX.length);
-      notes[dayKey] = localStorage.getItem(key) || "";
-    }
+function readLocalNotes(addr: string): Record<string, string> {
+  try {
+    return readNotes(localStorage, addr) as Record<string, string>;
+  } catch {
+    return {};
   }
-  return notes;
 }
 
-function writeLocalTheses(theses: ThesisTrade[]) {
-  localStorage.setItem(LOCAL_THESIS_KEY, JSON.stringify(theses));
+function writeLocalTheses(addr: string, theses: ThesisTrade[]) {
+  writeTheses(localStorage, addr, theses);
 }
 
-function writeLocalNote(dayKey: string, note: string) {
-  localStorage.setItem(`${LOCAL_NOTES_PREFIX}${dayKey}`, note);
+function writeLocalNote(addr: string, dayKey: string, note: string) {
+  writeNote(localStorage, addr, dayKey, note);
 }
 
 function broadcastTheses() {
@@ -102,32 +101,48 @@ async function ownerRead(addr: string, auth: LabAuth): Promise<LabData | null> {
 }
 
 export function useLabStorage(walletAddress?: string | null) {
-  const [theses, setTheses] = useState<ThesisTrade[]>(readLocalTheses);
-  const [notes, setNotes] = useState<Record<string, string>>(readLocalNotes);
+  const addr = walletAddress?.toLowerCase().trim() || "";
+  const [theses, setTheses] = useState<ThesisTrade[]>(() => readLocalTheses(addr));
+  const [notes, setNotes] = useState<Record<string, string>>(() => readLocalNotes(addr));
   const [syncing, setSyncing] = useState(false);
   const [synced, setSynced] = useState(false);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingModeRef = useRef<LabAuthMode>("cached");
-  const hasFetchedRef = useRef(false);
+  const fetchedForRef = useRef<string | null>(null);
+  const addrRef = useRef(addr);
+  addrRef.current = addr;
   const wallet = useLabWallet();
   const walletRef = useRef(wallet);
   walletRef.current = wallet;
 
-  const addr = walletAddress?.toLowerCase().trim();
-  const authState = useLabAuthState(addr);
+  const authState = useLabAuthState(addr || undefined);
 
-  const applyLocal = useCallback((data: LabData) => {
-    setTheses(data.theses);
-    setNotes(data.notes);
-    writeLocalTheses(data.theses);
-    Object.entries(data.notes).forEach(([k, v]) => writeLocalNote(k, v));
+  // Write a wallet's device copy, and show it only if that wallet is still the one connected: a
+  // read or save can finish after the user switched wallets, and must never land in the new one.
+  const applyLocal = useCallback((forAddr: string, data: LabData) => {
+    writeLocalTheses(forAddr, data.theses);
+    Object.entries(data.notes).forEach(([k, v]) => writeLocalNote(forAddr, k, v));
+    if (addrRef.current === forAddr) {
+      setTheses(data.theses);
+      setNotes(data.notes);
+    }
   }, []);
 
-  // ── Cross-instance re-sync: when ANY instance saves theses, every instance re-reads the
-  // shared localStorage cache so the Board's live-call dots reflect a just-published call.
+  // ── Another wallet (or none): show THAT wallet's own copy at once. A save still pending for the
+  // previous wallet is dropped here; its edits are already in its own copy and go up with its next save.
   useEffect(() => {
-    // Notes too: a view that folded in the server's copy wrote both to the shared cache.
-    const resync = () => { setTheses(readLocalTheses()); setNotes(readLocalNotes()); };
+    setTheses(readLocalTheses(addr));
+    setNotes(readLocalNotes(addr));
+    setSynced(false);
+    if (syncTimeoutRef.current) { clearTimeout(syncTimeoutRef.current); syncTimeoutRef.current = null; }
+    pendingModeRef.current = "cached";
+  }, [addr]);
+
+  // ── Cross-instance re-sync: when ANY instance saves theses, every instance re-reads the
+  // connected wallet's copy so the Board's live-call dots reflect a just-published call.
+  useEffect(() => {
+    // Notes too: a view that folded in the server's copy wrote both to the device copy.
+    const resync = () => { const a = addrRef.current; setTheses(readLocalTheses(a)); setNotes(readLocalNotes(a)); };
     window.addEventListener(THESES_EVENT, resync);
     return () => window.removeEventListener(THESES_EVENT, resync);
   }, []);
@@ -136,63 +151,66 @@ export function useLabStorage(walletAddress?: string | null) {
   // With a cached signature: the full record. Without: the public view (opening the Lab never
   // pops the wallet); private calls from other devices load once the user signs.
   useEffect(() => {
-    if (!addr || hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
+    if (!addr || fetchedForRef.current === addr) return;
+    fetchedForRef.current = addr;
+    const forAddr = addr;
 
     setSyncing(true);
     (async () => {
-      const cached = cachedLabAuth(addr);
-      let remote = cached ? await ownerRead(addr, cached) : null;
+      const cached = cachedLabAuth(forAddr);
+      let remote = cached ? await ownerRead(forAddr, cached) : null;
       const full = !!remote;
       if (!remote) {
-        const r = await fetch(`${API_BASE}/lab/${addr}`);
+        const r = await fetch(`${API_BASE}/lab/${forAddr}`);
         remote = r.ok ? ((await r.json()) as LabData) : null;
       }
       if (!remote) return;
       // Merge: remote takes priority, but keep any local items not in remote
-      applyLocal(mergeOnOpen({ theses: readLocalTheses(), notes: readLocalNotes() }, remote) as LabData);
-      if (full) { fullyMerged.add(addr); setSynced(true); }
+      applyLocal(forAddr, mergeOnOpen({ theses: readLocalTheses(forAddr), notes: readLocalNotes(forAddr) }, remote) as LabData);
+      if (full) { fullyMerged.add(forAddr); if (addrRef.current === forAddr) setSynced(true); }
     })()
       .catch(() => { /* Network error — fall back to localStorage silently */ })
       .finally(() => setSyncing(false));
   }, [addr, applyLocal]);
 
   // ── Push this device's copy to KV (signed) ───────────────
-  // Reads localStorage at push time, not this instance's state: every view writes the shared cache
-  // first, so it holds the newest calls AND notes (a view's own copy of the notes can be stale).
+  // Reads the wallet's device copy at push time, not this instance's state: every view writes the
+  // copy first, so it holds the newest calls AND notes (a view's own copy of the notes can be stale).
+  // Everything here is for the wallet the push started with (forAddr), even if the user switches.
   const pushNow = useCallback(async (mode: LabAuthMode): Promise<boolean> => {
     if (!addr) return false;
-    const auth = await getLabAuth(addr, walletRef.current, mode, { fallbackSigner: walletAddress });
+    const forAddr = addr;
+    const auth = await getLabAuth(forAddr, walletRef.current, mode, { fallbackSigner: walletAddress });
     if (!auth) return false;
-    let data: LabData = { theses: readLocalTheses(), notes: readLocalNotes() };
-    if (!fullyMerged.has(addr)) {
-      const remote = await ownerRead(addr, auth);
+    let data: LabData = { theses: readLocalTheses(forAddr), notes: readLocalNotes(forAddr) };
+    if (!fullyMerged.has(forAddr)) {
+      const remote = await ownerRead(forAddr, auth);
       if (!remote) return false;
-      data = foldInBeforeSave(data, remote, tombsFor(addr)) as LabData;
-      applyLocal(data);
+      data = foldInBeforeSave(data, remote, tombsFor(forAddr)) as LabData;
+      applyLocal(forAddr, data);
       broadcastTheses();
-      fullyMerged.add(addr);
+      fullyMerged.add(forAddr);
     }
     try {
-      const res = await fetch(`${API_BASE}/lab/${addr}`, {
+      const res = await fetch(`${API_BASE}/lab/${forAddr}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theses: data.theses, notes: data.notes, labAuth: auth }),
       });
-      if (res.status === 401) { clearLabAuth(addr); return false; }
+      if (res.status === 401) { clearLabAuth(forAddr); return false; }
       if (!res.ok) return false;
-      tombsFor(addr).clear();
+      tombsFor(forAddr).clear();
       // Published calls are permanent: take them exactly as the server stored them (its post time,
       // the frozen levels, the grade), and un-publish locally any it refused (labMerge.mjs).
       const out = await res.json().catch(() => null);
-      const merged = withServerPublished(readLocalTheses(), out);
+      const merged = withServerPublished(readLocalTheses(forAddr), out);
       if (merged.changed) {
         const list = merged.theses as ThesisTrade[];
-        writeLocalTheses(list);
-        setTheses(list);
+        writeLocalTheses(forAddr, list);
+        if (addrRef.current === forAddr) setTheses(list);
         broadcastTheses();
       }
-      setSynced(true);
+      if (addrRef.current === forAddr) setSynced(true);
       return true;
     } catch {
       return false; // localStorage already has the data
@@ -218,11 +236,11 @@ export function useLabStorage(walletAddress?: string | null) {
     (updated: ThesisTrade[], opts?: { quiet?: boolean }) => {
       if (addr) {
         const tombs = tombsFor(addr);
-        for (const id of removedIds(readLocalTheses(), updated)) tombs.add(id);
+        for (const id of removedIds(readLocalTheses(addr), updated)) tombs.add(id);
         for (const t of updated) if (t?.id) tombs.delete(t.id);
       }
       setTheses(updated);
-      writeLocalTheses(updated);
+      writeLocalTheses(addr, updated);
       // Tell every other useLabStorage instance (The Board's, above all) to re-read now.
       broadcastTheses();
       schedulePush(!!opts?.quiet);
@@ -234,10 +252,10 @@ export function useLabStorage(walletAddress?: string | null) {
   const saveNote = useCallback(
     (dayKey: string, note: string) => {
       setNotes((prev) => ({ ...prev, [dayKey]: note }));
-      writeLocalNote(dayKey, note);
+      writeLocalNote(addr, dayKey, note);
       schedulePush(false);
     },
-    [schedulePush]
+    [addr, schedulePush]
   );
 
   // ── Sign now and sync (the header's "sign to sync") ──────

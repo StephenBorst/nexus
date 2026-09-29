@@ -647,6 +647,21 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   63,600–63,800 was a 2R WIN). `/theses/advice` warns on a draft (`ENTRY_OFF_MARKET`, `entryVsMarket`). ⏭ Residual:
   hourly candles, so the posting hour's range allows up to an hour of hindsight on the entry (a server-recorded mark at
   publish would close it). The scoreboard (`axisbt.mjs`) has its own grader — not touched (engine freeze).
+- **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
+  (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
+  A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from
+  their own wallet's record), then the guest copy is emptied (backup `lab_thesis_trades:guest-backup`). `useLabStorage`
+  switches copies on a wallet change and never lands an async result in the wrong wallet's copy. Existing copies:
+  `callDedupe.mjs resolveDuplicates` (hourly, after grading) settles a call copied into several wallets ONLY on proof of
+  who made it, and only if that wallet holds a copy — (a) house ids `nexus-…`/`catalyst-…` → `HOUSE_CALLER_ADDRESS` /
+  `HOUSE_CATALYST_ADDRESS` (0xfc8c… = Nexus Signals); (b) the copy's `onChainTxHash` → the ThesisRegistry's
+  `ThesisRegistered` trader (msg.sender), matching `onChainId` (`thesisRegistrant`). Proofs cached in `callproof:{id}`.
+  Every other copy gets server field `duplicateOf: <owner>` — NOTHING is deleted; the board, the hourly grader, the
+  stance board, the feed, the challenge fan-out and `publicLabView` skip marked copies (the ledger doesn't: it proves
+  which records exist). **REPORT-FIRST:** marks are written only with worker var `CALL_DEDUPE_LIVE="true"` (commented in
+  lab-api wrangler.toml); until then `GET /theses/duplicates` shows the plan (owner, evidence, per-wallet before/after).
+  Sept 28 data: 35 copied calls / 114 copies; 18 house ids, 17 with an on-chain tx (16 also held by 0xfc8c), 1 held only
+  by the two Solana wallets. Tests: `labCache` / `callDedupe` (.test.mjs).
 - `GET /theses/leaderboard`: ranks public-thesis authors by hit-rate + avg-R over ≥5 resolved calls
   (net-positive-R gate, sample-confidence shrink). `GET /theses/ledger`: canonical SHA-256 of the public
   call set (proof-of-call fields + createdAt), recomputable, prev-linked chain (`/theses/ledger/chain`),

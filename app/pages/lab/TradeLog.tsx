@@ -259,10 +259,11 @@ export function TradeLogView({ dayKey, data, onBack, initialNote, onSaveNote }: 
   initialNote?: string;
   onSaveNote?: (dayKey: string, note: string) => void;
 }) {
-  const [note, setNote] = useState(initialNote ?? localStorage.getItem(`lab_note_${dayKey}`) ?? "");
+  // The note lives in the connected wallet's device copy (useLabStorage via onSaveNote), never in a
+  // shared key: a shared key is how one wallet's journal used to show up in another's.
+  const [note, setNote] = useState(initialNote ?? "");
   const [saved, setSaved] = useState(false);
   const saveNote = () => {
-    localStorage.setItem(`lab_note_${dayKey}`, note);
     onSaveNote?.(dayKey, note);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);

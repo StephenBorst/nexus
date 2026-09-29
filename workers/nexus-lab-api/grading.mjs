@@ -145,7 +145,7 @@ export async function gradePublicTheses(env) {
     // stamp is actually persisted (see resolutions.mjs).
     const justResolved = [];
     for (const t of (data.theses || [])) {
-      if (!t.isPublic || !t.symbol || !t.createdAt) continue;
+      if (!t.isPublic || !t.symbol || !t.createdAt || t.duplicateOf) continue; // copies: graded in their owner's record
       // A published call's status is the server's grade, never a self-mark (callLock.mjs): a legacy
       // "HIT_TP" or "INVALIDATED" the owner typed reads as live until the grade lands.
       const derived = gradedStatusOf(t.gradedOutcome);
@@ -239,7 +239,8 @@ export async function computeCallerStats(env, _unusedHorizonS = 30 * 86400, opts
     if (!raw) continue;
     let data; try { data = JSON.parse(raw); } catch { continue; }
     for (const t of (data.theses || [])) {
-      if (t.isPublic && t.symbol && t.createdAt) calls.push({ wallet, t });
+      // A copy of a call another wallet is proven to have made (callDedupe.mjs) isn't this wallet's.
+      if (t.isPublic && t.symbol && t.createdAt && !t.duplicateOf) calls.push({ wallet, t });
     }
   }
   // Each call is graded on the price from the hour it was posted. Every symbol's candle store
@@ -401,7 +402,7 @@ export async function gatherStanceEntries(env, { freshMs = 14 * 86400 * 1000, co
       let data; try { data = JSON.parse(raw); } catch { continue; }
       const wallet = key.name.replace("lab:", "");
       for (const t of (data.theses || [])) {
-        if (!t.isPublic || !t.symbol || !t.direction) continue;
+        if (!t.isPublic || !t.symbol || !t.direction || t.duplicateOf) continue;
         if (t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS") continue; // resolved → no longer a live stance
         if (t.status === "HIT_TP" || t.status === "STOPPED_OUT" || t.status === "INVALIDATED") continue;
         if ((now - (t.createdAt || 0)) > freshMs) continue; // stale
