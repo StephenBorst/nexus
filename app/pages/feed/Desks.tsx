@@ -4,6 +4,7 @@
 // Create / join / leave are wallet-signed; one desk per wallet (enforced server-side).
 // Reuses the cached `nexus_agent_sig_{addr}` session signature (no extra prompt if
 // the user already signed for the agent).
+import { StripHead } from "@/components/ui/StripHead";
 import { useEffect, useState } from "react";
 import { signWithInjected } from "@/utils/injectedWallet";
 
@@ -60,19 +61,16 @@ export default function Desks({ walletAddress }: { walletAddress: string | null 
 
   return (
     <div style={{ marginTop: 18 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: "bold", color: green, letterSpacing: "0.1em" }}>◆ DESKS</span>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>teams ranked by combined verified record</span>
-      </div>
+      <StripHead title="Desks" sub="teams ranked by their combined verified record" />
 
       {/* Create */}
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
         <input
           className="nx-input"
-          value={name} onChange={(e) => setName(e.target.value)} placeholder="name your desk…" maxLength={40}
+          value={name} onChange={(e) => setName(e.target.value)} placeholder="Name your desk" maxLength={40}
           style={{ flex: 1, minWidth: 0 }}
         />
-        <button className="nx-btn nx-btn-primary" onClick={create} disabled={busy || !name.trim()} style={{ flexShrink: 0 }}>+ CREATE</button>
+        <button className="nx-btn nx-btn-primary" onClick={create} disabled={busy || !name.trim()} style={{ flexShrink: 0 }}>Create desk</button>
       </div>
       {msg && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#fbbf24", marginBottom: 8 }}>{msg}</div>}
 

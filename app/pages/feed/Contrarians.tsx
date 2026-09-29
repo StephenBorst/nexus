@@ -4,6 +4,7 @@
 // persisted stance snapshots joined to the same trustless first-touch outcome —
 // gradeCall is never touched, this is attribution. Pure public read
 // (GET /theses/contrarians), fail-soft, sparse until stance history accrues.
+import { StripHead } from "@/components/ui/StripHead";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { pressKey } from "@/utils/a11y";
@@ -41,10 +42,7 @@ export default function Contrarians() {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#ededf0", letterSpacing: "0.04em" }}>&#9889; CONTRARIANS</span>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b" }}>right when they fade the crowd</span>
-      </div>
+      <StripHead title="Contrarians" sub="right when they fade the crowd" />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {rows.map((r) => (

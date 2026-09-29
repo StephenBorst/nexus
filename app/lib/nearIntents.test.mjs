@@ -187,3 +187,15 @@ test("a live quote carrying our fee: 1Click echoes HALF for us plus its own 20 b
   // no fee asked → the old quote passes exactly as before
   assert.equal(checkQuote(load("live"), INTENT).ok, true);
 });
+
+// The LIVE fee setting in public/config.js. xcAppFees silently drops a malformed recipient or an
+// out-of-range bps (the request then carries no fee), so a typo here would turn the fee off
+// without an error. Pinned: 10 bps asked (1Click keeps half, so 5 bps accrue to us) to the
+// broker EOA borst.eth, the same wallet as the spot fee.
+test("public/config.js: the live cross-chain fee resolves to one entry for the broker EOA", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../../public/config.js", import.meta.url), "utf8");
+  const cfg = JSON.parse(src.slice(src.indexOf("{"), src.lastIndexOf("}") + 1));
+  const fees = xcAppFees(cfg.VITE_XC_FEE_BPS, cfg.VITE_XC_FEE_RECIPIENT);
+  assert.deepEqual(fees, [{ recipient: cfg.VITE_BROKER_EOA_ADDRESS.toLowerCase(), fee: 10 }]);
+});

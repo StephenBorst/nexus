@@ -4,6 +4,7 @@
 // EARNED merit tier so a sharp-vs-sharp standoff outranks anonymous noise. Ranked
 // by tension = weight balance × total weight. Pure public read (GET /theses/
 // contested), fail-soft, 30s poll. Clicking a side prefills a copy trade.
+import { StripHead } from "@/components/ui/StripHead";
 import { useEffect, useState } from "react";
 
 const API_BASE = "https://og.nexustradinglabs.com";
@@ -73,12 +74,7 @@ export default function Contested() {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#ededf0", letterSpacing: "0.04em" }}>⚔ CONTESTED</span>
-          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b" }}>where the sharp callers disagree</span>
-        </div>
-      </div>
+      <StripHead title="Contested" sub="where the sharp callers disagree" />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 8 }}>
         {rows.map((row) => {

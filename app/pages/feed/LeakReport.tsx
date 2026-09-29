@@ -39,7 +39,7 @@ export default function LeakReport() {
   return (
     <div style={{ marginBottom: 24, background: "#0f0f11", border: "1px solid #232327", borderRadius: 6, padding: "14px 16px", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)" }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 4 }}>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", letterSpacing: "0.04em" }}>◇ WHERE WE ALL LEAK</span>
+        <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 16, fontWeight: 600, letterSpacing: "-0.01em", color: "#f4f4f5" }}>Where we all leak</span>
         <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>
           {summary.tagged} tagged losses · {data?.contributors} traders · {data?.windowDays}d
         </span>

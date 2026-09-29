@@ -922,14 +922,19 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   pin what 1Click signs, never loosen the asset check. All 6 origins × {USDC.sol, BTC} verified PASS live 2026-09-27.
 - EVM destinations always pay the connected wallet (no typed address); Solana/BTC take a typed, shape-checked one.
 - Local testing: Node's fetch ignores HTTPS_PROXY here — run live checks with `NODE_USE_ENV_PROXY=1`.
-- **Our fee — WIRED, OFF (2026-09-27):** `public/config.js` `VITE_XC_FEE_BPS` + `VITE_XC_FEE_RECIPIENT` (EVM address or
-  NEAR account) → `xcAppFees` → `appFees` on the quote; empty ⇒ field omitted. **Live-checked: 1Click KEEPS HALF** (ask
-  10 → echo lists 5 for us) and adds its own 20 bps regardless, so setting X costs the user X and earns us X/2.
-  `appFees` is NOT covered by the quote signature (tamper test) — checkQuote requires our entry, ≤ what we asked; the
-  user's floor is the SIGNED minAmountOut. Fixture `oneclick-quote-fee.json`. Cap 100 bps.
+- **Our fee — ON (2026-09-29): 10 bps asked → borst.eth `0x34df…b45c`** (`public/config.js` `VITE_XC_FEE_BPS` +
+  `VITE_XC_FEE_RECIPIENT`, EVM address or NEAR account) → `xcAppFees` → `appFees` on the quote; empty ⇒ field omitted.
+  **1Click KEEPS HALF** (ask 10 → echo lists 5 for us) and adds its own 20 bps regardless, so the user pays 10 and we
+  earn **5 bps**. ⚠️ The fee does NOT arrive as an on-chain transfer to the wallet: it accrues as a NEAR Intents
+  (intents.near) balance owned by that address, withdrawn by signing with its key — so the recipient must be an EOA
+  (not the Safe), and "did it land" = that intents balance, not the wallet on Arbiscan/Basescan. `appFees` is NOT
+  covered by the quote signature (tamper test) — checkQuote requires our entry, ≤ what we asked; the user's floor is
+  the SIGNED minAmountOut. Fixture `oneclick-quote-fee.json`. Cap 100 bps. `nearIntents.test.mjs` pins the live
+  config (a malformed recipient would silently send no fee). **Baseline live test (no fee, 2026-09-29):** 1.25 USDC
+  Arbitrum → 1.247349 USDC Base (est. 1.247346), ~21 bps path cost, deposit `0xc40a0fbc…3faf063`, delivery
+  `0xc43b443d…d21dfd08`. ⏳ One small transfer after this ships to confirm the 5 bps accrues.
 - **Spot fee:** `SPOT_FEE_BPS = "10"` → `0x34dF…B45c` (borst.eth broker wallet), now via spanDEX (see below).
-- ⏳ Not yet done: a small REAL transfer by borst (new money path — I can't sign); the fee numbers (after live tests);
-  partner API key via the worker (drops 1Click's 20 bps).
+- ⏳ Not yet done: partner API key via the worker (drops 1Click's 20 bps).
 
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the

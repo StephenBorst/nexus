@@ -3,6 +3,7 @@
 // recency-ranked, firewalled from the graded boards). Fail-soft: renders nothing when empty, so
 // it never shows an empty band at cold-start. Horizontal-scroll row → never clips on mobile.
 // Each card deep-links to that token's Spot page (/token/:ca), where the full thread lives.
+import { StripHead } from "@/components/ui/StripHead";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchCallerMerit, type CallerMerit } from "@/pages/token/data";
@@ -53,10 +54,7 @@ export default function TakesStrip() {
 
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontFamily: mono, fontSize: 11, fontWeight: "bold", color: "#ededf0", letterSpacing: "0.12em" }}>HOT TAKES</span>
-        <span style={{ fontFamily: mono, fontSize: 9, color: "#52525b" }}>ungraded conviction on Spot tokens · tap to open</span>
-      </div>
+      <StripHead title="Hot takes" sub="ungraded conviction on spot tokens" />
 
       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
         {takes.map((t) => {
