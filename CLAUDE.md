@@ -804,8 +804,11 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   always) + **0x** only when secret `ZEROX_API_KEY` is set (header only, never the URL).
 - **Fee = native spanDEX options** `integratorFeeAddress` + `integratorSwapFeeBps` from `SPOT_FEE_RECIPIENT`/`SPOT_FEE_BPS`
   (cap 100). On the wire: Nordstern `convenienceFee=0.1` (PERCENT) + `convenienceFeeRecipient`; 0x `swapFeeBps` +
-  `swapFeeRecipient`. `feeApplied` is true ONLY when the provider's response echoes a positive fee (0x
-  `fees.integratorFee`; Nordstern: any fee-named field) — never assumed. A provider that 400s on the fee → one clean
+  `swapFeeRecipient`. `feeApplied` is true ONLY when the provider confirms it (0x: `fees.integratorFee`; Nordstern:
+  its `convenienceFee` echo — just our percent repeated — AND our recipient INSIDE the swap calldata) — never assumed.
+  **Live-verified 2026-09-29:** 20 USDC→WETH on Base, taker ≠ recipient → `0x34dF…B45c` embedded in Nordstern's
+  calldata as its own field, minOut stated, router `0xC87D…fC3d`. The fee AMOUNT shows only in a real swap's receipt
+  (borst's first live buy). First live call 422'd once (transient); failures now carry the provider's `detail`. A provider that 400s on the fee → one clean
   retry without it (`feeConfigured:true, feeApplied:false`).
 - **Same response shape as Fabric's** so swapExec's guards are unchanged; the worker also drops any quote that spends
   ≠ the asked amount, approves a token we didn't choose, or carries native value. `router: "spanDEX"`, `provider`

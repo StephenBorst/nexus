@@ -112,7 +112,10 @@ const PROVIDER_NAME = { nordstern: "Nordstern", "0x": "0x" };
 // The response the client reads (same field names the Fabric route used).
 export function normalizeSpotQuote(q, swap, { fee, executable, failures = [] }) {
   const echo = fee ? feeEcho(q) : null;
-  const feeApplied = !!(fee && q.activatedFeatures?.includes("integratorFees") && echo);
+  // Nordstern's echo is just our percent repeated back, so it also has to name our recipient
+  // INSIDE the swap calldata (live-checked Sept 29 with a taker ≠ the recipient: it does).
+  const inCalldata = !!(fee && String(q.txData?.data || "").toLowerCase().includes(fee.recipient.slice(2).toLowerCase()));
+  const feeApplied = !!(fee && q.activatedFeatures?.includes("integratorFees") && echo && (q.provider !== "nordstern" || inCalldata));
   return {
     available: true,
     ok: true,

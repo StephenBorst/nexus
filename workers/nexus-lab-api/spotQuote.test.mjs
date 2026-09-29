@@ -24,7 +24,7 @@ function fakeNet({ nordstern = "ok", zerox = "ok", nordsternFee = true } = {}) {
       if (u.searchParams.has("convenienceFee") && nordstern === "refuse_fee") return reply(400, { error: "fee" });
       const body = {
         src: USDC, dst: WETH, fromAmount: u.searchParams.get("amount"), toAmount: "5000000000000000",
-        tx: { to: ROUTER, data: "0xabcdef", value: "0" }, swaps: [],
+        tx: { to: ROUTER, data: "0xabcdef" + (u.searchParams.get("convenienceFeeRecipient") || "").slice(2).toLowerCase(), value: "0" }, swaps: [],
       };
       if (nordsternFee && u.searchParams.has("convenienceFee")) body.convenienceFee = { amount: "20000", token: USDC };
       return reply(200, body);
@@ -76,7 +76,9 @@ test("Nordstern gets our fee on the wire as convenienceFee (percent) + recipient
   assert.equal(r.feeApplied, true);
   assert.equal(r.feeBps, 10);
   assert.deepEqual(r.approval, { token: USDC, amount: "20000000", spender: ROUTER });
-  assert.deepEqual(r.tx, { to: ROUTER, data: "0xabcdef", value: "0" });
+  assert.equal(r.tx.to, ROUTER);
+  assert.equal(r.tx.value, "0");
+  assert.ok(r.tx.data.includes(FEE_TO.slice(2).toLowerCase()), "our recipient is inside the swap calldata");
   assert.equal(r.priceImpact, null);
   assert.equal(calls.some((c) => c.url.host === "api.0x.org"), false, "0x is off without a key");
 });
@@ -113,6 +115,21 @@ test("0x joins with a key, keeps the key in a header, carries swapFeeBps, and th
   assert.equal(r.outAmount, "5100000000000000");
   assert.equal(r.minOut, "5049000000000000");
   assert.equal(r.feeApplied, true);
+});
+
+test("Nordstern echoing the fee without our recipient in the calldata ⇒ feeApplied false", async () => {
+  fakeNet();
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const res = await real(url, init);
+    if (!String(url).includes("nordstern")) return res;
+    const body = await res.json();
+    body.tx.data = "0xabcdef";
+    return { ...res, json: async () => body };
+  };
+  const r = await spotQuote(ENV, qs(REQ));
+  assert.equal(r.ok, true);
+  assert.equal(r.feeApplied, false);
 });
 
 test("a preview (no taker) never returns calldata", async () => {
