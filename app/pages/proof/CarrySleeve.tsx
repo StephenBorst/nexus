@@ -10,7 +10,7 @@ const CARRY_API = "https://nexus-carry-engine.stephenpatrick24.workers.dev";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", NEG = "#f7525f", WATCH = "#60a5fa";
+const POS = "#3ecf8e", NEG = "#f7525f", WATCH = "#e0a458";
 const BORDER = "#232327", SURFACE_ALT = "#0f0f11", INSET = "#08080a";
 
 type Point = { t: number; equity: number; funding: number; price: number };

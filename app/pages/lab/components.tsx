@@ -67,7 +67,7 @@ export function SectionHeader({ eyebrow, title, note }: { eyebrow: string; title
 // ─── Coachmark ───────────────────────────────────────────
 // One-time, dismissible teaching callout — makes a flow legible without a heavy
 // tour lib. Gated by a localStorage key so it shows once per browser. Terminal
-// register: a brand-blue left rule (the accent mark; green is reserved for profit), sans copy,
+// register: a #6cb6ff left rule (the teaching blue, its own job; green is reserved for profit), sans copy,
 // "Got it" to dismiss. Renders nothing once dismissed or when `when` is false.
 export function Coachmark({ storageKey, badge, title, children, when = true }: {
   storageKey: string; badge?: string; title: string; children: React.ReactNode; when?: boolean;
@@ -83,12 +83,12 @@ export function Coachmark({ storageKey, badge, title, children, when = true }: {
   return (
     <div className="nx-fade-in" style={{
       display: "flex", gap: 14, alignItems: "flex-start",
-      background: C.surfaceAlt, border: `1px solid ${C.border}`, borderLeft: `2px solid ${C.brand}`,
+      background: C.surfaceAlt, border: `1px solid ${C.border}`, borderLeft: "2px solid #6cb6ff",
       borderRadius: 8, padding: "12px 14px", marginBottom: 12,
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
-          {badge && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.16em", color: C.brand }}>{badge}</span>}
+          {badge && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.16em", color: "#6cb6ff" }}>{badge}</span>}
           <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 14, color: C.text.bright, fontWeight: 600 }}>{title}</span>
         </div>
         <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.fog, lineHeight: 1.55 }}>{children}</div>

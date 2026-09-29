@@ -1,7 +1,7 @@
 // The brand rule, enforced on every share card (docs/brand.md):
-//   black surfaces · bone type · a blue accent mark · green/red ONLY on money.
+//   black surfaces · bone type · a bone accent mark · green/red ONLY on money.
 // Each card is rendered with fixtures that exercise its branches; any colour outside
-// app/lib/brand.mjs fails, a card without the brand-blue top rule fails, and green/red on a
+// app/lib/brand.mjs fails, a card without the bone top rule fails, and green/red on a
 // card that shows no money figure fails. Three cards drifted back to the retired neon
 // palette because nothing checked them — this is the check.
 // Run: node --test workers/nexus-lab-api/ogCards.test.mjs
@@ -51,8 +51,11 @@ for (const [name, svg] of Object.entries(CARDS)) {
     const off = [...new Set(colours(svg))].filter((c) => !ALLOWED.has(c));
     assert.deepEqual(off, [], `off-brand colours: ${off.join(", ")}`);
   });
-  test(`${name}: carries the brand-blue accent mark`, () => {
-    assert.ok(colours(svg).includes(BRAND.brand), "no brand-blue top rule");
+  test(`${name}: carries the bone accent mark (the 3px top rule)`, () => {
+    // Bone is also the type colour, so "the card contains bone" proves nothing: check the rule itself.
+    const rule = svg.match(/<rect\b[^>]*\bheight="3"[^>]*\bfill="(#[0-9a-fA-F]{6})"/);
+    assert.ok(rule, "no 3px top rule");
+    assert.equal(rule[1].toLowerCase(), BRAND.brand.toLowerCase(), "top rule is not the brand mark");
   });
 }
 

@@ -317,7 +317,7 @@ export function TradeChart({ symbol, height = 240, positionEntry, tfIndex, onTf,
       {/* zoom controls */}
       <div style={{ position: "absolute", top: 7, right: 8, zIndex: 3, display: "flex", gap: 4 }}>
         <button title="Toggle moving averages (20 / 50 / 150)" onClick={() => setShowMA((s) => !s)} style={{ ...btn, width: "auto", padding: "0 6px", fontSize: 9, color: showMA ? BONE : MUTED, borderColor: showMA ? "#ededf055" : BORDER }}>MA</button>
-        <button title="Toggle estimated liquidation clusters" onClick={() => setShowLiq((s) => !s)} style={{ ...btn, width: "auto", padding: "0 6px", color: showLiq ? "#60a5fa" : MUTED, borderColor: showLiq ? "#1c2a3d" : BORDER }}>⚡</button>
+        <button title="Toggle estimated liquidation clusters" onClick={() => setShowLiq((s) => !s)} style={{ ...btn, width: "auto", padding: "0 6px", color: showLiq ? "#e0a458" : MUTED, borderColor: showLiq ? "#3a3320" : BORDER }}>⚡</button>
         <button title="Zoom in" onClick={() => applyZoom(0.7)} style={btn}>+</button>
         <button title="Zoom out" onClick={() => applyZoom(1.4)} style={btn}>−</button>
         <button title="Reset" onClick={() => setVp(null)} style={{ ...btn, fontSize: 10, opacity: vp ? 1 : 0.5 }}>⤢</button>

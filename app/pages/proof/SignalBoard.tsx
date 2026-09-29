@@ -36,9 +36,9 @@ const sign = (x: number, d?: number) => `${x >= 0 ? "+" : ""}${d != null ? x.toF
 const moneyTone = (x: number) => (x >= 0 ? POS : NEG);
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "");
 
-// The board's verdict. The brand blue marks only the reads that cleared the bar; the rest stay monochrome.
+// The board's verdict. The bone mark sits only on the reads that cleared the bar; the rest stay monochrome.
 const PILL: Record<string, { label: string; color: string; bg: string; border: string; tip: string }> = {
-  PREDICTIVE: { label: "PREDICTIVE", color: MARK, bg: SIGNAL.watchBg, border: "transparent", tip: "Enough samples, positive and stable in both halves of the record. Graded in R: first touch of a 1.2×ATR stop vs a 1.5R target. A read, not yet a strategy." },
+  PREDICTIVE: { label: "PREDICTIVE", color: MARK, bg: "#1a1a1e", border: "transparent", tip: "Enough samples, positive and stable in both halves of the record. Graded in R: first touch of a 1.2×ATR stop vs a 1.5R target. A read, not yet a strategy." },
   PROMISING: { label: "PROMISING", color: BONE, bg: "transparent", border: C.borderStrong, tip: "Positive, but not stable across both halves of the record yet." },
   NOISE: { label: "NOISE", color: MUTED, bg: "transparent", border: C.border, tip: "Flat or negative. Kept on the board: we publish the misses." },
   INSUFFICIENT: { label: "ACCRUING", color: FAINT, bg: "transparent", border: C.border, tip: "Not enough history to rate yet." },

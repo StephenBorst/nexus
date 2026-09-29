@@ -636,7 +636,7 @@ function FeedCard({
         return (
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10, fontFamily: "var(--nx-font-mono)", fontSize: 9.5, lineHeight: 1.5 }}>
             <span style={{ fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase" }}>Base rate at entry</span>
-            <span style={{ color: weak ? "#60a5fa" : "#71717a" }}>taken vs <b style={{ color: weak ? "#60a5fa" : "#a1a1aa" }}>{isRev ? `${br.revertedPct}% reverted` : `${br.hitRate}% hit · ${br.expectancyR! >= 0 ? "+" : ""}${br.expectancyR}R`}</b> · n={br.samples}{weak ? " — a weak hist, taken anyway" : ""}</span>
+            <span style={{ color: weak ? "#e0a458" : "#71717a" }}>taken vs <b style={{ color: weak ? "#e0a458" : "#a1a1aa" }}>{isRev ? `${br.revertedPct}% reverted` : `${br.hitRate}% hit · ${br.expectancyR! >= 0 ? "+" : ""}${br.expectancyR}R`}</b> · n={br.samples}{weak ? " — a weak hist, taken anyway" : ""}</span>
           </div>
         );
       })()}

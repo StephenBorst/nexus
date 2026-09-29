@@ -68,7 +68,7 @@ export function buildOgSvg({ displayName, wallet, wins, losses, active, total, a
 // shareable card that unfurls on X/Farcaster and links back. Monochrome-editorial to match
 // the brand (bone type, blue accent mark; plays read in words, not green/red). Each row = a market's mechanical PLAY +
 // how many independent lenses (smart · catalysts · forecasters) confirm it. Rows already
-// ranked by boardCardRows; a strong confluence (agree≥2) gets a brand-blue left mark.
+// ranked by boardCardRows; a strong confluence (agree≥2) gets a bone left mark.
 export function buildBoardOgSvg(rows, asOf, { fontFamily = "'Courier New', Courier, monospace" } = {}) {
   const { bone: BONE, bright: BRIGHT, muted: MUT, faint: FAINT, canvas: BG, border: BORD, borderStrong: BORD2, brand: MARK } = BRAND;
   // A play is a direction, not money, so it reads monochrome: a real FADE in bone, anything

@@ -896,7 +896,7 @@ export default function MiniApp() {
             ) : (
               <>
                 <div style={{ fontSize: 11, color: "#a1a1aa", lineHeight: 1.5 }}>
-                  The current lead: <span style={{ color: "#60a5fa" }}>Basis × CVD Stack</span>. It fades an extreme spot-perp basis only when same-hour order flow agrees. Graded PREDICTIVE as a read. Not yet robust as a strategy. <span style={{ color: "#fff" }}>PAPER only</span>. No funds. No key.
+                  The current lead: <span style={{ color: "#e0a458" }}>Basis × CVD Stack</span>. It fades an extreme spot-perp basis only when same-hour order flow agrees. Graded PREDICTIVE as a read. Not yet robust as a strategy. <span style={{ color: "#fff" }}>PAPER only</span>. No funds. No key.
                 </div>
                 <button onClick={deployPaperAgent} disabled={agentBusy} style={{ background: "#2a1a00", color: "#fbbf24", border: "1px solid #4a3a00", borderRadius: 5, padding: "10px 0", fontFamily: mono, fontSize: 11, fontWeight: "bold", cursor: agentBusy ? "wait" : "pointer", letterSpacing: "0.04em", opacity: agentBusy ? 0.6 : 1 }}>{agentBusy ? "DEPLOYING…" : "PAPER-TEST BASIS × CVD STACK"}</button>
               </>

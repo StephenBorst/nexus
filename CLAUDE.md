@@ -1488,24 +1488,27 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
 
 ## Brand & voice — design source of truth ⭐ (read BEFORE any brand-facing asset: landing, decks, videos, share cards, motion, marketing)
 Canonical system = **`app/config/theme.ts`** (`C` tokens), mirrored 1:1 by the landing (`nexus-landing/index.html` `:root`). Pull colors from these — never invent.
-- **⭐ THE RULE (2026-09-28, borst via Ember) = `docs/brand.md` — read it first.** Black surfaces · bone type · **blue
-  `#60a5fa` (`C.brand`, landing `--brand`) is the ACCENT MARK** (every share card's 3px top rule, the active top-nav + Lab
-  tab, the PnL poster hairline, the PREDICTIVE chip; never a button, never body text; buttons stay bone). **Was amber
-  until 2026-09-29 — borst: "amber reads as caution", so the brand can't wear it.** The same blue = `SIGNAL.watch`
-  (was `SIGNAL.caution` `#e0a458`): experimental / "watch this". Amber `#fbbf24` = `C.warn` = REAL DANGER ONLY.
-  `ogCards.test.mjs` fails if the brand mark is ever set to C.warn. ⚠️ `/mini` (parked) still draws its own amber
-  header rule; `#6cb6ff` (Coachmark/Telegram, APPROVED_EXTRAS) is a near-twin blue — fold it in when touched · **green/red = money + price ONLY** (P&L,
+- **⭐ THE RULE (2026-09-28, borst via Ember) = `docs/brand.md` — read it first.** Black surfaces · bone type · **bone
+  `#ededf0` (`C.brand`, landing `--brand`; same value as `C.accent`) is the ACCENT MARK** (every share card's 3px top
+  rule, the active top-nav + Lab tab, the PnL poster hairline, the PREDICTIVE chip; never body text). **FINAL (borst,
+  2026-09-29):** amber (the mark until PR #64; it reads as caution) and blue `#60a5fa` (PR #64, live for a
+  day, then reverted; PR #65 "amber = danger only / one blue" CLOSED unmerged) were both dropped — the mark is white. Don't re-open the accent.
+  Token names `C.brand` / `SIGNAL.watch` stayed (Lab header + scoreboard use them); `SIGNAL.watch` = soft amber
+  `#e0a458` (caution / experimental / "watch this", was named `SIGNAL.caution`). Amber = caution only (`C.warn`
+  `#fbbf24` warnings/danger). `#6cb6ff` = the teaching blue (Coachmark, Telegram), its own job, not the brand.
+  `ogCards.test.mjs` checks each card's 3px top rule IS `BRAND.brand` (bone is also the type colour, so a
+  "card contains bone" check would be vacuous) and that the mark is never C.warn · **green/red = money + price ONLY** (P&L,
   WIN/LOSS + its R, W/L tally, expectancy, price moves, Buy/Sell sides) — a LONG label, a TP/stop level, a count, a
   rate, a score, ACTIVE, a live dot are monochrome. Share cards read colours from `app/lib/brand.mjs` (pinned to
   theme.ts) and live in `workers/nexus-lab-api/ogCards.mjs`; `ogCards.test.mjs` renders every card and fails any
-  off-brand colour, a missing amber rule, or green/red on a card with no money. Link previews + the PnL poster are
+  off-brand colour, a missing bone top rule, or green/red on a card with no money. Link previews + the PnL poster are
   renders of `tools/brand/previews.html` — edit it, re-render, and bump the `?v=` on the og:image URL (X caches by URL).
   Warnings keep `C.warn`. This supersedes "bone is the ONE accent" below.
 - **Palette (Linear-discipline monochrome):** canvas `#0a0a0b` · surface `#141416` · borders `#232327`/`#33333a` · text bone `#f4f4f5` / fog `#a1a1aa` / muted `#71717a` / faint `#52525b`. **THE accent = bone/white `#ededf0`** (CTAs, headlines, interaction). **Green `#3ecf8e` = DATA role — profit/up/live ONLY, never the brand color.** neg `#f7525f`, warn `#fbbf24`. Elevation = hairline border + surface tier, NOT heavy shadow; ONE rationed accent; 4px spacing scale.
   - ⚠️ **NOT neon green.** "near-black + acid-green pop" is the exact AI-cliché to AVOID. It's bone-on-near-black, green rationed to data.
   - **Signal colours (2026-09-25) — each means ONE thing, never decoration.** Beyond bone + data colours, a few
-    colours earned a job and live NAMED in `theme.ts`: `SIGNAL.watch` brand blue `#60a5fa` (experimental/"watch this";
-    was soft-amber `SIGNAL.caution` until 2026-09-29 — `C.warn` stays for real danger) · `SIGNAL.follow` gold `#f5c451` (someone you follow)
+    colours earned a job and live NAMED in `theme.ts`: `SIGNAL.watch` soft amber `#e0a458` (caution/experimental/
+    "watch this"; named `SIGNAL.caution` before 2026-09-29 — softer than `C.warn`, which stays for real danger) · `SIGNAL.follow` gold `#f5c451` (someone you follow)
     · `SIGNAL.heat` orange `#f7931a` (🔥 engagement, never price) · `SIGNAL.posSoft` (moderate conviction) ·
     `SIGNAL.posMuted`/`negMuted` (DEMOTED context P&L under a graded headline) · `SIGNAL.sim.*` purple family
     (SIMULATED, not real money — Sim Composer) · `LINE.pos/neg/warn` agree/oppose/caution hairlines ·
