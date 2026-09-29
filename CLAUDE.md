@@ -674,13 +674,18 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   `ThesisRegistered` trader (msg.sender), matching `onChainId` (`thesisRegistrant`). Proofs cached in `callproof:{id}`.
   Every other copy gets server field `duplicateOf: <owner>` — NOTHING is deleted; the board, the hourly grader, the
   stance board, the feed, the challenge fan-out and `publicLabView` skip marked copies (the ledger doesn't: it proves
-  which records exist). **REPORT-FIRST:** marks are written only with worker var `CALL_DEDUPE_LIVE="true"` (commented in
-  lab-api wrangler.toml); until then `GET /theses/duplicates` shows the plan (owner, evidence, per-wallet before/after).
+  which records exist). **LIVE since 2026-09-29 (borst: "flip it"):** worker var `CALL_DEDUPE_LIVE="true"` in lab-api
+  wrangler.toml writes the marks each hourly pass; `GET /theses/duplicates` shows the plan and `marksWritten` (owner,
+  evidence, per-wallet before/after). Comment the var out to go back to report-only (written marks stay).
   Sept 28 data: 35 copied calls / 114 copies; 18 house ids, 17 with an on-chain tx (16 also held by 0xfc8c), 1 held only
   by the two Solana wallets. **First live report (Sept 29):** 17 house ids proven (→ Nexus Signals; 34 copies to mark in
   0x9a30/0xa77c), 18 unresolved — the 17 on-chain ones hit the event-hash bug above; unresolved rows now say why
-  (receipt unreadable / tx failed / no registry event / receipt budget). Marking changes no ranking (nobody qualifies
-  either way). Tests: `labCache` / `callDedupe` / `registryEvent` (.test.mjs).
+  (receipt unreadable / tx failed / no registry event / receipt budget). **After the #59 fix (05:17 UTC):** 33 of 35
+  proven — 17 house → Nexus Signals, **14 on-chain → 0xa77c** (borst posted the manual calls from the 24h paper-arm
+  wallet), 2 → 0x325d; 2 left alone (a SOL call with no tx held by 7 wallets; a ZEC call 0xa77c registered but no longer
+  holds). 107 copies marked. Marking changes no ranking (nobody qualifies either way); it turns 4 wallets EMERGING
+  (82mm 3 calls +0.67R · 2e91 2 +0.25R · 0x325d 3 −1R · 0x9a30 2 −1R). Tests: `labCache` / `callDedupe` /
+  `registryEvent` (.test.mjs).
 - `GET /theses/leaderboard`: ranks public-thesis authors by hit-rate + avg-R over ≥5 resolved calls
   (net-positive-R gate, sample-confidence shrink). `GET /theses/ledger`: canonical SHA-256 of the public
   call set (proof-of-call fields + createdAt), recomputable, prev-linked chain (`/theses/ledger/chain`),

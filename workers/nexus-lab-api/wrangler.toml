@@ -29,11 +29,12 @@ id = "c3c0582ec71c4d049d0795872f39f033"
 # GET /v1/models (claude-opus-4.8 / sonnet-4.6 / haiku-4.5 all present, caching
 # supported). Remove this var to revert to direct Anthropic.
 [vars]
-# Double-count (staged, report-only while unset): the hourly pass proves who made each call that
-# appears in several wallets (house id or the thesis registry's on-chain event) and reports the plan
-# at GET /theses/duplicates. Uncomment to MARK the other wallets' copies duplicateOf (nothing is
-# deleted; the board, feed and public views skip them). Read the report first.
-# CALL_DEDUPE_LIVE = "true"
+# Double-count (LIVE since 2026-09-29, borst): the hourly pass proves who made each call that appears
+# in several wallets (house id or the thesis registry's on-chain event) and MARKS the other wallets'
+# copies duplicateOf. Nothing is deleted; the board, feed and public views skip marked copies. The
+# plan and what was marked: GET /theses/duplicates. Comment this out to go back to report-only (marks
+# already written stay; they're a server field on each copy).
+CALL_DEDUPE_LIVE = "true"
 # Oct-15 (staged, OFF): serve GET /signals/basis, the graded basis-stack read for the paid feed.
 # Flip only if the re-validation holds: uncomment, commit, merge (CI deploys the worker).
 # BASIS_SIGNALS_LIVE = "true"
