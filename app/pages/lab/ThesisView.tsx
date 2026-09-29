@@ -2079,7 +2079,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 }}>
                   <strong style={{ color: "#ededf0" }}>You don&apos;t need capital to build a record here.</strong>{" "}
                   A public thesis is graded from public price — first touch of your target vs your
-                  stop — whether or not you take the trade.
+                  stop — whether or not you take the trade. It counts once price trades at your entry.
                 </div>
               </>
             ) : (
@@ -2195,8 +2195,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     background: "#0f0f11", border: "1px solid #232327", borderRadius: 3,
                   }}>
                     <strong style={{ color: "#ededf0" }}>Publishing makes this a graded call.</strong>{" "}
-                    It&apos;s scored from public price the moment you post it — first touch of your
-                    target vs your stop. <strong style={{ color: "#ededf0" }}>You don&apos;t have to take
+                    It&apos;s scored from public price: once price trades at your entry, the first touch
+                    of your target vs your stop decides it. <strong style={{ color: "#ededf0" }}>You don&apos;t have to take
                     the trade.</strong> Save private if you&apos;d rather not be graded, or DEPLOY (LIVE)
                     to also place a real order with real funds.
                   </div>

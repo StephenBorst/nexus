@@ -572,7 +572,7 @@ export default function ProofPage() {
 
       {/* Footer — how grading works */}
       <div style={{ marginTop: 30, paddingTop: 16, borderTop: `1px solid ${BORDER}`, fontFamily: UI, fontSize: 11.5, color: MUTED, lineHeight: 1.6 }}>
-        Calls are graded from public 1h price — first touch of target vs. stop, same-candle counted as a loss.
+        Calls are graded from public 1h price once price trades at the entry: first touch of target vs. stop, same-candle counted as a loss.
         Agents are ranked on real settled trades carrying exchange order IDs. Nobody types in a P&L.
         Want your own record? <span role="link" tabIndex={0} onClick={() => navigate("/analyze")} onKeyDown={pressKey(() => navigate("/analyze"))} style={{ color: BONE, cursor: "pointer" }}>X-ray any wallet →</span>
       </div>
