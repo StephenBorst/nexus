@@ -29,16 +29,34 @@ function relTime(ts: number): string {
 }
 const short = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
 
+// Line icons for the action bar (same stroke as the top-nav envelope). The stored reaction
+// behind Like is still 🔥; only the button's artwork is a line glyph.
+const ICON_PATHS: Record<string, React.ReactNode> = {
+  like: <path d="M12 21c-4 0-7-2.7-7-6.6 0-3.4 2.6-5.4 3.7-8.4.3 1.8 1.4 2.9 2.3 3.4C11.3 6.3 12.8 4 15 3c-.3 2.6.8 4.5 2 6 1.2 1.5 2 3 2 5.3C19 18.3 16 21 12 21z" />,
+  comment: <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z" />,
+  share: <><path d="M7 17 17 7" /><path d="M8 7h9v9" /></>,
+  copy: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>,
+  message: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+  react: <><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5c.9 1.1 2.1 1.7 3.5 1.7s2.6-.6 3.5-1.7" /><path d="M9 9.5h.01M15 9.5h.01" /></>,
+};
+
 function Action({ icon, label, onClick, active, href }: {
-  icon: string; label: string; onClick?: () => void; active?: boolean; href?: string;
+  icon: keyof typeof ICON_PATHS; label: string; onClick?: () => void; active?: boolean; href?: string;
 }) {
   const style: React.CSSProperties = {
     display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none",
-    color: active ? "#ededf0" : "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 11,
-    cursor: "pointer", padding: "6px 8px", borderRadius: 6, letterSpacing: "0.02em",
+    color: active ? "#ededf0" : "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 13, fontWeight: 500,
+    cursor: "pointer", padding: "6px 8px", borderRadius: 6, textTransform: "none", letterSpacing: 0,
     textDecoration: "none", whiteSpace: "nowrap",
   };
-  const body = <><span style={{ fontSize: 13, lineHeight: 1 }}>{icon}</span>{label}</>;
+  const body = (
+    <>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        {ICON_PATHS[icon]}
+      </svg>
+      {label}
+    </>
+  );
   return href
     ? <a className="nx-btn" href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={style}>{body}</a>
     : <button className="nx-btn" onClick={(e) => { e.stopPropagation(); onClick?.(); }} style={style}>{body}</button>;
@@ -178,12 +196,12 @@ export function SocialBar({
     <div style={{ borderTop: "1px solid #232327", marginTop: 8 }}>
       {/* Action bar — labelled, native, always visible */}
       <div style={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap", padding: "6px 2px" }}>
-        <Action icon="🔥" label={`Like${likeCount ? ` ${likeCount}` : ""}`} onClick={() => react(LIKE)} active={youReacted.includes(LIKE)} />
-        <Action icon="💬" label={`Comment${count ? ` ${count}` : ""}${newN ? ` · ${newN} new` : ""}`} onClick={toggleThread} active={open || newN > 0} />
-        {shareHref && <Action icon="↗" label="Share" href={shareHref} />}
-        {canCopy && onCopy && <Action icon="📋" label="Copy" onClick={onCopy} />}
-        {canMessage && onMessage && <Action icon="⬡" label="Message" onClick={onMessage} />}
-        {walletAddress && <Action icon="😀" label="React" onClick={() => setPalette((p) => !p)} active={palette} />}
+        <Action icon="like" label={`Like${likeCount ? ` ${likeCount}` : ""}`} onClick={() => react(LIKE)} active={youReacted.includes(LIKE)} />
+        <Action icon="comment" label={`Comment${count ? ` ${count}` : ""}${newN ? ` · ${newN} new` : ""}`} onClick={toggleThread} active={open || newN > 0} />
+        {shareHref && <Action icon="share" label="Share" href={shareHref} />}
+        {canCopy && onCopy && <Action icon="copy" label="Copy" onClick={onCopy} />}
+        {canMessage && onMessage && <Action icon="message" label="Message" onClick={onMessage} />}
+        {walletAddress && <Action icon="react" label="React" onClick={() => setPalette((p) => !p)} active={palette} />}
       </div>
 
       {/* Reaction chips (Slack-style) + the add-a-reaction palette */}
