@@ -38,3 +38,29 @@ export function removedIds(before, after) {
   const keep = ids(asList(after));
   return asList(before).map((t) => t.id).filter((id) => !keep.has(id));
 }
+
+// • AFTER A SAVE (withServerPublished): the server wins on every PUBLISHED call. Published calls
+//   are permanent (workers/nexus-lab-api/callLock.mjs): the server keeps the post time it stamped,
+//   the levels as published and the grade, and answers each save with those calls. The device takes
+//   them as they are, gets back any it tried to delete or hide, and a call the server refused to
+//   publish (another wallet published it first) goes back to private here. One exception: a timeline
+//   note typed while the save was in flight is kept, and the next save sends it.
+export function withServerPublished(local, response) {
+  const list = asList(local);
+  const pub = new Map(asList(response && response.published).map((t) => [t.id, t]));
+  const refused = new Set((Array.isArray(response && response.refused) ? response.refused : []).map((r) => r && r.id).filter(Boolean));
+  if (!pub.size && !refused.size) return { theses: list, changed: false };
+  const seen = new Set();
+  const theses = list.map((t) => {
+    seen.add(t.id);
+    const server = pub.get(t.id);
+    if (server) {
+      const mine = Array.isArray(t.updates) ? t.updates : [];
+      const theirs = Array.isArray(server.updates) ? server.updates : [];
+      return mine.length > theirs.length ? { ...server, updates: mine } : server;
+    }
+    return refused.has(t.id) ? { ...t, isPublic: false } : t;
+  });
+  for (const [id, t] of pub) if (!seen.has(id)) theses.push(t);
+  return { theses, changed: true };
+}

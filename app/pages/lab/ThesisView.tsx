@@ -84,6 +84,16 @@ function calcThesis(form: {
 }
 
 // ─── Thesis Card ──────────────────────────────────────────
+// Publishing is permanent: the server keeps a frozen copy (post time, levels, visibility) that the
+// Lab can't edit, hide or delete. The one action here that can't be undone, so it asks first.
+function confirmPublish(): boolean {
+  try {
+    return window.confirm("Publish this call?\n\nThe post time and your levels lock. It stays public. It can't be edited, hidden or deleted.\nNexus grades it from public price.");
+  } catch {
+    return false;
+  }
+}
+
 function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice }: {
   t: ThesisTrade;
   onUpdate: (id: string, patch: Partial<ThesisTrade>) => void;
@@ -203,29 +213,41 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
               >◆ CARD</button>
             )}
             {(() => {
-              // 3-state visibility cycle: PRIVATE → PUBLIC → HOLDERS → PRIVATE
-              const vis = t.holdersOnly ? "HOLDERS" : t.isPublic ? "PUBLIC" : "PRIVATE";
-              const next = vis === "PRIVATE"
-                ? { isPublic: true, holdersOnly: false }
-                : vis === "PUBLIC"
-                ? { isPublic: false, holdersOnly: true }
-                : { isPublic: false, holdersOnly: false };
+              // Visibility. A PUBLISHED call is permanent: the server keeps a frozen copy (post time,
+              // levels, visibility), so it can't be edited, hidden or deleted. Until then a call is
+              // PRIVATE or ◆ HOLDERS (a toggle), and PUBLISH asks first.
+              const vis = t.isPublic ? "PUBLIC" : t.holdersOnly ? "HOLDERS" : "PRIVATE";
               const meta = {
                 PRIVATE: { label: "PRIVATE", color: "#52525b", border: "#232327", bg: "transparent" },
-                PUBLIC:  { label: "PUBLIC",  color: "#ededf0", border: "#33333a", bg: "#1a1a1e" },
+                PUBLIC:  { label: "PUBLIC · LOCKED",  color: "#ededf0", border: "#33333a", bg: "#1a1a1e" },
                 HOLDERS: { label: "◆ HOLDERS",  color: "#ededf0", border: "#33333a", bg: "#1a1a1e" },
               }[vis];
+              const chip = { ...navBtnStyle, fontSize: 10, minHeight: 36, padding: "6px 12px", color: meta.color, borderColor: meta.border, background: meta.bg };
+              if (vis === "PUBLIC") {
+                return (
+                  <span title="Published. The post time and levels are locked and it stays public. It can't be edited, hidden or deleted."
+                    style={{ ...chip, display: "inline-flex", alignItems: "center", cursor: "default" }}>
+                    {meta.label}
+                  </span>
+                );
+              }
               return (
-                <button
-                  onClick={() => onUpdate(t.id, next)}
-                  title={`Visibility: ${vis} — click to cycle (PRIVATE → PUBLIC → HOLDERS-ONLY)`}
-                  style={{
-                    ...navBtnStyle, fontSize: 10, minHeight: 36, padding: "6px 12px",
-                    color: meta.color, borderColor: meta.border, background: meta.bg,
-                  }}
-                >
-                  {meta.label}
-                </button>
+                <>
+                  <button
+                    onClick={() => onUpdate(t.id, { isPublic: false, holdersOnly: vis === "PRIVATE" })}
+                    title={vis === "PRIVATE" ? "Private. Click to share with $NEXUS holders only." : "Holders only. Click to make it private again."}
+                    style={chip}
+                  >
+                    {meta.label}
+                  </button>
+                  <button
+                    onClick={() => onUpdate(t.id, { isPublic: true, holdersOnly: false })}
+                    title="Publish to the feed. Permanent: the post time and levels lock, and it's graded from public price."
+                    style={{ ...navBtnStyle, fontSize: 10, minHeight: 36, padding: "6px 12px", color: "#ededf0", borderColor: "#33333a" }}
+                  >
+                    PUBLISH
+                  </button>
+                </>
               );
             })()}
             <button onClick={() => deployToAgent(
@@ -254,7 +276,9 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
             {/* Thesis → Spot express: the honest SHORT note + "Express on Spot →" (LONG→Buy,
                 SHORT→Sell). Flash exec itself lives on the Spot terminal now. */}
             <FlashBracketButton symbol={t.symbol} direction={t.direction} stopLoss={String(t.stopLoss ?? "")} takeProfit1={String(t.takeProfit1 ?? "")} />
-            <button onClick={() => onRemove(t.id)} style={{ ...navBtnStyle, fontSize: 10, color: "#f7525f", borderColor: "#4a1e22", minHeight: 36, padding: "6px 12px" }}>REMOVE</button>
+            {!t.isPublic && (
+              <button onClick={() => onRemove(t.id)} style={{ ...navBtnStyle, fontSize: 10, color: "#f7525f", borderColor: "#4a1e22", minHeight: 36, padding: "6px 12px" }}>REMOVE</button>
+            )}
           </div>
         </div>
       </div>
@@ -299,8 +323,10 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
           return (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>◌ INVALIDATED · abandoned before it resolved. Excluded from your graded record.</span>
-              <button onClick={() => handleStatusClick("INVALIDATED")} title="Reopen. Put it back live so Nexus grades it from public price."
-                style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#71717a", cursor: "pointer" }}>↺ REOPEN</button>
+              {!t.isPublic && (
+                <button onClick={() => handleStatusClick("INVALIDATED")} title="Reopen. Put it back live so Nexus grades it from public price."
+                  style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#71717a", cursor: "pointer" }}>↺ REOPEN</button>
+              )}
             </div>
           );
         }
@@ -314,16 +340,21 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: `1px solid ${color}33`, background: `${color}0c`, borderRadius: 4, padding: "8px 10px", marginBottom: 10 }}>
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: 700, color }}>● {win ? "WIN" : "LOSS"} <span style={{ color: "#52525b", fontWeight: 400 }}>· self-marked</span></span>
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>Every public call is graded from public price. The grade lands on its own.</span>
-              <button onClick={() => handleStatusClick(eff)} title="Reopen. Clear the self-mark and let Nexus grade it from public price."
-                style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#71717a", cursor: "pointer" }}>↺ REOPEN</button>
+              {!t.isPublic && (
+                <button onClick={() => handleStatusClick(eff)} title="Reopen. Clear the self-mark and let Nexus grade it from public price."
+                  style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#71717a", cursor: "pointer" }}>↺ REOPEN</button>
+              )}
             </div>
           );
         }
         return (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>◷ LIVE · graded from public price the moment it resolves. Nothing to mark.</span>
-            <button onClick={() => handleStatusClick("INVALIDATED")} title="Abandon this thesis. It's no longer valid. The grader can't infer that, so it's your call."
-              style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#52525b", cursor: "pointer" }}>◌ INVALIDATE</button>
+            {/* A published call can't be abandoned: walking away from a live call is how a loser gets hidden. */}
+            {!t.isPublic && (
+              <button onClick={() => handleStatusClick("INVALIDATED")} title="Abandon this thesis. It's no longer valid. The grader can't infer that, so it's your call."
+                style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#52525b", cursor: "pointer" }}>◌ INVALIDATE</button>
+            )}
           </div>
         );
       })()}
@@ -878,7 +909,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   useEffect(() => {
     if (backfilledRef.current || !walletAddress) return;
     const WEEK = 7 * 86400 * 1000;
-    const need = trades.filter((t) => !t.baseRateAtEntry && t.status === "ACTIVE" && t.gradedOutcome !== "WIN" && t.gradedOutcome !== "LOSS" && t.symbol && (Date.now() - (t.createdAt || 0)) < WEEK);
+    const need = trades.filter((t) => !t.isPublic && !t.baseRateAtEntry && t.status === "ACTIVE" && t.gradedOutcome !== "WIN" && t.gradedOutcome !== "LOSS" && t.symbol && (Date.now() - (t.createdAt || 0)) < WEEK);
     if (!need.length) return;
     backfilledRef.current = true;
     (async () => {
@@ -1256,6 +1287,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   // private, while an on-chain ERROR still publishes to KV so the feed works.
   const publishAsCall = async () => {
     if (!formValid) return;
+    if (!confirmPublish()) return;
     const t = buildThesisTrade();
     const base = [t, ...trades];
     persist(base);
@@ -1351,6 +1383,17 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
     const thesis = trades.find((t) => t.id === id);
     if (!thesis) return;
 
+    // A published call is permanent: the server keeps its frozen copy and ignores edits, so the
+    // only changes sent are the two it takes (the timeline and the loss postmortem).
+    if (thesis.isPublic) {
+      const allowed: Partial<ThesisTrade> = {};
+      if ("updates" in patch) allowed.updates = patch.updates;
+      if ("lossReason" in patch) allowed.lossReason = patch.lossReason;
+      if (Object.keys(allowed).length) persist(trades.map((t) => (t.id === id ? { ...t, ...allowed } : t)));
+      return;
+    }
+    if (patch.isPublic === true && !confirmPublish()) return;
+
     // Publishing to feed for the first time → register on-chain
     if (patch.isPublic === true && !thesis.isPublic && !thesis.onChainId) {
       console.log("[ThesisRegistry] attempting registerOnChain for thesis:", thesis.id, thesis.symbol);
@@ -1419,6 +1462,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   // clobber, each mapping over stale `trades`). Auto-fills P&L from entry→exit×size.
   const syncGraded = () => {
     const updated = trades.map((t) => {
+      if (t.isPublic) return t; // published: the server writes its status, the Lab can't
       const sug = resolveSuggestion(t, livePrices[t.symbol]);
       if (!sug || !sug.graded) return t;
       const exit = sug.outcome === "HIT_TP" ? t.takeProfit1 : t.stopLoss;

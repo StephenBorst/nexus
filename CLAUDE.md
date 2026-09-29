@@ -604,10 +604,39 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   per-symbol KV store `tvhist:v2:{PERP_…}` (`workers/nexus-lab-api/gradeCandles.mjs`, tested): 20-day pages through
   `orderlyJson`, contiguous by construction (a failed page stops that symbol for the run — never a hole), tail re-fetched
   every 30 min, TTL 45d refreshed on write. Page budget per pass: cron 80 (the full cold backfill was 67), board read 24.
-  A call whose window isn't loaded yet is LEFT OUT of that read, never graded on a partial window. Old stamps written
-  before the fix are not revisited (the cron skips resolved calls); the board re-grades every call from candles.
+  A call whose window isn't loaded yet is LEFT OUT of that read, never graded on a partial window. Stamps written
+  before the fix are re-derived once (`GRADE_V`, see the lock bullet below); the board re-grades every call from candles.
+  **Live check after deploy (Sept 28):** every ranked hit rate fell (72→61%, 71→59%, 67→58%, 49→42%, 47→44%), the Bankr
+  wallet dropped off. It landed only halfway to an estimate built from stamped outcomes because 5 calls posted in
+  May/June were stamped in Jul/Aug on the old 60-day-capped window — the stamps were wrong, the new board is right.
   A `createdAt` that isn't a number or predates 2026 (`GRADE_FLOOR_MS`; the oldest real call is 2026-05-04) is never
   graded and never fetched, so one bad post time can't block its symbol or walk a store back years.
+- **⚠️ PUBLISHED CALLS ARE PERMANENT (2026-09-28, borst: "once a call is published, it's published — like it's
+  onchain").** The first save that makes a call public REGISTERS it in `callreg:{addr}` (written by the server only):
+  the server's clock becomes `createdAt`/`publishedAt` (the client's time is kept as `clientCreatedAt`) and the call as
+  saved becomes the FROZEN copy. Every writer of `lab:{addr}` goes through `labWrite.mjs prepareSeal → commit` (Lab
+  save, Bankr `/proxy/thesis-register`, both house-call generators) → `callLock.mjs sealTheses` rebuilds each published
+  call from the registry: levels/side/market/time/text can't change, a save that leaves it out gets it back, it can't
+  go private or holders-only, `DELETE` → 409 `published_permanent`. `SERVER_FIELDS` (grade stamps, plan/regime,
+  copyCount, publishedAt) never come from a client save, on ANY call. The owner may still append to the `updates`
+  timeline (append-only; stored entries must come back unchanged; new ones re-checked by `lifecycle.appendUpdate` with
+  the server clock as ceiling) and set `lossReason`. A published call's `status` = the server's grade (no self-marked
+  HIT_TP / INVALIDATED). **`callowner:{id}`** = the first wallet to publish an id; another wallet can't publish it (the
+  wallet-switch leak). **Legacy:** a wallet's first write after the lock bootstraps its registry from its STORED public
+  calls, frozen as they are (`publishLegacy`, stored time kept; a legacy public+holders-only call keeps that).
+  ⚠️ **The double-count is NOT fixed by this:** Sept 28 the feed had 414 public rows but only 241 distinct call ids —
+  117 copies across 8 wallets (the Lab's local cache isn't per-wallet, so connecting wallet B pushed wallet A's calls
+  into B). Those copies freeze per wallet; deciding which wallet owns each is the double-count fix's job (the registry
+  is server-owned, so that fix CAN rewrite it). **`GRADE_V = 2`** (grading.mjs): the hourly pass re-derives, once, any
+  stamp without it (old capped-window stamps, client-written ones; corrections aren't announced), removes stamps the
+  call's own window doesn't support, derives status for every public call, and writes onto a FRESH read copying only
+  `PASS_FIELDS` (a save mid-pass survives). Cards/permalink trust only a current stamp (`isCurrentStamp`), else grade
+  live. Bankr thesis route writes only when the registry's `ThesisRegistered` log names the wallet (`registeredBy` —
+  the event's trader is msg.sender, so smart-account wallets pass; the body's walletAddress alone proves nothing).
+  Lab UI: published = static `PUBLIC · LOCKED` chip, no REMOVE / INVALIDATE / REOPEN; unpublished = PRIVATE ↔ ◆ HOLDERS
+  toggle + `PUBLISH` (window.confirm first); `useLabStorage` applies the server's published copies after every save
+  (`labMerge.withServerPublished`). Tests: `callLock` / `grading.lock` / `routes-lab` / `labMerge` (.test.mjs).
+  ⏭ Open: the ENTRY price isn't checked against the market at publish, so a stale entry can still inflate R.
 - `GET /theses/leaderboard`: ranks public-thesis authors by hit-rate + avg-R over ≥5 resolved calls
   (net-positive-R gate, sample-confidence shrink). `GET /theses/ledger`: canonical SHA-256 of the public
   call set (proof-of-call fields + createdAt), recomputable, prev-linked chain (`/theses/ledger/chain`),

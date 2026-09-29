@@ -74,7 +74,9 @@ import { handleProfile, handleLab } from "./routes-lab.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
 import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
-import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances } from "./grading.mjs";
+import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp } from "./grading.mjs";
+import { prepareSeal } from "./labWrite.mjs";
+import { registeredBy } from "./callLock.mjs";
 import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signal-delivery.mjs";
 // The SAME synthesis the Lab + trader page render (pure, dependency-free), so the
 // shareable card can never disagree with the profile it depicts. Bundled cross-dir by
@@ -461,8 +463,10 @@ async function generateHouseCalls(env, { dryRun = false, max = 1 } = {}) {
   }
   if (dryRun) return { dryRun: true, house: houseAddr, candidates: toPost };
   if (!toPost.length) return { posted: [], note: "top fades all deduped (recent/active)" };
-  data.theses = [...toPost, ...existing].slice(0, 500);
-  await env.LAB_STORE.put(`lab:${houseAddr}`, JSON.stringify(data));
+  // Through the same seal as a user's save: house calls are published calls too (permanent, server-timed).
+  const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now());
+  if (prep.error) return { error: prep.error };
+  await prep.commit(data);
   // Ensure the feed/leaderboard has a name for the house identity (one-time seed).
   try {
     const pk = `profile:${houseAddr}`;
@@ -561,8 +565,9 @@ async function generateCatalystHouseCalls(env, { dryRun = false, max = 2 } = {})
   }
   if (dryRun) return { dryRun: true, house: houseAddr, candidates: toPost };
   if (!toPost.length) return { posted: [], note: "no fresh catalyst impacts (all deduped or unpriced)" };
-  data.theses = [...toPost, ...existing].slice(0, 500);
-  await env.LAB_STORE.put(`lab:${houseAddr}`, JSON.stringify(data));
+  const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now());
+  if (prep.error) return { error: prep.error };
+  await prep.commit(data);
   try {
     const pk = `profile:${houseAddr}`;
     if (!(await env.LAB_STORE.get(pk)))
@@ -1044,10 +1049,12 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
       if (!thesis) return new Response("not found", { status: 404 });
       const profile = profileRaw ? JSON.parse(profileRaw) : {};
       const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
-      // Card shows the OBJECTIVE grade, never the self-report — grade live if unresolved.
-      let ogStatus = thesis.gradedOutcome ? gradedStatusOf(thesis.gradedOutcome) : "ACTIVE";
-      let ogGradedR = (thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS") && typeof thesis.gradedR === "number" ? thesis.gradedR : null;
-      if (ogStatus === "ACTIVE" && thesis.gradedOutcome !== "WIN" && thesis.gradedOutcome !== "LOSS") {
+      // Card shows the OBJECTIVE grade, never the self-report. A stamp counts only if the current
+      // grader wrote it (grading.mjs GRADE_V); anything else is graded live from the call's window.
+      const stamped = isCurrentStamp(thesis);
+      let ogStatus = stamped ? gradedStatusOf(thesis.gradedOutcome) : "ACTIVE";
+      let ogGradedR = stamped && typeof thesis.gradedR === "number" ? thesis.gradedR : null;
+      if (!stamped) {
         try {
           const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt, env));
           if (g.outcome === "WIN" || g.outcome === "LOSS") { ogStatus = gradedStatusOf(g.outcome); ogGradedR = g.r; }
@@ -1205,14 +1212,18 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
       const thesis = (data.theses || []).find((t) => t.id === thesisId && t.isPublic);
       if (!thesis) return json({ error: "not found" }, request, 404);
       const profile = profileRaw ? JSON.parse(profileRaw) : {};
-      // Grade LIVE on read (one symbol) if the cron hasn't resolved it yet — the
-      // permalink + its OG card should never lag the market by up to an hour.
-      if (thesis.gradedOutcome !== "WIN" && thesis.gradedOutcome !== "LOSS") {
+      // Grade LIVE on read (one symbol) unless the current grader already stamped it — the
+      // permalink + its OG card should never lag the market by up to an hour, and a stamp from an
+      // older grader (or one a client wrote) is never shown as the grade.
+      if (!isCurrentStamp(thesis)) {
         try {
           const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt, env));
           if (g.outcome === "WIN" || g.outcome === "LOSS") {
-            thesis.gradedOutcome = g.outcome; thesis.gradedR = g.r; thesis.gradedAt = Date.now();
+            thesis.gradedOutcome = g.outcome; thesis.gradedR = g.r; thesis.gradedAt = thesis.gradedAt || Date.now();
+          } else {
+            delete thesis.gradedOutcome; delete thesis.gradedR; delete thesis.gradedAt;
           }
+          thesis.status = gradedStatusOf(thesis.gradedOutcome);
         } catch { /* fall through with the stored value */ }
       }
       return json({ thesis: { ...thesis, wallet, pfp: profile.pfp || null, displayName: profile.displayName || null } }, request);
@@ -2166,8 +2177,23 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       }
       const txHash = bankrData.txHash || bankrData?.transaction?.hash || bankrData.hash;
 
-      // Write thesis to KV so it shows in /feed immediately
+      // The Bankr key proves nothing about `walletAddress` (it came in the body). Before this call
+      // goes into that wallet's record, where once published it's permanent, the registry must have
+      // emitted ThesisRegistered for THAT wallet in a successful transaction (callLock registeredBy).
       const walletNormTR = walletAddress.toLowerCase().trim();
+      let receiptTR = null;
+      for (let i = 0; i < 3 && !receiptTR; i++) {
+        if (i) await new Promise((r) => setTimeout(r, 1500));
+        try {
+          const rr = await fetch(getArbRpc(env), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [txHash] }) });
+          receiptTR = (await rr.json())?.result || null;
+        } catch { receiptTR = null; }
+      }
+      if (!registeredBy(receiptTR, THESIS_REGISTRY, walletNormTR)) {
+        return json({ error: "wallet_not_proven", txHash, hint: "The registry didn't record this thesis for walletAddress, so nothing was written to its Lab record." }, request, 403);
+      }
+
+      // Write thesis to KV so it shows in /feed immediately
       const labKeyTR = `lab:${walletNormTR}`;
       const existingRawTR = await env.LAB_STORE.get(labKeyTR);
       const existingDataTR = existingRawTR ? JSON.parse(existingRawTR) : { theses: [] };
@@ -2196,8 +2222,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         isPublic: isPublic !== false,
         onChainTxHash: txHash,
       };
-      existingDataTR.theses = [newThesis, ...(existingDataTR.theses || [])];
-      await env.LAB_STORE.put(labKeyTR, JSON.stringify(existingDataTR));
+      const prevTR = existingDataTR.theses || [];
+      const prepTR = await prepareSeal(env, walletNormTR, prevTR, [newThesis, ...prevTR], Date.now());
+      if (prepTR.error) return json({ error: prepTR.error }, request, 400);
+      await prepTR.commit(existingDataTR);
 
       return json({ ok: true, txHash, thesisId: newThesis.id, symbol: sym, direction: direction.toUpperCase(), entryPrice, stopLoss, takeProfit1, takeProfit2, isPublic, notes, riskReward: rrFinal, hint: "Thesis registered on-chain and indexed in /feed. Parse ThesisRegistered event from txHash to get onChainId." }, request);
     }
