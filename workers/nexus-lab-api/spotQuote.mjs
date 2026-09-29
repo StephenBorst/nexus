@@ -143,7 +143,12 @@ export async function spotQuote(env, sp, deps = {}) {
   let feeUsed = fee;
   // A provider that refuses the fee still leaves the swap usable: retry once without it.
   if (!best && fee) { quotes = await run(false); best = pickSpotQuote(quotes, req.swap); feeUsed = null; }
-  const failures = (quotes || []).filter((q) => !q?.success).map((q) => ({ provider: q?.provider, error: String(q?.error?.message || q?.error || "").slice(0, 160) }));
+  // The provider's own reply rides along (trimmed): it says WHY, and holds no secret of ours.
+  const failures = (quotes || []).filter((q) => !q?.success).map((q) => {
+    const d = q?.error?.details;
+    const detail = d == null ? undefined : (typeof d === "string" ? d : JSON.stringify(d)).slice(0, 300);
+    return { provider: q?.provider, error: String(q?.error?.message || q?.error || "").slice(0, 160), ...(detail ? { detail } : {}) };
+  });
   if (!best) return { available: true, ok: false, reason: "no_route", failures };
   const out = normalizeSpotQuote(best, req.swap, { fee: feeUsed, executable: req.executable, failures });
   out.feeConfigured = !!fee; // true even when the fee was refused and we fell back to a clean quote

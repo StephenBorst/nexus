@@ -138,6 +138,7 @@ test("every provider failing ⇒ ok:false with the reasons (client falls back to
   assert.equal(r.ok, false);
   assert.equal(r.reason, "no_route");
   assert.ok(r.failures.length >= 1);
+  assert.match(r.failures[0].detail, /down/); // the provider's reason is passed through
 });
 
 test("pickSpotQuote drops anything we wouldn't let a wallet sign", () => {
