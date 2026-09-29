@@ -811,7 +811,15 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
 - **Fabric shut down Sept 16 2026** (their own deprecation notice); `route.withfabric.xyz` 525s. The Fabric notes
   above are history. `/swap/quote` now runs `workers/nexus-lab-api/spotQuote.mjs` on **`@spandex/core` 0.11.1**
   (pinned, bundled in the worker, +6 KB gzip): `getRawQuotes` (no simulation, no RPC) over **Nordstern** (keyless,
-  always) + **0x** only when secret `ZEROX_API_KEY` is set (header only, never the URL).
+  always) + **0x** only when secret `ZEROX_API_KEY` is set (header only, never the URL). **Key SET by borst 2026-09-29**
+  (`wrangler secret put` from `workers/nexus-lab-api`).
+- **⚠️ 0x goes through `SafeZeroX`, never the SDK's bare `zeroX()` (fixed 2026-09-29).** 0x answers "no liquidity" as
+  HTTP **200** `{"liquidityAvailable":false,"zid":…}` with NO `route`; @spandex/core 0.11.1 (the latest) only handles
+  non-200s, so it crashed on `quote.route.tokens` → `failures` read "Cannot read properties of undefined (reading
+  'tokens')". `SafeZeroX` (extends the exported `ZeroXAggregator`) checks the body first → clean failure `"0x: no
+  liquidity for this pair and size"` with 0x's reply as `detail`; Nordstern still quotes. (`QuoteError` isn't exported,
+  so it throws a plain Error with `.details` — what the failures mapper reads.) Live after deploy: 1 and 20 USDC→WETH
+  on Base both `ok`, no failures. Drop the wrapper only if a new SDK version checks `liquidityAvailable` itself.
 - **Fee = native spanDEX options** `integratorFeeAddress` + `integratorSwapFeeBps` from `SPOT_FEE_RECIPIENT`/`SPOT_FEE_BPS`
   (cap 100). On the wire: Nordstern `convenienceFee=0.1` (PERCENT) + `convenienceFeeRecipient`; 0x `swapFeeBps` +
   `swapFeeRecipient`. `feeApplied` is true ONLY when the provider confirms it (0x: `fees.integratorFee`; Nordstern:
@@ -831,7 +839,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   names who filled it. Preview (no taker) quotes for `0x…dEaD` and returns NO calldata. `priceImpact` is null (spanDEX
   doesn't state one; the client no longer prints Number(null)=0%). `minOut` = the provider's stated floor or null (we
   never compute one). Client gate: `EVM_SIGNABLE_ROUTERS` in swapExec.ts.
-- Tests: `spotQuote.test.mjs` (fake fetch through the REAL SDK: fee on the wire, key in header, preview has no tx,
+- Tests: `spotQuote.test.mjs` (fake fetch through the REAL SDK: fee on the wire, key in header, 0x no-liquidity reply, preview has no tx,
   fee refusal fallback, pick guards). Cloud sessions can't reach Nordstern/0x/spandex.sh — verify live via
   `og.nexustradinglabs.com/swap/quote?...&taker=`.
 
