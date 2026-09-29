@@ -293,11 +293,11 @@ html, body {
 .nx-feature-grid { grid-auto-rows: 1fr; }
 @media (max-width: 480px) { .nx-feature-grid { grid-auto-rows: auto; } }
 
-/* Brand accent mark (docs/brand.md): the top-nav active indicator is amber, like every
+/* Brand accent mark (docs/brand.md): the top-nav active indicator is the brand blue, like every
    active tab and every share card's top rule. Orderly draws it as an .oui-gradient-brand bar
    inside the nav item; retargeted here instead of changing the global brand gradient, which
    other SDK elements share. */
 .oui-group.oui-relative > .oui-gradient-brand.oui-rounded-full.oui-absolute {
   background-image: none !important;
-  background-color: #fbbf24 !important;
+  background-color: #60a5fa !important;
 }

@@ -276,7 +276,7 @@ export default function TheLabPage() {
                 minHeight: 36, flex: "1 0 21%", flexShrink: 1, whiteSpace: "nowrap",
               } : {
                 background: "none", border: "none",
-                borderBottom: `2px solid ${active ? C.amber : "transparent"}`, // amber = the brand accent mark
+                borderBottom: `2px solid ${active ? C.brand : "transparent"}`, // blue = the brand accent mark
                 color: active ? "#f4f4f5" : "#71717a",
                 fontFamily: "var(--nx-font-ui)", fontSize: 12.5, letterSpacing: "0.01em",
                 fontWeight: active ? 600 : 500,
@@ -316,7 +316,7 @@ export default function TheLabPage() {
           {rootWalletAddress && authState !== "ok" && (
             <button type="button" onClick={() => { void signToSync(); }}
               title="Sign a message (no funds move) so your calls and notes save to your record. Once a day."
-              style={{ fontFamily: "var(--nx-font-mono)", fontSize: isMobile ? 11 : 9, fontWeight: 700, letterSpacing: "0.08em", color: SIGNAL.caution, background: "transparent", border: `1px solid ${LINE.warn}`, borderRadius: 3, padding: isMobile ? "6px 9px" : "2px 7px", minHeight: isMobile ? 36 : "auto", cursor: "pointer", whiteSpace: "nowrap" }}>
+              style={{ fontFamily: "var(--nx-font-mono)", fontSize: isMobile ? 11 : 9, fontWeight: 700, letterSpacing: "0.08em", color: SIGNAL.watch, background: "transparent", border: `1px solid ${LINE.watch}`, borderRadius: 3, padding: isMobile ? "6px 9px" : "2px 7px", minHeight: isMobile ? 36 : "auto", cursor: "pointer", whiteSpace: "nowrap" }}>
               {isMobile ? "SIGN TO SYNC" : "◇ SIGN TO SYNC"}
             </button>
           )}

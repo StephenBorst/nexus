@@ -70,7 +70,7 @@ export function MarketStatStrip({ symbol }: { symbol: string }) {
       </div>
       <Stat label="24h"><span style={{ color: up ? POS : NEG }}>{up ? "+" : ""}{d.changePct.toFixed(2)}%</span></Stat>
       <Stat label="Funding · 8h">
-        <span style={{ color: d.funding > 0 ? "#e0a458" : d.funding < 0 ? POS : FOG }} title={`≈ ${fundAnnual >= 0 ? "+" : ""}${fundAnnual.toFixed(1)}%/yr`}>
+        <span style={{ color: d.funding > 0 ? "#60a5fa" : d.funding < 0 ? POS : FOG }} title={`≈ ${fundAnnual >= 0 ? "+" : ""}${fundAnnual.toFixed(1)}%/yr`}>
           {fundPct >= 0 ? "+" : ""}{fundPct.toFixed(4)}%
         </span>
       </Stat>

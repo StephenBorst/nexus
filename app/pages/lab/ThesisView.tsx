@@ -284,7 +284,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
       </div>
 
       {/* Base rate at entry (Grok) — the frozen odds this call was taken against, so ticket
-          honesty survives publish. A weak hist you took anyway SAYS so on the card, amber. */}
+          honesty survives publish. A weak hist you took anyway SAYS so on the card, in the watch blue. */}
       {t.baseRateAtEntry && (() => {
         const br = t.baseRateAtEntry!;
         // New cards freeze the reversion clock (revertedPct); old cards keep the backtest number
@@ -294,7 +294,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
         return (
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10, fontFamily: "var(--nx-font-mono)", fontSize: 9.5, lineHeight: 1.5 }}>
             <span style={{ fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase" }}>Base rate at entry</span>
-            <span style={{ color: weak ? "#e0a458" : "#71717a" }}>taken vs <b style={{ color: weak ? "#e0a458" : "#a1a1aa" }}>{isRev ? `${br.revertedPct}% reverted` : `${br.hitRate}% hit · ${br.expectancyR! >= 0 ? "+" : ""}${br.expectancyR}R`}</b> · n={br.samples}{weak ? " — a weak hist, taken anyway" : ""}</span>
+            <span style={{ color: weak ? "#60a5fa" : "#71717a" }}>taken vs <b style={{ color: weak ? "#60a5fa" : "#a1a1aa" }}>{isRev ? `${br.revertedPct}% reverted` : `${br.hitRate}% hit · ${br.expectancyR! >= 0 ? "+" : ""}${br.expectancyR}R`}</b> · n={br.samples}{weak ? " — a weak hist, taken anyway" : ""}</span>
           </div>
         );
       })()}
@@ -1628,7 +1628,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                       list="nexus-thesis-symbols" autoCapitalize="characters" autoComplete="off" onChange={(e) => set("symbol", e.target.value)} />
                   </div>
                   <div>
-                    <span style={fieldLabelStyle}>DIRECTION{!dirArmed && <span style={{ color: "#e0a458" }}> · WATCH</span>}</span>
+                    <span style={fieldLabelStyle}>DIRECTION{!dirArmed && <span style={{ color: "#60a5fa" }}> · WATCH</span>}</span>
                     <div style={{ display: "flex", gap: 4 }}>
                       {(["LONG", "SHORT"] as const).map((d) => {
                         const on = form.direction === d && dirArmed;          // committed side
@@ -1637,8 +1637,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                         <button key={d} onClick={() => { userChoseDir.current = true; setDirArmed(true); set("direction", d); if (canBuild) quickSetup(quickStopPct, quickTpR, d); }} style={{
                           flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11, cursor: "pointer", borderRadius: 3, border: "1px solid",
                           background: on ? (d === "LONG" ? "#1a1a1e" : "#241012") : "#0f0f11",
-                          borderColor: on ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : suggested ? "#e0a45866" : "#232327",
-                          color: on ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : suggested ? "#e0a458" : "#52525b",
+                          borderColor: on ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : suggested ? "#60a5fa66" : "#232327",
+                          color: on ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : suggested ? "#60a5fa" : "#52525b",
                         }}>{d === "LONG" ? "↑ LONG" : "↓ SHORT"}</button>
                         );
                       })}
@@ -1651,7 +1651,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 {/* WATCH gate (Grok): a weak base rate un-arms the direction so the trader
                     overrides a bad setup on purpose, not by our pre-check. Direction stays visible. */}
                 {!dirArmed && weakSetup && (
-                  <div className="nx-fade-in" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 4, border: `1px solid ${SIGNAL.caution}55`, background: SIGNAL.cautionBg, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: SIGNAL.caution, lineHeight: 1.55 }}>
+                  <div className="nx-fade-in" style={{ marginTop: 8, padding: "8px 10px", borderRadius: 4, border: `1px solid ${SIGNAL.watch}55`, background: SIGNAL.watchBg, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: SIGNAL.watch, lineHeight: 1.55 }}>
                     ⚠ WATCH — fading {form.symbol.toUpperCase()} has historically underperformed{weakSetup.histPct != null ? ` (reverted only ${weakSetup.histPct}% of recent stretched-funding instances)` : ""}. The {form.direction.toLowerCase()} side is shown, not pre-selected — tap it to commit.
                   </div>
                 )}

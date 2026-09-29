@@ -10,7 +10,7 @@ const CARRY_API = "https://nexus-carry-engine.stephenpatrick24.workers.dev";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", NEG = "#f7525f", AMBER = "#e0a458";
+const POS = "#3ecf8e", NEG = "#f7525f", WATCH = "#60a5fa";
 const BORDER = "#232327", SURFACE_ALT = "#0f0f11", INSET = "#08080a";
 
 type Point = { t: number; equity: number; funding: number; price: number };
@@ -85,7 +85,7 @@ export default function CarrySleeve() {
     <div style={{ marginTop: 26, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${BONE}`, borderRadius: 8, background: SURFACE_ALT, padding: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
         <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: BONE }}>◈ HOUSE CARRY SLEEVE</span>
-        <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.1em", color: AMBER, border: `1px solid ${AMBER}55`, borderRadius: 3, padding: "2px 6px" }}>
+        <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.1em", color: WATCH, border: `1px solid ${WATCH}55`, borderRadius: 3, padding: "2px 6px" }}>
           {(rec?.mode || "paper").toUpperCase()}
         </span>
         <span style={{ fontFamily: MONO, fontSize: 9, color: FAINT }}>sector-neutral funding carry</span>
