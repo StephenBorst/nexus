@@ -60,7 +60,7 @@ function winThenCrash(now = NOW_S, posted = POSTED_S) {
   };
 }
 
-test("the bug: the old fixed window grades an old WIN as a LOSS; the call's own window grades it WIN", async () => {
+test("the bug: the old fixed window misses an old WIN; the call's own window grades it WIN", async () => {
   const gc = makeGradeCandles({ LAB_STORE: kv() }, { budget: 10, fetchJson: fakeOrderly(winThenCrash()), nowMs: () => NOW_MS });
   const store = await gc.ensure("PERP_BTC_USDC", POSTED_S - REGIME_PAD_S);
   const cd = callWindow(store, CALL.createdAt);
@@ -70,7 +70,9 @@ test("the bug: the old fixed window grades an old WIN as a LOSS; the call's own 
   const winFrom = NOW_S - 30 * D - REGIME_PAD_S;
   const keep = cd.t.map((t, i) => i).filter((i) => cd.t[i] >= winFrom);
   const oldWindow = { t: keep.map((i) => cd.t[i]), h: keep.map((i) => cd.h[i]), l: keep.map((i) => cd.l[i]), c: keep.map((i) => cd.c[i]) };
-  assert.equal(gradeCall(CALL, oldWindow).outcome, "LOSS", "the old window started after the target was hit");
+  // It started after the target was hit: it graded a LOSS back then, and PENDING now that a call
+  // needs its entry to trade (the old window's first hour is already far from the entry).
+  assert.notEqual(gradeCall(CALL, oldWindow).outcome, "WIN", "the old window started after the target was hit");
 });
 
 // ── Page plan ────────────────────────────────────────────────────────────────────────────────

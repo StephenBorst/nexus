@@ -78,6 +78,7 @@ import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } f
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
 import { registeredBy } from "./callLock.mjs";
+import { resolveDuplicates, REPORT_KEY as DEDUPE_REPORT_KEY } from "./callDedupe.mjs";
 import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signal-delivery.mjs";
 // The SAME synthesis the Lab + trader page render (pure, dependency-free), so the
 // shareable card can never disagree with the profile it depicts. Bundled cross-dir by
@@ -311,6 +312,19 @@ async function fetchChartDataUri(rawUrl) {
 
 // ── Ph17: On-chain wallet discovery ──────────────────────────────────────────
 // ARB_RPC resolved at runtime — Alchemy if ALCHEMY_KEY secret set, public RPC fallback
+// One Arbitrum receipt (null on any failure). The double-count resolver reads the thesis registry's
+// event from it to prove which wallet made a copied call.
+async function arbReceipt(env, txHash) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const r = await fetch(getArbRpc(env), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [txHash] }) });
+      const d = await r.json();
+      if (d && d.result) return d.result;
+    } catch { /* one retry */ }
+  }
+  return null;
+}
+
 function getArbRpc(env) {
   return env.ALCHEMY_KEY
     ? `https://arb-mainnet.g.alchemy.com/v2/${env.ALCHEMY_KEY}`
@@ -603,6 +617,13 @@ export default {
     ctx.waitUntil((async () => {
       try { const n = await gradePublicTheses(env); console.log(`[grade] cron resolved ${n} calls`); }
       catch (e) { console.error("[grade] cron failed:", String(e)); }
+    })());
+    // Hourly: settle calls copied between wallets (callDedupe.mjs). Report-only until CALL_DEDUPE_LIVE.
+    ctx.waitUntil((async () => {
+      try {
+        const r = await resolveDuplicates(env, { fetchReceipt: (h) => arbReceipt(env, h) });
+        console.log(`[dedupe] ${r.duplicated} copied calls, ${r.resolved} proven, ${r.copiesToMark} copies to mark, ${r.marksWritten} marked (live=${r.live})`);
+      } catch (e) { console.error("[dedupe] failed:", String(e)); }
     })());
     // Hourly: snapshot the merit-weighted consensus lean per symbol so calls can be
     // graded contrarian-vs-crowd over time (docs/historical-stance-snapshots-spec.md).
@@ -5803,6 +5824,20 @@ document.getElementById("btn").addEventListener("click",go);
 
     // Theses family → routes-theses.mjs (migration rules in shared.mjs).
     {
+      // ── GET /theses/duplicates — the double-count report (callDedupe.mjs): every call that appears
+      // in more than one wallet, who is proven to have made it, and what the board would count. Read
+      // from the hourly pass; recomputed when older than 2h, or on ?refresh=1 at most every 10 minutes.
+      if (parts[0] === "theses" && parts[1] === "duplicates" && request.method === "GET") {
+        let report = null;
+        try { report = JSON.parse((await env.LAB_STORE.get(DEDUPE_REPORT_KEY)) || "null"); } catch { report = null; }
+        const age = report ? Date.now() - Number(report.at || 0) : Infinity;
+        const refresh = new URL(request.url).searchParams.get("refresh") === "1";
+        if (age > 2 * 3600e3 || (refresh && age > 10 * 60e3)) {
+          try { report = await resolveDuplicates(env, { fetchReceipt: (h) => arbReceipt(env, h) }); }
+          catch (e) { console.error("[dedupe] report failed:", String(e)); }
+        }
+        return json(report || { error: "no report yet, try again in a minute" }, request, report ? 200 : 503);
+      }
       const thesesRes = await handleTheses(parts, request, env);
       if (thesesRes) return thesesRes;
     }

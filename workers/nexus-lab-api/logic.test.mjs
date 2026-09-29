@@ -16,7 +16,7 @@ import {
   classifyMacro, macroEvents,
   houseCallFromSignal, wargameScenario,
   catalystToThesis, attachCatalystTheses, catalystHouseCall,
-  boardCardRows, boardCardPlay, fundingStretched, readVerdict,
+  boardCardRows, boardCardPlay, fundingStretched, readVerdict, entryVsMarket,
 } from "./logic.mjs";
 
 // Helper: candle series starting at t0 (sec), each 1h apart.
@@ -2310,4 +2310,56 @@ test("staleBoardFallback: an empty, malformed or undated board is never served",
   ]) assert.equal(staleBoardFallback([bad], now), null, JSON.stringify(bad));
   assert.equal(staleBoardFallback(undefined, now), null);
   assert.equal(staleBoardFallback([], now), null);
+});
+
+// ── The entry must trade (2026-09-29) ───────────────────────────────────────────────────────
+// `series` puts the first hour at the post, so bar 0 is the market the call was posted into.
+test("gradeCall: an entry the market never traded is not a win, whatever price did", () => {
+  const stale = { direction: "LONG", entryPrice: 90, stopLoss: 88, takeProfit1: 110, createdAt: t0 * 1000 };
+  // Posted while price was 99–101: a LONG "entered" at 90 with a stop at 88. The target prints.
+  const g = gradeCall(stale, series(t0, [{ h: 101, l: 99 }, { h: 111, l: 100 }]));
+  assert.deepEqual(g, { outcome: "PENDING", r: 0, awaitingEntry: true }, "it used to be a 10R WIN");
+});
+
+test("gradeCall: a resting entry counts from the hour price trades it", () => {
+  const stale = { direction: "LONG", entryPrice: 90, stopLoss: 88, takeProfit1: 110, createdAt: t0 * 1000 };
+  // Dips to 89.5 (fills at 90, stop 88 untouched), then runs to the target: a real 10R.
+  assert.deepEqual(gradeCall(stale, series(t0, [{ h: 101, l: 99 }, { h: 100, l: 89.5 }, { h: 111, l: 95 }])), { outcome: "WIN", r: 10 });
+  // The fill hour also reaches the stop: on the way down it filled first, so it's a LOSS.
+  assert.equal(gradeCall(stale, series(t0, [{ h: 101, l: 99 }, { h: 95, l: 87 }])).outcome, "LOSS");
+  // The fill hour reaches the target too: that can't count (it may have come before the fill).
+  assert.equal(gradeCall(stale, series(t0, [{ h: 101, l: 99 }, { h: 111, l: 89 }, { h: 95, l: 87 }])).outcome, "LOSS");
+  assert.equal(gradeCall(stale, series(t0, [{ h: 101, l: 99 }, { h: 111, l: 89 }, { h: 112, l: 95 }])).outcome, "WIN");
+});
+
+test("gradeCall: resting SHORT entries and stop-entries above the market wait for their price too", () => {
+  const shortAbove = { direction: "SHORT", entryPrice: 110, stopLoss: 112, takeProfit1: 90, createdAt: t0 * 1000 };
+  assert.equal(gradeCall(shortAbove, series(t0, [{ h: 101, l: 99 }, { h: 95, l: 85 }])).outcome, "PENDING", "never rallied to 110");
+  assert.deepEqual(gradeCall(shortAbove, series(t0, [{ h: 101, l: 99 }, { h: 111, l: 105 }, { h: 100, l: 89 }])), { outcome: "WIN", r: 10 });
+  // A breakout LONG: buy 105 with the market at 100, stop 100, target 115.
+  const breakout = { direction: "LONG", entryPrice: 105, stopLoss: 100, takeProfit1: 115, createdAt: t0 * 1000 };
+  assert.deepEqual(gradeCall(breakout, series(t0, [{ h: 101, l: 99 }, { h: 106, l: 101 }, { h: 116, l: 104 }])), { outcome: "WIN", r: 2 });
+  assert.equal(gradeCall(breakout, series(t0, [{ h: 101, l: 99 }, { h: 104, l: 99.5 }, { h: 104, l: 98 }])).outcome, "PENDING", "never broke out: its stop level printing doesn't grade it");
+});
+
+test("gradeCall: at the market it grades exactly as before; with no candle in the posting hour, the next one is the market", () => {
+  // Entry inside the posting hour: same answers as the first-touch tests above.
+  assert.deepEqual(gradeCall(baseLong, series(t0, [{ h: 105, l: 99 }, { h: 111, l: 104 }])), { outcome: "WIN", r: 2 });
+  // No candle in the hour it was posted (the series starts 30 minutes later): that candle is the market.
+  assert.deepEqual(gradeCall(baseLong, series(t0 + 1800, [{ h: 105, l: 99 }, { h: 111, l: 104 }])), { outcome: "WIN", r: 2 });
+  // The posting hour is the one BEFORE the post when the post isn't on the hour.
+  const midHour = { ...baseLong, createdAt: (t0 + 1800) * 1000 };
+  assert.deepEqual(gradeCall(midHour, series(t0, [{ h: 101, l: 99 }, { h: 111, l: 104 }])), { outcome: "WIN", r: 2 });
+  assert.equal(gradeCall(midHour, series(t0, [{ h: 131, l: 120 }, { h: 111, l: 104 }])).outcome, "PENDING", "posted into 120–131: an entry of 100 hasn't traded");
+});
+
+test("entryVsMarket: the advisor's off-market entry check reads the latest hour", () => {
+  const cd = { t: [t0, t0 + 3600], h: [101, 64000], l: [99, 63500], c: [100, 63700] };
+  assert.deepEqual(entryVsMarket(63600, cd), { traded: true, offPct: -0.16, last: 63700 });
+  const off = entryVsMarket(61000, cd);
+  assert.equal(off.traded, false);
+  assert.equal(off.offPct, -4.24);
+  assert.equal(entryVsMarket(0, cd), null);
+  assert.equal(entryVsMarket(100, null), null);
+  assert.equal(entryVsMarket(100, { t: [], h: [], l: [], c: [] }), null);
 });

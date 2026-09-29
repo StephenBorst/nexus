@@ -636,7 +636,32 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   Lab UI: published = static `PUBLIC · LOCKED` chip, no REMOVE / INVALIDATE / REOPEN; unpublished = PRIVATE ↔ ◆ HOLDERS
   toggle + `PUBLISH` (window.confirm first); `useLabStorage` applies the server's published copies after every save
   (`labMerge.withServerPublished`). Tests: `callLock` / `grading.lock` / `routes-lab` / `labMerge` (.test.mjs).
-  ⏭ Open: the ENTRY price isn't checked against the market at publish, so a stale entry can still inflate R.
+  **Live after deploy (Sept 29):** the first `GRADE_V=2` pass stamped all 328 public results; 3 of the 5 shared old calls
+  flipped (ETH L May-13 LOSS→WIN, BTC L May-4 LOSS→WIN, BTC S May-4 WIN→LOSS); every ranked wallet's card W/L == board W/L.
+- **⚠️ THE ENTRY MUST TRADE (2026-09-29, `gradeCall`, `GRADE_V = 3`).** A call whose entry is inside the price range of
+  the hour it was posted into is filled at the post (the usual case: entry = the market; graded exactly as before). Any
+  other entry is a RESTING order: graded from the first later hour whose range reaches it; in that fill hour a stop touch
+  counts (price passes the entry to reach it) and a target touch doesn't (it may have come first); never filled =
+  PENDING (`awaitingEntry`). Before: an entry typed away from the market was graded as if filled — Sept 29, 17 of 145
+  checkable calls had an off-market entry, 11 in the caller's favour (a BTC LONG "entered" at 61,000 with BTC at
+  63,600–63,800 was a 2R WIN). `/theses/advice` warns on a draft (`ENTRY_OFF_MARKET`, `entryVsMarket`). ⏭ Residual:
+  hourly candles, so the posting hour's range allows up to an hour of hindsight on the entry (a server-recorded mark at
+  publish would close it). The scoreboard (`axisbt.mjs`) has its own grader — not touched (engine freeze).
+- **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
+  (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
+  A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from
+  their own wallet's record), then the guest copy is emptied (backup `lab_thesis_trades:guest-backup`). `useLabStorage`
+  switches copies on a wallet change and never lands an async result in the wrong wallet's copy. Existing copies:
+  `callDedupe.mjs resolveDuplicates` (hourly, after grading) settles a call copied into several wallets ONLY on proof of
+  who made it, and only if that wallet holds a copy — (a) house ids `nexus-…`/`catalyst-…` → `HOUSE_CALLER_ADDRESS` /
+  `HOUSE_CATALYST_ADDRESS` (0xfc8c… = Nexus Signals); (b) the copy's `onChainTxHash` → the ThesisRegistry's
+  `ThesisRegistered` trader (msg.sender), matching `onChainId` (`thesisRegistrant`). Proofs cached in `callproof:{id}`.
+  Every other copy gets server field `duplicateOf: <owner>` — NOTHING is deleted; the board, the hourly grader, the
+  stance board, the feed, the challenge fan-out and `publicLabView` skip marked copies (the ledger doesn't: it proves
+  which records exist). **REPORT-FIRST:** marks are written only with worker var `CALL_DEDUPE_LIVE="true"` (commented in
+  lab-api wrangler.toml); until then `GET /theses/duplicates` shows the plan (owner, evidence, per-wallet before/after).
+  Sept 28 data: 35 copied calls / 114 copies; 18 house ids, 17 with an on-chain tx (16 also held by 0xfc8c), 1 held only
+  by the two Solana wallets. Tests: `labCache` / `callDedupe` (.test.mjs).
 - `GET /theses/leaderboard`: ranks public-thesis authors by hit-rate + avg-R over ≥5 resolved calls
   (net-positive-R gate, sample-confidence shrink). `GET /theses/ledger`: canonical SHA-256 of the public
   call set (proof-of-call fields + createdAt), recomputable, prev-linked chain (`/theses/ledger/chain`),

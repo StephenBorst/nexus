@@ -32,7 +32,8 @@ export async function handleFeed(parts, request, env) {
       const profileRaw = await env.LAB_STORE.get(`profile:${address}`);
       const profile = profileRaw ? JSON.parse(profileRaw) : {};
 
-      const publicTheses = (data.theses || []).filter((t) => t.isPublic === true);
+      // A copy of a call another wallet is proven to have made (callDedupe.mjs) shows once, in its owner's record.
+      const publicTheses = (data.theses || []).filter((t) => t.isPublic === true && !t.duplicateOf);
       for (const thesis of publicTheses) {
         feedItems.push({
           ...thesis,

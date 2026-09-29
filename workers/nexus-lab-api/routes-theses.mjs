@@ -19,7 +19,7 @@ import { json } from "./shared.mjs";
 import {
   rankCaller, callerScore, contestedBoard, consensusBySymbol, classifyRegime, callAlignment,
   planQuality, normalizeSymbol, REGIME, postmortemSummary, isLossReason, LOSS_REASONS,
-  estimateResolution, aggregateSideRecord, standoffVerdict,
+  estimateResolution, aggregateSideRecord, standoffVerdict, entryVsMarket,
 } from "./logic.mjs";
 import { computeCallerStats, gatherStanceEntries, ADVICE_FLAG_TEXT } from "./grading.mjs";
 
@@ -110,7 +110,7 @@ export async function handleTheses(parts, request, env) {
       emerging: emergingEnriched,
       criteria: {
         minCalls: MIN_CALLS,
-        grading: "Objective first-touch vs public Orderly OHLC (/tv/history, 1h). TP1-first = WIN (+planned R), SL-first = LOSS (-1R), same-candle = LOSS (conservative). PENDING excluded. Anyone can recompute.",
+        grading: "Objective first-touch vs public Orderly OHLC (/tv/history, 1h), from the hour the call was posted. The entry must trade: an entry inside that hour's range fills at the post; any other entry fills in the first later hour that trades it (a stop touch in that hour counts, a target touch doesn't). TP1-first = WIN (+R from the posted levels), SL-first = LOSS (-1R), same-candle = LOSS (conservative). PENDING (incl. never filled) excluded. Anyone can recompute.",
         discipline: "Plan quality at post time, from the same public candles: LATE_ENTRY (the move had already run >0.5R before the call went up, so the stated entry was never obtainable), STOP_IN_NOISE (<0.5 ATR), STOP_TOO_WIDE (>6 ATR), RR_MISMATCH (claimed R disagrees with the posted levels), BAD_LEVELS. Reported, not ranked on.",
         regime: "Each graded call is attributed to the market it was posted INTO, classified from the 48 candles BEFORE it (efficiency ratio → TREND_UP/TREND_DOWN/CHOP; ATR vs the symbol's own baseline → CALM/NORMAL/VOLATILE). Never reads post-call bars, so no outcome leaks into the label.",
       },
@@ -163,7 +163,7 @@ export async function handleTheses(parts, request, env) {
       criteria: {
         minCalls: MIN_MACRO,
         macro: "A call is MACRO when its catalyst classifies as a macro/geopolitical event (Fed, recession, war, ceasefire, elections, crypto policy) — the same classifier as the Macro & Events board. Draft one from that board.",
-        grading: "Identical to the main leaderboard: objective first-touch vs public Orderly OHLC (/tv/history, 1h). TP1-first = WIN (+planned R), SL-first = LOSS (-1R). Anyone can recompute. Nobody types in whether they were right about the Fed.",
+        grading: "Identical to the main leaderboard: objective first-touch vs public Orderly OHLC (/tv/history, 1h), counted once price trades at the entry. TP1-first = WIN (+R from the posted levels), SL-first = LOSS (-1R). Anyone can recompute. Nobody types in whether they were right about the Fed.",
       },
     }, request);
   }
@@ -531,6 +531,15 @@ export async function handleTheses(parts, request, env) {
     }
     for (const f of (plan?.flags || [])) {
       warnings.push({ severity: f === "BAD_LEVELS" ? "high" : "medium", kind: f, text: ADVICE_FLAG_TEXT[f] || f });
+    }
+    // The grader counts a call only once price trades its entry (gradeCall): say so before posting.
+    const em = draft.entryPrice ? entryVsMarket(draft.entryPrice, cd) : null;
+    if (em && !em.traded) {
+      const side = em.offPct < 0 ? "below" : "above";
+      warnings.push({
+        severity: "medium", kind: "ENTRY_OFF_MARKET",
+        text: `Your entry is ${Math.abs(em.offPct)}% ${side} the market. The call counts once price trades there, and not before.`,
+      });
     }
 
     return json({

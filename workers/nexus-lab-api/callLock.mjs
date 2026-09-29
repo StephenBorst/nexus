@@ -30,6 +30,7 @@ export const SERVER_FIELDS = [
   "gradedOutcome", "gradedR", "gradedAt", "gradeV",
   "planScore", "planFlags", "regimeTrend", "regimeVol", "regimeAlign",
   "copyCount", "publishedAt", "publishLegacy",
+  "duplicateOf",   // callDedupe.mjs: this record's copy of a call another wallet can be proven to have made
 ];
 /** The only fields the owner may still change on a published call. */
 export const OWNER_FIELDS = ["updates", "lossReason"];
@@ -234,4 +235,23 @@ export function registeredBy(receipt, registryAddress, wallet) {
     && Array.isArray(l.topics) && l.topics.length >= 3
     && String(l.topics[0]).toLowerCase() === THESIS_REGISTERED_TOPIC
     && ("0x" + String(l.topics[2]).slice(-40)).toLowerCase() === who);
+}
+
+/**
+ * The wallet a registry transaction registered a thesis for (the ThesisRegistered event's trader,
+ * i.e. the registry's msg.sender), or null. When `onChainId` is given it must match the event's
+ * thesis id too. Used to settle which wallet a copied call belongs to.
+ */
+export function thesisRegistrant(receipt, registryAddress, onChainId = null) {
+  if (!receipt || receipt.status !== "0x1" || !Array.isArray(receipt.logs)) return null;
+  const reg = String(registryAddress || "").toLowerCase();
+  const big = (x) => { try { return BigInt(x); } catch { return null; } };
+  const want = onChainId != null && onChainId !== "" ? big(onChainId) : null;
+  for (const l of receipt.logs) {
+    if (!l || String(l.address || "").toLowerCase() !== reg || !Array.isArray(l.topics) || l.topics.length < 3) continue;
+    if (String(l.topics[0]).toLowerCase() !== THESIS_REGISTERED_TOPIC) continue;
+    if (want != null && big(l.topics[1]) !== want) continue;
+    return ("0x" + String(l.topics[2]).slice(-40)).toLowerCase();
+  }
+  return null;
 }

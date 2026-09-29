@@ -186,7 +186,7 @@ export async function handleLab(parts, request, env, { now = Date.now } = {}) {
             if (!raw2) continue;
             let d2; try { d2 = JSON.parse(raw2); } catch { continue; }
             const opposes = (d2.theses || []).some(
-              (t) => t.isPublic && t.symbol === sym && String(t.direction).toUpperCase() === opp
+              (t) => t.isPublic && !t.duplicateOf && t.symbol === sym && String(t.direction).toUpperCase() === opp
                 && (t.status === "ACTIVE" || !t.status)
                 && t.gradedOutcome !== "WIN" && t.gradedOutcome !== "LOSS"
             );
