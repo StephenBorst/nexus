@@ -8,7 +8,7 @@
 //
 // Nothing here signs. A quote that fails any check is dropped, and no usable quote returns
 // ok:false, so the client falls back to the named Uniswap link as before.
-import { createConfig, getRawQuotes, nordstern, zeroX } from "@spandex/core";
+import { createConfig, getRawQuotes, nordstern, ZeroXAggregator } from "@spandex/core";
 
 export const SPOT_FEE_MAX_BPS = 100;
 const ADDR = /^0x[a-fA-F0-9]{40}$/;
@@ -24,9 +24,24 @@ export function spotFee(env) {
   return { bps, recipient };
 }
 
+// 0x answers "no liquidity" as HTTP 200 {liquidityAvailable:false} with no `route`, and
+// @spandex/core 0.11.1 then crashes on quote.route.tokens. Turn that answer into a clean
+// failure (with 0x's body as the detail) before the SDK parses it.
+export class SafeZeroX extends ZeroXAggregator {
+  async makeRequest(request, options) {
+    const body = await super.makeRequest(request, options);
+    if (body?.liquidityAvailable === false || !body?.route || !body?.transaction) {
+      const err = new Error("0x: no liquidity for this pair and size");
+      err.details = body;
+      throw err;
+    }
+    return body;
+  }
+}
+
 export function spotProviders(env) {
   const list = [nordstern({})];
-  if (env?.ZEROX_API_KEY) list.push(zeroX({ apiKey: env.ZEROX_API_KEY }));
+  if (env?.ZEROX_API_KEY) list.push(new SafeZeroX({ apiKey: env.ZEROX_API_KEY }));
   return list;
 }
 
