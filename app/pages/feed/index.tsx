@@ -1444,14 +1444,16 @@ export default function FeedPage() {
   // your size instead of making you type an account number.
   const { availableBalance } = useCollateral();
 
-  // Ph19: fetch on-chain wallet roster in parallel with feed
+  // Ph19: fetch on-chain wallet roster in parallel with feed. The count shows only once the
+  // worker's index covers the registry's whole history (`backfilled`): a failed or partial scan
+  // hides it rather than reading as "0 on-chain".
   useEffect(() => {
     fetch(`${API_BASE}/wallets/onchain`)
       .then((r) => r.json())
-      .then((data: { wallets?: string[] }) => {
-        setOnChainCount((data.wallets ?? []).length);
+      .then((data: { wallets?: string[]; backfilled?: boolean }) => {
+        setOnChainCount(data.backfilled === true && Array.isArray(data.wallets) ? data.wallets.length : null);
       })
-      .catch(() => {});
+      .catch(() => setOnChainCount(null));
   }, []);
 
   // Ph24: load follow graph when wallet connects

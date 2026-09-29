@@ -12,7 +12,7 @@
  *   GET    /feed                      → public theses feed (all wallets, isPublic=true)
  *   GET    /og/trader/:wallet         → Ph16: SVG OG image for trader profile
  *   GET    /og/trader/:wallet.png     → Ph21: PNG OG image for Twitter (via resvg-wasm)
- *   GET    /wallets/onchain           → Ph17: on-chain wallet discovery via ThesisRegistered logs
+ *   GET    /wallets/onchain           → Ph17: on-chain wallet discovery (incremental registry-log index, onchainWallets.mjs)
  */
 
 // Ph21: resvg-wasm for PNG generation (Twitter support)
@@ -90,6 +90,7 @@ import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 // wrangler bundles the cross-dir import (same as backtest.mjs).
 import { directiveLevels } from "../nexus-agent-exec/logic.mjs";
 import { handleBasisSignals } from "./basisSignals.mjs";
+import { advanceIndex, onchainResponse, ONCHAIN_INDEX_KEY, DEFAULT_LOGS_RPC } from "./onchainWallets.mjs";
 
 // Orderly sits behind Cloudflare bot-management, which intermittently serves an HTML
 // 403 challenge to header-light Worker fetches — which would break the mini-app money
@@ -346,73 +347,42 @@ async function getNexusPriceUsd() {
     return price && isFinite(price) && price > 0 ? price : null;
   } catch { return null; }
 }
-const THESIS_REGISTRY = "0x2f4eda890f96a7979d6f26bcb210cedad68346bc";
-const ONCHAIN_CACHE_KEY = "cache:onchain-wallets";
-const ONCHAIN_TTL_MS = 5 * 60 * 1000; // 5 min
+// Incremental index of the ThesisRegistry's registrants (onchainWallets.mjs). getLogs goes to a
+// PUBLIC Arbitrum RPC (Alchemy's free tier caps getLogs at 10 blocks); override with ARB_LOGS_RPC,
+// pin the start block with THESIS_REGISTRY_FROM_BLOCK. Until the backfill reaches the chain head every
+// request advances it; after that it refreshes at most every 5 min.
+const ONCHAIN_TTL_MS = 5 * 60 * 1000;
+
+function arbLogsRpc(env) {
+  const url = env.ARB_LOGS_RPC || DEFAULT_LOGS_RPC;
+  let id = 0;
+  return async (method, params) => {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params }) });
+    const text = await r.text();
+    let d;
+    try { d = JSON.parse(text); } catch { throw new Error(`${method}: HTTP ${r.status} non-JSON`); }
+    if (d && d.error) throw new Error(`${method}: ${d.error.message || JSON.stringify(d.error)}`);
+    if (!r.ok) throw new Error(`${method}: HTTP ${r.status}`);
+    return d ? d.result : null;
+  };
+}
 
 async function getOnChainWallets(env) {
-  // Return cached if fresh
-  const cached = await env.LAB_STORE.get(ONCHAIN_CACHE_KEY);
-  if (cached) {
-    const parsed = JSON.parse(cached);
-    if (Date.now() - (parsed.updatedAt || 0) < ONCHAIN_TTL_MS) {
-      return { wallets: parsed.wallets, fromCache: true };
-    }
+  let stored = null;
+  try { stored = JSON.parse((await env.LAB_STORE.get(ONCHAIN_INDEX_KEY)) || "null"); } catch { stored = null; }
+  if (stored?.backfilledAt && Date.now() - (stored.updatedAt || 0) < ONCHAIN_TTL_MS) {
+    return onchainResponse(stored, { fromCache: true });
   }
-
-  const ARB_RPC = getArbRpc(env);
-
-  try {
-    // Get latest block
-    const blockResp = await fetch(ARB_RPC, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }),
-    });
-    const blockData = await blockResp.json();
-    const latestBlock = parseInt(blockData.result, 16);
-
-    // Scan last ~30M blocks (~87 days at ~4 blk/s on Arbitrum)
-    // The contract is new so this window covers all registrations
-    const fromBlock = "0x" + Math.max(0, latestBlock - 30_000_000).toString(16);
-
-    const logsResp = await fetch(ARB_RPC, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0", id: 2, method: "eth_getLogs",
-        params: [{ address: THESIS_REGISTRY, fromBlock, toBlock: "latest" }],
-      }),
-    });
-    const logsData = await logsResp.json();
-    if (logsData.error) throw new Error(logsData.error.message);
-
-    // ThesisRegistered(uint256 indexed thesisId, address indexed trader)
-    // topics[0]=event hash, topics[1]=thesisId, topics[2]=trader (padded to 32 bytes)
-    const wallets = [
-      ...new Set(
-        (logsData.result || [])
-          .filter((log) => log.topics && log.topics.length >= 3)
-          .map((log) => "0x" + log.topics[2].slice(26).toLowerCase())
-      ),
-    ];
-
-    // Cache with TTL
-    await env.LAB_STORE.put(
-      ONCHAIN_CACHE_KEY,
-      JSON.stringify({ wallets, updatedAt: Date.now() }),
-      { expirationTtl: 300 }
-    );
-    return { wallets, fromCache: false };
-  } catch (err) {
-    // Fall back to stale cache or empty
-    const stale = await env.LAB_STORE.get(ONCHAIN_CACHE_KEY);
-    return {
-      wallets: stale ? JSON.parse(stale).wallets : [],
-      fromCache: true,
-      error: String(err),
-    };
+  const pinned = parseInt(env.THESIS_REGISTRY_FROM_BLOCK || "", 10);
+  const r = await advanceIndex({ rpc: arbLogsRpc(env), state: stored, fromBlock: Number.isFinite(pinned) ? pinned : undefined });
+  const next = { ...r.state, updatedAt: Date.now(), backfilledAt: stored?.backfilledAt || (r.backfilled ? Date.now() : null) };
+  if (r.error) console.error("[onchain] index scan:", r.error);
+  // Keep progress even when this run stopped on an error (the scan resumes from scannedTo); a clean
+  // run also refreshes updatedAt so the 5-min TTL holds.
+  if (!r.error || r.scanned > 0 || next.startBlock !== stored?.startBlock) {
+    try { await env.LAB_STORE.put(ONCHAIN_INDEX_KEY, JSON.stringify(next)); } catch (e) { console.error("[onchain] index write:", String(e)); }
   }
+  return onchainResponse(next, { latestBlock: r.latestBlock, error: r.error });
 }
 
 // ── HOUSE SIGNALS — seed the caller board with a systematic, graded track record ──
