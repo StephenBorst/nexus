@@ -638,6 +638,14 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   Lab registrations ever kept an `onChainId`, and the #56 check pinned to that hash refused EVERY Bankr registration
   and proved 0 of 17 copied calls. Now: a log FROM the registry with an indexed id (topics[1]) + an indexed address
   (topics[2]); proofs store the `event` hash they saw, so it can be pinned once known. Don't re-pin a guessed hash.
+  **`GET /wallets/onchain` (Feed "⛓ N on-chain") = an INCREMENTAL KV index (2026-09-29, `onchainWallets.mjs`, tested).**
+  It used to ask ONE getLogs for ~30M blocks through Alchemy, whose free tier caps getLogs at 10 blocks → always
+  failed → empty stale cache → the Feed read "0 on-chain". Now: getLogs goes to the PUBLIC Arbitrum RPC (override
+  `ARB_LOGS_RPC`; Alchemy stays for receipts), filtered by registry address + the layout above (NOT topic0
+  `0x479428a8…` = the guessed hash), from the first block of 2026 (binary search on headers; pin with
+  `THESIS_REGISTRY_FROM_BLOCK`), 500k-block chunks, ≤12 per request, halving on a range refusal (never on a rate
+  limit). KV `onchain:wallets:v2` {wallets, startBlock, scannedTo, chunk, backfilledAt}; every request advances the
+  backfill, then a 5-min TTL. The Feed shows the count ONLY when `backfilled:true` — a failed/partial scan hides it.
   Lab UI: published = static `PUBLIC · LOCKED` chip, no REMOVE / INVALIDATE / REOPEN; unpublished = PRIVATE ↔ ◆ HOLDERS
   toggle + `PUBLISH` (window.confirm first); `useLabStorage` applies the server's published copies after every save
   (`labMerge.withServerPublished`). Tests: `callLock` / `grading.lock` / `routes-lab` / `labMerge` (.test.mjs).
