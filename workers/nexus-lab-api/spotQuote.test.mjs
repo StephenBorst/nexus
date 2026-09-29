@@ -31,6 +31,8 @@ function fakeNet({ nordstern = "ok", zerox = "ok", nordsternFee = true } = {}) {
     }
     if (u.host === "api.0x.org") {
       if (zerox === "fail") return reply(400, { name: "INPUT_INVALID" });
+      // 0x's real "no liquidity" answer (live, Sept 29): HTTP 200, no route, no transaction.
+      if (zerox === "no_liquidity") return reply(200, { liquidityAvailable: false, zid: "0xf56b3f61dc5c06c9f65b3be5" });
       return reply(200, {
         sellToken: USDC, buyToken: WETH, sellAmount: u.searchParams.get("sellAmount"), buyAmount: "5100000000000000",
         minBuyAmount: "5049000000000000", allowanceTarget: "0x0000000000001fF3684f28c67538d4D072C22734",
@@ -147,6 +149,26 @@ test("a provider that refuses the fee still leaves a clean quote", async () => {
   assert.equal(r.feeApplied, false);
   assert.equal(r.feeConfigured, true);
   assert.equal(calls.filter((c) => c.url.host === "api.nordstern.finance").length, 2);
+});
+
+test("0x 'no liquidity' (200, no route) is a clean failure, not an SDK crash; Nordstern still quotes", async () => {
+  fakeNet({ zerox: "no_liquidity" });
+  const r = await spotQuote({ ...ENV, ZEROX_API_KEY: "secret-key" }, qs(REQ));
+  assert.equal(r.ok, true);
+  assert.equal(r.provider, "Nordstern");
+  const z = r.failures.find((f) => f.provider === "0x");
+  assert.ok(z, "0x's refusal is reported");
+  assert.match(z.error, /no liquidity/);
+  assert.doesNotMatch(z.error, /Cannot read properties/);
+  assert.match(z.detail, /liquidityAvailable/);
+});
+
+test("0x 'no liquidity' with Nordstern down ⇒ ok:false no_route with both reasons", async () => {
+  fakeNet({ zerox: "no_liquidity", nordstern: "fail" });
+  const r = await spotQuote({ ZEROX_API_KEY: "secret-key" }, qs(REQ));
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "no_route");
+  assert.match(r.failures.find((f) => f.provider === "0x").error, /no liquidity/);
 });
 
 test("every provider failing ⇒ ok:false with the reasons (client falls back to Uniswap)", async () => {
