@@ -22,6 +22,7 @@ import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
 // Keep copy:copiers:{leader} = [followers] in sync when a follower's config
@@ -407,19 +408,23 @@ async function getOnChainWallets(env) {
 // "No liquid markets"). Direct api-evm is the fallback (browser UA) so a proxy blip can't zero
 // it either. Returns the rows array ([] only if BOTH fail). One path, no drift — same fix as
 // computeSignalRows (/signals) in signal-delivery.mjs.
-async function fetchAllFutures() {
+async function fetchAllFuturesDetailed() {
+  const why = [];
   try {
-    const all = await (await fetch("https://orderly-proxy.stephenpatrick24.workers.dev")).json();
+    const all = await orderlyGet("https://orderly-proxy.stephenpatrick24.workers.dev", { tries: 1 });
     const rows = all?.data?.rows || [];
-    if (rows.length) return rows;
-  } catch { /* fall through to direct api-evm */ }
+    if (rows.length) return { rows, why: null };
+    why.push("proxy: empty");
+  } catch (e) { why.push(`proxy: ${whyFailed(e)}`); }
   try {
-    const res = await fetch("https://api-evm.orderly.org/v1/public/futures", {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36", "Accept": "application/json, text/plain, */*" },
-    });
-    return (await res.json())?.data?.rows || [];
-  } catch { return []; }
+    const rows = (await orderlyGet("https://api-evm.orderly.org/v1/public/futures"))?.data?.rows || [];
+    if (rows.length) return { rows, why: null };
+    why.push("direct: empty");
+  } catch (e) { why.push(`direct: ${whyFailed(e)}`); }
+  console.error(`[orderly] all-markets futures unavailable — ${why.join("; ")}`);
+  return { rows: [], why: why.join("; ") };
 }
+async function fetchAllFutures() { return (await fetchAllFuturesDetailed()).rows; }
 
 // Takes the current top funding-fade off the mispriced board and publishes it as a
 // graded thesis under the house identity (HOUSE_CALLER_ADDRESS), so the empty caller
@@ -2677,9 +2682,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         // the WHOLE board empty ("No liquid markets"); the proxy is cached and IP-reliable, with the
         // direct call as fallback. Fail-soft WITHOUT caching so the very next request retries fresh
         // (never pin an empty board for the cache TTL).
-        const rows = await fetchAllFutures();
+        const { rows, why } = await fetchAllFuturesDetailed();
         // Both paths fail together in bursts (Sept 27: ~30 min of empty boards, past the 10-min cache).
-        if (!rows.length) return lastGoodOr({ asOf: new Date().toISOString(), scanned: 0, mispricedCount: 0, markets: [], error: "futures unavailable" });
+        // `why` names the cause (rate_limited 429 / challenge 403 / …) so a curl of this route says it.
+        if (!rows.length) return lastGoodOr({ asOf: new Date().toISOString(), scanned: 0, mispricedCount: 0, markets: [], error: `futures unavailable (${why})` });
         const board = mispricedBoard(rows);
 
         // Self-awareness: enrich each FLAGGED market with whether fading it has
@@ -2690,7 +2696,9 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         const nowS = Math.floor(Date.now() / 1000);
         const fromS = nowS - 45 * 86400;
         const flagged = board.markets.filter((m) => m.status === "MISPRICED");
-        await Promise.all(flagged.map(async (m) => {
+        // Paced: 2 Orderly reads per flagged market, ≤ORDERLY_CONCURRENCY markets in flight (was one
+        // Promise.all — 2×flagged requests at once, enough alone to trip the 10 req/s per-IP limit).
+        await mapLimit(flagged, ORDERLY_CONCURRENCY, async (m) => {
           // ── THE ONE PIERCE (Grok #1) — stamped from oi:hist INDEPENDENTLY of the reversion
           // fetch, so an Orderly fetch failure can NEVER clear stretched/verdict. (It did: when
           // funding_rate_history/tv-history 403'd for a symbol, the whole row fell to the catch →
@@ -2704,8 +2712,8 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           // the reversion, never the pierce. Also yields the public-funding pierce fallback.
           try {
             const [fh, ph] = await Promise.all([
-              fetch(`https://api-evm.orderly.org/v1/public/funding_rate_history?symbol=${m.symbol}&page=1&size=100`, { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } }).then((r) => r.json()),
-              fetch(`https://api-evm.orderly.org/tv/history?symbol=${m.symbol}&resolution=60&from=${fromS}&to=${nowS}`).then((r) => r.json()),
+              orderlyGet(`https://api-evm.orderly.org/v1/public/funding_rate_history?symbol=${m.symbol}&page=1&size=100`),
+              orderlyGet(`https://api-evm.orderly.org/tv/history?symbol=${m.symbol}&resolution=60&from=${fromS}&to=${nowS}`).catch(() => null), // price is optional (as before)
             ]);
             const rows = fh?.data?.rows || [];
             const series = mergeFundingPrice(rows, (ph && ph.s === "ok" && Array.isArray(ph.t)) ? { t: ph.t, c: ph.c } : null);
@@ -2717,7 +2725,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           m.stretched = fundingStretched(fvals);
           m.verdict = readVerdict(m.direction, m.stretched, m.fundingAnnualPct);
           m.edgeQuality = edgeQuality(m.reversion);
-        }));
+        });
         flagged.sort((a, b) => (EDGE_QUALITY_RANK[a.edgeQuality.tier] - EDGE_QUALITY_RANK[b.edgeQuality.tier]) || (b.edge - a.edge));
         board.markets = [...flagged, ...board.markets.filter((m) => m.status !== "MISPRICED")];
 
