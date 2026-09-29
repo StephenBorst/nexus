@@ -631,8 +631,13 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   stamp without it (old capped-window stamps, client-written ones; corrections aren't announced), removes stamps the
   call's own window doesn't support, derives status for every public call, and writes onto a FRESH read copying only
   `PASS_FIELDS` (a save mid-pass survives). Cards/permalink trust only a current stamp (`isCurrentStamp`), else grade
-  live. Bankr thesis route writes only when the registry's `ThesisRegistered` log names the wallet (`registeredBy` —
+  live. Bankr thesis route writes only when the registry's registration event names the wallet (`registeredBy` —
   the event's trader is msg.sender, so smart-account wallets pass; the body's walletAddress alone proves nothing).
+  ⚠️ **The registry's event is read by its LAYOUT, never a signature hash (`app/lib/registryEvent.mjs`, 2026-09-29).**
+  The Lab ABI's `ThesisRegistered(uint256,address)` is NOT what the contract emits (source isn't in the repo): 0 of 94
+  Lab registrations ever kept an `onChainId`, and the #56 check pinned to that hash refused EVERY Bankr registration
+  and proved 0 of 17 copied calls. Now: a log FROM the registry with an indexed id (topics[1]) + an indexed address
+  (topics[2]); proofs store the `event` hash they saw, so it can be pinned once known. Don't re-pin a guessed hash.
   Lab UI: published = static `PUBLIC · LOCKED` chip, no REMOVE / INVALIDATE / REOPEN; unpublished = PRIVATE ↔ ◆ HOLDERS
   toggle + `PUBLISH` (window.confirm first); `useLabStorage` applies the server's published copies after every save
   (`labMerge.withServerPublished`). Tests: `callLock` / `grading.lock` / `routes-lab` / `labMerge` (.test.mjs).
@@ -647,6 +652,12 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   63,600–63,800 was a 2R WIN). `/theses/advice` warns on a draft (`ENTRY_OFF_MARKET`, `entryVsMarket`). ⏭ Residual:
   hourly candles, so the posting hour's range allows up to an hour of hindsight on the entry (a server-recorded mark at
   publish would close it). The scoreboard (`axisbt.mjs`) has its own grader — not touched (engine freeze).
+  **Live after deploy (Sept 29, 04:40 UTC): the caller board is EMPTY, correctly** — all 8 wallets with graded calls
+  are net-negative once entries must trade (Nexus Signals 173 calls −0.12R · 0x9a30 29 −0.35R · 0xa77c 28 −0.33R ·
+  0x2484 33 −0.29R · 82mm 14 −0.13R · 2e91 13 −0.26R · 0x325d 9 −0.58R · 0xd9f7 6 −1R). The ranked records rested on
+  four shared manual limit longs (BTC 61k/62k/64,094, ZEC 452) that never filled — now PENDING — plus a BTC 64,500
+  short that filled and stopped out. `/theses/leaderboard` returns empty arrays by design when nobody qualifies: an
+  empty board is not an outage — check `/theses/process/:wallet` before debugging.
 - **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
   (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
   A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from
@@ -661,7 +672,10 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   which records exist). **REPORT-FIRST:** marks are written only with worker var `CALL_DEDUPE_LIVE="true"` (commented in
   lab-api wrangler.toml); until then `GET /theses/duplicates` shows the plan (owner, evidence, per-wallet before/after).
   Sept 28 data: 35 copied calls / 114 copies; 18 house ids, 17 with an on-chain tx (16 also held by 0xfc8c), 1 held only
-  by the two Solana wallets. Tests: `labCache` / `callDedupe` (.test.mjs).
+  by the two Solana wallets. **First live report (Sept 29):** 17 house ids proven (→ Nexus Signals; 34 copies to mark in
+  0x9a30/0xa77c), 18 unresolved — the 17 on-chain ones hit the event-hash bug above; unresolved rows now say why
+  (receipt unreadable / tx failed / no registry event / receipt budget). Marking changes no ranking (nobody qualifies
+  either way). Tests: `labCache` / `callDedupe` / `registryEvent` (.test.mjs).
 - `GET /theses/leaderboard`: ranks public-thesis authors by hit-rate + avg-R over ≥5 resolved calls
   (net-positive-R gate, sample-confidence shrink). `GET /theses/ledger`: canonical SHA-256 of the public
   call set (proof-of-call fields + createdAt), recomputable, prev-linked chain (`/theses/ledger/chain`),

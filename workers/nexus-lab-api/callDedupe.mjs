@@ -9,7 +9,8 @@
 //   • house ids: `nexus-…` / `catalyst-…` are minted by the house-call generators alone, so the call
 //     belongs to that house wallet (HOUSE_CALLER_ADDRESS / HOUSE_CATALYST_ADDRESS);
 //   • on-chain: a copy carrying the publish transaction's hash — the ThesisRegistry's event names the
-//     wallet that registered it (its msg.sender), and must match the copy's onChainId.
+//     wallet that registered it (its msg.sender), and must match the copy's onChainId when the copy
+//     has one (none do yet: the Lab never kept it before 2026-09-29, see app/lib/registryEvent.mjs).
 // Anything else stays as it is and is listed as unresolved. The owner's copy is never touched.
 // Every OTHER copy gets `duplicateOf: <owner>` (a server field). Nothing is deleted, so it can be
 // undone, and the published copies stay permanent; the caller board, the feed, the stance board,
@@ -18,10 +19,11 @@
 // REPORT FIRST: the marks are written only when CALL_DEDUPE_LIVE === "true". Until then the hourly
 // pass writes the plan to `dedupe:report` (GET /theses/duplicates) and changes nothing.
 import { thesisRegistrant } from "./callLock.mjs";
+import { registryEvents, THESIS_REGISTRY } from "../../app/lib/registryEvent.mjs";
 
+export { THESIS_REGISTRY };
 export const REPORT_KEY = "dedupe:report";
 export const PROOF_KEY = (id) => `callproof:${id}`;
-export const THESIS_REGISTRY = "0x2f4eda890f96a7979d6f26bcb210cedad68346bc";
 const HOUSE_IDS = [["nexus-", "HOUSE_CALLER_ADDRESS"], ["catalyst-", "HOUSE_CATALYST_ADDRESS"]];
 
 const lower = (a) => String(a || "").trim().toLowerCase();
@@ -69,18 +71,28 @@ export async function resolveDuplicates(env, { fetchReceipt = async () => null, 
   const plan = [];
   for (const [id, list] of copies) {
     const holders = list.map((c) => c.wallet);
-    let proof = null;
+    let proof = null, noProof = "no proof of who made it";
     try { proof = JSON.parse((await kv.get(PROOF_KEY(id))) || "null"); } catch { proof = null; }
     if (!proof) {
       proof = houseProof(id, env);
       if (!proof) {
         const onChain = list.find((c) => typeof c.t.onChainTxHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(c.t.onChainTxHash));
-        if (onChain && receipts < maxReceipts) {
+        if (onChain && receipts >= maxReceipts) noProof = "on-chain proof not read yet (receipt budget for this pass spent)";
+        else if (onChain) {
           receipts++;
           let rc = null;
           try { rc = await fetchReceipt(onChain.t.onChainTxHash); } catch { rc = null; }
           const owner = rc ? thesisRegistrant(rc, THESIS_REGISTRY, onChain.t.onChainId ?? null) : null;
-          if (owner) proof = { owner, evidence: `registered on-chain by ${owner} in ${onChain.t.onChainTxHash}` };
+          if (owner) {
+            const event = registryEvents(rc.logs, THESIS_REGISTRY).find((e) => e.trader === owner)?.topic0 || null;
+            proof = { owner, evidence: `registered on-chain by ${owner} in ${onChain.t.onChainTxHash}`, event };
+          } else {
+            // Said plainly, so the report tells a missing receipt from a transaction that proves nothing.
+            noProof = !rc ? "its publish transaction's receipt couldn't be read (retried next pass)"
+              : rc.status !== "0x1" ? "its publish transaction failed"
+              : registryEvents(rc.logs, THESIS_REGISTRY).length ? "its publish transaction's registry events don't name one wallet"
+              : "its publish transaction has no registry event";
+          }
         }
       }
       if (proof) await kv.put(PROOF_KEY(id), JSON.stringify({ ...proof, at: now }));   // a proof never changes
@@ -89,7 +101,7 @@ export async function resolveDuplicates(env, { fetchReceipt = async () => null, 
     plan.push({
       id, symbol: list[0].t.symbol, direction: list[0].t.direction, holders,
       owner, evidence: proof ? proof.evidence : null,
-      unresolvedWhy: owner ? null : proof ? `proven owner ${proof.owner} holds no copy` : "no proof of who made it",
+      unresolvedWhy: owner ? null : proof ? `proven owner ${proof.owner} holds no copy` : noProof,
       mark: owner ? holders.filter((w) => w !== owner) : [],
     });
   }

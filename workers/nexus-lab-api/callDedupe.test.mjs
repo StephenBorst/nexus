@@ -3,16 +3,20 @@
 // who made them, report-only until CALL_DEDUPE_LIVE, and a marked copy counts nowhere but its owner.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { keccak_256 } from "@noble/hashes/sha3.js";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { findCopies, houseProof, resolveDuplicates, REPORT_KEY, PROOF_KEY, THESIS_REGISTRY } from "./callDedupe.mjs";
-import { thesisRegistrant, THESIS_REGISTERED_TOPIC, sealTheses } from "./callLock.mjs";
+import { thesisRegistrant, sealTheses } from "./callLock.mjs";
 import { computeCallerStats } from "./grading.mjs";
 import { publicLabView } from "../../app/lib/labAuth.mjs";
 
 const HOUSE = "0x" + "fc".repeat(20), A = "0x" + "aa".repeat(20), B = "0x" + "bb".repeat(20), SOL = "82mmcjt8nqxs";
 const TX = "0x" + "12".repeat(32);
 const pad = (a) => "0x" + "0".repeat(24) + a.slice(2);
+// Not the Lab ABI's ThesisRegistered(uint256,address): the contract's event is read by its layout.
+const TOPIC = "0x" + bytesToHex(keccak_256(utf8ToBytes("ThesisRegistered(uint256,address,string)")));
 const receiptFor = (trader, { status = "0x1", id = 7 } = {}) => ({
-  status, logs: [{ address: THESIS_REGISTRY, topics: [THESIS_REGISTERED_TOPIC, "0x" + id.toString(16).padStart(64, "0"), pad(trader)] }],
+  status, logs: [{ address: THESIS_REGISTRY, topics: [TOPIC, "0x" + id.toString(16).padStart(64, "0"), pad(trader)] }],
 });
 
 function kv(init = {}) {
@@ -53,6 +57,27 @@ test("thesisRegistrant: the registry's event, a successful tx, and a matching th
   assert.equal(thesisRegistrant(receiptFor(A, { status: "0x0" }), THESIS_REGISTRY), null);
   assert.equal(thesisRegistrant(receiptFor(A), "0x" + "99".repeat(20)), null, "another contract");
   assert.equal(thesisRegistrant(receiptFor(A), THESIS_REGISTRY, "not-a-number"), A, "a garbled stored id doesn't block the proof");
+  const two = { status: "0x1", logs: [...receiptFor(A).logs, ...receiptFor(B, { id: 8 }).logs] };
+  assert.equal(thesisRegistrant(two, THESIS_REGISTRY), null, "two wallets in one transaction prove neither");
+  assert.equal(thesisRegistrant(two, THESIS_REGISTRY, 8), B, "unless the call's own id picks one");
+});
+
+test("an on-chain copy that can't be proven says why, caches nothing, and is retried next pass", async () => {
+  const env = { LAB_STORE: kv({
+    [`lab:${A}`]: rec([call({ id: "c1", onChainTxHash: TX }), call({ id: "c2", onChainTxHash: "0x" + "34".repeat(32) }), call({ id: "c3", onChainTxHash: "0x" + "56".repeat(32) })]),
+    [`lab:${B}`]: rec([call({ id: "c1", onChainTxHash: TX }), call({ id: "c2", onChainTxHash: "0x" + "34".repeat(32) }), call({ id: "c3", onChainTxHash: "0x" + "56".repeat(32) })]),
+  }) };
+  const fetchReceipt = async (h) => (h === TX ? null
+    : h.startsWith("0x34") ? { status: "0x0", logs: [] }
+    : { status: "0x1", logs: [{ address: "0x" + "99".repeat(20), topics: [TOPIC, "0x7", pad(A)] }] });
+  const r = await resolveDuplicates(env, { fetchReceipt });
+  const why = Object.fromEntries(r.plan.map((p) => [p.id, p.unresolvedWhy]));
+  assert.match(why.c1, /receipt couldn't be read/);
+  assert.match(why.c2, /transaction failed/);
+  assert.match(why.c3, /no registry event/);
+  assert.ok(!env.LAB_STORE.m.has(PROOF_KEY("c1")), "nothing cached, so the next pass asks again");
+  const capped = await resolveDuplicates(env, { fetchReceipt, maxReceipts: 1 });
+  assert.equal(capped.plan.filter((p) => /budget/.test(p.unresolvedWhy)).length, 2, "past the pass's receipt budget, it says so");
 });
 
 test("report-only: the plan is written, the records aren't", async () => {
@@ -75,7 +100,9 @@ test("report-only: the plan is written, the records aren't", async () => {
   assert.deepEqual(r.perWallet[HOUSE], { publicNow: 2, publicAfter: 2, marked: 0 }, "the owner keeps every call");
   assert.equal(JSON.stringify([...env.LAB_STORE.m].filter(([k]) => k.startsWith("lab:"))), before, "no record changed");
   assert.ok(env.LAB_STORE.m.has(REPORT_KEY));
-  assert.match(JSON.parse(env.LAB_STORE.m.get(PROOF_KEY("1787"))).evidence, /registered on-chain by/);
+  const proof = JSON.parse(env.LAB_STORE.m.get(PROOF_KEY("1787")));
+  assert.match(proof.evidence, /registered on-chain by/);
+  assert.equal(proof.event, TOPIC, "the proof keeps the event it read, so the signature can be pinned later");
 });
 
 test("no proof, or a proven owner that holds no copy: left alone and listed as unresolved", async () => {
