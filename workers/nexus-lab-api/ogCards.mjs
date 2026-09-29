@@ -1,7 +1,7 @@
 // ── Share cards (1200×630 SVG → PNG via resvg in index.js) ──────────────────────────────
 // Moved out of index.js unchanged in shape so the brand test can render every card with
 // fixtures and fail any colour that isn't the brand's (brand.test.mjs). Colours come from
-// app/lib/brand.mjs — the rule is in docs/brand.md: black surfaces, bone type, an amber
+// app/lib/brand.mjs — the rule is in docs/brand.md: black surfaces, bone type, a blue
 // accent mark, and green/red ONLY on money (P&L, WIN/LOSS, price moves, Buy/Sell).
 import { BRAND, cardTopRule } from "../../app/lib/brand.mjs";
 
@@ -66,11 +66,11 @@ export function buildOgSvg({ displayName, wallet, wins, losses, active, total, a
 // ── THE BOARD share card — the live confluence read, as a branded OG image ────
 // The distribution flywheel: turn the Lab's flagship read into a beautiful, verifiable,
 // shareable card that unfurls on X/Farcaster and links back. Monochrome-editorial to match
-// the brand (bone type, amber accent mark; plays read in words, not green/red). Each row = a market's mechanical PLAY +
+// the brand (bone type, blue accent mark; plays read in words, not green/red). Each row = a market's mechanical PLAY +
 // how many independent lenses (smart · catalysts · forecasters) confirm it. Rows already
-// ranked by boardCardRows; a strong confluence (agree≥2) gets an amber left mark.
+// ranked by boardCardRows; a strong confluence (agree≥2) gets a brand-blue left mark.
 export function buildBoardOgSvg(rows, asOf, { fontFamily = "'Courier New', Courier, monospace" } = {}) {
-  const { bone: BONE, bright: BRIGHT, muted: MUT, faint: FAINT, canvas: BG, border: BORD, borderStrong: BORD2, amber: AMBER } = BRAND;
+  const { bone: BONE, bright: BRIGHT, muted: MUT, faint: FAINT, canvas: BG, border: BORD, borderStrong: BORD2, brand: MARK } = BRAND;
   // A play is a direction, not money, so it reads monochrome: a real FADE in bone, anything
   // else muted (a WATCH row must LOOK like WATCH). The direction is in the words ("FADE LONG").
   const playCol = (play) => (play.klass === "FADE" ? BRIGHT : MUT);
@@ -84,7 +84,7 @@ export function buildBoardOgSvg(rows, asOf, { fontFamily = "'Courier New', Couri
     const dc = playCol(r.play);
     const strong = r.play.strong && r.agree >= 2;
     const rects = lensCols.map(({ k, x }) => lensCell(r.lens[k], x, y)).join("");
-    const accent = strong ? `<rect x="40" y="${y - 24}" width="4" height="36" fill="${AMBER}"/>` : "";
+    const accent = strong ? `<rect x="40" y="${y - 24}" width="4" height="36" fill="${MARK}"/>` : "";
     return `${accent}
     <text x="60" y="${y}" fill="${BONE}" font-size="28" font-weight="bold">${esc(r.coin)}</text>
     <circle cx="234" cy="${y - 9}" r="6" fill="${dc}"/>
@@ -177,7 +177,7 @@ export function buildReadOgSvg(p, { fontFamily = "'Courier New', Courier, monosp
 // than an empty template. A card that looks broken at cold start would be worse than
 // none, because this is the thing people post.
 export function buildIdentitySvg({ profile, wallet, displayName, fontFamily = "'JetBrains Mono'" }) {
-  const { bone: BONE, bright: BRIGHT, muted: MUTED, faint: FAINT, fog: FOG, win: POS, loss: NEG, border: BORDER, panel: PANEL, canvas: CANVAS, amber: AMBER } = BRAND;
+  const { bone: BONE, bright: BRIGHT, muted: MUTED, faint: FAINT, fog: FOG, win: POS, loss: NEG, border: BORDER, panel: PANEL, canvas: CANVAS, brand: MARK } = BRAND;
   const shortAddr = `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
   const name = esc(displayName || shortAddr);
   const established = profile.tier !== "UNKNOWN" && !!profile.archetype;
@@ -225,7 +225,7 @@ export function buildIdentitySvg({ profile, wallet, displayName, fontFamily = "'
   <defs><style>text { font-family: ${fontFamily}; }</style></defs>
   <rect width="1200" height="630" fill="${CANVAS}"/>
   <rect x="16" y="16" width="1168" height="598" fill="${PANEL}" stroke="${BORDER}" stroke-width="1" rx="10"/>
-  <rect x="16" y="16" width="1168" height="3" fill="${AMBER}" rx="1"/>
+  <rect x="16" y="16" width="1168" height="3" fill="${MARK}" rx="1"/>
 
   <!-- header -->
   <text x="48" y="86" fill="${BRIGHT}" font-size="24" font-weight="bold" letter-spacing="4">// THE LAB</text>

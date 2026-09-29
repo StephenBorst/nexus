@@ -61,11 +61,11 @@ export const C = {
   accent: "#ededf0", // bone/white — CTA + interaction, NOT P&L
   pos: "#3ecf8e",    // profit / up / live
   neg: "#f7525f",    // loss / down
-  warn: "#fbbf24",
-  // Brand ACCENT MARK (the landing's --amber): a top rule, a section marker, an active tab.
-  // Never a button (buttons are bone) and never body text. Same hue as `warn` on purpose —
-  // the landing uses one amber — so warning TEXT keeps its ⚠ and wording to read as a warning.
-  amber: "#fbbf24",
+  warn: "#fbbf24",    // real danger only: liquidation risk, hard errors
+  // Brand ACCENT MARK (the landing's --brand): a top rule, a section marker, an active tab,
+  // a graded-PREDICTIVE chip. Never a button (buttons are bone) and never body text. Blue since
+  // 2026-09-29 (borst): amber reads as caution, so it can't be the brand; it stays C.warn's.
+  brand: "#60a5fa",
   info: "#d4d4d8",   // neutral status (active/closed) — stays monochrome
 } as const;
 
@@ -75,10 +75,10 @@ export const C = {
 // everywhere. Adding a colour here means naming its ONE job; if it has no job, it
 // doesn't get a colour. (tools/check-palette.mjs allows everything in this file.)
 export const SIGNAL = {
-  // Soft amber — caution / experimental / "watch this". Softer than C.warn, which stays
-  // reserved for real danger (liquidation risk, hard errors).
-  caution: "#e0a458",
-  cautionBg: "#1c1710",
+  // Brand blue — experimental / "watch this" (was soft amber `caution` until 2026-09-29).
+  // The same blue as C.brand: watch-this IS the brand's mark. C.warn stays for real danger.
+  watch: "#60a5fa",
+  watchBg: "#0e1622",
   // Gold ★ — someone you follow. Only for follow state + followed-trader alerts.
   follow: "#f5c451",
   // 🔥 orange — heat / attention (engagement counts). Never a price direction.
@@ -109,7 +109,8 @@ export const SIGNAL = {
 export const LINE = {
   pos: "#2a3a30",
   neg: "#3a2530",
-  warn: "#3a3320",
+  warn: "#3a3320",   // danger family (C.warn)
+  watch: "#1c2a3d",  // brand-blue family (SIGNAL.watch)
 } as const;
 
 // Status tints (thesis/agent states) — surface + border + text, from the palette.

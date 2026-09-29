@@ -205,7 +205,7 @@ export default function ProfileAvatar() {
           />
 
           {saveError && (
-            <div role="alert" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, color: "#e0a458", lineHeight: 1.45, marginBottom: 10 }}>{saveError}</div>
+            <div role="alert" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, color: "#fbbf24", lineHeight: 1.45, marginBottom: 10 }}>{saveError}</div>
           )}
           <div style={{ display: "flex", gap: 8 }}>
             <button

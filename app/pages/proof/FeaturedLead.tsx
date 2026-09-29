@@ -22,7 +22,7 @@ import { bareTicker } from "@/utils/utils";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", AMBER = "#e0a458", NEG = "#f7525f";
+const POS = "#3ecf8e", WATCH = "#60a5fa", NEG = "#f7525f";
 const BORDER = "#232327", SURFACE_ALT = "#0f0f11", INSET = "#08080a";
 // The append-only ledger anchor ON ARBITRUM — public, no login, always resolves.
 // A judge can tap this on a phone and see the Anchored events (every committed
@@ -39,7 +39,7 @@ const RECEIPTS: { label: string; value: string; tone?: string }[] = [
   { label: "backtest · 33d · as traded", value: "+$14.18", tone: POS },
   { label: "win rate", value: "80% · 10T", tone: POS },
   { label: "walk-forward", value: "NOT ROBUST", tone: NEG },
-  { label: "markets green", value: "4 of 6", tone: AMBER },
+  { label: "markets green", value: "4 of 6", tone: WATCH },
 ];
 
 export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
@@ -56,12 +56,12 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
   );
 
   return (
-    <div style={{ marginTop: 20, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${AMBER}`, borderRadius: 8, background: SURFACE_ALT, padding: isMobile ? 14 : 18 }}>
+    <div style={{ marginTop: 20, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${WATCH}`, borderRadius: 8, background: SURFACE_ALT, padding: isMobile ? 14 : 18 }}>
       {/* Identity + status tags */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
         <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.2em", textTransform: "uppercase", color: MUTED }}>The current lead</span>
-        <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: AMBER, border: `1px solid ${AMBER}55`, borderRadius: 3, padding: "2px 6px" }}>NOT YET ROBUST</span>
-        <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: AMBER, border: `1px solid ${AMBER}55`, borderRadius: 3, padding: "2px 6px" }}>NOT YET LIVE-PROVEN</span>
+        <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: WATCH, border: `1px solid ${WATCH}55`, borderRadius: 3, padding: "2px 6px" }}>NOT YET ROBUST</span>
+        <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: WATCH, border: `1px solid ${WATCH}55`, borderRadius: 3, padding: "2px 6px" }}>NOT YET LIVE-PROVEN</span>
       </div>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>

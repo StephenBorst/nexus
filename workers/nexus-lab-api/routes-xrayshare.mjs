@@ -55,9 +55,9 @@ export async function loadCardInputs(env, address, { hlInfo, now = Date.now(), i
 }
 
 // 1200×630, same grammar as the identity/thesis cards (colours from app/lib/brand.mjs): bone on
-// near-black, an amber top rule, green/red ONLY on numbers that mean profit/loss, JetBrains Mono.
+// near-black, a brand-blue top rule, green/red ONLY on numbers that mean profit/loss, JetBrains Mono.
 export function buildXrayCardSvg(card, { fontFamily = "'JetBrains Mono'" } = {}) {
-  const { bone: BONE, bright: BRIGHT, fog: FOG, muted: MUTED, faint: FAINT, win: POS, loss: NEG, border: BORDER, panel: PANEL, canvas: CANVAS, amber: AMBER } = BRAND;
+  const { bone: BONE, bright: BRIGHT, fog: FOG, muted: MUTED, faint: FAINT, win: POS, loss: NEG, border: BORDER, panel: PANEL, canvas: CANVAS, brand: MARK } = BRAND;
   const toneColor = (t) => (t === "pos" ? POS : t === "neg" ? NEG : BRIGHT);
   const badge = card.status === "GRADED" ? (card.kind === "WATCHED" ? "WATCHED RECORD" : "30D GRADE")
     : card.status === "ACCRUING" ? "ACCRUING" : "NO RECORD";
@@ -74,7 +74,7 @@ export function buildXrayCardSvg(card, { fontFamily = "'JetBrains Mono'" } = {})
   <defs><style>text { font-family: ${fontFamily}; }</style></defs>
   <rect width="1200" height="630" fill="${CANVAS}"/>
   <rect x="16" y="16" width="1168" height="598" fill="${PANEL}" stroke="${BORDER}" stroke-width="1" rx="10"/>
-  <rect x="16" y="16" width="1168" height="3" fill="${AMBER}" rx="1"/>
+  <rect x="16" y="16" width="1168" height="3" fill="${MARK}" rx="1"/>
 
   <text x="48" y="86" fill="${BRIGHT}" font-size="24" font-weight="bold" letter-spacing="4">WALLET X-RAY</text>
   <text x="48" y="112" fill="${MUTED}" font-size="15" letter-spacing="2">${esc(card.who)} · PUBLIC DATA · NEXUS</text>

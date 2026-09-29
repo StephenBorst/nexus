@@ -14,7 +14,7 @@ import { AXIS_BLURB, splitLabel, rankAxes, takeaway, sideBar, isCompact } from "
 const API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
-const { pos: POS, neg: NEG, amber: AMBER } = C;
+const { pos: POS, neg: NEG, brand: MARK } = C;
 const { bright: BRIGHT, fog: FOG, muted: MUTED, faint: FAINT } = C.text;
 const BONE = C.accent;
 const VIEW_KEY = "nx_proof_board_view";
@@ -36,9 +36,9 @@ const sign = (x: number, d?: number) => `${x >= 0 ? "+" : ""}${d != null ? x.toF
 const moneyTone = (x: number) => (x >= 0 ? POS : NEG);
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "");
 
-// The board's verdict. Amber marks only the reads that cleared the bar; the rest stay monochrome.
+// The board's verdict. The brand blue marks only the reads that cleared the bar; the rest stay monochrome.
 const PILL: Record<string, { label: string; color: string; bg: string; border: string; tip: string }> = {
-  PREDICTIVE: { label: "PREDICTIVE", color: AMBER, bg: SIGNAL.cautionBg, border: "transparent", tip: "Enough samples, positive and stable in both halves of the record. Graded in R: first touch of a 1.2×ATR stop vs a 1.5R target. A read, not yet a strategy." },
+  PREDICTIVE: { label: "PREDICTIVE", color: MARK, bg: SIGNAL.watchBg, border: "transparent", tip: "Enough samples, positive and stable in both halves of the record. Graded in R: first touch of a 1.2×ATR stop vs a 1.5R target. A read, not yet a strategy." },
   PROMISING: { label: "PROMISING", color: BONE, bg: "transparent", border: C.borderStrong, tip: "Positive, but not stable across both halves of the record yet." },
   NOISE: { label: "NOISE", color: MUTED, bg: "transparent", border: C.border, tip: "Flat or negative. Kept on the board: we publish the misses." },
   INSUFFICIENT: { label: "ACCRUING", color: FAINT, bg: "transparent", border: C.border, tip: "Not enough history to rate yet." },
@@ -161,7 +161,7 @@ function ExitBand({ a, preset, paused, isMobile }: { a: AxisRow; preset?: Return
               {exits.map((x) => (
                 <div key={x.maxHoldHours} style={{ display: "contents" }}>
                   <span style={{ color: BRIGHT }}>{x.maxHoldHours}h</span>
-                  <span style={{ color: x.verdict === "PREDICTIVE" ? AMBER : x.verdict === "PROMISING" ? BONE : MUTED, fontWeight: 700, letterSpacing: "0.06em" }}>{HZ_WORD[x.verdict] || x.verdict}</span>
+                  <span style={{ color: x.verdict === "PREDICTIVE" ? MARK : x.verdict === "PROMISING" ? BONE : MUTED, fontWeight: 700, letterSpacing: "0.06em" }}>{HZ_WORD[x.verdict] || x.verdict}</span>
                   <span style={{ lineHeight: 1.5 }}>
                     <span style={{ color: moneyTone(x.netBps) }}>{sign(x.netBps)} bps</span> net · {x.hitRate}% win · n{x.samples} · {x.exits.TIMEOUT || 0} timed out
                     {x.oos && <span style={{ color: FAINT }} title="Only trades entered after the 12h-vs-24h question was raised: the out-of-sample test."> · since {x.oos.since.slice(5, 10)}: {x.oos.samples ? <>n{x.oos.samples} <span style={{ color: moneyTone(x.oos.netBps) }}>{sign(x.oos.netBps)}</span></> : "no trades yet"}</span>}
@@ -289,7 +289,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
     <section style={{ marginTop: 36 }}>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto", gap: 16, alignItems: "end" }}>
         <div>
-          <div style={{ ...label, color: AMBER, marginBottom: 12 }}>Signal scoreboard</div>
+          <div style={{ ...label, color: MARK, marginBottom: 12 }}>Signal scoreboard</div>
           <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 32 : 44, fontWeight: 600, letterSpacing: "-0.035em", lineHeight: 1.02, color: BRIGHT }}>Signals, ranked by evidence.</h2>
           <p style={{ margin: "14px 0 0", fontFamily: UI, fontSize: 14.5, lineHeight: 1.6, color: FOG, maxWidth: 580 }}>
             Every read in the engine, graded the way we grade traders. Forward returns, no lookahead, walk-forward. The call first, the proof underneath. The misses stay on the board.
@@ -307,7 +307,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
       {tide && (
         <div title="Every recorded market-hour, entered at random, under the same frozen R contract the cards use. Not a sample: the whole population."
           style={{ marginTop: 22, display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "6px 14px", padding: "12px 16px", border: `1px solid ${C.border}`, borderRadius: 10, background: C.surfaceAlt, fontFamily: MONO, fontSize: 11, color: FOG, cursor: "help" }}>
-          <span style={{ ...label, color: AMBER }}>The tide</span>
+          <span style={{ ...label, color: MARK }}>The tide</span>
           <span>A random long earned <span style={{ color: moneyTone(tide.LONG.meanR) }}>{sign(tide.LONG.meanR)}R</span>; a random short <span style={{ color: moneyTone(tide.SHORT.meanR) }}>{sign(tide.SHORT.meanR)}R</span>.</span>
           <span style={{ marginLeft: isMobile ? 0 : "auto", color: FAINT, fontSize: 10 }}>A read has to beat its side’s tide, not zero.</span>
         </div>

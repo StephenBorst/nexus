@@ -17,7 +17,7 @@ const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", NEG = "#f7525f", WARN = "#e0a458", BORDER = "#232327", INSET = "#08080a";
+const POS = "#3ecf8e", NEG = "#f7525f", WATCH = "#60a5fa", BORDER = "#232327", INSET = "#08080a";
 
 type MispricedMkt = { coin?: string; symbol?: string; direction: "LONG" | "SHORT" | "NONE"; status: string; fundingAnnualPct: number; edge: number };
 type SmTrader = { address: string; positions: { coin?: string; sym?: string | null; side: "LONG" | "SHORT"; szUsd: number }[] };
@@ -30,7 +30,7 @@ const bare = (s: string) => String(s || "").toUpperCase().replace(/^PERP_/, "").
 const dirColor = (d: string | null) => (d === "LONG" ? POS : d === "SHORT" ? NEG : MUTED);
 const verdictStyle: Record<string, { label: string; color: string; bg: string }> = {
   CONFLUENCE: { label: "◆ CONFLUENCE", color: BONE, bg: "#1a1a1e" },
-  SPLIT: { label: "⚡ SPLIT", color: WARN, bg: SIGNAL.cautionBg },
+  SPLIT: { label: "⚡ SPLIT", color: WATCH, bg: SIGNAL.watchBg },
   CROWD: { label: "CROWD", color: FOG, bg: "#141416" },
   SMART: { label: "SMART", color: FOG, bg: "#141416" },
 };
@@ -120,7 +120,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
       <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.6, maxWidth: 640, marginBottom: 14 }}>
         Two boards, one read. The funding board says where the <b style={{ color: BONE }}>crowd</b> is over-extended and which way to fade it;
         the sharp wallets say where the <b style={{ color: BONE }}>smart money</b> sits. When they agree it’s <b style={{ color: BONE }}>confluence</b>;
-        when the smart money is with the crowd, the fade is <span style={{ color: WARN }}>contested</span>. The deep boards are below.
+        when the smart money is with the crowd, the fade is <span style={{ color: WATCH }}>contested</span>. The deep boards are below.
       </div>
 
       {recordByCoin.size > 0 && (
@@ -171,7 +171,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
                       style={{ marginLeft: "auto", color: BONE, background: "transparent", border: "1px solid #33333a", borderRadius: 4, padding: "3px 10px", fontFamily: MONO, fontSize: 10, cursor: "pointer" }}>◆ draft</button>
                   )}
                 </div>
-                <div style={{ fontFamily: UI, fontSize: 12, color: r.verdict === "SPLIT" ? WARN : FOG, lineHeight: 1.5, marginTop: 7 }}>{positioningRead(r)}</div>
+                <div style={{ fontFamily: UI, fontSize: 12, color: r.verdict === "SPLIT" ? WATCH : FOG, lineHeight: 1.5, marginTop: 7 }}>{positioningRead(r)}</div>
               </div>
             );
           })}

@@ -6,7 +6,7 @@
 //
 // THE RULE (docs/brand.md has the long form):
 //   • surfaces black, type bone — the landing's canvas + greys, nothing tinted;
-//   • amber is an ACCENT MARK (the top rule on every card, a section marker, an active tab),
+//   • blue is the ACCENT MARK (the top rule on every card, a section marker, an active tab),
 //     never a button, never body text; buttons stay bone;
 //   • green/red mean money and price only: P&L, a WIN/LOSS result, a price move, the Buy/Sell
 //     sides. A LONG label, a take-profit level, a count, a live dot: monochrome.
@@ -21,7 +21,7 @@ export const BRAND = Object.freeze({
   fog: "#a1a1aa",
   muted: "#71717a",
   faint: "#52525b",
-  amber: "#fbbf24",  // the accent mark (the landing's --amber)
+  brand: "#60a5fa",  // the accent mark (theme.ts C.brand, the landing's --brand)
   win: "#3ecf8e",    // money won / price up / Buy — nothing else
   loss: "#f7525f",   // money lost / price down / Sell — nothing else
 });
@@ -33,7 +33,7 @@ export function moneyColor(n) {
   return v > 0 ? BRAND.win : BRAND.loss;
 }
 
-// The accent mark every share card carries: a 3px amber rule across the top edge.
+// The accent mark every share card carries: a 3px brand-blue rule across the top edge.
 export function cardTopRule(width = 1200) {
-  return `<rect width="${width}" height="3" fill="${BRAND.amber}"/>`;
+  return `<rect width="${width}" height="3" fill="${BRAND.brand}"/>`;
 }

@@ -1,7 +1,7 @@
 // The brand rule, enforced on every share card (docs/brand.md):
-//   black surfaces · bone type · an amber accent mark · green/red ONLY on money.
+//   black surfaces · bone type · a blue accent mark · green/red ONLY on money.
 // Each card is rendered with fixtures that exercise its branches; any colour outside
-// app/lib/brand.mjs fails, a card without the amber top rule fails, and green/red on a
+// app/lib/brand.mjs fails, a card without the brand-blue top rule fails, and green/red on a
 // card that shows no money figure fails. Three cards drifted back to the retired neon
 // palette because nothing checked them — this is the check.
 // Run: node --test workers/nexus-lab-api/ogCards.test.mjs
@@ -51,8 +51,8 @@ for (const [name, svg] of Object.entries(CARDS)) {
     const off = [...new Set(colours(svg))].filter((c) => !ALLOWED.has(c));
     assert.deepEqual(off, [], `off-brand colours: ${off.join(", ")}`);
   });
-  test(`${name}: carries the amber accent mark`, () => {
-    assert.ok(colours(svg).includes(BRAND.amber), "no amber top rule");
+  test(`${name}: carries the brand-blue accent mark`, () => {
+    assert.ok(colours(svg).includes(BRAND.brand), "no brand-blue top rule");
   });
 }
 
@@ -95,8 +95,11 @@ test("brand.mjs matches app/config/theme.ts value for value", () => {
     canvas: /canvas:\s*"(#[0-9a-f]{6})"/i, surface: /\bsurface:\s*"(#[0-9a-f]{6})"/i, panel: /surfaceAlt:\s*"(#[0-9a-f]{6})"/i,
     border: /\bborder:\s*"(#[0-9a-f]{6})"/i, borderStrong: /borderStrong:\s*"(#[0-9a-f]{6})"/i,
     bright: /bright:\s*"(#[0-9a-f]{6})"/i, bone: /\baccent:\s*"(#[0-9a-f]{6})"/i, fog: /\bfog:\s*"(#[0-9a-f]{6})"/i,
-    muted: /\bmuted:\s*"(#[0-9a-f]{6})"/i, faint: /\bfaint:\s*"(#[0-9a-f]{6})"/i, amber: /\bamber:\s*"(#[0-9a-f]{6})"/i,
+    muted: /\bmuted:\s*"(#[0-9a-f]{6})"/i, faint: /\bfaint:\s*"(#[0-9a-f]{6})"/i, brand: /\bbrand:\s*"(#[0-9a-f]{6})"/i,
     win: /\bpos:\s*"(#[0-9a-f]{6})"/i, loss: /\bneg:\s*"(#[0-9a-f]{6})"/i,
   };
   for (const [k, re] of Object.entries(pairs)) assert.equal(BRAND[k].toLowerCase(), tok(re), `BRAND.${k}`);
+  // The accent mark is not the warning colour (2026-09-29: amber reads as caution, so the brand
+  // left it to C.warn). A mark that looks like a warning would put a caution sign on every card.
+  assert.notEqual(BRAND.brand.toLowerCase(), tok(/\bwarn:\s*"(#[0-9a-f]{6})"/i), "brand mark must not be C.warn");
 });

@@ -58,7 +58,7 @@
   --oui-color-success-darken: 45 170 115;
   --oui-color-success-contrast: 0 0 0;
 
-  /* warning = the brand amber (#fbbf24, the landing's --amber) — was a paler yellow */
+  /* warning = C.warn (#fbbf24): real danger only. The brand accent mark is blue since 2026-09-29. */
   --oui-color-warning: 251 191 36;
   --oui-color-warning-light: 252 211 77;
   --oui-color-warning-darken: 217 119 6;

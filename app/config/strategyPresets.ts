@@ -30,7 +30,7 @@ export const STAGED_BASIS_SMART: StrategyPreset = {
   id: "basis-smart-stack",
   name: "Basis × Smart Money Stack",
   tag: "EXPERIMENTAL · PAPER",
-  accent: "#e0a458",
+  accent: "#60a5fa",
   blurb: "The basis-extreme fade, taken only when the smart-money lean in the same hour points the same way. It is the exact intersection the scoreboard grades as \"Basis extreme × smart money\" — one shared rule, graded and traded, pinned by a parity test. ⚠️ The scoreboard grades the READ, not this strategy: exits, sizing and fees are unvalidated. PAPER only until it has a record of its own.",
   config: {
     symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC"],
@@ -47,7 +47,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     id: "basis-extreme-fade",
     name: "Basis Extreme Fade",
     tag: "EXPERIMENTAL · PAPER",
-    accent: "#e0a458",
+    accent: "#60a5fa",
     blurb: "Trades the one read our signal scoreboard grades PREDICTIVE (n=203, stable) — while it grades our own funding-fade flagship NOISE. A perp far above spot is froth (fade it short); far below is capitulation (fade it long). Extreme is measured against this market's own trailing week, never a fixed number, and it is the SAME rule the scoreboard grades — not a combo stack, not basis×CVD. ⚠️ PREDICTIVE rates the READ, not a strategy: the exits, sizing and fees here are unvalidated, and it is NOT walk-forward robust. Runs on a 12h hold because that is a graded horizon. PAPER only, on its own wallet, until it has a record of its own.",
     config: {
       symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC"],
@@ -63,7 +63,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     id: "basis-cvd-stack",
     name: "Basis × CVD Stack",
     tag: "EXPERIMENTAL · PAPER",
-    accent: "#e0a458",
+    accent: "#60a5fa",
     blurb: "The stack method, traded: take the basis-extreme fade ONLY when aggressor flow in the same hour diverges the same way (price up on net selling → short; down on net buying → long). This is exactly the intersection the scoreboard grades as \"Basis extreme × CVD divergence\" — one shared rule, graded and traded, with a parity test pinning them together. Rarer than the plain basis fade by design; it sits out more than it trades. ⚠️ The scoreboard grades the READ, not this strategy — exits, sizing and fees are unvalidated. PAPER only until it has a record of its own.",
     config: {
       symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC"],
@@ -78,7 +78,7 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     id: "regime-gated-invert",
     name: "Regime-Gated Invert",
     tag: "LEAD · NOT YET ROBUST",
-    accent: "#e0a458",
+    accent: "#60a5fa",
     blurb: "Fades the confluence signal (funding + OI agree), and only where fading has paid: high volatility (ATR% ≥ 0.7), US/Europe sessions, fresh signals only. It beats raw confluence on the same window — smaller loss, higher win rate — but both are still net negative, and the cross-market walk-forward comes back NOT ROBUST (net-positive on 1 of 4 markets). A lead worth papering, not an edge. PAPER only until it has a graded record.",
     config: {
       symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC", "PERP_HYPE_USDC"],
