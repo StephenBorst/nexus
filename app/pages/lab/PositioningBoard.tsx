@@ -17,7 +17,7 @@ const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", NEG = "#f7525f", WATCH = "#60a5fa", BORDER = "#232327", INSET = "#08080a";
+const POS = "#3ecf8e", NEG = "#f7525f", WATCH = "#e0a458", BORDER = "#232327", INSET = "#08080a";
 
 type MispricedMkt = { coin?: string; symbol?: string; direction: "LONG" | "SHORT" | "NONE"; status: string; fundingAnnualPct: number; edge: number };
 type SmTrader = { address: string; positions: { coin?: string; sym?: string | null; side: "LONG" | "SHORT"; szUsd: number }[] };

@@ -63,9 +63,9 @@ export const C = {
   neg: "#f7525f",    // loss / down
   warn: "#fbbf24",    // real danger only: liquidation risk, hard errors
   // Brand ACCENT MARK (the landing's --brand): a top rule, a section marker, an active tab,
-  // a graded-PREDICTIVE chip. Never a button (buttons are bone) and never body text. Blue since
-  // 2026-09-29 (borst): amber reads as caution, so it can't be the brand; it stays C.warn's.
-  brand: "#60a5fa",
+  // a graded-PREDICTIVE chip. Bone, the same value as `accent` (borst, 2026-09-29: amber reads as
+  // caution and blue is everyone's, so the mark is white). Never body text.
+  brand: "#ededf0",
   info: "#d4d4d8",   // neutral status (active/closed) — stays monochrome
 } as const;
 
@@ -75,10 +75,10 @@ export const C = {
 // everywhere. Adding a colour here means naming its ONE job; if it has no job, it
 // doesn't get a colour. (tools/check-palette.mjs allows everything in this file.)
 export const SIGNAL = {
-  // Brand blue — experimental / "watch this" (was soft amber `caution` until 2026-09-29).
-  // The same blue as C.brand: watch-this IS the brand's mark. C.warn stays for real danger.
-  watch: "#60a5fa",
-  watchBg: "#0e1622",
+  // Soft amber — caution / experimental / "watch this" (named `caution` before 2026-09-29).
+  // Softer than C.warn, which stays reserved for real danger (liquidation risk, hard errors).
+  watch: "#e0a458",
+  watchBg: "#1c1710",
   // Gold ★ — someone you follow. Only for follow state + followed-trader alerts.
   follow: "#f5c451",
   // 🔥 orange — heat / attention (engagement counts). Never a price direction.
@@ -110,7 +110,7 @@ export const LINE = {
   pos: "#2a3a30",
   neg: "#3a2530",
   warn: "#3a3320",   // danger family (C.warn)
-  watch: "#1c2a3d",  // brand-blue family (SIGNAL.watch)
+  watch: "#3a3320",  // soft-amber family (SIGNAL.watch)
 } as const;
 
 // Status tints (thesis/agent states) — surface + border + text, from the palette.

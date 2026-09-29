@@ -254,12 +254,12 @@ export function QuickTrade() {
         <div style={label}>MARKET</div>
         <button onClick={() => toggleFav(symbol)} title={curFav ? "Remove from your DEX favorites" : "Add to your DEX favorites"} style={{
           marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", padding: 0,
-          fontFamily: "var(--nx-font-mono)", fontSize: 13, color: curFav ? "#60a5fa" : "#52525b", lineHeight: 1,
+          fontFamily: "var(--nx-font-mono)", fontSize: 13, color: curFav ? "#e0a458" : "#52525b", lineHeight: 1,
         }}>{curFav ? "★" : "☆"} <span style={{ fontSize: 9, letterSpacing: "0.08em" }}>{curFav ? "FAVORITED" : "FAVORITE"}</span></button>
       </div>
       {favSymbols.length > 0 && (
         <div style={{ marginTop: 8 }}>
-          <div style={{ ...label, color: "#60a5fa", marginBottom: 5 }}>★ FAVORITES</div>
+          <div style={{ ...label, color: "#e0a458", marginBottom: 5 }}>★ FAVORITES</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {favSymbols.map((s) => <MktChip key={s} s={s} sel={s === symbol} onPick={() => { setSymbol(s); setMsg(null); }} />)}
           </div>
@@ -325,8 +325,8 @@ export function QuickTrade() {
               }}>${v}</button>
             ))}
             <button onClick={() => maxNotional > 0 && setNotional(maxNotional)} disabled={maxNotional <= 0} title={`Max on ${levClamped}x from free collateral`} style={{
-              background: "transparent", border: `1px solid ${maxNotional > 0 ? "#1c2a3d" : "#232327"}`, borderRadius: 3,
-              padding: "3px 9px", cursor: maxNotional > 0 ? "pointer" : "not-allowed", color: maxNotional > 0 ? "#60a5fa" : "#3f3f46", fontFamily: "var(--nx-font-mono)", fontSize: 10,
+              background: "transparent", border: `1px solid ${maxNotional > 0 ? "#3a3320" : "#232327"}`, borderRadius: 3,
+              padding: "3px 9px", cursor: maxNotional > 0 ? "pointer" : "not-allowed", color: maxNotional > 0 ? "#e0a458" : "#3f3f46", fontFamily: "var(--nx-font-mono)", fontSize: 10,
             }}>MAX</button>
           </div>
         </div>

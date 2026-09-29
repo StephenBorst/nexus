@@ -293,17 +293,17 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
   const convWord = convLevel === "HIGH" ? "STRONG READ" : convLevel === "MODERATE" ? "MODERATE" : convLevel === "AGAINST" ? "READS DISAGREE" : "LOW CONVICTION";
   // ── THE ONE HIST CLOCK — reversion / edgeQuality only (Grok). Lenses agreeing is NOT the fade
   // working ("counting is doing marketing"), so a weak base rate VETOES the confidence word.
-  //   weak     = a losing clock (edgeQuality TRAP or reverted ≤42%) → blue HIST line + arms WATCH.
+  //   weak     = a losing clock (edgeQuality TRAP or reverted ≤42%) → amber HIST line + arms WATCH.
   //   unproven = no reversion history (n=0) → can't read HIGH/PROVEN, says "unproven" (but doesn't
   //              force WATCH — you may draft an unproven fade on your own read).
   //   proven   = the fade has actually reverted here (edgeQuality PROVEN) → HIGH/PROVEN allowed.
   // The /intel/baserate BACKTEST is NO LONGER a second clock on the glass — one fade, one clock.
   const revProven = reversion ? reversion.tier === "PROVEN" : false;
   const revUnproven = !reversion || reversion.tier === "UNPROVEN";
-  const weakBase = revWeak;                                                               // the losing-clock dock (blue)
+  const weakBase = revWeak;                                                               // the losing-clock dock (ambe)
   const histLabel = revPct != null ? `${revPct}% reverted` : "unproven";
   // HIGH can only stand over a PROVEN clock; otherwise the word is capped to an aligned/HIST line
-  // (a weak clock is blue (watch); an unproven clock is muted and says "unproven" — n≥1 never says unproven).
+  // (a weak clock is amber; an unproven clock is muted and says "unproven" — n≥1 never says unproven).
   const cappedHigh = convLevel === "HIGH" && !revProven;
   const convWordFinal = (weakBase || cappedHigh) ? `${agree}/${voteReads.length} ALIGNED · HIST ${histLabel}` : convWord;
   const convColorFinal = weakBase ? WATCH : cappedHigh ? MUTED : convColor;
@@ -419,7 +419,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
           })()}
 
           {/* HIST — the ONE reversion clock (the SAME series the card / ticket / scanner cite):
-              how often fading this stretch has actually reverted here. Green when proven, blue
+              how often fading this stretch has actually reverted here. Green when proven, amber
               when it has bled, muted when there isn't enough history to prove it. The separate
               /intel/baserate backtest is NOT shown here. One fade, one clock (Grok). */}
           {reversion && (

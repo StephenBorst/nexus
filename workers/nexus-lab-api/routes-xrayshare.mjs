@@ -55,7 +55,7 @@ export async function loadCardInputs(env, address, { hlInfo, now = Date.now(), i
 }
 
 // 1200×630, same grammar as the identity/thesis cards (colours from app/lib/brand.mjs): bone on
-// near-black, a brand-blue top rule, green/red ONLY on numbers that mean profit/loss, JetBrains Mono.
+// near-black, a bone top rule, green/red ONLY on numbers that mean profit/loss, JetBrains Mono.
 export function buildXrayCardSvg(card, { fontFamily = "'JetBrains Mono'" } = {}) {
   const { bone: BONE, bright: BRIGHT, fog: FOG, muted: MUTED, faint: FAINT, win: POS, loss: NEG, border: BORDER, panel: PANEL, canvas: CANVAS, brand: MARK } = BRAND;
   const toneColor = (t) => (t === "pos" ? POS : t === "neg" ? NEG : BRIGHT);

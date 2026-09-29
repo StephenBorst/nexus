@@ -22,7 +22,7 @@ import { bareTicker } from "@/utils/utils";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", WATCH = "#60a5fa", NEG = "#f7525f";
+const POS = "#3ecf8e", WATCH = "#e0a458", NEG = "#f7525f";
 const BORDER = "#232327", SURFACE_ALT = "#0f0f11", INSET = "#08080a";
 // The append-only ledger anchor ON ARBITRUM — public, no login, always resolves.
 // A judge can tap this on a phone and see the Anchored events (every committed

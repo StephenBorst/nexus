@@ -6,7 +6,7 @@ import { SimCreditsBadge } from "./SimCreditsBadge";
 
 // ── The Lab's header: title, account read, and the tab bar ─────────────────────
 // One title row (what this page is + account status), the connected account's numbers, then
-// the tabs grouped by the loop's phase. Colour follows docs/brand.md: brand blue marks the active
+// the tabs grouped by the loop's phase. Colour follows docs/brand.md: the bone brand mark marks the active
 // tab only, green/red appear on money alone (P&L), counts and rates stay monochrome.
 
 const MONO = "var(--nx-font-mono)";
