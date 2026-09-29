@@ -1133,6 +1133,24 @@ credit and pays `x402.miroshark.xyz/run` $1 Base USDC from secret `MIROSHARK_PAY
   Sept 27: ~30 min of refusals, so 10 min wasn't enough. Whether Orderly blocks Workers on `/v1/public/futures` is with
   Wuzhong (borst asking); the `orderly-proxy` worker failing too points to network-level blocking.
 
+## ⚠️ Orderly public rate limit — 10 req/s PER IP (Orderly support, 2026-09-28)
+- Public endpoints (`/v1/public/futures`, `/tv/history`, `/v1/public/funding_rate_history`, `/v1/public/info`…) allow
+  10 req/s per IP. Workers leave from Cloudflare's SHARED egress IPs, so our bursts stack with other tenants'.
+- **lab-api rule (`workers/nexus-lab-api/orderlyGet.mjs`, tested):** fan-outs use `mapLimit` (≤3 in flight, starts
+  ≥250ms apart ⇒ ≤8 req/s at 2 reads/item), never a bare `Promise.all`; reads use `orderlyGet` (429 + HTML challenge
+  retried with exponential backoff + jitter, Retry-After honoured ≤4s, logged `[orderly] RATE LIMITED` / `non-JSON`,
+  final failure throws an `OrderlyError` with `kind`). Converted 2026-09-29: `/intel/mispriced` flagged fan-out (was
+  2×flagged at once), `snapshotTrendRegimes` (was 14 at once, hourly), `computeSignalRows` fallback (7 at once, and it
+  only runs when the proxy already failed), `fetchAllFutures`. `/intel/mispriced` now says WHY it is empty:
+  `error: "futures unavailable (proxy: …; direct: rate_limited 429)"` — curl it before guessing.
+- **Audit, engine side (FROZEN until Oct 15 — proposals only, not applied):** brain + exec `orderlyPublicGet` retry
+  ONLY an HTML 403; a JSON 429 is returned as data → the caller throws a TypeError on `data.data.…` and the tick is
+  lost, unlogged. Fix after Oct 15: treat `res.status === 429` like the 403 branch (backoff + jitter) and
+  `console.error` it. Rates: brain is sequential (fine); exec runs 10 users per `Promise.all` batch — mark price is
+  deduped per symbol, but per-user `/v1/public/info` + `tv/history` (volTarget / volScaledStops) can reach ~10 at
+  once as users grow; private calls are limited per account, not per IP. carry = 1 all-markets read / 5 min;
+  lab-alerts = 1 / min — fine. `gradeCandles` + backtest `orderlyJson` are sequential (fine).
+
 ## Tokenomics direction — Bankr-informed pivot (2026-06-08) ⭐ CURRENT
 The Safe is **LIVE** (`0x4Fe2…C733`, 1/1 Arbitrum+Base) and the PRO USDC payment rail is **wired**
 (`/sub/verify` + `NexusPro` subscribe flow). After pitching $HYPE-style mechanics to the Bankr team, **Danny B

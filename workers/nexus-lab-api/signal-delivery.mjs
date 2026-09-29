@@ -7,6 +7,7 @@ import { confluenceSignal, consensusBySymbol, classifyRegime, fundingStretched, 
 import { gatherStanceEntries } from "./grading.mjs";
 import { buildSignals } from "../../app/lib/signals.mjs";
 import { annualFundingPct } from "../../app/lib/funding.mjs";
+import { orderlyGet, mapLimit, ORDERLY_CONCURRENCY, ORDERLY_GAP_MS } from "./orderlyGet.mjs";
 
 const SIGNAL_SYMS = ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC", "PERP_ARB_USDC", "PERP_HYPE_USDC", "PERP_XRP_USDC", "PERP_DOGE_USDC"];
 
@@ -31,9 +32,11 @@ export async function snapshotTrendRegimes(env) {
   const now = Math.floor(Date.now() / 1000);
   const from = now - 80 * 3600; // ~80 candles ≥ the 48-candle lookback
   let stored = 0;
-  await Promise.all(SIGNAL_SYMS.map(async (sym) => {
+  // Paced (≤ORDERLY_CONCURRENCY symbols in flight, 2 reads each): the old Promise.all put 14 Orderly
+  // requests on the wire at once — over the 10 req/s per-IP public limit on its own.
+  await mapLimit(SIGNAL_SYMS, ORDERLY_CONCURRENCY, async (sym) => {
     try {
-      const d = await (await fetch(`https://api-evm.orderly.org/tv/history?symbol=${sym}&resolution=60&from=${from}&to=${now}`)).json();
+      const d = await orderlyGet(`https://api-evm.orderly.org/tv/history?symbol=${sym}&resolution=60&from=${from}&to=${now}`);
       if (!d || d.s !== "ok" || !Array.isArray(d.t) || !d.t.length) return;
       const cd = { t: d.t, h: d.h, l: d.l, c: d.c };
       const reg = classifyRegime(cd, cd.t[cd.t.length - 1]);
@@ -51,7 +54,7 @@ export async function snapshotTrendRegimes(env) {
       // hourly. Rounded to sensible precision for the price magnitude.
       let ema8 = null, ema21 = null;
       try {
-        const d4 = await (await fetch(`https://api-evm.orderly.org/tv/history?symbol=${sym}&resolution=240&from=${now - 240 * 3600}&to=${now}`)).json();
+        const d4 = await orderlyGet(`https://api-evm.orderly.org/tv/history?symbol=${sym}&resolution=240&from=${now - 240 * 3600}&to=${now}`);
         if (d4 && d4.s === "ok" && Array.isArray(d4.c) && d4.c.length >= 8) {
           const c4 = d4.c.map(Number).filter(Number.isFinite);
           const r8 = emaLast(c4, 8), r21 = emaLast(c4, 21);
@@ -63,7 +66,7 @@ export async function snapshotTrendRegimes(env) {
       await KV.put(`regime:${bare}`, JSON.stringify({ trend: reg.trend, vol: reg.vol, movePct: reg.movePct, oi: curOi, oiChangePct, ema8, ema21, t: Date.now() }), { expirationTtl: 6 * 3600 });
       stored++;
     } catch { /* skip this symbol */ }
-  }));
+  });
   return stored;
 }
 const BROADCAST_KEY = "signals:broadcast";     // { id, ts } of the last DM'd signal
@@ -81,13 +84,17 @@ export async function computeSignalRows(env) {
   // per-symbol api-evm fallback so a proxy blip can never zero the whole board.
   const bySym = {};
   try {
-    const all = await (await fetch("https://orderly-proxy.stephenpatrick24.workers.dev")).json();
+    const all = await orderlyGet("https://orderly-proxy.stephenpatrick24.workers.dev", { tries: 1 });
     for (const m of (all?.data?.rows ?? [])) if (m?.symbol) bySym[m.symbol] = m;
   } catch { /* fall through to per-symbol below */ }
-  const rows = await Promise.all(SIGNAL_SYMS.map(async (sym) => {
+  // The per-symbol fallback is paced: it only runs when the proxy failed — i.e. exactly when we may
+  // already be rate-limited, so a 7-wide burst would make it worse. No gap when the proxy covered
+  // every symbol (no Orderly call is made, so pacing would only add latency to /signals).
+  const needFetch = SIGNAL_SYMS.some((sym) => !bySym[sym]?.mark_price);
+  const rows = await mapLimit(SIGNAL_SYMS, needFetch ? ORDERLY_CONCURRENCY : SIGNAL_SYMS.length, async (sym) => {
     try {
       let d = bySym[sym];
-      if (!d || !d.mark_price) d = (await (await fetch(`https://api-evm.orderly.org/v1/public/futures/${sym}`)).json())?.data;
+      if (!d || !d.mark_price) d = (await orderlyGet(`https://api-evm.orderly.org/v1/public/futures/${sym}`))?.data;
       if (!d || !d.mark_price) return null;
       const mark = Number(d.mark_price), funding = Number(d.last_funding_rate) || 0, oi = Number(d.open_interest) || 0;
       const prev = JSON.parse((await KV.get(`market:prev:${sym}`)) || "null");
@@ -118,7 +125,7 @@ export async function computeSignalRows(env) {
         ema8_4h: reg?.ema8 ?? null, ema21_4h: reg?.ema21 ?? null,
       };
     } catch { return null; }
-  }));
+  }, { gapMs: needFetch ? ORDERLY_GAP_MS : 0 });
   return rows.filter(Boolean).sort(
     (a, b) => (b.confluence !== "NONE") - (a.confluence !== "NONE") || Math.abs(b.funding_rate_8h) - Math.abs(a.funding_rate_8h)
   );
