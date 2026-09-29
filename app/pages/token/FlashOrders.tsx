@@ -94,7 +94,7 @@ export function FlashOrders({ chainId, tokenAddress, symbol, walletAddress, prov
     finally { setBusyId(null); }
   };
 
-  const btn = (color: string): React.CSSProperties => ({ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.05em", color, background: "none", border: `1px solid ${BORD}`, borderRadius: 6, padding: "4px 9px", cursor: "pointer", flexShrink: 0 });
+  const btn = (color: string): React.CSSProperties => ({ fontFamily: UI, fontSize: 12, fontWeight: 600, color, background: "none", border: `1px solid ${BORD}`, borderRadius: 15, padding: "4px 11px", cursor: "pointer", flexShrink: 0 });
   const Row = ({ o }: { o: Record<string, unknown> }) => {
     const d = describeFlashOrder(o);
     return (
@@ -104,8 +104,8 @@ export function FlashOrders({ chainId, tokenAddress, symbol, walletAddress, prov
             {d.title} <span style={{ fontWeight: 400, color: d.status === "Rejected" ? NEG : d.status === "Filled" ? POS : FAINT }}>· {d.status}</span>
           </div>
           <div style={{ fontFamily: MONO, fontSize: 10, color: FOG, marginTop: 2 }}>{d.size}{d.expires ? <span style={{ color: FAINT }}> · {d.expires}</span> : null}</div>
-          {d.detail && <div style={{ fontFamily: UI, fontSize: 10, color: MUT, marginTop: 2, lineHeight: 1.4 }}>{d.detail}</div>}
-          {d.reason && <div style={{ fontFamily: UI, fontSize: 10, color: FAINT, marginTop: 2, lineHeight: 1.4 }}>{d.reason}</div>}
+          {d.detail && <div style={{ fontFamily: UI, fontSize: 11.5, color: MUT, marginTop: 2, lineHeight: 1.4 }}>{d.detail}</div>}
+          {d.reason && <div style={{ fontFamily: UI, fontSize: 11.5, color: FAINT, marginTop: 2, lineHeight: 1.4 }}>{d.reason}</div>}
         </div>
         {d.cancellable && (
           <button onClick={() => cancel(d.id)} disabled={!!busyId} style={{ ...btn(NEG), cursor: busyId ? "default" : "pointer", opacity: busyId && busyId !== d.id ? 0.5 : 1 }}>
@@ -117,24 +117,24 @@ export function FlashOrders({ chainId, tokenAddress, symbol, walletAddress, prov
   };
 
   return (
-    <div style={{ marginTop: 10, border: `1px solid ${BORD}`, borderRadius: 9, padding: "9px 11px" }}>
+    <div style={{ marginTop: 10, border: `1px solid ${BORD}`, borderRadius: 10, padding: "11px 12px" }}>
       <button onClick={() => setOpen((v) => !v)} aria-expanded={open}
-        style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: MUT }}>
-        <span>FLASH ORDERS{orders ? ` · ${live.length} open` : ""}</span>
+        style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>
+        <span>Flash orders{orders ? <span style={{ color: FAINT, fontWeight: 400 }}> · {live.length} open</span> : null}</span>
         <span style={{ color: FAINT }}>{open ? "−" : "+"}</span>
       </button>
       {open && (
         <div style={{ marginTop: 8 }}>
-          {err && <div style={{ fontFamily: UI, fontSize: 10.5, color: NEG, marginBottom: 6 }}>Flash orders: {err}</div>}
-          {!orders && !err && <div style={{ fontFamily: UI, fontSize: 10.5, color: FAINT }}>Loading…</div>}
-          {orders && live.length === 0 && <div style={{ fontFamily: UI, fontSize: 10.5, color: FAINT, paddingBottom: 6 }}>No open orders.</div>}
+          {err && <div style={{ fontFamily: UI, fontSize: 12, color: NEG, marginBottom: 6 }}>Flash orders: {err}</div>}
+          {!orders && !err && <div style={{ fontFamily: UI, fontSize: 12, color: FAINT }}>Loading…</div>}
+          {orders && live.length === 0 && <div style={{ fontFamily: UI, fontSize: 12, color: FAINT, paddingBottom: 6 }}>No open orders.</div>}
           {live.map((o) => <Row key={String(o.orderId)} o={o} />)}
-          {closed.length > 0 && <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.1em", color: FAINT, margin: "10px 0 2px" }}>RECENT</div>}
+          {closed.length > 0 && <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, margin: "10px 0 2px" }}>RECENT</div>}
           {closed.map((o) => <Row key={String(o.orderId)} o={o} />)}
-          {note && <div style={{ fontFamily: UI, fontSize: 10.5, color: FOG, marginTop: 8 }}>{note}</div>}
+          {note && <div style={{ fontFamily: UI, fontSize: 12, color: FOG, marginTop: 8 }}>{note}</div>}
 
           <div style={{ borderTop: `1px solid ${BORD}`, marginTop: 10, paddingTop: 9 }}>
-            <div style={{ fontFamily: UI, fontSize: 10.5, color: MUT, lineHeight: 1.5, marginBottom: 7 }}>
+            <div style={{ fontFamily: UI, fontSize: 12, color: MUT, lineHeight: 1.5, marginBottom: 7 }}>
               Cancelling is a gasless signature. The on-chain off switch is revoking Flash’s approval: then no order can pull that token, whatever Flash’s servers do.
             </div>
             {!allows && <button onClick={checkAllowances} disabled={!!busyId} style={btn(FOG)}>CHECK APPROVALS</button>}
@@ -146,7 +146,7 @@ export function FlashOrders({ chainId, tokenAddress, symbol, walletAddress, prov
                 {a.amount > 0n && <button onClick={() => revoke(a)} disabled={!!busyId} style={btn(NEG)}>{busyId === a.token ? "SIGN…" : "REVOKE"}</button>}
               </div>
             ))}
-            {allowNote && <div style={{ fontFamily: UI, fontSize: 10.5, color: FOG, marginTop: 6, lineHeight: 1.45 }}>{allowNote}</div>}
+            {allowNote && <div style={{ fontFamily: UI, fontSize: 12, color: FOG, marginTop: 6, lineHeight: 1.45 }}>{allowNote}</div>}
           </div>
         </div>
       )}

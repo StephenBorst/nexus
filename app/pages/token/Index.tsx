@@ -33,6 +33,7 @@ import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // signer (provider.signTransaction/sendTransaction). Safe outside the provider (useContext default).
 import { useWalletConnectorPrivy } from "@orderly.network/wallet-connector-privy";
 import { useEscapeKey } from "@/utils/a11y";
+import { C } from "@/config/theme";
 
 // WooFi majors-swap widget — the in-app fill for the majors WooFi routes (BTC/ETH/SOL/USDC etc.),
 // restored as an additive Spot panel (the old standalone /swap now redirects to /token). Lazy so its
@@ -128,7 +129,7 @@ function SpotCallAvatar({ pfp, name, ring }: { pfp: string | null; name: string 
   const initial = (name || "◆").slice(0, 1).toUpperCase();
   return (
     <div style={{ width: 18, height: 18, borderRadius: "50%", overflow: "hidden", border: `1.5px solid ${ring}`, background: "#141416", boxShadow: "0 0 0 2px #0a0a0b", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      {pfp && !err ? <img src={pfp} alt="" referrerPolicy="no-referrer" onError={() => setErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontFamily: MONO, fontSize: 9, color: ring, fontWeight: 700 }}>{initial}</span>}
+      {pfp && !err ? <img src={pfp} alt="" referrerPolicy="no-referrer" onError={() => setErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontFamily: MONO, fontSize: 10, color: ring, fontWeight: 700 }}>{initial}</span>}
     </div>
   );
 }
@@ -201,7 +202,7 @@ function Chart({ candles, loading, height, calls, liq, entries }: { candles: Can
   return (
     <div ref={measureRef} style={box}>
       {maLines.length > 0 && (
-        <div style={{ position: "absolute", top: 5, left: 8, zIndex: 2, display: "flex", gap: 10, fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.02em", pointerEvents: "none" }}>
+        <div style={{ position: "absolute", top: 5, left: 8, zIndex: 2, display: "flex", gap: 10, fontFamily: MONO, fontSize: 10, letterSpacing: "0.02em", pointerEvents: "none" }}>
           {maLines.map((m) => <span key={m.p} style={{ color: m.c }}>MA{m.p} {m.last != null ? `$${chFmtPx(m.last)}` : "—"}</span>)}
         </div>
       )}
@@ -270,7 +271,7 @@ function Chart({ candles, loading, height, calls, liq, entries }: { candles: Can
         </div>
       ))}
       {(callMarks.length > 0 || liqRects.length > 0 || entryMarks.length > 0) && (
-        <div style={{ position: "absolute", bottom: TIMEH + 3, right: 8, zIndex: 2, fontFamily: MONO, fontSize: 8, color: FAINT, letterSpacing: "0.04em", display: "flex", gap: 10, background: "#0a0a0bd9", padding: "2px 6px", borderRadius: 3, pointerEvents: "none" }}>
+        <div style={{ position: "absolute", bottom: TIMEH + 3, right: 8, zIndex: 2, fontFamily: MONO, fontSize: 10, color: FAINT, letterSpacing: "0.04em", display: "flex", gap: 10, background: "#0a0a0bd9", padding: "2px 6px", borderRadius: 3, pointerEvents: "none" }}>
           {liqRects.length > 0 && <span>⚡ est. liq · <span style={{ color: NEG }}>long▼</span> <span style={{ color: POS }}>short▲</span></span>}
           {callMarks.length > 0 && <span>{callMarks.length} graded call{callMarks.length === 1 ? "" : "s"}</span>}
           {entryMarks.length > 0 && <span style={{ color: POS }}>⊕ your entries</span>}
@@ -285,7 +286,7 @@ function Chart({ candles, loading, height, calls, liq, entries }: { candles: Can
 function HoldingsStrip({ holdings, loading, onOpen }: { holdings: Holding[]; loading: boolean; onOpen: (h: Holding) => void }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.14em", color: FAINT, textTransform: "uppercase", marginBottom: 7 }}>Your wallet</div>
+      <div style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT, marginBottom: 8 }}>Your wallet</div>
       {loading && holdings.length === 0 ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT }}>reading balances…</div>
       ) : holdings.length === 0 ? (
@@ -294,8 +295,8 @@ function HoldingsStrip({ holdings, loading, onOpen }: { holdings: Holding[]; loa
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {holdings.map((h, i) => (
             <button key={`${h.chain}-${h.sym}-${i}`} onClick={() => onOpen(h)} className="nx-press"
-              style={{ display: "flex", alignItems: "center", gap: 7, background: CARD, border: `1px solid ${BORD}`, borderRadius: 8, padding: "7px 11px", cursor: "pointer", fontFamily: MONO }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: BRIGHT }}>{h.sym}</span>
+              style={{ display: "flex", alignItems: "center", gap: 7, background: CARD, border: `1px solid ${BORD}`, borderRadius: 15, padding: "0 12px", height: 32, cursor: "pointer", fontFamily: UI }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: BRIGHT }}>{h.sym}</span>
               <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: MUT, border: `1px solid ${BORD}`, borderRadius: 3, padding: "0 4px", textTransform: "uppercase" }}>{h.chain}</span>
               <span style={{ fontSize: 11, color: FOG }}>{h.amountLabel}</span>
               <span style={{ fontSize: 11, color: MUT }}>· {h.usdLabel}</span>
@@ -321,21 +322,21 @@ function MoversRail({ onPick }: { onPick: (sym: string) => void }) {
     return () => { alive = false; clearInterval(iv); };
   }, []);
   if (!m || (!m.gainers.length && !m.losers.length && !m.active.length)) return null;
-  const sections = [["▲ Gainers · 24h", m.gainers, "chg"], ["▼ Losers · 24h", m.losers, "chg"], ["⚡ Most active", m.active, "vol"]] as const;
+  const sections = [["Gainers · 24h", m.gainers, "chg"], ["Losers · 24h", m.losers, "chg"], ["Most active", m.active, "vol"]] as const;
   return (
     <div style={{ marginBottom: 20 }}>
-      <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.14em", color: MUT, textTransform: "uppercase", marginBottom: 10 }}>Movers · live on Nexus</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}><span style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: BRIGHT }}>Movers</span><span style={{ fontFamily: UI, fontSize: 13, color: MUT }}>Live on Nexus</span></div>
       {sections.map(([label, rows, kind]) => rows.length ? (
         <div key={label} style={{ marginBottom: 10 }}>
-          <div style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.12em", color: FAINT, textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
+          <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: FAINT, textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {rows.map((r) => (
               <button key={r.sym} onClick={() => onPick(r.sym)} className="nx-press"
-                style={{ display: "flex", alignItems: "center", gap: 6, background: CARD, border: `1px solid ${BORD}`, borderRadius: 7, padding: "6px 10px", cursor: "pointer", fontFamily: MONO }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: BRIGHT }}>{r.sym}</span>
+                style={{ display: "flex", alignItems: "center", gap: 6, background: CARD, border: `1px solid ${BORD}`, borderRadius: 15, padding: "0 12px", height: 30, cursor: "pointer", fontFamily: UI }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: BRIGHT }}>{r.sym}</span>
                 {kind === "vol"
-                  ? <span style={{ fontSize: 10.5, color: MUT }}>{fmtUsd(r.volUsd)}</span>
-                  : <span style={{ fontSize: 10.5, fontWeight: 700, color: r.changePct >= 0 ? POS : NEG }}>{r.changePct >= 0 ? "+" : ""}{r.changePct.toFixed(1)}%</span>}
+                  ? <span style={{ fontSize: 12, color: MUT }}>{fmtUsd(r.volUsd)}</span>
+                  : <span style={{ fontSize: 12, fontWeight: 600, color: r.changePct >= 0 ? POS : NEG }}>{r.changePct >= 0 ? "+" : ""}{r.changePct.toFixed(1)}%</span>}
               </button>
             ))}
           </div>
@@ -356,10 +357,10 @@ function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCaller
   const leanLabel = data.side === "SPLIT" ? "SPLIT" : `${Math.abs(Math.round(data.lean * 100))}% ${data.side}`;
   const nCallers = data.participants;
   return (
-    <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+    <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-        <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.14em", color: BRIGHT }}>◆ CALLERS ON ${coin}</span>
-        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: leanColor, background: leanColor + "14", border: `1px solid ${leanColor}44`, borderRadius: 5, padding: "2px 6px" }}>{leanLabel}</span>
+        <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>Callers on {coin}</span>
+        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: leanColor, background: leanColor + "14", border: `1px solid ${leanColor}44`, borderRadius: 5, padding: "2px 6px" }}>{leanLabel}</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {rows.map((c) => {
@@ -369,33 +370,42 @@ function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCaller
               style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: `1px solid ${BORD2}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer" }}>
               {c.pfp
                 ? <img src={c.pfp} alt="" style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                : <div style={{ width: 20, height: 20, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 9, color: MUT }}>{(c.displayName || c.wallet).slice(0, 1).toUpperCase()}</div>}
+                : <div style={{ width: 20, height: 20, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 10, color: MUT }}>{(c.displayName || c.wallet).slice(0, 1).toUpperCase()}</div>}
               <span style={{ fontFamily: MONO, fontSize: 10.5, color: BRIGHT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 92 }}>{c.displayName || shortAddr(c.wallet)}</span>
               {c.meritRank?.glyph && (
-                <span title={`${c.meritRank.title} caller`} style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, color: POS, flexShrink: 0 }}>{c.meritRank.glyph}</span>
+                <span title={`${c.meritRank.title} caller`} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: POS, flexShrink: 0 }}>{c.meritRank.glyph}</span>
               )}
               {c.record && (
-                <span style={{ fontFamily: MONO, fontSize: 8.5, color: FAINT, flexShrink: 0, whiteSpace: "nowrap" }}>{c.record.winRate}% · {c.record.avgR >= 0 ? "+" : ""}{c.record.avgR}R</span>
+                <span style={{ fontFamily: MONO, fontSize: 10, color: FAINT, flexShrink: 0, whiteSpace: "nowrap" }}>{c.record.winRate}% · {c.record.avgR >= 0 ? "+" : ""}{c.record.avgR}R</span>
               )}
-              <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: long ? POS : NEG, background: (long ? POS : NEG) + "18", border: `1px solid ${(long ? POS : NEG)}44`, borderRadius: 5, padding: "2px 6px", flexShrink: 0 }}>{c.direction}</span>
+              <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: long ? POS : NEG, background: (long ? POS : NEG) + "18", border: `1px solid ${(long ? POS : NEG)}44`, borderRadius: 5, padding: "2px 6px", flexShrink: 0 }}>{c.direction}</span>
             </button>
           );
         })}
       </div>
       {data.callers.length > 5 && (
-        <button onClick={() => setExpanded((x) => !x)} style={{ width: "100%", marginTop: 8, background: "none", border: "none", color: MUT, fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.06em", cursor: "pointer", padding: "4px 0" }}>{expanded ? "show less ▴" : `+${data.callers.length - 5} more ▾`}</button>
+        <button onClick={() => setExpanded((x) => !x)} style={{ width: "100%", marginTop: 8, background: "none", border: "none", color: MUT, fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", cursor: "pointer", padding: "4px 0" }}>{expanded ? "show less ▴" : `+${data.callers.length - 5} more ▾`}</button>
       )}
-      <div style={{ fontFamily: MONO, fontSize: 8, color: FAINT, marginTop: 8, lineHeight: 1.4 }}>{nCallers} positioned · open positions + active public calls, graded on public price</div>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 8, lineHeight: 1.4 }}>{nCallers} positioned · open positions + active public calls, graded on public price</div>
     </div>
+  );
+}
+
+// Section toggle chevron — the same mark the Lab's Collapsible uses.
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" style={{ color: MUT, transform: open ? "rotate(180deg)" : "none", transition: "transform 160ms ease" }}>
+      <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
 // ── one header stat cell ──────────────────────────────────────────────────────
 function Stat({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-      <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: FAINT, textTransform: "uppercase" }}>{label}</span>
-      <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: color || BRIGHT, whiteSpace: "nowrap" }}>{value}</span>
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+      <span style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: color || BRIGHT, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{value}</span>
+      <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase" }}>{label}</span>
     </div>
   );
 }
@@ -405,10 +415,10 @@ function Stat({ label, value, color }: { label: string; value: React.ReactNode; 
 function ModalRow({ label, value, sub, accent, danger }: { label: string; value: string; sub?: string; accent?: boolean; danger?: boolean }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, padding: "7px 0", borderBottom: `1px solid ${BORD2}` }}>
-      <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUT, flexShrink: 0 }}>{label}</span>
+      <span style={{ fontFamily: UI, fontSize: 12.5, color: MUT, flexShrink: 0 }}>{label}</span>
       <span style={{ textAlign: "right", minWidth: 0 }}>
-        <span style={{ display: "block", fontFamily: MONO, fontSize: 12, fontWeight: 600, color: danger ? NEG : accent ? POS : BRIGHT, wordBreak: "break-word" }}>{value}</span>
-        {sub && <span style={{ display: "block", fontFamily: MONO, fontSize: 8.5, color: FAINT, marginTop: 2 }}>{sub}</span>}
+        <span style={{ display: "block", fontFamily: UI, fontSize: 13.5, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: danger ? NEG : accent ? POS : BRIGHT, wordBreak: "break-word" }}>{value}</span>
+        {sub && <span style={{ display: "block", fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 2 }}>{sub}</span>}
       </span>
     </div>
   );
@@ -1205,7 +1215,7 @@ export default function TokenTerminal() {
             way home except leaving Spot and returning. Shows on any resolved/searching state. */}
         {(query || perpOnly) && (
           <button onClick={() => { setInput(""); navigate("/token"); }} className="nx-press"
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${BORD}`, borderRadius: 7, color: MUT, fontFamily: MONO, fontSize: 11, letterSpacing: "0.04em", padding: "6px 11px", cursor: "pointer", marginBottom: 14 }}>
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${BORD}`, borderRadius: 15, color: FOG, fontFamily: UI, fontSize: 12.5, padding: "6px 13px", cursor: "pointer", marginBottom: 14 }}>
             ‹ Spot home
           </button>
         )}
@@ -1220,7 +1230,7 @@ export default function TokenTerminal() {
               value={input} onChange={(e) => setInput(e.target.value)}
               placeholder="Search any token · symbol, name or contract"
               spellCheck={false} autoCapitalize="off" autoCorrect="off"
-              style={{ width: "100%", background: CARD, border: `1px solid ${BORD}`, borderRadius: 8, color: BRIGHT, fontFamily: MONO, fontSize: 13, padding: "11px 40px 11px 14px", outline: "none", boxSizing: "border-box" }}
+              style={{ width: "100%", background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, color: BRIGHT, fontFamily: UI, fontSize: 14, padding: "12px 40px 12px 14px", outline: "none", boxSizing: "border-box" }}
             />
             {input && (
               <button type="button" aria-label="Clear search" title="Clear"
@@ -1228,7 +1238,7 @@ export default function TokenTerminal() {
                 style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: MUT, fontFamily: MONO, fontSize: 15, lineHeight: 1, cursor: "pointer", borderRadius: 6 }}>✕</button>
             )}
           </div>
-          <button type="submit" style={{ flexShrink: 0, background: BRIGHT, color: "#0a0a0b", border: "none", borderRadius: 8, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", padding: "0 18px", cursor: "pointer" }}>SEARCH</button>
+          <button type="submit" style={{ flexShrink: 0, background: BRIGHT, color: "#0a0a0b", border: "none", borderRadius: 10, fontFamily: UI, fontSize: 13.5, fontWeight: 600, padding: "0 20px", cursor: "pointer" }}>Search</button>
         </form>
 
         {/* ── LANDING (no query) — live MOVERS discovery first, then the blurb + majors ── */}
@@ -1242,7 +1252,7 @@ export default function TokenTerminal() {
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {["BTC", "ETH", "SOL", "HYPE", "NEXUS"].map((s) => (
-                  <button key={s} onClick={() => submit(s)} style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, color: MUT, fontFamily: MONO, fontSize: 12, padding: "7px 12px", cursor: "pointer" }}>{s}</button>
+                  <button key={s} onClick={() => submit(s)} className="nx-press" style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 15, color: FOG, fontFamily: UI, fontSize: 12.5, fontWeight: 600, height: 30, padding: "0 14px", cursor: "pointer" }}>{s}</button>
                 ))}
               </div>
             </div>
@@ -1254,7 +1264,7 @@ export default function TokenTerminal() {
             and even a genuine miss offers the CA-paste path + a DexScreener lookup, not "no token". ── */}
         {query && notFound && !loading && (
           <div style={{ padding: "40px 0", display: "flex", flexDirection: "column", gap: 10, maxWidth: 480 }}>
-            <div style={{ fontFamily: MONO, fontSize: 13, color: BRIGHT }}>No verified market for “{query}”.</div>
+            <div style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: BRIGHT }}>No verified market for “{query}”.</div>
             <div style={{ fontFamily: UI, fontSize: 12, color: MUT, lineHeight: 1.6 }}>
               Paste the exact <b style={{ color: FOG }}>contract address</b> (0x… on EVM, or the mint on Solana) in the search above to trade it directly — or look it up on DexScreener and copy the address.
             </div>
@@ -1267,7 +1277,7 @@ export default function TokenTerminal() {
 
         {/* ── LOADING ── */}
         {query && loading && !pair && (
-          <div style={{ fontFamily: MONO, fontSize: 12, color: FAINT, padding: "40px 0" }}>resolving {query}…</div>
+          <div style={{ fontFamily: UI, fontSize: 13, color: MUT, padding: "40px 0" }}>Resolving {query}…</div>
         )}
 
         {/* ── PERP-PREFERRED MAJOR (no trusted spot pair) ── Kept in Spot instead of bouncing to the
@@ -1278,18 +1288,18 @@ export default function TokenTerminal() {
               <div style={{ width: 36, height: 36, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 15, color: MUT }}>{perpOnly.slice(0, 1)}</div>
               <div>
                 <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: BRIGHT }}>{perpOnly}</div>
-                <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase" }}>Nexus perp market</div>
+                <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase" }}>Nexus perp market</div>
               </div>
             </div>
             <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 16 }}>
               There’s no trusted spot pool to price <b style={{ color: BRIGHT }}>{perpOnly}</b> here, so we don’t fake one. Swap the majors in-app via <b style={{ color: BRIGHT }}>WooFi</b>, or trade <b style={{ color: BRIGHT }}>{perpOnly}</b> on the Nexus perp book — graded like every Nexus position.
             </div>
             <button onClick={() => setWooFiOpen(true)} className="nx-press"
-              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "#0a0a0b", background: POS, border: "none", borderRadius: 9, padding: "13px 0", cursor: "pointer", marginBottom: 10 }}>
+              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#0a0a0b", background: POS, border: "none", borderRadius: 9, padding: "13px 0", cursor: "pointer", marginBottom: 10 }}>
               ⇄ Swap majors in-app · WooFi
             </button>
             <button onClick={() => navigate(`/perp/PERP_${perpOnly}_USDC`)} className="nx-press"
-              style={{ width: "100%", textAlign: "center", fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 9, padding: "12px 0", cursor: "pointer" }}>
+              style={{ width: "100%", textAlign: "center", fontFamily: UI, fontSize: 13, fontWeight: 600, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 9, padding: "12px 0", cursor: "pointer" }}>
               Trade {perpOnly} on the Nexus perp book →
             </button>
           </div>
@@ -1299,28 +1309,28 @@ export default function TokenTerminal() {
         {pair && (
           <>
             {/* header: identity + stats */}
-            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: isMobile ? "12px" : "12px 16px", background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: isMobile ? "14px" : "16px 18px", background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, marginBottom: 12, rowGap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                 {pair.imageUrl
                   ? <img src={pair.imageUrl} alt="" width={36} height={36} style={{ borderRadius: "50%", flexShrink: 0, background: BG }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
                   : <div style={{ width: 36, height: 36, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 14, color: MUT }}>{pair.baseSymbol.slice(0, 1)}</div>}
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                    <span style={{ fontFamily: MONO, fontSize: 17, fontWeight: 700, color: BRIGHT }}>{pair.baseSymbol}</span>
-                    <span style={{ fontFamily: MONO, fontSize: 11, color: FAINT }}>/{pair.quoteSymbol}</span>
+                    <span style={{ fontFamily: UI, fontSize: 19, fontWeight: 600, color: BRIGHT }}>{pair.baseSymbol}</span>
+                    <span style={{ fontFamily: UI, fontSize: 13, color: FAINT }}>/ {pair.quoteSymbol}</span>
                     {/* chain badge — a bare-ticker search picks the deepest pair across ALL chains, so
                         WETH can resolve to Solana when you meant Base; naming the chain here (+ the CA
                         below, + the switchable "Other pairs" chips) makes which token you're on unambiguous. */}
-                    <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: MUT, border: `1px solid ${BORD}`, borderRadius: 4, padding: "1px 5px", textTransform: "uppercase" }}>{pair.chainId}</span>
-                    {isPerp && <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: POS, border: `1px solid ${POS}55`, borderRadius: 4, padding: "1px 5px" }}>NEXUS PERP</span>}
+                    <span style={{ fontFamily: UI, fontSize: 11, fontWeight: 600, color: FOG, border: `1px solid ${BORD}`, borderRadius: 10, padding: "1px 8px", textTransform: "capitalize", alignSelf: "center" }}>{pair.chainId}</span>
+                    {isPerp && <span style={{ fontFamily: UI, fontSize: 11, fontWeight: 600, color: C.brand, border: `1px solid ${C.brand}55`, borderRadius: 10, padding: "1px 8px", alignSelf: "center" }}>Nexus perp</span>}
                   </div>
-                  <div style={{ fontFamily: UI, fontSize: 11, color: MUT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 180 }}>{pair.baseName}</div>
+                  <div style={{ fontFamily: UI, fontSize: 12.5, color: MUT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200, marginTop: 2 }}>{pair.baseName}</div>
                 </div>
               </div>
 
               <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                <span style={{ fontFamily: MONO, fontSize: 24, fontWeight: 600, color: BRIGHT, letterSpacing: "-0.01em" }}>{fmtPrice(pair.priceUsd)}</span>
-                {pair.priceChange24h != null && <span style={{ fontFamily: MONO, fontSize: 13, color: pair.priceChange24h > 0 ? POS : pair.priceChange24h < 0 ? NEG : MUT }}>{pair.priceChange24h > 0 ? "+" : ""}{pair.priceChange24h.toFixed(2)}%</span>}
+                <span style={{ fontFamily: UI, fontSize: 26, fontWeight: 600, color: BRIGHT, letterSpacing: "-0.01em", fontVariantNumeric: "tabular-nums" }}>{fmtPrice(pair.priceUsd)}</span>
+                {pair.priceChange24h != null && <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: pair.priceChange24h > 0 ? POS : pair.priceChange24h < 0 ? NEG : MUT }}>{pair.priceChange24h > 0 ? "+" : ""}{pair.priceChange24h.toFixed(2)}%</span>}
               </div>
 
               <div style={{ display: "flex", gap: isMobile ? 14 : 22, flexWrap: "wrap", marginLeft: isMobile ? 0 : "auto" }}>
@@ -1328,19 +1338,19 @@ export default function TokenTerminal() {
                 <Stat label="FDV" value={fmtUsd(pair.fdv)} />
                 <Stat label="24h Vol" value={fmtUsd(pair.volume24h)} />
                 <Stat label="Liquidity" value={fmtUsd(pair.liquidityUsd)} />
-                <Stat label="24h Buys" value={pair.buys24h != null ? pair.buys24h.toLocaleString() : "—"} color={POS} />
-                <Stat label="24h Sells" value={pair.sells24h != null ? pair.sells24h.toLocaleString() : "—"} color={NEG} />
+                <Stat label="24h Buys" value={pair.buys24h != null ? pair.buys24h.toLocaleString() : "—"} />
+                <Stat label="24h Sells" value={pair.sells24h != null ? pair.sells24h.toLocaleString() : "—"} />
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
                 {pair.baseAddress && (
-                  <button onClick={copyCa} title="Copy contract address" className="nx-press" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: BG, border: `1px solid ${copied ? "#3ecf8e88" : BORD}`, borderRadius: 7, color: copied ? POS : MUT, fontFamily: MONO, fontSize: 10.5, padding: "6px 11px", cursor: "pointer", lineHeight: 1 }}>
+                  <button onClick={copyCa} title="Copy contract address" className="nx-press" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: BG, border: `1px solid ${copied ? C.borderStrong : BORD}`, borderRadius: 15, color: copied ? BRIGHT : FOG, fontFamily: MONO, fontSize: 11.5, padding: "6px 12px", cursor: "pointer", lineHeight: 1 }}>
                     <span>{copied ? "copied ✓" : shortAddr(pair.baseAddress)}</span>
                     {!copied && <span style={{ color: FAINT, fontSize: 11 }}>⧉</span>}
                   </button>
                 )}
-                {pair.websites[0] && <a href={pair.websites[0]} target="_blank" rel="noopener noreferrer" className="nx-press" style={{ display: "inline-flex", alignItems: "center", fontFamily: MONO, fontSize: 10.5, color: MUT, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 7, padding: "6px 11px", lineHeight: 1 }}>web ↗</a>}
-                {pair.socials.filter((s) => /twitter|x/i.test(s.type)).slice(0, 1).map((s) => <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" className="nx-press" style={{ display: "inline-flex", alignItems: "center", fontFamily: MONO, fontSize: 10.5, color: MUT, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 7, padding: "6px 11px", lineHeight: 1 }}>𝕏 ↗</a>)}
+                {pair.websites[0] && <a href={pair.websites[0]} target="_blank" rel="noopener noreferrer" className="nx-press" style={{ display: "inline-flex", alignItems: "center", fontFamily: UI, fontSize: 12.5, color: FOG, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 15, padding: "6px 12px", lineHeight: 1 }}>web ↗</a>}
+                {pair.socials.filter((s) => /twitter|x/i.test(s.type)).slice(0, 1).map((s) => <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" className="nx-press" style={{ display: "inline-flex", alignItems: "center", fontFamily: UI, fontSize: 12.5, color: FOG, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 15, padding: "6px 12px", lineHeight: 1 }}>𝕏 ↗</a>)}
               </div>
             </div>
 
@@ -1348,21 +1358,21 @@ export default function TokenTerminal() {
             <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: "1fr 320px", gap: 12, alignItems: "start" }}>
               <div style={{ minWidth: 0 }}>
                 {/* chart + timeframe */}
-                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, padding: 10, marginBottom: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
+                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
                     {TIMEFRAMES.map((t, i) => (
-                      <button key={t.label} onClick={() => setTf(i)} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: i === tf ? BRIGHT : FAINT, background: i === tf ? "#ededf012" : "none", border: `1px solid ${i === tf ? "#ededf033" : "transparent"}`, borderRadius: 6, padding: "5px 11px", cursor: "pointer" }}>{t.label}</button>
+                      <button key={t.label} onClick={() => setTf(i)} style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: i === tf ? BRIGHT : MUT, background: i === tf ? C.surfaceAlt : "none", border: `1px solid ${i === tf ? C.borderStrong : "transparent"}`, borderRadius: 15, height: 28, padding: "0 12px", cursor: "pointer" }}>{t.label}</button>
                     ))}
-                    <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.04em", color: FAINT, alignSelf: "center", textTransform: "uppercase" }}>chart · GeckoTerminal</span>
+                    <span style={{ marginLeft: "auto", fontFamily: UI, fontSize: 12, color: FAINT, alignSelf: "center" }}>Chart · GeckoTerminal</span>
                   </div>
                   <Chart candles={candles} loading={chartLoading} height={isMobile ? 300 : 460} calls={chartCalls} liq={chartLiq} entries={chartEntries} />
                 </div>
 
                 {/* ── YOUR POSITION — shown when you hold the token; cost basis from tracked in-app buys ── */}
                 {held && (
-                  <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+                  <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
-                      <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.12em", color: BRIGHT }}>YOUR POSITION</span>
+                      <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>Your position</span>
                       {position?.pnlPct != null && <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: position.pnl! >= 0 ? POS : NEG }}>{position.pnl! >= 0 ? "+" : ""}{position.pnlPct.toFixed(2)}%</span>}
                     </div>
                     <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginBottom: position ? 12 : 0 }}>
@@ -1373,7 +1383,7 @@ export default function TokenTerminal() {
                       {position?.pnl != null && (
                         <div style={{ textAlign: "right" }}>
                           <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: position.pnl >= 0 ? POS : NEG }}>{position.pnl >= 0 ? "+" : "−"}${Math.abs(position.pnl).toLocaleString("en-US", { maximumFractionDigits: 2 })}</div>
-                          <div style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.06em", color: FAINT, textTransform: "uppercase", marginTop: 3 }}>tracked P&L</div>
+                          <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", color: FAINT, textTransform: "uppercase", marginTop: 3 }}>tracked P&L</div>
                         </div>
                       )}
                     </div>
@@ -1386,7 +1396,7 @@ export default function TokenTerminal() {
                             ["Tracked", `${position.boughtTokens.toLocaleString("en-US", { maximumFractionDigits: position.boughtTokens >= 1 ? 2 : 6 })} ${pair.baseSymbol}`],
                           ] as const).map(([label, val]) => (
                             <div key={label} style={{ background: BG, border: `1px solid ${BORD}`, borderRadius: 7, padding: "8px 10px" }}>
-                              <div style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
+                              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
                               <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: BRIGHT }}>{val}</div>
                             </div>
                           ))}
@@ -1404,7 +1414,7 @@ export default function TokenTerminal() {
                     and every canSolBuy gate. Kept for local debugging; never shown to real users. */}
                 {import.meta.env.DEV && pair.chainId === "solana" && (
                   <div style={{ background: CARD, border: `1px solid ${canSolBuy ? "#3ecf8e55" : BORD}`, borderRadius: 10, padding: "11px 14px", marginBottom: 12 }}>
-                    <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em", color: FAINT, textTransform: "uppercase", marginBottom: 6 }}>◎ Solana signer · live check</div>
+                    <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: FAINT, textTransform: "uppercase", marginBottom: 6 }}>◎ Solana signer · live check</div>
                     <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUT, lineHeight: 1.65 }}>
                       <div>picked: <span style={{ color: solSigner.src ? POS : NEG }}>{solSigner.src ?? "none"}</span> · sign <span style={{ color: solSigner.hasSign ? POS : NEG }}>{solSigner.hasSign ? "✓" : "✗"}</span> · send <span style={{ color: solSigner.hasSend ? POS : NEG }}>{solSigner.hasSend ? "✓" : "✗"}</span> · net {solSigner.network ?? "—"}</div>
                       <div>pubkey: <span style={{ color: BRIGHT, wordBreak: "break-all" }}>{solSigner.address ?? "—"}</span></div>
@@ -1422,20 +1432,20 @@ export default function TokenTerminal() {
                 )}
 
                 {/* live tape — collapsible (fold it away to give the chart room, like the trade panel) */}
-                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, overflow: "hidden" }}>
-                  <button onClick={() => setTapeOpen((o) => !o)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", borderBottom: tapeOpen ? `1px solid ${BORD}` : "none", padding: "9px 12px", cursor: "pointer" }}>
-                    <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.12em", color: MUT, textTransform: "uppercase" }}>Live tape{trades.length ? ` · ${trades.length}` : ""}</span>
-                    <span style={{ fontFamily: MONO, fontSize: 11, color: MUT }}>{tapeOpen ? "collapse ▾" : "expand ▸"}</span>
+                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, overflow: "hidden" }}>
+                  <button onClick={() => setTapeOpen((o) => !o)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", borderBottom: tapeOpen ? `1px solid ${BORD}` : "none", padding: "12px 14px", cursor: "pointer" }}>
+                    <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>Live tape{trades.length ? <span style={{ color: FAINT, fontWeight: 400 }}> · {trades.length}</span> : null}</span>
+                    <Chevron open={tapeOpen} />
                   </button>
                   {tapeOpen && (<>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 64px", gap: 8, padding: "9px 12px", borderBottom: `1px solid ${BORD}`, fontFamily: MONO, fontSize: 9, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 64px", gap: 8, padding: "9px 14px", borderBottom: `1px solid ${BORD}`, fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase" }}>
                       <span>Amount</span><span>Price</span><span>Wallet</span><span style={{ textAlign: "right" }}>Age</span>
                     </div>
                     <div style={{ maxHeight: 260, overflowY: "auto" }}>
                       {trades.length === 0
                         ? <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "18px 12px" }}>waiting for trades…</div>
                         : trades.map((t, i) => (
-                          <div key={t.tx + i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 64px", gap: 8, padding: "6px 12px", borderTop: i === 0 ? "none" : `1px solid ${BORD2}`, fontFamily: MONO, fontSize: 11 }}>
+                          <div key={t.tx + i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 64px", gap: 8, padding: "7px 14px", borderTop: i === 0 ? "none" : `1px solid ${BORD2}`, fontFamily: MONO, fontSize: 12 }}>
                             <span style={{ color: t.kind === "buy" ? POS : NEG }}>{fmtTapeUsd(t.amountUsd)}</span>
                             <span style={{ color: MUT }}>{fmtPrice(t.priceUsd)}</span>
                             <span style={{ color: FAINT }}>{shortAddr(t.wallet)}</span>
@@ -1451,10 +1461,10 @@ export default function TokenTerminal() {
                   The differentiator vs every other token terminal: a swap page anyone can
                   clone, but not the graded funding verdict beside it, and not an analyst you
                   can interrogate about the thing you're looking at. */}
-              <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, padding: 14, marginTop: isMobile ? 12 : 0, marginBottom: 12 }}>
+              <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginTop: isMobile ? 12 : 0, marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                  <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.14em", color: BRIGHT }}>◆ NEXUS</span>
-                  {isPerp && <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.08em", color: FAINT }}>· LISTED MARKET</span>}
+                  <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.brand, textTransform: "uppercase" }}>◆ Nexus read</span>
+                  {isPerp && <span style={{ fontFamily: UI, fontSize: 12, color: FAINT }}>· listed market</span>}
                 </div>
 
                 {sig ? (() => {
@@ -1462,11 +1472,11 @@ export default function TokenTerminal() {
                   return (
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", color: r.color, marginBottom: 4 }}>{r.label}</div>
-                      <div style={{ fontFamily: UI, fontSize: 11.5, lineHeight: 1.5, color: MUT }}>{r.sub}</div>
+                      <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: FOG }}>{r.sub}</div>
                     </div>
                   );
                 })() : (
-                  <div style={{ fontFamily: UI, fontSize: 11.5, lineHeight: 1.5, color: MUT, marginBottom: 12 }}>
+                  <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: FOG, marginBottom: 14 }}>
                     {isPerp
                       ? "Reading the funding tape for this market…"
                       : <>Nexus grades funding and positioning on the markets it lists — {pair.baseSymbol} isn’t one, so there’s no graded read to show. Ask below for what can be seen from public data.</>}
@@ -1478,7 +1488,7 @@ export default function TokenTerminal() {
                     ? `Give me your read on ${pair.baseSymbol} right now — funding, positioning, and whether there's a real edge here. Then the one thing to watch. Be honest if there isn't a setup.`
                     : `What can you tell me about the token ${pair.baseSymbol}${pair.baseAddress ? ` (${pair.baseAddress} on ${pair.chainId})` : ""}? It trades around ${fmtPrice(pair.priceUsd)} with ${fmtUsd(pair.liquidityUsd)} liquidity and ${fmtUsd(pair.volume24h)} 24h volume. Be explicit about what you can and can't verify.`)}
                   className="nx-card-interactive"
-                  style={{ width: "100%", fontFamily: MONO, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.04em", color: BRIGHT, background: "none", border: `1px solid #ededf055`, borderRadius: 8, padding: "10px 0", cursor: "pointer" }}
+                  style={{ width: "100%", fontFamily: UI, fontSize: 13, fontWeight: 600, color: BRIGHT, background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 10, padding: "10px 0", cursor: "pointer" }}
                 >Ask Nexus about {pair.baseSymbol} →</button>
               </div>
 
@@ -1488,11 +1498,11 @@ export default function TokenTerminal() {
               )}
 
               {/* trade panel — honest routing, no fake fills */}
-              <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, padding: 14 }}>
+              <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14 }}>
                 {/* collapse toggle — fold the buy/sell panel to give the chart + tape the room */}
                 <button onClick={() => setTradeOpen((o) => !o)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", padding: 0, marginBottom: tradeOpen ? 12 : 0, cursor: "pointer" }}>
-                  <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: BRIGHT, textTransform: "uppercase" }}>{showPerp ? "Trade · Perp" : "Trade · Spot"}</span>
-                  <span style={{ fontFamily: MONO, fontSize: 11, color: MUT }}>{tradeOpen ? "collapse ▾" : "expand ▸"}</span>
+                  <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>{showPerp ? "Trade perp" : "Trade spot"}</span>
+                  <Chevron open={tradeOpen} />
                 </button>
                 {tradeOpen && (<>
                 {/* Perp/Spot venue — a listed perp trades BOTH our book AND spot; the toggle picks
@@ -1500,7 +1510,7 @@ export default function TokenTerminal() {
                 {isPerp && (
                   <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
                     {(["perp", "spot"] as const).map((v) => (
-                      <button key={v} onClick={() => setVenue(v)} style={{ flex: 1, fontFamily: MONO, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: venue === v ? BRIGHT : MUT, background: venue === v ? "#ededf015" : "none", border: `1px solid ${venue === v ? "#ededf055" : BORD}`, borderRadius: 7, padding: "7px 0", cursor: "pointer" }}>
+                      <button key={v} onClick={() => setVenue(v)} style={{ flex: 1, fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: venue === v ? BRIGHT : MUT, background: venue === v ? C.surfaceAlt : "none", border: `1px solid ${venue === v ? C.borderStrong : BORD}`, borderRadius: 15, height: 30, cursor: "pointer" }}>
                         {v === "perp" ? "Perp · our book" : "Spot"}
                       </button>
                     ))}
@@ -1510,7 +1520,7 @@ export default function TokenTerminal() {
                 {/* side — Long/Short on the perp book, Buy/Sell on spot */}
                 <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                   {(["buy", "sell"] as const).map((s) => (
-                    <button key={s} onClick={() => setSide(s)} style={{ flex: 1, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: side === s ? "#0a0a0b" : s === "buy" ? POS : NEG, background: side === s ? (s === "buy" ? POS : NEG) : "none", border: `1px solid ${s === "buy" ? POS : NEG}55`, borderRadius: 7, padding: "9px 0", cursor: "pointer" }}>{showPerp ? (s === "buy" ? "Long" : "Short") : s}</button>
+                    <button key={s} onClick={() => setSide(s)} style={{ flex: 1, fontFamily: UI, fontSize: 13.5, fontWeight: 600, color: side === s ? "#0a0a0b" : s === "buy" ? POS : NEG, background: side === s ? (s === "buy" ? POS : NEG) : "none", border: `1px solid ${s === "buy" ? POS : NEG}55`, borderRadius: 10, padding: "9px 0", cursor: "pointer" }}>{showPerp ? (s === "buy" ? "Long" : "Short") : (s === "buy" ? "Buy" : "Sell")}</button>
                   ))}
                 </div>
 
@@ -1518,17 +1528,17 @@ export default function TokenTerminal() {
                     a SPOT SELL, with 25/50/MAX quick-fills that populate the field. */}
                 {isSpotSell ? (
                   <>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>
                       <span>Sell{held ? ` · bal ${held.amountLabel} ${pair.baseSymbol}` : " · no balance"}</span>
                       {/* unit toggle — type the amount in tokens or in $ */}
                       <span style={{ display: "flex", gap: 4 }}>
                         {(["token", "usd"] as const).map((u) => (
-                          <button key={u} onClick={() => { setSellUnit(u); setSellAmt(""); setSellMax(false); }} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: sellUnit === u ? BRIGHT : FAINT, background: sellUnit === u ? "#ededf012" : "none", border: `1px solid ${sellUnit === u ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{u === "usd" ? "USD" : pair.baseSymbol}</button>
+                          <button key={u} onClick={() => { setSellUnit(u); setSellAmt(""); setSellMax(false); }} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: sellUnit === u ? BRIGHT : FAINT, background: sellUnit === u ? "#ededf012" : "none", border: `1px solid ${sellUnit === u ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{u === "usd" ? "USD" : pair.baseSymbol}</button>
                         ))}
                       </span>
                     </div>
                     <input value={sellAmt} onChange={(e) => { setSellAmt(e.target.value.replace(/[^0-9.]/g, "")); setSellMax(false); }} inputMode="decimal" placeholder={sellUnit === "usd" ? "$0.00" : "0.0"}
-                      style={{ width: "100%", background: BG, border: `1px solid ${BORD}`, borderRadius: 8, color: BRIGHT, fontFamily: MONO, fontSize: 18, fontWeight: 600, padding: "10px 12px", outline: "none", marginBottom: 8, boxSizing: "border-box" }} />
+                      style={{ width: "100%", background: BG, border: `1px solid ${BORD}`, borderRadius: 10, color: BRIGHT, fontFamily: UI, fontSize: 20, fontWeight: 600, padding: "10px 12px", fontVariantNumeric: "tabular-nums", outline: "none", marginBottom: 8, boxSizing: "border-box" }} />
                     <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                       {[25, 50, 100].map((v) => {
                         const active = v === 100 && sellMax;
@@ -1538,7 +1548,7 @@ export default function TokenTerminal() {
                             if (!held) return;
                             if (v >= 100) { setSellMax(true); setSellAmt(fill(held.amount)); }
                             else { setSellMax(false); setSellAmt(fill(held.amount * v / 100)); }
-                          }} style={{ flex: 1, fontFamily: MONO, fontSize: 11, fontWeight: 700, color: active ? "#0a0a0b" : held ? MUT : FAINT, background: active ? NEG : BG, border: `1px solid ${active ? NEG : BORD}`, borderRadius: 6, padding: "7px 0", cursor: held ? "pointer" : "not-allowed" }}>{v === 100 ? "MAX" : `${v}%`}</button>
+                          }} style={{ flex: 1, fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: active ? "#0a0a0b" : held ? FOG : FAINT, background: active ? BRIGHT : BG, border: `1px solid ${active ? BRIGHT : BORD}`, borderRadius: 15, height: 30, cursor: held ? "pointer" : "not-allowed" }}>{v === 100 ? "MAX" : `${v}%`}</button>
                         );
                       })}
                     </div>
@@ -1547,7 +1557,7 @@ export default function TokenTerminal() {
                         wallet · balance). The sold token stays the only approve; this just picks the output. */}
                     {canInAppSell && receiveTargets.length > 0 && (
                       <>
-                        <div style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>Receive</div>
+                        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>Receive</div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
                           {[null, ...receiveTargets].map((t) => {
                             const key = t ? t.token.toLowerCase() : "usdc";
@@ -1565,18 +1575,18 @@ export default function TokenTerminal() {
                   </>
                 ) : (
                   <>
-                    <div style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>Amount (USD)</div>
+                    <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>Amount (USD)</div>
                     <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0.00"
-                      style={{ width: "100%", background: BG, border: `1px solid ${BORD}`, borderRadius: 8, color: BRIGHT, fontFamily: MONO, fontSize: 18, fontWeight: 600, padding: "10px 12px", outline: "none", marginBottom: 8, boxSizing: "border-box" }} />
+                      style={{ width: "100%", background: BG, border: `1px solid ${BORD}`, borderRadius: 10, color: BRIGHT, fontFamily: UI, fontSize: 20, fontWeight: 600, padding: "10px 12px", fontVariantNumeric: "tabular-nums", outline: "none", marginBottom: 8, boxSizing: "border-box" }} />
                     <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                       {[50, 100, 250, 1000].map((v) => (
-                        <button key={v} onClick={() => setAmount(String(v))} style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: MUT, background: BG, border: `1px solid ${BORD}`, borderRadius: 5, padding: "5px 0", cursor: "pointer" }}>${v}</button>
+                        <button key={v} onClick={() => setAmount(String(v))} className="nx-press" style={{ flex: 1, fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: FOG, background: BG, border: `1px solid ${BORD}`, borderRadius: 15, height: 30, cursor: "pointer" }}>${v}</button>
                       ))}
                     </div>
                   </>
                 )}
 
-                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: MONO, fontSize: 11, color: MUT, marginBottom: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontFamily: UI, fontSize: 13, color: MUT, marginBottom: 4 }}>
                   <span>Est. {isSpotSell || side === "sell" ? "value" : "output"}</span>
                   <span style={{ color: BRIGHT }}>{isSpotSell
                     ? (sellUsdEst != null ? `~$${sellUsdEst.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—")
@@ -1585,7 +1595,7 @@ export default function TokenTerminal() {
 
                 {/* route-confirmed preview badge (spot only) — a real quote (Jupiter / Fabric) */}
                 {showSpot && swapState.kind === "quote" && (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10, fontFamily: MONO, fontSize: 10.5, color: POS }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10, fontFamily: UI, fontSize: 12.5, color: FOG }}>
                     <span>✓ Route via {swapState.quoteRouter}</span>
                     {swapState.impact != null && <span style={{ color: swapState.impact >= 3 ? NEG : MUT }}>~{swapState.impact.toFixed(swapState.impact >= 1 ? 1 : 2)}% impact · ${Math.round(swapState.probeUsd).toLocaleString("en-US")}</span>}
                   </div>
@@ -1594,7 +1604,7 @@ export default function TokenTerminal() {
                 {/* ── PERP: Long/Short on our own book ── */}
                 {showPerp && route && (
                   <a href={route.href}
-                    style={{ display: "block", textAlign: "center", marginTop: 12, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "#0a0a0b", background: side === "buy" ? POS : NEG, borderRadius: 9, padding: "13px 0", textDecoration: "none" }}>
+                    style={{ display: "block", textAlign: "center", marginTop: 12, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#0a0a0b", background: side === "buy" ? POS : NEG, borderRadius: 9, padding: "13px 0", textDecoration: "none" }}>
                     {side === "buy" ? "Long" : "Short"} {pair.baseSymbol} on Nexus →
                   </a>
                 )}
@@ -1606,11 +1616,11 @@ export default function TokenTerminal() {
                     {side === "buy" && swapState.kind === "quote" && canInAppBuy && (
                       <>
                         <button onClick={openSwap} disabled={planning}
-                          style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "#0a0a0b", background: POS, border: "none", borderRadius: 9, padding: "13px 0", cursor: planning ? "wait" : "pointer", opacity: planning ? 0.7 : 1 }}>
+                          style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#0a0a0b", background: POS, border: "none", borderRadius: 9, padding: "13px 0", cursor: planning ? "wait" : "pointer", opacity: planning ? 0.7 : 1 }}>
                           {planning ? "Building route…" : `Buy ${pair.baseSymbol} in-app →`}
                         </button>
                         <a href={swapState.href} target="_blank" rel="noopener noreferrer"
-                          style={{ display: "block", textAlign: "center", marginTop: 8, fontFamily: MONO, fontSize: 10.5, color: MUT, textDecoration: "none" }}>
+                          style={{ display: "block", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 12.5, color: MUT, textDecoration: "none" }}>
                           or complete on {swapState.completeVenue} ↗
                         </a>
                       </>
@@ -1618,11 +1628,11 @@ export default function TokenTerminal() {
                     {side === "sell" && swapState.kind === "quote" && canInAppSell && (
                       <>
                         <button onClick={openSell} disabled={planning}
-                          style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "#fff", background: NEG, border: "none", borderRadius: 9, padding: "13px 0", cursor: planning ? "wait" : "pointer", opacity: planning ? 0.7 : 1 }}>
+                          style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#fff", background: NEG, border: "none", borderRadius: 9, padding: "13px 0", cursor: planning ? "wait" : "pointer", opacity: planning ? 0.7 : 1 }}>
                           {planning ? "Building route…" : sellOut ? `Sell ${pair.baseSymbol} → ${sellOut.sym} in-app →` : `Sell ${pair.baseSymbol} in-app →`}
                         </button>
                         <a href={swapState.href} target="_blank" rel="noopener noreferrer"
-                          style={{ display: "block", textAlign: "center", marginTop: 8, fontFamily: MONO, fontSize: 10.5, color: MUT, textDecoration: "none" }}>
+                          style={{ display: "block", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 12.5, color: MUT, textDecoration: "none" }}>
                           or complete on {swapState.completeVenue} ↗
                         </a>
                       </>
@@ -1632,7 +1642,7 @@ export default function TokenTerminal() {
                         deep-link below stays as the fallback (same pattern as the Solana buy). */}
                     {side === "sell" && canInAppSolSell && (
                       <button onClick={openSolSell} disabled={solPlanning}
-                        style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "#fff", background: NEG, border: "none", borderRadius: 9, padding: "13px 0", cursor: solPlanning ? "wait" : "pointer", opacity: solPlanning ? 0.7 : 1 }}>
+                        style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#fff", background: NEG, border: "none", borderRadius: 9, padding: "13px 0", cursor: solPlanning ? "wait" : "pointer", opacity: solPlanning ? 0.7 : 1 }}>
                         {solPlanning ? "Building route…" : `Sell ${pair.baseSymbol} → USDC in-app →`}
                       </button>
                     )}
@@ -1643,22 +1653,22 @@ export default function TokenTerminal() {
                     {canSolBuy && (
                       <div style={{ marginTop: 10, background: BG, border: `1px solid ${POS}44`, borderRadius: 9, padding: 11 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                          <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.1em", color: POS, textTransform: "uppercase" }}>◎ Buy in-app · pay with</span>
+                          <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: POS, textTransform: "uppercase" }}>◎ Buy in-app · pay with</span>
                           {/* input-token toggle — spend native SOL or USDC */}
                           <span style={{ display: "flex", gap: 4 }}>
                             {(["sol", "usdc"] as const).map((p) => (
-                              <button key={p} onClick={() => { setSolPayWith(p); setSolAmt(""); }} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: solPayWith === p ? BRIGHT : FAINT, background: solPayWith === p ? "#ededf012" : "none", border: `1px solid ${solPayWith === p ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{p === "usdc" ? "USDC" : "SOL"}</button>
+                              <button key={p} onClick={() => { setSolPayWith(p); setSolAmt(""); }} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: solPayWith === p ? BRIGHT : FAINT, background: solPayWith === p ? "#ededf012" : "none", border: `1px solid ${solPayWith === p ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{p === "usdc" ? "USDC" : "SOL"}</button>
                             ))}
                           </span>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>
                           <span>{solPayWith === "usdc"
                             ? (usdcBal != null ? `Bal ${usdcBal.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC` : "USDC bal —")
                             : (solBalance != null ? `Bal ${solBalance.toLocaleString("en-US", { maximumFractionDigits: 4 })} SOL${solUsd ? ` · $${(solBalance * solUsd).toLocaleString("en-US", { maximumFractionDigits: 2 })}` : ""}` : "Balance —")}</span>
                           {/* SOL ticket keeps its SOL/USD unit toggle; USDC ticket just shows the signer note */}
                           {solPayWith === "sol"
                             ? <span style={{ display: "flex", gap: 4 }}>{(["sol", "usd"] as const).map((u) => (
-                                <button key={u} onClick={() => { setSolUnit(u); setSolAmt(""); }} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: solUnit === u ? BRIGHT : FAINT, background: solUnit === u ? "#ededf012" : "none", border: `1px solid ${solUnit === u ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{u === "usd" ? "USD" : "SOL"}</button>
+                                <button key={u} onClick={() => { setSolUnit(u); setSolAmt(""); }} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: solUnit === u ? BRIGHT : FAINT, background: solUnit === u ? "#ededf012" : "none", border: `1px solid ${solUnit === u ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{u === "usd" ? "USD" : "SOL"}</button>
                               ))}</span>
                             : <span style={{ color: FAINT }}>Jupiter · you sign</span>}
                         </div>
@@ -1699,7 +1709,7 @@ export default function TokenTerminal() {
                             : "Insufficient SOL";
                           return (
                             <button onClick={openSolBuy} disabled={disabled}
-                              style={{ display: "block", width: "100%", textAlign: "center", fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: insufficient ? FAINT : "#0a0a0b", background: insufficient ? "none" : POS, border: insufficient ? `1px solid ${BORD}` : "none", borderRadius: 9, padding: "12px 0", cursor: disabled ? (solPlanning ? "wait" : "not-allowed") : "pointer", opacity: solPlanning ? 0.7 : 1 }}>
+                              style={{ display: "block", width: "100%", textAlign: "center", fontFamily: UI, fontSize: 14, fontWeight: 600, color: insufficient ? FAINT : "#0a0a0b", background: insufficient ? "none" : POS, border: insufficient ? `1px solid ${BORD}` : "none", borderRadius: 9, padding: "12px 0", cursor: disabled ? (solPlanning ? "wait" : "not-allowed") : "pointer", opacity: solPlanning ? 0.7 : 1 }}>
                               {solPlanning ? "Building route…" : insufficient ? insufLabel : `Buy ${pair.baseSymbol} with ${solInputDesc.sym} →`}
                             </button>
                           );
@@ -1713,18 +1723,18 @@ export default function TokenTerminal() {
                         detected balance) → the honest deep-link, which fills either direction. */}
                     {swapState.kind === "quote" && !(side === "buy" ? canInAppBuy : canInAppSell) && (
                       <a href={swapState.href} target="_blank" rel="noopener noreferrer"
-                        style={{ display: "block", textAlign: "center", marginTop: 8, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "#0a0a0b", background: BRIGHT, borderRadius: 9, padding: "13px 0", textDecoration: "none" }}>
+                        style={{ display: "block", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#0a0a0b", background: BRIGHT, borderRadius: 9, padding: "13px 0", textDecoration: "none" }}>
                         {side === "sell" ? "Sell" : "Buy"} {pair.baseSymbol} on {swapState.completeVenue} →
                       </a>
                     )}
                     {swapState.kind === "deeplink" && (
                       <a href={swapState.href} target="_blank" rel="noopener noreferrer"
-                        style={{ display: "block", textAlign: "center", marginTop: 12, fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "#0a0a0b", background: BRIGHT, borderRadius: 9, padding: "13px 0", textDecoration: "none" }}>
+                        style={{ display: "block", textAlign: "center", marginTop: 12, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#0a0a0b", background: BRIGHT, borderRadius: 9, padding: "13px 0", textDecoration: "none" }}>
                         {side === "sell" ? "Sell" : "Swap"} {pair.baseSymbol} on {swapState.venue} →
                       </a>
                     )}
                     {swapState.kind === "noroute" && (
-                      <div style={{ textAlign: "center", marginTop: 12, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", color: FAINT, background: "none", border: `1px solid ${BORD}`, borderRadius: 9, padding: "12px 0", cursor: "not-allowed" }}>
+                      <div style={{ textAlign: "center", marginTop: 12, fontFamily: UI, fontSize: 13, fontWeight: 600, color: FAINT, background: "none", border: `1px solid ${BORD}`, borderRadius: 9, padding: "12px 0", cursor: "not-allowed" }}>
                         No route
                       </div>
                     )}
@@ -1744,7 +1754,7 @@ export default function TokenTerminal() {
                 )}
 
                 {/* honesty: where the order actually fills */}
-                <div style={{ fontFamily: UI, fontSize: 10.5, lineHeight: 1.5, color: FAINT, marginTop: 10 }}>
+                <div style={{ fontFamily: UI, fontSize: 12, lineHeight: 1.55, color: MUT, marginTop: 12 }}>
                   {showPerp
                     ? <>Nexus lists {pair.baseSymbol} as a perp — trade it here on our book, graded like every Nexus position{isPerp ? <>, or switch to <b style={{ color: MUT }}>Spot</b> to buy/sell the token itself</> : null}.</>
                     : swapState.kind === "quote"
@@ -1761,7 +1771,7 @@ export default function TokenTerminal() {
                     modal so it gets its own room. Useful when the token here doesn't route but you
                     want to swap a major (get USDC to buy with, rotate BTC/ETH/SOL) without leaving. */}
                 <button onClick={() => setWooFiOpen(true)} className="nx-press"
-                  style={{ width: "100%", marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 9, padding: "10px 0", cursor: "pointer" }}>
+                  style={{ width: "100%", marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: UI, fontSize: 13, fontWeight: 600, color: FOG, background: "none", border: `1px solid ${BORD}`, borderRadius: 10, padding: "10px 0", cursor: "pointer" }}>
                   ⇄ Swap majors in-app <span style={{ color: FAINT, fontWeight: 400 }}>· WooFi</span>
                 </button>
                 </>)}
@@ -1773,19 +1783,19 @@ export default function TokenTerminal() {
             <div style={{ marginTop: 18 }}>
               {/* token tabs (Takes | About) — FOMO-style below-terminal organizer */}
               <div style={{ display: "flex", alignItems: "center", gap: 4, borderBottom: `1px solid ${BORD}`, marginBottom: 12 }}>
-                {([["takes", `TAKES${takes.length ? ` · ${takes.length}` : ""}`], ["about", "ABOUT"]] as const).map(([id, label]) => (
+                {([["takes", `Takes${takes.length ? ` · ${takes.length}` : ""}`], ["about", "About"]] as const).map(([id, label]) => (
                   <button key={id} onClick={() => setTokenTab(id)}
-                    style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", color: tokenTab === id ? BRIGHT : FAINT, background: "none", border: "none", borderBottom: `2px solid ${tokenTab === id ? BRIGHT : "transparent"}`, padding: "8px 12px", marginBottom: -1, cursor: "pointer" }}>{label}</button>
+                    style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: tokenTab === id ? BRIGHT : MUT, background: "none", border: "none", borderBottom: `2px solid ${tokenTab === id ? C.brand : "transparent"}`, padding: "10px 12px", marginBottom: -1, cursor: "pointer" }}>{label}</button>
                 ))}
-                {tokenTab === "takes" && <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.06em", color: FAINT, textTransform: "uppercase" }}>Ungraded · discussion</span>}
+                {tokenTab === "takes" && <span style={{ marginLeft: "auto", fontFamily: UI, fontSize: 12, color: FAINT }}>Ungraded · discussion</span>}
               </div>
 
               {tokenTab === "takes" ? (<>
               {wallet ? (
-                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
                   <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                     {(["BULL", "BEAR"] as const).map((d) => (
-                      <button key={d} onClick={() => setTakeDir(d)} style={{ flex: 1, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: takeDir === d ? "#0a0a0b" : d === "BULL" ? POS : NEG, background: takeDir === d ? (d === "BULL" ? POS : NEG) : "none", border: `1px solid ${d === "BULL" ? POS : NEG}55`, borderRadius: 7, padding: "8px 0", cursor: "pointer" }}>{d}</button>
+                      <button key={d} onClick={() => setTakeDir(d)} style={{ flex: 1, fontFamily: UI, fontSize: 13, fontWeight: 600, color: takeDir === d ? "#0a0a0b" : d === "BULL" ? POS : NEG, background: takeDir === d ? (d === "BULL" ? POS : NEG) : "none", border: `1px solid ${d === "BULL" ? POS : NEG}55`, borderRadius: 10, padding: "8px 0", cursor: "pointer" }}>{d === "BULL" ? "Bull" : "Bear"}</button>
                     ))}
                   </div>
                   <textarea value={takeText} onChange={(e) => setTakeText(e.target.value.slice(0, 280))} placeholder={`Your take on ${pair.baseSymbol}…`} rows={2}
@@ -1794,18 +1804,18 @@ export default function TokenTerminal() {
                     <input value={takeTarget} onChange={(e) => setTakeTarget(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="Target $ (optional)"
                       style={{ flex: 1, minWidth: 0, background: BG, border: `1px solid ${BORD}`, borderRadius: 8, color: MUT, fontFamily: MONO, fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" }} />
                     <button onClick={submitTake} disabled={takeBusy || !takeText.trim()}
-                      style={{ flexShrink: 0, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", color: "#0a0a0b", background: takeText.trim() ? BRIGHT : BORD, border: "none", borderRadius: 8, padding: "9px 18px", cursor: takeBusy ? "wait" : takeText.trim() ? "pointer" : "not-allowed", opacity: takeBusy ? 0.7 : 1 }}>{takeBusy ? "Posting…" : "Post take"}</button>
+                      style={{ flexShrink: 0, fontFamily: UI, fontSize: 13, fontWeight: 600, color: "#0a0a0b", background: takeText.trim() ? BRIGHT : BORD, border: "none", borderRadius: 8, padding: "9px 18px", cursor: takeBusy ? "wait" : takeText.trim() ? "pointer" : "not-allowed", opacity: takeBusy ? 0.7 : 1 }}>{takeBusy ? "Posting…" : "Post take"}</button>
                   </div>
                   <div style={{ fontFamily: UI, fontSize: 10, color: FAINT, marginTop: 8, lineHeight: 1.5 }}>Public + attributed to your wallet. Ungraded — {isPerp ? <>for a scored call, <a href="/lab?tab=thesis" style={{ color: MUT }}>post a graded thesis in the Lab ↗</a>.</> : <>Nexus doesn’t grade unlisted tokens, so this is a take, not a signal.</>}</div>
                 </div>
               ) : (
-                <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "10px 0", marginBottom: 4 }}>Connect a wallet to post a take.</div>
+                <div style={{ fontFamily: UI, fontSize: 13, color: MUT, padding: "10px 0", marginBottom: 4 }}>Connect a wallet to post a take.</div>
               )}
 
               {takesLoading ? (
-                <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "12px 0" }}>loading takes…</div>
+                <div style={{ fontFamily: UI, fontSize: 13, color: MUT, padding: "12px 0" }}>Loading takes…</div>
               ) : takes.length === 0 ? (
-                <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "12px 0" }}>No takes yet — drop the first read on {pair.baseSymbol}.</div>
+                <div style={{ fontFamily: UI, fontSize: 13, color: MUT, padding: "12px 0" }}>No takes yet — drop the first read on {pair.baseSymbol}.</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {takes.map((tk) => {
@@ -1813,19 +1823,19 @@ export default function TokenTerminal() {
                     const mine = !!wallet && tk.wallet.toLowerCase() === wallet.toLowerCase();
                     const merit = meritMap[tk.wallet.toLowerCase()]; // earned graded rank, or undefined
                     return (
-                      <div key={tk.id} style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, padding: "12px 14px" }}>
+                      <div key={tk.id} style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: "12px 14px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                           {tk.pfp
                             ? <img src={tk.pfp} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                            : <div style={{ width: 22, height: 22, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 9, color: MUT }}>{(tk.displayName || tk.wallet).slice(0, 1).toUpperCase()}</div>}
+                            : <div style={{ width: 22, height: 22, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 10, color: MUT }}>{(tk.displayName || tk.wallet).slice(0, 1).toUpperCase()}</div>}
                           <span style={{ fontFamily: MONO, fontSize: 11, color: MUT }}>{tk.displayName || shortAddr(tk.wallet)}</span>
                           {merit && (
                             <span title={`${merit.title} caller · ${merit.hitRate}% hit · ${merit.avgR >= 0 ? "+" : ""}${merit.avgR}R avg over ${merit.calls} graded calls`}
-                              style={{ display: "inline-flex", alignItems: "center", gap: 3, fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.04em", color: POS, background: POS + "14", border: `1px solid ${POS}44`, borderRadius: 5, padding: "2px 6px" }}>
+                              style={{ display: "inline-flex", alignItems: "center", gap: 3, fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", color: POS, background: POS + "14", border: `1px solid ${POS}44`, borderRadius: 5, padding: "2px 6px" }}>
                               {merit.glyph} {merit.title.toUpperCase()} · {merit.hitRate}%
                             </span>
                           )}
-                          <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.06em", color: bull ? POS : NEG, background: (bull ? POS : NEG) + "18", border: `1px solid ${(bull ? POS : NEG)}44`, borderRadius: 5, padding: "2px 6px" }}>{tk.direction}</span>
+                          <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: bull ? POS : NEG, background: (bull ? POS : NEG) + "18", border: `1px solid ${(bull ? POS : NEG)}44`, borderRadius: 5, padding: "2px 6px" }}>{tk.direction}</span>
                           <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 9.5, color: FAINT }}>{takeAge(tk.createdAt)}</span>
                           {mine && <button onClick={() => removeTake(tk.id)} title="Delete" style={{ background: "none", border: "none", color: FAINT, cursor: "pointer", fontFamily: MONO, fontSize: 11, padding: 0 }}>✕</button>}
                         </div>
@@ -1850,14 +1860,14 @@ export default function TokenTerminal() {
                       ["Age", tokenAgeLabel(pair.createdAt)],
                     ] as const).map(([label, val]) => (
                       <div key={label} style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 8, padding: "10px 12px" }}>
-                        <div style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+                        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
                         <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: label === "24h" && pair.priceChange24h != null ? (pair.priceChange24h >= 0 ? POS : NEG) : BRIGHT }}>{val}</div>
                       </div>
                     ))}
                   </div>
 
-                  <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 10, padding: 14 }}>
-                    <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.1em", color: FAINT, textTransform: "uppercase", marginBottom: 10 }}>Identity</div>
+                  <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14 }}>
+                    <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: FAINT, textTransform: "uppercase", marginBottom: 10 }}>Identity</div>
                     {([
                       ["Name", pair.baseName || pair.baseSymbol],
                       ["Symbol", pair.baseSymbol],
@@ -1875,9 +1885,9 @@ export default function TokenTerminal() {
                       <button onClick={copyCa} style={{ background: "none", border: "none", color: MUT, fontFamily: MONO, fontSize: 11, cursor: "pointer", padding: 0 }}>{shortAddr(pair.baseAddress)} {copied ? "✓" : "⧉"}</button>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                      {pair.websites[0] && <a href={pair.websites[0]} target="_blank" rel="noopener noreferrer" style={{ fontFamily: MONO, fontSize: 10.5, color: MUT, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 7, padding: "6px 11px" }}>web ↗</a>}
-                      {pair.socials.filter((s) => /twitter|x/i.test(s.type)).slice(0, 1).map((s) => <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: MONO, fontSize: 10.5, color: MUT, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 7, padding: "6px 11px" }}>𝕏 ↗</a>)}
-                      {pair.url && <a href={pair.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: MONO, fontSize: 10.5, color: MUT, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 7, padding: "6px 11px" }}>DexScreener ↗</a>}
+                      {pair.websites[0] && <a href={pair.websites[0]} target="_blank" rel="noopener noreferrer" style={{ fontFamily: UI, fontSize: 12.5, color: FOG, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 15, padding: "6px 12px" }}>web ↗</a>}
+                      {pair.socials.filter((s) => /twitter|x/i.test(s.type)).slice(0, 1).map((s) => <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: UI, fontSize: 12.5, color: FOG, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 15, padding: "6px 12px" }}>𝕏 ↗</a>)}
+                      {pair.url && <a href={pair.url} target="_blank" rel="noopener noreferrer" style={{ fontFamily: UI, fontSize: 12.5, color: FOG, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 15, padding: "6px 12px" }}>DexScreener ↗</a>}
                     </div>
                   </div>
 
@@ -1891,7 +1901,7 @@ export default function TokenTerminal() {
             </div>
 
             {/* provenance */}
-            <div style={{ fontFamily: MONO, fontSize: 9, color: FAINT, marginTop: 14, letterSpacing: "0.04em" }}>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 14, letterSpacing: "0.04em" }}>
               Stats + tape from DexScreener &amp; GeckoTerminal · public data · not advice. {pair.url && <a href={pair.url} target="_blank" rel="noopener noreferrer" style={{ color: MUT }}>view pair ↗</a>}
             </div>
           </>
@@ -1907,7 +1917,7 @@ export default function TokenTerminal() {
           <div role="dialog" aria-modal="true" aria-label="Swap majors" style={{ width: "100%", maxWidth: 460, marginTop: "6vh", background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div>
-                <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", color: BRIGHT }}>SWAP MAJORS</div>
+                <div style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT }}>Swap majors</div>
                 <div style={{ fontFamily: UI, fontSize: 10, color: FAINT, marginTop: 2 }}>WooFi · self-custodial · you sign in your own wallet</div>
               </div>
               <button onClick={() => setWooFiOpen(false)} style={{ background: "none", border: "none", color: MUT, fontSize: 16, cursor: "pointer", lineHeight: 1 }}>✕</button>
@@ -1924,7 +1934,7 @@ export default function TokenTerminal() {
         <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) closeSwap(); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div role="dialog" aria-modal="true" aria-label="Confirm swap" style={{ width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", color: BRIGHT }}>CONFIRM SWAP</span>
+              <span style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT }}>Confirm swap</span>
               <button onClick={closeSwap} disabled={swapBusy} style={{ background: "none", border: "none", color: swapBusy ? FAINT : MUT, fontSize: 16, cursor: swapBusy ? "default" : "pointer", lineHeight: 1 }}>✕</button>
             </div>
 
@@ -1959,21 +1969,21 @@ export default function TokenTerminal() {
                 {swapErr && <div style={{ fontFamily: MONO, fontSize: 11, color: NEG, marginBottom: 10, textAlign: "center" }}>{swapErr}</div>}
 
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={closeSwap} disabled={swapBusy} style={{ flex: 1, fontFamily: MONO, fontSize: 12, fontWeight: 700, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 8, padding: "11px 0", cursor: swapBusy ? "default" : "pointer" }}>Cancel</button>
-                  <button onClick={confirmSwap} disabled={swapBusy} style={{ flex: 2, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", color: "#0a0a0b", background: POS, border: "none", borderRadius: 8, padding: "11px 0", cursor: swapBusy ? "wait" : "pointer", opacity: swapBusy ? 0.7 : 1 }}>{swapBusy ? "Confirming…" : "Confirm swap"}</button>
+                  <button onClick={closeSwap} disabled={swapBusy} style={{ flex: 1, fontFamily: UI, fontSize: 13, fontWeight: 600, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 8, padding: "11px 0", cursor: swapBusy ? "default" : "pointer" }}>Cancel</button>
+                  <button onClick={confirmSwap} disabled={swapBusy} style={{ flex: 2, fontFamily: UI, fontSize: 13, fontWeight: 600, color: "#0a0a0b", background: POS, border: "none", borderRadius: 8, padding: "11px 0", cursor: swapBusy ? "wait" : "pointer", opacity: swapBusy ? 0.7 : 1 }}>{swapBusy ? "Confirming…" : "Confirm swap"}</button>
                 </div>
               </>
               ) : (
               <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
                 <div style={{ fontSize: 28, marginBottom: 8, color: POS }}>✓</div>
-                <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: POS, marginBottom: 6 }}>Swap sent</div>
+                <div style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT, marginBottom: 6 }}>Swap sent</div>
                 <div style={{ fontFamily: UI, fontSize: 11, color: MUT, marginBottom: 14 }}>Your {isSell ? plan.outSym : pair.baseSymbol} lands once it confirms on-chain.</div>
 
                 {/* share-on-swap card — the fact + a link to the token's Spot page. Verdict-only. */}
                 <div style={{ background: BG, border: `1px solid ${BORD}`, borderRadius: 8, padding: "10px 12px", marginBottom: 14, textAlign: "left" }}>
-                  <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.08em", color: FAINT, marginBottom: 3 }}>{pair.baseSymbol} · {isSell ? "SOLD" : "BOUGHT"} ON NEXUS</div>
+                  <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, marginBottom: 3 }}>{pair.baseSymbol} · {isSell ? "SOLD" : "BOUGHT"} ON NEXUS</div>
                   <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: BRIGHT, marginBottom: 9 }}>{isSell ? `${payAmt} ${plan.inSym} → ${recvVal}` : `${recvFmt ?? "—"} ${pair.baseSymbol}`}</div>
-                  <button onClick={copyShare} style={{ width: "100%", fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.03em", color: shareCopied ? POS : BRIGHT, background: "none", border: `1px solid ${shareCopied ? "#3ecf8e88" : BORD}`, borderRadius: 7, padding: "9px 0", cursor: "pointer" }}>
+                  <button onClick={copyShare} style={{ width: "100%", fontFamily: UI, fontSize: 13, fontWeight: 600, color: shareCopied ? POS : BRIGHT, background: "none", border: `1px solid ${shareCopied ? "#3ecf8e88" : BORD}`, borderRadius: 7, padding: "9px 0", cursor: "pointer" }}>
                     {shareCopied ? "✓ Link copied" : `Copy ${pair.baseSymbol} link ↗`}
                   </button>
                 </div>
@@ -1981,7 +1991,7 @@ export default function TokenTerminal() {
                 {explorerTx(plan.chainId, swapDone.hash) && (
                   <a href={explorerTx(plan.chainId, swapDone.hash)!} target="_blank" rel="noopener noreferrer" style={{ fontFamily: MONO, fontSize: 11, color: BRIGHT, textDecoration: "none", display: "inline-block", marginBottom: 14 }}>view transaction ↗</a>
                 )}
-                <button onClick={closeSwap} style={{ display: "block", width: "100%", fontFamily: MONO, fontSize: 12, fontWeight: 700, color: "#0a0a0b", background: BRIGHT, border: "none", borderRadius: 8, padding: "11px 0", cursor: "pointer" }}>Done</button>
+                <button onClick={closeSwap} style={{ display: "block", width: "100%", fontFamily: UI, fontSize: 13, fontWeight: 600, color: "#0a0a0b", background: BRIGHT, border: "none", borderRadius: 8, padding: "11px 0", cursor: "pointer" }}>Done</button>
               </div>
               );
             })()}
@@ -1995,7 +2005,7 @@ export default function TokenTerminal() {
         <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) closeSolModal(); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div role="dialog" aria-modal="true" aria-label="Confirm Solana swap" style={{ width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", color: BRIGHT }}>CONFIRM {solPlanDir === "sell" ? "SELL" : "SWAP"} · SOLANA</span>
+              <span style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT }}>Confirm {solPlanDir === "sell" ? "sell" : "swap"} · Solana</span>
               <button onClick={closeSolModal} disabled={solBusy} style={{ background: "none", border: "none", color: solBusy ? FAINT : MUT, fontSize: 16, cursor: solBusy ? "default" : "pointer", lineHeight: 1 }}>✕</button>
             </div>
             {(() => {
@@ -2021,17 +2031,17 @@ export default function TokenTerminal() {
                   {solBusy && <div style={{ fontFamily: MONO, fontSize: 11, color: POS, marginBottom: 10, textAlign: "center" }}>{solStep || "working…"}</div>}
                   {solErr && <div style={{ fontFamily: MONO, fontSize: 11, color: NEG, marginBottom: 10, textAlign: "center" }}>{solErr}</div>}
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={closeSolModal} disabled={solBusy} style={{ flex: 1, fontFamily: MONO, fontSize: 12, fontWeight: 700, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 8, padding: "11px 0", cursor: solBusy ? "default" : "pointer" }}>Cancel</button>
-                    <button onClick={isSolSell ? confirmSolSell : confirmSolBuy} disabled={solBusy || !solModalAffordable} style={{ flex: 2, fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.03em", color: solBusy || solModalAffordable ? "#0a0a0b" : FAINT, background: solBusy || solModalAffordable ? POS : BORD, border: "none", borderRadius: 8, padding: "11px 0", cursor: solBusy ? "wait" : solModalAffordable ? "pointer" : "not-allowed", opacity: solBusy ? 0.7 : 1 }}>{solBusy ? "Confirming…" : !solBalanceKnown ? "SOL balance unavailable" : !solModalAffordable ? "Need SOL for fees" : isSolSell ? "Confirm sell" : "Confirm swap"}</button>
+                    <button onClick={closeSolModal} disabled={solBusy} style={{ flex: 1, fontFamily: UI, fontSize: 13, fontWeight: 600, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 8, padding: "11px 0", cursor: solBusy ? "default" : "pointer" }}>Cancel</button>
+                    <button onClick={isSolSell ? confirmSolSell : confirmSolBuy} disabled={solBusy || !solModalAffordable} style={{ flex: 2, fontFamily: UI, fontSize: 13, fontWeight: 600, color: solBusy || solModalAffordable ? "#0a0a0b" : FAINT, background: solBusy || solModalAffordable ? POS : BORD, border: "none", borderRadius: 8, padding: "11px 0", cursor: solBusy ? "wait" : solModalAffordable ? "pointer" : "not-allowed", opacity: solBusy ? 0.7 : 1 }}>{solBusy ? "Confirming…" : !solBalanceKnown ? "SOL balance unavailable" : !solModalAffordable ? "Need SOL for fees" : isSolSell ? "Confirm sell" : "Confirm swap"}</button>
                   </div>
                 </>
               ) : (
                 <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
                   <div style={{ fontSize: 28, marginBottom: 8, color: POS }}>✓</div>
-                  <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, color: POS, marginBottom: 6 }}>Swap sent</div>
+                  <div style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT, marginBottom: 6 }}>Swap sent</div>
                   <div style={{ fontFamily: UI, fontSize: 11, color: MUT, marginBottom: 14 }}>Your {solPlan.outSym} lands once it confirms on Solana.</div>
                   <a href={solscanTx(solDone.sig)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: MONO, fontSize: 11, color: BRIGHT, textDecoration: "none", display: "inline-block", marginBottom: 14, wordBreak: "break-all" }}>view on Solscan ↗</a>
-                  <button onClick={closeSolModal} style={{ display: "block", width: "100%", fontFamily: MONO, fontSize: 12, fontWeight: 700, color: "#0a0a0b", background: BRIGHT, border: "none", borderRadius: 8, padding: "11px 0", cursor: "pointer" }}>Done</button>
+                  <button onClick={closeSolModal} style={{ display: "block", width: "100%", fontFamily: UI, fontSize: 13, fontWeight: 600, color: "#0a0a0b", background: BRIGHT, border: "none", borderRadius: 8, padding: "11px 0", cursor: "pointer" }}>Done</button>
                 </div>
               );
             })()}

@@ -185,17 +185,17 @@ export function CrossChainCard({ walletAddress: connected, provider }: { walletA
     if (alive.current) setTrack((t) => (t && !TERMINAL.has(t.status) ? { ...t, timedOut: true } : t));
   }
 
-  const sel = { background: BG, border: `1px solid ${BORD}`, borderRadius: 7, color: BRIGHT, fontFamily: MONO, fontSize: 12, padding: "9px 10px", width: "100%" } as const;
+  const sel = { background: BG, border: `1px solid ${BORD}`, borderRadius: 10, color: BRIGHT, fontFamily: UI, fontSize: 13.5, padding: "9px 10px", width: "100%" } as const;
   const field = { display: "flex", flexDirection: "column" as const, gap: 6, flex: 1, minWidth: 0 };
-  const lab = { fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: MUT };
+  const lab = { fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: MUT };
   const fromName = CHAIN_NAME[XC_ASSETS[from].chain as keyof typeof CHAIN_NAME];
   const toName = CHAIN_NAME[dest.chain as keyof typeof CHAIN_NAME];
 
   return (
     <section aria-labelledby="xc-title" style={{ marginTop: 28, marginBottom: 88, maxWidth: 640, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h2 id="xc-title" style={{ margin: 0, fontFamily: MONO, fontSize: 12, letterSpacing: "0.14em", color: BRIGHT, fontWeight: 600 }}>CROSS-CHAIN</h2>
-        <span style={{ fontFamily: MONO, fontSize: 10.5, color: FAINT }}>via NEAR Intents · one transfer · no approval</span>
+        <h2 id="xc-title" style={{ margin: 0, fontFamily: UI, fontSize: 16, color: BRIGHT, fontWeight: 600 }}>Cross-chain</h2>
+        <span style={{ fontFamily: UI, fontSize: 13, color: MUT }}>via NEAR Intents · one transfer · no approval</span>
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -227,10 +227,10 @@ export function CrossChainCard({ walletAddress: connected, provider }: { walletA
       )}
 
       {!walletAddress ? (
-        <div style={{ fontFamily: MONO, fontSize: 11, color: MUT }}>{connected ? "Connect an EVM wallet to send from Arbitrum, Base or Ethereum." : "Connect a wallet to move funds across chains."}</div>
+        <div style={{ fontFamily: UI, fontSize: 13, color: MUT }}>{connected ? "Connect an EVM wallet to send from Arbitrum, Base or Ethereum." : "Connect a wallet to move funds across chains."}</div>
       ) : (
         <button type="button" onClick={getQuote} disabled={!canQuote}
-          style={{ background: canQuote ? BRIGHT : "transparent", color: canQuote ? "#0a0a0b" : FAINT, border: `1px solid ${canQuote ? BRIGHT : BORD}`, borderRadius: 9, fontFamily: MONO, fontSize: 12.5, fontWeight: 700, letterSpacing: "0.03em", padding: "12px 0", cursor: canQuote ? "pointer" : "not-allowed" }}>
+          style={{ background: canQuote ? BRIGHT : "transparent", color: canQuote ? "#0a0a0b" : FAINT, border: `1px solid ${canQuote ? BRIGHT : BORD}`, borderRadius: 10, fontFamily: UI, fontSize: 14, fontWeight: 600, padding: "12px 0", cursor: canQuote ? "pointer" : "not-allowed" }}>
           {busy && !review ? busy : inFlight ? "Transfer in progress" : "Review"}
         </button>
       )}
@@ -250,19 +250,19 @@ export function CrossChainCard({ walletAddress: connected, provider }: { walletA
           {track.timedOut && <div style={{ color: FOG, fontSize: 10.5 }}>Still in progress. Search the deposit address on the explorer to follow it.</div>}
           {TERMINAL.has(track.status) && (
             <button type="button" onClick={() => { setTrack(null); saveTrack(null); }}
-              style={{ alignSelf: "flex-start", background: "transparent", color: MUT, border: `1px solid ${BORD}`, borderRadius: 6, fontFamily: MONO, fontSize: 10.5, padding: "5px 10px", cursor: "pointer" }}>Clear</button>
+              style={{ alignSelf: "flex-start", background: "transparent", color: MUT, border: `1px solid ${BORD}`, borderRadius: 15, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>Clear</button>
           )}
         </div>
       )}
 
-      <div style={{ fontFamily: UI, fontSize: 10.5, lineHeight: 1.5, color: FAINT }}>
+      <div style={{ fontFamily: UI, fontSize: 12, lineHeight: 1.5, color: FAINT }}>
         Quotes are signed by 1Click and checked in your browser: paid to your address, refunded to your address. Your wallet sends one transfer. If the swap can’t fill, it refunds to your wallet on {fromName}.
       </div>
 
       {review && (
         <div role="dialog" aria-modal="true" aria-labelledby="xc-review-title" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div style={{ width: "100%", maxWidth: 420, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
-            <h3 id="xc-review-title" style={{ margin: 0, fontFamily: MONO, fontSize: 12, letterSpacing: "0.14em", color: BRIGHT }}>REVIEW TRANSFER</h3>
+            <h3 id="xc-review-title" style={{ margin: 0, fontFamily: UI, fontSize: 16, fontWeight: 600, color: BRIGHT }}>Review transfer</h3>
             {[
               ["You send", `${fromUnits(review.amount.toString(), XC_ASSETS[from].decimals)} ${XC_ASSETS[from].sym} on ${fromName}`],
               ["You receive (est.)", `${fromUnits(String(review.quote.quote.amountOut), dest.decimals)} ${dest.sym} on ${toName}`],
@@ -277,14 +277,14 @@ export function CrossChainCard({ walletAddress: connected, provider }: { walletA
                 <span style={{ color: BRIGHT, textAlign: "right", wordBreak: "break-all" }}>{v}</span>
               </div>
             ))}
-            <div style={{ fontFamily: MONO, fontSize: 10.5, color: POS }}>✓ Signed by 1Click · recipient and refund are yours</div>
-            <div style={{ fontFamily: UI, fontSize: 10.5, lineHeight: 1.5, color: FAINT }}>Fees are inside the quote. Send exactly this amount, once.</div>
+            <div style={{ fontFamily: UI, fontSize: 12.5, color: FOG }}>✓ Signed by 1Click · recipient and refund are yours</div>
+            <div style={{ fontFamily: UI, fontSize: 12, lineHeight: 1.5, color: FAINT }}>Fees are inside the quote. Send exactly this amount, once.</div>
             {err && <div role="alert" style={{ fontFamily: MONO, fontSize: 11, color: NEG }}>{err}</div>}
             <div style={{ display: "flex", gap: 8 }}>
               <button type="button" onClick={() => setReview(null)} disabled={!!busy}
-                style={{ flex: 1, background: "transparent", color: FOG, border: `1px solid ${BORD}`, borderRadius: 9, fontFamily: MONO, fontSize: 12, padding: "11px 0", cursor: busy ? "not-allowed" : "pointer" }}>Cancel</button>
+                style={{ flex: 1, background: "transparent", color: FOG, border: `1px solid ${BORD}`, borderRadius: 10, fontFamily: UI, fontSize: 13, fontWeight: 600, padding: "11px 0", cursor: busy ? "not-allowed" : "pointer" }}>Cancel</button>
               <button type="button" onClick={send} disabled={!!busy}
-                style={{ flex: 2, background: BRIGHT, color: "#0a0a0b", border: "none", borderRadius: 9, fontFamily: MONO, fontSize: 12, fontWeight: 700, padding: "11px 0", cursor: busy ? "wait" : "pointer" }}>{busy || "Send transfer"}</button>
+                style={{ flex: 2, background: BRIGHT, color: "#0a0a0b", border: "none", borderRadius: 10, fontFamily: UI, fontSize: 13, fontWeight: 600, padding: "11px 0", cursor: busy ? "wait" : "pointer" }}>{busy || "Send transfer"}</button>
             </div>
           </div>
         </div>

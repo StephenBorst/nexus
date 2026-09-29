@@ -363,28 +363,28 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
     try { navigator.clipboard.writeText(`${window.location.origin}/token/${tokenAddress}?venue=spot`); setShareCopied(true); setTimeout(() => setShareCopied(false), 1600); } catch { /* clipboard blocked */ }
   };
   const inStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", background: BG, border: "1px solid #33333a", borderRadius: 6, color: BRIGHT, fontFamily: MONO, outline: "none" };
-  const chip = (on: boolean): React.CSSProperties => ({ flex: 1, fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: on ? BRIGHT : FAINT, background: on ? "#ededf012" : "none", border: `1px solid ${on ? "#ededf033" : BORD}`, borderRadius: 6, padding: "6px 0", cursor: busy ? "default" : "pointer" });
-  const label: React.CSSProperties = { display: "block", fontSize: 9, letterSpacing: "0.1em", color: MUT, marginBottom: 5 };
-  const placeText = busy ? "WORKING…" : ft === "market" ? "CONFIRM & SIGN" : ft === "twap" ? "PLACE TWAP" : ft === "limit" ? "PLACE LIMIT" : "PLACE STOP";
+  const chip = (on: boolean): React.CSSProperties => ({ flex: 1, fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: on ? BRIGHT : MUT, background: on ? "#ededf012" : "none", border: `1px solid ${on ? "#33333a" : BORD}`, borderRadius: 15, height: 30, padding: 0, cursor: busy ? "default" : "pointer" });
+  const label: React.CSSProperties = { display: "block", fontSize: 10, letterSpacing: "0.08em", color: MUT, marginBottom: 6 };
+  const placeText = busy ? "Working…" : ft === "market" ? "Confirm & sign" : ft === "twap" ? "Place TWAP" : ft === "limit" ? "Place limit" : "Place stop";
   const tabs: OType[] = ["market", "limit", "twap", "stop"];
-  const tabName = (t: OType) => (t === "stop" ? (side === "buy" ? "STOP" : "STOP-LOSS") : t.toUpperCase());
+  const tabName = (t: OType) => (t === "stop" ? (side === "buy" ? "Stop" : "Stop-loss") : t === "twap" ? "TWAP" : t.charAt(0).toUpperCase() + t.slice(1));
 
   return (
     <>
       <button onClick={openModal}
-        style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: POS, background: "none", border: `1px solid ${POS}44`, borderRadius: 9, padding: "10px 0", cursor: "pointer" }}>
-        ◇ {side === "sell" ? "Sell" : "Buy"} {symbol} via Flash <span style={{ color: FAINT, fontWeight: 400 }}>· limit · TWAP · stop</span>
+        style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 13, fontWeight: 600, color: BRIGHT, background: "none", border: "1px solid #33333a", borderRadius: 10, padding: "10px 0", cursor: "pointer" }}>
+        ◇ {side === "sell" ? "Sell" : "Buy"} {symbol} via Flash <span style={{ color: MUT, fontWeight: 400 }}>· limit · TWAP · stop</span>
       </button>
       {open && (
         <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) !busy && setOpen(false); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div role="dialog" aria-modal="true" aria-label="Flash order" style={{ width: "100%", maxWidth: 400, maxHeight: "calc(100vh - 32px)", overflowY: "auto", background: CARD, border: "1px solid #33333a", borderRadius: 12, padding: 20, fontFamily: MONO, boxSizing: "border-box" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: BRIGHT, letterSpacing: "0.06em", marginBottom: 10 }}>◇ FLASH · {side === "sell" ? "SELL" : "BUY"} {symbol}</div>
+            <div style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: BRIGHT, marginBottom: 12 }}>{side === "sell" ? "Sell" : "Buy"} {symbol} <span style={{ color: MUT, fontWeight: 400 }}>· Flash</span></div>
             <div role="tablist" aria-label="Order type" style={{ display: "flex", gap: 6, marginBottom: 9 }}>
               {tabs.map((t) => (
                 <button key={t} role="tab" aria-selected={otype === t} disabled={busy} onClick={() => pickType(t)} style={chip(otype === t)}>{tabName(t)}</button>
               ))}
             </div>
-            <div style={{ fontFamily: UI, fontSize: 11, color: FOG, lineHeight: 1.5, marginBottom: 14 }}>{TAB_TEXT[otype](side)}</div>
+            <div style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.55, marginBottom: 14 }}>{TAB_TEXT[otype](side)}</div>
 
             <label style={label} htmlFor={`${fid}-size`}>{ft === "twap" ? "TOTAL SIZE" : "SIZE"} ({inSym})</label>
             <input id={`${fid}-size`} value={size} onChange={(e) => setSize(e.target.value.replace(/[^0-9.]/g, ""))} onBlur={() => fetchPreview(size)} inputMode="decimal"
@@ -398,7 +398,7 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
                 </label>
                 <input id={`${fid}-px`} value={px} onChange={(e) => setPx(e.target.value.replace(/[^0-9.]/g, ""))} onBlur={() => fetchPreview(size)} inputMode="decimal" placeholder={now ? String(Number(now.toPrecision(6))) : "0.00"}
                   style={{ ...inStyle, fontSize: 14, padding: "8px 12px", marginBottom: pxIssue ? 6 : 12 }} />
-                {pxIssue && <div style={{ fontFamily: UI, fontSize: 10.5, color: pxIssue.block ? NEG : FOG, lineHeight: 1.45, marginBottom: 12 }}>{pxIssue.text}</div>}
+                {pxIssue && <div style={{ fontFamily: UI, fontSize: 12, color: pxIssue.block ? NEG : FOG, lineHeight: 1.45, marginBottom: 12 }}>{pxIssue.text}</div>}
                 <div style={label}>EXPIRES</div>
                 <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                   {EXPIRIES.map((e) => <button key={e.k} disabled={busy} onClick={() => setExpiry(e.k)} style={chip(expiry === e.k)} aria-pressed={expiry === e.k}>{e.label}</button>)}
@@ -423,7 +423,7 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
                   <input id={`${fid}-tp`} value={tp} onChange={(e) => setTp(e.target.value.replace(/[^0-9.]/g, ""))} onBlur={() => fetchPreview(size)} inputMode="decimal" placeholder="—" style={{ ...inStyle, color: POS, border: `1px solid ${BORD}`, fontSize: 12, padding: "7px 9px" }} /></div>
               </div>
             )}
-            {halfBracket && <div style={{ fontFamily: UI, fontSize: 10.5, color: FOG, lineHeight: 1.45, marginTop: -4, marginBottom: 12 }}>Flash attaches the stop and the take-profit as a pair. Set both, or clear both to buy without them.</div>}
+            {halfBracket && <div style={{ fontFamily: UI, fontSize: 12, color: FOG, lineHeight: 1.45, marginTop: -4, marginBottom: 12 }}>Flash attaches the stop and the take-profit as a pair. Set both, or clear both to buy without them.</div>}
 
             {preview && (
               <div style={{ fontFamily: MONO, fontSize: 11, color: MUT, lineHeight: 1.7, marginBottom: 12, borderTop: `1px solid ${BORD}`, paddingTop: 10 }}>
@@ -439,14 +439,14 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
             )}
 
             {resting && (
-              <div style={{ fontFamily: UI, fontSize: 10.5, color: MUT, lineHeight: 1.55, marginBottom: 12 }}>
+              <div style={{ fontFamily: UI, fontSize: 12, color: MUT, lineHeight: 1.55, marginBottom: 12 }}>
                 Rests with Definitive until it fills, expires or you cancel. Keep the {inSym} in this wallet until then.
                 {" "}Your signature caps the spend and sends the output only to this wallet. The {ft === "twap" ? "schedule" : "price"} is enforced by Definitive’s engine, not by the signature.
                 {ft === "stop" || ft === "stop-loss" ? " Once triggered it fills at market; on thin tokens that can be well past the trigger." : ""}
               </div>
             )}
             {wantsBracket && posNum(sl) > 0 && posNum(tp) > 0 && (
-              <div style={{ fontFamily: UI, fontSize: 10.5, color: MUT, lineHeight: 1.55, marginBottom: 12 }}>
+              <div style={{ fontFamily: UI, fontSize: 12, color: MUT, lineHeight: 1.55, marginBottom: 12 }}>
                 The SL/TP pair sells the {symbol} this buy receives, from this wallet. It needs its own approval, and the {symbol} has to stay here for it to fire.
               </div>
             )}
@@ -470,19 +470,19 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
                   <div style={{ fontSize: 9.5, letterSpacing: "0.08em", color: FAINT, marginBottom: 3 }}>{symbol} · FLASH{dollar ? ` · ${dollar}` : ""}</div>
                   <div style={{ fontSize: 12, fontWeight: 700, color, marginBottom: 6 }}>{head}</div>
                   {done.state === "filled" && done.got && <div style={{ fontSize: 10.5, color: FOG, marginBottom: 6 }}>Received {Number(done.got).toLocaleString("en-US", { maximumFractionDigits: 6 })} {outSym}{link ? <> · <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>tx ↗</a></> : null}</div>}
-                  {done.state === "failed" && done.reason && <div style={{ fontFamily: UI, fontSize: 10.5, color: FOG, marginBottom: 6 }}>Flash: {done.reason}. Nothing left your wallet.</div>}
-                  {done.state === "resting" && <div style={{ fontFamily: UI, fontSize: 10.5, color: FOG, marginBottom: 6 }}>It shows under Flash orders below. Cancel it there any time; cancelling is a gasless signature.</div>}
-                  {done.state === "slow" && <div style={{ fontFamily: UI, fontSize: 10.5, color: FOG, marginBottom: 6 }}>Flash hasn’t reported the fill yet. Check Flash orders below.</div>}
+                  {done.state === "failed" && done.reason && <div style={{ fontFamily: UI, fontSize: 12, color: FOG, marginBottom: 6 }}>Flash: {done.reason}. Nothing left your wallet.</div>}
+                  {done.state === "resting" && <div style={{ fontFamily: UI, fontSize: 12, color: FOG, marginBottom: 6 }}>It shows under Flash orders below. Cancel it there any time; cancelling is a gasless signature.</div>}
+                  {done.state === "slow" && <div style={{ fontFamily: UI, fontSize: 12, color: FOG, marginBottom: 6 }}>Flash hasn’t reported the fill yet. Check Flash orders below.</div>}
                   <div style={{ fontSize: 9, color: FAINT, marginBottom: 9, wordBreak: "break-all" }}>order {done.id || "—"}</div>
-                  <button onClick={copyShare} style={{ width: "100%", fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.03em", color: shareCopied ? POS : BRIGHT, background: "none", border: `1px solid ${shareCopied ? "#3ecf8e88" : BORD}`, borderRadius: 7, padding: "9px 0", cursor: "pointer" }}>{shareCopied ? "✓ Link copied" : `Copy ${symbol} link ↗`}</button>
+                  <button onClick={copyShare} style={{ width: "100%", fontFamily: UI, fontSize: 13, fontWeight: 600, color: shareCopied ? POS : BRIGHT, background: "none", border: `1px solid ${shareCopied ? "#3ecf8e88" : BORD}`, borderRadius: 7, padding: "9px 0", cursor: "pointer" }}>{shareCopied ? "✓ Link copied" : `Copy ${symbol} link ↗`}</button>
                 </div>
               );
             })()}
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => !busy && setOpen(false)} style={{ flex: 1, background: "none", border: "1px solid #33333a", borderRadius: 7, padding: "9px 0", color: FOG, fontFamily: MONO, fontSize: 11, cursor: busy ? "default" : "pointer" }}>{done ? "CLOSE" : "CANCEL"}</button>
-              {!done && <button onClick={run} disabled={busy || !canPlace} style={{ flex: 1.4, background: busy || !canPlace ? "#1a1a1e" : POS, border: "none", borderRadius: 7, padding: "9px 0", color: busy || !canPlace ? MUT : "#08080a", fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: busy ? "default" : "pointer" }}>{placeText}</button>}
+              <button onClick={() => !busy && setOpen(false)} style={{ flex: 1, background: "none", border: "1px solid #33333a", borderRadius: 7, padding: "9px 0", color: FOG, fontFamily: UI, fontSize: 13, fontWeight: 600, cursor: busy ? "default" : "pointer" }}>{done ? "Close" : "Cancel"}</button>
+              {!done && <button onClick={run} disabled={busy || !canPlace} style={{ flex: 1.4, background: busy || !canPlace ? "#1a1a1e" : POS, border: "none", borderRadius: 7, padding: "9px 0", color: busy || !canPlace ? MUT : "#08080a", fontFamily: UI, fontSize: 13, fontWeight: 600, cursor: busy ? "default" : "pointer" }}>{placeText}</button>}
             </div>
-            <div style={{ fontFamily: UI, fontSize: 9.5, color: FAINT, marginTop: 10 }}>Definitive Flash · MEV-protected · approvals sized to your orders, never unlimited</div>
+            <div style={{ fontFamily: UI, fontSize: 11.5, color: FAINT, marginTop: 12 }}>Definitive Flash · MEV-protected · approvals sized to your orders, never unlimited</div>
           </div>
         </div>
       )}
