@@ -95,3 +95,26 @@ export function withFlashFee(bodyText, env) {
   b.flashIntegratorFeeBps = String(bps);
   return JSON.stringify(b);
 }
+
+// ── Our Base builder code (ERC-8021) on Flash orders ───────────────────────────
+// Flash stamps `erc8021AttributionCode` onto the settlement tx so Base's builder program credits us.
+// ORDER-ONLY: Flash doesn't accept it on /quote (no pricing effect). The code comes from one var
+// (FLASH_ATTRIBUTION_CODE, our base.dev registration); a browser-sent value is always dropped, on
+// both routes. Unset or malformed ⇒ omitted (Flash would reject a bad one at order placement, which
+// would fail the user's trade; an unregistered-but-valid code only goes unattributed).
+export const FLASH_ATTRIBUTION_RE = /^[a-zA-Z0-9_.-]{1,32}$/;
+export function flashAttributionCode(env) {
+  const c = String(env?.FLASH_ATTRIBUTION_CODE || "").trim();
+  return FLASH_ATTRIBUTION_RE.test(c) ? c : "";
+}
+export function withFlashAttribution(bodyText, env, { isOrder }) {
+  let b;
+  try { b = JSON.parse(bodyText); } catch { return bodyText; }
+  if (!b || typeof b !== "object" || Array.isArray(b)) return bodyText;
+  const code = isOrder ? flashAttributionCode(env) : "";
+  const hadClient = "erc8021AttributionCode" in b;
+  delete b.erc8021AttributionCode;
+  if (!code) return hadClient ? JSON.stringify(b) : bodyText;
+  b.erc8021AttributionCode = code;
+  return JSON.stringify(b);
+}

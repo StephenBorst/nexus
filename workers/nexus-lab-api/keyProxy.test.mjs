@@ -81,3 +81,29 @@ test("Flash fee: set ⇒ the same string on every request; a browser-sent fee is
   assert.equal("flashIntegratorFeeBps" in JSON.parse(withFlashFee(JSON.stringify({ flashIntegratorFeeBps: "50" }), {})), false);
   assert.equal(withFlashFee("not json", env), "not json");
 });
+
+import { withFlashAttribution, flashAttributionCode } from "./keyProxy.mjs";
+
+test("Flash attribution: order-only, from our var; a browser-sent code is dropped on both routes", () => {
+  const env = { FLASH_ATTRIBUTION_CODE: "nexustradinglabs" };
+  const body = JSON.stringify({ side: "buy", qty: "20", erc8021AttributionCode: "someoneelse" });
+  assert.equal(JSON.parse(withFlashAttribution(body, env, { isOrder: true })).erc8021AttributionCode, "nexustradinglabs");
+  assert.equal("erc8021AttributionCode" in JSON.parse(withFlashAttribution(body, env, { isOrder: false })), false, "never on /quote");
+  // unset: an untouched body ships byte-identical; a browser value is still stripped
+  const plain = JSON.stringify({ side: "buy", qty: "20" });
+  assert.equal(withFlashAttribution(plain, {}, { isOrder: true }), plain);
+  assert.equal("erc8021AttributionCode" in JSON.parse(withFlashAttribution(body, {}, { isOrder: true })), false);
+});
+
+test("Flash attribution: a malformed code is omitted (Flash would reject the user's order)", () => {
+  for (const c of ["", "a,b", "has space", "x".repeat(33), "emoji🙂"]) {
+    assert.equal(flashAttributionCode({ FLASH_ATTRIBUTION_CODE: c }), "", JSON.stringify(c));
+  }
+  assert.equal(flashAttributionCode({ FLASH_ATTRIBUTION_CODE: " my.app_1-x " }), "my.app_1-x");
+});
+
+test("Flash fee + attribution compose on /order the way the worker calls them", () => {
+  const env = { FLASH_FEE_BPS: "10", FLASH_ATTRIBUTION_CODE: "nexustradinglabs" };
+  const o = JSON.parse(withFlashAttribution(withFlashFee(JSON.stringify({ side: "buy" }), env), env, { isOrder: true }));
+  assert.deepEqual([o.flashIntegratorFeeBps, o.erc8021AttributionCode], ["10", "nexustradinglabs"]);
+});
