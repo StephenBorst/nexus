@@ -1,0 +1,47 @@
+# Report-only replay of the registered structure × house-fade study
+# (docs/research/structure-house-fade-prereg.md). Manual trigger only. It reads public data (the
+# house caller's public Lab record for stage 2, Orderly's public 4H candles), writes a report (job
+# summary + artifact) and changes nothing: no deploy, no KV write, no commit.
+#
+# Stage 1 runs once, after the registration is merged to main. Stage 2 only after a stage-1 pass,
+# on or after 2026-10-28 (the runner refuses earlier). The verdict goes under "Results" in the doc.
+name: Structure study (report only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: "1 = the 163 registered calls. 2 = confirmation on calls posted Sep 30 – Oct 14 (not before Oct 28)."
+        type: choice
+        options: ["1", "2"]
+        default: "1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: structure-study
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    name: Replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Dependency-free (node built-ins + app/lib + lab-api's orderlyGet), so no install step.
+      - name: Run the registered replay
+        env:
+          STAGE: ${{ inputs.stage }}
+        run: node tools/structure-study/run.mjs --stage "$STAGE" --out structure-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: structure-report-stage-${{ inputs.stage }}
+          path: structure-report
+          if-no-files-found: ignore
+          retention-days: 90
