@@ -182,9 +182,8 @@ export function ShareXrayButton({ address, isMobile }: { address: string; isMobi
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <button onClick={onShare} className="nx-btn" title="Share this x-ray. The link unfurls with the 30D grade card"
-        style={{ background: "none", border: `1px solid ${state === "copied" ? BONE : BORDER}`, borderRadius: 3, cursor: "pointer",
-          fontFamily: MONO, fontSize: 9, letterSpacing: "0.08em", padding: "3px 9px", color: state === "copied" ? BONE : MUTED }}>
-        {state === "copied" ? "LINK COPIED ✓" : "↗ SHARE"}
+        style={{ padding: "4px 11px", fontSize: 12, borderColor: state === "copied" ? BONE : undefined, color: state === "copied" ? BONE : undefined }}>
+        {state === "copied" ? "Link copied ✓" : "↗ Share"}
       </button>
       {state === "manual" && (
         <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} aria-label="Share link"
@@ -272,8 +271,8 @@ export function PositionsPanel({
                   <button onClick={() => onDraft(r)} title="Draft a thesis from this position. Plan it yourself"
                     style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: MUTED, fontFamily: MONO, fontSize: 9, padding: "2px 7px", cursor: "pointer" }}>◆</button>
                   {gatePass && r.copySym ? (
-                    <button onClick={() => onCopy(r)} className="nx-btn" title="Copy this position. The agent enters your direction, manages the exit, and grades it on-chain"
-                      style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: BONE, fontFamily: MONO, fontSize: 9, letterSpacing: "0.04em", padding: "2px 7px", cursor: "pointer", whiteSpace: "nowrap" }}>⚡ COPY</button>
+                    <button onClick={() => onCopy(r)} className="nx-btn nx-btn-icon" title="Copy this position. The agent enters your direction, manages the exit, and grades it on-chain"
+                      style={{ color: BONE, whiteSpace: "nowrap" }}>⚡ Copy</button>
                   ) : (
                     <span title={!gatePass ? "Copy locked. The wallet's grade hasn't cleared the bar" : "Not listed on Orderly. Nothing to copy into"}
                       style={{ color: FAINT, fontSize: 9, padding: "2px 4px", whiteSpace: "nowrap" }}>{!gatePass ? "🔒" : "not listed"}</span>

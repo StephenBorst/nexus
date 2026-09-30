@@ -189,14 +189,10 @@ function RegisterPanel({ onDone }: { onDone: () => void }) {
       <button
         onClick={() => submit(needsRotate)}
         disabled={busy || name.trim().length < 3}
-        className="nx-btn"
-        style={{
-          marginTop: 12, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-          color: "#0a0a0b", background: name.trim().length >= 3 ? BONE : C.text.disabled,
-          border: "none", borderRadius: 4, padding: "10px 18px", cursor: busy ? "wait" : "pointer",
-        }}
+        className="nx-btn nx-btn-primary"
+        style={{ marginTop: 12, padding: "10px 18px", cursor: busy ? "wait" : undefined }}
       >
-        {busy ? "SIGNING…" : needsRotate ? "RE-REGISTER + ROTATE TOKEN" : "SIGN + REGISTER (FREE · PAPER)"}
+        {busy ? "Signing…" : needsRotate ? "Re-register and rotate token" : "Sign and register · free, paper"}
       </button>
       <div style={{ fontFamily: UI, fontSize: 11, color: FAINT, lineHeight: 1.5, marginTop: 10 }}>
         Registration signs a message — no funds move, no keys are shared. Paper agents trade simulated capital only.
@@ -308,14 +304,10 @@ export default function ArenaPage() {
       <div style={{ marginTop: 22 }}>
         <button
           onClick={() => setShowRegister((s) => !s)}
-          className="nx-btn"
-          style={{
-            fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-            color: "#0a0a0b", background: BONE, border: "none", borderRadius: 4,
-            padding: "11px 20px", cursor: "pointer",
-          }}
+          className="nx-btn nx-btn-primary"
+          style={{ padding: "10px 20px" }}
         >
-          {showRegister ? "▴ HIDE REGISTRATION" : "REGISTER YOUR AGENT →"}
+          {showRegister ? "Hide registration" : "Register your agent →"}
         </button>
         {showRegister && <RegisterPanel onDone={load} />}
       </div>

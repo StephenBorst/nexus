@@ -34,6 +34,7 @@ import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 import { useWalletConnectorPrivy } from "@orderly.network/wallet-connector-privy";
 import { useEscapeKey } from "@/utils/a11y";
 import { C } from "@/config/theme";
+import { Chevron, Pill, Stat, Tabs } from "@/components/ui";
 
 // WooFi majors-swap widget — the in-app fill for the majors WooFi routes (BTC/ETH/SOL/USDC etc.),
 // restored as an additive Spot panel (the old standalone /swap now redirects to /token). Lazy so its
@@ -387,25 +388,6 @@ function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCaller
         <button onClick={() => setExpanded((x) => !x)} style={{ width: "100%", marginTop: 8, background: "none", border: "none", color: MUT, fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", cursor: "pointer", padding: "4px 0" }}>{expanded ? "show less ▴" : `+${data.callers.length - 5} more ▾`}</button>
       )}
       <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 8, lineHeight: 1.4 }}>{nCallers} positioned · open positions + active public calls, graded on public price</div>
-    </div>
-  );
-}
-
-// Section toggle chevron — the same mark the Lab's Collapsible uses.
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" style={{ color: MUT, transform: open ? "rotate(180deg)" : "none", transition: "transform 160ms ease" }}>
-      <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-// ── one header stat cell ──────────────────────────────────────────────────────
-function Stat({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-      <span style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: color || BRIGHT, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{value}</span>
-      <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase" }}>{label}</span>
     </div>
   );
 }
@@ -1252,7 +1234,7 @@ export default function TokenTerminal() {
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {["BTC", "ETH", "SOL", "HYPE", "NEXUS"].map((s) => (
-                  <button key={s} onClick={() => submit(s)} className="nx-press" style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 15, color: FOG, fontFamily: UI, fontSize: 12.5, fontWeight: 600, height: 30, padding: "0 14px", cursor: "pointer" }}>{s}</button>
+                  <Pill key={s} onClick={() => submit(s)}>{s}</Pill>
                 ))}
               </div>
             </div>
@@ -1361,7 +1343,7 @@ export default function TokenTerminal() {
                 <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
                     {TIMEFRAMES.map((t, i) => (
-                      <button key={t.label} onClick={() => setTf(i)} style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: i === tf ? BRIGHT : MUT, background: i === tf ? C.surfaceAlt : "none", border: `1px solid ${i === tf ? C.borderStrong : "transparent"}`, borderRadius: 15, height: 28, padding: "0 12px", cursor: "pointer" }}>{t.label}</button>
+                      <Pill key={t.label} size="sm" active={i === tf} onClick={() => setTf(i)}>{t.label}</Pill>
                     ))}
                     <span style={{ marginLeft: "auto", fontFamily: UI, fontSize: 12, color: FAINT, alignSelf: "center" }}>Chart · GeckoTerminal</span>
                   </div>
@@ -1510,9 +1492,7 @@ export default function TokenTerminal() {
                 {isPerp && (
                   <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
                     {(["perp", "spot"] as const).map((v) => (
-                      <button key={v} onClick={() => setVenue(v)} style={{ flex: 1, fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: venue === v ? BRIGHT : MUT, background: venue === v ? C.surfaceAlt : "none", border: `1px solid ${venue === v ? C.borderStrong : BORD}`, borderRadius: 15, height: 30, cursor: "pointer" }}>
-                        {v === "perp" ? "Perp · our book" : "Spot"}
-                      </button>
+                      <Pill key={v} grow active={venue === v} onClick={() => setVenue(v)}>{v === "perp" ? "Perp · our book" : "Spot"}</Pill>
                     ))}
                   </div>
                 )}
@@ -1580,7 +1560,7 @@ export default function TokenTerminal() {
                       style={{ width: "100%", background: BG, border: `1px solid ${BORD}`, borderRadius: 10, color: BRIGHT, fontFamily: UI, fontSize: 20, fontWeight: 600, padding: "10px 12px", fontVariantNumeric: "tabular-nums", outline: "none", marginBottom: 8, boxSizing: "border-box" }} />
                     <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                       {[50, 100, 250, 1000].map((v) => (
-                        <button key={v} onClick={() => setAmount(String(v))} className="nx-press" style={{ flex: 1, fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: FOG, background: BG, border: `1px solid ${BORD}`, borderRadius: 15, height: 30, cursor: "pointer" }}>${v}</button>
+                        <Pill key={v} grow active={amount === String(v)} onClick={() => setAmount(String(v))}>${v}</Pill>
                       ))}
                     </div>
                   </>
@@ -1782,12 +1762,9 @@ export default function TokenTerminal() {
                 Firewalled server-side: never enters grading / the caller leaderboard / the ledger. ── */}
             <div style={{ marginTop: 18 }}>
               {/* token tabs (Takes | About) — FOMO-style below-terminal organizer */}
-              <div style={{ display: "flex", alignItems: "center", gap: 4, borderBottom: `1px solid ${BORD}`, marginBottom: 12 }}>
-                {([["takes", `Takes${takes.length ? ` · ${takes.length}` : ""}`], ["about", "About"]] as const).map(([id, label]) => (
-                  <button key={id} onClick={() => setTokenTab(id)}
-                    style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: tokenTab === id ? BRIGHT : MUT, background: "none", border: "none", borderBottom: `2px solid ${tokenTab === id ? C.brand : "transparent"}`, padding: "10px 12px", marginBottom: -1, cursor: "pointer" }}>{label}</button>
-                ))}
-                {tokenTab === "takes" && <span style={{ marginLeft: "auto", fontFamily: UI, fontSize: 12, color: FAINT }}>Ungraded · discussion</span>}
+              <div style={{ marginBottom: 12 }}>
+                <Tabs items={[{ id: "takes", label: "Takes", count: takes.length }, { id: "about", label: "About" }]} active={tokenTab} onChange={setTokenTab}
+                  right={tokenTab === "takes" ? "Ungraded · discussion" : undefined} />
               </div>
 
               {tokenTab === "takes" ? (<>
@@ -1970,7 +1947,7 @@ export default function TokenTerminal() {
 
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={closeSwap} disabled={swapBusy} style={{ flex: 1, fontFamily: UI, fontSize: 13, fontWeight: 600, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 8, padding: "11px 0", cursor: swapBusy ? "default" : "pointer" }}>Cancel</button>
-                  <button onClick={confirmSwap} disabled={swapBusy} style={{ flex: 2, fontFamily: UI, fontSize: 13, fontWeight: 600, color: "#0a0a0b", background: POS, border: "none", borderRadius: 8, padding: "11px 0", cursor: swapBusy ? "wait" : "pointer", opacity: swapBusy ? 0.7 : 1 }}>{swapBusy ? "Confirming…" : "Confirm swap"}</button>
+                  <button onClick={confirmSwap} disabled={swapBusy} style={{ flex: 2, fontFamily: UI, fontSize: 13, fontWeight: 600, color: "#0a0a0b", background: isSell ? NEG : POS, border: "none", borderRadius: 8, padding: "11px 0", cursor: swapBusy ? "wait" : "pointer", opacity: swapBusy ? 0.7 : 1 }}>{swapBusy ? "Confirming…" : "Confirm swap"}</button>
                 </div>
               </>
               ) : (
@@ -2032,7 +2009,7 @@ export default function TokenTerminal() {
                   {solErr && <div style={{ fontFamily: MONO, fontSize: 11, color: NEG, marginBottom: 10, textAlign: "center" }}>{solErr}</div>}
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={closeSolModal} disabled={solBusy} style={{ flex: 1, fontFamily: UI, fontSize: 13, fontWeight: 600, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 8, padding: "11px 0", cursor: solBusy ? "default" : "pointer" }}>Cancel</button>
-                    <button onClick={isSolSell ? confirmSolSell : confirmSolBuy} disabled={solBusy || !solModalAffordable} style={{ flex: 2, fontFamily: UI, fontSize: 13, fontWeight: 600, color: solBusy || solModalAffordable ? "#0a0a0b" : FAINT, background: solBusy || solModalAffordable ? POS : BORD, border: "none", borderRadius: 8, padding: "11px 0", cursor: solBusy ? "wait" : solModalAffordable ? "pointer" : "not-allowed", opacity: solBusy ? 0.7 : 1 }}>{solBusy ? "Confirming…" : !solBalanceKnown ? "SOL balance unavailable" : !solModalAffordable ? "Need SOL for fees" : isSolSell ? "Confirm sell" : "Confirm swap"}</button>
+                    <button onClick={isSolSell ? confirmSolSell : confirmSolBuy} disabled={solBusy || !solModalAffordable} style={{ flex: 2, fontFamily: UI, fontSize: 13, fontWeight: 600, color: solBusy || solModalAffordable ? "#0a0a0b" : FAINT, background: solBusy || solModalAffordable ? (isSolSell ? NEG : POS) : BORD, border: "none", borderRadius: 8, padding: "11px 0", cursor: solBusy ? "wait" : solModalAffordable ? "pointer" : "not-allowed", opacity: solBusy ? 0.7 : 1 }}>{solBusy ? "Confirming…" : !solBalanceKnown ? "SOL balance unavailable" : !solModalAffordable ? "Need SOL for fees" : isSolSell ? "Confirm sell" : "Confirm swap"}</button>
                   </div>
                 </>
               ) : (

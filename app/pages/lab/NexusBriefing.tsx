@@ -51,7 +51,7 @@ function InsightRow({ ins, onSelectTab, rank }: { ins: Insight; onSelectTab: (t:
         <button
           onClick={() => onSelectTab(ins.action!.tab as TabId)}
           className="nx-btn"
-          style={{ flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.05em", color: "#ededf0", background: "#1a1a1e", border: "1px solid #33333a", borderRadius: 4, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}
+          style={{ flexShrink: 0, fontSize: 12, padding: "5px 12px", color: "#ededf0", borderColor: "#33333a", whiteSpace: "nowrap" }}
         >{ins.action.label} →</button>
       )}
     </div>

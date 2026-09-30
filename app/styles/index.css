@@ -132,19 +132,21 @@ html, body {
 .nx-card-interactive:hover { border-color: var(--nx-border-strong); }
 
 .nx-label {
-  font-family: var(--nx-font-mono); font-size: 9px; letter-spacing: 0.12em;
+  font-family: var(--nx-font-mono); font-size: 10px; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--nx-muted);
 }
 
+/* Buttons speak in the UI face, sentence case — mono caps are for labels only (docs/brand.md).
+   Shape = the pill from app/components/ui (radius 15). Primary = bone fill; never the brand blue. */
 .nx-btn {
-  font-family: var(--nx-font-mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;
-  color: var(--nx-muted); background: none;
-  border: 1px solid var(--nx-border); border-radius: var(--nx-r-sm);
-  padding: 8px 16px; cursor: pointer;
+  font-family: var(--nx-font-ui); font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--nx-fog); background: none;
+  border: 1px solid var(--nx-border); border-radius: 15px;
+  padding: 7px 14px; cursor: pointer; line-height: 1.2;
   transition: color var(--nx-dur) var(--nx-ease), border-color var(--nx-dur) var(--nx-ease),
               background-color var(--nx-dur) var(--nx-ease), transform 90ms var(--nx-ease);
 }
-.nx-btn:hover { color: var(--nx-fog); border-color: var(--nx-border-strong); }
+.nx-btn:hover { color: var(--nx-bright); border-color: var(--nx-border-strong); }
 .nx-btn:active { transform: scale(0.97); }
 .nx-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--nx-border-accent); }
 /* Clickable rows/cards made keyboard-reachable (role="button"/"link" + tabIndex) get a bone
@@ -154,27 +156,27 @@ html, body {
 .nx-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
 
 .nx-btn-primary {
-  color: var(--nx-accent); background: #ededf014;
-  border-color: var(--nx-accent); font-weight: 600;
+  color: var(--nx-canvas); background: var(--nx-accent);
+  border-color: var(--nx-accent);
 }
-.nx-btn-primary:hover { background: #ededf024; color: var(--nx-accent); border-color: var(--nx-accent); }
+.nx-btn-primary:hover { background: var(--nx-bright); color: var(--nx-canvas); border-color: var(--nx-bright); }
 
 /* Small icon/chip button — same interaction, tighter footprint (feed/card actions). */
-.nx-btn-icon { padding: 3px 7px; font-size: 9px; letter-spacing: 0.05em; text-transform: none; }
+.nx-btn-icon { padding: 4px 10px; font-size: 12px; }
 
 /* Active/toggled state — rationed accent tint (following, comments open, etc.). */
 .nx-btn.is-active { color: var(--nx-accent); border-color: #33333a; background: #1a1a1e; }
 .nx-btn.is-active:hover { color: var(--nx-accent); border-color: var(--nx-accent); background: #1a1a1e; }
 
 .nx-badge {
-  font-family: var(--nx-font-mono); font-size: 9px; letter-spacing: 0.05em;
-  border: 1px solid var(--nx-border); border-radius: var(--nx-r-sm); padding: 2px 6px;
+  font-family: var(--nx-font-ui); font-size: 11px; font-weight: 600;
+  border: 1px solid var(--nx-border); border-radius: 10px; padding: 1px 8px;
 }
 
 .nx-input {
-  font-family: var(--nx-font-mono); font-size: 12px; color: var(--nx-bright);
+  font-family: var(--nx-font-ui); font-size: 13.5px; color: var(--nx-bright);
   background: var(--nx-inset); border: 1px solid var(--nx-border);
-  border-radius: var(--nx-r-sm); padding: 8px 10px; outline: none; width: 100%;
+  border-radius: 10px; padding: 9px 12px; outline: none; width: 100%;
   box-sizing: border-box;
   transition: border-color var(--nx-dur) var(--nx-ease), box-shadow var(--nx-dur) var(--nx-ease);
 }

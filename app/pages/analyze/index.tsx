@@ -43,7 +43,7 @@ const ORDERLY_API = "https://api-evm.orderly.org";
 const BONE = "#ededf0";
 const POS = "#3ecf8e", NEG = "#f7525f";
 const FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b", BRIGHT = "#f4f4f5";
-const BORDER = "#232327", SURFACE = "#141416", SURFACE_ALT = "#0f0f11";
+const BORDER = "#232327", SURFACE_ALT = "#0f0f11";
 
 const label: CSSProperties = { fontFamily: MONO, fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: MUTED };
 
@@ -358,14 +358,10 @@ export default function AnalyzePage() {
         <button
           onClick={submit}
           disabled={loading}
-          className="nx-btn"
-          style={{
-            fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-            color: "#0a0a0b", background: BONE, border: "none", borderRadius: 4,
-            padding: "11px 20px", cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1,
-          }}
+          className="nx-btn nx-btn-primary"
+          style={{ padding: "10px 20px" }}
         >
-          {loading ? "ANALYZING…" : "ANALYZE →"}
+          {loading ? "Analyzing…" : "Analyze →"}
         </button>
       </div>
 
@@ -462,10 +458,10 @@ export default function AnalyzePage() {
           <EdgeGateCard gate={gate}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               {gate.pass && topCopy && (
-                <button onClick={() => copyRow(topCopy)} className="nx-btn"
+                <button onClick={() => copyRow(topCopy)} className="nx-btn nx-btn-primary"
                   title="Load this position into your agent as a directive. You review and arm it. Nothing executes from here."
-                  style={{ background: BONE, color: "#0a0a0b", border: "none", borderRadius: 4, padding: "10px 18px", fontFamily: MONO, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
-                  ⚡ COPY {topCopy.side} {topCopy.copySym} →
+                  style={{ padding: "10px 18px" }}>
+                  ⚡ Copy {topCopy.side.toLowerCase()} {topCopy.copySym} →
                 </button>
               )}
               {gate.pass && !topCopy && (
@@ -521,7 +517,7 @@ export default function AnalyzePage() {
           )}
           <div style={{ marginTop: 24, padding: "16px 18px", border: `1px solid ${BORDER}`, borderRadius: 6, background: SURFACE_ALT, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontFamily: UI, fontSize: 13, color: BRIGHT }}>Build your own graded record.</div>
-            <a href="/lab" className="nx-btn" style={{ background: BONE, color: "#0a0a0b", textDecoration: "none", borderRadius: 4, padding: "10px 20px", fontFamily: MONO, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em" }}>OPEN THE LAB →</a>
+            <a href="/lab" className="nx-btn nx-btn-primary" style={{ textDecoration: "none", display: "inline-block", padding: "10px 20px" }}>Open the Lab →</a>
           </div>
         </div>
       )}
@@ -604,8 +600,8 @@ export default function AnalyzePage() {
                             style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: MUTED, fontFamily: MONO, fontSize: 9, padding: "2px 7px", cursor: "pointer" }}>◆</button>
                           {/* Gated: never one-tap copy a wallet whose grade hasn't cleared the bar. */}
                           {gate.pass ? (
-                            <button onClick={() => { if (gate.pass) copyPosition(s, orderly.address); }} className="nx-btn" title="Copy this position. The agent enters your direction, manages the exit and grades it."
-                              style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: BONE, fontFamily: MONO, fontSize: 9, letterSpacing: "0.04em", padding: "2px 7px", cursor: "pointer", whiteSpace: "nowrap" }}>⚡ COPY</button>
+                            <button onClick={() => { if (gate.pass) copyPosition(s, orderly.address); }} className="nx-btn nx-btn-icon" title="Copy this position. The agent enters your direction, manages the exit and grades it."
+                              style={{ color: BONE, whiteSpace: "nowrap" }}>⚡ Copy</button>
                           ) : (
                             <span title="Copy locked. This wallet's grade hasn't cleared the bar." style={{ color: FAINT, fontSize: 9, padding: "2px 4px" }}>🔒</span>
                           )}
@@ -639,9 +635,9 @@ export default function AnalyzePage() {
             target="_blank"
             rel="noopener noreferrer"
             className="nx-btn"
-            style={{ display: "inline-block", background: SURFACE, color: BRIGHT, border: `1px solid ${BORDER}`, textDecoration: "none", borderRadius: 4, padding: "10px 18px", fontFamily: MONO, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em" }}
+            style={{ display: "inline-block", textDecoration: "none", padding: "10px 18px" }}
           >
-            VERIFY {address.slice(0, 6)}…{address.slice(-4)} ON ORDERLY ↗
+            Verify {address.slice(0, 6)}…{address.slice(-4)} on Orderly ↗
           </a>
         </div>
       )}
