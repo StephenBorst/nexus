@@ -58,7 +58,10 @@ export interface HostedTier { id: string; label: string; cap: number; note: stri
 export const HOSTED_TIERS: HostedTier[] = [
   { id: "claude-haiku-4-5",  label: "Haiku 4.5",  cap: 100, note: "fastest · highest cap" },
   { id: "claude-sonnet-4-6", label: "Sonnet 4.6", cap: 40,  note: "balanced · default" },
-  { id: "claude-opus-4-8",   label: "Opus 4.8",   cap: 20,  note: "strongest · lowest cap" },
+  { id: "claude-opus-4-8",   label: "Opus 4.8",   cap: 20,  note: "strong · lower cap" },
+  { id: "claude-sonnet-5-5", label: "Sonnet 5.5", cap: 30,  note: "newer · thinks first" },
+  { id: "claude-opus-5-5",   label: "Opus 5.5",   cap: 12,  note: "newer · thinks first" },
+  { id: "claude-fable-5-1",  label: "Fable 5.1",  cap: 5,   note: "most capable · lowest cap" },
 ];
 export const HOSTED_DEFAULT_MODEL = "claude-sonnet-4-6";
 
@@ -70,6 +73,7 @@ export function loadHostedModel(): string {
 }
 
 import { anthropicTools, openaiTools, TOOL_BY_NAME, type ToolCtx } from "@/config/assistantTools";
+import { requestLimits, textOf, emptyTurnText, createStreamAssembler } from "@/lib/anthropicTurn.mjs";
 import { createWalletClient, custom } from "viem";
 import { bareTicker } from "@/utils/utils";
 
@@ -210,14 +214,14 @@ export async function sendChat(opts: {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1024,
+        ...requestLimits(model),
         system,
         messages: history.map((m) => ({ role: m.role, content: m.content })),
       }),
     });
     if (!res.ok) throw new Error(await errText(res));
     const data = await res.json();
-    return data?.content?.[0]?.text ?? "(empty response)";
+    return textOf(data?.content) || emptyTurnText(data?.stop_reason);
   }
 
   // openai
@@ -264,7 +268,7 @@ async function runAnthropic(opts: {
     const res = await fetch(t.endpoint, {
       method: "POST",
       headers: t.headers,
-      body: JSON.stringify({ model, max_tokens: 1024, system, tools: anthropicTools(), messages, ...t.authBody }),
+      body: JSON.stringify({ model, ...requestLimits(model), system, tools: anthropicTools(), messages, ...t.authBody }),
       signal,
     });
     if (!res.ok) throw new Error(await errText(res));
@@ -284,8 +288,8 @@ async function runAnthropic(opts: {
       continue;
     }
 
-    const text = content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
-    return { text: text || "(empty response)", toolsUsed };
+    // The assistant turn above goes back verbatim (thinking blocks included), as these models require.
+    return { text: textOf(content) || emptyTurnText(data?.stop_reason), toolsUsed };
   }
   return { text: "Stopped after too many tool calls — try narrowing the question.", toolsUsed };
 }
@@ -377,39 +381,17 @@ async function runAnthropicStream(opts: {
     const res = await fetch(t.endpoint, {
       method: "POST",
       headers: t.headers,
-      body: JSON.stringify({ model, max_tokens: 1024, system, tools: anthropicTools(), messages, stream: true, ...t.authBody }),
+      body: JSON.stringify({ model, ...requestLimits(model), system, tools: anthropicTools(), messages, stream: true, ...t.authBody }),
       signal,
     });
     if (!res.ok) throw new Error(await errText(res));
 
-    const blocks: Record<number, { type: string; text?: string; id?: string; name?: string; json?: string }> = {};
-    let stopReason: string | null = null;
-    await readSSE(res, (ev) => {
-      const type = ev.type as string;
-      if (type === "content_block_start") {
-        const cb = (ev.content_block as { type: string; id?: string; name?: string }) || { type: "text" };
-        blocks[ev.index as number] = cb.type === "tool_use"
-          ? { type: "tool_use", id: cb.id, name: cb.name, json: "" }
-          : { type: "text", text: "" };
-      } else if (type === "content_block_delta") {
-        const b = blocks[ev.index as number];
-        const delta = ev.delta as { type: string; text?: string; partial_json?: string };
-        if (!b) return;
-        if (delta.type === "text_delta" && delta.text) { b.text = (b.text || "") + delta.text; fullText += delta.text; onDelta(delta.text); }
-        else if (delta.type === "input_json_delta" && delta.partial_json) { b.json = (b.json || "") + delta.partial_json; }
-      } else if (type === "message_delta") {
-        const sr = (ev.delta as { stop_reason?: string })?.stop_reason;
-        if (sr) stopReason = sr;
-      }
-    });
-
-    const content = Object.keys(blocks).map(Number).sort((a, b) => a - b).map((k) => {
-      const b = blocks[k];
-      if (b.type === "text") return { type: "text", text: b.text || "" };
-      let input: Record<string, unknown> = {};
-      try { input = JSON.parse(b.json || "{}"); } catch { /* empty */ }
-      return { type: "tool_use", id: b.id, name: b.name, input };
-    });
+    // Rebuilds the turn with thinking blocks (text + signature) intact, so the tool loop can send
+    // it back unchanged (app/lib/anthropicTurn.mjs).
+    const turn = createStreamAssembler((chunk: string) => { fullText += chunk; onDelta(chunk); });
+    await readSSE(res, (ev) => turn.push(ev));
+    const stopReason = turn.stopReason as string | null;
+    const content = turn.content() as { type: string; id?: string; name?: string; input?: Record<string, unknown> }[];
 
     if (stopReason === "tool_use") {
       messages.push({ role: "assistant", content });
@@ -423,7 +405,7 @@ async function runAnthropicStream(opts: {
       messages.push({ role: "user", content: results });
       continue;
     }
-    return { text: fullText.trim() || "(empty response)", toolsUsed };
+    return { text: fullText.trim() || emptyTurnText(stopReason), toolsUsed };
   }
   return { text: fullText.trim() || "Stopped after too many tool calls.", toolsUsed };
 }

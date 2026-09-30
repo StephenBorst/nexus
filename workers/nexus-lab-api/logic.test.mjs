@@ -2363,3 +2363,59 @@ test("entryVsMarket: the advisor's off-market entry check reads the latest hour"
   assert.equal(entryVsMarket(100, null), null);
   assert.equal(entryVsMarket(100, { t: [], h: [], l: [], c: [] }), null);
 });
+
+// ── Newer hosted tiers (Sonnet 5.5 / Opus 5.5 / Fable 5.1, 2026-09-30) ──────────
+import { shapeHostedBody, HOSTED_THINKING_MAX_TOKENS, HOSTED_MAX_TOKENS } from "./logic.mjs";
+
+test("resolveHostedModel: new tiers at the half caps borst set (30 / 12 / 5), env-overridable", () => {
+  assert.deepEqual(resolveHostedModel("claude-sonnet-5-5", {}), { model: "claude-sonnet-5-5", cap: 30 });
+  assert.deepEqual(resolveHostedModel("claude-opus-5-5", {}), { model: "claude-opus-5-5", cap: 12 });
+  assert.deepEqual(resolveHostedModel("claude-fable-5-1", {}), { model: "claude-fable-5-1", cap: 5 });
+  assert.equal(resolveHostedModel("claude-fable-5-1", { HOSTED_CAP_FABLE: "8" }).cap, 8);
+  // the default tier doesn't move
+  assert.equal(resolveHostedModel(undefined, {}).model, "claude-sonnet-4-6");
+});
+
+test("bankrGatewayModel: new tiers map to the gateway's confirmed ids", () => {
+  assert.equal(bankrGatewayModel("claude-sonnet-5-5"), "claude-sonnet-5.5");
+  assert.equal(bankrGatewayModel("claude-opus-5-5"), "claude-opus-5.5");
+  assert.equal(bankrGatewayModel("claude-fable-5-1"), "claude-fable-5.1");
+  assert.equal(bankrGatewayModel("claude-opus-5-5", { BANKR_MODEL_OPUS55: "x" }), "x");
+});
+
+test("shapeHostedBody: older tiers keep the 1024 ceiling and pass the body through", () => {
+  const out = shapeHostedBody({ _addr: "0xa", _ts: 1, _sig: "s", max_tokens: 9999, model: "evil", system: "S", temperature: 0.2 },
+    "claude-sonnet-4-6", "claude-sonnet-4.6");
+  assert.equal(out.model, "claude-sonnet-4.6");
+  assert.equal(out.max_tokens, HOSTED_MAX_TOKENS);
+  assert.equal(out.temperature, 0.2);          // allowed on 4.x
+  assert.equal(out.output_config, undefined);  // no effort forced on 4.x
+  for (const k of ["_addr", "_ts", "_sig"]) assert.equal(k in out, false);
+});
+
+test("shapeHostedBody: thinking tiers get effort low, a 4096 ceiling, and lose fields they'd 400 on", () => {
+  for (const m of ["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"]) {
+    const out = shapeHostedBody({
+      _sig: "s", max_tokens: 64000, thinking: { type: "disabled" }, temperature: 0.5, top_p: 0.9, top_k: 5,
+      tool_choice: { type: "any" }, output_config: { effort: "max" }, messages: [{ role: "user", content: "hi" }],
+    }, m, "gw-id");
+    assert.equal(out.model, "gw-id");
+    assert.equal(out.max_tokens, HOSTED_THINKING_MAX_TOKENS);
+    assert.deepEqual(out.output_config, { effort: "low" });   // the client can't buy a higher effort
+    for (const k of ["thinking", "temperature", "top_p", "top_k", "tool_choice", "_sig"]) assert.equal(k in out, false, k);
+    assert.equal(out.messages.length, 1);
+  }
+  // a small client max_tokens is kept; auto tool_choice survives
+  const small = shapeHostedBody({ max_tokens: 900, tool_choice: { type: "auto" } }, "claude-opus-5-5", "g");
+  assert.equal(small.max_tokens, 900);
+  assert.deepEqual(small.tool_choice, { type: "auto" });
+});
+
+test("HOSTED_TIERS in app/config/assistant.ts mirror hostedCaps (ids + caps), so the UI never advertises a cap the server doesn't enforce", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { hostedCaps } = await import("./logic.mjs");
+  const src = readFileSync(new URL("../../app/config/assistant.ts", import.meta.url), "utf8");
+  const block = src.slice(src.indexOf("export const HOSTED_TIERS"), src.indexOf("];", src.indexOf("export const HOSTED_TIERS")));
+  const client = Object.fromEntries([...block.matchAll(/id:\s*"([^"]+)"[^}]*?cap:\s*(\d+)/g)].map((m) => [m[1], Number(m[2])]));
+  assert.deepEqual(client, hostedCaps({}));
+});

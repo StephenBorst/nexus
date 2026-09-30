@@ -1066,19 +1066,53 @@ export function nexusMinUnits(priceUsd, discountUsd, tolerance, decimals = 18) {
 // PRO users pick which model the hosted proxy runs; each model carries its OWN
 // daily cap so our LLM spend scales with model cost. Stronger model → lower cap;
 // cheaper model → higher cap (the user trades model strength for volume). Rates
-// per MTok (in/out): Haiku $1/$5 · Sonnet $3/$15 · Opus $5/$25. Default is Sonnet
+// per MTok (in/out): Haiku $1/$5 · Sonnet $3/$15 · Opus $5/$25 (4.x tiers). Default is Sonnet 4.6
 // (the everyday tier) — Opus is the scarce "big gun". Caps are env-overridable
 // (HOSTED_CAP_HAIKU/SONNET/OPUS) for tuning without a code change, and the default
 // tier via HOSTED_AI_DEFAULT_MODEL (legacy HOSTED_AI_MODEL still honored as the
 // default source). Mirrored on the client in app/config/assistant.ts (HOSTED_TIERS).
 export const HOSTED_DEFAULT_MODEL = "claude-sonnet-4-6";
 
+// Newer tiers (added 2026-09-30, borst: half caps to start, raise once real spend is in).
+// Price per MTok in/out: Sonnet 5.5 $2/$10 · Opus 5.5 $4/$20 · Fable 5.1 $10/$50. Price-matched
+// caps would be 60 / 25 / 10; these models always think and thinking bills as output, so they
+// start at half. Env: HOSTED_CAP_SONNET55 / HOSTED_CAP_OPUS55 / HOSTED_CAP_FABLE.
 export function hostedCaps(env = {}) {
   return {
     "claude-haiku-4-5": parseInt(env.HOSTED_CAP_HAIKU || "100", 10),
     "claude-sonnet-4-6": parseInt(env.HOSTED_CAP_SONNET || "40", 10),
     "claude-opus-4-8": parseInt(env.HOSTED_CAP_OPUS || "20", 10),
+    "claude-sonnet-5-5": parseInt(env.HOSTED_CAP_SONNET55 || "30", 10),
+    "claude-opus-5-5": parseInt(env.HOSTED_CAP_OPUS55 || "12", 10),
+    "claude-fable-5-1": parseInt(env.HOSTED_CAP_FABLE || "5", 10),
   };
+}
+
+// Tiers whose thinking can't be turned off: thinking counts toward max_tokens, `temperature`
+// and forced tool_choice are 400s, and thinking blocks must be passed back unchanged.
+export const HOSTED_THINKING_MODELS = new Set(["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"]);
+export const HOSTED_MAX_TOKENS = 1024;            // older tiers: the reply only
+export const HOSTED_THINKING_MAX_TOKENS = 4096;   // thinking tiers: short thinking + the reply
+
+// The upstream body for a hosted call, built from the client's body. The server owns what costs
+// money: the model (already whitelisted), the token ceiling, and on thinking tiers the effort
+// (always "low": short thinking, the cheapest setting that still answers well in chat). Fields a
+// thinking tier rejects are dropped instead of forwarded into a 400. Auth fields never go upstream.
+export function shapeHostedBody(body, hostedModel, upstreamModel) {
+  const out = { ...(body || {}) };
+  delete out._addr; delete out._ts; delete out._sig;
+  out.model = upstreamModel;
+  if (HOSTED_THINKING_MODELS.has(hostedModel)) {
+    out.max_tokens = Math.min(Number(out.max_tokens) || HOSTED_THINKING_MAX_TOKENS, HOSTED_THINKING_MAX_TOKENS);
+    delete out.thinking; delete out.temperature; delete out.top_p; delete out.top_k;
+    const tc = out.tool_choice && out.tool_choice.type;
+    if (tc === "any" || tc === "tool") delete out.tool_choice;
+    const oc = out.output_config && typeof out.output_config === "object" ? out.output_config : {};
+    out.output_config = { ...oc, effort: "low" };
+  } else {
+    out.max_tokens = Math.min(Number(out.max_tokens) || HOSTED_MAX_TOKENS, HOSTED_MAX_TOKENS);
+  }
+  return out;
 }
 
 // Resolve a client-requested hosted model → an allowed model + its daily cap.
@@ -1110,6 +1144,10 @@ export function bankrGatewayModel(anthropicId, env = {}) {
     "claude-haiku-4-5":  env.BANKR_MODEL_HAIKU  || "claude-haiku-4.5",
     "claude-sonnet-4-6": env.BANKR_MODEL_SONNET || "claude-sonnet-4.6",
     "claude-opus-4-8":   env.BANKR_MODEL_OPUS   || "claude-opus-4.8",
+    // Confirmed on the gateway's /v1/models by borst, 2026-09-30.
+    "claude-sonnet-5-5": env.BANKR_MODEL_SONNET55 || "claude-sonnet-5.5",
+    "claude-opus-5-5":   env.BANKR_MODEL_OPUS55   || "claude-opus-5.5",
+    "claude-fable-5-1":  env.BANKR_MODEL_FABLE    || "claude-fable-5.1",
   };
   return map[anthropicId] || anthropicId;
 }
