@@ -449,36 +449,30 @@ export function buildFusion(input: FusionInput): Insight[] {
     : callersFight ? ` But write it as the conflict it is: FADE ${fadeDir} · CALLERS ${lean!.side}. A real disagreement, so treat it as lower-odds.`
     : "";
 
-  // ── CONVICTION drives the queue ──────────────────────────────────────────────
-  // The engine isn't one signal; it's how many INDEPENDENT reads back this fade. Count
-  // them, boost the insight's priority by the tally (so the most-confirmed setup rises to
-  // the Briefing's #1 action), tag the title, and dock it when a credible source pushes
-  // back. Same explainable "agreement = signal" logic as THE READ's conviction verdict.
-  const convReads =
-    (klass === "confluence" ? 1 : 0) +   // funding AND OI agree
-    (callersAgree ? 1 : 0) +             // the graded crowd agrees
-    (userSide === fadeDir ? 1 : 0) +     // your measurably stronger side
-    (provenFader ? 1 : 0) +              // your proven crowd-fading record
-    (classAgainst ? 1 : 0);             // counter-trend is your class
-  const highConv = convReads >= 3;
+  // ── No tally (2026-09-30, borst) ────────────────────────────────────────────
+  // This used to count the reads backing the fade, print "N independent reads align", crown
+  // three or more with ◆, lift the insight's priority by the count (up to +10, enough to
+  // outrank a live-risk warning on an open position) and keep it green over a stated
+  // disagreement. A count of reads that aren't graded as an edge is a score with no grade
+  // behind it, the same rule THE READ follows. Each read is still stated in words
+  // (setupPhrase, your side / class / fading record, callerNote). What moves the insight is
+  // only the graded callers disagreeing: it drops 3 and reads caution.
+  const callerDock = callersFight ? 3 : 0;
+  const fadeTone: InsightTone = callersFight ? "caution" : "positive";
   // A stretched fade in the direction the tape's mean-reversion favors (long into RISK-OFF,
   // short into RISK-ON) is the book that WORKS in that tape — surface it AS that, tagged, so
   // the risk-off gate above reads as "suppress the chase, keep the fade," not "kill all longs."
   const tapeFavorsFade = (tapeLabel === "RISK-OFF" && fadeDir === "LONG") || (tapeLabel === "RISK-ON" && fadeDir === "SHORT");
   const tapeFadeTag = tapeFavorsFade ? `${tapeLabel} · FADE · ` : "";
   const tapeFadeNote = tapeFavorsFade ? ` The tape is ${tapeLabel}, so this stretched fade is the mean-reversion book it favors. Not a chase.` : "";
-  const convTag = highConv ? "◆ " : ""; // marker only. "HIGH CONVICTION" is banned language (Grok)
-  // Each aligned read lifts it; a credible caller fighting it pulls it back down.
-  const convBoost = convReads * 2 - (callersFight ? 3 : 0);
-  const convLine = convReads >= 2 ? ` ${convReads} independent reads align.` : "";
 
   if (userSide && userSide === fadeDir) {
     out.push({
       id: "fusion-your-setup",
-      priority: 92 + convBoost,
-      tone: highConv ? "positive" : callersFight ? "caution" : "positive",
-      title: `${tapeFadeTag}${convTag}Your setup: fade the crowd ${sideWord(fadeDir)} on ${sym}`,
-      detail: `${sym}: ${setupPhrase}. The crowd is heavily ${heavy}, so the clean fade is ${sideWord(fadeDir)}, and that's your stronger side (${userWr}% win rate)${faderNote}.${classNote}${callerNote}${convLine}${tapeFadeNote}`,
+      priority: 92 - callerDock,
+      tone: fadeTone,
+      title: `${tapeFadeTag}Your setup: fade the crowd ${sideWord(fadeDir)} on ${sym}`,
+      detail: `${sym}: ${setupPhrase}. The crowd is heavily ${heavy}, so the clean fade is ${sideWord(fadeDir)}, and that's your stronger side (${userWr}% win rate)${faderNote}.${classNote}${callerNote}${tapeFadeNote}`,
       action: { label: "Structure it", tab: "thesis" },
       meta: { symbol: sym, direction: fadeDir },
     });
@@ -486,10 +480,10 @@ export function buildFusion(input: FusionInput): Insight[] {
     // No directional edge, but the SETUP CLASS is where their edge lives.
     out.push({
       id: "fusion-your-class",
-      priority: 88 + convBoost,
-      tone: highConv ? "positive" : callersFight ? "caution" : "positive",
-      title: `${tapeFadeTag}${convTag}Your kind of setup: counter-trend fade ${sideWord(fadeDir)} on ${sym}`,
-      detail: `${sym}: ${setupPhrase}. The clean fade is ${sideWord(fadeDir)}, and counter-trend fades are where your edge lives (align +${alignAvgR}R against the trend)${faderNote}.${callerNote}${convLine}${tapeFadeNote}`,
+      priority: 88 - callerDock,
+      tone: fadeTone,
+      title: `${tapeFadeTag}Your kind of setup: counter-trend fade ${sideWord(fadeDir)} on ${sym}`,
+      detail: `${sym}: ${setupPhrase}. The clean fade is ${sideWord(fadeDir)}, and counter-trend fades are where your edge lives (align +${alignAvgR}R against the trend)${faderNote}.${callerNote}${tapeFadeNote}`,
       action: { label: "Structure it", tab: "thesis" },
       meta: { symbol: sym, direction: fadeDir },
     });
