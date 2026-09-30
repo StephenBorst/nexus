@@ -21,6 +21,10 @@ for the app, every share card and every link preview.
    - realized or unrealized P&L, a WIN / LOSS result and its R, a W / L tally, expectancy;
    - a price move (24h %, up/down ticks);
    - the Buy / Long and Sell / Short sides on the trade page.
+   - the final confirm that moves money (Confirm swap, Confirm & sign, Long / Short on Nexus):
+     green on a buy, red on a sell (decided 2026-09-30, borst via Ember). The colour is a
+     safety check against a buy/sell mis-tap, not decoration. `<Button side="buy|sell">` in
+     `app/components/ui` is the only way to get it. Every other button is bone.
 
    Everything else is monochrome: a LONG / SHORT label on a call, an entry / stop / take-profit
    level, a count, a rate, a score, a status like ACTIVE, a live dot, an "agrees / against" stance.
