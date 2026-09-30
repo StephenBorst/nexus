@@ -946,6 +946,10 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   Claiming = borst connects borst.eth to the NEAR Intents app when volume makes it worth it (nothing to build).
 - **Spot fee:** `SPOT_FEE_BPS = "10"` → `0x34dF…B45c` (borst.eth broker wallet), now via spanDEX (see below).
 - ⏳ Not yet done: partner API key via the worker (drops 1Click's 20 bps).
+- **Landing footer row (2026-09-30):** `Jupiter · spanDEX · Definitive Flash · WooFi · NEAR Protocol · XMTP · Quotient ·
+  Arbitrum` ("NEAR Protocol" matches the announcement post; Fabric → spanDEX since Fabric shut down). The spot card names
+  NEAR Intents for cross-chain. `llms.txt` is ONE file kept identical in `public/llms.txt` (app) and `nexus-landing/llms.txt`
+  — edit both, or they drift (they had: the app said ~100 markets, the landing was missing 3 endpoints).
 
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the
