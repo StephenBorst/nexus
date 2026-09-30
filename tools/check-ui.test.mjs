@@ -6,6 +6,9 @@ test("counts a button whose inline style sets the mono face", () => {
   assert.equal(countMonoButtons(`<button onClick={go} style={{ fontFamily: MONO, fontSize: 11 }}>GO</button>`), 1);
   assert.equal(countMonoButtons(`<a href="/x" style={{ fontFamily: "var(--nx-font-mono)" }}>x</a>`), 1);
   assert.equal(countMonoButtons(`<button style={{ fontFamily: MF }}>x</button>`), 1);
+  // router links are buttons too (the BUY $NEXUS CTA was a <Link> the first version missed)
+  assert.equal(countMonoButtons(`<Link to="/x" style={{ fontFamily: "var(--nx-font-mono)" }}>BUY</Link>`), 1);
+  assert.equal(countMonoButtons(`<LinkPreview style={{ fontFamily: MONO }} />`), 0);
 });
 
 test("ignores the UI face, labels and non-button tags", () => {

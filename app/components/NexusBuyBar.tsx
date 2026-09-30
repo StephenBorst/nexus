@@ -18,7 +18,7 @@ export function NexusBuyBar() {
         target="_blank"
         rel="noopener noreferrer"
         title="View $NEXUS on GeckoTerminal"
-        style={{ fontSize: 9, color: C.info, textDecoration: "none", letterSpacing: "0.06em", border: `1px solid ${C.border}`, borderRadius: 3, padding: "4px 8px" }}
+        style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: C.text.fog, textDecoration: "none", border: `1px solid ${C.border}`, borderRadius: 15, padding: "4px 11px" }}
       >
         GeckoTerminal ↗
       </a>

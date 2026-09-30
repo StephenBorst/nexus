@@ -123,12 +123,12 @@ export function LabStanding({ address }: { address?: string | null }) {
       <Link
         to="/feed?view=ranks"
         style={{
-          marginLeft: "auto", flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 10,
+          marginLeft: "auto", flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600,
           color: "#ededf0", textDecoration: "none", border: "1px solid #33333a",
-          borderRadius: 3, padding: "4px 10px", whiteSpace: "nowrap",
+          borderRadius: 15, padding: "4px 11px", whiteSpace: "nowrap",
         }}
       >
-        THE BOARD ↗
+        The board ↗
       </Link>
     </div>
   );

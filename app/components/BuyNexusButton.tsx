@@ -8,37 +8,38 @@
  * nexusCuratedPair in pages/token/data.ts.)
  */
 import { Link } from "react-router-dom";
+import { C } from "@/config/theme";
 
 const NEXUS_TOKEN = "0x3D958634ab725B627919EF8F2Ed59227309fDba3";
 // In-app Spot page for $NEXUS (venue=spot is explicit; a non-perp is spot-only regardless).
 const SPOT_URL = `/token/${NEXUS_TOKEN}?venue=spot`;
 
 export function BuyNexusButton({ size = "md" }: { size?: "sm" | "md" }) {
-  const pad = size === "sm" ? "5px 10px" : "8px 14px";
-  const fontSize = size === "sm" ? 10 : 12;
+  // A bone button like every other primary action (docs/brand.md): UI face, sentence case, pill.
+  const pad = size === "sm" ? "6px 13px" : "9px 16px";
+  const fontSize = size === "sm" ? 12.5 : 13.5;
   return (
     <Link
       to={SPOT_URL}
       title="Buy $NEXUS on Nexus Spot"
+      className="nx-press"
       style={{
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        fontFamily: "var(--nx-font-mono)",
+        fontFamily: "var(--nx-font-ui)",
         fontSize,
-        fontWeight: "bold",
-        letterSpacing: "0.06em",
-        color: "#141416",
-        background: "#ededf0",
-        border: "1px solid #ededf0",
-        borderRadius: 3,
+        fontWeight: 600,
+        color: C.canvas,
+        background: C.accent,
+        border: `1px solid ${C.accent}`,
+        borderRadius: 15,
         padding: pad,
         textDecoration: "none",
         whiteSpace: "nowrap",
-        boxShadow: "0 0 12px rgba(237,237,240,0.25)",
       }}
     >
-      BUY $NEXUS
+      Buy $NEXUS
     </Link>
   );
 }

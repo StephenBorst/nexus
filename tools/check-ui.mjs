@@ -5,7 +5,7 @@
 // every surface styled its own; the shared pieces in app/components/ui (Button, Pill, Tabs)
 // and the global .nx-btn class are the fix. This guard stops new ones creeping back in.
 //
-// It scans app/**/*.tsx for <button …> and <a …> opening tags whose inline style sets a
+// It scans app/**/*.tsx for <button …>, <a …> and <Link …> opening tags whose inline style sets a
 // MONO font, counts them per file, and compares with tools/ui-baseline.json:
 //   - a file whose count GROWS fails the check (a new file starts at 0);
 //   - legacy counts are grandfathered — shrink them as pages move to the shared pieces.
@@ -40,7 +40,7 @@ export function openingTag(src, i) {
 // Count <button>/<a> tags in a source string whose inline style uses the mono face.
 export function countMonoButtons(src) {
   let n = 0;
-  const re = /<(button|a)(?=[\s>])/g;
+  const re = /<(button|a|Link)(?=[\s>])/g;
   let m;
   while ((m = re.exec(src)) !== null) {
     const tag = openingTag(src, m.index);
