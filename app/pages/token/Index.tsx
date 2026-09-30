@@ -1192,7 +1192,7 @@ export default function TokenTerminal() {
         {/* Capped + centered container with the shared SectionHeader, so Spot reads as one of the
             Nexus custom surfaces (X-Ray / Feed / Proof), not a bespoke page. */}
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "20px 14px 96px" : "32px 24px 80px" }}>
-        <SectionHeader eyebrow="SPOT" title="Trade any token." note="LIVE DATA · ANY CHAIN" />
+        <SectionHeader eyebrow="SPOT" title="Trade any token." />
         {/* Back to the Spot landing (movers + majors + search) — a token detail otherwise had no
             way home except leaving Spot and returning. Shows on any resolved/searching state. */}
         {(query || perpOnly) && (

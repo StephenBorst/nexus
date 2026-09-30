@@ -45,7 +45,7 @@ export function MessageTraderButton({
 
   return (
     <button
-      className={style ? undefined : (className ?? (variant === "full" ? "nx-btn" : "nx-btn nx-btn-icon"))}
+      className={style ? className : (className ?? (variant === "full" ? "nx-btn" : "nx-btn nx-btn-icon"))}
       onClick={go}
       title={title ?? (context?.symbol ? "Discuss this call — encrypted DM" : "Send encrypted DM to trader")}
       style={style ? { flexShrink: 0, ...style } : { flexShrink: 0 }}

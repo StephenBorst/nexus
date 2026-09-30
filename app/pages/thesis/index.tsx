@@ -106,6 +106,12 @@ function Avatar({ pfp, displayName, size = 40 }: { pfp: string | null; displayNa
   );
 }
 
+// A text action: no box, UI face, fog; hover lifts it to bone (.nx-text-action in index.css).
+const TEXT_ACTION: React.CSSProperties = {
+  background: "none", border: "none", padding: "6px 0", cursor: "pointer", textDecoration: "none",
+  fontFamily: "var(--nx-font-ui)", fontSize: 13, fontWeight: 600, color: "#a1a1aa", whiteSpace: "nowrap",
+};
+
 export default function ThesisPage() {
   const { wallet, id } = useParams<{ wallet: string; id: string }>();
   const navigate = useNavigate();
@@ -276,44 +282,26 @@ export default function ThesisPage() {
 
   return (
     <div style={{ background: "#0a0a0b", minHeight: "100svh", padding: 0 }}>
-      {/* Top bar — every action button shares ONE size (font / padding / min-width) so
-          they read as a matched, congruent set on every breakpoint. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderBottom: "1px solid #232327", background: "#0f0f11", flexWrap: "wrap", rowGap: 8 }}>
-        <button
-          onClick={() => navigate(-1)}
-          style={{ background: "none", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", cursor: "pointer", minWidth: 82, textAlign: "center" }}
-        >← Back</button>
+      {/* Top bar — plain text actions, one style: no boxes, UI face, fog → bright on hover. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "10px 16px", borderBottom: "1px solid #232327", background: "#0f0f11", flexWrap: "wrap", rowGap: 8 }}>
+        <button onClick={() => navigate(-1)} className="nx-text-action" style={TEXT_ACTION}>← Back</button>
         <div style={{ flex: 1 }} />
         {/* Discuss THIS call with its author — seeds the DM with the call context */}
         <MessageTraderButton
           wallet={thesis.wallet}
           myWallet={myWallet}
           context={{ symbol: thesis.symbol, direction: thesis.direction }}
-          label="⬡ DISCUSS"
+          label="Discuss"
           title="Discuss this call with the trader. Encrypted DM"
-          style={{ border: "1px solid #232327", borderRadius: 4, background: "none", color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 12px", letterSpacing: "0.05em", cursor: "pointer", minWidth: 82, textAlign: "center" }}
+          className="nx-text-action"
+          style={TEXT_ACTION}
         />
         {/* Outbound share — X / Farcaster / copy link */}
-        <a
-          href={shareX} target="_blank" rel="noopener noreferrer"
-          title="Share on X"
-          style={{ textDecoration: "none", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", minWidth: 82, textAlign: "center" }}
-        >𝕏 Share</a>
-        <a
-          href={shareFc} target="_blank" rel="noopener noreferrer"
-          title="Share on Farcaster"
-          style={{ textDecoration: "none", border: "1px solid #232327", borderRadius: 4, color: "#6cb6ff", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", minWidth: 82, textAlign: "center" }}
-        >✦ Cast</a>
-        <button
-          onClick={handleShare}
-          title="Copy link"
-          style={{
-            background: copied ? "#1a1a1e" : "none",
-            border: `1px solid ${copied ? "#ededf0" : "#232327"}`,
-            borderRadius: 4, color: copied ? "#ededf0" : "#a1a1aa",
-            fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", cursor: "pointer", minWidth: 82, textAlign: "center",
-          }}
-        >{copied ? "✓ Copied" : "⧉ Link"}</button>
+        <a href={shareX} target="_blank" rel="noopener noreferrer" title="Share on X" className="nx-text-action" style={TEXT_ACTION}>𝕏 Share</a>
+        <a href={shareFc} target="_blank" rel="noopener noreferrer" title="Share on Farcaster" className="nx-text-action" style={TEXT_ACTION}>✦ Cast</a>
+        <button onClick={handleShare} title="Copy link" className="nx-text-action" style={{ ...TEXT_ACTION, color: copied ? "#ededf0" : TEXT_ACTION.color }}>
+          {copied ? "✓ Copied" : "⧉ Link"}
+        </button>
       </div>
 
       <div style={{ padding: 16, maxWidth: 720, margin: "0 auto" }}>

@@ -540,13 +540,7 @@ function FeedCard({
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, fontFamily: MONO, fontSize: 11, color: C.text.faint, whiteSpace: "nowrap", minWidth: 0 }}>
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{thesis.agent ? "autonomous agent" : thesis.displayName ? shortAddr : "wallet"}</span>
             <span aria-hidden>·</span>
-            {/* The timestamp doubles as the permalink. */}
-            <a
-              href={`/feed/thesis/${thesis.wallet}/${thesis.id}`}
-              onClick={(e) => { e.preventDefault(); navigate(`/feed/thesis/${thesis.wallet}/${thesis.id}`); }}
-              title="Open this call"
-              style={{ color: C.text.muted, textDecoration: "none" }}
-            >{timeAgo} ↗</a>
+            <span>{timeAgo}</span>
             {thesis.onChainId !== undefined && (
               thesis.onChainTxHash ? (
                 <a href={`https://arbiscan.io/tx/${thesis.onChainTxHash}`} target="_blank" rel="noopener noreferrer"
@@ -558,9 +552,16 @@ function FeedCard({
             )}
           </div>
         </div>
-        <span style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, padding: "0 10px", height: 26, display: "inline-flex", alignItems: "center", borderRadius: 13, border: `1px solid ${pill.border}`, color: pill.color, flexShrink: 0, whiteSpace: "nowrap" }}>
+        {/* The status pill is the ONE open control: it carries the grade and opens the call's page. */}
+        <a
+          href={`/feed/thesis/${thesis.wallet}/${thesis.id}`}
+          onClick={(e) => { e.preventDefault(); navigate(`/feed/thesis/${thesis.wallet}/${thesis.id}`); }}
+          title="Open this call"
+          className="nx-press"
+          style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, padding: "0 10px", height: 26, display: "inline-flex", alignItems: "center", borderRadius: 13, border: `1px solid ${pill.border}`, color: pill.color, flexShrink: 0, whiteSpace: "nowrap", textDecoration: "none", cursor: "pointer" }}
+        >
           {pill.label}
-        </span>
+        </a>
         {/* Follow: the one identity action in the header. Like / Comment / Share / Copy /
             Message all live in the SocialBar below. */}
         {walletAddress && !isOwnThesis && (

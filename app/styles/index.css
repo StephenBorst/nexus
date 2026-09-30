@@ -308,3 +308,8 @@ html, body {
 .nx-noscrollbar::-webkit-scrollbar { display: none; }
 /* Collapsible rows stacked one after another read as one list: no gap between them. */
 .nx-collapsible + .nx-collapsible { margin-top: 0 !important; }
+
+/* Plain text action (e.g. the call page's Back / Share / Cast / Link): no box, hover lifts to bone. */
+.nx-text-action { transition: color var(--nx-dur) var(--nx-ease); }
+.nx-text-action:hover { color: var(--nx-bright) !important; }
+.nx-text-action:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--nx-accent); border-radius: 3px; }
