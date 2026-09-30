@@ -50,13 +50,13 @@ export function CountUp({ value, format, durationMs = 620 }: {
 // Mono eyebrow → sans headline, the same shape as the page titles (Lab, Proof), so every
 // section on every surface reads as one system. The note sits right on desktop and wraps
 // under the title when there's no room.
-export function SectionHeader({ eyebrow, title, note }: { eyebrow: string; title: string; note?: React.ReactNode }) {
+export function SectionHeader({ eyebrow, title, note }: { eyebrow?: string; title: string; note?: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "6px 16px", flexWrap: "wrap" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: C.text.muted }}>{eyebrow}</div>
-          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: "clamp(20px, 2.6vw, 26px)", fontWeight: 600, color: C.text.bright, letterSpacing: "-0.02em", lineHeight: 1.15, marginTop: 6 }}>{title}</div>
+          {eyebrow && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: C.text.muted, marginBottom: 6 }}>{eyebrow}</div>}
+          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: "clamp(20px, 2.6vw, 26px)", fontWeight: 600, color: C.text.bright, letterSpacing: "-0.02em", lineHeight: 1.15 }}>{title}</div>
         </div>
         {note && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.muted, paddingBottom: 3 }}>{note}</div>}
       </div>

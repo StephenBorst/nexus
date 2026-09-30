@@ -10,7 +10,6 @@ import { useAccount } from "@orderly.network/hooks";
 import { useIsMobile } from "./useIsMobile";
 import { agentCardStyle, agentLabelStyle, navBtnStyle } from "./styles";
 import { deployDirectiveFromThesis } from "@/utils/agentPrefill";
-import { Coachmark } from "./components";
 import { SharePoster, type PosterData } from "./SharePoster";
 import { TraderDetail } from "./TraderDetail";
 import type { XrayTrack } from "@/components/TrackedRecordCard";
@@ -464,34 +463,20 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
         </div>
       )}
       {/* Header */}
+      {/* Header: the title, then ONE line — what this is and how to read it. (It used to be an
+          eyebrow, an intro, a "How to read this" box and a one-time LOOP coachmark: four blocks,
+          one idea.) */}
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 5 }}>Scout</div>
-        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 24, fontWeight: 600, color: C.text.bright, lineHeight: 1.1 }}>Smart Money</div>
-        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", marginTop: 6, lineHeight: 1.5, maxWidth: 660 }}>
-          The top traders on <strong style={{ color: "#a1a1aa" }}>Orderly</strong> and Hyperliquid, and what they’re holding right now —
-          indexed live from public on-chain data. Copy any move into a <strong style={{ color: "#a1a1aa" }}>risk-managed trade</strong> the
-          agent manages and grades on-chain, or star ★ the wallets you trust to track them.
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 22, fontWeight: 600, color: C.text.bright, lineHeight: 1.1 }}>Smart Money</div>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#a1a1aa", marginTop: 6, lineHeight: 1.55, maxWidth: 660 }}>
+          Top traders on Orderly and Hyperliquid, from public on-chain data. Agreement matters more than any one whale,
+          and smart money is often early and often wrong: treat it as context. Copy a move and your agent manages the exit;
+          star ★ a wallet to track it.
         </div>
-      </div>
-
-      {/* How to read this — plain, congruent with Intel + the Mispriced Board. */}
-      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 12, padding: "11px 13px", border: "1px solid #232327", borderLeft: "2px solid #71717a", borderRadius: 6, background: "#0f0f11" }}>
-        <span style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 12, flexShrink: 0 }}>?</span>
-        <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12.5, lineHeight: 1.55, color: "#a1a1aa" }}>
-          <b style={{ color: "#f4f4f5" }}>How to read this:</b> the strongest signal isn’t one whale. It’s <b style={{ color: "#f4f4f5" }}>agreement</b>. Consensus
-          shows the coins several top traders are positioned the same way on. Smart money is often early and often wrong, so treat it as
-          context. Then copy a move into a trade your agent manages and grades.
-        </span>
       </div>
 
       {/* Multi-axis conviction scan — the highest-agreement fades across the board. */}
       <ConvictionScanner />
-
-      {/* #3 convert-loop framing — one-time */}
-      <Coachmark storageKey="nexus_coach_smart_v1" badge="THE LOOP" title="From watcher to ranked trader">
-        Copy any move → the agent manages the exit → every close joins <strong style={{ color: "#d4d4d8" }}>your</strong> on-chain track record.
-        That’s how you go from watching smart money to <strong style={{ color: "#d4d4d8" }}>being</strong> graded next to them.
-      </Coachmark>
 
       {/* Bounded by the paint deadline above — this line can no longer stand forever. */}
       {loading && !board && !events && (
@@ -587,11 +572,8 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
       {events && events.length > 0 && (
         <div style={{ ...agentCardStyle, marginBottom: 12 }}>
           <div style={{ ...agentLabelStyle, display: "flex", alignItems: "center", gap: 8 }}>
-            {"// "}LIVE SIGNAL FEED
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3ecf8e", boxShadow: "0 0 6px #3ecf8e" }} />
-          </div>
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b", marginTop: 3, lineHeight: 1.5 }}>
-            Top on-chain traders opening &amp; closing positions in real time — ⚡ copies a move into a trade your agent manages.
+            LIVE SIGNAL FEED
+            <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, letterSpacing: 0, textTransform: "none", color: "#52525b" }}>opens and closes · ⚡ copies</span>
           </div>
           <div style={{ marginTop: 10, display: "flex", flexDirection: "column" }}>
             {events.slice(0, feedAll ? 30 : 8).map((e, i) => {

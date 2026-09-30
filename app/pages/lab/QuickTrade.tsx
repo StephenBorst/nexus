@@ -226,7 +226,16 @@ export function QuickTrade() {
   }
 
   if (!connected) {
-    return <div style={{ textAlign: "center", padding: "48px 20px", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#71717a" }}>Connect a wallet to place quick trades.</div>;
+    // Signed out there is nothing to show (the ticket spends real collateral). Say so once and
+    // point at the one place a guest CAN look at a market: the trading page.
+    return (
+      <div style={{ textAlign: "center", padding: "48px 20px", fontFamily: "var(--nx-font-ui)", fontSize: 13.5, color: C.text.fog, lineHeight: 1.6 }}>
+        Quick Trade places market orders from your wallet. Connect one to use it.
+        <div style={{ marginTop: 10 }}>
+          <a href="/" className="nx-text-action" style={{ fontWeight: 600, color: C.text.muted, textDecoration: "none" }}>Open the trading page →</a>
+        </div>
+      </div>
+    );
   }
 
   const px = (n: number) => (n >= 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : n.toLocaleString(undefined, { maximumFractionDigits: 4 }));

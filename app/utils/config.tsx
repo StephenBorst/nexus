@@ -8,7 +8,6 @@ import {
   MainNavItem as SdkNavItem,
 } from "@orderly.network/ui-scaffold";
 import { AppLogos } from "@orderly.network/react-app";
-import { OrderlyActiveIcon, OrderlyIcon } from "../components/icons/orderly";
 import { withBasePath } from "./base-path";
 import {
   PortfolioActiveIcon,
@@ -34,6 +33,17 @@ import ProfileAvatar from "@/components/ProfileAvatar";
 import MessagesNavButton from "@/components/MessagesNavButton";
 import SignalsNavButton from "@/components/SignalsNavButton";
 import { buildCampaignsUrl } from "@/components/CampaignsNavTitle";
+import { useAccount } from "@orderly.network/hooks";
+import type { ReactNode } from "react";
+
+// Nav pieces that only mean something with a wallet (the balance summary, DMs). Signed out
+// they rendered as placeholders ("Total value - USDC", an envelope with nothing behind it).
+// A component, not a check in customRender: the render callback isn't a hook context.
+function WithWallet({ children }: { children: ReactNode }) {
+  const { state } = useAccount();
+  return (state as { address?: string })?.address ? <>{children}</> : null;
+}
+
 interface MainNavItem {
   name: string;
   href: string;
@@ -337,22 +347,9 @@ const flatMenus: SdkNavItem[] = [...primaryMenus, ...moreChildren];
       mainMenus: allMenuItems,
     };
 
-    if (getRuntimeConfigBoolean("VITE_ENABLE_CAMPAIGNS")) {
-      mainNavProps.campaigns = {
-        name: "$ORDER",
-        href: "/rewards",
-        children: [
-          {
-            name: t("extend.staking"),
-            href: "https://app.orderly.network/staking",
-            description: t("extend.staking.description"),
-            icon: <OrderlyIcon size={14} />,
-            activeIcon: <OrderlyActiveIcon size={14} />,
-            target: "_blank",
-          },
-        ],
-      };
-    }
+    // No "$ORDER" campaigns pill in the nav: it promoted Orderly's token beside ours and
+    // pointed at /rewards, which the menu already carries. VITE_ENABLE_CAMPAIGNS still
+    // drives the Campaigns menu item above.
 
     mainNavProps.customRender = (components) => {
       return (
@@ -389,9 +386,9 @@ const flatMenus: SdkNavItem[] = [...primaryMenus, ...moreChildren];
               sub-account switcher) and keep the essentials — signals, messages,
               language (no hamburger alternative), network, wallet, identity. */}
           <Flex itemAlign={"center"} className="oui-gap-2">
-            {!isMobile && components.accountSummary}
+            {!isMobile && <WithWallet>{components.accountSummary}</WithWallet>}
             <SignalsNavButton />
-            <MessagesNavButton />
+            <WithWallet><MessagesNavButton /></WithWallet>
             {!isMobile && components.linkDevice}
             {!isMobile && components.scanQRCode}
             {components.languageSwitcher}

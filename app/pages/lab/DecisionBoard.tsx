@@ -499,26 +499,23 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       <SectionHeader
         eyebrow="THE BOARD"
         title="Every market, one read"
-        note={<span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : signalsFailed ? "retrying…" : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""} · every column verifiable</span>}
+        note={<span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : signalsFailed ? "retrying…" : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""}</span>}
       />
 
-      {/* Honesty framing — the whole point of the moat. On a phone it is ONE sentence (Grok):
-          the full doctrine is five sentences plus two conditionals, and on a 390px screen it
-          pushed the actual board below the fold. It is compressed, not dropped. Cut it entirely
-          and the board reads like a signal service, which is exactly what it is not. Desktop,
-          where there is room for the argument, keeps it in full. */}
-      {isMobile ? (
-        <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: C.text.muted, marginTop: -4, marginBottom: 14 }}>
-          <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range. Public facts, graded from the tape after, never advice.
-        </div>
-      ) : (
-      <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: C.text.muted, marginTop: -4, marginBottom: 16, maxWidth: 820 }}>
-        Funding and positioning are <b style={{ color: C.text.bright }}>public facts</b>. <b style={{ color: C.text.bright }}>The play</b> is one verdict word — <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range, <b style={{ color: C.text.muted }}>WATCH</b> when it’s merely elevated. The SAME read as the ticket. It grades <b style={{ color: C.text.bright }}>from the tape</b> after, like every call. No score to trust; a record to verify.
-        {" "}<b style={{ color: C.text.bright }}>Confluence</b> shows four INDEPENDENT reads — <span style={{ color: C.text.muted }}>callers · smart money · catalysts · forecasters</span>. And how many <b style={{ color: C.text.bright }}>agree with the play</b> (<span style={{ color: C.accent }}>◆</span> marks where separate signals converge). Agreement is a reason to look, still graded after.
-        {hasLens && <> Each play is also matched against <b style={{ color: C.pos }}>your own graded edge</b> — <span style={{ color: C.pos }}>◆ your side/class</span> vs <span style={{ color: C.warn }}>△ off your edge</span>.</>}
-        {hasLoop && <> Your loop state rides on the ticker: <b style={{ color: C.text.bright }}>● a live call</b> (planned) · <b style={{ color: C.text.bright }}>▸ an open position</b> (executing). The graded record closes it.</>}
+      {/* The rule in one sentence (phone and desktop alike), then a key for the marks the rows
+          use, only for the marks this user will actually see. Without the rule the board reads
+          like a signal service, which it is not; the column-by-column explainer that used to sit
+          here restated the headers and is gone. */}
+      <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: C.text.muted, marginTop: -4, marginBottom: 14, maxWidth: 820 }}>
+        <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range. Public facts, graded from the tape after, never advice.
+        {!isMobile && (
+          <div style={{ fontSize: 12, color: C.text.faint, marginTop: 4 }}>
+            <span style={{ color: C.accent }}>◆</span> separate reads agree with the play
+            {hasLens && <> · <span style={{ color: C.pos }}>◆</span> on your graded edge · <span style={{ color: C.warn }}>△</span> off it</>}
+            {hasLoop && <> · ● your live call · ▸ your open position</>}
+          </div>
+        )}
       </div>
-      )}
 
       {/* Sort controls. Desktop = one inline row. Mobile = SORT + SHARE on a header line, then
           the chips in an equal-width repeat(3,1fr) grid so they're congruent and WRAP instead of
@@ -745,15 +742,8 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
         </div>
       )}
 
-      {/* Scan → deep read: THE BOARD is the fast confluence scan; each column opens up into
-          a lens right below (Funding = which fades PAID vs a TRAP, Positioning = crowd vs
-          smart), and the full wallet board is the Smart Money drill-down. One spine. */}
-      {signals && signals.length > 0 && (
-        <div style={{ marginTop: 14, fontFamily: UI, fontSize: 11, lineHeight: 1.5, color: C.text.muted }}>
-          The deep read is right below — <b style={{ color: C.text.bright }}>Funding Edges</b> (which fades PAID vs a TRAP) and <b style={{ color: C.text.bright }}>Positioning</b> (crowd vs smart).
-          {onSelectTab && <> The full wallet board is in <button onClick={() => onSelectTab("smart")} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "var(--nx-font-ui)", color: C.accent }}>Smart money →</button></>}
-        </div>
-      )}
+      {/* No "the deep read is right below" pointer: the lenses sit directly under the Board
+          with their own heading, and Smart Money is a tab. */}
     </div>
   );
 }

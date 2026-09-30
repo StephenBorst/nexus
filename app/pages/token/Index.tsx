@@ -86,8 +86,9 @@ function nexusReadLabel(sig: NexusSignal): { label: string; color: string; sub: 
   const bigEnough = Math.abs(annual) >= FADE_FUNDING_FLOOR_PCT_YR;
   const isFade = sig.verdict === "FADE" && !!dir && bigEnough;
   const fundTxt = `funding ${annual >= 0 ? "+" : ""}${annual.toFixed(1)}%/yr`;
-  if (isFade) return { label: `◆ FADE ${dir}`, color: "#3ecf8e", sub: `${fundTxt} — the crowd is stretched ${dir === "SHORT" ? "long" : "short"}, graded from the tape after.` };
-  if (sig.verdict === "FADE" || sig.verdict === "WATCH") return { label: "◆ WATCHING", color: "#71717a", sub: `${fundTxt}. Elevated, not stretched vs its own range. No fade edge yet.` };
+  // A verdict word, not money: bone, never green (docs/brand.md).
+  if (isFade) return { label: `FADE ${dir}`, color: "#ededf0", sub: `${fundTxt} — the crowd is stretched ${dir === "SHORT" ? "long" : "short"}, graded from the tape after.` };
+  if (sig.verdict === "FADE" || sig.verdict === "WATCH") return { label: "WATCHING", color: "#71717a", sub: `${fundTxt}. Elevated, not stretched vs its own range. No fade edge yet.` };
   return { label: "BALANCED", color: "#71717a", sub: `${fundTxt}. No crowd extreme to fade.` };
 }
 
@@ -326,7 +327,7 @@ function MoversRail({ onPick }: { onPick: (sym: string) => void }) {
   const sections = [["Gainers · 24h", m.gainers, "chg"], ["Losers · 24h", m.losers, "chg"], ["Most active", m.active, "vol"]] as const;
   return (
     <div style={{ marginBottom: 20 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}><span style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: BRIGHT }}>Movers</span><span style={{ fontFamily: UI, fontSize: 13, color: MUT }}>Live on Nexus</span></div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}><span style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: BRIGHT }}>Movers</span><span style={{ fontFamily: UI, fontSize: 13, color: MUT }}>on Nexus</span></div>
       {sections.map(([label, rows, kind]) => rows.length ? (
         <div key={label} style={{ marginBottom: 10 }}>
           <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: FAINT, textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
@@ -1192,7 +1193,7 @@ export default function TokenTerminal() {
         {/* Capped + centered container with the shared SectionHeader, so Spot reads as one of the
             Nexus custom surfaces (X-Ray / Feed / Proof), not a bespoke page. */}
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "20px 14px 96px" : "32px 24px 80px" }}>
-        <SectionHeader eyebrow="SPOT" title="Trade any token." />
+        <SectionHeader title="Trade any token." />
         {/* Back to the Spot landing (movers + majors + search) — a token detail otherwise had no
             way home except leaving Spot and returning. Shows on any resolved/searching state. */}
         {(query || perpOnly) && (
@@ -1228,9 +1229,8 @@ export default function TokenTerminal() {
           <div>
             <MoversRail onPick={(s) => submit(s)} />
             <div style={{ maxWidth: 640 }}>
-              <div style={{ fontFamily: UI, fontSize: 15, color: BRIGHT, fontWeight: 600, marginBottom: 6 }}>Look up any token.</div>
-              <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 16 }}>
-                Live price, chart, and the trade tape for any token across the majors and every memecoin — read the market, then trade it. When it’s a market Nexus lists, you trade it here; otherwise we route you to its pool.
+              <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 12 }}>
+                If Nexus lists it, you trade it here. If not, you’re routed to its pool.
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {["BTC", "ETH", "SOL", "HYPE", "NEXUS"].map((s) => (
@@ -1445,7 +1445,7 @@ export default function TokenTerminal() {
                   can interrogate about the thing you're looking at. */}
               <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginTop: isMobile ? 12 : 0, marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                  <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.brand, textTransform: "uppercase" }}>◆ Nexus read</span>
+                  <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.brand, textTransform: "uppercase" }}>Nexus read</span>
                   {isPerp && <span style={{ fontFamily: UI, fontSize: 12, color: FAINT }}>· listed market</span>}
                 </div>
 
@@ -1740,9 +1740,9 @@ export default function TokenTerminal() {
                     : swapState.kind === "quote"
                     ? ((side === "buy" ? canInAppBuy : canInAppSell)
                       ? <>Route + price from <b style={{ color: MUT }}>{swapState.quoteRouter}</b>. Your wallet signs. Exact-amount approval. Minimum received enforced on-chain.</>
-                      : <>Route + price from <b style={{ color: MUT }}>{swapState.quoteRouter}</b>{side === "sell" && !holdsToken ? <> — connect the wallet holding {pair.baseSymbol} to sell in-app; meanwhile you complete on <b style={{ color: MUT }}>{swapState.completeVenue}</b></> : swapState.completeVenue !== swapState.quoteRouter ? <>; you complete on <b style={{ color: MUT }}>{swapState.completeVenue}</b></> : <> — preview only</>}. The read is ours.</>)
+                      : <>Route + price from <b style={{ color: MUT }}>{swapState.quoteRouter}</b>{side === "sell" && !holdsToken ? <> — connect the wallet holding {pair.baseSymbol} to sell in-app; meanwhile you complete on <b style={{ color: MUT }}>{swapState.completeVenue}</b></> : swapState.completeVenue !== swapState.quoteRouter ? <>; you complete on <b style={{ color: MUT }}>{swapState.completeVenue}</b></> : <> — preview only</>}.</>)
                     : swapState.kind === "deeplink"
-                    ? <>Nexus doesn’t run a spot book for {pair.baseSymbol}, so we route you to <b style={{ color: MUT }}>{swapState.venue}</b> where it can fill. The read is ours; the swap is theirs.</>
+                    ? <>Nexus doesn’t run a spot book for {pair.baseSymbol}, so we route you to <b style={{ color: MUT }}>{swapState.venue}</b> where it can fill.</>
                     : <>No router quotes {pair.baseSymbol} right now — no honest fill to offer, so we don’t fake it. The read above still stands.</>}
                 </div>
 

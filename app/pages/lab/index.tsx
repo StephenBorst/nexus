@@ -150,25 +150,20 @@ export default function TheLabPage() {
     .map((p) => ({ symbol: String(p.symbol ?? ""), direction: (Number(p.position_qty ?? 0) >= 0 ? "LONG" : "SHORT") as "LONG" | "SHORT" }))
     .filter((p) => p.symbol);
 
-  // ── The loop, made visible ────────────────────────────────────────────────
-  // The product's whole claim is a LOOP — observe → plan → run → prove — but the
-  // nav used to be nine equal-weight peers, which reads as nine unrelated tools and
-  // hides the one thing that makes the Lab coherent. Tabs are unchanged; they're now
-  // grouped under the phase they belong to, so the structure teaches the workflow.
-  // (Holders Room sits outside the loop — it's community access, not a trading step,
-  // and pretending otherwise would be the same dishonesty in the other direction.)
+  // Tabs in the loop's order: observe (Intel, Smart) → plan (Thesis) → run (Agent, Trade,
+  // Copy) → prove (Log, Analytics). The order carries the loop; no phase labels on screen.
+  // Holders Room is community access, not a trading step, so it sits before the prove tabs
+  // and the row still ends on Analytics.
   const tabs: LabTab[] = [
-    { id: "intel",          label: "Market Intel",       short: "Intel",   phase: "OBSERVE" },
-    { id: "smart",          label: "Smart Money",        short: "Smart",   phase: "OBSERVE" },
-    { id: "thesis",         label: "Thesis Engine",      short: "Thesis",  phase: "PLAN"    },
-    { id: "agent",          label: "Trading Agent",      short: "Agent",   phase: "RUN"     },
-    { id: "quicktrade",     label: "Quick Trade",        short: "Trade",   phase: "RUN"     },
-    { id: "copies",         label: "Copy Trades",        short: "Copy",    phase: "RUN"     },
-    // Holders Room is community access, not a trading step — it sits between RUN
-    // and PROVE so the loop still ENDS on Analytics (which closes it back to the top).
-    { id: "holders",        label: "Holders Room",       short: "Holders", phase: ""        },
-    { id: "tradelog",       label: "Trading Log",        short: "Log",     phase: "PROVE"   },
-    { id: "analytics",      label: "Analytics",          short: "Stats",   phase: "PROVE"   },
+    { id: "intel",      label: "Market Intel",  short: "Intel" },
+    { id: "smart",      label: "Smart Money",   short: "Smart" },
+    { id: "thesis",     label: "Thesis Engine", short: "Thesis" },
+    { id: "agent",      label: "Trading Agent", short: "Agent" },
+    { id: "quicktrade", label: "Quick Trade",   short: "Trade" },
+    { id: "copies",     label: "Copy Trades",   short: "Copy" },
+    { id: "holders",    label: "Holders Room",  short: "Holders" },
+    { id: "tradelog",   label: "Trading Log",   short: "Log" },
+    { id: "analytics",  label: "Analytics",     short: "Stats" },
   ];
   // ── Guest Lab IA — three rooms ────────────────────────────────────────────────
   // A guest (no wallet) sees the three read-first rooms — Market Intel · Smart Money · Thesis
@@ -325,10 +320,8 @@ export default function TheLabPage() {
           // as the deep read behind the Board's Confluence strip — no more two competing
           // "synthesis" tabs. Each lens is a public read that The Board folds into one line.
           const lensesHeader = (
-            <div style={{ marginTop: 36, marginBottom: 2 }}>
-              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.18em", color: C.text.muted, marginBottom: 6 }}>THE LENSES</div>
-              <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 20, fontWeight: 600, letterSpacing: "-0.015em", color: C.text.bright, lineHeight: 1.2 }}>What The Board is reading</div>
-              <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.muted, marginTop: 6, lineHeight: 1.5, maxWidth: 620 }}>Each lens is one column on The Board, opened up. Funding and positioning are the tape; catalysts and forecasters are the outside crowd.</div>
+            <div style={{ marginTop: 36, marginBottom: 8, fontFamily: "var(--nx-font-ui)", fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", color: C.text.bright, lineHeight: 1.2 }}>
+              What the Board is reading
             </div>
           );
           const funding = (

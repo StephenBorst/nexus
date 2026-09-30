@@ -250,12 +250,9 @@ export function NexusBriefing({
         title="What matters right now"
         note={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-            <span>
-              {personal.length ? "your terminal + the market" : "the market, right now"} · {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-              {tape && <span style={{ color: tape.label === "RISK-OFF" ? "#f7525f" : tape.label === "RISK-ON" ? "#ededf0" : "#a1a1aa" }}> · {tape.label} tape</span>}
-            </span>
-            <button onClick={toggle} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", background: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", cursor: "pointer" }}>
-              {collapsed ? `Show (${total})` : "Hide"}
+            {tape && <span style={{ color: tape.label === "RISK-OFF" ? "#f7525f" : tape.label === "RISK-ON" ? "#ededf0" : "#a1a1aa" }}>{tape.label} tape</span>}
+            <button onClick={toggle} className="nx-text-action" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600, color: "#71717a", background: "none", border: "none", padding: "2px 0", cursor: "pointer" }}>
+              {collapsed ? `Show ${total}` : "Hide"}
             </button>
           </span>
         }
@@ -288,11 +285,12 @@ export function NexusBriefing({
               in order — your edge × the market floats to the top by priority. */}
           <GroupLabel text={personal.length ? "Act on this — in order" : "Watch this — in order"} />
           {queue.map((ins, i) => <InsightRow key={ins.id} ins={ins} onSelectTab={onSelectTab} rank={i + 1} />)}
-          {/* Deep-dive hand-off to the copilot */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "9px 14px" }}>
-            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.05em" }}>deterministic — no AI, no key, just the data</span>
-            <button onClick={askAi} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#6cb6ff", background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>
-              ◆ Ask Nexus to go deeper →
+          {/* Hand-off to the copilot. Not a duplicate of the floating bubble: the bubble opens an
+              empty chat, this asks a prepared question built from THIS briefing (your record +
+              the tape). Kept as a quiet text action, no box, no glyph. */}
+          <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 14px" }}>
+            <button onClick={askAi} className="nx-text-action" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600, color: "#a1a1aa", background: "none", border: "none", padding: "4px 0", cursor: "pointer", whiteSpace: "nowrap" }}>
+              Ask Nexus about this →
             </button>
           </div>
         </div>

@@ -6,13 +6,13 @@ import { SimCreditsBadge } from "./SimCreditsBadge";
 
 // ── The Lab's header: title, account read, and the tab bar ─────────────────────
 // One title row (what this page is + account status), the connected account's numbers, then
-// the tabs grouped by the loop's phase. Colour follows docs/brand.md: the bone brand mark marks the active
+// one flat row of tabs. Colour follows docs/brand.md: the bone brand mark marks the active
 // tab only, green/red appear on money alone (P&L), counts and rates stay monochrome.
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui)";
 
-export type LabTab = { id: TabId; label: string; short: string; phase: string };
+export type LabTab = { id: TabId; label: string; short: string };
 
 type SyncState = { connected: boolean; authOk: boolean; syncing: boolean; synced: boolean; onSign: () => void };
 
@@ -46,8 +46,7 @@ export function LabTitleBar({ isMobile, sync }: { isMobile: boolean; sync: SyncS
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: isMobile ? "14px 14px 10px" : "18px 20px 12px" }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.18em", color: C.brand, marginBottom: 4 }}>THE LAB</div>
-        <h1 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 20 : 24, fontWeight: 600, letterSpacing: "-0.02em", color: C.text.bright, lineHeight: 1.15 }}>
+        <h1 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 17 : 20, fontWeight: 600, letterSpacing: "-0.02em", color: C.text.bright, lineHeight: 1.15 }}>
           Plan it. Run it. Prove it.
         </h1>
       </div>
@@ -89,8 +88,8 @@ export function LabStats({ isMobile, stats }: { isMobile: boolean; stats: StatRo
   );
 }
 
-// Tabs. Desktop: underline tabs grouped under a readable phase label (the loop: observe →
-// plan → run → prove). Phone: one row of pills that scrolls sideways, the active one kept in
+// Tabs, in declaration order (the array is the loop's order). Desktop: one flat row of
+// underline tabs. Phone: one row of pills that scrolls sideways, the active one kept in
 // view. "More" opens the rest and "Less" puts them back.
 export function LabTabs({ isMobile, tabs, activeTab, onSelect, canCondense, condensed, onToggleMore }: {
   isMobile: boolean; tabs: LabTab[]; activeTab: TabId; onSelect: (t: TabId) => void;
@@ -134,14 +133,6 @@ export function LabTabs({ isMobile, tabs, activeTab, onSelect, canCondense, cond
     );
   }
 
-  // Group in declaration order: the tab array IS the loop's order.
-  const groups = tabs.reduce<{ phase: string; items: LabTab[] }[]>((acc, t) => {
-    const last = acc[acc.length - 1];
-    if (last && last.phase === t.phase) last.items.push(t);
-    else acc.push({ phase: t.phase, items: [t] });
-    return acc;
-  }, []);
-
   const tabStyle = (active: boolean) => ({
     background: "none", border: "none", cursor: "pointer", whiteSpace: "nowrap" as const,
     borderBottom: `2px solid ${active ? C.brand : "transparent"}`,
@@ -151,24 +142,17 @@ export function LabTabs({ isMobile, tabs, activeTab, onSelect, canCondense, cond
   });
 
   return (
-    <div role="tablist" aria-label="Lab sections" style={{ display: "flex", alignItems: "flex-end", gap: 28, padding: "0 20px", overflowX: "auto" }}>
-      {groups.map((g, gi) => (
-        <div key={g.phase || `g${gi}`} style={{ display: "flex", flexDirection: "column", gap: 2, flexShrink: 0 }}>
-          <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.16em", color: C.text.faint, height: 12 }}>{g.phase}</span>
-          <div style={{ display: "flex", gap: 20 }}>
-            {g.items.map((t) => {
-              const active = activeTab === t.id;
-              return (
-                <button key={t.id} role="tab" aria-selected={active} onClick={() => onSelect(t.id)} style={tabStyle(active)}
-                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = C.text.fog; }}
-                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = C.text.muted; }}>
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+    <div role="tablist" aria-label="Lab sections" style={{ display: "flex", alignItems: "flex-end", gap: 22, padding: "0 20px", overflowX: "auto" }}>
+      {tabs.map((t) => {
+        const active = activeTab === t.id;
+        return (
+          <button key={t.id} role="tab" aria-selected={active} onClick={() => onSelect(t.id)} style={{ ...tabStyle(active), flexShrink: 0 }}
+            onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = C.text.fog; }}
+            onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = C.text.muted; }}>
+            {t.label}
+          </button>
+        );
+      })}
       {canCondense && (
         <button type="button" onClick={() => onToggleMore(condensed)} title={moreTitle}
           style={{ ...tabStyle(false), flexShrink: 0, color: C.text.fog }}>
