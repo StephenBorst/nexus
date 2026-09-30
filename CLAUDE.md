@@ -534,6 +534,23 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
 - **Landing Proof section** (`nexus-landing` `#proof`) speaks to this in-cadence: "many reads, graded in public,
   most still noise, always sharpening" — NOT "one signal." Keep it that way.
 
+## Structure × house fade — PRE-REGISTERED, report only (2026-09-30)
+- The house caller (Nexus Signals `0xfc8c…`: funding fade at ≥12%/yr, entry = mark, SL 3% / TP 4% = 1.33R) = 163 graded
+  calls, 39%, −0.09R. The registered question: do counter-cycle fades (against the weekly break-of-structure bias, or a
+  LONG/SHORT entered within 1 ATR of an unbroken 4H swing level) earn a different mean R? Protocol + decision rule =
+  **`docs/research/structure-house-fade-prereg.md`** (two-sided permutation, |gap| ≥ 0.40R, p ≤ 0.05, ≥30/group, kept
+  group > 0R, same sign in both halves and with any one market left out). Its param block is pinned to the code by
+  `tools/structure-study/prereg.test.mjs`; the 163 calls are frozen in `population-stage1.json` (sha256 pinned).
+  Lib `app/lib/structure.mjs` (closed bars only, Orderly perp 4H, no EMA200/OB/FVG). Runner `tools/structure-study/run.mjs`
+  via the Action **"Structure study (report only)"** (workflow_dispatch; cloud sessions can't reach Orderly). Run stage 1
+  ONCE after the doc is on main; append the verdict under Results (never edit above it). Stage 2 (calls posted Sep 30 →
+  Oct 14) only after a stage-1 pass, on/after Oct 28 (the runner refuses earlier). ⚠️ Nothing live reads it: no stamp,
+  overlay, gate or worker change until the report exists. A sub-split that looks good = a NEW dated registration.
+- **The Read = inputs, not a verdict (2026-09-30).** `LiveRead.tsx` no longer counts reads, crowns the count ("STRONG
+  READ", "◆ ALIGNED SETUP") or tints green: every input shows its number + the side it points to in plain ink; amber for
+  caution, C.warn for danger, nothing endorses. Don't re-add a tally of ungraded reads. ⏭ The Lab Briefing
+  (`app/pages/lab/briefing.ts` fusion insights) still prints "N independent reads align" + a ◆ tag — same pattern, not yet changed.
+
 ## Bankr SKILL + marketing assets (where things live)
 - **Bankr skill** = `github.com/BankrBot/skills` → `nexus-trading-labs/SKILL.md` + `references/*.md` (markdown skill,
   YAML frontmatter `name: nexus` + trigger `description`). Published/maintained by Nexus. Update = edit SKILL.md/refs,
