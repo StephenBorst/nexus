@@ -29,8 +29,10 @@ const PROXY = "https://orderly-proxy.stephenpatrick24.workers.dev";
 const AGENT_API = "https://og.nexustradinglabs.com";
 const COLLAPSE_KEY = "nexus_briefing_collapsed";
 
+// The left bar + rank number. Positive = the bone accent mark, not green: green is kept for money
+// and price (docs/brand.md), and an insight is advice, not a P&L. Caution = amber, info = grey.
 const TONE: Record<Insight["tone"], { bar: string; dot: string }> = {
-  positive: { bar: "#3ecf8e", dot: "#3ecf8e" },
+  positive: { bar: C.brand, dot: C.brand },
   caution: { bar: "#fbbf24", dot: "#fbbf24" },
   info: { bar: "#33333a", dot: "#71717a" },
 };

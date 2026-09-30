@@ -548,8 +548,11 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   overlay, gate or worker change until the report exists. A sub-split that looks good = a NEW dated registration.
 - **The Read = inputs, not a verdict (2026-09-30).** `LiveRead.tsx` no longer counts reads, crowns the count ("STRONG
   READ", "◆ ALIGNED SETUP") or tints green: every input shows its number + the side it points to in plain ink; amber for
-  caution, C.warn for danger, nothing endorses. Don't re-add a tally of ungraded reads. ⏭ The Lab Briefing
-  (`app/pages/lab/briefing.ts` fusion insights) still prints "N independent reads align" + a ◆ tag — same pattern, not yet changed.
+  caution, C.warn for danger, nothing endorses. Don't re-add a tally of ungraded reads. **Same rule in the Lab
+  Briefing (2026-09-30, borst):** `briefing.ts` fusion insights no longer count reads ("N independent reads align"),
+  crown them (◆), rank by the count (it could lift a trade idea to 102, above the 95 live-risk warning) or stay green
+  over a caller disagreement. Fixed priority (92 your setup / 88 your class), −3 and caution only when graded callers
+  disagree. The Briefing's "positive" tone is the bone mark (`C.brand`), not green (`NexusBriefing.tsx` TONE).
 
 ## Bankr SKILL + marketing assets (where things live)
 - **Bankr skill** = `github.com/BankrBot/skills` → `nexus-trading-labs/SKILL.md` + `references/*.md` (markdown skill,
