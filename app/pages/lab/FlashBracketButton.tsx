@@ -3,7 +3,7 @@
 //   1. On a SHORT fade, one line — a Flash spot BUY would be wrong-way, so a short expresses
 //      on the Orderly perp book. (We never mount a buy-to-short button.)
 //   2. "Express on Spot →" opens /token/{SYM}?venue=spot with the side prefilled — LONG→Buy,
-//      SHORT→Sell — where the Spot terminal offers Fabric / Flash / the Uniswap deep-link.
+//      SHORT→Sell — where the Spot terminal offers spanDEX / Flash / the Uniswap deep-link.
 // (Kept the export name for the existing thesis-card mount; it is no longer a bracket button.)
 import { useNavigate } from "react-router-dom";
 
@@ -21,7 +21,7 @@ export function FlashBracketButton({ symbol, direction, stopLoss, takeProfit1 }:
   const href = `/token/${encodeURIComponent(sym)}?venue=spot&side=${spotSide}${rLevels}`;
   const express = (
     <a href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}
-      title={`Open ${sym} on the Spot terminal with ${spotSide === "buy" ? "Buy" : "Sell"} prefilled (Fabric / Flash / Uniswap).`}
+      title={`Open ${sym} on the Spot terminal with ${spotSide === "buy" ? "Buy" : "Sell"} prefilled (spanDEX / Flash / Uniswap).`}
       style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: "#3ecf8e", textDecoration: "none", display: "inline-flex", alignItems: "center", minHeight: 36, padding: "6px 6px", whiteSpace: "nowrap" }}>
       Express on Spot →
     </a>
