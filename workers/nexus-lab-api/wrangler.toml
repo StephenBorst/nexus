@@ -55,9 +55,10 @@ SPOT_FEE_RECIPIENT = "0x34dFC08eB3B7eD60D00e5B2CB611ac27C152B45c"
 # Definitive Flash Portfolio (withdraw at app.definitive.fi). ON 2026-09-30 (borst): 10 bps, so a user
 # pays 20 bps on a Flash fill (Definitive's 10 bps is a promo rate through Dec 2026) plus gas.
 FLASH_FEE_BPS = "10"
-# Our Base builder code (ERC-8021), register at base.dev first. Order-only; unset = omitted. A valid
-# but unregistered code never fails an order (it just goes unattributed); a malformed one is dropped.
-# FLASH_ATTRIBUTION_CODE = "your-base-dev-code"
+# Our Base builder code (ERC-8021, registered at base.dev by borst 2026-09-30). Order-only; unset =
+# omitted. A valid but unregistered code never fails an order (it just goes unattributed); a malformed
+# one is dropped.
+FLASH_ATTRIBUTION_CODE = "bc_lrqwbh7u"
 # Request-bound (v2) signing enforcement (issue #14). Unset/"false" = no-op (legacy
 # static walletSig only). Set to "true" to REQUIRE a fresh /auth/challenge signature
 # on gated high-risk routes (withdraw first). Flip on only once clients send v2.
