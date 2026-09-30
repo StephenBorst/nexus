@@ -890,12 +890,20 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
 - **Testing Flash without our key:** Flash's docs print a PUBLIC integrator key "safe for development" (in every
   order-type page's Prerequisites note) — quotes/list/cancel-404 work with it from a cloud session via curl. Fixture `app/lib/__fixtures__/flash-quotes.json` = real quotes for every type (funder = our subscription
   receiver, nothing signed). Never place an order with it. Rate limit: 5 req/s per endpoint per key (ours).
-- **Our fee — WIRED, OFF (2026-09-27):** worker var `FLASH_FEE_BPS` (commented in lab-api wrangler.toml) →
-  `withFlashFee` (keyProxy.mjs, tested) adds `flashIntegratorFeeBps` to BOTH /quote and /order, drops any browser-sent
-  value, omits the field when unset (byte-identical body). Our cap 100 bps (Flash allows 1000). Stacks on Definitive's
-  10 bps; accrues in our Definitive Flash Portfolio. ⏳ borst: the number (only after live tests) +
-  `erc8021AttributionCode` (Base builder code, order-only, unset). Live test needed:
-  one small limit + cancel, one market buy with SL/TP (check the pair's WETH/token approval lands).
+- **Our fee — ON (2026-09-30): `FLASH_FEE_BPS = "10"`** in lab-api wrangler.toml → `withFlashFee` (keyProxy.mjs,
+  tested) adds `flashIntegratorFeeBps` to BOTH /quote and /order (Flash requires them identical), drops any
+  browser-sent value. Cap 100 bps (Flash allows 1000). **Stack = Definitive 10 bps (a PROMO rate through Dec 2026,
+  may change after) + our 10 = 20 bps, plus gas** — both inside the quote's `estimatedFeeNotional`, which the ticket
+  already prints as "Fee". Payout = the Flash Portfolio of the Definitive account that owns the API key (withdraw:
+  app.definitive.fi → Flash Portfolio → connect the vault's wallet → Withdraw); per-fill `integratorFeeAmount` /
+  `feeTicker` on `GET /orders/:id` reconcile it; paid in the stable/major side of the trade, else the input token.
+  **Live-checked 2026-09-30 (Flash's public dev key, quote only):** $20 USDC→WETH on Base, fee off vs 10 bps →
+  output −9.4 bps, `estimatedFeeNotional` $0.049 → $0.071 (+10.9 bps). **Base builder code — WIRED, OFF:**
+  `FLASH_ATTRIBUTION_CODE` (commented in wrangler.toml) → `withFlashAttribution` puts `erc8021AttributionCode` on
+  /order ONLY (Flash refuses it on /quote), drops browser values, omits a malformed code (Flash would reject the
+  user's order; a valid-but-unregistered code only goes unattributed). ⏳ borst registers the code at base.dev, then
+  uncomment. Verify on a settled tx: calldata ends in the ERC-8021 marker `0x8021…`, payload = "<definitive>,<ours>".
+  ⏳ Live test by borst (can't be signed here): one small limit + cancel, one small market buy with SL/TP.
 - **Key proxies gated** (`workers/nexus-lab-api/keyProxy.mjs`, tested): `/flash/*` + `/swap/jup/*` accept only our
   origins (ALLOWED_ORIGINS + `*.nexus-trading-lab.pages.dev`, https) and a per-IP isolate-local budget (flash writes
   30/min, flash reads 40/min, jup 120/min) → 403 `origin_not_allowed` / 429. Only browser code calls them.
