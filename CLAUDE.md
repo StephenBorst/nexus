@@ -909,12 +909,22 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   app.definitive.fi → Flash Portfolio → connect the vault's wallet → Withdraw); per-fill `integratorFeeAmount` /
   `feeTicker` on `GET /orders/:id` reconcile it; paid in the stable/major side of the trade, else the input token.
   **Live-checked 2026-09-30 (Flash's public dev key, quote only):** $20 USDC→WETH on Base, fee off vs 10 bps →
-  output −9.4 bps, `estimatedFeeNotional` $0.049 → $0.071 (+10.9 bps). **Base builder code — WIRED, OFF:**
-  `FLASH_ATTRIBUTION_CODE` (commented in wrangler.toml) → `withFlashAttribution` puts `erc8021AttributionCode` on
-  /order ONLY (Flash refuses it on /quote), drops browser values, omits a malformed code (Flash would reject the
-  user's order; a valid-but-unregistered code only goes unattributed). ⏳ borst registers the code at base.dev, then
-  uncomment. Verify on a settled tx: calldata ends in the ERC-8021 marker `0x8021…`, payload = "<definitive>,<ours>".
-  ⏳ Live test by borst (can't be signed here): one small limit + cancel, one small market buy with SL/TP.
+  output −9.4 bps, `estimatedFeeNotional` $0.049 → $0.071 (+10.9 bps). **Base builder code — ON:**
+  `FLASH_ATTRIBUTION_CODE = "bc_lrqwbh7u"` (borst's base.dev code, set in wrangler.toml 2026-09-30) →
+  `withFlashAttribution` puts `erc8021AttributionCode` on /order ONLY (Flash refuses it on /quote), drops browser
+  values, omits a malformed code (Flash would reject the user's order; a valid-but-unregistered code only goes
+  unattributed). ⏳ Verify on the next settled Flash tx: calldata ends in the ERC-8021 marker `0x8021…`, payload =
+  "<definitive>,bc_lrqwbh7u".
+  **✅ LIVE TEST (borst, 2026-09-30, fee ON):** market buy $5 USDC → **698,319.86 FAIR** on Base with SL/TP attached,
+  filled, tx `0xab1a055d…4a0658b8d` (success, ~$0.02 gas). A stop order placed then cancelled: gasless cancel worked.
+  The USDC approval asked for exactly 1 USDC, not unlimited. **The ticket's "Fee" read $0.034312 on $5 (~69 bps) — not
+  a fee bug:** `estimatedFeeNotional` = percentage fees + GAS, and gas is a flat ~$0.02–0.03 per fill on Base. $5 ×
+  20 bps = $0.010 (Definitive $0.005 + ours $0.005) + ~$0.024 gas = $0.034. Same split as the $20 dev-key quotes (fee
+  off $0.049 = $0.02 Definitive + ~$0.029 gas). The percentage part is 20 bps at every size; gas adds ~49 bps at $5,
+  ~2 bps at $100. Our cut on that fill ≈ **$0.005** (may show as $0.01 or $0.00 once rounded); not yet confirmed in the
+  Flash Portfolio. ⚠️ UX edge seen: the stop order came back noting "the trigger was already crossed when it was
+  placed" — the ticket's `pxIssue` guard checks against the PAGE's price (and skips when it has none), so a trigger
+  close to the market can pass it and still be crossed on Flash's own price. Open follow-up.
 - **Key proxies gated** (`workers/nexus-lab-api/keyProxy.mjs`, tested): `/flash/*` + `/swap/jup/*` accept only our
   origins (ALLOWED_ORIGINS + `*.nexus-trading-lab.pages.dev`, https) and a per-IP isolate-local budget (flash writes
   30/min, flash reads 40/min, jup 120/min) → 403 `origin_not_allowed` / 429. Only browser code calls them.
