@@ -22,7 +22,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
@@ -1613,11 +1613,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         if (used >= CAP) return json({ error: "daily_limit", model: hostedModel, cap: CAP, hint: `Hosted ${hostedModel} cap is ${CAP}/day (resets 00:00 UTC). Switch to a lighter model in ⚙ for a higher cap, or use your own API key.` }, request, 429);
         await env.LAB_STORE.put(usageKey, String(used + 1), { expirationTtl: 60 * 60 * 48 });
 
-        // Forward to Anthropic — use the resolved (whitelisted) model + clamp tokens.
-        const upstreamBody = { ...body };
-        delete upstreamBody._addr; delete upstreamBody._ts; delete upstreamBody._sig;
-        upstreamBody.model = upstreamCfg.model; // provider-correct id (gateway uses dot-notation)
-        upstreamBody.max_tokens = Math.min(Number(upstreamBody.max_tokens) || 1024, 1024);
+        // Forward the resolved (whitelisted) model with a server-set token ceiling; thinking tiers
+        // also get effort "low" and lose fields they'd 400 on (shapeHostedBody, logic.mjs).
+        // upstreamCfg.model is the provider-correct id (the gateway uses dot-notation).
+        const upstreamBody = shapeHostedBody(body, hostedModel, upstreamCfg.model);
 
         // Prompt caching — the system prompt + 12 tool schemas are identical every
         // call, so cache that stable prefix → repeat calls bill at ~0.1x instead of

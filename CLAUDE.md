@@ -44,6 +44,17 @@ is everything built on top:
   Tiers mirrored client-side in `config/assistant.ts` (`HOSTED_TIERS`). Env-tunable caps `HOSTED_CAP_HAIKU/
   SONNET/OPUS` + default tier `HOSTED_AI_DEFAULT_MODEL` (legacy `HOSTED_AI_MODEL` honored as default source);
   needs `ANTHROPIC_API_KEY` secret (set). Free users keep BYOK.
+  **+ Three newer tiers (2026-09-30, borst: half caps to start):** Sonnet 5.5 **30** · Opus 5.5 **12** · Fable 5.1 **5**
+  (gateway ids `claude-sonnet-5.5` / `claude-opus-5.5` / `claude-fable-5.1`, confirmed on Bankr's /v1/models;
+  env `HOSTED_CAP_SONNET55/OPUS55/FABLE`, `BANKR_MODEL_SONNET55/OPUS55/FABLE`). Price-matched caps would be 60/25/10;
+  halved because these models ALWAYS think and thinking bills as output. Default tier unchanged (Sonnet 4.6).
+  ⚠️ Thinking tiers need three things, all in place: `shapeHostedBody` (logic.mjs) sets effort `low` + a 4096 ceiling
+  (1024 left no room to answer) and drops `thinking`/`temperature`/forced `tool_choice` (400s on these models); the
+  client reads text by block TYPE (a turn can start with a thinking block) and the tool loop sends thinking blocks
+  back UNCHANGED with their signature — `app/lib/anthropicTurn.mjs` (`createStreamAssembler`, tested; the old stream
+  reader rewrote every non-tool block as an empty text block, which these models reject); refusals and max_tokens
+  cut-offs show a plain line. BYOK users on 5.x models get the same fixes. `logic.test.mjs` fails if `HOSTED_TIERS` and
+  `hostedCaps` disagree.
 - **⚠️ Hosted-AI SPEND PATH = Bankr LLM Gateway (LIVE 2026-06-14), not direct Anthropic.** `/ai/chat` upstream is
   pluggable via `resolveAiUpstream`/`bankrGatewayModel` in `logic.mjs`: with worker var `AI_GATEWAY=bankr` (set in
   wrangler.toml `[vars]`) + secret `BANKR_LLM_KEY` (set), it proxies to `https://llm.bankr.bot/v1/messages`
