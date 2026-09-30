@@ -27,7 +27,7 @@ function SyncStatus({ connected, authOk, syncing, synced, onSign, isMobile }: Sy
     return (
       <button type="button" onClick={onSign}
         title="Sign a message (no funds move) so your calls and notes save to your record. Once a day."
-        style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: SIGNAL.watch, background: SIGNAL.watchBg, border: `1px solid ${LINE.watch}`, borderRadius: 6, padding: "0 10px", height: isMobile ? 32 : 28, cursor: "pointer", whiteSpace: "nowrap" }}>
+        style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600, color: SIGNAL.watch, background: SIGNAL.watchBg, border: `1px solid ${LINE.watch}`, borderRadius: 6, padding: "0 10px", height: isMobile ? 32 : 28, cursor: "pointer", whiteSpace: "nowrap" }}>
         Sign to sync
       </button>
     );

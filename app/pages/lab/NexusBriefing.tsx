@@ -254,8 +254,8 @@ export function NexusBriefing({
               {personal.length ? "your terminal + the market" : "the market, right now"} · {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}
               {tape && <span style={{ color: tape.label === "RISK-OFF" ? "#f7525f" : tape.label === "RISK-ON" ? "#ededf0" : "#a1a1aa" }}> · {tape.label} tape</span>}
             </span>
-            <button onClick={toggle} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", background: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", cursor: "pointer", letterSpacing: "0.05em" }}>
-              {collapsed ? `SHOW (${total})` : "HIDE"}
+            <button onClick={toggle} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", background: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", cursor: "pointer" }}>
+              {collapsed ? `Show (${total})` : "Hide"}
             </button>
           </span>
         }
@@ -272,7 +272,7 @@ export function NexusBriefing({
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8.5, letterSpacing: "0.2em", color: "#52525b", textTransform: "uppercase" }}>Your operator read</span>
                   {operator.meritRank && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#a1a1aa", border: "1px solid #33333a", borderRadius: 2, padding: "0 4px" }}>{operator.meritRank.glyph} {operator.meritRank.title.toUpperCase()}</span>}
                 </span>
-                <button onClick={() => onSelectTab("analytics")} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.05em", color: "#a1a1aa", background: "none", border: "none", cursor: "pointer", padding: 0 }}>full profile →</button>
+                <button onClick={() => onSelectTab("analytics")} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", background: "none", border: "none", cursor: "pointer", padding: 0 }}>full profile →</button>
               </div>
               {operator.archetype && (
                 <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 17, color: "#f4f4f5", marginTop: 5, lineHeight: 1.2, letterSpacing: "-0.01em" }}>{operator.archetype.label}</div>
@@ -291,7 +291,7 @@ export function NexusBriefing({
           {/* Deep-dive hand-off to the copilot */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "9px 14px" }}>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.05em" }}>deterministic — no AI, no key, just the data</span>
-            <button onClick={askAi} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, letterSpacing: "0.05em", color: "#6cb6ff", background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>
+            <button onClick={askAi} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#6cb6ff", background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "5px 10px", cursor: "pointer", whiteSpace: "nowrap" }}>
               ◆ Ask Nexus to go deeper →
             </button>
           </div>

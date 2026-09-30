@@ -657,7 +657,7 @@ export default function MessagesPage() {
               disabled={!dmAddress.trim() || openingDM}
               style={{
                 background: "none", border: "1px solid #232327", borderRadius: 3,
-                color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 9,
+                color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12,
                 padding: "4px 8px", cursor: "pointer",
               }}
             >
@@ -692,14 +692,14 @@ export default function MessagesPage() {
                   />
                   <button
                     onClick={copy}
-                    style={{ background: "none", border: "1px solid #33333a", borderRadius: 3, color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "4px 8px", cursor: "pointer", whiteSpace: "nowrap" }}
+                    style={{ background: "none", border: "1px solid #33333a", borderRadius: 3, color: "#d4d4d8", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "4px 8px", cursor: "pointer", whiteSpace: "nowrap" }}
                   >
-                    {inviteCopied ? "COPIED ✓" : "COPY"}
+                    {inviteCopied ? "Copied ✓" : "Copy"}
                   </button>
                 </div>
                 <button
                   onClick={() => { setInviteAddr(null); setDmAddress(""); }}
-                  style={{ marginTop: 6, background: "none", border: "none", color: "#52525b", fontFamily: "var(--nx-font-mono)", fontSize: 8, cursor: "pointer", padding: 0 }}
+                  style={{ marginTop: 6, background: "none", border: "none", color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer", padding: 0 }}
                 >
                   dismiss
                 </button>
@@ -741,7 +741,7 @@ export default function MessagesPage() {
               {isMobile && (
                 <button
                   onClick={() => setActiveConvo(null)}
-                  style={{ background: "none", border: "none", borderBottom: "1px solid #232327", color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 11, padding: "10px 14px", cursor: "pointer", textAlign: "left", width: "100%" }}
+                  style={{ background: "none", border: "none", borderBottom: "1px solid #232327", color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, padding: "10px 14px", cursor: "pointer", textAlign: "left", width: "100%" }}
                 >
                   ← conversations
                 </button>

@@ -129,7 +129,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
             const on = (id === "mine") === mineOnly;
             return (
               <button key={id} type="button" onClick={() => setMineOnly(id === "mine")} style={{
-                fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.06em", padding: "5px 11px", borderRadius: 4, cursor: "pointer",
+                fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 11px", borderRadius: 4, cursor: "pointer",
                 background: on ? "#1a1a1e" : "none", border: `1px solid ${on ? BONE : BORDER}`, color: on ? BONE : MUTED,
               }}>{label}</button>
             );
@@ -168,7 +168,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
                   })()}
                   {actionable && (
                     <button type="button" onClick={() => draftFade(r)} className="nx-press"
-                      style={{ marginLeft: "auto", color: BONE, background: "transparent", border: "1px solid #33333a", borderRadius: 4, padding: "3px 10px", fontFamily: MONO, fontSize: 10, cursor: "pointer" }}>◆ draft</button>
+                      style={{ marginLeft: "auto", color: BONE, background: "transparent", border: "1px solid #33333a", borderRadius: 4, padding: "3px 10px", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer" }}>◆ draft</button>
                   )}
                 </div>
                 <div style={{ fontFamily: UI, fontSize: 12, color: r.verdict === "SPLIT" ? WATCH : FOG, lineHeight: 1.5, marginTop: 7 }}>{positioningRead(r)}</div>

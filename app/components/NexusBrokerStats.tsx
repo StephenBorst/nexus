@@ -66,11 +66,11 @@ export function NexusBrokerStats({ compact = false }: { compact?: boolean }) {
         display: "flex", alignItems: "center", gap: compact ? 12 : 18,
         padding: compact ? "8px 12px" : "12px 16px",
         background: "#141416", border: "1px solid #232327", borderRadius: 4,
-        fontFamily: "var(--nx-font-mono)", textDecoration: "none",
+        fontFamily: "var(--nx-font-ui)", textDecoration: "none",
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontSize: 8, letterSpacing: "0.12em", color: "#52525b" }}>NEXUS ON ORDERLY</span>
+        <span style={{ fontSize: 8, letterSpacing: "0.12em", color: "#52525b" }}>NEXUS on Orderly</span>
         <span style={{ fontSize: compact ? 12 : 13, color: "#a1a1aa" }}>
           {vol != null ? <>vol <b style={{ color: "#fff" }}>{fmtUsd(vol)}</b></> : <span style={{ color: "#ededf0" }}>network stats</span>}
           {fees != null && <> · fees <b style={{ color: "#fff" }}>{fmtUsd(fees)}</b></>}

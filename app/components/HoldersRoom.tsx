@@ -166,9 +166,9 @@ export function HoldersRoom({ walletAddress }: { walletAddress: string | null })
           <div style={{ marginTop: 12 }}>
             <button
               onClick={() => setSignNonce((n) => n + 1)}
-              style={{ background: "#1a1a1e", border: "1px solid #33333a", borderRadius: 3, color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 11, padding: "6px 14px", cursor: "pointer", letterSpacing: "0.08em" }}
+              style={{ background: "#1a1a1e", border: "1px solid #33333a", borderRadius: 3, color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, padding: "6px 14px", cursor: "pointer" }}
             >
-              ◆ SIGN TO ENTER
+              ◆ Sign to enter
             </button>
           </div>
         </div>
@@ -188,7 +188,7 @@ export function HoldersRoom({ walletAddress }: { walletAddress: string | null })
           <div key={t.id} style={{ background: "#141416", border: "1px solid #232327", borderRadius: 4, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
             <button
               onClick={() => navigate(`/feed/trader/${t.wallet}`)}
-              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", minWidth: 140 }}
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#a1a1aa", minWidth: 140 }}
             >
               {name}
               <NexusTierBadge address={t.wallet} />

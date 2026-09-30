@@ -655,14 +655,14 @@ export function MispricedBoard() {
         {listed && (
           <a href={perpHref} onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigate(perpHref); }}
             title={`Long / Short ${m.coin} on Nexus`} className="nx-press" style={{
-              flex: 1, textAlign: "center", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
+              flex: 1, textAlign: "center", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600,
               color: C.text.muted, background: "none", border: `1px solid ${C.border}`, borderRadius: RADIUS.md,
               padding: "8px 10px", cursor: "pointer", textDecoration: "none", whiteSpace: "nowrap",
             }}>Long / Short ↗</a>
         )}
         <a href={spotHref} onClick={(e) => { e.stopPropagation(); e.preventDefault(); navigate(spotHref); }}
           title={`Buy ${m.coin} on Spot`} className="nx-press" style={{
-            flex: 1, textAlign: "center", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
+            flex: 1, textAlign: "center", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600,
             color: C.text.muted, background: "none", border: `1px solid ${C.border}`, borderRadius: RADIUS.md,
             padding: "8px 10px", cursor: "pointer", textDecoration: "none", whiteSpace: "nowrap",
           }}>Trade on Spot ↗</a>
@@ -774,10 +774,10 @@ export function MispricedBoard() {
     return (
       <div>
         <button onClick={() => setOpenCoin(null)} className="nx-card-interactive" style={{
-          display: "inline-flex", alignItems: "center", gap: 6, fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em",
+          display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--nx-font-ui)", fontSize: 12,
           color: C.text.muted, background: "none", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm,
           padding: "6px 11px", cursor: "pointer", marginBottom: 16,
-        }}>← BACK TO BOARD</button>
+        }}>← Back to board</button>
 
         {/* Primo layout: the card (with the hero chart) takes the bulk of the width so the
             SynthChart breathes; the learnable legend fills the right cleanly instead of a
@@ -797,13 +797,13 @@ export function MispricedBoard() {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
                   <button onClick={() => canDraft && draftFade(m)} disabled={!canDraft} className="nx-card-interactive" style={{
-                    flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em",
+                    flex: 1, minWidth: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600,
                     color: isFade ? C.accent : draftAnyway ? C.warn : C.text.faint, background: "none",
                     border: `1px solid ${isFade ? C.borderStrong : draftAnyway ? `${C.warn}88` : C.border}`, borderRadius: RADIUS.md,
                     padding: "11px 12px", cursor: canDraft ? "pointer" : "not-allowed", opacity: canDraft ? 1 : 0.55,
                   }}>{isFade ? "Draft this fade →" : draftAnyway ? "Draft anyway →" : "No fade to draft yet"}</button>
                   <button onClick={() => shareRead(m, isFade, draftAnyway)} title="Share this read as a card on X" className="nx-press" style={{
-                    flexShrink: 0, fontFamily: MONO, fontSize: 11, letterSpacing: "0.06em", color: C.text.muted,
+                    flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: C.text.muted,
                     background: "none", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, padding: "11px 13px", cursor: "pointer",
                   }}>↗</button>
                 </div>
@@ -843,13 +843,13 @@ export function MispricedBoard() {
               {/* Share the READ as a branded, verifiable card (verdict only — no fake R/stops).
                   A WATCH card shares as WATCH, a FADE as FADE; unfurls on X, links back. */}
               <button onClick={() => shareRead(m, isFade, draftAnyway)} title="Share this read as a card on X" className="nx-press" style={{
-                marginLeft: "auto", fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.06em", color: C.text.muted,
+                marginLeft: "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: C.text.muted,
                 background: "none", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, padding: "8px 12px", cursor: "pointer",
-              }}>↗ SHARE</button>
+              }}>↗ Share</button>
               {/* One primary action, and it answers the page's one question: is there a fade NOW?
                   FADE → greenlight Draft. WATCH/NONE → Draft disabled (Simulate stays below). */}
               <button onClick={() => canDraft && draftFade(m)} disabled={!canDraft} title={isFade ? "Draft this fade into the Thesis Engine" : draftAnyway ? "Funding is stretched but fading it has historically underperformed. Draft it anyway on your own read, not the base rate" : "No fade edge right now. Funding isn't stretched vs its range"} className="nx-card-interactive" style={{
-                fontFamily: MONO, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em",
+                fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600,
                 color: isFade ? C.accent : draftAnyway ? C.warn : C.text.faint, background: "none",
                 border: `1px solid ${isFade ? C.borderStrong : draftAnyway ? `${C.warn}88` : C.border}`, borderRadius: RADIUS.md, padding: "9px 15px",
                 cursor: canDraft ? "pointer" : "not-allowed", opacity: canDraft ? 1 : 0.55,
@@ -968,12 +968,12 @@ export function MispricedBoard() {
                       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 11 }}>
                         {isFade ? (
                           <button onClick={(e) => { e.stopPropagation(); draftFade(m); }} title="Draft this fade into the Thesis Engine. No wallet needed (wallet only on Publish)" style={{
-                            width: "100%", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+                            width: "100%", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600,
                             color: C.accent, border: `1px solid ${C.borderStrong}`, borderRadius: RADIUS.md, padding: 8, background: "transparent", cursor: "pointer",
                           }}>Draft this fade →</button>
                         ) : (
                           <button onClick={(e) => { e.stopPropagation(); setOpenCoin(m.coin); }} style={{
-                            width: "100%", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+                            width: "100%", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600,
                             color: C.text.muted, border: `1px solid ${C.border}`, borderRadius: RADIUS.md, padding: 8, background: "transparent", cursor: "pointer",
                           }}>→ Open &amp; size</button>
                         )}

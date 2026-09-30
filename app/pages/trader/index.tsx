@@ -233,7 +233,7 @@ function ThesisRow({
             onClick={(e) => { e.stopPropagation(); onCopy(thesis); }}
             style={{
               background: "none", border: "1px solid #232327", borderRadius: 3,
-              color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 9,
+              color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12,
               padding: "3px 8px", cursor: "pointer",
             }}
             onMouseEnter={(e) => {
@@ -244,7 +244,7 @@ function ThesisRow({
               (e.currentTarget as HTMLButtonElement).style.borderColor = "#232327";
               (e.currentTarget as HTMLButtonElement).style.color = "#71717a";
             }}
-          >COPY</button>
+          >Copy</button>
         )}
 
         <div style={{ color: "#33333a", fontSize: 10 }}>{expanded ? "▲" : "▼"}</div>
@@ -458,11 +458,11 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
             width: "100%", background: saved ? "#1a1a1e" : calc && !hasValidationErr ? "#1a1a1e" : "#0f0f11",
             border: `1px solid ${saved ? "#ededf0" : calc && !hasValidationErr ? "#ededf0" : "#232327"}`,
             color: saved ? "#ededf0" : calc && !hasValidationErr ? "#ededf0" : "#33333a",
-            fontFamily: "var(--nx-font-mono)", fontSize: 11, letterSpacing: "0.1em",
+            fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
             padding: "10px 0", borderRadius: 4, cursor: calc && !saving && !saved && !hasValidationErr ? "pointer" : "default",
           }}
         >
-          {saved ? "✓ SAVED TO LAB" : saving ? "saving..." : "SAVE TO LAB →"}
+          {saved ? "✓ Saved to Lab" : saving ? "saving..." : "Save to Lab →"}
         </button>
       </div>
     </div>
@@ -670,9 +670,9 @@ export default function TraderPage() {
       <div style={{ padding: "8px 16px", borderBottom: "1px solid #232327", background: "#0f0f11", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 8 }}>
         <button
           onClick={() => navigate("/feed")}
-          style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: 0 }}
+          style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: 0 }}
         >
-          ← FEED
+          ← Feed
         </button>
         <div style={{ flex: 1, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#33333a", letterSpacing: "0.05em" }}>
           / TRADER
@@ -685,11 +685,11 @@ export default function TraderPage() {
             title={isFollowing ? "Unfollow. Stop starred alerts when they open a position" : "Follow. Their next open pings you in Live Alerts"}
             style={{
               background: isFollowing ? `${SIGNAL.follow}14` : "none", border: `1px solid ${isFollowing ? SIGNAL.follow : "#232327"}`, borderRadius: 4,
-              color: isFollowing ? SIGNAL.follow : "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10,
-              padding: "6px 14px", cursor: followBusy ? "default" : "pointer", letterSpacing: "0.05em", minWidth: 108,
+              color: isFollowing ? SIGNAL.follow : "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12,
+              padding: "6px 14px", cursor: followBusy ? "default" : "pointer", minWidth: 108,
             }}
           >
-            {isFollowing ? "★ FOLLOWING" : "☆ FOLLOW"}
+            {isFollowing ? "★ Following" : "☆ Follow"}
           </button>
         )}
         <MessageTraderButton
@@ -702,11 +702,11 @@ export default function TraderPage() {
           onClick={copyLink}
           style={{
             background: "none", border: "1px solid #232327", borderRadius: 4,
-            color: copied ? "#ededf0" : "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10,
-            padding: "6px 14px", cursor: "pointer", letterSpacing: "0.05em", minWidth: 108,
+            color: copied ? "#ededf0" : "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12,
+            padding: "6px 14px", cursor: "pointer", minWidth: 108,
           }}
         >
-          {copied ? "✓ COPIED" : "⎘ SHARE"}
+          {copied ? "✓ Copied" : "⎘ Share"}
         </button>
       </div>
 
@@ -751,12 +751,12 @@ export default function TraderPage() {
                   rel="noopener noreferrer"
                   title="X-ray this wallet's actual perp record on Hyperliquid + Orderly. Verify before you copy"
                   style={{
-                    flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 10,
+                    flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12,
                     color: "#ededf0", textDecoration: "none", border: "1px solid #33333a",
                     borderRadius: 4, padding: "8px 12px", whiteSpace: "nowrap",
                   }}
                 >
-                  ⌕ X-RAY ↗
+                  ⌕ X-ray ↗
                 </a>
               )}
               {/* Rep Score badge — Ph26: on-chain value from NexusRepScore contract */}
@@ -869,7 +869,7 @@ export default function TraderPage() {
                             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: "#d4d4d8" }}>{s.name} <span style={{ color: "#d4d4d8", fontSize: 9 }}>{deriveStyle(s.config)}</span></div>
                             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#a1a1aa", marginTop: 2 }}>{s.config.signalMode} · {s.config.leverage}x · TP{s.config.tpPercent}/SL{s.config.slPercent}</div>
                           </div>
-                          <button onClick={() => deployToAgent(s.config, `${displayName ?? shortAddr}'s "${s.name}"`, undefined, navigate, { replaceFilters: true })} style={{ background: "none", border: "1px solid #33333a", color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 14px", borderRadius: 3, cursor: "pointer", flexShrink: 0 }}>COPY →</button>
+                          <button onClick={() => deployToAgent(s.config, `${displayName ?? shortAddr}'s "${s.name}"`, undefined, navigate, { replaceFilters: true })} style={{ background: "none", border: "1px solid #33333a", color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 14px", borderRadius: 3, cursor: "pointer", flexShrink: 0 }}>Copy →</button>
                         </div>
                       ))}
                     </div>

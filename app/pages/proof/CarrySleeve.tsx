@@ -128,7 +128,7 @@ export default function CarrySleeve() {
           Carry-driven when the <b style={{ color: FOG }}>carry share</b> is high — that’s funding income, not price luck.
         </span>
         <a href={`${CARRY_API}/carry/record`} target="_blank" rel="noopener noreferrer"
-          style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 9.5, color: FOG, textDecoration: "none", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "3px 8px", background: "#1a1a1e" }}>
+          style={{ marginLeft: "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: FOG, textDecoration: "none", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "3px 8px", background: "#1a1a1e" }}>
           verify the record ↗
         </a>
       </div>

@@ -175,14 +175,13 @@ export default function NotificationBell() {
                   background: "none",
                   border: "none",
                   color: "#ededf0",
-                  fontFamily: "var(--nx-font-mono)",
-                  fontSize: 9,
+                  fontFamily: "var(--nx-font-ui)",
+                  fontSize: 12,
                   cursor: "pointer",
-                  letterSpacing: "0.08em",
                   padding: 0,
                 }}
               >
-                MARK ALL READ
+                Mark all read
               </button>
             )}
           </div>
@@ -248,8 +247,8 @@ export default function NotificationBell() {
                     <button
                       onClick={(e) => { e.stopPropagation(); shareResolution(n); }}
                       title="Share this graded result on X"
-                      style={{ background: "none", border: "1px solid #33333a", borderRadius: 4, color: "#a1a1aa", cursor: "pointer", fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.04em", padding: "3px 8px", flexShrink: 0, whiteSpace: "nowrap" }}
-                    >↗ SHARE</button>
+                      style={{ background: "none", border: "1px solid #33333a", borderRadius: 4, color: "#a1a1aa", cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 8px", flexShrink: 0, whiteSpace: "nowrap" }}
+                    >↗ Share</button>
                   )}
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}

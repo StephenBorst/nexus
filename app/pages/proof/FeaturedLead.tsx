@@ -102,13 +102,13 @@ export default function FeaturedLead({ isMobile }: { isMobile?: boolean }) {
       <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button
           onClick={() => (LEAD ? deployToAgent({ ...LEAD.config, mode: "PAPER" }, `the ${LEAD.name} preset (PAPER)`, undefined, navigate, { replaceFilters: true }) : navigate("/lab?tab=agent"))}
-          style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "#08080a", background: BONE, border: "none", borderRadius: 4, padding: "8px 16px", cursor: "pointer" }}
+          style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600, color: "#08080a", background: BONE, border: "none", borderRadius: 4, padding: "8px 16px", cursor: "pointer" }}
         >
           Deploy in the Lab →
         </button>
         <a
           href={ANCHOR_EXPLORER} target="_blank" rel="noopener noreferrer"
-          style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, textDecoration: "none", border: `1px solid ${BORDER}`, borderRadius: 4, padding: "8px 14px", background: "#1a1a1e" }}
+          style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: FOG, textDecoration: "none", border: `1px solid ${BORDER}`, borderRadius: 4, padding: "8px 14px", background: "#1a1a1e" }}
         >
           ⛓ Verify on Arbitrum ↗
         </a>

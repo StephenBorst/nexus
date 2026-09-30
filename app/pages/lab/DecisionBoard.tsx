@@ -598,7 +598,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                   {r.play.strong && r.play.dir && (
                     <button onClick={() => draftPlay(r)} disabled={!!draftingSym}
                       title="Draft this fade as a graded thesis. Mark · 1.2× H4 ATR stop · 1.5R · 7d"
-                      style={{ flexShrink: 0, background: "#1a1a1e", border: `1px solid ${C.border}`, color: C.accent, fontFamily: MONO, fontSize: 13, width: 34, height: 30, borderRadius: RADIUS.sm, cursor: draftingSym ? "default" : "pointer", lineHeight: 1, opacity: draftingSym && !busy ? 0.4 : 1 }}>
+                      style={{ flexShrink: 0, background: "#1a1a1e", border: `1px solid ${C.border}`, color: C.accent, fontFamily: "var(--nx-font-ui)", fontSize: 13, width: 34, height: 30, borderRadius: RADIUS.sm, cursor: draftingSym ? "default" : "pointer", lineHeight: 1, opacity: draftingSym && !busy ? 0.4 : 1 }}>
                       {busy ? "…" : "→"}
                     </button>
                   )}
@@ -731,7 +731,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
                       return (
                         <button onClick={() => draftPlay(r)} disabled={!!draftingSym}
                           title="Draft this fade as a graded thesis. Mark · 1.2× H4 ATR stop · 1.5R · 7d" style={{
-                          background: "#1a1a1e", border: `1px solid ${C.border}`, color: C.accent, fontFamily: MONO, fontSize: 11,
+                          background: "#1a1a1e", border: `1px solid ${C.border}`, color: C.accent, fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
                           width: 26, height: 24, borderRadius: RADIUS.sm, cursor: draftingSym ? "default" : "pointer", lineHeight: 1,
                           opacity: draftingSym && !busy ? 0.4 : 1,
                         }}>{busy ? "…" : "→"}</button>
@@ -751,7 +751,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       {signals && signals.length > 0 && (
         <div style={{ marginTop: 14, fontFamily: UI, fontSize: 11, lineHeight: 1.5, color: C.text.muted }}>
           The deep read is right below — <b style={{ color: C.text.bright }}>Funding Edges</b> (which fades PAID vs a TRAP) and <b style={{ color: C.text.bright }}>Positioning</b> (crowd vs smart).
-          {onSelectTab && <> The full wallet board is in <button onClick={() => onSelectTab("smart")} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: MONO, color: C.accent }}>[ SMART MONEY ] →</button></>}
+          {onSelectTab && <> The full wallet board is in <button onClick={() => onSelectTab("smart")} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "var(--nx-font-ui)", color: C.accent }}>Smart money →</button></>}
         </div>
       )}
     </div>

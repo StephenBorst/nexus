@@ -57,7 +57,7 @@ export function CreatorEarnings({ address }: { address?: string | null }) {
       {(e.claimable || claim === "done") && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
           <button type="button" onClick={doClaim} disabled={claim === "claiming" || claim === "done"} className="nx-press"
-            style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.06em", color: claim === "done" ? C.text.faint : C.accent, background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: RADIUS.md, padding: "8px 15px", cursor: claim === "done" ? "default" : "pointer" }}>
+            style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: claim === "done" ? C.text.faint : C.accent, background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: RADIUS.md, padding: "8px 15px", cursor: claim === "done" ? "default" : "pointer" }}>
             {claim === "claiming" ? "claiming…" : claim === "done" ? "✓ claim submitted" : `◆ Claim ${fmt(pending)}`}
           </button>
           {claimMsg && <span style={{ fontFamily: MONO, fontSize: 9, color: claim === "err" ? C.warn : C.text.faint, lineHeight: 1.4 }}>{claimMsg}</span>}

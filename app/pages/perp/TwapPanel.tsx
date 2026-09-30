@@ -116,10 +116,10 @@ export function TwapPanel({ symbol }: { symbol: string }) {
         style={{
           width: "100%", display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
           background: CARD, border: `1px solid ${LINE}`, borderRadius: 2, padding: "10px 14px",
-          color: BONE, fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.1em",
+          color: BONE, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600,
         }}
       >
-        <span style={{ color: active ? POS : BONE }}>⧗ TWAP EXECUTION</span>
+        <span style={{ color: active ? POS : BONE }}>⧗ TWAP execution</span>
         <span style={{ color: FAINT, fontWeight: 400, letterSpacing: 0, fontSize: 11 }}>
           {active ? `running · ${twap!.progress.filled}/${twap!.progress.total} slices` : `work a ${bare(symbol)} order over time`}
         </span>
@@ -153,7 +153,7 @@ export function TwapPanel({ symbol }: { symbol: string }) {
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <button type="button" onClick={cancel} disabled={busy} className="nx-press" style={{
                   color: NEG, background: "transparent", border: `1px solid ${NEG}55`, borderRadius: 2,
-                  padding: "6px 14px", fontFamily: "var(--nx-font-mono)", fontSize: 11, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+                  padding: "6px 14px", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
                 }}>{busy ? "…" : "◼ CANCEL TWAP"}</button>
                 <span style={{ color: FAINT, fontFamily: "var(--nx-font-mono)", fontSize: 10, lineHeight: 1.5 }}>
                   Filled slices remain your position. Cancel stops new slices only.
@@ -167,11 +167,11 @@ export function TwapPanel({ symbol }: { symbol: string }) {
                 {(["BUY", "SELL"] as Side[]).map((s) => (
                   <button key={s} type="button" onClick={() => setSide(s)} className="nx-press" style={{
                     flex: 1, padding: "8px 0", borderRadius: 2, cursor: "pointer",
-                    fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em",
+                    fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600,
                     background: side === s ? (s === "BUY" ? SIGNAL.posBg : STATUS_TINT.neg.bg) : C.surfaceAlt,
                     border: `1px solid ${side === s ? (s === "BUY" ? POS : NEG) + "88" : LINE}`,
                     color: side === s ? (s === "BUY" ? POS : NEG) : DIM,
-                  }}>{s === "BUY" ? "BUY / LONG" : "SELL / SHORT"}</button>
+                  }}>{s === "BUY" ? "Buy / long" : "Sell / short"}</button>
                 ))}
               </div>
 
@@ -201,11 +201,11 @@ export function TwapPanel({ symbol }: { symbol: string }) {
 
               <button type="button" onClick={start} disabled={busy || !previewOk || !wallet} className="nx-press" style={{
                 width: "100%", padding: "11px 0", borderRadius: 2, cursor: (busy || !previewOk || !wallet) ? "default" : "pointer",
-                fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 700, letterSpacing: "0.08em",
+                fontFamily: "var(--nx-font-ui)", fontSize: 13, fontWeight: 600,
                 background: (busy || !previewOk || !wallet) ? "#1a1a1e" : BONE,
                 color: (busy || !previewOk || !wallet) ? FAINT : "#0a0a0b",
                 border: "none",
-              }}>{busy ? "SIGNING…" : !wallet ? "CONNECT WALLET TO RUN TWAP" : "▶ START TWAP"}</button>
+              }}>{busy ? "Signing…" : !wallet ? "Connect wallet to run TWAP" : "▶ Start TWAP"}</button>
 
               <div style={{ marginTop: 10, color: FAINT, fontSize: 9.5, fontFamily: "var(--nx-font-mono)", lineHeight: 1.6 }}>
                 One signature authorizes an order-only key (can trade, never withdraw). Slices fire as MARKET orders on Nexus infra — no third-party backend. You keep whatever fills; cancel anytime.

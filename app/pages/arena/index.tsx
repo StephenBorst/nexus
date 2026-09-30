@@ -89,9 +89,9 @@ function CodeBlock({ text, padding = 12, marginTop = 0 }: { text: string; paddin
         ...(isMobile ? { whiteSpace: "pre-wrap", overflowWrap: "anywhere", wordBreak: "break-word" } : { overflowX: "auto" }),
       }}>{text}</pre>
       <button type="button" onClick={copy} className="nx-press" style={{
-        position: "absolute", top: 6, right: 6, fontFamily: MONO, fontSize: 9, letterSpacing: "0.05em",
+        position: "absolute", top: 6, right: 6, fontFamily: "var(--nx-font-ui)", fontSize: 12,
         color: copied ? POS : MUTED, background: "#08080a", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "3px 8px", cursor: "pointer",
-      }}>{copied ? "COPIED" : "COPY"}</button>
+      }}>{copied ? "Copied" : "Copy"}</button>
     </div>
   );
 }
@@ -116,8 +116,8 @@ function Credentials({ reg }: { reg: { webhook: { url: string; passphrase: strin
           <div style={label}>{k}</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 3 }}>
             <code style={{ fontFamily: MONO, fontSize: 11, color: BRIGHT, background: "#08080a", border: `1px solid ${BORDER}`, borderRadius: 4, padding: "6px 9px", overflowX: "auto", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>{v}</code>
-            <button onClick={() => copy(k as string, v as string)} style={{ flexShrink: 0, fontFamily: MONO, fontSize: 9, letterSpacing: "0.05em", color: copied === k ? POS : MUTED, background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "5px 9px", cursor: "pointer" }}>
-              {copied === k ? "COPIED" : "COPY"}
+            <button onClick={() => copy(k as string, v as string)} style={{ flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12, color: copied === k ? POS : MUTED, background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "5px 9px", cursor: "pointer" }}>
+              {copied === k ? "Copied" : "Copy"}
             </button>
           </div>
         </div>

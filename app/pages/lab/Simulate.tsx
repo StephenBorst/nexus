@@ -115,7 +115,7 @@ export function Simulate({ body, label = "◆ Simulate", wallet: walletProp }: {
   if (state === "idle") {
     const idleBtn = (
       <button type="button" onClick={build} className="nx-press"
-        style={{ color: C.text.fog, background: "transparent", border: `1px solid ${C.borderStrong}`, borderRadius: 3, padding: "3px 10px", fontFamily: MF, fontSize: 10, cursor: "pointer", whiteSpace: "nowrap" }}
+        style={{ color: C.text.fog, background: "transparent", border: `1px solid ${C.borderStrong}`, borderRadius: 3, padding: "3px 10px", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}
         title="Pressure-test this trade — 25 AI agents react across markets and communities over 10 rounds (1 credit)">{label}</button>
     );
     if (!saved || saved.done?.error) return idleBtn;
@@ -137,7 +137,7 @@ export function Simulate({ body, label = "◆ Simulate", wallet: walletProp }: {
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
         <span style={{ color: C.text.fog, fontFamily: MF, fontSize: 9, letterSpacing: "0.14em" }}>◆ SIMULATION</span>
         {credits != null && <span style={{ color: C.text.faint, fontFamily: MF, fontSize: 9 }}>{credits} credit{credits === 1 ? "" : "s"}</span>}
-        <button type="button" onClick={() => { setState("idle"); setStatusUrl(null); setNeedBuy(false); }} style={{ marginLeft: "auto", color: C.text.faint, background: "transparent", border: "none", fontFamily: MF, fontSize: 10, cursor: "pointer" }}>✕</button>
+        <button type="button" onClick={() => { setState("idle"); setStatusUrl(null); setNeedBuy(false); }} style={{ marginLeft: "auto", color: C.text.faint, background: "transparent", border: "none", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer" }}>✕</button>
       </div>
 
       {state === "building" && <div style={{ color: C.text.faint, fontFamily: MF, fontSize: 10 }}>building scenario…</div>}

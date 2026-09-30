@@ -140,7 +140,7 @@ export function OperatorProfileCard({ wallet, theses, orders }: {
         <button
           type="button"
           onClick={() => openIdentityShare(wallet, { established: profile.tier !== "UNKNOWN", archetypeLabel: profile.archetype?.label })}
-          style={{ marginTop: 12, width: "100%", background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: RADIUS.sm, color: C.text.fog, fontFamily: MONO, fontSize: 11, letterSpacing: "0.06em", padding: "9px 14px", cursor: "pointer", textTransform: "uppercase" }}
+          style={{ marginTop: 12, width: "100%", background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: RADIUS.sm, color: C.text.fog, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, padding: "9px 14px", cursor: "pointer" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = C.text.bright; e.currentTarget.style.borderColor = C.text.muted; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = C.text.fog; e.currentTarget.style.borderColor = C.borderStrong; }}
         >↗ Share your trading identity</button>

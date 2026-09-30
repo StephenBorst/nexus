@@ -22,7 +22,7 @@ export function FlashBracketButton({ symbol, direction, stopLoss, takeProfit1 }:
   const express = (
     <a href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}
       title={`Open ${sym} on the Spot terminal with ${spotSide === "buy" ? "Buy" : "Sell"} prefilled (Fabric / Flash / Uniswap).`}
-      style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.04em", color: "#3ecf8e", textDecoration: "none", display: "inline-flex", alignItems: "center", minHeight: 36, padding: "6px 6px", whiteSpace: "nowrap" }}>
+      style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: "#3ecf8e", textDecoration: "none", display: "inline-flex", alignItems: "center", minHeight: 36, padding: "6px 6px", whiteSpace: "nowrap" }}>
       Express on Spot →
     </a>
   );

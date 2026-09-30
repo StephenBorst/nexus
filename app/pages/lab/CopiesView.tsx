@@ -79,8 +79,8 @@ export function CopiesView() {
                       onClick={() => navigate(`/feed/trader/${t.copiedFromWallet}`)}
                       style={{
                         background: "none", border: "1px solid #232327", borderRadius: 3,
-                        color: "#52525b", fontFamily: "var(--nx-font-mono)", fontSize: 9,
-                        padding: "2px 8px", cursor: "pointer", letterSpacing: "0.04em",
+                        color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12,
+                        padding: "2px 8px", cursor: "pointer",
                       }}
                       onMouseEnter={(e) => {
                         (e.currentTarget as HTMLButtonElement).style.color = "#d4d4d8";

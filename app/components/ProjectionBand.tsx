@@ -165,7 +165,7 @@ export function ProjectionBand({ symbol, height = 216, horizonHours, fill }: { s
                 : HZ.map((z, i) => (
                   <button key={z.k} onClick={() => setHIdx(i)} style={{
                     background: hIdx === i ? "#ededf015" : "transparent", border: `1px solid ${hIdx === i ? "#ededf055" : BORDER}`, borderRadius: 3,
-                    padding: "2px 7px", cursor: "pointer", color: hIdx === i ? BONE : MUTED, fontFamily: MONO, fontSize: 9,
+                    padding: "2px 7px", cursor: "pointer", color: hIdx === i ? BONE : MUTED, fontFamily: "var(--nx-font-ui)", fontSize: 12,
                   }}>{z.k}</button>
                 ))}
             </div>

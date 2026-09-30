@@ -470,9 +470,9 @@ export default function AnalyzePage() {
               <button
                 onClick={() => toggleWatch(address)}
                 title={watch.includes(address) ? "Remove from your Smart Money watchlist" : "Track this wallet in Smart Money. Its record keeps accruing."}
-                style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 4, cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", padding: "9px 14px", color: watch.includes(address) ? BONE : MUTED }}
+                style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 4, cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "9px 14px", color: watch.includes(address) ? BONE : MUTED }}
               >
-                {watch.includes(address) ? "★ WATCHING" : "☆ WATCH"}
+                {watch.includes(address) ? "★ Watching" : "☆ Watch"}
               </button>
             </div>
           </EdgeGateCard>
@@ -558,9 +558,9 @@ export default function AnalyzePage() {
                 <button
                   onClick={() => toggleWatch(orderly.address)}
                   title={watch.includes(orderly.address) ? "Remove from your Smart Money watchlist" : "Track this wallet in Smart Money"}
-                  style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, cursor: "pointer", fontFamily: MONO, fontSize: 9, letterSpacing: "0.05em", padding: "3px 8px", color: watch.includes(orderly.address) ? BONE : MUTED }}
+                  style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 8px", color: watch.includes(orderly.address) ? BONE : MUTED }}
                 >
-                  {watch.includes(orderly.address) ? "★ WATCHING" : "☆ WATCH"}
+                  {watch.includes(orderly.address) ? "★ Watching" : "☆ Watch"}
                 </button>
               </div>
 
@@ -597,7 +597,7 @@ export default function AnalyzePage() {
                       {s.open && s.side && (
                         <>
                           <button onClick={() => draftThesis(s, orderly.address)} title="Draft a thesis from this position"
-                            style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: MUTED, fontFamily: MONO, fontSize: 9, padding: "2px 7px", cursor: "pointer" }}>◆</button>
+                            style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: MUTED, fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "2px 7px", cursor: "pointer" }}>◆</button>
                           {/* Gated: never one-tap copy a wallet whose grade hasn't cleared the bar. */}
                           {gate.pass ? (
                             <button onClick={() => { if (gate.pass) copyPosition(s, orderly.address); }} className="nx-btn nx-btn-icon" title="Copy this position. The agent enters your direction, manages the exit and grades it."

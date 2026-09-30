@@ -309,7 +309,7 @@ export function TradeChart({ symbol, height = 240, positionEntry, tfIndex, onTf,
         {TFS.map((t, i) => (
           <button key={t.k} onClick={() => setTf(i)} style={{
             background: tf === i ? "#ededf015" : "transparent", border: `1px solid ${tf === i ? "#ededf055" : BORDER}`, borderRadius: 3,
-            padding: "2px 7px", cursor: "pointer", color: tf === i ? "#ededf0" : MUTED, fontFamily: MONO, fontSize: 9,
+            padding: "2px 7px", cursor: "pointer", color: tf === i ? "#ededf0" : MUTED, fontFamily: "var(--nx-font-ui)", fontSize: 12,
           }}>{t.k}</button>
         ))}
       </div>

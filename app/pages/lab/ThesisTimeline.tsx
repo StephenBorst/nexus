@@ -85,7 +85,7 @@ export function ThesisTimeline({ t, onUpdate, canEdit }: {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
             {UPDATE_KINDS.map((k: { key: string; label: string; glyph: string }) => (
               <button key={k.key} onClick={() => { setKind(k.key); setErr(null); }} style={{
-                fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "4px 8px", cursor: "pointer",
+                fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "4px 8px", cursor: "pointer",
                 borderRadius: 3, minHeight: 26,
                 border: `1px solid ${kind === k.key ? "#33333a" : "#232327"}`,
                 background: kind === k.key ? "#1a1a1e" : "transparent",

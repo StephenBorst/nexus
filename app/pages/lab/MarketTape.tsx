@@ -93,7 +93,7 @@ export function MarketTape({ compact = false }: { compact?: boolean }) {
         {stat("funding", `${tape.fundSkew}% long`)}
         <span style={{ flex: 1, minWidth: 120, color: "#71717a", fontFamily: "var(--nx-font-ui)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={tape.agentNote}>▶ {tape.agentNote}</span>
         <button type="button" onClick={askAi} title="Ask the copilot for your play in this tape"
-          style={{ flexShrink: 0, background: "transparent", border: "1px solid #232327", borderRadius: 3, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "3px 9px", cursor: "pointer" }}
+          style={{ flexShrink: 0, background: "transparent", border: "1px solid #232327", borderRadius: 3, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 9px", cursor: "pointer" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "#ededf0"; e.currentTarget.style.borderColor = "#33333a"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#232327"; }}
         >◆ ask</button>
@@ -143,7 +143,7 @@ export function MarketTape({ compact = false }: { compact?: boolean }) {
       <button
         type="button"
         onClick={() => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: `The market tape is ${tape.label} (score ${tape.score}/100). Use get_market_regime and get_my_edge — what's my best play right now given my strengths, and what should I avoid?` } }))}
-        style={{ marginTop: 14, width: "100%", background: "transparent", border: "1px solid #232327", borderRadius: 6, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 11, letterSpacing: "0.04em", padding: "8px 10px", cursor: "pointer", textAlign: "left" }}
+        style={{ marginTop: 14, width: "100%", background: "transparent", border: "1px solid #232327", borderRadius: 6, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, padding: "8px 10px", cursor: "pointer", textAlign: "left" }}
         onMouseEnter={(e) => { e.currentTarget.style.color = "#ededf0"; e.currentTarget.style.borderColor = "#33333a"; }}
         onMouseLeave={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#232327"; }}
       >

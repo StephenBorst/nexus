@@ -419,15 +419,14 @@ function CopyModal({
             background: saved ? "#1a1a1e" : calc && !hasValidationErr ? "#1a1a1e" : "#0f0f11",
             border: `1px solid ${saved ? "#ededf0" : calc && !hasValidationErr ? "#ededf0" : "#232327"}`,
             color: saved ? "#ededf0" : calc && !hasValidationErr ? "#ededf0" : "#33333a",
-            fontFamily: "var(--nx-font-mono)",
-            fontSize: 11,
-            letterSpacing: "0.1em",
+            fontFamily: "var(--nx-font-ui)",
+            fontSize: 12.5,
             padding: "10px 0",
             borderRadius: 4,
             cursor: calc && !saving && !saved && !hasValidationErr ? "pointer" : "default",
           }}
         >
-          {saved ? "✓ SAVED TO LAB" : saving ? "saving..." : "SAVE TO LAB →"}
+          {saved ? "✓ Saved to Lab" : saving ? "saving..." : "Save to Lab →"}
         </button>
       </div>
     </div>
@@ -960,9 +959,9 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
           <code style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.fog, background: C.canvas, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 7px" }}>
             {callLedger.ledgerHash.slice(0, 10)}…{callLedger.ledgerHash.slice(-8)}
           </code>
-          <a href={`${API_BASE}/theses/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.fog, textDecoration: "none" }}>verify ↗</a>
+          <a href={`${API_BASE}/theses/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: C.text.fog, textDecoration: "none" }}>verify ↗</a>
           {callLedger.onChain?.verified && (
-            <a href={callLedger.onChain.explorer || "#"} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.fog, textDecoration: "none" }}>· ⛓ anchored onchain ↗</a>
+            <a href={callLedger.onChain.explorer || "#"} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: C.text.fog, textDecoration: "none" }}>· ⛓ anchored onchain ↗</a>
           )}
         </div>
       )}
@@ -1223,10 +1222,10 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                           onClick={(e) => { e.stopPropagation(); onCopy(t); }}
                           style={{
                             background: "none", border: "1px solid #232327", borderRadius: 3,
-                            color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 8,
+                            color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12,
                             padding: "2px 6px", cursor: "pointer",
                           }}
-                        >COPY</button>
+                        >Copy</button>
                       )}
                     </div>
                   );
@@ -1277,8 +1276,8 @@ function FeedEmptyState({ variant }: { variant: "feed" | "ranks" }) {
         onClick={() => navigate("/lab")}
         style={{
           background: "#ededf015", border: "1px solid #ededf0", borderRadius: 4,
-          color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: "bold",
-          padding: "10px 22px", cursor: "pointer", letterSpacing: "0.05em",
+          color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600,
+          padding: "10px 22px", cursor: "pointer",
         }}
       >
         → OPEN THE LAB &amp; PUBLISH
@@ -1313,11 +1312,11 @@ function ContributePrompt({ prominent = false }: { prominent?: boolean }) {
         onClick={() => navigate("/lab?tab=thesis")}
         style={{
           background: prominent ? "#ededf0" : "#ededf015", border: "1px solid #ededf0", borderRadius: 4,
-          color: prominent ? "#141416" : "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold",
-          padding: prominent ? "11px 18px" : "9px 16px", cursor: "pointer", letterSpacing: "0.05em", flexShrink: 0,
+          color: prominent ? "#141416" : "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600,
+          padding: prominent ? "11px 18px" : "9px 16px", cursor: "pointer", flexShrink: 0,
         }}
       >
-        → POST YOUR FIRST CALL
+        → Post your first call
       </button>
     </div>
   );

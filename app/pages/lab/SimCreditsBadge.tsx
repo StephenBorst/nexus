@@ -50,7 +50,7 @@ export function SimCreditsBadge() {
   return (
     <div ref={rootRef} style={{ position: "relative", display: "inline-flex" }}>
       <button onClick={() => setOpen((o) => !o)} title="Simulation credits — 1 per pressure-test"
-        style={{ appearance: "none", WebkitAppearance: "none", display: "inline-flex", alignItems: "center", gap: 5, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 5, padding: "4px 9px", cursor: "pointer", fontFamily: MF, fontSize: 10, color: C.text.fog }}>
+        style={{ appearance: "none", WebkitAppearance: "none", display: "inline-flex", alignItems: "center", gap: 5, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 5, padding: "4px 9px", cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: C.text.fog }}>
         <span style={{ color: (credits ?? 0) > 0 ? C.pos : C.text.faint }}>◆</span>
         <span style={{ color: C.text.bright, fontWeight: 700 }}>{credits ?? "—"}</span>
         <span style={{ color: C.text.faint }}>sim{credits === 1 ? "" : "s"}</span>
@@ -63,13 +63,13 @@ export function SimCreditsBadge() {
           </div>
           <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
             {(["arbitrum", "base"] as const).map((ch) => (
-              <button key={ch} onClick={() => setChain(ch)} style={{ appearance: "none", WebkitAppearance: "none", fontFamily: MF, fontSize: 9.5, padding: "3px 9px", borderRadius: 3, cursor: "pointer", background: "transparent", border: `1px solid ${chain === ch ? C.borderStrong : C.border}`, color: chain === ch ? C.text.bright : C.text.faint }}>{ch === "arbitrum" ? "USDC · Arbitrum" : "$NEXUS · Base"}</button>
+              <button key={ch} onClick={() => setChain(ch)} style={{ appearance: "none", WebkitAppearance: "none", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 9px", borderRadius: 3, cursor: "pointer", background: "transparent", border: `1px solid ${chain === ch ? C.borderStrong : C.border}`, color: chain === ch ? C.text.bright : C.text.faint }}>{ch === "arbitrum" ? "USDC · Arbitrum" : "$NEXUS · Base"}</button>
             ))}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <input value={tx} onChange={(e) => setTx(e.target.value)} placeholder="0x… transaction hash" spellCheck={false}
               style={{ flex: 1, minWidth: 150, background: C.inset, border: `1px solid ${C.border}`, borderRadius: 3, padding: "5px 8px", color: C.text.bright, fontFamily: MF, fontSize: 10 }} />
-            <button type="button" onClick={verify} disabled={busy} style={{ appearance: "none", WebkitAppearance: "none", fontFamily: MF, fontSize: 10.5, padding: "4px 12px", borderRadius: 3, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1, background: "transparent", border: `1px solid ${C.borderStrong}`, color: C.text.bright }}>Verify</button>
+            <button type="button" onClick={verify} disabled={busy} style={{ appearance: "none", WebkitAppearance: "none", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "4px 12px", borderRadius: 3, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1, background: "transparent", border: `1px solid ${C.borderStrong}`, color: C.text.bright }}>Verify</button>
           </div>
           {msg && <div style={{ fontFamily: MF, fontSize: 9.5, marginTop: 6, lineHeight: 1.4, color: msg.startsWith("✓") ? C.pos : C.text.fog }}>{msg}</div>}
         </div>

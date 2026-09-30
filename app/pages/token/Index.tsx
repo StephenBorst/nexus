@@ -385,7 +385,7 @@ function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCaller
         })}
       </div>
       {data.callers.length > 5 && (
-        <button onClick={() => setExpanded((x) => !x)} style={{ width: "100%", marginTop: 8, background: "none", border: "none", color: MUT, fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", cursor: "pointer", padding: "4px 0" }}>{expanded ? "show less ▴" : `+${data.callers.length - 5} more ▾`}</button>
+        <button onClick={() => setExpanded((x) => !x)} style={{ width: "100%", marginTop: 8, background: "none", border: "none", color: MUT, fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer", padding: "4px 0" }}>{expanded ? "show less ▴" : `+${data.callers.length - 5} more ▾`}</button>
       )}
       <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 8, lineHeight: 1.4 }}>{nCallers} positioned · open positions + active public calls, graded on public price</div>
     </div>
@@ -1217,7 +1217,7 @@ export default function TokenTerminal() {
             {input && (
               <button type="button" aria-label="Clear search" title="Clear"
                 onMouseDown={(e) => e.preventDefault()} onClick={() => setInput("")}
-                style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: MUT, fontFamily: MONO, fontSize: 15, lineHeight: 1, cursor: "pointer", borderRadius: 6 }}>✕</button>
+                style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: MUT, fontFamily: "var(--nx-font-ui)", fontSize: 15, lineHeight: 1, cursor: "pointer", borderRadius: 6 }}>✕</button>
             )}
           </div>
           <button type="submit" style={{ flexShrink: 0, background: BRIGHT, color: "#0a0a0b", border: "none", borderRadius: 10, fontFamily: UI, fontSize: 13.5, fontWeight: 600, padding: "0 20px", cursor: "pointer" }}>Search</button>
@@ -1251,7 +1251,7 @@ export default function TokenTerminal() {
               Paste the exact <b style={{ color: FOG }}>contract address</b> (0x… on EVM, or the mint on Solana) in the search above to trade it directly — or look it up on DexScreener and copy the address.
             </div>
             <a href={`https://dexscreener.com/search?q=${encodeURIComponent(query)}`} target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.06em", color: BRIGHT, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 7, padding: "8px 12px", alignSelf: "flex-start" }}>
+              style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: BRIGHT, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 7, padding: "8px 12px", alignSelf: "flex-start" }}>
               Open “{query}” on DexScreener ↗
             </a>
           </div>
@@ -1326,7 +1326,7 @@ export default function TokenTerminal() {
 
               <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
                 {pair.baseAddress && (
-                  <button onClick={copyCa} title="Copy contract address" className="nx-press" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: BG, border: `1px solid ${copied ? C.borderStrong : BORD}`, borderRadius: 15, color: copied ? BRIGHT : FOG, fontFamily: MONO, fontSize: 11.5, padding: "6px 12px", cursor: "pointer", lineHeight: 1 }}>
+                  <button onClick={copyCa} title="Copy contract address" className="nx-press" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: BG, border: `1px solid ${copied ? C.borderStrong : BORD}`, borderRadius: 15, color: copied ? BRIGHT : FOG, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, padding: "6px 12px", cursor: "pointer", lineHeight: 1 }}>
                     <span>{copied ? "copied ✓" : shortAddr(pair.baseAddress)}</span>
                     {!copied && <span style={{ color: FAINT, fontSize: 11 }}>⧉</span>}
                   </button>
@@ -1513,7 +1513,7 @@ export default function TokenTerminal() {
                       {/* unit toggle — type the amount in tokens or in $ */}
                       <span style={{ display: "flex", gap: 4 }}>
                         {(["token", "usd"] as const).map((u) => (
-                          <button key={u} onClick={() => { setSellUnit(u); setSellAmt(""); setSellMax(false); }} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: sellUnit === u ? BRIGHT : FAINT, background: sellUnit === u ? "#ededf012" : "none", border: `1px solid ${sellUnit === u ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{u === "usd" ? "USD" : pair.baseSymbol}</button>
+                          <button key={u} onClick={() => { setSellUnit(u); setSellAmt(""); setSellMax(false); }} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: sellUnit === u ? BRIGHT : FAINT, background: sellUnit === u ? "#ededf012" : "none", border: `1px solid ${sellUnit === u ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer" }}>{u === "usd" ? "USD" : pair.baseSymbol}</button>
                         ))}
                       </span>
                     </div>
@@ -1544,7 +1544,7 @@ export default function TokenTerminal() {
                             const sel = (sellOut ? sellOut.token.toLowerCase() : "usdc") === key;
                             return (
                               <button key={key} onClick={() => setSellOut(t)}
-                                style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", color: sel ? BRIGHT : MUT, background: sel ? "#ededf012" : BG, border: `1px solid ${sel ? "#ededf044" : BORD}`, borderRadius: 6, padding: "6px 10px", cursor: "pointer" }}>
+                                style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: sel ? BRIGHT : MUT, background: sel ? "#ededf012" : BG, border: `1px solid ${sel ? "#ededf044" : BORD}`, borderRadius: 6, padding: "6px 10px", cursor: "pointer" }}>
                                 {t ? t.sym : "USDC"}
                               </button>
                             );
@@ -1637,7 +1637,7 @@ export default function TokenTerminal() {
                           {/* input-token toggle — spend native SOL or USDC */}
                           <span style={{ display: "flex", gap: 4 }}>
                             {(["sol", "usdc"] as const).map((p) => (
-                              <button key={p} onClick={() => { setSolPayWith(p); setSolAmt(""); }} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: solPayWith === p ? BRIGHT : FAINT, background: solPayWith === p ? "#ededf012" : "none", border: `1px solid ${solPayWith === p ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{p === "usdc" ? "USDC" : "SOL"}</button>
+                              <button key={p} onClick={() => { setSolPayWith(p); setSolAmt(""); }} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: solPayWith === p ? BRIGHT : FAINT, background: solPayWith === p ? "#ededf012" : "none", border: `1px solid ${solPayWith === p ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer" }}>{p === "usdc" ? "USDC" : "SOL"}</button>
                             ))}
                           </span>
                         </div>
@@ -1648,7 +1648,7 @@ export default function TokenTerminal() {
                           {/* SOL ticket keeps its SOL/USD unit toggle; USDC ticket just shows the signer note */}
                           {solPayWith === "sol"
                             ? <span style={{ display: "flex", gap: 4 }}>{(["sol", "usd"] as const).map((u) => (
-                                <button key={u} onClick={() => { setSolUnit(u); setSolAmt(""); }} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: solUnit === u ? BRIGHT : FAINT, background: solUnit === u ? "#ededf012" : "none", border: `1px solid ${solUnit === u ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer", textTransform: "uppercase" }}>{u === "usd" ? "USD" : "SOL"}</button>
+                                <button key={u} onClick={() => { setSolUnit(u); setSolAmt(""); }} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: solUnit === u ? BRIGHT : FAINT, background: solUnit === u ? "#ededf012" : "none", border: `1px solid ${solUnit === u ? "#ededf033" : BORD}`, borderRadius: 5, padding: "3px 7px", cursor: "pointer" }}>{u === "usd" ? "USD" : "SOL"}</button>
                               ))}</span>
                             : <span style={{ color: FAINT }}>Jupiter · you sign</span>}
                         </div>
@@ -1660,19 +1660,19 @@ export default function TokenTerminal() {
                                 const canFill = usdcBal != null && usdcBal > 0;
                                 return (
                                   <button key={v} disabled={!canFill} onClick={() => { if (!canFill) return; const frac = v >= 100 ? usdcBal! : (usdcBal! * v / 100); setSolAmt(String(Number(frac.toFixed(2)))); }}
-                                    style={{ flex: 1, fontFamily: MONO, fontSize: 10, fontWeight: 700, color: canFill ? MUT : FAINT, background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, padding: "6px 0", cursor: canFill ? "pointer" : "not-allowed" }}>{v === 100 ? "MAX" : `${v}%`}</button>
+                                    style={{ flex: 1, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: canFill ? MUT : FAINT, background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, padding: "6px 0", cursor: canFill ? "pointer" : "not-allowed" }}>{v === 100 ? "Max" : `${v}%`}</button>
                                 );
                               })
                             : solUnit === "usd"
                               ? [5, 25, 100].map((v) => (
-                                  <button key={v} onClick={() => setSolAmt(String(v))} style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: MUT, background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, padding: "6px 0", cursor: "pointer" }}>${v}</button>
+                                  <button key={v} onClick={() => setSolAmt(String(v))} style={{ flex: 1, fontFamily: "var(--nx-font-ui)", fontSize: 12, color: MUT, background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, padding: "6px 0", cursor: "pointer" }}>${v}</button>
                                 ))
                               : [25, 50, 100].map((v) => {
                                   const canFill = solBalance != null && solBalance > 0;
                                   // MAX reserves a small SOL buffer for fees + wSOL rent so it doesn't guarantee-fail.
                                   return (
                                     <button key={v} disabled={!canFill} onClick={() => { if (!canFill) return; const frac = v >= 100 ? Math.max(0, solBalance! - 0.01) : (solBalance! * v / 100); setSolAmt(String(Number(frac.toFixed(6)))); }}
-                                      style={{ flex: 1, fontFamily: MONO, fontSize: 10, fontWeight: 700, color: canFill ? MUT : FAINT, background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, padding: "6px 0", cursor: canFill ? "pointer" : "not-allowed" }}>{v === 100 ? "MAX" : `${v}%`}</button>
+                                      style={{ flex: 1, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: canFill ? MUT : FAINT, background: CARD, border: `1px solid ${BORD}`, borderRadius: 6, padding: "6px 0", cursor: canFill ? "pointer" : "not-allowed" }}>{v === 100 ? "Max" : `${v}%`}</button>
                                   );
                                 })}
                         </div>
@@ -1814,7 +1814,7 @@ export default function TokenTerminal() {
                           )}
                           <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: bull ? POS : NEG, background: (bull ? POS : NEG) + "18", border: `1px solid ${(bull ? POS : NEG)}44`, borderRadius: 5, padding: "2px 6px" }}>{tk.direction}</span>
                           <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 9.5, color: FAINT }}>{takeAge(tk.createdAt)}</span>
-                          {mine && <button onClick={() => removeTake(tk.id)} title="Delete" style={{ background: "none", border: "none", color: FAINT, cursor: "pointer", fontFamily: MONO, fontSize: 11, padding: 0 }}>✕</button>}
+                          {mine && <button onClick={() => removeTake(tk.id)} title="Delete" style={{ background: "none", border: "none", color: FAINT, cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, padding: 0 }}>✕</button>}
                         </div>
                         <div style={{ fontFamily: UI, fontSize: 13, color: BRIGHT, lineHeight: 1.55, wordBreak: "break-word" }}>{tk.text}</div>
                         {tk.target ? <div style={{ fontFamily: MONO, fontSize: 10, color: MUT, marginTop: 6 }}>target {fmtPrice(tk.target)}</div> : null}
@@ -1859,7 +1859,7 @@ export default function TokenTerminal() {
                     ))}
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "5px 0", fontFamily: MONO, fontSize: 11 }}>
                       <span style={{ color: FAINT }}>Contract</span>
-                      <button onClick={copyCa} style={{ background: "none", border: "none", color: MUT, fontFamily: MONO, fontSize: 11, cursor: "pointer", padding: 0 }}>{shortAddr(pair.baseAddress)} {copied ? "✓" : "⧉"}</button>
+                      <button onClick={copyCa} style={{ background: "none", border: "none", color: MUT, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, cursor: "pointer", padding: 0 }}>{shortAddr(pair.baseAddress)} {copied ? "✓" : "⧉"}</button>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
                       {pair.websites[0] && <a href={pair.websites[0]} target="_blank" rel="noopener noreferrer" style={{ fontFamily: UI, fontSize: 12.5, color: FOG, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 15, padding: "6px 12px" }}>web ↗</a>}
@@ -1966,7 +1966,7 @@ export default function TokenTerminal() {
                 </div>
 
                 {explorerTx(plan.chainId, swapDone.hash) && (
-                  <a href={explorerTx(plan.chainId, swapDone.hash)!} target="_blank" rel="noopener noreferrer" style={{ fontFamily: MONO, fontSize: 11, color: BRIGHT, textDecoration: "none", display: "inline-block", marginBottom: 14 }}>view transaction ↗</a>
+                  <a href={explorerTx(plan.chainId, swapDone.hash)!} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: BRIGHT, textDecoration: "none", display: "inline-block", marginBottom: 14 }}>view transaction ↗</a>
                 )}
                 <button onClick={closeSwap} style={{ display: "block", width: "100%", fontFamily: UI, fontSize: 13, fontWeight: 600, color: "#0a0a0b", background: BRIGHT, border: "none", borderRadius: 8, padding: "11px 0", cursor: "pointer" }}>Done</button>
               </div>
@@ -2017,7 +2017,7 @@ export default function TokenTerminal() {
                   <div style={{ fontSize: 28, marginBottom: 8, color: POS }}>✓</div>
                   <div style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT, marginBottom: 6 }}>Swap sent</div>
                   <div style={{ fontFamily: UI, fontSize: 11, color: MUT, marginBottom: 14 }}>Your {solPlan.outSym} lands once it confirms on Solana.</div>
-                  <a href={solscanTx(solDone.sig)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: MONO, fontSize: 11, color: BRIGHT, textDecoration: "none", display: "inline-block", marginBottom: 14, wordBreak: "break-all" }}>view on Solscan ↗</a>
+                  <a href={solscanTx(solDone.sig)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: BRIGHT, textDecoration: "none", display: "inline-block", marginBottom: 14, wordBreak: "break-all" }}>view on Solscan ↗</a>
                   <button onClick={closeSolModal} style={{ display: "block", width: "100%", fontFamily: UI, fontSize: 13, fontWeight: 600, color: "#0a0a0b", background: BRIGHT, border: "none", borderRadius: 8, padding: "11px 0", cursor: "pointer" }}>Done</button>
                 </div>
               );

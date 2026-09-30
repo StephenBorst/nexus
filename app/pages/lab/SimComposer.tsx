@@ -63,8 +63,7 @@ export function SimComposer({ wallet, seed, compact = false }: { wallet: string 
           return (
             <button key={m} onClick={() => setMode(m)} style={{
               background: on ? `${ACCENT}22` : "transparent", border: "none", cursor: "pointer",
-              color: on ? SIM.text : SIM.muted, fontFamily: MF, fontSize: 9.5, fontWeight: on ? 700 : 400,
-              letterSpacing: "0.08em", padding: "5px 12px",
+              color: on ? SIM.text : SIM.muted, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: on ? 700 : 400, padding: "5px 12px",
             }}>{lbl}</button>
           );
         })}
@@ -86,8 +85,8 @@ export function SimComposer({ wallet, seed, compact = false }: { wallet: string 
                   return (
                     <button key={d} onClick={() => setDirection(d)} style={{
                       flex: 1, background: on ? `${col}1e` : "transparent", border: `1px solid ${on ? col : SIM.border}`,
-                      borderRadius: 4, cursor: "pointer", color: on ? col : SIM.muted, fontFamily: MF, fontSize: 10.5, fontWeight: on ? 700 : 400, padding: "7px 0",
-                    }}>{d === "LONG" ? "↑ LONG" : "↓ SHORT"}</button>
+                      borderRadius: 4, cursor: "pointer", color: on ? col : SIM.muted, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: on ? 700 : 400, padding: "7px 0",
+                    }}>{d === "LONG" ? "↑ Long" : "↓ Short"}</button>
                   );
                 })}
               </div>

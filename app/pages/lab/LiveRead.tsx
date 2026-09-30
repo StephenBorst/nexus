@@ -523,7 +523,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent("https://trade.nexustradinglabs.com/lab")}`;
               return (
                 <a href={xUrl} target="_blank" rel="noopener noreferrer" title="Share this read on X" className="nx-press"
-                  style={{ flexShrink: 0, fontFamily: MONO, fontSize: 10, color: FOG, background: "transparent", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "5px 11px", textDecoration: "none", whiteSpace: "nowrap" }}>𝕏 Share the read</a>
+                  style={{ flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12, color: FOG, background: "transparent", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "5px 11px", textDecoration: "none", whiteSpace: "nowrap" }}>𝕏 Share the read</a>
               );
             })()}
           </div>

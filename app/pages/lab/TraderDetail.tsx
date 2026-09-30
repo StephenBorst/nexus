@@ -46,10 +46,10 @@ export function TraderDetail({ source, address, accountId, myAddress, onClose }:
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.05em", color: source === "orderly" ? "#3ecf8e" : "#71717a", border: `1px solid ${source === "orderly" ? "#33333a" : "#232327"}`, borderRadius: 3, padding: "1px 5px" }}>{source === "orderly" ? "◆ ORDERLY" : "HL"}</span>
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#f4f4f5" }}>{short(address)}</span>
           <a href={source === "hl" ? `/analyze?address=${address}` : `https://orderly-dashboard.orderly.network/address/${address}`} target="_blank" rel="noopener noreferrer"
-            style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", textDecoration: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px" }}>
+            style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", textDecoration: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px" }}>
             {source === "hl" ? "full x-ray ↗" : "explorer ↗"}
           </a>
-          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "1px solid #232327", borderRadius: 3, color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "3px 8px", cursor: "pointer" }}>CLOSE</button>
+          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "1px solid #232327", borderRadius: 3, color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 8px", cursor: "pointer" }}>Close</button>
         </div>
 
         <div style={{ padding: 16 }}>
@@ -57,7 +57,7 @@ export function TraderDetail({ source, address, accountId, myAddress, onClose }:
             <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.6 }}>
               This is a Hyperliquid trader. Open the full wallet x-ray for their complete graded record — trading score, risk-adjusted ratios, hold-time, streaks and per-asset edge.
               <div style={{ marginTop: 12 }}>
-                <a href={`/analyze?address=${address}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#ededf0", textDecoration: "none", border: "1px solid #33333a", borderRadius: 4, padding: "8px 14px", display: "inline-block" }}>X-ray this wallet ↗</a>
+                <a href={`/analyze?address=${address}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#ededf0", textDecoration: "none", border: "1px solid #33333a", borderRadius: 4, padding: "8px 14px", display: "inline-block" }}>X-ray this wallet ↗</a>
               </div>
             </div>
           )}

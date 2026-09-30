@@ -79,8 +79,8 @@ function ImpactChip({ im, c, verdict }: { im: Impact; c: Catalyst; verdict?: Ver
       {canDraft ? (
         <button onClick={async () => { if (drafting) return; setDrafting(true); const ok = await draftCatalyst(im, c, verdict!); if (!ok) setDrafting(false); }}
           className="nx-press"
-          style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", color: C.accent, background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "4px 9px", cursor: "pointer", whiteSpace: "nowrap" }}>
-          {drafting ? "drafting…" : "◆ DRAFT THESIS →"}
+          style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: C.accent, background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "4px 9px", cursor: "pointer", whiteSpace: "nowrap" }}>
+          {drafting ? "drafting…" : "◆ Draft thesis →"}
         </button>
       ) : (
         <span style={{ fontFamily: MONO, fontSize: 9, color: C.text.faint, whiteSpace: "nowrap" }} title="No funding verdict for this market — event stays a calendar chip until it can fill a frozen thesis">not a trade yet</span>

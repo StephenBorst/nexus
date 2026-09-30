@@ -149,7 +149,7 @@ export default function LiveAlerts() {
       {showEnable && (
         <div style={{ background: "#141416", border: "1px solid #232327", borderRadius: 6, padding: "8px 10px", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", display: "flex", alignItems: "center", gap: 8 }}>
           <span>Alerts when callers you follow open or call.</span>
-          <button onClick={enableNotif} style={{ marginLeft: "auto", flexShrink: 0, background: "#1a1a1e", color: green, border: "1px solid #33333a", borderRadius: 3, padding: "3px 8px", fontFamily: "var(--nx-font-mono)", fontSize: 9, fontWeight: "bold", cursor: "pointer" }}>ON</button>
+          <button onClick={enableNotif} style={{ marginLeft: "auto", flexShrink: 0, background: "#1a1a1e", color: green, border: "1px solid #33333a", borderRadius: 3, padding: "3px 8px", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>ON</button>
           <button onClick={() => { setShowEnable(false); window.localStorage.setItem(NOTIF_KEY, "off"); }} style={{ flexShrink: 0, background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: 12 }}>✕</button>
         </div>
       )}
@@ -157,7 +157,7 @@ export default function LiveAlerts() {
         <a
           key={t.id}
           href={t.href}
-          style={{ textDecoration: "none", background: "#141416", border: `1px solid ${t.followed ? star : t.direction === "LONG" ? "#33333a" : "#4a1e22"}`, borderRadius: 6, padding: "9px 11px", fontFamily: "var(--nx-font-mono)", display: "flex", alignItems: "center", gap: 8, boxShadow: t.followed ? `0 4px 16px ${star}2e` : "0 4px 16px rgba(0,0,0,0.5)" }}
+          style={{ textDecoration: "none", background: "#141416", border: `1px solid ${t.followed ? star : t.direction === "LONG" ? "#33333a" : "#4a1e22"}`, borderRadius: 6, padding: "9px 11px", fontFamily: "var(--nx-font-ui)", display: "flex", alignItems: "center", gap: 8, boxShadow: t.followed ? `0 4px 16px ${star}2e` : "0 4px 16px rgba(0,0,0,0.5)" }}
         >
           <span style={{ fontSize: 13 }}>{t.kind === "call" ? "◆" : t.followed ? "★" : "●"}</span>
           <span style={{ fontSize: 11, color: "#f4f4f5" }}>

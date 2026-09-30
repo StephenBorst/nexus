@@ -169,8 +169,8 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
         </div>
         <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", lineHeight: 1.5, marginBottom: 14 }}>The agent enters your direction and manages the exit (PAPER-first, graded on-chain). You set the levels next. Not financial advice.</div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onCancel} style={{ flex: 1, fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", background: "none", border: "1px solid #232327", borderRadius: 4, padding: "9px 0", cursor: "pointer" }}>Cancel</button>
-          <button onClick={onConfirm} style={{ flex: 2, fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "#0a0a0b", background: "#ededf0", border: "none", borderRadius: 4, padding: "9px 0", cursor: "pointer" }}>⚡ COPY {side} {sym} →</button>
+          <button onClick={onCancel} style={{ flex: 1, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#a1a1aa", background: "none", border: "1px solid #232327", borderRadius: 4, padding: "9px 0", cursor: "pointer" }}>Cancel</button>
+          <button onClick={onConfirm} style={{ flex: 2, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600, color: "#0a0a0b", background: "#ededf0", border: "none", borderRadius: 4, padding: "9px 0", cursor: "pointer" }}>⚡ Copy {side} {sym} →</button>
         </div>
       </div>
     </div>
@@ -428,14 +428,14 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
 
   const tradeBtn = (onClick: () => void) => (
     <button onClick={onClick} title="Copy this move. The agent enters your direction and manages the exit (PAPER-first, graded on-chain)"
-      style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.04em", color: "#ededf0", background: "none", border: "1px solid #33333a", borderRadius: 3, padding: "3px 8px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
-      ⚡ TRADE
+      style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#ededf0", background: "none", border: "1px solid #33333a", borderRadius: 3, padding: "3px 8px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
+      ⚡ Trade
     </button>
   );
 
   const thesisBtn = (onClick: () => void) => (
     <button onClick={onClick} title="Turn this into a reasoned thesis. Sized, R:R'd, and gradeable in the Thesis Engine"
-      style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#a1a1aa", background: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
+      style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", background: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
       ◆ plan
     </button>
   );
@@ -444,7 +444,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
   // alive surface). Consensus cards carry the trader count.
   const shareBtn = (d: PosterData) => (
     <button onClick={() => setPoster(d)} title="Share this signal"
-      style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", background: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
+      style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", background: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
       ↗ share
     </button>
   );
@@ -545,7 +545,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
           <button
             title={`Ask Nexus about the ${shovel.sym} cluster`}
             onClick={() => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: `${shovel.wallets} tracked smart-money wallets${shovel.credential ? ` (each ${shovel.credential})` : ""} independently opened ${shovel.side} ${shovel.sym} in the last ${shovel.minutes} minutes. Is this a real cluster or coincidence, what's likely driving it, and does it fit my edge? Be honest if it's thin.` } }))}
-            style={{ flexShrink: 0, fontFamily: "var(--nx-font-mono)", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em", color: "#ededf0", background: "none", border: "1px solid #ededf055", borderRadius: 6, padding: "8px 12px", cursor: "pointer" }}
+            style={{ flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: "#ededf0", background: "none", border: "1px solid #ededf055", borderRadius: 6, padding: "8px 12px", cursor: "pointer" }}
           >Ask Nexus →</button>
         </div>
       )}
@@ -566,7 +566,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                     type="button"
                     title="Ask Nexus to analyze this consensus"
                     onClick={() => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: `${c.count} tracked smart-money traders are ${c.side} ${c.sym}. Use get_smart_money and explain_move. Is this consensus worth following, what's driving it, and how does it fit my edge?` } }))}
-                    style={{ background: "transparent", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "2px 6px", cursor: "pointer" }}
+                    style={{ background: "transparent", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "2px 6px", cursor: "pointer" }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = "#ededf0"; e.currentTarget.style.borderColor = "#33333a"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#232327"; }}
                   >◆ ask</button>
@@ -637,7 +637,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
           </div>
           {events.length > 8 && (
             <button onClick={() => setFeedAll((v) => !v)}
-              style={{ marginTop: 8, width: "100%", background: "none", border: "1px solid #232327", borderRadius: 4, color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.05em", padding: "6px 0", cursor: "pointer" }}>
+              style={{ marginTop: 8, width: "100%", background: "none", border: "1px solid #232327", borderRadius: 4, color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 0", cursor: "pointer" }}>
               {feedAll ? "▲ show less" : `▼ show ${Math.min(30, events.length) - 8} more`}
             </button>
           )}
@@ -677,8 +677,8 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
             <div style={agentLabelStyle}>SMART MONEY BOARD <span style={{ color: "#52525b" }}>— ◆ Orderly (native) + Hyperliquid</span></div>
             <button onClick={() => setWatchOnly((v) => !v)} disabled={watch.length === 0}
               title={watch.length === 0 ? "Star traders below to build a watchlist" : "Show only your watchlist"}
-              style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.04em", color: watchOnly ? TRACKED : "#71717a", background: watchOnly ? "#1a1a1e" : "none", border: `1px solid ${watchOnly ? "#33333a" : "#232327"}`, borderRadius: 3, padding: "4px 9px", cursor: watch.length === 0 ? "default" : "pointer", opacity: watch.length === 0 ? 0.5 : 1 }}>
-              ★ WATCHLIST{watch.length > 0 ? ` (${watch.length})` : ""}
+              style={{ marginLeft: "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: watchOnly ? TRACKED : "#71717a", background: watchOnly ? "#1a1a1e" : "none", border: `1px solid ${watchOnly ? "#33333a" : "#232327"}`, borderRadius: 3, padding: "4px 9px", cursor: watch.length === 0 ? "default" : "pointer", opacity: watch.length === 0 ? 0.5 : 1 }}>
+              ★ Watchlist{watch.length > 0 ? ` (${watch.length})` : ""}
             </button>
           </div>
           {watchOnly && shown.length === 0 && (
@@ -713,7 +713,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                     );
                   })()}
                   <a href={t.source === "hl" ? `/analyze?address=${t.address}` : `https://orderly-dashboard.orderly.network/address/${t.address}`} target="_blank" rel="noopener noreferrer"
-                    style={{ marginLeft: isMobile ? 0 : "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", textDecoration: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", flexShrink: 0 }}>
+                    style={{ marginLeft: isMobile ? 0 : "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", textDecoration: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", flexShrink: 0 }}>
                     {t.source === "hl" ? "x-ray ↗" : "explorer ↗"}
                   </a>
                 </div>
@@ -741,7 +741,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
           </div>
           {shown.length > 6 && (
             <button onClick={() => setBoardAll((v) => !v)}
-              style={{ marginTop: 8, width: "100%", background: "none", border: "1px solid #232327", borderRadius: 4, color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.05em", padding: "6px 0", cursor: "pointer" }}>
+              style={{ marginTop: 8, width: "100%", background: "none", border: "1px solid #232327", borderRadius: 4, color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 0", cursor: "pointer" }}>
               {boardAll ? "▲ show top 6" : `▼ show ${shown.length - 6} more traders`}
             </button>
           )}

@@ -449,8 +449,8 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
           <span style={{ color: sigC, fontSize: "11px" }}>{sig}</span>
           <button onClick={() => deployToAgent({ symbols: [`PERP_${sym}_USDC`] }, `the ${sym} funding read`, undefined, navigate)}
             title={`Set the agent to watch ${sym}. It trades your rules.`}
-            style={{ marginLeft: "auto", background: "none", border: "1px solid #33333a", color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: "9px", letterSpacing: "0.05em", padding: "3px 8px", borderRadius: "3px", cursor: "pointer" }}>
-            ⚡ AGENT
+            style={{ marginLeft: "auto", background: "none", border: "1px solid #33333a", color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 8px", borderRadius: "3px", cursor: "pointer" }}>
+            ⚡ Agent
           </button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", rowGap: "2px", columnGap: "8px", fontSize: "12px" }}>
@@ -609,10 +609,10 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
                   </p>
                   <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
                     <button onClick={(e) => { e.stopPropagation(); navigate(`/perp/${a.symbol}`); }}
-                      style={{ flex: 1, background: "none", border: `1px solid ${C.borderStrong}`, color: C.accent, fontFamily: "var(--nx-font-mono)", fontSize: "9.5px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", padding: "8px", borderRadius: "6px", cursor: "pointer" }}>→ Open {a.name}</button>
+                      style={{ flex: 1, background: "none", border: `1px solid ${C.borderStrong}`, color: C.accent, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, padding: "8px", borderRadius: "6px", cursor: "pointer" }}>→ Open {a.name}</button>
                     <button onClick={(e) => { e.stopPropagation(); deployToAgent({ symbols: [a.symbol] }, `the ${a.name} ${alertKind(a.signal).toLowerCase()} alert`, undefined, navigate); }}
                       title={`Set the agent to watch ${a.name}`}
-                      style={{ background: "none", border: `1px solid ${C.border}`, color: MUTED, fontFamily: "var(--nx-font-mono)", fontSize: "9.5px", letterSpacing: "0.05em", padding: "8px 10px", borderRadius: "6px", cursor: "pointer" }}>⚡ Agent</button>
+                      style={{ background: "none", border: `1px solid ${C.border}`, color: MUTED, fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "8px 10px", borderRadius: "6px", cursor: "pointer" }}>⚡ Agent</button>
                   </div>
                 </div>
               );

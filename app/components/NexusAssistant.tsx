@@ -524,7 +524,7 @@ export default function NexusAssistant() {
           style={{
             width: 52, height: 52, borderRadius: "50%",
             background: "#141416", border: `1px solid ${GREEN}`,
-            color: GREEN, fontFamily: mono, fontSize: 20, cursor: "grab",
+            color: GREEN, fontFamily: "var(--nx-font-ui)", fontSize: 20, cursor: "grab",
             boxShadow: "0 0 16px rgba(255,255,255,0.18)", flexShrink: 0,
             display: "flex", alignItems: "center", justifyContent: "center",
             animation: seen ? undefined : "nexAiPulse 2s infinite",
@@ -608,7 +608,7 @@ export default function NexusAssistant() {
                 <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                   {pageSuggestions.map((s) => (
                     <button key={s} onClick={() => setInput(s)} disabled={!ready}
-                      style={{ textAlign: "left", background: "#141416", border: "1px solid #232327", borderRadius: 4, color: ready ? "#a1a1aa" : "#52525b", fontFamily: mono, fontSize: 10, padding: "6px 9px", cursor: ready ? "pointer" : "default" }}>
+                      style={{ textAlign: "left", background: "#141416", border: "1px solid #232327", borderRadius: 4, color: ready ? "#a1a1aa" : "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 9px", cursor: ready ? "pointer" : "default" }}>
                       → {s}
                     </button>
                   ))}
@@ -656,14 +656,14 @@ export default function NexusAssistant() {
             />
             {loading ? (
               <button onClick={stop} title="Stop"
-                style={{ background: "#241012", border: "1px solid #f7525f", borderRadius: 4, color: "#f7525f", fontFamily: mono, fontSize: 13, padding: "8px 12px", cursor: "pointer" }}>■</button>
+                style={{ background: "#241012", border: "1px solid #f7525f", borderRadius: 4, color: "#f7525f", fontFamily: "var(--nx-font-ui)", fontSize: 13, padding: "8px 12px", cursor: "pointer" }}>■</button>
             ) : (
               <button onClick={() => send()} disabled={!input.trim()}
                 style={{
                   background: input.trim() ? "#141416" : "#0f0f11",
                   border: `1px solid ${input.trim() ? GREEN : "#232327"}`,
                   borderRadius: 4, color: input.trim() ? GREEN : "#52525b",
-                  fontFamily: mono, fontSize: 14, padding: "8px 12px", cursor: input.trim() ? "pointer" : "default",
+                  fontFamily: "var(--nx-font-ui)", fontSize: 14, padding: "8px 12px", cursor: input.trim() ? "pointer" : "default",
                 }}>↑</button>
             )}
           </div>
@@ -681,7 +681,7 @@ function CopyBtn({ text }: { text: string }) {
   return (
     <button
       onClick={() => { navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}
-      style={{ alignSelf: "flex-start", background: "none", border: "none", color: copied ? GREEN : "#52525b", fontFamily: mono, fontSize: 8, cursor: "pointer", padding: "1px 0" }}
+      style={{ alignSelf: "flex-start", background: "none", border: "none", color: copied ? GREEN : "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer", padding: "1px 0" }}
     >
       {copied ? "✓ copied" : "⧉ copy"}
     </button>
@@ -726,13 +726,13 @@ function SettingsView({
             disabled={!isPro}
             title={isPro ? "Toggle hosted inference" : "PRO required"}
             style={{
-              flexShrink: 0, fontFamily: mono, fontSize: 10, fontWeight: "bold", borderRadius: 3, padding: "6px 14px",
+              flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, borderRadius: 3, padding: "6px 14px",
               cursor: isPro ? "pointer" : "default",
               background: useHosted && isPro ? "#ededf015" : "#141416",
               border: `1px solid ${useHosted && isPro ? GREEN : "#232327"}`,
               color: !isPro ? "#52525b" : useHosted ? GREEN : "#a1a1aa",
             }}>
-            {useHosted && isPro ? "ON" : "OFF"}
+            {useHosted && isPro ? "ON" : "Off"}
           </button>
         </div>
 
@@ -776,7 +776,7 @@ function SettingsView({
               style={{
                 flex: 1, background: provider === p ? "#141416" : "#141416",
                 border: `1px solid ${provider === p ? GREEN : "#232327"}`, borderRadius: 4,
-                color: provider === p ? GREEN : "#a1a1aa", fontFamily: mono, fontSize: 10, padding: "7px 6px", cursor: "pointer",
+                color: provider === p ? GREEN : "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "7px 6px", cursor: "pointer",
               }}>
               {PROVIDERS[p].label}
             </button>
@@ -791,7 +791,7 @@ function SettingsView({
               style={{
                 background: model === mdl ? "#141416" : "#141416",
                 border: `1px solid ${model === mdl ? GREEN : "#232327"}`, borderRadius: 4,
-                color: model === mdl ? GREEN : "#a1a1aa", fontFamily: mono, fontSize: 9, padding: "5px 9px", cursor: "pointer",
+                color: model === mdl ? GREEN : "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 9px", cursor: "pointer",
               }}>
               {mdl}
             </button>
@@ -818,8 +818,8 @@ function SettingsView({
       </Field>
 
       <button onClick={onDone}
-        style={{ background: "#141416", border: `1px solid ${GREEN}`, borderRadius: 4, color: GREEN, fontFamily: mono, fontSize: 11, padding: "9px", cursor: "pointer", letterSpacing: "0.08em" }}>
-        {apiKey.trim() ? "DONE →" : "SAVE KEY TO CONTINUE"}
+        style={{ background: "#141416", border: `1px solid ${GREEN}`, borderRadius: 4, color: GREEN, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, padding: "9px", cursor: "pointer" }}>
+        {apiKey.trim() ? "Done →" : "Save key to continue"}
       </button>
     </div>
   );

@@ -65,7 +65,7 @@ export function WindowGradeCard({
             return (
               <button key={k} role="tab" aria-selected={on} onClick={() => onPick(k)}
                 style={{
-                  fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer",
+                  fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, cursor: "pointer",
                   padding: "5px 10px", borderRadius: 3, border: `1px solid ${on ? BONE : BORDER}`,
                   background: on ? BONE : "transparent", color: on ? "#0a0a0b" : MUTED,
                 }}>
@@ -269,7 +269,7 @@ export function PositionsPanel({
                 </span>
                 <span style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
                   <button onClick={() => onDraft(r)} title="Draft a thesis from this position. Plan it yourself"
-                    style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: MUTED, fontFamily: MONO, fontSize: 9, padding: "2px 7px", cursor: "pointer" }}>◆</button>
+                    style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, color: MUTED, fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "2px 7px", cursor: "pointer" }}>◆</button>
                   {gatePass && r.copySym ? (
                     <button onClick={() => onCopy(r)} className="nx-btn nx-btn-icon" title="Copy this position. The agent enters your direction, manages the exit, and grades it on-chain"
                       style={{ color: BONE, whiteSpace: "nowrap" }}>⚡ Copy</button>

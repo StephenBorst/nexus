@@ -125,7 +125,7 @@ export default function CommentsPanel({
                 border: `1px solid ${reacted ? "#ededf0" : "#232327"}`,
                 borderRadius: 20,
                 color: reacted ? "#ededf0" : "#a1a1aa",
-                fontFamily: "var(--nx-font-mono)",
+                fontFamily: "var(--nx-font-ui)",
                 fontSize: 13,
                 padding: "3px 10px",
                 cursor: walletAddress ? "pointer" : "default",
@@ -188,7 +188,7 @@ export default function CommentsPanel({
                       style={{
                         background: "none", border: "none",
                         color: "#52525b", cursor: "pointer",
-                        fontFamily: "var(--nx-font-mono)", fontSize: 10,
+                        fontFamily: "var(--nx-font-ui)", fontSize: 12,
                         padding: 0, lineHeight: 1,
                       }}
                     >
@@ -259,15 +259,14 @@ export default function CommentsPanel({
                 background: text.trim() && !submitting ? "#1a1a1e" : "#0f0f11",
                 border: `1px solid ${text.trim() && !submitting ? "#ededf0" : "#232327"}`,
                 color: text.trim() && !submitting ? "#ededf0" : "#33333a",
-                fontFamily: "var(--nx-font-mono)",
-                fontSize: 10,
+                fontFamily: "var(--nx-font-ui)",
+                fontSize: 12,
                 padding: "5px 14px",
                 cursor: text.trim() && !submitting ? "pointer" : "default",
                 borderRadius: 3,
-                letterSpacing: "0.05em",
               }}
             >
-              {submitting ? "sending..." : "SEND →"}
+              {submitting ? "sending..." : "Send →"}
             </button>
           </div>
         </div>

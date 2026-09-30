@@ -576,7 +576,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
         <button
           type="button"
           onClick={() => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: "Use get_my_edge. Break down my edge, tell me exactly what to trade more of, what to cut, and how to fix my weak spots." } }))}
-          style={{ background: "transparent", border: "1px solid #232327", borderRadius: 6, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 11, letterSpacing: "0.04em", padding: "7px 11px", cursor: "pointer" }}
+          style={{ background: "transparent", border: "1px solid #232327", borderRadius: 6, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, padding: "7px 11px", cursor: "pointer" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "#ededf0"; e.currentTarget.style.borderColor = "#33333a"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#232327"; }}
         >◆ ask nexus to coach my edge</button>
@@ -600,7 +600,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       <SectionHeader
         eyebrow="Grade · Analytics"
         title="Performance Analytics"
-        note={<a href="/analyze" style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.08em", textDecoration: "none", border: "1px solid #232327", borderRadius: 6, padding: "5px 10px" }}>▶ X-RAY ANY WALLET</a>}
+        note={<a href="/analyze" style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12, textDecoration: "none", border: "1px solid #232327", borderRadius: 6, padding: "5px 10px" }}>▶ X-ray any wallet</a>}
       />
       {/* SYNTHESIS FIRST — one point of view, before the instrument panel. Everything
           below is the evidence for it. */}

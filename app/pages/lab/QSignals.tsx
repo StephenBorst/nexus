@@ -106,7 +106,7 @@ function SignalCard({ s, onTrade, onStake }: { s: QSignal; onTrade: (x: QSignal)
         {s.capacityUsd != null ? <span style={{ color: FAINT }}>{fmtUsd(s.capacityUsd)} cap</span> : null}
         {link ? (
           <a href={link} target="_blank" rel="noreferrer noopener" className="nx-press"
-            style={{ marginLeft: "auto", color: BONE, textDecoration: "none", border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "3px 10px", fontFamily: MF, fontSize: 10 }}
+            style={{ marginLeft: "auto", color: BONE, textDecoration: "none", border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "3px 10px", fontFamily: "var(--nx-font-ui)", fontSize: 12 }}
           >open ↗</a>
         ) : null}
       </div>
@@ -119,10 +119,10 @@ function SignalCard({ s, onTrade, onStake }: { s: QSignal; onTrade: (x: QSignal)
           <span style={{ color: FAINT, fontFamily: MF, fontSize: 8.5, letterSpacing: "0.08em" }}>Q READ → PERP</span>
           <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
             <button onClick={() => onTrade(s)} className="nx-press"
-              style={{ background: ACCENT, color: CANVAS, border: `1px solid ${ACCENT}`, borderRadius: 2, padding: "3px 11px", fontFamily: MF, fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+              style={{ background: ACCENT, color: CANVAS, border: `1px solid ${ACCENT}`, borderRadius: 2, padding: "3px 11px", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
             >⚡ Trade</button>
             <button onClick={() => onStake(s)} className="nx-press"
-              style={{ background: "transparent", color: BONE, border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "3px 11px", fontFamily: MF, fontSize: 10, cursor: "pointer" }}
+              style={{ background: "transparent", color: BONE, border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "3px 11px", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer" }}
             >◆ Stake thesis</button>
           </div>
         </div>
@@ -138,7 +138,7 @@ function LoadButton({ label, onClick, disabled }: { label: string; onClick: () =
       style={{
         background: disabled ? INSET : ACCENT, color: disabled ? FAINT : CANVAS,
         border: `1px solid ${disabled ? BORDER : ACCENT}`, borderRadius: 2, padding: "7px 16px",
-        fontFamily: MF, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em",
+        fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600,
         cursor: disabled ? "default" : "pointer",
       }}
     >{label}</button>
@@ -257,7 +257,7 @@ export function QSignals({ address }: { address?: string | null }) {
                   <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
                     {([[true, `PERPS · ${perpSignals.length}`], [false, `ALL · ${signals.length}`]] as const).map(([po, lbl]) => (
                       <button key={String(po)} onClick={() => setPerpOnly(po)} className="nx-press"
-                        style={{ background: perpOnly === po ? ACCENT : INSET, color: perpOnly === po ? CANVAS : DIM, border: `1px solid ${perpOnly === po ? ACCENT : BORDER}`, borderRadius: 2, padding: "3px 11px", fontFamily: MF, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer" }}
+                        style={{ background: perpOnly === po ? ACCENT : INSET, color: perpOnly === po ? CANVAS : DIM, border: `1px solid ${perpOnly === po ? ACCENT : BORDER}`, borderRadius: 2, padding: "3px 11px", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
                       >{lbl}</button>
                     ))}
                   </div>
@@ -277,7 +277,7 @@ export function QSignals({ address }: { address?: string | null }) {
               {settlementTx ? (
                 <a href={`https://basescan.org/tx/${settlementTx}`} target="_blank" rel="noreferrer noopener" className="nx-press"
                   title="On-chain USDC settlement on Base"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 5, color: FAINT, fontSize: 9.5, fontFamily: MF, textDecoration: "none" }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, color: FAINT, fontSize: 12, fontFamily: "var(--nx-font-ui)", textDecoration: "none" }}
                 >
                   <span style={{ width: 5, height: 5, borderRadius: "50%", background: POS, display: "inline-block" }} />
                   settled <span style={{ color: FOG }}>{shortTx(settlementTx)}</span> ↗

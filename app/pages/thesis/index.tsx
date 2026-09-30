@@ -236,8 +236,8 @@ export default function ThesisPage() {
         <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#33333a" }}>thesis not found or not public</div>
         <button
           onClick={() => navigate("/feed")}
-          style={{ background: "none", border: "1px solid #232327", borderRadius: 3, color: "#52525b", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 14px", cursor: "pointer" }}
-        >← BACK TO FEED</button>
+          style={{ background: "none", border: "1px solid #232327", borderRadius: 3, color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 14px", cursor: "pointer" }}
+        >← Back to feed</button>
       </div>
     );
   }
@@ -281,8 +281,8 @@ export default function ThesisPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderBottom: "1px solid #232327", background: "#0f0f11", flexWrap: "wrap", rowGap: 8 }}>
         <button
           onClick={() => navigate(-1)}
-          style={{ background: "none", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 12px", cursor: "pointer", letterSpacing: "0.05em", minWidth: 82, textAlign: "center" }}
-        >← BACK</button>
+          style={{ background: "none", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", cursor: "pointer", minWidth: 82, textAlign: "center" }}
+        >← Back</button>
         <div style={{ flex: 1 }} />
         {/* Discuss THIS call with its author — seeds the DM with the call context */}
         <MessageTraderButton
@@ -297,13 +297,13 @@ export default function ThesisPage() {
         <a
           href={shareX} target="_blank" rel="noopener noreferrer"
           title="Share on X"
-          style={{ textDecoration: "none", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 12px", letterSpacing: "0.05em", minWidth: 82, textAlign: "center" }}
-        >𝕏 SHARE</a>
+          style={{ textDecoration: "none", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", minWidth: 82, textAlign: "center" }}
+        >𝕏 Share</a>
         <a
           href={shareFc} target="_blank" rel="noopener noreferrer"
           title="Share on Farcaster"
-          style={{ textDecoration: "none", border: "1px solid #232327", borderRadius: 4, color: "#6cb6ff", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 12px", letterSpacing: "0.05em", minWidth: 82, textAlign: "center" }}
-        >✦ CAST</a>
+          style={{ textDecoration: "none", border: "1px solid #232327", borderRadius: 4, color: "#6cb6ff", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", minWidth: 82, textAlign: "center" }}
+        >✦ Cast</a>
         <button
           onClick={handleShare}
           title="Copy link"
@@ -311,9 +311,9 @@ export default function ThesisPage() {
             background: copied ? "#1a1a1e" : "none",
             border: `1px solid ${copied ? "#ededf0" : "#232327"}`,
             borderRadius: 4, color: copied ? "#ededf0" : "#a1a1aa",
-            fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 12px", cursor: "pointer", letterSpacing: "0.05em", minWidth: 82, textAlign: "center",
+            fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", cursor: "pointer", minWidth: 82, textAlign: "center",
           }}
-        >{copied ? "✓ COPIED" : "⧉ LINK"}</button>
+        >{copied ? "✓ Copied" : "⧉ Link"}</button>
       </div>
 
       <div style={{ padding: 16, maxWidth: 720, margin: "0 auto" }}>
@@ -328,8 +328,8 @@ export default function ThesisPage() {
               This call is graded <b style={{ color: "#f4f4f5" }}>on-chain vs public price</b>. The tape decides the outcome, not the trader. Explore live calls from verified callers, or x-ray any wallet’s real record. <span style={{ color: "#71717a" }}>No login to look.</span>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={() => navigate("/feed")} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, letterSpacing: "0.04em", color: "#0a0a0b", background: "#ededf0", border: "1px solid #ededf0", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontWeight: 700 }}>Explore the live feed →</button>
-              <a href="/analyze" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, letterSpacing: "0.04em", color: "#ededf0", background: "none", border: "1px solid #33333a", borderRadius: 6, padding: "8px 14px", textDecoration: "none" }}>X-ray any wallet free →</a>
+              <button onClick={() => navigate("/feed")} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#0a0a0b", background: "#ededf0", border: "1px solid #ededf0", borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontWeight: 600 }}>Explore the live feed →</button>
+              <a href="/analyze" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#ededf0", background: "none", border: "1px solid #33333a", borderRadius: 6, padding: "8px 14px", textDecoration: "none" }}>X-ray any wallet free →</a>
             </div>
           </div>
         )}
@@ -472,10 +472,10 @@ export default function ThesisPage() {
                   style={{
                     background: "none", border: "1px solid #232327", borderRadius: 3,
                     color: verifying ? "#33333a" : "#71717a",
-                    fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 12px",
-                    cursor: verifying ? "default" : "pointer", letterSpacing: "0.05em",
+                    fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 12px",
+                    cursor: verifying ? "default" : "pointer",
                   }}
-                >{verifying ? "verifying..." : "VERIFY OUTCOME →"}</button>
+                >{verifying ? "verifying..." : "Verify outcome →"}</button>
               )}
             </div>
 
@@ -530,12 +530,12 @@ export default function ThesisPage() {
             onClick={() => navigate(`/feed/trader/${thesis.wallet}`)}
             style={{
               background: "none", border: "1px solid #232327", borderRadius: 3,
-              color: "#52525b", fontFamily: "var(--nx-font-mono)", fontSize: 9,
-              padding: "6px 14px", cursor: "pointer", letterSpacing: "0.05em",
+              color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12,
+              padding: "6px 14px", cursor: "pointer",
             }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#ededf0"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#ededf0"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#52525b"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#232327"; }}
-          >VIEW {traderName.toUpperCase()} PROFILE →</button>
+          >View {traderName.toUpperCase()} Profile →</button>
         </div>
 
         {/* Discussion — the public thread on THIS call. Same primitive as the feed,

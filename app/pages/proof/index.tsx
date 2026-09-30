@@ -190,10 +190,10 @@ export default function ProofPage() {
             {ledger.ledgerHash.slice(0, 12)}…{ledger.ledgerHash.slice(-10)}
           </code>
           {ledger.count != null && <span style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT }}>{ledger.count} records</span>}
-          <a href={`${API}/agents/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: MONO, fontSize: 9.5, color: FOG, textDecoration: "none" }}>recompute ↗</a>
+          <a href={`${API}/agents/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: FOG, textDecoration: "none" }}>recompute ↗</a>
           {ledger.onChain?.verified && (
-            <a href={ledger.onChain.explorer || "#"} target="_blank" rel="noopener noreferrer" style={{ fontFamily: MONO, fontSize: 9.5, color: BONE, textDecoration: "none", border: `1px solid #33333a`, borderRadius: 3, padding: "3px 8px", background: "#1a1a1e" }}>
-              ⛓ ANCHORED ON-CHAIN ↗
+            <a href={ledger.onChain.explorer || "#"} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: BONE, textDecoration: "none", border: `1px solid #33333a`, borderRadius: 3, padding: "3px 8px", background: "#1a1a1e" }}>
+              ⛓ Anchored on-chain ↗
             </a>
           )}
         </div>
@@ -231,7 +231,7 @@ export default function ProofPage() {
       <div style={{ display: "flex", gap: 6, marginTop: 22, marginBottom: 22, flexWrap: "wrap" }}>
         {filters.map((f) => (
           <button key={f.id} onClick={() => setFilter(f.id)} style={{
-            fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", padding: "6px 13px", borderRadius: 4, cursor: "pointer",
+            fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 13px", borderRadius: 4, cursor: "pointer",
             background: filter === f.id ? "#1a1a1e" : "none",
             border: `1px solid ${filter === f.id ? BONE : BORDER}`,
             color: filter === f.id ? BONE : MUTED,

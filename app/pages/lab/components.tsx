@@ -344,7 +344,7 @@ export function EmptyState({ message, unlock, onAction, actionLabel }: {
         <button
           type="button"
           onClick={onAction}
-          style={{ marginTop: 12, background: "none", border: "1px solid #33333a", borderRadius: 3, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 11, letterSpacing: "0.05em", padding: "7px 14px", cursor: "pointer" }}
+          style={{ marginTop: 12, background: "none", border: "1px solid #33333a", borderRadius: 3, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, padding: "7px 14px", cursor: "pointer" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "#ededf0"; e.currentTarget.style.borderColor = "#52525b"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#33333a"; }}
         >{actionLabel}</button>

@@ -216,15 +216,14 @@ export default function ProfileAvatar() {
                 background: "#1a1a1e",
                 border: "1px solid #33333a",
                 color: saving ? "#52525b" : "#ededf0",
-                fontFamily: "var(--nx-font-mono)",
-                fontSize: 10,
+                fontFamily: "var(--nx-font-ui)",
+                fontSize: 12,
                 padding: "7px 0",
                 cursor: saving ? "default" : "pointer",
                 borderRadius: 3,
-                letterSpacing: "0.06em",
               }}
             >
-              {saving ? "SAVING..." : "SAVE"}
+              {saving ? "Saving..." : "Save"}
             </button>
             <button
               onClick={() => setOpen(false)}
@@ -232,8 +231,8 @@ export default function ProfileAvatar() {
                 background: "none",
                 border: "1px solid #232327",
                 color: "#71717a",
-                fontFamily: "var(--nx-font-mono)",
-                fontSize: 10,
+                fontFamily: "var(--nx-font-ui)",
+                fontSize: 12,
                 padding: "7px 12px",
                 cursor: "pointer",
                 borderRadius: 3,

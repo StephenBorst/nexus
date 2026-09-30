@@ -266,7 +266,7 @@ function DivergentCard({ m, onDraft }: { m: ForecastMarket; onDraft: (m: Forecas
         {m.target != null ? <span style={{ color: DIM }}>{fmtPrice(m.target)} target ({m.distancePct}%)</span> : null}
         <span style={{ color: FAINT }}>{fmtUsd(m.volumeUsd)} vol</span>
         <button type="button" onClick={() => onDraft(m)} className="nx-press"
-          style={{ marginLeft: "auto", color: BONE, background: "transparent", border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "3px 10px", fontFamily: "var(--nx-font-mono)", fontSize: 10, cursor: "pointer" }}
+          style={{ marginLeft: "auto", color: BONE, background: "transparent", border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "3px 10px", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer" }}
         >◆ draft thesis</button>
       </div>
     </div>
@@ -283,7 +283,7 @@ function DivergentRow({ m, onDraft }: { m: ForecastMarket; onDraft: (m: Forecast
       <span style={{ color: FOG, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.question}</span>
       <span style={{ color: DIM, whiteSpace: "nowrap" }}>lean <b style={{ color: leanColor(m.forecastLean) }}>{m.forecastLean}</b> · tape <b style={{ color: leanColor(m.fundingLean) }}>{m.fundingLean}</b></span>
       <button type="button" onClick={() => onDraft(m)} className="nx-press" aria-label={`Draft a thesis on ${m.coin}`}
-        style={{ flexShrink: 0, color: BONE, background: "transparent", border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "2px 8px", fontFamily: "var(--nx-font-mono)", fontSize: 10, cursor: "pointer" }}
+        style={{ flexShrink: 0, color: BONE, background: "transparent", border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "2px 8px", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer" }}
       >◆</button>
     </div>
   );

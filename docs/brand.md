@@ -29,6 +29,11 @@ for the app, every share card and every link preview.
    Everything else is monochrome: a LONG / SHORT label on a call, an entry / stop / take-profit
    level, a count, a rate, a score, a status like ACTIVE, a live dot, an "agrees / against" stance.
 
+6. **Buttons speak in the UI face, sentence case.** Mono caps are for labels (eyebrows, table heads),
+   never a button. Build buttons from `app/components/ui` (`Button`, `Pill`, `Tabs`) or the global
+   `.nx-btn` class. `node tools/check-ui.mjs` (PR check "Button style") fails a PR that adds a
+   mono-styled `<button>`/`<a>`; the few left are baselined in `tools/ui-baseline.json` (shrink only).
+
 ## Where it lives
 
 | Surface | Source of truth |

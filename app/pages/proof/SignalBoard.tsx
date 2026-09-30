@@ -179,7 +179,7 @@ function ExitBand({ a, preset, paused, isMobile }: { a: AxisRow; preset?: Return
       {preset && (
         <div style={{ display: "flex", flexDirection: "column", alignItems: isMobile ? "flex-start" : "flex-end", gap: 6 }}>
           <button type="button" onClick={load} className="nx-press"
-            style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: C.inset, background: BONE, border: "none", borderRadius: 8, padding: "10px 16px", cursor: "pointer", whiteSpace: "nowrap" }}>
+            style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600, color: C.inset, background: BONE, border: "none", borderRadius: 8, padding: "10px 16px", cursor: "pointer", whiteSpace: "nowrap" }}>
             Load in agent →
           </button>
           <span style={{ fontFamily: MONO, fontSize: 9, color: FAINT }}>Paper · the rule this board grades · review, then save</span>
@@ -265,7 +265,7 @@ function SignalCard({ a, summary }: { a: AxisRow; summary: boolean }) {
 
         {compactByDefault && rated && (
           <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
-            style={{ marginTop: 14, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: MUTED }}>
+            style={{ marginTop: 14, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: MUTED }}>
             {open ? "Hide the evidence ↑" : "Show the evidence ↓"}
           </button>
         )}
@@ -325,7 +325,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
         <div role="radiogroup" aria-label="Board density" style={{ display: "inline-flex", padding: 3, border: `1px solid ${C.border}`, borderRadius: 9, background: C.surfaceAlt }}>
           {(["summary", "expanded"] as const).map((v) => (
             <button key={v} type="button" role="radio" aria-checked={view === v} onClick={() => pick(v)}
-              style={{ fontFamily: MONO, fontSize: 10.5, padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", background: view === v ? BONE : "transparent", color: view === v ? C.inset : FOG, fontWeight: view === v ? 700 : 500 }}>
+              style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", background: view === v ? BONE : "transparent", color: view === v ? C.inset : FOG, fontWeight: view === v ? 700 : 500 }}>
               {v === "summary" ? "Summary" : "Expanded"}
             </button>
           ))}

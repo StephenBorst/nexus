@@ -211,7 +211,7 @@ export function SocialBar({
             const mine = youReacted.includes(e);
             return (
               <button key={e} onClick={(ev) => { ev.stopPropagation(); react(e); }} title={mine ? "Remove reaction" : "React"}
-                style={{ display: "inline-flex", alignItems: "center", gap: 4, background: mine ? "#1a1a1e" : "#0a0a0b", border: `1px solid ${mine ? "#ededf0" : "#232327"}`, borderRadius: 20, color: mine ? "#ededf0" : "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 12, padding: "3px 9px", cursor: "pointer" }}>
+                style={{ display: "inline-flex", alignItems: "center", gap: 4, background: mine ? "#1a1a1e" : "#0a0a0b", border: `1px solid ${mine ? "#ededf0" : "#232327"}`, borderRadius: 20, color: mine ? "#ededf0" : "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 9px", cursor: "pointer" }}>
                 {e}<span style={{ fontSize: 10 }}>{reactions[e]}</span>
               </button>
             );
@@ -241,7 +241,7 @@ export function SocialBar({
                     {short(c.wallet)}<span style={{ marginLeft: 8, color: "#33333a" }}>{pending ? "sending…" : relTime(c.createdAt)}</span>
                   </span>
                   {!pending && c.wallet === walletLower && (
-                    <button onClick={() => remove(c.id)} title="Delete" style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: 0 }}>✕</button>
+                    <button onClick={() => remove(c.id)} title="Delete" style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: 0 }}>✕</button>
                   )}
                 </div>
                 <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", lineHeight: 1.5, wordBreak: "break-word" }}>{c.text}</div>
@@ -262,7 +262,7 @@ export function SocialBar({
             style={{ flex: 1, minWidth: 0, background: "#0a0a0b", border: "1px solid #232327", borderRadius: 20, color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 11, padding: "7px 12px", outline: "none" }}
           />
           {text.trim() && (
-            <button onClick={submit} disabled={busy} style={{ flexShrink: 0, background: "#1a1a1e", border: "1px solid #ededf0", color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 12px", borderRadius: 20, cursor: busy ? "wait" : "pointer", letterSpacing: "0.04em" }}>{busy ? "…" : "Post"}</button>
+            <button onClick={submit} disabled={busy} style={{ flexShrink: 0, background: "#1a1a1e", border: "1px solid #ededf0", color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", borderRadius: 20, cursor: busy ? "wait" : "pointer" }}>{busy ? "…" : "Post"}</button>
           )}
         </div>
       )}

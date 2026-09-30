@@ -17,6 +17,7 @@
     "lint:check": "node tools/check-lint.mjs",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
     "check:palette": "node tools/check-palette.mjs",
+    "check:ui": "node tools/check-ui.mjs",
     "check:workers": "eslint --no-eslintrc -c workers/.eslintrc.worker.json workers/*/index.js workers/*/*.mjs",
     "preview": "vite preview",
     "typecheck": "tsc"

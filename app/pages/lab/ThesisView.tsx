@@ -325,7 +325,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>◌ INVALIDATED · abandoned before it resolved. Excluded from your graded record.</span>
               {!t.isPublic && (
                 <button onClick={() => handleStatusClick("INVALIDATED")} title="Reopen. Put it back live so Nexus grades it from public price."
-                  style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#71717a", cursor: "pointer" }}>↺ REOPEN</button>
+                  style={{ marginLeft: "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#71717a", cursor: "pointer" }}>↺ Reopen</button>
               )}
             </div>
           );
@@ -342,7 +342,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
               <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>Every public call is graded from public price. The grade lands on its own.</span>
               {!t.isPublic && (
                 <button onClick={() => handleStatusClick(eff)} title="Reopen. Clear the self-mark and let Nexus grade it from public price."
-                  style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#71717a", cursor: "pointer" }}>↺ REOPEN</button>
+                  style={{ marginLeft: "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#71717a", cursor: "pointer" }}>↺ Reopen</button>
               )}
             </div>
           );
@@ -353,7 +353,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
             {/* A published call can't be abandoned: walking away from a live call is how a loser gets hidden. */}
             {!t.isPublic && (
               <button onClick={() => handleStatusClick("INVALIDATED")} title="Abandon this thesis. It's no longer valid. The grader can't infer that, so it's your call."
-                style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#52525b", cursor: "pointer" }}>◌ INVALIDATE</button>
+                style={{ marginLeft: "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 10px", borderRadius: 3, border: "1px solid #232327", background: "transparent", color: "#52525b", cursor: "pointer" }}>◌ Invalidate</button>
             )}
           </div>
         );
@@ -396,8 +396,8 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
                       title={r.hint}
                       onClick={() => onUpdate(t.id, { lossReason: r.key })}
                       style={{
-                        fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px",
-                        cursor: "pointer", borderRadius: 3, letterSpacing: "0.04em", minHeight: 30,
+                        fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 10px",
+                        cursor: "pointer", borderRadius: 3, minHeight: 30,
                         border: "1px solid #232327", background: "transparent", color: "#71717a",
                       }}
                     >{r.label}</button>
@@ -1635,11 +1635,11 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                         const suggested = form.direction === d && !dirArmed;  // shown, not pre-checked
                         return (
                         <button key={d} onClick={() => { userChoseDir.current = true; setDirArmed(true); set("direction", d); if (canBuild) quickSetup(quickStopPct, quickTpR, d); }} style={{
-                          flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11, cursor: "pointer", borderRadius: 3, border: "1px solid",
+                          flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, cursor: "pointer", borderRadius: 3, border: "1px solid",
                           background: on ? (d === "LONG" ? "#1a1a1e" : "#241012") : "#0f0f11",
                           borderColor: on ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : suggested ? "#e0a45866" : "#232327",
                           color: on ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : suggested ? "#e0a458" : "#52525b",
-                        }}>{d === "LONG" ? "↑ LONG" : "↓ SHORT"}</button>
+                        }}>{d === "LONG" ? "↑ Long" : "↓ Short"}</button>
                         );
                       })}
                     </div>
@@ -1670,9 +1670,9 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                   // The stop is built from real H4 ATR when we have it (1.2× ATR), not a flat 2%
                   // proxy — the fade breathes with the market's actual volatility (Grok item 3).
                   <button onClick={() => { const sp = atrStopPct ?? quickStopPct; setQuickStopPct(sp); quickSetup(sp, quickTpR); }} disabled={!canBuild || quickBusy || !dirArmed}
-                    style={{ marginTop: 12, width: "100%", padding: "11px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", cursor: canBuild && dirArmed && !quickBusy ? "pointer" : "not-allowed", borderRadius: 4,
+                    style={{ marginTop: 12, width: "100%", padding: "11px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, cursor: canBuild && dirArmed && !quickBusy ? "pointer" : "not-allowed", borderRadius: 4,
                       border: `1px solid ${canBuild && dirArmed ? "#33333a" : "#232327"}`, background: canBuild && dirArmed ? "#1a1a1e" : "#0a0a0b", color: canBuild && dirArmed ? "#ededf0" : "#52525b" }}>
-                    {quickBusy ? "BUILDING…" : !dirArmed ? "⚠ PICK A SIDE TO BUILD" : atrStopPct != null ? `⚡ BUILD IT · stop 1.2× H4 ATR (${atrStopPct}%)` : "⚡ BUILD IT · fill from live price"}
+                    {quickBusy ? "Building…" : !dirArmed ? "⚠ Pick a side to build" : atrStopPct != null ? `⚡ BUILD IT · stop 1.2× H4 ATR (${atrStopPct}%)` : "⚡ BUILD IT · fill from live price"}
                   </button>
                 ) : (
                   <>
@@ -1714,7 +1714,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                           <input style={inputStyle} type="number" placeholder="10000" value={form.accountSize} onChange={(e) => set("accountSize", e.target.value)} />
                         </div>
                         {Number(availableBalance) > 0 && (
-                          <button onClick={() => set("accountSize", String(Math.floor(Number(availableBalance))))} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "9px 10px", borderRadius: 3, border: "1px solid #33333a", background: "#0a0a0b", color: "#d4d4d8", cursor: "pointer", whiteSpace: "nowrap" }}>= MY COLLATERAL</button>
+                          <button onClick={() => set("accountSize", String(Math.floor(Number(availableBalance))))} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "9px 10px", borderRadius: 3, border: "1px solid #33333a", background: "#0a0a0b", color: "#d4d4d8", cursor: "pointer", whiteSpace: "nowrap" }}>= My collateral</button>
                         )}
                       </div>
                     ) : (
@@ -1731,11 +1731,11 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                       </div>
                     )}
                     <button onClick={publishAsCall} disabled={!formValid || publishing}
-                      style={{ marginTop: 12, width: "100%", padding: "13px 0", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 700, letterSpacing: "0.06em", cursor: formValid && !publishing ? "pointer" : "not-allowed", borderRadius: 4,
+                      style={{ marginTop: 12, width: "100%", padding: "13px 0", fontFamily: "var(--nx-font-ui)", fontSize: 13, fontWeight: 600, cursor: formValid && !publishing ? "pointer" : "not-allowed", borderRadius: 4,
                         border: `1px solid ${formValid || published ? "#3ecf8e" : "#232327"}`,
                         background: published || formValid ? SIGNAL.posBg : C.canvas,
                         color: formValid || published ? "#3ecf8e" : "#52525b" }}>
-                      {published ? "◆ PUBLISHED · NOW GRADED" : publishing ? "PUBLISHING…" : "◆ POST CALL"}
+                      {published ? "◆ Published · now graded" : publishing ? "Publishing…" : "◆ Post call"}
                     </button>
                     <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8.5, color: "#52525b", textAlign: "center", marginTop: 6, lineHeight: 1.5 }}>
                       Posts on-chain + public. Nexus grades it from public price — first-touch TP vs stop. You never mark it yourself.
@@ -1827,12 +1827,12 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 <div style={{ display: "flex", gap: 4 }}>
                   {(["LONG", "SHORT"] as const).map((d) => (
                     <button key={d} onClick={() => set("direction", d)} style={{
-                      flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11,
+                      flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
                       cursor: "pointer", borderRadius: 3, border: "1px solid",
                       background: form.direction === d ? (d === "LONG" ? "#1a1a1e" : "#241012") : "#0f0f11",
                       borderColor: form.direction === d ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : "#232327",
                       color: form.direction === d ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : "#52525b",
-                    }}>{d === "LONG" ? "↑ LONG" : "↓ SHORT"}</button>
+                    }}>{d === "LONG" ? "↑ Long" : "↓ Short"}</button>
                   ))}
                 </div>
               </div>
@@ -1914,9 +1914,9 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                   <button
                     onClick={() => set("accountSize", String(Math.floor(Number(availableBalance))))}
                     title="Use your connected Orderly free collateral"
-                    style={{ marginTop: 5, fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "4px 8px", borderRadius: 3, border: "1px solid #33333a", background: "#0a0a0b", color: "#d4d4d8", cursor: "pointer" }}
+                    style={{ marginTop: 5, fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "4px 8px", borderRadius: 3, border: "1px solid #33333a", background: "#0a0a0b", color: "#d4d4d8", cursor: "pointer" }}
                   >
-                    = MY COLLATERAL (${Math.floor(Number(availableBalance)).toLocaleString()})
+                    = My collateral (${Math.floor(Number(availableBalance)).toLocaleString()})
                   </button>
                 )}
               </div>
@@ -1938,7 +1938,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                   </span>
                   <button onClick={fillFundingFromLive} disabled={!form.symbol || fundingBusy}
                     title="Fill with the current live 8h funding rate"
-                    style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "3px 7px", borderRadius: 3, border: "1px solid #33333a", background: "#0a0a0b", color: form.symbol ? "#d4d4d8" : "#33333a", cursor: form.symbol ? "pointer" : "not-allowed" }}>
+                    style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 7px", borderRadius: 3, border: "1px solid #33333a", background: "#0a0a0b", color: form.symbol ? "#d4d4d8" : "#33333a", cursor: form.symbol ? "pointer" : "not-allowed" }}>
                     {fundingBusy ? "…" : "⟳ LIVE"}
                   </button>
                 </div>
@@ -2151,15 +2151,15 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={() => setLiveConfirm(false)} style={{
-                        flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11,
+                        flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
                         cursor: "pointer", borderRadius: 3, border: "1px solid #232327",
-                        background: "#0a0a0b", color: "#52525b", letterSpacing: "0.06em",
-                      }}>ABORT</button>
+                        background: "#0a0a0b", color: "#52525b",
+                      }}>Abort</button>
                       <button onClick={deployLive} style={{
-                        flex: 2, padding: "8px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11,
+                        flex: 2, padding: "8px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
                         cursor: "pointer", borderRadius: 3, border: "1px solid #fbbf24",
-                        background: "#2a1a00", color: "#fbbf24", letterSpacing: "0.08em", fontWeight: "bold",
-                      }}>&#9632; CONFIRM · DEPLOY LIVE</button>
+                        background: "#2a1a00", color: "#fbbf24", fontWeight: 600,
+                      }}>&#9632; Confirm · deploy live</button>
                     </div>
                   </div>
                 )}
@@ -2226,43 +2226,41 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     )}
                     {/* PRIMARY action — this is the one that builds a track record. */}
                     <button onClick={publishAsCall} disabled={!formValid || publishing} style={{
-                      width: "100%", padding: "10px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11,
+                      width: "100%", padding: "10px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
                       cursor: formValid && !publishing ? "pointer" : "not-allowed", borderRadius: 3,
                       border: `1px solid ${formValid ? "#ededf0" : "#33333a"}`,
                       background: published ? "#1a1a1e" : formValid ? "#ededf0" : "#0f0f11",
                       color: published ? "#ededf0" : formValid ? "#0a0a0b" : "#33333a",
-                      fontWeight: 700, letterSpacing: "0.08em", marginBottom: 6,
+                      fontWeight: 600, marginBottom: 6,
                     }}>
-                      {published ? "◆ PUBLISHED · NOW GRADED" : publishing ? "PUBLISHING…" : "◆ PUBLISH AS CALL"}
+                      {published ? "◆ Published · now graded" : publishing ? "Publishing…" : "◆ Publish as call"}
                     </button>
                     <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9.5, color: "#52525b", lineHeight: 1.45, marginBottom: 8 }}>
                       Publishing registers the call on-chain (one wallet signature, no funds moved) and
                       starts grading it from public price. Reject the signature and it stays private.
                     </div>
                     <button onClick={saveThesis} disabled={!formValid} style={{
-                      width: "100%", padding: "9px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11,
+                      width: "100%", padding: "9px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
                       cursor: formValid ? "pointer" : "not-allowed", borderRadius: 3,
                       border: `1px solid ${deployed ? "#ededf0" : "#33333a"}`,
                       background: deployed ? "#1a1a1e" : "#0f0f11",
-                      color: deployed ? "#ededf0" : formValid ? "#d4d4d8" : "#33333a",
-                      letterSpacing: "0.08em", marginBottom: 6,
+                      color: deployed ? "#ededf0" : formValid ? "#d4d4d8" : "#33333a", marginBottom: 6,
                     }}>
                       {/* NB: "&#9632;" as a JS string is NOT decoded by JSX — it rendered
                           literally on the old DEPLOY (PAPER) button. Use the character. */}
-                      {deployed ? "■ SAVED (PRIVATE)" : "■ SAVE PRIVATE · NOT GRADED"}
+                      {deployed ? "■ Saved (private)" : "■ Save private · not graded"}
                     </button>
                     <button
                       onClick={() => { if (formValid) setLiveConfirm(true); }}
                       disabled={!formValid || !isWalletReady}
                       style={{
-                        width: "100%", padding: "9px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11,
+                        width: "100%", padding: "9px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
                         cursor: formValid && isWalletReady ? "pointer" : "not-allowed", borderRadius: 3,
                         border: `1px solid ${!form.symbol || !isWalletReady ? "#52525b" : "#fbbf24"}`,
                         background: "#0a0a0b",
                         color: !form.symbol || !isWalletReady ? "#52525b" : "#fbbf24",
-                        letterSpacing: "0.08em",
                       }}>
-                      &#9632; DEPLOY (LIVE)
+                      &#9632; deploy (live)
                     </button>
                     {!form.symbol && <div style={{ fontSize: 9, color: "#33333a", fontFamily: "var(--nx-font-mono)", textAlign: "center", marginTop: 6 }}>enter symbol to deploy</div>}
                     {form.symbol && !isWalletReady && <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", textAlign: "center", marginTop: 6 }}>connect wallet to deploy live</div>}
@@ -2290,12 +2288,12 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 const c = f !== "ALL" ? STATUS_CONFIG[f as ThesisStatus] : null;
                 return (
                   <button key={f} onClick={() => setFilter(f)} style={{
-                    fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "3px 9px",
-                    cursor: "pointer", borderRadius: 3, letterSpacing: "0.06em",
+                    fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 9px",
+                    cursor: "pointer", borderRadius: 3,
                     border: `1px solid ${active ? (c?.border ?? "#33333a") : "#232327"}`,
                     background: active ? (c?.bg ?? "#1a1a1e") : "transparent",
                     color: active ? (c?.color ?? "#ededf0") : "#33333a",
-                  }}>{f === "ALL" ? "ALL" : STATUS_CONFIG[f as ThesisStatus].label}</button>
+                  }}>{f === "ALL" ? "All" : STATUS_CONFIG[f as ThesisStatus].label}</button>
                 );
               })}
             </div>
@@ -2309,8 +2307,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
               {gradedReady > 0 && (
                 <button onClick={syncGraded}
                   title="Sync every graded call and fill in its P&L."
-                  style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 12px", borderRadius: 3, border: "1px solid #3ecf8e", background: "transparent", color: "#3ecf8e", cursor: "pointer", whiteSpace: "nowrap" }}>
-                  SYNC {gradedReady} GRADED →
+                  style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 12px", borderRadius: 3, border: "1px solid #3ecf8e", background: "transparent", color: "#3ecf8e", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  Sync {gradedReady} Graded →
                 </button>
               )}
             </div>

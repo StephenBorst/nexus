@@ -144,7 +144,7 @@ export function CommandPalette({ onSelectTab }: { onSelectTab: (t: TabId) => voi
             aria-label="Close command palette"
             title="Close (Esc)"
             style={{
-              fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b",
+              fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#52525b",
               background: "none", border: "1px solid #232327", borderRadius: 3,
               padding: "2px 6px", cursor: "pointer",
               transition: "color 170ms var(--nx-ease), border-color 170ms var(--nx-ease)",
@@ -152,7 +152,7 @@ export function CommandPalette({ onSelectTab }: { onSelectTab: (t: TabId) => voi
             onMouseEnter={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#33333a"; }}
             onMouseLeave={(e) => { e.currentTarget.style.color = "#52525b"; e.currentTarget.style.borderColor = "#232327"; }}
           >
-            ESC
+            Esc
           </button>
         </div>
         <div role="listbox" aria-label="Commands" style={{ maxHeight: 340, overflowY: "auto", padding: 6 }}>

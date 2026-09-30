@@ -131,11 +131,11 @@ export function NexusPro({ walletAddress }: { walletAddress: string | null }) {
           onClick={dismiss}
           style={{
             marginLeft: "auto", background: "none", border: "1px solid #232327", borderRadius: 3,
-            color: "#52525b", fontFamily: mono, fontSize: 9, padding: "3px 10px",
-            cursor: "pointer", letterSpacing: "0.05em", alignSelf: "center",
+            color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 10px",
+            cursor: "pointer", alignSelf: "center",
           }}
         >
-          DISMISS
+          Dismiss
         </button>
       </div>
 
@@ -172,13 +172,13 @@ export function NexusPro({ walletAddress }: { walletAddress: string | null }) {
           {!PAYMENTS_LIVE ? (
             <div style={{ fontFamily: mono, fontSize: 9, color: "#71717a", border: "1px solid #232327", borderRadius: 3, padding: "5px 10px", textAlign: "center" }}>coming soon</div>
           ) : !subOpen ? (
-            <button onClick={() => setSubOpen(true)} style={{ fontFamily: mono, fontSize: 10, color: "#141416", background: "#ededf0", border: "none", borderRadius: 3, padding: "7px 10px", cursor: "pointer", fontWeight: "bold", letterSpacing: "0.06em" }}>SUBSCRIBE · USDC</button>
+            <button onClick={() => setSubOpen(true)} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#141416", background: "#ededf0", border: "none", borderRadius: 3, padding: "7px 10px", cursor: "pointer", fontWeight: 600 }}>Subscribe · USDC</button>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", gap: 4 }}>
                 {([["usdc", `$${PRO_MONTHLY_USDC} USDC`], ["nexus", `$${nexusDiscountedPrice()} $NEXUS`]] as const).map(([m, lbl]) => (
                   <button key={m} onClick={() => { setMethod(m); setSubStatus("idle"); setSubMsg(""); }}
-                    style={{ flex: 1, fontFamily: mono, fontSize: 8.5, cursor: "pointer", borderRadius: 3, padding: "4px 6px",
+                    style={{ flex: 1, fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer", borderRadius: 3, padding: "4px 6px",
                       background: method === m ? "#ededf015" : "#0a0a0b", border: `1px solid ${method === m ? "#ededf0" : "#232327"}`,
                       color: method === m ? "#ededf0" : "#a1a1aa" }}>{lbl}{m === "nexus" ? " · 25% off" : ""}</button>
                 ))}
@@ -188,15 +188,15 @@ export function NexusPro({ walletAddress }: { walletAddress: string | null }) {
                   ? <>1. Send <span style={{ color: "#fff" }}>${PRO_MONTHLY_USDC} USDC on Arbitrum</span> to:</>
                   : <>1. Send <span style={{ color: "#fff" }}>{nexusAmt ? `~${nexusAmt}` : "…"} $NEXUS on Base</span> to:</>}
               </div>
-              <button onClick={copyReceiver} title="Copy" style={{ fontFamily: mono, fontSize: 8.5, color: "#ededf0", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3, padding: "6px 8px", cursor: "pointer", textAlign: "left", wordBreak: "break-all" }}>
+              <button onClick={copyReceiver} title="Copy" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#ededf0", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3, padding: "6px 8px", cursor: "pointer", textAlign: "left", wordBreak: "break-all" }}>
                 {SUBSCRIPTION_RECEIVER} {copied ? "✓ copied" : "⧉"}
               </button>
               <div style={{ fontFamily: mono, fontSize: 8.5, color: "#a1a1aa" }}>2. Paste the transaction hash:</div>
               <input value={txHash} onChange={(e) => setTxHash(e.target.value)} placeholder="0x…" spellCheck={false}
                 style={{ fontFamily: mono, fontSize: 9, color: "#fff", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3, padding: "6px 8px", outline: "none" }} />
               <button onClick={verifyPayment} disabled={subStatus === "verifying" || subStatus === "ok"}
-                style={{ fontFamily: mono, fontSize: 10, color: "#141416", background: subStatus === "ok" ? "#33333a" : "#ededf0", border: "none", borderRadius: 3, padding: "7px 10px", cursor: subStatus === "verifying" ? "default" : "pointer", fontWeight: "bold", opacity: subStatus === "verifying" ? 0.6 : 1 }}>
-                {subStatus === "verifying" ? "VERIFYING…" : subStatus === "ok" ? "✓ ACTIVATED" : `ACTIVATE ${TIER_NAME.toUpperCase()}`}
+                style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#141416", background: subStatus === "ok" ? "#33333a" : "#ededf0", border: "none", borderRadius: 3, padding: "7px 10px", cursor: subStatus === "verifying" ? "default" : "pointer", fontWeight: 600, opacity: subStatus === "verifying" ? 0.6 : 1 }}>
+                {subStatus === "verifying" ? "Verifying…" : subStatus === "ok" ? "✓ Activated" : `ACTIVATE ${TIER_NAME.toUpperCase()}`}
               </button>
               {subMsg && <div style={{ fontFamily: mono, fontSize: 8.5, color: subStatus === "ok" ? "#ededf0" : "#f7525f", lineHeight: 1.4 }}>{subMsg}</div>}
             </div>

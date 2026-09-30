@@ -290,7 +290,7 @@ export function MacroEvents() {
                           type="button"
                           onClick={() => draftFrom(e)}
                           className="nx-press"
-                          style={{ color: BONE, background: "transparent", border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "3px 10px", fontFamily: "var(--nx-font-mono)", fontSize: 10, cursor: "pointer" }}
+                          style={{ color: BONE, background: "transparent", border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "3px 10px", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer" }}
                         >◆ draft thesis</button>
                       </span>
                     </div>

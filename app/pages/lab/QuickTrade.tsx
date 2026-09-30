@@ -56,8 +56,8 @@ function PositionRow({ position }: { position: Record<string, unknown> }) {
       <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", color: uPnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{uPnl >= 0 ? "+" : ""}${uPnl.toFixed(2)}</span>
       <button onClick={close} disabled={isMutating} style={{
         marginLeft: "auto", background: "#241012", color: "#f7525f", border: "1px solid #4a1e22", borderRadius: 3,
-        padding: "5px 12px", cursor: isMutating ? "wait" : "pointer", fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", letterSpacing: "0.06em",
-      }}>{isMutating ? "CLOSING…" : "CLOSE"}</button>
+        padding: "5px 12px", cursor: isMutating ? "wait" : "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600,
+      }}>{isMutating ? "Closing…" : "Close"}</button>
       {err && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#f7525f", width: "100%" }}>{err}</span>}
     </div>
   );
@@ -89,7 +89,7 @@ function MktChip({ s, sel, onPick }: { s: string; sel: boolean; onPick: () => vo
     <button onClick={onPick} style={{
       background: sel ? "#ededf015" : "#0a0a0b", border: `1px solid ${sel ? "#ededf060" : "#232327"}`,
       borderRadius: 3, padding: "5px 12px", cursor: "pointer", color: sel ? "#ededf0" : "#71717a",
-      fontFamily: "var(--nx-font-mono)", fontSize: 12,
+      fontFamily: "var(--nx-font-ui)", fontSize: 12,
     }}>{tk(s)}</button>
   );
 }
@@ -254,7 +254,7 @@ export function QuickTrade() {
         <div style={label}>MARKET</div>
         <button onClick={() => toggleFav(symbol)} title={curFav ? "Remove from your DEX favorites" : "Add to your DEX favorites"} style={{
           marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", padding: 0,
-          fontFamily: "var(--nx-font-mono)", fontSize: 13, color: curFav ? "#e0a458" : "#52525b", lineHeight: 1,
+          fontFamily: "var(--nx-font-ui)", fontSize: 13, color: curFav ? "#e0a458" : "#52525b", lineHeight: 1,
         }}>{curFav ? "★" : "☆"} <span style={{ fontSize: 9, letterSpacing: "0.08em" }}>{curFav ? "FAVORITED" : "FAVORITE"}</span></button>
       </div>
       {favSymbols.length > 0 && (
@@ -300,7 +300,7 @@ export function QuickTrade() {
       <MarketStatStrip symbol={symbol} />
       <TradeChart symbol={symbol} height={isMobile ? 232 : 480} positionEntry={positionEntry} tfIndex={tfIdx} onTf={setTfIdx} fill={!isMobile} />
       <div style={{ marginTop: 8, textAlign: "right", flexShrink: 0 }}>
-        <a href={`/perp/${symbol}`} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", color: "#71717a", textDecoration: "none" }}>
+        <a href={`/perp/${symbol}`} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", textDecoration: "none" }}>
           Open full chart →
         </a>
       </div>
@@ -321,13 +321,13 @@ export function QuickTrade() {
             {[25, 100, 500].map((v) => (
               <button key={v} onClick={() => setNotional(v)} style={{
                 background: notional === v ? "#ededf015" : "transparent", border: `1px solid ${notional === v ? "#ededf060" : "#232327"}`,
-                borderRadius: 3, padding: "3px 9px", cursor: "pointer", color: notional === v ? "#ededf0" : "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10,
+                borderRadius: 3, padding: "3px 9px", cursor: "pointer", color: notional === v ? "#ededf0" : "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12,
               }}>${v}</button>
             ))}
             <button onClick={() => maxNotional > 0 && setNotional(maxNotional)} disabled={maxNotional <= 0} title={`Max on ${levClamped}x from free collateral`} style={{
               background: "transparent", border: `1px solid ${maxNotional > 0 ? "#3a3320" : "#232327"}`, borderRadius: 3,
-              padding: "3px 9px", cursor: maxNotional > 0 ? "pointer" : "not-allowed", color: maxNotional > 0 ? "#e0a458" : "#3f3f46", fontFamily: "var(--nx-font-mono)", fontSize: 10,
-            }}>MAX</button>
+              padding: "3px 9px", cursor: maxNotional > 0 ? "pointer" : "not-allowed", color: maxNotional > 0 ? "#e0a458" : "#3f3f46", fontFamily: "var(--nx-font-ui)", fontSize: 12,
+            }}>Max</button>
           </div>
         </div>
         <div>
@@ -345,8 +345,8 @@ export function QuickTrade() {
             {levPresets.map((v) => (
               <button key={v} onClick={() => setLev(v)} style={{
                 background: levClamped === v ? "#ededf015" : "transparent", border: `1px solid ${levClamped === v ? "#ededf060" : "#232327"}`,
-                borderRadius: 3, padding: "2px 8px", cursor: "pointer", color: levClamped === v ? "#ededf0" : "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 9.5,
-              }}>{v === cap ? "MAX" : `${v}x`}</button>
+                borderRadius: 3, padding: "2px 8px", cursor: "pointer", color: levClamped === v ? "#ededf0" : "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12,
+              }}>{v === cap ? "Max" : `${v}x`}</button>
             ))}
           </div>
         </div>
@@ -377,14 +377,14 @@ export function QuickTrade() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
         <button onClick={() => tap("BUY")} disabled={tooSmall || !!busy || isMutating} style={{
           background: tooSmall ? "#1a1a1e" : "#ededf0", color: tooSmall ? "#71717a" : "#141416", border: "1px solid #ededf0",
-          borderRadius: 4, padding: "14px 0", cursor: tooSmall ? "not-allowed" : "pointer", fontFamily: "var(--nx-font-mono)",
-          fontSize: 14, fontWeight: "bold", letterSpacing: "0.08em", opacity: busy === "SELL" ? 0.4 : 1,
-        }}>{busy === "BUY" ? "PLACING…" : confirmSide === "BUY" ? "TAP TO CONFIRM ✓" : "↑ LONG"}</button>
+          borderRadius: 4, padding: "14px 0", cursor: tooSmall ? "not-allowed" : "pointer", fontFamily: "var(--nx-font-ui)",
+          fontSize: 14, fontWeight: 600, opacity: busy === "SELL" ? 0.4 : 1,
+        }}>{busy === "BUY" ? "Placing…" : confirmSide === "BUY" ? "Tap to confirm ✓" : "↑ Long"}</button>
         <button onClick={() => tap("SELL")} disabled={tooSmall || !!busy || isMutating} style={{
           background: tooSmall ? "#241012" : "#f7525f", color: tooSmall ? "#52525b" : "#fff", border: "1px solid #f7525f",
-          borderRadius: 4, padding: "14px 0", cursor: tooSmall ? "not-allowed" : "pointer", fontFamily: "var(--nx-font-mono)",
-          fontSize: 14, fontWeight: "bold", letterSpacing: "0.08em", opacity: busy === "BUY" ? 0.4 : 1,
-        }}>{busy === "SELL" ? "PLACING…" : confirmSide === "SELL" ? "TAP TO CONFIRM ✓" : "↓ SHORT"}</button>
+          borderRadius: 4, padding: "14px 0", cursor: tooSmall ? "not-allowed" : "pointer", fontFamily: "var(--nx-font-ui)",
+          fontSize: 14, fontWeight: 600, opacity: busy === "BUY" ? 0.4 : 1,
+        }}>{busy === "SELL" ? "Placing…" : confirmSide === "SELL" ? "Tap to confirm ✓" : "↓ Short"}</button>
       </div>
       {msg && (
         <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: msg.ok ? "#3ecf8e" : "#f7525f", textAlign: "center", marginTop: 10 }}>{msg.text}</div>
