@@ -313,3 +313,13 @@ html, body {
 .nx-text-action { transition: color var(--nx-dur) var(--nx-ease); }
 .nx-text-action:hover { color: var(--nx-bright) !important; }
 .nx-text-action:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--nx-accent); border-radius: 3px; }
+
+/* Orderly's TokenIcon (Markets / trade pages) tries the broker logo, then the plain one, and
+   renders an EMPTY avatar root when both 404 (e.g. PERP_ALPIX_USDC_alpix): an invisible box
+   that read as a gap before the ticker. Radix only mounts the <img> once it loads, so an
+   empty root = no logo. Give it a quiet placeholder disc instead of a hole. Loaded logos
+   are unaffected. */
+.oui-relative.oui-flex.oui-shrink-0.oui-overflow-hidden.oui-rounded-full:empty {
+  background: #1a1a1e;
+  box-shadow: inset 0 0 0 1px #33333a;
+}

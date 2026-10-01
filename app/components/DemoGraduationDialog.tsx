@@ -27,7 +27,7 @@ const DemoGraduationDialog = modal.create<DemoGraduationDialogProps>((props) => 
 
   return (
     <Dialog open={visible} onOpenChange={onOpenChange}>
-      <DialogContent className="oui-bg-base-8 oui-border oui-border-line-12">
+      <DialogContent className="oui-bg-base-8 oui-border oui-border-line-12" aria-describedby="demo-graduation-desc">
         <DialogHeader>
           <DialogTitle>Account Graduation Notice</DialogTitle>
         </DialogHeader>
@@ -35,7 +35,7 @@ const DemoGraduationDialog = modal.create<DemoGraduationDialogProps>((props) => 
         <div className="oui-py-4">
           <Box className="oui-flex oui-flex-col oui-gap-6">
             <Box className="oui-flex oui-flex-col oui-gap-4">
-              <Text className="oui-text-sm oui-text-base-contrast-80 oui-leading-relaxed">
+              <Text id="demo-graduation-desc" className="oui-text-sm oui-text-base-contrast-80 oui-leading-relaxed">
                 This DEX migrated to a new broker ID, which means all users now have new accounts. 
                 Your old demo account is still accessible via the demo platform.
               </Text>

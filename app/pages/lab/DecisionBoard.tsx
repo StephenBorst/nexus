@@ -41,6 +41,12 @@ const CROWDED = 0.0004;   // |funding|/8h at/above which the crowd is extended (
 // actually came back empty.
 const SIGNALS_TIMEOUT_MS = 20000;
 const SIGNALS_RETRY_MS = 5000;
+// Bounded: 3 quick tries (5s, then 10s apart), then a real error with a Retry button.
+// The 30s background refresh still tries quietly, so the board fills in on its own when
+// /signals comes back. Before this it retried every 5s forever behind a spinner.
+const SIGNALS_MAX_QUICK_TRIES = 3;
+// A first load that hasn't answered by now gets a "still waiting" note (cold /signals ≈15s).
+const SIGNALS_SLOW_MS = 8000;
 async function fetchJsonTimeout(url: string, ms: number) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), ms);
@@ -217,6 +223,9 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
   const isMobile = useIsMobile();
   const [signals, setSignals] = useState<MarketSignal[] | null>(null);
   const [signalsFailed, setSignalsFailed] = useState(false); // last /signals attempt errored/timed out (≠ an empty tick)
+  const [signalsFails, setSignalsFails] = useState(0);       // consecutive failed attempts since the last success
+  const [signalsSlow, setSignalsSlow] = useState(false);     // first load is taking longer than SIGNALS_SLOW_MS
+  const retrySignalsRef = useRef<() => void>(() => {});
   const [tape, setTape] = useState<Record<string, { price: number; change: number }>>({});
   const [tapeRead, setTapeRead] = useState<{ score: number; label: string } | null>(null); // RISK-OFF/ON breadth. Context for the fade tag
   const [consensus, setConsensus] = useState<Consensus | null>(null);
@@ -277,6 +286,8 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
     let alive = true;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let inflight = false;
+    let fails = 0;
+    const slowTimer = setTimeout(() => { if (alive) setSignalsSlow(true); }, SIGNALS_SLOW_MS);
     const loadSignals = () => {
       // /signals gates the table — timeout-capped. Success (even an empty array) is the
       // only thing that sets rows; a failure keeps last-good and retries quickly instead of
@@ -289,11 +300,15 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
           if (!alive) return;
           setSignals(Array.isArray(j?.signals) ? j.signals : []);
           setSignalsFailed(false);
+          fails = 0; setSignalsFails(0);
+          clearTimeout(slowTimer); setSignalsSlow(false);
         })
         .catch(() => {
           if (!alive) return;
           setSignalsFailed(true);
-          retry = setTimeout(loadSignals, SIGNALS_RETRY_MS);
+          fails += 1; setSignalsFails(fails);
+          // Quick retries with backoff, then stop and let the user (or the 30s refresh) retry.
+          if (fails < SIGNALS_MAX_QUICK_TRIES) retry = setTimeout(loadSignals, SIGNALS_RETRY_MS * fails);
         })
         .finally(() => { inflight = false; });
     };
@@ -328,9 +343,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
           ({ symbol: m.symbol, "24h_open": m["24h_open"], "24h_close": m.mark_price ?? m.index_price, last_funding_rate: m.last_funding_rate }))));
       }).catch(() => { /* price column just shows — */ });
     };
+    retrySignalsRef.current = () => { fails = 0; setSignalsFails(0); setSignalsFailed(false); loadSignals(); };
     load();
     const iv = setInterval(load, 30000);
-    return () => { alive = false; clearTimeout(retry); clearInterval(iv); };
+    return () => { alive = false; clearTimeout(retry); clearTimeout(slowTimer); clearInterval(iv); };
   }, []);
 
   const rows: Row[] = useMemo(() => {
@@ -499,7 +515,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       <SectionHeader
         eyebrow="THE BOARD"
         title="Every market, one read"
-        note={<span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : signalsFailed ? "retrying…" : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""}</span>}
+        note={<span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : signalsFails >= SIGNALS_MAX_QUICK_TRIES ? "unavailable" : signalsFailed ? "retrying…" : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""}</span>}
       />
 
       {/* The rule in one sentence (phone and desktop alike), then a key for the marks the rows
@@ -548,7 +564,21 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
       )}
 
       {!signals ? (
-        <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "18px 4px" }}>{signalsFailed ? "the read didn't come back. Retrying…" : "loading the board…"}</div>
+        signalsFails >= SIGNALS_MAX_QUICK_TRIES ? (
+          <div role="alert" style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: "16px 4px", fontFamily: UI, fontSize: 13, color: C.text.fog }}>
+            <span>Market data didn’t load after {SIGNALS_MAX_QUICK_TRIES} tries. It keeps trying every 30s in the background.</span>
+            <button type="button" onClick={() => retrySignalsRef.current()} className="nx-text-action"
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: UI, fontSize: 13, fontWeight: 600, color: C.text.bright }}>
+              Retry now
+            </button>
+          </div>
+        ) : (
+          <div style={{ fontFamily: UI, fontSize: 13, color: C.text.faint, padding: "18px 4px" }}>
+            {signalsFailed ? `Market data didn’t come back. Retrying (${signalsFails} of ${SIGNALS_MAX_QUICK_TRIES})…`
+              : signalsSlow ? "Still waiting on market data. The first load can take up to 20 seconds…"
+              : "Loading the board…"}
+          </div>
+        )
       ) : rows.length === 0 ? (
         // Real empty state (never vanish): /signals RESPONDED with no rows — a live-but-quiet
         // tick, not a slow load (that stays "loading…" above). Refreshes on the 30s interval.
