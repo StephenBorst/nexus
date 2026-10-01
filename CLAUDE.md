@@ -553,14 +553,12 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   built from Orderly's 1H candles (`fourHourBars` in tape.mjs, UTC 00/04/…/20 windows, 20-day pages) and an empty tape
   is a failed market (VOID by rule). prereg.test.mjs pins the text above Results AND the registered parameter block by
   sha256; an amendment block (`<!-- prereg-params amendment-N … -->`) may change only `candles` (the runner refuses
-  otherwise). Two other callers still ask Orderly for 240 and silently get nothing: signal-delivery's 4H EMA8/21 levels
-  (always null) and MacroEvents' BTC chart (never shows).
-  **Run 2 (2026-10-01, Action run 36916585840, commit b3fcd97) = NOT SHOWN → the study is CLOSED.** 163/163 classified,
-  23 markets, none failed. With structure 84 calls 36% −0.17R vs counter-cycle 79 calls 43% +0.00R: gap −0.17R, p 0.36
-  (bar |gap| ≥ 0.40R, p ≤ 0.05); halves and leave-one-market-out kept the sign. Structure does NOT gate the house caller,
-  there is no stage 2 (only a pass gets one), and stage 1 is never run again. The diagnostic "against weekly only"
-  (42 calls, 52%, +0.22R) is a sub-split seen after the fact: only a NEW dated registration, tested on calls posted
-  after its own date, can test it. Don't cite it as an edge.
+  otherwise). **Run 2 (2026-10-01, Action run 36916585840) = NOT SHOWN — study CLOSED, stage 2 never runs.** 163/163
+  classified, 23 markets clean: with-structure 84 · −0.17R vs counter-cycle 79 · +0.00R, gap 0.17R, p 0.36 (bar 0.40R /
+  0.05); direction held in both halves + every leave-one-out but too small. Structure does NOT gate the house caller.
+  ⚠️ The one positive diagnostic ("against weekly only" 42 · +0.22R) was found on this population — testing it = a NEW
+  dated registration on post-Oct-1 calls, never a re-read of these 163. Two other callers still ask Orderly for 240 and silently get
+  nothing: signal-delivery's 4H EMA8/21 levels (always null) and MacroEvents' BTC chart (never shows).
 - **The Read = inputs, not a verdict (2026-09-30).** `LiveRead.tsx` no longer counts reads, crowns the count ("STRONG
   READ", "◆ ALIGNED SETUP") or tints green: every input shows its number + the side it points to in plain ink; amber for
   caution, C.warn for danger, nothing endorses. Don't re-add a tally of ungraded reads. **Same rule in the Lab
