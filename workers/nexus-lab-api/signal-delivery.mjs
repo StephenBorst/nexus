@@ -8,6 +8,7 @@ import { gatherStanceEntries } from "./grading.mjs";
 import { buildSignals } from "../../app/lib/signals.mjs";
 import { annualFundingPct } from "../../app/lib/funding.mjs";
 import { orderlyGet, mapLimit, ORDERLY_CONCURRENCY, ORDERLY_GAP_MS } from "./orderlyGet.mjs";
+import { fetchFourHourBars } from "../../app/lib/fourHourBars.mjs";
 
 const SIGNAL_SYMS = ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC", "PERP_ARB_USDC", "PERP_HYPE_USDC", "PERP_XRP_USDC", "PERP_DOGE_USDC"];
 
@@ -50,13 +51,15 @@ export async function snapshotTrendRegimes(env) {
       const curOi = Number(prevMkt?.oi) || null;
       const priorReg = JSON.parse((await KV.get(`regime:${bare}`)) || "null");
       const oiChangePct = (priorReg?.oi && curOi) ? Number((((curOi - priorReg.oi) / priorReg.oi) * 100).toFixed(2)) : null;
-      // 4H EMA8/EMA21 — the trend levels traders retest to. One extra fetch per symbol,
-      // hourly. Rounded to sensible precision for the price magnitude.
+      // 4H EMA8/EMA21 — the trend levels traders retest to. Orderly serves no 4H candles
+      // (resolution 240 = "no_data"), so the bars are built from ~10 days of 1H (240 hourly →
+      // 60 4H bars, ≥ the 84 hours EMA21 needs). One extra fetch per symbol, hourly. Rounded to
+      // sensible precision for the price magnitude.
       let ema8 = null, ema21 = null;
       try {
-        const d4 = await orderlyGet(`https://api-evm.orderly.org/tv/history?symbol=${sym}&resolution=240&from=${now - 240 * 3600}&to=${now}`);
-        if (d4 && d4.s === "ok" && Array.isArray(d4.c) && d4.c.length >= 8) {
-          const c4 = d4.c.map(Number).filter(Number.isFinite);
+        const { bars } = await fetchFourHourBars(sym, now - 240 * 3600, now, { getJson: (url) => orderlyGet(url) });
+        if (bars.length >= 8) {
+          const c4 = bars.map((b) => b.c);
           const r8 = emaLast(c4, 8), r21 = emaLast(c4, 21);
           const dp = c4[c4.length - 1] >= 1000 ? 0 : c4[c4.length - 1] >= 1 ? 2 : 5;
           ema8 = r8 != null ? Number(r8.toFixed(dp)) : null;

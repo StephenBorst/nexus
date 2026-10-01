@@ -1300,6 +1300,16 @@ credit and pays `x402.miroshark.xyz/run` $1 Base USDC from secret `MIROSHARK_PAY
   Sept 27: ~30 min of refusals, so 10 min wasn't enough. Whether Orderly blocks Workers on `/v1/public/futures` is with
   Wuzhong (borst asking); the `orderly-proxy` worker failing too points to network-level blocking.
 
+## ⚠️ Orderly serves NO 4H candles — build them from 1H (2026-10-01)
+- `/tv/history` resolution 240 answers `{"s":"no_data"}` for every range (supported: 1, 5, 15, 30, 60, D). Anything
+  that wants 4H fetches resolution 60 in 20-day pages and builds bars on the UTC 00/04/08/12/16/20 windows with
+  **`app/lib/fourHourBars.mjs`** (`fetchFourHourBars`, injected `getJson`; a failed page fails the read, no holes).
+  Users: lab-api `snapshotTrendRegimes` (4H EMA8/EMA21 → `regime:{coin}` → `/signals` `ema8_4h` → the MOMENTUM
+  "4H EMA8" note; null forever until this fix) and the Lab macro-proxy chart (`app/pages/lab/macroProxy.mjs`; never
+  rendered until this fix). Neither feeds the engine or the Oct-15 routine. Fake for tests:
+  `app/lib/__fixtures__/fakeTvHistory.mjs` (240 → no_data, 60 → hourly). The structure study's `tape.mjs` (PR #75)
+  carries its own copy of `fourHourBars`; once both are on main it should import this one.
+
 ## ⚠️ Orderly public rate limit — 10 req/s PER IP (Orderly support, 2026-09-28)
 - Public endpoints (`/v1/public/futures`, `/tv/history`, `/v1/public/funding_rate_history`, `/v1/public/info`…) allow
   10 req/s per IP. Workers leave from Cloudflare's SHARED egress IPs, so our bursts stack with other tenants'.
