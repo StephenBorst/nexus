@@ -534,7 +534,7 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
 - **Landing Proof section** (`nexus-landing` `#proof`) speaks to this in-cadence: "many reads, graded in public,
   most still noise, always sharpening" — NOT "one signal." Keep it that way.
 
-## Structure × house fade — PRE-REGISTERED, report only (2026-09-30)
+## Structure × house fade — PRE-REGISTERED, report only (2026-09-30) · CLOSED 2026-10-01: NOT SHOWN
 - The house caller (Nexus Signals `0xfc8c…`: funding fade at ≥12%/yr, entry = mark, SL 3% / TP 4% = 1.33R) = 163 graded
   calls, 39%, −0.09R. The registered question: do counter-cycle fades (against the weekly break-of-structure bias, or a
   LONG/SHORT entered within 1 ATR of an unbroken 4H swing level) earn a different mean R? Protocol + decision rule =
