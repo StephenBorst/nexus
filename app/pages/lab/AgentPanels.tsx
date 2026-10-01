@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { Collapsible } from "./Collapsible";
 import type { AgentTrade } from "./types";
 import { agentCardStyle, agentLabelStyle, agentInputStyle, navBtnStyle } from "./styles";
-import { fmtUsdCompact, fmtUsdCompactAbs, fmtUsdExact } from "@/lib/fmtUsd.mjs";
+import { fmtUsdCompact, fmtUsdCompactAbs, fmtUsdExact, fmtUsdLoss } from "@/lib/fmtUsd.mjs";
 import { paperBlotter, tradeNotional, holdHours } from "@/lib/paperStats.mjs";
 import { bareTicker } from "@/utils/utils";
 
@@ -156,7 +156,7 @@ export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onR
               { label: "WIN RATE", value: `${wr.toFixed(1)}%`, exact: "", color: wr >= 50 ? "#3ecf8e" : "#f7525f" },
               { label: "TRADES", value: String(tr), exact: "", color: "#d4d4d8" },
               { label: "AVG WIN", value: fmtUsdCompactAbs(avgWin), exact: fmtUsdExact(avgWin), color: "#ededf0" },
-              { label: "AVG LOSS", value: fmtUsdCompactAbs(avgLoss), exact: fmtUsdExact(avgLoss), color: "#f7525f" },
+              { label: "AVG LOSS", value: fmtUsdLoss(avgLoss), exact: fmtUsdLoss(avgLoss, { compact: false }), color: "#f7525f" },
             ].map(({ label, value, exact, color }) => (
               <div key={label} style={{ minWidth: 0 }}>
                 <div style={{ ...agentLabelStyle, fontSize: 9 }}>{label}</div>
@@ -248,7 +248,7 @@ export function PaperBlotter({ trades: tradesProp, currentNotional, maxHoldHours
           ) : (
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
               {fmtUsdCompactAbs(b.atSize.notional)} notional · avg win <b style={{ color: "#3ecf8e" }}>{b.atSize.avgWin == null ? "—" : fmtUsdCompactAbs(b.atSize.avgWin)}</b>
-              {" · "}avg loss <b style={{ color: "#f7525f" }}>{b.atSize.avgLoss == null ? "—" : fmtUsdCompactAbs(b.atSize.avgLoss)}</b>
+              {" · "}avg loss <b style={{ color: "#f7525f" }}>{b.atSize.avgLoss == null ? "—" : fmtUsdLoss(b.atSize.avgLoss)}</b>
               {" · "}<span style={{ color: "#52525b" }}>{b.atSize.n} trades{b.atSize.excluded ? `, ${b.atSize.excluded} at other sizes excluded` : ""}</span>
             </span>
           )}

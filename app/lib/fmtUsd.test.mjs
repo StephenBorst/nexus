@@ -34,3 +34,14 @@ test("fmtUsdCompactAbs drops the sign for direction-labelled tiles", () => {
   assert.equal(fmtUsdCompactAbs(148617.53), "$148.6k");
   assert.equal(fmtUsdCompactAbs(-320.5), "$320.50");
 });
+
+test("fmtUsdLoss: a loss magnitude reads negative, compact and exact", async () => {
+  const { fmtUsdLoss } = await import("./fmtUsd.mjs");
+  assert.equal(fmtUsdLoss(2.69), "−$2.69");
+  assert.equal(fmtUsdLoss(-2.69), "−$2.69", "already-signed input gives the same answer");
+  assert.equal(fmtUsdLoss(12345.6), "−$12.3k");
+  assert.equal(fmtUsdLoss(12345.6, { compact: false }), "−$12,345.60");
+  assert.equal(fmtUsdLoss(0), "$0.00");
+  assert.equal(fmtUsdLoss(null), "—");
+  assert.equal(fmtUsdLoss(NaN), "—");
+});

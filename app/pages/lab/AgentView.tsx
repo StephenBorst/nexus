@@ -8,7 +8,7 @@ import { agentCardStyle, agentLabelStyle, agentBtnStyle, btnPrimary, navBtnStyle
 import { useSubscription } from "@/hooks/useSubscription";
 import { isProStrategy } from "@/config/subscription";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
-import { fmtUsdExact } from "@/lib/fmtUsd.mjs";
+import { fmtUsdExact, fmtUsdLoss } from "@/lib/fmtUsd.mjs";
 import { paperSummary } from "@/lib/paperStats.mjs";
 import { STYLE_PRESETS, deriveStyle, type TradingStyle } from "@/config/agentStyles";
 import { AGENT_PREFILL_KEY, DIRECTIVE_PREFILL_KEY, EXPERIMENTAL_FILTERS_OFF, type AgentPrefill, type DirectiveDraft } from "@/utils/agentPrefill";
@@ -2110,7 +2110,7 @@ export function AgentView() {
               { label: "WIN RATE", value: parseFloat(agentWinRate), fmt: (v) => `${v.toFixed(1)}%`, color: "#d4d4d8" },
               { label: "TRADES", value: histTrades.length, fmt: (v) => `${Math.round(v)}`, color: "#d4d4d8" },
               { label: "AVG WIN", value: agentAvgWin, fmt: usd, color: "#ededf0" },
-              { label: "AVG LOSS", value: agentAvgLoss, fmt: usd, color: "#f7525f" },
+              { label: "AVG LOSS", value: agentAvgLoss, fmt: (v) => fmtUsdLoss(v, { compact: false }), color: "#f7525f" },
             ];
             return (
               <div style={agentCardStyle} className="nx-fade-in">

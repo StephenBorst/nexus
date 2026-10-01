@@ -33,3 +33,15 @@ export function fmtUsdCompactAbs(n) {
   const s = fmtUsdCompact(Math.abs(Number(n) || 0));
   return s.startsWith("+") ? s.slice(1) : s;
 }
+
+// A loss average, which callers hold as a positive MAGNITUDE (sum of |pnl| / n). The tile must
+// read as a loss: "−$2.69", never "+$2.69" (fmtUsdExact on the magnitude added the "+"). Zero or
+// no data stays unsigned. U+2212 minus, matching the rest of the money display.
+export function fmtUsdLoss(n, { compact = true } = {}) {
+  if (n == null || n === "") return "—";
+  const v = Math.abs(Number(n));
+  if (!Number.isFinite(v)) return "—";
+  if (v === 0) return "$0.00";
+  const s = compact ? fmtUsdCompact(v) : fmtUsdExact(v);
+  return "−" + s.slice(1);
+}
