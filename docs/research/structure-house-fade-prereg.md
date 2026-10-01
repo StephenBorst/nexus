@@ -322,3 +322,49 @@ Next: stage 1 runs once on the amended source. Its result goes below.
   }
 }
 ```
+
+### Stage 1 · run 2 · 2026-10-01 · NOT SHOWN
+
+Workflow run [36916585840](https://github.com/StephenBorst/nexus/actions/runs/36916585840), commit `b3fcd97`,
+Amendment 1 in force. All 163 calls classified. 23 markets read, none failed: 795–986 4H bars each, no
+missing bars.
+
+| group | calls | hit rate | mean R |
+|---|---|---|---|
+| with structure | 84 | 36% | −0.17R |
+| counter-cycle | 79 | 43% | +0.00R |
+
+Gap (with − counter): −0.17R. Two-sided p 0.36: shuffled labels give a gap this size or larger 36% of
+the time.
+
+| rule | result |
+|---|---|
+| each group ≥ 30 calls | pass: 84 and 79 |
+| \|gap\| ≥ 0.40R | fail: 0.17R |
+| p ≤ 0.05 | fail: 0.36 |
+| kept group above 0R | fail: no group is kept, the gap is under the bar |
+| same sign in both halves | pass: −0.26R, then −0.10R |
+| same sign with any one market left out | pass |
+
+**NOT SHOWN.** The fades with structure did worse than the counter-cycle ones, the side the Disclosure
+hinted at, but by 0.17R: under the 0.40R bar and not distinguishable from chance. At this split the
+sample sees a true gap of 0.50R or more 80% of the time; a smaller real effect would most likely read
+like this. NOT SHOWN means this sample can't tell, not that structure is useless.
+
+By this document's rule, structure does not gate the house caller. Only a stage-1 pass gets a stage 2,
+so there is none, and stage 1 is not run again. The study is closed. A structure map can still ship
+later as operator glass with no vote: a UI choice, not an edge claim.
+
+Diagnostics, recorded and not decisive (no split below can pass this study):
+- against weekly only: 42 calls · 52% · +0.22R
+- into a 4H level only: 23 calls · 39% · −0.09R
+- both: 14 calls · 21% · −0.50R
+- neither (with structure): 84 calls · 36% · −0.17R
+- LONG · with structure: 51 calls · −0.13R
+- LONG · counter-cycle: 24 calls · +0.07R
+- SHORT · with structure: 33 calls · −0.22R
+- SHORT · counter-cycle: 55 calls · −0.03R
+
+A split that looks good here becomes a new dated registration, tested on calls posted after its own
+date. Per-call classifications: the run's `structure-report-stage-1` artifact (kept 90 days). Report
+only: nothing in production reads it.
