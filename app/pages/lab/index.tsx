@@ -203,6 +203,12 @@ export default function TheLabPage() {
     } catch { return false; }
   })();
 
+  // Lab-only: hide the scaffold's native scrollbar while this page is open (see index.css).
+  useEffect(() => {
+    document.documentElement.classList.add("nx-lab-route");
+    return () => document.documentElement.classList.remove("nx-lab-route");
+  }, []);
+
   return (
     <div style={{ background: C.canvas, padding: 0 }}>
       {/* ── LIVE MARKET TICKER ── one thin ambient line of market presence. */}

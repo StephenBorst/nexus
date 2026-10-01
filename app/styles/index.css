@@ -323,3 +323,10 @@ html, body {
   background: #1a1a1e;
   box-shadow: inset 0 0 0 1px #33333a;
 }
+
+/* Lab route only (borst, 2026-09-30): no native vertical scrollbar; the page still scrolls by
+   wheel, trackpad, touch and keyboard. The scroller is Orderly's shared .oui-scaffold-root, so
+   the Lab toggles html.nx-lab-route while it's mounted (app/pages/lab/index.tsx) and every other
+   page keeps its scrollbar. */
+html.nx-lab-route .oui-scaffold-root { scrollbar-width: none !important; }
+html.nx-lab-route .oui-scaffold-root::-webkit-scrollbar { display: none !important; width: 0 !important; }

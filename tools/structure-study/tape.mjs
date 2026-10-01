@@ -11,6 +11,11 @@
 // classified on a partial or missing tape. Missing bars stay missing (counted in `gaps`), never filled.
 import { orderlyGet } from "../../workers/nexus-lab-api/orderlyGet.mjs";
 import { normalizeBars, H4_MS } from "../../app/lib/structure.mjs";
+// 4H bars + page planning come from the shared module the app and lab-api use, so the study, the
+// regime snapshot and the macro chart build 4H the same way. Re-exported for tape.test.mjs and run.mjs.
+// (parseTvHistory stays local: unlike hourlyBarsFromTv it keeps non-finite rows for normalizeBars.)
+import { fourHourBars, planPages } from "../../app/lib/fourHourBars.mjs";
+export { fourHourBars, planPages };
 
 export const ORDERLY = "https://api-evm.orderly.org";
 export const HOUR_MS = 3600 * 1000;
@@ -23,13 +28,6 @@ export function orderlySymbol(raw) {
   return null;
 }
 
-/** Contiguous [from, to] pages (seconds) covering fromSec → toSec, oldest first. */
-export function planPages(fromSec, toSec, pageSec) {
-  const pages = [];
-  for (let from = fromSec; from < toSec; from += pageSec) pages.push({ from, to: Math.min(from + pageSec, toSec) });
-  return pages;
-}
-
 /** Bars from one /tv/history body (t in seconds → ms). "no_data" = a valid empty page. */
 export function parseTvHistory(d) {
   if (d && d.s === "no_data") return [];
@@ -37,30 +35,6 @@ export function parseTvHistory(d) {
   if (!d || d.s !== "ok" || !cols.every((k) => Array.isArray(d[k]))) throw new Error(`unusable candle page (${d && d.s})`);
   const out = [];
   for (let i = 0; i < d.t.length; i++) out.push({ t: Number(d.t[i]) * 1000, o: d.o[i], h: d.h[i], l: d.l[i], c: d.c[i] });
-  return out;
-}
-
-/**
- * 4-hour bars from 1-hour bars. Windows start at 00, 04, 08, 12, 16 and 20 UTC; each bar is the first
- * open, highest high, lowest low and last close of the hourly bars that OPEN inside its window, and `n`
- * says how many there were. A window with no hourly bar is no bar. `bars1h` ascending (normalizeBars).
- */
-export function fourHourBars(bars1h) {
-  const out = [];
-  let cur = null;
-  for (const b of bars1h) {
-    const w = Math.floor(b.t / H4_MS) * H4_MS;
-    if (!cur || cur.t !== w) {
-      if (cur) out.push(cur);
-      cur = { t: w, o: b.o, h: b.h, l: b.l, c: b.c, n: 1 };
-    } else {
-      cur.h = Math.max(cur.h, b.h);
-      cur.l = Math.min(cur.l, b.l);
-      cur.c = b.c;
-      cur.n += 1;
-    }
-  }
-  if (cur) out.push(cur);
   return out;
 }
 
