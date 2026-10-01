@@ -4,6 +4,7 @@ import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { C } from "@/config/theme";
 import { Simulate } from "./Simulate";
 import { pressKey } from "@/utils/a11y";
+import { loadMacroProxySeries } from "./macroProxy.mjs";
 
 // ── Macro / Events card — the intelligence corner for event traders ──────────
 // Sibling of Forecast Divergence, but for MACRO & geopolitical events (Fed, recession,
@@ -57,20 +58,15 @@ const lensLabel = (l: string | null) => (l === "RISK_ON" ? "RISK-ON" : l === "RI
 // ── THE MACRO-PROXY CHART — BTC/USDC, the default expression ───────────────────
 // Macro events aren't asset prices, so the honest premium graph is the PROXY these
 // theses actually trade (draftFrom defaults to BTC). One shared chart at the top:
-// price + a right-edge value box + date ticks. Client-side Orderly candles, fail-soft.
+// price + a right-edge value box + date ticks. Client-side Orderly 1H candles built into
+// 4H bars (macroProxy.mjs), fail-soft.
 function MacroProxyChart() {
   const [pc, setPc] = useState<{ t: number; c: number }[] | null>(null);
   useEffect(() => {
     let live = true;
-    const to = Math.floor(Date.now() / 1000), from = to - 30 * 86400;
-    fetch(`https://api-evm.orderly.org/tv/history?symbol=PERP_BTC_USDC&resolution=240&from=${from}&to=${to}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!live) return;
-        if (d && d.s === "ok" && Array.isArray(d.t) && Array.isArray(d.c))
-          setPc(d.t.map((t: number, i: number) => ({ t: t * 1000, c: Number(d.c[i]) })).filter((p: { c: number }) => p.c > 0));
-        else setPc([]);
-      })
+    // 4H bars built from 1H candles: Orderly answers resolution 240 with "no_data".
+    loadMacroProxySeries({ getJson: (url: string) => fetch(url).then((r) => r.json()) })
+      .then((series) => { if (live) setPc(series); })
       .catch(() => { if (live) setPc([]); });
     return () => { live = false; };
   }, []);
