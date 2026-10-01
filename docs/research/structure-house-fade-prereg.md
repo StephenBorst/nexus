@@ -232,4 +232,93 @@ heading is edited after registration. New rules = a new document with a new date
 
 ## Results
 
-_Not run yet._
+### Stage 1 · run 1 · 2026-09-30 · VOID: no candles
+
+Workflow run [36744854080](https://github.com/StephenBorst/nexus/actions/runs/36744854080), commit `436cddd`.
+The report printed INSUFFICIENT: 0 of 163 calls classified, all `h4_insufficient`.
+
+That label describes the tape, not the calls. All 23 markets came back with 0 candles. Orderly's
+`/tv/history` serves no 4H bars: resolution 240 answers `no_data` for every range (the app's
+`app/components/TradeChart.tsx` already noted this). The runner read each `no_data` page as a valid empty
+page, so no market counted as failed and the run wasn't voided.
+
+The run is VOID under this document's rule: the candles didn't load. Nothing was decided, and stage 1
+has not been run yet. No call was classified, so no outcome was seen against structure. No evidence for
+or against the hypothesis. Report only: nothing in production reads it.
+
+### Amendment 1 · 2026-10-01 · the candle source, nothing else
+
+Made after run 1 and before any call was classified.
+
+Changed:
+- 4H bars are built from Orderly's 1H perp candles (resolution 60, the candles the call grader reads),
+  on the 4-hour UTC windows starting 00, 04, 08, 12, 16 and 20. A bar is the first open, highest high,
+  lowest low and last close of the hourly candles inside its window. A window with no hourly candle is
+  no bar: still nothing interpolated. As before, a 4H bar counts only once its window closed before the post.
+- Pages are 20 days, the size the call grader uses.
+- A market whose candles come back empty counts as failed. A run like run 1 is now VOID by rule.
+
+Unchanged: every definition, threshold, the population and its hash, the test, the decision rule and
+stage 2. `tools/structure-study/prereg.test.mjs` enforces it: the registration above this heading is
+pinned by hash, and the block below may differ from the registered one only in `candles`.
+
+Next: stage 1 runs once on the amended source. Its result goes below.
+
+<!-- prereg-params amendment-1 2026-10-01 -->
+```json
+{
+  "id": "structure-house-fade-v1",
+  "registered": "2026-09-30",
+  "cutoffMs": 1790726400000,
+  "population": {
+    "wallet": "0xfc8c4f4e5ad8535571c199633aa1ec63e8f34a52",
+    "source": "nexus-signal",
+    "idPrefix": "nexus-",
+    "minGradeV": 3,
+    "outcomes": [
+      "WIN",
+      "LOSS"
+    ]
+  },
+  "stage1": {
+    "file": "tools/structure-study/population-stage1.json",
+    "n": 163,
+    "sha256": "8964d348345bdbd43b29931184723f74ca7b5343e17fd42c95cfb6c19a5686c0"
+  },
+  "candles": {
+    "venue": "orderly-perp",
+    "resolution": "60",
+    "build": "4H",
+    "pageDays": 20,
+    "weeksBefore": 28
+  },
+  "structure": {
+    "fractalK": 2,
+    "atrLen": 14,
+    "zoneLookbackBars": 180,
+    "zoneAtrMult": 1,
+    "minH4Bars": 60,
+    "weeklyWindow": 26,
+    "weeklyMinWeeks": 8
+  },
+  "test": {
+    "sided": "two",
+    "permutations": 10000,
+    "seed": 7,
+    "alpha": 0.05,
+    "minPerGroup": 30,
+    "minGapR": 0.4,
+    "survivorMeanAbove": 0,
+    "halves": "same-sign",
+    "leaveOneMarketOut": "same-sign",
+    "maxFetchFailureShare": 0.1
+  },
+  "stage2": {
+    "windowDays": 14,
+    "readNotBeforeDays": 28,
+    "minPerGroup": 15,
+    "minGapR": 0.2,
+    "survivorMeanAbove": 0
+  }
+}
+```
