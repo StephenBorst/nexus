@@ -546,6 +546,15 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   ONCE after the doc is on main; append the verdict under Results (never edit above it). Stage 2 (calls posted Sep 30 →
   Oct 14) only after a stage-1 pass, on/after Oct 28 (the runner refuses earlier). ⚠️ Nothing live reads it: no stamp,
   overlay, gate or worker change until the report exists. A sub-split that looks good = a NEW dated registration.
+  **Run 1 (2026-09-30, Action run 36744854080) = VOID: it read 0 candles on all 23 markets.** ⚠️ **Orderly's
+  `/tv/history` serves no 4H bars: resolution 240 answers `no_data` for every range** (TradeChart.tsx already said so).
+  The runner asked for 240 and took each empty page as valid, so it printed INSUFFICIENT (0 of 163 classified). No call
+  was classified, so nothing about the hypothesis was seen. **Amendment 1 (2026-10-01, under Results):** 4H bars are
+  built from Orderly's 1H candles (`fourHourBars` in tape.mjs, UTC 00/04/…/20 windows, 20-day pages) and an empty tape
+  is a failed market (VOID by rule). prereg.test.mjs pins the text above Results AND the registered parameter block by
+  sha256; an amendment block (`<!-- prereg-params amendment-N … -->`) may change only `candles` (the runner refuses
+  otherwise). Stage 1 re-runs once on the amended source. Two other callers still ask Orderly for 240 and silently get
+  nothing: signal-delivery's 4H EMA8/21 levels (always null) and MacroEvents' BTC chart (never shows).
 - **The Read = inputs, not a verdict (2026-09-30).** `LiveRead.tsx` no longer counts reads, crowns the count ("STRONG
   READ", "◆ ALIGNED SETUP") or tints green: every input shows its number + the side it points to in plain ink; amber for
   caution, C.warn for danger, nothing endorses. Don't re-add a tally of ungraded reads. **Same rule in the Lab

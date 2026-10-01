@@ -3,9 +3,10 @@
 //   node tools/structure-study/run.mjs --stage 2 [--out structure-report]   (not before the read date)
 //
 // Runs from the GitHub Action "Structure study (report only)" (.github/workflows/structure-study.yml);
-// cloud sessions can't reach Orderly. It refuses to run if the registration's parameter block and
-// study.mjs disagree, or if the frozen stage-1 population file changed. It writes report.json (every
-// call, how it was classified) + report.md, and changes nothing anywhere else.
+// cloud sessions can't reach Orderly. It refuses to run if the registration's latest parameter block
+// and study.mjs disagree, if an amendment changed anything but the candle source, or if the frozen
+// stage-1 population file changed. It writes report.json (every call, how it was classified) +
+// report.md, and changes nothing anywhere else.
 import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -23,14 +24,35 @@ export const readRepoFile = (p) => readFileSync(join(ROOT, p), "utf8");
 const API = "https://og.nexustradinglabs.com";
 const iso = (ms) => new Date(ms).toISOString();
 
-/** The ```json block that follows `<!-- prereg-params -->` in the registration. */
-export function paramsFromDoc(text) {
-  const at = text.indexOf("<!-- prereg-params -->");
-  if (at < 0) throw new Error("the registration has no <!-- prereg-params --> block");
-  const m = text.slice(at).match(/```json\r?\n([\s\S]*?)\r?\n```/);
-  if (!m) throw new Error("the registration's parameter block is not a ```json fence");
-  return JSON.parse(m[1]);
+const MARKER = "<!-- prereg-params";
+
+/**
+ * Every parameter block in the registration, in order: the ```json fence right after each
+ * `<!-- prereg-params … -->` marker. The first is the registered block; any later one is a dated
+ * amendment under Results (`<!-- prereg-params amendment-1 2026-10-01 -->`).
+ */
+export function paramBlocks(text) {
+  const out = [];
+  for (let at = text.indexOf(MARKER); at >= 0; at = text.indexOf(MARKER, at + MARKER.length)) {
+    const end = text.indexOf("-->", at);
+    if (end < 0) throw new Error("a parameter block marker is not closed with -->");
+    const label = text.slice(at + MARKER.length, end).trim();
+    const m = text.slice(end).match(/^-->\s*```json\r?\n([\s\S]*?)\r?\n```/);
+    if (!m) throw new Error(`the parameter block${label ? ` (${label})` : ""} is not a \`\`\`json fence`);
+    out.push({ label, params: JSON.parse(m[1]) });
+  }
+  return out;
 }
+
+/** The parameters in force: the registration's latest block. */
+export function paramsFromDoc(text) {
+  const blocks = paramBlocks(text);
+  if (!blocks.length) throw new Error("the registration has no <!-- prereg-params --> block");
+  return blocks[blocks.length - 1].params;
+}
+
+/** Every key an amendment may NOT change: all of them except how the candles are fetched. */
+export const RULE_KEYS = (params) => Object.keys(params).filter((k) => k !== "candles").sort();
 
 /** Key-order-independent JSON, for comparing the doc's block with PREREG. */
 export function canonical(x) {
@@ -78,6 +100,12 @@ export async function runStudy({
   if (canonical(paramsFromDoc(docText)) !== canonical(PREREG)) {
     throw new Error(`the parameters registered in ${DOC} differ from tools/structure-study/study.mjs: refusing to run`);
   }
+  const rules = (p) => canonical(Object.fromEntries(RULE_KEYS(p).map((k) => [k, p[k]])));
+  for (const b of paramBlocks(docText)) {
+    if (rules(b.params) !== rules(PREREG)) {
+      throw new Error(`a parameter block in ${DOC}${b.label ? ` (${b.label})` : ""} changes a rule, not just the candle source: refusing to run`);
+    }
+  }
   const file = JSON.parse(readText(PREREG.stage1.file));
   const pop1 = file.calls || [];
   const h1 = populationHash(pop1);
@@ -106,10 +134,13 @@ export async function runStudy({
     const mine = allCalls.filter((c) => c.symbol === symbol);
     const from = Math.min(...mine.map((c) => c.createdAt)) - PREREG.candles.weeksBefore * WEEK_MS;
     const to = Math.max(...mine.map((c) => c.createdAt));
-    const t = await tape(symbol, from, to, { pageDays: PREREG.candles.pageDays });
-    tapes.set(symbol, t);
-    markets.push({ symbol, orderly: t.orderly, bars: t.bars.length, firstBar: t.bars[0] ? iso(t.bars[0].t) : null, lastBar: t.bars.length ? iso(t.bars[t.bars.length - 1].t) : null, gaps: t.gaps, error: t.error || null });
-    log(`[structure-study] ${symbol}: ${t.error ? `FAILED ${t.error}` : `${t.bars.length} bars, ${t.gaps} gaps`}`);
+    const t = await tape(symbol, from, to, { pageDays: PREREG.candles.pageDays, resolution: PREREG.candles.resolution });
+    // An empty tape is a failed read even when no page errored (run 1, 2026-09-30: Orderly answered
+    // "no_data" for every page, and every call went through as h4_insufficient instead of VOID).
+    const error = t.error || (t.bars.length ? null : "no candles");
+    tapes.set(symbol, { ...t, error });
+    markets.push({ symbol, orderly: t.orderly, bars1h: t.bars1h ?? null, bars: t.bars.length, firstBar: t.bars[0] ? iso(t.bars[0].t) : null, lastBar: t.bars.length ? iso(t.bars[t.bars.length - 1].t) : null, gaps: t.gaps, error });
+    log(`[structure-study] ${symbol}: ${error ? `FAILED ${error}` : `${t.bars1h ?? "?"} 1H candles → ${t.bars.length} 4H bars, ${t.gaps} gaps`}`);
   }
 
   const classify = (calls) => calls.map((c) => {

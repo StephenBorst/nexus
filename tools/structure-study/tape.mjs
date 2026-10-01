@@ -1,13 +1,19 @@
-// ── The 4H tape a structure read is built from: Orderly perp, public /tv/history ────────────────
-// Levels come from the market's OWN perp tape on the venue the calls are graded on. Fetched
-// sequentially in fixed pages (Orderly allows 10 public req/s per IP), each read through
-// orderlyGet (429 + challenge pages retried with backoff). A page that fails fails the MARKET:
-// its calls are left out and named, never classified on a partial tape. Missing bars inside a
-// fetched range stay missing (counted in `gaps`), never filled.
+// ── The 4H tape a structure read is built from: Orderly perp 1H candles, built into 4H bars ─────
+// Levels come from the market's OWN perp tape on the venue the calls are graded on. Orderly's public
+// /tv/history serves no 4H bars: resolution 240 answers "no_data" for every range (stage-1 run 1,
+// 2026-09-30, got 0 candles on all 23 markets). So the tape is the market's 1H candles (resolution 60,
+// the candles the call grader reads) built into 4-hour bars on the UTC windows starting 00, 04, 08,
+// 12, 16 and 20 (Amendment 1 in the registration).
+//
+// Fetched sequentially in 20-day pages (Orderly allows 10 public req/s per IP), each read through
+// orderlyGet (429 + challenge pages retried with backoff). A page that fails fails the MARKET, and so
+// does a tape that comes back empty: its calls are left out and named (candles_unavailable), never
+// classified on a partial or missing tape. Missing bars stay missing (counted in `gaps`), never filled.
 import { orderlyGet } from "../../workers/nexus-lab-api/orderlyGet.mjs";
 import { normalizeBars, H4_MS } from "../../app/lib/structure.mjs";
 
 export const ORDERLY = "https://api-evm.orderly.org";
+export const HOUR_MS = 3600 * 1000;
 
 /** Bare ticker ("ETH") or canonical id → "PERP_ETH_USDC"; anything else → null. */
 export function orderlySymbol(raw) {
@@ -34,7 +40,31 @@ export function parseTvHistory(d) {
   return out;
 }
 
-/** Holes in a crypto tape: consecutive bars more than one bar apart. (RWA market hours show here too.) */
+/**
+ * 4-hour bars from 1-hour bars. Windows start at 00, 04, 08, 12, 16 and 20 UTC; each bar is the first
+ * open, highest high, lowest low and last close of the hourly bars that OPEN inside its window, and `n`
+ * says how many there were. A window with no hourly bar is no bar. `bars1h` ascending (normalizeBars).
+ */
+export function fourHourBars(bars1h) {
+  const out = [];
+  let cur = null;
+  for (const b of bars1h) {
+    const w = Math.floor(b.t / H4_MS) * H4_MS;
+    if (!cur || cur.t !== w) {
+      if (cur) out.push(cur);
+      cur = { t: w, o: b.o, h: b.h, l: b.l, c: b.c, n: 1 };
+    } else {
+      cur.h = Math.max(cur.h, b.h);
+      cur.l = Math.min(cur.l, b.l);
+      cur.c = b.c;
+      cur.n += 1;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/** Holes in a tape: consecutive bars more than one bar apart. (RWA market hours show here too.) */
 export function countGaps(bars, barMs = H4_MS) {
   let gaps = 0;
   for (let i = 1; i < bars.length; i++) if (bars[i].t - bars[i - 1].t > barMs) gaps++;
@@ -42,26 +72,31 @@ export function countGaps(bars, barMs = H4_MS) {
 }
 
 /**
- * One market's 4H bars over [fromMs, toMs].
- * @returns {Promise<{symbol, orderly, bars, pages, gaps, error?}>}
+ * One market's 4H bars over [fromMs, toMs], built from its 1H candles.
+ * @returns {Promise<{symbol, orderly, bars, bars1h, pages, gaps, error?}>}
  */
 export async function fetchTape(symbol, fromMs, toMs, {
-  get = orderlyGet, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), gapMs = 300, pageDays = 40,
+  get = orderlyGet, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), gapMs = 300, pageDays = 20, resolution = "60",
 } = {}) {
   const orderly = orderlySymbol(symbol);
-  if (!orderly) return { symbol, orderly: null, bars: [], pages: 0, gaps: 0, error: "not an Orderly market id" };
+  const none = { symbol, orderly, bars: [], bars1h: 0, pages: 0, gaps: 0 };
+  if (!orderly) return { ...none, error: "not an Orderly market id" };
+  if (String(resolution) !== "60") return { ...none, error: `resolution ${resolution} is not supported: the tape is built from 1H candles` };
   const pages = planPages(Math.floor(fromMs / 1000), Math.ceil(toMs / 1000), pageDays * 86400);
   const all = [];
   for (let i = 0; i < pages.length; i++) {
     if (i) await sleep(gapMs);
     const p = pages[i];
-    const url = `${ORDERLY}/tv/history?symbol=${orderly}&resolution=240&from=${p.from}&to=${p.to}`;
+    const url = `${ORDERLY}/tv/history?symbol=${orderly}&resolution=60&from=${p.from}&to=${p.to}`;
     try {
       all.push(...parseTvHistory(await get(url, { tries: 4 })));
     } catch (e) {
-      return { symbol, orderly, bars: [], pages: i, gaps: 0, error: String((e && e.message) || e).slice(0, 120) };
+      return { ...none, pages: i, error: String((e && e.message) || e).slice(0, 120) };
     }
   }
-  const bars = normalizeBars(all);
-  return { symbol, orderly, bars, pages: pages.length, gaps: countGaps(bars) };
+  const hourly = normalizeBars(all);
+  // The calls were posted while this market traded, so an empty tape is a failed read, never "no history".
+  if (!hourly.length) return { ...none, pages: pages.length, error: "no candles: every page came back empty" };
+  const bars = fourHourBars(hourly);
+  return { symbol, orderly, bars, bars1h: hourly.length, pages: pages.length, gaps: countGaps(bars) };
 }

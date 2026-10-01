@@ -1,7 +1,7 @@
 # Report-only replay of the registered structure × house-fade study
 # (docs/research/structure-house-fade-prereg.md). Manual trigger only. It reads public data (the
-# house caller's public Lab record for stage 2, Orderly's public 4H candles), writes a report (job
-# summary + artifact) and changes nothing: no deploy, no KV write, no commit.
+# house caller's public Lab record for stage 2, Orderly's public 1H candles, built into 4H bars),
+# writes a report (job summary + artifact) and changes nothing: no deploy, no KV write, no commit.
 #
 # Stage 1 runs once, after the registration is merged to main. Stage 2 only after a stage-1 pass,
 # on or after 2026-10-28 (the runner refuses earlier). The verdict goes under "Results" in the doc.

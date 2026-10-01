@@ -24,7 +24,9 @@ export const PREREG = deepFreeze({
     n: 163,
     sha256: "8964d348345bdbd43b29931184723f74ca7b5343e17fd42c95cfb6c19a5686c0",
   },
-  candles: { venue: "orderly-perp", resolution: "240", pageDays: 40, weeksBefore: 28 },
+  // Amendment 1 (2026-10-01): Orderly serves no 4H candles, so 4H bars are built from its 1H candles.
+  // The registered block (resolution "240", 40-day pages) stays in the doc, pinned by prereg.test.mjs.
+  candles: { venue: "orderly-perp", resolution: "60", build: "4H", pageDays: 20, weeksBefore: 28 },
   structure: {
     fractalK: 2,
     atrLen: 14,
@@ -285,7 +287,10 @@ export function renderMarkdown(rep) {
     L.push(`- ${k}: ${p.n} calls · sha256 ${p.sha256.slice(0, 16)}… · classified ${p.classified} · not classified ${p.unclassified}${p.byReason && Object.keys(p.byReason).length ? ` (${Object.entries(p.byReason).map(([r, n]) => `${r} ${n}`).join(", ")})` : ""}`);
   }
   const failed = rep.markets.filter((m) => m.error);
-  L.push(`- markets: ${rep.markets.length} read from Orderly 4H${failed.length ? ` · failed: ${failed.map((m) => `${m.symbol} (${m.error})`).join(", ")}` : ", none failed"}`);
+  // Bar counts printed so an empty or thin tape is visible at a glance (run 1 read 0 bars everywhere).
+  const counts = rep.markets.filter((m) => !m.error && Number.isFinite(m.bars)).map((m) => m.bars).sort((a, b) => a - b);
+  const range = counts.length ? ` · 4H bars per market ${counts[0]}–${counts[counts.length - 1]}, median ${counts[Math.floor(counts.length / 2)]}` : "";
+  L.push(`- markets: ${rep.markets.length} read from Orderly (${PREREG.candles.resolution}-minute candles built into ${PREREG.candles.build} bars)${range}${failed.length ? ` · failed: ${failed.map((m) => `${m.symbol} (${m.error})`).join(", ")}` : " · none failed"}`);
   const gappy = rep.markets.filter((m) => m.gaps > 0);
   if (gappy.length) L.push(`- missing 4H bars (left missing, never filled): ${gappy.map((m) => `${m.symbol} ${m.gaps}`).join(", ")}`);
   L.push("");
