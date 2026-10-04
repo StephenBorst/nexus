@@ -1,6 +1,6 @@
 # Oct 15 · what each result triggers
 
-Written 2026-10-04, eleven days before the read. **Sign-off: borst, pending.**
+Written 2026-10-04, eleven days before the read. **Signed off: borst, 2026-10-04.**
 
 The re-validation routine reports on 2026-10-15 at 15:00 UTC. This page fixes, before the numbers exist, what
 each result does. Nothing here changes code before then. A threshold that needs to change changes before Oct 15,
