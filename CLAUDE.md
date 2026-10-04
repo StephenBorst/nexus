@@ -571,6 +571,13 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   crown them (◆), rank by the count (it could lift a trade idea to 102, above the 95 live-risk warning) or stay green
   over a caller disagreement. Fixed priority (92 your setup / 88 your class), −3 and caution only when graded callers
   disagree. The Briefing's "positive" tone is the bone mark (`C.brand`), not green (`NexusBriefing.tsx` TONE).
+- **The Lab's FADE says it isn't graded (2026-10-04).** THE BOARD / Briefing / token page / Board + funding-ticket
+  share cards / share meta used to say the FADE was "graded from the tape after". The rule (funding pierces its own
+  p25–p75 band AND ≥ `FADE_FUNDING_FLOOR_PCT_YR` 10%/yr) has NO scoreboard grade; only a call made from it is graded.
+  Now: "Not graded yet." + the closest graded relative's LIVE grade (`funding_fade`, ≈11%/yr, no band test) via
+  `app/lib/fadeGrade.mjs` (`fadeFamilyGrade`/`fadeFamilyLine`, tested; display only) + `useFadeFamilyGrade` (one shared
+  `/intel/axis-backtest` fetch per page, ~7 KB br). The house caller's ≥12%/yr fade is a third variant. Don't re-add
+  "graded" wording to the FADE until the scoreboard grades the Board's exact rule (an engine change, after Oct 15).
 
 ## Bankr SKILL + marketing assets (where things live)
 - **Bankr skill** = `github.com/BankrBot/skills` → `nexus-trading-labs/SKILL.md` + `references/*.md` (markdown skill,
@@ -1517,6 +1524,11 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   vs minified-unsplit (8.9 s) — accepted: deploys land several times a day, so most return visits are post-deploy.
 - Smoke: 10 routes render the same on the new build as the old (same text length per route); the only page error in
   both is the sandbox blocking Orderly's API. ⚠️ In cloud sessions don't `pkill` servers: it kills your own shell.
+- **Phone sweep (2026-10-04, 20 routes at 390px):** no page scrolls sideways, nothing spills. First load = ONE vendor
+  chunk, 3.5 MB raw / 1.05 MB gz before the first screen (the open mobile item; defer wallet/SDK pieces = days of work).
+  **Feed pages its calls (`FEED_PAGE` = 20 + "Show 20 more · N left")** — it rendered all 329 at once (97,000 px).
+  **The ◆ orb steps aside on phones** while scrolling down (`app/hooks/useHideOnScrollDown.ts`, capture-phase so the
+  Lab's inner `.oui-scaffold-root` scroller counts) and returns on scroll up / near the top.
 
 ## Conventions
 - **⚠️ BROWSER-FIRST TRIAGE — rule out borst's browser BEFORE touching code (bit us TWICE; 2nd = 2026-09-25).**

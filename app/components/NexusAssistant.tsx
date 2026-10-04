@@ -16,6 +16,7 @@ import { computeEdge } from "@/config/edge";
 import { tiltRead, sessionEdge, overtradingRead, sizingRead } from "@/lib/behavioral.mjs";
 import { bareTicker } from "@/utils/utils";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
+import { useHideOnScrollDown } from "@/hooks/useHideOnScrollDown";
 import { useSubscription } from "@/hooks/useSubscription";
 import {
   PROVIDERS, LS_PROVIDER, LS_MODEL, LS_KEY, LS_HOSTED_MODEL, SYSTEM_PROMPT,
@@ -176,6 +177,10 @@ export default function NexusAssistant() {
   const isMobile = useIsMobile();
 
   const [open, setOpen] = useState(false);
+  // Phones: the idle orb steps aside while the reader scrolls down (it sat on row buttons and
+  // order-book numbers) and comes back on any scroll up or near the top.
+  const orbHidden = useHideOnScrollDown(isMobile && !open);
+  const reduceMotion = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const [view, setView] = useState<"chat" | "settings">("chat");
   // First-run discovery: pulse + one-time tooltip until the panel is first opened.
   const [seen, setSeen] = useState(() => typeof window !== "undefined" && window.localStorage.getItem("nexus_ai_seen") === "1");
@@ -492,6 +497,13 @@ export default function NexusAssistant() {
           // page's primary CTA (Spot BUY/SHARE/→, Lab share) — the "double orb on the CTA" fix.
           // Desktop keeps the tight corner; a dragged position (pos) always wins.
           ...(pos ? { left: pos.x, top: pos.y } : isMobile ? { right: 14, bottom: 84 } : { right: 16, bottom: 16 }),
+          // Hidden = faded, nudged down, untappable and out of the tab order (visibility flips after
+          // the fade). Only opacity/transform animate; reduced motion = no animation.
+          opacity: orbHidden ? 0 : 1,
+          transform: orbHidden ? "translateY(12px)" : "none",
+          visibility: orbHidden ? "hidden" : "visible",
+          pointerEvents: orbHidden ? "none" : undefined,
+          transition: reduceMotion ? "none" : `opacity .18s ease, transform .18s ease, visibility 0s linear ${orbHidden ? ".18s" : "0s"}`,
         }}
       >
         {/* First-run teaser is the "second overlay" — a wide Ask/AI card beside the orb. On a

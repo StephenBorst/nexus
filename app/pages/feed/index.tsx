@@ -36,6 +36,7 @@ import WatchOnlyBanner from "./WatchOnlyBanner";
 import { bareTicker } from "@/utils/utils";
 import { pressKey, useEscapeKey } from "@/utils/a11y";
 import { C, LINE, SIGNAL } from "@/config/theme";
+import { Button } from "@/components/ui";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -1371,6 +1372,9 @@ function FeedPulse({ feed }: { feed: FeedThesis[] }) {
 type FilterStatus = "ALL" | "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED";
 type DirFilter = "ALL" | "LONG" | "SHORT";
 
+// Calls per page of the feed (see `shown` in FeedPage).
+const FEED_PAGE = 20;
+
 export default function FeedPage() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -1396,6 +1400,9 @@ export default function FeedPage() {
   const [copyTarget, setCopyTarget] = useState<FeedThesis | null>(null);
   const [view, setView] = useState<"feed" | "ranks" | "following">("feed");
   const [sortMode, setSortMode] = useState<"latest" | "trending">("latest");
+  // The feed renders FEED_PAGE calls at a time. All of them at once (300+ cards) made the page about
+  // 115 phone screens tall and slow to open and scroll. A new view, filter, search or sort starts over.
+  const [shown, setShown] = useState(FEED_PAGE);
   // Ph19: on-chain trader count (trustless roster from ThesisRegistered logs)
   const [onChainCount, setOnChainCount] = useState<number | null>(null);
   // Ph24: follow graph
@@ -1523,6 +1530,14 @@ export default function FeedPage() {
         return diff !== 0 ? diff : b.createdAt - a.createdAt;
       })
     : [...filtered].sort((a, b) => b.createdAt - a.createdAt);
+  const visibleCalls = sortedFiltered.slice(0, shown);
+  const hiddenCalls = sortedFiltered.length - visibleCalls.length;
+  useEffect(() => { setShown(FEED_PAGE); }, [view, filter, dirFilter, search, sortMode]);
+  const showMore = hiddenCalls > 0 && (
+    <Button full onClick={() => setShown((n) => n + FEED_PAGE)} style={{ marginTop: 4 }}>
+      Show {Math.min(FEED_PAGE, hiddenCalls)} more · {hiddenCalls} left
+    </Button>
+  );
 
   const navBtnStyle = (active: boolean): React.CSSProperties => ({
     background: active ? C.surface : "none",
@@ -1649,7 +1664,7 @@ export default function FeedPage() {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {sortedFiltered.map((t) => (
+                {visibleCalls.map((t) => (
                   <FeedCard
                     key={`${t.wallet}-${t.id}`}
                     thesis={t}
@@ -1661,6 +1676,7 @@ export default function FeedPage() {
                     social={socialData[t.id]}
                   />
                 ))}
+                {showMore}
               </div>
             )}
           </>
@@ -1831,7 +1847,7 @@ export default function FeedPage() {
                 now follows below so a visitor sees calls first, not chrome. */}
             {!loading && !error && filtered.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {sortedFiltered.map((t) => (
+                {visibleCalls.map((t) => (
                   <FeedCard
                     key={`${t.wallet}-${t.id}`}
                     thesis={t}
@@ -1843,6 +1859,7 @@ export default function FeedPage() {
                     social={socialData[t.id]}
                   />
                 ))}
+                {showMore}
                 {/* Thin feed → invite contribution instead of just trailing off.
                     (Skip when very sparse — the prominent top nudge already shows.) */}
                 {feed.length >= 3 && feed.length < 12 && <ContributePrompt />}
