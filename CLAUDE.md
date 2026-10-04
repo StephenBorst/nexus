@@ -513,6 +513,11 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   (× CVD Stack)"; parity axis basis_dev / basis_dev_x_cvd. Parity test `app/lib/basisTwoSided.test.mjs` (3 seeds × same-hour
   rewrites, both sides must fire) + a guard that FAILS if the flag is set — turning it on means editing that guard in
   the same reviewed PR, and only after it grades PREDICTIVE with BOTH sides represented. No UI selector yet.
+- **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; sign-off: borst).** What
+  each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
+  off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
+  BEATS_RANDOM on its side + preset exit positive oos over ≥30 trades), house caller off until a read clears, copy words.
+  The hold call stays with `tools/oct15/holdDecision.mjs`. Don't edit its thresholds after Oct 15: a change = a new page.
 - **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
   AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
