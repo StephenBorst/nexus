@@ -110,7 +110,7 @@ export function buildBoardOgSvg(rows, asOf, { fontFamily = "'Courier New', Couri
   <line x1="60" y1="278" x2="1140" y2="278" stroke="${BORD}" stroke-width="1"/>
   ${body}
   <line x1="60" y1="584" x2="1140" y2="584" stroke="${BORD}" stroke-width="1"/>
-  <text x="60" y="610" fill="${FAINT}" font-size="14">Public facts. The play is mechanical, graded from the tape after — not advice.</text>
+  <text x="60" y="610" fill="${FAINT}" font-size="14">Public facts. The play is a mechanical rule, not graded yet. Not advice.</text>
   <text x="1140" y="610" fill="${FAINT}" font-size="14" text-anchor="end">${esc(asOf || "")}</text>
 </svg>`;
 }
@@ -161,7 +161,7 @@ export function buildReadOgSvg(p, { fontFamily = "'Courier New', Courier, monosp
   ${lensCell(60, "CROWD (FUNDING)", `paying to be ${crowdSide || "balanced"}`, isFade && fadeDir ? `FADE ${fadeDir}` : "", accent)}
   ${lensCell(630, "SMART $", smSide ? `${p.smartMoney.count} sharp${p.smartMoney.count === 1 ? "" : "s"} ${smSide}` : "no read", smWith == null ? "" : (smWith ? "WITH THE FADE" : "AGAINST"), smWith ? BONE : MUT)}
   <line x1="60" y1="560" x2="1140" y2="560" stroke="${BORD}" stroke-width="1"/>
-  <text x="60" y="590" fill="${FAINT}" font-size="15">A positioning read from public funding — graded on Nexus. A stretched market can stay stretched. Not advice.</text>
+  <text x="60" y="590" fill="${FAINT}" font-size="15">A positioning read from public funding, not graded yet. A stretched market can stay stretched. Not advice.</text>
 </svg>`;
 }
 
