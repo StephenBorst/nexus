@@ -1172,8 +1172,8 @@ Loading the record… <a style="color:#ededf0" href="${appUrl}">view on Nexus �
       const appUrl = "https://trade.nexustradinglabs.com/lab?guest=1";
       const img = "https://og.nexustradinglabs.com/og/board.png";
       const shareUrl = "https://og.nexustradinglabs.com/share/board";
-      const title = "The Board — every market, one read (graded from public price)";
-      const desc = "FADE only when funding is stretched vs its own range, and how many independent reads confirm it. Live on Nexus, graded from the tape — not advice.";
+      const title = "The Board: every market, one read";
+      const desc = "FADE only when funding is stretched vs its own range, and how many independent reads confirm it. A mechanical rule, not graded yet. Not advice.";
       const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>

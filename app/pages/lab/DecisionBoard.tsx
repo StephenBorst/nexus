@@ -13,10 +13,12 @@
 // Sits between the Briefing (the narrative read) and Market Intel (the deep detail):
 // Briefing = "what matters now", Board = "scan the whole book", Intel = "go deep".
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { C, MONO, UI, RADIUS } from "@/config/theme";
+import { Link, useSearchParams } from "react-router-dom";
+import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
 import { SectionHeader } from "./components";
 import { useIsMobile } from "./useIsMobile";
+import { useFadeFamilyGrade } from "./useFadeFamilyGrade";
+import { fadeFamilyLine } from "@/lib/fadeGrade.mjs";
 import { computeTape, FADE_FUNDING_FLOOR_PCT_YR, type MarketSignal } from "./briefing";
 import { annualFundingPct, finiteOrNull } from "@/lib/funding.mjs";
 import type { TabId } from "./types";
@@ -221,6 +223,8 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
   positions?: { symbol?: string; direction?: "LONG" | "SHORT" }[];                              // your open positions (EXECUTE leg)
 }) {
   const isMobile = useIsMobile();
+  // THE PLAY's FADE is a rule the scoreboard doesn't grade; say so, with its closest relative's live grade.
+  const fadeLine = fadeFamilyLine(useFadeFamilyGrade());
   const [signals, setSignals] = useState<MarketSignal[] | null>(null);
   const [signalsFailed, setSignalsFailed] = useState(false); // last /signals attempt errored/timed out (≠ an empty tick)
   const [signalsFails, setSignalsFails] = useState(0);       // consecutive failed attempts since the last success
@@ -523,7 +527,14 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
           like a signal service, which it is not; the column-by-column explainer that used to sit
           here restated the headers and is gone. */}
       <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: C.text.muted, marginTop: -4, marginBottom: 14, maxWidth: 820 }}>
-        <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range. Public facts, graded from the tape after, never advice.
+        <b style={{ color: C.text.bright }}>FADE</b> only when the crowd is <b style={{ color: C.text.bright }}>stretched</b> vs its own funding range. Public facts, never advice.
+        {/* The rule above has no grade of its own on the scoreboard. Say so plainly, with the live
+            grade of its closest graded relative (app/lib/fadeGrade.mjs), and link the scoreboard. */}
+        <div style={{ marginTop: 4 }}>
+          <span style={{ color: SIGNAL.watch }}>Not graded yet.</span>
+          {fadeLine ? ` ${fadeLine}` : ""}{" "}
+          <Link to="/proof" style={{ color: C.text.fog, textDecoration: "underline", textUnderlineOffset: 2, whiteSpace: "nowrap" }}>Scoreboard →</Link>
+        </div>
         {!isMobile && (
           <div style={{ fontSize: 12, color: C.text.faint, marginTop: 4 }}>
             <span style={{ color: C.accent }}>◆</span> separate reads agree with the play

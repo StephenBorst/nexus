@@ -78,7 +78,7 @@ function tokenAgeLabel(ts: number | null): string {
   return h > 0 ? `${h}h` : "new";
 }
 
-// The graded funding verdict for a listed market, read EXACTLY as the Board reads it (the server
+// The funding verdict for a listed market (a rule the scoreboard doesn't grade), read EXACTLY as the Board reads it (the server
 // verdict + the ONE shared economic floor) so the terminal can't disagree with the Lab.
 function nexusReadLabel(sig: NexusSignal): { label: string; color: string; sub: string } {
   const dir = sig.fadeDir === "LONG" || sig.fadeDir === "SHORT" ? sig.fadeDir : null;
@@ -87,7 +87,7 @@ function nexusReadLabel(sig: NexusSignal): { label: string; color: string; sub: 
   const isFade = sig.verdict === "FADE" && !!dir && bigEnough;
   const fundTxt = `funding ${annual >= 0 ? "+" : ""}${annual.toFixed(1)}%/yr`;
   // A verdict word, not money: bone, never green (docs/brand.md).
-  if (isFade) return { label: `FADE ${dir}`, color: "#ededf0", sub: `${fundTxt} — the crowd is stretched ${dir === "SHORT" ? "long" : "short"}, graded from the tape after.` };
+  if (isFade) return { label: `FADE ${dir}`, color: "#ededf0", sub: `${fundTxt}. The crowd is stretched ${dir === "SHORT" ? "long" : "short"}. A mechanical rule, not graded yet.` };
   if (sig.verdict === "FADE" || sig.verdict === "WATCH") return { label: "WATCHING", color: "#71717a", sub: `${fundTxt}. Elevated, not stretched vs its own range. No fade edge yet.` };
   return { label: "BALANCED", color: "#71717a", sub: `${fundTxt}. No crowd extreme to fade.` };
 }

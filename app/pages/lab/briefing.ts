@@ -11,6 +11,7 @@
 // amber, not red.
 import { bookConcentration } from "@/lib/bookRisk.mjs";
 import { annualFundingPct } from "@/lib/funding.mjs";
+import { fadeFamilyLine, type FadeFamilyGrade } from "@/lib/fadeGrade.mjs";
 
 export type InsightTone = "positive" | "caution" | "info";
 
@@ -151,6 +152,9 @@ export interface MarketReadInput {
   // The graded-caller lean per symbol — so a briefing row can name a caller crowd that FIGHTS
   // the fade ("FADE X · CALLERS Y"), the conflict grammar (Grok). Optional/fail-soft.
   consensus?: Record<string, { side: "LONG" | "SHORT" | "SPLIT"; lean: number; participants: number }> | null;
+  // The plain funding fade's live scoreboard grade (app/lib/fadeGrade.mjs). The FADE these rows print
+  // is a stricter rule with no grade of its own, so a FADE row says so and names this one. Optional.
+  fadeGrade?: FadeFamilyGrade | null;
 }
 
 const pctChange = (o?: string | number, c?: string | number) => {
@@ -161,8 +165,13 @@ const pctChange = (o?: string | number, c?: string | number) => {
 };
 
 export function buildMarketRead(input: MarketReadInput): Insight[] {
-  const { rows, signals, liveAgents, tape, consensus } = input;
+  const { rows, signals, liveAgents, tape, consensus, fadeGrade } = input;
   const out: Insight[] = [];
+  // A FADE row's last word. It used to say "Graded from the tape after, like every call", which read as
+  // if this rule were graded. It isn't: only a call made from it is. Say that, and give the closest
+  // graded relative's live grade when the scoreboard answered.
+  const familyLine = fadeFamilyLine(fadeGrade);
+  const fadeNote = `The mechanical fade, not graded yet.${familyLine ? ` ${familyLine}` : ""}`;
 
   // 1 — Tape headline: the BREADTH lens (what setups the tape favors) — NOT a second
   // market-mood SCORE. The Market Terminal's "THE MARKET READ" gauge is the one
@@ -210,7 +219,7 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
       tone: callerFights ? "caution" : "info",
       title: `${conf.symbol} · ${play}${yrClause(annual)}`,
       detail: isFade
-        ? `Funding and open interest agree the crowd is stretched${callerFights ? ` · CALLERS ${lean!.side} (they fight the fade)` : ""}. The mechanical fade. Graded from the tape after, like every call.`
+        ? `Funding and open interest agree the crowd is stretched${callerFights ? ` · CALLERS ${lean!.side} (they fight the fade)` : ""}. ${fadeNote}`
         : `Funding and open interest agree, but it's elevated rather than stretched vs its own range. A watch, not a fade yet.`,
       action: { label: "See the read", tab: "intel" },
     });
@@ -235,7 +244,7 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
         ? `${hot.symbol} · FADE ${hDir}${yrClause(hAnnual)}`
         : `${hot.symbol} funding is elevated${Number.isFinite(hAnnual) ? ` (${hAnnual >= 0 ? "+" : ""}${hAnnual.toFixed(0)}%/yr)` : ""}. Within its range`,
       detail: hFade
-        ? `The crowd is heavily ${heavy} and stretched vs its own funding range. The mechanical fade. Graded from the tape after, like every call.`
+        ? `The crowd is heavily ${heavy} and stretched vs its own funding range. ${fadeNote}`
         : `The crowd is heavily ${heavy}, but funding is within its typical range. Where fades set up, once it pierces out. A watch, not a fade yet.`,
       action: { label: "See the read", tab: "intel" },
     });

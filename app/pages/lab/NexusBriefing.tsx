@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SectionHeader } from "./components";
 import type { TabId, ProcessedTrade } from "./types";
 import { buildBriefing, buildMarketRead, buildFusion, computeTape, type BriefingTrade, type Insight, type MarketSignal } from "./briefing";
+import { useFadeFamilyGrade } from "./useFadeFamilyGrade";
 import { recordFlag, coachingInsight } from "@/lib/coaching.mjs";
 import { buildOperatorProfile, profileNarrative } from "@/lib/operatorProfile.mjs";
 import { tiltRead, sessionEdge, overtradingRead, sizingRead } from "@/lib/behavioral.mjs";
@@ -78,6 +79,7 @@ export function NexusBriefing({
 }) {
   const [rows, setRows] = useState<{ symbol: string; "24h_open"?: string | number; "24h_close"?: string | number }[] | null>(null);
   const [signals, setSignals] = useState<MarketSignal[] | null>(null);
+  const fadeGrade = useFadeFamilyGrade(); // the plain funding fade's live grade, for FADE rows
   const [liveAgents, setLiveAgents] = useState<number | null>(null);
   const [agentActive, setAgentActive] = useState<boolean | null>(null);
   const [consensus, setConsensus] = useState<Consensus | null>(null);
@@ -188,10 +190,10 @@ export function NexusBriefing({
   }, [wallet, trades, fusion]); // fusion dep → recompute after a fresh flag records
 
   const market = useMemo(
-    () => buildMarketRead({ rows, signals, liveAgents, tape, consensus })
+    () => buildMarketRead({ rows, signals, liveAgents, tape, consensus, fadeGrade })
       .filter((m) => !fusion.some((f) => f.detail.startsWith(m.title.split(" ")[0]))) // avoid echoing the fusion's symbol read
       .slice(0, (personal.length ? 3 : 3) - Math.min(fusion.length, 1)),
-    [rows, signals, liveAgents, tape, consensus, personal.length, fusion]
+    [rows, signals, liveAgents, tape, consensus, fadeGrade, personal.length, fusion]
   );
 
   // ⭐ THE ACTION QUEUE — the deepening: instead of three separate lenses, merge every
