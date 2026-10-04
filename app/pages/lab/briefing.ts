@@ -511,7 +511,7 @@ export function buildFusion(input: FusionInput): Insight[] {
       priority: 74,
       tone: "info",
       title: `${sym}: the signal and the graded callers both say fade ${sideWord(fadeDir)}`,
-      detail: `${setupPhrase}. The crowd is heavily ${heavy}. And the graded callers are ${fadeDir} too (WITH the fade), so the mechanical setup and the people with a track record agree.`,
+      detail: `${setupPhrase}. The crowd is heavily ${heavy}. And the graded callers are ${fadeDir} too (WITH the fade). The fade itself is a mechanical rule, not graded yet.`,
       action: { label: "See the read", tab: "intel" },
     });
   } else if (callersFight) {

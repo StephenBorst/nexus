@@ -490,7 +490,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
           : shareRow.play.klass === "WATCH" ? "WATCH" : "NO READ";
         // Same rule as the drafted thesis: a public card never states a rate we couldn't read.
         const fund = shareRow.fundingAnnual != null ? ` · funding ${fundLabel(shareRow.fundingAnnual, "%/yr")}` : "";
-        const text = `${shareRow.sym} · ${v}${fund}. The crowd's positioning, graded from public price on Nexus.`;
+        const text = `${shareRow.sym} · ${v}${fund}. A positioning read from public funding, not graded yet.`;
         const url = `https://og.nexustradinglabs.com/share/read/${encodeURIComponent(shareRow.sym)}`;
         window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank", "noopener");
       }}

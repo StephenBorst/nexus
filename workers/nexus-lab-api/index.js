@@ -959,8 +959,8 @@ export default {
       const appUrl = `https://trade.nexustradinglabs.com/lab?guest=1&coin=${encodeURIComponent(coin)}`;
       const img = `https://og.nexustradinglabs.com/og/read/${encodeURIComponent(coin)}.png`;
       const shareUrl = `https://og.nexustradinglabs.com/share/read/${encodeURIComponent(coin)}`;
-      const title = `${coin} funding read — the crowd's positioning, graded from public price`;
-      const desc = `Is ${coin} funding stretched enough to fade, or just elevated? The verdict + the lenses, live on Nexus. A positioning read, not advice.`;
+      const title = `${coin} funding read: the crowd's positioning`;
+      const desc = `Is ${coin} funding stretched enough to fade, or just elevated? The verdict and the lenses, live on Nexus. A positioning read, not graded yet. Not advice.`;
       const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>
