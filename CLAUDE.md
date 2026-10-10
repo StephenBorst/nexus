@@ -518,6 +518,14 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
   BEATS_RANDOM on its side + preset exit positive oos over ≥30 trades), house caller off until a read clears, copy words.
   The hold call stays with `tools/oct15/holdDecision.mjs`. Don't edit its thresholds after Oct 15: a change = a new page.
+  **House caller OFF (§6, 2026-10-04):** borst deleted the `HOUSE_SIGNALS_ENABLED` secret on nexus-lab-api; the 03:17 UTC
+  run posted nothing. The same secret gates the Catalyst Read caller (`HOUSE_CATALYST_ADDRESS` 0x2484…), so both are
+  off. Keep `HOUSE_CALLER_ADDRESS` set: the dedupe's house-id proof reads it. The silence is policy now, not a bug. Why it
+  had ALREADY gone quiet (last call Oct 1 17:17 UTC): `generateHouseCalls` reads the board from the 10-min
+  `intel:mispriced:v1` cache, which only visitors keep warm; cold, it falls back to a live all-markets futures fetch that
+  fails inside the busy :17 cron, and that `{error}` is RETURNED, not thrown, so nothing was logged (`GET /signals/house`
+  showed "no board available (cache cold + futures fetch failed)" on Oct 4). Before switching it back on (only for a read
+  that clears): log every non-post result and give it a board that doesn't depend on visitors.
 - **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
   AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
@@ -578,6 +586,9 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   `app/lib/fadeGrade.mjs` (`fadeFamilyGrade`/`fadeFamilyLine`, tested; display only) + `useFadeFamilyGrade` (one shared
   `/intel/axis-backtest` fetch per page, ~7 KB br). The house caller's ≥12%/yr fade is a third variant. Don't re-add
   "graded" wording to the FADE until the scoreboard grades the Board's exact rule (an engine change, after Oct 15).
+  Same-day follow-up: the Board's per-row X text, the `/share/read/:coin` page title, the ◆ SIGNALS bell + Telegram push
+  (`signals.mjs` FADE_ALIGN) and the Briefing's callers-agree line said "graded" or "the people with a track record
+  agree" (every graded caller is net-negative) → now "a mechanical rule, not graded yet".
 
 ## Bankr SKILL + marketing assets (where things live)
 - **Bankr skill** = `github.com/BankrBot/skills` → `nexus-trading-labs/SKILL.md` + `references/*.md` (markdown skill,

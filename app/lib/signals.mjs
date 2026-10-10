@@ -32,7 +32,7 @@ export function buildSignals({ signals, consensus, xrayEvents } = {}) {
     if (agree) {
       out.push({ id: `fade-align-${s.symbol}-${fadeDir}`, kind: "FADE_ALIGN", priority: 90, ts: now, tab: "intel",
         title: `${s.symbol}: fade ${sideWord(fadeDir)} — signal + callers agree`,
-        detail: `Funding stretched ${fundPct}%/8h and the graded callers lean the same way — the mechanical setup and the people with a track record agree.` });
+        detail: `Funding stretched ${fundPct}%/8h and the graded callers lean the same way. The fade is a mechanical rule, not graded yet.` });
     } else if (fight) {
       out.push({ id: `fade-div-${s.symbol}`, kind: "DIVERGENCE", priority: 74, ts: now, tab: "smart",
         title: `${s.symbol}: signal vs the sharp callers disagree`,
