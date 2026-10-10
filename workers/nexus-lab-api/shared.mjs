@@ -19,6 +19,7 @@ import { hexToBytes, bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import bs58 from "bs58";
 import { verifyLabAuth } from "../../app/lib/labAuth.mjs";
+import { pushNotification } from "./push.mjs";
 
 export const ALLOWED_ORIGINS = [
   "https://trade.nexustradinglabs.com",
@@ -129,6 +130,10 @@ export async function appendNotification(env, wallet, notif, opts = {}) {
   const list = raw ? JSON.parse(raw) : [];
   list.unshift(notif);
   await env.LAB_STORE.put(key, JSON.stringify(list.slice(0, 50)));
+
+  // Phone push (push.mjs): only the types a device switched on; a no-op until VAPID_PRIVATE_JWK
+  // is set. Before the Telegram opt-out below, so a caller with its own Telegram DM still pushes.
+  try { await pushNotification(env, w, notif); } catch (e) { console.error("[notif] push failed", e?.message || e); }
 
   // Fan the SAME alert out to Telegram if this wallet linked a chat — so comments,
   // reactions, follows and copies all reach the bot, not just call resolutions.

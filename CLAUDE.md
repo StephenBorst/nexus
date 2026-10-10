@@ -1028,6 +1028,36 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   NEAR Intents for cross-chain. `llms.txt` is ONE file kept identical in `public/llms.txt` (app) and `nexus-landing/llms.txt`
   — edit both, or they drift (they had: the app said ~100 markets, the landing was missing 3 endpoints).
 
+## 📱 Android app + phone alerts (2026-10-10) — runbook `docs/android-app.md`
+- **The app = the live site in a Trusted Web Activity** (Chrome full-screen, packaged by PWABuilder), Play Store
+  under an **Organization** account (LLC; D-U-N-S needed; skips the 12-testers/14-days rule for new personal
+  accounts). Package id `com.nexustradinglabs.app`. Android first; iOS after. Solana dApp Store = optional 2nd lane.
+  Play's crypto policy (Oct 29 2025) licenses CUSTODIAL wallets + exchanges; non-custodial wallets are exempt. A perp
+  front end is the grey zone: declare non-custodial; fallback = leave US/EU/UK out of the Play listing first.
+- **Phone alerts = Web Push, shipped DARK.** On only when secret `VAPID_PRIVATE_JWK` (one P-256 JWK; public half
+  derived, so they can't drift) is set on nexus-lab-api: `node ../../tools/push/vapid-keys.mjs | npx wrangler secret
+  put VAPID_PRIVATE_JWK` from `workers/nexus-lab-api`. ⚠️ Make it ONCE: a new key breaks every subscribed device.
+  `webpush.mjs` = RFC 8291 aes128gcm + RFC 8292 VAPID on Web Crypto (tests decrypt with an independent node:crypto
+  implementation; also cross-checked with the `http_ece` lib). `push.mjs` = rules + KV (`push:sub:{id}`,
+  `push:wallet:{addr}` ≤10 devices, `push:agentwatch`, `push:agentseen:{addr}`), endpoint ALLOWLIST (FCM, Mozilla,
+  WNS, Apple — the client hands us a URL, so no allowlist = SSRF). `routes-push.mjs`: `GET /push/config`, `POST
+  /push/subscribe|topics` (need `labAuth` — the device list is capped, so unsigned adds could evict your phone),
+  `/push/unsubscribe` + `/push/test` (endpoint = proof; test ≤1/min).
+- **What pushes:** (1) graded calls — `appendNotification` (shared.mjs) now has a push leg (before the Telegram
+  opt-out), so `notifyResolution` pushes; (2) agent opens/closes — **new `*/5` cron on lab-api that RETURNS before the
+  hourly jobs** (several write the engine's history series; don't let them run every 5 min). `runAgentWatch` READS
+  `agent:state` and writes only `push:agentseen:*` (engine freeze safe); first look = baseline (no replay); paper
+  closes carry P&L + exit from the new `paper_trades` rows, live closes don't (P&L is in Supabase) and say so; the
+  alert also lands in the bell as type `agent_trade` (url `/lab?tab=agent`), Telegram skipped (exec already sends
+  its own). Topics: calls ON, agent ON, social OFF (comment/reaction/follow/copy/challenge).
+- **Browser side:** `public/push-sw.js` (scope `/push/` = no pages, NO fetch handler, NO cache — the old caching SW
+  crashed wallet webviews). `app/main.tsx` still unregisters every other SW on load but skips this scope. A tap
+  posts `nexus-open` to an open window (`app/lib/pushTaps.ts listenForPushTaps`, history push + popstate) or opens
+  one. UI = bell → PHONE ALERTS (`PushAlertsPanel.tsx`, `pushAlerts.ts`), hidden while `/push/config` says off.
+- Manifest: `id:"/"`, colours `#0a0a0b` (was the off-brand `#0a0e0a`, also in index.html theme-color),
+  `icon-maskable-512.png` (mark inside the 80% safe circle), `push-badge.png` (white-on-transparent status icon).
+- ⏳ `public/.well-known/assetlinks.json` once borst sends the Play app-signing + upload-key SHA-256s.
+
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the
   brain's single best signal per tick (ties → first in `config.symbols`), and is gated by daily caps. Now

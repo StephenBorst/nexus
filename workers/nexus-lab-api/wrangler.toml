@@ -12,7 +12,8 @@ custom_domain = true
 # Smart Money — refresh the tracked HL-trader set from the live leaderboard every
 # 12h (best-effort; falls back to the static seed on failure). See scheduled().
 [triggers]
-crons = ["0 */12 * * *", "17 * * * *"]
+# "*/5" = phone alerts for agent trades ONLY (index.js returns before the hourly jobs).
+crons = ["0 */12 * * *", "17 * * * *", "*/5 * * * *"]
 
 [[kv_namespaces]]
 binding = "LAB_STORE"
