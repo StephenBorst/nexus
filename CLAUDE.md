@@ -532,8 +532,12 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   had ALREADY gone quiet (last call Oct 1 17:17 UTC): `generateHouseCalls` reads the board from the 10-min
   `intel:mispriced:v1` cache, which only visitors keep warm; cold, it falls back to a live all-markets futures fetch that
   fails inside the busy :17 cron, and that `{error}` is RETURNED, not thrown, so nothing was logged (`GET /signals/house`
-  showed "no board available (cache cold + futures fetch failed)" on Oct 4). Before switching it back on (only for a read
-  that clears): log every non-post result and give it a board that doesn't depend on visitors.
+  showed "no board available (cache cold + futures fetch failed)" on Oct 4). **Both fixed 2026-10-11 (still OFF):**
+  `pickHouseBoard` (houseBoard.mjs, tested) uses the cached board only while ≤10 min old (a house call's ENTRY is its
+  mark) and otherwise builds its own from a live fetch, retried once 20 s later in the cron (never in a request path);
+  every scheduled run (house + catalyst) logs one line via `houseRunSummary` and stores it 7 days at
+  `house:lastrun:<kind>`, shown as `lastRun` (+ `enabled`, `boardSource`) on `GET /signals/house` and
+  `/signals/catalyst-house`. Switching back on is still only for a read that clears (if/then §6).
 - **⚠️ basis:hist HAS HOLES (found 2026-10-10; collection fix = PR, borst decides before/after Oct 15).** Last 72 rows on
   Oct 10: BTC missing ~10% of hours, ETH ~27%, HYPE ~31% (gaps up to 7h); cvd:hist, written in the SAME pass, ~0%.
   Lifetime counts agree (ETH basis 902 vs cvd 1135, HYPE 784 vs 1077). Loss grows with the coin's place in

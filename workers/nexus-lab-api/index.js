@@ -54,6 +54,7 @@ import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
 import { runScorecard, AXES, priceByHour } from "./axisbt.mjs";
+import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
@@ -419,25 +420,19 @@ async function fetchAllFutures() { return (await fetchAllFuturesDetailed()).rows
 // call). Deduped per coin (skip if an ungraded house call on that coin exists, or one
 // was posted <24h ago). dryRun previews WITHOUT writing — safe to expose. The whole
 // feature stays DARK until HOUSE_SIGNALS_ENABLED="true" (the caller checks the flag).
-async function generateHouseCalls(env, { dryRun = false, max = 1 } = {}) {
+async function generateHouseCalls(env, { dryRun = false, max = 1, liveAttempts = 1 } = {}) {
   const houseAddr = String(env.HOUSE_CALLER_ADDRESS || "").toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(houseAddr)) return { skipped: "HOUSE_CALLER_ADDRESS not set" };
-  // Prefer the already-computed board (KV, maintained by /intel/mispriced + kept warm by
-  // the Lab's polling) — avoids the flaky direct futures fetch (Orderly intermittently
-  // serves an HTML 403 to header-light Worker calls). Fall back to a fresh fetch only if
-  // the cache is cold.
-  let markets = null;
-  try {
-    const cached = await env.LAB_STORE.get("intel:mispriced:v1");
-    if (cached) { const c = JSON.parse(cached); if (Array.isArray(c?.markets)) markets = c.markets; }
-  } catch { /* fall through to fetch */ }
-  if (!markets) {
-    const rows = await fetchAllFutures(); // proxy-first, fail-soft ([] if both paths fail)
-    if (!rows.length) return { error: "no board available (cache cold + futures fetch failed)" };
-    markets = mispricedBoard(rows).markets;
-  }
-  const fades = (markets || []).filter((m) => m.status === "MISPRICED" && m.direction !== "NONE").sort((a, b) => b.edge - a.edge);
-  if (!fades.length) return { posted: [], note: "no fade signal right now" };
+  // The board: the Lab's cached one only while it's fresh (a house call's ENTRY is its mark), else
+  // our own live build, retried once when the cron allows (pickHouseBoard, houseBoard.mjs). It used
+  // to take the cache at any age and give up silently when the cache was cold.
+  let cachedRaw = null;
+  try { cachedRaw = await env.LAB_STORE.get("intel:mispriced:v1"); } catch { /* treat as cold */ }
+  const pick = await pickHouseBoard({ cachedRaw, fetchDetailed: fetchAllFuturesDetailed, buildBoard: mispricedBoard, attempts: liveAttempts });
+  if (pick.error) return { error: pick.error };
+  const boardSource = pick.source === "cache" ? `cache, ${Math.round(pick.ageMs / 60000)} min old` : "live";
+  const fades = (pick.markets || []).filter((m) => m.status === "MISPRICED" && m.direction !== "NONE").sort((a, b) => b.edge - a.edge);
+  if (!fades.length) return { posted: [], note: "no fade signal right now", boardSource };
 
   const raw = await env.LAB_STORE.get(`lab:${houseAddr}`);
   const data = raw ? JSON.parse(raw) : { theses: [] };
@@ -453,8 +448,8 @@ async function generateHouseCalls(env, { dryRun = false, max = 1 } = {}) {
     const call = houseCallFromSignal(m, now);
     if (call) toPost.push(call);
   }
-  if (dryRun) return { dryRun: true, house: houseAddr, candidates: toPost };
-  if (!toPost.length) return { posted: [], note: "top fades all deduped (recent/active)" };
+  if (dryRun) return { dryRun: true, house: houseAddr, candidates: toPost, boardSource };
+  if (!toPost.length) return { posted: [], note: "top fades all deduped (recent/active)", boardSource };
   // Through the same seal as a user's save: house calls are published calls too (permanent, server-timed).
   const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now());
   if (prep.error) return { error: prep.error };
@@ -465,7 +460,18 @@ async function generateHouseCalls(env, { dryRun = false, max = 1 } = {}) {
     if (!(await env.LAB_STORE.get(pk)))
       await env.LAB_STORE.put(pk, JSON.stringify({ displayName: env.HOUSE_CALLER_NAME || "Nexus Signals", bio: "Systematic funding-fade signals — graded trustlessly from public price." }));
   } catch { /* best-effort */ }
-  return { house: houseAddr, posted: toPost.map((c) => ({ id: c.id, symbol: c.symbol, direction: c.direction, entry: c.entryPrice, tp: c.takeProfit1, sl: c.stopLoss })) };
+  return { house: houseAddr, boardSource, posted: toPost.map((c) => ({ id: c.id, symbol: c.symbol, direction: c.direction, entry: c.entryPrice, tp: c.takeProfit1, sl: c.stopLoss })) };
+}
+
+// Every scheduled house run leaves one log line and a 7-day note at `house:lastrun:<kind>`, read
+// back by GET /signals/house and its catalyst twin — so "why is it quiet?" has an answer without log access.
+async function recordHouseRun(env, kind, result) {
+  const line = houseRunSummary(result);
+  (result?.error ? console.error : console.log)(`[${kind}] ${line}`);
+  try { await env.LAB_STORE.put(`house:lastrun:${kind}`, JSON.stringify({ at: new Date().toISOString(), line }), { expirationTtl: 7 * 86400 }); } catch { /* best-effort */ }
+}
+async function readHouseRun(env, kind) {
+  try { const raw = await env.LAB_STORE.get(`house:lastrun:${kind}`); return raw ? JSON.parse(raw) : null; } catch { return null; }
 }
 
 // Build the Catalyst Read board fresh: liquid Polymarket macro/geo events → tradeable
@@ -664,16 +670,16 @@ export default {
     // the same public engine as everyone else on the next grade cron.
     if (env.HOUSE_SIGNALS_ENABLED === "true") {
       ctx.waitUntil((async () => {
-        try { const r = await generateHouseCalls(env); if (r.posted?.length) console.log(`[house] posted ${r.posted.length} signal(s)`); }
-        catch (e) { console.error("[house] generation failed:", String(e)); }
+        try { await recordHouseRun(env, "house", await generateHouseCalls(env, { liveAttempts: 2 })); }
+        catch (e) { await recordHouseRun(env, "house", { error: `generation failed: ${String(e).slice(0, 120)}` }); }
       })());
       // The Catalyst Read's own auto-graded track record — same gate, SEPARATE identity
       // (HOUSE_CATALYST_ADDRESS). Only runs when that address is set, so it stays dark until
       // borst opts the second producer in. Graded by the same public engine next grade cron.
       if (env.HOUSE_CATALYST_ADDRESS) {
         ctx.waitUntil((async () => {
-          try { const r = await generateCatalystHouseCalls(env); if (r.posted?.length) console.log(`[catalyst-house] posted ${r.posted.length} call(s)`); }
-          catch (e) { console.error("[catalyst-house] generation failed:", String(e)); }
+          try { await recordHouseRun(env, "catalyst-house", await generateCatalystHouseCalls(env)); }
+          catch (e) { await recordHouseRun(env, "catalyst-house", { error: `generation failed: ${String(e).slice(0, 120)}` }); }
         })());
       }
     }
@@ -2630,7 +2636,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // only runs when HOUSE_SIGNALS_ENABLED="true"). Whole feature is DARK until configured.
     if (parts[0] === "signals" && parts[1] === "house") {
       if (request.method === "GET") {
-        return json(await generateHouseCalls(env, { dryRun: true }), request);
+        return json({ ...(await generateHouseCalls(env, { dryRun: true })), enabled: env.HOUSE_SIGNALS_ENABLED === "true", lastRun: await readHouseRun(env, "house") }, request);
       }
       if (request.method === "POST") {
         const admin = String(env.HOUSE_SIGNALS_ADMIN || "");
@@ -2647,7 +2653,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // HOUSE_SIGNALS_ENABLED="true" AND HOUSE_CATALYST_ADDRESS being set. DARK until configured.
     if (parts[0] === "signals" && parts[1] === "catalyst-house") {
       if (request.method === "GET") {
-        return json(await generateCatalystHouseCalls(env, { dryRun: true }), request);
+        return json({ ...(await generateCatalystHouseCalls(env, { dryRun: true })), enabled: env.HOUSE_SIGNALS_ENABLED === "true" && !!env.HOUSE_CATALYST_ADDRESS, lastRun: await readHouseRun(env, "catalyst-house") }, request);
       }
       if (request.method === "POST") {
         const admin = String(env.HOUSE_SIGNALS_ADMIN || "");
