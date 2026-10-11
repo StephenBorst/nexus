@@ -16,6 +16,8 @@ import { useEffect, useMemo, useState } from "react";
 import { C, MONO, RADIUS } from "@/config/theme";
 import { buildOperatorProfile, profileNarrative } from "@/lib/operatorProfile.mjs";
 import { callProgress, openCallsSummary, PROGRESS_LABEL } from "@/lib/callProgress.mjs";
+import { callLifecycle, showsLivePnl, workingLine } from "@/lib/callLifecycle.mjs";
+import { fmtPx } from "@/components/AwaitingFill";
 import { openIdentityShare } from "@/utils/shareIdentity";
 import { bareTicker } from "@/utils/utils";
 
@@ -29,7 +31,11 @@ const eyebrow: React.CSSProperties = {
   fontSize: 9, letterSpacing: "0.12em", color: C.text.faint, fontFamily: MONO, textTransform: "uppercase",
 };
 
-type OpenCall = { symbol: string; direction: "LONG" | "SHORT"; entryPrice: number; stopLoss: number; takeProfit1: number };
+type OpenCall = {
+  symbol: string; direction: "LONG" | "SHORT"; entryPrice: number; stopLoss: number; takeProfit1: number;
+  // Whether the entry has traded (callLifecycle.mjs): a resting order has no position and no R.
+  status?: string; gradedOutcome?: string; fillState?: string; publishMark?: { px?: number };
+};
 
 // ── 1. WHO THEY ARE ──────────────────────────────────────────────────
 export function PublicOperatorProfile({ wallet, isOwn = false }: { wallet: string | null; isOwn?: boolean }) {
@@ -102,25 +108,40 @@ export function PublicOperatorProfile({ wallet, isOwn = false }: { wallet: strin
 }
 
 // ── 2. WHAT'S IN FLIGHT ──────────────────────────────────────────────
+// Only calls whose entry has traded show R and a progress bar. A resting entry price hasn't reached
+// (or one the grader hasn't checked yet) is listed as an order: its distance to the entry, a hollow
+// dashed track, and no R. It used to read as a live position: a LONG limit at $2,400 with ETH at
+// $2,538 showed "+2.73R at target" and counted toward the header's R total.
 export function InFlightCalls({ calls, prices }: { calls: OpenCall[]; prices: Record<string, number | null> }) {
   type Row = { t: OpenCall; progress: NonNullable<ReturnType<typeof callProgress>> };
   const rows = useMemo<Row[]>(
     () => (calls || [])
+      .filter((t) => showsLivePnl(t))
       .map((t) => ({ t, progress: callProgress(t, prices[t.symbol] ?? NaN) }))
       // Predicate (not a bare filter) so `progress` narrows to non-null downstream.
       .filter((r): r is Row => r.progress != null),
     [calls, prices],
   );
+  const pending = useMemo(() => (calls || []).filter((t) => {
+    const s = callLifecycle(t);
+    return s === "WORKING" || s === "UNCHECKED";
+  }), [calls]);
   const summary = useMemo(() => openCallsSummary(rows), [rows]);
-  if (!rows.length || !summary) return null;
+  if (!rows.length && !pending.length) return null;
 
   return (
     <div style={card}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
         <span style={eyebrow}>■ In flight</span>
         <span style={{ fontFamily: MONO, fontSize: 10, color: C.text.faint }}>
-          {summary.winning}/{summary.open} working ·{" "}
-          <span style={{ color: summary.rSum >= 0 ? C.pos : C.neg }}>{summary.rSum >= 0 ? "+" : ""}{summary.rSum}R</span> unresolved
+          {summary && (
+            <>
+              {summary.winning}/{summary.open} in profit ·{" "}
+              <span style={{ color: summary.rSum >= 0 ? C.pos : C.neg }}>{summary.rSum >= 0 ? "+" : ""}{summary.rSum}R</span> unresolved
+            </>
+          )}
+          {summary && pending.length > 0 && " · "}
+          {pending.length > 0 && `${pending.length} awaiting fill`}
         </span>
       </div>
 
@@ -150,11 +171,33 @@ export function InFlightCalls({ calls, prices }: { calls: OpenCall[]; prices: Re
             </div>
           );
         })}
+        {pending.map((t, i) => {
+          const working = callLifecycle(t) === "WORKING";
+          const mark = prices[t.symbol];
+          return (
+            <div key={`pending-${t.symbol}-${i}`}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+                <span style={{ fontFamily: MONO, fontSize: 11, color: C.text.fog, minWidth: 0 }}>
+                  <strong style={{ color: C.text.bright }}>{bareTicker(t.symbol)}</strong>{" "}
+                  <span style={{ color: C.text.faint }}>{t.direction}</span>
+                </span>
+                <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 11, color: C.text.fog, fontVariantNumeric: "tabular-nums" }}>
+                  {working ? `awaiting fill at $${fmtPx(t.entryPrice)}` : "fill not checked yet"}
+                </span>
+              </div>
+              {/* No position: a hollow track, nothing filled, no marker. */}
+              <div style={{ height: 4, border: `1px dashed ${C.borderStrong}`, borderRadius: 2, boxSizing: "border-box" }} />
+              <div style={{ marginTop: 2, fontSize: 8, color: C.text.faint, fontFamily: MONO }}>
+                {mark != null ? workingLine(t, mark) : "no position until price trades the entry"}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* The distinction that keeps this honest. */}
       <div style={{ fontSize: 9, color: C.text.faint, fontFamily: MONO, marginTop: 10, lineHeight: 1.5 }}>
-        unresolved — live mark vs the posted levels. only first touch of TP or SL grades a call.
+        unresolved — live mark vs the posted levels, only for calls whose entry has traded. only first touch of TP or SL grades a call.
       </div>
     </div>
   );

@@ -10,6 +10,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useAccount, useCollateral } from "@orderly.network/hooks";
 import { useNavigate } from "react-router-dom";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
+import { showsLivePnl } from "@/lib/callLifecycle.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.mjs";
+import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { fetchOnChainRepScore } from "@/hooks/useThesisRegistry";
 import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -75,6 +78,9 @@ type FeedThesis = {
   leverage: number;
   status: "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "CLOSED";
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped); absent = not yet graded
+  fillState?: "WORKING" | "OPEN";  // server: has the entry traded yet (grading.mjs applyFillStamp)
+  filledAt?: number;
+  publishMark?: { px: number; at: number };
   gradedR?: number;               // graded R-multiple result (present once resolved)
   actualPnl: number | null;
   createdAt: number;
@@ -308,7 +314,7 @@ function CopyModal({
             { label: "ENTRY", val: `$${px(thesis.entryPrice)}`, color: "#a1a1aa" },
             { label: "STOP",  val: `$${px(thesis.stopLoss)}`,   color: "#f7525f" },
             { label: "TP1",   val: `$${px(thesis.takeProfit1)}`, color: "#ededf0" },
-            { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`, color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
+            { label: "R:R",   val: fmtRR(callRR(thesis)), color: (callRR(thesis) ?? 0) >= 2 ? "#ededf0" : "#fbbf24" },
           ].map(({ label, val, color }) => (
             <div key={label}>
               <div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</div>
@@ -504,13 +510,15 @@ function FeedCard({
   const pill = eff === "HIT_TP" ? { label: `Won${rTxt}`, color: C.pos, border: LINE.pos }
     : eff === "STOPPED_OUT" ? { label: `Stopped out${rTxt}`, color: C.neg, border: LINE.neg }
     : eff === "INVALIDATED" ? { label: "Invalidated", color: C.text.faint, border: C.border }
+    : awaitingLabel(thesis) ? { label: awaitingLabel(thesis)!, color: C.text.fog, border: C.borderStrong, dashed: true }
     : { label: "Open", color: C.text.bright, border: C.borderStrong };
   const MONO = "var(--nx-font-mono)", UI = "var(--nx-font-ui)";
   const levels = [
     { label: "ENTRY", val: `$${px(thesis.entryPrice)}` },
     { label: "STOP", val: `$${px(thesis.stopLoss)}` },
     { label: "TARGET", val: `$${px(thesis.takeProfit1)}` },
-    { label: "R:R", val: `1 : ${thesis.riskReward.toFixed(2)}` },
+    { label: "R:R", val: fmtRR(callRR(thesis)).replace(":", " : ") },
+    ...(runnerRR(thesis) != null ? [{ label: "RUNNER", val: fmtRR(runnerRR(thesis)).replace(":", " : ") }] : []),
   ];
   const size = (Number(thesis.positionSize) || 0) > 0 ? `$${thesis.positionSize.toFixed(0)}` : null;
 
@@ -559,7 +567,7 @@ function FeedCard({
           onClick={(e) => { e.preventDefault(); navigate(`/feed/thesis/${thesis.wallet}/${thesis.id}`); }}
           title="Open this call"
           className="nx-press"
-          style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, padding: "0 10px", height: 26, display: "inline-flex", alignItems: "center", borderRadius: 13, border: `1px solid ${pill.border}`, color: pill.color, flexShrink: 0, whiteSpace: "nowrap", textDecoration: "none", cursor: "pointer" }}
+          style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, padding: "0 10px", height: 26, display: "inline-flex", alignItems: "center", borderRadius: 13, border: `1px ${"dashed" in pill ? "dashed" : "solid"} ${pill.border}`, color: pill.color, flexShrink: 0, whiteSpace: "nowrap", textDecoration: "none", cursor: "pointer" }}
         >
           {pill.label}
         </a>
@@ -620,19 +628,25 @@ function FeedCard({
         );
       })()}
 
-      {/* Live P&L — active theses with mark price */}
-      {thesis.status === "ACTIVE" && markPrice != null && (() => {
+      {/* No position yet (a resting entry price hasn't reached, or not checked): the order, not P&L. */}
+      <AwaitingFill thesis={thesis} markPrice={markPrice} style={{ marginBottom: 12 }} />
+
+      {/* Live P&L — only for a call whose entry has traded (callLifecycle OPEN) */}
+      {showsLivePnl(thesis) && markPrice != null && (() => {
         const { pnl, pct } = calcUnrealizedPnl(thesis.direction, thesis.entryPrice, markPrice, thesis.positionSize);
         const toSL = distancePct(markPrice, thesis.stopLoss);
         const toTP = distancePct(markPrice, thesis.takeProfit1);
-        const isWinning = pnl >= 0;
+        const isWinning = pnl > 0 || (pnl === 0 && pct >= 0);
         // Live P&L stats: on phones drop to a 2×2 grid so the UNREALIZED value (dollars +
         // parenthetical %) gets a full-width cell and can't spill into TO SL; desktop keeps 4-up.
         return (
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: "12px 16px", marginBottom: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
             {[
               { label: "MARK", val: `$${px(markPrice)}`, color: C.text.bright },
-              { label: "UNREALIZED", val: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`, color: isWinning ? C.pos : C.neg },
+              // Public calls carry no size: read the move in R and %, never a "$0.00" that ignores the mark.
+              (Number(thesis.positionSize) || 0) > 0
+                ? { label: "UNREALIZED", val: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`, color: isWinning ? C.pos : C.neg }
+                : { label: "MOVE", val: fmtLiveMove(liveMove(thesis, markPrice)), color: pct >= 0 ? C.pos : C.neg },
               { label: "TO STOP", val: `${toSL.toFixed(2)}%`, color: C.text.bright },
               { label: "TO TARGET", val: `${toTP.toFixed(2)}%`, color: C.text.bright },
             ].map(({ label, val, color }) => (
@@ -724,7 +738,7 @@ function FeedCard({
           (thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS")
             // Resolved → lead with the TRUSTLESS RESULT, not the planned R:R.
             ? `${ticker} ${thesis.direction}. Graded ${thesis.gradedOutcome}${typeof thesis.gradedR === "number" ? ` ${thesis.gradedR >= 0 ? "+" : ""}${thesis.gradedR.toFixed(2)}R` : ""}.\n\nFirst touch vs public price. The tape marked it, not me.\n\nGraded on Nexus Trading Labs.`
-            : `${ticker} ${thesis.direction} ${thesis.leverage.toFixed(1)}x.\n\nEntry $${thesis.entryPrice.toFixed(2)}. Stop $${thesis.stopLoss.toFixed(2)}. TP $${thesis.takeProfit1.toFixed(2)}. R:R 1:${thesis.riskReward.toFixed(2)}.\n\nGraded against public price on Nexus Trading Labs.`
+            : `${ticker} ${thesis.direction} ${thesis.leverage.toFixed(1)}x.\n\nEntry $${thesis.entryPrice.toFixed(2)}. Stop $${thesis.stopLoss.toFixed(2)}. TP $${thesis.takeProfit1.toFixed(2)}. R:R ${fmtRR(callRR(thesis))}.\n\nGraded against public price on Nexus Trading Labs.`
         )}&url=${encodeURIComponent(`https://og.nexustradinglabs.com/share/thesis/${thesis.wallet.toLowerCase()}/${thesis.id}`)}`}
         onCopy={() => onCopy(thesis)}
         canCopy={!!walletAddress && !isOwnThesis}
@@ -795,9 +809,8 @@ function buildLeaderboard(feed: FeedThesis[]): TraderStats[] {
 
     // Avg R:R from all theses for this wallet
     const walletTheses = feed.filter(t => t.wallet.toLowerCase() === s.wallet.toLowerCase());
-    s.avgRR = walletTheses.length > 0
-      ? walletTheses.reduce((sum, t) => sum + t.riskReward, 0) / walletTheses.length
-      : 0;
+    const rrs = walletTheses.map((t) => callRR(t)).filter((r): r is number => r != null);
+    s.avgRR = rrs.length > 0 ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 0;
   }
 
   // Per-wallet display stats only, unordered: these counts are the Lab's own statuses, so the
@@ -1207,7 +1220,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                       <div style={{ display: "flex", gap: 16 }}>
                         {[
                           { label: "ENTRY", val: `$${t.entryPrice.toFixed(2)}`, color: "#a1a1aa" },
-                          { label: "R:R",   val: `1:${t.riskReward.toFixed(2)}`, color: C.text.bright },
+                          { label: "R:R",   val: fmtRR(callRR(t)), color: C.text.bright },
                         ].map(({ label, val, color }) => (
                           <div key={label}>
                             <div style={{ fontSize: 7, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</div>

@@ -22,7 +22,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, callR, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
@@ -80,7 +80,7 @@ import { handleProfile, handleLab } from "./routes-lab.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
 import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
-import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp } from "./grading.mjs";
+import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
 import { readPublishMark } from "./publishMark.mjs";
 import { registeredBy } from "./callLock.mjs";
@@ -833,10 +833,9 @@ export default {
       const active = theses.filter((t) => t.status === "ACTIVE" && t.gradedOutcome !== "WIN" && t.gradedOutcome !== "LOSS").length;
       const closed = wins + losses;
       const winRate = closed > 0 ? Math.round((wins / closed) * 100) : null;
-      const avgRR =
-        theses.length > 0
-          ? theses.reduce((s, t) => s + (t.riskReward || 0), 0) / theses.length
-          : 0;
+      // R from each call's own levels (callR, what the grader pays), not the stored riskReward.
+      const rrs = theses.map(callR).filter((r) => r != null);
+      const avgRR = rrs.length > 0 ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 0;
       const rep = calcRepScore(wins, losses, avgRR);
 
       const statsPayload = {
@@ -1096,7 +1095,7 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         displayName: profile.displayName || null, wallet, ticker,
         direction: thesis.direction, entryPrice: thesis.entryPrice,
         stopLoss: thesis.stopLoss, takeProfit1: thesis.takeProfit1,
-        riskReward: thesis.riskReward, status: ogStatus, gradedR: ogGradedR, notes: thesis.notes || "",
+        riskReward: callR(thesis) ?? 0, status: ogStatus, gradedR: ogGradedR, notes: thesis.notes || "",
       };
       // Chart is fetched ONLY for the PNG path — the SVG path would need the same
       // inlining anyway (resvg can't pull remote refs), and X/Twitter unfurls the PNG.
@@ -1249,13 +1248,16 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
       // older grader (or one a client wrote) is never shown as the grade.
       if (!isCurrentStamp(thesis)) {
         try {
-          const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt, env));
+          const cd = await fetchGradeHistory(thesis.symbol, thesis.createdAt, env);
+          const g = gradeCall(thesis, cd);
           if (g.outcome === "WIN" || g.outcome === "LOSS") {
             thesis.gradedOutcome = g.outcome; thesis.gradedR = g.r; thesis.gradedAt = thesis.gradedAt || Date.now();
           } else {
             delete thesis.gradedOutcome; delete thesis.gradedR; delete thesis.gradedAt;
           }
           thesis.status = gradedStatusOf(thesis.gradedOutcome);
+          // Has the entry traded? Read live too, so the page never shows P&L on an unfilled order.
+          if (cd) applyFillStamp(thesis, g, cd);
         } catch { /* fall through with the stored value */ }
       }
       return json({ thesis: { ...thesis, wallet, pfp: profile.pfp || null, displayName: profile.displayName || null } }, request);
@@ -1290,7 +1292,7 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
         : `${esc(ticker)} ${esc(thesis.direction)} by ${name} · ACTIVE`;
       const desc = resolved
         ? `Graded ${thesis.gradedOutcome}${rTxt ? " " + rTxt : ""} — first-touch vs public price, on-chain. The tape marked this, not the trader.`
-        : `Entry $${(+thesis.entryPrice).toFixed(2)} · SL $${(+thesis.stopLoss).toFixed(2)} · TP $${(+thesis.takeProfit1).toFixed(2)} · R:R 1:${(+thesis.riskReward).toFixed(2)} — graded from public price, on-chain.`;
+        : `Entry $${(+thesis.entryPrice).toFixed(2)} · SL $${(+thesis.stopLoss).toFixed(2)} · TP $${(+thesis.takeProfit1).toFixed(2)} · R:R 1:${(callR(thesis) ?? 0).toFixed(2)} — graded from public price, on-chain.`;
       const img = `https://og.nexustradinglabs.com/og/thesis/${wallet}/${thesisId}.png`;
       const shareUrl = `https://og.nexustradinglabs.com/share/thesis/${wallet}/${thesisId}`;
       const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
