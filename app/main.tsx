@@ -15,6 +15,7 @@ import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import '@fontsource/ibm-plex-mono/600.css';
 import './styles/index.css';
+import { PUSH_SW_SCOPE, listenForPushTaps } from './lib/pushTaps';
 
 const IndexPage = lazy(() => import('./pages/Index'));
 const PerpLayout = lazy(() => import('./pages/perp/Layout'));
@@ -296,8 +297,11 @@ loadRuntimeConfig().then(() => {
 // unregister any worker a returning client still has installed, and clear its caches.
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations()
-    .then((regs) => regs.forEach((r) => r.unregister()))
+    // …except the phone-alerts worker (public/push-sw.js): scope /push/, no fetch handler, no
+    // cache, controls no page. Deleting it here would switch alerts off on every visit.
+    .then((regs) => regs.forEach((r) => { if (!r.scope.endsWith(PUSH_SW_SCOPE)) r.unregister(); }))
     .catch(() => { /* ignore */ });
+  listenForPushTaps();
   if (typeof caches !== 'undefined') {
     caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => { /* ignore */ });
   }

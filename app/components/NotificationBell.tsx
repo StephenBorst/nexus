@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { pressKey } from "@/utils/a11y";
+import PushAlertsPanel from "@/components/PushAlertsPanel";
 
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
@@ -22,6 +23,7 @@ function typeIcon(type: Notification["type"]): string {
   if (type === "comment") return "≡";
   if (type === "reaction") return "▲";
   if (type === "challenge") return "⚔";
+  if (type === "agent_trade") return "◇";
   return "●";
 }
 
@@ -34,6 +36,11 @@ export default function NotificationBell() {
   // A thesisId-bearing notification (e.g. a comment on your call) is about YOUR call,
   // so it links to that call's permalink — turning the alert into a one-click return.
   const openNotif = (n: Notification) => {
+    if (n.url && n.url.startsWith("/")) {
+      setOpen(false);
+      navigate(n.url);
+      return;
+    }
     if (n.thesisId && walletAddress) {
       setOpen(false);
       // Challenge links to the challenger's call (thesisWallet); comment/resolution
@@ -212,7 +219,7 @@ export default function NotificationBell() {
                     display: "flex",
                     gap: 10,
                     alignItems: "flex-start",
-                    cursor: n.thesisId ? "pointer" : "default",
+                    cursor: n.thesisId || n.url ? "pointer" : "default",
                   }}
                 >
                   <span
@@ -270,6 +277,7 @@ export default function NotificationBell() {
               ))
             )}
           </div>
+          <PushAlertsPanel wallet={walletAddress} />
         </div>
       )}
     </div>

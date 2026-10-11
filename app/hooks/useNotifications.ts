@@ -4,8 +4,10 @@ const API_BASE = "https://og.nexustradinglabs.com";
 
 export interface Notification {
   id: string;
-  type: "follow" | "copy" | "thesis_closed" | "call_resolved" | "comment" | "challenge" | "reaction";
+  type: "follow" | "copy" | "thesis_closed" | "call_resolved" | "comment" | "challenge" | "reaction" | "agent_trade";
   message: string;
+  // In-app path to open on tap (agent alerts → "/lab?tab=agent"). Calls use thesisId instead.
+  url?: string;
   fromWallet?: string;
   thesisId?: string;
   // Owner of thesisId when it isn't the recipient's own call (e.g. a challenge links to

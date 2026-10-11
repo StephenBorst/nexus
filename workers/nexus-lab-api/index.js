@@ -67,6 +67,8 @@ import { twapSchedule, twapProgress } from "../nexus-agent-exec/logic.mjs";
 import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus } from "./routes-smart.mjs";
 import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
 import { handleXrayShare } from "./routes-xrayshare.mjs";
+import { handlePush } from "./routes-push.mjs";
+import { runAgentWatch } from "./push.mjs";
 import { buildOgSvg, buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
 import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
@@ -583,6 +585,18 @@ export default {
   // tracked set from the live HL leaderboard. Fails safe: on error the routes
   // fall back to the static SMART_SEED, so a heavy/failed parse never breaks the tab.
   async scheduled(event, env, ctx) {
+    // Every 5 min: phone alerts for agent opens/closes (push.mjs). Reads agent:state only, and it
+    // RETURNS here: every job below is hourly and must not start running every 5 minutes (several
+    // of them write the engine's history series). No-op until VAPID_PRIVATE_JWK is set.
+    if (event.cron === "*/5 * * * *") {
+      ctx.waitUntil((async () => {
+        try {
+          const r = await runAgentWatch(env, (w, n) => appendNotification(env, w, n, { telegram: false }));
+          if (r.events) console.log(`[push] agent watch: ${r.events} alert(s) across ${r.watched} wallets`);
+        } catch (e) { console.error("[push] agent watch failed:", String(e)); }
+      })());
+      return;
+    }
     // Hourly ("17 * * * *"): objectively grade public theses from public price.
     // Every run also grades (cheap, idempotent) so a fresh deploy resolves immediately.
     ctx.waitUntil((async () => {
@@ -702,6 +716,11 @@ export default {
       if (tapeRes) return tapeRes;
     }
     // GET /share/xray/:address + /og/xray/:address(.png) — X-Ray share links (routes-xrayshare.mjs).
+    // /push/* — phone alerts (routes-push.mjs).
+    {
+      const pushRes = await handlePush(parts, request, env);
+      if (pushRes) return pushRes;
+    }
     {
       const shareRes = await handleXrayShare(parts, request, env, { renderPng: renderMonoPng });
       if (shareRes) return shareRes;
