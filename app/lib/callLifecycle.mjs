@@ -12,8 +12,9 @@
 // Before this, every unresolved call read as a live position: a LONG with a limit entry at $2,400 and
 // ETH at $2,538 showed "+2.73R at target" with no trade behind it.
 
-/** Same as ENTRY_AT_MARK_PCT in lab-api logic.mjs (pinned by callLifecycle.test.mjs). */
-export const ENTRY_AT_MARK_PCT = 0.3;
+// One band, shared with the grader (lab-api logic.mjs) and the call page (entryAtMark.mjs).
+import { ENTRY_AT_MARK_PCT } from "./entryAtMark.mjs";
+export { ENTRY_AT_MARK_PCT };
 
 const isClosedStatus = (s) => typeof s === "string" && s !== "" && s !== "ACTIVE";
 

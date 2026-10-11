@@ -30,9 +30,10 @@ export function callR(t) {
   return Math.round((reward / risk) * 100) / 100;
 }
 
-/** How far (%) an entry may sit from the mark read at publish and still count as the market. */
-export const ENTRY_AT_MARK_PCT = 0.3;
-const atMark = (entry, mark) => Math.abs(entry - mark) / mark <= ENTRY_AT_MARK_PCT / 100;
+// How far an entry may sit from the mark read at publish and still count as the market: one band,
+// shared with the call page that explains it (app/lib/entryAtMark.mjs).
+import { ENTRY_AT_MARK_PCT, atMark } from "../../app/lib/entryAtMark.mjs";
+export { ENTRY_AT_MARK_PCT };
 
 /**
  * Whether a call's entry has traded, by the same rule gradeCall grades it on (see below): the

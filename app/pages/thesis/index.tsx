@@ -17,6 +17,7 @@ import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.m
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { chartImageList, effectiveStatus } from "@/pages/lab/helpers";
+import { publishMarkLine } from "@/lib/entryAtMark.mjs";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
 import { SocialBar } from "@/components/SocialBar";
 import { bareTicker } from "@/utils/utils";
@@ -40,7 +41,7 @@ type FeedThesis = {
   gradedR?: number;               // graded R-multiple result
   fillState?: "WORKING" | "OPEN"; // server: has the entry traded yet (grading.mjs applyFillStamp)
   filledAt?: number;
-  publishMark?: { px: number; at: number };
+  publishMark?: { px: number; at: number; src?: string }; // server-read market price at first publish
   actualPnl: number | null;
   createdAt: number;
   notes: string;
@@ -402,6 +403,19 @@ export default function ThesisPage() {
               </div>
             ))}
           </div>
+
+          {/* The market price the server locked when the call was published: the grade's reference. */}
+          {(() => {
+            const pm = publishMarkLine(thesis);
+            if (!pm) return null;
+            return (
+              <div style={{ marginTop: -8, marginBottom: 16, padding: "8px 14px", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", lineHeight: 1.6 }}>
+                <span style={{ color: "#52525b" }}>MARKET AT POST </span>
+                <span style={{ color: "#a1a1aa" }}>{pm.markText}</span>
+                <span> · Orderly mark, read by the server when this was published. {pm.line}</span>
+              </div>
+            );
+          })()}
 
           {/* No position yet (a resting entry price hasn't reached, or not checked): the order, not P&L. */}
           <AwaitingFill thesis={thesis} markPrice={markPrice} style={{ marginBottom: 16 }} />
