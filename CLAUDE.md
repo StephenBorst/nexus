@@ -100,9 +100,11 @@ is everything built on top:
 - A "Build & Deploy" Action run failing fast (~21s) is almost always a transient `yarn install` flake,
   not a real break — the next push's superset deploy covers it.
 - **Manual redeploy (2026-10-11):** deploy.yml also has `workflow_dispatch` → Actions → "Build & Deploy to Cloudflare
-  Pages" → Run workflow (branch main). Added after Actions went silent: from Oct 4 to at least Oct 11 NO run started on
-  this repo at all (the #79 merge deploy, PR checks on #80 and #81), so the cause is repo/account-side, not one merge.
-  After merging, check that a run started (cloud sessions can't read Actions settings: the proxy 403s that path).
+  Pages" → Run workflow (branch main). Added after Actions went silent: from Oct 4 to Oct 11 NO run started on this
+  repo (the #79 merge deploy, PR checks on #80 and #81). **Cause: Actions was disabled on the repo** (it's a fork, where
+  GitHub can turn workflows off); borst re-enabled it 2026-10-11 and main deployed green (`ad309f8`, manual run). If runs
+  stop again, check repo Settings → Actions → General first. After merging, check that a run started (cloud sessions
+  can't read Actions settings: the proxy 403s that path).
 
 ## Cloudflare Workers (deploy with `npx wrangler deploy` in each dir; needs CF auth)
 - **nexus-lab-api** (`workers/nexus-lab-api`) → `og.nexustradinglabs.com`. This is the `AGENT_API`
@@ -522,6 +524,8 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
   BEATS_RANDOM on its side + preset exit positive oos over ≥30 trades), house caller off until a read clears, copy words.
   The hold call stays with `tools/oct15/holdDecision.mjs`. Don't edit its thresholds after Oct 15: a change = a new page.
+  **The Oct-15 routine applies this page itself (step 7 of `docs/routines/revalidate-basis-2026-10-15.md`, added
+  2026-10-11)** — it needs borst to re-paste the doc into the routine before Oct 15 15:00 UTC.
   **House caller OFF (§6, 2026-10-04):** borst deleted the `HOUSE_SIGNALS_ENABLED` secret on nexus-lab-api; the 03:17 UTC
   run posted nothing. The same secret gates the Catalyst Read caller (`HOUSE_CATALYST_ADDRESS` 0x2484…), so both are
   off. Keep `HOUSE_CALLER_ADDRESS` set: the dedupe's house-id proof reads it. The silence is policy now, not a bug. Why it
