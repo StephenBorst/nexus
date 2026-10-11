@@ -1082,6 +1082,11 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   no mounted UI either; phone pushes don't depend on it.
 - Manifest: `id:"/"`, colours `#0a0a0b` (was the off-brand `#0a0e0a`, also in index.html theme-color),
   `icon-maskable-512.png` (mark inside the 80% safe circle), `push-badge.png` (white-on-transparent status icon).
+  ⚠️ **Edit `tools/manifest/manifest.mjs`, never `public/manifest.json`.** deploy.yml runs
+  `scripts/generate-manifest.ts` before and after the build, so the JSON is rebuilt from that module on every deploy.
+  Until 2026-10-11 the script held its own copy and production shipped no `id`, `#0a0e0a`, and the plain icon as
+  maskable while the repo file looked right. `tools/manifest/manifest.test.mjs` fails a hand edit, a colour off the
+  canvas, or an icon whose PNG isn't the size it claims.
 - ⏳ `public/.well-known/assetlinks.json` once borst sends the Play app-signing + upload-key SHA-256s.
 
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
