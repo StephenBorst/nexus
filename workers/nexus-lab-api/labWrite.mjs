@@ -4,6 +4,7 @@
 // rebuilt from the server's registry whoever writes (callLock.mjs). The hourly grader and the
 // copy counter only touch server fields on existing calls and write their own way.
 import { sealTheses, publishCandidates, REGISTRY_KEY, OWNER_KEY } from "./callLock.mjs";
+import { marksForPublishes } from "./publishMark.mjs";
 
 export const MAX_NEW_PUBLISHES_PER_SAVE = 25;
 // Owner-index claims for a wallet's LEGACY public calls, made once when its registry is first
@@ -22,15 +23,19 @@ export async function claimLegacyOwners(kv, ids, address) {
  * sealed = sealTheses' result (use sealed.theses as the record's calls); commit(record) writes the
  * registry, the owner index and then the record, in that order (a record never holds a published
  * call its registry doesn't).
+ * readMark(symbol) → {px, at} | null: the live market price, read once per market for the calls this
+ * save publishes (publishMark.mjs readPublishMark in production). Omitted (tests, or a caller that
+ * can't wait on Orderly): no marks, and those calls are graded by the posting hour's range.
  */
-export async function prepareSeal(env, address, prevTheses, incomingTheses, nowMs) {
+export async function prepareSeal(env, address, prevTheses, incomingTheses, nowMs, { readMark } = {}) {
   const kv = env.LAB_STORE;
   const regRaw = await kv.get(REGISTRY_KEY(address));
   const candidates = publishCandidates(incomingTheses, regRaw, prevTheses);
   if (candidates.length > MAX_NEW_PUBLISHES_PER_SAVE) return { error: "too_many_new_publishes" };
   const owners = await Promise.all(candidates.map((id) => kv.get(OWNER_KEY(id))));
   const ownedElsewhere = new Set(candidates.filter((id, i) => owners[i] && owners[i] !== address));
-  const sealed = sealTheses({ prev: prevTheses, incoming: incomingTheses, registry: regRaw, now: nowMs, ownedElsewhere });
+  const publishMarks = await marksForPublishes(incomingTheses, candidates.filter((id) => !ownedElsewhere.has(id)), readMark);
+  const sealed = sealTheses({ prev: prevTheses, incoming: incomingTheses, registry: regRaw, now: nowMs, ownedElsewhere, publishMarks });
 
   async function commit(record) {
     if (sealed.registryChanged) await kv.put(REGISTRY_KEY(address), JSON.stringify(sealed.registry));

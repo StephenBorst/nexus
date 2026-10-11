@@ -88,6 +88,8 @@ export function gradedStatusOf(outcome) {
 //       post, and a client save could write a stamp itself.
 //   3 = the entry must trade (logic.mjs gradeCall, 2026-09-29): an entry away from the market is
 //       graded from the hour price reaches it, and never counts if it never does.
+//   (no bump, 2026-10-11) the market at the post = the mark read at publish (`publishMark`). It only
+//       exists on calls published from that day, so no stored stamp was made under another rule.
 export const GRADE_V = 3;
 export const isCurrentStamp = (t) => (t?.gradedOutcome === "WIN" || t?.gradedOutcome === "LOSS") && t?.gradeV === GRADE_V;
 

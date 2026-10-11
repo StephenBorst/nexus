@@ -38,7 +38,9 @@ const req = (method, path, body) => new Request(`https://og.test${path}`, {
   method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body),
 });
 const parts = (path) => path.split("/").filter(Boolean);
-const lab = (env, method, path, body) => handleLab(parts(path), req(method, path, body), env, { now });
+// Tests never touch the network: the publish price comes from this stub (null = no mark, as when Orderly fails).
+let markStub = async () => null;
+const lab = (env, method, path, body) => handleLab(parts(path), req(method, path, body), env, { now, readMark: (s) => markStub(s) });
 const profile = (env, method, path, body) => handleProfile(parts(path), req(method, path, body), env, { now });
 const stored = (env, key) => JSON.parse(env.LAB_STORE.m.get(key) || "null");
 
@@ -80,7 +82,7 @@ test("PUT with the owner's signature saves, and the signature is not stored", as
 
 test("a day-old signature expires", async () => {
   const env = envWith({ [`lab:${A}`]: record });
-  const res = await handleLab(parts(`/lab/${A}`), req("PUT", `/lab/${A}`, { theses: [], notes: {}, labAuth: await evmAuth(alice) }), env, { now: () => T0 + LAB_AUTH_MAX_AGE_MS + 1 });
+  const res = await handleLab(parts(`/lab/${A}`), req("PUT", `/lab/${A}`, { theses: [], notes: {}, labAuth: await evmAuth(alice) }), env, { now: () => T0 + LAB_AUTH_MAX_AGE_MS + 1, readMark: async () => null });
   assert.equal(res.status, 401);
   assert.equal((await res.json()).reason, "expired");
   assert.deepEqual(stored(env, `lab:${A}`), record);
@@ -279,4 +281,42 @@ test("a refused (unsigned) save registers nothing", async () => {
   assert.equal((await lab(env, "PUT", `/lab/${A}`, { theses: [draft({ isPublic: true })], notes: {} })).status, 401);
   assert.equal(env.LAB_STORE.m.has(`callreg:${A}`), false);
   assert.equal(env.LAB_STORE.m.has("callowner:c1"), false);
+});
+
+test("publishing records the market price the server read, once; no save can add, move or drop it", async () => {
+  const env = envWith();
+  const asked = [];
+  markStub = async (s) => { asked.push(s); return { px: 100.2, at: now(), src: "orderly-mark" }; };
+  try {
+    // The client tries to bring its own price: ignored.
+    await lab(env, "PUT", `/lab/${A}`, { theses: [draft({ isPublic: true, publishMark: { px: 1, at: now() } })], notes: {}, labAuth: await evmAuth(alice) });
+    assert.deepEqual(asked, ["PERP_BTC_USDC"], "one read, for the call's market");
+    assert.deepEqual(stored(env, `lab:${A}`).theses[0].publishMark, { px: 100.2, at: now(), src: "orderly-mark" });
+    assert.equal(stored(env, `callreg:${A}`).calls.c1.publishMark.px, 100.2, "kept on the registry entry");
+    // Later saves: a moved mark, a dropped mark; neither sticks, and no new read happens.
+    const kept = stored(env, `lab:${A}`).theses[0];
+    await lab(env, "PUT", `/lab/${A}`, { theses: [{ ...kept, publishMark: { px: 50, at: now() } }], notes: {}, labAuth: await evmAuth(alice) });
+    const { publishMark: _drop, ...noMark } = kept;
+    await lab(env, "PUT", `/lab/${A}`, { theses: [noMark], notes: {}, labAuth: await evmAuth(alice) });
+    assert.equal(stored(env, `lab:${A}`).theses[0].publishMark.px, 100.2);
+    assert.equal(asked.length, 1, "the price is read at the first publish only");
+  } finally { markStub = async () => null; }
+});
+
+test("a failed price read still publishes, without a mark; a private save reads nothing", async () => {
+  const env = envWith();
+  let reads = 0;
+  markStub = async () => { reads++; return null; };
+  try {
+    await lab(env, "PUT", `/lab/${A}`, { theses: [draft({ id: "p", isPublic: false })], notes: {}, labAuth: await evmAuth(alice) });
+    assert.equal(reads, 0, "nothing published, nothing read");
+    const res = await lab(env, "PUT", `/lab/${A}`, { theses: [draft({ isPublic: true })], notes: {}, labAuth: await evmAuth(alice) });
+    assert.equal(res.status, 200);
+    const t = stored(env, `lab:${A}`).theses.find((x) => x.id === "c1");
+    assert.equal(t.isPublic, true);
+    assert.equal(t.publishMark, undefined, "graded by the posting hour's range, as before");
+    // A private call can't carry a client-written mark either.
+    await lab(env, "PUT", `/lab/${A}`, { theses: [t, draft({ id: "q", isPublic: false, publishMark: { px: 1, at: now() } })], notes: {}, labAuth: await evmAuth(alice) });
+    assert.equal(stored(env, `lab:${A}`).theses.find((x) => x.id === "q").publishMark, undefined);
+  } finally { markStub = async () => null; }
 });

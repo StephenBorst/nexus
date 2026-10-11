@@ -745,9 +745,16 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   counts (price passes the entry to reach it) and a target touch doesn't (it may have come first); never filled =
   PENDING (`awaitingEntry`). Before: an entry typed away from the market was graded as if filled — Sept 29, 17 of 145
   checkable calls had an off-market entry, 11 in the caller's favour (a BTC LONG "entered" at 61,000 with BTC at
-  63,600–63,800 was a 2R WIN). `/theses/advice` warns on a draft (`ENTRY_OFF_MARKET`, `entryVsMarket`). ⏭ Residual:
-  hourly candles, so the posting hour's range allows up to an hour of hindsight on the entry (a server-recorded mark at
-  publish would close it). The scoreboard (`axisbt.mjs`) has its own grader — not touched (engine freeze).
+  63,600–63,800 was a 2R WIN). `/theses/advice` warns on a draft (`ENTRY_OFF_MARKET`, `entryVsMarket`).
+  **Hindsight closed (2026-10-11):** the posting hour's range allowed up to an hour of hindsight on the entry (post at
+  14:50, entry = 14:05's low, "filled"). Now the FIRST publish reads Orderly's live mark (`publishMark.mjs
+  readPublishMark`, ≤5 markets per save, 2 tries, never blocks a publish) and the registry keeps it as server field
+  `publishMark {px, at, src}` (a mark read >2 min from the publish isn't kept; no save can add, move or drop it).
+  `gradeCall` fills a call at the post only if its entry is within `ENTRY_AT_MARK_PCT` (0.3%) of that mark; anything
+  else takes the resting-order path above. Calls without a mark (all before Oct 11, or a failed read) keep the
+  hour-range rule, so no stored grade moved and `GRADE_V` stays 3. The advisor warns on `!atMarket` (0.3% of the last
+  price). The call-ledger hash does NOT include the mark (fixed field list; changing it breaks the anchored chain).
+  Tests: `publishMark.test.mjs` + publish-mark cases in `logic.test.mjs` / `routes-lab.test.mjs` (fake reader). The scoreboard (`axisbt.mjs`) has its own grader — not touched (engine freeze).
   **Live after deploy (Sept 29, 04:40 UTC): the caller board is EMPTY, correctly** — all 8 wallets with graded calls
   are net-negative once entries must trade (Nexus Signals 173 calls −0.12R · 0x9a30 29 −0.35R · 0xa77c 28 −0.33R ·
   0x2484 33 −0.29R · 82mm 14 −0.13R · 2e91 13 −0.26R · 0x325d 9 −0.58R · 0xd9f7 6 −1R). The ranked records rested on

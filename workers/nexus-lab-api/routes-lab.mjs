@@ -18,6 +18,7 @@ import { json, normalizeAddress, appendNotification, checkLabAuth } from "./shar
 import { normalizeSymbol } from "./logic.mjs";
 import { publicLabView } from "../../app/lib/labAuth.mjs";
 import { prepareSeal, claimLegacyOwners } from "./labWrite.mjs";
+import { readPublishMark } from "./publishMark.mjs";
 import { REGISTRY_KEY, readRegistry, bootstrapRegistry, isPublished } from "./callLock.mjs";
 
 // 401 and nothing else happens. `error` tells the client which action to re-sign for.
@@ -61,7 +62,7 @@ export async function handleProfile(parts, request, env, { now = Date.now } = {}
   return json({ error: "method not allowed" }, request, 405);
 }
 
-export async function handleLab(parts, request, env, { now = Date.now } = {}) {
+export async function handleLab(parts, request, env, { now = Date.now, readMark = readPublishMark } = {}) {
   // ── /lab/:address ──────────────────────────────────────
   if (parts[0] !== "lab" || !parts[1]) {
     return json({ error: "not found" }, request, 404);
@@ -111,7 +112,7 @@ export async function handleLab(parts, request, env, { now = Date.now } = {}) {
     const prevRaw = await env.LAB_STORE.get(kvKey);
     let prevTheses = [];
     try { prevTheses = prevRaw ? (JSON.parse(prevRaw).theses || []) : []; } catch { prevTheses = []; }
-    const prep = await prepareSeal(env, address, prevTheses, body.theses, now());
+    const prep = await prepareSeal(env, address, prevTheses, body.theses, now(), { readMark });
     if (prep.error) return json({ error: prep.error, hint: "Publish fewer calls in one save." }, request, 400);
     const { sealed, commit } = prep;
 
