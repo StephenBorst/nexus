@@ -100,9 +100,9 @@ is everything built on top:
 - A "Build & Deploy" Action run failing fast (~21s) is almost always a transient `yarn install` flake,
   not a real break — the next push's superset deploy covers it.
 - **Manual redeploy (2026-10-11):** deploy.yml also has `workflow_dispatch` → Actions → "Build & Deploy to Cloudflare
-  Pages" → Run workflow (branch main). Added because the #79 merge (done through the session's `gh api` proxy, Oct 10)
-  landed on main but started NO run; the #78 merge through the GitHub MCP tool deployed normally. Merge via the MCP
-  tool or the GitHub UI, and check that a run started.
+  Pages" → Run workflow (branch main). Added after Actions went silent: from Oct 4 to at least Oct 11 NO run started on
+  this repo at all (the #79 merge deploy, PR checks on #80 and #81), so the cause is repo/account-side, not one merge.
+  After merging, check that a run started (cloud sessions can't read Actions settings: the proxy 403s that path).
 
 ## Cloudflare Workers (deploy with `npx wrangler deploy` in each dir; needs CF auth)
 - **nexus-lab-api** (`workers/nexus-lab-api`) → `og.nexustradinglabs.com`. This is the `AGENT_API`
