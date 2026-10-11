@@ -1075,6 +1075,11 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   crashed wallet webviews). `app/main.tsx` still unregisters every other SW on load but skips this scope. A tap
   posts `nexus-open` to an open window (`app/lib/pushTaps.ts listenForPushTaps`, history push + popstate) or opens
   one. UI = bell → PHONE ALERTS (`PushAlertsPanel.tsx`, `pushAlerts.ts`), hidden while `/push/config` says off.
+  ⚠️ **The nav bell is `SignalsNavButton.tsx` (◆ SIGNALS, mounted in `app/utils/config.tsx`). `NotificationBell.tsx`
+  is NOT mounted anywhere** — the panel first shipped there and never appeared (found live 2026-10-11, fixed: it now
+  sits under the signals list, reads the wallet via `useAccount`, and says "Connect a wallet…" when none is connected).
+  Before adding UI to a component, grep that it's mounted. The in-app notification list (`/notifications/:addr`) has
+  no mounted UI either; phone pushes don't depend on it.
 - Manifest: `id:"/"`, colours `#0a0a0b` (was the off-brand `#0a0e0a`, also in index.html theme-color),
   `icon-maskable-512.png` (mark inside the 80% safe circle), `push-badge.png` (white-on-transparent status icon).
 - ⏳ `public/.well-known/assetlinks.json` once borst sends the Play app-signing + upload-key SHA-256s.
