@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { pressKey } from "@/utils/a11y";
-import PushAlertsPanel from "@/components/PushAlertsPanel";
 
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
@@ -277,7 +276,6 @@ export default function NotificationBell() {
               ))
             )}
           </div>
-          <PushAlertsPanel wallet={walletAddress} />
         </div>
       )}
     </div>

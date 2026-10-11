@@ -1,6 +1,7 @@
 /**
- * The "PHONE ALERTS" block at the bottom of the bell: switch alerts on for this device, pick which
- * ones, send a test. Hidden until the server's push key is set (push.mjs), so it ships dark.
+ * The "PHONE ALERTS" block at the bottom of the ◆ SIGNALS bell (SignalsNavButton — the bell that is
+ * actually in the nav; NotificationBell.tsx is not mounted anywhere). Switch alerts on for this device,
+ * pick which ones, send a test. Hidden until the server's push key is set (push.mjs).
  */
 import { useEffect, useState } from "react";
 import { C } from "@/config/theme";
@@ -29,7 +30,7 @@ const btn = (primary: boolean): React.CSSProperties => ({
   cursor: "pointer",
 });
 
-export default function PushAlertsPanel({ wallet }: { wallet: string }) {
+export default function PushAlertsPanel({ wallet }: { wallet: string | null }) {
   const labWallet = useLabWallet();
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [topics, setTopics] = useState<PushTopics>(() => savedTopics());
@@ -59,7 +60,7 @@ export default function PushAlertsPanel({ wallet }: { wallet: string }) {
   const toggleTopic = (k: keyof PushTopics) => {
     const next = { ...topics, [k]: !topics[k] };
     setTopics(next);
-    if (status === "on") run(() => updatePushTopics(wallet, labWallet, next), "Saved.");
+    if (status === "on" && wallet) run(() => updatePushTopics(wallet, labWallet, next), "Saved.");
   };
 
   return (
@@ -69,7 +70,11 @@ export default function PushAlertsPanel({ wallet }: { wallet: string }) {
       {status === "unsupported" && <div style={line}>This browser can’t show alerts. The Android app and Chrome can.</div>}
       {status === "blocked" && <div style={line}>Notifications are blocked for this site. Allow them in the browser’s site settings, then come back.</div>}
 
-      {(status === "off" || status === "on") && (
+      {(status === "off" || status === "on") && !wallet && (
+        <div style={line}>Connect a wallet to get alerts on this device: your calls when graded, your agent’s trades.</div>
+      )}
+
+      {(status === "off" || status === "on") && wallet && (
         <>
           <div style={line}>{status === "on" ? "On for this device." : "Get an alert on this device when:"}</div>
           <div style={{ display: "grid", gap: 4 }}>
@@ -82,7 +87,7 @@ export default function PushAlertsPanel({ wallet }: { wallet: string }) {
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {status === "off" ? (
-              <button type="button" disabled={busy} style={btn(true)} onClick={() => run(() => enablePush(wallet, labWallet, topics), "On. Send a test to check.")}>
+              <button type="button" disabled={busy} style={btn(true)} onClick={() => wallet && run(() => enablePush(wallet, labWallet, topics), "On. Send a test to check.")}>
                 {busy ? "Turning on…" : "Turn on"}
               </button>
             ) : (
