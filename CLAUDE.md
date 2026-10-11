@@ -1028,7 +1028,8 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
 - `/token` landing card `app/pages/token/CrossChainCard.tsx`: USDC/ETH on Arbitrum · Base · Ethereum → any other
   pinned asset, incl. SOL / USDC on Solana and BTC. Flow = 1Click quote → user sends ONE plain transfer to the
   quote's `depositAddress` → solver delivers → status polled (`/v0/status`). Browser-direct (1Click CORS is `*`),
-  no key, no worker hop. Unauthenticated = 1Click adds ~20–25 bps; a partner JWT (via the worker) cuts it.
+  quote via the worker with our partner JWT (falls back to direct). Measured 2026-10-11: keyed and keyless quotes are
+  priced the same (see the partner-key bullet below).
 - **The deposit address is the whole money path**, so `app/lib/nearIntents.mjs` (`checkQuote`, 18 tests on REAL
   signed quotes in `app/lib/__fixtures__/oneclick-quote-*.json`) gates it BEFORE any wallet prompt:
   (1) ed25519 signature vs the key PINNED from the official SDK (`ONE_CLICK_PUBKEY`), same canonical hash as the
@@ -1069,6 +1070,13 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   through the worker un-retried. checkQuote still verifies 1Click's signature, so the hop adds no trust. To turn on:
   request the JWT (NEAR's form, linked in the one-click SDK README), then `npx wrangler secret put ONE_CLICK_JWT` from
   `workers/nexus-lab-api`. Our 10 bps `appFees` are unchanged by the key.
+  **✅ LIVE 2026-10-11 (borst set `ONE_CLICK_JWT`).** Verified: `/xc/quote` returns a signed 1Click quote (201; was 503
+  `xc_not_configured`), still 403 without our Origin, and 1Click ACCEPTS the key (a fake Bearer → 401 "Invalid token").
+  ⚠️ **But the key changed no price.** $100 USDC Arb→Base dry quote, keyed vs keyless: identical amountOut (99.9784 bare;
+  99.888409 with our 10 bps), and the `appFees` echo is still split 5 bps ours / 5 bps 1Click on both. So the "~20–25
+  bps unauthenticated surcharge" above is NOT what we see: the keyless path costs ~2 bps at $100. The 21 bps baseline
+  on 1.25 USDC was mostly the FIXED `withdrawFee` (0.0024 USDC ≈ 19 bps at that size). Keep the key (it identifies us as a
+  partner); a better fee split or rate is NEAR's to grant on the account, not something the code can unlock.
 - **Landing footer row (2026-09-30):** `Jupiter · spanDEX · Definitive Flash · WooFi · NEAR Protocol · XMTP · Quotient ·
   Arbitrum` ("NEAR Protocol" matches the announcement post; Fabric → spanDEX since Fabric shut down). The spot card names
   NEAR Intents for cross-chain. `llms.txt` is ONE file kept identical in `public/llms.txt` (app) and `nexus-landing/llms.txt`
