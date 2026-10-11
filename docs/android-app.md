@@ -7,7 +7,7 @@ app; there is no second codebase. Phone alerts are Web Push (`workers/nexus-lab-
 ## Status
 - [x] Push alerts built, shipped dark (PR "Phone alerts…"). Off until step 1.
 - [x] Manifest: brand background `#0a0a0b`, maskable icon (`public/icon-maskable-512.png`).
-- [ ] 1. Push key set (borst)
+- [x] 1. Push key set (borst, 2026-10-11). Live-tested: Send test landed on borst's Android phone (Chrome).
 - [ ] 2. D-U-N-S number + Play Console organization account (borst)
 - [ ] 3. Android package from PWABuilder (borst)
 - [ ] 4. `public/.well-known/assetlinks.json` with both fingerprints (Claude, from step 3's numbers)
