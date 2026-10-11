@@ -65,6 +65,15 @@ is everything built on top:
   still apply. Falls back to direct Anthropic if `BANKR_LLM_KEY` is absent. Manage credits/usage at bankr.bot/llm
   (Bankr wallet `0xd9f7…b449`). Revert = remove the `AI_GATEWAY` var. Verified live: credit balance ticked down on
   a real PRO call.
+- **Owner revenue page `/ops/revenue` (2026-10-11, not in the nav, noindex).** `POST /ops/revenue {address, labAuth,
+  refresh?}` (`routes-revenue.mjs` + `revenue.mjs`, tested) reads the subs receiver, the Bankr x402 wallet, borst.eth,
+  the treasury Safe (USDC/ETH/WETH/$NEXUS on Arbitrum + Base) and borst.eth's NEAR Intents fee balance
+  (`mt_batch_balance_of` on intents.near), priced from Orderly marks + DexScreener $NEXUS. It moves nothing. Answers only
+  a wallet that signed the Lab message AND is a Safe owner (`getOwners()` on Arbitrum, cached 1h) or listed in worker var
+  `OPS_WALLETS` (comma-separated); 401 unsigned, 403 otherwise. Read cached 5 min (`ops:rev:latest`); one snapshot a day
+  (`ops:rev:snap:YYYY-MM-DD`, 400d, written by the 12h cron or the first view) → "7d / 30d change" (a sweep = a drop in
+  its wallet, a rise in the Safe). An unreadable holding shows "unread", never 0, and an all-unread read stores no
+  snapshot. Flash + Orderly broker fees aren't readable onchain → linked under "Not read here".
 - **`/analyze`** public Hyperliquid wallet x-ray (HL public API → Lab AnalyticsView; in nav). **Strategy presets**
   (`config/strategyPresets.ts`) load in PAPER/ASSISTED/AUTONOMOUS (no longer force PAPER). **Agent regime filter**
   `respectRegime` (opt-in; brain `computeRegime` gates trend-fighting entries). Bankr skill updated for both.
@@ -762,6 +771,9 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   hour-range rule, so no stored grade moved and `GRADE_V` stays 3. The advisor warns on `!atMarket` (0.3% of the last
   price). The call-ledger hash does NOT include the mark (fixed field list; changing it breaks the anchored chain).
   Tests: `publishMark.test.mjs` + publish-mark cases in `logic.test.mjs` / `routes-lab.test.mjs` (fake reader). The scoreboard (`axisbt.mjs`) has its own grader — not touched (engine freeze).
+  **The call page states it (2026-10-11):** "MARKET AT POST $X · Orderly mark, read by the server when this was published"
+  + what the grader does with this entry (`app/lib/entryAtMark.mjs publishMarkLine`; `ENTRY_AT_MARK_PCT` lives there and
+  logic.mjs imports it, so the page and the grader can't use different bands). Calls without a mark show nothing.
   **Live after deploy (Sept 29, 04:40 UTC): the caller board is EMPTY, correctly** — all 8 wallets with graded calls
   are net-negative once entries must trade (Nexus Signals 173 calls −0.12R · 0x9a30 29 −0.35R · 0xa77c 28 −0.33R ·
   0x2484 33 −0.29R · 82mm 14 −0.13R · 2e91 13 −0.26R · 0x325d 9 −0.58R · 0xd9f7 6 −1R). The ranked records rested on

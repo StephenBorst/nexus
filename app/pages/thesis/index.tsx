@@ -14,6 +14,7 @@ import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { chartImageList, effectiveStatus } from "@/pages/lab/helpers";
+import { publishMarkLine } from "@/lib/entryAtMark.mjs";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
 import { SocialBar } from "@/components/SocialBar";
 import { bareTicker } from "@/utils/utils";
@@ -45,6 +46,7 @@ type FeedThesis = {
   displayName: string | null;
   onChainId?: number;
   onChainTxHash?: string;
+  publishMark?: { px: number; at: number; src?: string }; // server-read market price at first publish
 };
 
 type VerifyResult = {
@@ -391,6 +393,19 @@ export default function ThesisPage() {
               </div>
             ))}
           </div>
+
+          {/* The market price the server locked when the call was published: the grade's reference. */}
+          {(() => {
+            const pm = publishMarkLine(thesis);
+            if (!pm) return null;
+            return (
+              <div style={{ marginTop: -8, marginBottom: 16, padding: "8px 14px", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", lineHeight: 1.6 }}>
+                <span style={{ color: "#52525b" }}>MARKET AT POST </span>
+                <span style={{ color: "#a1a1aa" }}>{pm.markText}</span>
+                <span> · Orderly mark, read by the server when this was published. {pm.line}</span>
+              </div>
+            );
+          })()}
 
           {/* Live P&L — active theses */}
           {thesis.status === "ACTIVE" && markPrice != null && (() => {

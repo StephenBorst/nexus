@@ -68,6 +68,7 @@ import { twapSchedule, twapProgress } from "../nexus-agent-exec/logic.mjs";
 import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus } from "./routes-smart.mjs";
 import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
 import { handleXrayShare } from "./routes-xrayshare.mjs";
+import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handlePush } from "./routes-push.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildOgSvg, buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
@@ -700,6 +701,11 @@ export default {
         try { const r = await sweepHlTapes(env); console.log(`[hltape] synced ${r.synced}/${r.watched} watched · +${r.added} fills · ${r.gaps} gaps · ${r.failed} failed`); }
         catch (e) { console.error("[hltape] sweep failed:", String(e)); }
       })());
+      // Owner revenue page: one snapshot a day so it can say what changed (reads balances, moves nothing).
+      ctx.waitUntil((async () => {
+        try { await freshRevenue(env, { nexusPrice: getNexusPriceUsd }); console.log("[revenue] snapshot checked"); }
+        catch (e) { console.error("[revenue] snapshot failed:", String(e)); }
+      })());
     }
   },
 
@@ -730,6 +736,8 @@ export default {
       if (pushRes) return pushRes;
     }
     {
+      const revenueRes = await handleRevenue(parts, request, env, { nexusPrice: getNexusPriceUsd });
+      if (revenueRes) return revenueRes;
       const shareRes = await handleXrayShare(parts, request, env, { renderPng: renderMonoPng });
       if (shareRes) return shareRes;
     }
