@@ -55,7 +55,9 @@ bell → PHONE ALERTS → Turn on → Send test. The test should land on the dev
    not secrets.
 
 ## 4. Prove the site and the app belong together
-Claude adds `public/.well-known/assetlinks.json` with both fingerprints. Until it's live, the app opens
+Claude adds `public/.well-known/assetlinks.json` with both fingerprints
+(`node tools/android/assetlinks.mjs <app-signing SHA-256> <upload SHA-256>`; `tools/android/assetlinks.test.mjs`
+then fails CI if the file is malformed or lists fewer than two). Until it's live, the app opens
 with a browser bar on top; after, it's full-screen. Check:
 `https://trade.nexustradinglabs.com/.well-known/assetlinks.json`.
 

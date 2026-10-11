@@ -532,8 +532,12 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   had ALREADY gone quiet (last call Oct 1 17:17 UTC): `generateHouseCalls` reads the board from the 10-min
   `intel:mispriced:v1` cache, which only visitors keep warm; cold, it falls back to a live all-markets futures fetch that
   fails inside the busy :17 cron, and that `{error}` is RETURNED, not thrown, so nothing was logged (`GET /signals/house`
-  showed "no board available (cache cold + futures fetch failed)" on Oct 4). Before switching it back on (only for a read
-  that clears): log every non-post result and give it a board that doesn't depend on visitors.
+  showed "no board available (cache cold + futures fetch failed)" on Oct 4). **Both fixed 2026-10-11 (still OFF):**
+  `pickHouseBoard` (houseBoard.mjs, tested) uses the cached board only while ≤10 min old (a house call's ENTRY is its
+  mark) and otherwise builds its own from a live fetch, retried once 20 s later in the cron (never in a request path);
+  every scheduled run (house + catalyst) logs one line via `houseRunSummary` and stores it 7 days at
+  `house:lastrun:<kind>`, shown as `lastRun` (+ `enabled`, `boardSource`) on `GET /signals/house` and
+  `/signals/catalyst-house`. Switching back on is still only for a read that clears (if/then §6).
 - **⚠️ basis:hist HAS HOLES (found 2026-10-10; collection fix = PR, borst decides before/after Oct 15).** Last 72 rows on
   Oct 10: BTC missing ~10% of hours, ETH ~27%, HYPE ~31% (gaps up to 7h); cvd:hist, written in the SAME pass, ~0%.
   Lifetime counts agree (ETH basis 902 vs cvd 1135, HYPE 784 vs 1077). Loss grows with the coin's place in
@@ -1043,7 +1047,14 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   held, delivered. Base deposit `0x42b9af30…6c968569`, Arb delivery `0xcf292eee…2a801d29`. The fee stands as configured.
   Claiming = borst connects borst.eth to the NEAR Intents app when volume makes it worth it (nothing to build).
 - **Spot fee:** `SPOT_FEE_BPS = "10"` → `0x34dF…B45c` (borst.eth broker wallet), now via spanDEX (see below).
-- ⏳ Not yet done: partner API key via the worker (drops 1Click's 20 bps).
+- **Partner key via the worker — BUILT, dark until secret `ONE_CLICK_JWT` is set on nexus-lab-api (2026-10-11).** Only
+  the QUOTE goes through us: `POST /xc/quote` (`oneClickUpstream` in keyProxy.mjs = one fixed URL; origin gate + 60/min/IP;
+  body ≤8 KB) adds `Authorization: Bearer <JWT>` and forwards verbatim; status + deposit-submit stay browser-direct.
+  Client `fetchOneClickQuote` (nearIntents.mjs, tested) asks the worker first and falls back to 1Click direct on
+  403/404/429/503/5xx/unreachable (= exactly today's behaviour, unauthenticated price); 1Click's own 4xx comes back
+  through the worker un-retried. checkQuote still verifies 1Click's signature, so the hop adds no trust. To turn on:
+  request the JWT (NEAR's form, linked in the one-click SDK README), then `npx wrangler secret put ONE_CLICK_JWT` from
+  `workers/nexus-lab-api`. Our 10 bps `appFees` are unchanged by the key.
 - **Landing footer row (2026-09-30):** `Jupiter · spanDEX · Definitive Flash · WooFi · NEAR Protocol · XMTP · Quotient ·
   Arbitrum` ("NEAR Protocol" matches the announcement post; Fabric → spanDEX since Fabric shut down). The spot card names
   NEAR Intents for cross-chain. `llms.txt` is ONE file kept identical in `public/llms.txt` (app) and `nexus-landing/llms.txt`
@@ -1087,7 +1098,9 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   Until 2026-10-11 the script held its own copy and production shipped no `id`, `#0a0e0a`, and the plain icon as
   maskable while the repo file looked right. `tools/manifest/manifest.test.mjs` fails a hand edit, a colour off the
   canvas, or an icon whose PNG isn't the size it claims.
-- ⏳ `public/.well-known/assetlinks.json` once borst sends the Play app-signing + upload-key SHA-256s.
+- ⏳ `public/.well-known/assetlinks.json` once borst sends the Play app-signing + upload-key SHA-256s: run
+  `node tools/android/assetlinks.mjs <app-signing> <upload>` (validates 32-byte fingerprints, package
+  `com.nexustradinglabs.app`); `tools/android/assetlinks.test.mjs` checks the committed file (skips until it exists).
 
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the
@@ -1596,6 +1609,18 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   vs minified-unsplit (8.9 s) — accepted: deploys land several times a day, so most return visits are post-deploy.
 - Smoke: 10 routes render the same on the new build as the old (same text length per route); the only page error in
   both is the sandbox blocking Orderly's API. ⚠️ In cloud sessions don't `pkill` servers: it kills your own shell.
+- **First-load trims (2026-10-11, `firstLoadTrims()` in vite.config.ts): vendor 3.63 → 3.00 MB raw, 1,071 → 881 KB gz
+  (−18%).** Everything in the vendor chunk is reached through Orderly's SDK (hooks/ui/react-app pull the Solana adapter,
+  amplitude, ethers…), so the only levers were two libraries it over-ships: (1) Node `crypto` — the three first-load
+  importers (lz-solana-sdk-v2, spl-type-length-value, brorand) only use `createHash("sha256")` / `randomBytes`, yet the
+  polyfill pulled all of crypto-browserify (elliptic, asn1, diffie-hellman, public-encrypt…). They now get
+  `app/lib/nodeCryptoLite.mjs` (tested byte-for-byte vs node:crypto; anything but sha256 throws); every other importer
+  (lazy wallet chunks) keeps the full polyfill. (2) lodash — Orderly hooks import only `debounce` (wallet-connector
+  `merge`) from CJS lodash, which can't tree-shake; those two importers resolve to `lodash-es` (now a declared dep).
+  Both are importer ALLOWLISTS; `tools/firstLoadTrims.test.mjs` fails CI if an SDK upgrade starts using more. Smoke:
+  10 routes at 390px render identical text on old vs new build; the only page error in both is the sandbox's blocked
+  Orderly fetch. Measure with a temporary `generateBundle` plugin (per-package `renderedLength` per chunk) — a build
+  takes ~3 min and ~7 GB.
 - **Phone sweep (2026-10-04, 20 routes at 390px):** no page scrolls sideways, nothing spills. First load = ONE vendor
   chunk, 3.5 MB raw / 1.05 MB gz before the first screen (the open mobile item; defer wallet/SDK pieces = days of work).
   **Feed pages its calls (`FEED_PAGE` = 20 + "Show 20 more · N left")** — it rendered all 329 at once (97,000 px).

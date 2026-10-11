@@ -34,6 +34,20 @@ export function makeRateLimiter({ limit, windowMs, maxKeys = 5000 }) {
   };
 }
 
+// ── NEAR Intents 1Click quote ─────────────────────────────────────────────────────
+// ONE route: POST /xc/quote → 1Click's /v0/quote, with our partner key (secret ONE_CLICK_JWT) as a
+// Bearer token, which drops 1Click's own fee for unauthenticated callers. Status and deposit-submit
+// stay browser-direct (the key doesn't change their price). The body is forwarded verbatim and the
+// browser verifies 1Click's signature on the reply (app/lib/nearIntents.mjs checkQuote), so this hop
+// can't alter a quote unnoticed. Anything else under /xc is refused.
+export const ONE_CLICK_V0 = "https://1click.chaindefuser.com/v0";
+export const XC_BODY_MAX = 8192; // a quote request is ~600 bytes
+export function oneClickUpstream(method, parts) {
+  if (method === "POST" && Array.isArray(parts) && parts.length === 2 && parts[0] === "xc" && parts[1] === "quote")
+    return { url: `${ONE_CLICK_V0}/quote` };
+  return null;
+}
+
 // ── Flash route whitelist ──────────────────────────────────────────────────────
 // Maps OUR /flash/* route to ONE fixed upstream Flash URL, or null. Everything that reaches the
 // upstream URL is validated here (UUID order ids, EVM funder addresses, known statuses, an

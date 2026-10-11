@@ -107,3 +107,14 @@ test("Flash fee + attribution compose on /order the way the worker calls them", 
   const o = JSON.parse(withFlashAttribution(withFlashFee(JSON.stringify({ side: "buy" }), env), env, { isOrder: true }));
   assert.deepEqual([o.flashIntegratorFeeBps, o.erc8021AttributionCode], ["10", "nexustradinglabs"]);
 });
+
+// ── NEAR Intents 1Click quote route ──────────────────────────────────────────────
+import { oneClickUpstream, ONE_CLICK_V0, XC_BODY_MAX } from "./keyProxy.mjs";
+
+test("oneClickUpstream: only POST /xc/quote, to the one fixed 1Click URL", () => {
+  assert.deepEqual(oneClickUpstream("POST", ["xc", "quote"]), { url: `${ONE_CLICK_V0}/quote` });
+  assert.equal(ONE_CLICK_V0, "https://1click.chaindefuser.com/v0");
+  for (const [m, p] of [["GET", ["xc", "quote"]], ["POST", ["xc", "status"]], ["POST", ["xc", "deposit", "submit"]], ["POST", ["xc", "quote", "x"]], ["POST", ["xc"]], ["POST", ["flash", "quote"]], ["POST", "xc/quote"]])
+    assert.equal(oneClickUpstream(m, p), null, `${m} ${p}`);
+  assert.ok(XC_BODY_MAX >= 2048 && XC_BODY_MAX <= 65536);
+});

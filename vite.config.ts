@@ -5,6 +5,7 @@ import { cjsInterop } from "vite-plugin-cjs-interop";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
 function loadConfigTitle(): string {
   try {
@@ -67,6 +68,43 @@ export function vendorChunk(): Rollup.ManualChunksOption {
   };
 }
 
+// First-load trims (2026-10-11). Two libraries the SDK loads up front ship far more than it uses:
+// - Node `crypto`: three first-load modules import it for one SHA-256 hash (and brorand for random
+//   bytes it never asks for in a browser), which pulled all of crypto-browserify (~1 MB raw) into
+//   the first download. They get app/lib/nodeCryptoLite.mjs (tested against node:crypto); every
+//   other importer, all in lazy wallet chunks, keeps the full polyfill.
+// - lodash: Orderly's hooks import only `debounce` (and its wallet connector `merge`), but lodash is
+//   CommonJS, so the whole library (~565 KB raw) shipped. Those two ESM importers get lodash-es,
+//   which tree-shakes to the functions they name.
+// Both are allowlists by importer path: a new SDK version that imports more needs a look here.
+export const LITE_CRYPTO_IMPORTERS = [
+  /node_modules\/@layerzerolabs\/lz-solana-sdk-v2\/dist\/index\.mjs$/,
+  /node_modules\/@solana\/spl-type-length-value\/lib\/esm\/splDiscriminate\.js$/,
+  /node_modules\/brorand\/index\.js$/,
+];
+export const LODASH_ES_IMPORTERS = [
+  /node_modules\/@orderly\.network\/hooks\/dist\/index\.mjs$/,
+  /node_modules\/@orderly\.network\/wallet-connector\/dist\/index\.mjs$/,
+];
+const isNodeCrypto = (s: string) => s === "crypto" || s === "node:crypto" || /crypto-browserify(\/index\.js)?$/.test(s);
+export function firstLoadTrims(): Plugin {
+  const lite = fileURLToPath(new URL("./app/lib/nodeCryptoLite.mjs", import.meta.url));
+  return {
+    name: "nexus-first-load-trims",
+    enforce: "pre",
+    apply: "build",
+    async resolveId(source, importer) {
+      if (!importer) return null;
+      const from = importer.split("?")[0];
+      if (isNodeCrypto(source) && LITE_CRYPTO_IMPORTERS.some((r) => r.test(from))) return lite;
+      if (source === "lodash" && LODASH_ES_IMPORTERS.some((r) => r.test(from))) {
+        return this.resolve("lodash-es", importer, { skipSelf: true });
+      }
+      return null;
+    },
+  };
+}
+
 export default defineConfig(() => {
   const basePath = process.env.PUBLIC_PATH || "/";
 
@@ -77,6 +115,7 @@ export default defineConfig(() => {
     },
     base: basePath,
     plugins: [
+      firstLoadTrims(),
       react(),
       tsconfigPaths(),
       htmlTitlePlugin(),
