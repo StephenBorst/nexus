@@ -526,9 +526,15 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   The hold call stays with `tools/oct15/holdDecision.mjs`. Don't edit its thresholds after Oct 15: a change = a new page.
   **The Oct-15 routine applies this page itself (step 7 of `docs/routines/revalidate-basis-2026-10-15.md`, added
   2026-10-11)** — it needs borst to re-paste the doc into the routine before Oct 15 15:00 UTC.
-  **House caller OFF (§6, 2026-10-04):** borst deleted the `HOUSE_SIGNALS_ENABLED` secret on nexus-lab-api; the 03:17 UTC
-  run posted nothing. The same secret gates the Catalyst Read caller (`HOUSE_CATALYST_ADDRESS` 0x2484…), so both are
-  off. Keep `HOUSE_CALLER_ADDRESS` set: the dedupe's house-id proof reads it. The silence is policy now, not a bug. Why it
+  **House caller OFF (§6) — for real since 2026-10-11 18:15 UTC, NOT Oct 4.** On Oct 4 the secret was believed
+  deleted and the 03:17 run posted nothing, but that silence was the cold board (below), not the flag: the flag still
+  read "true". Once the board warmed, it posted **9 house calls (Oct 9 15:17 → Oct 11 17:17: AVAX S ×3, HYPE L, MON S,
+  NEAR L, LINK L, ETH L, S L) + 2 catalyst calls (Oct 9 15:17, BTC S + L)** while it was meant to be off. They're
+  published, so they stay and are graded like any call. borst deleted `HOUSE_SIGNALS_ENABLED` (Delete & Deploy) on
+  Oct 11 18:15; `/signals/house` + `/signals/catalyst-house` read `enabled:false` and nothing posted at 18:17. ⚠️ Check
+  "off" by reading `enabled` on those routes, never by a quiet run. The block runs on the `:17` AND the `0 */12` crons
+  (hence posts at 00:01/12:00); `POST /signals/house` with `HOUSE_SIGNALS_ADMIN` still posts by hand regardless of the
+  flag. The same secret gates the Catalyst Read caller (`HOUSE_CATALYST_ADDRESS` 0x2484…), so both are off. Keep `HOUSE_CALLER_ADDRESS` set: the dedupe's house-id proof reads it. The silence is policy now, not a bug. Why it
   had ALREADY gone quiet (last call Oct 1 17:17 UTC): `generateHouseCalls` reads the board from the 10-min
   `intel:mispriced:v1` cache, which only visitors keep warm; cold, it falls back to a live all-markets futures fetch that
   fails inside the busy :17 cron, and that `{error}` is RETURNED, not thrown, so nothing was logged (`GET /signals/house`
