@@ -534,6 +534,15 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   fails inside the busy :17 cron, and that `{error}` is RETURNED, not thrown, so nothing was logged (`GET /signals/house`
   showed "no board available (cache cold + futures fetch failed)" on Oct 4). Before switching it back on (only for a read
   that clears): log every non-post result and give it a board that doesn't depend on visitors.
+- **⚠️ basis:hist HAS HOLES (found 2026-10-10; collection fix = PR, borst decides before/after Oct 15).** Last 72 rows on
+  Oct 10: BTC missing ~10% of hours, ETH ~27%, HYPE ~31% (gaps up to 7h); cvd:hist, written in the SAME pass, ~0%.
+  Lifetime counts agree (ETH basis 902 vs cvd 1135, HYPE 784 vs 1077). Loss grows with the coin's place in
+  `snapshotFlow`'s loop → OKX ticker rate limit hit by our own burst (2 ticker calls/coin, `okxJson` retried
+  instantly inside OKX's 2s window, failures dropped unlogged). Effects: the brain sits out basis rows >3h stale, and
+  every missing hour is a lost graded event. The fix (`okxGetAll` in okx.mjs + paced `snapshotFlow`, tests
+  `okx.test.mjs` / `flow.snapshot.test.mjs`) changes how often a row lands, never what a row says; it logs
+  `[flow] basis N/9 · cvd N/9 · retries R` every hour and `[flow] MISSED …` with reasons. Read history with the holes
+  in mind: a pre-fix window has fewer basis hours than its calendar span.
 - **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
   AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
