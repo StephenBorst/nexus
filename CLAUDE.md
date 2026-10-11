@@ -1094,7 +1094,9 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   Until 2026-10-11 the script held its own copy and production shipped no `id`, `#0a0e0a`, and the plain icon as
   maskable while the repo file looked right. `tools/manifest/manifest.test.mjs` fails a hand edit, a colour off the
   canvas, or an icon whose PNG isn't the size it claims.
-- ⏳ `public/.well-known/assetlinks.json` once borst sends the Play app-signing + upload-key SHA-256s.
+- ⏳ `public/.well-known/assetlinks.json` once borst sends the Play app-signing + upload-key SHA-256s: run
+  `node tools/android/assetlinks.mjs <app-signing> <upload>` (validates 32-byte fingerprints, package
+  `com.nexustradinglabs.app`); `tools/android/assetlinks.test.mjs` checks the committed file (skips until it exists).
 
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the
