@@ -17,7 +17,7 @@
 //      SUCCESS reads as delivered; a refund goes back to the user's own address.
 import { useEffect, useRef, useState } from "react";
 import {
-  ONE_CLICK_API, XC_ASSETS, CHAIN_NAME, STATUS_TEXT, TERMINAL,
+  ONE_CLICK_API, XC_ASSETS, fetchOneClickQuote, CHAIN_NAME, STATUS_TEXT, TERMINAL,
   checkQuote, buildDepositTx, recipientFitsChain, toUnits, fromUnits,
   xcAppFees,
 } from "@/lib/nearIntents.mjs";
@@ -116,7 +116,7 @@ export function CrossChainCard({ walletAddress: connected, provider }: { walletA
         refundTo: walletAddress, refundType: "ORIGIN_CHAIN", deadline,
         ...(appFees.length ? { appFees } : {}),
       };
-      const r = await fetch(`${ONE_CLICK_API}/v0/quote`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const { res: r } = await fetchOneClickQuote(body);
       const j = await r.json().catch(() => null);
       if (!r.ok || !j) throw new Error((j && typeof j.message === "string" ? j.message : "No quote") + ". Nothing was sent.");
       const chk = checkQuote(j, {

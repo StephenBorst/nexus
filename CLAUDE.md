@@ -1043,7 +1043,14 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   held, delivered. Base deposit `0x42b9af30…6c968569`, Arb delivery `0xcf292eee…2a801d29`. The fee stands as configured.
   Claiming = borst connects borst.eth to the NEAR Intents app when volume makes it worth it (nothing to build).
 - **Spot fee:** `SPOT_FEE_BPS = "10"` → `0x34dF…B45c` (borst.eth broker wallet), now via spanDEX (see below).
-- ⏳ Not yet done: partner API key via the worker (drops 1Click's 20 bps).
+- **Partner key via the worker — BUILT, dark until secret `ONE_CLICK_JWT` is set on nexus-lab-api (2026-10-11).** Only
+  the QUOTE goes through us: `POST /xc/quote` (`oneClickUpstream` in keyProxy.mjs = one fixed URL; origin gate + 60/min/IP;
+  body ≤8 KB) adds `Authorization: Bearer <JWT>` and forwards verbatim; status + deposit-submit stay browser-direct.
+  Client `fetchOneClickQuote` (nearIntents.mjs, tested) asks the worker first and falls back to 1Click direct on
+  403/404/429/503/5xx/unreachable (= exactly today's behaviour, unauthenticated price); 1Click's own 4xx comes back
+  through the worker un-retried. checkQuote still verifies 1Click's signature, so the hop adds no trust. To turn on:
+  request the JWT (NEAR's form, linked in the one-click SDK README), then `npx wrangler secret put ONE_CLICK_JWT` from
+  `workers/nexus-lab-api`. Our 10 bps `appFees` are unchanged by the key.
 - **Landing footer row (2026-09-30):** `Jupiter · spanDEX · Definitive Flash · WooFi · NEAR Protocol · XMTP · Quotient ·
   Arbitrum` ("NEAR Protocol" matches the announcement post; Fabric → spanDEX since Fabric shut down). The spot card names
   NEAR Intents for cross-chain. `llms.txt` is ONE file kept identical in `public/llms.txt` (app) and `nexus-landing/llms.txt`

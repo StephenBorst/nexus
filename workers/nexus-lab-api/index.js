@@ -54,7 +54,7 @@ import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
 import { runScorecard, AXES, priceByHour } from "./axisbt.mjs";
-import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution } from "./keyProxy.mjs";
+import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
@@ -572,6 +572,7 @@ async function generateCatalystHouseCalls(env, { dryRun = false, max = 2 } = {})
 const flashLimiter = makeRateLimiter({ limit: 30, windowMs: 60000 });
 const flashReadLimiter = makeRateLimiter({ limit: 40, windowMs: 60000 }); // open-orders list + status polls
 const jupLimiter = makeRateLimiter({ limit: 120, windowMs: 60000 });
+const xcLimiter = makeRateLimiter({ limit: 60, windowMs: 60000 }); // 1Click quotes (partner key)
 // Gate for a key-carrying proxy: our own origin only, within the per-IP budget. Returns a
 // Response to send (refusal) or null to proceed.
 function keyProxyGate(request, limiter) {
@@ -5907,6 +5908,27 @@ document.getElementById("btn").addEventListener("click",go);
     // flashUpstream (keyProxy.mjs, tested) whitelists the five routes the Spot ticket uses and
     // maps each to ONE fixed Flash URL (no SSRF, no other Flash endpoint on our key). A 401 here
     // means the key is a Portfolio key, not a Flash key — surfaced verbatim so the op knows.
+    // ── NEAR Intents 1Click quote with our partner key — POST /xc/quote ─────────────────
+    // Adds ONE_CLICK_JWT as a Bearer token (drops 1Click's unauthenticated fee) and forwards the body
+    // verbatim to the one fixed upstream (oneClickUpstream, keyProxy.mjs). No key ⇒ 503
+    // xc_not_configured and the browser quotes 1Click directly, as before (fetchOneClickQuote).
+    // The browser checks 1Click's signature on the reply, so this hop adds no trust.
+    if (parts[0] === "xc") {
+      const up = oneClickUpstream(request.method, parts);
+      if (!up) return json({ error: "xc_route_not_allowed" }, request, 404);
+      const jwt = env.ONE_CLICK_JWT || "";
+      if (!jwt) return json({ error: "xc_not_configured" }, request, 503);
+      const gated = keyProxyGate(request, xcLimiter); if (gated) return gated;
+      const body = await request.text();
+      if (body.length > XC_BODY_MAX) return json({ error: "body_too_large" }, request, 413);
+      try {
+        const r = await fetch(up.url, { method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${jwt}` }, body });
+        return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
+      } catch (e) {
+        return json({ error: "xc_proxy_failed", detail: String(e?.message || e).slice(0, 120) }, request, 502);
+      }
+    }
+
     if (parts[0] === "flash") {
       const up = flashUpstream(request.method, parts, url.searchParams);
       if (!up) return json({ error: "flash_route_not_allowed" }, request, 404);
