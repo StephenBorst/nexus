@@ -1055,7 +1055,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   accounts). Package id `com.nexustradinglabs.app`. Android first; iOS after. Solana dApp Store = optional 2nd lane.
   Play's crypto policy (Oct 29 2025) licenses CUSTODIAL wallets + exchanges; non-custodial wallets are exempt. A perp
   front end is the grey zone: declare non-custodial; fallback = leave US/EU/UK out of the Play listing first.
-- **Phone alerts = Web Push, shipped DARK.** On only when secret `VAPID_PRIVATE_JWK` (one P-256 JWK; public half
+- **Phone alerts = Web Push — LIVE (key set + test push landed on borst's Android phone, 2026-10-11).** On only when secret `VAPID_PRIVATE_JWK` (one P-256 JWK; public half
   derived, so they can't drift) is set on nexus-lab-api: `node ../../tools/push/vapid-keys.mjs | npx wrangler secret
   put VAPID_PRIVATE_JWK` from `workers/nexus-lab-api`. ⚠️ Make it ONCE: a new key breaks every subscribed device.
   `webpush.mjs` = RFC 8291 aes128gcm + RFC 8292 VAPID on Web Crypto (tests decrypt with an independent node:crypto
