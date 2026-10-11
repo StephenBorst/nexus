@@ -3,6 +3,8 @@ name: Build & Deploy to Cloudflare Pages
 on:
   push:
     branches: [main]
+  # Manual "Run workflow" button (Actions tab): redeploys main when a push didn't start a run.
+  workflow_dispatch:
 
 jobs:
   deploy:
