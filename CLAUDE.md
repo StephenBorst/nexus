@@ -1659,6 +1659,13 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   10 routes at 390px render identical text on old vs new build; the only page error in both is the sandbox's blocked
   Orderly fetch. Measure with a temporary `generateBundle` plugin (per-package `renderedLength` per chunk) — a build
   takes ~3 min and ~7 GB.
+- **Amplitude opt-out (2026-10-11; Orderly/Wuzhong hadn't answered since Oct 3).** Orderly's hooks start Amplitude with
+  no `defaultTracking`, which in analytics-browser 2.x means page views, sessions, form interactions, file downloads and
+  attribution for every visitor; the SDK exposes no switch. `amplitudeOptOut()` in vite.config.ts (build only) rewrites
+  that one call via `tools/amplitudeOptOut.mjs` to `defaultTracking:false` + `trackingOptions.ipAddress:false`. Still sent:
+  Orderly's named events and its identify (wallet address as user id), which feed Orderly's broker stats. If the SDK's
+  init call changes, the build FAILS (and `tools/amplitudeOptOut.test.mjs` fails in CI) rather than shipping full
+  tracking. Verified in a real build: the vendor chunk carries `defaultTracking:!1`. Dev server (prebundled deps) is unpatched.
 - **Phone sweep (2026-10-04, 20 routes at 390px):** no page scrolls sideways, nothing spills. First load = ONE vendor
   chunk, 3.5 MB raw / 1.05 MB gz before the first screen (the open mobile item; defer wallet/SDK pieces = days of work).
   **Feed pages its calls (`FEED_PAGE` = 20 + "Show 20 more · N left")** — it rendered all 329 at once (97,000 px).

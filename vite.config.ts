@@ -6,6 +6,7 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { isOrderlyHooksDist, patchAmplitudeInit } from "./tools/amplitudeOptOut.mjs";
 
 function loadConfigTitle(): string {
   try {
@@ -105,6 +106,21 @@ export function firstLoadTrims(): Plugin {
   };
 }
 
+// Orderly's SDK starts Amplitude with every automatic capture on and no option to change it.
+// The production build turns that off (see tools/amplitudeOptOut.mjs for what still flows) and
+// fails if the SDK's init call ever changes shape.
+export function amplitudeOptOut(): Plugin {
+  return {
+    name: "nexus-amplitude-opt-out",
+    enforce: "pre",
+    apply: "build",
+    transform(code, id) {
+      if (!isOrderlyHooksDist(id) || !code.includes("amplitude.init(")) return null;
+      return { code: patchAmplitudeInit(code), map: null };
+    },
+  };
+}
+
 export default defineConfig(() => {
   const basePath = process.env.PUBLIC_PATH || "/";
 
@@ -116,6 +132,7 @@ export default defineConfig(() => {
     base: basePath,
     plugins: [
       firstLoadTrims(),
+      amplitudeOptOut(),
       react(),
       tsconfigPaths(),
       htmlTitlePlugin(),
