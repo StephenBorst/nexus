@@ -778,6 +778,12 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   `app/components/AwaitingFill.tsx`. Feed card, call page and trader profile (cards + In flight list, whose R total
   now counts filled calls only) show "Awaiting fill at $X · mark N% above the entry", a dashed outline, no R and no
   P&L. Grading unchanged. Not covered: the owner's own Lab ThesisView (private calls are never stamped).
+  **Cards read R:R from the LEVELS (2026-10-11).** The stored `riskReward` is client-written and some clients wrote it
+  to TP2 (a card showed 1:5.00 beside levels that make 1:2.60; the grader paid 2.60). Every card, share text, OG card
+  and profile average now uses `callRR` (`app/lib/callMath.mjs`, pinned to lab-api `callR` by test); TP2 shows as
+  RUNNER. Public calls carry no size, so the live row reads MOVE in R and % (`liveMove`), never "+$0.00". ⚠️ `/feed`
+  also carries RESOLUTION rows (`resolution:true`, no levels): filter them before treating rows as calls (the trader
+  profile didn't, and showed them as $0.00 calls stuck on "Checking fill").
   **Feed RANKS never ranks on KV data (borst + Ember, 2026-09-29).** `LeaderboardView` lists ONLY graded callers, in the
   grader's order (/theses/leaderboard), then EMERGING callers unranked ("—"); nobody else. It used to rank everyone in the
   feed, falling back to the Lab's own statuses (`buildLeaderboard`/`calcRepScore`) and the on-chain Rep Score (outcomes
