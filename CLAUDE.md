@@ -525,7 +525,8 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   BEATS_RANDOM on its side + preset exit positive oos over ≥30 trades), house caller off until a read clears, copy words.
   The hold call stays with `tools/oct15/holdDecision.mjs`. Don't edit its thresholds after Oct 15: a change = a new page.
   **The Oct-15 routine applies this page itself (step 7 of `docs/routines/revalidate-basis-2026-10-15.md`, added
-  2026-10-11)** — it needs borst to re-paste the doc into the routine before Oct 15 15:00 UTC.
+  2026-10-11)**. **Re-pasted by borst 2026-10-11 19:00 UTC; verified via `get_trigger`: the stored prompt has step 7 and
+  the step-(6) house-caller check, next run 2026-10-15T15:00Z.** Any later edit to the doc needs another re-paste.
   **House caller OFF (§6) — for real since 2026-10-11 18:15 UTC, NOT Oct 4.** On Oct 4 the secret was believed
   deleted and the 03:17 run posted nothing, but that silence was the cold board (below), not the flag: the flag still
   read "true". Once the board warmed, it posted **9 house calls (Oct 9 15:17 → Oct 11 17:17: AVAX S ×3, HYPE L, MON S,
