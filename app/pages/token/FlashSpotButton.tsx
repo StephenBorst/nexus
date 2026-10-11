@@ -13,7 +13,7 @@ import { useId, useRef, useState } from "react";
 import { parseTransaction } from "viem";
 import { EVM_USDC, ensureChain } from "./swapExec";
 import {
-  checkFlashOrder, checkFlashSetupTx, checkFlashBracket, encodeApprove, toBaseUnits, openSpend, approvalPlan, FLASH_ALLOWANCE,
+  checkFlashOrder, checkFlashSetupTx, checkFlashBracket, encodeApprove, toBaseUnits, openSpend, approvalPlan, FLASH_ALLOWANCE, flashRefPrice, triggerCheck,
 } from "@/lib/flashGuards.mjs";
 import { describeFlashOrder } from "@/lib/flashOrders.mjs";
 import { FLASH, FLASH_CHANGED, fetchOpenOrders, fetchOrder, erc20Balance, human, txLink, type Eip1193 } from "./flashApi";
@@ -98,6 +98,7 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
   const [busy, setBusy] = useState(false); const [status, setStatus] = useState("");
   const [err, setErr] = useState<string | null>(null); const [done, setDone] = useState<Done | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [flashPx, setFlashPx] = useState<number | null>(null); // Flash's own price, from a market quote
   const fid = useId();
   const previewSeq = useRef(0); // only the newest preview request may land (tab flips race)
   // Escape = the backdrop click: never while a signature is pending.
@@ -115,14 +116,24 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
   // One leg typed must never read as protection that isn't there, so the ticket waits for both.
   const halfBracket = wantsBracket && !(posNum(sl) > 0 && posNum(tp) > 0);
 
-  // Trigger/limit sanity against the page's live price. A stop whose trigger is already crossed
-  // is cancelled by Flash on entry (REASON_ORDER_TRIGGERED_ON_ENTRY) → block it here; a limit on
-  // the far side of the market is legal (it just fills now) → say so.
+  // Trigger/limit sanity. A stop whose trigger is already crossed is cancelled by Flash on entry
+  // (REASON_ORDER_TRIGGERED_ON_ENTRY) → block it here. Stops are checked against FLASH's price (a
+  // market quote, `flashPx`) when we have it: the page's price comes from elsewhere and a trigger
+  // close to the market could pass it and still be crossed on Flash (seen live 2026-09-30). A
+  // limit on the far side of the market is legal (it just fills now) → say so.
   const pxN = posNum(px);
   const pxIssue: { block: boolean; text: string } | null = (() => {
-    if (!now || !pxN || (ft !== "limit" && ft !== "stop" && ft !== "stop-loss")) return null;
-    if (ft === "stop" && pxN <= now) return { block: true, text: `Price is already at or above ${fmtUsd(pxN)}. Set the trigger above ${fmtUsd(now)}.` };
-    if (ft === "stop-loss" && pxN >= now) return { block: true, text: `Price is already at or below ${fmtUsd(pxN)}. Set the trigger below ${fmtUsd(now)}.` };
+    if (!pxN || (ft !== "limit" && ft !== "stop" && ft !== "stop-loss")) return null;
+    if (ft === "stop" || ft === "stop-loss") {
+      const ref = flashPx ?? now;
+      const tc = triggerCheck({ type: ft, trigger: pxN, ref });
+      if (!tc || !ref) return null;
+      const whose = flashPx ? "Flash’s price" : "The price";
+      const dir = ft === "stop" ? "above" : "below";
+      if (tc.block) return { block: true, text: `${whose} is ${fmtUsd(ref)}, so this trigger is already crossed. Set it ${dir} ${fmtUsd(ref)}.` };
+      return { block: false, text: `Within 0.5% of ${flashPx ? "Flash’s price" : "the price"} (${fmtUsd(ref)}). One move can cross it before it rests, and Flash cancels a crossed stop.` };
+    }
+    if (!now) return null;
     if (ft === "limit" && side === "buy" && pxN >= now) return { block: false, text: "At or above the market: this fills now, like a market buy." };
     if (ft === "limit" && side === "sell" && pxN <= now) return { block: false, text: "At or below the market: this fills now, like a market sell." };
     return null;
@@ -175,10 +186,21 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
     return b;
   };
 
+  // Flash's own price for this token: a MARKET quote at this size (a stop quote is priced at the
+  // trigger, so it can't say where the market is). Null when the quote can't be read.
+  const fetchFlashPx = async (qty: string): Promise<number | null> => {
+    if (!(parseFloat(qty) > 0)) return null;
+    try {
+      const r = await fetch(`${FLASH}/quote`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(requestBody(qty, { over: { otype: "market" } })) });
+      return r.ok ? flashRefPrice(await r.json()) : null;
+    } catch { return null; }
+  };
+
   const fetchPreview = async (qty: string, over: Over = {}) => {
     setErr(null);
     const f = over.otype ? flashType(over.otype, side) : ft;
     const mine = ++previewSeq.current;
+    if (f === "stop" || f === "stop-loss") void fetchFlashPx(qty).then((p) => { if (mine === previewSeq.current && p) setFlashPx(p); });
     if (!(parseFloat(qty) > 0) || ((f === "limit" || f === "stop" || f === "stop-loss") && !pxN)) { setPreview(null); return; }
     try {
       const r = await fetch(`${FLASH}/quote`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(requestBody(qty, { withBracket: true, exp: expiryNow(f), over })) });
@@ -224,6 +246,18 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
       if (!provider || !walletAddress) throw new Error("Connect a wallet first.");
       const wallet = walletAddress;
       const exp = expiryNow();
+      // Stops: re-read Flash's price right before signing. A trigger crossed since the preview would
+      // be cancelled on entry; stop here instead. Unreadable → the check above (page price) stands.
+      if (ft === "stop" || ft === "stop-loss") {
+        setStatus("Checking the trigger against Flash’s price…");
+        const ref = await fetchFlashPx(size);
+        if (ref) {
+          setFlashPx(ref);
+          if (triggerCheck({ type: ft, trigger: pxN, ref })?.block)
+            throw new Error(`Flash’s price is ${fmtUsd(ref)}, so this trigger is already crossed. Set it ${ft === "stop" ? "above" : "below"} ${fmtUsd(ref)}. Nothing was sent.`);
+        }
+        setStatus("Getting a quote…");
+      }
       const r = await fetch(`${FLASH}/quote`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(requestBody(size, { withBracket: true, exp })) });
       const q = await r.json();
       if (!r.ok) throw new Error(q?.error?.message || q?.message || q?.error || (r.status === 401 ? "Flash key invalid (Portfolio, not Flash). Regenerate it." : `quote failed (${r.status})`));
@@ -355,7 +389,7 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
   };
   const pickType = (t: OType) => {
     if (busy) return;
-    setOtype(t); setPreview(null); setErr(null); setDone(null);
+    setOtype(t); setPreview(null); setErr(null); setDone(null); setFlashPx(null);
     void fetchPreview(size, { otype: t }); // clears itself when the new type still needs a price
   };
   // Flash success card share link — the token's Spot page (same /token/{ca} the share-on-swap card uses).

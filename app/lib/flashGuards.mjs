@@ -218,3 +218,32 @@ export function utf8Hex(str) {
   return "0x" + Array.from(new TextEncoder().encode(String(str)), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+
+// ── trigger vs Flash's own price ───────────────────────────────────────────────
+// A stop/limit quote is priced AT the trigger, so it can't tell us where the market is. A MARKET
+// quote can: the token's USD price = notional ÷ amount on its "target" leg (buy: `to`, sell: `from`).
+// The page's price comes from another source and can lag Flash's by enough that a trigger near the
+// market passes the page check and is already crossed on Flash, which cancels it on entry
+// (REASON_ORDER_TRIGGERED_ON_ENTRY). Null when the quote doesn't carry a readable target leg.
+export function flashRefPrice(q) {
+  const leg = [q?.from, q?.to].find((x) => x?.asset === "target");
+  const amt = Number(leg?.amount);
+  const usd = Number(leg?.notional);
+  return amt > 0 && usd > 0 && Number.isFinite(usd / amt) ? usd / amt : null;
+}
+
+// stop (breakout buy) must sit ABOVE the market, stop-loss (sell) BELOW it. Crossed = Flash cancels
+// it on entry → block. Within `near` (default 0.5%) = one tick can cross it before it rests → warn.
+export const TRIGGER_NEAR = 0.005;
+export function triggerCheck({ type, trigger, ref, near = TRIGGER_NEAR }) {
+  const t = Number(trigger), r = Number(ref);
+  if (!(t > 0) || !(r > 0) || (type !== "stop" && type !== "stop-loss")) return null;
+  if (type === "stop") {
+    if (t <= r) return { block: true, crossed: true };
+    if (t <= r * (1 + near)) return { block: false, near: true };
+  } else {
+    if (t >= r) return { block: true, crossed: true };
+    if (t >= r * (1 - near)) return { block: false, near: true };
+  }
+  return null;
+}
