@@ -1596,6 +1596,18 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   vs minified-unsplit (8.9 s) — accepted: deploys land several times a day, so most return visits are post-deploy.
 - Smoke: 10 routes render the same on the new build as the old (same text length per route); the only page error in
   both is the sandbox blocking Orderly's API. ⚠️ In cloud sessions don't `pkill` servers: it kills your own shell.
+- **First-load trims (2026-10-11, `firstLoadTrims()` in vite.config.ts): vendor 3.63 → 3.00 MB raw, 1,071 → 881 KB gz
+  (−18%).** Everything in the vendor chunk is reached through Orderly's SDK (hooks/ui/react-app pull the Solana adapter,
+  amplitude, ethers…), so the only levers were two libraries it over-ships: (1) Node `crypto` — the three first-load
+  importers (lz-solana-sdk-v2, spl-type-length-value, brorand) only use `createHash("sha256")` / `randomBytes`, yet the
+  polyfill pulled all of crypto-browserify (elliptic, asn1, diffie-hellman, public-encrypt…). They now get
+  `app/lib/nodeCryptoLite.mjs` (tested byte-for-byte vs node:crypto; anything but sha256 throws); every other importer
+  (lazy wallet chunks) keeps the full polyfill. (2) lodash — Orderly hooks import only `debounce` (wallet-connector
+  `merge`) from CJS lodash, which can't tree-shake; those two importers resolve to `lodash-es` (now a declared dep).
+  Both are importer ALLOWLISTS; `tools/firstLoadTrims.test.mjs` fails CI if an SDK upgrade starts using more. Smoke:
+  10 routes at 390px render identical text on old vs new build; the only page error in both is the sandbox's blocked
+  Orderly fetch. Measure with a temporary `generateBundle` plugin (per-package `renderedLength` per chunk) — a build
+  takes ~3 min and ~7 GB.
 - **Phone sweep (2026-10-04, 20 routes at 390px):** no page scrolls sideways, nothing spills. First load = ONE vendor
   chunk, 3.5 MB raw / 1.05 MB gz before the first screen (the open mobile item; defer wallet/SDK pieces = days of work).
   **Feed pages its calls (`FEED_PAGE` = 20 + "Show 20 more · N left")** — it rendered all 329 at once (97,000 px).
