@@ -35,6 +35,34 @@ export const ENTRY_AT_MARK_PCT = 0.3;
 const atMark = (entry, mark) => Math.abs(entry - mark) / mark <= ENTRY_AT_MARK_PCT / 100;
 
 /**
+ * Whether a call's entry has traded, by the same rule gradeCall grades it on (see below): the
+ * entry is the market at the post (within ENTRY_AT_MARK_PCT of `publishMark`, else inside the
+ * posting hour's range), or a resting order that fills in the first later hour whose range reaches
+ * it. gradeCall uses this, and the hourly pass stamps it on open calls (`fillState`), so a card can
+ * tell a live position from an order that never filled.
+ * @returns {{ filled:false } | { filled:true, atPost:boolean, fillSec:number, fillIdx:number, next:number }}
+ *   fillSec = the post time, or the start of the hour the order filled in. fillIdx = that hour's
+ *   candle (-1 when filled at the post). next = the first candle that can grade the call.
+ */
+export function entryFill(t, cd) {
+  const startSec = Math.floor((t?.createdAt || 0) / 1000);
+  const n = cd && Array.isArray(cd.t) ? cd.t.length : 0;
+  let i = 0;
+  while (i < n && cd.t[i] < startSec) i++;          // the first hour that starts at or after the post
+  // The market the call was posted into: the hour containing the post, else the first hour after it.
+  const ref = i < n && cd.t[i] === startSec ? i : i > 0 && cd.t[i - 1] > startSec - 3600 ? i - 1 : i;
+  const entry = Number(t?.entryPrice);
+  const traded = (k) => cd.l[k] <= entry && entry <= cd.h[k];
+  const mark = Number(t?.publishMark?.px);
+  const atPost = mark > 0 ? atMark(entry, mark) : ref < n && traded(ref);
+  if (atPost) return { filled: true, atPost: true, fillSec: startSec, fillIdx: -1, next: i };
+  let f = i;
+  while (f < n && !traded(f)) f++;
+  if (f >= n) return { filled: false };
+  return { filled: true, atPost: false, fillSec: cd.t[f], fillIdx: f, next: f + 1 };  // a target in the fill hour doesn't count
+}
+
+/**
  * Grade a human "call" (thesis) against public OHLC candles, first-touch.
  * Trustless: the outcome is a fact about public price, not self-report.
  * - LONG  wins if a candle high reaches takeProfit1 before a low hits stopLoss
@@ -64,29 +92,17 @@ const atMark = (entry, mark) => Math.abs(entry - mark) / mark <= ENTRY_AT_MARK_P
  * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number, awaitingEntry?:true }}
  */
 export function gradeCall(t, cd) {
-  const { entryPrice, stopLoss, takeProfit1, createdAt } = t;
+  const { entryPrice, stopLoss, takeProfit1 } = t;
   if (!entryPrice || !stopLoss || !takeProfit1 || !cd) return { outcome: "INVALID", r: 0 };
   const R = callR(t);
   if (R == null) return { outcome: "INVALID", r: 0 };
   const long = String(t.direction).toUpperCase() === "LONG";
-  const startSec = Math.floor((createdAt || 0) / 1000);
-  const n = cd.t.length;
-  let i = 0;
-  while (i < n && cd.t[i] < startSec) i++;          // the first hour that starts at or after the post
-  // The market the call was posted into: the hour containing the post, else the first hour after it.
-  const ref = i < n && cd.t[i] === startSec ? i : i > 0 && cd.t[i - 1] > startSec - 3600 ? i - 1 : i;
-  const entry = Number(entryPrice);
-  const traded = (k) => cd.l[k] <= entry && entry <= cd.h[k];
-  const mark = Number(t.publishMark?.px);
-  const atPost = mark > 0 ? atMark(entry, mark) : ref < n && traded(ref);
-  if (!atPost) {
-    let f = i;
-    while (f < n && !traded(f)) f++;
-    if (f >= n) return { outcome: "PENDING", r: 0, awaitingEntry: true };
-    if (long ? cd.l[f] <= stopLoss : cd.h[f] >= stopLoss) return { outcome: "LOSS", r: -1 };
-    i = f + 1;                                        // a target in the fill hour doesn't count
-  }
-  for (; i < n; i++) {
+  const fill = entryFill(t, cd);
+  if (!fill.filled) return { outcome: "PENDING", r: 0, awaitingEntry: true };
+  let i = fill.next;
+  const f = fill.fillIdx;
+  if (f >= 0 && (long ? cd.l[f] <= stopLoss : cd.h[f] >= stopLoss)) return { outcome: "LOSS", r: -1 };
+  for (; i < cd.t.length; i++) {
     const hi = cd.h[i], lo = cd.l[i];
     if (long) {
       const tp = hi >= takeProfit1, sl = lo <= stopLoss;

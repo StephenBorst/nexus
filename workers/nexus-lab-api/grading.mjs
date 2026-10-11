@@ -12,7 +12,7 @@
 // ⚠️ Pure move — logic byte-identical to what shipped.
 import { notifyResolution } from "./resolutions.mjs";
 import {
-  gradeCall, classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets,
+  gradeCall, entryFill, classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets,
   regimeEdge, planQuality, planSummary, expectancyStats, convictionCalibration, rankCaller,
   consensusBySymbol, stanceAtPost, classifyContrarian, aggregateSideRecord, contrarianEdgeScore,
   classifyMacro,
@@ -95,7 +95,24 @@ export const isCurrentStamp = (t) => (t?.gradedOutcome === "WIN" || t?.gradedOut
 
 // The fields the hourly pass writes on a public call. When it writes back, it copies ONLY these onto
 // a fresh read of the record, so a save that landed during the pass isn't overwritten.
-const PASS_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "planScore", "planFlags", "regimeTrend", "regimeVol", "regimeAlign", "status"];
+const PASS_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "fillState", "filledAt", "planScore", "planFlags", "regimeTrend", "regimeVol", "regimeAlign", "status"];
+
+// Where an UNRESOLVED call's entry stands, so a card never shows a live P&L for an order that never
+// filled. "WORKING" = the entry hasn't traded (a resting order); "OPEN" = it has, `filledAt` = the post
+// time or the start of the hour it filled in. Same rule gradeCall grades on (entryFill in logic.mjs).
+// A graded or invalid call carries neither: it's closed, or it's not a call. Display only: nothing
+// ranks on it. Returns true when the call changed.
+export function applyFillStamp(t, g, cd) {
+  const before = `${t.fillState}|${t.filledAt}`;
+  if (g && g.outcome === "PENDING") {
+    const f = entryFill(t, cd);
+    if (f.filled) { t.fillState = "OPEN"; t.filledAt = f.fillSec * 1000; }
+    else { t.fillState = "WORKING"; delete t.filledAt; }
+  } else {
+    delete t.fillState; delete t.filledAt;
+  }
+  return `${t.fillState}|${t.filledAt}` !== before;
+}
 
 // 1h OHLC from REGIME_PAD_S before the call to now, for gradeCall. Every grader (this cron, the
 // leaderboard, the permalink and the share card) reads the SAME per-symbol candle store
@@ -195,6 +212,7 @@ export async function gradePublicTheses(env) {
           delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV;
           changed = true; regraded++;
         }
+        if (applyFillStamp(t, g, cd)) changed = true;
         t.status = gradedStatusOf(t.gradedOutcome);
       }
     }

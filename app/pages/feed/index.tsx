@@ -10,6 +10,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useAccount, useCollateral } from "@orderly.network/hooks";
 import { useNavigate } from "react-router-dom";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
+import { showsLivePnl } from "@/lib/callLifecycle.mjs";
+import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { fetchOnChainRepScore } from "@/hooks/useThesisRegistry";
 import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -75,6 +77,9 @@ type FeedThesis = {
   leverage: number;
   status: "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "CLOSED";
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped); absent = not yet graded
+  fillState?: "WORKING" | "OPEN";  // server: has the entry traded yet (grading.mjs applyFillStamp)
+  filledAt?: number;
+  publishMark?: { px: number; at: number };
   gradedR?: number;               // graded R-multiple result (present once resolved)
   actualPnl: number | null;
   createdAt: number;
@@ -504,6 +509,7 @@ function FeedCard({
   const pill = eff === "HIT_TP" ? { label: `Won${rTxt}`, color: C.pos, border: LINE.pos }
     : eff === "STOPPED_OUT" ? { label: `Stopped out${rTxt}`, color: C.neg, border: LINE.neg }
     : eff === "INVALIDATED" ? { label: "Invalidated", color: C.text.faint, border: C.border }
+    : awaitingLabel(thesis) ? { label: awaitingLabel(thesis)!, color: C.text.fog, border: C.borderStrong, dashed: true }
     : { label: "Open", color: C.text.bright, border: C.borderStrong };
   const MONO = "var(--nx-font-mono)", UI = "var(--nx-font-ui)";
   const levels = [
@@ -559,7 +565,7 @@ function FeedCard({
           onClick={(e) => { e.preventDefault(); navigate(`/feed/thesis/${thesis.wallet}/${thesis.id}`); }}
           title="Open this call"
           className="nx-press"
-          style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, padding: "0 10px", height: 26, display: "inline-flex", alignItems: "center", borderRadius: 13, border: `1px solid ${pill.border}`, color: pill.color, flexShrink: 0, whiteSpace: "nowrap", textDecoration: "none", cursor: "pointer" }}
+          style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, padding: "0 10px", height: 26, display: "inline-flex", alignItems: "center", borderRadius: 13, border: `1px ${"dashed" in pill ? "dashed" : "solid"} ${pill.border}`, color: pill.color, flexShrink: 0, whiteSpace: "nowrap", textDecoration: "none", cursor: "pointer" }}
         >
           {pill.label}
         </a>
@@ -620,8 +626,11 @@ function FeedCard({
         );
       })()}
 
-      {/* Live P&L — active theses with mark price */}
-      {thesis.status === "ACTIVE" && markPrice != null && (() => {
+      {/* No position yet (a resting entry price hasn't reached, or not checked): the order, not P&L. */}
+      <AwaitingFill thesis={thesis} markPrice={markPrice} style={{ marginBottom: 12 }} />
+
+      {/* Live P&L — only for a call whose entry has traded (callLifecycle OPEN) */}
+      {showsLivePnl(thesis) && markPrice != null && (() => {
         const { pnl, pct } = calcUnrealizedPnl(thesis.direction, thesis.entryPrice, markPrice, thesis.positionSize);
         const toSL = distancePct(markPrice, thesis.stopLoss);
         const toTP = distancePct(markPrice, thesis.takeProfit1);

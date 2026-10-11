@@ -768,6 +768,16 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   four shared manual limit longs (BTC 61k/62k/64,094, ZEC 452) that never filled — now PENDING — plus a BTC 64,500
   short that filled and stopped out. `/theses/leaderboard` returns empty arrays by design when nobody qualifies: an
   empty board is not an outage — check `/theses/process/:wallet` before debugging.
+  **Cards show a position only once the entry trades (2026-10-11).** An unresolved call used to read as a live
+  position everywhere: a LONG limit at $2,400 with ETH at $2,538 showed "+2.73R at target" with no trade behind it.
+  The fill rule moved out of `gradeCall` into `entryFill` (logic.mjs, same answer, all old tests pass) and the hourly
+  pass stamps server fields `fillState` ("WORKING" = entry not traded, "OPEN" = traded) + `filledAt` on every
+  unresolved public call (`applyFillStamp`, grading.mjs; in PASS_FIELDS + SERVER_FIELDS, so no client save writes
+  them); the permalink reads it live. Display: `app/lib/callLifecycle.mjs` (WORKING / OPEN / CLOSED / UNCHECKED;
+  unstamped = OPEN only when the entry was within 0.3% of `publishMark`, else UNCHECKED, never a guess) +
+  `app/components/AwaitingFill.tsx`. Feed card, call page and trader profile (cards + In flight list, whose R total
+  now counts filled calls only) show "Awaiting fill at $X · mark N% above the entry", a dashed outline, no R and no
+  P&L. Grading unchanged. Not covered: the owner's own Lab ThesisView (private calls are never stamped).
   **Feed RANKS never ranks on KV data (borst + Ember, 2026-09-29).** `LeaderboardView` lists ONLY graded callers, in the
   grader's order (/theses/leaderboard), then EMERGING callers unranked ("—"); nobody else. It used to rank everyone in the
   feed, falling back to the Lab's own statuses (`buildLeaderboard`/`calcRepScore`) and the on-chain Rep Score (outcomes
