@@ -33,6 +33,7 @@ export const SERVER_FIELDS = [
   "copyCount", "publishedAt", "publishLegacy",
   "duplicateOf",   // callDedupe.mjs: this record's copy of a call another wallet can be proven to have made
   "publishMark",   // publishMark.mjs: the market price the server read when the call was first published
+  "fillState", "filledAt", // grading.mjs applyFillStamp: has the entry traded yet (WORKING / OPEN)
 ];
 /** The only fields the owner may still change on a published call. */
 export const OWNER_FIELDS = ["updates", "lossReason"];

@@ -12,6 +12,8 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
+import { showsLivePnl } from "@/lib/callLifecycle.mjs";
+import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { chartImageList, effectiveStatus } from "@/pages/lab/helpers";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
@@ -35,6 +37,9 @@ type FeedThesis = {
   status: "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "CLOSED";
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped)
   gradedR?: number;               // graded R-multiple result
+  fillState?: "WORKING" | "OPEN"; // server: has the entry traded yet (grading.mjs applyFillStamp)
+  filledAt?: number;
+  publishMark?: { px: number; at: number };
   actualPnl: number | null;
   createdAt: number;
   notes: string;
@@ -262,6 +267,16 @@ export default function ThesisPage() {
   })();
 
   const markPrice = livePrices[thesis.symbol] ?? null;
+  // A call with no position yet reads "Awaiting fill" / "Checking fill", never "ACTIVE".
+  const pendingLabel = awaitingLabel(thesis)?.split(" · ")[0] ?? null; // the price is in the block below
+  // A call posted without a size (Bankr, house calls) has no SIZE to show, not "$0".
+  const levelCells = [
+    { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`,   color: "#a1a1aa" },
+    { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,      color: "#f7525f" },
+    { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`,   color: "#ededf0" },
+    { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`,   color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
+    ...(thesis.positionSize > 0 ? [{ label: "SIZE", val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" }] : []),
+  ];
   const isClosed = thesis.status === "HIT_TP" || thesis.status === "STOPPED_OUT" || thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS";
 
   // Outbound share — pre-filled X / Farcaster posts that pull external eyes back
@@ -344,8 +359,8 @@ export default function ThesisPage() {
                 <span style={{ fontSize: 14 }} title="on-chain verified">⛓</span>
               ) : null}
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a" }}>{timeAgo}</div>
-              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 3, background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color }}>
-                {cfg.label}
+              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 3, background: cfg.bg, border: `1px ${pendingLabel ? "dashed" : "solid"} ${cfg.border}`, color: pendingLabel ? "#a1a1aa" : cfg.color }}>
+                {pendingLabel ? pendingLabel.toUpperCase() : cfg.label}
               </div>
             </div>
           </div>
@@ -377,14 +392,8 @@ export default function ThesisPage() {
           })()}
 
           {/* Key levels */}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, minmax(0, 1fr))" : "repeat(5, minmax(0, 1fr))", gap: "10px 16px", marginBottom: 16, padding: 14, background: "#0f0f11", borderRadius: 4, border: "1px solid #232327" }}>
-            {[
-              { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`,   color: "#a1a1aa" },
-              { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,      color: "#f7525f" },
-              { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`,   color: "#ededf0" },
-              { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`,   color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
-              { label: "SIZE",  val: `$${thesis.positionSize.toFixed(0)}`,  color: "#a1a1aa" },
-            ].map(({ label, val, color }) => (
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, minmax(0, 1fr))" : `repeat(${levelCells.length}, minmax(0, 1fr))`, gap: "10px 16px", marginBottom: 16, padding: 14, background: "#0f0f11", borderRadius: 4, border: "1px solid #232327" }}>
+            {levelCells.map(({ label, val, color }) => (
               <div key={label}>
                 <div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</div>
                 <div style={{ fontSize: 14, color, fontFamily: "var(--nx-font-mono)", fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val}</div>
@@ -392,8 +401,11 @@ export default function ThesisPage() {
             ))}
           </div>
 
-          {/* Live P&L — active theses */}
-          {thesis.status === "ACTIVE" && markPrice != null && (() => {
+          {/* No position yet (a resting entry price hasn't reached, or not checked): the order, not P&L. */}
+          <AwaitingFill thesis={thesis} markPrice={markPrice} style={{ marginBottom: 16 }} />
+
+          {/* Live P&L — only once the entry has traded (callLifecycle OPEN) */}
+          {showsLivePnl(thesis) && markPrice != null && (() => {
             const { pnl, pct } = calcUnrealizedPnl(thesis.direction, thesis.entryPrice, markPrice, thesis.positionSize);
             const toSL = distancePct(markPrice, thesis.stopLoss);
             const toTP = distancePct(markPrice, thesis.takeProfit1);

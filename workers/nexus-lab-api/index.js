@@ -79,7 +79,7 @@ import { handleProfile, handleLab } from "./routes-lab.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
 import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
-import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp } from "./grading.mjs";
+import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
 import { readPublishMark } from "./publishMark.mjs";
 import { registeredBy } from "./callLock.mjs";
@@ -1241,13 +1241,16 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
       // older grader (or one a client wrote) is never shown as the grade.
       if (!isCurrentStamp(thesis)) {
         try {
-          const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt, env));
+          const cd = await fetchGradeHistory(thesis.symbol, thesis.createdAt, env);
+          const g = gradeCall(thesis, cd);
           if (g.outcome === "WIN" || g.outcome === "LOSS") {
             thesis.gradedOutcome = g.outcome; thesis.gradedR = g.r; thesis.gradedAt = thesis.gradedAt || Date.now();
           } else {
             delete thesis.gradedOutcome; delete thesis.gradedR; delete thesis.gradedAt;
           }
           thesis.status = gradedStatusOf(thesis.gradedOutcome);
+          // Has the entry traded? Read live too, so the page never shows P&L on an unfilled order.
+          if (cd) applyFillStamp(thesis, g, cd);
         } catch { /* fall through with the stored value */ }
       }
       return json({ thesis: { ...thesis, wallet, pfp: profile.pfp || null, displayName: profile.displayName || null } }, request);

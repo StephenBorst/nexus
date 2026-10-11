@@ -9,6 +9,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
+import { showsLivePnl } from "@/lib/callLifecycle.mjs";
+import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { fetchOnChainRepScore } from "@/hooks/useThesisRegistry";
 import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -49,6 +51,9 @@ type FeedThesis = {
   leverage: number;
   status: "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "CLOSED";
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped); absent = not yet graded
+  fillState?: "WORKING" | "OPEN";  // server: has the entry traded yet (grading.mjs applyFillStamp)
+  filledAt?: number;
+  publishMark?: { px: number; at: number };
   actualPnl: number | null;
   createdAt: number;
   notes: string;
@@ -146,7 +151,9 @@ function ThesisRow({
     return "just now";
   })();
 
-  const pnlData = thesis.status === "ACTIVE" && markPrice != null
+  // P&L only once the entry has traded; a resting order shows the order instead (AwaitingFill).
+  const pendingLabel = awaitingLabel(thesis)?.split(" · ")[0] ?? null; // the price is in the block below
+  const pnlData = showsLivePnl(thesis) && markPrice != null
     ? calcUnrealizedPnl(thesis.direction, thesis.entryPrice, markPrice, thesis.positionSize)
     : null;
 
@@ -190,7 +197,7 @@ function ThesisRow({
             { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,   color: "#f7525f" },
             { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`, color: "#ededf0" },
             { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`, color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
-            { label: "SIZE",  val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" },
+            ...(thesis.positionSize > 0 ? [{ label: "SIZE", val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" }] : []),
           ].map(({ label, val, color }) => (
             <div key={label}>
               <div style={{ fontSize: 7, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</div>
@@ -222,8 +229,8 @@ function ThesisRow({
           <div style={{
             fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.08em",
             padding: "2px 7px", borderRadius: 3,
-            background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color,
-          }}>{cfg.label}</div>
+            background: cfg.bg, border: `1px ${pendingLabel ? "dashed" : "solid"} ${cfg.border}`, color: pendingLabel ? "#a1a1aa" : cfg.color,
+          }}>{pendingLabel ? pendingLabel.toUpperCase() : cfg.label}</div>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a" }}>{timeAgo}</div>
         </div>
 
@@ -253,8 +260,9 @@ function ThesisRow({
       {/* Expanded: full details + notes + live grid */}
       {expanded && (
         <div style={{ borderTop: "1px solid #232327", padding: "12px 16px" }}>
-          {/* Live price grid */}
-          {thesis.status === "ACTIVE" && markPrice != null && (() => {
+          <AwaitingFill thesis={thesis} markPrice={markPrice} style={{ marginBottom: 12 }} />
+          {/* Live price grid — only once the entry has traded */}
+          {showsLivePnl(thesis) && markPrice != null && (() => {
             const { pnl, pct } = calcUnrealizedPnl(thesis.direction, thesis.entryPrice, markPrice, thesis.positionSize);
             const toSL = distancePct(markPrice, thesis.stopLoss);
             const toTP = distancePct(markPrice, thesis.takeProfit1);
@@ -562,6 +570,7 @@ export default function TraderPage() {
     () => theses.filter((t) => t.status === "ACTIVE").map((t) => ({
       symbol: t.symbol, direction: t.direction,
       entryPrice: t.entryPrice, stopLoss: t.stopLoss, takeProfit1: t.takeProfit1,
+      status: t.status, gradedOutcome: t.gradedOutcome, fillState: t.fillState, publishMark: t.publishMark,
     })),
     [theses],
   );
@@ -811,7 +820,7 @@ export default function TraderPage() {
                   <StatBox
                     label="ACTIVE"
                     value={String(stats.active)}
-                    sub="live trades"
+                    sub="unresolved calls"
                     color={stats.active > 0 ? "#d4d4d8" : "#52525b"}
                   />
                   <StatBox
