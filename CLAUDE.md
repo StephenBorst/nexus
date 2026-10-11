@@ -988,7 +988,11 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   ~2 bps at $100. Our cut on that fill ≈ **$0.005** (may show as $0.01 or $0.00 once rounded); not yet confirmed in the
   Flash Portfolio. ⚠️ UX edge seen: the stop order came back noting "the trigger was already crossed when it was
   placed" — the ticket's `pxIssue` guard checks against the PAGE's price (and skips when it has none), so a trigger
-  close to the market can pass it and still be crossed on Flash's own price. Open follow-up.
+  close to the market can pass it and still be crossed on Flash's own price. **Fixed 2026-10-11:** stops are now
+  checked against FLASH's price — a MARKET quote at the same size (`flashRefPrice` = the target leg's notional ÷ amount;
+  a stop quote is priced AT the trigger, so it can't say where the market is) — on preview and again right before
+  signing; crossed → blocked ("Nothing was sent"), within 0.5% (`TRIGGER_NEAR`) → warning. Unreadable market quote →
+  the page-price check stands. `triggerCheck` in flashGuards.mjs, tests `flashTrigger.test.mjs` (live fixture).
 - **Key proxies gated** (`workers/nexus-lab-api/keyProxy.mjs`, tested): `/flash/*` + `/swap/jup/*` accept only our
   origins (ALLOWED_ORIGINS + `*.nexus-trading-lab.pages.dev`, https) and a per-IP isolate-local budget (flash writes
   30/min, flash reads 40/min, jup 120/min) → 403 `origin_not_allowed` / 429. Only browser code calls them.
