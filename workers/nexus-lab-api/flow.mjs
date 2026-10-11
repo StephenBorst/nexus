@@ -15,7 +15,7 @@
 // Both accumulate hourly (basis:hist / cvd:hist) — same pattern as oi:hist / liq:hist.
 // OKX is CF-accessible (unlike Binance). Magnitudes are notional-ish (consistent per symbol).
 
-import { okxJson, deribitResult } from "./okx.mjs";
+import { okxJson, okxGetAll, deribitResult } from "./okx.mjs";
 
 export const OKX_TICKER = "https://www.okx.com/api/v5/market/ticker";
 export const OKX_TRADES = "https://www.okx.com/api/v5/market/trades";
@@ -220,22 +220,66 @@ export function classifySkew(hist, current) {
 
 // Hourly cron: append {t, basisPct} to basis:hist and {t, cvd, buy, sell} to cvd:hist
 // per coin (≥55-min guard → hourly; ~90d cap). Best-effort per coin.
-export async function snapshotFlow(env, coins) {
+//
+// Paced + retried (2026-10-11). basis:hist was losing 10–31% of hours to OKX rate limits (see
+// okxGetAll in okx.mjs). Now: coins run one after another with FLOW_COIN_GAP_MS between them; a
+// coin's two tickers go out together (and are retried together), then its trades call; each group
+// gets FLOW_TRIES with backoff inside a FLOW_BUDGET_MS pass budget; every miss is logged with its
+// reason. The ROW SHAPES, keys, hourly guard and `t` stamp are unchanged — this changes how often a
+// row lands, never what a row says.
+// NOTE: options skew/DVOL is fetched CLIENT-SIDE (Deribit hard-blocks CF egress — see
+// app/lib/deribit.mjs), so no server-side skew snapshot here.
+export const FLOW_TRIES = 4;
+export const FLOW_COIN_GAP_MS = 500;
+export const FLOW_CALL_GAP_MS = 250;
+export const FLOW_BUDGET_MS = 120_000;
+const CVD_WINDOW_MS = 65 * 60 * 1000;
+
+export async function snapshotFlow(env, coins, {
+  fetchImpl = globalThis.fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+  random = Math.random, log = console, clock = Date.now,
+} = {}) {
   const KV = env.NEXUS_AGENT || env.LAB_STORE;
+  const started = clock();
+  const get = { tries: FLOW_TRIES, fetchImpl, sleep, random, deadline: started + FLOW_BUDGET_MS, now: clock };
+  const stat = { basis: 0, cvd: 0, retries: 0, missed: [] };
   let n = 0;
-  for (const coin of coins) {
+  for (let i = 0; i < coins.length; i++) {
+    if (i > 0) await sleep(FLOW_COIN_GAP_MS);
+    const coin = coins[i];
     const bare = String(coin).toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
-    const now = Date.now();
+    const spot = coinToSpot(coin);
+    if (!spot) continue;
+    const now = clock();
+    let wrote = false;
     try {
-      // NOTE: options skew/DVOL is fetched CLIENT-SIDE (Deribit hard-blocks CF egress — see
-      // app/lib/deribit.mjs), so no server-side skew snapshot here (it always failed). OKX
-      // basis + CVD work fine from the worker.
-      const [basis, cvd] = await Promise.all([fetchBasis(coin), fetchCvd(coin)]);
-      if (basis) await appendHist(KV, `basis:hist:${bare}`, { t: now, basisPct: basis.basisPct }, now);
-      if (cvd) await appendHist(KV, `cvd:hist:${bare}`, { t: now, cvd: cvd.cvd, buy: cvd.buy, sell: cvd.sell }, now);
-      if (basis || cvd) n++;
-    } catch { /* per-coin best-effort */ }
+      const b = await okxGetAll([`${OKX_TICKER}?instId=${spot}`, `${OKX_TICKER}?instId=${spot}-SWAP`], get);
+      stat.retries += Math.max(0, (b.attempts || 1) - 1);
+      const basisPct = b.ok ? computeBasisPct(b.json[0].data?.[0]?.last, b.json[1].data?.[0]?.last) : null;
+      if (basisPct != null) {
+        await appendHist(KV, `basis:hist:${bare}`, { t: now, basisPct }, now);
+        stat.basis++; wrote = true;
+      } else {
+        stat.missed.push(`${bare} basis: ${b.ok ? "bad tick" : `${b.reason}, ${b.attempts} tries`}`);
+      }
+      await sleep(FLOW_CALL_GAP_MS);
+      const c = await okxGetAll([`${OKX_TRADES}?instId=${spot}-SWAP&limit=100`], get);
+      stat.retries += Math.max(0, (c.attempts || 1) - 1);
+      if (c.ok) {
+        const cvd = aggregateCvd(c.json[0].data || [], clock() - CVD_WINDOW_MS);
+        await appendHist(KV, `cvd:hist:${bare}`, { t: now, cvd: cvd.cvd, buy: cvd.buy, sell: cvd.sell }, now);
+        stat.cvd++; wrote = true;
+      } else {
+        stat.missed.push(`${bare} cvd: ${c.reason}, ${c.attempts} tries`);
+      }
+    } catch (e) {
+      stat.missed.push(`${bare}: ${String((e && e.message) || e).slice(0, 80)}`);
+    }
+    if (wrote) n++;
   }
+  const secs = ((clock() - started) / 1000).toFixed(1);
+  log.log(`[flow] basis ${stat.basis}/${coins.length} · cvd ${stat.cvd}/${coins.length} · retries ${stat.retries} · ${secs}s`);
+  if (stat.missed.length) log.error(`[flow] MISSED ${stat.missed.length}: ${stat.missed.join(" | ")}`);
   return n;
 }
 
