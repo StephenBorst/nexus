@@ -116,12 +116,13 @@ export function calcUnrealizedPnl(
   markPrice: number,
   positionSize: number
 ): { pnl: number; pct: number } {
-  if (!entryPrice || !markPrice || !positionSize) return { pnl: 0, pct: 0 };
-  const qty = positionSize / entryPrice;
+  if (!entryPrice || !markPrice) return { pnl: 0, pct: 0 };
   const priceDelta = direction === "LONG"
     ? markPrice - entryPrice
     : entryPrice - markPrice;
-  const pnl = priceDelta * qty;
+  // No size (public calls carry none): no dollars, but the % move is still real. It used to return
+  // 0% too, so a card read "+$0.00 (+0.00%)" while the mark moved.
+  const pnl = positionSize ? priceDelta * (positionSize / entryPrice) : 0;
   const pct = (priceDelta / entryPrice) * 100;
   return { pnl, pct };
 }

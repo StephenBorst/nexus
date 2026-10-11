@@ -10,6 +10,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { fetchOnChainRepScore } from "@/hooks/useThesisRegistry";
 import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
@@ -153,9 +154,12 @@ function ThesisRow({
 
   // P&L only once the entry has traded; a resting order shows the order instead (AwaitingFill).
   const pendingLabel = awaitingLabel(thesis)?.split(" · ")[0] ?? null; // the price is in the block below
+  // Public calls carry no position size, so the badge reads the move in R and % (a dollar
+  // figure would always be $0.00). A sized call (the owner's own view) keeps its dollars.
   const pnlData = showsLivePnl(thesis) && markPrice != null
     ? calcUnrealizedPnl(thesis.direction, thesis.entryPrice, markPrice, thesis.positionSize)
     : null;
+  const move = showsLivePnl(thesis) && markPrice != null ? liveMove(thesis, markPrice) : null;
 
   return (
     <div style={{
@@ -196,7 +200,8 @@ function ThesisRow({
             { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`, color: "#a1a1aa" },
             { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,   color: "#f7525f" },
             { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`, color: "#ededf0" },
-            { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`, color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
+            { label: "R:R",   val: fmtRR(callRR(thesis)), color: (callRR(thesis) ?? 0) >= 2 ? "#ededf0" : "#fbbf24" },
+            ...(runnerRR(thesis) != null ? [{ label: "RUNNER", val: fmtRR(runnerRR(thesis)), color: "#a1a1aa" }] : []),
             ...(thesis.positionSize > 0 ? [{ label: "SIZE", val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" }] : []),
           ].map(({ label, val, color }) => (
             <div key={label}>
@@ -207,13 +212,17 @@ function ThesisRow({
         </div>
 
         {/* Live P&L badge (if active) */}
-        {pnlData && (
+        {pnlData && thesis.positionSize > 0 ? (
           <div style={{
             fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold",
             color: pnlData.pnl >= 0 ? "#3ecf8e" : "#f7525f",
           }}>
             {pnlData.pnl >= 0 ? "+" : ""}${pnlData.pnl.toFixed(2)}
             <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 3 }}>({pnlData.pct >= 0 ? "+" : ""}{pnlData.pct.toFixed(2)}%)</span>
+          </div>
+        ) : move && (
+          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", color: move.pct >= 0 ? "#3ecf8e" : "#f7525f" }}>
+            {fmtLiveMove(move)}
           </div>
         )}
 
@@ -270,7 +279,9 @@ function ThesisRow({
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(70px, 1fr))", gap: "8px 12px", marginBottom: 12, padding: 10, background: "#0f0f11", borderRadius: 4, border: "1px solid #232327" }}>
                 {[
                   { label: "MARK", val: `$${markPrice.toFixed(markPrice < 10 ? 4 : 2)}`, color: "#fff" },
-                  { label: "UNREALIZED", val: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`, color: pnl >= 0 ? "#3ecf8e" : "#f7525f" },
+                  thesis.positionSize > 0
+                    ? { label: "UNREALIZED", val: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`, color: pnl >= 0 ? "#3ecf8e" : "#f7525f" }
+                    : { label: "MOVE", val: fmtLiveMove(liveMove(thesis, markPrice)), color: pct >= 0 ? "#3ecf8e" : "#f7525f" },
                   { label: "TO SL", val: `${toSL.toFixed(2)}%`, color: "#f7525f" },
                   { label: "TO TP1", val: `${toTP.toFixed(2)}%`, color: "#ededf0" },
                 ].map(({ label, val, color }) => (
@@ -545,7 +556,9 @@ export default function TraderPage() {
           leverage: num(t.leverage),
           actualPnl: t.actualPnl == null ? null : num(t.actualPnl),
         }));
-        setTheses(all.filter((t) => t.wallet.toLowerCase() === wallet.toLowerCase()));
+        // /feed also carries RESOLUTION rows ("BTC SHORT stopped out, −1R"): announcements with no
+        // levels. They used to land here as calls with $0.00 entry/stop/TP and "Checking fill".
+        setTheses(all.filter((t) => !(t as { resolution?: boolean }).resolution && t.wallet.toLowerCase() === wallet.toLowerCase()));
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
@@ -585,11 +598,11 @@ export default function TraderPage() {
     const invalidated = theses.filter((t) => t.status === "INVALIDATED").length;
     const closed = wins + losses;
     const winRate = closed > 0 ? (wins / closed) * 100 : null;
-    const avgRR = theses.length > 0
-      ? theses.reduce((sum, t) => sum + t.riskReward, 0) / theses.length
-      : 0;
+    // From each call's own levels (TP1), the R the grader pays; calls whose levels don't make a call are left out.
+    const rrs = theses.map((t) => callRR(t)).filter((r): r is number => r != null);
+    const avgRR = rrs.length > 0 ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 0;
     const bestTrade = theses.reduce<FeedThesis | null>((best, t) =>
-      !best || t.riskReward > best.riskReward ? t : best, null);
+      callRR(t) != null && (!best || (callRR(t) ?? 0) > (callRR(best) ?? 0)) ? t : best, null);
     const totalPnl = theses
       .filter((t) => t.actualPnl !== null)
       .reduce((sum, t) => sum + (t.actualPnl ?? 0), 0);
@@ -747,7 +760,7 @@ export default function TraderPage() {
                 </div>
                 <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b", marginTop: 2 }}>{shortAddr}</div>
                 <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a", marginTop: 4 }}>
-                  {theses.length} public thesis{theses.length !== 1 ? "es" : ""}
+                  {theses.length} public {theses.length === 1 ? "call" : "calls"}
                 </div>
               </div>
               {/* Cross-check: this board ranks GRADED CALLS, but a caller's real
@@ -840,7 +853,7 @@ export default function TraderPage() {
                   {stats.bestTrade && (
                     <StatBox
                       label="BEST R:R"
-                      value={`1:${stats.bestTrade.riskReward.toFixed(2)}`}
+                      value={fmtRR(callRR(stats.bestTrade))}
                       sub={bareTicker(stats.bestTrade.symbol)}
                       color="#ededf0"
                     />
