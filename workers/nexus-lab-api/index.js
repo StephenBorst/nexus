@@ -81,6 +81,7 @@ import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.
 import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
+import { readPublishMark } from "./publishMark.mjs";
 import { registeredBy } from "./callLock.mjs";
 import { resolveDuplicates, REPORT_KEY as DEDUPE_REPORT_KEY } from "./callDedupe.mjs";
 import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signal-delivery.mjs";
@@ -451,7 +452,7 @@ async function generateHouseCalls(env, { dryRun = false, max = 1, liveAttempts =
   if (dryRun) return { dryRun: true, house: houseAddr, candidates: toPost, boardSource };
   if (!toPost.length) return { posted: [], note: "top fades all deduped (recent/active)", boardSource };
   // Through the same seal as a user's save: house calls are published calls too (permanent, server-timed).
-  const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now());
+  const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now(), { readMark: readPublishMark });
   if (prep.error) return { error: prep.error };
   await prep.commit(data);
   // Ensure the feed/leaderboard has a name for the house identity (one-time seed).
@@ -563,7 +564,7 @@ async function generateCatalystHouseCalls(env, { dryRun = false, max = 2 } = {})
   }
   if (dryRun) return { dryRun: true, house: houseAddr, candidates: toPost };
   if (!toPost.length) return { posted: [], note: "no fresh catalyst impacts (all deduped or unpriced)" };
-  const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now());
+  const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now(), { readMark: readPublishMark });
   if (prep.error) return { error: prep.error };
   await prep.commit(data);
   try {
@@ -2250,7 +2251,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         onChainTxHash: txHash,
       };
       const prevTR = existingDataTR.theses || [];
-      const prepTR = await prepareSeal(env, walletNormTR, prevTR, [newThesis, ...prevTR], Date.now());
+      const prepTR = await prepareSeal(env, walletNormTR, prevTR, [newThesis, ...prevTR], Date.now(), { readMark: readPublishMark });
       if (prepTR.error) return json({ error: prepTR.error }, request, 400);
       await prepTR.commit(existingDataTR);
 

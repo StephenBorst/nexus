@@ -30,6 +30,10 @@ export function callR(t) {
   return Math.round((reward / risk) * 100) / 100;
 }
 
+/** How far (%) an entry may sit from the mark read at publish and still count as the market. */
+export const ENTRY_AT_MARK_PCT = 0.3;
+const atMark = (entry, mark) => Math.abs(entry - mark) / mark <= ENTRY_AT_MARK_PCT / 100;
+
 /**
  * Grade a human "call" (thesis) against public OHLC candles, first-touch.
  * Trustless: the outcome is a fact about public price, not self-report.
@@ -48,8 +52,14 @@ export function callR(t) {
  *   target touch doesn't (it may have come first). Never filled = PENDING. Before this, an entry
  *   typed away from the market was graded as if filled: a LONG "entered" 4% under the market won
  *   2R without price ever trading there.
+ * - THE MARKET AT THE POST (2026-10-11). A call published since then carries `publishMark`, the
+ *   Orderly mark the server read when it was first published (publishMark.mjs). For those, "the
+ *   entry is the market" means within ENTRY_AT_MARK_PCT of that mark, not anywhere in the posting
+ *   hour's range: an hourly range left up to an hour of hindsight (post at 14:50, entry at 14:05's
+ *   low, graded as filled). Any other entry is a resting order exactly as above. Calls without a
+ *   mark (everything published before, or a failed read) keep the hour-range rule.
  *
- * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, createdAt }
+ * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, createdAt, publishMark? }
  * @param {object} cd candles { t:number[] (sec), h:number[], l:number[] } ascending by t
  * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number, awaitingEntry?:true }}
  */
@@ -67,7 +77,9 @@ export function gradeCall(t, cd) {
   const ref = i < n && cd.t[i] === startSec ? i : i > 0 && cd.t[i - 1] > startSec - 3600 ? i - 1 : i;
   const entry = Number(entryPrice);
   const traded = (k) => cd.l[k] <= entry && entry <= cd.h[k];
-  if (!(ref < n && traded(ref))) {
+  const mark = Number(t.publishMark?.px);
+  const atPost = mark > 0 ? atMark(entry, mark) : ref < n && traded(ref);
+  if (!atPost) {
     let f = i;
     while (f < n && !traded(f)) f++;
     if (f >= n) return { outcome: "PENDING", r: 0, awaitingEntry: true };
@@ -95,7 +107,7 @@ export function gradeCall(t, cd) {
  * Where a draft's entry sits against the market right now (the latest hour's range), for the
  * advisor: gradeCall only counts a call once price trades its entry, so an entry away from the
  * market is a resting order and the trader should know before posting. null without candles.
- * @returns {{ traded: boolean, offPct: number, last: number } | null}
+ * @returns {{ traded: boolean, atMarket: boolean, offPct: number, last: number } | null}
  */
 export function entryVsMarket(entryPrice, cd) {
   const e = Number(entryPrice);
@@ -103,7 +115,11 @@ export function entryVsMarket(entryPrice, cd) {
   if (!(e > 0) || !n) return null;
   const k = n - 1, last = Number(cd.c?.[k] ?? (cd.h[k] + cd.l[k]) / 2);
   if (!(last > 0)) return null;
-  return { traded: cd.l[k] <= e && e <= cd.h[k], offPct: Math.round(((e - last) / last) * 10000) / 100, last };
+  return {
+    traded: cd.l[k] <= e && e <= cd.h[k],
+    atMarket: atMark(e, last),            // what a publish right now would grade as "filled at the post"
+    offPct: Math.round(((e - last) / last) * 10000) / 100, last,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

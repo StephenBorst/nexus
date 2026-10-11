@@ -110,7 +110,7 @@ test("callR: reward ÷ risk from the levels, 2dp; null when the levels aren't a 
 });
 
 // ── verifyErc20Payment (PRO subscription rail) ──────────────
-import { verifyErc20Payment, ERC20_TRANSFER_TOPIC } from "./logic.mjs";
+import { verifyErc20Payment, ERC20_TRANSFER_TOPIC, ENTRY_AT_MARK_PCT } from "./logic.mjs";
 
 const USDC = "0xaf88d065e77c8cc2239327c5edb3a432268e5831";
 const RECV = "0x06cD9c281E6ab09906B46a10e059F2770EfdE49A";
@@ -2355,7 +2355,11 @@ test("gradeCall: at the market it grades exactly as before; with no candle in th
 
 test("entryVsMarket: the advisor's off-market entry check reads the latest hour", () => {
   const cd = { t: [t0, t0 + 3600], h: [101, 64000], l: [99, 63500], c: [100, 63700] };
-  assert.deepEqual(entryVsMarket(63600, cd), { traded: true, offPct: -0.16, last: 63700 });
+  assert.deepEqual(entryVsMarket(63600, cd), { traded: true, atMarket: true, offPct: -0.16, last: 63700 });
+  // Inside the hour's range but 0.31% under the last price: a publish now would make it a resting order.
+  const wide = entryVsMarket(63500, cd);
+  assert.equal(wide.traded, true);
+  assert.equal(wide.atMarket, false);
   const off = entryVsMarket(61000, cd);
   assert.equal(off.traded, false);
   assert.equal(off.offPct, -4.24);
@@ -2418,4 +2422,49 @@ test("HOSTED_TIERS in app/config/assistant.ts mirror hostedCaps (ids + caps), so
   const block = src.slice(src.indexOf("export const HOSTED_TIERS"), src.indexOf("];", src.indexOf("export const HOSTED_TIERS")));
   const client = Object.fromEntries([...block.matchAll(/id:\s*"([^"]+)"[^}]*?cap:\s*(\d+)/g)].map((m) => [m[1], Number(m[2])]));
   assert.deepEqual(client, hostedCaps({}));
+});
+
+// ── The market at the post (2026-10-11) ─────────────────────────────────────────────────────
+// A call published since carries publishMark (the mark the server read at publish). Bar 0 is the
+// hour it was posted into; the post lands at :50, so most of that hour's range came BEFORE it.
+const midHour = (t0 + 3000) * 1000;
+test("gradeCall: with a publish mark, an entry from earlier in the hour is a resting order, not a fill", () => {
+  // Posted at 14:50 with BTC at 101; the hour ranged 96–102. Entry 96.5 = the hour's low, typed after
+  // the fact. The hour-range rule filled it at the post and paid 2R when 106 printed.
+  const hindsight = { direction: "LONG", entryPrice: 96.5, stopLoss: 94.5, takeProfit1: 100.5, createdAt: midHour };
+  const cd = series(t0, [{ h: 102, l: 96 }, { h: 106, l: 100 }, { h: 107, l: 101 }]);
+  assert.equal(gradeCall(hindsight, cd).outcome, "WIN", "without a mark: the old rule, unchanged");
+  const g = gradeCall({ ...hindsight, publishMark: { px: 101, at: midHour } }, cd);
+  assert.deepEqual(g, { outcome: "PENDING", r: 0, awaitingEntry: true }, "price never came back to 96.5");
+});
+
+test("gradeCall: with a publish mark, an entry at the market fills at the post", () => {
+  const call = { direction: "LONG", entryPrice: 100.2, stopLoss: 98, takeProfit1: 104.6, createdAt: midHour, publishMark: { px: 100, at: midHour } };
+  const g = gradeCall(call, series(t0, [{ h: 100.5, l: 99.8 }, { h: 105, l: 99 }]));
+  assert.deepEqual(g, { outcome: "WIN", r: 2 });
+  // The band is ENTRY_AT_MARK_PCT either side of the mark: 0.3% of 100 = 0.3.
+  assert.equal(ENTRY_AT_MARK_PCT, 0.3);
+  const cd = series(t0, [{ h: 101, l: 99 }, { h: 105, l: 99.6 }]);
+  const atEdge = { ...call, entryPrice: 99.7, stopLoss: 97.7, takeProfit1: 104.1 };
+  assert.equal(gradeCall(atEdge, cd).outcome, "WIN", "0.3% under the mark is still the market");
+  const past = { ...call, entryPrice: 99.6, stopLoss: 97.6, takeProfit1: 104 };
+  // 0.4% under: resting. Hour 1 trades 99.6 (fill hour, a target touch there doesn't count) → pending.
+  assert.equal(gradeCall(past, cd).outcome, "PENDING");
+});
+
+test("gradeCall: a resting entry with a mark still fills later, and a stop in the fill hour counts", () => {
+  const short = { direction: "SHORT", entryPrice: 103, stopLoss: 105, takeProfit1: 99, createdAt: midHour, publishMark: { px: 100, at: midHour } };
+  // The posting hour reached 103 (before the post, as far as anyone can tell): not a fill.
+  const cd = series(t0, [{ h: 103.5, l: 99 }, { h: 101, l: 99.5 }, { h: 103.2, l: 101 }, { h: 102, l: 98.5 }]);
+  assert.deepEqual(gradeCall(short, cd), { outcome: "WIN", r: 2 }, "fills in hour 2, target in hour 3");
+  const stopped = series(t0, [{ h: 101, l: 99 }, { h: 105.5, l: 101 }]);
+  assert.deepEqual(gradeCall(short, stopped), { outcome: "LOSS", r: -1 });
+});
+
+test("gradeCall: a malformed mark falls back to the hour-range rule", () => {
+  const call = { direction: "LONG", entryPrice: 96.5, stopLoss: 94.5, takeProfit1: 100.5, createdAt: midHour };
+  const cd = series(t0, [{ h: 102, l: 96 }, { h: 106, l: 100 }]);
+  for (const bad of [null, {}, { px: 0 }, { px: -5 }, { px: "abc" }]) {
+    assert.equal(gradeCall({ ...call, publishMark: bad }, cd).outcome, "WIN", JSON.stringify(bad));
+  }
 });
