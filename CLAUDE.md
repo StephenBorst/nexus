@@ -633,6 +633,12 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   PR to BankrBot/skills. Our fork = **`StephenBorst/skills`**, branch **`add-autonomous-agent`** (agent control +
   full config surface) — ✅ MERGED into `BankrBot/skills` (the agent-control module is live in the published
   Bankr skill). Local staging clone: `C:\Users\steph\bankr-skills-stage`.
+- **`nexus-trading-labs/` in this repo = a byte-for-byte copy of BankrBot/skills' folder (synced 2026-10-12, after the
+  registration/status PR from `StephenBorst/skills:nexus-trading-labs-update`).** It had drifted BEHIND upstream (no
+  `agent.md`, no `catalog.json`, missing the copy-is-not-auto-trading + deposit-destination warnings), so a wholesale
+  copy from here would have regressed the published skill. Rule: change the skill in BankrBot first (PR from the fork),
+  then copy that folder back here; never copy this folder over theirs without diffing. (The older `bankr-skill/` copy, incl. its
+  `app-scripts/` Bankr app snippets, was deleted 2026-10-12; recover from git history if ever needed.)
 - **Repo source-of-truth copies:** `docs/SKILL.md` (full updated skill), `docs/bankr-skill-agent-module.md` (=
   `references/agent.md`), `docs/bankr-agent-spec.md` (build spec), `docs/skill-agent-additions.md` (apply guide).
 - **Marketing:** `marketing/lab-article.md` (flagship X long-form article + 3 hook tweets + pull-quotes),

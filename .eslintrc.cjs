@@ -22,8 +22,6 @@ module.exports = {
   },
   ignorePatterns: [
     "!**/.server", "!**/.client",
-    // Snippets pasted into the Bankr skill's own page (its `$`/`bankr`/`load` globals), not our runtime.
-    "bankr-skill/app-scripts/**",
   ],
 
   // Base config
