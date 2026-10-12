@@ -393,6 +393,9 @@ export async function handleTheses(parts, request, env) {
     return json({
       coin, side, lean: Math.round(lean * 100) / 100,
       longCount, shortCount, participants: live.length,
+      // Wallets on this coin through an OPEN PUBLIC CALL (a position-only wallet isn't counted).
+      // The Spot search card shows this as a plain count, no side split.
+      callCount: live.filter((s) => s.sources.has("thesis")).length,
       callers: callers.slice(0, 12),
       criteria: {
         note: "Credible callers positioned on this symbol RIGHT NOW — from currently-open positions (agents + opted-in humans) and active (unresolved, <14d) public calls. Direction + earned merit tier + graded record per caller; lean is merit-weighted (Apex 3 / Sharp 2 / Signal 1). A wallet on both sides of the symbol is voided. Recomputable from public price.",

@@ -1164,6 +1164,19 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   bps unauthenticated surcharge" above is NOT what we see: the keyless path costs ~2 bps at $100. The 21 bps baseline
   on 1.25 USDC was mostly the FIXED `withdrawFee` (0.0024 USDC ≈ 19 bps at that size). Keep the key (it identifies us as a
   partner); a better fee split or rate is NEAR's to grant on the account, not something the code can unlock.
+- **Spot discovery pass (2026-10-12, borst's scope).** Rules in `app/lib/spotDiscovery.mjs` (tested): (1) **Recently
+  viewed** = last 5 tokens opened in this browser, keyed chain + CA (perp-only majors by ticker), localStorage
+  `nx_spot_viewed_v1`, no wallet needed; chips under the search bar reopen by ADDRESS. Separate from holdings.ts recents
+  (bought tokens, which drive balance reads). (2) **Address search fix:** DexScreener `/tokens/<addr>` returns pairs where
+  the address is base OR quote; `searchToken` now keeps the token's own pairs (`pairsForAddress`), so a pasted CA opens
+  that token. (3) **"Not this one?"** under the search card = `didYouMean` (a different contract, real-market floors,
+  ticker searches only). (4) **Majors row** (`SPOT_MAJORS`): Solana majors open by MINT (SOL/JUP/RAY/BONK/WIF), NEXUS by
+  its Base CA, BTC/ETH/HYPE by ticker; above Movers with no wallet, below with one. (5) **Bridge prompt**: Solana buy
+  ticket shows "Get USDC on Solana →" only when BOTH balances read and neither can pay (`needsSolanaFunds`); it opens the
+  cross-chain card preset to USDC · Solana + the user's own address via router STATE (never the URL); `CrossChainCard`
+  takes `initialTo` (non-origin assets only) / `initialRecipient` (still shape-checked + bound by checkQuote). (6) **Callers
+  count**: `/theses/symbol` returns `callCount` (wallets on the coin via an open public call); the card shows "N public
+  calls open on X · see who", **no long/short split until the verified board has a net-positive caller** (borst).
 - **Landing footer row (2026-09-30):** `Jupiter · spanDEX · Definitive Flash · WooFi · NEAR Protocol · XMTP · Quotient ·
   Arbitrum` ("NEAR Protocol" matches the announcement post; Fabric → spanDEX since Fabric shut down). The spot card names
   NEAR Intents for cross-chain. `llms.txt` is ONE file kept identical in `public/llms.txt` (app) and `nexus-landing/llms.txt`
