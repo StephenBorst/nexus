@@ -48,6 +48,11 @@ export interface ThesisTrade {
   gradedOutcome?: "WIN" | "LOSS";    // objective grade from public price (server-stamped)
   gradedR?: number;
   gradedAt?: number;
+  // Server fields on PUBLISHED calls only (grading.mjs applyFillStamp / publishMark.mjs): has the entry
+  // traded yet, and the market price read at the first publish. Private calls never carry them.
+  fillState?: "WORKING" | "OPEN";
+  filledAt?: number;
+  publishMark?: { px: number; at: number; src?: string };
   actualPnl: number | null;
   // Append-only lifecycle timeline (add/trim/move stop/flip/close/note). See
   // app/lib/lifecycle.mjs. ⚠️ ADDITIVE ONLY — grading and the anchored call ledger

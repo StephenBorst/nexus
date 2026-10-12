@@ -789,7 +789,8 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   unstamped = OPEN only when the entry was within 0.3% of `publishMark`, else UNCHECKED, never a guess) +
   `app/components/AwaitingFill.tsx`. Feed card, call page and trader profile (cards + In flight list, whose R total
   now counts filled calls only) show "Awaiting fill at $X · mark N% above the entry", a dashed outline, no R and no
-  P&L. Grading unchanged. Not covered: the owner's own Lab ThesisView (private calls are never stamped).
+  P&L. Grading unchanged. The owner's Lab ThesisView does the same for PUBLISHED calls (2026-10-12: no P&L row, no
+  "price tagged your TP1" notice until the entry trades); private calls are never stamped, so they keep the live P&L row.
   **Cards read R:R from the LEVELS (2026-10-11).** The stored `riskReward` is client-written and some clients wrote it
   to TP2 (a card showed 1:5.00 beside levels that make 1:2.60; the grader paid 2.60). Every card, share text, OG card
   and profile average now uses `callRR` (`app/lib/callMath.mjs`, pinned to lab-api `callR` by test); TP2 shows as
