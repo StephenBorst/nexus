@@ -73,12 +73,12 @@ export function AgentToggleCard({ label, description, on, onToggle }: {
         </div>
         <button onClick={onToggle}
           style={{
-            flexShrink: 0, cursor: "pointer", fontFamily: "var(--nx-font-mono)", fontSize: 11, borderRadius: 4, padding: "6px 16px",
+            flexShrink: 0, cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 11, borderRadius: 4, padding: "6px 16px",
             background: on ? `${accent}15` : "#0a0a0b",
             border: `1px solid ${on ? accent : "#232327"}`,
             color: on ? accent : "#71717a",
           }}>
-          {on ? "ON" : "OFF"}
+          {on ? "On" : "Off"}
         </button>
       </div>
     </div>
