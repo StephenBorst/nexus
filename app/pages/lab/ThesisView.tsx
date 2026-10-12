@@ -26,6 +26,8 @@ import { ThesisTimeline } from "./ThesisTimeline";
 import { ThesisAdvisor } from "./ThesisAdvisor";
 import { PnlChart, EmptyState, Coachmark } from "./components";
 import { Collapsible } from "./Collapsible";
+import { AwaitingFill } from "@/components/AwaitingFill";
+import { showsLivePnl } from "@/lib/callLifecycle.mjs";
 import { SharePoster, type PosterData } from "./SharePoster";
 import { bareTicker } from "@/utils/utils";
 import { C, SIGNAL } from "@/config/theme";
@@ -110,6 +112,10 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
   // chroma; active/other stay a quiet neutral.
   const leftRule = eff === "HIT_TP" ? "#3ecf8e" : eff === "STOPPED_OUT" ? "#f7525f" : eff === "INVALIDATED" ? "#3f3f46" : "#33333a";
   const cardFunding = fundingFlow(t.direction, t.fundingRate);
+  // A published call is a position only once its entry trades (the hourly grader stamps fillState).
+  // Until then it shows the order, not P&L, the same as the Feed card and the call page. Private
+  // calls are the owner's own plan and are never stamped, so they keep the live P&L row.
+  const noPositionYet = t.isPublic && eff === "ACTIVE" && !showsLivePnl(t);
 
   // Auto-grade the dollar P&L from the plan the trader already logged, so a HIT TP /
   // STOPPED OUT click fills the number instead of making them do entry→exit × size
@@ -413,7 +419,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
           stamped the objective grade yet (first-touch OHLC, computed server-side).
           Informational ONLY: the grade lands automatically from public price, so there's
           nothing to click. Once graded, the authoritative banner above takes over. */}
-      {eff === "ACTIVE" && (() => {
+      {eff === "ACTIVE" && !noPositionYet && (() => {
         const sug = resolveSuggestion(t, markPrice);
         if (!sug || sug.graded) return null; // graded → shown by the grade banner above
         const isTp = sug.outcome === "HIT_TP";
@@ -427,8 +433,11 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
         );
       })()}
 
+      {/* Published call whose entry hasn't traded (or not checked yet): the order, no P&L. */}
+      {noPositionYet && <AwaitingFill thesis={t} markPrice={markPrice} style={{ marginBottom: 10 }} />}
+
       {/* Live P&L — only shown for still-live (ungraded) theses with a mark price */}
-      {eff === "ACTIVE" && markPrice != null && (() => {
+      {eff === "ACTIVE" && !noPositionYet && markPrice != null && (() => {
         const { pnl, pct } = calcUnrealizedPnl(t.direction, t.entryPrice, markPrice, t.positionSize);
         const toSL = distancePct(markPrice, t.stopLoss);
         const toTP = distancePct(markPrice, t.takeProfit1);
