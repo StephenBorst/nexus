@@ -826,6 +826,11 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   calls only (else 404); `gradeCall` on the same `tvhist:v2` candles every grader reads, ignoring the stamp; verdict
   MATCH / MISMATCH / UNSTAMPED / NO_DATA vs the stored stamp; `source` = the public Orderly /tv/history URL. The secret
   `COINGECKO_API_KEY` is no longer read anywhere.
+  **Share card + permalink answer public calls only (2026-10-12).** `GET /og/thesis/:w/:id(.png)` (now
+  `routes-ogthesis.mjs`, tested) rendered whatever id matched, so a private or holders-only call's levels + notes were one
+  guessed id away; `/share/thesis` and `/thesis` checked `isPublic` alone. All three now use `isPublicCall` (routes-verify:
+  public, not holders-only, not a `duplicateOf` copy) → 404 / bounce. No share button builds these URLs for an
+  unpublished call.
 - **Registration hardened + keyless index (2026-10-12, after an agent burned ~$0.15 gas and indexed nothing).**
   `routes-thesisreg.mjs` (I/O) + `thesisRegister.mjs` (rules, tested vs viem). `/proxy/thesis-register`: `checkRegistration`
   (side, symbol, levels via callR, 6-decimal scale error ≤0.1%, exitPlan/split, notes ≤1000 B) + an `eth_call` simulation
