@@ -607,8 +607,8 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   classified, 23 markets clean: with-structure 84 · −0.17R vs counter-cycle 79 · +0.00R, gap 0.17R, p 0.36 (bar 0.40R /
   0.05); direction held in both halves + every leave-one-out but too small. Structure does NOT gate the house caller.
   ⚠️ The one positive diagnostic ("against weekly only" 42 · +0.22R) was found on this population — testing it = a NEW
-  dated registration on post-Oct-1 calls, never a re-read of these 163. Two other callers still ask Orderly for 240 and silently get
-  nothing: signal-delivery's 4H EMA8/21 levels (always null) and MacroEvents' BTC chart (never shows).
+  dated registration on post-Oct-1 calls, never a re-read of these 163. (Both other 240 callers are gone: the 4H
+  EMA levels now build bars from 1H, and the MacroEvents chart was dead code, deleted 2026-10-12.)
 - **The Read = inputs, not a verdict (2026-09-30).** `LiveRead.tsx` no longer counts reads, crowns the count ("STRONG
   READ", "◆ ALIGNED SETUP") or tints green: every input shows its number + the side it points to in plain ink; amber for
   caution, C.warn for danger, nothing endorses. Don't re-add a tally of ungraded reads. **Same rule in the Lab
@@ -880,6 +880,8 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   (`@noble/curves`)** (recovered addr must match, ts fresh ≤10min) THEN on-chain balanceOf ≥ `OPERATOR_MIN`.
   ⚠️ **`OPERATOR_MIN` in lab-api MUST match the frontend OPERATOR threshold** (currently 50M) or badges/gate drift.
   Frontend caches the signature per-session (8min) to avoid re-prompting.
+- **⚠️ STALE (2026-10-12): `NexusMarket` + `NexusTreasury` are deleted** — the strip was slimmed to `NexusBuyBar` on Aug 16
+  and the treasury moved to `TreasuryInventory` on Sept 12; the bullet below is history.
 - **Public flywheel strip** (Feed header + Lab header + landing): `NexusMarket` (live price/MC/vol/liq from
   GeckoTerminal, **client-side fetch** — GeckoTerminal/CoinGecko 403 datacenter IPs; carries the GT link-back) +
   `NexusTreasury` (USDC balance of the Safe on Arbitrum; LIVE — `NEXUS_TREASURY_ADDRESS` is set to the Safe) + `NexusBurnCounter` (on-chain $NEXUS at dead address as % of supply;
@@ -1140,7 +1142,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   is NOT mounted anywhere** — the panel first shipped there and never appeared (found live 2026-10-11, fixed: it now
   sits under the signals list, reads the wallet via `useAccount`, and says "Connect a wallet…" when none is connected).
   Before adding UI to a component, grep that it's mounted. The in-app notification list (`/notifications/:addr`) has
-  no mounted UI either; phone pushes don't depend on it.
+  no UI (NotificationBell + useNotifications deleted 2026-10-12); phone pushes don't depend on it.
 - Manifest: `id:"/"`, colours `#0a0a0b` (was the off-brand `#0a0e0a`, also in index.html theme-color),
   `icon-maskable-512.png` (mark inside the 80% safe circle), `push-badge.png` (white-on-transparent status icon).
   ⚠️ **Edit `tools/manifest/manifest.mjs`, never `public/manifest.json`.** deploy.yml runs
@@ -1452,10 +1454,10 @@ credit and pays `x402.miroshark.xyz/run` $1 Base USDC from secret `MIROSHARK_PAY
   that wants 4H fetches resolution 60 in 20-day pages and builds bars on the UTC 00/04/08/12/16/20 windows with
   **`app/lib/fourHourBars.mjs`** (`fetchFourHourBars`, injected `getJson`; a failed page fails the read, no holes).
   Users: lab-api `snapshotTrendRegimes` (4H EMA8/EMA21 → `regime:{coin}` → `/signals` `ema8_4h` → the MOMENTUM
-  "4H EMA8" note; null forever until this fix) and the Lab macro-proxy chart (`app/pages/lab/macroProxy.mjs`; never
-  rendered until this fix). Neither feeds the engine or the Oct-15 routine. Fake for tests:
-  `app/lib/__fixtures__/fakeTvHistory.mjs` (240 → no_data, 60 → hourly). The structure study's `tape.mjs` (PR #75)
-  carries its own copy of `fourHourBars`; once both are on main it should import this one.
+  "4H EMA8" note; null forever until this fix) and the structure study's `tape.mjs` (imports it since 2026-10-01).
+  Neither feeds the engine or the Oct-15 routine. Fake for tests: `app/lib/__fixtures__/fakeTvHistory.mjs` (240 →
+  no_data, 60 → hourly). (The Lab macro-proxy chart that also used it was dead code: the Macro surface was removed
+  Aug 23; deleted 2026-10-12.)
 
 ## ⚠️ Orderly public rate limit — 10 req/s PER IP (Orderly support, 2026-09-28)
 - Public endpoints (`/v1/public/futures`, `/tv/history`, `/v1/public/funding_rate_history`, `/v1/public/info`…) allow
@@ -1678,6 +1680,10 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   Orderly's named events and its identify (wallet address as user id), which feed Orderly's broker stats. If the SDK's
   init call changes, the build FAILS (and `tools/amplitudeOptOut.test.mjs` fails in CI) rather than shipping full
   tracking. Verified in a real build: the vendor chunk carries `defaultTracking:!1`. Dev server (prebundled deps) is unpatched.
+- **Dead-code sweep (2026-10-12):** 16 files nothing imported were deleted (NexusMarket, NexusTreasury,
+  NexusTreasuryStack, NexusBrokerStats, CommentsPanel, MiniPriceChart, NotificationBell, useNotifications,
+  useIpRestriction — region blocking is the SDK's `restrictedInfo` —, useWatchlistSync, useMarketPulse, MacroView,
+  MacroEvents, MacroCallers, macroProxy + test). Before building on a component, grep that something imports it.
 - **Phone sweep (2026-10-04, 20 routes at 390px):** no page scrolls sideways, nothing spills. First load = ONE vendor
   chunk, 3.5 MB raw / 1.05 MB gz before the first screen (the open mobile item; defer wallet/SDK pieces = days of work).
   **Feed pages its calls (`FEED_PAGE` = 20 + "Show 20 more · N left")** — it rendered all 329 at once (97,000 px).

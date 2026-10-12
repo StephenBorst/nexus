@@ -34,7 +34,7 @@ export function buildOgSvg({ displayName, wallet, wins, losses, active, total, a
   <!-- Trader identity -->
   <text x="48" y="170" fill="${bright}" font-size="54" font-weight="bold">${name}</text>
   <text x="48" y="210" fill="${muted}" font-size="18">${esc(shortAddr)}</text>
-  <text x="48" y="240" fill="${faint}" font-size="14">${total} thesis${total !== 1 ? "es" : ""} published on-chain</text>
+  <text x="48" y="240" fill="${faint}" font-size="14">${total} ${total !== 1 ? "calls" : "call"} published on-chain</text>
 
   <!-- REP Score (right column) -->
   <text x="980" y="130" fill="${muted}" font-size="13" letter-spacing="4" text-anchor="middle">REP SCORE</text>

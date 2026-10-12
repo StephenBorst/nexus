@@ -273,7 +273,7 @@ export function PlanAdherenceCard({ theses, orders }: { theses: ThesisTrade[]; o
       {!report.matched ? (
         <div style={{ ...hint, padding: "10px 0" }}>
           No theses matched to fills yet. Write a thesis before you take the trade (same market + direction, within 72h) and this scores whether you actually traded your own plan.
-          {report.unmatched > 0 && <> · {report.unmatched} thesis{report.unmatched === 1 ? "" : "es"} with no matching fill</>}
+          {report.unmatched > 0 && <> · {report.unmatched} {report.unmatched === 1 ? "call" : "calls"} with no matching fill</>}
         </div>
       ) : (
         <>
