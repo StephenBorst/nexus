@@ -72,7 +72,8 @@ import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handlePush } from "./routes-push.mjs";
 import { handleThesisRegistration } from "./routes-thesisreg.mjs";
 import { handleCallStatus } from "./routes-callstatus.mjs";
-import { handleVerify } from "./routes-verify.mjs";
+import { handleVerify, isPublicCall } from "./routes-verify.mjs";
+import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildOgSvg, buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
 import { handleTheses } from "./routes-theses.mjs";
@@ -1067,56 +1068,23 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
     }
 
     // ── Ph22: /og/thesis/:wallet/:id(.png)? → thesis OG image ─
-    if (parts[0] === "og" && parts[1] === "thesis" && parts[2] && parts[3]) {
-      if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
-      const isPng = parts[3].endsWith(".png");
-      const thesisId = isPng ? parts[3].slice(0, -4) : parts[3];
-      const wallet = normalizeAddress(parts[2]);
-      const [raw, profileRaw] = await Promise.all([
-        env.LAB_STORE.get(`lab:${wallet}`),
-        env.LAB_STORE.get(`profile:${wallet}`),
-      ]);
-      if (!raw) return new Response("not found", { status: 404 });
-      const data = JSON.parse(raw);
-      const thesis = (data.theses || []).find((t) => t.id === thesisId);
-      if (!thesis) return new Response("not found", { status: 404 });
-      const profile = profileRaw ? JSON.parse(profileRaw) : {};
-      const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
-      // Card shows the OBJECTIVE grade, never the self-report. A stamp counts only if the current
-      // grader wrote it (grading.mjs GRADE_V); anything else is graded live from the call's window.
-      const stamped = isCurrentStamp(thesis);
-      let ogStatus = stamped ? gradedStatusOf(thesis.gradedOutcome) : "ACTIVE";
-      let ogGradedR = stamped && typeof thesis.gradedR === "number" ? thesis.gradedR : null;
-      if (!stamped) {
-        try {
-          const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt, env));
-          if (g.outcome === "WIN" || g.outcome === "LOSS") { ogStatus = gradedStatusOf(g.outcome); ogGradedR = g.r; }
-        } catch { /* keep ACTIVE */ }
-      }
-      const payload = {
-        displayName: profile.displayName || null, wallet, ticker,
-        direction: thesis.direction, entryPrice: thesis.entryPrice,
-        stopLoss: thesis.stopLoss, takeProfit1: thesis.takeProfit1,
-        riskReward: callR(thesis) ?? 0, status: ogStatus, gradedR: ogGradedR, notes: thesis.notes || "",
-      };
-      // Chart is fetched ONLY for the PNG path — the SVG path would need the same
-      // inlining anyway (resvg can't pull remote refs), and X/Twitter unfurls the PNG.
-      if (isPng) {
-        try {
+    {
+      const ogThesisRes = await handleOgThesis(parts, request, env, {
+        // Chart is fetched ONLY for the PNG path — the SVG path would need the same
+        // inlining anyway (resvg can't pull remote refs), and X/Twitter unfurls the PNG.
+        // Only the FIRST chart goes on the share card — an unfurl needs one legible
+        // image, not four thumbnails. Also keeps the fetch/size budget bounded.
+        renderPng: async (payload, thesis) => {
           await ensureResvg();
           const font = await getMonoFont();
-          // Only the FIRST chart goes on the share card — an unfurl needs one legible
-          // image, not four thumbnails. Also keeps the fetch/size budget bounded.
           const firstChart = (thesis.chartUrls && thesis.chartUrls[0]) || thesis.chartUrl;
           const chartDataUri = await fetchChartDataUri(firstChart);
           const svg = buildThesisOgSvg({ ...payload, chartDataUri, fontFamily: "'JetBrains Mono'" });
           const resvg = new Resvg(svg, { font: { loadSystemFonts: false, fontBuffers: [font], defaultFontFamily: "JetBrains Mono" } });
-          const png = resvg.render().asPng();
-          return new Response(png, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*" } });
-        } catch (e) { console.error("[OG PNG thesis]", String(e)); }
-      }
-      const svg = buildThesisOgSvg(payload);
-      return new Response(svg, { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*" } });
+          return resvg.render().asPng();
+        },
+      });
+      if (ogThesisRes) return ogThesisRes;
     }
 
     // ── /og/identity/:wallet(.png)? — the TRADING IDENTITY card ─────────────────
@@ -1242,7 +1210,7 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
       ]);
       if (!raw) return json({ error: "not found" }, request, 404);
       const data = JSON.parse(raw);
-      const thesis = (data.theses || []).find((t) => t.id === thesisId && t.isPublic);
+      const thesis = (data.theses || []).find((t) => t && t.id === thesisId && isPublicCall(t));
       if (!thesis) return json({ error: "not found" }, request, 404);
       const profile = profileRaw ? JSON.parse(profileRaw) : {};
       // Grade LIVE on read (one symbol) unless the current grader already stamped it — the
@@ -1279,7 +1247,7 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
         env.LAB_STORE.get(`profile:${wallet}`),
       ]);
       const data = raw ? JSON.parse(raw) : null;
-      const thesis = data && (data.theses || []).find((t) => t.id === thesisId && t.isPublic);
+      const thesis = data && (data.theses || []).find((t) => t && t.id === thesisId && isPublicCall(t));
       // Unknown/private → just bounce to the app; nothing to preview.
       if (!thesis) return Response.redirect(appUrl, 302);
       const profile = profileRaw ? JSON.parse(profileRaw) : {};
