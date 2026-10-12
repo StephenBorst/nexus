@@ -20,6 +20,7 @@ import { chartImageList, effectiveStatus } from "@/pages/lab/helpers";
 import { publishMarkLine } from "@/lib/entryAtMark.mjs";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
 import { SocialBar } from "@/components/SocialBar";
+import { Button } from "@/components/ui";
 import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
@@ -54,15 +55,30 @@ type FeedThesis = {
   onChainTxHash?: string;
 };
 
+type GradeRead = { outcome: "WIN" | "LOSS" | "PENDING" | "INVALID"; r: number; awaitingEntry?: boolean };
+// GET /verify/:wallet/:id — the grader re-run from scratch (workers/nexus-lab-api/routes-verify.mjs).
 type VerifyResult = {
-  verified: boolean;
-  hitTP: boolean;
-  hitSL: boolean;
-  status: string;
-  method: string;
-  candlesChecked: number;
+  verdict?: "MATCH" | "MISMATCH" | "UNSTAMPED" | "NO_DATA";
+  fresh?: GradeRead | null;
+  stamped?: { outcome: string; r: number } | null;
+  candlesChecked?: number;
+  source?: string | null;
+  rule?: string;
   error?: string;
 };
+
+const VERDICT_LINE: Record<string, { label: string; color: string; note: string }> = {
+  MATCH:     { label: "✓ MATCHES THE GRADE", color: "#ededf0", note: "A fresh grade from the candles gives the same result as the stored one." },
+  MISMATCH:  { label: "✕ DOES NOT MATCH",    color: "#fbbf24", note: "A fresh grade disagrees with the stored one. The hourly pass re-grades it; check back after the hour." },
+  UNSTAMPED: { label: "GRADED NOW",          color: "#a1a1aa", note: "No stored grade yet. This is what the grader says right now." },
+  NO_DATA:   { label: "CANDLES NOT LOADED",  color: "#a1a1aa", note: "The candles for this call’s window aren’t loaded yet. Try again in a few minutes." },
+};
+
+function gradeText(g?: { outcome: string; r: number } | null): string {
+  if (!g) return "—";
+  if (g.outcome === "WIN" || g.outcome === "LOSS") return `${g.outcome} ${g.r >= 0 ? "+" : ""}${Number(g.r).toFixed(2)}R`;
+  return g.outcome;
+}
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   ACTIVE:      { label: "ACTIVE",      color: "#d4d4d8", bg: "#1a1a1e", border: "#33333a" },
@@ -217,9 +233,9 @@ export default function ThesisPage() {
     try {
       const r = await fetch(`${API_BASE}/verify/${wallet}/${id}`);
       const data = await r.json();
-      setVerifyResult(data);
+      setVerifyResult(r.ok ? data : { error: data?.error || `HTTP ${r.status}` });
     } catch {
-      setVerifyResult({ verified: false, hitTP: false, hitSL: false, status: "", method: "", candlesChecked: 0, error: "request failed" });
+      setVerifyResult({ error: "request failed" });
     } finally {
       setVerifying(false);
     }
@@ -280,7 +296,6 @@ export default function ThesisPage() {
     ...(runnerRR(thesis) != null ? [{ label: "RUNNER", val: fmtRR(runnerRR(thesis)), color: "#a1a1aa" }] : []),
     ...(thesis.positionSize > 0 ? [{ label: "SIZE", val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" }] : []),
   ];
-  const isClosed = thesis.status === "HIT_TP" || thesis.status === "STOPPED_OUT" || thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS";
 
   // Outbound share — pre-filled X / Farcaster posts that pull external eyes back
   // Share via the worker OG proxy — crawlers can't see the SPA's JS-injected OG tags,
@@ -474,74 +489,68 @@ export default function ThesisPage() {
           )}
         </div>
 
-        {/* Ph25: Verify Outcome — only for closed theses */}
-        {isClosed && (
-          <div style={{ background: "#141416", border: "1px solid #232327", borderRadius: 4, padding: "16px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b", letterSpacing: "0.05em" }}>PRICE VERIFICATION</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a", marginTop: 2 }}>
-                  Cross-check recorded outcome against CoinGecko OHLC data
-                </div>
+        {/* Re-grade from candles: the real grader, run fresh, vs the stored grade. */}
+        <div style={{ background: "#141416", border: "1px solid #232327", borderRadius: 4, padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", letterSpacing: "0.05em" }}>CHECK THE GRADE</div>
+              <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", marginTop: 4, lineHeight: 1.5 }}>
+                Re-runs the grader on Orderly’s 1h candles and ignores the stored result.
               </div>
-              {!verifyResult && (
-                <button
-                  onClick={handleVerify}
-                  disabled={verifying}
-                  style={{
-                    background: "none", border: "1px solid #232327", borderRadius: 3,
-                    color: verifying ? "#33333a" : "#71717a",
-                    fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 12px",
-                    cursor: verifying ? "default" : "pointer",
-                  }}
-                >{verifying ? "verifying..." : "Verify outcome →"}</button>
-              )}
             </div>
-
-            {verifyResult && (
-              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #232327" }}>
-                {verifyResult.error ? (
-                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#f7525f" }}>
-                    error: {verifyResult.error}
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{
-                        fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: "bold",
-                        color: verifyResult.verified ? "#3ecf8e" : "#f7525f",
-                      }}>
-                        {verifyResult.verified ? "✓ VERIFIED" : "✗ DISPUTED"}
-                      </div>
-                      <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a" }}>
-                        via {verifyResult.method} · {verifyResult.candlesChecked} candles
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 16 }}>
-                      <div>
-                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#52525b" }}>TP HIT IN DATA</div>
-                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: verifyResult.hitTP ? "#ededf0" : "#52525b" }}>
-                          {verifyResult.hitTP ? "yes" : "no"}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#52525b" }}>SL HIT IN DATA</div>
-                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: verifyResult.hitSL ? "#f7525f" : "#52525b" }}>
-                          {verifyResult.hitSL ? "yes" : "no"}
-                        </div>
-                      </div>
-                    </div>
-                    {!verifyResult.verified && (
-                      <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>
-                        price data does not confirm recorded outcome. Outcome may have been manually set
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+            {!verifyResult && (
+              <Button size="sm" disabled={verifying} onClick={handleVerify}>
+                {verifying ? "Checking…" : "Re-grade from candles"}
+              </Button>
             )}
           </div>
-        )}
+
+          {verifyResult && (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #232327" }}>
+              {verifyResult.error ? (
+                <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#fbbf24" }}>
+                  Couldn’t check it: {verifyResult.error}
+                </div>
+              ) : (() => {
+                const v = VERDICT_LINE[verifyResult.verdict || "NO_DATA"] || VERDICT_LINE.NO_DATA;
+                const fresh = verifyResult.fresh;
+                const money = (o?: string) => (o === "WIN" ? "#3ecf8e" : o === "LOSS" ? "#f7525f" : "#d4d4d8");
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: "bold", color: v.color }}>{v.label}</div>
+                    <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.5 }}>{v.note}</div>
+                    <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+                      <div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>FRESH GRADE</div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: money(fresh?.outcome) }}>
+                          {fresh?.awaitingEntry ? "PENDING · entry not traded" : gradeText(fresh)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>STORED GRADE</div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: money(verifyResult.stamped?.outcome) }}>
+                          {gradeText(verifyResult.stamped)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>CANDLES</div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#d4d4d8" }}>{verifyResult.candlesChecked ?? 0}</div>
+                      </div>
+                    </div>
+                    {verifyResult.rule && (
+                      <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", lineHeight: 1.5 }}>{verifyResult.rule}</div>
+                    )}
+                    {verifyResult.source && (
+                      <a href={verifyResult.source} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#d4d4d8" }}>
+                        The candles, straight from Orderly ↗
+                      </a>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
 
         {/* Footer: link to full trader profile */}
         <div style={{ marginTop: 16, textAlign: "center" }}>
