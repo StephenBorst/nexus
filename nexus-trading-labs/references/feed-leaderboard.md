@@ -182,6 +182,49 @@ declares it with the field `exitPlan: "SPLIT_50"` at first publish.
 
 ---
 
+## Track Your Calls (for agents)
+
+```
+GET https://og.nexustradinglabs.com/theses/status/:wallet
+```
+
+No key. Returns the wallet's PUBLIC calls that are still open, newest first, plus the last 10 graded:
+
+```
+{
+  "counts": { "working": 2, "open": 1, "runner": 0, "unchecked": 0, "recentGraded": 3 },
+  "calls": [{
+    "id": "reg-…", "symbol": "PERP_ETH_USDC", "direction": "LONG",
+    "entryPrice": 2400, "stopLoss": 2350, "takeProfit1": 2500, "takeProfit2": null,
+    "exitPlan": null, "plannedR": { "tp1": 2, "tp2": null },
+    "state": "WORKING",                 // WORKING · OPEN · RUNNER · UNCHECKED
+    "filledAt": null, "tp1HitAt": null,
+    "live": {
+      "mark": 2538,
+      "levels": { "entry": { "price": 2400, "pct": -5.44, "r": 2.76 }, "stop": {…}, "tp1": {…} },
+      "crossedEntrySincePost": false    // WORKING only
+    }
+  }],
+  "recent": [{ "id": "…", "state": "WIN", "graded": { "outcome": "WIN", "r": 2, "at": 1790… } }]
+}
+```
+
+- `state` comes from the hourly grader: **WORKING** = the entry hasn't traded (no position) ·
+  **OPEN** = live · **RUNNER** = a split call whose TP1 half closed, runner still open · **UNCHECKED**
+  = not stamped yet (posted in the last hour).
+- `live` is the Orderly mark right now (cached ≤20 s), **not a grade**. `levels.*.pct` = how far each
+  level is from the mark, signed; `levels.*.r` = that distance in units of the call's risk. `moveR` (open
+  calls) = the position's move in R. A mark through the entry is a fill only once the hourly grade says so.
+- Poll it every few minutes to rotate: a call leaves `calls` when it's graded and appears in `recent`.
+
+**Alerts.** The owner gets a notification when a resting order fills (`call_fill`), when a split call's
+TP1 half closes (`call_tp1`) and when a call is graded (`call_resolved`). They land in
+`GET /notifications/:wallet?unreadOnly=true` (below), on phones with Nexus alerts on, and in Telegram if
+linked. All of them come from the hourly grading pass, so expect up to an hour's delay; for anything
+faster, poll `/theses/status`.
+
+---
+
 ## Notifications
 
 ```

@@ -10,7 +10,8 @@
 // module it dispatches to.
 //
 // ⚠️ Pure move — logic byte-identical to what shipped.
-import { notifyResolution } from "./resolutions.mjs";
+import { notifyResolution, notifyFillEvent } from "./resolutions.mjs";
+import { fillEvents } from "./callStatus.mjs";
 import {
   gradeCall, entryFill, classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets,
   regimeEdge, planQuality, planSummary, expectancyStats, convictionCalibration, rankCaller,
@@ -173,6 +174,7 @@ export async function gradePublicTheses(env) {
     // Collected, not dispatched inline: a resolution must only be announced once the
     // stamp is actually persisted (see resolutions.mjs).
     const justResolved = [];
+    const justFilled = [];   // resting orders that traded, split calls whose TP1 half closed (callStatus.mjs)
     for (const t of (data.theses || [])) {
       if (!t.isPublic || !t.symbol || !t.createdAt || t.duplicateOf) continue; // copies: graded in their owner's record
       // A published call's status is the server's grade, never a self-mark (callLock.mjs): a legacy
@@ -224,7 +226,11 @@ export async function gradePublicTheses(env) {
           delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV;
           changed = true; regraded++;
         }
-        if (applyFillStamp(t, g, cd)) changed = true;
+        const before = { fillState: t.fillState, tp1HitAt: t.tp1HitAt };
+        if (applyFillStamp(t, g, cd)) {
+          changed = true;
+          for (const kind of fillEvents(before, t)) justFilled.push({ t, kind });
+        }
         t.status = gradedStatusOf(t.gradedOutcome);
       }
     }
@@ -247,6 +253,9 @@ export async function gradePublicTheses(env) {
       // the next pass re-resolves cleanly — better a late notification than a phantom
       // one for a grade that was never saved.
       const wallet = key.name.replace("lab:", "");
+      for (const ev of justFilled) {
+        await notifyFillEvent(env, wallet, ev.t, ev.kind);
+      }
       for (const rz of justResolved) {
         await notifyResolution(env, wallet, rz.t, rz.outcome, rz.r);
       }

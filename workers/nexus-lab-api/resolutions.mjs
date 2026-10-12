@@ -14,6 +14,7 @@
 // first would tell someone their call resolved and then lose the stamp on a failed
 // put, so the next cron pass would resolve and notify it all over again.
 import { appendNotification } from "./shared.mjs";
+import { fillEventMessage } from "./callStatus.mjs";
 
 export const RESOLVED_FEED_KEY = "resolved:feed";
 const MAX_FEED = 60;
@@ -99,4 +100,23 @@ export async function notifyResolution(env, wallet, t, outcome, r) {
     list.unshift(resolutionFeedEntry(wallet, t, outcome, r));
     await env.LAB_STORE.put(RESOLVED_FEED_KEY, JSON.stringify(list.slice(0, MAX_FEED)));
   } catch (e) { console.error("[resolve] feed failed", e.message); }
+}
+
+/**
+ * A resting order that filled, or a split call whose TP1 half closed (callStatus.mjs fillEvents):
+ * the owner's in-app notification, which also goes to their phone and Telegram. Not a public feed
+ * event: the card already shows it. Best-effort, after the record is written, like a resolution.
+ */
+export async function notifyFillEvent(env, wallet, t, kind) {
+  const m = fillEventMessage(t, kind);
+  try {
+    await appendNotification(env, String(wallet).toLowerCase(), {
+      id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: m.type,
+      message: m.message,
+      thesisId: t?.id ?? undefined,
+      createdAt: Date.now(),
+      read: false,
+    });
+  } catch (e) { console.error("[fill] notif failed", e.message); }
 }
