@@ -99,16 +99,16 @@ function HorizonStrip({ hz, sel, onSelect, isMobile }: { hz: Horizon[]; sel: num
         return (
           <button key={h.h} type="button" role="radio" aria-checked={on} onClick={() => onSelect(h.h)}
             title={`${h.h}h forward move after the read fired · ${h.hitRate}% hit · n${h.samples}${h.stable ? " · stable in both halves" : ""}`}
-            style={{ ...edge, textAlign: "left", cursor: "pointer", background: on ? C.surface : "transparent", boxShadow: on ? `inset 0 2px 0 ${BONE}` : "none", color: BRIGHT, padding: isMobile ? "12px 14px" : "12px 14px 13px", display: "flex", flexDirection: isMobile ? "row" : "column", alignItems: isMobile ? "center" : "stretch", justifyContent: "space-between", gap: isMobile ? 12 : 8, fontFamily: MONO, borderRight: "none", borderBottom: "none" }}>
+            style={{ ...edge, textAlign: "left", cursor: "pointer", background: on ? C.surface : "transparent", boxShadow: on ? `inset 0 2px 0 ${BONE}` : "none", color: BRIGHT, padding: isMobile ? "12px 14px" : "12px 14px 13px", display: "flex", flexDirection: isMobile ? "row" : "column", alignItems: isMobile ? "center" : "stretch", justifyContent: "space-between", gap: isMobile ? 12 : 8, borderRight: "none", borderBottom: "none" }}>
             {isMobile ? (
               <>
-                <span style={{ fontSize: 11, fontWeight: 700, color: on ? BRIGHT : FOG, width: 36 }}>{h.h}H</span>
+                <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: on ? BRIGHT : FOG, width: 36 }}>{h.h}H</span>
                 <span style={{ marginLeft: "auto", display: "flex", alignItems: "baseline", gap: 12 }}>{word}{value}</span>
               </>
             ) : (
               <>
                 <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: on ? BRIGHT : FOG }}>{h.h}H</span>{word}
+                  <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 700, color: on ? BRIGHT : FOG }}>{h.h}H</span>{word}
                 </span>
                 {value}
               </>

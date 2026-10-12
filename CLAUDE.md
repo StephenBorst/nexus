@@ -820,8 +820,12 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   from their fill, so their R is obtainable: never flagged (`components.resting`). `PLAN_V = 2` (grading.mjs) re-derives
   plan stamps inside the 60-day horizon once (13 public calls carried LATE_ENTRY: 8 Engine A, 5 Nexus Signals). The
   draft advisor passes the latest close as the mark so it judges a draft the way a publish would.
-  ⏭ Leftover: an old CoinGecko verify route in index.js (~line 1406, `method: "coingecko_ohlc"`) has its own first-touch
-  check that ignores the entry-must-trade rule; it isn't the grader, but it disagrees with it.
+  **`GET /verify/:wallet/:id` = the grader re-run (2026-10-12, `routes-verify.mjs`, tested).** The call page's "Re-grade
+  from candles" button. It used to run its own first-touch check on CoinGecko candles that ignored the entry-must-trade
+  rule (a never-filled limit read as a WIN) and answered for PRIVATE calls too. Now: public, non-holders, non-duplicate
+  calls only (else 404); `gradeCall` on the same `tvhist:v2` candles every grader reads, ignoring the stamp; verdict
+  MATCH / MISMATCH / UNSTAMPED / NO_DATA vs the stored stamp; `source` = the public Orderly /tv/history URL. The secret
+  `COINGECKO_API_KEY` is no longer read anywhere.
 - **Registration hardened + keyless index (2026-10-12, after an agent burned ~$0.15 gas and indexed nothing).**
   `routes-thesisreg.mjs` (I/O) + `thesisRegister.mjs` (rules, tested vs viem). `/proxy/thesis-register`: `checkRegistration`
   (side, symbol, levels via callR, 6-decimal scale error ≤0.1%, exitPlan/split, notes ≤1000 B) + an `eth_call` simulation
@@ -833,8 +837,11 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   input (nested smart-account calls work; one+one so a bundle can't hand a wallet another's levels) + block ≤6h old →
   the call is built FROM THE CALLDATA (`thesisFromRegistration`), id `reg-<txHash[2:18]>` (idempotent), `onChainId` kept.
   The split is declared ON-CHAIN as `#SPLIT_50` in the notes (the contract has no field; a body-only flag would let
-  whoever indexes first choose the grading). Skill refs document both paths + every status. ⏳ The published Bankr skill
-  (BankrBot/skills) needs a PR with `nexus-trading-labs/` to pick this up. Not verifiable from a cloud session (no
+  whoever indexes first choose the grading). Skill refs document both paths + every status. ⏳ Ported into the PUBLISHED skill on fork
+  branch `StephenBorst/skills:nexus-thesis-registration` (2026-10-12; registration section + call status + 2 table rows
+  only). borst opens the PR to BankrBot/skills (a session can't attach both `skills` repos). ⚠️ Our repo's
+  `nexus-trading-labs/` copy is BEHIND the published one (no `references/agent.md`, missing guardrails): never copy it
+  over the published folder wholesale; port sections. Not verifiable from a cloud session (no
   Arbitrum egress): first live registration after deploy is the test.
 - **Call status + fill alerts (2026-10-12, the A/B's hands-off piece).** `GET /theses/status/:wallet` (no key,
   `routes-callstatus.mjs`, rows in `callStatus.mjs`, tested): the wallet's PUBLIC open calls (no private, holders-only
@@ -1777,6 +1784,10 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   the whole tab (bit us twice). Feed reuses the Lab hook: `import { useIsMobile } from "@/pages/lab/useIsMobile"`.
 - **Calendar cells:** use a FIXED `height` (not `minHeight`) so data-days don't grow taller than empty days
   ("weekdays huge, weekends small"); 60px mobile / 80px desktop + condensed content + `overflow:hidden`.
+- **Lab tab row desktop — no stray scrollbar (2026-10-12):** tabs used to hang 1px below the row (`marginBottom −1`) so
+  the active underline sat on the header border; with `overflowX: auto` CSS also makes `overflowY` auto, and that 1px
+  drew a vertical scroller at the row's right edge (measured: scrollHeight 41 in a 40px box). Now the ROW carries
+  `marginBottom: −1` + `overflowY: hidden` + hidden bar; tabs have no negative margin. Same look, nothing to scroll.
 - **Lab tab row mobile:** tabs are equal-width `flex:1` with `short` labels; Holders short = `ROOM` (was a
   cryptic `◆`); the sync/operational status dot is hidden on mobile to reclaim space. Feed nav mirrors this
   (equal `flex:1` tabs, glyphs+divider dropped, "N theses" count hidden on mobile — no awkward gap).

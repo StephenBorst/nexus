@@ -55,7 +55,7 @@ export function LabTitleBar({ isMobile, sync }: { isMobile: boolean; sync: SyncS
         <SyncStatus {...sync} isMobile={isMobile} />
         {!isMobile && (
           <button type="button" onClick={openPalette} aria-label="Open command palette" title="Command palette"
-            style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6, height: 28, padding: "0 9px", cursor: "pointer" }}>
+            style={{ fontSize: 12, color: C.text.muted, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6, height: 28, padding: "0 9px", cursor: "pointer" }}>
             ⌘K
           </button>
         )}
@@ -138,11 +138,16 @@ export function LabTabs({ isMobile, tabs, activeTab, onSelect, canCondense, cond
     borderBottom: `2px solid ${active ? C.brand : "transparent"}`,
     color: active ? C.text.bright : C.text.muted,
     fontFamily: UI, fontSize: 13.5, fontWeight: active ? 600 : 500,
-    padding: "8px 0 11px", marginBottom: -1, transition: "color 140ms ease",
+    padding: "8px 0 11px", transition: "color 140ms ease",
   });
 
   return (
-    <div role="tablist" aria-label="Lab sections" style={{ display: "flex", alignItems: "flex-end", gap: 22, padding: "0 20px", overflowX: "auto" }}>
+    // Each tab used to hang 1px below the row (marginBottom −1) so the active underline sat on the
+    // header's border. With overflowX auto, CSS makes overflowY auto too, and that 1px overhang drew
+    // a tiny vertical scroller at the row's right edge. Now the ROW sits 1px over the border and
+    // clips vertically; tabs stay inside it. Sideways scroll stays for narrow windows, bar hidden.
+    <div role="tablist" aria-label="Lab sections" className="nx-noscrollbar"
+      style={{ display: "flex", alignItems: "flex-end", gap: 22, padding: "0 20px", marginBottom: -1, overflowX: "auto", overflowY: "hidden", scrollbarWidth: "none" }}>
       {tabs.map((t) => {
         const active = activeTab === t.id;
         return (

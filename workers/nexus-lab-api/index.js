@@ -72,6 +72,7 @@ import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handlePush } from "./routes-push.mjs";
 import { handleThesisRegistration } from "./routes-thesisreg.mjs";
 import { handleCallStatus } from "./routes-callstatus.mjs";
+import { handleVerify } from "./routes-verify.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildOgSvg, buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
 import { handleTheses } from "./routes-theses.mjs";
@@ -1364,71 +1365,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       return json({ error: "method not allowed" }, request, 405);
     }
 
-    // ── Ph25: /verify/:wallet/:id → price-verify thesis outcome ─
-    if (parts[0] === "verify" && parts[1] && parts[2]) {
-      if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
-      const wallet = normalizeAddress(parts[1]);
-      const thesisId = parts[2];
-      const raw = await env.LAB_STORE.get(`lab:${wallet}`);
-      if (!raw) return json({ error: "not found" }, request, 404);
-      const data = JSON.parse(raw);
-      const thesis = (data.theses || []).find((t) => t.id === thesisId);
-      if (!thesis) return json({ error: "not found" }, request, 404);
-
-      const COINGECKO_IDS = {
-        BTC: "bitcoin", ETH: "ethereum", SOL: "solana", ARB: "arbitrum", OP: "optimism",
-        AVAX: "avalanche-2", LINK: "chainlink", UNI: "uniswap", AAVE: "aave",
-        MATIC: "matic-network", SUI: "sui", SEI: "sei-network", TIA: "celestia",
-        INJ: "injective-protocol", WIF: "dogwifcoin", DOGE: "dogecoin", PEPE: "pepe",
-        SHIB: "shiba-inu", XRP: "ripple", ADA: "cardano", DOT: "polkadot",
-        LTC: "litecoin", BCH: "bitcoin-cash", ATOM: "cosmos", FTM: "fantom",
-        NEAR: "near", APT: "aptos", JUP: "jupiter-exchange-solana", WLD: "worldcoin-wld",
-        TON: "the-open-network", POL: "matic-network", STRK: "starknet",
-      };
-      const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
-      const coinId = COINGECKO_IDS[ticker];
-      if (!coinId) return json({ error: "unsupported asset", ticker }, request, 422);
-
-      // CoinGecko /ohlc only accepts these discrete `days` values — snap up to the
-      // smallest one that still covers the thesis lifetime (arbitrary values 400).
-      const rawDays = Math.ceil((Date.now() - thesis.createdAt) / 86400000) + 1;
-      const ALLOWED_DAYS = [1, 7, 14, 30, 90, 180, 365];
-      const daysSince = ALLOWED_DAYS.find((d) => d >= rawDays) ?? 365;
-      try {
-        // Keyless requests from cloud IPs get 403 — a (free) demo key is required.
-        const cgHeaders = { Accept: "application/json" };
-        if (env.COINGECKO_API_KEY) cgHeaders["x-cg-demo-api-key"] = env.COINGECKO_API_KEY;
-        const cgResp = await fetch(
-          `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${daysSince}`,
-          { headers: cgHeaders }
-        );
-        if (!cgResp.ok) throw new Error(`CoinGecko ${cgResp.status}`);
-        const ohlc = await cgResp.json();
-        const { entryPrice, stopLoss, takeProfit1, direction, createdAt } = thesis;
-        const relevant = ohlc.filter(([ts]) => ts >= createdAt);
-        let hitTP = false;
-        let hitSL = false;
-        for (const [, , high, low] of relevant) {
-          if (direction === "LONG") {
-            if (high >= takeProfit1) { hitTP = true; break; }
-            if (low <= stopLoss) { hitSL = true; break; }
-          } else {
-            if (low <= takeProfit1) { hitTP = true; break; }
-            if (high >= stopLoss) { hitSL = true; break; }
-          }
-        }
-        const priceConfirms =
-          (thesis.status === "HIT_TP" && hitTP) ||
-          (thesis.status === "STOPPED_OUT" && hitSL) ||
-          (thesis.status === "ACTIVE" && !hitTP && !hitSL);
-        return json({
-          verified: priceConfirms, hitTP, hitSL,
-          status: thesis.status, direction, entryPrice, stopLoss, takeProfit1,
-          method: "coingecko_ohlc", candlesChecked: relevant.length,
-        }, request);
-      } catch (e) {
-        return json({ error: "price fetch failed", detail: String(e) }, request, 502);
-      }
+    // ── /verify/:wallet/:id → re-grade one public call with the real grader (routes-verify.mjs) ─
+    {
+      const verifyRes = await handleVerify(parts, request, env);
+      if (verifyRes) return verifyRes;
     }
 
     // ── Nexus PRO — subscription payment rail (USDC on Arbitrum) ──
