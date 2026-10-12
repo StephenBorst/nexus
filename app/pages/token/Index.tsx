@@ -26,7 +26,7 @@ import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmt
 import { FlashSpotButton } from "./FlashSpotButton";
 import { FlashOrders } from "./FlashOrders";
 import { CrossChainCard } from "./CrossChainCard";
-import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS, majorHref, needsSolanaFunds, openCallCount, callCountLine } from "@/lib/spotDiscovery.mjs";
+import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS, majorHref, needsSolanaFunds, openCallCount, callCountLine, poolCaution } from "@/lib/spotDiscovery.mjs";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -34,7 +34,7 @@ import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // signer (provider.signTransaction/sendTransaction). Safe outside the provider (useContext default).
 import { useWalletConnectorPrivy } from "@orderly.network/wallet-connector-privy";
 import { useEscapeKey } from "@/utils/a11y";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 import { Chevron, Pill, Stat, Tabs } from "@/components/ui";
 
 // WooFi majors-swap widget — the in-app fill for the majors WooFi routes (BTC/ETH/SOL/USDC etc.),
@@ -367,18 +367,18 @@ function MoversRail({ onPick }: { onPick: (sym: string) => void }) {
 function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCallers; onOpen: (wallet: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const rows = expanded ? data.callers : data.callers.slice(0, 5);
-  const leanColor = data.side === "LONG" ? POS : data.side === "SHORT" ? NEG : MUT;
-  const leanLabel = data.side === "SPLIT" ? "SPLIT" : `${Math.abs(Math.round(data.lean * 100))}% ${data.side}`;
+  // A plain count, no lean: the strip used to crown a merit-weighted "70% LONG" in green. Every graded
+  // caller is net-negative today, so no side split until the verified board has a net-positive caller
+  // (borst, 2026-10-12). Each row's side is a label, monochrome (green/red is for money only).
   const nCallers = data.participants;
   return (
     <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
         <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>Callers on {coin}</span>
-        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: leanColor, background: leanColor + "14", border: `1px solid ${leanColor}44`, borderRadius: 5, padding: "2px 6px" }}>{leanLabel}</span>
+        <span style={{ marginLeft: "auto", fontFamily: UI, fontSize: 12.5, color: FOG }}>{nCallers} positioned</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {rows.map((c) => {
-          const long = c.direction === "LONG";
           return (
             <button key={c.wallet} onClick={() => onOpen(c.wallet)} className="nx-card-interactive"
               style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: `1px solid ${BORD2}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer" }}>
@@ -392,7 +392,7 @@ function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCaller
               {c.record && (
                 <span style={{ fontFamily: MONO, fontSize: 10, color: FAINT, flexShrink: 0, whiteSpace: "nowrap" }}>{c.record.winRate}% · {c.record.avgR >= 0 ? "+" : ""}{c.record.avgR}R</span>
               )}
-              <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: long ? POS : NEG, background: (long ? POS : NEG) + "18", border: `1px solid ${(long ? POS : NEG)}44`, borderRadius: 5, padding: "2px 6px", flexShrink: 0 }}>{c.direction}</span>
+              <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: FOG, border: `1px solid ${BORD}`, borderRadius: 5, padding: "2px 6px", flexShrink: 0 }}>{c.direction}</span>
             </button>
           );
         })}
@@ -400,7 +400,7 @@ function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCaller
       {data.callers.length > 5 && (
         <button onClick={() => setExpanded((x) => !x)} style={{ width: "100%", marginTop: 8, background: "none", border: "none", color: MUT, fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer", padding: "4px 0" }}>{expanded ? "show less ▴" : `+${data.callers.length - 5} more ▾`}</button>
       )}
-      <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 8, lineHeight: 1.4 }}>{nCallers} positioned · open positions + active public calls, graded on public price</div>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 8, lineHeight: 1.4 }}>Open positions + active public calls. Records graded on public price.</div>
     </div>
   );
 }
@@ -667,6 +667,9 @@ export default function TokenTerminal() {
   // "Not this one?": after a TICKER search, the deepest different token the search also found.
   const addrQuery = !!query && (/^0x[a-fA-F0-9]{40}$/.test(query.trim()) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(query.trim()));
   const dym = useMemo(() => didYouMean(pair, alts, { addressQuery: addrQuery }) as TokenPair | null, [pair, alts, addrQuery]);
+  // Padded (liquidity ≈ market cap) or thin pool: a ticker search already skips these; a pasted
+  // address still opens the exact token, with this one line under the card.
+  const caution = useMemo(() => (pair && !perpOnly ? (poolCaution(pair) as string | null) : null), [pair, perpOnly]);
   // Recently viewed, minus the token on screen.
   const viewedChips = useMemo(() => viewed.filter((v) => !(pair && v.kind === "spot" && v.ca === pair.baseAddress) && !(perpOnly && v.kind === "perp" && v.sym === perpOnly)), [viewed, pair, perpOnly]);
   const clearViewed = useCallback(() => { setViewed([]); try { writeViewed(window.localStorage, []); } catch { /* storage blocked */ } }, []);
@@ -1396,8 +1399,11 @@ export default function TokenTerminal() {
 
             {/* Under the card: another token the ticker search found, and a plain count of open public
                 calls on this coin (no long/short split until a verified caller is net-positive). */}
-            {(dym || (callers && openCallCount(callers) > 0)) && (
+            {(dym || (callers && openCallCount(callers) > 0) || caution) && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "-4px 0 12px", padding: "0 4px" }}>
+                {caution && (
+                  <div style={{ fontFamily: UI, fontSize: 12.5, color: SIGNAL.watch, lineHeight: 1.5 }}>{caution}</div>
+                )}
                 {callers && openCallCount(callers) > 0 && (
                   <button type="button" onClick={() => document.getElementById("callers-on-coin")?.scrollIntoView({ behavior: "smooth", block: "center" })}
                     style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontFamily: UI, fontSize: 12.5, color: FOG, cursor: "pointer", textAlign: "left" }}>

@@ -67,18 +67,51 @@ export function pairsForAddress(pairs, address) {
   return own.length ? own : (pairs || []);
 }
 
+// ── is this pool a real market? ─────────────────────────────────────────────────────────────────
+// A ticker search ranks pools by liquidity, so a padded pool wins it: a fake LP that holds nearly
+// the whole supply reports liquidity close to its own market cap, and almost nothing trades in it.
+// A pool reads as a REAL market only when it clears the volume + liquidity floors AND is neither:
+//   padded: liquidity >= 80% of market cap (a real token's float is mostly outside its pool),
+//   thin:   24h volume under 0.1% of the pool's liquidity (nobody trades it).
+// Unknown market cap or volume never marks a pool padded or thin on its own; the floors still apply.
+export const MIN_SPOT_VOL_USD = 1000;
+export const MIN_SPOT_LIQ_USD = 5000;
+export const PADDED_LIQ_TO_MCAP = 0.8;
+export const MIN_DAILY_TURNOVER = 0.001;
+const n = (x) => (typeof x === "number" && Number.isFinite(x) ? x : null);
+
+export function poolFlags(p) {
+  const liq = n(p?.liquidityUsd), mcap = n(p?.marketCap), vol = n(p?.volume24h);
+  return {
+    padded: liq != null && mcap != null && mcap > 0 && liq >= PADDED_LIQ_TO_MCAP * mcap,
+    thin: liq != null && liq > 0 && vol != null && vol < MIN_DAILY_TURNOVER * liq,
+  };
+}
+
+export function isRealMarket(p) {
+  if (!p || (n(p.volume24h) ?? 0) < MIN_SPOT_VOL_USD || (n(p.liquidityUsd) ?? 0) < MIN_SPOT_LIQ_USD) return false;
+  const f = poolFlags(p);
+  return !f.padded && !f.thin;
+}
+
+/** One caution line for a pool the page still shows (an address search is never second-guessed). */
+export function poolCaution(p) {
+  const f = poolFlags(p);
+  if (f.padded) return "Pool liquidity is close to the token's whole market cap. That is the shape of a padded pool: the price may not hold for a real trade.";
+  if (f.thin) return "Almost nothing traded in this pool in the last 24h. Quotes may not fill near the price shown.";
+  return null;
+}
+
 // ── "did you mean" ───────────────────────────────────────────────────────────────────────────────
 // After a TICKER search, the best different token the search also found: another contract (not
-// just another pool of the same token), with a real market (same floors the resolver uses), the
-// deepest first. An address search is exact, so it never gets one.
-export const DYM_MIN_VOL_USD = 1000;
-export const DYM_MIN_LIQ_USD = 5000;
+// just another pool of the same token), with a real market (the same isRealMarket the resolver
+// uses), the deepest first. An address search is exact, so it never gets one.
 export function didYouMean(best, alts, { addressQuery = false } = {}) {
   if (addressQuery || !best || !Array.isArray(alts)) return null;
   const seen = new Set();
   const cands = alts
     .filter((p) => p && p.baseAddress && !sameAddress(p.baseAddress, best.baseAddress))
-    .filter((p) => (p.volume24h ?? 0) >= DYM_MIN_VOL_USD && (p.liquidityUsd ?? 0) >= DYM_MIN_LIQ_USD)
+    .filter(isRealMarket)
     .sort((a, b) => (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0))
     .filter((p) => { const k = `${p.chainId}:${String(p.baseAddress).toLowerCase()}`; if (seen.has(k)) return false; seen.add(k); return true; });
   return cands[0] || null;

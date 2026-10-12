@@ -4,6 +4,7 @@ import {
   addViewed, readViewed, writeViewed, validViewed, viewedHref, VIEWED_MAX, VIEWED_KEY,
   pairsForAddress, didYouMean, sameAddress, SPOT_MAJORS, majorHref,
   needsSolanaFunds, openCallCount, callCountLine,
+  isRealMarket, poolFlags, poolCaution,
 } from "./spotDiscovery.mjs";
 
 const RAY = "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R";
@@ -104,4 +105,36 @@ test("callers count: plain count of open public calls, no side split", () => {
   assert.equal(callCountLine(1, "RAY"), "1 public call open on RAY");
   assert.equal(callCountLine(0, "RAY"), null);
   assert.doesNotMatch(callCountLine(3, "RAY"), /long|short/i);
+});
+
+test("real market: a padded pool (liquidity ≈ market cap) or a thin one (no turnover) is not one", () => {
+  const real = { liquidityUsd: 4e6, marketCap: 6e8, volume24h: 2e6 };
+  assert.equal(isRealMarket(real), true);
+  // ZRO-style copy: $3M "liquidity" on a $3.2M market cap, $1.5k traded
+  const padded = { liquidityUsd: 3e6, marketCap: 3.2e6, volume24h: 1.5e5 };
+  assert.deepEqual(poolFlags(padded), { padded: true, thin: false });
+  assert.equal(isRealMarket(padded), false);
+  const thin = { liquidityUsd: 2e6, marketCap: 9e7, volume24h: 1500 };
+  assert.deepEqual(poolFlags(thin), { padded: false, thin: true });
+  assert.equal(isRealMarket(thin), false);
+  // floors still apply; unknown mcap / volume never flags on its own
+  assert.equal(isRealMarket({ liquidityUsd: 4000, marketCap: 1e9, volume24h: 1e6 }), false);
+  assert.deepEqual(poolFlags({ liquidityUsd: 1e6, marketCap: null, volume24h: null }), { padded: false, thin: false });
+  assert.equal(isRealMarket(null), false);
+});
+
+test("did you mean skips padded and thin copies", () => {
+  const best = { baseAddress: RAY, chainId: "solana", liquidityUsd: 9e6, marketCap: 5e8, volume24h: 1e6 };
+  const alts = [
+    { baseAddress: "0x" + "e".repeat(40), chainId: "bsc", liquidityUsd: 5e6, marketCap: 5.1e6, volume24h: 9e4 },  // padded
+    { baseAddress: "0x" + "f".repeat(40), chainId: "base", liquidityUsd: 4e6, marketCap: 8e7, volume24h: 2000 },   // thin
+    { baseAddress: "0x" + "c".repeat(40), chainId: "eth", liquidityUsd: 80000, marketCap: 2e6, volume24h: 20000 },
+  ];
+  assert.equal(didYouMean(best, alts).chainId, "eth");
+});
+
+test("pool caution: one line for padded or thin, nothing for a normal pool", () => {
+  assert.match(poolCaution({ liquidityUsd: 3e6, marketCap: 3.2e6, volume24h: 1e5 }), /padded/);
+  assert.match(poolCaution({ liquidityUsd: 2e6, marketCap: 9e7, volume24h: 100 }), /Almost nothing traded/);
+  assert.equal(poolCaution({ liquidityUsd: 4e6, marketCap: 6e8, volume24h: 2e6 }), null);
 });
