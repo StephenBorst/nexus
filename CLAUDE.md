@@ -801,6 +801,20 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   feed, falling back to the Lab's own statuses (`buildLeaderboard`/`calcRepScore`) and the on-chain Rep Score (outcomes
   callers close themselves) under a "RANKED BY KV DATA" label. Now: "No verified callers yet." when nobody's graded, a
   load error when the board can't be read (never an empty board for a failed read). Don't add a fallback ranking.
+- **Split exit + LATE_ENTRY fix (2026-10-12, borst: engine A/B rivalry).** (1) **`exitPlan: "SPLIT_50"`** (declared
+  at publish, frozen by callLock like the levels; a TP2 ALONE declares nothing, since Engine A and older calls carry TP2
+  as a note): `gradeCall` closes half at TP1, half at TP2, BOTH on the original stop (breakeven-after-TP1 is a different
+  strategy; don't mix). Total 0.5·R1 + 0.5·R2 or 0.5·R1 − 0.5; WIN when > 0; PENDING until the runner closes, with
+  `tp1At`/`bankedR` (+ server stamp `tp1HitAt`). Declared split with TP2 not beyond TP1 = INVALID; `/proxy/thesis-register`
+  400s `bad_split` BEFORE gas. Lab form: SPLIT EXIT checkbox under the levels (shown when TP2 is set). No GRADE_V bump (no
+  stored call had the field). Engine B's 5 calls from Oct 12 00:54 UTC predate it → graded TP1-only, permanently.
+  (2) **LATE_ENTRY only fires on a call graded as filled at the post** (`entryFill(...).atPost`) whose market had run
+  >0.5R past the entry (mark = `publishMark.px` if present, else the posting hour's close). Resting orders are graded
+  from their fill, so their R is obtainable: never flagged (`components.resting`). `PLAN_V = 2` (grading.mjs) re-derives
+  plan stamps inside the 60-day horizon once (13 public calls carried LATE_ENTRY: 8 Engine A, 5 Nexus Signals). The
+  draft advisor passes the latest close as the mark so it judges a draft the way a publish would.
+  ⏭ Leftover: an old CoinGecko verify route in index.js (~line 1406, `method: "coingecko_ohlc"`) has its own first-touch
+  check that ignores the entry-must-trade rule; it isn't the grader, but it disagrees with it.
 - **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
   (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
   A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from

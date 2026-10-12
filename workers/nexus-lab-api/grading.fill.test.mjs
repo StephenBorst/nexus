@@ -6,7 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { entryFill, gradeCall } from "./logic.mjs";
-import { applyFillStamp, gradePublicTheses } from "./grading.mjs";
+import { applyFillStamp, gradePublicTheses, PLAN_V } from "./grading.mjs";
 import { sealTheses } from "./callLock.mjs";
 
 const H = 3600, D = 86400;
@@ -122,4 +122,34 @@ test("a client save can't write fillState or filledAt", () => {
   const x = theses.find((t) => t.id === "x");
   assert.equal(x.fillState, "WORKING", "the server's value stays");
   assert.equal("filledAt" in x, false);
+});
+
+// ── a declared split's runner (2026-10-12) ────────────────────────────────────
+test("a split whose TP1 half closed carries tp1HitAt while the runner is open, and nothing once it closes", () => {
+  const t = long({ entryPrice: 100, stopLoss: 98, takeProfit1: 103, takeProfit2: 108, exitPlan: "SPLIT_50" });
+  const half = tape([[101, 99], [103.5, 100], [105, 101]]);
+  assert.equal(applyFillStamp(t, gradeCall(t, half), half), true);
+  assert.deepEqual([t.fillState, t.filledAt, t.tp1HitAt], ["OPEN", t0 * 1000, (t0 + H) * 1000]);
+  assert.equal(applyFillStamp(t, gradeCall(t, half), half), false, "unchanged = no write");
+  const done = tape([[101, 99], [103.5, 100], [108.5, 104]]);
+  assert.equal(gradeCall(t, done).r, 2.75);
+  applyFillStamp(t, gradeCall(t, done), done);
+  assert.equal("tp1HitAt" in t || "fillState" in t, false);
+});
+
+// ── plan quality re-derived once under the new LATE_ENTRY rule ────────────────
+test("the pass re-stamps an old LATE_ENTRY on a resting bid once, then leaves it", () => {
+  const drift = () => ({ h: 2545, l: 2525, c: 2538 });
+  // Stamped by the old rule: a limit bid 138 under the market lost 30 points.
+  const env = { LAB_STORE: kv({ [`lab:${W}`]: { theses: [
+    call({ id: "bid", entryPrice: 2400, planScore: 70, planFlags: ["LATE_ENTRY"] }),
+  ] } }) };
+  return withOrderly(drift, async () => {
+    await gradePublicTheses(env);
+    const [bid] = JSON.parse(env.LAB_STORE.m.get(`lab:${W}`)).theses;
+    assert.deepEqual([bid.planScore, bid.planFlags, bid.planV], [100, [], PLAN_V]);
+    const before = env.LAB_STORE.m.get(`lab:${W}`);
+    await gradePublicTheses(env);
+    assert.equal(env.LAB_STORE.m.get(`lab:${W}`), before, "stamped once");
+  });
 });

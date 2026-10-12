@@ -18,6 +18,9 @@ export interface ThesisTrade {
   stopLoss: number;
   takeProfit1: number;
   takeProfit2: number;
+  // Declared at publish, frozen with the call: graded half at TP1 + half at TP2 (lab-api gradeCall).
+  // Absent = graded at TP1 only, whatever TP2 holds.
+  exitPlan?: "SPLIT_50";
   riskPercent: number;
   accountSize: number;
   fundingRate: number;

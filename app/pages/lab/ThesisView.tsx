@@ -948,6 +948,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
     catalyst: "",
     targetWindow: "",
     chartUrls: [""] as string[],
+    splitExit: false,
   });
 
   // Done-for-you: seed account size from the connected collateral so position sizing
@@ -1105,7 +1106,13 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   // (catches missing fields, entry===stop, 0 risk → $0 / Infinity positions) AND a
   // direction has been committed (the WATCH gate: a weak base rate must be overridden
   // on purpose, never by a pre-checked default).
-  const formValid = !!form.symbol && dirArmed && !!calc
+  // A declared split needs TP2 beyond TP1 (else the grader calls it INVALID).
+  const splitBad = form.splitExit && (() => {
+    const e = parseFloat(form.entryPrice), t1 = parseFloat(form.takeProfit1), t2 = parseFloat(form.takeProfit2);
+    if (!(t2 > 0)) return false;
+    return form.direction === "LONG" ? !(t2 > t1 && t1 > e) : !(t2 < t1 && t1 < e);
+  })();
+  const formValid = !!form.symbol && dirArmed && !!calc && !splitBad
     && Number.isFinite(calc.positionSize) && calc.positionSize > 0
     && Number.isFinite(calc.riskReward) && calc.riskReward > 0;
   // string | string[] — chartUrls is a list; every other field is a plain string.
@@ -1245,6 +1252,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
     stopLoss: parseFloat(form.stopLoss),
     takeProfit1: parseFloat(form.takeProfit1),
     takeProfit2: parseFloat(form.takeProfit2) || 0,
+    // Declared split, graded half at TP1 + half at TP2 (lab-api gradeCall). Locked once published.
+    exitPlan: form.splitExit && parseFloat(form.takeProfit2) > 0 ? "SPLIT_50" : undefined,
     riskPercent: parseFloat(form.riskPercent),
     accountSize: parseFloat(form.accountSize),
     fundingRate: parseFloat(form.fundingRate),
@@ -1266,7 +1275,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   });
 
   const resetForm = () =>
-    setForm((f) => ({ ...f, symbol: "", entryPrice: "", stopLoss: "", takeProfit1: "", takeProfit2: "", notes: "", catalyst: "", targetWindow: "", chartUrls: [""] }));
+    setForm((f) => ({ ...f, symbol: "", entryPrice: "", stopLoss: "", takeProfit1: "", takeProfit2: "", splitExit: false, notes: "", catalyst: "", targetWindow: "", chartUrls: [""] }));
 
   // Saves the thesis PRIVATELY. Places no order of any kind — it was called
   // "deployPaper" and labelled "DEPLOY (PAPER)", which read as paper *trading* and
@@ -1859,6 +1868,13 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 </div>
               ))}
             </div>
+            {parseFloat(form.takeProfit2) > 0 && (
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 10, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", cursor: "pointer" }}>
+                <input type="checkbox" checked={form.splitExit} onChange={(e) => setForm((f) => ({ ...f, splitExit: e.target.checked }))} style={{ marginTop: 1 }} />
+                <span>SPLIT EXIT · graded as half at TP1, half at TP2, both on this stop. Off = graded at TP1 only. Locked once published.
+                  {splitBad && <span style={{ display: "block", color: "#fbbf24", marginTop: 4 }}>TP2 must sit beyond TP1 for a split.</span>}</span>
+              </label>
+            )}
             {/* Guided quick-fill: anchor entry to the live mark, then snap stop/target */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 10 }}>
               {(() => {

@@ -22,7 +22,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, callR, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, callR, SPLIT_EXIT, splitPlan, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
@@ -2123,9 +2123,16 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     if (parts[0] === "proxy" && parts[1] === "thesis-register" && request.method === "POST") {
       let body;
       try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const { walletAddress, bankrApiKey, symbol: rawSym, direction, entryPrice, stopLoss, takeProfit1, takeProfit2 = 0, isPublic = true, notes = "" } = body;
+      const { walletAddress, bankrApiKey, symbol: rawSym, direction, entryPrice, stopLoss, takeProfit1, takeProfit2 = 0, isPublic = true, notes = "", exitPlan } = body;
       if (!walletAddress || !bankrApiKey || !rawSym || !direction || !entryPrice || !stopLoss || !takeProfit1) {
         return json({ error: "missing required fields: walletAddress, bankrApiKey, symbol, direction, entryPrice, stopLoss, takeProfit1" }, request, 400);
+      }
+      // Checked BEFORE the transaction: a bad declaration must not cost gas.
+      if (exitPlan != null && exitPlan !== SPLIT_EXIT) {
+        return json({ error: "bad_exit_plan", hint: `exitPlan takes one value, "${SPLIT_EXIT}" (half at TP1, half at TP2). Leave it out for a single target.` }, request, 400);
+      }
+      if (exitPlan === SPLIT_EXIT && splitPlan({ direction, entryPrice: Number(entryPrice), stopLoss: Number(stopLoss), takeProfit1: Number(takeProfit1), takeProfit2: Number(takeProfit2), exitPlan }).invalid) {
+        return json({ error: "bad_split", hint: "A split exit needs takeProfit2 beyond takeProfit1, on the target side of entry." }, request, 400);
       }
 
       const THESIS_REGISTRY = "0x2F4EdA890f96a7979d6f26bCB210cEDAD68346Bc";
@@ -2244,6 +2251,8 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         stopLoss: Number(stopLoss),
         takeProfit1: Number(takeProfit1),
         takeProfit2: Number(takeProfit2),
+        // A declared split (half at TP1, half at TP2, gradeCall). Frozen with the call at publish.
+        ...(exitPlan === SPLIT_EXIT ? { exitPlan: SPLIT_EXIT } : {}),
         riskPercent: 0,
         accountSize: 0,
         fundingRate: 0,
