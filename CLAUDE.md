@@ -816,6 +816,20 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   draft advisor passes the latest close as the mark so it judges a draft the way a publish would.
   ⏭ Leftover: an old CoinGecko verify route in index.js (~line 1406, `method: "coingecko_ohlc"`) has its own first-touch
   check that ignores the entry-must-trade rule; it isn't the grader, but it disagrees with it.
+- **Registration hardened + keyless index (2026-10-12, after an agent burned ~$0.15 gas and indexed nothing).**
+  `routes-thesisreg.mjs` (I/O) + `thesisRegister.mjs` (rules, tested vs viem). `/proxy/thesis-register`: `checkRegistration`
+  (side, symbol, levels via callR, 6-decimal scale error ≤0.1%, exitPlan/split, notes ≤1000 B) + an `eth_call` simulation
+  from the wallet run BEFORE Bankr; KV `thesisreg:pending:{sha(wallet|calldata)}` (15 min) stops a second submit of the
+  same call (a repeat returns the first txHash; 409 `in_flight` while the outcome is unknown; `retry:true` overrides only
+  a submit Bankr explicitly refused); Bankr fetch has a 45 s timeout and accepts `txHash`/`transactionHash`/`hash`; a
+  slow receipt = 202 `{pending, txHash}`, never "nothing written". **`POST /theses/index {txHash, walletAddress}`** = no key:
+  receipt status 0x1 + EXACTLY ONE registry event naming the wallet + exactly one decodable `registerThesis` in the tx
+  input (nested smart-account calls work; one+one so a bundle can't hand a wallet another's levels) + block ≤6h old →
+  the call is built FROM THE CALLDATA (`thesisFromRegistration`), id `reg-<txHash[2:18]>` (idempotent), `onChainId` kept.
+  The split is declared ON-CHAIN as `#SPLIT_50` in the notes (the contract has no field; a body-only flag would let
+  whoever indexes first choose the grading). Skill refs document both paths + every status. ⏳ The published Bankr skill
+  (BankrBot/skills) needs a PR with `nexus-trading-labs/` to pick this up. Not verifiable from a cloud session (no
+  Arbitrum egress): first live registration after deploy is the test.
 - **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
   (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
   A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from

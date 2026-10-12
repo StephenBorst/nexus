@@ -22,7 +22,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, callR, SPLIT_EXIT, splitPlan, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, callR, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
@@ -70,6 +70,7 @@ import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
 import { handleXrayShare } from "./routes-xrayshare.mjs";
 import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handlePush } from "./routes-push.mjs";
+import { handleThesisRegistration } from "./routes-thesisreg.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildOgSvg, buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
 import { handleTheses } from "./routes-theses.mjs";
@@ -83,7 +84,6 @@ import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } f
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
 import { readPublishMark } from "./publishMark.mjs";
-import { registeredBy } from "./callLock.mjs";
 import { resolveDuplicates, REPORT_KEY as DEDUPE_REPORT_KEY } from "./callDedupe.mjs";
 import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signal-delivery.mjs";
 // The SAME synthesis the Lab + trader page render (pure, dependency-free), so the
@@ -2116,165 +2116,14 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       }, request);
     }
 
-    // ── /proxy/thesis-register — register a thesis on ThesisRegistry (Arbitrum) ─
-    // ABI-encodes registerThesis() and submits via Bankr /wallet/submit.
-    // Selector: 0xce4d0f18 = keccak256("registerThesis(string,uint8,uint256,uint256,uint256,uint256,uint256,bool,string)")
-    // Price scaling: 1e6 (e.g. $65000.50 → 65000500000). RR scaling: 1e4.
-    if (parts[0] === "proxy" && parts[1] === "thesis-register" && request.method === "POST") {
-      let body;
-      try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const { walletAddress, bankrApiKey, symbol: rawSym, direction, entryPrice, stopLoss, takeProfit1, takeProfit2 = 0, isPublic = true, notes = "", exitPlan } = body;
-      if (!walletAddress || !bankrApiKey || !rawSym || !direction || !entryPrice || !stopLoss || !takeProfit1) {
-        return json({ error: "missing required fields: walletAddress, bankrApiKey, symbol, direction, entryPrice, stopLoss, takeProfit1" }, request, 400);
-      }
-      // Checked BEFORE the transaction: a bad declaration must not cost gas.
-      if (exitPlan != null && exitPlan !== SPLIT_EXIT) {
-        return json({ error: "bad_exit_plan", hint: `exitPlan takes one value, "${SPLIT_EXIT}" (half at TP1, half at TP2). Leave it out for a single target.` }, request, 400);
-      }
-      if (exitPlan === SPLIT_EXIT && splitPlan({ direction, entryPrice: Number(entryPrice), stopLoss: Number(stopLoss), takeProfit1: Number(takeProfit1), takeProfit2: Number(takeProfit2), exitPlan }).invalid) {
-        return json({ error: "bad_split", hint: "A split exit needs takeProfit2 beyond takeProfit1, on the target side of entry." }, request, 400);
-      }
-
-      const THESIS_REGISTRY = "0x2F4EdA890f96a7979d6f26bCB210cEDAD68346Bc";
-      const CHAIN_ID = 42161; // Arbitrum One
-
-      const normSym = (s) => { s = s.toUpperCase().trim(); return s.startsWith("PERP_") ? s : "PERP_" + s + "_USDC"; };
-      const sym = normSym(rawSym);
-      const dirEnum = direction.toUpperCase() === "LONG" ? 0 : 1;
-
-      // Price encoding: 1e6 (contract uses 6 decimal scaling)
-      const scale = (v) => BigInt(Math.round(Number(v) * 1_000_000));
-      const entryScaled = scale(entryPrice);
-      const slScaled    = scale(stopLoss);
-      const tp1Scaled   = scale(takeProfit1);
-      const tp2Scaled   = scale(takeProfit2);
-
-      // Risk-reward: |tp1 - entry| / |entry - sl|, scaled by 1e4
-      const rrRaw = Math.abs(Number(takeProfit1) - Number(entryPrice)) / Math.abs(Number(entryPrice) - Number(stopLoss));
-      const rrScaled = BigInt(Math.round(rrRaw * 10_000));
-
-      // ── ABI encode registerThesis(string,uint8,uint256,uint256,uint256,uint256,uint256,bool,string) ──
-      const enc = new TextEncoder();
-      const symBytes   = enc.encode(sym);
-      const notesBytes = enc.encode(notes);
-
-      const padTo32bytes = (bytes) => {
-        const padLen = Math.ceil(Math.max(bytes.length, 1) / 32) * 32;
-        const out = new Uint8Array(padLen); out.set(bytes); return out;
-      };
-      const toBE32 = (val) => {
-        const b = new Uint8Array(32);
-        let v = typeof val === 'bigint' ? val : BigInt(val);
-        for (let i = 31; i >= 0; i--) { b[i] = Number(v & 0xffn); v >>= 8n; }
-        return b;
-      };
-
-      const symPadded   = padTo32bytes(symBytes);
-      // notesPadded only used when notes is non-empty; empty string = length 0 + no data bytes
-      const notesPadded = notesBytes.length ? padTo32bytes(notesBytes) : null;
-
-      const HEAD = 9 * 32; // 288 bytes — 9 params
-      const offsetSym   = HEAD;
-      // offsetNotes: after selector-less HEAD + sym length word + sym data
-      const offsetNotes = HEAD + 32 + symPadded.length;
-
-      const parts_enc = [
-        new Uint8Array([0xce, 0x4d, 0x0f, 0x18]), // selector
-        toBE32(offsetSym),
-        toBE32(dirEnum),
-        toBE32(entryScaled),
-        toBE32(slScaled),
-        toBE32(tp1Scaled),
-        toBE32(tp2Scaled),
-        toBE32(rrScaled),
-        toBE32(isPublic ? 1 : 0),
-        toBE32(offsetNotes),
-        toBE32(symBytes.length),   // symbol: length word
-        symPadded,                 // symbol: padded data
-        toBE32(notesBytes.length), // notes: length word (0 if empty)
-        ...(notesPadded ? [notesPadded] : []), // notes: padded data (omit if empty)
-      ];
-
-      const totalLen = parts_enc.reduce((s, p) => s + p.length, 0);
-      const calldata = new Uint8Array(totalLen);
-      let off = 0;
-      for (const p of parts_enc) { calldata.set(p, off); off += p.length; }
-      const calldataHex = "0x" + Array.from(calldata).map(b => b.toString(16).padStart(2,"0")).join("");
-
-      // Submit via Bankr /wallet/submit
-      const bankrRes = await fetch("https://api.bankr.bot/wallet/submit", {
-        method: "POST",
-        headers: { "X-API-Key": bankrApiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transaction: { to: THESIS_REGISTRY, chainId: CHAIN_ID, value: "0", data: calldataHex },
-          description: `Register ${direction.toUpperCase()} thesis for ${sym} on ThesisRegistry`,
-          waitForConfirmation: true,
-        }),
+    // ── /proxy/thesis-register + /theses/index — a call registered on ThesisRegistry (Arbitrum) ─
+    // routes-thesisreg.mjs: checks + simulation before gas, no double submits, keyless indexing.
+    {
+      const regRes = await handleThesisRegistration(parts, request, env, {
+        rpcUrls: [getArbRpc(env), "https://arb1.arbitrum.io/rpc"].filter((u, i, a) => a.indexOf(u) === i),
+        readMark: readPublishMark,
       });
-      const bankrData = await bankrRes.json();
-      if (!bankrData?.success) {
-        return json({ error: "bankr_submit_failed", detail: bankrData }, request, 502);
-      }
-      const txHash = bankrData.txHash || bankrData?.transaction?.hash || bankrData.hash;
-
-      // The Bankr key proves nothing about `walletAddress` (it came in the body). Before this call
-      // goes into that wallet's record, where once published it's permanent, the registry must have
-      // emitted its registration event for THAT wallet in a successful transaction (callLock
-      // registeredBy, which reads the event by its layout: the signature this route checked from
-      // 2026-09-28 to 09-29 wasn't the contract's, so it refused every registration).
-      const walletNormTR = walletAddress.toLowerCase().trim();
-      let receiptTR = null;
-      for (let i = 0; i < 6 && !receiptTR; i++) {
-        if (i) await new Promise((r) => setTimeout(r, 1500));
-        try {
-          const rr = await fetch(getArbRpc(env), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [txHash] }) });
-          receiptTR = (await rr.json())?.result || null;
-        } catch { receiptTR = null; }
-      }
-      if (!receiptTR) {
-        return json({ error: "receipt_unavailable", txHash, hint: "The registration was sent, but its receipt couldn't be read yet, so nothing was written to the Lab record." }, request, 504);
-      }
-      if (!registeredBy(receiptTR, THESIS_REGISTRY, walletNormTR)) {
-        return json({ error: "wallet_not_proven", txHash, hint: "The registry didn't record this thesis for walletAddress, so nothing was written to its Lab record." }, request, 403);
-      }
-
-      // Write thesis to KV so it shows in /feed immediately
-      const labKeyTR = `lab:${walletNormTR}`;
-      const existingRawTR = await env.LAB_STORE.get(labKeyTR);
-      const existingDataTR = existingRawTR ? JSON.parse(existingRawTR) : { theses: [] };
-      const rrFinal = Math.round(rrRaw * 100) / 100;
-      const newThesis = {
-        id: crypto.randomUUID(),
-        symbol: sym,
-        direction: direction.toUpperCase(),
-        entryPrice: Number(entryPrice),
-        stopLoss: Number(stopLoss),
-        takeProfit1: Number(takeProfit1),
-        takeProfit2: Number(takeProfit2),
-        // A declared split (half at TP1, half at TP2, gradeCall). Frozen with the call at publish.
-        ...(exitPlan === SPLIT_EXIT ? { exitPlan: SPLIT_EXIT } : {}),
-        riskPercent: 0,
-        accountSize: 0,
-        fundingRate: 0,
-        notes: notes || "",
-        createdAt: Date.now(),
-        positionSize: 0,
-        leverage: 0,
-        riskReward: rrFinal,
-        fundingCost8h: 0,
-        fundingCost24h: 0,
-        fundingCost72h: 0,
-        status: "ACTIVE",
-        actualPnl: null,
-        isPublic: isPublic !== false,
-        onChainTxHash: txHash,
-      };
-      const prevTR = existingDataTR.theses || [];
-      const prepTR = await prepareSeal(env, walletNormTR, prevTR, [newThesis, ...prevTR], Date.now(), { readMark: readPublishMark });
-      if (prepTR.error) return json({ error: prepTR.error }, request, 400);
-      await prepTR.commit(existingDataTR);
-
-      return json({ ok: true, txHash, thesisId: newThesis.id, symbol: sym, direction: direction.toUpperCase(), entryPrice, stopLoss, takeProfit1, takeProfit2, isPublic, notes, riskReward: rrFinal, hint: "Thesis registered on-chain and indexed in /feed. Parse ThesisRegistered event from txHash to get onChainId." }, request);
+      if (regRes) return regRes;
     }
 
     // ── /mark-price — get current mark price for a symbol ───────────────────
