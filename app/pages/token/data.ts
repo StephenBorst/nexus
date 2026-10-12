@@ -11,7 +11,7 @@
 //      to real in-venue execution instead of only a deep-link out.
 // Everything is fail-soft: a dead source renders its section empty, never blocks the page.
 
-import { pairsForAddress } from "@/lib/spotDiscovery.mjs";
+import { pairsForAddress, isRealMarket as isRealMarketRule } from "@/lib/spotDiscovery.mjs";
 
 const DS_BASE = "https://api.dexscreener.com/latest/dex";
 const GT_BASE = "https://api.geckoterminal.com/api/v2";
@@ -161,12 +161,10 @@ const PERP_PREFERRED = new Set<string>([
   "BTC", "ETH", "ZEC", "POL", "DOT", "APT", "ADA", "XRP", "LTC", "BCH", "ATOM", "NEAR", "TON", "TRX",
   "XLM", "DOGE", "AVAX", "BNB", "ALGO", "XMR", "ETC", "FIL", "HBAR", "DASH", "XTZ", "EGLD", "FLOW", "EOS", "KAS",
 ]);
-// A pair reads as a REAL market only above these floors. A ~$4-volume wrapper never clears them; every
-// genuine listed name clears them with orders of magnitude to spare (250x+ over the observed scams).
-const MIN_SPOT_VOL_USD = 1000;
-const MIN_SPOT_LIQ_USD = 5000;
-const isRealMarket = (p: TokenPair): boolean =>
-  (p.volume24h ?? 0) >= MIN_SPOT_VOL_USD && (p.liquidityUsd ?? 0) >= MIN_SPOT_LIQ_USD;
+// A pair reads as a REAL market only above the volume + liquidity floors (a ~$4-volume wrapper never
+// clears them) and when it isn't padded (liquidity ≈ market cap) or thin (almost no 24h volume vs its
+// liquidity). Rules + thresholds live in spotDiscovery.mjs (tested), shared with "did you mean".
+const isRealMarket = (p: TokenPair): boolean => isRealMarketRule(p);
 const dedupePairs = (arr: (TokenPair | null | undefined)[]): TokenPair[] =>
   arr.filter((p): p is TokenPair => !!p).filter((p, i, a) => a.findIndex((x) => x.pairAddress === p.pairAddress) === i);
 

@@ -1175,7 +1175,13 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   ticket shows "Get USDC on Solana →" only when BOTH balances read and neither can pay (`needsSolanaFunds`); it opens the
   cross-chain card preset to USDC · Solana + the user's own address via router STATE (never the URL); `CrossChainCard`
   takes `initialTo` (non-origin assets only) / `initialRecipient` (still shape-checked + bound by checkQuote). (6) **Callers
-  count**: `/theses/symbol` returns `callCount` (wallets on the coin via an open public call); the card shows "N public
+  count**: `/theses/symbol` returns `callCount` (wallets on the coin via an open public call); the card shows "N public **Pool quality (same day):** `isRealMarket`
+  moved into spotDiscovery.mjs (one rule for the ticker resolver + "Not this one?"): floors ($1k vol, $5k liq) AND not
+  **padded** (liquidity ≥ 80% of market cap, the fake-LP shape) AND not **thin** (24h vol < 0.1% of liquidity). A ticker
+  search skips such pools (perp-listed names fall through to the perp); a pasted address still opens the exact token,
+  with one amber `poolCaution` line under the card. ⚠️ Not checked live on $NEXUS's own pool (sandbox can't reach
+  GeckoTerminal). The token page's **Callers card no longer shows the merit-weighted "70% LONG" lean** (green/red):
+  plain "N positioned", each row's side monochrome. The server still returns `lean`/`side`; nothing renders them here.
   calls open on X · see who", **no long/short split until the verified board has a net-positive caller** (borst).
 - **Landing footer row (2026-09-30):** `Jupiter · spanDEX · Definitive Flash · WooFi · NEAR Protocol · XMTP · Quotient ·
   Arbitrum` ("NEAR Protocol" matches the announcement post; Fabric → spanDEX since Fabric shut down). The spot card names
