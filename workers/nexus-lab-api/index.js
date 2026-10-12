@@ -71,6 +71,7 @@ import { handleXrayShare } from "./routes-xrayshare.mjs";
 import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handlePush } from "./routes-push.mjs";
 import { handleThesisRegistration } from "./routes-thesisreg.mjs";
+import { handleCallStatus } from "./routes-callstatus.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildOgSvg, buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
 import { handleTheses } from "./routes-theses.mjs";
@@ -2124,6 +2125,11 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         readMark: readPublishMark,
       });
       if (regRes) return regRes;
+    }
+    // ── GET /theses/status/:wallet — a wallet's public calls with live distances (routes-callstatus.mjs) ─
+    {
+      const statusRes = await handleCallStatus(parts, request, env);
+      if (statusRes) return statusRes;
     }
 
     // ── /mark-price — get current mark price for a symbol ───────────────────

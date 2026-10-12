@@ -830,6 +830,16 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   whoever indexes first choose the grading). Skill refs document both paths + every status. ⏳ The published Bankr skill
   (BankrBot/skills) needs a PR with `nexus-trading-labs/` to pick this up. Not verifiable from a cloud session (no
   Arbitrum egress): first live registration after deploy is the test.
+- **Call status + fill alerts (2026-10-12, the A/B's hands-off piece).** `GET /theses/status/:wallet` (no key,
+  `routes-callstatus.mjs`, rows in `callStatus.mjs`, tested): the wallet's PUBLIC open calls (no private, holders-only
+  or `duplicateOf` copies) newest first + last 10 graded. Per call: `state` from the grader's stamps (WORKING / OPEN /
+  RUNNER = split with `tp1HitAt` / UNCHECKED, via `callLifecycle`), `plannedR`, and `live` = ONE all-markets Orderly
+  futures read cached 20 s in the isolate: `levels.{entry,stop,tp1,tp2}.{pct,r}` from the mark, `moveR` (open),
+  `crossedEntrySincePost` (WORKING, from `publishMark`). Two clocks, labelled: state = hourly grade, live = mark now.
+  **Alerts:** the hourly pass (`gradePublicTheses`) collects `fillEvents(before, t)` — FILL = a resting order that
+  traded AFTER the post (`filledAt > createdAt`; a fill at the post isn't news), TP1 = `tp1HitAt` newly set — and sends
+  them after the write via `notifyFillEvent` (resolutions.mjs → `appendNotification`: in-app + phone push + generic
+  Telegram; types `call_fill` / `call_tp1`, push topic `calls`). No public feed event. Up to an hour late by design.
 - **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
   (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
   A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from

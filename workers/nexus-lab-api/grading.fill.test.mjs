@@ -153,3 +153,23 @@ test("the pass re-stamps an old LATE_ENTRY on a resting bid once, then leaves it
     assert.equal(env.LAB_STORE.m.get(`lab:${W}`), before, "stamped once");
   });
 });
+
+// ── the fill alert (callStatus.mjs fillEvents → resolutions.mjs notifyFillEvent) ──
+test("a resting order that fills on a later pass alerts its owner once; one filled at the post doesn't", async () => {
+  const flat = () => ({ h: 2545, l: 2525, c: 2538 });
+  const env1 = { LAB_STORE: kv({ [`lab:${W}`]: { theses: [
+    call({ id: "limit", entryPrice: 2400 }),
+    call({ id: "market", entryPrice: 2538 }),
+  ] } }) };
+  await withOrderly(flat, () => gradePublicTheses(env1));
+  assert.equal(env1.LAB_STORE.m.get(`notif:${W}`), undefined, "nothing filled later: no alert");
+  // A later pass (fresh candle store) where price dipped to the bid a day after the post.
+  const dip = (t) => (t >= POSTED + D && t < POSTED + D + 2 * H ? { h: 2420, l: 2395, c: 2410 } : flat());
+  const env2 = { LAB_STORE: kv({ [`lab:${W}`]: env1.LAB_STORE.m.get(`lab:${W}`) }) };
+  await withOrderly(dip, () => gradePublicTheses(env2));
+  const notifs = JSON.parse(env2.LAB_STORE.m.get(`notif:${W}`) || "[]");
+  assert.deepEqual(notifs.map((n) => [n.type, n.thesisId]), [["call_fill", "limit"]]);
+  assert.match(notifs[0].message, /^ETH LONG filled at 2400/);
+  await withOrderly(dip, () => gradePublicTheses(env2));
+  assert.equal(JSON.parse(env2.LAB_STORE.m.get(`notif:${W}`)).length, 1, "no repeat on the next pass");
+});
