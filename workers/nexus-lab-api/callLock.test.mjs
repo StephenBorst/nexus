@@ -200,3 +200,18 @@ test("a public call without an id is never dropped from the record: it stays, pr
   assert.equal(r.theses[0].stopLoss, 1);
   assert.equal(r.refused[0].reason, "a published call needs an id");
 });
+
+test("a split exit is declared at publish: it can't be added, dropped or changed afterwards", () => {
+  const single = published({ takeProfit2: 120 });
+  const added = save(single.prev, [{ ...single.prev[0], exitPlan: "SPLIT_50" }], single.reg, NOW + H).theses[0];
+  assert.equal("exitPlan" in added, false, "a single-target call can't become a split after the fact");
+  const split = published({ takeProfit2: 120, exitPlan: "SPLIT_50" });
+  assert.equal(split.prev[0].exitPlan, "SPLIT_50");
+  const { exitPlan: _drop, ...without } = split.prev[0];
+  assert.equal(save(split.prev, [without], split.reg, NOW + H).theses[0].exitPlan, "SPLIT_50");
+  assert.equal(save(split.prev, [{ ...split.prev[0], exitPlan: "X" }], split.reg, NOW + H).theses[0].exitPlan, "SPLIT_50");
+});
+
+test("tp1HitAt and planV are server fields", () => {
+  for (const k of ["tp1HitAt", "planV"]) assert.ok(SERVER_FIELDS.includes(k), k);
+});

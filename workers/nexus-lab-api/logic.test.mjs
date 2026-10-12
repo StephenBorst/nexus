@@ -800,12 +800,37 @@ test("planQuality: a well-formed call scores 100 with no flags", () => {
   assert.equal(p.components.rrGeom, 2);
 });
 
-test("planQuality: LATE_ENTRY when the move already happened before the post", () => {
-  // market is at 130 by bar 30; claiming an entry back at 120 is 2R of free ground
+test("planQuality: a limit bid under the market is a resting order, not LATE_ENTRY (2026-10-12)", () => {
+  // Market at 130 by bar 30; a LONG bid at 120. gradeCall counts it only once price trades 120, so
+  // the 2R it claims is obtainable. It used to lose 30 points here for its order type.
   const p = planQuality(cleanPlan({ entryPrice: 120, stopLoss: 115, takeProfit1: 130 }), planCd);
+  assert.ok(!p.flags.includes("LATE_ENTRY"));
+  assert.equal(p.components.entryDriftR, 2, "the distance is still reported");
+  assert.equal(p.components.resting, true);
+  assert.equal(p.score, 100);
+});
+
+test("planQuality: LATE_ENTRY when the call fills at the post on an entry the market had passed", () => {
+  // Posted into the hour 129.35–130.65 (close 130): an entry of 129.5 is inside the hour's range,
+  // so it fills at the post, 1R better than the market, with a 0.5 stop. That fill wasn't on offer.
+  const p = planQuality(cleanPlan({ entryPrice: 129.5, stopLoss: 129, takeProfit1: 130.5, riskReward: 2 }), planCd);
   assert.ok(p.flags.includes("LATE_ENTRY"));
-  assert.equal(p.components.entryDriftR, 2);
-  assert.ok(p.score < 100);
+  assert.equal(p.components.resting, false);
+  assert.equal(p.components.entryDriftR, 1);
+});
+
+test("planQuality: with a publish mark, the mark is the market and the 0.3% band decides", () => {
+  const mark = { px: 130 };
+  // 0.23% under the mark = filled at the post, 0.75R better than the market: LATE_ENTRY.
+  const inBand = planQuality(cleanPlan({ entryPrice: 129.7, stopLoss: 129.3, takeProfit1: 130.5, riskReward: 2, publishMark: mark }), planCd);
+  assert.ok(inBand.flags.includes("LATE_ENTRY"));
+  assert.equal(inBand.components.markAtPost, 130);
+  // Outside the band: a resting order, never flagged however far it rests.
+  const resting = planQuality(cleanPlan({ entryPrice: 125, stopLoss: 122, takeProfit1: 131, riskReward: 2, publishMark: mark }), planCd);
+  assert.ok(!resting.flags.includes("LATE_ENTRY"));
+  assert.equal(resting.components.resting, true);
+  // At the mark: no drift, no flag.
+  assert.ok(!planQuality(cleanPlan({ publishMark: mark }), planCd).flags.includes("LATE_ENTRY"));
 });
 
 test("planQuality: entering BEFORE the level is not penalized", () => {
@@ -816,10 +841,13 @@ test("planQuality: entering BEFORE the level is not penalized", () => {
 });
 
 test("planQuality: LATE_ENTRY inverts correctly for shorts", () => {
-  // price has fallen to ~130 from 160; a short 'entry' at 150 is late
+  // price has fallen to ~130.5 from 160; a short 'entry' at 150 is a resting offer above the market
   const down = rSeries(t0, rampUp(60, 160, -0.5), 1);
-  const p = planQuality({ direction: "SHORT", entryPrice: 150, stopLoss: 155, takeProfit1: 140, riskReward: 2, createdAt: (t0 + 59 * 3600) * 1000 }, down);
-  assert.ok(p.flags.includes("LATE_ENTRY"));
+  const resting = planQuality({ direction: "SHORT", entryPrice: 150, stopLoss: 155, takeProfit1: 140, riskReward: 2, createdAt: (t0 + 59 * 3600) * 1000 }, down);
+  assert.ok(!resting.flags.includes("LATE_ENTRY"));
+  // ...but a short "filled" at 131 (inside the posting hour, above its 130.5 close) with a 0.4 stop is late
+  const late = planQuality({ direction: "SHORT", entryPrice: 131, stopLoss: 131.4, takeProfit1: 130.2, riskReward: 2, createdAt: (t0 + 59 * 3600) * 1000 }, down);
+  assert.ok(late.flags.includes("LATE_ENTRY"));
 });
 
 test("planQuality: STOP_IN_NOISE when the stop sits inside one bar's range", () => {
@@ -2467,4 +2495,65 @@ test("gradeCall: a malformed mark falls back to the hour-range rule", () => {
   for (const bad of [null, {}, { px: 0 }, { px: -5 }, { px: "abc" }]) {
     assert.equal(gradeCall({ ...call, publishMark: bad }, cd).outcome, "WIN", JSON.stringify(bad));
   }
+});
+
+// ── A declared split exit (2026-10-12) ──────────────────────────────────────────────────────
+// Engine B's shape: half at 1.5R, half at 4R, both on the original stop. Bar 0 is the posting hour.
+import { splitPlan, SPLIT_EXIT } from "./logic.mjs";
+const splitLong = { direction: "LONG", entryPrice: 100, stopLoss: 98, takeProfit1: 103, takeProfit2: 108, exitPlan: "SPLIT_50", createdAt: t0 * 1000 };
+
+test("splitPlan: only the declared value makes a split; a bad TP2 makes it invalid", () => {
+  assert.equal(SPLIT_EXIT, "SPLIT_50");
+  assert.deepEqual(splitPlan(splitLong), { r1: 1.5, r2: 4 });
+  assert.equal(splitPlan({ ...splitLong, exitPlan: undefined }), null, "a TP2 alone declares nothing");
+  assert.equal(splitPlan({ ...splitLong, exitPlan: "split" }), null);
+  for (const tp2 of [0, 102, 103, 95]) assert.deepEqual(splitPlan({ ...splitLong, takeProfit2: tp2 }), { invalid: true }, String(tp2));
+  const short = { direction: "SHORT", entryPrice: 100, stopLoss: 102, takeProfit1: 97, takeProfit2: 92, exitPlan: "SPLIT_50" };
+  assert.deepEqual(splitPlan(short), { r1: 1.5, r2: 4 });
+});
+
+test("gradeCall split: TP1 then TP2 pays 0.5·R1 + 0.5·R2", () => {
+  const g = gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 103.5, l: 100 }, { h: 106, l: 101 }, { h: 108.5, l: 104 }]));
+  assert.deepEqual(g, { outcome: "WIN", r: 2.75, legs: { tp1: "HIT", runner: "TP2" }, tp1At: t0 + 3600, bankedR: 0.75 });
+});
+
+test("gradeCall split: TP1 then the original stop pays 0.5·R1 − 0.5 (no breakeven move)", () => {
+  // After TP1 price falls to 99.5 (a breakeven stop would have closed it; the original 98 doesn't), then 97.
+  const g = gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 103.5, l: 100 }, { h: 101, l: 99.5 }, { h: 100, l: 97 }]));
+  assert.deepEqual(g, { outcome: "WIN", r: 0.25, legs: { tp1: "HIT", runner: "STOP" }, tp1At: t0 + 3600, bankedR: 0.75 });
+  // With R1 under 1 the same path nets negative: a LOSS.
+  const thin = { ...splitLong, takeProfit1: 101.5, takeProfit2: 104 };   // R1 0.75, R2 2
+  const l = gradeCall(thin, series(t0, [{ h: 101, l: 99 }, { h: 101.6, l: 100 }, { h: 100, l: 97 }]));
+  assert.equal(l.outcome, "LOSS");
+  assert.equal(l.r, -0.12);   // 0.375 − 0.5, to 2dp
+});
+
+test("gradeCall split: the stop before TP1 is −1R on the whole call; same-candle rules stay conservative", () => {
+  assert.deepEqual(gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 102, l: 97.5 }])),
+    { outcome: "LOSS", r: -1, legs: { tp1: "STOP", runner: "STOP" } });
+  // TP1 + stop in one hour = LOSS, as for any call.
+  assert.equal(gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 104, l: 97 }])).r, -1);
+  // TP2 + stop in one hour after TP1 = the stop.
+  const g = gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 103.5, l: 100 }, { h: 109, l: 97 }]));
+  assert.equal(g.legs.runner, "STOP");
+  assert.equal(g.r, 0.25);
+});
+
+test("gradeCall split: an hour through both targets closes both halves; an open runner stays PENDING with the banked half", () => {
+  assert.equal(gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 108.2, l: 100 }])).r, 2.75);
+  const open = gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 103.5, l: 100 }, { h: 105, l: 101 }]));
+  assert.deepEqual(open, { outcome: "PENDING", r: 0, legs: { tp1: "HIT", runner: "OPEN" }, tp1At: t0 + 3600, bankedR: 0.75 });
+});
+
+test("gradeCall split: SHORT mirrors; a resting split entry waits for its fill like any call", () => {
+  const short = { direction: "SHORT", entryPrice: 100, stopLoss: 102, takeProfit1: 97, takeProfit2: 92, exitPlan: "SPLIT_50", createdAt: t0 * 1000 };
+  assert.equal(gradeCall(short, series(t0, [{ h: 101, l: 99 }, { h: 100, l: 96.5 }, { h: 98, l: 91.5 }])).r, 2.75);
+  const resting = { ...splitLong, entryPrice: 95, stopLoss: 93, takeProfit1: 98, takeProfit2: 103 };
+  assert.deepEqual(gradeCall(resting, series(t0, [{ h: 101, l: 99 }, { h: 110, l: 99 }])), { outcome: "PENDING", r: 0, awaitingEntry: true });
+});
+
+test("gradeCall split: an undeclared TP2 changes nothing; a declared split with a bad TP2 is INVALID", () => {
+  const cd = series(t0, [{ h: 101, l: 99 }, { h: 103.5, l: 100 }, { h: 108.5, l: 104 }]);
+  assert.deepEqual(gradeCall({ ...splitLong, exitPlan: undefined }, cd), { outcome: "WIN", r: 1.5 });
+  assert.deepEqual(gradeCall({ ...splitLong, takeProfit2: 102 }, cd), { outcome: "INVALID", r: 0 });
 });

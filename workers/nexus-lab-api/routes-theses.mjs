@@ -110,8 +110,8 @@ export async function handleTheses(parts, request, env) {
       emerging: emergingEnriched,
       criteria: {
         minCalls: MIN_CALLS,
-        grading: "Objective first-touch vs public Orderly OHLC (/tv/history, 1h), from the hour the call was posted. The entry must trade: an entry within 0.3% of the market price the server read at publish fills at the post (calls published before 2026-10-11 carry no such price: there, an entry inside the posting hour's range fills at the post); any other entry fills in the first later hour that trades it (a stop touch in that hour counts, a target touch doesn't). TP1-first = WIN (+R from the posted levels), SL-first = LOSS (-1R), same-candle = LOSS (conservative). PENDING (incl. never filled) excluded. Anyone can recompute.",
-        discipline: "Plan quality at post time, from the same public candles: LATE_ENTRY (the move had already run >0.5R before the call went up, so the stated entry was never obtainable), STOP_IN_NOISE (<0.5 ATR), STOP_TOO_WIDE (>6 ATR), RR_MISMATCH (claimed R disagrees with the posted levels), BAD_LEVELS. Reported, not ranked on.",
+        grading: "Objective first-touch vs public Orderly OHLC (/tv/history, 1h), from the hour the call was posted. The entry must trade: an entry within 0.3% of the market price the server read at publish fills at the post (calls published before 2026-10-11 carry no such price: there, an entry inside the posting hour's range fills at the post); any other entry fills in the first later hour that trades it (a stop touch in that hour counts, a target touch doesn't). TP1-first = WIN (+R from the posted levels), SL-first = LOSS (-1R), same-candle = LOSS (conservative). A call published with exitPlan SPLIT_50 closes half at TP1 and half at TP2, both on the original stop: 0.5·R1 + 0.5·R2, or 0.5·R1 − 0.5 if the runner is stopped (WIN when the total is above zero); it stays PENDING until the runner closes. PENDING (incl. never filled) excluded. Anyone can recompute.",
+        discipline: "Plan quality at post time, from the same public candles: LATE_ENTRY (graded as filled at the post, but price had already run >0.5R past the entry, so that fill was never on offer; a resting order is graded from its fill and never flagged), STOP_IN_NOISE (<0.5 ATR), STOP_TOO_WIDE (>25 ATR), RR_MISMATCH (claimed R disagrees with the posted levels), BAD_LEVELS. Reported, not ranked on.",
         regime: "Each graded call is attributed to the market it was posted INTO, classified from the 48 candles BEFORE it (efficiency ratio → TREND_UP/TREND_DOWN/CHOP; ATR vs the symbol's own baseline → CALM/NORMAL/VOLATILE). Never reads post-call bars, so no outcome leaks into the label.",
       },
     }, request);
@@ -491,7 +491,10 @@ export async function handleTheses(parts, request, env) {
 
     // Plan quality on the DRAFT — the same scorer that will judge it once posted,
     // so a trader can fix a stop-in-noise before it costs them, not after.
-    const draft = { direction, entryPrice: Number(entryPrice), stopLoss: Number(stopLoss), takeProfit1: Number(takeProfit1), riskReward: Number(riskReward), createdAt: Date.now() };
+    // A publish reads the mark and fills the call at the post only within ENTRY_AT_MARK_PCT of it;
+    // the latest close stands in for that mark, so LATE_ENTRY here matches what the post would get.
+    const lastPx = cd && Array.isArray(cd.c) && cd.c.length ? Number(cd.c[cd.c.length - 1]) : NaN;
+    const draft = { direction, entryPrice: Number(entryPrice), stopLoss: Number(stopLoss), takeProfit1: Number(takeProfit1), riskReward: Number(riskReward), createdAt: Date.now(), ...(lastPx > 0 ? { publishMark: { px: lastPx } } : {}) };
     const plan = (draft.entryPrice && draft.stopLoss && draft.takeProfit1) ? planQuality(draft, cd) : null;
 
     // "When will I know?" — a call grades on FIRST TOUCH, so this has a real answer,

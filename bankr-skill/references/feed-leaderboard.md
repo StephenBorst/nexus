@@ -107,9 +107,22 @@ POST https://og.nexustradinglabs.com/proxy/thesis-register
   "takeProfit1":   70000,
   "takeProfit2":   0,
   "isPublic":      true,
-  "notes":         "BTC breakout thesis"
+  "notes":         "BTC breakout thesis",
+  "exitPlan":      "SPLIT_50"            // optional, see below
 }
 ```
+
+**How a call is graded.** First touch on public 1h candles: TP1 before the stop = WIN at the R of the
+posted levels; stop first (or both in one hour) = LOSS, −1R. A `takeProfit2` on its own is a note; it
+is NOT graded.
+
+**Split exit (`exitPlan: "SPLIT_50"`, optional).** Declares half closed at TP1 and half at TP2, both
+on the ORIGINAL stop (no move to breakeven). Graded total = 0.5·R1 + 0.5·R2 if the runner reaches
+TP2, or 0.5·R1 − 0.5 if the runner is stopped (WIN when the total is above zero); the call stays
+PENDING until the runner closes. Requires `takeProfit2` beyond `takeProfit1`, or the route answers
+400 `bad_split` before any transaction. Set it when the call is first published: it is frozen with
+the call and can't be added, removed or changed later. The same field works on a call saved through
+`PUT /lab/:address`.
 
 Returns `{ ok, txHash, thesisId, riskReward, hint }`. The thesis is automatically indexed in `/feed` — no separate PUT required. `thesisId` is the KV record ID. `txHash` links to Arbiscan. To also capture the on-chain `onChainId` (ThesisRegistry's integer ID), parse the `ThesisRegistered` event from the tx receipt.
 
