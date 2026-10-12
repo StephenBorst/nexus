@@ -6,7 +6,7 @@
 // fill: our own perp page when the token is a listed Orderly market, else a deep-link to
 // the token's pool. No fake order tabs, no dead "Buy" button.
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { generatePageTitle } from "@/utils/utils";
 import { getPageMeta } from "@/utils/seo";
 import { renderSEOTags } from "@/utils/seo-tags";
@@ -26,6 +26,7 @@ import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmt
 import { FlashSpotButton } from "./FlashSpotButton";
 import { FlashOrders } from "./FlashOrders";
 import { CrossChainCard } from "./CrossChainCard";
+import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS, majorHref, needsSolanaFunds, openCallCount, callCountLine } from "@/lib/spotDiscovery.mjs";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -314,6 +315,17 @@ function HoldingsStrip({ holdings, loading, onOpen }: { holdings: Holding[]; loa
 // listed perp, so a tap lands on its Spot page (trade on our book). Self-fetching, 60s refresh,
 // fail-soft (renders nothing without data). Turns "search a token you already know" into "land and
 // see what's ripping → tap → trade." ─────────────────────────────────────────────────────────────
+// The majors row on the Spot landing. Solana names open by their mint (spotDiscovery.mjs).
+function MajorsRow({ onOpen }: { onOpen: (href: string) => void }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+      {SPOT_MAJORS.map((m) => (
+        <Pill key={m.sym} onClick={() => onOpen(majorHref(m))} title={m.ca ? `${m.sym} · ${m.ca}` : m.sym}>{m.sym}</Pill>
+      ))}
+    </div>
+  );
+}
+
 function MoversRail({ onPick }: { onPick: (sym: string) => void }) {
   const [m, setM] = useState<{ gainers: Mover[]; losers: Mover[]; active: Mover[] } | null>(null);
   useEffect(() => {
@@ -411,6 +423,16 @@ export default function TokenTerminal() {
   const isMobile = useIsMobile();
   const { query } = useParams();
   const navigate = useNavigate();
+  // The bridge prompt hands the cross-chain card a destination (+ the user's own Solana address)
+  // through router state, never the URL.
+  const location = useLocation();
+  const xcPreset = (location.state as { xcTo?: string; xcRecipient?: string } | null) || null;
+  const xcRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!xcPreset?.xcTo || query) return;
+    const t = setTimeout(() => xcRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    return () => clearTimeout(t);
+  }, [xcPreset?.xcTo, query]);
   const [searchParams] = useSearchParams();
   // The board's "Trade on Spot" deep-links /token/:sym?venue=spot so a LISTED perp opens on the
   // Spot door, not its own book. Non-perp tokens are spot-only regardless (the toggle is perp-only).
@@ -423,6 +445,10 @@ export default function TokenTerminal() {
   // user out to the /perp book, we KEEP them in the Spot terminal and offer WooFi (majors swap) +
   // a link to the perp book. Holds the base symbol when that's the case; null otherwise.
   const [perpOnly, setPerpOnly] = useState<string | null>(null);
+  // Other pairs the search found (ranked by liquidity) → the "Not this one?" line under the card.
+  const [alts, setAlts] = useState<TokenPair[]>([]);
+  // Recently viewed: the last 5 tokens opened in this browser (spotDiscovery.mjs). No wallet needed.
+  const [viewed, setViewed] = useState(() => readViewed(typeof window !== "undefined" ? (() => { try { return window.localStorage; } catch { return null; } })() : null));
   const [candles, setCandles] = useState<Candle[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [tf, setTf] = useState(1); // index into TIMEFRAMES (1H default)
@@ -487,9 +513,9 @@ export default function TokenTerminal() {
 
   // ── resolve the searched token → the deepest pair ──
   useEffect(() => {
-    if (!query) { setPair(null); setNotFound(false); setPerpOnly(null); return; }
+    if (!query) { setPair(null); setNotFound(false); setPerpOnly(null); setAlts([]); return; }
     let alive = true;
-    setLoading(true); setNotFound(false); setPerpOnly(null);
+    setLoading(true); setNotFound(false); setPerpOnly(null); setAlts([]);
     // independent watchdog: never leave the terminal on a spinner if the fetch hangs
     const paint = setTimeout(() => { if (alive) setLoading(false); }, 6500);
     // DexScreener 429s/timeouts return an empty set → a FALSE "no token found" for a real ticker
@@ -501,8 +527,9 @@ export default function TokenTerminal() {
       return r;
     };
     resolveToken()
-      .then(({ best, perpBase }) => {
+      .then(({ best, alts: others, perpBase }) => {
         if (!alive) return;
+        setAlts(others || []);
         // A perp-preferred major (BTC/ETH/ZEC/POL/…) has no trusted DEX spot pair. We no longer
         // bounce the user out to the /perp book — WooFi now fills majors in-app, so KEEP them in
         // the Spot terminal (perpOnly card) with a WooFi swap + a link to the perp book.
@@ -525,6 +552,19 @@ export default function TokenTerminal() {
     const base = query.trim().replace(/^\$/, "").replace(/^PERP_/i, "").replace(/_USDC$/i, "").toUpperCase();
     if (base && perpSet.has(base)) { setPerpOnly(base); setNotFound(false); }
   }, [notFound, query, perpSet, loading]);
+
+  // ── recently viewed ── a resolved token (by chain + CA) or a perp-only major (by ticker).
+  useEffect(() => {
+    const entry = pair?.baseAddress
+      ? { kind: "spot", chain: pair.chainId, ca: pair.baseAddress, sym: pair.baseSymbol }
+      : perpOnly && !pair ? { kind: "perp", sym: perpOnly } : null;
+    if (!entry) return;
+    setViewed((prev) => {
+      const next = addViewed(prev, entry);
+      try { writeViewed(window.localStorage, next); } catch { /* storage blocked */ }
+      return next;
+    });
+  }, [pair?.baseAddress, pair?.chainId, pair?.baseSymbol, perpOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── chart for the resolved pair (+ on timeframe change) ──
   useEffect(() => {
@@ -624,6 +664,12 @@ export default function TokenTerminal() {
   }, [navigate]);
 
   const isPerp = !!pair && perpSet.has(pair.baseSymbol);
+  // "Not this one?": after a TICKER search, the deepest different token the search also found.
+  const addrQuery = !!query && (/^0x[a-fA-F0-9]{40}$/.test(query.trim()) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(query.trim()));
+  const dym = useMemo(() => didYouMean(pair, alts, { addressQuery: addrQuery }) as TokenPair | null, [pair, alts, addrQuery]);
+  // Recently viewed, minus the token on screen.
+  const viewedChips = useMemo(() => viewed.filter((v) => !(pair && v.kind === "spot" && v.ca === pair.baseAddress) && !(perpOnly && v.kind === "perp" && v.sym === perpOnly)), [viewed, pair, perpOnly]);
+  const clearViewed = useCallback(() => { setViewed([]); try { writeViewed(window.localStorage, []); } catch { /* storage blocked */ } }, []);
   const route = useMemo(() => (pair ? tradeLink(pair, isPerp) : null), [pair, isPerp]);
   // The SPOT route regardless of perp-listing — so a perp token can ALSO be spot-traded (the
   // Perp/Spot optionality). `route` above stays perp-aware for the Long/Short CTA.
@@ -1223,22 +1269,34 @@ export default function TokenTerminal() {
           </div>
           <button type="submit" style={{ flexShrink: 0, background: BRIGHT, color: "#0a0a0b", border: "none", borderRadius: 10, fontFamily: UI, fontSize: 13.5, fontWeight: 600, padding: "0 20px", cursor: "pointer" }}>Search</button>
         </form>
+        {/* ── RECENTLY VIEWED ── the last tokens opened in this browser, reopened by contract address. */}
+        {viewedChips.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", margin: "-6px 0 16px", maxWidth: 640 }}>
+            <span style={{ fontFamily: UI, fontSize: 12, color: FAINT, marginRight: 2 }}>Recent</span>
+            {viewedChips.map((v) => (
+              <Pill key={v.kind === "perp" ? `perp:${v.sym}` : `${v.chain}:${v.ca}`} size="sm" onClick={() => navigate(viewedHref(v))}
+                title={v.kind === "perp" ? `${v.sym} · Nexus perp` : `${v.sym} · ${v.chain} · ${v.ca}`}>{v.sym}</Pill>
+            ))}
+            <button type="button" onClick={clearViewed} style={{ background: "none", border: "none", color: FAINT, fontFamily: UI, fontSize: 12, cursor: "pointer", padding: "4px 6px" }}>Clear</button>
+          </div>
+        )}
 
         {/* ── LANDING (no query) — live MOVERS discovery first, then the blurb + majors ── */}
         {!query && (
           <div>
+            {/* Majors: Solana names open by their mint, so a guest can't land on a same-ticker copy.
+                No wallet → above Movers (nothing else to start from); a wallet → below, its own chips lead. */}
+            {!(wallet || solSigner.address) && <MajorsRow onOpen={(href) => navigate(href)} />}
             <MoversRail onPick={(s) => submit(s)} />
             <div style={{ maxWidth: 640 }}>
               <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 12 }}>
                 If Nexus lists it, you trade it here. If not, you’re routed to its pool.
               </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {["BTC", "ETH", "SOL", "HYPE", "NEXUS"].map((s) => (
-                  <Pill key={s} onClick={() => submit(s)}>{s}</Pill>
-                ))}
-              </div>
+              {(wallet || solSigner.address) && <MajorsRow onOpen={(href) => navigate(href)} />}
             </div>
-            <CrossChainCard walletAddress={wallet} provider={provider} />
+            <div id="cross-chain" ref={xcRef}>
+              <CrossChainCard walletAddress={wallet} provider={provider} initialTo={xcPreset?.xcTo} initialRecipient={xcPreset?.xcRecipient} />
+            </div>
           </div>
         )}
 
@@ -1335,6 +1393,27 @@ export default function TokenTerminal() {
                 {pair.socials.filter((s) => /twitter|x/i.test(s.type)).slice(0, 1).map((s) => <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" className="nx-press" style={{ display: "inline-flex", alignItems: "center", fontFamily: UI, fontSize: 12.5, color: FOG, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 15, padding: "6px 12px", lineHeight: 1 }}>𝕏 ↗</a>)}
               </div>
             </div>
+
+            {/* Under the card: another token the ticker search found, and a plain count of open public
+                calls on this coin (no long/short split until a verified caller is net-positive). */}
+            {(dym || (callers && openCallCount(callers) > 0)) && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "-4px 0 12px", padding: "0 4px" }}>
+                {callers && openCallCount(callers) > 0 && (
+                  <button type="button" onClick={() => document.getElementById("callers-on-coin")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                    style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontFamily: UI, fontSize: 12.5, color: FOG, cursor: "pointer", textAlign: "left" }}>
+                    {callCountLine(openCallCount(callers), pair.baseSymbol)} · <span style={{ color: BRIGHT }}>see who</span>
+                  </button>
+                )}
+                {dym && (
+                  <button type="button" onClick={() => navigate(`/token/${encodeURIComponent(dym.baseAddress)}`)}
+                    style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontFamily: UI, fontSize: 12.5, color: MUT, cursor: "pointer", textAlign: "left", lineHeight: 1.5 }}>
+                    Not this one? <span style={{ color: BRIGHT }}>{dym.baseSymbol}</span> on <span style={{ textTransform: "capitalize" }}>{dym.chainId}</span>
+                    {" · "}<span style={{ fontFamily: MONO, fontSize: 11.5 }}>{shortAddr(dym.baseAddress)}</span>
+                    {" · "}{fmtUsd(dym.liquidityUsd)} liquidity →
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* body: chart + tape (left) · trade panel (right) */}
             <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: "1fr 320px", gap: 12, alignItems: "start" }}>
@@ -1476,7 +1555,7 @@ export default function TokenTerminal() {
 
               {/* who's positioned on this coin — credible callers, graded, not self-reported */}
               {isPerp && callers && callers.callers.length > 0 && (
-                <CallersStrip coin={pair.baseSymbol} data={callers} onOpen={(w) => navigate(`/trader/${w}`)} />
+                <div id="callers-on-coin"><CallersStrip coin={pair.baseSymbol} data={callers} onOpen={(w) => navigate(`/trader/${w}`)} /></div>
               )}
 
               {/* trade panel — honest routing, no fake fills */}
@@ -1641,6 +1720,13 @@ export default function TokenTerminal() {
                             ))}
                           </span>
                         </div>
+                        {needsSolanaFunds({ sol: solBalance, usdc: usdcBal }) && (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", background: CARD, border: `1px solid ${BORD}`, borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+                            <span style={{ fontFamily: UI, fontSize: 12.5, color: FOG }}>No SOL or USDC on Solana to pay with.</span>
+                            <button type="button" onClick={() => navigate("/token", { state: { xcTo: "USDC.sol", xcRecipient: solSigner.address || "" } })}
+                              style={{ background: "none", border: "none", padding: 0, fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: BRIGHT, cursor: "pointer" }}>Get USDC on Solana →</button>
+                          </div>
+                        )}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>
                           <span>{solPayWith === "usdc"
                             ? (usdcBal != null ? `Bal ${usdcBal.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC` : "USDC bal —")

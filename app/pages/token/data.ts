@@ -11,6 +11,8 @@
 //      to real in-venue execution instead of only a deep-link out.
 // Everything is fail-soft: a dead source renders its section empty, never blocks the page.
 
+import { pairsForAddress } from "@/lib/spotDiscovery.mjs";
+
 const DS_BASE = "https://api.dexscreener.com/latest/dex";
 const GT_BASE = "https://api.geckoterminal.com/api/v2";
 const ORDERLY_INFO = "https://api-evm.orderly.org/v1/public/info";
@@ -212,7 +214,10 @@ export async function searchToken(query: string): Promise<{ best: TokenPair | nu
 
   const url = isAddress ? `${DS_BASE}/tokens/${encodeURIComponent(q)}` : `${DS_BASE}/search?q=${encodeURIComponent(q)}`;
   const j = (await getJson(url)) as { pairs?: unknown[] } | null;
-  const pairs = Array.isArray(j?.pairs) ? j!.pairs!.map(toPair).filter((p): p is TokenPair => !!p) : [];
+  const allPairs = Array.isArray(j?.pairs) ? j!.pairs!.map(toPair).filter((p): p is TokenPair => !!p) : [];
+  // /tokens/<address> returns every pair the address is in, as base OR quote: keep the token's own
+  // pairs so a pasted CA (or a recents / pinned-major chip) opens that token, not a pool it quotes.
+  const pairs: TokenPair[] = isAddress ? pairsForAddress(allPairs, q) : allPairs;
   let best = bestPair(pairs);
   let alts = pairs
     .filter((p) => p.pairAddress !== best?.pairAddress)
@@ -439,6 +444,7 @@ export interface SymbolCallers {
   longCount: number;
   shortCount: number;
   participants: number;
+  callCount?: number; // wallets on the coin through an open public call (server, 2026-10-12)
   callers: SymbolCaller[];
 }
 const _callersCache = new Map<string, { at: number; data: SymbolCallers }>();
