@@ -75,6 +75,7 @@ Do NOT use relative paths. Do NOT prepend `/api/`. Do NOT use the app domain (`t
 | Settle PnL | `POST https://og.nexustradinglabs.com/settle-pnl` | walletSig |
 | Register wallet | `POST https://og.nexustradinglabs.com/proxy/bankr-register` | Bankr API key |
 | Publish thesis on-chain | `POST https://og.nexustradinglabs.com/proxy/thesis-register` | Bankr API key |
+| Index a registration you sent yourself | `POST https://og.nexustradinglabs.com/theses/index` | None (txHash + wallet) |
 | Mark price | `GET https://og.nexustradinglabs.com/mark-price?symbol=BTC` | public |
 | Funding rate | `GET https://og.nexustradinglabs.com/funding-rate?symbol=BTC` | public |
 | 24h stats | `GET https://og.nexustradinglabs.com/24h-stats?symbol=BTC` | public |
