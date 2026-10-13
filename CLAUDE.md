@@ -844,10 +844,11 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   The split is declared ON-CHAIN as `#SPLIT_50` in the notes (the contract has no field; a body-only flag would let
   whoever indexes first choose the grading). Skill refs document both paths + every status. ⏳ Ported into the PUBLISHED skill on fork
   branch `StephenBorst/skills:nexus-thesis-registration` (2026-10-12; registration section + call status + 2 table rows
-  only). borst opens the PR to BankrBot/skills (a session can't attach both `skills` repos). ⚠️ Our repo's
-  `nexus-trading-labs/` copy is BEHIND the published one (no `references/agent.md`, missing guardrails): never copy it
-  over the published folder wholesale; port sections. Not verifiable from a cloud session (no
-  Arbitrum egress): first live registration after deploy is the test.
+  only). borst opens the PR to BankrBot/skills (a session can't attach both `skills` repos); this repo's
+  `nexus-trading-labs/` was synced to that PR's folder 2026-10-12 (#99). **✅ LIVE-VERIFIED 2026-10-12 (Engine B,
+  borst):** ETH SHORT via `/proxy/thesis-register` → 200, tx `0xbd180a17…8d113e`, onChainId 39, stored as
+  `reg-bd180a17119ae795` with `exitPlan: SPLIT_50`, a `publishMark` (2416.55 vs entry 2416.7 → filled at the post),
+  `fillState: OPEN`, and the row on `/theses/status/0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4`. No fallback needed.
 - **Call status + fill alerts (2026-10-12, the A/B's hands-off piece).** `GET /theses/status/:wallet` (no key,
   `routes-callstatus.mjs`, rows in `callStatus.mjs`, tested): the wallet's PUBLIC open calls (no private, holders-only
   or `duplicateOf` copies) newest first + last 10 graded. Per call: `state` from the grader's stamps (WORKING / OPEN /
