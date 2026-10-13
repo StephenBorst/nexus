@@ -8,6 +8,10 @@
 //   2. The same call from the same wallet can't be sent twice within PENDING_TTL_S. A repeat gets the
 //      first submit's txHash (and is indexed from it), or 409 while the first is still in flight /
 //      its outcome is unknown. `retry: true` overrides only a submit Bankr said FAILED.
+//      KV has no compare-and-set: the marker blocks a repeat that arrives after it's written. Two
+//      identical requests in the same isolate are serialised by `inflight`; two landing on different
+//      isolates at the same instant can both be sent (a Durable Object would close that; not built).
+//      The skill says so: send one request and wait for its answer.
 //   3. Bankr /wallet/submit. A receipt not readable within ~15 s answers 202 with the txHash: the
 //      call is on its way, and POST /theses/index {txHash, walletAddress} finishes the job.
 // /theses/index {txHash, walletAddress}: no key. Proves the registration from the chain
@@ -28,6 +32,8 @@ const WALLET_RE = /^0x[0-9a-f]{40}$/;
 const TX_RE = /^0x[0-9a-f]{64}$/;
 
 const registerLimiter = makeRateLimiter({ limit: 10, windowMs: 60_000 });
+// Pending keys this isolate is working on right now (see step 2 above).
+const inflight = new Set();
 const indexLimiter = makeRateLimiter({ limit: 30, windowMs: 60_000 });
 
 /** JSON-RPC over the given URLs in order: the first that answers wins. A JSON-RPC error is an
@@ -111,7 +117,6 @@ export async function indexRegistration(env, { txHash, wallet, rpc, readMark, no
 }
 
 async function proxyRegister(body, request, env, deps) {
-  const { rpc, readMark, now, fetchImpl, sleep } = deps;
   const wallet = lower(body.walletAddress);
   if (!WALLET_RE.test(wallet) || !body.bankrApiKey) {
     return json({ error: "missing required fields: walletAddress (0x…), bankrApiKey, symbol, direction, entryPrice, stopLoss, takeProfit1" }, request, 400);
@@ -121,6 +126,19 @@ async function proxyRegister(body, request, env, deps) {
   const calldata = encodeRegisterThesis(body);
   const kv = env.LAB_STORE;
   const key = await pendingKey(wallet, calldata);
+  if (inflight.has(key)) {
+    return json({ error: "in_flight", hint: "This exact call is being sent right now. Don't resend: wait for the first request's answer." }, request, 409);
+  }
+  inflight.add(key);
+  try {
+    return await proxyRegisterOnce(body, request, env, deps, { wallet, calldata, kv, key });
+  } finally {
+    inflight.delete(key);
+  }
+}
+
+async function proxyRegisterOnce(body, request, env, deps, { wallet, calldata, kv, key }) {
+  const { rpc, readMark, now, fetchImpl, sleep } = deps;
   const prior = await readJson(kv, key);
   if (prior && prior.txHash) {
     // Already sent: never pay twice. Finish indexing from the first submit.

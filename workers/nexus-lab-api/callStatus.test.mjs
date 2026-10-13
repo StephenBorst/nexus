@@ -122,3 +122,26 @@ test("GET /theses/status/:wallet: a bad address is refused; Orderly down still a
   assert.equal(body.calls[0].state, "OPEN");
   assert.equal(await handleCallStatus(["theses", "leaderboard"], get("/theses/leaderboard"), env, {}), null);
 });
+
+test("GET /theses/status/:wallet: a failed refresh reuses marks ≤2 min old, flagged; older marks are dropped", async () => {
+  _resetMarkCache();
+  const env = { LAB_STORE: kv({ [`lab:${W}`]: { theses: [call({ fillState: "OPEN" })] } }) };
+  const n = { n: 0 };
+  let up = true;
+  const ok = futures({ PERP_BTC_USDC: 101 }, n);
+  const fetchImpl = async (url) => { if (!up) throw new Error("down"); return ok(url); };
+  let t = T0;
+  const deps = { fetchImpl, now: () => t, sleep: async () => {} };
+  const read = async () => (await handleCallStatus(["theses", "status", W], get(`/theses/status/${W}`), env, deps)).json();
+  const fresh = await read();
+  assert.deepEqual([fresh.marksAvailable, fresh.marksStale, fresh.markAgeSec], [true, false, 0]);
+  up = false;
+  t = T0 + 60_000;
+  const stale = await read();
+  assert.deepEqual([stale.marksAvailable, stale.marksStale, stale.markAgeSec], [true, true, 60], "the last read, said to be old");
+  assert.equal(stale.calls[0].live.mark, 101);
+  t = T0 + 5 * 60_000;
+  const gone = await read();
+  assert.deepEqual([gone.marksAvailable, gone.marksStale, gone.markAt, gone.markAgeSec], [false, false, null, null], "a 5-minute-old mark is not served");
+  assert.equal(gone.calls[0].live, null);
+});

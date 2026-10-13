@@ -36,6 +36,7 @@ function chain() {
     async rpc(method, params) {
       c.calls.push(method);
       if (method === "eth_call") {
+        if (c.simDelayMs) await new Promise((r) => setTimeout(r, c.simDelayMs));
         if (c.sim === "revert") { const e = new Error("execution reverted"); e.rpcError = { code: 3, message: "execution reverted" }; throw e; }
         if (c.sim === "down") throw new Error("fetch failed");
         return "0x" + "0".repeat(63) + "1";
@@ -202,4 +203,15 @@ test("other paths and methods pass through or are refused", async () => {
   assert.equal(await handleThesisRegistration(["theses", "leaderboard"], req("/theses/leaderboard", {}), s.env, {}), null);
   const get = await handleThesisRegistration(["theses", "index"], new Request("https://og.test/theses/index"), s.env, {});
   assert.equal(get.status, 405);
+});
+
+test("two identical requests at the same moment: one is sent, the other is told to wait", async () => {
+  const s = setup();
+  s.ch.simDelayMs = 30; // both requests sit in the simulation window, the gap a KV marker can't cover
+  const [a, b] = await Promise.all([s.go("/proxy/thesis-register", call()), s.go("/proxy/thesis-register", call())]);
+  assert.equal(s.bk.submits, 1);
+  assert.deepEqual([a.status, b.status].sort(), [200, 409]);
+  assert.equal([a, b].find((r) => r.status === 409).body.error, "in_flight");
+  const later = await s.go("/proxy/thesis-register", call());
+  assert.deepEqual([later.status, later.body.already, s.bk.submits], [200, true, 1], "and a later repeat still finds the first");
 });
