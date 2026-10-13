@@ -1822,6 +1822,12 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   (recent commits: Opus 5, Opus 5.5). ⚠️ Don't hard-code a model name here: this line said "Opus 4.8" long after
   sessions had moved on, and because a CLAUDE.md rule OUTRANKS the harness reminder, a stale name here makes every
   session misattribute its own commits. Commit/push when asked.
+- **⭐ MERGE GREEN PRs YOURSELF (borst, 2026-10-13).** A session merges its OWN PR on `StephenBorst/nexus` once CI is
+  green on the current head and it's mergeable — no waiting for borst's word. Still HOLD and tell borst when: CI is red
+  or pending · a merge conflict · an unanswered review thread · a failing Claude Approvals check (where it runs) · the PR
+  isn't yours or is on another repo (BankrBot/skills, nexus-landing) · it touches the engine during a freeze (see
+  "⛔ ENGINE FREEZE") · it arms live money (`CARRY_LIVE`, carry/agent key secrets, any live-trading switch). After a
+  merge, check the deploy run started on main (see "Manual redeploy").
 - Env is **Windows PowerShell** — no `&&` chaining; use `;`. `gh` CLI is NOT installed.
 - `tsc --noEmit` baseline is now **0 errors** (cleaned up 2026-08-24 — the old walletConnector
   `EvmInitialProps` mismatch fixed via a `walletConfig` appMetadata.name fallback; useNav
