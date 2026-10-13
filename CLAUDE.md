@@ -836,7 +836,10 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   (side, symbol, levels via callR, 6-decimal scale error ≤0.1%, exitPlan/split, notes ≤1000 B) + an `eth_call` simulation
   from the wallet run BEFORE Bankr; KV `thesisreg:pending:{sha(wallet|calldata)}` (15 min) stops a second submit of the
   same call (a repeat returns the first txHash; 409 `in_flight` while the outcome is unknown; `retry:true` overrides only
-  a submit Bankr explicitly refused); Bankr fetch has a 45 s timeout and accepts `txHash`/`transactionHash`/`hash`; a
+  a submit Bankr explicitly refused). ⚠️ KV has no compare-and-set: an isolate-local `inflight` set serialises identical
+  requests in ONE isolate (2026-10-13, after BankrBot/skills#777 review: two concurrent identical requests got two
+  txHashes); two landing on different isolates at the same instant can still both send. The skill says "send one, wait
+  for its answer"; a Durable Object would close it (not built); Bankr fetch has a 45 s timeout and accepts `txHash`/`transactionHash`/`hash`; a
   slow receipt = 202 `{pending, txHash}`, never "nothing written". **`POST /theses/index {txHash, walletAddress}`** = no key:
   receipt status 0x1 + EXACTLY ONE registry event naming the wallet + exactly one decodable `registerThesis` in the tx
   input (nested smart-account calls work; one+one so a bundle can't hand a wallet another's levels) + block ≤6h old →
@@ -853,7 +856,8 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   `routes-callstatus.mjs`, rows in `callStatus.mjs`, tested): the wallet's PUBLIC open calls (no private, holders-only
   or `duplicateOf` copies) newest first + last 10 graded. Per call: `state` from the grader's stamps (WORKING / OPEN /
   RUNNER = split with `tp1HitAt` / UNCHECKED, via `callLifecycle`), `plannedR`, and `live` = ONE all-markets Orderly
-  futures read cached 20 s in the isolate: `levels.{entry,stop,tp1,tp2}.{pct,r}` from the mark, `moveR` (open),
+  futures read cached 20 s in the isolate (a failed refresh reuses it ≤2 min, `marksStale: true`; older = no marks;
+  `markAt`/`markAgeSec` always given — a review caught a 5-min-old mark served as fresh): `levels.{entry,stop,tp1,tp2}.{pct,r}` from the mark, `moveR` (open),
   `crossedEntrySincePost` (WORKING, from `publishMark`). Two clocks, labelled: state = hourly grade, live = mark now.
   **Alerts:** the hourly pass (`gradePublicTheses`) collects `fillEvents(before, t)` — FILL = a resting order that
   traded AFTER the post (`filledAt > createdAt`; a fill at the post isn't news), TP1 = `tp1HitAt` newly set — and sends
