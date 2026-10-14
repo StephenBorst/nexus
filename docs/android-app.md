@@ -9,8 +9,8 @@ app; there is no second codebase. Phone alerts are Web Push (`workers/nexus-lab-
 - [x] Manifest: brand background `#0a0a0b`, maskable icon (`public/icon-maskable-512.png`).
 - [x] 1. Push key set (borst, 2026-10-11). Live-tested: Send test landed on borst's Android phone (Chrome).
 - [x] 2. D-U-N-S number + Play Console organization account (borst, 2026-10-14). Package registered: `com.nexustradinglabs.nexus`.
-- [ ] 3. Android package from PWABuilder (borst)
-- [ ] 4. `public/.well-known/assetlinks.json` with both fingerprints (Claude, from step 3's numbers)
+- [x] 3. Android package from PWABuilder (borst, 2026-10-14). First .aab rolled out on internal testing.
+- [x] 4. `public/.well-known/assetlinks.json` with both fingerprints (2026-10-14: app signing `DD:F5:…:C7:62`, upload `72:4C:…:02:4C`)
 - [x] 5a. Privacy policy page `nexustradinglabs.com/privacy` (nexus-landing PR #14)
 - [x] 5b. Store listing copy + graphics: `marketing/play-store/` (icon, feature graphic, 3 phone screenshots, listing.md)
 - [x] 5c. Data safety form + store listing saved (borst, 2026-10-14). Not sent for review yet.
