@@ -11,7 +11,9 @@ app; there is no second codebase. Phone alerts are Web Push (`workers/nexus-lab-
 - [ ] 2. D-U-N-S number + Play Console organization account (borst)
 - [ ] 3. Android package from PWABuilder (borst)
 - [ ] 4. `public/.well-known/assetlinks.json` with both fingerprints (Claude, from step 3's numbers)
-- [ ] 5. Store listing: copy + graphics (Claude drafts, borst submits)
+- [x] 5a. Privacy policy page `nexustradinglabs.com/privacy` (nexus-landing PR #14)
+- [x] 5b. Store listing copy + graphics: `marketing/play-store/` (icon, feature graphic, 3 phone screenshots, listing.md)
+- [ ] 5c. Data safety form + listing submitted (borst)
 - [ ] 6. Solana dApp Store, same package (optional second lane)
 
 ## 1. Turn push on (5 minutes, once)
