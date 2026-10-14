@@ -5,6 +5,7 @@ import {
   pairsForAddress, didYouMean, sameAddress, SPOT_MAJORS, majorHref,
   needsSolanaFunds, openCallCount, callCountLine,
   isRealMarket, poolFlags, poolCaution,
+  safeLogoUrl, fundingPayLine, readBrief, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo,
 } from "./spotDiscovery.mjs";
 
 const RAY = "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R";
@@ -137,4 +138,74 @@ test("pool caution: one line for padded or thin, nothing for a normal pool", () 
   assert.match(poolCaution({ liquidityUsd: 3e6, marketCap: 3.2e6, volume24h: 1e5 }), /padded/);
   assert.match(poolCaution({ liquidityUsd: 2e6, marketCap: 9e7, volume24h: 100 }), /Almost nothing traded/);
   assert.equal(poolCaution({ liquidityUsd: 4e6, marketCap: 6e8, volume24h: 2e6 }), null);
+});
+
+test("logos: only https on the data hosts; a bad stored logo is dropped, the row kept", () => {
+  assert.equal(safeLogoUrl("https://dd.dexscreener.com/ds-data/tokens/solana/x.png"), "https://dd.dexscreener.com/ds-data/tokens/solana/x.png");
+  assert.ok(safeLogoUrl("https://assets.geckoterminal.com/a.png"));
+  assert.ok(safeLogoUrl("https://coin-images.coingecko.com/coins/images/1/large/b.png"));
+  assert.equal(safeLogoUrl("http://dd.dexscreener.com/x.png"), null);
+  assert.equal(safeLogoUrl("https://dexscreener.com.evil.io/x.png"), null);
+  assert.equal(safeLogoUrl("javascript:alert(1)"), null);
+  const s = memStore();
+  s.setItem(VIEWED_KEY, JSON.stringify([{ kind: "spot", chain: "solana", ca: RAY, sym: "RAY", at: 1, img: "https://evil.io/x.png" }]));
+  const [row] = readViewed(s);
+  assert.equal(row.sym, "RAY");
+  assert.equal(row.img, undefined);
+});
+
+test("logos: a re-view without a logo keeps the stored one; majors reuse it by address", () => {
+  const img = "https://dd.dexscreener.com/ray.png";
+  let l = addViewed([], { kind: "spot", chain: "solana", ca: RAY, sym: "RAY", img }, 1);
+  l = addViewed(l, { kind: "spot", chain: "solana", ca: RAY, sym: "RAY" }, 2);
+  assert.equal(l[0].img, img);
+  const ray = SPOT_MAJORS.find((m) => m.sym === "RAY");
+  assert.equal(majorLogo(ray, l), img);
+  assert.equal(majorLogo(SPOT_MAJORS.find((m) => m.sym === "BTC"), l), null);
+});
+
+test("read brief: who pays, the open call count, and the not-graded tag; no funding → no line", () => {
+  assert.equal(readBrief({ fundingAnnualPct: 12, callCount: 3 }), "Funding +12.0%/yr, longs pay · 3 public calls open · a mechanical rule, not graded.");
+  assert.equal(readBrief({ fundingAnnualPct: -8.04, callCount: 1 }), "Funding −8.0%/yr, shorts pay · 1 public call open · a mechanical rule, not graded.");
+  assert.equal(readBrief({ fundingAnnualPct: 0.01, callCount: 0 }), "Funding +0.0%/yr, flat · no public calls open · a mechanical rule, not graded.");
+  assert.equal(readBrief({ fundingAnnualPct: null, callCount: 4 }), null);
+  assert.equal(readBrief({ fundingAnnualPct: 5, callCount: undefined }), "Funding +5.0%/yr, longs pay · a mechanical rule, not graded.");
+  assert.equal(fundingPayLine(NaN), null);
+});
+
+test("caller record: win rate always beside R and sample; no record = ungraded", () => {
+  assert.equal(callerRecordLine({ calls: 12, winRate: 58.3, avgR: -0.3 }), "12 graded · 58% · −0.30R");
+  assert.equal(callerRecordLine({ calls: 5, winRate: 60, avgR: 0.25 }), "5 graded · 60% · +0.25R");
+  assert.equal(callerRecordLine(null), "ungraded");
+  assert.equal(callerRecordLine({ calls: 0, winRate: 0, avgR: 0 }), "ungraded");
+  assert.doesNotMatch(callerRecordLine({ calls: 9, winRate: 70, avgR: -0.1 }), /^\d+%$/);
+});
+
+test("call draft: entry = the mark (rounded), no side or levels; no mark → no entry", () => {
+  const d = callDraft({ coin: "PERP_SOL_USDC", mark: 103.93412 });
+  assert.equal(d.symbol, "SOL");
+  assert.equal(d.entryPrice, "103.934");
+  assert.equal(d.direction, undefined);
+  assert.equal(d.stopLoss, undefined);
+  assert.equal(callDraft({ coin: "BTC", mark: 64123.456 }).entryPrice, "64123.5");
+  assert.equal(callDraft({ coin: "BONK", mark: 0.0000213 }).entryPrice, "0.000021");
+  assert.equal(callDraft({ coin: "ETH", mark: null }).entryPrice, undefined);
+  assert.equal(callDraft({ coin: "<x>", mark: 1 }), null);
+});
+
+test("chip dots: an open call on a listed coin, or a buy of that exact token", () => {
+  const viewed = [
+    { kind: "spot", chain: "solana", ca: RAY, sym: "RAY" },
+    { kind: "spot", chain: "base", ca: "0x" + "a".repeat(40), sym: "RAY" }, // a same-ticker copy
+    { kind: "perp", sym: "BTC" },
+    { kind: "spot", chain: "base", ca: EVM, sym: "NEXUS" },
+  ];
+  const m = chipMarks(viewed, { openCoins: new Set(["RAY", "BTC"]), listed: new Set(["RAY", "BTC"]), buys: [{ chain: "base", ca: EVM.toLowerCase() }] });
+  assert.deepEqual(m[chipKey(viewed[0])], { call: true, buy: false });
+  assert.deepEqual(m[chipKey(viewed[2])], { call: true, buy: false });
+  assert.deepEqual(m[chipKey(viewed[3])], { call: false, buy: true });
+  // the copy shares the ticker, so it matches the listed-coin call too; an UNLISTED ticker never does
+  const unlisted = chipMarks(viewed, { openCoins: new Set(["RAY"]), listed: new Set(), buys: [] });
+  assert.equal(unlisted[chipKey(viewed[0])], undefined);
+  assert.deepEqual(chipMarks(viewed, {}), {});
 });

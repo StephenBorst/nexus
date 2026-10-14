@@ -11,7 +11,7 @@
 //      to real in-venue execution instead of only a deep-link out.
 // Everything is fail-soft: a dead source renders its section empty, never blocks the page.
 
-import { pairsForAddress, isRealMarket as isRealMarketRule } from "@/lib/spotDiscovery.mjs";
+import { pairsForAddress, isRealMarket as isRealMarketRule, safeLogoUrl } from "@/lib/spotDiscovery.mjs";
 
 const DS_BASE = "https://api.dexscreener.com/latest/dex";
 const GT_BASE = "https://api.geckoterminal.com/api/v2";
@@ -175,8 +175,9 @@ const dedupePairs = (arr: (TokenPair | null | undefined)[]): TokenPair[] =>
 const NEXUS_CA = "0x3D958634ab725B627919EF8F2Ed59227309fDba3";
 const NEXUS_POOL = "0xdc5be7d936f69eb3219ad6bd98b0be0b0c56f172a81f70eca09fd97d6bfd2009";
 async function nexusCuratedPair(): Promise<TokenPair | null> {
-  const j = (await getJson(`https://api.geckoterminal.com/api/v2/networks/base/pools/${NEXUS_POOL}`)) as { data?: { attributes?: Record<string, unknown> } } | null;
+  const j = (await getJson(`https://api.geckoterminal.com/api/v2/networks/base/pools/${NEXUS_POOL}?include=base_token`)) as { data?: { attributes?: Record<string, unknown> }; included?: { type?: string; attributes?: { image_url?: unknown } }[] } | null;
   const a = j?.data?.attributes;
+  const baseImg = (j?.included || []).find((x) => x?.type === "token")?.attributes?.image_url;
   if (!a) return null;
   const pcp = (a.price_change_percentage as Record<string, unknown>) || {};
   const vol = (a.volume_usd as Record<string, unknown>) || {};
@@ -187,7 +188,7 @@ async function nexusCuratedPair(): Promise<TokenPair | null> {
     pairAddress: NEXUS_POOL, baseSymbol: "NEXUS", baseName: "Nexus", baseAddress: NEXUS_CA, quoteSymbol: "WETH",
     priceUsd: num(a.base_token_price_usd), priceChange24h: num(pcp.h24), liquidityUsd: num(a.reserve_in_usd),
     fdv: num(a.fdv_usd), marketCap: num(a.market_cap_usd), volume24h: num(vol.h24), volume1h: num(vol.h1),
-    buys24h: num(tx.buys), sells24h: num(tx.sells), imageUrl: null, websites: [], socials: [],
+    buys24h: num(tx.buys), sells24h: num(tx.sells), imageUrl: safeLogoUrl(baseImg), websites: [], socials: [],
     createdAt: Number.isFinite(created) ? created : null,
   };
 }
@@ -611,3 +612,34 @@ export function fmtAge(ts: number): string {
   return `${Math.floor(h / 24)}d`;
 }
 export const shortAddr = (a: string): string => (a && a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a || "—");
+
+// ── a token's logo from GeckoTerminal when DexScreener has none (header + Recent chips). Read-only,
+// cached per token for the session, fail-soft → null (the page shows a monogram). Only image hosts
+// safeLogoUrl allows ever reach an <img>.
+const _logoCache = new Map<string, string | null>();
+export async function tokenLogo(chainId: string, address: string): Promise<string | null> {
+  if (!chainId || !address) return null;
+  const key = `${chainId}:${address}`;
+  if (_logoCache.has(key)) return _logoCache.get(key) ?? null;
+  const j = (await getJson(`${GT_BASE}/networks/${encodeURIComponent(gtNetwork(chainId))}/tokens/${encodeURIComponent(address)}`)) as { data?: { attributes?: { image_url?: unknown } } } | null;
+  const url = safeLogoUrl(j?.data?.attributes?.image_url);
+  _logoCache.set(key, url);
+  return url;
+}
+
+// ── the Orderly mark for a listed perp, read when the user taps "Post a call" (the draft's entry). ──
+export async function perpMark(coin: string): Promise<number | null> {
+  const sym = bareSym(coin);
+  if (!/^[A-Z0-9]{1,16}$/.test(sym)) return null;
+  const j = (await getJson(`${ORDERLY_FUTURES}/PERP_${sym}_USDC`, 4000)) as { data?: { mark_price?: unknown } } | null;
+  return num(j?.data?.mark_price);
+}
+
+// ── the wallet's coins with an OPEN public call (for the dots on the Recent chips). Public route,
+// no key; null on a failed read (no dots rather than wrong dots). ──
+export async function openCallCoins(wallet: string): Promise<Set<string> | null> {
+  if (!wallet) return null;
+  const j = (await getJson(`${AGENT_API}/theses/status/${encodeURIComponent(wallet)}`)) as { calls?: { symbol?: string }[] } | null;
+  if (!j || !Array.isArray(j.calls)) return null;
+  return new Set(j.calls.map((c) => bareSym(String(c?.symbol || ""))).filter(Boolean));
+}

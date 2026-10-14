@@ -24,6 +24,7 @@ import { PublicOperatorProfile, InFlightCalls, VenueEvidence } from "./ProfileSy
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
 import { bareTicker } from "@/utils/utils";
 import { SIGNAL } from "@/config/theme";
+import { TEXT_ACTION, TEXT_ACTION_BAR, TEXT_ACTION_CLASS } from "@/components/ui";
 import { pressKey } from "@/utils/a11y";
 import { useEscapeKey } from "@/utils/a11y";
 import type { SavedStrategy } from "@/pages/lab/agentTypes";
@@ -687,29 +688,19 @@ export default function TraderPage() {
         <CopyModal thesis={copyTarget} walletAddress={walletAddress} onClose={() => setCopyTarget(null)} />
       )}
 
-      {/* Header — flexWrap so the three actions (FOLLOW + MESSAGE + SHARE) drop to a second
-          row on a phone instead of overflowing the right edge; on desktop they stay inline. */}
-      <div style={{ padding: "8px 16px", borderBottom: "1px solid #232327", background: "#0f0f11", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 8 }}>
-        <button
-          onClick={() => navigate("/feed")}
-          style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: 0 }}
-        >
-          ← Feed
-        </button>
-        <div style={{ flex: 1, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#33333a", letterSpacing: "0.05em" }}>
-          / TRADER
-        </div>
-        {/* Header actions — one shared size so FOLLOW + MESSAGE + SHARE read as a matched set. */}
+      {/* Header — the call page's action bar: plain text actions, one style (TEXT_ACTION), no boxes. Follow /
+          Message / Link wrap to a second row on a phone; each keeps a 44px tap target. */}
+      <div style={TEXT_ACTION_BAR}>
+        <button onClick={() => navigate("/feed")} className={TEXT_ACTION_CLASS} style={TEXT_ACTION}>← Feed</button>
+        <div style={{ flex: 1 }} />
         {walletAddress && !isOwn && wallet && (
           <button
             onClick={toggleFollow}
             disabled={followBusy}
+            className={TEXT_ACTION_CLASS}
             title={isFollowing ? "Unfollow. Stop starred alerts when they open a position" : "Follow. Their next open pings you in Live Alerts"}
-            style={{
-              background: isFollowing ? `${SIGNAL.follow}14` : "none", border: `1px solid ${isFollowing ? SIGNAL.follow : "#232327"}`, borderRadius: 4,
-              color: isFollowing ? SIGNAL.follow : "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12,
-              padding: "6px 14px", cursor: followBusy ? "default" : "pointer", minWidth: 108,
-            }}
+            // Gold = someone you follow (SIGNAL.follow's one job); otherwise the plain action colour.
+            style={{ ...TEXT_ACTION, color: isFollowing ? SIGNAL.follow : TEXT_ACTION.color, cursor: followBusy ? "default" : "pointer" }}
           >
             {isFollowing ? "★ Following" : "☆ Follow"}
           </button>
@@ -718,17 +709,12 @@ export default function TraderPage() {
           wallet={wallet}
           myWallet={walletAddress}
           variant="full"
-          style={{ background: "none", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 14px", cursor: "pointer", letterSpacing: "0.05em", justifyContent: "center", minWidth: 108 }}
+          label="⬡ Message"
+          className={TEXT_ACTION_CLASS}
+          style={TEXT_ACTION}
         />
-        <button
-          onClick={copyLink}
-          style={{
-            background: "none", border: "1px solid #232327", borderRadius: 4,
-            color: copied ? "#ededf0" : "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12,
-            padding: "6px 14px", cursor: "pointer", minWidth: 108,
-          }}
-        >
-          {copied ? "✓ Copied" : "⎘ Share"}
+        <button onClick={copyLink} title="Copy link" className={TEXT_ACTION_CLASS} style={{ ...TEXT_ACTION, color: copied ? "#ededf0" : TEXT_ACTION.color }}>
+          {copied ? "✓ Copied" : "⧉ Link"}
         </button>
       </div>
 

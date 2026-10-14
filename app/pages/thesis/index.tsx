@@ -20,7 +20,7 @@ import { chartImageList, effectiveStatus } from "@/pages/lab/helpers";
 import { publishMarkLine } from "@/lib/entryAtMark.mjs";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
 import { SocialBar } from "@/components/SocialBar";
-import { Button } from "@/components/ui";
+import { Button, TEXT_ACTION, TEXT_ACTION_BAR } from "@/components/ui";
 import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
@@ -130,10 +130,6 @@ function Avatar({ pfp, displayName, size = 40 }: { pfp: string | null; displayNa
 }
 
 // A text action: no box, UI face, fog; hover lifts it to bone (.nx-text-action in index.css).
-const TEXT_ACTION: React.CSSProperties = {
-  background: "none", border: "none", padding: "6px 0", cursor: "pointer", textDecoration: "none",
-  fontFamily: "var(--nx-font-ui)", fontSize: 13, fontWeight: 600, color: "#a1a1aa", whiteSpace: "nowrap",
-};
 
 export default function ThesisPage() {
   const { wallet, id } = useParams<{ wallet: string; id: string }>();
@@ -316,7 +312,7 @@ export default function ThesisPage() {
   return (
     <div style={{ background: "#0a0a0b", minHeight: "100svh", padding: 0 }}>
       {/* Top bar — plain text actions, one style: no boxes, UI face, fog → bright on hover. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "10px 16px", borderBottom: "1px solid #232327", background: "#0f0f11", flexWrap: "wrap", rowGap: 8 }}>
+      <div style={TEXT_ACTION_BAR}>
         <button onClick={() => navigate(-1)} className="nx-text-action" style={TEXT_ACTION}>← Back</button>
         <div style={{ flex: 1 }} />
         {/* Discuss THIS call with its author — seeds the DM with the call context */}
