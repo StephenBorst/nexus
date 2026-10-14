@@ -1188,6 +1188,20 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   GeckoTerminal). The token page's **Callers card no longer shows the merit-weighted "70% LONG" lean** (green/red):
   plain "N positioned", each row's side monochrome. The server still returns `lean`/`side`; nothing renders them here.
   calls open on X · see who", **no long/short split until the verified board has a net-positive caller** (borst).
+- **One-system pass (2026-10-14, borst's scope).** Rules in `app/lib/spotDiscovery.mjs` (tested): **logos** only from
+  DexScreener / GeckoTerminal / CoinGecko over https (`safeLogoUrl`; re-checked on every localStorage read), GeckoTerminal
+  `tokenLogo` when DexScreener has none, else a first-letter monogram (`TokenLogo`); Recent chips carry the logo they were
+  viewed with, and pinned majors reuse it by address (`majorLogo`). **Nexus Read brief** = `readBrief`: "Funding +X%/yr,
+  longs pay · N public calls open · a mechanical rule, not graded." (count left out until the callers read lands, never
+  shown as 0). **Callers card**: `callerRecordLine` = "N graded · W% · ±RR" or "ungraded" (win rate never alone); merit
+  glyph monochrome; the hero count opens + scrolls to it. **"Nexus perp" badge** = a button → perp venue + ticket in view;
+  the ticket header shows funding + the plain open-call count. **"Post a call on X →"** (badge row, empty callers card,
+  perp-only card, takes empty state) = `callDraft`: Lab draft with the entry at the Orderly mark read at the tap (no side,
+  no levels) → `/lab?tab=thesis`. **Recent-chip dot** (bone, not green) = `chipMarks`: an open public call on a LISTED coin
+  (`/theses/status/:wallet`) or a buy of that exact token in this browser. **Empty states**: empty wallet → "Get USDC on
+  Solana" (Solana-only wallet with nothing to pay) or "Run the agent on paper"; no callers / no takes → post a call.
+  Copy fixed: positions aren't graded, calls are (perp ticket + perp-only card). **Header actions** on the call page and
+  the trader profile share `TEXT_ACTION` / `TEXT_ACTION_BAR` (`app/components/ui/textAction.ts`): plain text, 44px tap.
 - **Landing footer row (2026-09-30):** `Jupiter · spanDEX · Definitive Flash · WooFi · NEAR Protocol · XMTP · Quotient ·
   Arbitrum` ("NEAR Protocol" matches the announcement post; Fabric → spanDEX since Fabric shut down). The spot card names
   NEAR Intents for cross-chain. `llms.txt` is ONE file kept identical in `public/llms.txt` (app) and `nexus-landing/llms.txt`

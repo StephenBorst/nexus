@@ -32,12 +32,21 @@ export function validViewed(v) {
   return v.kind === "spot" && CHAIN.test(String(v.chain || "")) && (EVM_CA.test(String(v.ca || "")) || SOL_CA.test(String(v.ca || "")));
 }
 
+// A stored logo URL survives only if it's still on an allowed image host (see safeLogoUrl).
+function cleanViewed(v) {
+  const { img, ...rest } = v;
+  const safe = safeLogoUrl(img);
+  return safe ? { ...rest, img: safe } : rest;
+}
+
 /** Newest first, one row per token, at most VIEWED_MAX. Returns a new list. */
 export function addViewed(list, entry, now = Date.now()) {
-  const row = { ...entry, at: now };
+  const row = cleanViewed({ ...entry, at: now });
   if (!validViewed(row)) return Array.isArray(list) ? list.filter(validViewed).slice(0, VIEWED_MAX) : [];
   const k = viewedKey(row);
-  const rest = (Array.isArray(list) ? list : []).filter((v) => validViewed(v) && viewedKey(v) !== k);
+  const prev = (Array.isArray(list) ? list : []).find((v) => validViewed(v) && viewedKey(v) === k);
+  if (!row.img && prev?.img) { const kept = safeLogoUrl(prev.img); if (kept) row.img = kept; } // a re-view without a logo keeps the one we had
+  const rest = (Array.isArray(list) ? list : []).filter((v) => validViewed(v) && viewedKey(v) !== k).map(cleanViewed);
   return [row, ...rest].slice(0, VIEWED_MAX);
 }
 
@@ -45,7 +54,7 @@ export function readViewed(storage) {
   try {
     const raw = storage?.getItem(VIEWED_KEY);
     const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr.filter(validViewed).slice(0, VIEWED_MAX) : [];
+    return Array.isArray(arr) ? arr.filter(validViewed).map(cleanViewed).slice(0, VIEWED_MAX) : [];
   } catch { return []; }
 }
 
@@ -133,6 +142,12 @@ export const SPOT_MAJORS = [
   { sym: "NEXUS", ca: "0x3D958634ab725B627919EF8F2Ed59227309fDba3" },
 ];
 export const majorHref = (m) => `/token/${encodeURIComponent(m.ca || m.sym)}`;
+/** A pinned major's logo, if this browser has opened that exact token (by address) before. */
+export function majorLogo(m, viewed) {
+  if (!m?.ca) return null;
+  const hit = (Array.isArray(viewed) ? viewed : []).find((v) => v?.kind === "spot" && sameAddress(v.ca, m.ca));
+  return hit ? safeLogoUrl(hit.img) : null;
+}
 
 // ── nothing to buy with on Solana ────────────────────────────────────────────────────────────────
 // True only when BOTH balances were read and neither can pay for a buy: SOL below a small buy plus
@@ -161,3 +176,84 @@ export function callCountLine(n, coin) {
   if (!n || n < 1) return null;
   return `${n} public call${n === 1 ? "" : "s"} open on ${coin}`;
 }
+
+// ── token logos ──────────────────────────────────────────────────────────────────────────────────
+// A logo is shown only from the image hosts the token data comes from (DexScreener, GeckoTerminal,
+// CoinGecko), over https. localStorage is user-editable, so a stored logo URL is checked again on
+// read. A copycat token can carry the same logo, so the page always shows chain + address beside it.
+const LOGO_HOSTS = ["dexscreener.com", "geckoterminal.com", "coingecko.com"];
+export function safeLogoUrl(u) {
+  if (typeof u !== "string" || u.length > 400) return null;
+  let url;
+  try { url = new URL(u); } catch { return null; }
+  if (url.protocol !== "https:") return null;
+  const h = url.hostname.toLowerCase();
+  return LOGO_HOSTS.some((d) => h === d || h.endsWith("." + d)) ? url.href : null;
+}
+
+// ── the one-line read brief (token page, listed markets) ─────────────────────────────────────────
+// Inputs, not a verdict: who pays funding, how many public calls are open, and that the funding rule
+// isn't graded (borst, 2026-10-12: "a mechanical rule, not graded."). Positive funding = longs pay.
+export function fundingPayLine(annualPct) {
+  if (typeof annualPct !== "number" || !Number.isFinite(annualPct)) return null;
+  const v = `${annualPct >= 0 ? "+" : "−"}${Math.abs(annualPct).toFixed(1)}%/yr`;
+  if (Math.abs(annualPct) < 0.05) return `Funding ${v}, flat`;
+  return `Funding ${v}, ${annualPct > 0 ? "longs" : "shorts"} pay`;
+}
+export function readBrief({ fundingAnnualPct, callCount }) {
+  const f = fundingPayLine(fundingAnnualPct);
+  if (!f) return null;
+  // An unread count (callers not loaded or the read failed) leaves the segment out, never "no calls".
+  if (!Number.isInteger(callCount) || callCount < 0) return `${f} · a mechanical rule, not graded.`;
+  const calls = callCount ? `${callCount} public call${callCount === 1 ? "" : "s"} open` : "no public calls open";
+  return `${f} · ${calls} · a mechanical rule, not graded.`;
+}
+
+// ── a caller's record on the callers card ────────────────────────────────────────────────────────
+// Win rate never appears without its R and sample: every graded caller is net-negative today, and
+// "60%" alone would hide the "−0.3R" beside it. No record = "ungraded".
+export function callerRecordLine(record) {
+  const calls = Number(record?.calls), win = Number(record?.winRate), r = Number(record?.avgR);
+  if (!record || !Number.isFinite(calls) || calls < 1 || !Number.isFinite(win) || !Number.isFinite(r)) return "ungraded";
+  return `${calls} graded · ${Math.round(win)}% · ${r >= 0 ? "+" : "−"}${Math.abs(r).toFixed(2)}R`;
+}
+
+// ── "Post a call on X" → the Lab's call draft ────────────────────────────────────────────────────
+// Same draft contract every Lab board uses (localStorage nexus_thesis_draft). The entry is the Orderly
+// mark read at the tap, because the grader fills a call at the post only when its entry is within 0.3%
+// of the market (entryAtMark.mjs). No side and no levels: the trader picks those. No mark → no entry.
+export function callDraft({ coin, mark }) {
+  const sym = String(coin || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
+  if (!/^[A-Z0-9]{1,16}$/.test(sym)) return null;
+  const px = typeof mark === "number" && Number.isFinite(mark) && mark > 0 ? mark : null;
+  const dp = px == null ? 0 : px >= 1000 ? 1 : px >= 1 ? 3 : 6;
+  const draft = {
+    symbol: sym,
+    notes: px != null
+      ? `Entry = the Orderly mark when this draft opened. An entry within 0.3% of the market fills at the post; anything else waits for price to reach it. Pick your side, stop and target.`
+      : `Set the entry at the market (within 0.3%) to fill at the post. Pick your side, stop and target.`,
+  };
+  if (px != null) draft.entryPrice = String(Number(px.toFixed(dp)));
+  return draft;
+}
+
+// ── dots on the Recent chips ─────────────────────────────────────────────────────────────────────
+// A chip gets a dot when the connected wallet has an OPEN public call on that coin, or bought that
+// exact token in this browser. A call matches by ticker, and only for a coin Nexus lists (the same
+// gate as the callers card), so a same-ticker copy token doesn't borrow the call. A buy matches by
+// chain + contract address.
+export function chipMarks(viewed, { openCoins, buys, listed } = {}) {
+  const out = {};
+  const coins = openCoins instanceof Set ? openCoins : new Set();
+  const listedSet = listed instanceof Set ? listed : new Set();
+  const buyKeys = new Set((Array.isArray(buys) ? buys : []).filter((b) => b && b.ca).map((b) => `${String(b.chain || "").toLowerCase()}:${EVM_CA.test(b.ca) ? b.ca.toLowerCase() : b.ca}`));
+  for (const v of Array.isArray(viewed) ? viewed : []) {
+    if (!validViewed(v)) continue;
+    const sym = v.sym.toUpperCase();
+    const call = coins.has(sym) && (v.kind === "perp" || listedSet.has(sym));
+    const buy = v.kind === "spot" && buyKeys.has(`${v.chain}:${EVM_CA.test(v.ca) ? v.ca.toLowerCase() : v.ca}`);
+    if (call || buy) out[viewedKey(v)] = { call, buy };
+  }
+  return out;
+}
+export const chipKey = (v) => viewedKey(v);
