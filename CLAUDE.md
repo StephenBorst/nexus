@@ -1208,6 +1208,12 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   WNS, Apple — the client hands us a URL, so no allowlist = SSRF). `routes-push.mjs`: `GET /push/config`, `POST
   /push/subscribe|topics` (need `labAuth` — the device list is capped, so unsigned adds could evict your phone),
   `/push/unsubscribe` + `/push/test` (endpoint = proof; test ≤1/min).
+  **"On" means the SERVER knows the device (fixed 2026-10-14).** The panel used to read "On for this device" whenever the
+  phone held a subscription, so the Android app showed "On" while `/push/test` answered `not_subscribed` (the TWA shares
+  Chrome's storage for the site, so it can find a subscription the server dropped after a `gone`). Now `POST /push/status
+  {endpoint}` → `{subscribed}`; a device-only subscription is `stale` → re-registered quietly with the held Lab signature
+  (`repairPush`, mode "cached", never prompts), else "Turn on" again. Every turn-on makes a FRESH subscription (old one
+  unsubscribed on the server and the device first); a test answered 404/gone drops the local copy.
 - **What pushes:** (1) graded calls — `appendNotification` (shared.mjs) now has a push leg (before the Telegram
   opt-out), so `notifyResolution` pushes; (2) agent opens/closes — **new `*/5` cron on lab-api that RETURNS before the
   hourly jobs** (several write the engine's history series; don't let them run every 5 min). `runAgentWatch` READS

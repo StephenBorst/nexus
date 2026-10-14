@@ -3,11 +3,11 @@
  * actually in the nav; NotificationBell.tsx is not mounted anywhere). Switch alerts on for this device,
  * pick which ones, send a test. Hidden until the server's push key is set (push.mjs).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { C } from "@/config/theme";
 import { useLabWallet } from "@/hooks/useLabAuth";
 import {
-  pushStatus, enablePush, disablePush, updatePushTopics, sendTestPush, savedTopics,
+  pushStatus, enablePush, repairPush, disablePush, updatePushTopics, sendTestPush, savedTopics,
   type PushStatus, type PushTopics,
 } from "@/lib/pushAlerts";
 
@@ -32,6 +32,9 @@ const btn = (primary: boolean): React.CSSProperties => ({
 
 export default function PushAlertsPanel({ wallet }: { wallet: string | null }) {
   const labWallet = useLabWallet();
+  // A fresh object every render: read it through a ref so the status check runs per wallet, not per render.
+  const labWalletRef = useRef(labWallet);
+  labWalletRef.current = labWallet;
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [topics, setTopics] = useState<PushTopics>(() => savedTopics());
   const [busy, setBusy] = useState(false);
@@ -39,9 +42,15 @@ export default function PushAlertsPanel({ wallet }: { wallet: string | null }) {
 
   useEffect(() => {
     let live = true;
-    pushStatus().then((s) => { if (live) setStatus(s); });
+    (async () => {
+      let s = await pushStatus();
+      // The device thinks it's on but the server has no record of it: re-register quietly with the
+      // signature the app already holds (never prompts). If that can't be done, the panel says so.
+      if (s === "stale" && wallet && (await repairPush(wallet, labWalletRef.current))) s = await pushStatus();
+      if (live) setStatus(s);
+    })();
     return () => { live = false; };
-  }, []);
+  }, [wallet]);
 
   // Dark until the server can send, and silent while it's still checking.
   if (!status || status === "off-server") return null;
@@ -70,13 +79,17 @@ export default function PushAlertsPanel({ wallet }: { wallet: string | null }) {
       {status === "unsupported" && <div style={line}>This browser can’t show alerts. The Android app and Chrome can.</div>}
       {status === "blocked" && <div style={line}>Notifications are blocked for this site. Allow them in the browser’s site settings, then come back.</div>}
 
-      {(status === "off" || status === "on") && !wallet && (
+      {(status === "off" || status === "stale" || status === "on") && !wallet && (
         <div style={line}>Connect a wallet to get alerts on this device: your calls when graded, your agent’s trades.</div>
       )}
 
-      {(status === "off" || status === "on") && wallet && (
+      {(status === "off" || status === "stale" || status === "on") && wallet && (
         <>
-          <div style={line}>{status === "on" ? "On for this device." : "Get an alert on this device when:"}</div>
+          <div style={line}>
+            {status === "on" ? "On for this device."
+              : status === "stale" ? "This device lost its link to alerts. Turn them on again."
+              : "Get an alert on this device when:"}
+          </div>
           <div style={{ display: "grid", gap: 4 }}>
             {TOPIC_ROWS.map((t) => (
               <label key={t.key} style={{ ...line, display: "flex", gap: 8, alignItems: "center", cursor: busy ? "default" : "pointer" }}>
@@ -86,7 +99,7 @@ export default function PushAlertsPanel({ wallet }: { wallet: string | null }) {
             ))}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {status === "off" ? (
+            {status !== "on" ? (
               <button type="button" disabled={busy} style={btn(true)} onClick={() => wallet && run(() => enablePush(wallet, labWallet, topics), "On. Send a test to check.")}>
                 {busy ? "Turning on…" : "Turn on"}
               </button>
