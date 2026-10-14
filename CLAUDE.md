@@ -1196,7 +1196,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
 ## 📱 Android app + phone alerts (2026-10-10) — runbook `docs/android-app.md`
 - **The app = the live site in a Trusted Web Activity** (Chrome full-screen, packaged by PWABuilder), Play Store
   under an **Organization** account (LLC; D-U-N-S needed; skips the 12-testers/14-days rule for new personal
-  accounts). Package id `com.nexustradinglabs.app`. Android first; iOS after. Solana dApp Store = optional 2nd lane.
+  accounts). Package id `com.nexustradinglabs.nexus`. Android first; iOS after. Solana dApp Store = optional 2nd lane.
   Play's crypto policy (Oct 29 2025) licenses CUSTODIAL wallets + exchanges; non-custodial wallets are exempt. A perp
   front end is the grey zone: declare non-custodial; fallback = leave US/EU/UK out of the Play listing first.
 - **Phone alerts = Web Push — LIVE (key set + test push landed on borst's Android phone, 2026-10-11).** On only when secret `VAPID_PRIVATE_JWK` (one P-256 JWK; public half
@@ -1233,7 +1233,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   canvas, or an icon whose PNG isn't the size it claims.
 - ⏳ `public/.well-known/assetlinks.json` once borst sends the Play app-signing + upload-key SHA-256s: run
   `node tools/android/assetlinks.mjs <app-signing> <upload>` (validates 32-byte fingerprints, package
-  `com.nexustradinglabs.app`); `tools/android/assetlinks.test.mjs` checks the committed file (skips until it exists).
+  `com.nexustradinglabs.nexus`); `tools/android/assetlinks.test.mjs` checks the committed file (skips until it exists).
 
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the

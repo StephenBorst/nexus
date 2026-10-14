@@ -10,7 +10,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export const ANDROID_PACKAGE = "com.nexustradinglabs.app";
+export const ANDROID_PACKAGE = "com.nexustradinglabs.nexus";
 export const ASSETLINKS_PATH = new URL("../../public/.well-known/assetlinks.json", import.meta.url);
 
 export function normalizeFingerprint(raw) {
