@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;width:1024px;height:500px;background:#0a0a0b;overflow:hidden}
+.wrap{position:relative;width:1024px;height:500px;overflow:hidden}
+    .nx-atmos{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;background:radial-gradient(60% 55% at 86% 6%,rgba(237,237,240,.07),transparent 70%),radial-gradient(55% 50% at 6% 102%,rgba(237,237,240,.035),transparent 70%)}
+    .nx-atmos i{position:absolute;left:50%;top:50%;display:block}
+    .nx-silk{position:absolute;inset:0}
+    .nx-atmos .nx-sheen{width:200vmax;height:40vmax;margin:-20vmax 0 0 -100vmax;background:radial-gradient(ellipse 50% 50% at 52% 50%,rgba(237,237,240,.085),rgba(237,237,240,.025) 52%,transparent 74%);transform:translate(6vmax,-19vmax) rotate(-17deg);}
+    .nx-atmos .nx-core{width:160vmax;height:8vmax;margin:-4vmax 0 0 -80vmax;background:radial-gradient(ellipse 44% 50% at 47% 50%,rgba(255,255,255,.22),rgba(255,255,255,.06) 48%,transparent 76%);transform:translate(8vmax,-17vmax) rotate(-16deg);}
+    .nx-atmos .nx-edge{width:90vmax;height:1.1vmax;margin:-.55vmax 0 0 -45vmax;background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(255,255,255,.34),rgba(255,255,255,.06) 55%,transparent 80%);transform:translate(4vmax,-16vmax) rotate(-17deg);}
+    .nx-atmos .nx-low{width:200vmax;height:28vmax;margin:-14vmax 0 0 -100vmax;background:radial-gradient(ellipse 50% 50% at 48% 50%,rgba(237,237,240,.05),transparent 72%);transform:translate(-8vmax,26vmax) rotate(-17deg);}
+    .nx-atmos::after{content:"";position:absolute;inset:0;opacity:.07;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='1' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .7 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+/* fixed-size frame: vmax = 10.24px here */
+.content{position:absolute;inset:0;display:flex;align-items:center;gap:56px;padding:0 96px;z-index:1}
+.mark{width:150px;height:150px;flex-shrink:0}
+h1{margin:0;font:800 64px/1.02 Manrope,system-ui,sans-serif;letter-spacing:-.02em;color:#f4f4f5}
+.eyebrow{font:500 15px/1 'IBM Plex Mono',monospace;letter-spacing:.22em;color:#a1a1aa;text-transform:uppercase;margin-bottom:22px}
+.sub{margin-top:22px;font:400 17px/1.4 'IBM Plex Mono',monospace;color:#a1a1aa}
+</style></head><body><div class="wrap">
+<div class="nx-atmos"><div class="nx-silk"><i class="nx-sheen"></i><i class="nx-low"></i><i class="nx-core"></i><i class="nx-edge"></i></div></div>
+<div class="content"><img class="mark" src="../../public/logo-mark.png" alt="">
+<div><div class="eyebrow">Nexus Trading Labs</div><h1>Plan it.<br>Run it.<br>Prove it.</h1>
+<div class="sub">An onchain trading terminal · non-custodial perps</div></div></div>
+</div></body></html>
