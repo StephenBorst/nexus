@@ -36,3 +36,6 @@ wrangler-account.json
 # Backup files
 *.bak
 .env
+
+# Local env (never commit)
+.env.local
