@@ -63,3 +63,13 @@ test("test push: one per minute, only to a subscribed device; unsubscribe by end
   assert.deepEqual(un, { ok: true, removed: true });
   assert.equal(env.LAB_STORE.m.get(`push:wallet:${A}`), undefined);
 });
+
+test("status says whether the server knows a device, and nothing else", async () => {
+  const env = { LAB_STORE: kv(), VAPID_PRIVATE_JWK: jwk };
+  assert.deepEqual(await (await call(env, "POST", "/push/status", { endpoint: SUB.endpoint })).json(), { subscribed: false });
+  await call(env, "POST", "/push/subscribe", { wallet: A, subscription: SUB, labAuth: await auth(alice) });
+  assert.deepEqual(await (await call(env, "POST", "/push/status", { endpoint: SUB.endpoint })).json(), { subscribed: true });
+  assert.equal((await call(env, "POST", "/push/status", { endpoint: "https://evil.example/x" })).status, 400);
+  await call(env, "POST", "/push/unsubscribe", { endpoint: SUB.endpoint });
+  assert.deepEqual(await (await call(env, "POST", "/push/status", { endpoint: SUB.endpoint })).json(), { subscribed: false });
+});
