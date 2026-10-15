@@ -1580,8 +1580,10 @@ credit and pays `x402.miroshark.xyz/run` $1 Base USDC from secret `MIROSHARK_PAY
   `error: "futures unavailable (proxy: …; direct: rate_limited 429)"` — curl it before guessing.
 - **Audit, engine side (FROZEN until Oct 15 — proposals only, not applied):** brain + exec `orderlyPublicGet` retry
   ONLY an HTML 403; a JSON 429 is returned as data → the caller throws a TypeError on `data.data.…` and the tick is
-  lost, unlogged. Fix after Oct 15: treat `res.status === 429` like the 403 branch (backoff + jitter) and
-  `console.error` it. Rates: brain is sequential (fine); exec runs 10 users per `Promise.all` batch — mark price is
+  lost, unlogged. **Fix BUILT 2026-10-11, held until after the Oct 15 read:** brain + exec `orderlyPublicGet` =
+  lab-api's `orderlyGet(url, { httpErrors: "return" })` (one implementation; 429 + challenge retried with backoff,
+  logged, then THROWN; other JSON error bodies still returned as data). It also closes an exec gap: a 429 on
+  `/v1/public/info` in `enterPosition` fell back to the default step size and no min-notional; now the entry aborts. Rates: brain is sequential (fine); exec runs 10 users per `Promise.all` batch — mark price is
   deduped per symbol, but per-user `/v1/public/info` + `tv/history` (volTarget / volScaledStops) can reach ~10 at
   once as users grow; private calls are limited per account, not per IP. carry = 1 all-markets read / 5 min;
   lab-alerts = 1 / min — fine. `gradeCandles` + backtest `orderlyJson` are sequential (fine).

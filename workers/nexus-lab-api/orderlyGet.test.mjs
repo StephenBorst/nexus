@@ -57,6 +57,35 @@ test("a JSON error (400) is not retried and names the status", async () => {
   assert.equal(f.calls.length, 1);
 });
 
+test('httpErrors:"return" (brain/exec): a JSON error body comes back as data, as it always did', async () => {
+  const f = script(resp(400, { success: false, message: "bad symbol" }));
+  assert.deepEqual(await orderlyGet(URL1, { fetchImpl: f.fetchImpl, log: quiet().log, httpErrors: "return" }), { success: false, message: "bad symbol" });
+  assert.equal(f.calls.length, 1);
+});
+
+test('httpErrors:"return" still retries a 429 and THROWS when it never clears (the brain/exec fix)', async () => {
+  const f = script(resp(429, { success: false }), resp(429, { success: false }), resp(429, { success: false })); const q = quiet(); const s = noSleep();
+  await assert.rejects(orderlyGet(URL1, { fetchImpl: f.fetchImpl, log: q.log, sleep: s.sleep, random: () => 0, httpErrors: "return" }),
+    (e) => e instanceof OrderlyError && e.kind === "rate_limited");
+  assert.equal(f.calls.length, 3); assert.match(q.lines[0], /RATE LIMITED 429/);
+});
+
+test('httpErrors:"return" retries a 429 then hands back the good body', async () => {
+  const f = script(resp(429, {}), resp(200, { success: true, data: { mark_price: 1 } }));
+  const body = await orderlyGet(URL1, { fetchImpl: f.fetchImpl, log: quiet().log, sleep: noSleep().sleep, httpErrors: "return" });
+  assert.equal(body.data.mark_price, 1);
+});
+
+test("brain + exec read Orderly through this module (no private copy left to drift)", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const w of ["nexus-agent-brain", "nexus-agent-exec"]) {
+    const src = readFileSync(new URL(`../${w}/index.js`, import.meta.url), "utf8");
+    assert.match(src, /import \{ orderlyGet \} from "\.\.\/nexus-lab-api\/orderlyGet\.mjs"/, w);
+    assert.match(src, /const orderlyPublicGet = \(url\) => orderlyGet\(url, \{ httpErrors: "return" \}\)/, w);
+    assert.doesNotMatch(src, /async function orderlyPublicGet/, w);
+  }
+});
+
 test("network error retries, then reports network", async () => {
   const f = script(new Error("socket hang up"), resp(200, { ok: 1 }));
   assert.deepEqual(await orderlyGet(URL1, { fetchImpl: f.fetchImpl, log: quiet().log, sleep: noSleep().sleep }), { ok: 1 });

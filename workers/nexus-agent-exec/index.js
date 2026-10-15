@@ -11,6 +11,7 @@
 //   - Logs trades to Supabase
 // ═══════════════════════════════════════════════════════════
 
+import { orderlyGet } from "../nexus-lab-api/orderlyGet.mjs";
 import * as ed from "@noble/ed25519";
 import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
@@ -29,22 +30,11 @@ const BROWSER_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-// Public (unauthed) Orderly GET → parsed JSON, with browser headers + retry on the
-// 403 bot-challenge. Throws with the real status/body so logs name the failure.
-async function orderlyPublicGet(url, tries = 3) {
-  let lastErr;
-  for (let attempt = 0; attempt < tries; attempt++) {
-    const res = await fetch(url, { headers: BROWSER_HEADERS });
-    const text = await res.text();
-    try { return JSON.parse(text); }
-    catch {
-      lastErr = new Error(`orderly GET ${url} non-JSON (HTTP ${res.status}): ${text.slice(0, 80)}`);
-      if (res.status === 403 && attempt < tries - 1) { await new Promise((r) => setTimeout(r, 300 * (attempt + 1))); continue; }
-      throw lastErr;
-    }
-  }
-  throw lastErr;
-}
+// Public (unauthed) Orderly GET → parsed JSON. One implementation with lab-api (orderlyGet.mjs, tested): a JSON 429 and an HTML challenge are
+// retried with backoff + jitter and logged `[orderly] RATE LIMITED`; the final failure THROWS.
+// Before, a JSON 429 came back as data: callers crashed on `data.data.…` (tick lost, unlogged) or
+// fell back to defaults. Other JSON error bodies still come back as data, as they did.
+const orderlyPublicGet = (url) => orderlyGet(url, { httpErrors: "return" });
 
 // ── Agent → public Feed bridge ────────────────────────────────────────────────
 // Surfaces the bot's real autonomous trades on the public feed so it has a live

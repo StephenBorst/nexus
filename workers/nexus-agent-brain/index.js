@@ -15,6 +15,7 @@
 //   Entry: BOTH rules must agree (confluence). Single signal = no trade.
 // ═══════════════════════════════════════════════════════════
 
+import { orderlyGet } from "../nexus-lab-api/orderlyGet.mjs";
 import { deriveSignal, computeRegime, atrPct, oiSnapshotDue } from "./logic.mjs";
 import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
@@ -39,26 +40,11 @@ const HARNESS_SYMBOLS = ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC", "PER
 // Orderly sits behind Cloudflare bot-management, which intermittently serves an HTML
 // 403 challenge to header-light Worker fetches — which would starve the brain of the
 // market data it needs to emit signals. Realistic browser headers clear it; a bounded
-// retry rides out a transient one. (Mirrors the same fix in nexus-agent-exec.)
-const BROWSER_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-  "Accept": "application/json, text/plain, */*",
-  "Accept-Language": "en-US,en;q=0.9",
-};
-async function orderlyPublicGet(url, tries = 3) {
-  let lastErr;
-  for (let attempt = 0; attempt < tries; attempt++) {
-    const res = await fetch(url, { headers: BROWSER_HEADERS });
-    const text = await res.text();
-    try { return JSON.parse(text); }
-    catch {
-      lastErr = new Error(`orderly GET ${url} non-JSON (HTTP ${res.status}): ${text.slice(0, 80)}`);
-      if (res.status === 403 && attempt < tries - 1) { await new Promise((r) => setTimeout(r, 300 * (attempt + 1))); continue; }
-      throw lastErr;
-    }
-  }
-  throw lastErr;
-}
+// retry rides out a transient one. One implementation with lab-api (orderlyGet.mjs, tested): a JSON 429 and an HTML challenge are
+// retried with backoff + jitter and logged `[orderly] RATE LIMITED`; the final failure THROWS.
+// Before, a JSON 429 came back as data: callers crashed on `data.data.…` (tick lost, unlogged) or
+// fell back to defaults. Other JSON error bodies still come back as data, as they did.
+const orderlyPublicGet = (url) => orderlyGet(url, { httpErrors: "return" });
 
 export default {
   async scheduled(event, env) {

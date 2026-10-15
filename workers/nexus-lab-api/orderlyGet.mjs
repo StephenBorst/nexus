@@ -43,7 +43,7 @@ export class OrderlyError extends Error {
 
 export async function orderlyGet(url, {
   tries = 3, fetchImpl = globalThis.fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
-  random = Math.random, log = console, headers = {},
+  random = Math.random, log = console, headers = {}, httpErrors = "throw",
 } = {}) {
   const path = pathOf(url);
   let last;
@@ -72,7 +72,9 @@ export async function orderlyGet(url, {
       if (attempt < tries - 1) { await sleep(backoffMs(attempt, null, random)); continue; }
       throw last;
     }
-    if (!res.ok) throw new OrderlyError("http", res.status, path, String(body?.message || "").slice(0, 80));
+    // httpErrors:"return" = hand any other JSON error body to the caller as before (brain/exec read
+    // `success:false` bodies themselves); only 429 + challenge pages are retried/thrown here.
+    if (!res.ok && httpErrors !== "return") throw new OrderlyError("http", res.status, path, String(body?.message || "").slice(0, 80));
     return body;
   }
   throw last;
