@@ -528,6 +528,14 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   (× CVD Stack)"; parity axis basis_dev / basis_dev_x_cvd. Parity test `app/lib/basisTwoSided.test.mjs` (3 seeds × same-hour
   rewrites, both sides must fire) + a guard that FAILS if the flag is set — turning it on means editing that guard in
   the same reviewed PR, and only after it grades PREDICTIVE with BOTH sides represented. No UI selector yet.
+- **✅ OCT 15 RESULT = `docs/routines/oct15-results.md` (read + applied 2026-10-15).** The routine FAILED (usage limit,
+  37s, no report); the checks were run by hand from the same public endpoints. **Nothing cleared.** Basis × CVD
+  HOLDS (PREDICTIVE +0.19R n62 stable, LONG beats 97.3% of random) but both out-of-sample exit lines lost (12h −33.9
+  bps n20 · 24h −30.2 n20) → **off the /proof lead** (`AXIS_PAUSED.basis_x_cvd`; FeaturedLead now reads "Graded in
+  public. Nothing has cleared the bar yet."). Basis Extreme / Smart / Liq-Flush all decayed to NOISE. Hold =
+  INSUFFICIENT (24h arm 4 paper trades) → keep 12h. All staged switches off, no live money, x402 + house unchanged.
+  Paper parity CLEAN on all three wallets. The finding: the ENTRIES beat random; the preset's TP 2.5/SL 2 exits give it
+  back. DEFAULT_CONFIG (new agents) still spreads the basis-cvd-stack preset — the page didn't touch it (borst's call).
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
@@ -1955,7 +1963,7 @@ inference is LIVE** as a PRO benefit (`POST /ai/chat`, see "Revenue + AI + Treas
 - **In-app EVM buy/sell is LIVE and tested** — on spanDEX since Fabric shut down (Sept 16); borst's $1 buy + sell
   (Sept 28) filled and the 10 bps fee landed both ways. Don't pitch "run a small live test" again.
 - Current focus = **the engine and its signals** (basis stack, scoreboard → one-click strategies, mobile polish).
-- **⛔ ENGINE FREEZE until the Oct 15 2026 re-validation (borst + Ember, 2026-09-28).** The worker/agent engine is
+- **✅ ENGINE FREEZE LIFTED 2026-10-15** (page applied, see "OCT 15 RESULT"); first engine PR = #83 (brain/exec 429). History: **⛔ ENGINE FREEZE until the Oct 15 2026 re-validation (borst + Ember, 2026-09-28).** The worker/agent engine is
   hands-off until the Oct 15 re-validation — no changes there, that's a scheduled experiment in progress. Engine =
   `nexus-agent-brain`, `nexus-agent-exec`, `nexus-carry-engine`, the shared signal/exit rules in `app/lib/` (basisFade,
   basisStack, axisExits, paperStats, paperParity, strategyLabel), and lab-api's grading/replay code (`axisbt.mjs`,

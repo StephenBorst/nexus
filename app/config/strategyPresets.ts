@@ -201,5 +201,7 @@ if (OCT15_BASIS_SMART_LIVE) {
 // Oct-15 re-validation), but /proof stops offering the one-tap Load. Reversible — delete the line.
 export const AXIS_PAUSED: Record<string, string> = {
   basis_extreme: "preset paused Sept 25 — its 12h exit grades NOISE (−10 bps, n148); 24h only PROMISING. Still graded.",
+  // Oct 15 if/then §1 (docs/routines/oct15-results.md): both out-of-sample exit lines negative with ≥20 trades each.
+  basis_x_cvd: "off the lead Oct 15 · as the agent trades it since Sept 25: 12h −33.9 bps (n20) · 24h −30.2 bps (n20). Still graded.",
 };
 export const presetById = (id: string) => STRATEGY_PRESETS.find((p) => p.id === id);
