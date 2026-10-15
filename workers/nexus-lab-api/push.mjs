@@ -57,7 +57,7 @@ export function normTopics(t) {
 
 /** Which switch an in-app notification type sits behind. null = never pushed. */
 export function topicForType(type) {
-  if (type === "call_resolved" || type === "thesis_closed") return "calls";
+  if (type === "call_resolved" || type === "thesis_closed" || type === "call_fill" || type === "call_tp1") return "calls";
   if (type === "agent_trade") return "agent";
   if (["comment", "reaction", "follow", "copy", "challenge"].includes(type)) return "social";
   return null;
@@ -66,6 +66,8 @@ export function topicForType(type) {
 const TITLES = {
   call_resolved: "Call graded",
   thesis_closed: "Call closed",
+  call_fill: "Call filled",
+  call_tp1: "TP1 reached",
   agent_trade: "Agent",
   comment: "New comment",
   reaction: "New reaction",

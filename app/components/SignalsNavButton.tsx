@@ -5,7 +5,9 @@
 // return, not a stale dashboard. All sources are public + fail-soft; no wallet, no key.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAccount } from "@orderly.network/hooks";
 import { buildSignals, countUnseen } from "@/lib/signals.mjs";
+import PushAlertsPanel from "@/components/PushAlertsPanel";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const SEEN_KEY = "nexus_signals_seen";
@@ -24,6 +26,9 @@ export default function SignalsNavButton() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  // Phone alerts are per wallet (PushAlertsPanel); the signals list itself needs no wallet.
+  const { state: accountState } = useAccount();
+  const walletAddress = (accountState as { address?: string })?.address ?? null;
 
   const refresh = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden) return;
@@ -120,6 +125,7 @@ export default function SignalsNavButton() {
             ))
           )}
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", padding: "9px 14px", textAlign: "center" }}>synthesized from funding, the graded caller crowd, and tracked wallets</div>
+          <PushAlertsPanel wallet={walletAddress} />
         </div>
       )}
     </div>

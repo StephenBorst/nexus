@@ -179,7 +179,7 @@ export default function ProofPage() {
         competitors can’t copy: being <i>right</i> is the only thing that ranks.
       </div>
 
-      {/* FEATURED LEAD — the engine's validated edge, front and center (booth hero). */}
+      {/* THE LEAD — what the Oct 15 re-validation decided (none cleared the bar). */}
       <FeaturedLead isMobile={isMobile} />
 
       {/* Ledger trust strip — the primitive that unifies everything. */}

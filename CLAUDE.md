@@ -65,6 +65,15 @@ is everything built on top:
   still apply. Falls back to direct Anthropic if `BANKR_LLM_KEY` is absent. Manage credits/usage at bankr.bot/llm
   (Bankr wallet `0xd9f7…b449`). Revert = remove the `AI_GATEWAY` var. Verified live: credit balance ticked down on
   a real PRO call.
+- **Owner revenue page `/ops/revenue` (2026-10-11, not in the nav, noindex).** `POST /ops/revenue {address, labAuth,
+  refresh?}` (`routes-revenue.mjs` + `revenue.mjs`, tested) reads the subs receiver, the Bankr x402 wallet, borst.eth,
+  the treasury Safe (USDC/ETH/WETH/$NEXUS on Arbitrum + Base) and borst.eth's NEAR Intents fee balance
+  (`mt_batch_balance_of` on intents.near), priced from Orderly marks + DexScreener $NEXUS. It moves nothing. Answers only
+  a wallet that signed the Lab message AND is a Safe owner (`getOwners()` on Arbitrum, cached 1h) or listed in worker var
+  `OPS_WALLETS` (comma-separated); 401 unsigned, 403 otherwise. Read cached 5 min (`ops:rev:latest`); one snapshot a day
+  (`ops:rev:snap:YYYY-MM-DD`, 400d, written by the 12h cron or the first view) → "7d / 30d change" (a sweep = a drop in
+  its wallet, a rise in the Safe). An unreadable holding shows "unread", never 0, and an all-unread read stores no
+  snapshot. Flash + Orderly broker fees aren't readable onchain → linked under "Not read here".
 - **`/analyze`** public Hyperliquid wallet x-ray (HL public API → Lab AnalyticsView; in nav). **Strategy presets**
   (`config/strategyPresets.ts`) load in PAPER/ASSISTED/AUTONOMOUS (no longer force PAPER). **Agent regime filter**
   `respectRegime` (opt-in; brain `computeRegime` gates trend-fighting entries). Bankr skill updated for both.
@@ -519,21 +528,49 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   (× CVD Stack)"; parity axis basis_dev / basis_dev_x_cvd. Parity test `app/lib/basisTwoSided.test.mjs` (3 seeds × same-hour
   rewrites, both sides must fire) + a guard that FAILS if the flag is set — turning it on means editing that guard in
   the same reviewed PR, and only after it grades PREDICTIVE with BOTH sides represented. No UI selector yet.
+- **✅ OCT 15 RESULT = `docs/routines/oct15-results.md` (read + applied 2026-10-15).** The routine FAILED (usage limit,
+  37s, no report); the checks were run by hand from the same public endpoints. **Nothing cleared.** Basis × CVD
+  HOLDS (PREDICTIVE +0.19R n62 stable, LONG beats 97.3% of random) but both out-of-sample exit lines lost (12h −33.9
+  bps n20 · 24h −30.2 n20) → **off the /proof lead** (`AXIS_PAUSED.basis_x_cvd`; FeaturedLead now reads "Graded in
+  public. Nothing has cleared the bar yet."). Basis Extreme / Smart / Liq-Flush all decayed to NOISE. Hold =
+  INSUFFICIENT (24h arm 4 paper trades) → keep 12h. All staged switches off, no live money, x402 + house unchanged.
+  Paper parity CLEAN on all three wallets. The finding: the ENTRIES beat random; the preset's TP 2.5/SL 2 exits give it
+  back. DEFAULT_CONFIG (new agents) still spreads the basis-cvd-stack preset — the page didn't touch it (borst's call).
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
   BEATS_RANDOM on its side + preset exit positive oos over ≥30 trades), house caller off until a read clears, copy words.
   The hold call stays with `tools/oct15/holdDecision.mjs`. Don't edit its thresholds after Oct 15: a change = a new page.
   **The Oct-15 routine applies this page itself (step 7 of `docs/routines/revalidate-basis-2026-10-15.md`, added
-  2026-10-11)** — it needs borst to re-paste the doc into the routine before Oct 15 15:00 UTC.
-  **House caller OFF (§6, 2026-10-04):** borst deleted the `HOUSE_SIGNALS_ENABLED` secret on nexus-lab-api; the 03:17 UTC
-  run posted nothing. The same secret gates the Catalyst Read caller (`HOUSE_CATALYST_ADDRESS` 0x2484…), so both are
-  off. Keep `HOUSE_CALLER_ADDRESS` set: the dedupe's house-id proof reads it. The silence is policy now, not a bug. Why it
+  2026-10-11)**. **Re-pasted by borst 2026-10-11 19:00 UTC; verified via `get_trigger`: the stored prompt has step 7 and
+  the step-(6) house-caller check, next run 2026-10-15T15:00Z.** Any later edit to the doc needs another re-paste.
+  **House caller OFF (§6) — for real since 2026-10-11 18:15 UTC, NOT Oct 4.** On Oct 4 the secret was believed
+  deleted and the 03:17 run posted nothing, but that silence was the cold board (below), not the flag: the flag still
+  read "true". Once the board warmed, it posted **9 house calls (Oct 9 15:17 → Oct 11 17:17: AVAX S ×3, HYPE L, MON S,
+  NEAR L, LINK L, ETH L, S L) + 2 catalyst calls (Oct 9 15:17, BTC S + L)** while it was meant to be off. They're
+  published, so they stay and are graded like any call. borst deleted `HOUSE_SIGNALS_ENABLED` (Delete & Deploy) on
+  Oct 11 18:15; `/signals/house` + `/signals/catalyst-house` read `enabled:false` and nothing posted at 18:17. ⚠️ Check
+  "off" by reading `enabled` on those routes, never by a quiet run. The block runs on the `:17` AND the `0 */12` crons
+  (hence posts at 00:01/12:00); `POST /signals/house` with `HOUSE_SIGNALS_ADMIN` still posts by hand regardless of the
+  flag. The same secret gates the Catalyst Read caller (`HOUSE_CATALYST_ADDRESS` 0x2484…), so both are off. Keep `HOUSE_CALLER_ADDRESS` set: the dedupe's house-id proof reads it. The silence is policy now, not a bug. Why it
   had ALREADY gone quiet (last call Oct 1 17:17 UTC): `generateHouseCalls` reads the board from the 10-min
   `intel:mispriced:v1` cache, which only visitors keep warm; cold, it falls back to a live all-markets futures fetch that
   fails inside the busy :17 cron, and that `{error}` is RETURNED, not thrown, so nothing was logged (`GET /signals/house`
-  showed "no board available (cache cold + futures fetch failed)" on Oct 4). Before switching it back on (only for a read
-  that clears): log every non-post result and give it a board that doesn't depend on visitors.
+  showed "no board available (cache cold + futures fetch failed)" on Oct 4). **Both fixed 2026-10-11 (still OFF):**
+  `pickHouseBoard` (houseBoard.mjs, tested) uses the cached board only while ≤10 min old (a house call's ENTRY is its
+  mark) and otherwise builds its own from a live fetch, retried once 20 s later in the cron (never in a request path);
+  every scheduled run (house + catalyst) logs one line via `houseRunSummary` and stores it 7 days at
+  `house:lastrun:<kind>`, shown as `lastRun` (+ `enabled`, `boardSource`) on `GET /signals/house` and
+  `/signals/catalyst-house`. Switching back on is still only for a read that clears (if/then §6).
+- **⚠️ basis:hist HAS HOLES (found 2026-10-10; collection fix = PR, borst decides before/after Oct 15).** Last 72 rows on
+  Oct 10: BTC missing ~10% of hours, ETH ~27%, HYPE ~31% (gaps up to 7h); cvd:hist, written in the SAME pass, ~0%.
+  Lifetime counts agree (ETH basis 902 vs cvd 1135, HYPE 784 vs 1077). Loss grows with the coin's place in
+  `snapshotFlow`'s loop → OKX ticker rate limit hit by our own burst (2 ticker calls/coin, `okxJson` retried
+  instantly inside OKX's 2s window, failures dropped unlogged). Effects: the brain sits out basis rows >3h stale, and
+  every missing hour is a lost graded event. The fix (`okxGetAll` in okx.mjs + paced `snapshotFlow`, tests
+  `okx.test.mjs` / `flow.snapshot.test.mjs`) changes how often a row lands, never what a row says; it logs
+  `[flow] basis N/9 · cvd N/9 · retries R` every hour and `[flow] MISSED …` with reasons. Read history with the holes
+  in mind: a pre-fix window has fewer basis hours than its calendar span.
 - **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
   AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
@@ -578,8 +615,8 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   classified, 23 markets clean: with-structure 84 · −0.17R vs counter-cycle 79 · +0.00R, gap 0.17R, p 0.36 (bar 0.40R /
   0.05); direction held in both halves + every leave-one-out but too small. Structure does NOT gate the house caller.
   ⚠️ The one positive diagnostic ("against weekly only" 42 · +0.22R) was found on this population — testing it = a NEW
-  dated registration on post-Oct-1 calls, never a re-read of these 163. Two other callers still ask Orderly for 240 and silently get
-  nothing: signal-delivery's 4H EMA8/21 levels (always null) and MacroEvents' BTC chart (never shows).
+  dated registration on post-Oct-1 calls, never a re-read of these 163. (Both other 240 callers are gone: the 4H
+  EMA levels now build bars from 1H, and the MacroEvents chart was dead code, deleted 2026-10-12.)
 - **The Read = inputs, not a verdict (2026-09-30).** `LiveRead.tsx` no longer counts reads, crowns the count ("STRONG
   READ", "◆ ALIGNED SETUP") or tints green: every input shows its number + the side it points to in plain ink; amber for
   caution, C.warn for danger, nothing endorses. Don't re-add a tally of ungraded reads. **Same rule in the Lab
@@ -604,6 +641,12 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   PR to BankrBot/skills. Our fork = **`StephenBorst/skills`**, branch **`add-autonomous-agent`** (agent control +
   full config surface) — ✅ MERGED into `BankrBot/skills` (the agent-control module is live in the published
   Bankr skill). Local staging clone: `C:\Users\steph\bankr-skills-stage`.
+- **`nexus-trading-labs/` in this repo = a byte-for-byte copy of BankrBot/skills' folder (re-synced 2026-10-15 from
+  BankrBot main `55a5656`, after BankrBot/skills#777 merged: registration, keyless index, call status, review fixes).** It had drifted BEHIND upstream (no
+  `agent.md`, no `catalog.json`, missing the copy-is-not-auto-trading + deposit-destination warnings), so a wholesale
+  copy from here would have regressed the published skill. Rule: change the skill in BankrBot first (PR from the fork),
+  then copy that folder back here; never copy this folder over theirs without diffing. (The older `bankr-skill/` copy, incl. its
+  `app-scripts/` Bankr app snippets, was deleted 2026-10-12; recover from git history if ever needed.)
 - **Repo source-of-truth copies:** `docs/SKILL.md` (full updated skill), `docs/bankr-skill-agent-module.md` (=
   `references/agent.md`), `docs/bankr-agent-spec.md` (build spec), `docs/skill-agent-additions.md` (apply guide).
 - **Marketing:** `marketing/lab-article.md` (flagship X long-form article + 3 hook tweets + pull-quotes),
@@ -732,20 +775,101 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   counts (price passes the entry to reach it) and a target touch doesn't (it may have come first); never filled =
   PENDING (`awaitingEntry`). Before: an entry typed away from the market was graded as if filled — Sept 29, 17 of 145
   checkable calls had an off-market entry, 11 in the caller's favour (a BTC LONG "entered" at 61,000 with BTC at
-  63,600–63,800 was a 2R WIN). `/theses/advice` warns on a draft (`ENTRY_OFF_MARKET`, `entryVsMarket`). ⏭ Residual:
-  hourly candles, so the posting hour's range allows up to an hour of hindsight on the entry (a server-recorded mark at
-  publish would close it). The scoreboard (`axisbt.mjs`) has its own grader — not touched (engine freeze).
+  63,600–63,800 was a 2R WIN). `/theses/advice` warns on a draft (`ENTRY_OFF_MARKET`, `entryVsMarket`).
+  **Hindsight closed (2026-10-11):** the posting hour's range allowed up to an hour of hindsight on the entry (post at
+  14:50, entry = 14:05's low, "filled"). Now the FIRST publish reads Orderly's live mark (`publishMark.mjs
+  readPublishMark`, ≤5 markets per save, 2 tries, never blocks a publish) and the registry keeps it as server field
+  `publishMark {px, at, src}` (a mark read >2 min from the publish isn't kept; no save can add, move or drop it).
+  `gradeCall` fills a call at the post only if its entry is within `ENTRY_AT_MARK_PCT` (0.3%) of that mark; anything
+  else takes the resting-order path above. Calls without a mark (all before Oct 11, or a failed read) keep the
+  hour-range rule, so no stored grade moved and `GRADE_V` stays 3. The advisor warns on `!atMarket` (0.3% of the last
+  price). The call-ledger hash does NOT include the mark (fixed field list; changing it breaks the anchored chain).
+  Tests: `publishMark.test.mjs` + publish-mark cases in `logic.test.mjs` / `routes-lab.test.mjs` (fake reader). The scoreboard (`axisbt.mjs`) has its own grader — not touched (engine freeze).
+  **The call page states it (2026-10-11):** "MARKET AT POST $X · Orderly mark, read by the server when this was published"
+  + what the grader does with this entry (`app/lib/entryAtMark.mjs publishMarkLine`; `ENTRY_AT_MARK_PCT` lives there and
+  logic.mjs imports it, so the page and the grader can't use different bands). Calls without a mark show nothing.
   **Live after deploy (Sept 29, 04:40 UTC): the caller board is EMPTY, correctly** — all 8 wallets with graded calls
   are net-negative once entries must trade (Nexus Signals 173 calls −0.12R · 0x9a30 29 −0.35R · 0xa77c 28 −0.33R ·
   0x2484 33 −0.29R · 82mm 14 −0.13R · 2e91 13 −0.26R · 0x325d 9 −0.58R · 0xd9f7 6 −1R). The ranked records rested on
   four shared manual limit longs (BTC 61k/62k/64,094, ZEC 452) that never filled — now PENDING — plus a BTC 64,500
   short that filled and stopped out. `/theses/leaderboard` returns empty arrays by design when nobody qualifies: an
   empty board is not an outage — check `/theses/process/:wallet` before debugging.
+  **Cards show a position only once the entry trades (2026-10-11).** An unresolved call used to read as a live
+  position everywhere: a LONG limit at $2,400 with ETH at $2,538 showed "+2.73R at target" with no trade behind it.
+  The fill rule moved out of `gradeCall` into `entryFill` (logic.mjs, same answer, all old tests pass) and the hourly
+  pass stamps server fields `fillState` ("WORKING" = entry not traded, "OPEN" = traded) + `filledAt` on every
+  unresolved public call (`applyFillStamp`, grading.mjs; in PASS_FIELDS + SERVER_FIELDS, so no client save writes
+  them); the permalink reads it live. Display: `app/lib/callLifecycle.mjs` (WORKING / OPEN / CLOSED / UNCHECKED;
+  unstamped = OPEN only when the entry was within 0.3% of `publishMark`, else UNCHECKED, never a guess) +
+  `app/components/AwaitingFill.tsx`. Feed card, call page and trader profile (cards + In flight list, whose R total
+  now counts filled calls only) show "Awaiting fill at $X · mark N% above the entry", a dashed outline, no R and no
+  P&L. Grading unchanged. The owner's Lab ThesisView does the same for PUBLISHED calls (2026-10-12: no P&L row, no
+  "price tagged your TP1" notice until the entry trades); private calls are never stamped, so they keep the live P&L row.
+  **Cards read R:R from the LEVELS (2026-10-11).** The stored `riskReward` is client-written and some clients wrote it
+  to TP2 (a card showed 1:5.00 beside levels that make 1:2.60; the grader paid 2.60). Every card, share text, OG card
+  and profile average now uses `callRR` (`app/lib/callMath.mjs`, pinned to lab-api `callR` by test); TP2 shows as
+  RUNNER. Public calls carry no size, so the live row reads MOVE in R and % (`liveMove`), never "+$0.00". ⚠️ `/feed`
+  also carries RESOLUTION rows (`resolution:true`, no levels): filter them before treating rows as calls (the trader
+  profile didn't, and showed them as $0.00 calls stuck on "Checking fill").
   **Feed RANKS never ranks on KV data (borst + Ember, 2026-09-29).** `LeaderboardView` lists ONLY graded callers, in the
   grader's order (/theses/leaderboard), then EMERGING callers unranked ("—"); nobody else. It used to rank everyone in the
   feed, falling back to the Lab's own statuses (`buildLeaderboard`/`calcRepScore`) and the on-chain Rep Score (outcomes
   callers close themselves) under a "RANKED BY KV DATA" label. Now: "No verified callers yet." when nobody's graded, a
   load error when the board can't be read (never an empty board for a failed read). Don't add a fallback ranking.
+- **Split exit + LATE_ENTRY fix (2026-10-12, borst: engine A/B rivalry).** (1) **`exitPlan: "SPLIT_50"`** (declared
+  at publish, frozen by callLock like the levels; a TP2 ALONE declares nothing, since Engine A and older calls carry TP2
+  as a note): `gradeCall` closes half at TP1, half at TP2, BOTH on the original stop (breakeven-after-TP1 is a different
+  strategy; don't mix). Total 0.5·R1 + 0.5·R2 or 0.5·R1 − 0.5; WIN when > 0; PENDING until the runner closes, with
+  `tp1At`/`bankedR` (+ server stamp `tp1HitAt`). Declared split with TP2 not beyond TP1 = INVALID; `/proxy/thesis-register`
+  400s `bad_split` BEFORE gas. Lab form: SPLIT EXIT checkbox under the levels (shown when TP2 is set). No GRADE_V bump (no
+  stored call had the field). Engine B's 5 calls from Oct 12 00:54 UTC predate it → graded TP1-only, permanently.
+  (2) **LATE_ENTRY only fires on a call graded as filled at the post** (`entryFill(...).atPost`) whose market had run
+  >0.5R past the entry (mark = `publishMark.px` if present, else the posting hour's close). Resting orders are graded
+  from their fill, so their R is obtainable: never flagged (`components.resting`). `PLAN_V = 2` (grading.mjs) re-derives
+  plan stamps inside the 60-day horizon once (13 public calls carried LATE_ENTRY: 8 Engine A, 5 Nexus Signals). The
+  draft advisor passes the latest close as the mark so it judges a draft the way a publish would.
+  **`GET /verify/:wallet/:id` = the grader re-run (2026-10-12, `routes-verify.mjs`, tested).** The call page's "Re-grade
+  from candles" button. It used to run its own first-touch check on CoinGecko candles that ignored the entry-must-trade
+  rule (a never-filled limit read as a WIN) and answered for PRIVATE calls too. Now: public, non-holders, non-duplicate
+  calls only (else 404); `gradeCall` on the same `tvhist:v2` candles every grader reads, ignoring the stamp; verdict
+  MATCH / MISMATCH / UNSTAMPED / NO_DATA vs the stored stamp; `source` = the public Orderly /tv/history URL. The secret
+  `COINGECKO_API_KEY` is no longer read anywhere.
+  **Share card + permalink answer public calls only (2026-10-12).** `GET /og/thesis/:w/:id(.png)` (now
+  `routes-ogthesis.mjs`, tested) rendered whatever id matched, so a private or holders-only call's levels + notes were one
+  guessed id away; `/share/thesis` and `/thesis` checked `isPublic` alone. All three now use `isPublicCall` (routes-verify:
+  public, not holders-only, not a `duplicateOf` copy) → 404 / bounce. No share button builds these URLs for an
+  unpublished call.
+- **Registration hardened + keyless index (2026-10-12, after an agent burned ~$0.15 gas and indexed nothing).**
+  `routes-thesisreg.mjs` (I/O) + `thesisRegister.mjs` (rules, tested vs viem). `/proxy/thesis-register`: `checkRegistration`
+  (side, symbol, levels via callR, 6-decimal scale error ≤0.1%, exitPlan/split, notes ≤1000 B) + an `eth_call` simulation
+  from the wallet run BEFORE Bankr; KV `thesisreg:pending:{sha(wallet|calldata)}` (15 min) stops a second submit of the
+  same call (a repeat returns the first txHash; 409 `in_flight` while the outcome is unknown; `retry:true` overrides only
+  a submit Bankr explicitly refused). ⚠️ KV has no compare-and-set: an isolate-local `inflight` set serialises identical
+  requests in ONE isolate (2026-10-13, after BankrBot/skills#777 review: two concurrent identical requests got two
+  txHashes); two landing on different isolates at the same instant can still both send. The skill says "send one, wait
+  for its answer"; a Durable Object would close it (not built); Bankr fetch has a 45 s timeout and accepts `txHash`/`transactionHash`/`hash`; a
+  slow receipt = 202 `{pending, txHash}`, never "nothing written". **`POST /theses/index {txHash, walletAddress}`** = no key:
+  receipt status 0x1 + EXACTLY ONE registry event naming the wallet + exactly one decodable `registerThesis` in the tx
+  input (nested smart-account calls work; one+one so a bundle can't hand a wallet another's levels) + block ≤6h old →
+  the call is built FROM THE CALLDATA (`thesisFromRegistration`), id `reg-<txHash[2:18]>` (idempotent), `onChainId` kept.
+  The split is declared ON-CHAIN as `#SPLIT_50` in the notes (the contract has no field; a body-only flag would let
+  whoever indexes first choose the grading). Skill refs document both paths + every status. ✅ PUBLISHED: BankrBot/skills#777
+  (fork branch `StephenBorst/skills:nexus-thesis-registration`) merged 2026-10-14 after review (example fix, "send one,
+  wait" wording, mark freshness fields, one nine-arg ABI); this repo's copy re-synced from it 2026-10-15. **✅ LIVE-VERIFIED 2026-10-12 (Engine B,
+  borst):** ETH SHORT via `/proxy/thesis-register` → 200, tx `0xbd180a17…8d113e`, onChainId 39, stored as
+  `reg-bd180a17119ae795` with `exitPlan: SPLIT_50`, a `publishMark` (2416.55 vs entry 2416.7 → filled at the post),
+  `fillState: OPEN`, and the row on `/theses/status/0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4`. No fallback needed.
+- **Call status + fill alerts (2026-10-12, the A/B's hands-off piece).** `GET /theses/status/:wallet` (no key,
+  `routes-callstatus.mjs`, rows in `callStatus.mjs`, tested): the wallet's PUBLIC open calls (no private, holders-only
+  or `duplicateOf` copies) newest first + last 10 graded. Per call: `state` from the grader's stamps (WORKING / OPEN /
+  RUNNER = split with `tp1HitAt` / UNCHECKED, via `callLifecycle`), `plannedR`, and `live` = ONE all-markets Orderly
+  futures read cached 20 s in the isolate (a failed refresh reuses it ≤2 min, `marksStale: true`; older = no marks;
+  `markAt`/`markAgeSec` always given — a review caught a 5-min-old mark served as fresh): `levels.{entry,stop,tp1,tp2}.{pct,r}` from the mark, `moveR` (open),
+  `crossedEntrySincePost` (WORKING, from `publishMark`). Two clocks, labelled: state = hourly grade, live = mark now.
+  **Alerts:** the hourly pass (`gradePublicTheses`) collects `fillEvents(before, t)` — FILL = a resting order that
+  traded AFTER the post (`filledAt > createdAt`; a fill at the post isn't news), TP1 = `tp1HitAt` newly set — and sends
+  them after the write via `notifyFillEvent` (resolutions.mjs → `appendNotification`: in-app + phone push + generic
+  Telegram; types `call_fill` / `call_tp1`, push topic `calls`). No public feed event. Up to an hour late by design.
 - **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
   (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
   A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from
@@ -825,6 +949,8 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   (`@noble/curves`)** (recovered addr must match, ts fresh ≤10min) THEN on-chain balanceOf ≥ `OPERATOR_MIN`.
   ⚠️ **`OPERATOR_MIN` in lab-api MUST match the frontend OPERATOR threshold** (currently 50M) or badges/gate drift.
   Frontend caches the signature per-session (8min) to avoid re-prompting.
+- **⚠️ STALE (2026-10-12): `NexusMarket` + `NexusTreasury` are deleted** — the strip was slimmed to `NexusBuyBar` on Aug 16
+  and the treasury moved to `TreasuryInventory` on Sept 12; the bullet below is history.
 - **Public flywheel strip** (Feed header + Lab header + landing): `NexusMarket` (live price/MC/vol/liq from
   GeckoTerminal, **client-side fetch** — GeckoTerminal/CoinGecko 403 datacenter IPs; carries the GT link-back) +
   `NexusTreasury` (USDC balance of the Safe on Arbitrum; LIVE — `NEXUS_TREASURY_ADDRESS` is set to the Safe) + `NexusBurnCounter` (on-chain $NEXUS at dead address as % of supply;
@@ -1001,7 +1127,8 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
 - `/token` landing card `app/pages/token/CrossChainCard.tsx`: USDC/ETH on Arbitrum · Base · Ethereum → any other
   pinned asset, incl. SOL / USDC on Solana and BTC. Flow = 1Click quote → user sends ONE plain transfer to the
   quote's `depositAddress` → solver delivers → status polled (`/v0/status`). Browser-direct (1Click CORS is `*`),
-  no key, no worker hop. Unauthenticated = 1Click adds ~20–25 bps; a partner JWT (via the worker) cuts it.
+  quote via the worker with our partner JWT (falls back to direct). Measured 2026-10-11: keyed and keyless quotes are
+  priced the same (see the partner-key bullet below).
 - **The deposit address is the whole money path**, so `app/lib/nearIntents.mjs` (`checkQuote`, 18 tests on REAL
   signed quotes in `app/lib/__fixtures__/oneclick-quote-*.json`) gates it BEFORE any wallet prompt:
   (1) ed25519 signature vs the key PINNED from the official SDK (`ONE_CLICK_PUBKEY`), same canonical hash as the
@@ -1034,7 +1161,54 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   held, delivered. Base deposit `0x42b9af30…6c968569`, Arb delivery `0xcf292eee…2a801d29`. The fee stands as configured.
   Claiming = borst connects borst.eth to the NEAR Intents app when volume makes it worth it (nothing to build).
 - **Spot fee:** `SPOT_FEE_BPS = "10"` → `0x34dF…B45c` (borst.eth broker wallet), now via spanDEX (see below).
-- ⏳ Not yet done: partner API key via the worker (drops 1Click's 20 bps).
+- **Partner key via the worker — BUILT, dark until secret `ONE_CLICK_JWT` is set on nexus-lab-api (2026-10-11).** Only
+  the QUOTE goes through us: `POST /xc/quote` (`oneClickUpstream` in keyProxy.mjs = one fixed URL; origin gate + 60/min/IP;
+  body ≤8 KB) adds `Authorization: Bearer <JWT>` and forwards verbatim; status + deposit-submit stay browser-direct.
+  Client `fetchOneClickQuote` (nearIntents.mjs, tested) asks the worker first and falls back to 1Click direct on
+  403/404/429/503/5xx/unreachable (= exactly today's behaviour, unauthenticated price); 1Click's own 4xx comes back
+  through the worker un-retried. checkQuote still verifies 1Click's signature, so the hop adds no trust. To turn on:
+  request the JWT (NEAR's form, linked in the one-click SDK README), then `npx wrangler secret put ONE_CLICK_JWT` from
+  `workers/nexus-lab-api`. Our 10 bps `appFees` are unchanged by the key.
+  **✅ LIVE 2026-10-11 (borst set `ONE_CLICK_JWT`).** Verified: `/xc/quote` returns a signed 1Click quote (201; was 503
+  `xc_not_configured`), still 403 without our Origin, and 1Click ACCEPTS the key (a fake Bearer → 401 "Invalid token").
+  ⚠️ **But the key changed no price.** $100 USDC Arb→Base dry quote, keyed vs keyless: identical amountOut (99.9784 bare;
+  99.888409 with our 10 bps), and the `appFees` echo is still split 5 bps ours / 5 bps 1Click on both. So the "~20–25
+  bps unauthenticated surcharge" above is NOT what we see: the keyless path costs ~2 bps at $100. The 21 bps baseline
+  on 1.25 USDC was mostly the FIXED `withdrawFee` (0.0024 USDC ≈ 19 bps at that size). Keep the key (it identifies us as a
+  partner); a better fee split or rate is NEAR's to grant on the account, not something the code can unlock.
+- **Spot discovery pass (2026-10-12, borst's scope).** Rules in `app/lib/spotDiscovery.mjs` (tested): (1) **Recently
+  viewed** = last 5 tokens opened in this browser, keyed chain + CA (perp-only majors by ticker), localStorage
+  `nx_spot_viewed_v1`, no wallet needed; chips under the search bar reopen by ADDRESS. Separate from holdings.ts recents
+  (bought tokens, which drive balance reads). (2) **Address search fix:** DexScreener `/tokens/<addr>` returns pairs where
+  the address is base OR quote; `searchToken` now keeps the token's own pairs (`pairsForAddress`), so a pasted CA opens
+  that token. (3) **"Not this one?"** under the search card = `didYouMean` (a different contract, real-market floors,
+  ticker searches only). (4) **Majors row** (`SPOT_MAJORS`): Solana majors open by MINT (SOL/JUP/RAY/BONK/WIF), NEXUS by
+  its Base CA, BTC/ETH/HYPE by ticker; above Movers with no wallet, below with one. (5) **Bridge prompt**: Solana buy
+  ticket shows "Get USDC on Solana →" only when BOTH balances read and neither can pay (`needsSolanaFunds`); it opens the
+  cross-chain card preset to USDC · Solana + the user's own address via router STATE (never the URL); `CrossChainCard`
+  takes `initialTo` (non-origin assets only) / `initialRecipient` (still shape-checked + bound by checkQuote). (6) **Callers
+  count**: `/theses/symbol` returns `callCount` (wallets on the coin via an open public call); the card shows "N public **Pool quality (same day):** `isRealMarket`
+  moved into spotDiscovery.mjs (one rule for the ticker resolver + "Not this one?"): floors ($1k vol, $5k liq) AND not
+  **padded** (liquidity ≥ 80% of market cap, the fake-LP shape) AND not **thin** (24h vol < 0.1% of liquidity). A ticker
+  search skips such pools (perp-listed names fall through to the perp); a pasted address still opens the exact token,
+  with one amber `poolCaution` line under the card. ⚠️ Not checked live on $NEXUS's own pool (sandbox can't reach
+  GeckoTerminal). The token page's **Callers card no longer shows the merit-weighted "70% LONG" lean** (green/red):
+  plain "N positioned", each row's side monochrome. The server still returns `lean`/`side`; nothing renders them here.
+  calls open on X · see who", **no long/short split until the verified board has a net-positive caller** (borst).
+- **One-system pass (2026-10-14, borst's scope).** Rules in `app/lib/spotDiscovery.mjs` (tested): **logos** only from
+  DexScreener / GeckoTerminal / CoinGecko over https (`safeLogoUrl`; re-checked on every localStorage read), GeckoTerminal
+  `tokenLogo` when DexScreener has none, else a first-letter monogram (`TokenLogo`); Recent chips carry the logo they were
+  viewed with, and pinned majors reuse it by address (`majorLogo`). **Nexus Read brief** = `readBrief`: "Funding +X%/yr,
+  longs pay · N public calls open · a mechanical rule, not graded." (count left out until the callers read lands, never
+  shown as 0). **Callers card**: `callerRecordLine` = "N graded · W% · ±RR" or "ungraded" (win rate never alone); merit
+  glyph monochrome; the hero count opens + scrolls to it. **"Nexus perp" badge** = a button → perp venue + ticket in view;
+  the ticket header shows funding + the plain open-call count. **"Post a call on X →"** (badge row, empty callers card,
+  perp-only card, takes empty state) = `callDraft`: Lab draft with the entry at the Orderly mark read at the tap (no side,
+  no levels) → `/lab?tab=thesis`. **Recent-chip dot** (bone, not green) = `chipMarks`: an open public call on a LISTED coin
+  (`/theses/status/:wallet`) or a buy of that exact token in this browser. **Empty states**: empty wallet → "Get USDC on
+  Solana" (Solana-only wallet with nothing to pay) or "Run the agent on paper"; no callers / no takes → post a call.
+  Copy fixed: positions aren't graded, calls are (perp ticket + perp-only card). **Header actions** on the call page and
+  the trader profile share `TEXT_ACTION` / `TEXT_ACTION_BAR` (`app/components/ui/textAction.ts`): plain text, 44px tap.
 - **Landing footer row (2026-09-30):** `Jupiter · spanDEX · Definitive Flash · WooFi · NEAR Protocol · XMTP · Quotient ·
   Arbitrum` ("NEAR Protocol" matches the announcement post; Fabric → spanDEX since Fabric shut down). The spot card names
   NEAR Intents for cross-chain. `llms.txt` is ONE file kept identical in `public/llms.txt` (app) and `nexus-landing/llms.txt`
@@ -1043,10 +1217,10 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
 ## 📱 Android app + phone alerts (2026-10-10) — runbook `docs/android-app.md`
 - **The app = the live site in a Trusted Web Activity** (Chrome full-screen, packaged by PWABuilder), Play Store
   under an **Organization** account (LLC; D-U-N-S needed; skips the 12-testers/14-days rule for new personal
-  accounts). Package id `com.nexustradinglabs.app`. Android first; iOS after. Solana dApp Store = optional 2nd lane.
+  accounts). Package id `com.nexustradinglabs.nexus`. Android first; iOS after. Solana dApp Store = optional 2nd lane.
   Play's crypto policy (Oct 29 2025) licenses CUSTODIAL wallets + exchanges; non-custodial wallets are exempt. A perp
   front end is the grey zone: declare non-custodial; fallback = leave US/EU/UK out of the Play listing first.
-- **Phone alerts = Web Push, shipped DARK.** On only when secret `VAPID_PRIVATE_JWK` (one P-256 JWK; public half
+- **Phone alerts = Web Push — LIVE (key set + test push landed on borst's Android phone, 2026-10-11).** On only when secret `VAPID_PRIVATE_JWK` (one P-256 JWK; public half
   derived, so they can't drift) is set on nexus-lab-api: `node ../../tools/push/vapid-keys.mjs | npx wrangler secret
   put VAPID_PRIVATE_JWK` from `workers/nexus-lab-api`. ⚠️ Make it ONCE: a new key breaks every subscribed device.
   `webpush.mjs` = RFC 8291 aes128gcm + RFC 8292 VAPID on Web Crypto (tests decrypt with an independent node:crypto
@@ -1055,6 +1229,12 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   WNS, Apple — the client hands us a URL, so no allowlist = SSRF). `routes-push.mjs`: `GET /push/config`, `POST
   /push/subscribe|topics` (need `labAuth` — the device list is capped, so unsigned adds could evict your phone),
   `/push/unsubscribe` + `/push/test` (endpoint = proof; test ≤1/min).
+  **"On" means the SERVER knows the device (fixed 2026-10-14).** The panel used to read "On for this device" whenever the
+  phone held a subscription, so the Android app showed "On" while `/push/test` answered `not_subscribed` (the TWA shares
+  Chrome's storage for the site, so it can find a subscription the server dropped after a `gone`). Now `POST /push/status
+  {endpoint}` → `{subscribed}`; a device-only subscription is `stale` → re-registered quietly with the held Lab signature
+  (`repairPush`, mode "cached", never prompts), else "Turn on" again. Every turn-on makes a FRESH subscription (old one
+  unsubscribed on the server and the device first); a test answered 404/gone drops the local copy.
 - **What pushes:** (1) graded calls — `appendNotification` (shared.mjs) now has a push leg (before the Telegram
   opt-out), so `notifyResolution` pushes; (2) agent opens/closes — **new `*/5` cron on lab-api that RETURNS before the
   hourly jobs** (several write the engine's history series; don't let them run every 5 min). `runAgentWatch` READS
@@ -1066,9 +1246,22 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   crashed wallet webviews). `app/main.tsx` still unregisters every other SW on load but skips this scope. A tap
   posts `nexus-open` to an open window (`app/lib/pushTaps.ts listenForPushTaps`, history push + popstate) or opens
   one. UI = bell → PHONE ALERTS (`PushAlertsPanel.tsx`, `pushAlerts.ts`), hidden while `/push/config` says off.
+  ⚠️ **The nav bell is `SignalsNavButton.tsx` (◆ SIGNALS, mounted in `app/utils/config.tsx`). `NotificationBell.tsx`
+  is NOT mounted anywhere** — the panel first shipped there and never appeared (found live 2026-10-11, fixed: it now
+  sits under the signals list, reads the wallet via `useAccount`, and says "Connect a wallet…" when none is connected).
+  Before adding UI to a component, grep that it's mounted. The in-app notification list (`/notifications/:addr`) has
+  no UI (NotificationBell + useNotifications deleted 2026-10-12); phone pushes don't depend on it.
 - Manifest: `id:"/"`, colours `#0a0a0b` (was the off-brand `#0a0e0a`, also in index.html theme-color),
   `icon-maskable-512.png` (mark inside the 80% safe circle), `push-badge.png` (white-on-transparent status icon).
-- ⏳ `public/.well-known/assetlinks.json` once borst sends the Play app-signing + upload-key SHA-256s.
+  ⚠️ **Edit `tools/manifest/manifest.mjs`, never `public/manifest.json`.** deploy.yml runs
+  `scripts/generate-manifest.ts` before and after the build, so the JSON is rebuilt from that module on every deploy.
+  Until 2026-10-11 the script held its own copy and production shipped no `id`, `#0a0e0a`, and the plain icon as
+  maskable while the repo file looked right. `tools/manifest/manifest.test.mjs` fails a hand edit, a colour off the
+  canvas, or an icon whose PNG isn't the size it claims.
+- ✅ `public/.well-known/assetlinks.json` (2026-10-14): Play app-signing key `DD:F5:…:C7:62` + upload key `72:4C:…:02:4C`,
+  package `com.nexustradinglabs.nexus`. First .aab is on internal testing. Regenerate only via
+  `node tools/android/assetlinks.mjs <app-signing> <upload>`; `tools/android/assetlinks.test.mjs` checks the committed file.
+  A wrong or missing entry doesn't break the app: it opens with Chrome's address bar instead of full-screen.
 
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the
@@ -1370,10 +1563,10 @@ credit and pays `x402.miroshark.xyz/run` $1 Base USDC from secret `MIROSHARK_PAY
   that wants 4H fetches resolution 60 in 20-day pages and builds bars on the UTC 00/04/08/12/16/20 windows with
   **`app/lib/fourHourBars.mjs`** (`fetchFourHourBars`, injected `getJson`; a failed page fails the read, no holes).
   Users: lab-api `snapshotTrendRegimes` (4H EMA8/EMA21 → `regime:{coin}` → `/signals` `ema8_4h` → the MOMENTUM
-  "4H EMA8" note; null forever until this fix) and the Lab macro-proxy chart (`app/pages/lab/macroProxy.mjs`; never
-  rendered until this fix). Neither feeds the engine or the Oct-15 routine. Fake for tests:
-  `app/lib/__fixtures__/fakeTvHistory.mjs` (240 → no_data, 60 → hourly). The structure study's `tape.mjs` (PR #75)
-  carries its own copy of `fourHourBars`; once both are on main it should import this one.
+  "4H EMA8" note; null forever until this fix) and the structure study's `tape.mjs` (imports it since 2026-10-01).
+  Neither feeds the engine or the Oct-15 routine. Fake for tests: `app/lib/__fixtures__/fakeTvHistory.mjs` (240 →
+  no_data, 60 → hourly). (The Lab macro-proxy chart that also used it was dead code: the Macro surface was removed
+  Aug 23; deleted 2026-10-12.)
 
 ## ⚠️ Orderly public rate limit — 10 req/s PER IP (Orderly support, 2026-09-28)
 - Public endpoints (`/v1/public/futures`, `/tv/history`, `/v1/public/funding_rate_history`, `/v1/public/info`…) allow
@@ -1579,6 +1772,29 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   vs minified-unsplit (8.9 s) — accepted: deploys land several times a day, so most return visits are post-deploy.
 - Smoke: 10 routes render the same on the new build as the old (same text length per route); the only page error in
   both is the sandbox blocking Orderly's API. ⚠️ In cloud sessions don't `pkill` servers: it kills your own shell.
+- **First-load trims (2026-10-11, `firstLoadTrims()` in vite.config.ts): vendor 3.63 → 3.00 MB raw, 1,071 → 881 KB gz
+  (−18%).** Everything in the vendor chunk is reached through Orderly's SDK (hooks/ui/react-app pull the Solana adapter,
+  amplitude, ethers…), so the only levers were two libraries it over-ships: (1) Node `crypto` — the three first-load
+  importers (lz-solana-sdk-v2, spl-type-length-value, brorand) only use `createHash("sha256")` / `randomBytes`, yet the
+  polyfill pulled all of crypto-browserify (elliptic, asn1, diffie-hellman, public-encrypt…). They now get
+  `app/lib/nodeCryptoLite.mjs` (tested byte-for-byte vs node:crypto; anything but sha256 throws); every other importer
+  (lazy wallet chunks) keeps the full polyfill. (2) lodash — Orderly hooks import only `debounce` (wallet-connector
+  `merge`) from CJS lodash, which can't tree-shake; those two importers resolve to `lodash-es` (now a declared dep).
+  Both are importer ALLOWLISTS; `tools/firstLoadTrims.test.mjs` fails CI if an SDK upgrade starts using more. Smoke:
+  10 routes at 390px render identical text on old vs new build; the only page error in both is the sandbox's blocked
+  Orderly fetch. Measure with a temporary `generateBundle` plugin (per-package `renderedLength` per chunk) — a build
+  takes ~3 min and ~7 GB.
+- **Amplitude opt-out (2026-10-11; Orderly/Wuzhong hadn't answered since Oct 3).** Orderly's hooks start Amplitude with
+  no `defaultTracking`, which in analytics-browser 2.x means page views, sessions, form interactions, file downloads and
+  attribution for every visitor; the SDK exposes no switch. `amplitudeOptOut()` in vite.config.ts (build only) rewrites
+  that one call via `tools/amplitudeOptOut.mjs` to `defaultTracking:false` + `trackingOptions.ipAddress:false`. Still sent:
+  Orderly's named events and its identify (wallet address as user id), which feed Orderly's broker stats. If the SDK's
+  init call changes, the build FAILS (and `tools/amplitudeOptOut.test.mjs` fails in CI) rather than shipping full
+  tracking. Verified in a real build: the vendor chunk carries `defaultTracking:!1`. Dev server (prebundled deps) is unpatched.
+- **Dead-code sweep (2026-10-12):** 16 files nothing imported were deleted (NexusMarket, NexusTreasury,
+  NexusTreasuryStack, NexusBrokerStats, CommentsPanel, MiniPriceChart, NotificationBell, useNotifications,
+  useIpRestriction — region blocking is the SDK's `restrictedInfo` —, useWatchlistSync, useMarketPulse, MacroView,
+  MacroEvents, MacroCallers, macroProxy + test). Before building on a component, grep that something imports it.
 - **Phone sweep (2026-10-04, 20 routes at 390px):** no page scrolls sideways, nothing spills. First load = ONE vendor
   chunk, 3.5 MB raw / 1.05 MB gz before the first screen (the open mobile item; defer wallet/SDK pieces = days of work).
   **Feed pages its calls (`FEED_PAGE` = 20 + "Show 20 more · N left")** — it rendered all 329 at once (97,000 px).
@@ -1627,6 +1843,10 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   the whole tab (bit us twice). Feed reuses the Lab hook: `import { useIsMobile } from "@/pages/lab/useIsMobile"`.
 - **Calendar cells:** use a FIXED `height` (not `minHeight`) so data-days don't grow taller than empty days
   ("weekdays huge, weekends small"); 60px mobile / 80px desktop + condensed content + `overflow:hidden`.
+- **Lab tab row desktop — no stray scrollbar (2026-10-12):** tabs used to hang 1px below the row (`marginBottom −1`) so
+  the active underline sat on the header border; with `overflowX: auto` CSS also makes `overflowY` auto, and that 1px
+  drew a vertical scroller at the row's right edge (measured: scrollHeight 41 in a 40px box). Now the ROW carries
+  `marginBottom: −1` + `overflowY: hidden` + hidden bar; tabs have no negative margin. Same look, nothing to scroll.
 - **Lab tab row mobile:** tabs are equal-width `flex:1` with `short` labels; Holders short = `ROOM` (was a
   cryptic `◆`); the sync/operational status dot is hidden on mobile to reclaim space. Feed nav mirrors this
   (equal `flex:1` tabs, glyphs+divider dropped, "N theses" count hidden on mobile — no awkward gap).
@@ -1636,6 +1856,12 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   (recent commits: Opus 5, Opus 5.5). ⚠️ Don't hard-code a model name here: this line said "Opus 4.8" long after
   sessions had moved on, and because a CLAUDE.md rule OUTRANKS the harness reminder, a stale name here makes every
   session misattribute its own commits. Commit/push when asked.
+- **⭐ MERGE GREEN PRs YOURSELF (borst, 2026-10-13).** A session merges its OWN PR on `StephenBorst/nexus` once CI is
+  green on the current head and it's mergeable — no waiting for borst's word. Still HOLD and tell borst when: CI is red
+  or pending · a merge conflict · an unanswered review thread · a failing Claude Approvals check (where it runs) · the PR
+  isn't yours or is on another repo (BankrBot/skills, nexus-landing) · it touches the engine during a freeze (see
+  "⛔ ENGINE FREEZE") · it arms live money (`CARRY_LIVE`, carry/agent key secrets, any live-trading switch). After a
+  merge, check the deploy run started on main (see "Manual redeploy").
 - Env is **Windows PowerShell** — no `&&` chaining; use `;`. `gh` CLI is NOT installed.
 - `tsc --noEmit` baseline is now **0 errors** (cleaned up 2026-08-24 — the old walletConnector
   `EvmInitialProps` mismatch fixed via a `walletConfig` appMetadata.name fallback; useNav
@@ -1739,7 +1965,7 @@ inference is LIVE** as a PRO benefit (`POST /ai/chat`, see "Revenue + AI + Treas
 - **In-app EVM buy/sell is LIVE and tested** — on spanDEX since Fabric shut down (Sept 16); borst's $1 buy + sell
   (Sept 28) filled and the 10 bps fee landed both ways. Don't pitch "run a small live test" again.
 - Current focus = **the engine and its signals** (basis stack, scoreboard → one-click strategies, mobile polish).
-- **⛔ ENGINE FREEZE until the Oct 15 2026 re-validation (borst + Ember, 2026-09-28).** The worker/agent engine is
+- **✅ ENGINE FREEZE LIFTED 2026-10-15** (page applied, see "OCT 15 RESULT"); first engine PR = #83 (brain/exec 429). History: **⛔ ENGINE FREEZE until the Oct 15 2026 re-validation (borst + Ember, 2026-09-28).** The worker/agent engine is
   hands-off until the Oct 15 re-validation — no changes there, that's a scheduled experiment in progress. Engine =
   `nexus-agent-brain`, `nexus-agent-exec`, `nexus-carry-engine`, the shared signal/exit rules in `app/lib/` (basisFade,
   basisStack, axisExits, paperStats, paperParity, strategyLabel), and lab-api's grading/replay code (`axisbt.mjs`,

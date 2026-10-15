@@ -10,9 +10,10 @@
 // module it dispatches to.
 //
 // ⚠️ Pure move — logic byte-identical to what shipped.
-import { notifyResolution } from "./resolutions.mjs";
+import { notifyResolution, notifyFillEvent } from "./resolutions.mjs";
+import { fillEvents } from "./callStatus.mjs";
 import {
-  gradeCall, classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets,
+  gradeCall, entryFill, classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets,
   regimeEdge, planQuality, planSummary, expectancyStats, convictionCalibration, rankCaller,
   consensusBySymbol, stanceAtPost, classifyContrarian, aggregateSideRecord, contrarianEdgeScore,
   classifyMacro,
@@ -88,12 +89,41 @@ export function gradedStatusOf(outcome) {
 //       post, and a client save could write a stamp itself.
 //   3 = the entry must trade (logic.mjs gradeCall, 2026-09-29): an entry away from the market is
 //       graded from the hour price reaches it, and never counts if it never does.
+//   (no bump, 2026-10-11) the market at the post = the mark read at publish (`publishMark`). It only
+//       exists on calls published from that day, so no stored stamp was made under another rule.
+//   (no bump, 2026-10-12) a declared split exit (`exitPlan: "SPLIT_50"`, gradeCall). No call published
+//       before carries it, so no stored stamp was made under another rule.
 export const GRADE_V = 3;
+
+// The plan-quality rules that wrote `planScore`/`planFlags`. Plan quality describes the moment of the
+// post, so it's stamped once; a bump re-derives every stamp inside the stamping horizon once.
+//   2 = LATE_ENTRY only on a call graded as filled at the post (2026-10-12): a resting limit bid
+//       under the market used to lose 30 points for being a resting order.
+export const PLAN_V = 2;
 export const isCurrentStamp = (t) => (t?.gradedOutcome === "WIN" || t?.gradedOutcome === "LOSS") && t?.gradeV === GRADE_V;
 
 // The fields the hourly pass writes on a public call. When it writes back, it copies ONLY these onto
 // a fresh read of the record, so a save that landed during the pass isn't overwritten.
-const PASS_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "planScore", "planFlags", "regimeTrend", "regimeVol", "regimeAlign", "status"];
+const PASS_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "fillState", "filledAt", "tp1HitAt", "planScore", "planFlags", "planV", "regimeTrend", "regimeVol", "regimeAlign", "status"];
+
+// Where an UNRESOLVED call's entry stands, so a card never shows a live P&L for an order that never
+// filled. "WORKING" = the entry hasn't traded (a resting order); "OPEN" = it has, `filledAt` = the post
+// time or the start of the hour it filled in. Same rule gradeCall grades on (entryFill in logic.mjs).
+// A declared split whose TP1 half has closed also carries `tp1HitAt` (ms, the start of that hour)
+// while its runner is open. A graded or invalid call carries none of these: it's closed, or it's not
+// a call. Display only: nothing ranks on it. Returns true when the call changed.
+export function applyFillStamp(t, g, cd) {
+  const before = `${t.fillState}|${t.filledAt}|${t.tp1HitAt}`;
+  if (g && g.outcome === "PENDING") {
+    const f = entryFill(t, cd);
+    if (f.filled) { t.fillState = "OPEN"; t.filledAt = f.fillSec * 1000; }
+    else { t.fillState = "WORKING"; delete t.filledAt; }
+    if (g.tp1At) t.tp1HitAt = g.tp1At * 1000; else delete t.tp1HitAt;
+  } else {
+    delete t.fillState; delete t.filledAt; delete t.tp1HitAt;
+  }
+  return `${t.fillState}|${t.filledAt}|${t.tp1HitAt}` !== before;
+}
 
 // 1h OHLC from REGIME_PAD_S before the call to now, for gradeCall. Every grader (this cron, the
 // leaderboard, the permalink and the share card) reads the SAME per-symbol candle store
@@ -108,7 +138,7 @@ export { REGIME_PAD_S };
 // Plan-quality flags, phrased for a trader looking at a DRAFT (POST /theses/advice)
 // rather than a graded record — present tense, and each one names the fix.
 export const ADVICE_FLAG_TEXT = {
-  LATE_ENTRY: "Price has already run past your entry — the R you're claiming isn't obtainable from here.",
+  LATE_ENTRY: "Price is already more than half your risk past this entry, but close enough to count as filled now. That fill isn't on offer: enter at the market, or move the entry far enough to rest as an order.",
   STOP_IN_NOISE: "Your stop sits inside a single bar's normal range — this is a coin flip on noise, not on the idea.",
   STOP_TOO_WIDE: "That stop is too wide to be risk control. Cut the size instead.",
   RR_MISMATCH: "Your stated R:R doesn't match these levels — the record will be graded on the levels.",
@@ -144,6 +174,7 @@ export async function gradePublicTheses(env) {
     // Collected, not dispatched inline: a resolution must only be announced once the
     // stamp is actually persisted (see resolutions.mjs).
     const justResolved = [];
+    const justFilled = [];   // resting orders that traded, split calls whose TP1 half closed (callStatus.mjs)
     for (const t of (data.theses || [])) {
       if (!t.isPublic || !t.symbol || !t.createdAt || t.duplicateOf) continue; // copies: graded in their owner's record
       // A published call's status is the server's grade, never a self-mark (callLock.mjs): a legacy
@@ -155,7 +186,7 @@ export async function gradePublicTheses(env) {
       // they're stamped once and never revisited — including on already-resolved
       // calls that predate this feature (backfill). Skipped beyond the history
       // horizon, where the candles we'd need no longer come back.
-      const stampable = t.planScore === undefined && t.createdAt > Date.now() - 60 * 86400 * 1000;
+      const stampable = (t.planScore === undefined || t.planV !== PLAN_V) && t.createdAt > Date.now() - 60 * 86400 * 1000;
       if (resolved && !stampable) continue;
 
       // null = the candles don't reach back to this call yet (budget / Orderly refusal): leave it
@@ -166,6 +197,8 @@ export async function gradePublicTheses(env) {
       if (stampable) {
         const pq = planQuality(t, cd);
         if (pq) { t.planScore = pq.score; t.planFlags = pq.flags; }
+        else { delete t.planScore; delete t.planFlags; }
+        t.planV = PLAN_V;
         const reg = classifyRegime(cd, Math.floor(t.createdAt / 1000));
         if (reg) {
           t.regimeTrend = reg.trend;
@@ -193,6 +226,11 @@ export async function gradePublicTheses(env) {
           delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV;
           changed = true; regraded++;
         }
+        const before = { fillState: t.fillState, tp1HitAt: t.tp1HitAt };
+        if (applyFillStamp(t, g, cd)) {
+          changed = true;
+          for (const kind of fillEvents(before, t)) justFilled.push({ t, kind });
+        }
         t.status = gradedStatusOf(t.gradedOutcome);
       }
     }
@@ -215,6 +253,9 @@ export async function gradePublicTheses(env) {
       // the next pass re-resolves cleanly — better a late notification than a phantom
       // one for a grade that was never saved.
       const wallet = key.name.replace("lab:", "");
+      for (const ev of justFilled) {
+        await notifyFillEvent(env, wallet, ev.t, ev.kind);
+      }
       for (const rz of justResolved) {
         await notifyResolution(env, wallet, rz.t, rz.outcome, rz.r);
       }

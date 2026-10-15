@@ -63,6 +63,8 @@ const ArenaLayout = lazy(() => import('./pages/arena/Layout'));
 // ✅ PROOF PAGE (unified track-records hub)
 const ProofPage = lazy(() => import('./pages/proof'));
 const ProofLayout = lazy(() => import('./pages/proof/Layout'));
+const RevenuePage = lazy(() => import('./pages/ops/revenue'));
+const OpsLayout = lazy(() => import('./pages/ops/Layout'));
 
 // ✅ TRADER PROFILE PAGE
 const TraderPage = lazy(() => import('./pages/trader'));
@@ -164,6 +166,15 @@ const router = createBrowserRouter([
         element: <><PageMeta title="Proof" description="Records for callers, agents and desks. Graded from public price. Anchored on Arbitrum." /><ProofLayout /></>,
         children: [
           { index: true, element: <ProofPage /> },
+        ],
+      },
+
+      // Owner-only revenue page (not in the nav; the worker answers only a treasury Safe owner)
+      {
+        path: 'ops/revenue',
+        element: <><PageMeta title="Revenue" noindex /><OpsLayout /></>,
+        children: [
+          { index: true, element: <RevenuePage /> },
         ],
       },
 

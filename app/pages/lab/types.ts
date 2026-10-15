@@ -18,6 +18,9 @@ export interface ThesisTrade {
   stopLoss: number;
   takeProfit1: number;
   takeProfit2: number;
+  // Declared at publish, frozen with the call: graded half at TP1 + half at TP2 (lab-api gradeCall).
+  // Absent = graded at TP1 only, whatever TP2 holds.
+  exitPlan?: "SPLIT_50";
   riskPercent: number;
   accountSize: number;
   fundingRate: number;
@@ -48,6 +51,11 @@ export interface ThesisTrade {
   gradedOutcome?: "WIN" | "LOSS";    // objective grade from public price (server-stamped)
   gradedR?: number;
   gradedAt?: number;
+  // Server fields on PUBLISHED calls only (grading.mjs applyFillStamp / publishMark.mjs): has the entry
+  // traded yet, and the market price read at the first publish. Private calls never carry them.
+  fillState?: "WORKING" | "OPEN";
+  filledAt?: number;
+  publishMark?: { px: number; at: number; src?: string };
   actualPnl: number | null;
   // Append-only lifecycle timeline (add/trim/move stop/flip/close/note). See
   // app/lib/lifecycle.mjs. ⚠️ ADDITIVE ONLY — grading and the anchored call ledger

@@ -7,11 +7,13 @@ app; there is no second codebase. Phone alerts are Web Push (`workers/nexus-lab-
 ## Status
 - [x] Push alerts built, shipped dark (PR "Phone alerts…"). Off until step 1.
 - [x] Manifest: brand background `#0a0a0b`, maskable icon (`public/icon-maskable-512.png`).
-- [ ] 1. Push key set (borst)
-- [ ] 2. D-U-N-S number + Play Console organization account (borst)
-- [ ] 3. Android package from PWABuilder (borst)
-- [ ] 4. `public/.well-known/assetlinks.json` with both fingerprints (Claude, from step 3's numbers)
-- [ ] 5. Store listing: copy + graphics (Claude drafts, borst submits)
+- [x] 1. Push key set (borst, 2026-10-11). Live-tested: Send test landed on borst's Android phone (Chrome).
+- [x] 2. D-U-N-S number + Play Console organization account (borst, 2026-10-14). Package registered: `com.nexustradinglabs.nexus`.
+- [x] 3. Android package from PWABuilder (borst, 2026-10-14). First .aab rolled out on internal testing.
+- [x] 4. `public/.well-known/assetlinks.json` with both fingerprints (2026-10-14: app signing `DD:F5:…:C7:62`, upload `72:4C:…:02:4C`)
+- [x] 5a. Privacy policy page `nexustradinglabs.com/privacy` (nexus-landing PR #14)
+- [x] 5b. Store listing copy + graphics: `marketing/play-store/` (icon, feature graphic, 3 phone screenshots, listing.md)
+- [x] 5c. Data safety form + store listing saved (borst, 2026-10-14). Not sent for review yet.
 - [ ] 6. Solana dApp Store, same package (optional second lane)
 
 ## 1. Turn push on (5 minutes, once)
@@ -38,7 +40,7 @@ bell → PHONE ALERTS → Turn on → Send test. The test should land on the dev
 ## 3. Build the Android package (PWABuilder, ~15 minutes)
 1. Go to pwabuilder.com, enter `https://trade.nexustradinglabs.com`, Package for stores → Android.
 2. Options (change only these):
-   - Package ID: `com.nexustradinglabs.app` (permanent: it can never change after the first upload)
+   - Package ID: `com.nexustradinglabs.nexus` (permanent: it can never change after the first upload)
    - App name: `Nexus Trading Labs` · Launcher name: `Nexus`
    - Theme / background / nav bar colour: `#0a0a0b`
    - **Notification delegation: ON** (this is what routes push alerts into the app)
@@ -55,7 +57,9 @@ bell → PHONE ALERTS → Turn on → Send test. The test should land on the dev
    not secrets.
 
 ## 4. Prove the site and the app belong together
-Claude adds `public/.well-known/assetlinks.json` with both fingerprints. Until it's live, the app opens
+Claude adds `public/.well-known/assetlinks.json` with both fingerprints
+(`node tools/android/assetlinks.mjs <app-signing SHA-256> <upload SHA-256>`; `tools/android/assetlinks.test.mjs`
+then fails CI if the file is malformed or lists fewer than two). Until it's live, the app opens
 with a browser bar on top; after, it's full-screen. Check:
 `https://trade.nexustradinglabs.com/.well-known/assetlinks.json`.
 

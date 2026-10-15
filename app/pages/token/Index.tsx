@@ -6,7 +6,7 @@
 // fill: our own perp page when the token is a listed Orderly market, else a deep-link to
 // the token's pool. No fake order tabs, no dead "Buy" button.
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { generatePageTitle } from "@/utils/utils";
 import { getPageMeta } from "@/utils/seo";
 import { renderSEOTags } from "@/utils/seo-tags";
@@ -17,6 +17,7 @@ import { FADE_FUNDING_FLOOR_PCT_YR } from "@/pages/lab/briefing";
 import {
   searchToken, poolCandles, poolTrades, orderlyPerpSet, nexusSignal, swapQuote, chartOverlays,
   fetchTakes, postTake, deleteTake, fetchCallerMerit, fetchMovers, fetchSymbolCallers,
+  tokenLogo, perpMark, openCallCoins,
   fmtUsd, fmtTapeUsd, fmtPrice, fmtAge, shortAddr,
   type TokenPair, type Candle, type Trade, type NexusSignal, type SwapQuote, type CallMark, type LiqMap, type Take, type CallerMerit, type Mover, type SymbolCallers,
 } from "./data";
@@ -26,6 +27,8 @@ import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmt
 import { FlashSpotButton } from "./FlashSpotButton";
 import { FlashOrders } from "./FlashOrders";
 import { CrossChainCard } from "./CrossChainCard";
+import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS, majorHref, needsSolanaFunds, openCallCount, callCountLine, poolCaution,
+  readBrief, fundingPayLine, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo, safeLogoUrl } from "@/lib/spotDiscovery.mjs";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -33,7 +36,7 @@ import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // signer (provider.signTransaction/sendTransaction). Safe outside the provider (useContext default).
 import { useWalletConnectorPrivy } from "@orderly.network/wallet-connector-privy";
 import { useEscapeKey } from "@/utils/a11y";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 import { Chevron, Pill, Stat, Tabs } from "@/components/ui";
 
 // WooFi majors-swap widget — the in-app fill for the majors WooFi routes (BTC/ETH/SOL/USDC etc.),
@@ -79,18 +82,40 @@ function tokenAgeLabel(ts: number | null): string {
 }
 
 // The funding verdict for a listed market (a rule the scoreboard doesn't grade), read EXACTLY as the Board reads it (the server
-// verdict + the ONE shared economic floor) so the terminal can't disagree with the Lab.
-function nexusReadLabel(sig: NexusSignal): { label: string; color: string; sub: string } {
+// verdict + the ONE shared economic floor) so the terminal can't disagree with the Lab. Funding, who pays, the open call
+// count and "a mechanical rule, not graded." sit on the brief line under it (readBrief, spotDiscovery.mjs).
+function nexusReadLabel(sig: NexusSignal): { label: string; color: string; why: string } {
   const dir = sig.fadeDir === "LONG" || sig.fadeDir === "SHORT" ? sig.fadeDir : null;
   const annual = sig.fundingAnnualPct ?? 0;
   const bigEnough = Math.abs(annual) >= FADE_FUNDING_FLOOR_PCT_YR;
   const isFade = sig.verdict === "FADE" && !!dir && bigEnough;
-  const fundTxt = `funding ${annual >= 0 ? "+" : ""}${annual.toFixed(1)}%/yr`;
   // A verdict word, not money: bone, never green (docs/brand.md).
-  if (isFade) return { label: `FADE ${dir}`, color: "#ededf0", sub: `${fundTxt}. The crowd is stretched ${dir === "SHORT" ? "long" : "short"}. A mechanical rule, not graded yet.` };
-  if (sig.verdict === "FADE" || sig.verdict === "WATCH") return { label: "WATCHING", color: "#71717a", sub: `${fundTxt}. Elevated, not stretched vs its own range. No fade edge yet.` };
-  return { label: "BALANCED", color: "#71717a", sub: `${fundTxt}. No crowd extreme to fade.` };
+  if (isFade) return { label: `FADE ${dir}`, color: "#ededf0", why: `The crowd is stretched ${dir === "SHORT" ? "long" : "short"}.` };
+  if (sig.verdict === "FADE" || sig.verdict === "WATCH") return { label: "WATCHING", color: "#71717a", why: "Elevated, not stretched vs its own range." };
+  return { label: "BALANCED", color: "#71717a", why: "No crowd extreme to fade." };
 }
+
+// A token's logo, or its first letter when there's none (or the image fails). Only hosts safeLogoUrl allows.
+function TokenLogo({ src, sym, size = 36 }: { src?: string | null; sym: string; size?: number }) {
+  const [broken, setBroken] = useState(false);
+  const safe = src ? safeLogoUrl(src) : null;
+  useEffect(() => { setBroken(false); }, [safe]);
+  if (safe && !broken) {
+    return <img src={safe} alt="" width={size} height={size} loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)}
+      style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, background: BG, objectFit: "cover" }} />;
+  }
+  return (
+    <span aria-hidden style={{ width: size, height: size, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: Math.max(8, Math.round(size * 0.42)), color: MUT, lineHeight: 1 }}>
+      {(sym || "?").slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
+// The plain-text "next action" link used across the token page's empty states and the perp badge row.
+const NEXT_ACTION: React.CSSProperties = {
+  background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
+  fontWeight: 600, color: "#ededf0", textAlign: "left",
+};
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
@@ -285,14 +310,14 @@ function Chart({ candles, loading, height, calls, liq, entries }: { candles: Can
 
 // ── YOUR WALLET strip — read-only spot holdings, a launcher + (later) MAX source ──
 // Connected only; disconnected renders nothing. Each row opens that token on Spot.
-function HoldingsStrip({ holdings, loading, onOpen }: { holdings: Holding[]; loading: boolean; onOpen: (h: Holding) => void }) {
+function HoldingsStrip({ holdings, loading, onOpen, empty }: { holdings: Holding[]; loading: boolean; onOpen: (h: Holding) => void; empty?: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT, marginBottom: 8 }}>Your wallet</div>
       {loading && holdings.length === 0 ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT }}>reading balances…</div>
       ) : holdings.length === 0 ? (
-        <div style={{ fontFamily: UI, fontSize: 12, color: MUT }}>No spot tokens in this wallet.</div>
+        empty ?? <div style={{ fontFamily: UI, fontSize: 12, color: MUT }}>No spot tokens in this wallet.</div>
       ) : (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {holdings.map((h, i) => (
@@ -314,6 +339,21 @@ function HoldingsStrip({ holdings, loading, onOpen }: { holdings: Holding[]; loa
 // listed perp, so a tap lands on its Spot page (trade on our book). Self-fetching, 60s refresh,
 // fail-soft (renders nothing without data). Turns "search a token you already know" into "land and
 // see what's ripping → tap → trade." ─────────────────────────────────────────────────────────────
+// The majors row on the Spot landing. Solana names open by their mint (spotDiscovery.mjs).
+function MajorsRow({ onOpen, viewed }: { onOpen: (href: string) => void; viewed: unknown[] }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+      {SPOT_MAJORS.map((m) => (
+        <Pill key={m.sym} onClick={() => onOpen(majorHref(m))} title={m.ca ? `${m.sym} · ${m.ca}` : m.sym}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <TokenLogo src={majorLogo(m, viewed) as string | null} sym={m.sym} size={16} />{m.sym}
+          </span>
+        </Pill>
+      ))}
+    </div>
+  );
+}
+
 function MoversRail({ onPick }: { onPick: (sym: string) => void }) {
   const [m, setM] = useState<{ gainers: Mover[]; losers: Mover[]; active: Mover[] } | null>(null);
   useEffect(() => {
@@ -352,21 +392,20 @@ function MoversRail({ onPick }: { onPick: (sym: string) => void }) {
 // Not self-reported "I'm long": credible callers with an OPEN position or an active graded
 // call on this symbol right now, each with earned merit + graded record, and a merit-weighted
 // lean. Sits in the ◆ NEXUS sidebar for a listed market; renders nothing for an uncalled coin.
-function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCallers; onOpen: (wallet: string) => void }) {
-  const [expanded, setExpanded] = useState(false);
+function CallersStrip({ coin, data, onOpen, expanded, setExpanded }: { coin: string; data: SymbolCallers; onOpen: (wallet: string) => void; expanded: boolean; setExpanded: (fn: (x: boolean) => boolean) => void }) {
   const rows = expanded ? data.callers : data.callers.slice(0, 5);
-  const leanColor = data.side === "LONG" ? POS : data.side === "SHORT" ? NEG : MUT;
-  const leanLabel = data.side === "SPLIT" ? "SPLIT" : `${Math.abs(Math.round(data.lean * 100))}% ${data.side}`;
+  // A plain count, no lean: the strip used to crown a merit-weighted "70% LONG" in green. Every graded
+  // caller is net-negative today, so no side split until the verified board has a net-positive caller
+  // (borst, 2026-10-12). Each row's side is a label, monochrome (green/red is for money only).
   const nCallers = data.participants;
   return (
     <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
         <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>Callers on {coin}</span>
-        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: leanColor, background: leanColor + "14", border: `1px solid ${leanColor}44`, borderRadius: 5, padding: "2px 6px" }}>{leanLabel}</span>
+        <span style={{ marginLeft: "auto", fontFamily: UI, fontSize: 12.5, color: FOG }}>{nCallers} positioned</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {rows.map((c) => {
-          const long = c.direction === "LONG";
           return (
             <button key={c.wallet} onClick={() => onOpen(c.wallet)} className="nx-card-interactive"
               style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: `1px solid ${BORD2}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer" }}>
@@ -375,12 +414,12 @@ function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCaller
                 : <div style={{ width: 20, height: 20, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 10, color: MUT }}>{(c.displayName || c.wallet).slice(0, 1).toUpperCase()}</div>}
               <span style={{ fontFamily: MONO, fontSize: 10.5, color: BRIGHT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 92 }}>{c.displayName || shortAddr(c.wallet)}</span>
               {c.meritRank?.glyph && (
-                <span title={`${c.meritRank.title} caller`} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: POS, flexShrink: 0 }}>{c.meritRank.glyph}</span>
+                <span title={`${c.meritRank.title} caller`} style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: FOG, flexShrink: 0 }}>{c.meritRank.glyph}</span>
               )}
-              {c.record && (
-                <span style={{ fontFamily: MONO, fontSize: 10, color: FAINT, flexShrink: 0, whiteSpace: "nowrap" }}>{c.record.winRate}% · {c.record.avgR >= 0 ? "+" : ""}{c.record.avgR}R</span>
-              )}
-              <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: long ? POS : NEG, background: (long ? POS : NEG) + "18", border: `1px solid ${(long ? POS : NEG)}44`, borderRadius: 5, padding: "2px 6px", flexShrink: 0 }}>{c.direction}</span>
+              {/* Win rate only ever beside its R and sample (callerRecordLine); no record reads "ungraded". */}
+              <span title={c.record ? "Graded from public price: closed public calls, win rate, average R" : "No graded calls yet"}
+                style={{ fontFamily: MONO, fontSize: 10, color: FAINT, flexShrink: 0, whiteSpace: "nowrap" }}>{callerRecordLine(c.record) as string}</span>
+              <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: FOG, border: `1px solid ${BORD}`, borderRadius: 5, padding: "2px 6px", flexShrink: 0 }}>{c.direction}</span>
             </button>
           );
         })}
@@ -388,7 +427,7 @@ function CallersStrip({ coin, data, onOpen }: { coin: string; data: SymbolCaller
       {data.callers.length > 5 && (
         <button onClick={() => setExpanded((x) => !x)} style={{ width: "100%", marginTop: 8, background: "none", border: "none", color: MUT, fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer", padding: "4px 0" }}>{expanded ? "show less ▴" : `+${data.callers.length - 5} more ▾`}</button>
       )}
-      <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 8, lineHeight: 1.4 }}>{nCallers} positioned · open positions + active public calls, graded on public price</div>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 8, lineHeight: 1.4 }}>Open positions + active public calls. Records graded on public price.</div>
     </div>
   );
 }
@@ -411,6 +450,16 @@ export default function TokenTerminal() {
   const isMobile = useIsMobile();
   const { query } = useParams();
   const navigate = useNavigate();
+  // The bridge prompt hands the cross-chain card a destination (+ the user's own Solana address)
+  // through router state, never the URL.
+  const location = useLocation();
+  const xcPreset = (location.state as { xcTo?: string; xcRecipient?: string } | null) || null;
+  const xcRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!xcPreset?.xcTo || query) return;
+    const t = setTimeout(() => xcRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    return () => clearTimeout(t);
+  }, [xcPreset?.xcTo, query]);
   const [searchParams] = useSearchParams();
   // The board's "Trade on Spot" deep-links /token/:sym?venue=spot so a LISTED perp opens on the
   // Spot door, not its own book. Non-perp tokens are spot-only regardless (the toggle is perp-only).
@@ -423,6 +472,10 @@ export default function TokenTerminal() {
   // user out to the /perp book, we KEEP them in the Spot terminal and offer WooFi (majors swap) +
   // a link to the perp book. Holds the base symbol when that's the case; null otherwise.
   const [perpOnly, setPerpOnly] = useState<string | null>(null);
+  // Other pairs the search found (ranked by liquidity) → the "Not this one?" line under the card.
+  const [alts, setAlts] = useState<TokenPair[]>([]);
+  // Recently viewed: the last 5 tokens opened in this browser (spotDiscovery.mjs). No wallet needed.
+  const [viewed, setViewed] = useState(() => readViewed(typeof window !== "undefined" ? (() => { try { return window.localStorage; } catch { return null; } })() : null));
   const [candles, setCandles] = useState<Candle[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [tf, setTf] = useState(1); // index into TIMEFRAMES (1H default)
@@ -465,6 +518,12 @@ export default function TokenTerminal() {
   // Credible callers positioned on THIS coin (open positions + active public calls) — the ◆ NEXUS
   // "who's on it" strip. Listed markets only (same honesty gate as the signal); null = render nothing.
   const [callers, setCallers] = useState<SymbolCallers | null>(null);
+  const [callersOpen, setCallersOpen] = useState(false); // the callers card shows all rows (the hero count opens it)
+  // GeckoTerminal's logo when DexScreener's pair has none (the header falls back to a first letter).
+  const [gtLogo, setGtLogo] = useState<string | null>(null);
+  // The connected wallet's coins with an open public call → dots on the Recent chips. null = not read.
+  const [openCoins, setOpenCoins] = useState<Set<string> | null>(null);
+  const [postingCall, setPostingCall] = useState(false);
 
   // Connected wallet → read-only spot holdings (no txs). Disconnected → no strip.
   const { state: acct } = useAccount();
@@ -487,9 +546,9 @@ export default function TokenTerminal() {
 
   // ── resolve the searched token → the deepest pair ──
   useEffect(() => {
-    if (!query) { setPair(null); setNotFound(false); setPerpOnly(null); return; }
+    if (!query) { setPair(null); setNotFound(false); setPerpOnly(null); setAlts([]); return; }
     let alive = true;
-    setLoading(true); setNotFound(false); setPerpOnly(null);
+    setLoading(true); setNotFound(false); setPerpOnly(null); setAlts([]);
     // independent watchdog: never leave the terminal on a spinner if the fetch hangs
     const paint = setTimeout(() => { if (alive) setLoading(false); }, 6500);
     // DexScreener 429s/timeouts return an empty set → a FALSE "no token found" for a real ticker
@@ -501,8 +560,9 @@ export default function TokenTerminal() {
       return r;
     };
     resolveToken()
-      .then(({ best, perpBase }) => {
+      .then(({ best, alts: others, perpBase }) => {
         if (!alive) return;
+        setAlts(others || []);
         // A perp-preferred major (BTC/ETH/ZEC/POL/…) has no trusted DEX spot pair. We no longer
         // bounce the user out to the /perp book — WooFi now fills majors in-app, so KEEP them in
         // the Spot terminal (perpOnly card) with a WooFi swap + a link to the perp book.
@@ -525,6 +585,30 @@ export default function TokenTerminal() {
     const base = query.trim().replace(/^\$/, "").replace(/^PERP_/i, "").replace(/_USDC$/i, "").toUpperCase();
     if (base && perpSet.has(base)) { setPerpOnly(base); setNotFound(false); }
   }, [notFound, query, perpSet, loading]);
+
+  // ── logo fallback ── DexScreener carries no image for many tokens; GeckoTerminal often does.
+  useEffect(() => {
+    setGtLogo(null);
+    if (!pair?.baseAddress || pair.imageUrl) return;
+    let alive = true;
+    tokenLogo(pair.chainId, pair.baseAddress).then((u) => { if (alive) setGtLogo(u); }).catch(() => { /* first letter */ });
+    return () => { alive = false; };
+  }, [pair?.baseAddress, pair?.chainId, pair?.imageUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  const logoSrc = pair ? (pair.imageUrl || gtLogo) : null;
+
+  // ── recently viewed ── a resolved token (by chain + CA) or a perp-only major (by ticker). Its logo rides
+  // along (checked against the image hosts again on every read) so the chips and the majors row can show it.
+  useEffect(() => {
+    const entry = pair?.baseAddress
+      ? { kind: "spot", chain: pair.chainId, ca: pair.baseAddress, sym: pair.baseSymbol, img: logoSrc || undefined }
+      : perpOnly && !pair ? { kind: "perp", sym: perpOnly } : null;
+    if (!entry) return;
+    setViewed((prev) => {
+      const next = addViewed(prev, entry);
+      try { writeViewed(window.localStorage, next); } catch { /* storage blocked */ }
+      return next;
+    });
+  }, [pair?.baseAddress, pair?.chainId, pair?.baseSymbol, perpOnly, logoSrc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── chart for the resolved pair (+ on timeframe change) ──
   useEffect(() => {
@@ -590,6 +674,7 @@ export default function TokenTerminal() {
   // ── callers positioned on this coin — the ◆ NEXUS "who's on it" strip (listed perps only) ──
   // Same honesty gate as the signal: only a market we list has a caller graph to show. Polls 45s;
   // fail-soft (an uncalled coin returns an empty list → the strip renders nothing).
+  useEffect(() => { setCallersOpen(false); }, [pair?.baseSymbol]);
   useEffect(() => {
     const sym = pair?.baseSymbol;
     if (!sym || !perpSet.has(sym)) { setCallers(null); return; }
@@ -624,6 +709,15 @@ export default function TokenTerminal() {
   }, [navigate]);
 
   const isPerp = !!pair && perpSet.has(pair.baseSymbol);
+  // "Not this one?": after a TICKER search, the deepest different token the search also found.
+  const addrQuery = !!query && (/^0x[a-fA-F0-9]{40}$/.test(query.trim()) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(query.trim()));
+  const dym = useMemo(() => didYouMean(pair, alts, { addressQuery: addrQuery }) as TokenPair | null, [pair, alts, addrQuery]);
+  // Padded (liquidity ≈ market cap) or thin pool: a ticker search already skips these; a pasted
+  // address still opens the exact token, with this one line under the card.
+  const caution = useMemo(() => (pair && !perpOnly ? (poolCaution(pair) as string | null) : null), [pair, perpOnly]);
+  // Recently viewed, minus the token on screen.
+  const viewedChips = useMemo(() => viewed.filter((v) => !(pair && v.kind === "spot" && v.ca === pair.baseAddress) && !(perpOnly && v.kind === "perp" && v.sym === perpOnly)), [viewed, pair, perpOnly]);
+  const clearViewed = useCallback(() => { setViewed([]); try { writeViewed(window.localStorage, []); } catch { /* storage blocked */ } }, []);
   const route = useMemo(() => (pair ? tradeLink(pair, isPerp) : null), [pair, isPerp]);
   // The SPOT route regardless of perp-listing — so a perp token can ALSO be spot-traded (the
   // Perp/Spot optionality). `route` above stays perp-aware for the Long/Short CTA.
@@ -863,6 +957,47 @@ export default function TokenTerminal() {
     if (isSolToken && solTokenBal != null && solTokenBal > 0 && pair?.baseAddress) rows.push(mk(pair.baseSymbol, solTokenBal, (pair.priceUsd || 0) > 0 ? solTokenBal * (pair.priceUsd as number) : null, pair.baseAddress));
     return rows;
   }, [isSolToken, solSigner.address, solBalance, usdcBal, solTokenBal, solUsd, pair]);
+
+  // ── dots on the Recent chips ── an open public call on that coin (read from the wallet's call status),
+  // or a buy of that exact token in this browser (holdings.ts recents). Read-only; no wallet → no dots.
+  const callWallet = wallet || solSigner.address || null;
+  useEffect(() => {
+    if (!callWallet) { setOpenCoins(null); return; }
+    let alive = true;
+    openCallCoins(callWallet).then((c) => { if (alive) setOpenCoins(c); }).catch(() => { if (alive) setOpenCoins(null); });
+    return () => { alive = false; };
+  }, [callWallet]);
+  const chipDots = useMemo(() => chipMarks(viewed, {
+    openCoins: openCoins ?? undefined,
+    listed: perpSet,
+    buys: wallet ? getRecents(wallet) : [],
+  }) as Record<string, { call: boolean; buy: boolean }>, [viewed, openCoins, perpSet, wallet, holdings]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── "Post a call on X" ── opens the Lab's call draft with the entry at the Orderly mark (read now), so a
+  // call published from it fills at the post. No side, no levels: the trader sets those. A failed mark read
+  // still opens the draft, with no entry.
+  const postCall = useCallback(async (coin: string) => {
+    if (postingCall) return;
+    setPostingCall(true);
+    let mark: number | null = null;
+    try { mark = await perpMark(coin); } catch { /* draft without an entry */ }
+    const d = callDraft({ coin, mark });
+    setPostingCall(false);
+    if (!d) return;
+    try { window.localStorage.setItem("nexus_thesis_draft", JSON.stringify(d)); } catch { /* private mode */ }
+    try { window.dispatchEvent(new CustomEvent("nexus:lab-tab", { detail: { tab: "thesis" } })); window.dispatchEvent(new CustomEvent("nexus:thesis-draft")); } catch { /* ignore */ }
+    navigate("/lab?tab=thesis");
+  }, [postingCall, navigate]);
+  // The "Nexus perp" badge: the ticket on our book, opened and in view (funding sits in its header).
+  const openPerpTicket = useCallback(() => {
+    setVenue("perp");
+    setTradeOpen(true);
+    setTimeout(() => document.getElementById("trade-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }, []);
+  // Open the cross-chain card preset to USDC on Solana, paying this wallet (router state, never the URL).
+  const getUsdcOnSolana = useCallback(() => {
+    navigate("/token", { state: { xcTo: "USDC.sol", xcRecipient: solSigner.address || "" } });
+  }, [navigate, solSigner.address]);
   // YOUR POSITION (from tracked in-app buys) — invested, avg entry, and P&L on the TRACKED tokens
   // (honest: we only know what you bought in-app, not external cost basis). null when nothing tracked.
   const position = useMemo(() => {
@@ -1202,7 +1337,23 @@ export default function TokenTerminal() {
             ‹ Spot home
           </button>
         )}
-        {(wallet || solSigner.address) && <HoldingsStrip holdings={holdings.length ? holdings : solHoldings} loading={holdingsLoading || (!!solSigner.address && solHoldings.length === 0 && solBalance == null && solBalanceErr == null)} onOpen={(h) => navigate(`/token/${encodeURIComponent(h.address || h.sym)}`)} />}
+        {(wallet || solSigner.address) && <HoldingsStrip holdings={holdings.length ? holdings : solHoldings} loading={holdingsLoading || (!!solSigner.address && solHoldings.length === 0 && solBalance == null && solBalanceErr == null)} onOpen={(h) => navigate(`/token/${encodeURIComponent(h.address || h.sym)}`)}
+          empty={
+            // Empty wallet → the next real action, never a dead end. A Solana wallet with nothing to pay
+            // with gets USDC on Solana (the cross-chain card, preset); anyone else can run the agent on
+            // paper, which needs no funds.
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+              {solSigner.address && !wallet && needsSolanaFunds({ sol: solBalance, usdc: usdcBal })
+                ? <>
+                    <span style={{ fontFamily: UI, fontSize: 12.5, color: MUT }}>No SOL or USDC on Solana yet.</span>
+                    <button type="button" onClick={getUsdcOnSolana} style={NEXT_ACTION}>Get USDC on Solana →</button>
+                  </>
+                : <>
+                    <span style={{ fontFamily: UI, fontSize: 12.5, color: MUT }}>No spot tokens in this wallet.</span>
+                    <button type="button" onClick={() => navigate("/lab?tab=agent")} style={NEXT_ACTION}>Run the agent on paper meanwhile. No funds needed →</button>
+                  </>}
+            </div>
+          } />}
         {/* ── SEARCH ── Definitive's "Search CA or Token" */}
         <form onSubmit={(e) => { e.preventDefault(); submit(input); }} style={{ display: "flex", gap: 8, marginBottom: 16, maxWidth: 640 }}>
           {/* Relative wrapper so the one-tap clear (✕) sits inside the field — wiping a long
@@ -1223,22 +1374,46 @@ export default function TokenTerminal() {
           </div>
           <button type="submit" style={{ flexShrink: 0, background: BRIGHT, color: "#0a0a0b", border: "none", borderRadius: 10, fontFamily: UI, fontSize: 13.5, fontWeight: 600, padding: "0 20px", cursor: "pointer" }}>Search</button>
         </form>
+        {/* ── RECENTLY VIEWED ── the last tokens opened in this browser, reopened by contract address. */}
+        {viewedChips.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", margin: "-6px 0 16px", maxWidth: 640 }}>
+            <span style={{ fontFamily: UI, fontSize: 12, color: FAINT, marginRight: 2 }}>Recent</span>
+            {viewedChips.map((v) => {
+              const dot = chipDots[chipKey(v) as string];
+              const dotTitle = dot ? [dot.call ? `you have an open public call on ${v.sym}` : "", dot.buy ? "you bought this token here" : ""].filter(Boolean).join(" · ") : "";
+              return (
+                <Pill key={v.kind === "perp" ? `perp:${v.sym}` : `${v.chain}:${v.ca}`} size="sm" onClick={() => navigate(viewedHref(v))}
+                  title={`${v.kind === "perp" ? `${v.sym} · Nexus perp` : `${v.sym} · ${v.chain} · ${v.ca}`}${dotTitle ? ` · ${dotTitle}` : ""}`}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    <TokenLogo src={v.kind === "spot" ? (v as { img?: string }).img : null} sym={v.sym} size={14} />
+                    {v.sym}
+                    {/* A dot = your open call or your buy (white, not green: it's a marker, not money). */}
+                    {dot && <span aria-label={dotTitle} style={{ width: 5, height: 5, borderRadius: "50%", background: C.brand, flexShrink: 0 }} />}
+                  </span>
+                </Pill>
+              );
+            })}
+            <button type="button" onClick={clearViewed} style={{ background: "none", border: "none", color: FAINT, fontFamily: UI, fontSize: 12, cursor: "pointer", padding: "4px 6px" }}>Clear</button>
+          </div>
+        )}
 
         {/* ── LANDING (no query) — live MOVERS discovery first, then the blurb + majors ── */}
         {!query && (
           <div>
+            {/* Majors: Solana names open by their mint, so a guest can't land on a same-ticker copy.
+                No wallet → above Movers (nothing else to start from); a wallet → below, its own chips lead. */}
+            {!(wallet || solSigner.address) && <MajorsRow onOpen={(href) => navigate(href)} viewed={viewed} />}
             <MoversRail onPick={(s) => submit(s)} />
             <div style={{ maxWidth: 640 }}>
               <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 12 }}>
                 If Nexus lists it, you trade it here. If not, you’re routed to its pool.
               </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {["BTC", "ETH", "SOL", "HYPE", "NEXUS"].map((s) => (
-                  <Pill key={s} onClick={() => submit(s)}>{s}</Pill>
-                ))}
-              </div>
+              {(wallet || solSigner.address) && <MajorsRow onOpen={(href) => navigate(href)} viewed={viewed} />}
             </div>
-            <CrossChainCard walletAddress={wallet} provider={provider} />
+            <div id="cross-chain" ref={xcRef}>
+              {/* keyed on the preset so "Get USDC on Solana" from this page re-opens the card preset (its in-flight transfers persist + resume) */}
+              <CrossChainCard key={`xc:${xcPreset?.xcTo || ""}:${xcPreset?.xcRecipient || ""}`} walletAddress={wallet} provider={provider} initialTo={xcPreset?.xcTo} initialRecipient={xcPreset?.xcRecipient} />
+            </div>
           </div>
         )}
 
@@ -1274,7 +1449,7 @@ export default function TokenTerminal() {
               </div>
             </div>
             <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 16 }}>
-              There’s no trusted spot pool to price <b style={{ color: BRIGHT }}>{perpOnly}</b> here, so we don’t fake one. Swap the majors in-app via <b style={{ color: BRIGHT }}>WooFi</b>, or trade <b style={{ color: BRIGHT }}>{perpOnly}</b> on the Nexus perp book — graded like every Nexus position.
+              There’s no trusted spot pool to price <b style={{ color: BRIGHT }}>{perpOnly}</b> here, so we don’t fake one. Swap the majors in-app via <b style={{ color: BRIGHT }}>WooFi</b>, or trade <b style={{ color: BRIGHT }}>{perpOnly}</b> on the Nexus perp book. A public call on it is graded from public price.
             </div>
             <button onClick={() => setWooFiOpen(true)} className="nx-press"
               style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#0a0a0b", background: POS, border: "none", borderRadius: 9, padding: "13px 0", cursor: "pointer", marginBottom: 10 }}>
@@ -1283,6 +1458,9 @@ export default function TokenTerminal() {
             <button onClick={() => navigate(`/perp/PERP_${perpOnly}_USDC`)} className="nx-press"
               style={{ width: "100%", textAlign: "center", fontFamily: UI, fontSize: 13, fontWeight: 600, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 9, padding: "12px 0", cursor: "pointer" }}>
               Trade {perpOnly} on the Nexus perp book →
+            </button>
+            <button type="button" onClick={() => postCall(perpOnly)} disabled={postingCall} style={{ ...NEXT_ACTION, marginTop: 12 }}>
+              {postingCall ? "Reading the mark…" : `Post a call on ${perpOnly} →`}
             </button>
           </div>
         )}
@@ -1293,18 +1471,20 @@ export default function TokenTerminal() {
             {/* header: identity + stats */}
             <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", padding: isMobile ? "14px" : "16px 18px", background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, marginBottom: 12, rowGap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                {pair.imageUrl
-                  ? <img src={pair.imageUrl} alt="" width={36} height={36} style={{ borderRadius: "50%", flexShrink: 0, background: BG }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-                  : <div style={{ width: 36, height: 36, borderRadius: "50%", background: BG, border: `1px solid ${BORD}`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: MONO, fontSize: 14, color: MUT }}>{pair.baseSymbol.slice(0, 1)}</div>}
+                <TokenLogo src={logoSrc} sym={pair.baseSymbol} size={36} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", rowGap: 4 }}>
                     <span style={{ fontFamily: UI, fontSize: 19, fontWeight: 600, color: BRIGHT }}>{pair.baseSymbol}</span>
                     <span style={{ fontFamily: UI, fontSize: 13, color: FAINT }}>/ {pair.quoteSymbol}</span>
                     {/* chain badge — a bare-ticker search picks the deepest pair across ALL chains, so
                         WETH can resolve to Solana when you meant Base; naming the chain here (+ the CA
                         below, + the switchable "Other pairs" chips) makes which token you're on unambiguous. */}
                     <span style={{ fontFamily: UI, fontSize: 11, fontWeight: 600, color: FOG, border: `1px solid ${BORD}`, borderRadius: 10, padding: "1px 8px", textTransform: "capitalize", alignSelf: "center" }}>{pair.chainId}</span>
-                    {isPerp && <span style={{ fontFamily: UI, fontSize: 11, fontWeight: 600, color: C.brand, border: `1px solid ${C.brand}55`, borderRadius: 10, padding: "1px 8px", alignSelf: "center" }}>Nexus perp</span>}
+                    {/* The badge opens the perp ticket (funding shown in its header); a call, not a trade, is what gets graded. */}
+                    {isPerp && <button type="button" onClick={openPerpTicket} title="Trade it on the Nexus perp book"
+                      style={{ fontFamily: UI, fontSize: 11, fontWeight: 600, color: C.brand, background: "none", border: `1px solid ${C.brand}55`, borderRadius: 10, padding: "1px 8px", alignSelf: "center", cursor: "pointer" }}>Nexus perp</button>}
+                    {isPerp && <button type="button" onClick={() => postCall(pair.baseSymbol)} disabled={postingCall} title="Open a call draft in the Lab, entry at the Orderly mark"
+                      style={{ ...NEXT_ACTION, fontSize: 12, padding: "0 2px", alignSelf: "center" }}>{postingCall ? "Reading the mark…" : `Post a call on ${pair.baseSymbol} →`}</button>}
                   </div>
                   <div style={{ fontFamily: UI, fontSize: 12.5, color: MUT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200, marginTop: 2 }}>{pair.baseName}</div>
                 </div>
@@ -1335,6 +1515,30 @@ export default function TokenTerminal() {
                 {pair.socials.filter((s) => /twitter|x/i.test(s.type)).slice(0, 1).map((s) => <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" className="nx-press" style={{ display: "inline-flex", alignItems: "center", fontFamily: UI, fontSize: 12.5, color: FOG, textDecoration: "none", border: `1px solid ${BORD}`, borderRadius: 15, padding: "6px 12px", lineHeight: 1 }}>𝕏 ↗</a>)}
               </div>
             </div>
+
+            {/* Under the card: another token the ticker search found, and a plain count of open public
+                calls on this coin (no long/short split until a verified caller is net-positive). */}
+            {(dym || (callers && openCallCount(callers) > 0) || caution) && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "-4px 0 12px", padding: "0 4px" }}>
+                {caution && (
+                  <div style={{ fontFamily: UI, fontSize: 12.5, color: SIGNAL.watch, lineHeight: 1.5 }}>{caution}</div>
+                )}
+                {callers && openCallCount(callers) > 0 && (
+                  <button type="button" onClick={() => { setCallersOpen(true); setTimeout(() => document.getElementById("callers-on-coin")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }}
+                    style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontFamily: UI, fontSize: 12.5, color: FOG, cursor: "pointer", textAlign: "left" }}>
+                    {callCountLine(openCallCount(callers), pair.baseSymbol)} · <span style={{ color: BRIGHT }}>see who</span>
+                  </button>
+                )}
+                {dym && (
+                  <button type="button" onClick={() => navigate(`/token/${encodeURIComponent(dym.baseAddress)}`)}
+                    style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontFamily: UI, fontSize: 12.5, color: MUT, cursor: "pointer", textAlign: "left", lineHeight: 1.5 }}>
+                    Not this one? <span style={{ display: "inline-flex", verticalAlign: "-3px", marginRight: 4 }}><TokenLogo src={dym.imageUrl} sym={dym.baseSymbol} size={14} /></span><span style={{ color: BRIGHT }}>{dym.baseSymbol}</span> on <span style={{ textTransform: "capitalize" }}>{dym.chainId}</span>
+                    {" · "}<span style={{ fontFamily: MONO, fontSize: 11.5 }}>{shortAddr(dym.baseAddress)}</span>
+                    {" · "}{fmtUsd(dym.liquidityUsd)} liquidity →
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* body: chart + tape (left) · trade panel (right) */}
             <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: "1fr 320px", gap: 12, alignItems: "start" }}>
@@ -1451,17 +1655,21 @@ export default function TokenTerminal() {
 
                 {sig ? (() => {
                   const r = nexusReadLabel(sig);
+                  // One line: funding + who pays + open public calls + "a mechanical rule, not graded." The call
+                  // count is left out (never shown as 0) until the callers read lands.
+                  const brief = readBrief({ fundingAnnualPct: sig.fundingAnnualPct, callCount: callers ? openCallCount(callers) : undefined }) as string | null;
                   return (
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", color: r.color, marginBottom: 4 }}>{r.label}</div>
-                      <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: FOG }}>{r.sub}</div>
+                      {brief && <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: FOG }}>{brief}</div>}
+                      <div style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.55, color: MUT, marginTop: 2 }}>{r.why}</div>
                     </div>
                   );
                 })() : (
                   <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: FOG, marginBottom: 14 }}>
                     {isPerp
                       ? "Reading the funding tape for this market…"
-                      : <>Nexus grades funding and positioning on the markets it lists — {pair.baseSymbol} isn’t one, so there’s no graded read to show. Ask below for what can be seen from public data.</>}
+                      : <>Nexus reads funding and positioning on the markets it lists. {pair.baseSymbol} isn’t one, so there’s no read to show. Ask below for what can be seen from public data.</>}
                   </div>
                 )}
 
@@ -1476,14 +1684,33 @@ export default function TokenTerminal() {
 
               {/* who's positioned on this coin — credible callers, graded, not self-reported */}
               {isPerp && callers && callers.callers.length > 0 && (
-                <CallersStrip coin={pair.baseSymbol} data={callers} onOpen={(w) => navigate(`/trader/${w}`)} />
+                <div id="callers-on-coin"><CallersStrip coin={pair.baseSymbol} data={callers} onOpen={(w) => navigate(`/trader/${w}`)} expanded={callersOpen} setExpanded={setCallersOpen} /></div>
+              )}
+              {/* Nobody on it yet → the next real action is a call, which is what gets graded. */}
+              {isPerp && callers && callers.callers.length === 0 && (
+                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                  <div style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT, marginBottom: 4 }}>Callers on {pair.baseSymbol}</div>
+                  <div style={{ fontFamily: UI, fontSize: 12.5, color: MUT, marginBottom: 6 }}>No open positions or public calls on {pair.baseSymbol} right now.</div>
+                  <button type="button" onClick={() => postCall(pair.baseSymbol)} disabled={postingCall} style={NEXT_ACTION}>{postingCall ? "Reading the mark…" : `Post the first call on ${pair.baseSymbol} →`}</button>
+                </div>
               )}
 
               {/* trade panel — honest routing, no fake fills */}
-              <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14 }}>
+              <div id="trade-ticket" style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, scrollMarginTop: 72 }}>
                 {/* collapse toggle — fold the buy/sell panel to give the chart + tape the room */}
                 <button onClick={() => setTradeOpen((o) => !o)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", padding: 0, marginBottom: tradeOpen ? 12 : 0, cursor: "pointer" }}>
-                  <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>{showPerp ? "Trade perp" : "Trade spot"}</span>
+                  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, minWidth: 0 }}>
+                    <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>{showPerp ? "Trade perp" : "Trade spot"}</span>
+                    {/* On our book, funding is part of the cost of holding: show it where the size is chosen. */}
+                    {(() => {
+                      // On our book, funding is part of the cost of holding: show it where the size is chosen. The plain
+                      // open-call count rides beside it (no side split), so it sits by the ticket on desktop too.
+                      const fund = showPerp && sig ? (fundingPayLine(sig.fundingAnnualPct) as string | null) : null;
+                      const n = callers ? openCallCount(callers) : 0;
+                      const parts = [fund, n > 0 ? `${n} public call${n === 1 ? "" : "s"} open` : null].filter(Boolean);
+                      return parts.length ? <span style={{ fontFamily: UI, fontSize: 12, color: MUT, textAlign: "left" }}>{parts.join(" · ")}</span> : null;
+                    })()}
+                  </span>
                   <Chevron open={tradeOpen} />
                 </button>
                 {tradeOpen && (<>
@@ -1641,6 +1868,13 @@ export default function TokenTerminal() {
                             ))}
                           </span>
                         </div>
+                        {needsSolanaFunds({ sol: solBalance, usdc: usdcBal }) && (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", background: CARD, border: `1px solid ${BORD}`, borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+                            <span style={{ fontFamily: UI, fontSize: 12.5, color: FOG }}>No SOL or USDC on Solana to pay with.</span>
+                            <button type="button" onClick={() => navigate("/token", { state: { xcTo: "USDC.sol", xcRecipient: solSigner.address || "" } })}
+                              style={{ background: "none", border: "none", padding: 0, fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: BRIGHT, cursor: "pointer" }}>Get USDC on Solana →</button>
+                          </div>
+                        )}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", color: FAINT, textTransform: "uppercase", marginBottom: 5 }}>
                           <span>{solPayWith === "usdc"
                             ? (usdcBal != null ? `Bal ${usdcBal.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC` : "USDC bal —")
@@ -1736,7 +1970,7 @@ export default function TokenTerminal() {
                 {/* honesty: where the order actually fills */}
                 <div style={{ fontFamily: UI, fontSize: 12, lineHeight: 1.55, color: MUT, marginTop: 12 }}>
                   {showPerp
-                    ? <>Nexus lists {pair.baseSymbol} as a perp — trade it here on our book, graded like every Nexus position{isPerp ? <>, or switch to <b style={{ color: MUT }}>Spot</b> to buy/sell the token itself</> : null}.</>
+                    ? <>Nexus lists {pair.baseSymbol} as a perp. Trade it here on our book{isPerp ? <>, or switch to <b style={{ color: MUT }}>Spot</b> to buy/sell the token itself</> : null}.</>
                     : swapState.kind === "quote"
                     ? ((side === "buy" ? canInAppBuy : canInAppSell)
                       ? <>Route + price from <b style={{ color: MUT }}>{swapState.quoteRouter}</b>. Your wallet signs. Exact-amount approval. Minimum received enforced on-chain.</>
@@ -1792,7 +2026,10 @@ export default function TokenTerminal() {
               {takesLoading ? (
                 <div style={{ fontFamily: UI, fontSize: 13, color: MUT, padding: "12px 0" }}>Loading takes…</div>
               ) : takes.length === 0 ? (
-                <div style={{ fontFamily: UI, fontSize: 13, color: MUT, padding: "12px 0" }}>No takes yet — drop the first read on {pair.baseSymbol}.</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "12px 0" }}>
+                  <span style={{ fontFamily: UI, fontSize: 13, color: MUT }}>{wallet ? "No takes yet. Add the first one above." : `No takes on ${pair.baseSymbol} yet.`}</span>
+                  {isPerp && <button type="button" onClick={() => postCall(pair.baseSymbol)} disabled={postingCall} style={NEXT_ACTION}>Takes aren’t graded. A call is: post one on {pair.baseSymbol} →</button>}
+                </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {takes.map((tk) => {

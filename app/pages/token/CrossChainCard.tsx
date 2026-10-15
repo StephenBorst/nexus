@@ -17,7 +17,7 @@
 //      SUCCESS reads as delivered; a refund goes back to the user's own address.
 import { useEffect, useRef, useState } from "react";
 import {
-  ONE_CLICK_API, XC_ASSETS, CHAIN_NAME, STATUS_TEXT, TERMINAL,
+  ONE_CLICK_API, XC_ASSETS, fetchOneClickQuote, CHAIN_NAME, STATUS_TEXT, TERMINAL,
   checkQuote, buildDepositTx, recipientFitsChain, toUnits, fromUnits,
   xcAppFees,
 } from "@/lib/nearIntents.mjs";
@@ -67,14 +67,18 @@ async function originBalance(provider: Eip1193, token: string | null, owner: str
   } catch { return null; }
 }
 
-export function CrossChainCard({ walletAddress: connected, provider }: { walletAddress: string | null; provider: Eip1193 | undefined }) {
+// initialTo / initialRecipient: a PRESET from the Spot page's "Get USDC on Solana" prompt — the
+// destination and the user's own address, filled in. Nothing is sent until the usual review; the
+// recipient is shape-checked like a typed one and is part of the signed quote checkQuote verifies.
+export function CrossChainCard({ walletAddress: connected, provider, initialTo, initialRecipient }: { walletAddress: string | null; provider: Eip1193 | undefined; initialTo?: string; initialRecipient?: string }) {
   // The transfer is signed by an EVM wallet; a Solana-only connection can receive (typed
   // address) but not send from here.
   const walletAddress = connected && /^0x[0-9a-fA-F]{40}$/.test(connected) ? connected : null;
   const [from, setFrom] = useState<AssetKey>("USDC.arb");
-  const [to, setTo] = useState<AssetKey>("SOL.sol");
+  const presetTo = initialTo && (KEYS as string[]).includes(initialTo) && !XC_ASSETS[initialTo as AssetKey].origin ? (initialTo as AssetKey) : null;
+  const [to, setTo] = useState<AssetKey>(presetTo || "SOL.sol");
   const [amount, setAmount] = useState("");
-  const [typedRecipient, setTypedRecipient] = useState("");
+  const [typedRecipient, setTypedRecipient] = useState(presetTo && typeof initialRecipient === "string" ? initialRecipient.trim().slice(0, 64) : "");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [review, setReview] = useState<Review | null>(null);
@@ -116,7 +120,7 @@ export function CrossChainCard({ walletAddress: connected, provider }: { walletA
         refundTo: walletAddress, refundType: "ORIGIN_CHAIN", deadline,
         ...(appFees.length ? { appFees } : {}),
       };
-      const r = await fetch(`${ONE_CLICK_API}/v0/quote`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const { res: r } = await fetchOneClickQuote(body);
       const j = await r.json().catch(() => null);
       if (!r.ok || !j) throw new Error((j && typeof j.message === "string" ? j.message : "No quote") + ". Nothing was sent.");
       const chk = checkQuote(j, {

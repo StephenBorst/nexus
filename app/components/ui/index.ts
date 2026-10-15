@@ -7,3 +7,4 @@ export { Stat } from "./Stat";
 export { Tabs, type TabItem } from "./Tabs";
 export { StripHead } from "./StripHead";
 export { Chevron } from "./Chevron";
+export { TEXT_ACTION, TEXT_ACTION_BAR, TEXT_ACTION_CLASS } from "./textAction";

@@ -674,11 +674,10 @@ export function AgentView() {
               background: tab === t ? "#1a1a1e" : "none",
               border: `1px solid ${tab === t ? "#ededf0" : "transparent"}`,
               color: tab === t ? "#ededf0" : "#71717a",
-              fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "4px 10px",
-              cursor: "pointer", letterSpacing: "0.05em", borderRadius: 3,
-              textTransform: "uppercase",
+              fontFamily: "var(--nx-font-ui)", fontSize: 11.5, padding: "4px 10px",
+              cursor: "pointer", borderRadius: 3,
             }}>
-              {t === "leaderboard" ? "TOP AGENTS" : t}
+              {t === "leaderboard" ? "Top agents" : t[0].toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
@@ -716,9 +715,9 @@ export function AgentView() {
                 : "A DM on every open and close."}
             </span>
             <a href={`https://t.me/${TG_BOT}?start=${walletAddress.toLowerCase()}`} target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, fontWeight: "bold", letterSpacing: "0.05em", textDecoration: "none",
+              style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, fontWeight: "bold", textDecoration: "none",
                 color: "#6cb6ff", border: "1px solid #33333a", background: "#0f0f11", borderRadius: 3, padding: "7px 14px", flexShrink: 0 }}>
-              {tgLinked ? "MANAGE ↗" : "LINK TELEGRAM ↗"}
+              {tgLinked ? "Manage ↗" : "Link Telegram ↗"}
             </a>
           </div>
           {!tgLinked && (
@@ -731,9 +730,9 @@ export function AgentView() {
                   const cmd = `/start ${walletAddress.toLowerCase()}`;
                   navigator.clipboard?.writeText(cmd).then(() => { setTgCopied(true); setTimeout(() => setTgCopied(false), 2000); }).catch(() => {});
                 }}
-                style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, fontWeight: "bold", color: tgCopied ? "#ededf0" : "#a1a1aa",
+                style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, fontWeight: "bold", color: tgCopied ? "#ededf0" : "#a1a1aa",
                   border: `1px solid ${tgCopied ? "#33333a" : "#232327"}`, background: "#0a0a0b", borderRadius: 3, padding: "6px 12px", cursor: "pointer", flexShrink: 0 }}>
-                {tgCopied ? "COPIED ✓" : "COPY /start CMD"}
+                {tgCopied ? "Copied ✓" : "Copy /start command"}
               </button>
             </div>
           )}
@@ -790,11 +789,11 @@ export function AgentView() {
               <div style={{ display: "flex", gap: 6 }}>
                 {(["MARKET", "LIMIT"] as const).map((et) => (
                   <button key={et} onClick={() => setDirectiveEntry(et)} style={{
-                    flex: 1, padding: "7px 0", fontFamily: "var(--nx-font-mono)", fontSize: 10, cursor: "pointer", borderRadius: 3,
+                    flex: 1, padding: "7px 0", fontFamily: "var(--nx-font-ui)", fontSize: 11.5, cursor: "pointer", borderRadius: 3,
                     border: `1px solid ${directiveEntry === et ? "#ededf0" : "#232327"}`,
                     background: directiveEntry === et ? "#1a1a1e" : "#0f0f11",
                     color: directiveEntry === et ? "#ededf0" : "#52525b",
-                  }}>{et === "MARKET" ? "MARKET (fill now)" : "LIMIT (wait for price)"}</button>
+                  }}>{et === "MARKET" ? "Market (fill now)" : "Limit (wait for price)"}</button>
                 ))}
               </div>
               {directiveEntry === "LIMIT" && (
@@ -814,11 +813,11 @@ export function AgentView() {
             <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
               {(["PAPER", "AUTONOMOUS"] as const).map((m) => (
                 <button key={m} onClick={() => setDirectiveMode(m)} style={{
-                  flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11, cursor: "pointer", borderRadius: 3,
+                  flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-ui)", fontSize: 11, cursor: "pointer", borderRadius: 3,
                   border: `1px solid ${directiveMode === m ? (m === "PAPER" ? "#d4d4d8" : "#fbbf24") : "#232327"}`,
                   background: directiveMode === m ? (m === "PAPER" ? "#1a1a1e" : "#2a1a00") : "#0f0f11",
                   color: directiveMode === m ? (m === "PAPER" ? "#d4d4d8" : "#fbbf24") : "#52525b",
-                }}>{m === "PAPER" ? "PAPER (simulated)" : "AUTONOMOUS (real $)"}</button>
+                }}>{m === "PAPER" ? "Paper (simulated)" : "Autonomous (real $)"}</button>
               ))}
             </div>
             {live && (
@@ -828,15 +827,15 @@ export function AgentView() {
             )}
             <div style={{ display: "flex", gap: 6 }}>
               <button onClick={() => setDirectiveDraft(null)} disabled={directiveBusy} style={{
-                flex: 1, padding: "9px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11, cursor: "pointer", borderRadius: 3,
+                flex: 1, padding: "9px 0", fontFamily: "var(--nx-font-ui)", fontSize: 11, cursor: "pointer", borderRadius: 3,
                 border: "1px solid #232327", background: "#0a0a0b", color: "#52525b",
-              }}>DISMISS</button>
+              }}>Dismiss</button>
               <button onClick={armDirective} disabled={directiveBusy} style={{
-                flex: 2, padding: "9px 0", fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", letterSpacing: "0.06em",
+                flex: 2, padding: "9px 0", fontFamily: "var(--nx-font-ui)", fontSize: 11, fontWeight: "bold",
                 cursor: directiveBusy ? "wait" : "pointer", borderRadius: 3,
                 border: `1px solid ${live ? "#fbbf24" : "#33333a"}`, background: live ? "#2a1a00" : "#1a1a1e",
                 color: live ? "#fbbf24" : "#ededf0",
-              }}>{directiveBusy ? "ARMING…" : live ? "▶ ARM LIVE — GO LIVE" : "▶ ARM (PAPER)"}</button>
+              }}>{directiveBusy ? "Arming…" : live ? "▶ Arm live" : "▶ Arm (paper)"}</button>
             </div>
           </div>
         );
@@ -870,9 +869,9 @@ export function AgentView() {
             </div>
             {armed && (
               <button onClick={cancelDirective} disabled={directiveBusy} style={{
-                padding: "7px 16px", fontFamily: "var(--nx-font-mono)", fontSize: 10, cursor: directiveBusy ? "wait" : "pointer",
+                padding: "7px 16px", fontFamily: "var(--nx-font-ui)", fontSize: 11.5, cursor: directiveBusy ? "wait" : "pointer",
                 borderRadius: 3, border: "1px solid #4a1e22", background: "#241012", color: "#f7525f",
-              }}>{directiveBusy ? "…" : "CANCEL DIRECTIVE"}</button>
+              }}>{directiveBusy ? "…" : "Cancel directive"}</button>
             )}
             {!armed && (
               <div style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginTop: 8 }}>
@@ -1010,12 +1009,12 @@ export function AgentView() {
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <button onClick={() => { setConfig({ ...config, mode: "ASSISTED" }); setSuccess("Mode → ASSISTED. Review, then Update below."); setTimeout(() => setSuccess(null), 4000); }}
-                    style={{ background: "#ededf015", border: "1px solid #ededf0", borderRadius: 4, color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 11, padding: "8px 16px", cursor: "pointer" }}>
-                    → GO ASSISTED
+                    style={{ background: "#ededf015", border: "1px solid #ededf0", borderRadius: 4, color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 11, padding: "8px 16px", cursor: "pointer" }}>
+                    → Go assisted
                   </button>
                   <button onClick={() => { setConfig({ ...config, mode: "AUTONOMOUS" }); setSuccess("Mode → AUTONOMOUS. Needs a trading key. Review below."); setTimeout(() => setSuccess(null), 4000); }}
-                    style={{ background: "#fbbf2415", border: "1px solid #fbbf24", borderRadius: 4, color: "#fbbf24", fontFamily: "var(--nx-font-mono)", fontSize: 11, padding: "8px 16px", cursor: "pointer" }}>
-                    → GO AUTONOMOUS
+                    style={{ background: "#fbbf2415", border: "1px solid #fbbf24", borderRadius: 4, color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 11, padding: "8px 16px", cursor: "pointer" }}>
+                    → Go autonomous
                   </button>
                 </div>
                 <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#52525b", marginTop: 10, lineHeight: 1.5 }}>
@@ -1068,9 +1067,9 @@ export function AgentView() {
                     border: `1px solid ${sel ? color : "#232327"}`,
                     borderRadius: 4, padding: "10px 16px", cursor: "pointer",
                     color: sel ? color : "#71717a",
-                    fontFamily: "var(--nx-font-mono)", fontSize: 12, letterSpacing: "0.05em",
+                    fontFamily: "var(--nx-font-ui)", fontSize: 12,
                   }}>
-                    <div style={{ fontWeight: 600 }}>{mode}</div>
+                    <div style={{ fontWeight: 600 }}>{mode[0] + mode.slice(1).toLowerCase()}</div>
                     <div style={{ fontSize: 9, marginTop: 4, opacity: 0.7 }}>{desc}</div>
                   </button>
                 );
@@ -1096,12 +1095,12 @@ export function AgentView() {
             <div style={agentLabelStyle}>STRATEGY — SIGNAL MODE</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {([
-                { v: "CONFLUENCE", label: "CONFLUENCE", hint: "Funding AND OI must agree. Strictest filter. Fewest entries." },
-                { v: "FUNDING_ONLY", label: "FUNDING", hint: "Fade funding extremes only" },
-                { v: "OI_ONLY", label: "OI DIVERGENCE", hint: "Open-interest divergence only" },
-                { v: "MOMENTUM", label: "MOMENTUM", hint: "Trade WITH the move (trend-follow)" },
-                { v: "MEAN_REVERSION", label: "MEAN REVERSION", hint: "Fade the move (buy dip / sell rip)" },
-                { v: "BASIS_FADE", label: "BASIS FADE", hint: "Fade an extreme spot-perp basis. EXPERIMENTAL. Paper only." },
+                { v: "CONFLUENCE", label: "Confluence", hint: "Funding AND OI must agree. Strictest filter. Fewest entries." },
+                { v: "FUNDING_ONLY", label: "Funding", hint: "Fade funding extremes only" },
+                { v: "OI_ONLY", label: "OI divergence", hint: "Open-interest divergence only" },
+                { v: "MOMENTUM", label: "Momentum", hint: "Trade WITH the move (trend-follow)" },
+                { v: "MEAN_REVERSION", label: "Mean reversion", hint: "Fade the move (buy dip / sell rip)" },
+                { v: "BASIS_FADE", label: "Basis fade", hint: "Fade an extreme spot-perp basis. EXPERIMENTAL. Paper only." },
               ] as const).map(({ v, label, hint }) => {
                 const sel = (config.signalMode ?? "FUNDING_ONLY") === v;
                 const locked = isProStrategy(v) && !isPro;
@@ -1113,7 +1112,7 @@ export function AgentView() {
                     border: `1px solid ${sel ? "#ededf060" : "#232327"}`,
                     borderRadius: 3, padding: "4px 10px", cursor: "pointer",
                     color: locked ? "#52525b" : sel ? "#ededf0" : "#71717a",
-                    fontFamily: "var(--nx-font-mono)", fontSize: 11,
+                    fontFamily: "var(--nx-font-ui)", fontSize: 11,
                   }}>{label}{locked ? " ◆" : ""}</button>
                 );
               })}
@@ -1143,15 +1142,15 @@ export function AgentView() {
               <div style={agentLabelStyle}>CONFIRM THE FADE <span style={{ color: "#71717a" }}>— the basis stack</span></div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
                 {([
-                  { v: undefined, label: "OFF", hint: "Plain basis fade. Trade every extreme." },
+                  { v: undefined, label: "Off", hint: "Plain basis fade. Trade every extreme." },
                   { v: "CVD" as const, label: "CVD", hint: "Only when aggressor flow in the same hour diverges the same way (price up on net selling → short; down on net buying → long). Graded as Basis extreme × CVD divergence." },
-                  { v: "SMART" as const, label: "SMART MONEY", hint: "Only when the tracked smart-money wallets lean the same side in the same hour. Graded as Basis extreme × smart money agrees. Pending the Oct-15 re-validation." },
-                  { v: "LIQ" as const, label: "LIQ FLUSH", hint: "Only when a same-hour liquidation cascade reverts to the same side (longs flushed → long, shorts squeezed → short). Graded as Basis extreme × liq-flush timing. Pending the Oct-15 re-validation." },
+                  { v: "SMART" as const, label: "Smart money", hint: "Only when the tracked smart-money wallets lean the same side in the same hour. Graded as Basis extreme × smart money agrees. Pending the Oct-15 re-validation." },
+                  { v: "LIQ" as const, label: "Liq flush", hint: "Only when a same-hour liquidation cascade reverts to the same side (longs flushed → long, shorts squeezed → short). Graded as Basis extreme × liq-flush timing. Pending the Oct-15 re-validation." },
                 ]).map((o) => {
                   const on = (config.basisConfirm ?? undefined) === o.v;
                   return (
                     <button key={o.label} title={o.hint} onClick={() => setConfig({ ...config, basisConfirm: o.v })} style={{
-                      flex: "1 1 90px", cursor: "pointer", fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: 600, letterSpacing: "0.04em",
+                      flex: "1 1 90px", cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 11, fontWeight: 600,
                       padding: "8px 10px", borderRadius: 4, background: on ? "#ededf010" : "#0a0a0b",
                       border: `1px solid ${on ? "#ededf0" : "#232327"}`, color: on ? "#ededf0" : "#a1a1aa",
                     }}>{o.label}{on ? " ✓" : ""}</button>
@@ -1285,7 +1284,7 @@ export function AgentView() {
                     border: `1px solid ${selected ? "#ededf060" : "#232327"}`,
                     borderRadius: 3, padding: "4px 10px", cursor: "pointer",
                     color: selected ? "#ededf0" : "#71717a",
-                    fontFamily: "var(--nx-font-mono)", fontSize: 11,
+                    fontFamily: "var(--nx-font-ui)", fontSize: 11,
                   }}>
                     {label}
                   </button>
@@ -1342,12 +1341,12 @@ export function AgentView() {
             return (
               <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 8px" }}>
                 <button onClick={() => setShowAdvanced((v) => !v)} style={{
-                  fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.08em",
+                  fontFamily: "var(--nx-font-ui)", fontSize: 11.5,
                   padding: "7px 16px", borderRadius: 6, cursor: "pointer",
                   background: showAdvanced || advancedActive ? "#ededf015" : "transparent",
                   border: `1px solid ${showAdvanced || advancedActive ? "#ededf0" : "#232327"}`,
                   color: showAdvanced || advancedActive ? "#ededf0" : "#71717a",
-                }}>{showAdvanced ? "▾ HIDE ADVANCED SETTINGS" : advancedActive ? "▸ ADVANCED SETTINGS · ON · scale-out, DCA, webhooks" : "▸ ADVANCED SETTINGS · scale-out, DCA, webhooks"}</button>
+                }}>{showAdvanced ? "▾ Hide advanced settings" : advancedActive ? "▸ Advanced settings · on · scale-out, DCA, webhooks" : "▸ Advanced settings · scale-out, DCA, webhooks"}</button>
               </div>
             );
           })()}
@@ -1375,12 +1374,12 @@ export function AgentView() {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                   <div style={agentLabelStyle}>ADVANCED EXITS</div>
                   <button onClick={toggleScaleOut} style={{
-                    fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "4px 12px", borderRadius: 3, cursor: "pointer",
+                    fontFamily: "var(--nx-font-ui)", fontSize: 11.5, padding: "4px 12px", borderRadius: 3, cursor: "pointer",
                     background: scaleOut ? "#ededf015" : "#0a0a0b",
                     border: `1px solid ${scaleOut ? "#ededf0" : "#232327"}`,
                     color: scaleOut ? "#ededf0" : "#71717a",
                   }}>
-                    SCALE-OUT {scaleOut ? "ON" : "OFF"}
+                    Scale-out {scaleOut ? "on" : "off"}
                   </button>
                 </div>
 
@@ -1461,12 +1460,12 @@ export function AgentView() {
                     <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0", border: "1px solid #33333a", borderRadius: 3, padding: "2px 8px" }}>◆ PRO</span>
                   </div>
                   <button onClick={isPro ? toggle : undefined} disabled={!isPro} style={{
-                    fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "4px 12px", borderRadius: 3, cursor: isPro ? "pointer" : "not-allowed",
+                    fontFamily: "var(--nx-font-ui)", fontSize: 11.5, padding: "4px 12px", borderRadius: 3, cursor: isPro ? "pointer" : "not-allowed",
                     background: on ? "#ededf015" : "#0a0a0b",
                     border: `1px solid ${on ? "#ededf0" : "#232327"}`,
                     color: on ? "#ededf0" : "#71717a", opacity: isPro ? 1 : 0.5,
                   }}>
-                    {on ? "ON" : "OFF"}
+                    {on ? "On" : "Off"}
                   </button>
                 </div>
                 {!isPro ? (
@@ -1628,14 +1627,12 @@ export function AgentView() {
                   border: "1px solid #f7525f",
                   borderRadius: 4,
                   color: "#f7525f",
-                  fontFamily: "var(--nx-font-mono)",
+                  fontFamily: "var(--nx-font-ui)",
                   fontSize: 11,
                   padding: "8px 16px",
                   cursor: "pointer",
-                  letterSpacing: "0.05em",
-                  textTransform: "uppercase",
                 }}>
-                  ⚡ KILL
+                  ⚡ Kill
                 </button>
               </>
             )}
@@ -1695,15 +1692,15 @@ export function AgentView() {
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={() => resolvePending(t.id, "deploy")} style={{
                       background: "#ededf020", border: "1px solid #ededf0", borderRadius: 3,
-                      color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 12px",
-                      cursor: "pointer", letterSpacing: "0.05em", textTransform: "uppercase",
+                      color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 11.5, padding: "5px 12px",
+                      cursor: "pointer",
                     }}>
                       ✓ Reviewed
                     </button>
                     <button onClick={() => resolvePending(t.id, "dismiss")} style={{
                       background: "none", border: "1px solid #f7525f50", borderRadius: 3,
-                      color: "#f7525f", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 12px",
-                      cursor: "pointer", letterSpacing: "0.05em", textTransform: "uppercase",
+                      color: "#f7525f", fontFamily: "var(--nx-font-ui)", fontSize: 11.5, padding: "5px 12px",
+                      cursor: "pointer",
                     }}>
                       ✕ Dismiss
                     </button>
@@ -2076,8 +2073,8 @@ export function AgentView() {
                                   leverage: trade.leverage ?? null, reason: trade.reason ?? null, held: holdLabel,
                                 });
                               }}
-                              style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.05em", color: "#a1a1aa", background: "none", border: "1px solid #33333a", borderRadius: 3, padding: "4px 10px", cursor: "pointer" }}
-                            >↗ SHARE CARD</button>
+                              style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, color: "#a1a1aa", background: "none", border: "1px solid #33333a", borderRadius: 3, padding: "4px 10px", cursor: "pointer" }}
+                            >↗ Share card</button>
                           </div>
                         </div>
                       </div>
@@ -2167,8 +2164,8 @@ export function AgentView() {
               <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 10, color: "#71717a", lineHeight: 1.5 }}>
                 Building an AI agent elsewhere? Prove it on the same standard in the open <strong style={{ color: "#a1a1aa" }}>Arena</strong>.
               </span>
-              <a href="/arena" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "#ededf0", textDecoration: "none", border: "1px solid #33333a", borderRadius: 3, padding: "3px 9px", background: "#1a1a1e", whiteSpace: "nowrap" }}>
-                ENTER THE ARENA →
+              <a href="/arena" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, color: "#ededf0", textDecoration: "none", border: "1px solid #33333a", borderRadius: 3, padding: "3px 9px", background: "#1a1a1e", whiteSpace: "nowrap" }}>
+                Enter the Arena →
               </a>
             </div>
             {ledgerInfo && (
@@ -2178,13 +2175,13 @@ export function AgentView() {
                   {ledgerInfo.hash.slice(0, 10)}…{ledgerInfo.hash.slice(-8)}
                 </code>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>· {ledgerInfo.count} records ·</span>
-                <a href={`${AGENT_API}/agents/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#d4d4d8", textDecoration: "none" }}>
+                <a href={`${AGENT_API}/agents/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, color: "#d4d4d8", textDecoration: "none" }}>
                   verify ↗
                 </a>
                 {ledgerInfo.onChain?.verified && (
                   <a href={ledgerInfo.onChain.explorer || "#"} target="_blank" rel="noopener noreferrer"
-                    style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0", textDecoration: "none", border: "1px solid #33333a", borderRadius: 3, padding: "2px 6px", background: "#1a1a1e" }}>
-                    ⛓ ANCHORED ON-CHAIN ↗
+                    style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, color: "#ededf0", textDecoration: "none", border: "1px solid #33333a", borderRadius: 3, padding: "2px 6px", background: "#1a1a1e" }}>
+                    ⛓ Anchored on-chain ↗
                   </a>
                 )}
               </div>
@@ -2255,11 +2252,11 @@ export function AgentView() {
                           background: isMe ? "#0a0a0b" : isCopying ? "#ededf0" : "#ededf015",
                           border: `1px solid ${isMe ? "#232327" : "#ededf0"}`,
                           borderRadius: 4, color: isMe ? "#52525b" : isCopying ? "#0a0a0b" : "#ededf0",
-                          fontFamily: "var(--nx-font-mono)", fontSize: 10, fontWeight: 600, padding: "7px 10px",
-                          cursor: isMe ? "default" : "pointer", letterSpacing: "0.03em", whiteSpace: "nowrap",
+                          fontFamily: "var(--nx-font-ui)", fontSize: 11.5, fontWeight: 600, padding: "7px 10px",
+                          cursor: isMe ? "default" : "pointer", whiteSpace: "nowrap",
                         }}
                       >
-                        {isMe ? "YOUR AGENT" : isCopying ? "⚡ COPYING" : "⚡ AUTOCOPY"}
+                        {isMe ? "Your agent" : isCopying ? "⚡ Copying" : "⚡ Autocopy"}
                       </button>
                       {!isMe && (
                         <button
@@ -2270,11 +2267,11 @@ export function AgentView() {
                             background: "#0a0a0b",
                             border: `1px solid ${e.config ? "#33333a" : "#232327"}`,
                             borderRadius: 4, color: e.config ? "#a1a1aa" : "#52525b",
-                            fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 10px",
-                            cursor: e.config ? "pointer" : "default", letterSpacing: "0.03em", whiteSpace: "nowrap",
+                            fontFamily: "var(--nx-font-ui)", fontSize: 11.5, padding: "5px 10px",
+                            cursor: e.config ? "pointer" : "default", whiteSpace: "nowrap",
                           }}
                         >
-                          COPY CONFIG
+                          Copy config
                         </button>
                       )}
                     </div>

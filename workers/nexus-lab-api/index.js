@@ -22,7 +22,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, callR, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
@@ -54,7 +54,8 @@ import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
 import { runScorecard, AXES, priceByHour } from "./axisbt.mjs";
-import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution } from "./keyProxy.mjs";
+import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
+import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
@@ -67,7 +68,12 @@ import { twapSchedule, twapProgress } from "../nexus-agent-exec/logic.mjs";
 import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus } from "./routes-smart.mjs";
 import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
 import { handleXrayShare } from "./routes-xrayshare.mjs";
+import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handlePush } from "./routes-push.mjs";
+import { handleThesisRegistration } from "./routes-thesisreg.mjs";
+import { handleCallStatus } from "./routes-callstatus.mjs";
+import { handleVerify, isPublicCall } from "./routes-verify.mjs";
+import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildOgSvg, buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
 import { handleTheses } from "./routes-theses.mjs";
@@ -78,9 +84,9 @@ import { handleProfile, handleLab } from "./routes-lab.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
 import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
-import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp } from "./grading.mjs";
+import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
-import { registeredBy } from "./callLock.mjs";
+import { readPublishMark } from "./publishMark.mjs";
 import { resolveDuplicates, REPORT_KEY as DEDUPE_REPORT_KEY } from "./callDedupe.mjs";
 import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signal-delivery.mjs";
 // The SAME synthesis the Lab + trader page render (pure, dependency-free), so the
@@ -419,25 +425,19 @@ async function fetchAllFutures() { return (await fetchAllFuturesDetailed()).rows
 // call). Deduped per coin (skip if an ungraded house call on that coin exists, or one
 // was posted <24h ago). dryRun previews WITHOUT writing — safe to expose. The whole
 // feature stays DARK until HOUSE_SIGNALS_ENABLED="true" (the caller checks the flag).
-async function generateHouseCalls(env, { dryRun = false, max = 1 } = {}) {
+async function generateHouseCalls(env, { dryRun = false, max = 1, liveAttempts = 1 } = {}) {
   const houseAddr = String(env.HOUSE_CALLER_ADDRESS || "").toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(houseAddr)) return { skipped: "HOUSE_CALLER_ADDRESS not set" };
-  // Prefer the already-computed board (KV, maintained by /intel/mispriced + kept warm by
-  // the Lab's polling) — avoids the flaky direct futures fetch (Orderly intermittently
-  // serves an HTML 403 to header-light Worker calls). Fall back to a fresh fetch only if
-  // the cache is cold.
-  let markets = null;
-  try {
-    const cached = await env.LAB_STORE.get("intel:mispriced:v1");
-    if (cached) { const c = JSON.parse(cached); if (Array.isArray(c?.markets)) markets = c.markets; }
-  } catch { /* fall through to fetch */ }
-  if (!markets) {
-    const rows = await fetchAllFutures(); // proxy-first, fail-soft ([] if both paths fail)
-    if (!rows.length) return { error: "no board available (cache cold + futures fetch failed)" };
-    markets = mispricedBoard(rows).markets;
-  }
-  const fades = (markets || []).filter((m) => m.status === "MISPRICED" && m.direction !== "NONE").sort((a, b) => b.edge - a.edge);
-  if (!fades.length) return { posted: [], note: "no fade signal right now" };
+  // The board: the Lab's cached one only while it's fresh (a house call's ENTRY is its mark), else
+  // our own live build, retried once when the cron allows (pickHouseBoard, houseBoard.mjs). It used
+  // to take the cache at any age and give up silently when the cache was cold.
+  let cachedRaw = null;
+  try { cachedRaw = await env.LAB_STORE.get("intel:mispriced:v1"); } catch { /* treat as cold */ }
+  const pick = await pickHouseBoard({ cachedRaw, fetchDetailed: fetchAllFuturesDetailed, buildBoard: mispricedBoard, attempts: liveAttempts });
+  if (pick.error) return { error: pick.error };
+  const boardSource = pick.source === "cache" ? `cache, ${Math.round(pick.ageMs / 60000)} min old` : "live";
+  const fades = (pick.markets || []).filter((m) => m.status === "MISPRICED" && m.direction !== "NONE").sort((a, b) => b.edge - a.edge);
+  if (!fades.length) return { posted: [], note: "no fade signal right now", boardSource };
 
   const raw = await env.LAB_STORE.get(`lab:${houseAddr}`);
   const data = raw ? JSON.parse(raw) : { theses: [] };
@@ -453,10 +453,10 @@ async function generateHouseCalls(env, { dryRun = false, max = 1 } = {}) {
     const call = houseCallFromSignal(m, now);
     if (call) toPost.push(call);
   }
-  if (dryRun) return { dryRun: true, house: houseAddr, candidates: toPost };
-  if (!toPost.length) return { posted: [], note: "top fades all deduped (recent/active)" };
+  if (dryRun) return { dryRun: true, house: houseAddr, candidates: toPost, boardSource };
+  if (!toPost.length) return { posted: [], note: "top fades all deduped (recent/active)", boardSource };
   // Through the same seal as a user's save: house calls are published calls too (permanent, server-timed).
-  const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now());
+  const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now(), { readMark: readPublishMark });
   if (prep.error) return { error: prep.error };
   await prep.commit(data);
   // Ensure the feed/leaderboard has a name for the house identity (one-time seed).
@@ -465,7 +465,18 @@ async function generateHouseCalls(env, { dryRun = false, max = 1 } = {}) {
     if (!(await env.LAB_STORE.get(pk)))
       await env.LAB_STORE.put(pk, JSON.stringify({ displayName: env.HOUSE_CALLER_NAME || "Nexus Signals", bio: "Systematic funding-fade signals — graded trustlessly from public price." }));
   } catch { /* best-effort */ }
-  return { house: houseAddr, posted: toPost.map((c) => ({ id: c.id, symbol: c.symbol, direction: c.direction, entry: c.entryPrice, tp: c.takeProfit1, sl: c.stopLoss })) };
+  return { house: houseAddr, boardSource, posted: toPost.map((c) => ({ id: c.id, symbol: c.symbol, direction: c.direction, entry: c.entryPrice, tp: c.takeProfit1, sl: c.stopLoss })) };
+}
+
+// Every scheduled house run leaves one log line and a 7-day note at `house:lastrun:<kind>`, read
+// back by GET /signals/house and its catalyst twin — so "why is it quiet?" has an answer without log access.
+async function recordHouseRun(env, kind, result) {
+  const line = houseRunSummary(result);
+  (result?.error ? console.error : console.log)(`[${kind}] ${line}`);
+  try { await env.LAB_STORE.put(`house:lastrun:${kind}`, JSON.stringify({ at: new Date().toISOString(), line }), { expirationTtl: 7 * 86400 }); } catch { /* best-effort */ }
+}
+async function readHouseRun(env, kind) {
+  try { const raw = await env.LAB_STORE.get(`house:lastrun:${kind}`); return raw ? JSON.parse(raw) : null; } catch { return null; }
 }
 
 // Build the Catalyst Read board fresh: liquid Polymarket macro/geo events → tradeable
@@ -557,7 +568,7 @@ async function generateCatalystHouseCalls(env, { dryRun = false, max = 2 } = {})
   }
   if (dryRun) return { dryRun: true, house: houseAddr, candidates: toPost };
   if (!toPost.length) return { posted: [], note: "no fresh catalyst impacts (all deduped or unpriced)" };
-  const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now());
+  const prep = await prepareSeal(env, houseAddr, existing, [...toPost, ...existing], Date.now(), { readMark: readPublishMark });
   if (prep.error) return { error: prep.error };
   await prep.commit(data);
   try {
@@ -572,6 +583,7 @@ async function generateCatalystHouseCalls(env, { dryRun = false, max = 2 } = {})
 const flashLimiter = makeRateLimiter({ limit: 30, windowMs: 60000 });
 const flashReadLimiter = makeRateLimiter({ limit: 40, windowMs: 60000 }); // open-orders list + status polls
 const jupLimiter = makeRateLimiter({ limit: 120, windowMs: 60000 });
+const xcLimiter = makeRateLimiter({ limit: 60, windowMs: 60000 }); // 1Click quotes (partner key)
 // Gate for a key-carrying proxy: our own origin only, within the per-IP budget. Returns a
 // Response to send (refusal) or null to proceed.
 function keyProxyGate(request, limiter) {
@@ -663,16 +675,16 @@ export default {
     // the same public engine as everyone else on the next grade cron.
     if (env.HOUSE_SIGNALS_ENABLED === "true") {
       ctx.waitUntil((async () => {
-        try { const r = await generateHouseCalls(env); if (r.posted?.length) console.log(`[house] posted ${r.posted.length} signal(s)`); }
-        catch (e) { console.error("[house] generation failed:", String(e)); }
+        try { await recordHouseRun(env, "house", await generateHouseCalls(env, { liveAttempts: 2 })); }
+        catch (e) { await recordHouseRun(env, "house", { error: `generation failed: ${String(e).slice(0, 120)}` }); }
       })());
       // The Catalyst Read's own auto-graded track record — same gate, SEPARATE identity
       // (HOUSE_CATALYST_ADDRESS). Only runs when that address is set, so it stays dark until
       // borst opts the second producer in. Graded by the same public engine next grade cron.
       if (env.HOUSE_CATALYST_ADDRESS) {
         ctx.waitUntil((async () => {
-          try { const r = await generateCatalystHouseCalls(env); if (r.posted?.length) console.log(`[catalyst-house] posted ${r.posted.length} call(s)`); }
-          catch (e) { console.error("[catalyst-house] generation failed:", String(e)); }
+          try { await recordHouseRun(env, "catalyst-house", await generateCatalystHouseCalls(env)); }
+          catch (e) { await recordHouseRun(env, "catalyst-house", { error: `generation failed: ${String(e).slice(0, 120)}` }); }
         })());
       }
     }
@@ -691,6 +703,11 @@ export default {
       ctx.waitUntil((async () => {
         try { const r = await sweepHlTapes(env); console.log(`[hltape] synced ${r.synced}/${r.watched} watched · +${r.added} fills · ${r.gaps} gaps · ${r.failed} failed`); }
         catch (e) { console.error("[hltape] sweep failed:", String(e)); }
+      })());
+      // Owner revenue page: one snapshot a day so it can say what changed (reads balances, moves nothing).
+      ctx.waitUntil((async () => {
+        try { await freshRevenue(env, { nexusPrice: getNexusPriceUsd }); console.log("[revenue] snapshot checked"); }
+        catch (e) { console.error("[revenue] snapshot failed:", String(e)); }
       })());
     }
   },
@@ -722,6 +739,8 @@ export default {
       if (pushRes) return pushRes;
     }
     {
+      const revenueRes = await handleRevenue(parts, request, env, { nexusPrice: getNexusPriceUsd });
+      if (revenueRes) return revenueRes;
       const shareRes = await handleXrayShare(parts, request, env, { renderPng: renderMonoPng });
       if (shareRes) return shareRes;
     }
@@ -817,10 +836,9 @@ export default {
       const active = theses.filter((t) => t.status === "ACTIVE" && t.gradedOutcome !== "WIN" && t.gradedOutcome !== "LOSS").length;
       const closed = wins + losses;
       const winRate = closed > 0 ? Math.round((wins / closed) * 100) : null;
-      const avgRR =
-        theses.length > 0
-          ? theses.reduce((s, t) => s + (t.riskReward || 0), 0) / theses.length
-          : 0;
+      // R from each call's own levels (callR, what the grader pays), not the stored riskReward.
+      const rrs = theses.map(callR).filter((r) => r != null);
+      const avgRR = rrs.length > 0 ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 0;
       const rep = calcRepScore(wins, losses, avgRR);
 
       const statsPayload = {
@@ -1050,56 +1068,23 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
     }
 
     // ── Ph22: /og/thesis/:wallet/:id(.png)? → thesis OG image ─
-    if (parts[0] === "og" && parts[1] === "thesis" && parts[2] && parts[3]) {
-      if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
-      const isPng = parts[3].endsWith(".png");
-      const thesisId = isPng ? parts[3].slice(0, -4) : parts[3];
-      const wallet = normalizeAddress(parts[2]);
-      const [raw, profileRaw] = await Promise.all([
-        env.LAB_STORE.get(`lab:${wallet}`),
-        env.LAB_STORE.get(`profile:${wallet}`),
-      ]);
-      if (!raw) return new Response("not found", { status: 404 });
-      const data = JSON.parse(raw);
-      const thesis = (data.theses || []).find((t) => t.id === thesisId);
-      if (!thesis) return new Response("not found", { status: 404 });
-      const profile = profileRaw ? JSON.parse(profileRaw) : {};
-      const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
-      // Card shows the OBJECTIVE grade, never the self-report. A stamp counts only if the current
-      // grader wrote it (grading.mjs GRADE_V); anything else is graded live from the call's window.
-      const stamped = isCurrentStamp(thesis);
-      let ogStatus = stamped ? gradedStatusOf(thesis.gradedOutcome) : "ACTIVE";
-      let ogGradedR = stamped && typeof thesis.gradedR === "number" ? thesis.gradedR : null;
-      if (!stamped) {
-        try {
-          const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt, env));
-          if (g.outcome === "WIN" || g.outcome === "LOSS") { ogStatus = gradedStatusOf(g.outcome); ogGradedR = g.r; }
-        } catch { /* keep ACTIVE */ }
-      }
-      const payload = {
-        displayName: profile.displayName || null, wallet, ticker,
-        direction: thesis.direction, entryPrice: thesis.entryPrice,
-        stopLoss: thesis.stopLoss, takeProfit1: thesis.takeProfit1,
-        riskReward: thesis.riskReward, status: ogStatus, gradedR: ogGradedR, notes: thesis.notes || "",
-      };
-      // Chart is fetched ONLY for the PNG path — the SVG path would need the same
-      // inlining anyway (resvg can't pull remote refs), and X/Twitter unfurls the PNG.
-      if (isPng) {
-        try {
+    {
+      const ogThesisRes = await handleOgThesis(parts, request, env, {
+        // Chart is fetched ONLY for the PNG path — the SVG path would need the same
+        // inlining anyway (resvg can't pull remote refs), and X/Twitter unfurls the PNG.
+        // Only the FIRST chart goes on the share card — an unfurl needs one legible
+        // image, not four thumbnails. Also keeps the fetch/size budget bounded.
+        renderPng: async (payload, thesis) => {
           await ensureResvg();
           const font = await getMonoFont();
-          // Only the FIRST chart goes on the share card — an unfurl needs one legible
-          // image, not four thumbnails. Also keeps the fetch/size budget bounded.
           const firstChart = (thesis.chartUrls && thesis.chartUrls[0]) || thesis.chartUrl;
           const chartDataUri = await fetchChartDataUri(firstChart);
           const svg = buildThesisOgSvg({ ...payload, chartDataUri, fontFamily: "'JetBrains Mono'" });
           const resvg = new Resvg(svg, { font: { loadSystemFonts: false, fontBuffers: [font], defaultFontFamily: "JetBrains Mono" } });
-          const png = resvg.render().asPng();
-          return new Response(png, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*" } });
-        } catch (e) { console.error("[OG PNG thesis]", String(e)); }
-      }
-      const svg = buildThesisOgSvg(payload);
-      return new Response(svg, { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*" } });
+          return resvg.render().asPng();
+        },
+      });
+      if (ogThesisRes) return ogThesisRes;
     }
 
     // ── /og/identity/:wallet(.png)? — the TRADING IDENTITY card ─────────────────
@@ -1225,7 +1210,7 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
       ]);
       if (!raw) return json({ error: "not found" }, request, 404);
       const data = JSON.parse(raw);
-      const thesis = (data.theses || []).find((t) => t.id === thesisId && t.isPublic);
+      const thesis = (data.theses || []).find((t) => t && t.id === thesisId && isPublicCall(t));
       if (!thesis) return json({ error: "not found" }, request, 404);
       const profile = profileRaw ? JSON.parse(profileRaw) : {};
       // Grade LIVE on read (one symbol) unless the current grader already stamped it — the
@@ -1233,13 +1218,16 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
       // older grader (or one a client wrote) is never shown as the grade.
       if (!isCurrentStamp(thesis)) {
         try {
-          const g = gradeCall(thesis, await fetchGradeHistory(thesis.symbol, thesis.createdAt, env));
+          const cd = await fetchGradeHistory(thesis.symbol, thesis.createdAt, env);
+          const g = gradeCall(thesis, cd);
           if (g.outcome === "WIN" || g.outcome === "LOSS") {
             thesis.gradedOutcome = g.outcome; thesis.gradedR = g.r; thesis.gradedAt = thesis.gradedAt || Date.now();
           } else {
             delete thesis.gradedOutcome; delete thesis.gradedR; delete thesis.gradedAt;
           }
           thesis.status = gradedStatusOf(thesis.gradedOutcome);
+          // Has the entry traded? Read live too, so the page never shows P&L on an unfilled order.
+          if (cd) applyFillStamp(thesis, g, cd);
         } catch { /* fall through with the stored value */ }
       }
       return json({ thesis: { ...thesis, wallet, pfp: profile.pfp || null, displayName: profile.displayName || null } }, request);
@@ -1259,7 +1247,7 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
         env.LAB_STORE.get(`profile:${wallet}`),
       ]);
       const data = raw ? JSON.parse(raw) : null;
-      const thesis = data && (data.theses || []).find((t) => t.id === thesisId && t.isPublic);
+      const thesis = data && (data.theses || []).find((t) => t && t.id === thesisId && isPublicCall(t));
       // Unknown/private → just bounce to the app; nothing to preview.
       if (!thesis) return Response.redirect(appUrl, 302);
       const profile = profileRaw ? JSON.parse(profileRaw) : {};
@@ -1274,7 +1262,7 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
         : `${esc(ticker)} ${esc(thesis.direction)} by ${name} · ACTIVE`;
       const desc = resolved
         ? `Graded ${thesis.gradedOutcome}${rTxt ? " " + rTxt : ""} — first-touch vs public price, on-chain. The tape marked this, not the trader.`
-        : `Entry $${(+thesis.entryPrice).toFixed(2)} · SL $${(+thesis.stopLoss).toFixed(2)} · TP $${(+thesis.takeProfit1).toFixed(2)} · R:R 1:${(+thesis.riskReward).toFixed(2)} — graded from public price, on-chain.`;
+        : `Entry $${(+thesis.entryPrice).toFixed(2)} · SL $${(+thesis.stopLoss).toFixed(2)} · TP $${(+thesis.takeProfit1).toFixed(2)} · R:R 1:${(callR(thesis) ?? 0).toFixed(2)} — graded from public price, on-chain.`;
       const img = `https://og.nexustradinglabs.com/og/thesis/${wallet}/${thesisId}.png`;
       const shareUrl = `https://og.nexustradinglabs.com/share/thesis/${wallet}/${thesisId}`;
       const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -1345,71 +1333,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       return json({ error: "method not allowed" }, request, 405);
     }
 
-    // ── Ph25: /verify/:wallet/:id → price-verify thesis outcome ─
-    if (parts[0] === "verify" && parts[1] && parts[2]) {
-      if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
-      const wallet = normalizeAddress(parts[1]);
-      const thesisId = parts[2];
-      const raw = await env.LAB_STORE.get(`lab:${wallet}`);
-      if (!raw) return json({ error: "not found" }, request, 404);
-      const data = JSON.parse(raw);
-      const thesis = (data.theses || []).find((t) => t.id === thesisId);
-      if (!thesis) return json({ error: "not found" }, request, 404);
-
-      const COINGECKO_IDS = {
-        BTC: "bitcoin", ETH: "ethereum", SOL: "solana", ARB: "arbitrum", OP: "optimism",
-        AVAX: "avalanche-2", LINK: "chainlink", UNI: "uniswap", AAVE: "aave",
-        MATIC: "matic-network", SUI: "sui", SEI: "sei-network", TIA: "celestia",
-        INJ: "injective-protocol", WIF: "dogwifcoin", DOGE: "dogecoin", PEPE: "pepe",
-        SHIB: "shiba-inu", XRP: "ripple", ADA: "cardano", DOT: "polkadot",
-        LTC: "litecoin", BCH: "bitcoin-cash", ATOM: "cosmos", FTM: "fantom",
-        NEAR: "near", APT: "aptos", JUP: "jupiter-exchange-solana", WLD: "worldcoin-wld",
-        TON: "the-open-network", POL: "matic-network", STRK: "starknet",
-      };
-      const ticker = thesis.symbol.replace("PERP_", "").replace("_USDC", "");
-      const coinId = COINGECKO_IDS[ticker];
-      if (!coinId) return json({ error: "unsupported asset", ticker }, request, 422);
-
-      // CoinGecko /ohlc only accepts these discrete `days` values — snap up to the
-      // smallest one that still covers the thesis lifetime (arbitrary values 400).
-      const rawDays = Math.ceil((Date.now() - thesis.createdAt) / 86400000) + 1;
-      const ALLOWED_DAYS = [1, 7, 14, 30, 90, 180, 365];
-      const daysSince = ALLOWED_DAYS.find((d) => d >= rawDays) ?? 365;
-      try {
-        // Keyless requests from cloud IPs get 403 — a (free) demo key is required.
-        const cgHeaders = { Accept: "application/json" };
-        if (env.COINGECKO_API_KEY) cgHeaders["x-cg-demo-api-key"] = env.COINGECKO_API_KEY;
-        const cgResp = await fetch(
-          `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${daysSince}`,
-          { headers: cgHeaders }
-        );
-        if (!cgResp.ok) throw new Error(`CoinGecko ${cgResp.status}`);
-        const ohlc = await cgResp.json();
-        const { entryPrice, stopLoss, takeProfit1, direction, createdAt } = thesis;
-        const relevant = ohlc.filter(([ts]) => ts >= createdAt);
-        let hitTP = false;
-        let hitSL = false;
-        for (const [, , high, low] of relevant) {
-          if (direction === "LONG") {
-            if (high >= takeProfit1) { hitTP = true; break; }
-            if (low <= stopLoss) { hitSL = true; break; }
-          } else {
-            if (low <= takeProfit1) { hitTP = true; break; }
-            if (high >= stopLoss) { hitSL = true; break; }
-          }
-        }
-        const priceConfirms =
-          (thesis.status === "HIT_TP" && hitTP) ||
-          (thesis.status === "STOPPED_OUT" && hitSL) ||
-          (thesis.status === "ACTIVE" && !hitTP && !hitSL);
-        return json({
-          verified: priceConfirms, hitTP, hitSL,
-          status: thesis.status, direction, entryPrice, stopLoss, takeProfit1,
-          method: "coingecko_ohlc", candlesChecked: relevant.length,
-        }, request);
-      } catch (e) {
-        return json({ error: "price fetch failed", detail: String(e) }, request, 502);
-      }
+    // ── /verify/:wallet/:id → re-grade one public call with the real grader (routes-verify.mjs) ─
+    {
+      const verifyRes = await handleVerify(parts, request, env);
+      if (verifyRes) return verifyRes;
     }
 
     // ── Nexus PRO — subscription payment rail (USDC on Arbitrum) ──
@@ -2098,156 +2025,19 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       }, request);
     }
 
-    // ── /proxy/thesis-register — register a thesis on ThesisRegistry (Arbitrum) ─
-    // ABI-encodes registerThesis() and submits via Bankr /wallet/submit.
-    // Selector: 0xce4d0f18 = keccak256("registerThesis(string,uint8,uint256,uint256,uint256,uint256,uint256,bool,string)")
-    // Price scaling: 1e6 (e.g. $65000.50 → 65000500000). RR scaling: 1e4.
-    if (parts[0] === "proxy" && parts[1] === "thesis-register" && request.method === "POST") {
-      let body;
-      try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const { walletAddress, bankrApiKey, symbol: rawSym, direction, entryPrice, stopLoss, takeProfit1, takeProfit2 = 0, isPublic = true, notes = "" } = body;
-      if (!walletAddress || !bankrApiKey || !rawSym || !direction || !entryPrice || !stopLoss || !takeProfit1) {
-        return json({ error: "missing required fields: walletAddress, bankrApiKey, symbol, direction, entryPrice, stopLoss, takeProfit1" }, request, 400);
-      }
-
-      const THESIS_REGISTRY = "0x2F4EdA890f96a7979d6f26bCB210cEDAD68346Bc";
-      const CHAIN_ID = 42161; // Arbitrum One
-
-      const normSym = (s) => { s = s.toUpperCase().trim(); return s.startsWith("PERP_") ? s : "PERP_" + s + "_USDC"; };
-      const sym = normSym(rawSym);
-      const dirEnum = direction.toUpperCase() === "LONG" ? 0 : 1;
-
-      // Price encoding: 1e6 (contract uses 6 decimal scaling)
-      const scale = (v) => BigInt(Math.round(Number(v) * 1_000_000));
-      const entryScaled = scale(entryPrice);
-      const slScaled    = scale(stopLoss);
-      const tp1Scaled   = scale(takeProfit1);
-      const tp2Scaled   = scale(takeProfit2);
-
-      // Risk-reward: |tp1 - entry| / |entry - sl|, scaled by 1e4
-      const rrRaw = Math.abs(Number(takeProfit1) - Number(entryPrice)) / Math.abs(Number(entryPrice) - Number(stopLoss));
-      const rrScaled = BigInt(Math.round(rrRaw * 10_000));
-
-      // ── ABI encode registerThesis(string,uint8,uint256,uint256,uint256,uint256,uint256,bool,string) ──
-      const enc = new TextEncoder();
-      const symBytes   = enc.encode(sym);
-      const notesBytes = enc.encode(notes);
-
-      const padTo32bytes = (bytes) => {
-        const padLen = Math.ceil(Math.max(bytes.length, 1) / 32) * 32;
-        const out = new Uint8Array(padLen); out.set(bytes); return out;
-      };
-      const toBE32 = (val) => {
-        const b = new Uint8Array(32);
-        let v = typeof val === 'bigint' ? val : BigInt(val);
-        for (let i = 31; i >= 0; i--) { b[i] = Number(v & 0xffn); v >>= 8n; }
-        return b;
-      };
-
-      const symPadded   = padTo32bytes(symBytes);
-      // notesPadded only used when notes is non-empty; empty string = length 0 + no data bytes
-      const notesPadded = notesBytes.length ? padTo32bytes(notesBytes) : null;
-
-      const HEAD = 9 * 32; // 288 bytes — 9 params
-      const offsetSym   = HEAD;
-      // offsetNotes: after selector-less HEAD + sym length word + sym data
-      const offsetNotes = HEAD + 32 + symPadded.length;
-
-      const parts_enc = [
-        new Uint8Array([0xce, 0x4d, 0x0f, 0x18]), // selector
-        toBE32(offsetSym),
-        toBE32(dirEnum),
-        toBE32(entryScaled),
-        toBE32(slScaled),
-        toBE32(tp1Scaled),
-        toBE32(tp2Scaled),
-        toBE32(rrScaled),
-        toBE32(isPublic ? 1 : 0),
-        toBE32(offsetNotes),
-        toBE32(symBytes.length),   // symbol: length word
-        symPadded,                 // symbol: padded data
-        toBE32(notesBytes.length), // notes: length word (0 if empty)
-        ...(notesPadded ? [notesPadded] : []), // notes: padded data (omit if empty)
-      ];
-
-      const totalLen = parts_enc.reduce((s, p) => s + p.length, 0);
-      const calldata = new Uint8Array(totalLen);
-      let off = 0;
-      for (const p of parts_enc) { calldata.set(p, off); off += p.length; }
-      const calldataHex = "0x" + Array.from(calldata).map(b => b.toString(16).padStart(2,"0")).join("");
-
-      // Submit via Bankr /wallet/submit
-      const bankrRes = await fetch("https://api.bankr.bot/wallet/submit", {
-        method: "POST",
-        headers: { "X-API-Key": bankrApiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transaction: { to: THESIS_REGISTRY, chainId: CHAIN_ID, value: "0", data: calldataHex },
-          description: `Register ${direction.toUpperCase()} thesis for ${sym} on ThesisRegistry`,
-          waitForConfirmation: true,
-        }),
+    // ── /proxy/thesis-register + /theses/index — a call registered on ThesisRegistry (Arbitrum) ─
+    // routes-thesisreg.mjs: checks + simulation before gas, no double submits, keyless indexing.
+    {
+      const regRes = await handleThesisRegistration(parts, request, env, {
+        rpcUrls: [getArbRpc(env), "https://arb1.arbitrum.io/rpc"].filter((u, i, a) => a.indexOf(u) === i),
+        readMark: readPublishMark,
       });
-      const bankrData = await bankrRes.json();
-      if (!bankrData?.success) {
-        return json({ error: "bankr_submit_failed", detail: bankrData }, request, 502);
-      }
-      const txHash = bankrData.txHash || bankrData?.transaction?.hash || bankrData.hash;
-
-      // The Bankr key proves nothing about `walletAddress` (it came in the body). Before this call
-      // goes into that wallet's record, where once published it's permanent, the registry must have
-      // emitted its registration event for THAT wallet in a successful transaction (callLock
-      // registeredBy, which reads the event by its layout: the signature this route checked from
-      // 2026-09-28 to 09-29 wasn't the contract's, so it refused every registration).
-      const walletNormTR = walletAddress.toLowerCase().trim();
-      let receiptTR = null;
-      for (let i = 0; i < 6 && !receiptTR; i++) {
-        if (i) await new Promise((r) => setTimeout(r, 1500));
-        try {
-          const rr = await fetch(getArbRpc(env), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getTransactionReceipt", params: [txHash] }) });
-          receiptTR = (await rr.json())?.result || null;
-        } catch { receiptTR = null; }
-      }
-      if (!receiptTR) {
-        return json({ error: "receipt_unavailable", txHash, hint: "The registration was sent, but its receipt couldn't be read yet, so nothing was written to the Lab record." }, request, 504);
-      }
-      if (!registeredBy(receiptTR, THESIS_REGISTRY, walletNormTR)) {
-        return json({ error: "wallet_not_proven", txHash, hint: "The registry didn't record this thesis for walletAddress, so nothing was written to its Lab record." }, request, 403);
-      }
-
-      // Write thesis to KV so it shows in /feed immediately
-      const labKeyTR = `lab:${walletNormTR}`;
-      const existingRawTR = await env.LAB_STORE.get(labKeyTR);
-      const existingDataTR = existingRawTR ? JSON.parse(existingRawTR) : { theses: [] };
-      const rrFinal = Math.round(rrRaw * 100) / 100;
-      const newThesis = {
-        id: crypto.randomUUID(),
-        symbol: sym,
-        direction: direction.toUpperCase(),
-        entryPrice: Number(entryPrice),
-        stopLoss: Number(stopLoss),
-        takeProfit1: Number(takeProfit1),
-        takeProfit2: Number(takeProfit2),
-        riskPercent: 0,
-        accountSize: 0,
-        fundingRate: 0,
-        notes: notes || "",
-        createdAt: Date.now(),
-        positionSize: 0,
-        leverage: 0,
-        riskReward: rrFinal,
-        fundingCost8h: 0,
-        fundingCost24h: 0,
-        fundingCost72h: 0,
-        status: "ACTIVE",
-        actualPnl: null,
-        isPublic: isPublic !== false,
-        onChainTxHash: txHash,
-      };
-      const prevTR = existingDataTR.theses || [];
-      const prepTR = await prepareSeal(env, walletNormTR, prevTR, [newThesis, ...prevTR], Date.now());
-      if (prepTR.error) return json({ error: prepTR.error }, request, 400);
-      await prepTR.commit(existingDataTR);
-
-      return json({ ok: true, txHash, thesisId: newThesis.id, symbol: sym, direction: direction.toUpperCase(), entryPrice, stopLoss, takeProfit1, takeProfit2, isPublic, notes, riskReward: rrFinal, hint: "Thesis registered on-chain and indexed in /feed. Parse ThesisRegistered event from txHash to get onChainId." }, request);
+      if (regRes) return regRes;
+    }
+    // ── GET /theses/status/:wallet — a wallet's public calls with live distances (routes-callstatus.mjs) ─
+    {
+      const statusRes = await handleCallStatus(parts, request, env);
+      if (statusRes) return statusRes;
     }
 
     // ── /mark-price — get current mark price for a symbol ───────────────────
@@ -2629,7 +2419,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // only runs when HOUSE_SIGNALS_ENABLED="true"). Whole feature is DARK until configured.
     if (parts[0] === "signals" && parts[1] === "house") {
       if (request.method === "GET") {
-        return json(await generateHouseCalls(env, { dryRun: true }), request);
+        return json({ ...(await generateHouseCalls(env, { dryRun: true })), enabled: env.HOUSE_SIGNALS_ENABLED === "true", lastRun: await readHouseRun(env, "house") }, request);
       }
       if (request.method === "POST") {
         const admin = String(env.HOUSE_SIGNALS_ADMIN || "");
@@ -2646,7 +2436,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // HOUSE_SIGNALS_ENABLED="true" AND HOUSE_CATALYST_ADDRESS being set. DARK until configured.
     if (parts[0] === "signals" && parts[1] === "catalyst-house") {
       if (request.method === "GET") {
-        return json(await generateCatalystHouseCalls(env, { dryRun: true }), request);
+        return json({ ...(await generateCatalystHouseCalls(env, { dryRun: true })), enabled: env.HOUSE_SIGNALS_ENABLED === "true" && !!env.HOUSE_CATALYST_ADDRESS, lastRun: await readHouseRun(env, "catalyst-house") }, request);
       }
       if (request.method === "POST") {
         const admin = String(env.HOUSE_SIGNALS_ADMIN || "");
@@ -5907,6 +5697,27 @@ document.getElementById("btn").addEventListener("click",go);
     // flashUpstream (keyProxy.mjs, tested) whitelists the five routes the Spot ticket uses and
     // maps each to ONE fixed Flash URL (no SSRF, no other Flash endpoint on our key). A 401 here
     // means the key is a Portfolio key, not a Flash key — surfaced verbatim so the op knows.
+    // ── NEAR Intents 1Click quote with our partner key — POST /xc/quote ─────────────────
+    // Adds ONE_CLICK_JWT as a Bearer token (drops 1Click's unauthenticated fee) and forwards the body
+    // verbatim to the one fixed upstream (oneClickUpstream, keyProxy.mjs). No key ⇒ 503
+    // xc_not_configured and the browser quotes 1Click directly, as before (fetchOneClickQuote).
+    // The browser checks 1Click's signature on the reply, so this hop adds no trust.
+    if (parts[0] === "xc") {
+      const up = oneClickUpstream(request.method, parts);
+      if (!up) return json({ error: "xc_route_not_allowed" }, request, 404);
+      const jwt = env.ONE_CLICK_JWT || "";
+      if (!jwt) return json({ error: "xc_not_configured" }, request, 503);
+      const gated = keyProxyGate(request, xcLimiter); if (gated) return gated;
+      const body = await request.text();
+      if (body.length > XC_BODY_MAX) return json({ error: "body_too_large" }, request, 413);
+      try {
+        const r = await fetch(up.url, { method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${jwt}` }, body });
+        return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
+      } catch (e) {
+        return json({ error: "xc_proxy_failed", detail: String(e?.message || e).slice(0, 120) }, request, 502);
+      }
+    }
+
     if (parts[0] === "flash") {
       const up = flashUpstream(request.method, parts, url.searchParams);
       if (!up) return json({ error: "flash_route_not_allowed" }, request, 404);

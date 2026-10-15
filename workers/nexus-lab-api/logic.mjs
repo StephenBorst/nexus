@@ -30,6 +30,39 @@ export function callR(t) {
   return Math.round((reward / risk) * 100) / 100;
 }
 
+// How far an entry may sit from the mark read at publish and still count as the market: one band,
+// shared with the call page that explains it (app/lib/entryAtMark.mjs).
+import { ENTRY_AT_MARK_PCT, atMark } from "../../app/lib/entryAtMark.mjs";
+export { ENTRY_AT_MARK_PCT };
+
+/**
+ * Whether a call's entry has traded, by the same rule gradeCall grades it on (see below): the
+ * entry is the market at the post (within ENTRY_AT_MARK_PCT of `publishMark`, else inside the
+ * posting hour's range), or a resting order that fills in the first later hour whose range reaches
+ * it. gradeCall uses this, and the hourly pass stamps it on open calls (`fillState`), so a card can
+ * tell a live position from an order that never filled.
+ * @returns {{ filled:false } | { filled:true, atPost:boolean, fillSec:number, fillIdx:number, next:number }}
+ *   fillSec = the post time, or the start of the hour the order filled in. fillIdx = that hour's
+ *   candle (-1 when filled at the post). next = the first candle that can grade the call.
+ */
+export function entryFill(t, cd) {
+  const startSec = Math.floor((t?.createdAt || 0) / 1000);
+  const n = cd && Array.isArray(cd.t) ? cd.t.length : 0;
+  let i = 0;
+  while (i < n && cd.t[i] < startSec) i++;          // the first hour that starts at or after the post
+  // The market the call was posted into: the hour containing the post, else the first hour after it.
+  const ref = i < n && cd.t[i] === startSec ? i : i > 0 && cd.t[i - 1] > startSec - 3600 ? i - 1 : i;
+  const entry = Number(t?.entryPrice);
+  const traded = (k) => cd.l[k] <= entry && entry <= cd.h[k];
+  const mark = Number(t?.publishMark?.px);
+  const atPost = mark > 0 ? atMark(entry, mark) : ref < n && traded(ref);
+  if (atPost) return { filled: true, atPost: true, fillSec: startSec, fillIdx: -1, next: i };
+  let f = i;
+  while (f < n && !traded(f)) f++;
+  if (f >= n) return { filled: false };
+  return { filled: true, atPost: false, fillSec: cd.t[f], fillIdx: f, next: f + 1 };  // a target in the fill hour doesn't count
+}
+
 /**
  * Grade a human "call" (thesis) against public OHLC candles, first-touch.
  * Trustless: the outcome is a fact about public price, not self-report.
@@ -48,54 +81,83 @@ export function callR(t) {
  *   target touch doesn't (it may have come first). Never filled = PENDING. Before this, an entry
  *   typed away from the market was graded as if filled: a LONG "entered" 4% under the market won
  *   2R without price ever trading there.
+ * - THE MARKET AT THE POST (2026-10-11). A call published since then carries `publishMark`, the
+ *   Orderly mark the server read when it was first published (publishMark.mjs). For those, "the
+ *   entry is the market" means within ENTRY_AT_MARK_PCT of that mark, not anywhere in the posting
+ *   hour's range: an hourly range left up to an hour of hindsight (post at 14:50, entry at 14:05's
+ *   low, graded as filled). Any other entry is a resting order exactly as above. Calls without a
+ *   mark (everything published before, or a failed read) keep the hour-range rule.
  *
- * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, createdAt }
+ * - A DECLARED SPLIT EXIT (2026-10-12). A call published with `exitPlan: "SPLIT_50"` closes half at
+ *   TP1 and half at TP2, both halves on the ORIGINAL stop (no move to breakeven: that is a different
+ *   strategy). The declaration is frozen with the call at publish (callLock), so it can't be chosen
+ *   after the fact. A TP2 alone declares nothing: plenty of single-target calls carry one as a note.
+ *   Before TP1: stop (or a same-candle TP1 + stop) = −1R on the whole call. TP1 banks 0.5 × R1; the
+ *   runner then grades first-touch TP2 vs the stop, a same-candle TP2 + stop = the stop. A TP1 hour
+ *   that also reaches TP2 (and not the stop) closes both halves. Total = 0.5·R1 + 0.5·R2 or
+ *   0.5·R1 − 0.5; WIN when the total is above zero. Until the runner closes the call stays PENDING,
+ *   with `tp1At` (sec) and `bankedR` so a card can show the half that's done. A declared split whose
+ *   TP2 isn't beyond TP1 is INVALID.
+ *
+ * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, takeProfit2?, exitPlan?, createdAt, publishMark? }
  * @param {object} cd candles { t:number[] (sec), h:number[], l:number[] } ascending by t
- * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number, awaitingEntry?:true }}
+ * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number, awaitingEntry?:true,
+ *   legs?:{ tp1:"HIT"|"STOP"|"OPEN", runner:"TP2"|"STOP"|"OPEN" }, tp1At?:number, bankedR?:number }}
  */
 export function gradeCall(t, cd) {
-  const { entryPrice, stopLoss, takeProfit1, createdAt } = t;
+  const { entryPrice, stopLoss, takeProfit1 } = t;
   if (!entryPrice || !stopLoss || !takeProfit1 || !cd) return { outcome: "INVALID", r: 0 };
   const R = callR(t);
   if (R == null) return { outcome: "INVALID", r: 0 };
+  const split = splitPlan(t);
+  if (split && split.invalid) return { outcome: "INVALID", r: 0 };
   const long = String(t.direction).toUpperCase() === "LONG";
-  const startSec = Math.floor((createdAt || 0) / 1000);
-  const n = cd.t.length;
-  let i = 0;
-  while (i < n && cd.t[i] < startSec) i++;          // the first hour that starts at or after the post
-  // The market the call was posted into: the hour containing the post, else the first hour after it.
-  const ref = i < n && cd.t[i] === startSec ? i : i > 0 && cd.t[i - 1] > startSec - 3600 ? i - 1 : i;
-  const entry = Number(entryPrice);
-  const traded = (k) => cd.l[k] <= entry && entry <= cd.h[k];
-  if (!(ref < n && traded(ref))) {
-    let f = i;
-    while (f < n && !traded(f)) f++;
-    if (f >= n) return { outcome: "PENDING", r: 0, awaitingEntry: true };
-    if (long ? cd.l[f] <= stopLoss : cd.h[f] >= stopLoss) return { outcome: "LOSS", r: -1 };
-    i = f + 1;                                        // a target in the fill hour doesn't count
-  }
-  for (; i < n; i++) {
-    const hi = cd.h[i], lo = cd.l[i];
-    if (long) {
-      const tp = hi >= takeProfit1, sl = lo <= stopLoss;
-      if (tp && sl) return { outcome: "LOSS", r: -1 };
-      if (tp) return { outcome: "WIN", r: R };
-      if (sl) return { outcome: "LOSS", r: -1 };
-    } else {
-      const tp = lo <= takeProfit1, sl = hi >= stopLoss;
-      if (tp && sl) return { outcome: "LOSS", r: -1 };
-      if (tp) return { outcome: "WIN", r: R };
-      if (sl) return { outcome: "LOSS", r: -1 };
+  const fill = entryFill(t, cd);
+  if (!fill.filled) return { outcome: "PENDING", r: 0, awaitingEntry: true };
+  let i = fill.next;
+  const f = fill.fillIdx;
+  const stopHit = (k) => (long ? cd.l[k] <= stopLoss : cd.h[k] >= stopLoss);
+  const reached = (k, px) => (long ? cd.h[k] >= px : cd.l[k] <= px);
+  const stopped = split ? { outcome: "LOSS", r: -1, legs: { tp1: "STOP", runner: "STOP" } } : { outcome: "LOSS", r: -1 };
+  if (f >= 0 && stopHit(f)) return stopped;
+  for (; i < cd.t.length; i++) {
+    const tp = reached(i, takeProfit1), sl = stopHit(i);
+    if (sl) return stopped;              // a same-candle target + stop is a LOSS (conservative)
+    if (!tp) continue;
+    if (!split) return { outcome: "WIN", r: R };
+    // TP1 banked on half. The runner keeps the original stop.
+    const tp1At = cd.t[i], banked = R / 2;
+    const done = (runner, r) => ({ outcome: r > 0 ? "WIN" : "LOSS", r: round(r, 2), legs: { tp1: "HIT", runner }, tp1At, bankedR: round(banked, 2) });
+    if (reached(i, Number(t.takeProfit2))) return done("TP2", banked + split.r2 / 2);
+    for (let k = i + 1; k < cd.t.length; k++) {
+      if (stopHit(k)) return done("STOP", banked - 0.5);   // same-candle TP2 + stop = the stop
+      if (reached(k, Number(t.takeProfit2))) return done("TP2", banked + split.r2 / 2);
     }
+    return { outcome: "PENDING", r: 0, legs: { tp1: "HIT", runner: "OPEN" }, tp1At, bankedR: round(banked, 2) };
   }
   return { outcome: "PENDING", r: 0 };
+}
+
+/** The declared split exit (see gradeCall). The one value it takes; anything else = a single target. */
+export const SPLIT_EXIT = "SPLIT_50";
+
+/**
+ * A call's declared split, or null for a single-target call.
+ * @returns {null | { invalid: true } | { r1: number, r2: number }} r2 = reward to TP2 ÷ risk, 2dp
+ */
+export function splitPlan(t) {
+  if (t?.exitPlan !== SPLIT_EXIT) return null;
+  const r1 = callR(t);
+  const r2 = callR({ ...t, takeProfit1: t.takeProfit2 });
+  if (r1 == null || r2 == null || !(r2 > r1)) return { invalid: true };
+  return { r1, r2 };
 }
 
 /**
  * Where a draft's entry sits against the market right now (the latest hour's range), for the
  * advisor: gradeCall only counts a call once price trades its entry, so an entry away from the
  * market is a resting order and the trader should know before posting. null without candles.
- * @returns {{ traded: boolean, offPct: number, last: number } | null}
+ * @returns {{ traded: boolean, atMarket: boolean, offPct: number, last: number } | null}
  */
 export function entryVsMarket(entryPrice, cd) {
   const e = Number(entryPrice);
@@ -103,7 +165,11 @@ export function entryVsMarket(entryPrice, cd) {
   if (!(e > 0) || !n) return null;
   const k = n - 1, last = Number(cd.c?.[k] ?? (cd.h[k] + cd.l[k]) / 2);
   if (!(last > 0)) return null;
-  return { traded: cd.l[k] <= e && e <= cd.h[k], offPct: Math.round(((e - last) / last) * 10000) / 100, last };
+  return {
+    traded: cd.l[k] <= e && e <= cd.h[k],
+    atMarket: atMark(e, last),            // what a publish right now would grade as "filled at the post"
+    offPct: Math.round(((e - last) / last) * 10000) / 100, last,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -285,9 +351,10 @@ export function regimeEdge(buckets, dimension = "trend", cfg = REGIME_EDGE) {
 //
 // What IS publicly verifiable is whether the PLAN was well-formed at the moment it
 // was posted, judged against the public price at that moment:
-//   LATE_ENTRY   the market had already run most of the way to target before the
-//                call went up — the stated entry was never obtainable, so the R
-//                being claimed is fiction (this is the main way a board gets gamed)
+//   LATE_ENTRY   the call is graded as filled at the post, but the market had already
+//                run more than 0.5R past its entry: the stated fill was never on offer.
+//                A resting order is never flagged: it's graded from the hour price
+//                trades it (gradeCall), so its R is obtainable.
 //   STOP_IN_NOISE  the stop sits inside a single bar's normal range → the outcome
 //                is a coin flip on noise regardless of whether the idea was right
 //   STOP_TOO_WIDE  "stop" so far away it isn't risk control
@@ -342,14 +409,24 @@ export function planQuality(t, cd, cfg = PLAN) {
   const atSec = Math.floor((t.createdAt || 0) / 1000);
   const idx = cd ? candleIndexAt(cd, atSec) : -1;
   if (idx >= 0) {
-    const mark = Number(cd.c?.[idx]);
+    // The market at the post: the mark the server read at publish when there is one, else the
+    // posting hour's close.
+    const pm = Number(t.publishMark?.px);
+    const mark = pm > 0 ? pm : Number(cd.c?.[idx]);
     if (Number.isFinite(mark) && mark) {
       // Signed in the direction of the trade: positive = the move already happened.
       const favourable = long ? mark - t.entryPrice : t.entryPrice - mark;
       const driftR = favourable / riskDist;
       components.markAtPost = round(mark, 8);
       components.entryDriftR = round(driftR, 2);
-      if (driftR > cfg.lateEntryR) flags.push("LATE_ENTRY");
+      // LATE_ENTRY is only a claim on a fill the market didn't offer: the call is graded as filled
+      // at the post (entryFill), yet price had already run past the entry. A resting order (a limit
+      // bid under the market, a stop-entry above it) is graded from the hour price trades it, so
+      // the R it claims is obtainable and it is never flagged (2026-10-12; before, every limit bid
+      // more than 0.5R under the market lost 30 points for its order type).
+      const atPost = entryFill(t, cd).atPost === true;
+      components.resting = !atPost;
+      if (atPost && driftR > cfg.lateEntryR) flags.push("LATE_ENTRY");
     }
     // Stop distance vs what a single bar routinely does.
     const regime = classifyRegime(cd, atSec);

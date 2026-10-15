@@ -32,6 +32,9 @@ import * as ed from "@noble/ed25519";
 if (!ed.etc.sha512Sync) ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 
 export const ONE_CLICK_API = "https://1click.chaindefuser.com";
+// Our worker holds the 1Click partner key (secret ONE_CLICK_JWT) and forwards quotes with it, which
+// drops 1Click's own fee for unauthenticated callers. The key never reaches the browser.
+export const XC_WORKER_API = "https://og.nexustradinglabs.com";
 // Pinned from the official SDK (ONE_CLICK_MANAGER_PUB_KEY). If 1Click rotates it, every
 // quote fails closed with "signature" — update it here from the SDK, never from a response.
 export const ONE_CLICK_PUBKEY = "ed25519:reYaWhvwu8Jzo3WUM3zhn6VrhuMEF4eADL17qtRVifc";
@@ -264,3 +267,21 @@ export const STATUS_TEXT = {
   FAILED: "Failed",
 };
 export const TERMINAL = new Set(["SUCCESS", "REFUNDED", "FAILED", "INCOMPLETE_DEPOSIT"]);
+
+// ── Quote transport ─────────────────────────────────────────────────────────────
+// Ask our worker first (it adds the partner key). When the worker has no key (503
+// xc_not_configured), is an older build (404), refuses the origin (403), is rate-limited (429),
+// errors (5xx) or can't be reached, quote straight from 1Click as before: the user still gets a quote, at 1Click's
+// unauthenticated price. A 4xx from 1Click itself (bad amount, unsupported pair) comes back through
+// the worker as-is and is NOT retried: asking again directly would get the same answer.
+// The hop adds no trust either way: checkQuote verifies 1Click's signature on whatever comes back.
+const WORKER_FALLBACK = new Set([403, 404, 429, 503]); // 403 = an origin the worker doesn't serve (local dev)
+export async function fetchOneClickQuote(body, { workerBase = XC_WORKER_API, fetchImpl = globalThis.fetch } = {}) {
+  const init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  try {
+    const r = await fetchImpl(`${workerBase}/xc/quote`, init);
+    if (!WORKER_FALLBACK.has(r.status) && r.status < 500) return { res: r, via: "worker" };
+  } catch { /* worker unreachable: fall through to 1Click */ }
+  return { res: await fetchImpl(`${ONE_CLICK_API}/v0/quote`, init), via: "direct" };
+}
+

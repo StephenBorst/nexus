@@ -121,7 +121,7 @@ export function TwapPanel({ symbol }: { symbol: string }) {
       >
         <span style={{ color: active ? POS : BONE }}>⧗ TWAP execution</span>
         <span style={{ color: FAINT, fontWeight: 400, letterSpacing: 0, fontSize: 11 }}>
-          {active ? `running · ${twap!.progress.filled}/${twap!.progress.total} slices` : `work a ${bare(symbol)} order over time`}
+          {active ? `running · ${twap!.progress.filled}/${twap!.progress.total} slices` : `split a ${bare(symbol)} order over time`}
         </span>
         <span style={{ marginLeft: "auto", color: FAINT }}>{open ? "▾" : "▸"}</span>
       </button>

@@ -22,6 +22,7 @@ export type PushStatus =
   | "off-server"   // the server's push key isn't set yet
   | "blocked"      // the user (or the browser) denied notifications
   | "off"
+  | "stale"        // this device holds a subscription the server has no record of: nothing reaches it
   | "on";
 
 export function savedTopics(): PushTopics {
@@ -62,12 +63,29 @@ async function currentSubscription(): Promise<PushSubscription | null> {
   try { return reg ? await reg.pushManager.getSubscription() : null; } catch { return null; }
 }
 
+/** Does the server have a record for this endpoint? null when it can't be asked (offline). */
+async function serverKnows(endpoint: string): Promise<boolean | null> {
+  try {
+    const r = await fetch(`${PUSH_API}/push/status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint }) });
+    if (!r.ok) return null;
+    return !!(await r.json()).subscribed;
+  } catch { return null; }
+}
+
+/**
+ * "on" only when this device has a subscription AND the server has a record of it. A local
+ * subscription alone isn't enough: the server drops a device the push service reports gone, and the
+ * Android app shares Chrome's storage for the site, so it can find a subscription made in Chrome
+ * days earlier that the server no longer has. If the server can't be asked, trust the device.
+ */
 export async function pushStatus(): Promise<PushStatus> {
   if (!pushSupported()) return "unsupported";
   const cfg = await pushConfig();
   if (!cfg.enabled || !cfg.publicKey) return "off-server";
   if (Notification.permission === "denied") return "blocked";
-  return (await currentSubscription()) ? "on" : "off";
+  const sub = await currentSubscription();
+  if (!sub) return "off";
+  return (await serverKnows(sub.endpoint)) === false ? "stale" : "on";
 }
 
 function keyBytes(b64u: string): Uint8Array {
@@ -84,6 +102,36 @@ async function post(path: string, body: unknown) {
 }
 
 /**
+ * Make a FRESH subscription for this device and save it for `wallet`. Any subscription the device
+ * already holds is dropped first (on the server too): it may be one the push service no longer
+ * delivers to, and reusing it is how a device ends up "On" with nothing arriving.
+ */
+async function registerDevice(wallet: string, labAuth: unknown, topics: PushTopics, publicKey: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  let sub: PushSubscription;
+  try {
+    const reg = await navigator.serviceWorker.register(PUSH_SW_URL, { scope: PUSH_SW_SCOPE });
+    // Not navigator.serviceWorker.ready: that waits for a worker controlling THIS page, and the
+    // alerts worker controls none, so it would never resolve.
+    await activeWorker(reg);
+    const old = await reg.pushManager.getSubscription();
+    if (old) {
+      await post("/push/unsubscribe", { endpoint: old.endpoint }).catch(() => null);
+      try { await old.unsubscribe(); } catch { /* the new subscribe below replaces it anyway */ }
+    }
+    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) as BufferSource });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Couldn’t register this device." };
+  }
+  const r = await post("/push/subscribe", { wallet: wallet.toLowerCase(), subscription: sub.toJSON(), topics, labAuth });
+  if (!r.ok) {
+    try { await sub.unsubscribe(); } catch { /* ignore */ }
+    return { ok: false, error: r.status === 401 ? "The signature didn’t check out. Try again." : `Couldn’t save this device (${r.data.error || r.status}).` };
+  }
+  saveTopics(topics);
+  return { ok: true };
+}
+
+/**
  * Switch alerts on for this device and wallet. Asks the browser for permission, then for the Lab
  * signature if it isn't already held (the same one saves use, good for a day).
  */
@@ -97,25 +145,21 @@ export async function enablePush(wallet: string, labWallet: LabWallet, topics: P
   let why = "";
   const labAuth = await getLabAuth(wallet, labWallet, "explicit", { fallbackSigner: wallet, onError: (m) => { why = m; } });
   if (!labAuth) return { ok: false, error: why || "Sign the Nexus message to turn alerts on." };
+  return registerDevice(wallet, labAuth, topics, cfg.publicKey);
+}
 
-  let sub: PushSubscription;
-  try {
-    const reg = await navigator.serviceWorker.register(PUSH_SW_URL, { scope: PUSH_SW_SCOPE });
-    // Not navigator.serviceWorker.ready: that waits for a worker controlling THIS page, and the
-    // alerts worker controls none, so it would never resolve.
-    await activeWorker(reg);
-    sub = (await reg.pushManager.getSubscription())
-      || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(cfg.publicKey) as BufferSource });
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Couldn’t register this device." };
-  }
-  const r = await post("/push/subscribe", { wallet: wallet.toLowerCase(), subscription: sub.toJSON(), topics, labAuth });
-  if (!r.ok) {
-    try { await sub.unsubscribe(); } catch { /* ignore */ }
-    return { ok: false, error: r.status === 401 ? "The signature didn’t check out. Try again." : `Couldn’t save this device (${r.data.error || r.status}).` };
-  }
-  saveTopics(topics);
-  return { ok: true };
+/**
+ * Quietly re-register a "stale" device with the Lab signature the app already holds. Never prompts:
+ * without a held signature (or without notification permission) it does nothing and the panel asks
+ * the user to turn alerts on again.
+ */
+export async function repairPush(wallet: string, labWallet: LabWallet): Promise<boolean> {
+  if (!pushSupported() || Notification.permission !== "granted") return false;
+  const cfg = await pushConfig();
+  if (!cfg.enabled || !cfg.publicKey) return false;
+  const labAuth = await getLabAuth(wallet, labWallet, "cached");
+  if (!labAuth) return false;
+  return (await registerDevice(wallet, labAuth, savedTopics(), cfg.publicKey)).ok;
 }
 
 /** Change which alerts this device gets. Needs the device to be on already. */
@@ -144,5 +188,13 @@ export async function sendTestPush() {
   if (!sub) return { ok: false, error: "Alerts are off on this device." };
   const r = await post("/push/test", { endpoint: sub.endpoint });
   if (r.ok) return { ok: true };
-  return { ok: false, error: r.status === 429 ? "One test a minute." : `Test failed (${r.data.error || r.status}).` };
+  if (r.status === 429) return { ok: false, error: "One test a minute." };
+  // The server has no record of this device, or the push service just said it's gone (the server
+  // has dropped it). Drop the local copy too, so the panel offers "Turn on" instead of a dead "On".
+  const gone = (r.data as { gone?: boolean }).gone;
+  if (r.status === 404 || gone) {
+    try { await sub.unsubscribe(); } catch { /* ignore */ }
+    return { ok: false, error: "This device wasn’t registered for alerts. Turn them on again." };
+  }
+  return { ok: false, error: `Test failed (${r.data.error || r.status}).` };
 }

@@ -4,6 +4,7 @@
 //   POST /push/topics       same body: change a device's switches (subscribe is idempotent)
 //   POST /push/unsubscribe  { endpoint }   holding the endpoint is the proof
 //   POST /push/test         { endpoint }   one test alert to that device, ≤1 per minute
+//   POST /push/status       { endpoint }   does the server know this device? { subscribed }
 //
 // Why subscribe needs the wallet's signature: a device list is capped per wallet, so anyone able
 // to add devices to YOUR wallet could push your real phone off the list. The signature is the same
@@ -48,6 +49,14 @@ export async function handlePush(parts, request, env) {
   if (route === "unsubscribe") {
     const r = await deleteSubscription(env, endpoint);
     return json({ ok: true, removed: r.removed }, request);
+  }
+
+  // The app asks this on open: a device can hold a subscription the server has no record of (the
+  // record was dropped after the push service said the device was gone, or the save never landed),
+  // and then it would read "On" while nothing could reach it.
+  if (route === "status") {
+    const rec = await getSubscription(env, endpoint);
+    return json({ subscribed: !!rec }, request);
   }
 
   if (route === "test") {

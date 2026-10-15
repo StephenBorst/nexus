@@ -26,6 +26,8 @@ import { ThesisTimeline } from "./ThesisTimeline";
 import { ThesisAdvisor } from "./ThesisAdvisor";
 import { PnlChart, EmptyState, Coachmark } from "./components";
 import { Collapsible } from "./Collapsible";
+import { AwaitingFill } from "@/components/AwaitingFill";
+import { showsLivePnl } from "@/lib/callLifecycle.mjs";
 import { SharePoster, type PosterData } from "./SharePoster";
 import { bareTicker } from "@/utils/utils";
 import { C, SIGNAL } from "@/config/theme";
@@ -110,6 +112,10 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
   // chroma; active/other stay a quiet neutral.
   const leftRule = eff === "HIT_TP" ? "#3ecf8e" : eff === "STOPPED_OUT" ? "#f7525f" : eff === "INVALIDATED" ? "#3f3f46" : "#33333a";
   const cardFunding = fundingFlow(t.direction, t.fundingRate);
+  // A published call is a position only once its entry trades (the hourly grader stamps fillState).
+  // Until then it shows the order, not P&L, the same as the Feed card and the call page. Private
+  // calls are the owner's own plan and are never stamped, so they keep the live P&L row.
+  const noPositionYet = t.isPublic && eff === "ACTIVE" && !showsLivePnl(t);
 
   // Auto-grade the dollar P&L from the plan the trader already logged, so a HIT TP /
   // STOPPED OUT click fills the number instead of making them do entry→exit × size
@@ -413,7 +419,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
           stamped the objective grade yet (first-touch OHLC, computed server-side).
           Informational ONLY: the grade lands automatically from public price, so there's
           nothing to click. Once graded, the authoritative banner above takes over. */}
-      {eff === "ACTIVE" && (() => {
+      {eff === "ACTIVE" && !noPositionYet && (() => {
         const sug = resolveSuggestion(t, markPrice);
         if (!sug || sug.graded) return null; // graded → shown by the grade banner above
         const isTp = sug.outcome === "HIT_TP";
@@ -427,8 +433,11 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
         );
       })()}
 
+      {/* Published call whose entry hasn't traded (or not checked yet): the order, no P&L. */}
+      {noPositionYet && <AwaitingFill thesis={t} markPrice={markPrice} style={{ marginBottom: 10 }} />}
+
       {/* Live P&L — only shown for still-live (ungraded) theses with a mark price */}
-      {eff === "ACTIVE" && markPrice != null && (() => {
+      {eff === "ACTIVE" && !noPositionYet && markPrice != null && (() => {
         const { pnl, pct } = calcUnrealizedPnl(t.direction, t.entryPrice, markPrice, t.positionSize);
         const toSL = distancePct(markPrice, t.stopLoss);
         const toTP = distancePct(markPrice, t.takeProfit1);
@@ -948,6 +957,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
     catalyst: "",
     targetWindow: "",
     chartUrls: [""] as string[],
+    splitExit: false,
   });
 
   // Done-for-you: seed account size from the connected collateral so position sizing
@@ -1105,7 +1115,13 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   // (catches missing fields, entry===stop, 0 risk → $0 / Infinity positions) AND a
   // direction has been committed (the WATCH gate: a weak base rate must be overridden
   // on purpose, never by a pre-checked default).
-  const formValid = !!form.symbol && dirArmed && !!calc
+  // A declared split needs TP2 beyond TP1 (else the grader calls it INVALID).
+  const splitBad = form.splitExit && (() => {
+    const e = parseFloat(form.entryPrice), t1 = parseFloat(form.takeProfit1), t2 = parseFloat(form.takeProfit2);
+    if (!(t2 > 0)) return false;
+    return form.direction === "LONG" ? !(t2 > t1 && t1 > e) : !(t2 < t1 && t1 < e);
+  })();
+  const formValid = !!form.symbol && dirArmed && !!calc && !splitBad
     && Number.isFinite(calc.positionSize) && calc.positionSize > 0
     && Number.isFinite(calc.riskReward) && calc.riskReward > 0;
   // string | string[] — chartUrls is a list; every other field is a plain string.
@@ -1245,6 +1261,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
     stopLoss: parseFloat(form.stopLoss),
     takeProfit1: parseFloat(form.takeProfit1),
     takeProfit2: parseFloat(form.takeProfit2) || 0,
+    // Declared split, graded half at TP1 + half at TP2 (lab-api gradeCall). Locked once published.
+    exitPlan: form.splitExit && parseFloat(form.takeProfit2) > 0 ? "SPLIT_50" : undefined,
     riskPercent: parseFloat(form.riskPercent),
     accountSize: parseFloat(form.accountSize),
     fundingRate: parseFloat(form.fundingRate),
@@ -1266,7 +1284,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   });
 
   const resetForm = () =>
-    setForm((f) => ({ ...f, symbol: "", entryPrice: "", stopLoss: "", takeProfit1: "", takeProfit2: "", notes: "", catalyst: "", targetWindow: "", chartUrls: [""] }));
+    setForm((f) => ({ ...f, symbol: "", entryPrice: "", stopLoss: "", takeProfit1: "", takeProfit2: "", splitExit: false, notes: "", catalyst: "", targetWindow: "", chartUrls: [""] }));
 
   // Saves the thesis PRIVATELY. Places no order of any kind — it was called
   // "deployPaper" and labelled "DEPLOY (PAPER)", which read as paper *trading* and
@@ -1859,6 +1877,13 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 </div>
               ))}
             </div>
+            {parseFloat(form.takeProfit2) > 0 && (
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 10, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", cursor: "pointer" }}>
+                <input type="checkbox" checked={form.splitExit} onChange={(e) => setForm((f) => ({ ...f, splitExit: e.target.checked }))} style={{ marginTop: 1 }} />
+                <span>SPLIT EXIT · graded as half at TP1, half at TP2, both on this stop. Off = graded at TP1 only. Locked once published.
+                  {splitBad && <span style={{ display: "block", color: "#fbbf24", marginTop: 4 }}>TP2 must sit beyond TP1 for a split.</span>}</span>
+              </label>
+            )}
             {/* Guided quick-fill: anchor entry to the live mark, then snap stop/target */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 10 }}>
               {(() => {

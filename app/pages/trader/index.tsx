@@ -9,6 +9,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
+import { showsLivePnl } from "@/lib/callLifecycle.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.mjs";
+import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { fetchOnChainRepScore } from "@/hooks/useThesisRegistry";
 import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -21,6 +24,7 @@ import { PublicOperatorProfile, InFlightCalls, VenueEvidence } from "./ProfileSy
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
 import { bareTicker } from "@/utils/utils";
 import { SIGNAL } from "@/config/theme";
+import { TEXT_ACTION, TEXT_ACTION_BAR, TEXT_ACTION_CLASS } from "@/components/ui";
 import { pressKey } from "@/utils/a11y";
 import { useEscapeKey } from "@/utils/a11y";
 import type { SavedStrategy } from "@/pages/lab/agentTypes";
@@ -49,6 +53,9 @@ type FeedThesis = {
   leverage: number;
   status: "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "CLOSED";
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped); absent = not yet graded
+  fillState?: "WORKING" | "OPEN";  // server: has the entry traded yet (grading.mjs applyFillStamp)
+  filledAt?: number;
+  publishMark?: { px: number; at: number };
   actualPnl: number | null;
   createdAt: number;
   notes: string;
@@ -146,9 +153,14 @@ function ThesisRow({
     return "just now";
   })();
 
-  const pnlData = thesis.status === "ACTIVE" && markPrice != null
+  // P&L only once the entry has traded; a resting order shows the order instead (AwaitingFill).
+  const pendingLabel = awaitingLabel(thesis)?.split(" · ")[0] ?? null; // the price is in the block below
+  // Public calls carry no position size, so the badge reads the move in R and % (a dollar
+  // figure would always be $0.00). A sized call (the owner's own view) keeps its dollars.
+  const pnlData = showsLivePnl(thesis) && markPrice != null
     ? calcUnrealizedPnl(thesis.direction, thesis.entryPrice, markPrice, thesis.positionSize)
     : null;
+  const move = showsLivePnl(thesis) && markPrice != null ? liveMove(thesis, markPrice) : null;
 
   return (
     <div style={{
@@ -189,8 +201,9 @@ function ThesisRow({
             { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`, color: "#a1a1aa" },
             { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,   color: "#f7525f" },
             { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`, color: "#ededf0" },
-            { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`, color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
-            { label: "SIZE",  val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" },
+            { label: "R:R",   val: fmtRR(callRR(thesis)), color: (callRR(thesis) ?? 0) >= 2 ? "#ededf0" : "#fbbf24" },
+            ...(runnerRR(thesis) != null ? [{ label: "RUNNER", val: fmtRR(runnerRR(thesis)), color: "#a1a1aa" }] : []),
+            ...(thesis.positionSize > 0 ? [{ label: "SIZE", val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" }] : []),
           ].map(({ label, val, color }) => (
             <div key={label}>
               <div style={{ fontSize: 7, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</div>
@@ -200,13 +213,17 @@ function ThesisRow({
         </div>
 
         {/* Live P&L badge (if active) */}
-        {pnlData && (
+        {pnlData && thesis.positionSize > 0 ? (
           <div style={{
             fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold",
             color: pnlData.pnl >= 0 ? "#3ecf8e" : "#f7525f",
           }}>
             {pnlData.pnl >= 0 ? "+" : ""}${pnlData.pnl.toFixed(2)}
             <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 3 }}>({pnlData.pct >= 0 ? "+" : ""}{pnlData.pct.toFixed(2)}%)</span>
+          </div>
+        ) : move && (
+          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", color: move.pct >= 0 ? "#3ecf8e" : "#f7525f" }}>
+            {fmtLiveMove(move)}
           </div>
         )}
 
@@ -222,8 +239,8 @@ function ThesisRow({
           <div style={{
             fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.08em",
             padding: "2px 7px", borderRadius: 3,
-            background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color,
-          }}>{cfg.label}</div>
+            background: cfg.bg, border: `1px ${pendingLabel ? "dashed" : "solid"} ${cfg.border}`, color: pendingLabel ? "#a1a1aa" : cfg.color,
+          }}>{pendingLabel ? pendingLabel.toUpperCase() : cfg.label}</div>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a" }}>{timeAgo}</div>
         </div>
 
@@ -253,8 +270,9 @@ function ThesisRow({
       {/* Expanded: full details + notes + live grid */}
       {expanded && (
         <div style={{ borderTop: "1px solid #232327", padding: "12px 16px" }}>
-          {/* Live price grid */}
-          {thesis.status === "ACTIVE" && markPrice != null && (() => {
+          <AwaitingFill thesis={thesis} markPrice={markPrice} style={{ marginBottom: 12 }} />
+          {/* Live price grid — only once the entry has traded */}
+          {showsLivePnl(thesis) && markPrice != null && (() => {
             const { pnl, pct } = calcUnrealizedPnl(thesis.direction, thesis.entryPrice, markPrice, thesis.positionSize);
             const toSL = distancePct(markPrice, thesis.stopLoss);
             const toTP = distancePct(markPrice, thesis.takeProfit1);
@@ -262,7 +280,9 @@ function ThesisRow({
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(70px, 1fr))", gap: "8px 12px", marginBottom: 12, padding: 10, background: "#0f0f11", borderRadius: 4, border: "1px solid #232327" }}>
                 {[
                   { label: "MARK", val: `$${markPrice.toFixed(markPrice < 10 ? 4 : 2)}`, color: "#fff" },
-                  { label: "UNREALIZED", val: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`, color: pnl >= 0 ? "#3ecf8e" : "#f7525f" },
+                  thesis.positionSize > 0
+                    ? { label: "UNREALIZED", val: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`, color: pnl >= 0 ? "#3ecf8e" : "#f7525f" }
+                    : { label: "MOVE", val: fmtLiveMove(liveMove(thesis, markPrice)), color: pct >= 0 ? "#3ecf8e" : "#f7525f" },
                   { label: "TO SL", val: `${toSL.toFixed(2)}%`, color: "#f7525f" },
                   { label: "TO TP1", val: `${toTP.toFixed(2)}%`, color: "#ededf0" },
                 ].map(({ label, val, color }) => (
@@ -537,7 +557,9 @@ export default function TraderPage() {
           leverage: num(t.leverage),
           actualPnl: t.actualPnl == null ? null : num(t.actualPnl),
         }));
-        setTheses(all.filter((t) => t.wallet.toLowerCase() === wallet.toLowerCase()));
+        // /feed also carries RESOLUTION rows ("BTC SHORT stopped out, −1R"): announcements with no
+        // levels. They used to land here as calls with $0.00 entry/stop/TP and "Checking fill".
+        setTheses(all.filter((t) => !(t as { resolution?: boolean }).resolution && t.wallet.toLowerCase() === wallet.toLowerCase()));
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
@@ -562,6 +584,7 @@ export default function TraderPage() {
     () => theses.filter((t) => t.status === "ACTIVE").map((t) => ({
       symbol: t.symbol, direction: t.direction,
       entryPrice: t.entryPrice, stopLoss: t.stopLoss, takeProfit1: t.takeProfit1,
+      status: t.status, gradedOutcome: t.gradedOutcome, fillState: t.fillState, publishMark: t.publishMark,
     })),
     [theses],
   );
@@ -576,11 +599,11 @@ export default function TraderPage() {
     const invalidated = theses.filter((t) => t.status === "INVALIDATED").length;
     const closed = wins + losses;
     const winRate = closed > 0 ? (wins / closed) * 100 : null;
-    const avgRR = theses.length > 0
-      ? theses.reduce((sum, t) => sum + t.riskReward, 0) / theses.length
-      : 0;
+    // From each call's own levels (TP1), the R the grader pays; calls whose levels don't make a call are left out.
+    const rrs = theses.map((t) => callRR(t)).filter((r): r is number => r != null);
+    const avgRR = rrs.length > 0 ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 0;
     const bestTrade = theses.reduce<FeedThesis | null>((best, t) =>
-      !best || t.riskReward > best.riskReward ? t : best, null);
+      callRR(t) != null && (!best || (callRR(t) ?? 0) > (callRR(best) ?? 0)) ? t : best, null);
     const totalPnl = theses
       .filter((t) => t.actualPnl !== null)
       .reduce((sum, t) => sum + (t.actualPnl ?? 0), 0);
@@ -665,29 +688,19 @@ export default function TraderPage() {
         <CopyModal thesis={copyTarget} walletAddress={walletAddress} onClose={() => setCopyTarget(null)} />
       )}
 
-      {/* Header — flexWrap so the three actions (FOLLOW + MESSAGE + SHARE) drop to a second
-          row on a phone instead of overflowing the right edge; on desktop they stay inline. */}
-      <div style={{ padding: "8px 16px", borderBottom: "1px solid #232327", background: "#0f0f11", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 8 }}>
-        <button
-          onClick={() => navigate("/feed")}
-          style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: 0 }}
-        >
-          ← Feed
-        </button>
-        <div style={{ flex: 1, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#33333a", letterSpacing: "0.05em" }}>
-          / TRADER
-        </div>
-        {/* Header actions — one shared size so FOLLOW + MESSAGE + SHARE read as a matched set. */}
+      {/* Header — the call page's action bar: plain text actions, one style (TEXT_ACTION), no boxes. Follow /
+          Message / Link wrap to a second row on a phone; each keeps a 44px tap target. */}
+      <div style={TEXT_ACTION_BAR}>
+        <button onClick={() => navigate("/feed")} className={TEXT_ACTION_CLASS} style={TEXT_ACTION}>← Feed</button>
+        <div style={{ flex: 1 }} />
         {walletAddress && !isOwn && wallet && (
           <button
             onClick={toggleFollow}
             disabled={followBusy}
+            className={TEXT_ACTION_CLASS}
             title={isFollowing ? "Unfollow. Stop starred alerts when they open a position" : "Follow. Their next open pings you in Live Alerts"}
-            style={{
-              background: isFollowing ? `${SIGNAL.follow}14` : "none", border: `1px solid ${isFollowing ? SIGNAL.follow : "#232327"}`, borderRadius: 4,
-              color: isFollowing ? SIGNAL.follow : "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12,
-              padding: "6px 14px", cursor: followBusy ? "default" : "pointer", minWidth: 108,
-            }}
+            // Gold = someone you follow (SIGNAL.follow's one job); otherwise the plain action colour.
+            style={{ ...TEXT_ACTION, color: isFollowing ? SIGNAL.follow : TEXT_ACTION.color, cursor: followBusy ? "default" : "pointer" }}
           >
             {isFollowing ? "★ Following" : "☆ Follow"}
           </button>
@@ -696,17 +709,12 @@ export default function TraderPage() {
           wallet={wallet}
           myWallet={walletAddress}
           variant="full"
-          style={{ background: "none", border: "1px solid #232327", borderRadius: 4, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "6px 14px", cursor: "pointer", letterSpacing: "0.05em", justifyContent: "center", minWidth: 108 }}
+          label="⬡ Message"
+          className={TEXT_ACTION_CLASS}
+          style={TEXT_ACTION}
         />
-        <button
-          onClick={copyLink}
-          style={{
-            background: "none", border: "1px solid #232327", borderRadius: 4,
-            color: copied ? "#ededf0" : "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12,
-            padding: "6px 14px", cursor: "pointer", minWidth: 108,
-          }}
-        >
-          {copied ? "✓ Copied" : "⎘ Share"}
+        <button onClick={copyLink} title="Copy link" className={TEXT_ACTION_CLASS} style={{ ...TEXT_ACTION, color: copied ? "#ededf0" : TEXT_ACTION.color }}>
+          {copied ? "✓ Copied" : "⧉ Link"}
         </button>
       </div>
 
@@ -738,7 +746,7 @@ export default function TraderPage() {
                 </div>
                 <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b", marginTop: 2 }}>{shortAddr}</div>
                 <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a", marginTop: 4 }}>
-                  {theses.length} public thesis{theses.length !== 1 ? "es" : ""}
+                  {theses.length} public {theses.length === 1 ? "call" : "calls"}
                 </div>
               </div>
               {/* Cross-check: this board ranks GRADED CALLS, but a caller's real
@@ -811,7 +819,7 @@ export default function TraderPage() {
                   <StatBox
                     label="ACTIVE"
                     value={String(stats.active)}
-                    sub="live trades"
+                    sub="unresolved calls"
                     color={stats.active > 0 ? "#d4d4d8" : "#52525b"}
                   />
                   <StatBox
@@ -831,7 +839,7 @@ export default function TraderPage() {
                   {stats.bestTrade && (
                     <StatBox
                       label="BEST R:R"
-                      value={`1:${stats.bestTrade.riskReward.toFixed(2)}`}
+                      value={fmtRR(callRR(stats.bestTrade))}
                       sub={bareTicker(stats.bestTrade.symbol)}
                       color="#ededf0"
                     />

@@ -32,6 +32,10 @@ export const SERVER_FIELDS = [
   "planScore", "planFlags", "regimeTrend", "regimeVol", "regimeAlign",
   "copyCount", "publishedAt", "publishLegacy",
   "duplicateOf",   // callDedupe.mjs: this record's copy of a call another wallet can be proven to have made
+  "publishMark",   // publishMark.mjs: the market price the server read when the call was first published
+  "fillState", "filledAt", // grading.mjs applyFillStamp: has the entry traded yet (WORKING / OPEN)
+  "tp1HitAt",      // grading.mjs applyFillStamp: a declared split's TP1 half closed, runner still open
+  "planV",         // grading.mjs PLAN_V: the plan-quality rules that wrote planScore/planFlags
 ];
 /** The only fields the owner may still change on a published call. */
 export const OWNER_FIELDS = ["updates", "lossReason"];
@@ -95,6 +99,11 @@ function ownerLossReason(stored, incoming) {
   return typeof incoming === "string" && incoming.length <= MAX_LOSS_REASON ? incoming : stored;
 }
 
+// A mark the server read at the first publish (publishMark.mjs). Kept on the registry entry, so no
+// save can add, move or drop it.
+const MARK_MAX_AGE_MS = 120_000;
+const isMark = (m) => isObj(m) && Number(m.px) > 0 && Number.isFinite(Number(m.px)) && Number(m.at) > 0;
+
 const statusFromGrade = (o) => (o === "WIN" ? "HIT_TP" : o === "LOSS" ? "STOPPED_OUT" : "ACTIVE");
 
 function serverFieldsOf(t) {
@@ -113,6 +122,7 @@ function publishedView(entry, stored, incoming, now) {
     publishedAt: entry.publishedAt,
   };
   if (entry.legacy) view.publishLegacy = true; else delete view.publishLegacy;
+  if (isMark(entry.publishMark)) view.publishMark = { ...entry.publishMark }; else delete view.publishMark;
   const updates = mergeUpdates(stored?.updates, incoming ? incoming.updates : undefined, now);
   if (updates.length) view.updates = updates;
   const lr = ownerLossReason(stored?.lossReason, incoming ? incoming.lossReason : undefined);
@@ -126,16 +136,18 @@ function publishedView(entry, stored, incoming, now) {
  * publishes, and keep server fields server-owned.
  *
  * @param {{ prev: object[], incoming: object[], registry: object|null, now: number,
- *            ownedElsewhere?: Set<string> }} p
+ *            ownedElsewhere?: Set<string>, publishMarks?: Record<string, {px:number, at:number}> }} p
  *   prev: the stored theses before this save · incoming: what the save sends (the client's list,
  *   or a server writer's) · registry: callreg, or null for a wallet that has none yet ·
  *   ownedElsewhere: ids another wallet already published (callowner index). Those can't be
  *   published here: the Lab's cache used to carry one wallet's calls into the next wallet it
- *   connected, and a lock would make every such copy permanent.
+ *   connected, and a lock would make every such copy permanent. publishMarks: the market price the
+ *   server read for each call this save publishes (prepareSeal); a mark read more than
+ *   MARK_MAX_AGE_MS from `now` is not kept.
  * @returns {{ theses: object[], registry: object, registryChanged: boolean, bootstrapped: string[],
  *             newlyPublished: object[], refused: {id:string, reason:string}[], restored: string[] }}
  */
-export function sealTheses({ prev, incoming, registry, now, ownedElsewhere = new Set() }) {
+export function sealTheses({ prev, incoming, registry, now, ownedElsewhere = new Set(), publishMarks = {} }) {
   const prevList = Array.isArray(prev) ? prev.filter(isObj) : [];
   let reg = readRegistry(registry);
   let registryChanged = false, bootstrapped = [];
@@ -172,6 +184,10 @@ export function sealTheses({ prev, incoming, registry, now, ownedElsewhere = new
       frozen.clientCreatedAt = t.createdAt;
       frozen.createdAt = now;
       reg.calls[id] = { frozen, publishedAt: now };
+      const pm = isObj(publishMarks) ? publishMarks[id] : null;
+      if (isMark(pm) && Math.abs(Number(pm.at) - now) <= MARK_MAX_AGE_MS) {
+        reg.calls[id].publishMark = { px: Number(pm.px), at: Number(pm.at), ...(typeof pm.src === "string" ? { src: pm.src } : {}) };
+      }
       reg.order.push(id);
       registryChanged = true;
       const view = publishedView(reg.calls[id], null, t, now);

@@ -12,10 +12,15 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
+import { showsLivePnl } from "@/lib/callLifecycle.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.mjs";
+import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { chartImageList, effectiveStatus } from "@/pages/lab/helpers";
+import { publishMarkLine } from "@/lib/entryAtMark.mjs";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
 import { SocialBar } from "@/components/SocialBar";
+import { Button, TEXT_ACTION, TEXT_ACTION_BAR } from "@/components/ui";
 import { bareTicker } from "@/utils/utils";
 
 const API_BASE = "https://og.nexustradinglabs.com";
@@ -35,6 +40,9 @@ type FeedThesis = {
   status: "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "CLOSED";
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped)
   gradedR?: number;               // graded R-multiple result
+  fillState?: "WORKING" | "OPEN"; // server: has the entry traded yet (grading.mjs applyFillStamp)
+  filledAt?: number;
+  publishMark?: { px: number; at: number; src?: string }; // server-read market price at first publish
   actualPnl: number | null;
   createdAt: number;
   notes: string;
@@ -47,15 +55,30 @@ type FeedThesis = {
   onChainTxHash?: string;
 };
 
+type GradeRead = { outcome: "WIN" | "LOSS" | "PENDING" | "INVALID"; r: number; awaitingEntry?: boolean };
+// GET /verify/:wallet/:id — the grader re-run from scratch (workers/nexus-lab-api/routes-verify.mjs).
 type VerifyResult = {
-  verified: boolean;
-  hitTP: boolean;
-  hitSL: boolean;
-  status: string;
-  method: string;
-  candlesChecked: number;
+  verdict?: "MATCH" | "MISMATCH" | "UNSTAMPED" | "NO_DATA";
+  fresh?: GradeRead | null;
+  stamped?: { outcome: string; r: number } | null;
+  candlesChecked?: number;
+  source?: string | null;
+  rule?: string;
   error?: string;
 };
+
+const VERDICT_LINE: Record<string, { label: string; color: string; note: string }> = {
+  MATCH:     { label: "✓ MATCHES THE GRADE", color: "#ededf0", note: "A fresh grade from the candles gives the same result as the stored one." },
+  MISMATCH:  { label: "✕ DOES NOT MATCH",    color: "#fbbf24", note: "A fresh grade disagrees with the stored one. The hourly pass re-grades it; check back after the hour." },
+  UNSTAMPED: { label: "GRADED NOW",          color: "#a1a1aa", note: "No stored grade yet. This is what the grader says right now." },
+  NO_DATA:   { label: "CANDLES NOT LOADED",  color: "#a1a1aa", note: "The candles for this call’s window aren’t loaded yet. Try again in a few minutes." },
+};
+
+function gradeText(g?: { outcome: string; r: number } | null): string {
+  if (!g) return "—";
+  if (g.outcome === "WIN" || g.outcome === "LOSS") return `${g.outcome} ${g.r >= 0 ? "+" : ""}${Number(g.r).toFixed(2)}R`;
+  return g.outcome;
+}
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   ACTIVE:      { label: "ACTIVE",      color: "#d4d4d8", bg: "#1a1a1e", border: "#33333a" },
@@ -107,10 +130,6 @@ function Avatar({ pfp, displayName, size = 40 }: { pfp: string | null; displayNa
 }
 
 // A text action: no box, UI face, fog; hover lifts it to bone (.nx-text-action in index.css).
-const TEXT_ACTION: React.CSSProperties = {
-  background: "none", border: "none", padding: "6px 0", cursor: "pointer", textDecoration: "none",
-  fontFamily: "var(--nx-font-ui)", fontSize: 13, fontWeight: 600, color: "#a1a1aa", whiteSpace: "nowrap",
-};
 
 export default function ThesisPage() {
   const { wallet, id } = useParams<{ wallet: string; id: string }>();
@@ -172,7 +191,7 @@ export default function ThesisPage() {
     const ticker = bareTicker(thesis.symbol);
     const name = thesis.displayName ?? `${thesis.wallet.slice(0, 6)}…${thesis.wallet.slice(-4)}`;
     const title = `${ticker} ${thesis.direction} by ${name}`;
-    const desc = `Entry: $${thesis.entryPrice.toFixed(2)} | SL: $${thesis.stopLoss.toFixed(2)} | TP: $${thesis.takeProfit1.toFixed(2)} | R:R 1:${thesis.riskReward.toFixed(2)}`;
+    const desc = `Entry: $${thesis.entryPrice.toFixed(2)} | SL: $${thesis.stopLoss.toFixed(2)} | TP: $${thesis.takeProfit1.toFixed(2)} | R:R ${fmtRR(callRR(thesis))}`;
     const ogImg = `${OG_BASE}/og/thesis/${wallet}/${id}`;
     const ogImgPng = `${OG_BASE}/og/thesis/${wallet}/${id}.png`;
     const pageUrl = window.location.href;
@@ -210,9 +229,9 @@ export default function ThesisPage() {
     try {
       const r = await fetch(`${API_BASE}/verify/${wallet}/${id}`);
       const data = await r.json();
-      setVerifyResult(data);
+      setVerifyResult(r.ok ? data : { error: data?.error || `HTTP ${r.status}` });
     } catch {
-      setVerifyResult({ verified: false, hitTP: false, hitSL: false, status: "", method: "", candlesChecked: 0, error: "request failed" });
+      setVerifyResult({ error: "request failed" });
     } finally {
       setVerifying(false);
     }
@@ -262,7 +281,17 @@ export default function ThesisPage() {
   })();
 
   const markPrice = livePrices[thesis.symbol] ?? null;
-  const isClosed = thesis.status === "HIT_TP" || thesis.status === "STOPPED_OUT" || thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS";
+  // A call with no position yet reads "Awaiting fill" / "Checking fill", never "ACTIVE".
+  const pendingLabel = awaitingLabel(thesis)?.split(" · ")[0] ?? null; // the price is in the block below
+  // A call posted without a size (Bankr, house calls) has no SIZE to show, not "$0".
+  const levelCells = [
+    { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`,   color: "#a1a1aa" },
+    { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,      color: "#f7525f" },
+    { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`,   color: "#ededf0" },
+    { label: "R:R",   val: fmtRR(callRR(thesis)),   color: (callRR(thesis) ?? 0) >= 2 ? "#ededf0" : "#fbbf24" },
+    ...(runnerRR(thesis) != null ? [{ label: "RUNNER", val: fmtRR(runnerRR(thesis)), color: "#a1a1aa" }] : []),
+    ...(thesis.positionSize > 0 ? [{ label: "SIZE", val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" }] : []),
+  ];
 
   // Outbound share — pre-filled X / Farcaster posts that pull external eyes back
   // Share via the worker OG proxy — crawlers can't see the SPA's JS-injected OG tags,
@@ -275,7 +304,7 @@ export default function ThesisPage() {
       ? `${ticker} ${thesis.direction}. Graded ${thesis.gradedOutcome}${typeof thesis.gradedR === "number" ? ` ${thesis.gradedR >= 0 ? "+" : ""}${thesis.gradedR.toFixed(2)}R` : ""}.\n\n` +
         `First touch vs public price. The tape marked it, not me.\n\nGraded on Nexus Trading Labs.`
       : `${ticker} ${thesis.direction} ${thesis.leverage.toFixed(1)}x.\n\n` +
-        `Entry $${thesis.entryPrice.toFixed(2)}. Stop $${thesis.stopLoss.toFixed(2)}. TP $${thesis.takeProfit1.toFixed(2)}. R:R 1:${thesis.riskReward.toFixed(2)}.\n\n` +
+        `Entry $${thesis.entryPrice.toFixed(2)}. Stop $${thesis.stopLoss.toFixed(2)}. TP $${thesis.takeProfit1.toFixed(2)}. R:R ${fmtRR(callRR(thesis))}.\n\n` +
         `Graded against public price on Nexus Trading Labs.`;
   const shareX = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
   const shareFc = `https://warpcast.com/~/compose?text=${encodeURIComponent(shareText + "\n\n" + shareUrl)}&embeds[]=${encodeURIComponent(shareUrl)}`;
@@ -283,7 +312,7 @@ export default function ThesisPage() {
   return (
     <div style={{ background: "#0a0a0b", minHeight: "100svh", padding: 0 }}>
       {/* Top bar — plain text actions, one style: no boxes, UI face, fog → bright on hover. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "10px 16px", borderBottom: "1px solid #232327", background: "#0f0f11", flexWrap: "wrap", rowGap: 8 }}>
+      <div style={TEXT_ACTION_BAR}>
         <button onClick={() => navigate(-1)} className="nx-text-action" style={TEXT_ACTION}>← Back</button>
         <div style={{ flex: 1 }} />
         {/* Discuss THIS call with its author — seeds the DM with the call context */}
@@ -344,8 +373,8 @@ export default function ThesisPage() {
                 <span style={{ fontSize: 14 }} title="on-chain verified">⛓</span>
               ) : null}
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a" }}>{timeAgo}</div>
-              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 3, background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color }}>
-                {cfg.label}
+              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 3, background: cfg.bg, border: `1px ${pendingLabel ? "dashed" : "solid"} ${cfg.border}`, color: pendingLabel ? "#a1a1aa" : cfg.color }}>
+                {pendingLabel ? pendingLabel.toUpperCase() : cfg.label}
               </div>
             </div>
           </div>
@@ -377,14 +406,8 @@ export default function ThesisPage() {
           })()}
 
           {/* Key levels */}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, minmax(0, 1fr))" : "repeat(5, minmax(0, 1fr))", gap: "10px 16px", marginBottom: 16, padding: 14, background: "#0f0f11", borderRadius: 4, border: "1px solid #232327" }}>
-            {[
-              { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`,   color: "#a1a1aa" },
-              { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,      color: "#f7525f" },
-              { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`,   color: "#ededf0" },
-              { label: "R:R",   val: `1:${thesis.riskReward.toFixed(2)}`,   color: thesis.riskReward >= 2 ? "#ededf0" : "#fbbf24" },
-              { label: "SIZE",  val: `$${thesis.positionSize.toFixed(0)}`,  color: "#a1a1aa" },
-            ].map(({ label, val, color }) => (
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, minmax(0, 1fr))" : `repeat(${levelCells.length}, minmax(0, 1fr))`, gap: "10px 16px", marginBottom: 16, padding: 14, background: "#0f0f11", borderRadius: 4, border: "1px solid #232327" }}>
+            {levelCells.map(({ label, val, color }) => (
               <div key={label}>
                 <div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</div>
                 <div style={{ fontSize: 14, color, fontFamily: "var(--nx-font-mono)", fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val}</div>
@@ -392,8 +415,24 @@ export default function ThesisPage() {
             ))}
           </div>
 
-          {/* Live P&L — active theses */}
-          {thesis.status === "ACTIVE" && markPrice != null && (() => {
+          {/* The market price the server locked when the call was published: the grade's reference. */}
+          {(() => {
+            const pm = publishMarkLine(thesis);
+            if (!pm) return null;
+            return (
+              <div style={{ marginTop: -8, marginBottom: 16, padding: "8px 14px", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", lineHeight: 1.6 }}>
+                <span style={{ color: "#52525b" }}>MARKET AT POST </span>
+                <span style={{ color: "#a1a1aa" }}>{pm.markText}</span>
+                <span> · Orderly mark, read by the server when this was published. {pm.line}</span>
+              </div>
+            );
+          })()}
+
+          {/* No position yet (a resting entry price hasn't reached, or not checked): the order, not P&L. */}
+          <AwaitingFill thesis={thesis} markPrice={markPrice} style={{ marginBottom: 16 }} />
+
+          {/* Live P&L — only once the entry has traded (callLifecycle OPEN) */}
+          {showsLivePnl(thesis) && markPrice != null && (() => {
             const { pnl, pct } = calcUnrealizedPnl(thesis.direction, thesis.entryPrice, markPrice, thesis.positionSize);
             const toSL = distancePct(markPrice, thesis.stopLoss);
             const toTP = distancePct(markPrice, thesis.takeProfit1);
@@ -401,7 +440,10 @@ export default function ThesisPage() {
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: "10px 16px", marginBottom: 16, padding: 14, background: "#0f0f11", borderRadius: 4, border: "1px solid #33333a" }}>
                 {[
                   { label: "MARK",       val: `$${markPrice.toFixed(markPrice < 10 ? 4 : 2)}`, color: "#fff" },
-                  { label: "UNREALIZED", val: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`, color: pnl >= 0 ? "#3ecf8e" : "#f7525f" },
+                  // No size on a public call: the move in R and %, not a "$0.00" that ignores the mark.
+                  thesis.positionSize > 0
+                    ? { label: "UNREALIZED", val: `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`, color: pnl >= 0 ? "#3ecf8e" : "#f7525f" }
+                    : { label: "MOVE", val: fmtLiveMove(liveMove(thesis, markPrice)), color: pct >= 0 ? "#3ecf8e" : "#f7525f" },
                   { label: "TO SL",      val: `${toSL.toFixed(2)}%`, color: "#f7525f" },
                   { label: "TO TP1",     val: `${toTP.toFixed(2)}%`, color: "#ededf0" },
                 ].map(({ label, val, color }) => (
@@ -443,74 +485,68 @@ export default function ThesisPage() {
           )}
         </div>
 
-        {/* Ph25: Verify Outcome — only for closed theses */}
-        {isClosed && (
-          <div style={{ background: "#141416", border: "1px solid #232327", borderRadius: 4, padding: "16px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b", letterSpacing: "0.05em" }}>PRICE VERIFICATION</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a", marginTop: 2 }}>
-                  Cross-check recorded outcome against CoinGecko OHLC data
-                </div>
+        {/* Re-grade from candles: the real grader, run fresh, vs the stored grade. */}
+        <div style={{ background: "#141416", border: "1px solid #232327", borderRadius: 4, padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", letterSpacing: "0.05em" }}>CHECK THE GRADE</div>
+              <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", marginTop: 4, lineHeight: 1.5 }}>
+                Re-runs the grader on Orderly’s 1h candles and ignores the stored result.
               </div>
-              {!verifyResult && (
-                <button
-                  onClick={handleVerify}
-                  disabled={verifying}
-                  style={{
-                    background: "none", border: "1px solid #232327", borderRadius: 3,
-                    color: verifying ? "#33333a" : "#71717a",
-                    fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "5px 12px",
-                    cursor: verifying ? "default" : "pointer",
-                  }}
-                >{verifying ? "verifying..." : "Verify outcome →"}</button>
-              )}
             </div>
-
-            {verifyResult && (
-              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #232327" }}>
-                {verifyResult.error ? (
-                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#f7525f" }}>
-                    error: {verifyResult.error}
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{
-                        fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: "bold",
-                        color: verifyResult.verified ? "#3ecf8e" : "#f7525f",
-                      }}>
-                        {verifyResult.verified ? "✓ VERIFIED" : "✗ DISPUTED"}
-                      </div>
-                      <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a" }}>
-                        via {verifyResult.method} · {verifyResult.candlesChecked} candles
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 16 }}>
-                      <div>
-                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#52525b" }}>TP HIT IN DATA</div>
-                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: verifyResult.hitTP ? "#ededf0" : "#52525b" }}>
-                          {verifyResult.hitTP ? "yes" : "no"}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#52525b" }}>SL HIT IN DATA</div>
-                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: verifyResult.hitSL ? "#f7525f" : "#52525b" }}>
-                          {verifyResult.hitSL ? "yes" : "no"}
-                        </div>
-                      </div>
-                    </div>
-                    {!verifyResult.verified && (
-                      <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>
-                        price data does not confirm recorded outcome. Outcome may have been manually set
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+            {!verifyResult && (
+              <Button size="sm" disabled={verifying} onClick={handleVerify}>
+                {verifying ? "Checking…" : "Re-grade from candles"}
+              </Button>
             )}
           </div>
-        )}
+
+          {verifyResult && (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #232327" }}>
+              {verifyResult.error ? (
+                <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#fbbf24" }}>
+                  Couldn’t check it: {verifyResult.error}
+                </div>
+              ) : (() => {
+                const v = VERDICT_LINE[verifyResult.verdict || "NO_DATA"] || VERDICT_LINE.NO_DATA;
+                const fresh = verifyResult.fresh;
+                const money = (o?: string) => (o === "WIN" ? "#3ecf8e" : o === "LOSS" ? "#f7525f" : "#d4d4d8");
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: "bold", color: v.color }}>{v.label}</div>
+                    <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.5 }}>{v.note}</div>
+                    <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+                      <div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>FRESH GRADE</div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: money(fresh?.outcome) }}>
+                          {fresh?.awaitingEntry ? "PENDING · entry not traded" : gradeText(fresh)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>STORED GRADE</div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: money(verifyResult.stamped?.outcome) }}>
+                          {gradeText(verifyResult.stamped)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>CANDLES</div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#d4d4d8" }}>{verifyResult.candlesChecked ?? 0}</div>
+                      </div>
+                    </div>
+                    {verifyResult.rule && (
+                      <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", lineHeight: 1.5 }}>{verifyResult.rule}</div>
+                    )}
+                    {verifyResult.source && (
+                      <a href={verifyResult.source} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#d4d4d8" }}>
+                        The candles, straight from Orderly ↗
+                      </a>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
 
         {/* Footer: link to full trader profile */}
         <div style={{ marginTop: 16, textAlign: "center" }}>

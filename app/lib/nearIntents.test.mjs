@@ -199,3 +199,38 @@ test("public/config.js: the live cross-chain fee resolves to one entry for the b
   const fees = xcAppFees(cfg.VITE_XC_FEE_BPS, cfg.VITE_XC_FEE_RECIPIENT);
   assert.deepEqual(fees, [{ recipient: cfg.VITE_BROKER_EOA_ADDRESS.toLowerCase(), fee: 10 }]);
 });
+
+// ── fetchOneClickQuote: worker (partner key) first, 1Click direct as the fallback ──────────────
+import { fetchOneClickQuote, XC_WORKER_API, ONE_CLICK_API as ONE_CLICK } from "./nearIntents.mjs";
+const fakeFetch = (answers) => {
+  const calls = [];
+  return { calls, fn: async (url, init) => { calls.push({ url, init }); const a = answers.shift(); if (a instanceof Error) throw a; return { status: a, ok: a >= 200 && a < 300 }; } };
+};
+const BODY = { amount: "1000000", originAsset: "x" };
+
+test("fetchOneClickQuote: a keyed worker answers → no second call", async () => {
+  const f = fakeFetch([200]);
+  const out = await fetchOneClickQuote(BODY, { fetchImpl: f.fn });
+  assert.equal(out.via, "worker");
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].url, `${XC_WORKER_API}/xc/quote`);
+  assert.equal(f.calls[0].init.body, JSON.stringify(BODY));
+});
+
+test("fetchOneClickQuote: no key / old worker / origin / rate limit / 5xx / down → 1Click direct, same body", async () => {
+  for (const first of [503, 404, 403, 429, 500, 502, new Error("network")]) {
+    const f = fakeFetch([first, 200]);
+    const out = await fetchOneClickQuote(BODY, { fetchImpl: f.fn });
+    assert.equal(out.via, "direct", String(first));
+    assert.equal(f.calls[1].url, `${ONE_CLICK}/v0/quote`);
+    assert.equal(f.calls[1].init.body, JSON.stringify(BODY));
+  }
+});
+
+test("fetchOneClickQuote: 1Click's own 4xx through the worker is returned, not retried", async () => {
+  const f = fakeFetch([400]);
+  const out = await fetchOneClickQuote(BODY, { fetchImpl: f.fn });
+  assert.equal(out.via, "worker");
+  assert.equal(out.res.status, 400);
+  assert.equal(f.calls.length, 1);
+});
