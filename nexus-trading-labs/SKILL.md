@@ -282,7 +282,7 @@ agent has checked the chain itself:
 - **references/trading.md** — full trade flow, registration, SL/TP, close, cancel, order-status, order-history, positions, leverage
 - **references/deposit-withdraw.md** — deposit USDC, withdraw, settle PnL, balance
 - **references/agent.md** — deploy/arm/fund/kill the autonomous agent, mode flips (PAPER/ASSISTED/AUTONOMOUS), status formatting, safety gates
-- **references/feed-leaderboard.md** — public feed, thesis copy flow, on-chain registry (proxy or direct contract call + `/theses/index`), how calls are graded (incl. split exit), call status + fill alerts, Rep Score, leaderboard build, notifications, comments
+- **references/feed-leaderboard.md** — public feed, thesis copy flow, on-chain registry, Rep Score, leaderboard build, notifications, comments
 - **references/market-data.md** — mark price, funding rate, 24h stats, error codes, retry logic, rate limits, testnet
 - **references/intel.md** — market intelligence: pull live OI, funding rates, regime signals from Orderly public API
 - **references/news.md** — pull latest crypto/macro news via RSS feeds before framing a trade or answering market questions
