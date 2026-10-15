@@ -633,8 +633,8 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   PR to BankrBot/skills. Our fork = **`StephenBorst/skills`**, branch **`add-autonomous-agent`** (agent control +
   full config surface) — ✅ MERGED into `BankrBot/skills` (the agent-control module is live in the published
   Bankr skill). Local staging clone: `C:\Users\steph\bankr-skills-stage`.
-- **`nexus-trading-labs/` in this repo = a byte-for-byte copy of BankrBot/skills' folder (synced 2026-10-12, after the
-  registration/status PR from `StephenBorst/skills:nexus-trading-labs-update`).** It had drifted BEHIND upstream (no
+- **`nexus-trading-labs/` in this repo = a byte-for-byte copy of BankrBot/skills' folder (re-synced 2026-10-15 from
+  BankrBot main `55a5656`, after BankrBot/skills#777 merged: registration, keyless index, call status, review fixes).** It had drifted BEHIND upstream (no
   `agent.md`, no `catalog.json`, missing the copy-is-not-auto-trading + deposit-destination warnings), so a wholesale
   copy from here would have regressed the published skill. Rule: change the skill in BankrBot first (PR from the fork),
   then copy that folder back here; never copy this folder over theirs without diffing. (The older `bankr-skill/` copy, incl. its
@@ -845,10 +845,9 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   input (nested smart-account calls work; one+one so a bundle can't hand a wallet another's levels) + block ≤6h old →
   the call is built FROM THE CALLDATA (`thesisFromRegistration`), id `reg-<txHash[2:18]>` (idempotent), `onChainId` kept.
   The split is declared ON-CHAIN as `#SPLIT_50` in the notes (the contract has no field; a body-only flag would let
-  whoever indexes first choose the grading). Skill refs document both paths + every status. ⏳ Ported into the PUBLISHED skill on fork
-  branch `StephenBorst/skills:nexus-thesis-registration` (2026-10-12; registration section + call status + 2 table rows
-  only). borst opens the PR to BankrBot/skills (a session can't attach both `skills` repos); this repo's
-  `nexus-trading-labs/` was synced to that PR's folder 2026-10-12 (#99). **✅ LIVE-VERIFIED 2026-10-12 (Engine B,
+  whoever indexes first choose the grading). Skill refs document both paths + every status. ✅ PUBLISHED: BankrBot/skills#777
+  (fork branch `StephenBorst/skills:nexus-thesis-registration`) merged 2026-10-14 after review (example fix, "send one,
+  wait" wording, mark freshness fields, one nine-arg ABI); this repo's copy re-synced from it 2026-10-15. **✅ LIVE-VERIFIED 2026-10-12 (Engine B,
   borst):** ETH SHORT via `/proxy/thesis-register` → 200, tx `0xbd180a17…8d113e`, onChainId 39, stored as
   `reg-bd180a17119ae795` with `exitPlan: SPLIT_50`, a `publishMark` (2416.55 vs entry 2416.7 → filled at the post),
   `fillState: OPEN`, and the row on `/theses/status/0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4`. No fallback needed.
