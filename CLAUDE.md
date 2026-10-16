@@ -816,13 +816,21 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   pass after 2026-10-19: delete `labSaveMessageV1` then. `labAuthScope.test.mjs` lists every worker file that accepts the
   signature and fails if a new one appears, or its use isn't named in the message. The skill's copy of the message (fork
   branch `nexus-lab-signature` = BankrBot/skills#790) must match it word for word.
-  **⚠️ Found 2026-10-16, NOT fixed (trading-account code, borst's call):** (1) `GET /account-snapshot?wallet=` returns any
-  registered wallet's Orderly positions + open orders with NO signature (it signs with the stored seed); (2) that seed —
-  the order-only trading key's seed, SHA-256(walletSig) — sits UNENCRYPTED in LAB_STORE `user:{addr}.seed` (agent keys
-  are AES-GCM encrypted; these aren't); (3) `POST /proxy/register-key` writes `user:{userAddress}` from the BODY's
-  `userAddress`/`orderlyKey`, not the signed message's, and on `d.success || d.data` — anyone can overwrite another
-  wallet's stored key (breaks its Bankr/mini trading until it re-registers; no theft). Fix = read both from
-  `body.message` and require `success === true`.
+  **Trading-account record `user:{addr}` hardened (2026-10-16, `routes-account.mjs`, tests `routes-account.test.mjs`).**
+  (1) `GET /account-snapshot?wallet=` returned any registered wallet's Orderly positions + open orders with NO signature,
+  signing with a seed cached in the record → RETIRED (410, hint → `POST /positions` / `POST /order-history` with
+  walletSig, which return the same data). Its only caller was a Bankr app-page script deleted 2026-10-12; the skill and
+  the app never called it. (2) The seed (SHA-256 of walletSig = the order-only trading key) was cached UNENCRYPTED by
+  /order-history, /positions and /proxy/bankr-register, and only the snapshot read it → nothing caches it now (a key that
+  isn't stored can't leak; encrypting it would have kept a server-held trading key for a route nobody uses). The hourly
+  cron `scrubStoredSeeds` removes the stored ones (200 records a run, two full passes so an old isolate's last write is
+  caught, a record changed between its two reads is skipped); `GET /ops/seed-scrub` = counts only. A test fails if
+  index.js writes or reads `seed` again. (3) `/proxy/register-key` (+ bankr-register) stored the record on
+  `success || data`; now only on `success === true`, with the key from the SIGNED `message.orderlyKey` (a different
+  top-level `orderlyKey` → 400 before Orderly). ⚠️ Correction to the first write-up: this was NOT an overwrite hole —
+  Orderly checks the signature against `userAddress` ("address and signature do not match"), so a request for someone
+  else's address fails there; it's hardening. Still open: `/positions` + `/balance` also accept `walletSig` in a GET
+  query string (`?wallet=&sig=`), which lands in logs; nothing in the app or the skill uses that form (the mini app POSTs).
 - A human thesis = a **call**. Outcomes are graded OBJECTIVELY from PUBLIC price (Orderly `GET /tv/history`,
   1h OHLC, first-touch TP1-vs-SL; same-candle = LOSS conservative) — NOT self-reported. So `actualPnl`/status
   the user types is ignored for ranking. **A WIN pays the call's GEOMETRIC R (`callR`, from entry/stop/TP1), never
