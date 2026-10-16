@@ -606,6 +606,13 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   (`excludedCoins` in the block, cache `axisbt:v12`) so no event counts on both lines. ⚠️ **oi:hist coverage:** the
   brain recorded only 6 coins unconditionally (ARB stopped Sep 20, WLD Oct 13, DOGE/BNB/LINK from late Sep, SUI Oct 4);
   since 2026-10-16 it records all 12 `HARNESS_SYMBOLS` (recording only) — the scoreboard prices every event off it.
+  **✅ REGISTERED (borst, 2026-10-16) = `docs/research/explorers-prereg.md`, events from 2026-10-17T00:00Z:** level_reclaim ·
+  oi_div_reversal (borderline ~97/60d; holdout can't fire before ~Nov 1, 30 holdout events ~late Nov) · session_momentum
+  (same-window median) · confluence_follow (24h cooldown, frozen in `CONFLUENCE`). **vol_breakout DROPPED for v1** (33/60d).
+  All four are side `"BOTH"` → judged on the POOLED random result (`pipelineStage` reads `random.pooled`). In `AXES` via
+  `EXPLORER_READS` + `REGISTERED_READS` (holdout + graded exit); cache `axisbt:v13`; /proof rows with `oos` show a
+  "Registered · counts from … · the grade above is in-sample" line (`RegisteredLine`). Scorecard CPU on real data
+  ~1.0s → ~1.8s (cached 1h). A changed rule = a new name + a new registration.
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +

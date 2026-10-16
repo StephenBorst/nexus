@@ -1,15 +1,14 @@
-# Explorer reads · definitions frozen, power-checked, NOT registered yet
+# Explorer reads · definitions frozen, power-checked, four registered
 
-**Status (2026-10-16):** borst defined all five and froze them. The count-only power check has run. **None is
-registered.** Each one is registered under `docs/research/read-pipeline.md` only after borst has seen its count and
-signed it off. Registering means a dated registration doc, a future `registeredAt`, an entry in `REGISTERED_READS`,
-and adding it to the scoreboard.
+**Status (2026-10-16):** borst signed off on four reads. level_reclaim, oi_div_reversal and session_momentum were
+registered as written; confluence_follow was registered with a 24h cooldown. All four count from
+2026-10-17T00:00:00Z and are registered in `docs/research/explorers-prereg.md`. **vol_breakout was dropped for v1**:
+it would have fired 33 times in 60 days. session_momentum uses the same-window median. This page is the record of
+how the five were defined and counted. It is not a registration.
 
-The code is `workers/nexus-lab-api/explorerReads.mjs`. It is **not** in the scoreboard's `AXES`, so nothing grades it,
-and a test fails if that changes. The only thing that runs these generators before registration is the count-only
-power check, `tools/explorers/powerCheck.mjs`. It counts how often each rule would have fired and never reads a price
-after an event. `explorerReads.test.mjs` checks each rule on hand-built data and checks no-lookahead on a random tape
-whose future is poisoned.
+The code is `workers/nexus-lab-api/explorerReads.mjs`. The count-only power check is `tools/explorers/powerCheck.mjs`.
+`explorerReads.test.mjs` checks each rule on hand-built data, checks for lookahead on a poisoned tape, and fails if a
+read is graded without being registered.
 
 ## Already graded (not re-registered)
 

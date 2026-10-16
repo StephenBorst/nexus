@@ -1,8 +1,8 @@
 // ── The five explorer reads, as borst defined them (2026-10-16) ─────────────────────────────
-// docs/research/explorer-drafts.md. NOT on the scoreboard: these generators are not in AXES, so
-// nothing grades them. Until a read is registered (docs/research/read-pipeline.md), the only thing
-// allowed to run them is the COUNT-ONLY power check (tools/explorers/powerCheck.mjs), which counts
-// how often each would fire and never looks at what happened after.
+// docs/research/explorers-prereg.md (registered 2026-10-16; events count from 2026-10-17T00:00Z).
+// The scoreboard grades them (axisbt AXES) once registered; before registration the only thing
+// allowed to run a generator is the COUNT-ONLY power check (tools/explorers/powerCheck.mjs).
+// A changed rule = a new name and a new registration; these bodies are frozen.
 //
 // Every generator: (cs, pmap, ctx) → [{ t, side }], the scoreboard's generator shape.
 //   - decides on data up to and including the deciding bar, never after (no lookahead);
@@ -82,53 +82,16 @@ export function oiDivReversalEvents(cs, _pmap, _ctx, p = OI_DIV) {
   return ev;
 }
 
-// ── 2 · vol_breakout ────────────────────────────────────────────────────────────────────────
-// Compression: hourly ATR-24 of the bar BEFORE the breakout bar is in the bottom 20% of its own
-// ATR-24 values over the prior 30 days. Breakout: the hourly close is above the prior 24 bars' high
-// → LONG, below their low → SHORT. No volume filter. Entry at that close. Cooldown 24h per coin.
-export const VOL_BRK = Object.freeze({ atrH: 24, rangeH: 24, lookbackH: MONTH_H, pct: 0.2, cooldownH: 24, minHistory: MONTH_H / 2 });
-export function volBreakoutEvents(cs, _pmap, _ctx, p = VOL_BRK) {
-  const cbh = candleMap(cs.candleHist);
-  const hours = [...cbh.keys()].sort((a, b) => a - b);
-  const tr = new Map(), atr = new Map();
-  for (const h of hours) {
-    const c = cbh.get(h), prev = cbh.get(h - 1);
-    if (!prev) continue;
-    tr.set(h, Math.max(c.h - c.l, Math.abs(c.h - prev.c), Math.abs(c.l - prev.c)) / prev.c);
-  }
-  for (const h of hours) {
-    let s = 0, n = 0;
-    for (let k = h - p.atrH + 1; k <= h; k++) { const v = tr.get(k); if (v == null) break; s += v; n++; }
-    if (n === p.atrH) atr.set(h, s / n); // a full, contiguous 24 bars or nothing
-  }
-  const ev = [];
-  let last = -Infinity;
-  for (const h of hours) {
-    if (h - last < p.cooldownH) continue;
-    const pre = atr.get(h - 1);
-    if (pre == null) continue;
-    const prior = [];
-    for (let k = h - 1 - p.lookbackH; k < h - 1; k++) { const v = atr.get(k); if (v != null) prior.push(v); }
-    if (prior.length < p.minHistory || !(pctRank(prior, pre) <= p.pct)) continue;
-    let hi = -Infinity, lo = Infinity, full = true;
-    for (let k = h - p.rangeH; k < h; k++) { const c = cbh.get(k); if (!c) { full = false; break; } hi = Math.max(hi, c.h); lo = Math.min(lo, c.l); }
-    if (!full) continue;
-    const c = cbh.get(h);
-    const side = c.c > hi ? "LONG" : c.c < lo ? "SHORT" : null;
-    if (!side) continue;
-    ev.push({ t: Number(c.t) + H, side });
-    last = h;
-  }
-  return ev;
-}
+// ── 2 · vol_breakout — DROPPED for v1 (borst, 2026-10-16) ────────────────────────────────────
+// Its power check counted 33 events in 60 days on the main card, a third of the bar. A looser
+// version would be a new definition and a new registration; the frozen v1 is in git history.
 
 // ── 3 · session_momentum ────────────────────────────────────────────────────────────────────
 // NY open drive: the move from the 13:00 UTC open to the 15:00 UTC close (the 13:00 and 14:00
 // bars). If |move| is larger than the median |move| of the SAME 13:00→15:00 window over the prior
-// 30 days, take its direction at the 15:00 close. One event per coin per day.
-// `median: "all"` = the median of every rolling 2h move over the prior 30 days instead (the other
-// reading of "the coin's median 2h move"; counted by the power check, borst picks one).
-export const SESSION = Object.freeze({ openUtcH: 13, spanH: 2, lookbackDays: 30, minDays: 20, median: "same" });
+// 30 days (borst, 2026-10-16: the NY open compared with itself, not with every 2h), take its
+// direction at the 15:00 close. One event per coin per day.
+export const SESSION = Object.freeze({ openUtcH: 13, spanH: 2, lookbackDays: 30, minDays: 20 });
 export function sessionMomentumEvents(cs, _pmap, _ctx, p = SESSION) {
   const cbh = candleMap(cs.candleHist);
   const hours = [...cbh.keys()].sort((a, b) => a - b);
@@ -139,13 +102,8 @@ export function sessionMomentumEvents(cs, _pmap, _ctx, p = SESSION) {
     const mv = moveAt(h);
     if (mv == null || mv === 0) continue;
     const prior = [];
-    if (p.median === "all") {
-      for (let k = h - p.lookbackDays * DAY_H; k < h - p.spanH + 1; k++) { const x = moveAt(k); if (x != null) prior.push(Math.abs(x)); }
-      if (prior.length < p.minDays * DAY_H) continue;
-    } else {
-      for (let d = 1; d <= p.lookbackDays; d++) { const x = moveAt(h - d * DAY_H); if (x != null) prior.push(Math.abs(x)); }
-      if (prior.length < p.minDays) continue;
-    }
+    for (let d = 1; d <= p.lookbackDays; d++) { const x = moveAt(h - d * DAY_H); if (x != null) prior.push(Math.abs(x)); }
+    if (prior.length < p.minDays) continue;
     if (!(Math.abs(mv) > median(prior))) continue;
     ev.push({ t: Number(cbh.get(h + p.spanH - 1).t) + H, side: mv > 0 ? "LONG" : "SHORT" });
   }
@@ -194,9 +152,9 @@ export function levelReclaimEvents(cs, _pmap, _ctx, p = LEVEL) {
 // The brain's CONFLUENCE rule at its default thresholds (nexus-agent-brain/logic.mjs deriveSignal:
 // fundingThreshold 0.01% → 0.0001, oiChangeThreshold 0), traded the OTHER way. Price and OI change
 // are measured row over row on oi:hist (hourly; the brain itself compares with a ~5-min-old
-// snapshot, which is not recorded). `cooldownH` 0 = every qualifying hour (as written); the power
-// check also counts a 24h cooldown so borst can choose.
-export const CONFLUENCE = Object.freeze({ fundingThreshold: 0.0001, maxGapH: 2, cooldownH: 0 });
+// snapshot, which is not recorded). Cooldown 24h per coin (borst, 2026-10-16): without it one
+// funding episode fires every hour and the grader would count it as dozens of independent events.
+export const CONFLUENCE = Object.freeze({ fundingThreshold: 0.0001, maxGapH: 2, cooldownH: 24 });
 export function confluenceFollowEvents(cs, _pmap, _ctx, p = CONFLUENCE) {
   const rows = [...(cs.oiHist || [])].filter((r) => r && Number.isFinite(r.price) && r.price > 0).sort((a, b) => a.t - b.t);
   const ev = [];
@@ -220,10 +178,11 @@ export function confluenceFollowEvents(cs, _pmap, _ctx, p = CONFLUENCE) {
   return ev;
 }
 
-export const EXPLORER_GENS = Object.freeze({
-  oi_div_reversal: oiDivReversalEvents,
-  vol_breakout: volBreakoutEvents,
-  session_momentum: sessionMomentumEvents,
-  level_reclaim: levelReclaimEvents,
-  confluence_follow: confluenceFollowEvents,
-});
+// The four registered 2026-10-16 (docs/research/explorers-prereg.md). Labels are the scoreboard's.
+export const EXPLORER_READS = Object.freeze([
+  Object.freeze({ name: "level_reclaim", label: "Prior-day high/low swept and reclaimed", gen: levelReclaimEvents }),
+  Object.freeze({ name: "oi_div_reversal", label: "Extreme 24h move on falling OI, faded", gen: oiDivReversalEvents }),
+  Object.freeze({ name: "session_momentum", label: "NY open drive (13–15 UTC), followed", gen: sessionMomentumEvents }),
+  Object.freeze({ name: "confluence_follow", label: "Funding × OI confluence, traded with the crowd", gen: confluenceFollowEvents }),
+]);
+export const EXPLORER_GENS = Object.freeze(Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.gen])));

@@ -18,6 +18,7 @@ import { trailingPct, basisExtremeSide, basisDeviationSide } from "../../app/lib
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { GRADED_EXIT, gradedExitLevels, GRADED_EXIT_OOS_CUTOFF_MS } from "../../app/lib/gradedExit.mjs";
 import { REGISTERED_READS, registeredMs } from "../../app/lib/readPipeline.mjs";
+import { EXPLORER_READS } from "./explorerReads.mjs";
 import { openPosition, stepExit, closedPnlPct, DEFAULT_FEE_BPS, BASELINE_RUNS, BASELINE_MIN_TRADES, baselineVerdict, mulberry32, tradesToSeparate } from "./backtest.mjs";
 
 // hourBucket + the oi:hist price spine live in app/lib/basisStack.mjs (shared with the
@@ -895,6 +896,9 @@ export const AXES = [
   { name: "rs_value_pullback_candle_rsi", label: "D1_candle: + RSI≥45 (real VWAP · true ATR)", gen: rsValuePullbackCandleRsiEvents },
   { name: "rs_value_pullback_rotation", label: "D2: + volume rotation (real VWAP/ATR · 2nd veto)", gen: rsValuePullbackRotationEvents },
   { name: "rsi_reset_deep", label: "RSI reset <45 (uptrend)", gen: rsiResetDeepEvents },
+  // The explorer reads registered 2026-10-16 (docs/research/explorers-prereg.md). Graded like every
+  // read; only their events after 2026-10-17T00:00Z count toward a pipeline stage (the rest is in-sample).
+  ...EXPLORER_READS.map((r) => ({ name: r.name, label: r.label, gen: r.gen })),
 ];
 
 // Bucket the RS-ranked universe into quartiles (Q1 = strongest, "fastest horses"). Lets

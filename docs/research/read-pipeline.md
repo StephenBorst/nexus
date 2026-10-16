@@ -21,7 +21,8 @@ A wallet's job comes later: checking that the agent trades what was graded.
    **in-sample**: it is shown, labelled, and never counts toward a stage.
 2. **Lead.** At least 30 out-of-sample events graded in R, mean R above 0, and the first and second halves agreeing in
    sign.
-3. **Edge.** A Lead that also beats at least 95% of random entries on its own side, on the main card, **and
+3. **Edge.** A Lead that also beats at least 95% of random entries on its own side (the pooled result, for a read
+   that trades both sides), on the main card, **and
    replicates on the holdout coins** (`app/lib/recordedUniverse.mjs`): at least 30 holdout events, mean R above 0, and
    beating at least 80% of random entries on the same side. This replication is the guard against testing many
    reads at once. A read found on the main coins has to work again on coins nobody looked at.
@@ -57,6 +58,7 @@ the same block. The full-history row next to it is in-sample.
 | Read | Registered | Doc |
 |---|---|---|
 | rsi_reset_deep | 2026-10-17T00:00:00Z | `docs/research/rsi-reset-deep-prereg.md` |
+| level_reclaim · oi_div_reversal · session_momentum · confluence_follow | 2026-10-17T00:00:00Z | `docs/research/explorers-prereg.md` |
 
-The five explorer reads are drafts (`docs/research/explorer-drafts.md`). They are not registered until borst has
-weighed in on their definitions.
+The four explorers are two-sided, so each is judged on the pooled random result. vol_breakout was dropped for v1 at
+the power check. Definitions and counts are in `docs/research/explorer-drafts.md`.

@@ -10,7 +10,8 @@
 //   REGISTERED  rule frozen, accruing. The scoreboard's back-graded history is IN-SAMPLE and never
 //               counts toward a stage.
 //   LEAD        ≥ minEvents R-graded events, mean R > 0, first half and second half agree in sign.
-//   EDGE        LEAD + beats ≥ edgePct of random entries on its own side (main card)
+//   EDGE        LEAD + beats ≥ edgePct of random entries on its own side (main card; a two-sided read,
+//               side "BOTH", on the pooled result)
 //               + REPLICATES on the holdout coins: ≥ holdoutMinEvents, mean R > 0, beats ≥
 //               holdoutPct of random entries on the same side. Replication is the multiple-testing
 //               guard (borst's pick): a read that only works on the coins it was found on stops here.
@@ -47,12 +48,26 @@ export const REGISTERED_READS = Object.freeze([
     gradedExit: true,
     paperWallet: null,
   }),
+  // The four explorer reads borst froze and signed off 2026-10-16 (docs/research/explorers-prereg.md).
+  // Two-sided reads: judged on the pooled random result. vol_breakout was dropped (power check: 33/60d).
+  ...["level_reclaim", "oi_div_reversal", "session_momentum", "confluence_follow"].map((axis) => Object.freeze({
+    axis,
+    side: "BOTH",
+    registeredAt: "2026-10-17T00:00:00Z",
+    doc: "docs/research/explorers-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  })),
 ]);
 
 export const registeredMs = (reg) => Date.parse(reg.registeredAt);
 export const registrationFor = (axis) => REGISTERED_READS.find((r) => r.axis === axis) || null;
 
-const sideOf = (random, side) => (random && random.bySide ? random.bySide[side] : null) || null;
+// A one-sided read is judged on its side; a two-sided read ("BOTH") on the pooled result (longs and
+// shorts together, each still re-drawn on its own side), with the per-side split shown beside it.
+const sideOf = (random, side) => (side === "BOTH" ? random?.pooled : random?.bySide?.[side]) || null;
+const sideWord = (side) => (side === "BOTH" ? "entries" : `${side.toLowerCase()}s`);
 const pct = (b) => (b && Number.isFinite(b.pctBeaten) ? b.pctBeaten : null);
 
 /**
@@ -89,7 +104,7 @@ export function pipelineStage(reg, oos, holdout, rules = PIPELINE_RULES) {
   const holdOk = reg.holdout && hr.samples >= rules.holdoutMinEvents && hr.meanR > 0 && pct(hRnd) != null && pct(hRnd) >= rules.holdoutPct;
   if (!mainOk || !holdOk) {
     const need = [];
-    if (!mainOk) need.push(`beat ${rules.edgePct}% of random ${side.toLowerCase()}s (now ${pct(rnd) ?? "—"}%)`);
+    if (!mainOk) need.push(`beat ${rules.edgePct}% of random ${sideWord(side)} (now ${pct(rnd) ?? "—"}%)`);
     if (!reg.holdout) need.push("a holdout line");
     else if (hr.samples < rules.holdoutMinEvents) need.push(`${rules.holdoutMinEvents - hr.samples} more holdout events`);
     else if (!holdOk) need.push(`holdout mean R > 0 and ≥ ${rules.holdoutPct}% vs random (now ${hr.meanR}R, ${pct(hRnd) ?? "—"}%)`);

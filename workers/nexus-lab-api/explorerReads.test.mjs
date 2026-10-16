@@ -4,21 +4,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  oiDivReversalEvents, volBreakoutEvents, sessionMomentumEvents, levelReclaimEvents, confluenceFollowEvents,
+  oiDivReversalEvents, sessionMomentumEvents, levelReclaimEvents, confluenceFollowEvents,
   EXPLORER_GENS, OI_DIV, CONFLUENCE,
 } from "./explorerReads.mjs";
 import { AXES } from "./axisbt.mjs";
+import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 import { powerCheck } from "../../tools/explorers/powerCheck.mjs";
 
 const H = 3600000;
 const T0 = Date.UTC(2026, 6, 1, 0, 0, 0);
 const candle = (i, o, h, l, c) => ({ t: T0 + i * H, o, h, l, c, v: 1 });
-// a quiet tape: tiny wiggle around `p`, range ±r
-const quiet = (n, p = 100, r = 0.2) => Array.from({ length: n }, (_, i) => candle(i, p, p + r, p - r, p + (i % 2 ? 0.05 : -0.05)));
 
-test("nothing here is on the scoreboard until it is registered", () => {
-  const names = new Set(AXES.map((a) => a.name));
-  for (const n of Object.keys(EXPLORER_GENS)) assert.ok(!names.has(n), `${n} must not be graded before registration`);
+test("an explorer is on the scoreboard only once registered, and every registration is graded", () => {
+  const graded = new Set(AXES.map((a) => a.name));
+  const registered = new Set(REGISTERED_READS.map((r) => r.axis));
+  for (const n of Object.keys(EXPLORER_GENS)) assert.ok(!graded.has(n) || registered.has(n), `${n} is graded but not registered`);
+  for (const n of registered) assert.ok(graded.has(n), `${n} is registered but not on the scoreboard`);
+  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "oi_div_reversal", "session_momentum"]);
+  assert.ok(!("vol_breakout" in EXPLORER_GENS), "dropped for v1");
 });
 
 test("oi_div_reversal: an extreme rally on falling OI → SHORT; the same rally on rising OI → nothing", () => {
@@ -47,21 +50,6 @@ test("oi_div_reversal: a drop on falling OI → LONG, and the 24h cooldown holds
   const ev = oiDivReversalEvents({ oiHist: rows });
   assert.ok(ev.length >= 1 && ev.every((e) => e.side === "LONG"));
   for (let i = 1; i < ev.length; i++) assert.ok(ev[i].t - ev[i - 1].t >= OI_DIV.cooldownH * H);
-});
-
-test("vol_breakout: a close above the prior 24h high after compression → LONG at the bar's close", () => {
-  // 30 days wide (range ±2), then 2 days quiet (±0.2), then a breakout bar closing at 101
-  const wide = Array.from({ length: 720 }, (_, i) => candle(i, 100, 102, 98, 100 + (i % 2 ? 1 : -1)));
-  const calm = quiet(48).map((c, j) => ({ ...c, t: T0 + (720 + j) * H }));
-  const brk = candle(768, 100, 101.2, 99.9, 101);
-  const ev = volBreakoutEvents({ candleHist: [...wide, ...calm, brk] });
-  assert.equal(ev.length, 1);
-  assert.equal(ev[0].side, "LONG");
-  assert.equal(ev[0].t, brk.t + H, "stamped at the breakout bar's close");
-  // the same breakout without compression (wide all the way) → nothing
-  const noSqueeze = Array.from({ length: 769 }, (_, i) => candle(i, 100, 102, 98, 100 + (i % 2 ? 1 : -1)));
-  noSqueeze.push(candle(769, 100, 103, 99.9, 102.5));
-  assert.equal(volBreakoutEvents({ candleHist: noSqueeze }).filter((e) => e.t > T0 + 760 * H).length, 0);
 });
 
 test("session_momentum: a NY open drive bigger than its usual → that side at 15:00 UTC; a small one → nothing", () => {
@@ -114,10 +102,11 @@ test("confluence_follow: funding and the OI rule agree → trade the other way; 
   assert.equal(confluenceFollowEvents({ oiHist: [row(0, 100, 1000, 0.00005), row(1, 101, 990, 0.00005)] }).length, 0);
   // a gap is not "the previous snapshot"
   assert.equal(confluenceFollowEvents({ oiHist: [row(0, 100, 1000, 0.0002), row(5, 101, 990, 0.0002)] }).length, 0);
-  // the 24h cooldown variant keeps only the first of consecutive hours
+  // the frozen 24h cooldown keeps only the first of consecutive hours (one funding episode = one event)
   const run = Array.from({ length: 6 }, (_, i) => row(i, 100 + i, 1000 - i, 0.0002));
-  assert.equal(confluenceFollowEvents({ oiHist: run }).length, 5);
-  assert.equal(confluenceFollowEvents({ oiHist: run }, null, null, { ...CONFLUENCE, cooldownH: 24 }).length, 1);
+  assert.equal(CONFLUENCE.cooldownH, 24);
+  assert.equal(confluenceFollowEvents({ oiHist: run }).length, 1);
+  assert.equal(confluenceFollowEvents({ oiHist: run }, null, null, { ...CONFLUENCE, cooldownH: 0 }).length, 5);
 });
 
 // a seeded random tape with funding/OI/candles, for the lookahead property

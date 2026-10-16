@@ -9,16 +9,14 @@
 //   /agent/oi-history/PERP_<COIN>_USDC and /agent/candle-history/PERP_<COIN>_USDC.
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { EXPLORER_GENS, SESSION, CONFLUENCE, sessionMomentumEvents, confluenceFollowEvents } from "../../workers/nexus-lab-api/explorerReads.mjs";
+import { EXPLORER_GENS } from "../../workers/nexus-lab-api/explorerReads.mjs";
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 import { RECORDED_COINS, HOLDOUT_COINS } from "../../app/lib/recordedUniverse.mjs";
 
 const MAIN = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
-const READS = {
-  ...EXPLORER_GENS,
-  "session_momentum (median of all 2h moves)": (cs) => sessionMomentumEvents(cs, null, null, { ...SESSION, median: "all" }),
-  "confluence_follow (24h cooldown)": (cs) => confluenceFollowEvents(cs, null, null, { ...CONFLUENCE, cooldownH: 24 }),
-};
+// The reads to count. A new explorer is counted here BEFORE it is registered (add its generator
+// to a list like this one; never to the scoreboard's AXES until its registration is signed).
+const READS = { ...EXPLORER_GENS };
 
 export function powerCheck(sets, { days = 60, now = Date.now() } = {}) {
   const from = now - days * 86400000;
