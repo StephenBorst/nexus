@@ -799,6 +799,30 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   cached sig) in useComments / SocialBar (`take` prop on the token page) / Feed + trader follow (reverts on failure)
   / token takes. Tests `socialAuth.test.mjs` (real routes, viem + ed25519 sigs). ⚠️ Bankr agents that comment or
   react need the skill's labAuth guide (fork branch `nexus-lab-signature`).
+  **Telegram link is owner-signed (2026-10-16, `routes-telegram.mjs`, tests `routes-telegram.test.mjs`).** The app opened
+  the bot as `t.me/<bot>?start=<wallet>` and the bot linked any address it was sent, so anyone could send `/start
+  0xSOMEONE` and take that wallet's agent alerts + notifications (the owner's chat silently stopped). Now `POST /tg/link
+  {wallet, labAuth}` returns a one-time code (KV `tg:linkcode:{code}`, 10 min, deleted on use) and the deep link carries
+  the code; `/start <address>` links nothing. UI = `app/pages/lab/TelegramLink.tsx` (Agent card + call-card ALERTS; two
+  taps, because a link opened after an await is blocked on phones). Webhook secret header: derived from TELEGRAM_TOKEN
+  (`webhookSecret`, no second secret); the hourly cron `secureTelegramWebhook` re-registers OUR existing webhook with it
+  (only if Telegram's webhook URL == `TG_WEBHOOK_URL`, keeps allowed_updates/max_connections) and enforcement starts only
+  after Telegram answers ok. `GET /tg/status` = `{secured, securedAt, lastCheck}` (no secrets) — check it after a deploy;
+  `url_mismatch` means the webhook points elsewhere and nothing is enforced. Links made before the fix stay linked (can't
+  tell a hijacked one from a real one); a user who stopped getting alerts re-links from the Agent tab.
+  **The Lab sign message was reworded 2026-10-16** to name everything it covers ("sign in with this wallet … calls, notes,
+  profile, comments, reactions, takes, follows, notifications, phone alerts and Telegram link … No funds move. No
+  trades."). Signatures over the old wording pass only if dated before `LAB_AUTH_V1_UNTIL_MS` (2026-10-18), so none can
+  pass after 2026-10-19: delete `labSaveMessageV1` then. `labAuthScope.test.mjs` lists every worker file that accepts the
+  signature and fails if a new one appears, or its use isn't named in the message. The skill's copy of the message (fork
+  branch `nexus-lab-signature` = BankrBot/skills#790) must match it word for word.
+  **⚠️ Found 2026-10-16, NOT fixed (trading-account code, borst's call):** (1) `GET /account-snapshot?wallet=` returns any
+  registered wallet's Orderly positions + open orders with NO signature (it signs with the stored seed); (2) that seed —
+  the order-only trading key's seed, SHA-256(walletSig) — sits UNENCRYPTED in LAB_STORE `user:{addr}.seed` (agent keys
+  are AES-GCM encrypted; these aren't); (3) `POST /proxy/register-key` writes `user:{userAddress}` from the BODY's
+  `userAddress`/`orderlyKey`, not the signed message's, and on `d.success || d.data` — anyone can overwrite another
+  wallet's stored key (breaks its Bankr/mini trading until it re-registers; no theft). Fix = read both from
+  `body.message` and require `success === true`.
 - A human thesis = a **call**. Outcomes are graded OBJECTIVELY from PUBLIC price (Orderly `GET /tv/history`,
   1h OHLC, first-touch TP1-vs-SL; same-candle = LOSS conservative) — NOT self-reported. So `actualPnl`/status
   the user types is ignored for ranking. **A WIN pays the call's GEOMETRIC R (`callR`, from entry/stop/TP1), never
