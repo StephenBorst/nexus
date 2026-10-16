@@ -175,8 +175,8 @@ export default function ProofPage() {
       <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.65, maxWidth: 660 }}>
         Humans, machines, and teams — all ranked on <b style={{ color: BRIGHT }}>one standard</b>. Every record here is
         graded from public price (first-touch target vs. stop for calls; settled trades for agents), never
-        self-reported, and hashed into a ledger anyone can recompute and check against the chain. This is the part
-        competitors can’t copy: being <i>right</i> is the only thing that ranks.
+        self-reported, and hashed into a ledger anyone can recompute and check against the chain. Being <i>right</i> is
+        the only thing that ranks.
       </div>
 
       {/* THE LEAD — what the Oct 15 re-validation decided (none cleared the bar). */}
@@ -207,7 +207,7 @@ export default function ProofPage() {
       {proof && proof.cards.length > 0 && (
         <div style={{ marginTop: 26 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>PROOF OF EDGE</span>
+            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>GRADED CALLS</span>
             {proof.summary && proof.summary.resolved > 0 && (
               <span style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT }}>
                 {proof.summary.resolved} resolved · {proof.summary.hitRate}% hit · {proof.summary.avgR >= 0 ? "+" : ""}{proof.summary.avgR}R avg

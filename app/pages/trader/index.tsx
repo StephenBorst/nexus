@@ -53,6 +53,7 @@ type FeedThesis = {
   leverage: number;
   status: "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "CLOSED";
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped); absent = not yet graded
+  gradedR?: number;                // the R the grader paid (present once resolved)
   fillState?: "WORKING" | "OPEN";  // server: has the entry traded yet (grading.mjs applyFillStamp)
   filledAt?: number;
   publishMark?: { px: number; at: number };
@@ -161,6 +162,7 @@ function ThesisRow({
     ? calcUnrealizedPnl(thesis.direction, thesis.entryPrice, markPrice, thesis.positionSize)
     : null;
   const move = showsLivePnl(thesis) && markPrice != null ? liveMove(thesis, markPrice) : null;
+  const isGraded = (thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS") && Number.isFinite(thesis.gradedR);
 
   return (
     <div style={{
@@ -170,101 +172,78 @@ function ThesisRow({
       overflow: "hidden",
       opacity: thesis.status === "INVALIDATED" ? 0.65 : 1,
     }}>
-      {/* Main row */}
+      {/* Main row: identity + result on one line, the levels in a grid under it, so every card has the
+          same shape on a phone and on desktop (it used to stack the levels into one tall column). */}
       <div role="button" tabIndex={0}
         onClick={() => setExpanded(!expanded)} onKeyDown={pressKey(() => setExpanded(!expanded))}
-        style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}
+        style={{ padding: "12px 16px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 10 }}
       >
-        {/* Ticker + direction */}
-        <div style={{ minWidth: 100, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 15, fontWeight: "bold", color: "#fff" }}>{ticker}</span>
-          <span style={{
-            fontFamily: "var(--nx-font-mono)", fontSize: 10,
-            color: thesis.direction === "LONG" ? "#3ecf8e" : "#f7525f",
-          }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 6 }}>
+          {/* Ticker + side. The side is a label, not money: monochrome (docs/brand.md). */}
+          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 15, fontWeight: "bold", color: "#f4f4f5" }}>{ticker}</span>
+          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.04em", color: "#a1a1aa" }}>
             {thesis.direction === "LONG" ? "↑" : "↓"} {thesis.direction}
           </span>
           {(thesis.copyCount ?? 0) > 0 && (
-            <span style={{
-              fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#a1a1aa",
-              background: "#1a1a1e", border: "1px solid #232327",
-              borderRadius: 3, padding: "1px 5px",
+            <span title={`Copied ${thesis.copyCount} time${thesis.copyCount === 1 ? "" : "s"}`} style={{
+              fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#a1a1aa",
+              background: "#1a1a1e", border: "1px solid #232327", borderRadius: 3, padding: "1px 5px",
             }}>
-              {thesis.copyCount}
+              ⧉ {thesis.copyCount}
             </span>
           )}
-        </div>
+          <div style={{ flex: 1 }} />
 
-        {/* Levels */}
-        <div style={{ display: "flex", gap: 16, flex: 1, flexWrap: "wrap" }}>
-          {[
-            { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`, color: "#a1a1aa" },
-            { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,   color: "#f7525f" },
-            { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`, color: "#ededf0" },
-            { label: "R:R",   val: fmtRR(callRR(thesis)), color: (callRR(thesis) ?? 0) >= 2 ? "#ededf0" : "#fbbf24" },
-            ...(runnerRR(thesis) != null ? [{ label: "RUNNER", val: fmtRR(runnerRR(thesis)), color: "#a1a1aa" }] : []),
-            ...(thesis.positionSize > 0 ? [{ label: "SIZE", val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" }] : []),
-          ].map(({ label, val, color }) => (
-            <div key={label}>
-              <div style={{ fontSize: 7, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{label}</div>
-              <div style={{ fontSize: 11, color, fontFamily: "var(--nx-font-mono)" }}>{val}</div>
-            </div>
-          ))}
-        </div>
+          {/* Result: the graded R once resolved; the live move while open; never a typed-in dollar figure
+              (public calls carry no size, so it read "+$0.00"). A sized call (owner's view) keeps its dollars. */}
+          {isGraded ? (
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700, color: (thesis.gradedR as number) >= 0 ? "#3ecf8e" : "#f7525f" }}>
+              {(thesis.gradedR as number) >= 0 ? "+" : "−"}{Math.abs(thesis.gradedR as number).toFixed(2)}R
+            </span>
+          ) : pnlData && thesis.positionSize > 0 ? (
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", color: pnlData.pnl >= 0 ? "#3ecf8e" : "#f7525f" }}>
+              {pnlData.pnl >= 0 ? "+" : ""}${pnlData.pnl.toFixed(2)}
+              <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 3 }}>({pnlData.pct >= 0 ? "+" : ""}{pnlData.pct.toFixed(2)}%)</span>
+            </span>
+          ) : move ? (
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", color: move.pct >= 0 ? "#3ecf8e" : "#f7525f" }}>
+              {fmtLiveMove(move)}
+            </span>
+          ) : null}
 
-        {/* Live P&L badge (if active) */}
-        {pnlData && thesis.positionSize > 0 ? (
-          <div style={{
-            fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold",
-            color: pnlData.pnl >= 0 ? "#3ecf8e" : "#f7525f",
-          }}>
-            {pnlData.pnl >= 0 ? "+" : ""}${pnlData.pnl.toFixed(2)}
-            <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 3 }}>({pnlData.pct >= 0 ? "+" : ""}{pnlData.pct.toFixed(2)}%)</span>
-          </div>
-        ) : move && (
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", color: move.pct >= 0 ? "#3ecf8e" : "#f7525f" }}>
-            {fmtLiveMove(move)}
-          </div>
-        )}
-
-        {/* Actual PnL (closed) */}
-        {thesis.actualPnl !== null && thesis.status !== "ACTIVE" && (
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", color: thesis.actualPnl >= 0 ? "#3ecf8e" : "#f7525f" }}>
-            {thesis.actualPnl >= 0 ? "+" : ""}${thesis.actualPnl.toFixed(2)}
-          </div>
-        )}
-
-        {/* Status + time */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
+          <span style={{
             fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.08em",
             padding: "2px 7px", borderRadius: 3,
             background: cfg.bg, border: `1px ${pendingLabel ? "dashed" : "solid"} ${cfg.border}`, color: pendingLabel ? "#a1a1aa" : cfg.color,
-          }}>{pendingLabel ? pendingLabel.toUpperCase() : cfg.label}</div>
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a" }}>{timeAgo}</div>
+          }}>{pendingLabel ? pendingLabel.toUpperCase() : cfg.label}</span>
+          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", whiteSpace: "nowrap" }}>{timeAgo}</span>
+
+          {walletAddress && !isOwn && onCopy && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCopy(thesis); }}
+              className="nx-text-action"
+              style={{ background: "none", border: "none", color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, padding: "4px 2px", cursor: "pointer" }}
+            >Copy</button>
+          )}
+          <span aria-hidden style={{ color: "#52525b", fontSize: 10 }}>{expanded ? "▲" : "▼"}</span>
         </div>
 
-        {/* Copy button */}
-        {walletAddress && !isOwn && onCopy && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onCopy(thesis); }}
-            style={{
-              background: "none", border: "1px solid #232327", borderRadius: 3,
-              color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12,
-              padding: "3px 8px", cursor: "pointer",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.borderColor = "#ededf0";
-              (e.currentTarget as HTMLButtonElement).style.color = "#ededf0";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.borderColor = "#232327";
-              (e.currentTarget as HTMLButtonElement).style.color = "#71717a";
-            }}
-          >Copy</button>
-        )}
-
-        <div style={{ color: "#33333a", fontSize: 10 }}>{expanded ? "▲" : "▼"}</div>
+        {/* Levels — monochrome: a stop or a target is a level, not money. */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(84px, 1fr))", gap: "6px 12px" }}>
+          {[
+            { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`, color: "#a1a1aa" },
+            { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,   color: "#a1a1aa" },
+            { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`, color: "#ededf0" },
+            { label: "R:R",   val: fmtRR(callRR(thesis)), color: "#ededf0" },
+            ...(runnerRR(thesis) != null ? [{ label: "RUNNER", val: fmtRR(runnerRR(thesis)), color: "#a1a1aa" }] : []),
+            ...(thesis.positionSize > 0 ? [{ label: "SIZE", val: `$${thesis.positionSize.toFixed(0)}`, color: "#a1a1aa" }] : []),
+          ].map(({ label, val, color }) => (
+            <div key={label} style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 8.5, letterSpacing: "0.06em", color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>{label}</div>
+              <div style={{ fontSize: 12, color, fontFamily: "var(--nx-font-mono)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{val}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Expanded: full details + notes + live grid */}
@@ -599,16 +578,15 @@ export default function TraderPage() {
     const invalidated = theses.filter((t) => t.status === "INVALIDATED").length;
     const closed = wins + losses;
     const winRate = closed > 0 ? (wins / closed) * 100 : null;
+    // Average graded R over the resolved calls: the win rate never shows without it.
+    const graded = theses.filter((t) => (t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS") && Number.isFinite(t.gradedR));
+    const avgR = graded.length ? graded.reduce((a, t) => a + (t.gradedR as number), 0) / graded.length : null;
     // From each call's own levels (TP1), the R the grader pays; calls whose levels don't make a call are left out.
     const rrs = theses.map((t) => callRR(t)).filter((r): r is number => r != null);
     const avgRR = rrs.length > 0 ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 0;
     const bestTrade = theses.reduce<FeedThesis | null>((best, t) =>
       callRR(t) != null && (!best || (callRR(t) ?? 0) > (callRR(best) ?? 0)) ? t : best, null);
-    const totalPnl = theses
-      .filter((t) => t.actualPnl !== null)
-      .reduce((sum, t) => sum + (t.actualPnl ?? 0), 0);
-    const hasPnl = theses.some((t) => t.actualPnl !== null);
-    return { wins, losses, active, invalidated, closed, winRate, avgRR, bestTrade, totalPnl, hasPnl };
+    return { wins, losses, active, invalidated, closed, winRate, avgR, avgRR, bestTrade };
   }, [theses]);
 
   // Pull each identity field from the first thesis that actually has it — a wallet's
@@ -678,7 +656,7 @@ export default function TraderPage() {
   // Ph26: pre-compute rep display values to avoid IIFE pattern in JSX (TSC cascade errors)
   const repForDisplay = onChainRep ?? calcRepScore(stats.wins, stats.losses, stats.avgRR);
   const isOnChainRep = onChainRep !== null;
-  const repColor = repForDisplay >= 70 ? "#3ecf8e" : repForDisplay >= 40 ? "#fbbf24" : "#f7525f";
+  const repColor = "#ededf0"; // a score, not money: monochrome (docs/brand.md)
   const showRepBadge = stats.closed > 0 || onChainRep !== null;
 
   return (
@@ -720,14 +698,14 @@ export default function TraderPage() {
 
       <div style={{ padding: 16, maxWidth: 860, margin: "0 auto" }}>
         {loading && (
-          <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#33333a" }}>
-            loading trader profile...
+          <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-ui)", fontSize: 13, color: "#71717a" }}>
+            Loading profile…
           </div>
         )}
 
         {error && !loading && (
-          <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#f7525f" }}>
-            failed to load. Check connection
+          <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-ui)", fontSize: 13, color: "#fbbf24" }}>
+            Couldn’t load this profile. Check your connection and try again.
           </div>
         )}
 
@@ -745,7 +723,7 @@ export default function TraderPage() {
                   {wallet && <span style={{ flexShrink: 0 }}><NexusTierBadge address={wallet} /></span>}
                 </div>
                 <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#52525b", marginTop: 2 }}>{shortAddr}</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a", marginTop: 4 }}>
+                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", marginTop: 4 }}>
                   {theses.length} public {theses.length === 1 ? "call" : "calls"}
                 </div>
               </div>
@@ -758,11 +736,8 @@ export default function TraderPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title="X-ray this wallet's actual perp record on Hyperliquid + Orderly. Verify before you copy"
-                  style={{
-                    flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12,
-                    color: "#ededf0", textDecoration: "none", border: "1px solid #33333a",
-                    borderRadius: 4, padding: "8px 12px", whiteSpace: "nowrap",
-                  }}
+                  className={TEXT_ACTION_CLASS}
+                  style={{ ...TEXT_ACTION, flexShrink: 0 }}
                 >
                   ⌕ X-ray ↗
                 </a>
@@ -784,10 +759,9 @@ export default function TraderPage() {
 
             {theses.length === 0 ? (
               <div style={{ textAlign: "center", padding: "60px 0" }}>
-                <div style={{ fontSize: 20, color: "#33333a", marginBottom: 8 }}>◆</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#33333a" }}>
-                  no public theses from this trader yet
-                </div>
+                <div aria-hidden style={{ fontSize: 20, color: "#52525b", marginBottom: 8 }}>◆</div>
+                <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: "#a1a1aa" }}>No public calls yet.</div>
+                <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", marginTop: 4 }}>Calls appear here once this wallet publishes one. Each is graded from public price.</div>
               </div>
             ) : (
               <>
@@ -804,23 +778,30 @@ export default function TraderPage() {
 
                 {/* Stats grid */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8, marginBottom: 24 }}>
+                  {/* A rate is monochrome; the graded R beside it carries the money colour. */}
                   <StatBox
                     label="WIN RATE"
                     value={stats.winRate !== null ? `${stats.winRate.toFixed(0)}%` : "—"}
-                    sub={stats.closed > 0 ? `${stats.wins}W / ${stats.losses}L` : "no closed trades"}
-                    color={stats.winRate === null ? "#52525b" : stats.winRate >= 60 ? "#3ecf8e" : stats.winRate >= 40 ? "#fbbf24" : "#f7525f"}
+                    sub={stats.closed > 0 ? `${stats.wins}W / ${stats.losses}L graded` : "no graded calls yet"}
+                    color={stats.winRate === null ? "#52525b" : "#ededf0"}
                   />
                   <StatBox
-                    label="AVG R:R"
+                    label="AVG GRADED R"
+                    value={stats.avgR !== null ? `${stats.avgR >= 0 ? "+" : "−"}${Math.abs(stats.avgR).toFixed(2)}R` : "—"}
+                    sub={stats.avgR !== null ? `over ${stats.closed} resolved` : "none resolved yet"}
+                    color={stats.avgR === null ? "#52525b" : stats.avgR >= 0 ? "#3ecf8e" : "#f7525f"}
+                  />
+                  <StatBox
+                    label="PLANNED R:R"
                     value={`1:${stats.avgRR.toFixed(2)}`}
-                    sub="all theses"
-                    color={stats.avgRR >= 2 ? "#ededf0" : "#fbbf24"}
+                    sub="avg, from the levels"
+                    color="#ededf0"
                   />
                   <StatBox
                     label="ACTIVE"
                     value={String(stats.active)}
                     sub="unresolved calls"
-                    color={stats.active > 0 ? "#d4d4d8" : "#52525b"}
+                    color={stats.active > 0 ? "#ededf0" : "#52525b"}
                   />
                   <StatBox
                     label="TOTAL"
@@ -828,14 +809,6 @@ export default function TraderPage() {
                     sub={`${stats.invalidated} invalidated`}
                     color="#a1a1aa"
                   />
-                  {stats.hasPnl && (
-                    <StatBox
-                      label="REALIZED P&L"
-                      value={`${stats.totalPnl >= 0 ? "+" : ""}$${stats.totalPnl.toFixed(2)}`}
-                      sub="closed trades"
-                      color={stats.totalPnl >= 0 ? "#3ecf8e" : "#f7525f"}
-                    />
-                  )}
                   {stats.bestTrade && (
                     <StatBox
                       label="BEST R:R"
@@ -849,7 +822,7 @@ export default function TraderPage() {
                 {/* Hub: this trader's graded autonomous-agent record */}
                 {agentRec && (
                   <div style={{ marginBottom: 16, border: "1px solid #232327", borderRadius: 6, padding: 14, background: "#0a0a0b" }}>
-                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>AUTONOMOUS AGENT. GRADED RECORD</div>
+                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>AUTONOMOUS AGENT · GRADED RECORD</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(80px,1fr))", gap: 12 }}>
                       {[
                         { l: "NET P&L", v: `${agentRec.netPnl >= 0 ? "+" : ""}$${agentRec.netPnl}`, c: agentRec.netPnl >= 0 ? "#3ecf8e" : "#f7525f" },
@@ -869,7 +842,7 @@ export default function TraderPage() {
                 {/* Hub: this trader's published strategies — copyable to your own agent */}
                 {pubStrats.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>PUBLISHED STRATEGIES. Copy to your agent</div>
+                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>PUBLISHED STRATEGIES · COPY TO YOUR AGENT</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {pubStrats.map((s) => (
                         <div key={s.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "8px 10px", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3 }}>
@@ -886,7 +859,7 @@ export default function TraderPage() {
 
                 {/* Thesis list */}
                 <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>
-                  THESES. Click to expand
+                  CALLS · TAP ONE TO OPEN IT
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {theses

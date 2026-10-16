@@ -10,12 +10,15 @@ import { useEffect, useState } from "react";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 
+// Anything that rounds to $0 reads as "$0": no sign, no money colour ("+$0" in green / "-$0" in red read as a result).
+const isZeroUsd = (n?: number) => Math.abs(n || 0) < 0.5;
 const usd = (n: number) => {
   const a = Math.abs(n);
+  if (a < 0.5) return "$0";
   const s = a >= 1e9 ? `${(a / 1e9).toFixed(1)}B` : a >= 1e6 ? `${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `${(a / 1e3).toFixed(0)}K` : `${a.toFixed(0)}`;
   return `${n < 0 ? "-" : ""}$${s}`;
 };
-const fmtSigned = (n?: number) => `${(n || 0) >= 0 ? "+" : ""}${usd(n || 0)}`;
+const fmtSigned = (n?: number) => `${!isZeroUsd(n) && (n || 0) > 0 ? "+" : ""}${usd(n || 0)}`;
 const pct = (n?: number | null) => (n == null ? "—" : `${n}%`);
 const numOrDash = (n?: number | null) => (n == null ? "—" : String(n));
 // Which side "wins" a metric (higher = better); null defers to the number.
@@ -38,11 +41,11 @@ export interface XrayTrack {
 interface CopyRec { available: boolean; trades: number; net: number; winRatePct: number | null; copiers: number; }
 
 const label = { fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase" as const, marginBottom: 3 };
-const statVal = (n: number) => ({ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: n >= 0 ? "#3ecf8e" : "#f7525f" });
+const statVal = (n: number) => ({ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: isZeroUsd(n) ? "#ededf0" : n > 0 ? "#3ecf8e" : "#f7525f" });
 const card = { border: "1px solid #232327", borderRadius: 8, padding: 12, marginBottom: 16 } as const;
 
 // Dependency-free equity sparkline of the tracked realized-PnL window.
-function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
+function Sparkline({ data, positive }: { data: number[]; positive: boolean | null }) {
   if (!data || data.length < 2) return null;
   const w = 260, h = 44, pad = 3;
   const min = Math.min(0, ...data), max = Math.max(0, ...data);
@@ -51,9 +54,10 @@ function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
   const y = (v: number) => pad + (1 - (v - min) / range) * (h - 2 * pad);
   const path = data.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
   const zeroY = y(0);
-  const color = positive ? "#3ecf8e" : "#f7525f";
+  const color = positive == null ? "#71717a" : positive ? "#3ecf8e" : "#f7525f"; // flat (no P&L) = grey
   return (
-    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: "block" }}>
+    // Fixed height: with only a width, the stretched viewBox grew to ~180px of empty box on desktop.
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: "block", height: h }}>
       <line x1={pad} x2={w - pad} y1={zeroY} y2={zeroY} stroke="#33333a" strokeWidth="1" strokeDasharray="2 3" />
       <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
@@ -122,13 +126,13 @@ export function TrackedRecordCard({ address, myAddress }: { address: string; myA
         ) : (
           <>
             {track.curve && track.curve.length >= 2 && (
-              <div style={{ marginBottom: 10 }}><Sparkline data={track.curve} positive={(track.netRealized || 0) >= 0} /></div>
+              <div style={{ marginBottom: 10 }}><Sparkline data={track.curve} positive={isZeroUsd(track.netRealized) ? null : (track.netRealized || 0) > 0} /></div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 10 }}>
-              <div><div style={label}>Net (tracked)</div><div style={statVal(track.netRealized || 0)}>{(track.netRealized || 0) >= 0 ? "+" : ""}{usd(track.netRealized || 0)}</div></div>
+              <div><div style={label}>Net (tracked)</div><div style={statVal(track.netRealized || 0)}>{fmtSigned(track.netRealized)}</div></div>
               <div><div style={label}>Days Tracked</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: "#ededf0" }}>{track.daysTracked}</div></div>
               <div><div style={label}>Green Days</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: "#ededf0" }}>{track.winWindowRate == null ? "—" : `${track.winWindowRate}%`}</div></div>
-              <div><div style={label}>Max Drawdown</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: "#f7525f" }}>-{usd(track.maxDrawdown || 0)}</div></div>
+              <div><div style={label}>Max Drawdown</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: isZeroUsd(track.maxDrawdown) ? "#ededf0" : "#f7525f" }}>{isZeroUsd(track.maxDrawdown) ? "$0" : `-${usd(track.maxDrawdown || 0)}`}</div></div>
             </div>
             {!track.scored && (
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", marginTop: 8, lineHeight: 1.5 }}>
@@ -175,7 +179,7 @@ export function TrackedRecordCard({ address, myAddress }: { address: string; myA
         <div style={card}>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase", marginBottom: 8 }}>Copied on Nexus</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(80px, 1fr))", gap: 10 }}>
-            <div><div style={label}>Net (copiers)</div><div style={statVal(copyRec.net)}>{copyRec.net >= 0 ? "+" : ""}{usd(copyRec.net)}</div></div>
+            <div><div style={label}>Net (copiers)</div><div style={statVal(copyRec.net)}>{fmtSigned(copyRec.net)}</div></div>
             <div><div style={label}>Graded Closes</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: "#ededf0" }}>{copyRec.trades}</div></div>
             <div><div style={label}>Win Rate</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: "#ededf0" }}>{copyRec.winRatePct == null ? "—" : `${copyRec.winRatePct}%`}</div></div>
             <div><div style={label}>Copiers</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: "#ededf0" }}>{copyRec.copiers}</div></div>

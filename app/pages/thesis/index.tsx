@@ -249,7 +249,7 @@ export default function ThesisPage() {
   if (loading) {
     return (
       <div style={{ background: "#0a0a0b", minHeight: "100svh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#33333a" }}>loading thesis...</div>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: "#71717a" }}>Loading call…</div>
       </div>
     );
   }
@@ -257,12 +257,9 @@ export default function ThesisPage() {
   if (notFound || !thesis) {
     return (
       <div style={{ background: "#0a0a0b", minHeight: "100svh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
-        <div style={{ fontSize: 24, color: "#33333a" }}>◆</div>
-        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#33333a" }}>thesis not found or not public</div>
-        <button
-          onClick={() => navigate("/feed")}
-          style={{ background: "none", border: "1px solid #232327", borderRadius: 3, color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 14px", cursor: "pointer" }}
-        >← Back to feed</button>
+        <div aria-hidden style={{ fontSize: 24, color: "#52525b" }}>◆</div>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: "#a1a1aa" }}>This call isn’t public, or doesn’t exist.</div>
+        <button onClick={() => navigate("/feed")} className="nx-text-action" style={TEXT_ACTION}>← Back to the feed</button>
       </div>
     );
   }
@@ -286,7 +283,7 @@ export default function ThesisPage() {
   // A call posted without a size (Bankr, house calls) has no SIZE to show, not "$0".
   const levelCells = [
     { label: "ENTRY", val: `$${thesis.entryPrice.toFixed(2)}`,   color: "#a1a1aa" },
-    { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,      color: "#f7525f" },
+    { label: "STOP",  val: `$${thesis.stopLoss.toFixed(2)}`,      color: "#a1a1aa" }, // a level, not money: monochrome
     { label: "TP1",   val: `$${thesis.takeProfit1.toFixed(2)}`,   color: "#ededf0" },
     { label: "R:R",   val: fmtRR(callRR(thesis)),   color: (callRR(thesis) ?? 0) >= 2 ? "#ededf0" : "#fbbf24" },
     ...(runnerRR(thesis) != null ? [{ label: "RUNNER", val: fmtRR(runnerRR(thesis)), color: "#a1a1aa" }] : []),
@@ -372,7 +369,7 @@ export default function ThesisPage() {
               ) : thesis.onChainId !== undefined ? (
                 <span style={{ fontSize: 14 }} title="on-chain verified">⛓</span>
               ) : null}
-              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a" }}>{timeAgo}</div>
+              <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>{timeAgo}</div>
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 3, background: cfg.bg, border: `1px ${pendingLabel ? "dashed" : "solid"} ${cfg.border}`, color: pendingLabel ? "#a1a1aa" : cfg.color }}>
                 {pendingLabel ? pendingLabel.toUpperCase() : cfg.label}
               </div>
@@ -382,7 +379,7 @@ export default function ThesisPage() {
           {/* Symbol + direction */}
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 36, fontWeight: "bold", color: "#fff" }}>{ticker}</span>
-            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 16, color: thesis.direction === "LONG" ? "#3ecf8e" : "#f7525f" }}>
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 16, color: "#a1a1aa" }}>
               {thesis.direction === "LONG" ? "↑" : "↓"} {thesis.direction} · {thesis.leverage.toFixed(1)}x
             </span>
           </div>
@@ -548,18 +545,11 @@ export default function ThesisPage() {
           )}
         </div>
 
-        {/* Footer: link to full trader profile */}
-        <div style={{ marginTop: 16, textAlign: "center" }}>
-          <button
-            onClick={() => navigate(`/feed/trader/${thesis.wallet}`)}
-            style={{
-              background: "none", border: "1px solid #232327", borderRadius: 3,
-              color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12,
-              padding: "6px 14px", cursor: "pointer",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#ededf0"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#ededf0"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#52525b"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#232327"; }}
-          >View {traderName.toUpperCase()} Profile →</button>
+        {/* Footer: link to full trader profile — a plain text action, like the bar at the top */}
+        <div style={{ marginTop: 12, textAlign: "center" }}>
+          <button onClick={() => navigate(`/feed/trader/${thesis.wallet}`)} className="nx-text-action" style={TEXT_ACTION}>
+            {traderName}’s profile and record →
+          </button>
         </div>
 
         {/* Discussion — the public thread on THIS call. Same primitive as the feed,
