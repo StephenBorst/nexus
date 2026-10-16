@@ -900,7 +900,8 @@ export function rsQuartiles(universe) {
 export function runScorecard(coinSets, cfg = {}) {
   const randomPools = buildRandomPools(coinSets); // every (market, side, hour) graded ONCE, shared by all reads
   const tide = windowTide(randomPools);
-  const axes = AXES.map((a) => {
+  const only = Array.isArray(cfg.axes) ? new Set(cfg.axes) : null; // the holdout line grades a subset
+  const axes = AXES.filter((a) => !only || only.has(a.name)).map((a) => {
     const shadow = !AXIS_EXITS[a.name] && SHADOW_EXITS[a.name];
     const s = scoreEvents(coinSets, a.gen, { ...cfg, randomPools, exit: AXIS_EXITS[a.name] || (shadow ? shadow.exit : null), gradedExit: GRADED_EXIT_AXES.includes(a.name) });
     if (shadow) for (const g of [s.exit, s.exit24h]) if (g) { g.presetExit = false; g.shadowOf = shadow.shadowOf; }
@@ -918,4 +919,19 @@ export function runScorecard(coinSets, cfg = {}) {
     ? rsQuartiles(coinSets.filter((c) => c !== btc).map((c) => ({ coin: c.coin, rs: relStrength(c.oiHist, btc.oiHist) })).filter((x) => x.rs != null).sort((a, b) => b.rs - a.rs))
     : [];
   return { axes, tide, coins: coinSets.length, universe };
+}
+
+// ── The HOLDOUT line (docs/research/holdout-universe-prereg.md) ────────────────────────────────
+// Eight coins the basis read was never looked at on (app/lib/recordedUniverse.mjs), recorded from
+// 2026-10-16. They are graded on their OWN line and never pooled into the main card.
+// The main card: any holdout coin already on it (SUI, there for its other reads) keeps those reads
+// but gets its basis + CVD series emptied — exactly what the card saw before they were recorded.
+export function withoutHoldoutFlow(coinSets, isHoldout) {
+  return (coinSets || []).map((cs) => (isHoldout(cs.coin) ? { ...cs, basisHist: [], cvdHist: [] } : cs));
+}
+
+// The holdout line: the holdout coins alone, graded by the same runScorecard on `axes` only.
+export function runHoldoutScorecard(holdoutSets, cfg = {}) {
+  const sc = runScorecard(holdoutSets, cfg);
+  return { coins: holdoutSets.map((c) => c.coin), axes: sc.axes, tide: sc.tide };
 }
