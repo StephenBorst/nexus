@@ -10,7 +10,8 @@
 // EVM, ed25519 verify for Solana) so this file stays dependency-free for the browser bundle.
 //
 // Deliberately NOT the 'nexus-trading-key-v1' signature: that one seeds agent trading keys, so it must
-// not become a bearer token for everyday saves. This one only opens the Lab record, for a day.
+// not become a bearer token for everyday saves. This one only acts in the Lab (the record, the social
+// writes, alert settings), for a day; it can't trade or move funds.
 
 export const LAB_AUTH_MAX_AGE_MS = 24 * 3600 * 1000;   // the worker accepts a signature this long
 export const LAB_AUTH_REUSE_MS = 23 * 3600 * 1000;     // the browser re-signs an hour early (clock drift)
@@ -21,11 +22,36 @@ export const isEvmAddress = (a) => typeof a === "string" && /^0x[0-9a-fA-F]{40}$
 // (the Lab keys records by the LOWERCASED address; the signature needs the real one).
 export const isSolAddress = (a) => typeof a === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a);
 
-/** The exact text the wallet signs. ASCII only (every wallet renders it the same way). */
+const who = (signer) => (isEvmAddress(signer) ? signer.toLowerCase() : String(signer));
+
+/**
+ * The exact text the wallet signs. ASCII only (every wallet renders it the same way).
+ * It names everything the signature lets the worker do as this wallet. The list grew past the
+ * first wording ("save and open my calls, notes and profile") when comments, reactions, takes,
+ * follows, notifications (2026-10-16), phone alerts and the Telegram link started using it, so it
+ * was reworded 2026-10-16. ⚠️ A new route that accepts this signature must be named here too:
+ * workers/nexus-lab-api/labAuthScope.test.mjs fails until it is.
+ */
 export function labSaveMessage(signer, ts) {
-  const who = isEvmAddress(signer) ? signer.toLowerCase() : String(signer);
-  return `Nexus Lab: save and open my calls, notes and profile\nAddress: ${who}\nTimestamp: ${ts}\nNo funds move. Valid 24 hours.`;
+  return "Nexus Lab: sign in with this wallet\n"
+    + "Lets Nexus save and open your calls, notes and profile, post your comments, reactions and takes, "
+    + "and update your follows, notifications, phone alerts and Telegram link.\n"
+    + `Address: ${who(signer)}\nTimestamp: ${ts}\nNo funds move. No trades. Valid 24 hours.`;
 }
+
+/**
+ * The first wording. Accepted only for signatures dated before LAB_AUTH_V1_UNTIL_MS, so a signature a
+ * browser already holds keeps working until it runs out (24h) instead of failing at the deploy, and
+ * a tab still open on the old app can keep saving until then. After 2026-10-19 no v1 signature can
+ * pass (each lasts 24h); delete this and the branch in verifyLabAuth then.
+ */
+export const LAB_AUTH_V1_UNTIL_MS = Date.UTC(2026, 9, 18); // 2026-10-18T00:00Z
+export function labSaveMessageV1(signer, ts) {
+  return `Nexus Lab: save and open my calls, notes and profile\nAddress: ${who(signer)}\nTimestamp: ${ts}\nNo funds move. Valid 24 hours.`;
+}
+const messagesFor = (signer, ts) => (ts < LAB_AUTH_V1_UNTIL_MS
+  ? [labSaveMessage(signer, ts), labSaveMessageV1(signer, ts)]
+  : [labSaveMessage(signer, ts)]);
 
 /**
  * Does `auth` prove the caller owns `address` (the route's lowercased key)?
@@ -44,16 +70,22 @@ export function verifyLabAuth({ address, auth, now = Date.now(), recoverEvm, ver
   if (ts - now > LAB_AUTH_SKEW_MS) return { ok: false, reason: "future" };
 
   if (isEvmAddress(addr)) {
-    let who = null;
-    try { who = recoverEvm(labSaveMessage(addr, ts), sig); } catch { who = null; }
-    return who && String(who).toLowerCase() === addr ? { ok: true, signer: addr } : { ok: false, reason: "wrong_signer" };
+    for (const m of messagesFor(addr, ts)) {
+      let rec = null;
+      try { rec = recoverEvm(m, sig); } catch { rec = null; }
+      if (rec && String(rec).toLowerCase() === addr) return { ok: true, signer: addr };
+    }
+    return { ok: false, reason: "wrong_signer" };
   }
   // Solana: the signer must BE this record's owner (same key, case aside) and must have signed.
   const signer = auth.signer;
   if (!isSolAddress(signer) || signer.toLowerCase() !== addr) return { ok: false, reason: "wrong_signer" };
-  let good = false;
-  try { good = verifySol(labSaveMessage(signer, ts), sig, signer) === true; } catch { good = false; }
-  return good ? { ok: true, signer } : { ok: false, reason: "wrong_signer" };
+  for (const m of messagesFor(signer, ts)) {
+    let good = false;
+    try { good = verifySol(m, sig, signer) === true; } catch { good = false; }
+    if (good) return { ok: true, signer };
+  }
+  return { ok: false, reason: "wrong_signer" };
 }
 
 const toHex = (b) => "0x" + Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
