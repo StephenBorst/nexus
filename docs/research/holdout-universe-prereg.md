@@ -117,3 +117,34 @@ floors only decide who joins the holdout, so this changes nothing for the nine.
 Recording check at the same time: `basis:hist` + `cvd:hist` hold 3 hourly rows each for ZEC, NEAR, SUI and ZRO. The
 `/intel/axis-backtest` `holdout` block lists all eight, and both reads are INSUFFICIENT (0 events), as expected before
 48 hours of history.
+
+### Third read · 2026-10-16T13:24Z (`GET /intel/universe` v2, about 12 hours after the first)
+
+This read reports only. The page's drop rule applies to the second read, and the coin list is fixed. Dropping a coin
+now is borst's call, and it would be a new dated page.
+
+`holdoutFailing` = **[ONDO]**. ONDO's Orderly volume read $38,747, 3% under the $40k floor. Its other legs pass. No
+coin's Orderly mark is more than 0.18% from its OKX perp price.
+
+| Coin | OKX spot | OKX perp | Orderly vol | Orderly OI | Price gap |
+|---|---|---|---|---|---|
+| ZEC | $69.0M | $1,214.1M | $317,910 | $304,344 | 0.14% |
+| NEAR | $38.5M | $344.4M | $231,809 | $31,664 | 0.14% |
+| SUI | $14.3M | $97.7M | $40,040 | $48,756 | 0.10% |
+| PUMP | $5.8M | $114.0M | $165,078 | $55,185 | 0.18% |
+| ENA | $7.3M | $57.5M | $71,091 | $50,231 | 0.08% |
+| ONDO | $7.7M | $37.6M | **$38,747** | $43,735 | 0.09% |
+| INJ | $8.6M | $130.6M | $1,065,253 | $43,043 | 0.10% |
+| ZRO | $5.5M | $34.5M | $59,158 | $31,249 | 0.17% |
+
+Closest to a floor besides ONDO:
+- SUI's Orderly volume: $40,040, right at the floor.
+- ZRO's open interest: $31k.
+- NEAR's open interest: $32k.
+- PUMP's and ZRO's OKX spot: $5.8M and $5.5M.
+
+Two of the original nine are under a floor on this read: BNB's Orderly volume ($12k) and LINK's OKX spot ($4.7M). The
+Orderly floors are day-to-day noise at this size.
+
+Scoreboard check at the same time: the `/intel/axis-backtest` `holdout` block lists all eight. basis_x_cvd and
+basis_extreme are still INSUFFICIENT (0 events), as expected inside the first 48 hours.
