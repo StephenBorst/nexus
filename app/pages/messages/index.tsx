@@ -191,7 +191,7 @@ const S = {
   bubbleTime: {
     fontFamily: "var(--nx-font-mono)",
     fontSize: 8,
-    color: "#33333a",
+    color: "#71717a",
     marginTop: 4,
     textAlign: "right" as const,
   },
@@ -430,7 +430,7 @@ function ThreadView({
       <div style={S.threadHeader}>
         <span style={{ color: "#ededf0", fontSize: 10 }}>⬡</span>
         {peerDisplay}
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#33333a", marginLeft: "auto" }}>
+        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#71717a", marginLeft: "auto" }}>
           end-to-end encrypted · XMTP
         </span>
       </div>
@@ -608,11 +608,11 @@ export default function MessagesPage() {
           <span style={S.headerLabel}>■ MESSAGES</span>
         </div>
         <div style={S.center}>
-          <div style={{ fontSize: 24, color: "#232327" }}>⬡</div>
+          <div style={{ fontSize: 24, color: "#52525b" }}>⬡</div>
           <div style={S.centerLabel}>
             wallet-to-wallet encrypted DMs powered by XMTP
             <br />
-            <span style={{ color: "#33333a", fontSize: 9 }}>
+            <span style={{ color: "#71717a", fontSize: 9 }}>
               you’ll sign twice — once for the encryption key, once to register
             </span>
           </div>
@@ -630,7 +630,7 @@ export default function MessagesPage() {
       <div style={S.header}>
         <button onClick={goBack} style={S.backBtn} aria-label="Back" title="Back">‹</button>
         <span style={S.headerLabel}>■ MESSAGES</span>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#33333a", marginLeft: "auto" }}>
+        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#71717a", marginLeft: "auto" }}>
           ⬡ XMTP · end-to-end encrypted
         </span>
       </div>
@@ -709,12 +709,12 @@ export default function MessagesPage() {
 
           <div style={S.convoList}>
             {loadingConvos && (
-              <div style={{ padding: 14, fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a" }}>
+              <div style={{ padding: 14, fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>
                 loading...
               </div>
             )}
             {!loadingConvos && conversations.length === 0 && (
-              <div style={{ padding: 14, fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#33333a", lineHeight: 1.6 }}>
+              <div style={{ padding: 14, fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#71717a", lineHeight: 1.6 }}>
                 no conversations yet
                 <br />paste a wallet address above
               </div>
@@ -760,7 +760,7 @@ export default function MessagesPage() {
             </>
           ) : (
             <div style={S.center}>
-              <div style={{ fontSize: 28, color: "#232327" }}>⬡</div>
+              <div style={{ fontSize: 28, color: "#52525b" }}>⬡</div>
               <div style={S.centerLabel}>
                 select a conversation or paste a wallet address to start a new DM
               </div>

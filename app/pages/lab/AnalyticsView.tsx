@@ -122,7 +122,7 @@ function TradingScoreSection({ orders, winRate }: { orders: ProcessedTrade[]; wi
               <div key={d.label} style={{ background: "#0a0a0b", border: "1px solid #232327", borderRadius: 6, padding: "8px 10px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                   <span style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.16em", textTransform: "uppercase" }}>{d.label}</span>
-                  <span style={{ fontSize: 8, color: "#33333a", fontFamily: "var(--nx-font-mono)" }}>{d.weight}</span>
+                  <span style={{ fontSize: 8, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>{d.weight}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                   <span style={{ fontSize: 16, color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{d.score}</span>
@@ -247,7 +247,7 @@ function BreakdownRow({ orders }: { orders: ProcessedTrade[] }) {
       <div style={cardStyle}>
         <div style={{ fontSize: 10, color: "#71717a", letterSpacing: "0.1em", marginBottom: 12, fontFamily: "var(--nx-font-mono)" }}>&#9632; LEVERAGE ANALYSIS</div>
         {leverage.buckets.length === 0
-          ? <div style={{ fontSize: 11, color: "#33333a", fontFamily: "var(--nx-font-mono)" }}>no leverage data available</div>
+          ? <div style={{ fontSize: 11, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>no leverage data available</div>
           : leverage.buckets.map((b) => (
             <div key={b.label} style={{ marginBottom: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
@@ -392,7 +392,7 @@ function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {
         {gated ? (
           <div style={{ fontSize: 11, color: "#52525b", fontFamily: "var(--nx-font-ui)", lineHeight: 1.7 }}>
             need <span style={{ color: "#ededf0" }}>{RISK_SAMPLE_GATE - stats.n}</span> more closed trades<br />
-            <span style={{ color: "#33333a" }}>ratios are meaningless under {RISK_SAMPLE_GATE} samples. We won&apos;t fake them</span>
+            <span style={{ color: "#71717a" }}>ratios are meaningless under {RISK_SAMPLE_GATE} samples. We won&apos;t fake them</span>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -412,7 +412,7 @@ function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {
 
       {/* Peak hours + heatmap */}
       <div style={{ ...cardStyle, gridColumn: isMobile ? "auto" : "span 2" }}>
-        <div style={{ fontSize: 10, color: "#71717a", letterSpacing: "0.1em", marginBottom: 12, fontFamily: "var(--nx-font-mono)" }}>&#9632; PEAK HOURS <span style={{ color: "#33333a" }}>(local)</span></div>
+        <div style={{ fontSize: 10, color: "#71717a", letterSpacing: "0.1em", marginBottom: 12, fontFamily: "var(--nx-font-mono)" }}>&#9632; PEAK HOURS <span style={{ color: "#71717a" }}>(local)</span></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(24, 1fr)", gap: 2, marginBottom: 12 }}>
           {stats.hours.map((b) => {
             const wr = b.trades ? Math.round((b.wins / b.trades) * 100) : 0;
@@ -426,7 +426,7 @@ function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {stats.peak.length === 0
-            ? <span style={{ fontSize: 11, color: "#33333a", fontFamily: "var(--nx-font-mono)" }}>no timing data</span>
+            ? <span style={{ fontSize: 11, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>no timing data</span>
             : stats.peak.map((b) => (
               <div key={b.h} style={{ background: "#141416", border: "1px solid #232327", borderRadius: 6, padding: "6px 10px" }}>
                 <div style={{ fontSize: 12, color: "#fff", fontFamily: "var(--nx-font-mono)" }}>{fmtHr(b.h)}-{fmtHr((b.h + 1) % 24)}</div>

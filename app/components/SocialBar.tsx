@@ -238,7 +238,7 @@ export function SocialBar({
               <div key={c.id} style={{ background: "#0a0a0b", border: "1px solid #232327", borderRadius: 5, padding: "7px 10px", opacity: pending ? 0.6 : 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>
-                    {short(c.wallet)}<span style={{ marginLeft: 8, color: "#33333a" }}>{pending ? "sending…" : relTime(c.createdAt)}</span>
+                    {short(c.wallet)}<span style={{ marginLeft: 8 }}>{pending ? "sending…" : relTime(c.createdAt)}</span>
                   </span>
                   {!pending && c.wallet === walletLower && (
                     <button onClick={() => remove(c.id)} title="Delete" style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: 0 }}>✕</button>

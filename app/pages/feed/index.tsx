@@ -13,7 +13,6 @@ import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePr
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
 import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
-import { fetchOnChainRepScore } from "@/hooks/useThesisRegistry";
 import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
@@ -387,7 +386,7 @@ function CopyModal({
               </div>
             </div>
           ) : (
-            <div style={{ padding: 10, background: "#0f0f11", borderRadius: 4, border: "1px solid #232327", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a", textAlign: "center" }}>
+            <div style={{ padding: 10, background: "#0f0f11", borderRadius: 4, border: "1px solid #232327", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", textAlign: "center" }}>
               enter account size + risk % to calculate your position
             </div>
           )}
@@ -710,7 +709,7 @@ function FeedCard({
         return (
           <div style={{ borderTop: "1px solid #232327", paddingTop: 8, marginTop: 6 }}>
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#52525b", letterSpacing: "0.1em", marginBottom: 5 }}>
-              UPDATES · {st.count}{!st.closed && <span style={{ color: "#33333a" }}> · {st.size}% still on</span>}{st.closed && <span style={{ color: "#33333a" }}> · closed</span>}
+              UPDATES · {st.count}{!st.closed && <span> · {st.size}% still on</span>}{st.closed && <span> · closed</span>}
             </div>
             {recent.map((u: { at: number; kind: string; note?: string }, i: number) => (
               <div key={`${u.at}-${i}`} style={{ display: "flex", gap: 6, alignItems: "baseline", marginBottom: 2 }}>
@@ -748,15 +747,6 @@ function FeedCard({
       </div>
     </div>
   );
-}
-
-// ─── Rep Score ───────────────────────────────────────────────────────────────
-function calcRepScore(wins: number, losses: number, avgRR: number): number {
-  const closed = wins + losses;
-  const winRate = closed > 0 ? (wins / closed) * 100 : 0;
-  const rrBonus = Math.min(avgRR * 10, 20);
-  const samplePenalty = Math.max(0, 10 - closed) * 2;
-  return Math.max(0, Math.min(100, Math.round(winRate + rrBonus - samplePenalty)));
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
@@ -830,7 +820,6 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
   const navigate = useNavigate();
 
   // Ph12/26 -- trustless on-chain stats + Rep Score from NexusRepScore contract
-  const [onChainStats, setOnChainStats] = useState<Map<string, { wins: number; losses: number; active: number; repScore: number; avgRR: number }>>(new Map());
 
   // ⚡ Autocopy a verified caller — your agent mirrors their next public call at your
   // own risk (backend reads config.autocopy.leaders → caller:latest). Load who you
@@ -869,28 +858,6 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
     } catch { setCopyMsg("Couldn't update autocopy"); } finally { setCopyBusy(null); }
   }
 
-  useEffect(() => {
-    if (board.length === 0) return;
-    Promise.all(
-      board.map(async (trader) => {
-        try {
-          const stats = await fetchOnChainRepScore(trader.wallet);
-          return { wallet: trader.wallet.toLowerCase(), stats };
-        } catch {
-          return { wallet: trader.wallet.toLowerCase(), stats: null };
-        }
-      })
-    ).then((results) => {
-      const map = new Map<string, { wins: number; losses: number; active: number; repScore: number; avgRR: number }>();
-      for (const { wallet, stats } of results) {
-        if (stats && (stats.wins + stats.losses + stats.active + stats.invalidated) > 0) {
-          map.set(wallet, { wins: stats.wins, losses: stats.losses, active: stats.active, repScore: stats.repScore, avgRR: stats.avgRR });
-        }
-      }
-      setOnChainStats(map);
-    });
-  }, [board.length]);
-
   // Trustless call grades (public-price graded, on-chain anchored) keyed by wallet.
   const [graded, setGraded] = useState<Map<string, { hitRate: number; avgR: number; calls: number; score: number; meritRank: { tier: string; title: string; glyph: string } | null; rSeries: number[]; discipline: { score: number; scored: number } | null; regimeEdge: { best: { bucket: string; avgR: number } } | null; calibration: { calibrated: boolean; inverted: boolean; gap: number } | null; contrarian: { calls: number; avgR: number; edge: number; score: number } | null }>>(new Map());
   const [emerging, setEmerging] = useState<Map<string, { calls: number; toQualify: number }>>(new Map());
@@ -923,30 +890,18 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
   // (/theses/leaderboard). EMERGING callers (1–4 graded calls) follow, unranked. Nobody else
   // is listed, and nothing here is ordered by self-reported Lab statuses or the on-chain
   // Rep Score (which counts outcomes callers close themselves): until someone is graded, the
-  // board says so. On-chain stats still fill the display columns of the rows shown.
+  // board says so. Every number in a row comes from the grader too (no on-chain Rep read).
   const rows = useMemo(() => {
     const byWallet = new Map(board.map((t) => [t.wallet.toLowerCase(), t]));
     const row = (w: string) => {
       const trader: TraderStats = byWallet.get(w) ?? { wallet: w, displayName: null, pfp: null, total: 0, wins: 0, losses: 0, active: 0, invalidated: 0, winRate: 0, avgRR: 0, bestRR: 0, bestTicker: "" };
       const g = graded.get(w) || null;
-      const oc = onChainStats.get(w);
-      if (!oc) return { ...trader, onChainRepScore: null as number | null, graded: g };
-      const closed = oc.wins + oc.losses;
-      return {
-        ...trader,
-        wins: oc.wins,
-        losses: oc.losses,
-        active: oc.active,
-        avgRR: oc.avgRR,
-        winRate: closed > 0 ? (oc.wins / closed) * 100 : 0,
-        onChainRepScore: oc.repScore,
-        graded: g,
-      };
+      return { ...trader, graded: g };
     };
     const verified = [...graded.keys()].map(row);                      // Map order = the grader's rank
     const building = [...emerging.keys()].filter((w) => !graded.has(w)).map(row);
     return [...verified, ...building];
-  }, [board, onChainStats, graded, emerging]);
+  }, [board, graded, emerging]);
 
   if (gradedState === "loading") {
     return <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", padding: "12px 2px" }}>LOADING VERIFIED CALLERS…</div>;
@@ -991,7 +946,6 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
         const g = trader.graded;
         const gWins = g ? Math.round((g.hitRate / 100) * g.calls) : 0;
         const gLosses = g ? Math.max(0, g.calls - gWins) : 0;
-        const closed = g ? g.calls : 0;
         const shortAddr = `${trader.wallet.slice(0, 6)}…${trader.wallet.slice(-4)}`;
         const isExpanded = expandedWallet === trader.wallet.toLowerCase();
         const traderTheses = feed.filter(t => t.wallet.toLowerCase() === trader.wallet.toLowerCase());
@@ -1111,9 +1065,9 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                 </div>
               </div>
 
-              {/* Avg R:R */}
-              <div style={{ textAlign: "center", flex: "1 1 50px", minWidth: 50 }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.text.muted, fontFamily: "var(--nx-font-mono)", marginBottom: 3 }}>AVG R:R</div>
+              {/* Planned R:R, read from each public call's levels (what the grader pays on a win) */}
+              <div title="Average planned reward-to-risk across this caller's public calls, read from their entry, stop and first target." style={{ textAlign: "center", flex: "1 1 50px", minWidth: 50 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.text.muted, fontFamily: "var(--nx-font-mono)", marginBottom: 3 }}>PLANNED R:R</div>
                 <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 15, fontWeight: 600, color: C.text.bright }}>
                   1:{trader.avgRR.toFixed(1)}
                 </div>
@@ -1126,28 +1080,6 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   {trader.active}
                 </div>
               </div>
-
-              {/* Rep Score — Ph26: on-chain value when available */}
-              {(() => {
-                const onChain = (trader as typeof trader & { onChainRepScore?: number | null }).onChainRepScore;
-                // REP from the GRADED record too, so it can't read 99 on a self-reported
-                // 8/2 while the caller is only "emerging". Ungraded → "—" via closed===0.
-                const rep = onChain ?? calcRepScore(gWins, gLosses, trader.avgRR);
-                const isOnChain = onChain != null;
-                return (
-                  <div style={{ textAlign: "center", flex: "1 1 44px", minWidth: 44 }}>
-                    <div style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: C.text.muted, fontFamily: "var(--nx-font-mono)" }}>
-                      {isOnChain ? "⛓REP" : "REP"}
-                    </div>
-                    <div style={{
-                      fontFamily: "var(--nx-font-ui)", fontSize: 15, fontWeight: 600,
-                      color: closed === 0 ? C.text.faint : C.text.bright,
-                    }}>
-                      {closed === 0 ? "—" : rep}
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* ⚡ Autocopy this caller — your agent mirrors their next public call */}
               {walletAddress && !isOwn && (
@@ -1201,7 +1133,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   </button>
                 </div>
                 {traderTheses.length === 0 ? (
-                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#33333a" }}>no theses</div>
+                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>no theses</div>
                 ) : traderTheses.map((t) => {
                   const cfg = STATUS_CONFIG[effectiveStatus(t)] ?? STATUS_CONFIG.ACTIVE;
                   const ticker = bareTicker(t.symbol);
@@ -1664,14 +1596,14 @@ export default function FeedPage() {
           <>
             {following.size === 0 ? (
               <div style={{ textAlign: "center", padding: "60px 0" }}>
-                <div style={{ fontSize: 20, color: "#33333a", marginBottom: 8 }}>◈</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#33333a" }}>
+                <div style={{ fontSize: 20, color: "#52525b", marginBottom: 8 }}>◈</div>
+                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#71717a" }}>
                   not following anyone yet — hit + on a trader card to follow them
                 </div>
               </div>
             ) : filtered.length === 0 ? (
               <div style={{ textAlign: "center", padding: "60px 0" }}>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#33333a" }}>
+                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#71717a" }}>
                   no public theses from traders you follow
                 </div>
               </div>
@@ -1699,7 +1631,7 @@ export default function FeedPage() {
         {view === "ranks" && (
           <>
             {loading && (
-              <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#33333a" }}>
+              <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#71717a" }}>
                 loading rankings...
               </div>
             )}
@@ -1831,7 +1763,7 @@ export default function FeedPage() {
             })()}
 
             {loading && (
-              <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#33333a" }}>
+              <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#71717a" }}>
                 loading feed...
               </div>
             )}
@@ -1847,8 +1779,8 @@ export default function FeedPage() {
                 ? <FeedEmptyState variant="feed" />
                 : (
                   <div style={{ textAlign: "center", padding: "60px 0" }}>
-                    <div style={{ fontSize: 20, color: "#33333a", marginBottom: 8 }}>■</div>
-                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#33333a" }}>
+                    <div style={{ fontSize: 20, color: "#52525b", marginBottom: 8 }}>■</div>
+                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#71717a" }}>
                       no results for this filter
                     </div>
                   </div>

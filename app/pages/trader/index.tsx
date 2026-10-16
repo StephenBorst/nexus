@@ -12,7 +12,6 @@ import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePr
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
 import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
-import { fetchOnChainRepScore } from "@/hooks/useThesisRegistry";
 import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
@@ -30,15 +29,6 @@ import { useEscapeKey } from "@/utils/a11y";
 import type { SavedStrategy } from "@/pages/lab/agentTypes";
 
 const API_BASE = "https://og.nexustradinglabs.com";
-
-// ─── Rep Score ───────────────────────────────────────────────────────────────
-function calcRepScore(wins: number, losses: number, avgRR: number): number {
-  const closed = wins + losses;
-  const winRate = closed > 0 ? (wins / closed) * 100 : 0;
-  const rrBonus = Math.min(avgRR * 10, 20);
-  const samplePenalty = Math.max(0, 10 - closed) * 2;
-  return Math.max(0, Math.min(100, Math.round(winRate + rrBonus - samplePenalty)));
-}
 
 type FeedThesis = {
   id: string;
@@ -443,7 +433,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
               </div>
             </div>
           ) : (
-            <div style={{ padding: 10, background: "#0f0f11", borderRadius: 4, border: "1px solid #232327", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a", textAlign: "center" }}>
+            <div style={{ padding: 10, background: "#0f0f11", borderRadius: 4, border: "1px solid #232327", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", textAlign: "center" }}>
               enter account size + risk % to calculate
             </div>
           )}
@@ -477,8 +467,10 @@ export default function TraderPage() {
   const [error, setError] = useState(false);
   const [copyTarget, setCopyTarget] = useState<FeedThesis | null>(null);
   const [copied, setCopied] = useState(false);
-  // Ph26: on-chain Rep Score from NexusRepScore contract
-  const [onChainRep, setOnChainRep] = useState<number | null>(null);
+  // Merit rank from the grader (/theses/process): earned from graded calls only. It replaced a
+  // "REP" score built from planned R:R and the on-chain Rep Score, which counts outcomes callers
+  // close themselves; Feed RANKS stopped ranking on either, so the profile doesn't show them.
+  const [merit, setMerit] = useState<{ glyph: string; title: string } | null>(null);
   const [agentRec, setAgentRec] = useState<{ netPnl: number; winRate: number; trades: number; score: number } | null>(null);
   const [pubStrats, setPubStrats] = useState<SavedStrategy[]>([]);
 
@@ -519,7 +511,7 @@ export default function TraderPage() {
     if (!wallet) return;
     setLoading(true);
     setError(false);
-    setOnChainRep(null);
+    setMerit(null);
     fetch(`${API_BASE}/feed`)
       .then((r) => r.json())
       .then((data: { feed: FeedThesis[] }) => {
@@ -542,9 +534,8 @@ export default function TraderPage() {
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-    // Ph26: fetch on-chain Rep Score in parallel
-    fetchOnChainRepScore(wallet)
-      .then((result) => setOnChainRep(result.repScore))
+    fetch(`${API_BASE}/theses/process/${wallet.toLowerCase()}`).then((r) => r.ok ? r.json() : null)
+      .then((d) => setMerit(d?.meritRank?.title ? { glyph: String(d.meritRank.glyph ?? ""), title: String(d.meritRank.title) } : null))
       .catch(() => {});
     // Hub: this trader's graded AGENT record + their published strategies.
     setAgentRec(null); setPubStrats([]);
@@ -611,10 +602,11 @@ export default function TraderPage() {
   useEffect(() => {
     if (loading || !wallet) return;
     const name = displayName ?? shortAddr;
-    const rep = onChainRep ?? calcRepScore(stats.wins, stats.losses, stats.avgRR);
-    const winRateStr = stats.winRate !== null ? `${stats.winRate.toFixed(0)}%` : "—";
     const title = `${name} on Nexus`;
-    const description = `Win rate: ${winRateStr} | Avg R:R: 1:${stats.avgRR.toFixed(2)} | Rep: ${rep}`;
+    // The graded record in parts: a win rate never goes out without its R.
+    const description = stats.closed > 0 && stats.winRate !== null && stats.avgR !== null
+      ? `${stats.closed} graded call${stats.closed === 1 ? "" : "s"} · ${stats.winRate.toFixed(0)}% · ${stats.avgR >= 0 ? "+" : "−"}${Math.abs(stats.avgR).toFixed(2)}R avg. Graded from public price.`
+      : "No graded calls yet. Every public call is graded from public price.";
 
     const setMeta = (property: string, content: string) => {
       let el = document.querySelector(`meta[property="${property}"]`);
@@ -649,15 +641,9 @@ export default function TraderPage() {
       setMeta("twitter:image", "https://trade.nexustradinglabs.com/embed-mini.png");
       document.title = "Nexus Trading Labs";
     };
-  }, [wallet, loading, displayName, shortAddr, stats.wins, stats.losses, stats.avgRR, stats.winRate]);
+  }, [wallet, loading, displayName, shortAddr, stats.closed, stats.avgR, stats.winRate]);
 
   if (!wallet) return null;
-
-  // Ph26: pre-compute rep display values to avoid IIFE pattern in JSX (TSC cascade errors)
-  const repForDisplay = onChainRep ?? calcRepScore(stats.wins, stats.losses, stats.avgRR);
-  const isOnChainRep = onChainRep !== null;
-  const repColor = "#ededf0"; // a score, not money: monochrome (docs/brand.md)
-  const showRepBadge = stats.closed > 0 || onChainRep !== null;
 
   return (
     <div style={{ background: "#0a0a0b", minHeight: "100svh" }}>
@@ -742,17 +728,20 @@ export default function TraderPage() {
                   ⌕ X-ray ↗
                 </a>
               )}
-              {/* Rep Score badge — Ph26: on-chain value from NexusRepScore contract */}
-              {showRepBadge && (
-                <div style={{
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                  padding: "8px 14px", border: `1px solid ${repColor}22`, borderRadius: 4,
-                  background: `${repColor}08`, flexShrink: 0,
-                }}>
-                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: isOnChainRep ? "#ededf0" : "#52525b", letterSpacing: "0.08em" }}>
-                    {isOnChainRep ? "⛓REP" : "REP"}
+              {/* Merit rank: earned from graded calls (▪ Signal → ◆ Sharp → ✦ Apex), never bought. A rank,
+                  not money: monochrome. No rank, no badge — the tiles below carry the record. */}
+              {merit && (
+                <div
+                  title="Merit rank, earned from graded calls: Signal (5+ calls, net positive R), Sharp (15+, 50%+, 0.5R+), Apex (30+, 55%+, 1R+)."
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    padding: "8px 14px", border: "1px solid #33333a", borderRadius: 4, flexShrink: 0,
+                  }}
+                >
+                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", letterSpacing: "0.12em" }}>RANK</div>
+                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 15, fontWeight: 700, color: "#ededf0", lineHeight: 1.4, whiteSpace: "nowrap" }}>
+                    {merit.glyph} {merit.title.toUpperCase()}
                   </div>
-                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 28, fontWeight: "bold", color: repColor, lineHeight: 1.1 }}>{repForDisplay}</div>
                 </div>
               )}
             </div>

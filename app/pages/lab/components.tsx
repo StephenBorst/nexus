@@ -165,7 +165,7 @@ export function PnlChart({ points }: { points: number[] }) {
 
   if (points.length < 2) {
     return (
-      <div style={{ height: 190, display: "flex", alignItems: "center", justifyContent: "center", color: "#33333a", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>
+      <div style={{ height: 190, display: "flex", alignItems: "center", justifyContent: "center", color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>
         no data yet
       </div>
     );
@@ -224,7 +224,7 @@ export function PnlChart({ points }: { points: number[] }) {
         {/* Value axis: max (top), 0 baseline, min (bottom) — the numbers the curve was missing. */}
         <text x={axisX} y={y(max) + 3} fill="#52525b" fontSize="9" fontFamily="var(--nx-font-mono)" textAnchor="start">{fmt(max)}</text>
         {showZero && (
-          <text x={axisX} y={zeroY + 3} fill="#33333a" fontSize="9" fontFamily="var(--nx-font-mono)" textAnchor="start">$0</text>
+          <text x={axisX} y={zeroY + 3} fill="#52525b" fontSize="9" fontFamily="var(--nx-font-mono)" textAnchor="start">$0</text>
         )}
         <text x={axisX} y={y(min) + 3} fill="#52525b" fontSize="9" fontFamily="var(--nx-font-mono)" textAnchor="start">{fmt(min)}</text>
         {showZero && (
@@ -269,7 +269,7 @@ export function PnlBars({ values, labels }: { values: number[]; labels?: string[
 
   if (values.length < 1) {
     return (
-      <div style={{ height: 96, display: "flex", alignItems: "center", justifyContent: "center", color: "#33333a", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>
+      <div style={{ height: 96, display: "flex", alignItems: "center", justifyContent: "center", color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>
         no data yet
       </div>
     );
@@ -332,12 +332,12 @@ export function EmptyState({ message, unlock, onAction, actionLabel }: {
   actionLabel?: string;
 }) {
   return (
-    <div style={{ padding: "40px 0", textAlign: "center", color: "#33333a", fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>
+    <div style={{ padding: "40px 0", textAlign: "center", color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>
       <div style={{ fontSize: 20, marginBottom: 8 }}>&#9632;</div>
       {message}
       {unlock && (
         <div style={{ marginTop: 10, color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12, lineHeight: 1.55, maxWidth: 380, marginLeft: "auto", marginRight: "auto" }}>
-          <span style={{ color: "#33333a", fontFamily: "var(--nx-font-mono)", marginRight: 6 }}>→</span>{unlock}
+          <span style={{ color: "#52525b", fontFamily: "var(--nx-font-mono)", marginRight: 6 }}>→</span>{unlock}
         </div>
       )}
       {onAction && actionLabel && (
