@@ -19,6 +19,7 @@ import { orderlyGet } from "../nexus-lab-api/orderlyGet.mjs";
 import { deriveSignal, computeRegime, atrPct, oiSnapshotDue } from "./logic.mjs";
 import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
+import { HOLDOUT_PERPS } from "../../app/lib/recordedUniverse.mjs";
 
 // The markets we ALWAYS record oi:hist for. ⚠️ Keep this in step with
 // VALIDATE_UNIVERSE in nexus-lab-api/strategies.mjs — a symbol the walk-forward asks
@@ -56,12 +57,16 @@ export default {
       // Idempotent within a tick: recordOiSnapshot's 55-min gate no-ops the repeat
       // call for watchlist symbols further down.
       await recordOiForSymbols(OI_CORE_SYMBOLS, env);
+      // The holdout coins (app/lib/recordedUniverse.mjs): hourly price + OI and candles so the
+      // scoreboard's separate holdout line can grade the basis read on them. RECORDING ONLY — no
+      // signal path reads these lists; nothing trades them unless a user picks one in the Lab.
+      await recordOiForSymbols(HOLDOUT_PERPS, env);
       // Real OHLC+volume candles (from Orderly's own tv/history) — the SAME market-
       // data-not-per-user rationale as OI above, so it matures with zero active
       // agents. Unlocks true VWAP/ATR + rs_rank quartiles for the harness and the
       // futures-volume-rotation read. Hourly-gated + one-shot backfilled to ~90d, so the
       // whole SCORECARD universe (the coins /intel/axis-backtest grades) has depth NOW.
-      await recordCandlesForSymbols(HARNESS_SYMBOLS, env);
+      await recordCandlesForSymbols([...HARNESS_SYMBOLS, ...HOLDOUT_PERPS.filter((s) => !HARNESS_SYMBOLS.includes(s))], env);
 
       const usersRaw = await env.NEXUS_AGENT.get("agent:users");
       if (!usersRaw) { console.log("[brain] no active users"); return; }

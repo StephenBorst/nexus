@@ -567,6 +567,18 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   24h USD); names that differ between venues = `unmatched`, never guessed. It changes nothing. New coins join only after
   borst signs the list, as a HOLDOUT graded separately; no agent/wallet config changes (the graded-exit wallet stays on
   its 9).
+  **Signed off 2026-10-16 → `docs/research/holdout-universe-prereg.md` (bar fixed before the data).** Floors revised
+  (the first $1M/$500k Orderly floors failed 6 of our own 9): OKX spot ≥$5M · OKX perp ≥$20M · Orderly vol ≥$40k ·
+  Orderly OI ≥$30k · Orderly mark within 2% of OKX perp (else `unmatched`). Holdout = **ZEC NEAR SUI PUMP ENA ONDO INJ
+  ZRO**, ONE list in **`app/lib/recordedUniverse.mjs`** (`RECORDED_COINS` 9 + `HOLDOUT_COINS` 8; `FLOW_COINS` = both)
+  read by snapshotFlow (basis/cvd), the brain (`HOLDOUT_PERPS` → oi:hist + candle:hist, recording only), the scoreboard
+  and the feeds. **Never pooled:** `/intel/axis-backtest` main card runs `withoutHoldoutFlow` (SUI keeps its other reads,
+  loses basis/cvd), the separate **`holdout`** block = `runHoldoutScorecard` on the eight for basis_x_cvd + basis_extreme
+  (cache `axisbt:v10`); `/intel/evidence` (`evidence:v4`) and staged `/signals/basis` leave them out. No preset/default/
+  wallet lists them (pinned by recordedUniverse.test.mjs). Bar: basis_x_cvd holdout PREDICTIVE + BEATS_RANDOM on its side
+  at ≥30 events = holds; NOISE/BELOW_RANDOM/mean R ≤0 at ≥30 = fails; never moves the main verdict or a trade.
+  `/intel/universe` v2 names `holdoutFailing` (under a floor or unmatched). Tests `axisbt.holdout.test.mjs` (incl. 17
+  coins inside the flow budget), `recordedUniverse.test.mjs`, `universe.test.mjs`.
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +

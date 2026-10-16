@@ -13,8 +13,10 @@
 import { basisFadeFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 import { deriveSignal } from "../nexus-agent-brain/logic.mjs";
+import { isHoldoutCoin } from "../../app/lib/recordedUniverse.mjs";
 
-export const BASIS_SIGNAL_COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
+// Holdout coins (app/lib/recordedUniverse.mjs) are recorded and graded on their own line, never sold.
+export const BASIS_SIGNAL_COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"].filter((c) => !isHoldoutCoin(c));
 export const BASIS_CONFIRMS = ["CVD", "SMART", "LIQ", "NONE"];
 
 // One market's read. `hists` = the recorded series the brain reads from the same KV.

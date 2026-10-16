@@ -71,7 +71,8 @@ test("flag ON: one row per scoreboard market, same rule label, bad confirm refus
   const env = { LAB_STORE: kv, NEXUS_AGENT: kv, BASIS_SIGNALS_LIVE: "true" };
   const r = await handleBasisSignals(new Request("https://x/signals/basis?confirm=cvd"), env, json);
   assert.equal(r.status, 200);
-  assert.equal(r.body.signals.length, 12);
+  assert.equal(r.body.signals.length, 11); // the twelve minus SUI, a holdout coin (never sold)
+  assert.ok(!r.body.signals.some((x) => /SUI/.test(x.symbol || x.coin || "")));
   assert.deepEqual(r.body.rule, { signalMode: "BASIS_FADE", basisConfirm: "CVD" });
   assert.ok(r.body.signals.every((s) => s.direction === "NONE")); // empty KV → nothing fires
   const bad = await handleBasisSignals(new Request("https://x/signals/basis?confirm=VIBES"), env, json);

@@ -2,7 +2,7 @@
 // Run: node --test workers/nexus-lab-api/universe.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rankUniverse, RECORDED_COINS, UNIVERSE_RULES } from "./universe.mjs";
+import { rankUniverse, RECORDED_COINS, HOLDOUT_COINS, UNIVERSE_RULES } from "./universe.mjs";
 
 const ob = (coin, vol, oiBase, mark) => ({ symbol: `PERP_${coin}_USDC`, "24h_amount": vol, open_interest: oiBase, mark_price: mark });
 const sp = (coin, quoteVol) => ({ instId: `${coin}-USDT`, volCcy24h: String(quoteVol) });
@@ -25,7 +25,7 @@ test("USD conversions: OKX perp volume is base × last, Orderly OI is base × ma
 
 test("every leg must clear its floor, and the failing legs are named", () => {
   const r = rankUniverse({
-    orderlyRows: [ob("THIN", 100_000, 10, 1), ob("OK", 5e6, 1e6, 1)],
+    orderlyRows: [ob("THIN", 30_000, 10, 1), ob("OK", 5e6, 1e6, 1)],
     okxSpot: [sp("THIN", 1e6), sp("OK", 1e7)],
     okxSwap: [sw("THIN", 1e6, 1), sw("OK", 5e7, 1)],
     recorded: [],
@@ -64,7 +64,31 @@ test("non-USDC and malformed rows are ignored", () => {
   assert.deepEqual(r.rows, []);
 });
 
-test("the recorded list is the recorder's nine, and the floors are the proposed ones", () => {
+test("the recorded list is the recorder's nine, and the floors are the signed-off ones", () => {
   assert.deepEqual([...RECORDED_COINS], ["BTC", "ETH", "SOL", "BNB", "XRP", "LINK", "DOGE", "AVAX", "HYPE"]);
-  assert.deepEqual({ ...UNIVERSE_RULES }, { minOkxSpotUsd: 5e6, minOkxSwapUsd: 2e7, minOrderlyVolUsd: 1e6, minOrderlyOiUsd: 5e5 });
+  assert.deepEqual({ ...UNIVERSE_RULES }, { minOkxSpotUsd: 5e6, minOkxSwapUsd: 2e7, minOrderlyVolUsd: 4e4, minOrderlyOiUsd: 3e4, maxPriceGapPct: 2 });
+});
+
+test("same ticker, different price → unmatched, never guessed", () => {
+  const r = rankUniverse({
+    orderlyRows: [ob("SAME", 5e6, 1e6, 1.01), ob("DIFF", 5e6, 1e6, 1)],
+    okxSpot: [sp("SAME", 1e7), sp("DIFF", 1e7)],
+    okxSwap: [sw("SAME", 5e7, 1), sw("DIFF", 5e7, 0.5)],
+    recorded: [],
+  });
+  assert.deepEqual(r.rows.map((x) => x.coin), ["SAME"]);
+  assert.equal(r.rows[0].priceGapPct, 1);
+  assert.deepEqual(r.unmatched, ["DIFF (price gap 100.0% vs OKX)"]);
+});
+
+test("holdout coins are flagged, never counted as new, and named when they drop under a floor", () => {
+  const r = rankUniverse({
+    orderlyRows: [ob("ZEC", 3e5, 3e5, 1), ob("ZRO", 20_000, 3e4, 1)],
+    okxSpot: [sp("ZEC", 8e7), sp("ZRO", 7e6)],
+    okxSwap: [sw("ZEC", 1e9, 1), sw("ZRO", 3e7, 1)],
+  });
+  assert.deepEqual(r.newPassing, []);
+  assert.ok(r.rows.every((x) => x.holdout === true));
+  assert.deepEqual(r.holdoutFailing, HOLDOUT_COINS.filter((c) => c !== "ZEC"), "ZRO under a floor; the rest absent from this tape");
+  assert.ok(HOLDOUT_COINS.includes("ZEC"));
 });
