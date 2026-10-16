@@ -693,10 +693,5 @@ export async function handleSmart(parts, request, env, ctx) {
     return json({ ok: true, watch: clean }, request);
   }
 
-  // ── POST /tg/webhook — Telegram bot updates (link a chat ↔ wallet) ──────────
-  // The bot deep-link t.me/nexustradinglabs_bot?start=<wallet> sends "/start <wallet>".
-  // We map chat_id ↔ wallet in KV so the exec can DM the owner on agent trades. Public
-  // (Telegram calls it); nothing sensitive is exposed. Reply needs TELEGRAM_TOKEN, but
-  // the mapping is stored even without it (degrades to no confirmation message).
   return null; // a /smart/* path we don't serve → fall through
 }
