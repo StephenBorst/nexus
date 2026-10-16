@@ -58,7 +58,8 @@ test("the route wires both: main card stripped, holdout loaded from HOLDOUT_COIN
   const s = src("index.js");
   assert.match(s, /withoutHoldoutFlow\(await loadSets\(COINS\), isHoldoutCoin\)/);
   assert.match(s, /const holdoutSets = await loadSets\(HOLDOUT_COINS\)/);
-  assert.match(s, /axes: \[\.\.\.HOLDOUT_AXES\]/);
+  // the holdout prereg's reads + pipeline reads registered with a holdout line (never other reads)
+  assert.match(s, /axes: \[\.\.\.HOLDOUT_AXES, \.\.\.holdoutRegs\.map\(\(x\) => x\.axis\)\]/);
   assert.match(s, /"WLD"\]\.filter\(\(c\) => !isHoldoutCoin\(c\)\);\n\s+const symbols = COINS/);
   assert.match(s, /snapshotFlow\(env, \[\.\.\.FLOW_COINS\]\)/);
 });

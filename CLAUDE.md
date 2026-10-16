@@ -579,6 +579,22 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   at ≥30 events = holds; NOISE/BELOW_RANDOM/mean R ≤0 at ≥30 = fails; never moves the main verdict or a trade.
   `/intel/universe` v2 names `holdoutFailing` (under a floor or unmatched). Tests `axisbt.holdout.test.mjs` (incl. 17
   coins inside the flow budget), `recordedUniverse.test.mjs`, `universe.test.mjs`.
+  **Second read 2026-10-16T05:06Z: all 8 pass** (borst merged #119 at 01:45 before it; third read at 13:15 UTC reports only).
+- **🧪 READ PIPELINE (borst, 2026-10-16) = `docs/research/read-pipeline.md`, rules in `app/lib/readPipeline.mjs`.** Scoreboard
+  first, wallets only for reads that pass. Stages, all on OUT-OF-SAMPLE events (after `registeredAt`): REGISTERED → LEAD
+  (≥30 events, mean R > 0, halves agree) → EDGE (≥95% vs random on its side + HOLDOUT replication: ≥30 holdout events,
+  mean R > 0, ≥80% vs random) → TRADEABLE (graded exit net > 0 over ≥30 trades) → PAPER (wallet; live = separate review);
+  RETIRED at ≥100 events on either line with mean R ≤ 0 or BELOW_RANDOM, publicly. The scoreboard's back-graded history
+  is IN-SAMPLE and never counts. A tweak = new registration (new name, new date). Scoreboard (`axisbt:v11`): each
+  registered axis row carries `oos` (`registeredGrade`, same grader, events ≥ fromMs), the holdout line adds every
+  registered read with `holdout:true`, `pipeline.reads[]` = `pipelineStage` + `next`, `overlap` = `readOverlap` counts
+  (same coin + side within ±24h; no outcomes). Graded-exit cutoffs are PER READ (`GRADED_EXIT_CUTOFFS`: basis_x_cvd Oct 16,
+  pipeline reads their registration). **Registered #1: rsi_reset_deep** (LONG, from 2026-10-17T00:00Z,
+  `docs/research/rsi-reset-deep-prereg.md`; picked off the board → selection bias disclosed). **Ember's ten:** 5 are
+  already graded (funding_fade, liq_flush, cvd mirror, rsi_reset_deep, basis mirror); the 5 new ones are DRAFTS in
+  `docs/research/explorer-drafts.md`, NOT registered until borst defines them + a count-only power check. ⚠️ The
+  brain's OI rule is not a pure reversal: it fades price/OI disagreeing and FOLLOWS them agreeing. Tests
+  `readPipeline.test.mjs`, `axisbt.pipeline.test.mjs`.
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
