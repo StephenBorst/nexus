@@ -281,6 +281,7 @@ function ThesisRow({
         <SocialBar
           thesisId={thesis.id}
           walletAddress={walletAddress}
+          authorWallet={thesis.wallet}
           autoload
         />
       </div>
