@@ -16,6 +16,7 @@ import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
 import { trailingPct, basisExtremeSide, basisDeviationSide } from "../../app/lib/basisFade.mjs";
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
+import { GRADED_EXIT, gradedExitLevels, GRADED_EXIT_OOS_CUTOFF_MS } from "../../app/lib/gradedExit.mjs";
 import { openPosition, stepExit, closedPnlPct, DEFAULT_FEE_BPS, BASELINE_RUNS, BASELINE_MIN_TRADES, baselineVerdict, mulberry32, tradesToSeparate } from "./backtest.mjs";
 
 // hourBucket + the oi:hist price spine live in app/lib/basisStack.mjs (shared with the
@@ -497,15 +498,23 @@ export function gradeEventR(cbh, eventHour, side, entry, opts = R_CONTRACT) {
 // not exited by the end of the logged candles (or across a data gap past the hold + grace)
 // returns null — it is left out, never credited.
 export const EXIT_GRACE_H = 6;
+// An exit with `exitContract: GRADED_EXIT` sizes its stop/target per trade from the coin's H4 ATR-14
+// at the event hour (app/lib/gradedExit.mjs — the rule the agent's paper entries use), instead of
+// fixed percentages. No ATR (thin candles, insane value) ⇒ null: the agent would sit that one out.
 export function gradeEventExit(cbh, eventHour, side, entry, exit) {
   if (!cbh || !cbh.size || !(entry > 0) || !exit) return null;
   const config = { tpPercent: exit.tpPercent, slPercent: exit.slPercent, maxHoldHours: exit.maxHoldHours };
+  let lvl = null;
+  if (exit.exitContract === GRADED_EXIT) {
+    lvl = gradedExitLevels(atrPctH4At(cbh, eventHour));
+    if (!lvl) return null;
+  }
   const maxH = (Number(exit.maxHoldHours) > 0 ? Number(exit.maxHoldHours) : R_CONTRACT.maxHoldH) + EXIT_GRACE_H;
-  const pos = openPosition(config, side, entry, eventHour * 3600);
+  const pos = openPosition(config, side, entry, eventHour * 3600, lvl);
   for (let h = eventHour + 1; h <= eventHour + maxH; h++) {
     const c = cbh.get(h); if (!c || !Number.isFinite(c.h) || !Number.isFinite(c.l)) continue;
     const hit = stepExit(pos, c, (h - eventHour) * 3600000, config);
-    if (hit) return { pnlPct: closedPnlPct(pos, hit.px), reason: hit.reason, holdH: h - eventHour };
+    if (hit) return { pnlPct: closedPnlPct(pos, hit.px), reason: hit.reason, holdH: h - eventHour, slPercent: pos.state.slPercent };
   }
   return null;
 }
@@ -558,8 +567,9 @@ export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS,
   const feePct = (feeBps / 100) * 2;
   const net = [], fst = [], snd = [], oos = [], exits = { TP: 0, SL: 0, TIMEOUT: 0 };
   const bySideNet = { LONG: [], SHORT: [] };
-  let holdSum = 0;
+  let holdSum = 0, slSum = 0;
   for (const g of tradeableExitTrades(all, exit, windowH)) {
+    slSum += Number(g.slPercent) || 0;
     const n = (g.pnlPct - feePct) / 100; // fraction, same unit agg() expects
     net.push(n); (g.t <= medT ? fst : snd).push(n);
     if (g.t > oosCutoff) oos.push(n);
@@ -575,6 +585,7 @@ export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS,
     preset: exit.preset, tpPercent: exit.tpPercent, slPercent: exit.slPercent, maxHoldHours: exit.maxHoldHours, feeBps,
     samples: a.samples, hitRate: a.hitRate, netBps: a.meanBps, stable, verdict, exits,
     avgHoldH: a.samples ? Math.round((holdSum / a.samples) * 10) / 10 : 0,
+    ...(exit.exitContract ? { exitContract: exit.exitContract, avgSlPercent: a.samples ? Math.round((slSum / a.samples) * 100) / 100 : 0 } : {}),
     oos: { since: new Date(oosCutoff).toISOString(), samples: o.samples, hitRate: o.hitRate, netBps: o.meanBps },
     bySide: sideSplit(bySideNet),
   };
@@ -597,6 +608,22 @@ export function scoreExitVariants(all, exit, medT, minSamples) {
   const windowH = Math.max(...variants.map((v) => Number(v.cfg.maxHoldHours) || 0));
   for (const v of variants) out[v.key] = { ...scoreExit(all, v.cfg, medT, minSamples, DEFAULT_FEE_BPS, windowH), presetExit: v.preset };
   return out;
+}
+
+// ── The GRADED EXIT, as the agent trades it ─────────────────────────────────────
+// The R grade (gradeEventR) is the kinder grade: no fees, and a trade that touches neither level
+// in 168h counts as 0R. The agent pays fees and closes at the market at 168h. `exitGraded` grades
+// the SAME stop/target/hold the way the agent trades it — through stepExit (→ exec evaluateExit),
+// net of the round-trip fee, a timeout closed at that bar's close, one position per market — so the
+// paper wallet trading this exit has its own as-traded grade from day one (borst, 2026-10-15:
+// "I don't want the early data on the kinder grade only"). Its own entry window (168h), so the
+// 12h/24h lines are unchanged. `oos` = trades entered after the pre-registered cutoff
+// (docs/research/graded-exit-prereg.md). Informational — the read's verdict is unchanged.
+export const GRADED_EXIT_AXES = Object.freeze(["basis_x_cvd"]);
+export const GRADED_EXIT_SPEC = Object.freeze({ preset: "graded-exit", exitContract: GRADED_EXIT, maxHoldHours: R_CONTRACT.maxHoldH });
+export function scoreGradedExit(all, medT, minSamples) {
+  const g = scoreExit(all, GRADED_EXIT_SPEC, medT, minSamples, DEFAULT_FEE_BPS, GRADED_EXIT_SPEC.maxHoldHours, GRADED_EXIT_OOS_CUTOFF_MS);
+  return { ...g, presetExit: false, atrMult: R_CONTRACT.atrMult, rMultiple: R_CONTRACT.rMultiple };
 }
 
 function aggR(arr) {
@@ -729,7 +756,7 @@ export function windowTide(pools) {
   return { metric: "R", from: new Date(lo * 3600000).toISOString(), to: new Date(hi * 3600000).toISOString(), markets: pools.size, LONG: side("LONG"), SHORT: side("SHORT") };
 }
 
-export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null } = {}) {
+export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null, gradedExit = false } = {}) {
   // BTC context (regime map + price map) for the RS/veto gens — built once, passed to every gen.
   const btcCs = (coinSets || []).find((c) => String(c.coin || "").toUpperCase() === "BTC");
   // BTC context off the DEEPEST btc series (candle closes preferred) so the RS/veto reaches
@@ -744,7 +771,7 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
     const mkt = mktKey(cs, i); // the SAME key buildRandomPools uses, so a replay redraws on this market
     for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, mkt, pmap, cbh, rs: typeof e.rs === "number" ? e.rs : null });
   });
-  if (!all.length) return { random: null, sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples) };
+  if (!all.length) return { random: null, sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples), exitGraded: gradedExit ? scoreGradedExit([], 0, minSamples) : null };
   // rs_quartile written on EVERY event row that carries an rs — from closes, NOT candle-gated
   // (Grok #4). Cross-sectional rank → quartile (Q1 = strongest). Exposed so Sept-14 can
   // condition on it; a top-quartile-only axis is a one-line follow-up once these matter.
@@ -818,6 +845,7 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
   // does NOT change the axis verdict (that grades the READ); it says whether the read
   // survives the exit the agent actually uses.
   const exitGrades = scoreExitVariants(all, exit, medT, minSamples);
+  const exitGraded = gradedExit ? scoreGradedExit(all, medT, minSamples) : null;
   const rBySide = { LONG: [], SHORT: [] };
   for (const e of all) if (e._r != null) rBySide[e.side].push(e._r);
   const sides = {
@@ -825,7 +853,7 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
     SHORT: { events: all.filter((e) => e.side === "SHORT").length, r: aggR(rBySide.SHORT) },
   };
   const random = randomPools ? randomEntryBaselineR(all, randomPools) : null;
-  return { random, sides, samples: all.length, horizons: horizonsOut, r, rsQuartileDist, headline: useR ? "R" : "bps", verdict: useR ? rVerdict : (bestHorizon ? bestHorizon.verdict : "INSUFFICIENT"), bestHorizon, ...exitGrades };
+  return { random, sides, samples: all.length, horizons: horizonsOut, r, rsQuartileDist, headline: useR ? "R" : "bps", verdict: useR ? rVerdict : (bestHorizon ? bestHorizon.verdict : "INSUFFICIENT"), bestHorizon, ...exitGrades, exitGraded };
 }
 
 // The full scorecard across every registered axis, ranked by best-horizon mean return.
@@ -874,9 +902,9 @@ export function runScorecard(coinSets, cfg = {}) {
   const tide = windowTide(randomPools);
   const axes = AXES.map((a) => {
     const shadow = !AXIS_EXITS[a.name] && SHADOW_EXITS[a.name];
-    const s = scoreEvents(coinSets, a.gen, { ...cfg, randomPools, exit: AXIS_EXITS[a.name] || (shadow ? shadow.exit : null) });
+    const s = scoreEvents(coinSets, a.gen, { ...cfg, randomPools, exit: AXIS_EXITS[a.name] || (shadow ? shadow.exit : null), gradedExit: GRADED_EXIT_AXES.includes(a.name) });
     if (shadow) for (const g of [s.exit, s.exit24h]) if (g) { g.presetExit = false; g.shadowOf = shadow.shadowOf; }
-    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, sides: s.sides, random: s.random, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit, exit24h: s.exit24h };
+    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, sides: s.sides, random: s.random, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit, exit24h: s.exit24h, exitGraded: s.exitGraded };
   });
   // rank: PREDICTIVE > PROMISING > NOISE > INSUFFICIENT, then by the HEADLINE metric —
   // meanR once R-graded (the right object), else forward-bps until candles mature.

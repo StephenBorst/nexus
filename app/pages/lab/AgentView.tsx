@@ -25,6 +25,7 @@ import { AGENT_API, TG_BOT, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentS
 import type { BacktestResult, SweepResult, ValidationResult } from "./backtestTypes";
 import { errText } from "./helpers";
 import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter } from "./AgentPanels";
+import { gradedExitRefusal } from "@/lib/gradedExit.mjs";
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
@@ -235,7 +236,7 @@ export function AgentView() {
           walletSig,
         }),
       });
-      if (!res.ok) throw new Error("Failed to activate agent");
+      if (!res.ok) { const j = await res.json().catch(() => null); throw new Error(j?.hint || "Failed to activate agent"); }
       setSuccess("Agent activated");
       setAgentState((prev) => prev ? { ...prev, active: true } : { active: true, daily_pnl: 0, trades_today: 0, current_position: null, last_signal: null });
       setTimeout(() => setSuccess(null), 3000);
@@ -431,7 +432,7 @@ export function AgentView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ config, walletSig }),
       });
-      if (!res.ok) throw new Error("Failed to save config");
+      if (!res.ok) { const j = await res.json().catch(() => null); throw new Error(j?.hint || "Failed to save config"); }
       setSuccess("Config saved");
       setTimeout(() => setSuccess(null), 3000);
     } catch (e) {
@@ -1174,7 +1175,7 @@ export function AgentView() {
               on Test/Sweep. Tucked behind disclosure so the config flows mode → strategy →
               symbols → risk; auto-opens if any filter is already active. */}
           <Collapsible title="Filters & conditioning" subtitle="experimental · validate on Test / Sweep first"
-            defaultOpen={!!(config.invertSignal || config.respectRegime || config.respectSmartMoney || config.volScaledStops || (config.tradeSessions && config.tradeSessions.length) || config.minVolAtrPct || config.maxVolAtrPct)}
+            defaultOpen={!!(config.invertSignal || config.respectRegime || config.respectSmartMoney || config.volScaledStops || config.exitContract || (config.tradeSessions && config.tradeSessions.length) || config.minVolAtrPct || config.maxVolAtrPct)}
             storageKey="nx_agent_filters">
           {/* Opt-in INVERT — the "fade your own signal" lever. If a config is
               systematically wrong, the edge is the opposite trade. */}
@@ -1263,6 +1264,22 @@ export function AgentView() {
             on={!!config.volScaledStops}
             onToggle={() => setConfig({ ...config, volScaledStops: !config.volScaledStops })}
           />
+
+          {/* The scoreboard's graded exit (R contract), traded on PAPER. Turning it on sets the whole
+              contract at once (168h hold, no ladder/trail/breakeven/DCA/vol-scaled) and forces PAPER:
+              exec and lab-api refuse it on any other mode (app/lib/gradedExit.mjs). */}
+          <AgentToggleCard
+            label="GRADED EXIT — PAPER ONLY"
+            description={<>The exit the scoreboard grades every read with. Stop = 1.2× the coin&apos;s 4-hour ATR, so it is wider on volatile coins. Target = 1.5× the stop. Holds up to 7 days. No 3% stop cap, which is why it never runs live. Turning it on switches the agent to PAPER and replaces your TP / SL / hold.</>}
+            on={!!config.exitContract}
+            onToggle={() => setConfig(config.exitContract
+              ? { ...config, exitContract: undefined }
+              : { ...config, exitContract: "R_CONTRACT", mode: "PAPER", maxHoldHours: 168, volScaledStops: false, takeProfits: undefined, trailingStopPct: undefined, breakevenTriggerPct: undefined, dcaEnabled: false })}
+          />
+          {(() => {
+            const why = gradedExitRefusal(config, config.mode === "PAPER");
+            return why ? <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#fbbf24", margin: "-4px 0 10px" }}>Graded exit can&apos;t run: {why}.</div> : null;
+          })()}
           </Collapsible>
 
           <div style={agentCardStyle}>

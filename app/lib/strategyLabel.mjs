@@ -17,6 +17,11 @@ function hasGates(config) {
 
 // The human name for what this config actually trades.
 export function strategyLabel(config = {}) {
+  // The graded exit (app/lib/gradedExit.mjs) is a different trade on the same entries — say so.
+  const entry = entryLabel(config || {});
+  return config?.exitContract === "R_CONTRACT" ? `${entry} · graded exit` : entry;
+}
+function entryLabel(config) {
   const mode = config.signalMode || "CONFLUENCE";
   // The basis stack reads by what it trades, matching the presets + the scoreboard rows —
   // and a filtered/inverted variant SAYS so, so a result can't be mistaken for the preset.
@@ -49,6 +54,7 @@ export function backtestGateSupport(config = {}) {
   if (config.signalMode === "BASIS_FADE" && config.basisConfirm === "SMART") applied.push("smart-money confirm");
   if (config.signalMode === "BASIS_FADE" && config.basisConfirm === "LIQ") applied.push("liq-flush confirm");
   if (config.signalMode === "BASIS_FADE" && config.basisAnchor === "MEAN") applied.push("two-sided basis");
+  if (config.exitContract === "R_CONTRACT") applied.push("graded exit (H4 ATR stop, 168h)");
   if (config.respectRegime) skipped.push("regime (RISK_ON/RISK_OFF tape)");
   if (config.respectSmartMoney) skipped.push("smart-money consensus");
   if ((config.maxSignalAgeSec ?? 0) > 0) skipped.push("signal-age (live latency guard)");

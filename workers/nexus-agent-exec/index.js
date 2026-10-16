@@ -15,6 +15,7 @@ import { orderlyGet } from "../nexus-lab-api/orderlyGet.mjs";
 import * as ed from "@noble/ed25519";
 import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
+import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
@@ -698,6 +699,14 @@ async function enterPosition(address, state, config, signal, env, cache) {
   // A directive is the user's exact directional trade — it overrides sizing/levels
   // for THIS entry (the user supplies the edge). null for normal signal entries.
   const directive = signal.directive || null;
+  // The graded exit (the scoreboard's R contract) is PAPER ONLY and the WHOLE contract. Refused here,
+  // before any price read, key read, order or state write (app/lib/gradedExit.mjs; borst 2026-10-15:
+  // the uncapped stop never reaches live money without its own review).
+  const gradedRefusal = gradedExitRefusal(config, paper);
+  if (gradedRefusal) {
+    console.error(`[exec] ${address.slice(0, 10)} graded exit refused: ${gradedRefusal}`);
+    return;
+  }
   const effLeverage = (directive && directive.leverage > 0) ? directive.leverage : config.leverage;
   let effCapital = (directive && directive.capitalPerTrade > 0) ? directive.capitalPerTrade : config.capitalPerTrade;
 
@@ -767,6 +776,17 @@ async function enterPosition(address, state, config, signal, env, cache) {
   }
   const qty = snap.qty;
 
+  // Graded-exit levels are read BEFORE anything is placed: no H4 ATR → sit this one out, never a
+  // fallback to the flat config % (that would trade an exit the scoreboard didn't grade).
+  let gradedLv = null;
+  if (!directive && usesGradedExit(config)) {
+    gradedLv = await fetchGradedExitLevels(symbol);
+    if (!gradedLv) {
+      console.error(`[exec] ${address.slice(0, 10)} graded exit: no H4 ATR for ${symbol}, sitting out`);
+      return;
+    }
+  }
+
   let orderId = null;
   if (!paper) {
     const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
@@ -806,6 +826,10 @@ async function enterPosition(address, state, config, signal, env, cache) {
     // Skip volatility-scaling — the user gave concrete prices, not a % to scale.
     effTp = directiveLv.tpPercent; effSl = directiveLv.slPercent;
     takeProfits = normTakeProfits({ takeProfits: directiveLv.takeProfits, tpPercent: effTp }, config);
+  } else if (gradedLv) {
+    effTp = gradedLv.tpPercent; effSl = gradedLv.slPercent;
+    console.log(`[exec] ${address.slice(0, 10)} graded exit → tp=${effTp} sl=${effSl} hold=${config.maxHoldHours}h`);
+    takeProfits = normTakeProfits({ tpPercent: effTp }, {});
   } else {
     if (config.volScaledStops) {
       const atrPct = await fetchAtrPct(symbol, env);
@@ -905,6 +929,20 @@ async function enterPosition(address, state, config, signal, env, cache) {
   await notifyTelegram(address, env,
     `${paper ? "📝 <b>[PAPER]</b> " : "🟢 "}<b>OPEN ${signal.direction} ${tkEnter}</b> @ $${markPrice}\n` +
     `TP ${effTp}% · SL ${effSl}% · ${effLeverage}x${directive ? " · directive" : ` · ${config.signalMode || "CONFLUENCE"}`}`);
+}
+
+// The graded exit's stop/target from the coin's H4 ATR-14 — built from the last 80h of 1h candles by
+// the SAME function the scoreboard's R grade uses (app/lib/atr.mjs via gradedExit.mjs). null on any
+// failure; the caller sits out.
+async function fetchGradedExitLevels(symbol) {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const from = now - (GRADED_EXIT_LOOKBACK_H + 2) * 3600;
+    const d = await orderlyPublicGet(`${ORDERLY_API}/tv/history?symbol=${symbol}&resolution=60&from=${from}&to=${now}`);
+    if (!d || d.s !== "ok" || !Array.isArray(d.t)) return null;
+    const hourly = d.t.map((t, i) => ({ t: Number(t), h: Number(d.h[i]), l: Number(d.l[i]), c: Number(d.c[i]) }));
+    return gradedExitLevelsFromHourly(hourly);
+  } catch { return null; }
 }
 
 // ATR as a % of price from recent 1h candles (public /tv/history). Used to scale

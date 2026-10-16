@@ -26,6 +26,8 @@ export const EXPERIMENTAL_FILTERS_OFF: Partial<AgentConfig> = {
   // basisConfirm (if any) comes back in after this reset.
   basisConfirm: undefined,
   basisAnchor: undefined,
+  // The graded exit is a whole-strategy choice too: another preset must not inherit its uncapped stop.
+  exitContract: undefined,
 };
 
 export type AgentPrefill = {
