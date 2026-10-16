@@ -85,6 +85,7 @@ import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
 import { handleFeed } from "./routes-feed.mjs";
 import { handleSocial } from "./routes-social.mjs";
+import { handleTelegram, secureTelegramWebhook } from "./routes-telegram.mjs";
 import { handleProfile, handleLab } from "./routes-lab.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
@@ -606,6 +607,13 @@ export default {
       })());
       return;
     }
+    // Hourly: register the Telegram webhook's secret header (routes-telegram.mjs). A no-op once done.
+    ctx.waitUntil((async () => {
+      try {
+        const r = await secureTelegramWebhook(env);
+        if (r.result !== "already_secured" && r.result !== "no_token") console.log(`[tg] webhook secret: ${r.result}`);
+      } catch (e) { console.error("[tg] webhook secret failed:", String(e)); }
+    })());
     // Hourly ("17 * * * *"): objectively grade public theses from public price.
     // Every run also grades (cheap, idempotent) so a fresh deploy resolves immediately.
     ctx.waitUntil((async () => {
@@ -745,66 +753,10 @@ export default {
       const smartRes = await handleSmart(parts, request, env, ctx);
       if (smartRes) return smartRes;
     }
-    if (parts[0] === "tg" && parts[1] === "webhook" && request.method === "POST") {
-      const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
-      let upd = null;
-      try { upd = await request.json(); } catch { /* ignore malformed */ }
-      const msg = upd?.message || upd?.edited_message;
-      const chatId = msg?.chat?.id;
-      const text = String(msg?.text || "").trim();
-      const reply = async (t) => {
-        if (!env.TELEGRAM_TOKEN || !chatId) return;
-        try {
-          await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: chatId, text: t, parse_mode: "HTML", disable_web_page_preview: true }),
-          });
-        } catch { /* fail-soft */ }
-      };
-      if (chatId && text.startsWith("/signals")) {
-        // Opt in/out of the highest-conviction market signal push (separate from agent
-        // trade alerts). Keyed by chatId so delivery can list subscribers directly.
-        const onoff = (text.split(/\s+/)[1] || "on").toLowerCase();
-        if (onoff === "off" || onoff === "stop") {
-          await AGENT_KV.delete(`signals:sub:${chatId}`);
-          await reply("🔕 Signals off. Send /signals on to get the top Nexus market signal again.");
-        } else {
-          await AGENT_KV.put(`signals:sub:${chatId}`, "1");
-          await reply("◆ Signals on. You'll get the single highest-conviction Nexus signal when it fires — funding + the graded caller crowd aligned, or a sharp disagreement. At most once every few hours. Send /signals off to stop.");
-        }
-      } else if (chatId && text.startsWith("/start")) {
-        const arg = text.split(/\s+/)[1] || "";
-        const addr = /^0x[a-fA-F0-9]{40}$/.test(arg) ? arg.toLowerCase() : null;
-        if (addr) {
-          await AGENT_KV.put(`tg:chat:${addr}`, String(chatId));
-          await AGENT_KV.put(`tg:wallet:${chatId}`, addr);
-          await reply(`✅ Linked to <code>${addr.slice(0, 6)}…${addr.slice(-4)}</code>. You'll get a message whenever your Nexus agent opens or closes a trade. Send /stop to unlink. Want market signals too? Send /signals on.`);
-        } else {
-          await reply("👋 To get Nexus agent trade alerts, open the Agent tab on Nexus Trading Labs and tap “Link Telegram”. For market signals, send /signals on.");
-        }
-      } else if (chatId && text.startsWith("/stop")) {
-        const stopArg = text.split(/\s+/)[1] || "";
-        const stopAddr = /^0x[a-fA-F0-9]{40}$/.test(stopArg) ? stopArg.toLowerCase() : null;
-        if (stopAddr) {
-          // Unlink the SPECIFIED wallet — but only if it's actually linked to THIS chat.
-          const linkedChat = await AGENT_KV.get(`tg:chat:${stopAddr}`);
-          if (String(linkedChat) === String(chatId)) {
-            await AGENT_KV.delete(`tg:chat:${stopAddr}`);
-            const cur = await AGENT_KV.get(`tg:wallet:${chatId}`);
-            if (cur === stopAddr) await AGENT_KV.delete(`tg:wallet:${chatId}`);
-            await reply(`🔕 Unlinked <code>${stopAddr.slice(0, 6)}…${stopAddr.slice(-4)}</code>. Send /start to re-enable.`);
-          } else {
-            await reply("That wallet isn't linked to this chat.");
-          }
-        } else {
-          // No arg → unlink the most-recently linked wallet for this chat.
-          const addr = await AGENT_KV.get(`tg:wallet:${chatId}`);
-          if (addr) await AGENT_KV.delete(`tg:chat:${addr}`);
-          await AGENT_KV.delete(`tg:wallet:${chatId}`);
-          await reply("🔕 Unlinked. Send /start (or /start &lt;wallet&gt;) to re-enable agent trade alerts.");
-        }
-      }
-      return new Response("ok"); // Telegram only needs a 200
+    {
+      // Telegram link + bot webhook (routes-telegram.mjs): links need a one-time code from the app.
+      const tgRes = await handleTelegram(parts, request, env);
+      if (tgRes) return tgRes;
     }
 
     // ── /og/trader/:wallet(.png)? → the graded record card ─────────────────────

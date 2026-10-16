@@ -5,8 +5,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  labSaveMessage, verifyLabAuth, publicLabView, isEvmAddress, isSolAddress,
-  LAB_AUTH_MAX_AGE_MS, LAB_AUTH_REUSE_MS, LAB_AUTH_SKEW_MS,
+  labSaveMessage, labSaveMessageV1, verifyLabAuth, publicLabView, isEvmAddress, isSolAddress,
+  LAB_AUTH_MAX_AGE_MS, LAB_AUTH_REUSE_MS, LAB_AUTH_SKEW_MS, LAB_AUTH_V1_UNTIL_MS,
 } from "./labAuth.mjs";
 
 const EVM = "0xAbCdEf0000000000000000000000000000000001";
@@ -96,4 +96,38 @@ test("public view: only public, non-holders calls; never notes", () => {
   assert.deepEqual(publicLabView(record), { theses: [{ id: "a", isPublic: true }], notes: {} });
   assert.deepEqual(publicLabView(null), { theses: [], notes: {} });
   assert.deepEqual(publicLabView({ theses: "nope" }), { theses: [], notes: {} });
+});
+
+// A fake recover that only "recovers" the owner when the signed text is `signedText`, so the tests
+// below can tell which wording a signature was made over.
+const recoverIfSigned = (signedText, owner) => (m) => (m === signedText ? owner : "0x" + "9".repeat(40));
+
+test("rewording: the new message names everything the signature does, and still promises no funds and no trades", () => {
+  const m = labSaveMessage(EVM, T0);
+  for (const word of ["calls", "notes", "profile", "comments", "reactions", "takes", "follows", "notifications", "phone alerts", "Telegram link"]) {
+    assert.ok(m.includes(word), word);
+  }
+  assert.match(m, /No funds move\. No trades\. Valid 24 hours\.$/);
+  assert.notEqual(m, labSaveMessageV1(EVM, T0));
+});
+
+test("rewording: a signature over the OLD wording passes only if it was made before the switch", () => {
+  const before = LAB_AUTH_V1_UNTIL_MS - 3600_000;
+  const after = LAB_AUTH_V1_UNTIL_MS + 60_000;
+  const addr = EVM.toLowerCase();
+  const old = (ts) => verifyLabAuth({ address: addr, auth: { ts, sig: SIG }, now: ts + 60_000, recoverEvm: recoverIfSigned(labSaveMessageV1(addr, ts), EVM), verifySol: never });
+  const neu = (ts) => verifyLabAuth({ address: addr, auth: { ts, sig: SIG }, now: ts + 60_000, recoverEvm: recoverIfSigned(labSaveMessage(addr, ts), EVM), verifySol: never });
+  assert.equal(old(before).ok, true);
+  assert.deepEqual(old(after), { ok: false, reason: "wrong_signer" });
+  assert.equal(neu(before).ok, true);
+  assert.equal(neu(after).ok, true);
+  // Solana follows the same rule.
+  const sol = (ts, text) => verifyLabAuth({ address: SOL.toLowerCase(), auth: { ts, sig: SIG, signer: SOL }, now: ts + 60_000, recoverEvm: never, verifySol: (m) => m === text });
+  assert.equal(sol(before, labSaveMessageV1(SOL, before)).ok, true);
+  assert.equal(sol(after, labSaveMessageV1(SOL, after)).ok, false);
+  assert.equal(sol(after, labSaveMessage(SOL, after)).ok, true);
+});
+
+test("rewording: no old-wording signature can still be valid after the switch plus 24h (the code can go)", () => {
+  assert.equal(LAB_AUTH_V1_UNTIL_MS + LAB_AUTH_MAX_AGE_MS, Date.UTC(2026, 9, 19));
 });

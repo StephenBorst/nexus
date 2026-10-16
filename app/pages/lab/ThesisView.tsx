@@ -24,6 +24,7 @@ import { FADE_FUNDING_FLOOR_PCT_YR } from "./briefing";
 import { frozenLevelsFor } from "@/lib/frozenDraft";
 import { ThesisTimeline } from "./ThesisTimeline";
 import { ThesisAdvisor } from "./ThesisAdvisor";
+import { TelegramAlertsButton } from "./TelegramLink";
 import { PnlChart, EmptyState, Coachmark } from "./components";
 import { Collapsible } from "./Collapsible";
 import { AwaitingFill } from "@/components/AwaitingFill";
@@ -180,14 +181,7 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
           {!isMobile && <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>{new Date(t.createdAt).toLocaleDateString()}</div>}
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             {eff === "ACTIVE" && walletAddress && (
-              <a
-                href={`https://t.me/nexustradinglabs_bot?start=${walletAddress.toLowerCase()}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ ...navBtnStyle, fontSize: 10, color: "#6cb6ff", borderColor: "#1a1a1e", textDecoration: "none", display: "inline-block", textAlign: "center", minHeight: 36, lineHeight: "22px", padding: "6px 12px" }}
-              >
-                ALERTS
-              </a>
+              <TelegramAlertsButton wallet={walletAddress} />
             )}
             {t.isPublic && walletAddress && (() => {
               // Share your own public call → pulls external eyes back to the feed.

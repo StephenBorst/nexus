@@ -21,13 +21,14 @@ import { SharePoster, type PosterData } from "./SharePoster";
 // Constants/local types, leaf components, and the Orderly key + ownership-proof
 // readers now live beside this file. Behavior is unchanged — the move was purely
 // mechanical, which matters because this is the agent MONEY PATH.
-import { AGENT_API, TG_BOT, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentStanding, type SavedStrategy, type CommunityStrategy } from "./agentTypes";
+import { AGENT_API, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentStanding, type SavedStrategy, type CommunityStrategy } from "./agentTypes";
 import type { BacktestResult, SweepResult, ValidationResult } from "./backtestTypes";
 import { errText } from "./helpers";
 import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter } from "./AgentPanels";
 import { gradedExitRefusal } from "@/lib/gradedExit.mjs";
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
+import { TelegramLinkPanel } from "./TelegramLink";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
@@ -59,7 +60,6 @@ export function AgentView() {
   const [directiveLimitPrice, setDirectiveLimitPrice] = useState("");
   const [directiveBusy, setDirectiveBusy] = useState(false);
   const [tgLinked, setTgLinked] = useState(false);
-  const [tgCopied, setTgCopied] = useState(false);
   // History: which trade row is expanded (progressive-disclosure detail panel).
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
   // Share poster (in-app branded card) — set to open the modal for a trade.
@@ -715,28 +715,8 @@ export function AgentView() {
                 ? "A DM on every open and close."
                 : "A DM on every open and close."}
             </span>
-            <a href={`https://t.me/${TG_BOT}?start=${walletAddress.toLowerCase()}`} target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, fontWeight: "bold", textDecoration: "none",
-                color: "#6cb6ff", border: "1px solid #33333a", background: "#0f0f11", borderRadius: 3, padding: "7px 14px", flexShrink: 0 }}>
-              {tgLinked ? "Manage ↗" : "Link Telegram ↗"}
-            </a>
+            <TelegramLinkPanel wallet={walletAddress} linked={tgLinked} />
           </div>
-          {!tgLinked && (
-            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #1a1a1e", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", lineHeight: 1.4, flex: 1, minWidth: 150 }}>
-                Link not opening Telegram? Some in-app browsers block it. Open <b style={{ color: "#a1a1aa" }}>@{TG_BOT}</b> in Telegram and send this:
-              </span>
-              <button
-                onClick={() => {
-                  const cmd = `/start ${walletAddress.toLowerCase()}`;
-                  navigator.clipboard?.writeText(cmd).then(() => { setTgCopied(true); setTimeout(() => setTgCopied(false), 2000); }).catch(() => {});
-                }}
-                style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, fontWeight: "bold", color: tgCopied ? "#ededf0" : "#a1a1aa",
-                  border: `1px solid ${tgCopied ? "#33333a" : "#232327"}`, background: "#0a0a0b", borderRadius: 3, padding: "6px 12px", cursor: "pointer", flexShrink: 0 }}>
-                {tgCopied ? "Copied ✓" : "Copy /start command"}
-              </button>
-            </div>
-          )}
         </div>
       )}
 
