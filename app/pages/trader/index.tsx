@@ -24,6 +24,7 @@ import { TrackedRecordCard } from "@/components/TrackedRecordCard";
 import { bareTicker } from "@/utils/utils";
 import { SIGNAL } from "@/config/theme";
 import { TEXT_ACTION, TEXT_ACTION_BAR, TEXT_ACTION_CLASS } from "@/components/ui";
+import { identityShareText, normRecord } from "@/lib/identityCard.mjs";
 import { pressKey } from "@/utils/a11y";
 import { useEscapeKey } from "@/utils/a11y";
 import type { SavedStrategy } from "@/pages/lab/agentTypes";
@@ -471,6 +472,9 @@ export default function TraderPage() {
   // "REP" score built from planned R:R and the on-chain Rep Score, which counts outcomes callers
   // close themselves; Feed RANKS stopped ranking on either, so the profile doesn't show them.
   const [merit, setMerit] = useState<{ glyph: string; title: string } | null>(null);
+  // The same record the share card prints. null until /theses/process answers: the X / Farcaster
+  // share actions wait for it, so a failed read never posts "no graded calls" for a real record.
+  const [record, setRecord] = useState<{ calls: number; hitRate: number | null; avgR: number | null } | null>(null);
   const [agentRec, setAgentRec] = useState<{ netPnl: number; winRate: number; trades: number; score: number } | null>(null);
   const [pubStrats, setPubStrats] = useState<SavedStrategy[]>([]);
 
@@ -512,6 +516,7 @@ export default function TraderPage() {
     setLoading(true);
     setError(false);
     setMerit(null);
+    setRecord(null);
     fetch(`${API_BASE}/feed`)
       .then((r) => r.json())
       .then((data: { feed: FeedThesis[] }) => {
@@ -535,7 +540,10 @@ export default function TraderPage() {
       .catch(() => setError(true))
       .finally(() => setLoading(false));
     fetch(`${API_BASE}/theses/process/${wallet.toLowerCase()}`).then((r) => r.ok ? r.json() : null)
-      .then((d) => setMerit(d?.meritRank?.title ? { glyph: String(d.meritRank.glyph ?? ""), title: String(d.meritRank.title) } : null))
+      .then((d) => {
+        setMerit(d?.meritRank?.title ? { glyph: String(d.meritRank.glyph ?? ""), title: String(d.meritRank.title) } : null);
+        if (d && typeof d.calls === "number") setRecord(normRecord(d));
+      })
       .catch(() => {});
     // Hub: this trader's graded AGENT record + their published strategies.
     setAgentRec(null); setPubStrats([]);
@@ -677,6 +685,17 @@ export default function TraderPage() {
           className={TEXT_ACTION_CLASS}
           style={TEXT_ACTION}
         />
+        {record && wallet && (() => {
+          // The words the share card prints (identityCardModel), so the post and the image agree.
+          const url = `https://og.nexustradinglabs.com/share/identity/${wallet.toLowerCase()}`;
+          const text = `${displayName ?? shortAddr} on Nexus.\n\n${identityShareText(record, merit)}`;
+          return (
+            <>
+              <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer" title="Share on X" className={TEXT_ACTION_CLASS} style={TEXT_ACTION}>𝕏 Share</a>
+              <a href={`https://warpcast.com/~/compose?text=${encodeURIComponent(`${text}\n\n${url}`)}&embeds[]=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer" title="Share on Farcaster" className={TEXT_ACTION_CLASS} style={TEXT_ACTION}>✦ Cast</a>
+            </>
+          );
+        })()}
         <button onClick={copyLink} title="Copy link" className={TEXT_ACTION_CLASS} style={{ ...TEXT_ACTION, color: copied ? "#ededf0" : TEXT_ACTION.color }}>
           {copied ? "✓ Copied" : "⧉ Link"}
         </button>

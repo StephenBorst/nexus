@@ -10,8 +10,7 @@
  *   GET    /profile/:address          → fetch profile { pfp, displayName }
  *   PUT    /profile/:address          → save profile { pfp, displayName }
  *   GET    /feed                      → public theses feed (all wallets, isPublic=true)
- *   GET    /og/trader/:wallet         → Ph16: SVG OG image for trader profile
- *   GET    /og/trader/:wallet.png     → Ph21: PNG OG image for Twitter (via resvg-wasm)
+ *   GET    /og/trader/:wallet(.png)   → 301 to /og/identity (the graded caller record card)
  *   GET    /wallets/onchain           → Ph17: on-chain wallet discovery (incremental registry-log index, onchainWallets.mjs)
  */
 
@@ -22,7 +21,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, callR, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
@@ -78,7 +77,9 @@ import { handleCallStatus } from "./routes-callstatus.mjs";
 import { handleVerify, isPublicCall } from "./routes-verify.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { runAgentWatch } from "./push.mjs";
-import { buildOgSvg, buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
+import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
+import { loadIdentity, identityCardVersion } from "./identity.mjs";
+import { identityShareText } from "../../app/lib/identityCard.mjs";
 import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
@@ -95,7 +96,6 @@ import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signa
 // The SAME synthesis the Lab + trader page render (pure, dependency-free), so the
 // shareable card can never disagree with the profile it depicts. Bundled cross-dir by
 // wrangler like the other ../ imports.
-import { buildOperatorProfile } from "../../app/lib/operatorProfile.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { gradedExitRefusal } from "../../app/lib/gradedExit.mjs";
 // Directive level validation lives with the exec's money-path logic (single source);
@@ -286,14 +286,6 @@ function esc(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function calcRepScore(wins, losses, avgRR) {
-  const closed = wins + losses;
-  const winRate = closed > 0 ? (wins / closed) * 100 : 0;
-  const rrBonus = Math.min(avgRR * 10, 20);
-  const samplePenalty = Math.max(0, 10 - closed) * 2;
-  return Math.max(0, Math.min(100, Math.round(winRate + rrBonus - samplePenalty)));
 }
 
 // Fetch a thesis chart for embedding in the OG card. Every guard here matters because
@@ -814,82 +806,14 @@ export default {
       return new Response("ok"); // Telegram only needs a 200
     }
 
-    // ── Ph16/21: /og/trader/:wallet(.png)? → OG image ─────
-    // SVG endpoint: Discord, Telegram, iMessage, most crawlers
-    // PNG endpoint (.png suffix): Twitter/X (requires raster image)
+    // ── /og/trader/:wallet(.png)? → the graded record card ─────────────────────
+    // The legacy trader card printed a self-scored "REP" (hit rate + planned R:R bonus). Old shared links
+    // still point here, so it now answers with the graded caller record card (/og/identity).
     if (parts[0] === "og" && parts[1] === "trader" && parts[2]) {
       if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
-
       const isPng = parts[2].endsWith(".png");
-      const walletRaw = isPng ? parts[2].slice(0, -4) : parts[2];
-      const wallet = normalizeAddress(walletRaw);
-
-      const [raw, profileRaw] = await Promise.all([
-        env.LAB_STORE.get(`lab:${wallet}`),
-        env.LAB_STORE.get(`profile:${wallet}`),
-      ]);
-      const data = raw ? JSON.parse(raw) : { theses: [] };
-      const profile = profileRaw ? JSON.parse(profileRaw) : {};
-      const theses = data.theses || [];
-
-      // Trustless: count the OBJECTIVE grade (gradedOutcome), not self-reported /
-      // agent-exec statuses — a shared card must not advertise an inflated self-report.
-      // Matches the RANKS board fix.
-      const wins = theses.filter((t) => t.gradedOutcome === "WIN").length;
-      const losses = theses.filter((t) => t.gradedOutcome === "LOSS").length;
-      const active = theses.filter((t) => t.status === "ACTIVE" && t.gradedOutcome !== "WIN" && t.gradedOutcome !== "LOSS").length;
-      const closed = wins + losses;
-      const winRate = closed > 0 ? Math.round((wins / closed) * 100) : null;
-      // R from each call's own levels (callR, what the grader pays), not the stored riskReward.
-      const rrs = theses.map(callR).filter((r) => r != null);
-      const avgRR = rrs.length > 0 ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 0;
-      const rep = calcRepScore(wins, losses, avgRR);
-
-      const statsPayload = {
-        displayName: profile.displayName || null,
-        wallet,
-        wins,
-        losses,
-        active,
-        total: theses.length,
-        avgRR,
-        winRate,
-        rep,
-      };
-
-      // Ph21: PNG for Twitter
-      if (isPng) {
-        try {
-          await ensureResvg();
-          const font = await getMonoFont();
-          // Use JetBrains Mono family name since we're loading that font
-          const svg = buildOgSvg({ ...statsPayload, fontFamily: "'JetBrains Mono'" });
-          const resvg = new Resvg(svg, {
-            font: { loadSystemFonts: false, fontBuffers: [font], defaultFontFamily: "JetBrains Mono" },
-          });
-          const png = resvg.render().asPng();
-          return new Response(png, {
-            headers: {
-              "Content-Type": "image/png",
-              "Cache-Control": "public, max-age=300, stale-while-revalidate=60",
-              "Access-Control-Allow-Origin": "*",
-            },
-          });
-        } catch (e) {
-          // Graceful fallback to SVG if PNG generation fails
-          console.error("[OG PNG] failed, falling back to SVG:", String(e));
-        }
-      }
-
-      // Default / fallback: SVG
-      const svg = buildOgSvg(statsPayload);
-      return new Response(svg, {
-        headers: {
-          "Content-Type": "image/svg+xml",
-          "Cache-Control": "public, max-age=300, stale-while-revalidate=60",
-          "Access-Control-Allow-Origin": "*",
-        },
-      });
+      const wallet = normalizeAddress(isPng ? parts[2].slice(0, -4) : parts[2]);
+      return Response.redirect(`https://og.nexustradinglabs.com/og/identity/${wallet}${isPng ? ".png" : ""}`, 301);
     }
 
     // ── /og/board(.png)? → shareable card of THE BOARD's live confluence read ─────
@@ -1091,43 +1015,20 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
       if (ogThesisRes) return ogThesisRes;
     }
 
-    // ── /og/identity/:wallet(.png)? — the TRADING IDENTITY card ─────────────────
-    // The shareable poster of the Operator Profile. GRADED data only, composed from
-    // buildOperatorProfile so it can't disagree with the profile page. SVG for most
-    // crawlers; .png for X/Farcaster (raster). Cold-start states handled in the builder.
+    // ── /og/identity/:wallet(.png)? — the graded caller record card ─────────────
+    // GRADED data only (loadIdentity = the /theses/process record), words from identityCardModel.
+    // SVG for most crawlers; .png for X/Farcaster (raster).
     if (parts[0] === "og" && parts[1] === "identity" && parts[2]) {
       if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
       const isPng = parts[2].endsWith(".png");
       const wallet = normalizeAddress(isPng ? parts[2].slice(0, -4) : parts[2]);
-
-      // Same shape /theses/process builds, so the card and the page share one source.
-      let profile;
-      try {
-        const byWallet = await computeCallerStats(env, 30 * 86400, { onlyWallet: wallet });
-        const a = Object.values(byWallet)[0];
-        const process = (a && a.calls) ? {
-          calls: a.calls,
-          hitRate: Math.round((a.wins / a.calls) * 1000) / 10,
-          avgR: Math.round((a.rSum / a.calls) * 100) / 100,
-          expectancy: a.expectancy,
-          regimeEdges: a.regimeEdges,
-          discipline: a.plan,
-          calibration: a.calibration,
-          meritRank: rankCaller(a),
-        } : { calls: 0 };
-        profile = buildOperatorProfile({ process });
-      } catch (e) {
-        console.error("[og identity] profile build failed:", String(e));
-        profile = buildOperatorProfile({});
-      }
-      const profileRaw = await env.LAB_STORE.get(`profile:${wallet}`);
-      const displayName = profileRaw ? (JSON.parse(profileRaw).displayName || null) : null;
+      const { profile, record, displayName } = await loadIdentity(env, wallet);
 
       if (isPng) {
         try {
           await ensureResvg();
           const font = await getMonoFont();
-          const svg = buildIdentitySvg({ profile, wallet, displayName, fontFamily: "'JetBrains Mono'" });
+          const svg = buildIdentitySvg({ profile, record, wallet, displayName, fontFamily: "'JetBrains Mono'" });
           const resvg = new Resvg(svg, { font: { loadSystemFonts: false, fontBuffers: [font], defaultFontFamily: "JetBrains Mono" } });
           const png = resvg.render().asPng();
           return new Response(png, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=300, stale-while-revalidate=60", "Access-Control-Allow-Origin": "*" } });
@@ -1135,7 +1036,7 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
           console.error("[og identity PNG] failed, falling back to SVG:", String(e));
         }
       }
-      const svg = buildIdentitySvg({ profile, wallet, displayName });
+      const svg = buildIdentitySvg({ profile, record, wallet, displayName });
       return new Response(svg, { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*" } });
     }
 
@@ -1145,12 +1046,13 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
     if (parts[0] === "share" && parts[1] === "identity" && parts[2]) {
       const wallet = normalizeAddress(parts[2]);
       const appUrl = `https://trade.nexustradinglabs.com/feed/trader/${wallet}`;
-      const img = `https://og.nexustradinglabs.com/og/identity/${wallet}.png`;
+      const { profile, record, displayName } = await loadIdentity(env, wallet);
+      // Versioned by the record, so a re-share after new grades gets a fresh image (X caches by URL).
+      const img = `https://og.nexustradinglabs.com/og/identity/${wallet}.png?v=${identityCardVersion(record, profile.meritRank)}`;
       const shareUrl = `https://og.nexustradinglabs.com/share/identity/${wallet}`;
-      const profileRaw = await env.LAB_STORE.get(`profile:${wallet}`);
-      const name = esc((profileRaw && JSON.parse(profileRaw).displayName) || `${wallet.slice(0, 6)}…${wallet.slice(-4)}`);
-      const title = `${name} · trading identity, graded from public price`;
-      const desc = "Every call scored against public price — not self-reported. See the record on Nexus.";
+      const name = esc(displayName || `${wallet.slice(0, 6)}…${wallet.slice(-4)}`);
+      const title = `${name} on Nexus · graded caller record`;
+      const desc = identityShareText(record, profile.meritRank);
       const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>

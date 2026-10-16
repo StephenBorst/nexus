@@ -370,7 +370,7 @@ export function profileNarrative(profile, { publicOnly = false, max = 4, voice =
 // is a stranger reading ABOUT someone, where "your edge" is plainly wrong — so the
 // same sentences are re-pointed rather than duplicated in two voices (which would
 // inevitably drift apart).
-function toThirdPerson(text) {
+export function toThirdPerson(text) {
   return text
     // Object pronouns FIRST: these read "...carry you", where a blanket you->they
     // would produce "carry they". Word-boundaried so "yourself" cannot be mangled.

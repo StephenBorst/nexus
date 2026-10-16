@@ -879,7 +879,19 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   `calcRepScore` (hit rate + PLANNED R:R bonus) or the on-chain Rep Score (outcomes callers close themselves). Gone: the
   row shows the grader's merit chip + "PLANNED R:R" (from levels); the profile shows "RANK ▪ SIGNAL" from
   `/theses/process/:wallet` (`meritRank`), nothing when unranked. The copilot's `get_trader` reads the same grader record
-  (no typed P&L, no self-marked statuses). `fetchOnChainRepScore` has no callers left.
+  (no typed P&L, no self-marked statuses). **Rep Score code deleted (2026-10-16):** `fetchOnChainRepScore` + the
+  `NexusRepScore` address/ABI (frontend), worker `calcRepScore` + `buildOgSvg`; legacy `/og/trader/:w(.png)` now 301s to
+  `/og/identity`. ⚠️ The published Bankr skill (`nexus-trading-labs/references/feed-leaderboard.md`, a byte copy of
+  BankrBot/skills) still tells agents to rank by `repScore`: fix it in BankrBot first (PR from StephenBorst/skills),
+  then copy back.
+  **Shared identity card (2026-10-16, borst: "no badge is better than a made-up one").** `/og/identity/:w(.png)` +
+  `/share/identity/:w` + the profile's 𝕏 Share / ✦ Cast all read ONE model, `app/lib/identityCard.mjs`
+  (`identityCardModel` / `identityShareText`, tested), on ONE loader
+  (`workers/nexus-lab-api/identity.mjs loadIdentity` = the /theses/process record; a failed read = zero record, never
+  invented). Rank chip ONLY when the grader gave a merit rank (no "BUILDING" placeholder); record always in parts
+  ("N graded calls · W% hit · ±R avg"); under 5 calls = "TO QUALIFY: N graded calls to the caller board" (never "to
+  Signal": Signal also needs net-positive R); third person ("their edge"). Share image URL versioned by the record
+  (`identityCardVersion`, X caches by URL). The profile's share actions wait for /theses/process.
 - **Split exit + LATE_ENTRY fix (2026-10-12, borst: engine A/B rivalry).** (1) **`exitPlan: "SPLIT_50"`** (declared
   at publish, frozen by callLock like the levels; a TP2 ALONE declares nothing, since Engine A and older calls carry TP2
   as a note): `gradeCall` closes half at TP1, half at TP2, BOTH on the original stop (breakeven-after-TP1 is a different

@@ -819,8 +819,6 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
   const board = useMemo(() => buildLeaderboard(feed), [feed]);
   const navigate = useNavigate();
 
-  // Ph12/26 -- trustless on-chain stats + Rep Score from NexusRepScore contract
-
   // ⚡ Autocopy a verified caller — your agent mirrors their next public call at your
   // own risk (backend reads config.autocopy.leaders → caller:latest). Load who you
   // already copy from your agent config; toggle by GET→merge→PUT (owner-authed).
