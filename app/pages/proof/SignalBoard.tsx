@@ -23,12 +23,12 @@ const VIEW_KEY = "nx_proof_board_view";
 type SideStat = { samples: number; hitRate: number; meanBps: number };
 type Drift = { baseBps: number; excessBps: number; excessStable: boolean; bySide: Record<"LONG" | "SHORT", { baseBps: number; excessBps: number; samples: number }> };
 type Horizon = { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean; verdict: string; drift?: Drift };
-type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number; presetExit?: boolean; shadowOf?: string; bySide?: Record<"LONG" | "SHORT", SideStat>; oos?: { since: string; samples: number; hitRate: number; netBps: number } };
+type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number; presetExit?: boolean; shadowOf?: string; bySide?: Record<"LONG" | "SHORT", SideStat>; oos?: { since: string; samples: number; hitRate: number; netBps: number }; exitContract?: string; avgSlPercent?: number; atrMult?: number; rMultiple?: number };
 type AxisSides = Record<"LONG" | "SHORT", { events: number; r: { samples: number; hitRate: number; meanR: number } }>;
 type RandomSide = { verdict: string; n: number; pctBeaten?: number; realMeanR?: number; randomMedianR?: number; moreTradesNeeded?: number | null };
 type RandomBaseline = { metric: string; runs: number; window: { from: string; to: string; hours: number }; pooled: RandomSide; bySide: Record<"LONG" | "SHORT", RandomSide> };
 type Tide = { metric: string; from: string; to: string; markets: number; LONG: { n: number; meanR: number }; SHORT: { n: number; meanR: number } };
-export type AxisRow = { name: string; label: string; verdict: string; best: (Horizon & { bySide?: Record<"LONG" | "SHORT", SideStat> }) | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null; sides?: AxisSides; random?: RandomBaseline | null };
+export type AxisRow = { name: string; label: string; verdict: string; best: (Horizon & { bySide?: Record<"LONG" | "SHORT", SideStat> }) | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null; exitGraded?: ExitGrade | null; sides?: AxisSides; random?: RandomBaseline | null };
 export type Scorecard = { failed?: boolean; axes: AxisRow[]; tide?: Tide | null; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; asOf?: string };
 type Evidence = { ok: boolean; hold: number; markets: number; marketsGreen: number; trades: number; netUsd: number; caveat?: string; baseline?: { verdict: string; pctBeaten?: number; moreTradesNeeded?: number | null } };
 
@@ -140,6 +140,25 @@ function SideRow({ a, side }: { a: AxisRow; side: "LONG" | "SHORT" }) {
   );
 }
 
+// The scoreboard's own exit (the R contract) graded the way the agent trades it: fees in, a trade
+// still open at 168h closed at the market. A paper wallet trades it; the line is its yardstick.
+function GradedExitLine({ g }: { g: ExitGrade }) {
+  const graded = g.verdict !== "INSUFFICIENT";
+  return (
+    <div title="Stop = 1.2× the coin’s 4-hour ATR at entry, target = 1.5× the stop, held up to 168h. One position per market, net of a taker fee each side, a trade still open at 168h closed at the market. Paper only. Informational: it doesn’t change the read’s grade."
+      style={{ marginTop: 12, fontFamily: MONO, fontSize: 10.5, color: FOG, lineHeight: 1.6, cursor: "help" }}>
+      <span style={{ ...label, color: BRIGHT }}>Graded exit, as traded</span>
+      <span style={{ fontSize: 9.5, color: FAINT }}> · stop {g.atrMult ?? 1.2}× 4h ATR{g.avgSlPercent ? ` (avg ${g.avgSlPercent}%)` : ""} · target {g.rMultiple ?? 1.5}× · {g.maxHoldHours}h · paper only</span>
+      <div style={{ marginTop: 4 }}>
+        {graded
+          ? <><span style={{ color: g.verdict === "PREDICTIVE" ? MARK : g.verdict === "PROMISING" ? BONE : MUTED, fontWeight: 700, letterSpacing: "0.06em" }}>{HZ_WORD[g.verdict] || g.verdict}</span> · <span style={{ color: moneyTone(g.netBps) }}>{sign(g.netBps)} bps</span> net · {g.hitRate}% win · n{g.samples} · {g.exits.TIMEOUT || 0} timed out</>
+          : <span style={{ color: FAINT }}>Accruing · n{g.samples}</span>}
+        {g.oos && <span style={{ color: FAINT }}> · since {g.oos.since.slice(5, 10)}: {g.oos.samples ? <>n{g.oos.samples} <span style={{ color: moneyTone(g.oos.netBps) }}>{sign(g.oos.netBps)}</span></> : "no trades yet"}</span>}
+      </div>
+    </div>
+  );
+}
+
 function ExitBand({ a, preset, paused, isMobile }: { a: AxisRow; preset?: ReturnType<typeof presetById>; paused?: string; isMobile: boolean }) {
   const navigate = useNavigate();
   const exits = [a.exit, a.exit24h].filter((g): g is ExitGrade => !!g && g.verdict !== "INSUFFICIENT");
@@ -169,6 +188,7 @@ function ExitBand({ a, preset, paused, isMobile }: { a: AxisRow; preset?: Return
                 </div>
               ))}
             </div>
+            {a.exitGraded && <GradedExitLine g={a.exitGraded} />}
             {!paused && !head.shadowOf && <EvidenceLine axis={a.name} />}
           </>
         )}

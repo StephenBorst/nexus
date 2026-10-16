@@ -94,6 +94,7 @@ import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signa
 // wrangler like the other ../ imports.
 import { buildOperatorProfile } from "../../app/lib/operatorProfile.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
+import { gradedExitRefusal } from "../../app/lib/gradedExit.mjs";
 // Directive level validation lives with the exec's money-path logic (single source);
 // wrangler bundles the cross-dir import (same as backtest.mjs).
 import { directiveLevels } from "../nexus-agent-exec/logic.mjs";
@@ -4648,7 +4649,7 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "intel" && parts[1] === "axis-backtest" && request.method === "GET") {
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
-      const CACHE = `axisbt:v8:min${min}`; // v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
+      const CACHE = `axisbt:v9:min${min}`; // v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
@@ -5271,6 +5272,8 @@ document.getElementById("btn").addEventListener("click",go);
         if (config.dcaEnabled && !(await walletIsPro(address, env))) {
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
+        // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
+        { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
         const prevLeadersAct = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         // Keep the public copiers count in sync (activate can also change autocopy).
@@ -5304,6 +5307,8 @@ document.getElementById("btn").addEventListener("click",go);
         if (config.dcaEnabled && !(await walletIsPro(address, env))) {
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
+        // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
+        { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
         const prevLeaders = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         // Keep the public copiers count in sync with autocopy follow/unfollow.
@@ -5492,6 +5497,8 @@ document.getElementById("btn").addEventListener("click",go);
         if (config.dcaEnabled && !(await walletIsPro(address, env))) {
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
+        // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
+        { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
 
         // Live modes need the delegated key. Derive it from the wallet signature
         // (auth) + the registered accountId.
@@ -5538,6 +5545,7 @@ document.getElementById("btn").addEventListener("click",go);
         const configRaw = await AGENT_KV.get(`agent:config:${address}`);
         if (!configRaw) return json({ error: "no_agent", hint: "Activate the agent first via /agent/:address/bankr/activate." }, request, 400);
         const config = JSON.parse(configRaw);
+        { const why = gradedExitRefusal({ ...config, mode }, mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
 
         // Live modes require the order-only key to exist; provision it from the
         // wallet signature if this agent was previously PAPER (no key stored).

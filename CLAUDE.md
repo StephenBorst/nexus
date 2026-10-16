@@ -536,6 +536,24 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   INSUFFICIENT (24h arm 4 paper trades) → keep 12h. All staged switches off, no live money, x402 + house unchanged.
   Paper parity CLEAN on all three wallets. The finding: the ENTRIES beat random; the preset's TP 2.5/SL 2 exits give it
   back. DEFAULT_CONFIG (new agents) still spreads the basis-cvd-stack preset — the page didn't touch it (borst's call).
+- **🧪 GRADED-EXIT VARIANT (borst go, 2026-10-15) = `docs/research/graded-exit-prereg.md` (bar fixed before the data).**
+  Basis × CVD's entries beat random on the R contract, but the preset's TP 2.5/SL 2 exit lost out of sample. So the agent
+  can now trade THE graded exit: config `exitContract: "R_CONTRACT"` → stop 1.2× H4 ATR-14 (`h4Atr14Frac`, the R grade's
+  own ruler, 80h of 1H candles), target 1.5× the stop, 168h hold. ONE rule in **`app/lib/gradedExit.mjs`**, imported by
+  exec (paper entries), the backtest (`exitLevelsAt`, shared by entryAt + the random baseline), axisbt and lab-api. No
+  ATR / stop >20% ⇒ sit out, never the flat %. **⚠️ PAPER ONLY (borst's condition):** no 3% cap on this path, so
+  `gradedExitRefusal` refuses every non-PAPER config; exec checks it at the top of `enterPosition` (before any price/key/
+  order/state), lab-api 409s `graded_exit_refused` on PUT /agent, PUT /config, bankr/activate and a bankr/mode flip.
+  It also refuses extra exit parts (takeProfits ladder, trail, breakeven, DCA, volScaledStops, hold ≠ 168). Lifting
+  paper-only = its own reviewed PR. Lab: GRADED EXIT — PAPER ONLY toggle under Filters (sets the whole contract + PAPER);
+  `exitContract` is in `EXPERIMENTAL_FILTERS_OFF` so other presets never inherit it; label "… · graded exit".
+  **Scoreboard line `exitGraded`** (basis_x_cvd only, `GRADED_EXIT_AXES`; cache `axisbt:v9`): the same contract graded as
+  the agent trades it — `stepExit`, 3 bps/side fees, a trade open at 168h closed at the market (the R grade credits 0R),
+  its OWN 168h entry window (12h/24h lines unchanged), `oos` from **2026-10-16T00:00Z** (`GRADED_EXIT_OOS_CUTOFF_MS`,
+  pinned to the doc by `gradedExit.test.mjs`). /proof shows it as "Graded exit, as traded". Bar: oos net > 0 over ≥30
+  trades + read still PREDICTIVE + BEATS_RANDOM (LONG) = clears; ≤0 at ≥30 = retired. Fourth paper wallet (borst sets it
+  up AFTER this ships): Basis × CVD Stack preset + GRADED EXIT on, nine mature markets. Tests: `gradedExit.test.mjs`,
+  `axisbt.graded.test.mjs` (incl. exec↔grader level parity on the same candles).
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
@@ -1578,9 +1596,9 @@ credit and pays `x402.miroshark.xyz/run` $1 Base USDC from secret `MIROSHARK_PAY
   2×flagged at once), `snapshotTrendRegimes` (was 14 at once, hourly), `computeSignalRows` fallback (7 at once, and it
   only runs when the proxy already failed), `fetchAllFutures`. `/intel/mispriced` now says WHY it is empty:
   `error: "futures unavailable (proxy: …; direct: rate_limited 429)"` — curl it before guessing.
-- **Audit, engine side (FROZEN until Oct 15 — proposals only, not applied):** brain + exec `orderlyPublicGet` retry
+- **Audit, engine side:** brain + exec `orderlyPublicGet` retry
   ONLY an HTML 403; a JSON 429 is returned as data → the caller throws a TypeError on `data.data.…` and the tick is
-  lost, unlogged. **Fix BUILT 2026-10-11, held until after the Oct 15 read:** brain + exec `orderlyPublicGet` =
+  lost, unlogged. **✅ Fix MERGED 2026-10-15 (#83, deployed green):** brain + exec `orderlyPublicGet` =
   lab-api's `orderlyGet(url, { httpErrors: "return" })` (one implementation; 429 + challenge retried with backoff,
   logged, then THROWN; other JSON error bodies still returned as data). It also closes an exec gap: a 429 on
   `/v1/public/info` in `enterPosition` fell back to the default step size and no min-notional; now the entry aborts. Rates: brain is sequential (fine); exec runs 10 users per `Promise.all` batch — mark price is

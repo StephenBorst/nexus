@@ -14,6 +14,7 @@
 import { deriveSignal } from "../nexus-agent-brain/logic.mjs";
 import { computePnl, evaluateExit, breakevenArmed, volScaledLevels, dailyCapBlocked, shouldResetDaily } from "../nexus-agent-exec/logic.mjs";
 import { percentileRank } from "./logic.mjs";
+import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 
@@ -198,6 +199,23 @@ export function stepExit(pos, c, holdMs, config) {
   return null;
 }
 
+// Per-trade exit levels at bar i: the graded exit (H4 ATR-14 off the candles up to and including
+// bar i — what exec reads at entry) or vol-scaled stops, else null (the config's flat %).
+// `skip` = the agent would sit this entry out (graded exit with no ATR, or a config the exec
+// refuses for the graded exit). Shared by entryAt and the random-entry baseline.
+export function exitLevelsAt(candles, i, config) {
+  if (usesGradedExit(config)) {
+    if (gradedExitRefusal(config, true)) return { skip: true, lvl: null };
+    const lvl = gradedExitLevelsFromHourly(candles.slice(Math.max(0, i - GRADED_EXIT_LOOKBACK_H), i + 1));
+    return lvl ? { skip: false, lvl } : { skip: true, lvl: null };
+  }
+  if (config.volScaledStops) {
+    const atr = atrPctAt(candles, i);
+    if (Number.isFinite(atr) && atr > 0) return { skip: false, lvl: volScaledLevels(atr, config) };
+  }
+  return { skip: false, lvl: null };
+}
+
 // ── The entry decision at bar i, ONE implementation ────────────────────────────
 // What the brain would have decided when bar i closed: the raw inputs (price/OI/funding deltas,
 // session hour, ATR, basis stack) → deriveSignal → optional research entryFilter → vol-scaled
@@ -225,10 +243,11 @@ export function entryAt(candles, i, { fundingAt, fundingPctAt = null, oiChangeAt
   const sig = deriveSignal(raw, config);
   if (!sig.direction || sig.direction === "NONE" || (sig.confidence ?? 0) < 50) return null;
   if (entryFilter && !entryFilter(candles, i, sig, config)) return null;
-  // Vol-scaled stops: size the stop to recent ATR at entry (no lookahead),
-  // preserving the configured reward:risk. Falls back to fixed when ATR unavailable.
-  let lvl = null;
-  if (config.volScaledStops && Number.isFinite(atr) && atr > 0) lvl = volScaledLevels(atr, config);
+  // Vol-scaled stops: size the stop to recent ATR at entry (no lookahead), preserving the
+  // configured reward:risk; falls back to fixed when ATR is unavailable. The graded exit sizes it
+  // from H4 ATR-14 and sits the entry out when it can't (exitLevelsAt).
+  const { skip, lvl } = exitLevelsAt(candles, i, config);
+  if (skip) return null;
   return { direction: sig.direction, confidence: sig.confidence ?? 0, lvl };
 }
 
@@ -380,11 +399,8 @@ export function mulberry32(seed) {
 // One trade from bar i through the shared exit path. Right-censored → null (never credited).
 function simulateFrom(candles, i, direction, config) {
   const c = candles[i];
-  let lvl = null;
-  if (config.volScaledStops) {
-    const atr = atrPctAt(candles, i);
-    if (Number.isFinite(atr) && atr > 0) lvl = volScaledLevels(atr, config);
-  }
+  const { skip, lvl } = exitLevelsAt(candles, i, config);
+  if (skip) return null;
   const pos = openPosition(config, direction, c.c, c.t, lvl);
   for (let k = i + 1; k < candles.length; k++) {
     const hit = stepExit(pos, candles[k], (candles[k].t - c.t) * 1000, config);
