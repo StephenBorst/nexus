@@ -87,7 +87,7 @@ export function PublicOperatorProfile({ wallet, isOwn = false }: { wallet: strin
               <div style={{ fontFamily: MONO, fontSize: 17, fontWeight: 700, fontVariantNumeric: "tabular-nums", marginTop: 2, color: h.tone === "pos" ? C.pos : h.tone === "neg" ? C.neg : C.text.bright }}>
                 {h.value ?? "—"}
               </div>
-              <div style={{ ...eyebrow, letterSpacing: 0, textTransform: "none", marginTop: 1 }}>{h.sub}</div>
+              <div style={{ ...eyebrow, letterSpacing: 0, textTransform: "none", marginTop: 1 }}>{isOwn ? h.sub : h.sub.replace(/\byour\b/gi, "their")}</div>
             </div>
           ))}
       </div>

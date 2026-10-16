@@ -357,7 +357,9 @@ export function profileNarrative(profile, { publicOnly = false, max = 4, voice =
       : "Your record is still forming; the reads below will sharpen as more calls resolve.";
   }
   const head = profile.archetype ? `${profile.archetype.label}. ` : "";
-  const body = reads.map((r) => (third ? toThirdPerson(r.text) : r.text)).join(". ");
+  // Each read is its own sentence, so each one starts with a capital ("…mistake. Plan quality…").
+  const cap = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+  const body = reads.map((r) => cap(third ? toThirdPerson(r.text) : r.text)).join(". ");
   const tail = profile.tier === "FORMING"
     ? (third ? " (Small sample so far — leaning, not settled.)" : " (Still a small sample — treat these as leaning, not settled.)")
     : "";
