@@ -512,7 +512,7 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   16:21 and was still holding). The route now passes `state.current_position` (paper) as an entry with `closedAt:null`
   (`open:true` in the report). Entries are keyed by (market, side, opened_at), so paper TP_PARTIAL slices — which carry NO
   `parent_id` — collapse with their position. Before calling DRIFT a brain problem, check the open position.
-  **Full paper wallets:** 12h control `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
+  **Full paper wallets:** graded-exit wallet (12h control until 2026-10-16) `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
   `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE`.
 - **⏸ OCT-15 PREP — STAGED, ALL OFF (2026-09-27, PRs #46 + 2/2).** Nothing below trades or serves until a verdict:
   (1) `tools/oct15/holdDecision.mjs` = the pre-registered 12h-vs-24h rule (oos exit grades + paper A/B since the clean
@@ -552,7 +552,10 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   its OWN 168h entry window (12h/24h lines unchanged), `oos` from **2026-10-16T00:00Z** (`GRADED_EXIT_OOS_CUTOFF_MS`,
   pinned to the doc by `gradedExit.test.mjs`). /proof shows it as "Graded exit, as traded". Bar: oos net > 0 over ≥30
   trades + read still PREDICTIVE + BEATS_RANDOM (LONG) = clears; ≤0 at ≥30 = retired. Fourth paper wallet (borst sets it
-  up AFTER this ships): Basis × CVD Stack preset + GRADED EXIT on, nine mature markets. Tests: `gradedExit.test.mjs`,
+  up AFTER this ships): Basis × CVD Stack preset + GRADED EXIT on, nine mature markets. **= `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28`,
+  reset 2026-10-16T00:29:06Z — the former 12h CONTROL wallet** (its 12h ledger ended; the Oct-15 numbers are in
+  oct15-results.md). Paper control for it = the nine-market 24h arm `0x325D…95DE` (same markets + entries, preset exit);
+  the 12h preset exit is still graded on the scoreboard's `exit` line. Tests: `gradedExit.test.mjs`,
   `axisbt.graded.test.mjs` (incl. exec↔grader level parity on the same candles).
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →

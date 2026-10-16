@@ -63,3 +63,18 @@ Expect it to take a while. The line accrues per market (about nine positions at 
 ## Results
 
 (Append below. Never edit above this line.)
+
+### Setup · 2026-10-16
+
+- **Fourth paper wallet = `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28`**, record reset 2026-10-16T00:29:06Z (its
+  `paper_reset_at`). Config read back from `GET /agent/:addr` at 00:35 UTC: PAPER · BASIS_FADE + CVD · `exitContract:
+  R_CONTRACT` · 168h · $50 · 5x · 3 trades/day · $10 daily stop · the nine markets · no ladder, trail, breakeven, DCA,
+  vol-scaled stops or entry filters. `gradedExitRefusal` on that config = none. Parity: NO_DATA (0 trades), axis
+  basis_x_cvd.
+- **This wallet was the 12h control** (Oct 15: 6 paper trades, +$5.50, parity CLEAN, in `docs/routines/oct15-results.md`).
+  Its ledger was reset for this test, so the 12h preset exit no longer has a paper wallet. The scoreboard's 12h `exit`
+  line keeps grading that exit out of sample. The paper control for this wallet is the nine-market 24h arm
+  `0x325Da3ed024f533764407524918a847bCb3f95DE`: the same nine markets and entries, the preset exit. "The three existing
+  paper wallets keep running unchanged" above now reads two: the 24h arm and the nine-market arm.
+- The $10 daily stop is the preset's. With $250 notional, a graded stop past 4% loses the whole day's allowance on one
+  trade, so some graded events will be missed on the daily cap; parity names those as explained (likely), not drift.
