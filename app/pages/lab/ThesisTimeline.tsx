@@ -51,7 +51,7 @@ export function ThesisTimeline({ t, onUpdate, canEdit }: {
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: state.count ? 8 : 0 }}>
         <div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.1em" }}>
           TIMELINE
-          {state.count > 0 && <span style={{ color: "#33333a" }}> · {state.size}% still on{state.closed ? " · closed" : ""}</span>}
+          {state.count > 0 && <span> · {state.size}% still on{state.closed ? " · closed" : ""}</span>}
         </div>
         {canEdit && (
           <button onClick={() => { setOpen((o) => !o); setErr(null); }} style={{ ...navBtnStyle, fontSize: 9, minHeight: 26, padding: "3px 9px" }}>
@@ -70,7 +70,7 @@ export function ThesisTimeline({ t, onUpdate, canEdit }: {
                 <span style={{ flexShrink: 0, width: 12, textAlign: "center", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>{k?.glyph}</span>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#d4d4d8" }}>{describeUpdate(u)}</span>
-                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#33333a", marginLeft: 6 }}>{ago(u.at)}</span>
+                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", marginLeft: 6 }}>{ago(u.at)}</span>
                   {u.note && <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#a1a1aa", lineHeight: 1.5, marginTop: 1 }}>{u.note}</div>}
                 </div>
               </div>
@@ -121,7 +121,7 @@ export function ThesisTimeline({ t, onUpdate, canEdit }: {
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <button onClick={submit} style={{ ...navBtnStyle, fontSize: 9, color: "#ededf0", borderColor: "#33333a", minHeight: 28, padding: "5px 12px" }}>APPEND</button>
-            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#33333a", lineHeight: 1.5 }}>
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#71717a", lineHeight: 1.5 }}>
               append-only · commentary, not evidence — your grade is still judged on the levels you originally posted
             </span>
           </div>

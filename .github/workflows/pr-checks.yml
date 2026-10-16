@@ -33,6 +33,18 @@ jobs:
       # app/components/ui or className="nx-btn". Baseline = tools/ui-baseline.json (shrink only).
       - run: node tools/check-ui.mjs
 
+  ink:
+    name: Text contrast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Dependency-free: fails if a PR sets TEXT to a border tone (#33333a / #232327, ~1.5:1 on the
+      # canvas). Fix = "#71717a" for hints and empty states, "#52525b" for decorative glyphs.
+      - run: node tools/check-ink.mjs
+
   # Every *.test.mjs in the repo (money path: order sizing, signing guards, exits; trust
   # path: grading, parity, ledger inputs) + the TypeScript baseline (kept at 0 errors).
   tests:

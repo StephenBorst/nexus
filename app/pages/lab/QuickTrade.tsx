@@ -412,7 +412,7 @@ export function QuickTrade() {
     </div>
   ) : null;
   const footer = (
-    <div style={{ ...label, textAlign: "center", color: "#33333a" }}>
+    <div style={{ ...label, textAlign: "center", color: "#71717a" }}>
       Real market order on Orderly · for limit / TP-SL use the full trade page
     </div>
   );

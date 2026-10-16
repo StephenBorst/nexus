@@ -847,6 +847,11 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   feed, falling back to the Lab's own statuses (`buildLeaderboard`/`calcRepScore`) and the on-chain Rep Score (outcomes
   callers close themselves) under a "RANKED BY KV DATA" label. Now: "No verified callers yet." when nobody's graded, a
   load error when the board can't be read (never an empty board for a failed read). Don't add a fallback ranking.
+  **No self-scored REP anywhere (2026-10-16).** The RANKS row's "REP" column and the profile's "REP 56" box were
+  `calcRepScore` (hit rate + PLANNED R:R bonus) or the on-chain Rep Score (outcomes callers close themselves). Gone: the
+  row shows the grader's merit chip + "PLANNED R:R" (from levels); the profile shows "RANK ▪ SIGNAL" from
+  `/theses/process/:wallet` (`meritRank`), nothing when unranked. The copilot's `get_trader` reads the same grader record
+  (no typed P&L, no self-marked statuses). `fetchOnChainRepScore` has no callers left.
 - **Split exit + LATE_ENTRY fix (2026-10-12, borst: engine A/B rivalry).** (1) **`exitPlan: "SPLIT_50"`** (declared
   at publish, frozen by callLock like the levels; a TP2 ALONE declares nothing, since Engine A and older calls carry TP2
   as a note): `gradeCall` closes half at TP1, half at TP2, BOTH on the original stop (breakeven-after-TP1 is a different
@@ -1929,6 +1934,9 @@ Canonical system = **`app/config/theme.ts`** (`C` tokens), mirrored 1:1 by the l
   - **Palette guard:** `node tools/check-palette.mjs` (allows everything in theme.ts; ratchet baseline
     `tools/palette-baseline.json` — shrink, never grow). Runs on every PR via `.github/workflows/pr-checks.yml`
     (never blocks the deploy). It drifted to ~25 strays Sept 19–24 because nothing ran it.
+  - **Text-contrast guard (2026-10-16):** `node tools/check-ink.mjs` (PR job "Text contrast") fails any TEXT set to a
+    border tone (`#33333a` / `#232327`, ~1.5:1 on the canvas). Ink ladder: bone → fog `#a1a1aa` → muted `#71717a`
+    (hints, empty states, timestamps) → faint `#52525b` (decorative glyphs). The parked mini app is allowlisted.
 - **⭐ WRITTEN VOICE = `marketing/VOICE.md`** (borst's brief, Sept 25 2026) — read it before writing ANY post, QT, article
   or launch copy as @nexustradinglab. A terminal that speaks: short end-stopped lines, fact → rule → action, numbers over
   adjectives, no hype words/emoji, no em-dash brochure clauses, default closer = nothing. Rewrites return 1 primary + 1

@@ -10,6 +10,7 @@
 
 import { deployDirectiveFromThesis } from "@/utils/agentPrefill";
 import { bareTicker } from "@/utils/utils";
+import { callRR } from "@/lib/callMath.mjs";
 // Same synthesis the Lab renders — the copilot must speak with ONE point of view,
 // not answer from an older, narrower readout while the terminal shows another.
 import { buildOperatorProfile, profileNarrative, PUBLIC_READS } from "@/lib/operatorProfile.mjs";
@@ -622,7 +623,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_trader",
     description:
-      "Analyze a specific trader by wallet: their PUBLIC published theses and a win/loss summary (graded by status). Use when the user is viewing or asks about a trader's track record. Only public theses are returned.",
+      "Analyze a specific trader by wallet: their graded caller record (from the grader: graded calls, hit rate, average R, merit rank) and their PUBLIC calls with the graded result of each. Use when the user is viewing or asks about a trader's track record. Only public calls are returned.",
     input_schema: {
       type: "object",
       properties: { wallet: { type: "string", description: "0x… wallet address." } },
@@ -631,20 +632,36 @@ export const TOOLS: ToolDef[] = [
     run: async (args) => {
       const w = String(args.wallet ?? "").trim();
       if (!/^0x[0-9a-fA-F]{40}$/.test(w)) return JSON.stringify({ error: "invalid wallet address" });
-      const res = await fetch(`${AGENT_API}/feed`);
-      if (!res.ok) return JSON.stringify({ error: `feed fetch failed (${res.status})` });
-      const all = (await res.json())?.feed ?? [];
-      const theses = all.filter((t: { wallet?: string }) => String(t.wallet ?? "").toLowerCase() === w.toLowerCase());
-      const wins = theses.filter((t: { status?: string }) => t.status === "HIT_TP").length;
-      const losses = theses.filter((t: { status?: string }) => t.status === "STOPPED_OUT").length;
+      // The record comes from the grader (the same numbers the profile and the board show), never
+      // from statuses or P&L typed into the Lab.
+      const [feedRes, procRes] = await Promise.all([
+        fetch(`${AGENT_API}/feed`),
+        fetch(`${AGENT_API}/theses/process/${w.toLowerCase()}`).catch(() => null),
+      ]);
+      if (!feedRes.ok) return JSON.stringify({ error: `feed fetch failed (${feedRes.status})` });
+      const all = (await feedRes.json())?.feed ?? [];
+      const proc = procRes && procRes.ok ? await procRes.json().catch(() => null) : null;
+      // /feed also carries resolution announcements (no levels): not calls.
+      const calls = all.filter((t: { wallet?: string; resolution?: boolean }) =>
+        !t.resolution && String(t.wallet ?? "").toLowerCase() === w.toLowerCase());
+      const record = proc && typeof proc.calls === "number" ? {
+        graded_calls: proc.calls,
+        hit_rate_pct: proc.calls > 0 ? proc.hitRate ?? null : null,
+        avg_r: proc.calls > 0 ? proc.avgR ?? null : null,
+        merit_rank: proc.meritRank?.title ?? null,
+      } : null;
       return JSON.stringify({
         wallet: w,
-        public_theses: theses.length,
-        wins, losses,
-        win_rate_pct: wins + losses ? Math.round((wins / (wins + losses)) * 100) : null,
-        theses: theses.slice(0, 15).map((t: Record<string, unknown>) => ({
-          symbol: t.symbol, direction: t.direction, status: t.status, rr: t.riskReward, entry: t.entryPrice, pnl: t.actualPnl,
+        public_calls: calls.length,
+        graded_record: record,
+        calls: calls.slice(0, 15).map((t: Record<string, unknown>) => ({
+          symbol: t.symbol, direction: t.direction,
+          entry: t.entryPrice, stop: t.stopLoss, target: t.takeProfit1,
+          planned_rr: callRR(t),
+          graded: t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS" ? { outcome: t.gradedOutcome, r: t.gradedR ?? null } : null,
+          fill: t.fillState ?? null,
         })),
+        note: "graded_record is the grader's: calls graded from public price, a WIN pays the call's planned R from its levels. Never quote the hit rate without the average R beside it. graded_record null or 0 graded calls = no record yet; say so. fill WORKING = the entry hasn't traded, so there is no position yet. Calls carry no position size: never state a dollar P&L for them.",
       });
     },
   },

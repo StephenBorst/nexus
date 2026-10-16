@@ -76,7 +76,7 @@ export function MarketTape({ compact = false }: { compact?: boolean }) {
   // where "what's the tape right now" informs the trade you're about to size — the
   // signal lives where the decision is, not on a reading tab that already covers it.
   if (compact) {
-    const div = <span style={{ color: "#232327" }}>·</span>;
+    const div = <span style={{ color: "#52525b" }}>·</span>;
     const stat = (label: string, val: string, color = "#a1a1aa") => (
       <span style={{ color: "#52525b" }}>{label} <span style={{ color }}>{val}</span></span>
     );

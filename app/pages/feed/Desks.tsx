@@ -75,8 +75,8 @@ export default function Desks({ walletAddress }: { walletAddress: string | null 
       {msg && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#fbbf24", marginBottom: 8 }}>{msg}</div>}
 
       {/* Leaderboard */}
-      {desks === null && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#33333a" }}>loading desks…</div>}
-      {desks && desks.length === 0 && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#33333a" }}>No desks yet. Start one.</div>}
+      {desks === null && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>loading desks…</div>}
+      {desks && desks.length === 0 && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>No desks yet. Start one.</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {desks?.map((d) => (
           <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#0a0a0b", border: "1px solid #232327", borderRadius: 5, padding: "8px 10px", overflowX: "auto" }}>

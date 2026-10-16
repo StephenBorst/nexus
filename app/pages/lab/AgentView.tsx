@@ -1908,7 +1908,7 @@ export function AgentView() {
               <div style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>
                 {"// "}SCANNING FOR SIGNALS ON {config.symbols.map(s => s.replace("PERP_", "").replace("_USDC", "")).join(", ")}
               </div>
-              <div style={{ color: "#33333a", fontFamily: "var(--nx-font-mono)", fontSize: 10, marginTop: 6 }}>
+              <div style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10, marginTop: 6 }}>
                 Funding threshold: {config.fundingThreshold}% · Checking every 5 minutes
               </div>
             </div>

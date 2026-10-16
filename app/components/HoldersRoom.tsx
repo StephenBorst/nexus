@@ -80,7 +80,7 @@ function LockScreen() {
         Hold at least <b style={{ color: "#fff" }}>{minOperator.toLocaleString()} $NEXUS</b> to unlock the
         {" "}<span style={{ color: TIER_META.OPERATOR.color }}>{TIER_META.OPERATOR.glyph} OPERATOR</span> tier and enter.
       </div>
-      <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#33333a", lineHeight: 1.6 }}>
+      <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#71717a", lineHeight: 1.6 }}>
         $NEXUS is a community token. It pays for Nexus data and PRO. No yield. No revenue share.
         <br />
         Tiers unlock access &amp; status inside the Lab, nothing more.

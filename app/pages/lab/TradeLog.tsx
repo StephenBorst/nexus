@@ -242,7 +242,7 @@ export function TradeLogAllView({
                   <div style={{ position: "absolute", bottom: 0, width: "100%", height: `${winRate}%`, background: g.pnl >= 0 ? "#3ecf8e" : "#f7525f", borderRadius: 2 }} />
                 </div>
               </div>
-              <div style={{ fontSize: 14, color: "#33333a", fontFamily: "var(--nx-font-mono)", textAlign: "right" }}>›</div>
+              <div style={{ fontSize: 14, color: "#52525b", fontFamily: "var(--nx-font-mono)", textAlign: "right" }}>›</div>
             </div>
           );
         })}
@@ -312,7 +312,7 @@ export function TradeLogView({ dayKey, data, onBack, initialNote, onSaveNote }: 
             <div><div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>EXIT</div><div style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>${trade.price.toFixed(2)}</div></div>
             <div><div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>QTY</div><div style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>{trade.qty}</div></div>
           </div>
-          <div style={{ fontSize: 9, color: "#33333a", marginTop: 8, fontFamily: "var(--nx-font-mono)" }}>{new Date(trade.timestamp).toLocaleTimeString()}</div>
+          <div style={{ fontSize: 9, color: "#71717a", marginTop: 8, fontFamily: "var(--nx-font-mono)" }}>{new Date(trade.timestamp).toLocaleTimeString()}</div>
         </div>
       ))}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 12 }}>

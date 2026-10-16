@@ -204,7 +204,7 @@ export function NexusPro({ walletAddress }: { walletAddress: string | null }) {
         </div>
       </div>
 
-      <div style={{ fontFamily: mono, fontSize: 8, color: "#33333a", marginTop: 10, lineHeight: 1.4 }}>
+      <div style={{ fontFamily: mono, fontSize: 8, color: "#71717a", marginTop: 10, lineHeight: 1.4 }}>
         {TIER_NAME} is a software subscription. $NEXUS pays for it or unlocks it by holding. No yield. No revenue share.
       </div>
     </div>
