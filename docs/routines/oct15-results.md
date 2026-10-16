@@ -66,3 +66,18 @@ Every trade is LONG. Parity is CLEAN: the agent traded exactly what the scoreboa
 8. **The freeze lifts with this page applied.** First engine PR: the brain/exec 429 handling (#83).
 
 Not run: the Lab clean-preset check (Test / Validate) needs a PRO wallet signature.
+
+## Added 2026-10-16
+
+**Lab clean-preset check (run by borst, Basis × CVD Stack as loaded, PRO signature).**
+- Backtest, each market on its own: +$50.10, 63.2% win, 19 trades.
+- As the agent trades it (one position at a time, daily caps): +$14.07 over 13 trades; 14 signals missed while the agent
+  was busy or capped.
+- vs random entries: beat 61.3% of replays. Not distinguishable from luck.
+- Walk-forward: NOT ROBUST. 42% of folds positive; as traded −$9.37.
+
+It agrees with the scoreboard: the preset as traded has no stable edge across time windows. It changes no decision here.
+The graded-exit test (`docs/research/graded-exit-prereg.md`) is the open question.
+
+**New-agent default: kept (borst).** New agents still start on the Basis × CVD Stack in PAPER. Revisit once the
+graded-exit wallet has out-of-sample numbers.
