@@ -17,6 +17,7 @@ import { R_CONTRACT } from "../../app/lib/rContract.mjs";
 import { trailingPct, basisExtremeSide, basisDeviationSide } from "../../app/lib/basisFade.mjs";
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { GRADED_EXIT, gradedExitLevels, GRADED_EXIT_OOS_CUTOFF_MS } from "../../app/lib/gradedExit.mjs";
+import { REGISTERED_READS, registeredMs } from "../../app/lib/readPipeline.mjs";
 import { openPosition, stepExit, closedPnlPct, DEFAULT_FEE_BPS, BASELINE_RUNS, BASELINE_MIN_TRADES, baselineVerdict, mulberry32, tradesToSeparate } from "./backtest.mjs";
 
 // hourBucket + the oi:hist price spine live in app/lib/basisStack.mjs (shared with the
@@ -619,10 +620,16 @@ export function scoreExitVariants(all, exit, medT, minSamples) {
 // "I don't want the early data on the kinder grade only"). Its own entry window (168h), so the
 // 12h/24h lines are unchanged. `oos` = trades entered after the pre-registered cutoff
 // (docs/research/graded-exit-prereg.md). Informational — the read's verdict is unchanged.
-export const GRADED_EXIT_AXES = Object.freeze(["basis_x_cvd"]);
+// Each graded-exit line's out-of-sample cutoff: basis_x_cvd's from its prereg (Oct 16), every
+// pipeline read's from its own registration (app/lib/readPipeline.mjs) — never a shared date.
+export const GRADED_EXIT_CUTOFFS = Object.freeze({
+  basis_x_cvd: GRADED_EXIT_OOS_CUTOFF_MS,
+  ...Object.fromEntries(REGISTERED_READS.filter((r) => r.gradedExit).map((r) => [r.axis, registeredMs(r)])),
+});
+export const GRADED_EXIT_AXES = Object.freeze(Object.keys(GRADED_EXIT_CUTOFFS));
 export const GRADED_EXIT_SPEC = Object.freeze({ preset: "graded-exit", exitContract: GRADED_EXIT, maxHoldHours: R_CONTRACT.maxHoldH });
-export function scoreGradedExit(all, medT, minSamples) {
-  const g = scoreExit(all, GRADED_EXIT_SPEC, medT, minSamples, DEFAULT_FEE_BPS, GRADED_EXIT_SPEC.maxHoldHours, GRADED_EXIT_OOS_CUTOFF_MS);
+export function scoreGradedExit(all, medT, minSamples, cutoffMs = GRADED_EXIT_OOS_CUTOFF_MS) {
+  const g = scoreExit(all, GRADED_EXIT_SPEC, medT, minSamples, DEFAULT_FEE_BPS, GRADED_EXIT_SPEC.maxHoldHours, cutoffMs);
   return { ...g, presetExit: false, atrMult: R_CONTRACT.atrMult, rMultiple: R_CONTRACT.rMultiple };
 }
 
@@ -771,7 +778,8 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
     const mkt = mktKey(cs, i); // the SAME key buildRandomPools uses, so a replay redraws on this market
     for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, mkt, pmap, cbh, rs: typeof e.rs === "number" ? e.rs : null });
   });
-  if (!all.length) return { random: null, sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples), exitGraded: gradedExit ? scoreGradedExit([], 0, minSamples) : null };
+  const gxCut = typeof gradedExit === "number" ? gradedExit : GRADED_EXIT_OOS_CUTOFF_MS;
+  if (!all.length) return { random: null, sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples), exitGraded: gradedExit ? scoreGradedExit([], 0, minSamples, gxCut) : null };
   // rs_quartile written on EVERY event row that carries an rs — from closes, NOT candle-gated
   // (Grok #4). Cross-sectional rank → quartile (Q1 = strongest). Exposed so Sept-14 can
   // condition on it; a top-quartile-only axis is a one-line follow-up once these matter.
@@ -845,7 +853,7 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
   // does NOT change the axis verdict (that grades the READ); it says whether the read
   // survives the exit the agent actually uses.
   const exitGrades = scoreExitVariants(all, exit, medT, minSamples);
-  const exitGraded = gradedExit ? scoreGradedExit(all, medT, minSamples) : null;
+  const exitGraded = gradedExit ? scoreGradedExit(all, medT, minSamples, gxCut) : null;
   const rBySide = { LONG: [], SHORT: [] };
   for (const e of all) if (e._r != null) rBySide[e.side].push(e._r);
   const sides = {
@@ -903,9 +911,15 @@ export function runScorecard(coinSets, cfg = {}) {
   const only = Array.isArray(cfg.axes) ? new Set(cfg.axes) : null; // the holdout line grades a subset
   const axes = AXES.filter((a) => !only || only.has(a.name)).map((a) => {
     const shadow = !AXIS_EXITS[a.name] && SHADOW_EXITS[a.name];
-    const s = scoreEvents(coinSets, a.gen, { ...cfg, randomPools, exit: AXIS_EXITS[a.name] || (shadow ? shadow.exit : null), gradedExit: GRADED_EXIT_AXES.includes(a.name) });
+    const gx = GRADED_EXIT_AXES.includes(a.name) ? GRADED_EXIT_CUTOFFS[a.name] : false;
+    const s = scoreEvents(coinSets, a.gen, { ...cfg, randomPools, exit: AXIS_EXITS[a.name] || (shadow ? shadow.exit : null), gradedExit: gx });
     if (shadow) for (const g of [s.exit, s.exit24h]) if (g) { g.presetExit = false; g.shadowOf = shadow.shadowOf; }
-    return { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, sides: s.sides, random: s.random, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit, exit24h: s.exit24h, exitGraded: s.exitGraded };
+    const row = { name: a.name, label: a.label, verdict: s.verdict, headline: s.headline, r: s.r, sides: s.sides, random: s.random, rsQuartileDist: s.rsQuartileDist, best: s.bestHorizon, horizons: s.horizons, exit: s.exit, exit24h: s.exit24h, exitGraded: s.exitGraded };
+    // A pipeline read (app/lib/readPipeline.mjs): the SAME grade on events after its registration
+    // only. The row above is the whole recorded history = in-sample; only `oos` counts for a stage.
+    const reg = (cfg.registered || []).find((x) => x.axis === a.name);
+    if (reg) row.oos = { since: new Date(reg.fromMs).toISOString(), ...registeredGrade(coinSets, a.gen, reg.fromMs, { ...cfg, randomPools, gradedExit: gx === false ? false : reg.fromMs }) };
+    return row;
   });
   // rank: PREDICTIVE > PROMISING > NOISE > INSUFFICIENT, then by the HEADLINE metric —
   // meanR once R-graded (the right object), else forward-bps until candles mature.
@@ -918,7 +932,52 @@ export function runScorecard(coinSets, cfg = {}) {
   const universe = btc
     ? rsQuartiles(coinSets.filter((c) => c !== btc).map((c) => ({ coin: c.coin, rs: relStrength(c.oiHist, btc.oiHist) })).filter((x) => x.rs != null).sort((a, b) => b.rs - a.rs))
     : [];
-  return { axes, tide, coins: coinSets.length, universe };
+  const overlap = (cfg.overlapPairs || []).map(([x, y]) => readOverlap(coinSets, x, y));
+  return { axes, tide, coins: coinSets.length, universe, ...(overlap.length ? { overlap } : {}) };
+}
+
+// The out-of-sample grade of one read: its own generator, events at or after `fromMs` only.
+function registeredGrade(coinSets, gen, fromMs, opts) {
+  const s = scoreEvents(coinSets, (cs, pmap, ctx) => (gen(cs, pmap, ctx) || []).filter((e) => e && e.t >= fromMs), opts);
+  return { verdict: s.verdict, r: s.r, sides: s.sides, random: s.random, exitGraded: s.exitGraded };
+}
+
+// ── OVERLAP: are two reads one bet? ────────────────────────────────────────────────────────
+// Two reads that fire on the same coin, same side, within `windowH` hours of each other are the
+// same bet counted twice. Counts only (no outcomes), so it can't be mined for a better subset.
+// `marketWide` = the other read fired on ANY coin, same side, within the window (a shared regime).
+export function readOverlap(coinSets, nameA, nameB, { windowH = 24 } = {}) {
+  const genOf = (n) => AXES.find((a) => a.name === n)?.gen;
+  const gA = genOf(nameA), gB = genOf(nameB);
+  if (!gA || !gB) return { a: nameA, b: nameB, error: "unknown axis" };
+  const btcCs = (coinSets || []).find((c) => String(c.coin || "").toUpperCase() === "BTC");
+  const btcSeries = btcCs ? priceSeries(btcCs) : [];
+  const ctx = btcCs ? { btcMap: btcRegimeByHour(btcSeries), btcPrice: priceByHour(btcSeries), btcCandles: candlesByHour(btcCs.candleHist) } : {};
+  const evs = (gen) => {
+    const out = [];
+    for (const cs of coinSets || []) {
+      const pmap = priceByHour(cs.oiHist);
+      if (pmap.size < 2) continue;
+      for (const e of gen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) out.push({ coin: cs.coin, side: e.side, h: hourBucket(e.t) });
+    }
+    return out;
+  };
+  const A = evs(gA), B = evs(gB);
+  const near = (x, list, sameCoin, w) => list.some((y) => y.side === x.side && (!sameCoin || y.coin === x.coin) && Math.abs(y.h - x.h) <= w);
+  const share = (X, Y, sameCoin, w) => (X.length ? Math.round((X.filter((x) => near(x, Y, sameCoin, w)).length / X.length) * 1000) / 10 : null);
+  const firstLast = (X) => (X.length ? [Math.min(...X.map((x) => x.h)), Math.max(...X.map((x) => x.h))] : null);
+  const [fa, fb] = [firstLast(A), firstLast(B)];
+  const common = fa && fb ? [Math.max(fa[0], fb[0]), Math.min(fa[1], fb[1])] : null;
+  return {
+    a: nameA, b: nameB, windowH,
+    aEvents: A.length, bEvents: B.length,
+    sameHour: A.filter((x) => near(x, B, true, 0)).length,
+    aWithB: share(A, B, true, windowH), bWithA: share(B, A, true, windowH),
+    aWithBMarketWide: share(A, B, false, windowH), bWithAMarketWide: share(B, A, false, windowH),
+    commonWindow: common && common[1] >= common[0] ? { from: new Date(common[0] * 3600000).toISOString(), to: new Date(common[1] * 3600000).toISOString() } : null,
+    aInCommon: common ? A.filter((x) => x.h >= common[0] && x.h <= common[1]).length : 0,
+    bInCommon: common ? B.filter((x) => x.h >= common[0] && x.h <= common[1]).length : 0,
+  };
 }
 
 // ── The HOLDOUT line (docs/research/holdout-universe-prereg.md) ────────────────────────────────

@@ -61,6 +61,7 @@ import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
 import { rankUniverse, RECORDED_COINS, HOLDOUT_COINS, UNIVERSE_RULES } from "./universe.mjs";
 import { FLOW_COINS, HOLDOUT_AXES, HOLDOUT_SIGNED_OFF, isHoldoutCoin } from "../../app/lib/recordedUniverse.mjs";
+import { REGISTERED_READS, PIPELINE_RULES, pipelineStage, registeredMs } from "../../app/lib/readPipeline.mjs";
 // TWAP planner/status — reuse the exec worker's tested logic (wrangler bundles the
 // cross-dir import, same as backtest.mjs). ONE planner, so start-validation and the
 // cron fire from identical rules.
@@ -4674,7 +4675,7 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "intel" && parts[1] === "axis-backtest" && request.method === "GET") {
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
-      const CACHE = `axisbt:v10:min${min}`; // v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
+      const CACHE = `axisbt:v11:min${min}`; // v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
@@ -4699,12 +4700,17 @@ document.getElementById("btn").addEventListener("click",go);
       };
       // Main card: the twelve, with any holdout coin's basis + CVD left out (never pooled).
       const coinSets = withoutHoldoutFlow(await loadSets(COINS), isHoldoutCoin);
-      const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min });
-      // Holdout line: the signed-off eight on their own, the basis reads only.
+      // Pipeline reads (app/lib/readPipeline.mjs): each gets an out-of-sample grade (`oos`) from its
+      // registration on; the full-history row stays, labelled in-sample.
+      const registered = REGISTERED_READS.map((r) => ({ axis: r.axis, fromMs: registeredMs(r) }));
+      const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min, registered, overlapPairs: [["basis_x_cvd", "rsi_reset_deep"]] });
+      // Holdout line: the signed-off eight on their own — the basis reads (holdout prereg) + every
+      // pipeline read registered with a holdout line (its own registration doc).
       const holdoutSets = await loadSets(HOLDOUT_COINS);
+      const holdoutRegs = registered.filter((x) => REGISTERED_READS.find((r) => r.axis === x.axis)?.holdout);
       const holdout = {
         signedOff: HOLDOUT_SIGNED_OFF, listed: [...HOLDOUT_COINS],
-        ...runHoldoutScorecard(holdoutSets, { horizons: [4, 12, 24], minSamples: min, axes: [...HOLDOUT_AXES] }),
+        ...runHoldoutScorecard(holdoutSets, { horizons: [4, 12, 24], minSamples: min, axes: [...HOLDOUT_AXES, ...holdoutRegs.map((x) => x.axis)], registered: holdoutRegs }),
         note: "Coins the basis read was never looked at on, picked on liquidity only and recorded from the sign-off date. Graded by the same code, never pooled into the main card. Accrues: basis needs 48h of history before it can fire, and the R grade needs hourly prices recorded since the sign-off. See docs/research/holdout-universe-prereg.md.",
       };
       const out = {
@@ -4712,6 +4718,15 @@ document.getElementById("btn").addEventListener("click",go);
         config: { horizonsHours: [4, 12, 24], minSamples: min, coins: coinSets.map((c) => c.coin) },
         ...scorecard,
         holdout,
+        pipeline: {
+          rules: PIPELINE_RULES,
+          reads: REGISTERED_READS.map((reg) => {
+            const main = scorecard.axes.find((a) => a.name === reg.axis);
+            const hold = (holdout.axes || []).find((a) => a.name === reg.axis);
+            return { axis: reg.axis, side: reg.side, registeredAt: reg.registeredAt, doc: reg.doc, ...pipelineStage(reg, main?.oos || null, hold?.oos || null) };
+          }),
+          note: "Stages count out-of-sample events only (after each read's registration). The axis rows above are the whole recorded history = in-sample. docs/research/read-pipeline.md.",
+        },
         note: "Walk-forward event study on self-logged history — forward returns, no lookahead, first/second-half stability. Axes read INSUFFICIENT until the series matures. A read is not an edge until it's PREDICTIVE here. `exit` (on reads a preset trades) grades the read through that preset's own TP/SL/max-hold along the logged candles, one position per market, net of a 3 bps/side taker fee; `exit24h` is the same exit with a 24h hold on the same entry window; `oos` counts only trades entered after 2026-09-25 04:00 UTC. Informational — they do not change the read's verdict. `random` replays every R-graded event at a random hour — same market, same side, same frozen R contract, drawn only from the window the read fired in — 300 seeded runs, pooled and per side; BEATS_RANDOM (≥95% of replays beaten) / LEANS_ABOVE (≥80%) / NOT_DISTINGUISHABLE / BELOW_RANDOM (≤5% — reliably worse than random; not a licence to invert) / TOO_FEW (<5 events), the same ladder as the Lab backtest. It separates 'the signal picked good moments' from 'the window did the work'. `tide` is what a random long vs a random short earned under the same R contract across every recorded market-hour — what a read's side has to beat. (Distinct from each horizon's `drift`, which subtracts the coin's average h-hour move over its whole recorded history, in bps.) Informational — neither changes any verdict.",
       };
       try { await env.LAB_STORE.put(CACHE, JSON.stringify(out), { expirationTtl: 3600 }); } catch { /* best-effort */ }
