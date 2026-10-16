@@ -1,95 +1,113 @@
-# Explorer reads · DRAFT definitions (not registered)
+# Explorer reads · definitions frozen, power-checked, NOT registered yet
 
-**Status: DRAFT, written 2026-10-16. Nothing here is registered, built or graded.** borst weighs in on what each read
-means from the trading side first ("that's my edge in this"). After that, each one becomes a registration under
-`docs/research/read-pipeline.md`, with frozen parameters, a future `registeredAt`, and an entry in `REGISTERED_READS`.
-Until then, editing this page freely is fine.
+**Status (2026-10-16):** borst defined all five and froze them. The count-only power check has run. **None is
+registered.** Each one is registered under `docs/research/read-pipeline.md` only after borst has seen its count and
+signed it off. Registering means a dated registration doc, a future `registeredAt`, an entry in `REGISTERED_READS`,
+and adding it to the scoreboard.
 
-## Which of Ember's ten are new
+The code is `workers/nexus-lab-api/explorerReads.mjs`. It is **not** in the scoreboard's `AXES`, so nothing grades it,
+and a test fails if that changes. The only thing that runs these generators before registration is the count-only
+power check, `tools/explorers/powerCheck.mjs`. It counts how often each rule would have fired and never reads a price
+after an event. `explorerReads.test.mjs` checks each rule on hand-built data and checks no-lookahead on a random tape
+whose future is poisoned.
 
-Five are already on the scoreboard, graded on thousands of events (live grades, 2026-10-16):
+## Already graded (not re-registered)
 
-| Ember's read | Already graded as | Live grade |
+| Ember's read | Graded as | Live grade, 2026-10-16 |
 |---|---|---|
-| Funding extreme fade | `funding_fade` | NOISE, −0.16R over 3,383 events; shorts worse than random (0%) |
+| Funding extreme fade | `funding_fade` | NOISE, −0.16R over 3,383 events; shorts worse than random |
 | Liq cascade fade | `liq_flush` | NOISE, −0.03R over 3,532 events |
-| CVD trend following | the mirror of `cvd_divergence` | NOISE, about 50% vs random on both sides, so the mirror is noise too |
-| RSI mean reversion | `rsi_reset_deep` | PREDICTIVE (in-sample), **registered 2026-10-16** |
-| Basis momentum | the mirror of `basis_extreme` | the fade beats 84% of random longs, so the mirror starts with a weak prior |
+| CVD trend following | the mirror of `cvd_divergence` | NOISE, about 50% vs random on both sides |
+| RSI mean reversion | `rsi_reset_deep` | registered 2026-10-16 (`rsi-reset-deep-prereg.md`) |
+| Basis momentum | the mirror of `basis_extreme` | weak prior: the fade beats 84% of random longs |
 
-Re-registering these adds nothing unless borst means a different rule from the graded one. If so, say how it differs
-and it gets its own name.
+## The five, as borst froze them
 
-The five new ones are drafted below. Every one of them:
-- uses only hourly data we already record (`oi:hist` price, OI and funding; `candle:hist` OHLCV),
-- makes its decision on the bar's close, with no lookahead,
-- fires at most once per coin per episode (a cooldown), so one move isn't counted many times,
-- is graded on entries only, with the R contract (stop 1.2× H4 ATR-14, target 1.5× the stop, 168h). Exits are a
-  later stage.
+All five are graded on entries only, with the R contract (stop 1.2× H4 ATR-14, target 1.5× the stop, 168h). Each
+rule decides on the data up to and including its deciding bar. A candle read's event is stamped at that bar's close.
 
-## 1 · OI divergence reversal (`oi_div_reversal`)
+### 1 · `oi_div_reversal`
+- Fires when the 24h move is extreme, meaning |24h return| is at or above the 90th percentile of |24h return| over
+  the prior 30 days, **and** OI fell at least 3% over the same 24h.
+- It fades the move: a rally on falling OI goes SHORT, a drop on falling OI goes LONG.
+- A move with OI rising against it does not fire. Window 24h, cooldown 24h per coin.
+- A 4h version would be a later registration.
+- *How the code reads it:* 24h returns and OI change come from `oi:hist`, hour against the same hour a day earlier.
+  The percentile is a mid-rank percentile, where tied values count as half below. The rule needs at least 15 of the 30
+  prior days of returns.
 
-**Draft.** Over the last 24h, price moved more than its own usual 24h move (above the 90th percentile of |24h
-return| over the prior 30 days) **while OI fell at least 3%**. That move was positions closing, not new money. Fade it:
-a rally on falling OI goes SHORT (shorts covering), a drop on falling OI goes LONG (longs capitulating). Cooldown 24h.
+### 2 · `vol_breakout`
+- Compression is required: the hourly ATR-24 is in the bottom 20% of its own last 30 days.
+- Breakout: an hourly close above the prior 24h high goes LONG, below the prior 24h low goes SHORT.
+- No volume filter, entry on the close, cooldown 24h. A retest version would be a later registration.
+- *How the code reads it:* compression is measured on the bar **before** the breakout bar, because the breakout bar's
+  own range would inflate the ATR. The ATR is the mean true range over 24 contiguous bars. The percentile is mid-rank:
+  a flat history ranks 0.5, so it counts as neither compressed nor extreme.
 
-**For borst:**
-- Is "divergence" OI falling into the move (above), or OI rising against it?
-- The agent's own OI rule fades in two cases (price up with OI down, price down with OI up) but *follows* in the
-  other two (both moving together), so "the agent's OI rule" isn't a reversal rule as written.
-- Window: 24h, or 4h?
-- How big must the OI drop be?
+### 3 · `session_momentum`
+- NY open drive only, 13:00–15:00 UTC.
+- If the 2h move is larger than the coin's median 2h move over the prior 30 days, take that direction at the 15:00
+  close. One event per coin per day.
+- Not Asia, not London, and no session-range breakout in v1.
+- *How the code reads it:* the move runs from the open of the 13:00 bar to the close of the 14:00 bar.
+- **One open choice:** "the coin's median 2h move" can mean the same 13:00→15:00 window on each of the prior 30 days
+  (`median: "same"`, the default) or every rolling 2h move over those 30 days (`"all"`). The NY open is livelier than
+  an average 2h, so "all" sets a lower bar. Both counts are below.
 
-## 2 · Vol breakout momentum (`vol_breakout`)
+### 4 · `level_reclaim`
+- Uses the prior UTC day's high and low only.
+- Sweep: price trades at least 0.4 × H4 ATR-14 beyond the level.
+- Reclaim: an hourly close back through the level within 6h of the first breach. Entry is on that close.
+- A reclaimed prior-day low goes LONG, a reclaimed prior-day high goes SHORT. One event per level per day.
+- Not the weekly open, 4H swings, VWAP, round numbers, or a retest that holds, in v1.
+- *How the code reads it:*
+  - Only the day's **first** breach of each level is judged.
+  - The ATR is the one known at the bar before the breach.
+  - The 6h window is the breach bar plus the five after it, so a bar that sweeps and closes back counts.
+  - The levels stay those of the day the breach happened, even if the window crosses midnight.
 
-**Draft.** Compression: the coin's hourly ATR-24 is in the bottom 20% of its own last 30 days. Breakout: an hourly
-close above the highest high of the prior 24h goes LONG, or below the lowest low goes SHORT. Cooldown 24h.
+### 5 · `confluence_follow`
+- The full CONFLUENCE rule (funding plus OI, at the brain's default thresholds: funding 0.01%, any OI move), traded the
+  other way. Not funding alone, and not percentile extremes in v1.
+- *How the code reads it:* it follows the brain's OI rule case by case, including that it *follows* when price and OI
+  move together.
+- One difference from live: price and OI change are measured row over row on `oi:hist` (hourly). The brain compares
+  against a snapshot about 5 minutes old, which isn't recorded.
+- **One open choice:** the definition has no cooldown, so every qualifying hour fires and a single funding episode is
+  counted again and again. Both counts are below.
 
-**For borst:**
-- Is "compression" required, or is any 24h breakout enough?
-- Should a breakout need volume above normal?
-- Is a close beyond the range the right trigger, or a retest of it?
+## Power check · 2026-10-16 (counts only)
 
-## 3 · Session momentum (`session_momentum`)
+The window is the last 60 days of recorded history. "Main" means the 11 main-card coins; SUI is now holdout-only.
+"Gradeable today" is the number of events that land on an hour where the scoreboard has a price to grade from (an
+`oi:hist` row).
 
-**Draft.** NY open drive. If the move from 13:00 to 15:00 UTC is larger than the coin's median 2h move over the last 30
-days, take that direction at the 15:00 close. One event per coin per day.
+| Read | Main: fired / gradeable today | Per coin per 60d | Holdout (8): fired | ~100 in 60d? |
+|---|---|---|---|---|
+| oi_div_reversal | 57 / 57 | 8.8 on coins with full OI history | 11 (only ZEC and PUMP have OI history yet) | **Borderline**: about 97 a period once all 11 main coins are recorded and warmed up |
+| vol_breakout | 33 / 22 | 3.0 | 38 | **No**: about a third of the bar |
+| session_momentum (same-window median) | 297 / 201 | 27 | 242 | **Yes** |
+| session_momentum ("all" median) | 348 / 231 | 32 | 275 | Yes |
+| level_reclaim | 108 / 65 | 9.8 | 128 | **Yes, just**, once the main coins' OI gaps are filled |
+| confluence_follow (as written, no cooldown) | 898 / 898 | 82 | 75 | Counts pass, but runs of consecutive hours make the count overstate the evidence |
+| confluence_follow (24h cooldown) | 134 / 134 | 12 | 17 | **Yes** |
 
-**For borst:**
-- Which session: Asia (00–08 UTC), London (07–16) or NY (13–21)? Each one tested is a separate registration and adds
-  to the family. Pick the one you believe in most.
-- Is it the open drive (first 2h), or a continuation after a session high or low breaks?
+What the counts say:
+- **The main card was losing events.** The brain recorded `oi:hist` unconditionally for only 6 coins. ARB stopped on
+  Sept 20 and WLD on Oct 13, DOGE, BNB and LINK only start in late September, and SUI on Oct 4. From this PR the brain
+  records all 12 scorecard coins, so "gradeable" catches up with "fired" from now on. This is a recording-only change.
+- `oi_div_reversal` needs at least 15 days of 24h returns, plus a day. Six of the 8 holdout coins started on Oct 16,
+  so its holdout line can't fire before about Nov 1. At about 9 per coin per 60 days, it reaches 30 holdout events
+  around late November.
 
-## 4 · Level reclaim (`level_reclaim`)
+## Decisions for borst before registering
 
-**Draft.** The level is the prior UTC day's low (and high). If price trades below the prior-day low and an hourly bar
-then *closes* back above it within 6h of the first breach, go LONG at that close. The mirror on the prior-day high
-goes SHORT. One event per level per day.
-
-**For borst (this is the one that needs your read the most):**
-- Which levels: prior-day high/low, weekly open, 4H swing highs and lows, round numbers, or the weekly VWAP the
-  scoreboard already computes?
-- How far past the level must the sweep go (any trade through, or at least x% / x ATR)?
-- How fast must the reclaim come?
-- Is the entry on the reclaim close, or on a retest that holds?
-
-## 5 · Confluence follow (`confluence_follow`)
-
-**Draft.** The brain's own CONFLUENCE rule at its default thresholds (fundingThreshold 0.01%, oiChangeThreshold 0,
-price and OI change measured hour over hour on `oi:hist`), traded the OTHER way: with the crowd, not against it.
-
-The motive: the fade side of the funding read is worse than random on shorts (0% over 2,944 events). A read that is
-reliably worse than random is **not** a licence to invert it. The inverse has its own fees and its own R asymmetry,
-so it has to be graded as its own read. This registration is how that happens properly.
-
-**For borst:**
-- Should it follow the full CONFLUENCE rule, or funding alone?
-- Is the default threshold right, or do you want extremes only (for example funding above its own 90th percentile)?
-
-## Before any of these is registered
-
-1. borst's definitions replace the drafts above.
-2. **A count-only power check:** how often each rule *would have* fired over recorded history. Counts only, never
-   outcomes. A rule that can't reach about 100 events in 60 days is pooled across more markets or dropped.
-3. A registration doc, a future-dated `registeredAt`, and an entry in `REGISTERED_READS`, all in the same PR. The
-   read's generator code goes in that PR too, and its first graded numbers are in-sample by construction.
+1. **vol_breakout fails the check.** It reaches about a third of the bar. Drop it, or redefine it (for example a
+   looser squeeze or a shorter range). A redefinition is a new definition, counted again.
+2. **oi_div_reversal is borderline** at about 97 per 60 days, projected. Register it now and accept roughly 60–90 days
+   to its first verdict, or wait two weeks for the recording to catch up and re-count.
+3. **session_momentum:** same-window median (recommended, because it compares the NY open with itself) or every-2h
+   median.
+4. **confluence_follow:** a 24h cooldown (recommended, so one funding episode isn't counted as many events), or as
+   written.
+5. **level_reclaim passes**, and it was your first priority. It's ready to register once you sign it off.

@@ -918,7 +918,11 @@ export function runScorecard(coinSets, cfg = {}) {
     // A pipeline read (app/lib/readPipeline.mjs): the SAME grade on events after its registration
     // only. The row above is the whole recorded history = in-sample; only `oos` counts for a stage.
     const reg = (cfg.registered || []).find((x) => x.axis === a.name);
-    if (reg) row.oos = { since: new Date(reg.fromMs).toISOString(), ...registeredGrade(coinSets, a.gen, reg.fromMs, { ...cfg, randomPools, gradedExit: gx === false ? false : reg.fromMs }) };
+    // `oosExclude` (main card: the holdout coins) keeps a coin that is on BOTH lists — SUI, on the
+    // main card for its older reads — out of the main card's out-of-sample grade, so no event is
+    // counted on both lines. The in-sample row above is unchanged.
+    const oosSets = cfg.oosExclude ? coinSets.filter((cs) => !cfg.oosExclude(cs.coin)) : coinSets;
+    if (reg) row.oos = { since: new Date(reg.fromMs).toISOString(), ...(cfg.oosExclude ? { excludedCoins: coinSets.filter((cs) => cfg.oosExclude(cs.coin)).map((cs) => cs.coin) } : {}), ...registeredGrade(oosSets, a.gen, reg.fromMs, { ...cfg, randomPools, gradedExit: gx === false ? false : reg.fromMs }) };
     return row;
   });
   // rank: PREDICTIVE > PROMISING > NOISE > INSUFFICIENT, then by the HEADLINE metric —

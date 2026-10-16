@@ -595,6 +595,17 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   `docs/research/explorer-drafts.md`, NOT registered until borst defines them + a count-only power check. ⚠️ The
   brain's OI rule is not a pure reversal: it fades price/OI disagreeing and FOLLOWS them agreeing. Tests
   `readPipeline.test.mjs`, `axisbt.pipeline.test.mjs`.
+  **Overlap read (live, Oct 16): basis_x_cvd × rsi_reset_deep = two bets** — 0 same-hour, 22%/15% same coin ±24h ≈ chance.
+  **Explorers (Oct 16): borst FROZE all five definitions** → code `workers/nexus-lab-api/explorerReads.mjs` (NOT in AXES; a
+  test fails if one is graded before registration) + COUNT-ONLY power check `tools/explorers/powerCheck.mjs` (reads the
+  public `/agent/oi-history` + `/agent/candle-history`; counts only, a test pins its output fields). 60d counts (main 11):
+  level_reclaim 108 ✓ · session_momentum 297 ✓ · confluence_follow 134 with a 24h cooldown ✓ (898 without — clustered) ·
+  oi_div_reversal ~97 projected (borderline) · vol_breakout 33 ✗. Results + open choices in `explorer-drafts.md`; NONE
+  registered until borst signs each count. ⚠️ Percentiles are MID-RANK (ties half) — a flat history isn't "compressed".
+  ⚠️ **SUI is on the main card AND the holdout:** the main card's `oos` grade now runs with `oosExclude: isHoldoutCoin`
+  (`excludedCoins` in the block, cache `axisbt:v12`) so no event counts on both lines. ⚠️ **oi:hist coverage:** the
+  brain recorded only 6 coins unconditionally (ARB stopped Sep 20, WLD Oct 13, DOGE/BNB/LINK from late Sep, SUI Oct 4);
+  since 2026-10-16 it records all 12 `HARNESS_SYMBOLS` (recording only) — the scoreboard prices every event off it.
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
