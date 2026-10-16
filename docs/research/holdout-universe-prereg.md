@@ -148,3 +148,21 @@ Orderly floors are day-to-day noise at this size.
 
 Scoreboard check at the same time: the `/intel/axis-backtest` `holdout` block lists all eight. basis_x_cvd and
 basis_extreme are still INSUFFICIENT (0 events), as expected inside the first 48 hours.
+
+### Exception rule · dated 2026-10-16 (written 21:21 UTC, before any holdout event was graded)
+
+borst signed this off on 2026-10-16. At the time of writing, basis_x_cvd and basis_extreme had 0 holdout events, and every
+registered read's holdout line starts counting at 2026-10-17T00:00Z. So no holdout outcome existed when this rule was
+written.
+
+- **Liquidity never removes a coin.** The floors decided who joined, on the second read. Later liquidity reads are
+  reported and nothing more. ONDO stays on the list after the third read put it 3% under the Orderly volume floor.
+- **A coin stops counting only when its data stops being valid:**
+  - its Orderly mark sits more than 2% from its OKX perp price, so they are different assets;
+  - OKX delists its spot or its USDT perp, so the basis or CVD rows stop;
+  - Orderly delists its perp, so its hourly prices (`oi:hist`) and candles stop.
+- **A break stops only the reads that use that data.** For example, an OKX spot delisting stops the basis reads. The
+  candle and OI reads go on, because their inputs are still real.
+- **Graded events stay graded.** Events up to the break keep counting. Nothing is regraded or removed afterwards.
+- **The rule is applied without looking at outcomes.** It is decided on the data check alone, without reading that
+  coin's R, hit rate or random-baseline result. Any change to this rule is a new dated page.
