@@ -59,6 +59,7 @@ import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFla
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
+import { rankUniverse, RECORDED_COINS, UNIVERSE_RULES } from "./universe.mjs";
 // TWAP planner/status — reuse the exec worker's tested logic (wrangler bundles the
 // cross-dir import, same as backtest.mjs). ONE planner, so start-validation and the
 // cron fire from identical rules.
@@ -653,8 +654,7 @@ export default {
     // Same accumulate-hourly pattern; seeds both for backtesting. Fail-soft.
     ctx.waitUntil((async () => {
       try {
-        const coins = ["BTC", "ETH", "SOL", "BNB", "XRP", "LINK", "DOGE", "AVAX", "HYPE"];
-        const n = await snapshotFlow(env, coins);
+        const n = await snapshotFlow(env, [...RECORDED_COINS]); // universe.mjs: changes only by a reviewed edit
         console.log(`[flow] snapshotted ${n} coins' basis/cvd`);
       } catch (e) { console.error("[flow] snapshot failed:", String(e)); }
     })());
@@ -4639,6 +4639,29 @@ document.getElementById("btn").addEventListener("click",go);
       const out = { coin, ...computeBeta(cs, bs) };
       try { await env.LAB_STORE.put(CACHE, JSON.stringify(out), { expirationTtl: 1800 }); } catch { /* best-effort */ }
       return json(out, request);
+    }
+
+    // ── GET /intel/universe — which markets could be recorded (read-only report) ──
+    // Ranks every Orderly perp that OKX also lists as spot + USDT perp by liquidity on all three legs
+    // (universe.mjs). It changes nothing: the recorder reads RECORDED_COINS, edited by review only.
+    // Three upstream reads, cached 30 min; a failed leg is named and nothing is cached.
+    if (parts[0] === "intel" && parts[1] === "universe" && !parts[2] && request.method === "GET") {
+      const CACHE = "universe:candidates:v1";
+      const cached = await env.LAB_STORE.get(CACHE);
+      if (cached) return json(JSON.parse(cached), request);
+      const [ord, spot, swap] = await Promise.all([
+        fetchAllFuturesDetailed(),
+        okxJson("https://www.okx.com/api/v5/market/tickers?instType=SPOT"),
+        okxJson("https://www.okx.com/api/v5/market/tickers?instType=SWAP"),
+      ]);
+      const failed = [];
+      if (!ord.rows.length) failed.push(`orderly: ${ord.why || "empty"}`);
+      if (spot.code !== "0") failed.push(`okx spot: ${spot.msg || spot.code}`);
+      if (swap.code !== "0") failed.push(`okx perp: ${swap.msg || swap.code}`);
+      if (failed.length) return json({ ok: false, error: failed.join("; ") }, request, 503);
+      const report = { ok: true, asOf: new Date().toISOString(), recorded: [...RECORDED_COINS], ...rankUniverse({ orderlyRows: ord.rows, okxSpot: spot.data, okxSwap: swap.data, rules: UNIVERSE_RULES }) };
+      await env.LAB_STORE.put(CACHE, JSON.stringify(report), { expirationTtl: 1800 });
+      return json(report, request);
     }
 
     // ── GET /intel/axis-backtest — the AXIS SCORECARD (walk-forward event study) ──

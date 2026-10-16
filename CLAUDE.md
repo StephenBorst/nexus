@@ -536,6 +536,9 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   INSUFFICIENT (24h arm 4 paper trades) → keep 12h. All staged switches off, no live money, x402 + house unchanged.
   Paper parity CLEAN on all three wallets. The finding: the ENTRIES beat random; the preset's TP 2.5/SL 2 exits give it
   back. DEFAULT_CONFIG (new agents) still spreads the basis-cvd-stack preset — the page didn't touch it (borst's call).
+  **Oct 16 (borst):** DEFAULT_CONFIG KEPT on Basis × CVD (PAPER), revisit after graded-exit oos numbers. Lab clean-preset
+  check: per-market +$50.10 · 63.2% · 19T; as traded +$14.07 · 13T (14 signals missed); vs random 61.3% (luck);
+  walk-forward NOT ROBUST (42% folds, as traded −$9.37). Recorded in oct15-results.md.
 - **🧪 GRADED-EXIT VARIANT (borst go, 2026-10-15) = `docs/research/graded-exit-prereg.md` (bar fixed before the data).**
   Basis × CVD's entries beat random on the R contract, but the preset's TP 2.5/SL 2 exit lost out of sample. So the agent
   can now trade THE graded exit: config `exitContract: "R_CONTRACT"` → stop 1.2× H4 ATR-14 (`h4Atr14Frac`, the R grade's
@@ -557,6 +560,13 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   oct15-results.md). Paper control for it = the nine-market 24h arm `0x325D…95DE` (same markets + entries, preset exit);
   the 12h preset exit is still graded on the scoreboard's `exit` line. Tests: `gradedExit.test.mjs`,
   `axisbt.graded.test.mjs` (incl. exec↔grader level parity on the same candles).
+- **🌐 RECORDED UNIVERSE (2026-10-16, borst: widen it; list + liquidity filter to him first; record-and-grade ONLY).**
+  The basis × CVD read was picked on 9 coins (`RECORDED_COINS` in `workers/nexus-lab-api/universe.mjs`, the list the
+  hourly `snapshotFlow` reads). `GET /intel/universe` = read-only report: every Orderly perp OKX also lists as spot + USDT
+  perp, ranked by its WEAKEST leg vs `UNIVERSE_RULES` (OKX spot ≥$5M, OKX perp ≥$20M, Orderly vol ≥$1M, Orderly OI ≥$0.5M,
+  24h USD); names that differ between venues = `unmatched`, never guessed. It changes nothing. New coins join only after
+  borst signs the list, as a HOLDOUT graded separately; no agent/wallet config changes (the graded-exit wallet stays on
+  its 9).
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
