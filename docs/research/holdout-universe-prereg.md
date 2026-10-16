@@ -91,3 +91,29 @@ roughly four to six weeks after the first 48 hours. The coins differ, so this is
 ## Results
 
 (Append below. Never edit above this line.)
+
+### Second read · 2026-10-16T05:06Z (`GET /intel/universe` v2, signed-off floors + price check)
+
+PR #119 was merged at 01:45 UTC, before this read, so recording began then. This read came about 4 hours after the
+first, not the planned 12, so the two 24h windows overlap more than intended. A third read at least 12 hours after the
+first is scheduled. All eight pass. `holdoutFailing` is empty, and no coin's Orderly mark is more than 0.15% from its
+OKX perp price.
+
+| Coin | OKX spot | OKX perp | Orderly vol | Orderly OI | Price gap |
+|---|---|---|---|---|---|
+| ZEC | $75.4M | $1,378.2M | $284,705 | $318,397 | 0.13% |
+| NEAR | $38.1M | $345.6M | $344,412 | $33,490 | 0.15% |
+| SUI | $17.0M | $109.3M | $51,643 | $45,495 | 0.11% |
+| PUMP | $7.2M | $148.2M | $261,472 | $58,312 | 0.11% |
+| ENA | $7.1M | $63.2M | $68,187 | $52,539 | 0.11% |
+| ONDO | $7.8M | $38.9M | $43,170 | $46,831 | 0.11% |
+| INJ | $7.1M | $75.7M | $1,435,797 | $46,391 | 0.14% |
+| ZRO | $7.0M | $32.1M | $61,227 | $34,191 | 0.10% |
+
+Closest to a floor: ONDO's Orderly volume ($43k against $40k), NEAR's open interest ($33k against $30k) and ZRO's open
+interest ($34k against $30k). BNB, one of the original nine, read $39.9k Orderly volume, just under the floor. The
+floors only decide who joins the holdout, so this changes nothing for the nine.
+
+Recording check at the same time: `basis:hist` + `cvd:hist` hold 3 hourly rows each for ZEC, NEAR, SUI and ZRO. The
+`/intel/axis-backtest` `holdout` block lists all eight, and both reads are INSUFFICIENT (0 events), as expected before
+48 hours of history.
