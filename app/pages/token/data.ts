@@ -12,6 +12,7 @@
 // Everything is fail-soft: a dead source renders its section empty, never blocks the page.
 
 import { pairsForAddress, isRealMarket as isRealMarketRule, safeLogoUrl } from "@/lib/spotDiscovery.mjs";
+import { sendSigned, type LabWallet } from "@/hooks/useLabAuth";
 
 const DS_BASE = "https://api.dexscreener.com/latest/dex";
 const GT_BASE = "https://api.geckoterminal.com/api/v2";
@@ -469,15 +470,15 @@ export async function fetchTakes(chain: string, ca: string): Promise<Take[]> {
   const j = (await getJson(`${AGENT_API}/takes/${encodeURIComponent(chain)}/${encodeURIComponent(ca)}`)) as { takes?: Take[] } | null;
   return Array.isArray(j?.takes) ? j!.takes! : [];
 }
+// Posting and deleting a take are signed with the wallet's Lab signature (sendSigned).
 export async function postTake(
   chain: string, ca: string,
   body: { wallet: string; direction: "BULL" | "BEAR"; text: string; target?: number | null; sym?: string },
+  labWallet: LabWallet,
 ): Promise<Take | null> {
   try {
-    const r = await fetch(`${AGENT_API}/takes/${encodeURIComponent(chain)}/${encodeURIComponent(ca)}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    });
-    if (!r.ok) return null;
+    const r = await sendSigned(`${AGENT_API}/takes/${encodeURIComponent(chain)}/${encodeURIComponent(ca)}`, "POST", body.wallet, labWallet, body);
+    if (!r?.ok) return null;
     const j = (await r.json()) as { take?: Take };
     return j?.take ?? null;
   } catch { return null; }
@@ -504,12 +505,10 @@ export async function fetchCallerMerit(): Promise<Record<string, CallerMerit>> {
   return map;
 }
 
-export async function deleteTake(chain: string, ca: string, id: string, wallet: string): Promise<boolean> {
+export async function deleteTake(chain: string, ca: string, id: string, wallet: string, labWallet: LabWallet): Promise<boolean> {
   try {
-    const r = await fetch(`${AGENT_API}/takes/${encodeURIComponent(chain)}/${encodeURIComponent(ca)}/${encodeURIComponent(id)}`, {
-      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wallet }),
-    });
-    return r.ok;
+    const r = await sendSigned(`${AGENT_API}/takes/${encodeURIComponent(chain)}/${encodeURIComponent(ca)}/${encodeURIComponent(id)}`, "DELETE", wallet, labWallet, { wallet });
+    return !!r?.ok;
   } catch { return false; }
 }
 

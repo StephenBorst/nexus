@@ -102,6 +102,28 @@ export function useLabAuthState(addr?: string | null): LabAuthState {
 }
 
 /**
+ * A social write (comment, reaction, take, follow, notification) as `addr`, signed with its Lab
+ * signature: the server refuses these without proof of the wallet since 2026-10-16
+ * (workers/nexus-lab-api/socialAuth.mjs). Signs if needed (the user just pressed something).
+ * null = no signature (declined, no wallet) or no network; a 401 forgets the refused signature.
+ */
+export async function sendSigned(
+  url: string,
+  method: "POST" | "PUT" | "DELETE",
+  addr: string,
+  wallet: LabWallet,
+  body: Record<string, unknown>,
+): Promise<Response | null> {
+  const labAuth = await getLabAuth(addr, wallet, "explicit", { fallbackSigner: addr });
+  if (!labAuth) return null;
+  const r = await fetch(url, {
+    method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, labAuth }),
+  }).catch(() => null);
+  if (r?.status === 401) clearLabAuth(addr);
+  return r;
+}
+
+/**
  * Add one call to a wallet's Lab from outside the Lab (the Feed / trader-page COPY modals).
  * Signs if needed (the user just pressed Save), reads the FULL record, appends, writes back.
  * If the read fails nothing is written: a record we couldn't read must not be replaced by one

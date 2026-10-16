@@ -84,6 +84,7 @@ import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
 import { handleFeed } from "./routes-feed.mjs";
+import { handleSocial } from "./routes-social.mjs";
 import { handleProfile, handleLab } from "./routes-lab.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
@@ -1199,44 +1200,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       catch (e) { return json({ error: String(e) }, request, 500); }
     }
 
-    // ── Ph24: /follows/:wallet → follow graph ──────────────
-    if (parts[0] === "follows" && parts[1]) {
-      const wallet = normalizeAddress(parts[1]);
-      const followKey = `follows:${wallet}`;
-      if (request.method === "GET") {
-        const raw = await env.LAB_STORE.get(followKey);
-        return json({ following: raw ? JSON.parse(raw) : [] }, request);
-      }
-      if (request.method === "PUT") {
-        let body;
-        try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        if (!Array.isArray(body.following)) return json({ error: "expected { following: [] }" }, request, 400);
-        const newFollowing = body.following.map((a) => normalizeAddress(a)).slice(0, 500);
-
-        // Detect newly followed wallets to trigger notifications
-        const oldRaw = await env.LAB_STORE.get(followKey);
-        const oldSet = new Set(oldRaw ? JSON.parse(oldRaw) : []);
-        const newlyAdded = newFollowing.filter((a) => !oldSet.has(a));
-
-        await env.LAB_STORE.put(followKey, JSON.stringify(newFollowing));
-
-        // Notify each newly followed wallet
-        const followerShort = `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
-        await Promise.all(
-          newlyAdded.map((followedWallet) =>
-            appendNotification(env, followedWallet, {
-              id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-              type: "follow",
-              message: `${followerShort} started following you`,
-              fromWallet: wallet,
-              createdAt: Date.now(),
-            })
-          )
-        );
-
-        return json({ ok: true }, request);
-      }
-      return json({ error: "method not allowed" }, request, 405);
+    // ── /notifications/:wallet + /follows/:wallet → routes-social.mjs (owner-signed writes) ─
+    {
+      const socialRes = await handleSocial(parts, request, env);
+      if (socialRes) return socialRes;
     }
 
     // ── /verify/:wallet/:id → re-grade one public call with the real grader (routes-verify.mjs) ─
@@ -1509,43 +1476,6 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       const feedRes = await handleFeed(parts, request, env);
       if (feedRes) return feedRes;
     }
-    if (parts[0] === "notifications" && parts[1]) {
-      const wallet = normalizeAddress(parts[1]);
-      const notifKey = `notif:${wallet}`;
-
-      // GET /notifications/:wallet
-      if (request.method === "GET" && parts.length === 2) {
-        const raw = await env.LAB_STORE.get(notifKey);
-        return json(raw ? JSON.parse(raw) : [], request);
-      }
-
-      // (No public POST: notifications are appended server-side via appendNotification(). The old
-      // "internal" POST was open to anyone and relayed its text through the Telegram bot to any
-      // linked chat. No client ever called it. Removed 2026-09-27.)
-
-      // PUT /notifications/:wallet/read — mark all read
-      if (request.method === "PUT" && parts.length === 3 && parts[2] === "read") {
-        const raw = await env.LAB_STORE.get(notifKey);
-        if (!raw) return json({ ok: true }, request);
-        const now = Date.now();
-        const list = JSON.parse(raw).map((n) => n.readAt ? n : { ...n, readAt: now });
-        await env.LAB_STORE.put(notifKey, JSON.stringify(list));
-        return json({ ok: true }, request);
-      }
-
-      // DELETE /notifications/:wallet/:id
-      if (request.method === "DELETE" && parts.length === 3) {
-        const id = parts[2];
-        const raw = await env.LAB_STORE.get(notifKey);
-        if (!raw) return json({ ok: true }, request);
-        const list = JSON.parse(raw).filter((n) => n.id !== id);
-        await env.LAB_STORE.put(notifKey, JSON.stringify(list));
-        return json({ ok: true }, request);
-      }
-
-      return json({ error: "method not allowed" }, request, 405);
-    }
-
     // ⚠️ REMOVED: a SECOND, unreachable copy of /comments/:id and /reactions/:id lived
     // here. The blocks above match first and return, so ~85 lines never executed. The
     // dead pair had diverged and was arguably the better implementation (randomUUID ids,

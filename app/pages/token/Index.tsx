@@ -36,6 +36,7 @@ import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // signer (provider.signTransaction/sendTransaction). Safe outside the provider (useContext default).
 import { useWalletConnectorPrivy } from "@orderly.network/wallet-connector-privy";
 import { useEscapeKey } from "@/utils/a11y";
+import { useLabWallet } from "@/hooks/useLabAuth";
 import { C, SIGNAL } from "@/config/theme";
 import { Chevron, Pill, Stat, Tabs } from "@/components/ui";
 
@@ -1143,6 +1144,8 @@ export default function TokenTerminal() {
     try { navigator.clipboard.writeText(link); setShareCopied(true); setTimeout(() => setShareCopied(false), 1600); } catch { /* clipboard blocked */ }
   }, [pair]);
 
+  // Takes are signed with the wallet's Lab signature (one a day, shared with the Lab).
+  const labWallet = useLabWallet();
   // Post a take → optimistic prepend, reconcile from the server's stamped row (id + pfp/name).
   const submitTake = useCallback(async () => {
     if (!pair?.baseAddress || !wallet || takeBusy) return;
@@ -1152,16 +1155,16 @@ export default function TokenTerminal() {
     const target = Number.isFinite(targetNum) && targetNum > 0 ? targetNum : null;
     setTakeBusy(true);
     try {
-      const saved = await postTake(pair.chainId, pair.baseAddress, { wallet, direction: takeDir, text, target, sym: pair.baseSymbol });
+      const saved = await postTake(pair.chainId, pair.baseAddress, { wallet, direction: takeDir, text, target, sym: pair.baseSymbol }, labWallet);
       if (saved) { setTakes((ts) => [saved, ...ts]); setTakeText(""); setTakeTarget(""); }
     } finally { setTakeBusy(false); }
-  }, [pair, wallet, takeDir, takeText, takeTarget, takeBusy]);
+  }, [pair, wallet, labWallet, takeDir, takeText, takeTarget, takeBusy]);
 
   const removeTake = useCallback(async (id: string) => {
     if (!pair?.baseAddress || !wallet) return;
-    const ok = await deleteTake(pair.chainId, pair.baseAddress, id, wallet);
+    const ok = await deleteTake(pair.chainId, pair.baseAddress, id, wallet, labWallet);
     if (ok) setTakes((ts) => ts.filter((t) => t.id !== id));
-  }, [pair, wallet]);
+  }, [pair, wallet, labWallet]);
 
   // ── Solana in-app BUY handlers (Jupiter, wSOL → token) — plan validates + guards; execute re-fetches
   // fresh bytes, re-guards, simulates, then signs via the Privy Solana provider. Fail-soft → deep-link. ──
@@ -2055,7 +2058,7 @@ export default function TokenTerminal() {
                         </div>
                         <div style={{ fontFamily: UI, fontSize: 13, color: BRIGHT, lineHeight: 1.55, wordBreak: "break-word" }}>{tk.text}</div>
                         {tk.target ? <div style={{ fontFamily: MONO, fontSize: 10, color: MUT, marginTop: 6 }}>target {fmtPrice(tk.target)}</div> : null}
-                        <SocialBar autoload thesisId={tk.id} walletAddress={wallet} authorWallet={tk.wallet} symbol={pair.baseSymbol} direction={bull ? "LONG" : "SHORT"} />
+                        <SocialBar autoload thesisId={tk.id} walletAddress={wallet} take={{ chain: pair.chainId, ca: pair.baseAddress }} />
                       </div>
                     );
                   })}
