@@ -79,3 +79,15 @@ test("overlap within a window: same coin + same side within ±24h counts, anothe
   assert.equal(o.aWithB, 100); // each event matches itself
   assert.ok(o.aWithBMarketWide >= o.aWithB);
 });
+
+test("a coin on both lists is graded out of sample on the holdout line only, never twice", () => {
+  const sets = [coinSet("BTC"), coinSet("SUI", 2400, 7)];
+  const isHold = (c) => c === "SUI";
+  const out = runScorecard(sets, { horizons: [4], minSamples: 5, registered: [{ axis: "rsi_reset_deep", fromMs: CUT }], oosExclude: isHold });
+  const row = out.axes.find((a) => a.name === "rsi_reset_deep");
+  const btcOnly = runScorecard([coinSet("BTC")], { horizons: [4], minSamples: 5, registered: [{ axis: "rsi_reset_deep", fromMs: CUT }] })
+    .axes.find((a) => a.name === "rsi_reset_deep");
+  assert.deepEqual(row.oos.excludedCoins, ["SUI"]);
+  assert.equal(row.oos.sides.LONG.events, btcOnly.oos.sides.LONG.events, "SUI's events are not on the main card's oos grade");
+  assert.ok(row.sides.LONG.events > btcOnly.sides.LONG.events, "the in-sample row is unchanged (SUI still in it)");
+});

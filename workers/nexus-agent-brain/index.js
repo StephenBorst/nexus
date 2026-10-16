@@ -61,6 +61,11 @@ export default {
       // scoreboard's separate holdout line can grade the basis read on them. RECORDING ONLY — no
       // signal path reads these lists; nothing trades them unless a user picks one in the Lab.
       await recordOiForSymbols(HOLDOUT_PERPS, env);
+      // The rest of the scorecard universe (2026-10-16). The scoreboard prices every graded event off
+      // oi:hist, and only the six core markets were recorded unconditionally: DOGE/AVAX/HYPE/ARB/WLD/SUI
+      // had history only while someone watchlisted them (ARB stopped Sept 20, WLD Oct 13, SUI began
+      // Oct 4), so events there went ungraded. RECORDING ONLY — same rows, nothing reads them to trade.
+      await recordOiForSymbols(HARNESS_SYMBOLS.filter((s) => !OI_CORE_SYMBOLS.includes(s)), env);
       // Real OHLC+volume candles (from Orderly's own tv/history) — the SAME market-
       // data-not-per-user rationale as OI above, so it matures with zero active
       // agents. Unlocks true VWAP/ATR + rs_rank quartiles for the harness and the

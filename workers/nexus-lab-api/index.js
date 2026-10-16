@@ -4577,7 +4577,7 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "intel" && parts[1] === "axis-backtest" && request.method === "GET") {
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
-      const CACHE = `axisbt:v11:min${min}`; // v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
+      const CACHE = `axisbt:v12:min${min}`; // v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
@@ -4605,7 +4605,7 @@ document.getElementById("btn").addEventListener("click",go);
       // Pipeline reads (app/lib/readPipeline.mjs): each gets an out-of-sample grade (`oos`) from its
       // registration on; the full-history row stays, labelled in-sample.
       const registered = REGISTERED_READS.map((r) => ({ axis: r.axis, fromMs: registeredMs(r) }));
-      const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min, registered, overlapPairs: [["basis_x_cvd", "rsi_reset_deep"]] });
+      const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min, registered, oosExclude: isHoldoutCoin, overlapPairs: [["basis_x_cvd", "rsi_reset_deep"]] });
       // Holdout line: the signed-off eight on their own — the basis reads (holdout prereg) + every
       // pipeline read registered with a holdout line (its own registration doc).
       const holdoutSets = await loadSets(HOLDOUT_COINS);

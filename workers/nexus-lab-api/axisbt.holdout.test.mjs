@@ -62,6 +62,8 @@ test("the route wires both: main card stripped, holdout loaded from HOLDOUT_COIN
   assert.match(s, /axes: \[\.\.\.HOLDOUT_AXES, \.\.\.holdoutRegs\.map\(\(x\) => x\.axis\)\]/);
   assert.match(s, /"WLD"\]\.filter\(\(c\) => !isHoldoutCoin\(c\)\);\n\s+const symbols = COINS/);
   assert.match(s, /snapshotFlow\(env, \[\.\.\.FLOW_COINS\]\)/);
+  // pipeline reads: the main card's out-of-sample grade leaves holdout coins out (SUI is on both lists)
+  assert.match(s, /registered, oosExclude: isHoldoutCoin/);
 });
 
 test("never sold: the staged basis feed leaves every holdout coin out", () => {
@@ -74,6 +76,8 @@ test("the brain records price/OI + candles for the holdout, and nothing in its s
   assert.match(b, /await recordOiForSymbols\(HOLDOUT_PERPS, env\);/);
   assert.match(b, /recordCandlesForSymbols\(\[\.\.\.HARNESS_SYMBOLS, \.\.\.HOLDOUT_PERPS/);
   assert.equal((b.match(/HOLDOUT_PERPS/g) || []).length, 3, "the import + the two recorders, nothing else");
+  // the whole scorecard universe gets the price spine the grader needs, not just the six core markets
+  assert.match(b, /await recordOiForSymbols\(HARNESS_SYMBOLS\.filter\(\(s\) => !OI_CORE_SYMBOLS\.includes\(s\)\), env\);/);
 });
 
 // 1s per call, every call counted one after another (the two tickers really go out together):
