@@ -787,6 +787,18 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   public view; the FIRST signed save folds in the server's full record via `labMerge.mjs`, so a public view can never
   overwrite private calls; this session's deletes are tombstoned); `appendToLab` (copy modals: full read or NOTHING is
   written). Not the 'nexus-trading-key-v1' sig (that seeds agent keys). A new writer of `lab:`/`profile:` MUST sign.
+  **Social writes are owner-signed too (2026-10-16).** Comments (post/delete), reactions, takes (post/delete), the
+  follow list (`PUT /follows/:w`) and the notification list (`PUT /notifications/:w/read`, `DELETE
+  /notifications/:w/:id`) all took the acting wallet from the body or URL with NO proof. Now each needs the same
+  `labAuth` in the body (`workers/nexus-lab-api/socialAuth.mjs provenWallet`, 401 `sign_to_save` + `reason`, checked
+  before any write or notification); notifications + follows moved to `routes-social.mjs`. Reads stay public
+  (`GET /notifications/:w` too: a privacy question, not this fix). Comment/reaction notifications name the author
+  the server FINDS (`verifiedAuthor`: a public, non-copy call in `lab:{authorWallet}`, or a take in
+  `takes:{chain}:{ca}` via body `take`), and the market/side from that stored row, never from the body (a caller
+  could aim "your BTC LONG call" at any wallet). Client: `sendSigned` (useLabAuth.ts, "explicit"; 401 clears the
+  cached sig) in useComments / SocialBar (`take` prop on the token page) / Feed + trader follow (reverts on failure)
+  / token takes. Tests `socialAuth.test.mjs` (real routes, viem + ed25519 sigs). ⚠️ Bankr agents that comment or
+  react need the skill's labAuth guide (fork branch `nexus-lab-signature`).
 - A human thesis = a **call**. Outcomes are graded OBJECTIVELY from PUBLIC price (Orderly `GET /tv/history`,
   1h OHLC, first-touch TP1-vs-SL; same-candle = LOSS conservative) — NOT self-reported. So `actualPnl`/status
   the user types is ignored for ranking. **A WIN pays the call's GEOMETRIC R (`callR`, from entry/stop/TP1), never

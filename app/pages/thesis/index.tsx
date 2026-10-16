@@ -563,8 +563,6 @@ export default function ThesisPage() {
             thesisId={id!}
             walletAddress={myWallet}
             authorWallet={thesis.wallet}
-            symbol={thesis.symbol}
-            direction={thesis.direction}
             autoload
             defaultOpen
           />

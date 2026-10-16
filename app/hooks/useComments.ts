@@ -1,3 +1,5 @@
+import { sendSigned, type LabWallet } from "@/hooks/useLabAuth";
+
 const API_BASE = "https://og.nexustradinglabs.com";
 
 export interface Comment {
@@ -19,45 +21,39 @@ export async function fetchReactions(thesisId: string): Promise<Record<string, s
   return r.json() as Promise<Record<string, string[]>>;
 }
 
+// Where the server looks up the author to notify: the call's author wallet, or the take's token.
+// The server reads the author, market and side from that stored call or take, not from here.
+export type AuthorRef = { authorWallet?: string; take?: { chain: string; ca: string } };
+
+// Every write below is signed with the wallet's Lab signature (sendSigned); without it nothing is sent.
 export async function addComment(
   thesisId: string,
   wallet: string,
+  labWallet: LabWallet,
   text: string,
-  // Ride-along call context so the worker can notify the call's author.
-  ctx?: { authorWallet?: string; symbol?: string; direction?: string },
+  ref?: AuthorRef,
 ): Promise<void> {
-  const r = await fetch(`${API_BASE}/comments/${thesisId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ wallet, text, ...(ctx ?? {}) }),
-  });
-  if (!r.ok) throw new Error(`addComment: ${r.status}`);
+  const r = await sendSigned(`${API_BASE}/comments/${thesisId}`, "POST", wallet, labWallet, { wallet, text, ...(ref ?? {}) });
+  if (!r?.ok) throw new Error(`addComment: ${r?.status ?? "not sent"}`);
 }
 
 export async function deleteComment(
   thesisId: string,
   commentId: string,
   wallet: string,
+  labWallet: LabWallet,
 ): Promise<void> {
-  const r = await fetch(`${API_BASE}/comments/${thesisId}/${commentId}`, {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ wallet }),
-  });
-  if (!r.ok) throw new Error(`deleteComment: ${r.status}`);
+  const r = await sendSigned(`${API_BASE}/comments/${thesisId}/${commentId}`, "DELETE", wallet, labWallet, { wallet });
+  if (!r?.ok) throw new Error(`deleteComment: ${r?.status ?? "not sent"}`);
 }
 
 export async function toggleReaction(
   thesisId: string,
   emoji: string,
   wallet: string,
-  // Ride-along call context so the worker can notify the call's author on an ADD.
-  ctx?: { authorWallet?: string; symbol?: string; direction?: string },
+  labWallet: LabWallet,
+  ref?: AuthorRef,
 ): Promise<void> {
-  const r = await fetch(`${API_BASE}/reactions/${thesisId}/${encodeURIComponent(emoji)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ wallet, ...(ctx ?? {}) }),
-  });
-  if (!r.ok) throw new Error(`toggleReaction: ${r.status}`);
+  const r = await sendSigned(`${API_BASE}/reactions/${thesisId}/${encodeURIComponent(emoji)}`, "PUT", wallet, labWallet, { wallet, ...(ref ?? {}) });
+  if (!r?.ok) throw new Error(`toggleReaction: ${r?.status ?? "not sent"}`);
 }

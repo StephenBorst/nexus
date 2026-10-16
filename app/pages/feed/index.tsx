@@ -13,7 +13,7 @@ import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePr
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
 import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
-import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
+import { useLabWallet, appendToLab, sendSigned } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
 import { TreasuryInventory } from "@/components/TreasuryInventory";
@@ -728,8 +728,6 @@ function FeedCard({
         thesisId={thesis.id}
         walletAddress={walletAddress}
         authorWallet={thesis.wallet}
-        symbol={thesis.symbol}
-        direction={thesis.direction}
         initialReactions={social?.reactions}
         initialYouReacted={social?.you}
         initialCommentCount={social?.c ?? 0}
@@ -1370,6 +1368,8 @@ export default function FeedPage() {
       .catch(() => setOnChainCount(null));
   }, []);
 
+  const followWallet = useLabWallet();
+
   // Ph24: load follow graph when wallet connects
   useEffect(() => {
     if (!walletAddress) { setFollowing(new Set()); return; }
@@ -1381,22 +1381,18 @@ export default function FeedPage() {
       .catch(() => {});
   }, [walletAddress]);
 
-  // Ph24: follow/unfollow handler
+  // Ph24: follow/unfollow handler. Signed with the wallet's Lab signature; if it isn't saved
+  // (signature declined, refused, offline) the button goes back to what the server holds.
   async function handleFollowToggle(targetWallet: string) {
     if (!walletAddress) return;
     const lower = targetWallet.toLowerCase();
+    const prev = following;
     const next = new Set(following);
     if (next.has(lower)) next.delete(lower);
     else next.add(lower);
     setFollowing(next);
-    // persist
-    try {
-      await fetch(`${API_BASE}/follows/${walletAddress}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ following: [...next] }),
-      });
-    } catch { /* revert on failure would be nice but not critical */ }
+    const r = await sendSigned(`${API_BASE}/follows/${walletAddress}`, "PUT", walletAddress, followWallet, { following: [...next] });
+    if (!r?.ok) setFollowing(prev);
   }
 
   useEffect(() => {

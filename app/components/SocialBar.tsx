@@ -12,6 +12,7 @@
 // host surface doesn't batch — `autoload`). Open threads poll for live updates.
 import { useState, useEffect, useRef } from "react";
 import { fetchComments, fetchReactions, addComment, deleteComment, toggleReaction, type Comment } from "@/hooks/useComments";
+import { useLabWallet } from "@/hooks/useLabAuth";
 
 const LIKE = "🔥";
 // Curated trading-flavoured palette for the 😀 add-picker (the 🔥 like has its own
@@ -63,15 +64,16 @@ function Action({ icon, label, onClick, active, href }: {
 }
 
 export function SocialBar({
-  thesisId, walletAddress, authorWallet, symbol, direction,
+  thesisId, walletAddress, authorWallet, take,
   initialReactions, initialYouReacted, initialCommentCount = 0,
   shareHref, onCopy, canCopy, onMessage, canMessage, autoload = false, defaultOpen = false,
 }: {
   thesisId: string;
   walletAddress: string | null;
+  // Where the server finds the author to notify: a call's author wallet, or (for a spot take) the
+  // take's token. The server reads author, market and side from storage; nothing else is sent.
   authorWallet?: string;
-  symbol?: string;
-  direction?: string;
+  take?: { chain: string; ca: string };
   initialReactions?: Record<string, number>;
   initialYouReacted?: string[];
   initialCommentCount?: number;
@@ -87,6 +89,8 @@ export function SocialBar({
   // Dedicated pages (a call's permalink) show the thread expanded from the start.
   defaultOpen?: boolean;
 }) {
+  const labWallet = useLabWallet(); // likes, comments and deletes are signed (Lab signature)
+  const ref = take ? { take } : { authorWallet };
   const [reactions, setReactions] = useState<Record<string, number>>(initialReactions ?? {});
   const [youReacted, setYouReacted] = useState<string[]>(initialYouReacted ?? []);
   const [count, setCount] = useState(initialCommentCount);
@@ -152,7 +156,7 @@ export function SocialBar({
     const has = youReacted.includes(emoji);
     setYouReacted((y) => (has ? y.filter((e) => e !== emoji) : [...y, emoji]));       // optimistic
     setReactions((r) => ({ ...r, [emoji]: Math.max(0, (r[emoji] || 0) + (has ? -1 : 1)) }));
-    try { await toggleReaction(thesisId, emoji, walletAddress, { authorWallet, symbol, direction }); }
+    try { await toggleReaction(thesisId, emoji, walletAddress, labWallet, ref); }
     catch {
       setYouReacted((y) => (has ? [...y, emoji] : y.filter((e) => e !== emoji)));
       setReactions((r) => ({ ...r, [emoji]: Math.max(0, (r[emoji] || 0) + (has ? 1 : -1)) }));
@@ -175,7 +179,7 @@ export function SocialBar({
     setCount((n) => n + 1);
     setText(""); setOpen(true); setLoaded(true); setBusy(true);
     try {
-      await addComment(thesisId, walletAddress, bodyText, { authorWallet, symbol, direction });
+      await addComment(thesisId, walletAddress, labWallet, bodyText, ref);
       const c = await fetchComments(thesisId); setComments(c); setCount(c.length);   // reconcile
     } catch {
       setComments((cs) => cs.filter((x) => x.id !== temp.id)); setCount((n) => Math.max(0, n - 1)); setText(bodyText);
@@ -184,7 +188,7 @@ export function SocialBar({
 
   async function remove(id: string) {
     if (!walletAddress) return;
-    try { await deleteComment(thesisId, id, walletAddress); const c = comments.filter((x) => x.id !== id); setComments(c); setCount(c.length); }
+    try { await deleteComment(thesisId, id, walletAddress, labWallet); const c = comments.filter((x) => x.id !== id); setComments(c); setCount(c.length); }
     catch { /* ignore */ }
   }
 

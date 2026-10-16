@@ -12,7 +12,7 @@ import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePr
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
 import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
-import { useLabWallet, appendToLab } from "@/hooks/useLabAuth";
+import { useLabWallet, appendToLab, sendSigned } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
 import { MessageTraderButton } from "@/components/MessageTraderButton";
 import type { ThesisTrade } from "@/pages/lab/types";
@@ -281,8 +281,6 @@ function ThesisRow({
         <SocialBar
           thesisId={thesis.id}
           walletAddress={walletAddress}
-          symbol={thesis.symbol}
-          direction={thesis.direction}
           autoload
         />
       </div>
@@ -487,6 +485,7 @@ export default function TraderPage() {
   // a toggle here never clobbers follows made elsewhere.
   const [followSet, setFollowSet] = useState<Set<string>>(new Set());
   const [followBusy, setFollowBusy] = useState(false);
+  const followWallet = useLabWallet();
   const isFollowing = !!wallet && followSet.has(wallet.toLowerCase());
   useEffect(() => {
     if (!walletAddress) { setFollowSet(new Set()); return; }
@@ -501,13 +500,14 @@ export default function TraderPage() {
     const lw = wallet.toLowerCase();
     const next = new Set(followSet);
     if (next.has(lw)) next.delete(lw); else next.add(lw);
+    const prev = followSet;
     setFollowSet(next); // optimistic
     setFollowBusy(true);
     try {
-      await fetch(`${API_BASE}/follows/${walletAddress}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ following: [...next] }),
-      });
-    } catch { /* keep optimistic; a reload re-syncs from the server */ } finally { setFollowBusy(false); }
+      // Signed with the wallet's Lab signature; not saved (declined, refused, offline) → revert.
+      const r = await sendSigned(`${API_BASE}/follows/${walletAddress}`, "PUT", walletAddress, followWallet, { following: [...next] });
+      if (!r?.ok) setFollowSet(prev);
+    } finally { setFollowBusy(false); }
   }
 
   // Fetch all public theses, filter to this wallet

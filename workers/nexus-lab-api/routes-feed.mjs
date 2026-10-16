@@ -9,10 +9,13 @@
 // line-count win is not worth the risk without a staging environment.
 //
 // ⚠️ Pure move — logic byte-identical to what shipped.
+// (Since 2026-10-16 every write here — comment, comment delete, reaction, take, take delete —
+// needs the wallet's Lab signature: socialAuth.mjs.)
 import { json, recoverEthAddress, holdersRoomMessage, appendNotification } from "./shared.mjs";
 import { RESOLVED_FEED_KEY } from "./resolutions.mjs";
+import { provenWallet, unsignedSocial, verifiedAuthor } from "./socialAuth.mjs";
 
-export async function handleFeed(parts, request, env) {
+export async function handleFeed(parts, request, env, { now = Date.now } = {}) {
   if (!["feed", "comments", "reactions", "takes"].includes(parts[0])) return null;
   if (parts[0] === "feed" && !parts[1]) {
     if (request.method !== "GET") {
@@ -190,9 +193,12 @@ export async function handleFeed(parts, request, env) {
     if (request.method === "POST" && parts.length === 2) {
       let body;
       try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const wallet = typeof body.wallet === "string" ? body.wallet.toLowerCase().trim() : null;
       const text = typeof body.text === "string" ? body.text.trim().slice(0, 280) : null;
-      if (!wallet || !text) return json({ error: "missing wallet or text" }, request, 400);
+      if (typeof body.wallet !== "string" || !body.wallet.trim() || !text) return json({ error: "missing wallet or text" }, request, 400);
+      // The wallet must have signed: no comment under an address the caller can't prove.
+      const who = provenWallet(body.wallet, body.labAuth, now());
+      if (!who.ok) return unsignedSocial(request, who);
+      const wallet = who.wallet;
       const raw = await env.LAB_STORE.get(commentKey);
       const list = raw ? JSON.parse(raw) : [];
       list.unshift({
@@ -202,16 +208,14 @@ export async function handleFeed(parts, request, env) {
         createdAt: Date.now(),
       });
       await env.LAB_STORE.put(commentKey, JSON.stringify(list.slice(0, 50)));
-      // Lifecycle notify: tell the call's author someone is discussing it (skip self).
-      // authorWallet/symbol/direction ride along from the client, which knows the call.
-      const authorWallet = typeof body.authorWallet === "string" ? body.authorWallet.toLowerCase().trim() : null;
-      if (authorWallet && authorWallet !== wallet) {
-        const sym = typeof body.symbol === "string" ? body.symbol.replace("PERP_", "").replace("_USDC", "") : "";
-        const dir = typeof body.direction === "string" ? ` ${body.direction}` : "";
-        await appendNotification(env, authorWallet, {
+      // Lifecycle notify: tell the author someone is discussing it (skip self). The author, market
+      // and side come from the stored call or take, never from the request (verifiedAuthor).
+      const author = await verifiedAuthor(env, thesisId, body);
+      if (author && author.wallet !== wallet) {
+        await appendNotification(env, author.wallet, {
           id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           type: "comment",
-          message: sym ? `New comment on your ${sym}${dir} call` : "New comment on your call",
+          message: `New comment on your ${author.label}`,
           fromWallet: wallet,
           thesisId,
           createdAt: Date.now(),
@@ -224,8 +228,10 @@ export async function handleFeed(parts, request, env) {
       const commentId = parts[2];
       let body;
       try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const wallet = typeof body.wallet === "string" ? body.wallet.toLowerCase().trim() : null;
-      if (!wallet) return json({ error: "missing wallet" }, request, 400);
+      if (typeof body.wallet !== "string" || !body.wallet.trim()) return json({ error: "missing wallet" }, request, 400);
+      const who = provenWallet(body.wallet, body.labAuth, now());
+      if (!who.ok) return unsignedSocial(request, who);
+      const wallet = who.wallet;
       const raw = await env.LAB_STORE.get(commentKey);
       if (!raw) return json({ ok: true }, request);
       const list = JSON.parse(raw);
@@ -256,8 +262,10 @@ export async function handleFeed(parts, request, env) {
       if (!ALLOWED_EMOJIS.includes(emoji)) return json({ error: "emoji not allowed" }, request, 400);
       let body;
       try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const wallet = typeof body.wallet === "string" ? body.wallet.toLowerCase().trim() : null;
-      if (!wallet) return json({ error: "missing wallet" }, request, 400);
+      if (typeof body.wallet !== "string" || !body.wallet.trim()) return json({ error: "missing wallet" }, request, 400);
+      const who = provenWallet(body.wallet, body.labAuth, now());
+      if (!who.ok) return unsignedSocial(request, who);
+      const wallet = who.wallet;
       const raw = await env.LAB_STORE.get(reactionKey);
       const reactions = raw ? JSON.parse(raw) : {};
       const reactors = reactions[emoji] ?? [];
@@ -267,16 +275,14 @@ export async function handleFeed(parts, request, env) {
       else reactors.push(wallet);
       reactions[emoji] = reactors;
       await env.LAB_STORE.put(reactionKey, JSON.stringify(reactions));
-      // Notify the call's author when someone ADDS a reaction (skip removals + self).
-      // Call context rides along from the client so the message can name the call.
-      const rAuthor = typeof body.authorWallet === "string" ? body.authorWallet.toLowerCase().trim() : null;
-      if (added && rAuthor && rAuthor !== wallet) {
-        const sym = typeof body.symbol === "string" ? body.symbol.replace("PERP_", "").replace("_USDC", "") : "";
-        const dir = typeof body.direction === "string" ? ` ${body.direction}` : "";
-        await appendNotification(env, rAuthor, {
+      // Notify the author when someone ADDS a reaction (skip removals + self). Author, market and
+      // side come from the stored call or take (verifiedAuthor), not from the request.
+      const rAuthor = added ? await verifiedAuthor(env, thesisId, body) : null;
+      if (rAuthor && rAuthor.wallet !== wallet) {
+        await appendNotification(env, rAuthor.wallet, {
           id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           type: "reaction",
-          message: sym ? `${emoji} reacted to your ${sym}${dir} call` : `${emoji} reacted to your call`,
+          message: `${emoji} reacted to your ${rAuthor.label}`,
           fromWallet: wallet,
           thesisId,
           createdAt: Date.now(),
@@ -295,8 +301,8 @@ export async function handleFeed(parts, request, env) {
   // itself, discussable via the SAME comments/reactions layer (each take's id → SocialBar).
   // ⚠️ FIREWALL: takes live under their OWN key (`takes:{chain}:{ca}`), never in `lab:` — so
   // they can NEVER enter grading, the caller leaderboard, or the on-chain ledger. Memecoin
-  // opinions stay off the trustless perp moat by construction. Wallet-attributed (same trust
-  // model as comments), self-delete only.
+  // opinions stay off the trustless perp moat by construction. Signed by the posting wallet
+  // (socialAuth.mjs, same as comments), self-delete only.
   // ── /takes/hot — latest takes across ALL tokens (discovery strip for the Feed) ──
   // Cross-pollination: surface fresh conviction from every token so the Feed drives traffic
   // back into /token pages. Recency-ranked (cheap); still firewalled (read-only aggregate of
@@ -358,12 +364,15 @@ export async function handleFeed(parts, request, env) {
     if (request.method === "POST" && parts.length === 3) {
       let body;
       try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const wallet = typeof body.wallet === "string" ? body.wallet.toLowerCase().trim() : null;
+      const claimed = typeof body.wallet === "string" ? body.wallet.toLowerCase().trim() : null;
       const text = typeof body.text === "string" ? body.text.trim().slice(0, 280) : null;
       const direction = body.direction === "BULL" || body.direction === "BEAR" ? body.direction : null;
-      if (!/^0x[a-f0-9]{40}$/.test(wallet || "")) return json({ error: "bad wallet" }, request, 400);
+      if (!/^0x[a-f0-9]{40}$/.test(claimed || "")) return json({ error: "bad wallet" }, request, 400);
       if (!text) return json({ error: "missing text" }, request, 400);
       if (!direction) return json({ error: "direction must be BULL or BEAR" }, request, 400);
+      const who = provenWallet(claimed, body.labAuth, now());
+      if (!who.ok) return unsignedSocial(request, who);
+      const wallet = who.wallet;
       const targetNum = Number(body.target);
       const target = Number.isFinite(targetNum) && targetNum > 0 ? targetNum : null;
       const sym = typeof body.sym === "string" ? body.sym.replace(/[^A-Za-z0-9]/g, "").slice(0, 16) : "";
@@ -385,8 +394,10 @@ export async function handleFeed(parts, request, env) {
       const takeId = parts[3];
       let body;
       try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const wallet = typeof body.wallet === "string" ? body.wallet.toLowerCase().trim() : null;
-      if (!wallet) return json({ error: "missing wallet" }, request, 400);
+      if (typeof body.wallet !== "string" || !body.wallet.trim()) return json({ error: "missing wallet" }, request, 400);
+      const who = provenWallet(body.wallet, body.labAuth, now());
+      if (!who.ok) return unsignedSocial(request, who);
+      const wallet = who.wallet;
       const raw = await env.LAB_STORE.get(takesKey);
       if (!raw) return json({ ok: true }, request);
       const list = JSON.parse(raw);
