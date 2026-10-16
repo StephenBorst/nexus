@@ -65,7 +65,7 @@ test("registrations: future-dated when written, one per axis, each with a doc th
   for (const r of REGISTERED_READS) {
     assert.ok(!seen.has(r.axis), `${r.axis} registered twice`); seen.add(r.axis);
     assert.ok(Number.isFinite(registeredMs(r)));
-    assert.ok(["LONG", "SHORT"].includes(r.side));
+    assert.ok(["LONG", "SHORT", "BOTH"].includes(r.side));
     const doc = readFileSync(join(ROOT, r.doc), "utf8");
     assert.ok(doc.includes(r.registeredAt), `${r.doc} must name ${r.registeredAt}`);
     assert.ok(doc.includes(r.axis));
@@ -80,4 +80,18 @@ test("the pipeline doc states the same numbers as the code", () => {
   for (const s of [`${R.minEvents} out-of-sample events`, `${R.edgePct}%`, `${R.holdoutMinEvents} holdout events`, `${R.holdoutPct}%`, `${R.exitMinTrades} trades`, `${R.killEvents} out-of-sample events`]) {
     assert.ok(doc.includes(s), `read-pipeline.md must say "${s}"`);
   }
+});
+
+test("a two-sided read is judged on the pooled random result, not one side", () => {
+  const both = { ...REG, side: "BOTH" };
+  const pooled = (pct, verdict = "NOT_DISTINGUISHABLE") => ({ pooled: { pctBeaten: pct, verdict }, bySide: { LONG: { pctBeaten: 10 }, SHORT: { pctBeaten: 10 } } });
+  const main = { r: { samples: 80, meanR: 0.3, stable: true }, random: pooled(97), exitGraded: null };
+  const hold = { r: { samples: 40, meanR: 0.2, stable: true }, random: pooled(85) };
+  const s = pipelineStage(both, main, hold);
+  assert.equal(s.stage, "EDGE", "pooled 97% / 85% clears, whatever one side alone says");
+  assert.equal(s.numbers.beatsRandomPct, 97);
+  assert.equal(pipelineStage(both, { ...main, random: pooled(94) }, hold).stage, "LEAD");
+  assert.match(pipelineStage(both, { ...main, random: pooled(94) }, hold).next, /random entries/);
+  const dead = pipelineStage(both, { r: { samples: 120, meanR: 0.1, stable: true }, random: pooled(2, "BELOW_RANDOM") }, null);
+  assert.equal(dead.stage, "RETIRED");
 });

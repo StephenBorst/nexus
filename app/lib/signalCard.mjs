@@ -25,6 +25,10 @@ export const AXIS_BLURB = {
   rs_value_pullback_candle: "Relative-strength leaders pulling back to weekly VWAP. Real candles.",
   rs_value_pullback_candle_rsi: "The VWAP pullback, with RSI at 45 or higher. Real candles.",
   rs_value_pullback_rotation: "The VWAP pullback, vetoed unless volume rotates in.",
+  level_reclaim: "Price sweeps the prior day's high or low, then closes back inside. Fades the sweep.",
+  oi_div_reversal: "A big 24h move while open interest falls. Fades it.",
+  session_momentum: "A bigger-than-usual NY open move (13–15 UTC). Goes with it.",
+  confluence_follow: "Funding and OI agree on a fade. Goes the other way, with the crowd.",
 };
 
 // "RSI reset <45 (uptrend)" → { main: "RSI reset <45", aside: "(uptrend)" }. Only a trailing

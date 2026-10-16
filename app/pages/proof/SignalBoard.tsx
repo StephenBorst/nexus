@@ -28,7 +28,9 @@ type AxisSides = Record<"LONG" | "SHORT", { events: number; r: { samples: number
 type RandomSide = { verdict: string; n: number; pctBeaten?: number; realMeanR?: number; randomMedianR?: number; moreTradesNeeded?: number | null };
 type RandomBaseline = { metric: string; runs: number; window: { from: string; to: string; hours: number }; pooled: RandomSide; bySide: Record<"LONG" | "SHORT", RandomSide> };
 type Tide = { metric: string; from: string; to: string; markets: number; LONG: { n: number; meanR: number }; SHORT: { n: number; meanR: number } };
-export type AxisRow = { name: string; label: string; verdict: string; best: (Horizon & { bySide?: Record<"LONG" | "SHORT", SideStat> }) | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null; exitGraded?: ExitGrade | null; sides?: AxisSides; random?: RandomBaseline | null };
+// A read registered in the read pipeline: the same grade on events after its registration only.
+export type OosGrade = { since: string; verdict: string; r?: { samples: number; meanR: number } | null };
+export type AxisRow = { name: string; label: string; verdict: string; best: (Horizon & { bySide?: Record<"LONG" | "SHORT", SideStat> }) | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null; exitGraded?: ExitGrade | null; sides?: AxisSides; random?: RandomBaseline | null; oos?: OosGrade | null };
 export type Scorecard = { failed?: boolean; axes: AxisRow[]; tide?: Tide | null; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; asOf?: string };
 type Evidence = { ok: boolean; hold: number; markets: number; marketsGreen: number; trades: number; netUsd: number; caveat?: string; baseline?: { verdict: string; pctBeaten?: number; moreTradesNeeded?: number | null } };
 
@@ -140,6 +142,22 @@ function SideRow({ a, side }: { a: AxisRow; side: "LONG" | "SHORT" }) {
   );
 }
 
+// A registered read (docs/research/read-pipeline.md): the grade above is the recorded history,
+// in-sample; only events after the registration count toward its stage.
+function RegisteredLine({ o }: { o: OosGrade }) {
+  const n = o.r?.samples ?? 0;
+  return (
+    <div title="Registered with its rule frozen. The grade above is the whole recorded history, which was there when it was registered. Only events after the registration date count toward a verdict."
+      style={{ marginTop: 12, fontFamily: MONO, fontSize: 10.5, color: FOG, lineHeight: 1.6, cursor: "help" }}>
+      <span style={{ ...label, color: BRIGHT }}>Registered</span>
+      <span style={{ fontSize: 9.5, color: FAINT }}> · counts from {o.since.slice(5, 10)} · the grade above is in-sample</span>
+      <div style={{ marginTop: 4 }}>
+        {n ? <>Since then: n{n} · <span style={{ color: moneyTone(o.r?.meanR ?? 0) }}>{(o.r?.meanR ?? 0) > 0 ? "+" : ""}{o.r?.meanR}R</span> mean</> : <span style={{ color: FAINT }}>No events since registration yet</span>}
+      </div>
+    </div>
+  );
+}
+
 // The scoreboard's own exit (the R contract) graded the way the agent trades it: fees in, a trade
 // still open at 168h closed at the market. A paper wallet trades it; the line is its yardstick.
 function GradedExitLine({ g }: { g: ExitGrade }) {
@@ -188,6 +206,7 @@ function ExitBand({ a, preset, paused, isMobile }: { a: AxisRow; preset?: Return
                 </div>
               ))}
             </div>
+            {a.oos && <RegisteredLine o={a.oos} />}
             {a.exitGraded && <GradedExitLine g={a.exitGraded} />}
             {!paused && !head.shadowOf && <EvidenceLine axis={a.name} />}
           </>
