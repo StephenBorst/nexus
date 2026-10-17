@@ -85,6 +85,7 @@ import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
 import { handleFeed } from "./routes-feed.mjs";
 import { handleSocial } from "./routes-social.mjs";
+import { handleAccount } from "./routes-account.mjs";
 import { handleTelegram, secureTelegramWebhook } from "./routes-telegram.mjs";
 import { handleProfile, handleLab } from "./routes-lab.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
@@ -2940,17 +2941,16 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     }
 
     // ── /positions and /balance — proxy to Orderly private API ─────────────
-    // POST body { walletAddress, walletSig } preferred; GET ?wallet=&sig= also accepted
+    // POST body { walletAddress, walletSig } only. walletSig derives the trading key and a URL
+    // lands in logs, so a signature in the URL is refused, never used.
     if ((parts[0] === "positions" || parts[0] === "balance") && (request.method === "GET" || request.method === "POST")) {
       const qp = new URL(request.url).searchParams;
-      let wAddr = qp.get("wallet") || qp.get("walletAddress");
-      let wSig  = qp.get("sig")    || qp.get("walletSig");
-      if (request.method === "POST") {
-        let pb; try { pb = await request.json(); } catch { pb = {}; }
-        wAddr = wAddr || pb.walletAddress || pb.wallet;
-        wSig  = wSig  || pb.walletSig    || pb.sig;
-      }
-      if (!wAddr || !wSig) return json({ error: "wallet and sig required — POST { walletAddress, walletSig } or GET ?wallet=&sig=" }, request, 400);
+      if (qp.has("sig") || qp.has("walletSig")) return json({ error: "signature_in_url", hint: "Send walletSig in the JSON body of a POST, never in the URL. Sign again: the one in this URL may be in logs." }, request, 400);
+      if (request.method !== "POST") return json({ error: "method not allowed", hint: "POST { walletAddress, walletSig }" }, request, 405);
+      let pb; try { pb = await request.json(); } catch { pb = {}; }
+      const wAddr = pb.walletAddress || pb.wallet;
+      const wSig  = pb.walletSig    || pb.sig;
+      if (!wAddr || !wSig) return json({ error: "walletAddress and walletSig required — POST { walletAddress, walletSig }" }, request, 400);
       const wNorm = wAddr.toLowerCase().trim();
       const uRaw  = await env.LAB_STORE.get("user:" + wNorm);
       if (!uRaw) return json({ error: "wallet_not_registered" }, request, 401);
@@ -3928,42 +3928,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       }
     }
 
-    // ── /proxy/register-key — server-side proxy to Orderly (multi-user) ──────────
-    if (parts[0] === "proxy" && parts[1] === "register-key" && request.method === "POST") {
-      let body;
-      try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const { userAddress, orderlyKey: userOrderlyKey } = body;
-      const walletNorm = userAddress ? userAddress.toLowerCase().trim() : null;
-      try {
-        let accountId = null;
-        if (walletNorm) {
-          try {
-            const ar = await fetch("https://api-evm.orderly.org/v1/get_account?address=" + walletNorm + "&broker_id=nexus_trading");
-            accountId = (await ar.json())?.data?.account_id ?? null;
-          } catch { /* best-effort */ }
-        }
-        const rh = { "Content-Type": "application/json" };
-        if (accountId) rh["X-Account-Id"] = accountId;
-        const r = await fetch("https://api-evm.orderly.org/v1/orderly_key", {
-          method: "POST", headers: rh, body: JSON.stringify(body),
-        });
-        const d = await r.json();
-        if (!accountId) accountId = d?.data?.account_id ?? null;
-        if ((d.success || d.data) && walletNorm && accountId && userOrderlyKey) {
-          await env.LAB_STORE.put("user:" + walletNorm, JSON.stringify({
-            accountId, orderlyKey: userOrderlyKey, registeredAt: Date.now(),
-          }));
-        }
-        return new Response(JSON.stringify({ ...d, accountId }), {
-          status: 200,
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        });
-      } catch (e) {
-        return new Response(JSON.stringify({ error: String(e) }), {
-          status: 500,
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        });
-      }
+    // ── /proxy/register-key — forward a signed AddOrderlyKey; store it only on Orderly's success ──
+    {
+      const accountRes = await handleAccount(parts, request, env);
+      if (accountRes) return accountRes;
     }
 
     // ── /register-orderly-key — deterministic wallet registration ───────────────
