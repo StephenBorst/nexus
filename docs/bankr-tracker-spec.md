@@ -10,6 +10,11 @@ Decided 2026-10-17 (borst). Replaces the tracker's reads of `GET /account-snapsh
 - **Orders: refreshed on demand, in chat.** The agent signs exactly as it does for a trade, reads, and writes a
   snapshot of the result. No scheduled refresh (a background script would have to hold `walletSig`).
 - **Opt-in with disclosure.** The tracker is for all Bankr users, so the user agrees before the first snapshot.
+- **Record-scoped storage only.** Bankr (2026-10-17): file-backed `appkv` is one bucket for the whole app with no user
+  isolation; record-scoped storage isolates per viewer, though the owner keeps admin read. The snapshot goes in the
+  user's own record.
+  **⏳ Open with Bankr:** the exact record-scoped write call and key naming. `nexus-tracker-snapshot` is our proposal
+  (BankrBot/skills PR from `StephenBorst:nexus-tracker-refresh`); until Bankr confirms it, the skill text is a proposal.
 
 ## 1. Positions panel (the page, live)
 
@@ -38,7 +43,9 @@ When the user asks to refresh the tracker, the agent:
 2. Calls both, signature in the JSON body only:
    - `POST https://og.nexustradinglabs.com/order-history` `{ walletAddress, walletSig, limit: 50 }`
    - `POST https://og.nexustradinglabs.com/positions` `{ walletAddress, walletSig }`
-3. Writes the snapshot below to `appkv`, **only if both calls succeeded**:
+3. Writes the snapshot below to the **user's own record-scoped** `appkv` entry (isolated per viewer, not the app's
+   shared file bucket, which every user of the app shares), key `nexus-tracker-snapshot`, **only if both calls
+   succeeded**:
    - `/order-history` succeeded: HTTP 200 and `ok === true`. A 502 `orderly_error` means the orders were NOT
      read; it never means the account has no orders.
    - `/positions` succeeded: HTTP 200 and `success === true` (it passes Orderly's reply through).
