@@ -151,3 +151,11 @@ test("nothing in the worker writes or reads a stored seed any more", () => {
   assert.equal(/\.seed\b/.test(src), false, "a stored `.seed` is read somewhere in index.js");
   assert.equal(/account-snapshot"/.test(src), false, "the snapshot route is back in index.js");
 });
+
+test("no trading-key route reads a signature from the URL", () => {
+  // walletSig derives the trading key; a URL lands in logs. The Holders Room check (routes-feed.mjs)
+  // is the one exception: a 10-minute, read-only challenge signature, not the trading-key one.
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  assert.equal(/\.get\(\s*"(sig|walletSig)"\s*\)/.test(src), false, "index.js reads a signature from the query string");
+  assert.match(src, /error: "signature_in_url"/, "/positions and /balance must refuse a signature in the URL");
+});

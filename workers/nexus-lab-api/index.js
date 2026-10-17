@@ -2908,17 +2908,21 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     }
 
     // ── /positions and /balance — proxy to Orderly private API ─────────────
-    // POST body { walletAddress, walletSig } preferred; GET ?wallet=&sig= also accepted
+    // POST body { walletAddress, walletSig } only. The walletSig is what the trading key is derived
+    // from, so it never travels in a URL (URLs land in logs). GET ?wallet=&sig= was accepted until
+    // 2026-10-16; nothing sent it. A request that puts a signature in the URL is refused, not used.
     if ((parts[0] === "positions" || parts[0] === "balance") && (request.method === "GET" || request.method === "POST")) {
       const qp = new URL(request.url).searchParams;
-      let wAddr = qp.get("wallet") || qp.get("walletAddress");
-      let wSig  = qp.get("sig")    || qp.get("walletSig");
-      if (request.method === "POST") {
-        let pb; try { pb = await request.json(); } catch { pb = {}; }
-        wAddr = wAddr || pb.walletAddress || pb.wallet;
-        wSig  = wSig  || pb.walletSig    || pb.sig;
+      if (qp.has("sig") || qp.has("walletSig")) {
+        return json({ error: "signature_in_url", hint: "Send walletSig in the JSON body of a POST, never in the URL. Sign again: the one in this URL may be in logs." }, request, 400);
       }
-      if (!wAddr || !wSig) return json({ error: "wallet and sig required — POST { walletAddress, walletSig } or GET ?wallet=&sig=" }, request, 400);
+      if (request.method !== "POST") {
+        return json({ error: "method not allowed", hint: "POST { walletAddress, walletSig }" }, request, 405);
+      }
+      let pb; try { pb = await request.json(); } catch { pb = {}; }
+      const wAddr = pb.walletAddress || pb.wallet;
+      const wSig  = pb.walletSig    || pb.sig;
+      if (!wAddr || !wSig) return json({ error: "wallet and sig required — POST { walletAddress, walletSig }" }, request, 400);
       const wNorm = wAddr.toLowerCase().trim();
       const uRaw  = await env.LAB_STORE.get("user:" + wNorm);
       if (!uRaw) return json({ error: "wallet_not_registered" }, request, 401);

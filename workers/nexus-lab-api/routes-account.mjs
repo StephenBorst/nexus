@@ -88,6 +88,8 @@ export async function scrubStoredSeeds(env, { now = Date.now, page = SCRUB_PAGE 
 export async function handleAccount(parts, request, env, { fetch: f = fetch } = {}) {
   // GET /account-snapshot — retired. Same data, signed: POST /positions, POST /order-history.
   if (parts[0] === "account-snapshot" && parts.length === 1) {
+    // One line per call, so a caller we missed shows up in the worker logs (no wallet, no secrets).
+    console.warn(`[account-snapshot] retired route called · ua=${(request.headers.get("User-Agent") || "-").slice(0, 120)}`);
     return json({
       error: "gone",
       hint: "Retired 2026-10-16: it answered without a signature. Use POST /positions and POST /order-history with { walletAddress, walletSig }.",

@@ -829,8 +829,10 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   `success || data`; now only on `success === true`, with the key from the SIGNED `message.orderlyKey` (a different
   top-level `orderlyKey` → 400 before Orderly). ⚠️ Correction to the first write-up: this was NOT an overwrite hole —
   Orderly checks the signature against `userAddress` ("address and signature do not match"), so a request for someone
-  else's address fails there; it's hardening. Still open: `/positions` + `/balance` also accept `walletSig` in a GET
-  query string (`?wallet=&sig=`), which lands in logs; nothing in the app or the skill uses that form (the mini app POSTs).
+  else's address fails there; it's hardening. `/positions` + `/balance` take `walletSig` from the POST
+  body only: a signature in the URL → 400 `signature_in_url` (refused, not used), GET → 405 (nothing sent the old
+  `?wallet=&sig=` form; walletSig derives the trading key and URLs land in logs). The retired snapshot logs
+  `[account-snapshot] retired route called · ua=…` per call — a hit in the worker logs = a caller we missed.
 - A human thesis = a **call**. Outcomes are graded OBJECTIVELY from PUBLIC price (Orderly `GET /tv/history`,
   1h OHLC, first-touch TP1-vs-SL; same-candle = LOSS conservative) — NOT self-reported. So `actualPnl`/status
   the user types is ignored for ranking. **A WIN pays the call's GEOMETRIC R (`callR`, from entry/stop/TP1), never
