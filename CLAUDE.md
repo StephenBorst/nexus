@@ -827,6 +827,13 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   cached UNENCRYPTED in `user:{addr}.seed` by /order-history, /positions and bankr-register. Bankr's Nexus Trade Tracker
   app page reads it today and can't sign (sandboxed iframe, no `sign_message`; actions hand off to chat), so retiring
   it waits for a replacement read path for that page.
+  **Tracker plan (borst, 2026-10-17):** positions panel → public `/smart/xray`, `nexus_trading` venue only; orders →
+  refreshed ON DEMAND in chat (agent signs as today, calls `/positions` + `/order-history`, writes ONLY a field-by-field
+  result snapshot to Bankr `appkv`). `appkv` is NOT private (owner admin-read, logs, postMessage), so no credential of
+  any kind goes there: no walletSig, no Lab signature, no token. No stored Orderly key, no scheduled refresh. The opt-in
+  says the tracker's owner (Nexus) and Bankr's logs can see the snapshot. `/order-history` now answers a refused Orderly
+  read with 502 `orderly_error` (`orderHistoryResult`), never `{count: 0, orders: []}`, so a failed read can't become
+  an empty book; a success carries `ok: true` + `fetchedAt`.
 - A human thesis = a **call**. Outcomes are graded OBJECTIVELY from PUBLIC price (Orderly `GET /tv/history`,
   1h OHLC, first-touch TP1-vs-SL; same-candle = LOSS conservative) — NOT self-reported. So `actualPnl`/status
   the user types is ignored for ranking. **A WIN pays the call's GEOMETRIC R (`callR`, from entry/stop/TP1), never
