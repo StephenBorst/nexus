@@ -819,8 +819,8 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   **Trading-account record `user:{addr}` hardened (2026-10-16, `routes-account.mjs`, tests `routes-account.test.mjs`).**
   (1) `GET /account-snapshot?wallet=` returned any registered wallet's Orderly positions + open orders with NO signature,
   signing with a seed cached in the record → RETIRED (410, hint → `POST /positions` / `POST /order-history` with
-  walletSig, which return the same data). Its only caller was a Bankr app-page script deleted 2026-10-12; the skill and
-  the app never called it. (2) The seed (SHA-256 of walletSig = the order-only trading key) was cached UNENCRYPTED by
+  walletSig, which return the same data). Its caller was Bankr's Nexus Trade Tracker app page (sandboxed, can't sign),
+  so this merges only after the tracker reads /smart/xray + the chat-written order snapshot (tracker plan below). (2) The seed (SHA-256 of walletSig = the order-only trading key) was cached UNENCRYPTED by
   /order-history, /positions and /proxy/bankr-register, and only the snapshot read it → nothing caches it now (a key that
   isn't stored can't leak; encrypting it would have kept a server-held trading key for a route nobody uses). The hourly
   cron `scrubStoredSeeds` removes the stored ones (200 records a run, two full passes so an old isolate's last write is
@@ -833,6 +833,13 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   body only: a signature in the URL → 400 `signature_in_url` (refused, not used), GET → 405 (nothing sent the old
   `?wallet=&sig=` form; walletSig derives the trading key and URLs land in logs). The retired snapshot logs
   `[account-snapshot] retired route called · ua=…` per call — a hit in the worker logs = a caller we missed.
+  **Tracker plan (borst, 2026-10-17):** positions panel → public `/smart/xray`, `nexus_trading` venue only; orders →
+  refreshed ON DEMAND in chat (spec `docs/bankr-tracker-spec.md`) (agent signs as today, calls `/positions` + `/order-history`, writes ONLY a field-by-field
+  result snapshot to Bankr `appkv`). `appkv` is NOT private (owner admin-read, logs, postMessage), so no credential of
+  any kind goes there: no walletSig, no Lab signature, no token. No stored Orderly key, no scheduled refresh. The opt-in
+  says the tracker's owner (Nexus) and Bankr's logs can see the snapshot. `/order-history` now answers a refused Orderly
+  read with 502 `orderly_error` (`orderHistoryResult`), never `{count: 0, orders: []}`, so a failed read can't become
+  an empty book; a success carries `ok: true` + `fetchedAt`.
 - A human thesis = a **call**. Outcomes are graded OBJECTIVELY from PUBLIC price (Orderly `GET /tv/history`,
   1h OHLC, first-touch TP1-vs-SL; same-candle = LOSS conservative) — NOT self-reported. So `actualPnl`/status
   the user types is ignored for ranking. **A WIN pays the call's GEOMETRIC R (`callR`, from entry/stop/TP1), never

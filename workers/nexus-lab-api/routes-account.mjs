@@ -5,9 +5,9 @@
 //  1. GET /account-snapshot?wallet= returned any registered wallet's Orderly positions AND open
 //     orders with no signature. It could, because routes that DID get a walletSig cached the
 //     trading key's seed (SHA-256 of the walletSig, which signs orders) in `user:{addr}.seed`,
-//     UNENCRYPTED, and the snapshot signed with it. Its only caller was a Bankr app-page script,
-//     deleted 2026-10-12; the Bankr skill and the app never called it. POST /positions and
-//     POST /order-history return the same data with the walletSig. So the route is retired (410)
+//     UNENCRYPTED, and the snapshot signed with it. Its caller was Bankr's Nexus Trade Tracker app
+//     page, which can't sign; it reads positions from the public /smart/xray and an order snapshot
+//     the agent writes from chat instead (docs/bankr-tracker-spec.md). So the route is retired (410)
 //     and nothing caches the seed any more: a key that isn't stored can't leak.
 //  2. The seeds already stored are removed by the cron (scrubStoredSeeds), a few hundred records
 //     a run, until none are left. GET /ops/seed-scrub reports progress (counts only).
@@ -85,6 +85,38 @@ export async function scrubStoredSeeds(env, { now = Date.now, page = SCRUB_PAGE 
   return { ...next, ran: true };
 }
 
+/**
+ * POST /order-history's answer, from Orderly's reply to GET /v1/orders. It used to map
+ * `data.rows ?? []`, so a refused read (bad key, rate limit, a challenge page) came back as
+ * `{ count: 0, orders: [] }`: an empty book that wasn't. Now only `success === true` with a rows
+ * array is a list; anything else is a 502 naming what Orderly said. Returns { status, body }.
+ */
+export function orderHistoryResult(upstreamStatus, text, now = Date.now()) {
+  let d = null;
+  try { d = JSON.parse(text); } catch { d = null; }
+  if (d?.success === true && Array.isArray(d?.data?.rows)) {
+    const orders = d.data.rows.map((o) => ({
+      orderId: o.order_id, symbol: o.symbol, side: o.side, type: o.type,
+      status: o.status, price: o.price, quantity: o.quantity,
+      executedQty: o.executed, avgPrice: o.average_executed_price,
+      fee: o.total_fee, feeCurrency: o.fee_asset,
+      createdAt: o.created_time, updatedAt: o.updated_time,
+    }));
+    return { status: 200, body: { ok: true, count: orders.length, orders, fetchedAt: now } };
+  }
+  return {
+    status: 502,
+    body: {
+      ok: false,
+      error: "orderly_error",
+      upstreamStatus,
+      code: d?.code ?? null,
+      message: d ? (typeof d.message === "string" ? d.message.slice(0, 200) : null) : "Orderly did not answer with JSON",
+      hint: "Orders were not read. Nothing here means the account has no orders.",
+    },
+  };
+}
+
 export async function handleAccount(parts, request, env, { fetch: f = fetch } = {}) {
   // GET /account-snapshot — retired. Same data, signed: POST /positions, POST /order-history.
   if (parts[0] === "account-snapshot" && parts.length === 1) {
@@ -92,7 +124,7 @@ export async function handleAccount(parts, request, env, { fetch: f = fetch } = 
     console.warn(`[account-snapshot] retired route called · ua=${(request.headers.get("User-Agent") || "-").slice(0, 120)}`);
     return json({
       error: "gone",
-      hint: "Retired 2026-10-16: it answered without a signature. Use POST /positions and POST /order-history with { walletAddress, walletSig }.",
+      hint: "Retired: it answered without a signature. Positions: GET /smart/xray?address= (public). Orders: POST /order-history with { walletAddress, walletSig }. Bankr tracker: see docs/bankr-tracker-spec.md.",
     }, request, 410);
   }
 

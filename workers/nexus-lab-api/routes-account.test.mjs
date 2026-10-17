@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { handleAccount, registerKeyTarget, scrubStoredSeeds, SCRUB_STATE_KEY } from "./routes-account.mjs";
+import { handleAccount, registerKeyTarget, orderHistoryResult, scrubStoredSeeds, SCRUB_STATE_KEY } from "./routes-account.mjs";
 
 const A = "0x" + "a".repeat(40);
 const KEY = "ed25519:" + "8".repeat(44);
@@ -55,7 +55,8 @@ test("/account-snapshot is retired: 410, and it reads nothing", async () => {
   const r = await call(env, f, "GET", `/account-snapshot?wallet=${A}`);
   assert.equal(r.status, 410);
   assert.equal(r.body.error, "gone");
-  assert.match(r.body.hint, /POST \/positions/);
+  assert.match(r.body.hint, /\/smart\/xray/);
+  assert.match(r.body.hint, /POST \/order-history/);
   assert.equal(env.LAB_STORE.log.length, 0);
   assert.equal(calls.length, 0);
 });
@@ -158,4 +159,36 @@ test("no trading-key route reads a signature from the URL", () => {
   const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
   assert.equal(/\.get\(\s*"(sig|walletSig)"\s*\)/.test(src), false, "index.js reads a signature from the query string");
   assert.match(src, /error: "signature_in_url"/, "/positions and /balance must refuse a signature in the URL");
+});
+
+test("order-history: Orderly's rows become the list, with when it was read", () => {
+  const reply = JSON.stringify({ success: true, data: { rows: [
+    { order_id: 7, symbol: "PERP_BTC_USDC", side: "BUY", type: "LIMIT", status: "NEW", price: 60000, quantity: 0.01,
+      executed: 0, average_executed_price: null, total_fee: 0, fee_asset: "USDC", created_time: 1, updated_time: 2 },
+  ] } });
+  const r = orderHistoryResult(200, reply, 1234);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.ok, true); assert.equal(r.body.count, 1); assert.equal(r.body.fetchedAt, 1234);
+  assert.deepEqual(r.body.orders[0], {
+    orderId: 7, symbol: "PERP_BTC_USDC", side: "BUY", type: "LIMIT", status: "NEW", price: 60000, quantity: 0.01,
+    executedQty: 0, avgPrice: null, fee: 0, feeCurrency: "USDC", createdAt: 1, updatedAt: 2,
+  });
+  // A real empty book is still an empty list.
+  const empty = orderHistoryResult(200, JSON.stringify({ success: true, data: { rows: [] } }));
+  assert.equal(empty.status, 200); assert.equal(empty.body.count, 0);
+});
+
+test("order-history: a refused read is a 502, never an empty book", () => {
+  for (const [status, text, code] of [
+    [401, JSON.stringify({ success: false, code: -1004, message: "orderly key error" }), -1004],
+    [429, JSON.stringify({ success: false, code: -1003, message: "too many requests" }), -1003],
+    [200, JSON.stringify({ success: true, data: {} }), null], // no rows array: not a list
+    [403, "<html>Just a moment...</html>", null],
+  ]) {
+    const r = orderHistoryResult(status, text);
+    assert.equal(r.status, 502, text);
+    assert.equal(r.body.ok, false); assert.equal(r.body.error, "orderly_error");
+    assert.equal(r.body.upstreamStatus, status); assert.equal(r.body.code, code);
+    assert.equal("orders" in r.body, false); assert.equal("count" in r.body, false);
+  }
 });
