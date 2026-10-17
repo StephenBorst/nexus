@@ -28,6 +28,38 @@ export function registerKeyTarget(body) {
   return { ok: true, wallet: wallet.toLowerCase(), orderlyKey: key };
 }
 
+/**
+ * POST /order-history's answer, from Orderly's reply to GET /v1/orders. It used to map
+ * `data.rows ?? []`, so a refused read (bad key, rate limit, a challenge page) came back as
+ * `{ count: 0, orders: [] }`: an empty book that wasn't. Now only `success === true` with a rows
+ * array is a list; anything else is a 502 naming what Orderly said. Returns { status, body }.
+ */
+export function orderHistoryResult(upstreamStatus, text, now = Date.now()) {
+  let d = null;
+  try { d = JSON.parse(text); } catch { d = null; }
+  if (d?.success === true && Array.isArray(d?.data?.rows)) {
+    const orders = d.data.rows.map((o) => ({
+      orderId: o.order_id, symbol: o.symbol, side: o.side, type: o.type,
+      status: o.status, price: o.price, quantity: o.quantity,
+      executedQty: o.executed, avgPrice: o.average_executed_price,
+      fee: o.total_fee, feeCurrency: o.fee_asset,
+      createdAt: o.created_time, updatedAt: o.updated_time,
+    }));
+    return { status: 200, body: { ok: true, count: orders.length, orders, fetchedAt: now } };
+  }
+  return {
+    status: 502,
+    body: {
+      ok: false,
+      error: "orderly_error",
+      upstreamStatus,
+      code: d?.code ?? null,
+      message: d ? (typeof d.message === "string" ? d.message.slice(0, 200) : null) : "Orderly did not answer with JSON",
+      hint: "Orders were not read. Nothing here means the account has no orders.",
+    },
+  };
+}
+
 export async function handleAccount(parts, request, env, { fetch: f = fetch } = {}) {
   // POST /proxy/register-key — forward a browser-signed AddOrderlyKey to Orderly; store the result.
   if (parts[0] === "proxy" && parts[1] === "register-key" && parts.length === 2 && request.method === "POST") {

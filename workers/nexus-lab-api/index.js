@@ -85,7 +85,7 @@ import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
 import { handleFeed } from "./routes-feed.mjs";
 import { handleSocial } from "./routes-social.mjs";
-import { handleAccount } from "./routes-account.mjs";
+import { handleAccount, orderHistoryResult } from "./routes-account.mjs";
 import { handleTelegram, secureTelegramWebhook } from "./routes-telegram.mjs";
 import { handleProfile, handleLab } from "./routes-lab.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
@@ -2827,15 +2827,9 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       const ohPath   = `/v1/orders?size=${pageSize}&page=1${symParam}`;
       const ohHdrs   = await ohsign("GET", ohPath);
       const ohRes    = await fetch("https://api-evm.orderly.org" + ohPath, { headers: ohHdrs });
-      const ohData   = await ohRes.json();
-      const orders   = (ohData?.data?.rows ?? []).map(o => ({
-        orderId: o.order_id, symbol: o.symbol, side: o.side, type: o.type,
-        status: o.status, price: o.price, quantity: o.quantity,
-        executedQty: o.executed, avgPrice: o.average_executed_price,
-        fee: o.total_fee, feeCurrency: o.fee_asset,
-        createdAt: o.created_time, updatedAt: o.updated_time,
-      }));
-      return json({ count: orders.length, orders }, request);
+      // A refused read is an error, never an empty list (routes-account.mjs orderHistoryResult).
+      const ohOut    = orderHistoryResult(ohRes.status, await ohRes.text());
+      return json(ohOut.body, request, ohOut.status);
     }
 
     // ── /cancel — cancel an open (unfilled) order ────────────────────────────
