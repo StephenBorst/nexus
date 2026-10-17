@@ -816,13 +816,17 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   pass after 2026-10-19: delete `labSaveMessageV1` then. `labAuthScope.test.mjs` lists every worker file that accepts the
   signature and fails if a new one appears, or its use isn't named in the message. The skill's copy of the message (fork
   branch `nexus-lab-signature` = BankrBot/skills#790) must match it word for word.
-  **⚠️ Found 2026-10-16, NOT fixed (trading-account code, borst's call):** (1) `GET /account-snapshot?wallet=` returns any
-  registered wallet's Orderly positions + open orders with NO signature (it signs with the stored seed); (2) that seed —
-  the order-only trading key's seed, SHA-256(walletSig) — sits UNENCRYPTED in LAB_STORE `user:{addr}.seed` (agent keys
-  are AES-GCM encrypted; these aren't); (3) `POST /proxy/register-key` writes `user:{userAddress}` from the BODY's
-  `userAddress`/`orderlyKey`, not the signed message's, and on `d.success || d.data` — anyone can overwrite another
-  wallet's stored key (breaks its Bankr/mini trading until it re-registers; no theft). Fix = read both from
-  `body.message` and require `success === true`.
+  **⚠️ Trading-account record `user:{addr}` (found 2026-10-16; split into two PRs 2026-10-17).** FIXED (this half,
+  `routes-account.mjs`, tests `routes-account.test.mjs`): `/proxy/register-key` stored the record on `success || data`
+  with the key from a top-level body field; now only on `success === true`, with the SIGNED `message.orderlyKey` (a
+  different top-level `orderlyKey` → 400 before Orderly). Not an overwrite hole: Orderly checks the signature against
+  `userAddress` ("address and signature do not match"), so it's hardening. `/positions` + `/balance` take `walletSig`
+  from the POST body only: a signature in the URL → 400 `signature_in_url` (refused, not used), GET → 405 (nothing sent
+  the old `?wallet=&sig=` form). STILL OPEN (PR #130, held): `GET /account-snapshot?wallet=` returns any registered
+  wallet's positions + open orders with NO signature, signing with the order-only key's seed (SHA-256 of walletSig)
+  cached UNENCRYPTED in `user:{addr}.seed` by /order-history, /positions and bankr-register. Bankr's Nexus Trade Tracker
+  app page reads it today and can't sign (sandboxed iframe, no `sign_message`; actions hand off to chat), so retiring
+  it waits for a replacement read path for that page.
 - A human thesis = a **call**. Outcomes are graded OBJECTIVELY from PUBLIC price (Orderly `GET /tv/history`,
   1h OHLC, first-touch TP1-vs-SL; same-candle = LOSS conservative) — NOT self-reported. So `actualPnl`/status
   the user types is ignored for ranking. **A WIN pays the call's GEOMETRIC R (`callR`, from entry/stop/TP1), never
