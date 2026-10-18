@@ -1,15 +1,16 @@
 // ── The signal scoreboard, as an evidence board ───────────────────────────────────────
 // Our own reads, graded the way we grade traders (/intel/axis-backtest). Display only: every
 // number is served by the grader; the one-line verdicts come from app/lib/signalCard.mjs.
-// Hierarchy per card: what the read is → what the evidence says → the numbers → the proof
-// underneath → how the agent would trade it (only where a preset trades the exact rule).
+// The board: one row per read, grouped by stage (signalCard.mjs stageGroups); a tap opens the
+// full card underneath: the numbers → the proof → how the agent would trade it (only where a
+// preset trades the exact rule).
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { C } from "@/config/theme";
-import { AXIS_BLURB, splitLabel, rankAxes, takeaway, sideBar, isCompact } from "@/lib/signalCard.mjs";
+import { AXIS_BLURB, splitLabel, takeaway, sideBar, stageGroups, randomBar } from "@/lib/signalCard.mjs";
 
 const API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -17,7 +18,6 @@ const UI = "var(--nx-font-ui, sans-serif)";
 const { pos: POS, neg: NEG, brand: MARK } = C;
 const { bright: BRIGHT, fog: FOG, muted: MUTED, faint: FAINT } = C.text;
 const BONE = C.accent;
-const VIEW_KEY = "nx_proof_board_view";
 
 // ── data (only the fields rendered) ──
 type SideStat = { samples: number; hitRate: number; meanBps: number };
@@ -30,8 +30,9 @@ type RandomBaseline = { metric: string; runs: number; window: { from: string; to
 type Tide = { metric: string; from: string; to: string; markets: number; LONG: { n: number; meanR: number }; SHORT: { n: number; meanR: number } };
 // A read registered in the read pipeline: the same grade on events after its registration only.
 export type OosGrade = { since: string; verdict: string; r?: { samples: number; meanR: number } | null };
-export type AxisRow = { name: string; label: string; verdict: string; best: (Horizon & { bySide?: Record<"LONG" | "SHORT", SideStat> }) | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null; exitGraded?: ExitGrade | null; sides?: AxisSides; random?: RandomBaseline | null; oos?: OosGrade | null };
-export type Scorecard = { failed?: boolean; axes: AxisRow[]; tide?: Tide | null; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; asOf?: string };
+export type AxisRow = { name: string; label: string; verdict: string; r?: { samples: number; meanR: number; hitRate?: number } | null; best: (Horizon & { bySide?: Record<"LONG" | "SHORT", SideStat> }) | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null; exitGraded?: ExitGrade | null; sides?: AxisSides; random?: RandomBaseline | null; oos?: OosGrade | null };
+export type PipelineRead = { axis: string; side?: string; stage: string; registeredAt?: string; next?: string; numbers?: { events: number; meanR: number } };
+export type Scorecard = { failed?: boolean; axes: AxisRow[]; tide?: Tide | null; pipeline?: { rules?: { minEvents?: number }; reads?: PipelineRead[] } | null; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; asOf?: string };
 type Evidence = { ok: boolean; hold: number; markets: number; marketsGreen: number; trades: number; netUsd: number; caveat?: string; baseline?: { verdict: string; pctBeaten?: number; moreTradesNeeded?: number | null } };
 
 const sign = (x: number, d?: number) => `${x >= 0 ? "+" : ""}${d != null ? x.toFixed(d) : x}`;
@@ -182,7 +183,7 @@ function ExitBand({ a, preset, paused, isMobile }: { a: AxisRow; preset?: Return
   const exits = [a.exit, a.exit24h].filter((g): g is ExitGrade => !!g && g.verdict !== "INSUFFICIENT");
   const load = () => preset && deployToAgent({ ...preset.config, mode: "PAPER" }, `the ${preset.name} preset (PAPER)`, undefined, navigate, { replaceFilters: true });
   const research = !preset && !paused && (a.verdict === "PREDICTIVE" || a.verdict === "PROMISING");
-  if (!exits.length && !preset && !paused && !research) return null;
+  if (!exits.length && !preset && !paused && !research && !a.oos && !a.exitGraded) return null;
   const head = exits[0];
   return (
     <div style={{ borderTop: `1px solid ${C.border}`, background: C.surfaceAlt, padding: isMobile ? "16px 18px 18px" : "16px 24px 18px", display: "grid", gridTemplateColumns: isMobile || !preset ? "1fr" : "minmax(0, 1fr) auto", gap: 16, alignItems: "end" }}>
@@ -206,13 +207,14 @@ function ExitBand({ a, preset, paused, isMobile }: { a: AxisRow; preset?: Return
                 </div>
               ))}
             </div>
-            {a.oos && <RegisteredLine o={a.oos} />}
-            {a.exitGraded && <GradedExitLine g={a.exitGraded} />}
             {!paused && !head.shadowOf && <EvidenceLine axis={a.name} />}
           </>
         )}
+        {/* Outside the exit block: a registered read with no preset exit still says its grade is in-sample. */}
+        {a.oos && <RegisteredLine o={a.oos} />}
+        {a.exitGraded && <GradedExitLine g={a.exitGraded} />}
         {!preset && (paused || research) && (
-          <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: head ? 12 : 0 }}>{paused || "Research read · not an agent mode yet"}</div>
+          <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 12 }}>{paused || "Research read · not an agent mode yet"}</div>
         )}
       </div>
       {preset && (
@@ -228,15 +230,13 @@ function ExitBand({ a, preset, paused, isMobile }: { a: AxisRow; preset?: Return
   );
 }
 
-function SignalCard({ a, summary }: { a: AxisRow; summary: boolean }) {
+// The full evidence card for one read. On the board it opens under its row (`expanded`), so
+// every detail line (horizons, sides vs random, exits, registration, graded exit) is one tap away.
+function SignalCard({ a }: { a: AxisRow }) {
   const isMobile = useIsMobile();
-  const compactByDefault = summary || isCompact(a);
-  const [open, setOpen] = useState(false);
-  const full = !compactByDefault || open;
   const hz = (a.horizons || []).filter((h) => h.verdict !== "INSUFFICIENT");
   const [sel, setSel] = useState<number>(a.best?.h ?? hz[0]?.h ?? 0);
   const cur = hz.find((h) => h.h === sel) || a.best;
-  const { main, aside } = splitLabel(a.label);
   const blurb = AXIS_BLURB[a.name as keyof typeof AXIS_BLURB];
   const tk = takeaway(a);
   const paused = AXIS_PAUSED[a.name];
@@ -255,17 +255,11 @@ function SignalCard({ a, summary }: { a: AxisRow; summary: boolean }) {
 
   return (
     <article style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", opacity: a.verdict === "NOISE" || a.verdict === "INSUFFICIENT" ? 0.92 : 1 }}>
-      <div style={{ padding: `${pad}px ${pad}px ${full ? 20 : pad}px` }}>
+      <div style={{ padding: `${pad}px ${pad}px 20px` }}>
         {/* what it is · what the evidence says · the numbers */}
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto", gap: isMobile ? 16 : 24, alignItems: "start" }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: isMobile ? "space-between" : "flex-start", gap: 12 }}>
-              <h3 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 18 : 17, fontWeight: 600, letterSpacing: "-0.015em", color: BRIGHT, lineHeight: 1.3, minWidth: 0 }}>
-                {main}{aside && <span style={{ color: FOG, fontWeight: 400 }}> {aside}</span>}
-              </h3>
-              <Pill verdict={a.verdict} />
-            </div>
-            {blurb && <p style={{ margin: "8px 0 0", fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.5 }}>{blurb}</p>}
+            {blurb && <p style={{ margin: 0, fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.5 }}>{blurb}</p>}
             <p style={{ margin: "8px 0 0", fontFamily: MONO, fontSize: 10.5, lineHeight: 1.6, color: tk.tone === "pos" ? BRIGHT : FOG }}>
               <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 3, marginRight: 8, verticalAlign: 1, background: tk.tone === "pos" ? BONE : tk.tone === "neg" ? MUTED : FAINT }} />{tk.text}
             </p>
@@ -275,7 +269,7 @@ function SignalCard({ a, summary }: { a: AxisRow; summary: boolean }) {
         </div>
 
         {/* the proof underneath */}
-        {full && rated && hz.length > 0 && (
+        {rated && hz.length > 0 && (
           <div style={{ marginTop: 20 }}>
             <div style={{ ...label, fontSize: 8.5, marginBottom: 8 }}>Forward move by horizon · tap to inspect</div>
             <HorizonStrip hz={hz} sel={sel} onSelect={setSel} isMobile={isMobile} />
@@ -302,91 +296,151 @@ function SignalCard({ a, summary }: { a: AxisRow; summary: boolean }) {
           </div>
         )}
 
-        {compactByDefault && rated && (
-          <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
-            style={{ marginTop: 14, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: MUTED }}>
-            {open ? "Hide the evidence ↑" : "Show the evidence ↓"}
-          </button>
-        )}
       </div>
-      {full && <ExitBand a={a} preset={preset} paused={paused} isMobile={isMobile} />}
+      <ExitBand a={a} preset={preset} paused={paused} isMobile={isMobile} />
     </article>
   );
 }
 
+// ── One read, one row: what it is · its grade · how it fares vs random. Tap for the evidence. ──
+type Reg = { stage: string; registeredAt?: string; next?: string; numbers?: { events: number; meanR: number } } | null;
+
+function RandomBar({ a }: { a: AxisRow }) {
+  const b = randomBar(a);
+  const tip = "Share of 300 random-hour replays (same markets, same sides, same window, same R contract) the read out-earned. 95%+ beats random; 5% or under is reliably worse.";
+  if (b.state !== "tested") return <span title={tip} style={{ fontFamily: MONO, fontSize: 10, color: FAINT, cursor: "help" }}>{b.label}</span>;
+  const fill = b.verdict === "BELOW_RANDOM" ? NEG : b.verdict === "BEATS_RANDOM" ? BONE : FOG;
+  return (
+    <span title={tip} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "help", minWidth: 0 }}>
+      <span style={{ position: "relative", flex: 1, minWidth: 48, height: 6, borderRadius: 3, background: C.border }}>
+        <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${b.pct}%`, borderRadius: 3, background: fill }} />
+        {/* the two bars a read is judged against: 5% (reliably worse) and 95% (beats random) */}
+        <span style={{ position: "absolute", left: "5%", top: -2, bottom: -2, width: 1, background: MUTED }} />
+        <span style={{ position: "absolute", left: "95%", top: -2, bottom: -2, width: 1, background: MUTED }} />
+      </span>
+      <span style={{ fontFamily: MONO, fontSize: 10.5, color: b.verdict === "BELOW_RANDOM" ? NEG : FOG, width: 38, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{Math.round(b.pct ?? 0)}%</span>
+    </span>
+  );
+}
+
+function StageRow({ a, reg, minEvents }: { a: AxisRow; reg: Reg; minEvents: number }) {
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);
+  const { main, aside } = splitLabel(a.label);
+  const r = a.r && a.r.samples ? a.r : null;
+  const n = reg?.numbers;
+  const sub = reg ? (
+    <div style={{ marginTop: 4, fontFamily: MONO, fontSize: 9.5, color: MUTED, lineHeight: 1.5 }}>
+      <span style={{ color: FOG }}>{reg.stage === "REGISTERED" ? "Registered" : reg.stage}</span>
+      {reg.registeredAt && <> · counts from {day(reg.registeredAt)}</>}
+      {" · "}{n?.events ?? 0}/{minEvents} out-of-sample
+      {n?.events ? <> · <span style={{ color: moneyTone(n.meanR) }}>{sign(n.meanR, 2)}R</span></> : null}
+    </div>
+  ) : null;
+  const toggle = () => setOpen((v) => !v);
+  const cells = (
+    <>
+      <span style={{ fontFamily: MONO, fontSize: 12, color: r ? moneyTone(r.meanR) : FAINT, textAlign: isMobile ? "left" : "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }} title="Mean R per event: first touch of a 1.2×ATR stop vs a 1.5R target, on the recorded history.">
+        {r ? `${sign(r.meanR, 2)}R` : "—"}
+      </span>
+      <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTED, textAlign: isMobile ? "left" : "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }} title="Graded events">
+        {r ? `n${r.samples.toLocaleString()}` : ""}
+      </span>
+      <RandomBar a={a} />
+    </>
+  );
+  return (
+    <div style={{ borderTop: `1px solid ${C.border}` }}>
+      <button type="button" onClick={toggle} aria-expanded={open}
+        style={{ width: "100%", background: open ? C.surface : "transparent", border: "none", cursor: "pointer", textAlign: "left", color: BRIGHT, padding: isMobile ? "12px 4px" : "12px 10px",
+          display: "grid", alignItems: "center", columnGap: 14, rowGap: 8,
+          gridTemplateColumns: isMobile ? "58px 56px minmax(0, 1fr)" : "minmax(0, 1fr) 104px 64px 64px 170px 14px" }}>
+        <span style={{ minWidth: 0, gridColumn: isMobile ? "1 / -1" : undefined, display: isMobile ? "flex" : "block", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+          <span style={{ minWidth: 0 }}>
+            <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em", color: BRIGHT }}>{main}</span>
+            {aside && <span style={{ fontFamily: UI, fontSize: 13, color: MUTED }}> {aside}</span>}
+            {sub}
+          </span>
+          {isMobile && <Pill verdict={a.verdict} />}
+        </span>
+        {!isMobile && <span><Pill verdict={a.verdict} /></span>}
+        {cells}
+        {!isMobile && <span style={{ fontFamily: MONO, fontSize: 11, color: MUTED }}>{open ? "−" : "+"}</span>}
+      </button>
+      {open && (
+        <div style={{ padding: isMobile ? "4px 0 14px" : "4px 0 16px" }}>
+          <SignalCard a={a} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const GROUP: Record<string, { title: string; note: string }> = {
+  pipeline: { title: "In the pipeline", note: "Rule frozen at registration. The grade shown is in-sample; only events after the date count." },
+  history: { title: "Graded on recorded history", note: "In-sample. A grade, not an edge." },
+  below: { title: "Worse than random entries", note: "Kept on the board. We publish the misses." },
+};
+
 export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null }) {
   const isMobile = useIsMobile();
-  const [view, setView] = useState<"summary" | "expanded">(() => {
-    try { return localStorage.getItem(VIEW_KEY) === "summary" ? "summary" : "expanded"; } catch { return "expanded"; }
-  });
-  const pick = (v: "summary" | "expanded") => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* private window */ } };
   const tide = scorecard?.tide;
-  const axes = rankAxes(scorecard?.axes);
-  const counts = axes.reduce<Record<string, number>>((m, a) => { m[a.verdict] = (m[a.verdict] || 0) + 1; return m; }, {});
+  const groups = stageGroups(scorecard?.axes, scorecard?.pipeline?.reads);
+  const minEvents = scorecard?.pipeline?.rules?.minEvents ?? 30;
 
   return (
-    <section style={{ marginTop: 36 }}>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) auto", gap: 16, alignItems: "end" }}>
-        <div>
-          <div style={{ ...label, color: MARK, marginBottom: 12 }}>Signal scoreboard</div>
-          <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 32 : 44, fontWeight: 600, letterSpacing: "-0.035em", lineHeight: 1.02, color: BRIGHT }}>Signals, ranked by evidence.</h2>
-          <p style={{ margin: "14px 0 0", fontFamily: UI, fontSize: 14.5, lineHeight: 1.6, color: FOG, maxWidth: 580 }}>
-            Every read in the engine, graded the way we grade traders. Forward returns, no lookahead, walk-forward. The call first, the proof underneath. The misses stay on the board.
-          </p>
-        </div>
+    <section style={{ marginTop: 40 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 26 : 32, fontWeight: 600, letterSpacing: "-0.03em", lineHeight: 1.1, color: BRIGHT }}>Signals, by stage.</h2>
         {tide && (
-          <div style={{ fontFamily: MONO, fontSize: 10, lineHeight: 1.8, color: MUTED, textAlign: isMobile ? "left" : "right" }}>
-            <div style={{ color: FOG }}>{tide.markets} markets</div>
-            <div>{day(tide.from)} – {day(tide.to)}</div>
-            <div>hourly observations{scorecard?.asOf ? ` · updated ${day(scorecard.asOf)}` : ""}</div>
-          </div>
+          <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
+            {tide.markets} markets · {day(tide.from)} – {day(tide.to)}{scorecard?.asOf ? ` · updated ${day(scorecard.asOf)}` : ""}
+          </span>
         )}
       </div>
+      <p style={{ margin: "8px 0 0", fontFamily: UI, fontSize: 13.5, lineHeight: 1.5, color: FOG }}>
+        Our own reads, graded like traders: forward returns, no lookahead, walk-forward.
+      </p>
 
       {tide && (
         <div title="Every recorded market-hour, entered at random, under the same frozen R contract the cards use. Not a sample: the whole population."
-          style={{ marginTop: 22, display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "6px 14px", padding: "12px 16px", border: `1px solid ${C.border}`, borderRadius: 10, background: C.surfaceAlt, fontFamily: MONO, fontSize: 11, color: FOG, cursor: "help" }}>
+          style={{ marginTop: 16, display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "6px 14px", padding: "10px 14px", border: `1px solid ${C.border}`, borderRadius: 10, background: C.surfaceAlt, fontFamily: MONO, fontSize: 11, color: FOG, cursor: "help" }}>
           <span style={{ ...label, color: MARK }}>The tide</span>
-          <span>A random long earned <span style={{ color: moneyTone(tide.LONG.meanR) }}>{sign(tide.LONG.meanR)}R</span>; a random short <span style={{ color: moneyTone(tide.SHORT.meanR) }}>{sign(tide.SHORT.meanR)}R</span>.</span>
+          <span>random long <span style={{ color: moneyTone(tide.LONG.meanR) }}>{sign(tide.LONG.meanR)}R</span> · random short <span style={{ color: moneyTone(tide.SHORT.meanR) }}>{sign(tide.SHORT.meanR)}R</span></span>
           <span style={{ marginLeft: isMobile ? 0 : "auto", color: FAINT, fontSize: 10 }}>A read has to beat its side’s tide, not zero.</span>
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, margin: "30px 0 14px", flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-          <h3 style={{ margin: 0, fontFamily: UI, fontSize: 18, fontWeight: 600, letterSpacing: "-0.015em", color: BRIGHT }}>Evidence board</h3>
-          {axes.length > 0 && (
-            <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
-              {[["PREDICTIVE", "predictive"], ["PROMISING", "promising"], ["NOISE", "noise"], ["INSUFFICIENT", "accruing"]].filter(([k]) => counts[k]).map(([k, w]) => `${counts[k]} ${w}`).join(" · ")}
-            </span>
-          )}
+      {!isMobile && groups.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 104px 64px 64px 170px 14px", columnGap: 14, padding: "20px 10px 6px", ...label, fontSize: 8.5 }}>
+          <span>Read</span><span>Grade · in-sample</span><span style={{ textAlign: "right" }}>Mean R</span><span style={{ textAlign: "right" }}>Events</span><span>Beats random · 5% / 95%</span><span />
         </div>
-        <div role="radiogroup" aria-label="Board density" style={{ display: "inline-flex", padding: 3, border: `1px solid ${C.border}`, borderRadius: 9, background: C.surfaceAlt }}>
-          {(["summary", "expanded"] as const).map((v) => (
-            <button key={v} type="button" role="radio" aria-checked={view === v} onClick={() => pick(v)}
-              style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer", background: view === v ? BONE : "transparent", color: view === v ? C.inset : FOG, fontWeight: view === v ? 700 : 500 }}>
-              {v === "summary" ? "Summary" : "Expanded"}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {scorecard === null ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "24px 0" }}>Loading the board…</div>
       ) : scorecard.failed ? (
         // A failed read is never shown as an empty board.
         <div style={{ fontFamily: MONO, fontSize: 11, color: FOG, padding: "24px 0" }}>Couldn’t load the board. Refresh to try again.</div>
-      ) : !axes.length ? (
+      ) : !groups.length ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "24px 0" }}>The scorecard is warming up.</div>
       ) : (
-        <div style={{ display: "grid", gap: 12 }}>
-          {axes.map((a) => <SignalCard key={`${a.name}:${view}`} a={a} summary={view === "summary"} />)}
-        </div>
+        groups.map((g) => (
+          <div key={g.key} style={{ marginTop: isMobile ? 22 : 14 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", padding: isMobile ? "0 4px 8px" : "0 10px 8px" }}>
+              <span style={{ ...label, color: BRIGHT }}>{GROUP[g.key].title} · {g.rows.length}</span>
+              <span style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED }}>{GROUP[g.key].note}</span>
+            </div>
+            <div style={{ borderBottom: `1px solid ${C.border}` }}>
+              {g.rows.map(({ a, reg }) => <StageRow key={a.name} a={a} reg={reg} minEvents={minEvents} />)}
+            </div>
+          </div>
+        ))
       )}
 
-      <p style={{ margin: "16px 0 0", fontFamily: MONO, fontSize: 9.5, color: FAINT, lineHeight: 1.6 }}>
+      <p style={{ margin: "14px 0 0", fontFamily: MONO, fontSize: 9.5, color: FAINT, lineHeight: 1.6 }}>
         {scorecard?.config?.coins?.length ? `Pooled across ${scorecard.config.coins.length} markets · min ${scorecard.config.minSamples} observations to rate · ` : ""}
-        verdicts are graded in R; the horizon strip shows the raw forward move.
+        verdicts are graded in R; tap a read for its horizons, sides and exits.
       </p>
     </section>
   );

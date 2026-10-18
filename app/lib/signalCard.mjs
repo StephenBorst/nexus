@@ -100,3 +100,41 @@ export function sideBar(a, side) {
   if (!rb || rb.verdict === "TOO_FEW" || rb.pctBeaten == null) return { events, state: "thin", meanR, label: "too few to test" };
   return { events, state: "tested", meanR, pct: Math.max(0, Math.min(100, rb.pctBeaten)), verdict: rb.verdict };
 }
+
+// ── The board ordered by STAGE (borst, 2026-10-18) ──────────────────────────────────────────
+// A ranked list reads as "the top row is the winner". With nothing past the bar, the top of the
+// board must be the reads that are actually being TESTED, not the best in-sample number. So:
+//   1. "pipeline"  registered reads (app/lib/readPipeline.mjs), furthest stage first. Their grade
+//                  on the board is in-sample; only events after registration move the stage.
+//   2. "history"   every other read, graded on recorded history (in-sample), by rankAxes.
+//   3. "below"     reads that lose to random entries (pooled BELOW_RANDOM) or were retired.
+//                  Kept on the board: the misses are published, never dropped.
+// Display only: stages and verdicts come from /intel/axis-backtest as served.
+export const STAGE_LADDER = ["PAPER", "TRADEABLE", "EDGE", "LEAD", "REGISTERED"];
+
+export function stageGroups(axes, reads) {
+  const regBy = new Map((Array.isArray(reads) ? reads : []).filter((r) => r && r.axis).map((r) => [r.axis, r]));
+  const ranked = rankAxes(axes);
+  const pipeline = [], history = [], below = [];
+  for (const a of ranked) {
+    const reg = regBy.get(a.name) || null;
+    const step = reg ? STAGE_LADDER.indexOf(reg.stage) : -1;
+    if (step >= 0) pipeline.push({ a, reg, step });
+    else if ((reg && reg.stage === "RETIRED") || a?.random?.pooled?.verdict === "BELOW_RANDOM") below.push({ a, reg });
+    else history.push({ a, reg: null });
+  }
+  // Sort is stable, so equal stages keep rankAxes order.
+  pipeline.sort((x, y) => x.step - y.step);
+  return [
+    { key: "pipeline", rows: pipeline.map(({ a, reg }) => ({ a, reg })) },
+    { key: "history", rows: history },
+    { key: "below", rows: below },
+  ].filter((g) => g.rows.length);
+}
+
+// The vs-random bar on a board row: the pooled share of random replays the read beat.
+export function randomBar(a) {
+  const p = a?.random?.pooled;
+  if (!p || p.verdict === "TOO_FEW" || p.pctBeaten == null) return { state: "thin", label: "too few to test" };
+  return { state: "tested", pct: Math.max(0, Math.min(100, p.pctBeaten)), verdict: p.verdict };
+}

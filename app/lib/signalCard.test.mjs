@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { splitLabel, rankAxes, takeaway, sideBar, isCompact, AXIS_BLURB } from "./signalCard.mjs";
+import { splitLabel, rankAxes, takeaway, sideBar, isCompact, AXIS_BLURB, stageGroups, randomBar } from "./signalCard.mjs";
 
 const axis = (o = {}) => ({
   name: "x", label: "X", verdict: "PREDICTIVE",
@@ -64,4 +64,45 @@ test("every blurb is a plain description, never a grade", () => {
     assert.ok(v.length < 110, k);
     assert.doesNotMatch(v, /strongest|best|proven|edge|winning|reliable/i, k);
   }
+});
+
+test("stageGroups: registered reads first by stage, then history, then reads worse than random", () => {
+  const list = [
+    axis({ name: "top-insample", random: { pooled: { verdict: "BEATS_RANDOM", pctBeaten: 100 } } }),
+    axis({ name: "reg-lead", verdict: "PROMISING" }),
+    axis({ name: "reg-registered" }),
+    axis({ name: "reg-below", verdict: "NOISE", random: { pooled: { verdict: "BELOW_RANDOM", pctBeaten: 0 } } }),
+    axis({ name: "worse", verdict: "NOISE", random: { pooled: { verdict: "BELOW_RANDOM", pctBeaten: 1 } } }),
+    axis({ name: "noise", verdict: "NOISE", random: { pooled: { verdict: "NOT_DISTINGUISHABLE", pctBeaten: 60 } } }),
+    axis({ name: "retired" }),
+  ];
+  const reads = [
+    { axis: "reg-registered", stage: "REGISTERED" },
+    { axis: "reg-lead", stage: "LEAD" },
+    { axis: "reg-below", stage: "REGISTERED" },
+    { axis: "retired", stage: "RETIRED" },
+    { axis: "not-on-board", stage: "EDGE" },
+  ];
+  const g = stageGroups(list, reads);
+  assert.deepEqual(g.map((x) => x.key), ["pipeline", "history", "below"]);
+  // The best in-sample read is NOT on top: a further stage beats a better in-sample number.
+  assert.deepEqual(g[0].rows.map((r) => r.a.name), ["reg-lead", "reg-registered", "reg-below"]);
+  assert.equal(g[0].rows[0].reg.stage, "LEAD");
+  assert.deepEqual(g[1].rows.map((r) => r.a.name), ["top-insample", "noise"]);
+  // Worse-than-random and retired reads stay on the board, at the bottom.
+  assert.deepEqual(g[2].rows.map((r) => r.a.name).sort(), ["retired", "worse"]);
+  // Every read on the board appears exactly once.
+  assert.equal(g.reduce((n, x) => n + x.rows.length, 0), list.length);
+});
+
+test("stageGroups: no pipeline served → history and below only; empty groups dropped", () => {
+  const g = stageGroups([axis({ name: "a" })], undefined);
+  assert.deepEqual(g.map((x) => x.key), ["history"]);
+  assert.deepEqual(stageGroups(null, null), []);
+});
+
+test("randomBar: thin baselines aren't drawn as bars", () => {
+  assert.deepEqual(randomBar(axis({ random: { pooled: { verdict: "TOO_FEW", n: 3 } } })), { state: "thin", label: "too few to test" });
+  assert.deepEqual(randomBar(axis({ random: { pooled: { verdict: "BELOW_RANDOM", pctBeaten: -2 } } })), { state: "tested", pct: 0, verdict: "BELOW_RANDOM" });
+  assert.equal(randomBar({}).state, "thin");
 });

@@ -1,12 +1,12 @@
 // ── THE PROOF — the unified track-records hub ────────────────────────────────
-// One destination for every trustless record Nexus produces: human callers,
-// autonomous agents, external AI agents (the Arena), and desks (teams). All graded
-// from public data, never self-reported, and anchored to a recomputable on-chain
-// ledger. The moat, made legible in one place — humans, machines, teams, one
-// standard. Every board is fail-soft: sparse at cold-start by design, never broken.
-import { useCallback, useEffect, useMemo, useState } from "react";
+// One destination for every trustless record Nexus produces: our own signals, human
+// callers, autonomous agents, external AI agents (the Arena), and desks (teams). All graded
+// from public data, never self-reported, and anchored to a recomputable on-chain ledger.
+// Order (borst, 2026-10-18: less words, more show): the verdict → the signal board, by stage
+// → graded calls + verified callers → the other records, folded → the ledger line.
+// Every board is fail-soft: sparse at cold-start by design, never broken.
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { SectionHeader } from "@/pages/lab/components";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import CarrySleeve from "./CarrySleeve";
 import FeaturedLead from "./FeaturedLead";
@@ -19,8 +19,6 @@ const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
 const POS = "#3ecf8e", NEG = "#f7525f";
 const BORDER = "#232327", SURFACE_ALT = "#0f0f11", INSET = "#08080a";
-
-type Filter = "all" | "callers" | "agents" | "arena" | "desks" | "signals";
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const usd = (n: number) => `${n < 0 ? "-" : "+"}$${Math.abs(n) >= 1000 ? `${(Math.abs(n) / 1000).toFixed(1)}K` : Math.abs(n).toFixed(2)}`;
@@ -40,15 +38,38 @@ type ProofCard = {
 };
 type ProofOfEdge = { cards: ProofCard[]; summary?: { resolved: number; wins: number; hitRate: number; avgR: number } };
 
+// The anchor contract ON ARBITRUM — public, no login, always resolves (the fallback when the
+// ledger read fails or its on-chain proof isn't verified yet).
+const ANCHOR_EXPLORER = "https://arbiscan.io/address/0x57a698df84a44F3dA3dac3E08CA455a55A4eff84";
+
+function SectionTitle({ title }: { title: string }) {
+  return <h2 style={{ margin: "0 0 12px", fontFamily: UI, fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", color: BRIGHT }}>{title}</h2>;
+}
+
 function BoardShell({ title, count, children }: { title: string; count?: number | null; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 26 }}>
+    <div style={{ marginBottom: 22 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8 }}>
-        <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>{title}</span>
-        {count != null && count > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: FAINT }}>{count}</span>}
+        <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>{title}</span>
+        {count != null && count > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: MUTED }}>{count}</span>}
       </div>
-      <div style={{ height: 1, background: BORDER, marginBottom: 8 }} />
       {children}
+    </div>
+  );
+}
+
+// A record set that sits one tap away: the title and its count show, the board opens on tap.
+function Fold({ title, count, children }: { title: string; count?: number | null; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderTop: `1px solid ${BORDER}` }}>
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", cursor: "pointer", padding: "14px 2px", textAlign: "left" }}>
+        <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>{title}</span>
+        {count != null && <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>{count}</span>}
+        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 12, color: MUTED }}>{open ? "−" : "+"}</span>
+      </button>
+      {open && <div style={{ paddingBottom: 14 }}>{children}</div>}
     </div>
   );
 }
@@ -129,7 +150,6 @@ export default function ProofPage() {
   const rowM: React.CSSProperties = isMobile ? { flexWrap: "wrap", rowGap: 4, overflowX: "visible" } : {};
   const statM: React.CSSProperties = isMobile ? { order: 10, flexBasis: "100%", paddingLeft: 32, marginLeft: 0 } : {};
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<Filter>("all");
   const [callers, setCallers] = useState<Caller[] | null>(null);
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [arena, setArena] = useState<ArenaAgent[] | null>(null);
@@ -137,6 +157,7 @@ export default function ProofPage() {
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [proof, setProof] = useState<ProofOfEdge | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
+  const [allCalls, setAllCalls] = useState(false);
 
   const load = useCallback(() => {
     fetch(`${API}/theses/leaderboard`).then((r) => r.json()).then((d) => setCallers(Array.isArray(d?.leaderboard) ? d.leaderboard : [])).catch(() => setCallers([]));
@@ -149,120 +170,69 @@ export default function ProofPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const show = (f: Filter) => filter === "all" || filter === f;
-  const totalRecords = useMemo(
-    () => (callers?.length ?? 0) + (agents?.length ?? 0) + (arena?.length ?? 0) + (desks?.length ?? 0),
-    [callers, agents, arena, desks]
-  );
-
-  const filters: { id: Filter; label: string }[] = [
-    { id: "all", label: "ALL" },
-    { id: "callers", label: "CALLERS" },
-    { id: "agents", label: "AGENTS" },
-    { id: "arena", label: "ARENA" },
-    { id: "desks", label: "DESKS" },
-    { id: "signals", label: "SIGNALS" },
-  ];
+  const cards = proof?.cards ?? [];
+  const shownCards = allCalls ? cards.slice(0, 12) : cards.slice(0, 6);
 
   return (
-    <div style={{ maxWidth: 980, margin: "0 auto", padding: isMobile ? "20px 14px 60px" : "32px 24px 80px" }}>
-      <SectionHeader
-        eyebrow="THE PROOF"
-        title="Every record on Nexus. Graded, not claimed."
-        note={totalRecords > 0 ? `${totalRecords} RANKED` : "TRUSTLESS BY DESIGN"}
-      />
-
-      <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.65, maxWidth: 660 }}>
-        Humans, machines, and teams — all ranked on <b style={{ color: BRIGHT }}>one standard</b>. Every record here is
-        graded from public price (first-touch target vs. stop for calls; settled trades for agents), never
-        self-reported, and hashed into a ledger anyone can recompute and check against the chain. Being <i>right</i> is
-        the only thing that ranks.
-      </div>
-
-      {/* THE LEAD — what the Oct 15 re-validation decided (none cleared the bar). */}
+    <div style={{ maxWidth: 980, margin: "0 auto", padding: isMobile ? "24px 16px 60px" : "40px 24px 80px" }}>
+      {/* 1 · THE VERDICT — what the Oct 15 re-validation decided (none cleared the bar). */}
       <FeaturedLead isMobile={isMobile} />
 
-      {/* Ledger trust strip — the primitive that unifies everything. */}
-      {ledger?.ledgerHash && (
-        <div style={{ marginTop: 20, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${BONE}`, borderRadius: 6, background: SURFACE_ALT, padding: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: BONE }}>LEDGER SHA-256</span>
-          <code style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, background: INSET, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "3px 8px" }}>
-            {ledger.ledgerHash.slice(0, 12)}…{ledger.ledgerHash.slice(-10)}
-          </code>
-          {ledger.count != null && <span style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT }}>{ledger.count} records</span>}
-          <a href={`${API}/agents/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: FOG, textDecoration: "none" }}>recompute ↗</a>
-          {ledger.onChain?.verified && (
-            <a href={ledger.onChain.explorer || "#"} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: BONE, textDecoration: "none", border: `1px solid #33333a`, borderRadius: 3, padding: "3px 8px", background: "#1a1a1e" }}>
-              ⛓ Anchored on-chain ↗
-            </a>
-          )}
-        </div>
-      )}
+      {/* 2 · THE SIGNAL BOARD — our own reads, by stage. The misses stay on it. */}
+      <SignalBoard scorecard={scorecard} />
 
-      {/* HOUSE CARRY SLEEVE — our own strategy, run in the open (transparency-as-product). */}
-      <CarrySleeve />
-
-      {/* PROOF OF EDGE — resolved calls traced through the public record. The flagship
-          trust artifact: not a leaderboard number, the actual calls behind it. */}
-      {proof && proof.cards.length > 0 && (
-        <div style={{ marginTop: 26 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>GRADED CALLS</span>
-            {proof.summary && proof.summary.resolved > 0 && (
-              <span style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT }}>
-                {proof.summary.resolved} resolved · {proof.summary.hitRate}% hit · {proof.summary.avgR >= 0 ? "+" : ""}{proof.summary.avgR}R avg
-              </span>
-            )}
+      {/* 3 · GRADED CALLS + VERIFIED CALLERS — the human record, traced call by call. */}
+      <section style={{ marginTop: 44 }}>
+        <SectionTitle title="Graded calls" />
+        {/* The cards are the TOP calls by graded R, so they read as wins. The record is every resolved
+            public call, and it stays in plain sight next to them. */}
+        {proof?.summary && proof.summary.resolved > 0 && (
+          <div style={{ marginTop: -4, marginBottom: 12, fontFamily: MONO, fontSize: 10.5, color: FOG, lineHeight: 1.6 }}>
+            All {proof.summary.resolved} resolved public calls: {proof.summary.hitRate}% hit ·{" "}
+            <span style={{ color: proof.summary.avgR >= 0 ? POS : NEG }}>{proof.summary.avgR >= 0 ? "+" : ""}{proof.summary.avgR}R</span> avg.
+            <span style={{ color: MUTED }}> Below: the best by graded R.</span>
           </div>
-          <div style={{ height: 1, background: BORDER, marginBottom: 12 }} />
-          <div style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.6, maxWidth: 660, marginBottom: 14 }}>
-            The calls behind the record — thesis, levels, and first-touch outcome, graded from public price.
-            Ranked by graded R; the aggregate above is every resolved public call, not just these.
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
-            {proof.cards.slice(0, 12).map((c) => (
-              <ProofEdgeCard key={`${c.wallet}-${c.coin}-${c.gradedAt ?? c.createdAt}`} c={c} onClick={() => navigate(`/feed/trader/${c.wallet}`)} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Filter */}
-      <div style={{ display: "flex", gap: 6, marginTop: 22, marginBottom: 22, flexWrap: "wrap" }}>
-        {filters.map((f) => (
-          <button key={f.id} onClick={() => setFilter(f.id)} style={{
-            fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 13px", borderRadius: 4, cursor: "pointer",
-            background: filter === f.id ? "#1a1a1e" : "none",
-            border: `1px solid ${filter === f.id ? BONE : BORDER}`,
-            color: filter === f.id ? BONE : MUTED,
-          }}>{f.label}</button>
-        ))}
-      </div>
-
-      {/* CALLERS — humans, graded from public price */}
-      {show("callers") && (
-        <BoardShell title="VERIFIED CALLERS" count={callers?.length}>
-          {callers === null ? empty("loading…") : callers.length === 0 ? empty("No qualified callers yet — 5+ graded calls to rank.") : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {callers.slice(0, 15).map((c, i) => (
-                <div role="link" tabIndex={0} key={c.wallet} onClick={() => navigate(`/feed/trader/${c.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${c.wallet}`))} style={{ ...rowStyle(true), ...rowM }}>
-                  <span style={rankCell}>{i + 1}</span>
-                  <Pfp src={c.pfp} />
-                  <span style={nameCell}>{c.displayName || short(c.wallet)}</span>
-                  {c.meritRank?.glyph && <span title={c.meritRank.title} style={{ fontFamily: MONO, fontSize: 10, color: BONE, flexShrink: 0 }}>{c.meritRank.glyph}</span>}
-                  <span style={{ ...statCell, ...statM }}>{c.calls} calls · {c.hitRate}% · {c.avgR >= 0 ? "+" : ""}{c.avgR}R</span>
-                  <span style={{ ...scoreCell, color: c.score > 0 ? BONE : FAINT }}>{c.score || "—"}</span>
-                </div>
+        )}
+        {cards.length > 0 && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
+              {shownCards.map((c) => (
+                <ProofEdgeCard key={`${c.wallet}-${c.coin}-${c.gradedAt ?? c.createdAt}`} c={c} onClick={() => navigate(`/feed/trader/${c.wallet}`)} />
               ))}
             </div>
-          )}
-        </BoardShell>
-      )}
+            {cards.length > 6 && (
+              <button type="button" onClick={() => setAllCalls((v) => !v)}
+                style={{ marginTop: 10, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: UI, fontSize: 12, color: MUTED }}>
+                {allCalls ? "Show fewer ↑" : `Show ${Math.min(cards.length, 12) - 6} more ↓`}
+              </button>
+            )}
+          </>
+        )}
 
-      {/* AGENTS — Nexus autonomous agents, settled trades */}
-      {show("agents") && (
-        <BoardShell title="AUTONOMOUS AGENTS" count={agents?.length}>
-          {agents === null ? empty("loading…") : agents.length === 0 ? empty("No ranked agents yet — 10 live trades over 3+ days to qualify.") : (
+        <div style={{ marginTop: 22 }}>
+          <BoardShell title="VERIFIED CALLERS" count={callers?.length}>
+            {callers === null ? empty("loading…") : callers.length === 0 ? empty("No qualified callers yet: 5+ graded calls and net-positive R to rank.") : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {callers.slice(0, 15).map((c, i) => (
+                  <div role="link" tabIndex={0} key={c.wallet} onClick={() => navigate(`/feed/trader/${c.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${c.wallet}`))} style={{ ...rowStyle(true), ...rowM }}>
+                    <span style={rankCell}>{i + 1}</span>
+                    <Pfp src={c.pfp} />
+                    <span style={nameCell}>{c.displayName || short(c.wallet)}</span>
+                    {c.meritRank?.glyph && <span title={c.meritRank.title} style={{ fontFamily: MONO, fontSize: 10, color: BONE, flexShrink: 0 }}>{c.meritRank.glyph}</span>}
+                    <span style={{ ...statCell, ...statM }}>{c.calls} calls · {c.hitRate}% · {c.avgR >= 0 ? "+" : ""}{c.avgR}R</span>
+                    <span style={{ ...scoreCell, color: c.score > 0 ? BONE : FAINT }}>{c.score || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </BoardShell>
+        </div>
+      </section>
+
+      {/* 4 · THE OTHER RECORDS — one tap away. */}
+      <section style={{ marginTop: 30, borderBottom: `1px solid ${BORDER}` }}>
+        <Fold title="Autonomous agents" count={agents?.length}>
+          {agents === null ? empty("loading…") : agents.length === 0 ? empty("No ranked agents yet: 10 live trades over 3+ days to qualify.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {agents.slice(0, 15).map((a) => (
                 <div role="link" tabIndex={0} key={a.wallet} onClick={() => navigate(`/feed/trader/${a.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${a.wallet}`))} style={{ ...rowStyle(true), ...rowM }}>
@@ -275,15 +245,12 @@ export default function ProofPage() {
               ))}
             </div>
           )}
-        </BoardShell>
-      )}
+        </Fold>
 
-      {/* ARENA — external AI agents, paper + live */}
-      {show("arena") && (
-        <BoardShell title="ARENA · EXTERNAL AI AGENTS" count={arena?.length}>
+        <Fold title="Arena · external AI agents" count={arena?.length}>
           {arena === null ? empty("loading…") : arena.length === 0 ? (
-            <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "6px 2px" }}>
-              The open proving ground is live — no agents registered yet. <span role="link" tabIndex={0} onClick={() => navigate("/arena")} onKeyDown={pressKey(() => navigate("/arena"))} style={{ color: BONE, cursor: "pointer" }}>Enter the Arena →</span>
+            <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, padding: "6px 2px" }}>
+              No agents registered yet. <span role="link" tabIndex={0} onClick={() => navigate("/arena")} onKeyDown={pressKey(() => navigate("/arena"))} style={{ color: BONE, cursor: "pointer" }}>Enter the Arena →</span>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -302,13 +269,10 @@ export default function ProofPage() {
               })}
             </div>
           )}
-        </BoardShell>
-      )}
+        </Fold>
 
-      {/* DESKS — teams, combined graded call record */}
-      {show("desks") && (
-        <BoardShell title="◆ DESKS — TEAMS" count={desks?.length}>
-          {desks === null ? empty("loading…") : desks.length === 0 ? empty("No desks yet — teams rank by their members' combined graded record.") : (
+        <Fold title="Desks · teams" count={desks?.length}>
+          {desks === null ? empty("loading…") : desks.length === 0 ? empty("No desks yet. Teams rank by their members’ combined graded record.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {desks.slice(0, 15).map((d) => (
                 <div role="link" tabIndex={0} key={d.id} onClick={() => navigate("/feed")} onKeyDown={pressKey(() => navigate("/feed"))} style={{ ...rowStyle(true), ...rowM }}>
@@ -320,18 +284,38 @@ export default function ProofPage() {
               ))}
             </div>
           )}
-        </BoardShell>
-      )}
+        </Fold>
 
-      {/* SIGNALS — we grade our OWN reads by the same standard, and publish the misses. */}
-      {show("signals") && <SignalBoard scorecard={scorecard} />}
+        <Fold title="House carry sleeve · paper">
+          <CarrySleeve flush />
+        </Fold>
+      </section>
 
-      {/* Footer — how grading works */}
-      <div style={{ marginTop: 30, paddingTop: 16, borderTop: `1px solid ${BORDER}`, fontFamily: UI, fontSize: 11.5, color: MUTED, lineHeight: 1.6 }}>
-        Calls are graded from public 1h price once price trades at the entry: first touch of target vs. stop, same-candle counted as a loss.
-        Agents are ranked on real settled trades carrying exchange order IDs. Nobody types in a P&L.
-        Want your own record? <span role="link" tabIndex={0} onClick={() => navigate("/analyze")} onKeyDown={pressKey(() => navigate("/analyze"))} style={{ color: BONE, cursor: "pointer" }}>X-ray any wallet →</span>
-      </div>
+      {/* 5 · THE LEDGER — how it's graded, and where anyone can check it. */}
+      <footer style={{ marginTop: 28, fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
+        <div style={{ color: FOG }}>Graded, not claimed. One standard for signals, callers, agents and desks.</div>
+        <div style={{ marginTop: 4 }}>
+          Calls: public 1h price once the entry trades; first touch of target vs stop; a candle touching both is a loss.
+          Agents: settled trades with exchange order IDs. Nobody types in a P&amp;L.
+        </div>
+        <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          {ledger?.ledgerHash && (
+            <>
+              <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", color: FOG }}>LEDGER SHA-256</span>
+              <code style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, background: INSET, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "3px 8px" }}>
+                {ledger.ledgerHash.slice(0, 12)}…{ledger.ledgerHash.slice(-10)}
+              </code>
+              {ledger.count != null && <span style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED }}>{ledger.count} records</span>}
+              <a href={`${API}/agents/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: FOG, textDecoration: "none" }}>Recompute ↗</a>
+            </>
+          )}
+          <a href={ledger?.onChain?.verified && ledger.onChain.explorer ? ledger.onChain.explorer : ANCHOR_EXPLORER} target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 12, color: BONE, textDecoration: "none", border: `1px solid ${BORDER}`, borderRadius: 4, padding: "6px 12px", background: "#1a1a1e" }}>
+            ⛓ {ledger?.onChain?.verified ? "Anchored on Arbitrum ↗" : "Verify on Arbitrum ↗"}
+          </a>
+          <span role="link" tabIndex={0} onClick={() => navigate("/analyze")} onKeyDown={pressKey(() => navigate("/analyze"))} style={{ fontSize: 12, color: FOG, cursor: "pointer", marginLeft: isMobile ? 0 : "auto" }}>X-ray any wallet →</span>
+        </div>
+      </footer>
     </div>
   );
 }

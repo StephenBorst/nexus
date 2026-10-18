@@ -114,6 +114,9 @@ is everything built on top:
   GitHub can turn workflows off); borst re-enabled it 2026-10-11 and main deployed green (`ad309f8`, manual run). If runs
   stop again, check repo Settings → Actions → General first. After merging, check that a run started (cloud sessions
   can't read Actions settings: the proxy 403s that path).
+  **⚠️ 2026-10-18: Actions disabled ACCOUNT-wide** ("Actions has been disabled for this user": GitHub abuse detection
+  flagged the account for manual review; borst replied to support). Not the repo setting. Nothing deploys until support
+  clears it, so hold merges; worker secrets (`wrangler secret put`) still work, they don't go through Actions.
 
 ## Cloudflare Workers (deploy with `npx wrangler deploy` in each dir; needs CF auth)
 - **nexus-lab-api** (`workers/nexus-lab-api`) → `og.nexustradinglabs.com`. This is the `AGENT_API`
@@ -648,6 +651,15 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   `okx.test.mjs` / `flow.snapshot.test.mjs`) changes how often a row lands, never what a row says; it logs
   `[flow] basis N/9 · cvd N/9 · retries R` every hour and `[flow] MISSED …` with reasons. Read history with the holes
   in mind: a pre-fix window has fewer basis hours than its calendar span.
+- **/proof layout (2026-10-18, borst: less words, more show; branch `claude/bold-sagan-ucqho1`, merge held while Actions
+  is off).** Order: the verdict (`FeaturedLead.tsx`: "Graded in public. Nothing has cleared the bar yet." + the bar in
+  one line + the 4 dated receipts) → the signal board **by stage** (`stageGroups` in `app/lib/signalCard.mjs`, tested:
+  registered pipeline reads first by stage, then reads graded on history, then reads worse than random / retired,
+  kept visible) as compact rows; a tap opens the full card → graded calls (the all-calls record stays visible beside
+  the best-by-R cards) + verified callers → agents / arena / desks / carry folded → the ledger line (hash, recompute,
+  on-chain anchor). ⚠️ Don't rank the board by in-sample R: the top row reads as the winner. The in-sample label
+  sits on the column header and each group's note; `RegisteredLine` now shows on every registered read (it used to
+  render only for reads with preset exit grades).
 - **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
   AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
