@@ -5011,6 +5011,14 @@ document.getElementById("btn").addEventListener("click",go);
         if (!stateRaw) return json({ ok: true, cleared: 0 }, request);
         const state = JSON.parse(stateRaw);
         const cleared = (state.paper_trades || []).length;
+        // A reset is public, not silent: record what was wiped (the lifetime figures
+        // as they stood) and count it. The board shows the count; the log is capped.
+        const wiped = state.paper_agg && Number(state.paper_agg.trades) > 0 ? state.paper_agg : null;
+        state.paper_resets = (Number(state.paper_resets) || 0) + 1;
+        state.paper_reset_log = [
+          ...(Array.isArray(state.paper_reset_log) ? state.paper_reset_log : []),
+          { at: Date.now(), cleared, wiped: wiped ? { trades: wiped.trades, wins: wiped.wins, net: wiped.net, firstTradeAt: wiped.firstTradeAt, lastTradeAt: wiped.lastTradeAt } : null },
+        ].slice(-50);
         state.paper_trades = [];
         // RESET means the record starts clean — clear the LIFETIME aggregate too,
         // or the card would keep reporting totals for trades the user just wiped.
