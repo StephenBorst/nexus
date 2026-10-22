@@ -16,9 +16,21 @@ import { callR, splitPlan } from "./logic.mjs";
 const r2 = (n) => Math.round(n * 100) / 100;
 const bare = (s) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
 
-/** WIN / LOSS (graded) · CLOSED (closed another way) · WORKING · OPEN · RUNNER (split, TP1 half done) · UNCHECKED. */
+/**
+ * Why gradeCall will never grade this call, or null: levels on the wrong side of entry, or a declared
+ * split whose TP2 isn't beyond TP1. Published calls are frozen, so this is permanent. (Since
+ * 2026-10-22 the lock refuses a bad split at publish; calls published before can still carry one.)
+ */
+export function invalidReason(t) {
+  if (callR(t) == null) return "stop or target on the wrong side of entry";
+  if (splitPlan(t)?.invalid) return "split exit with TP2 not beyond TP1";
+  return null;
+}
+
+/** WIN / LOSS (graded) · INVALID (never gradeable) · CLOSED (closed another way) · WORKING · OPEN · RUNNER (split, TP1 half done) · UNCHECKED. */
 export function callState(t) {
   if (t?.gradedOutcome === "WIN" || t?.gradedOutcome === "LOSS") return t.gradedOutcome;
+  if (invalidReason(t)) return "INVALID";
   const lc = callLifecycle(t);
   if (lc === "OPEN" && t.tp1HitAt) return "RUNNER";
   return lc;
@@ -44,11 +56,12 @@ export function callStatusRow(t, mark) {
     state,
     filledAt: t.filledAt ?? null,
     tp1HitAt: t.tp1HitAt ?? null,
-    graded: state === "WIN" || state === "LOSS" ? { outcome: state, r: t.gradedR ?? null, at: t.gradedAt ?? null } : null,
+    graded: state === "WIN" || state === "LOSS" ? { outcome: state, r: t.gradedR ?? null, at: t.gradedAt ?? null, exitedAt: t.exitedAt ?? null } : null,
+    ...(state === "INVALID" ? { invalidReason: invalidReason(t) } : {}),
     live: null,
   };
   const m = Number(mark);
-  if (!(m > 0) || !(risk > 0) || row.graded || state === "CLOSED") return row;
+  if (!(m > 0) || !(risk > 0) || row.graded || state === "CLOSED" || state === "INVALID") return row;
   const away = (lvl) => ({ price: lvl, pct: r2(((lvl - m) / m) * 100), r: r2(Math.abs(lvl - m) / risk) });
   row.live = { mark: m, levels: { entry: away(entry), stop: away(stop), tp1: away(tp1), ...(tp2 > 0 ? { tp2: away(tp2) } : {}) } };
   if (state === "OPEN" || state === "RUNNER") row.live.moveR = r2((long ? m - entry : entry - m) / risk);

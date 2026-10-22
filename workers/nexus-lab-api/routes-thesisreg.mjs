@@ -102,6 +102,10 @@ export async function indexRegistration(env, { txHash, wallet, rpc, readMark, no
   const thesis = thesisFromRegistration(proven, { txHash, blockTimeMs });
   const prep = await prepareSeal(env, wallet, prev, [thesis, ...prev], now(), { readMark });
   if (prep.error) return { status: 400, body: { error: prep.error, txHash } };
+  // The lock refused to publish it (another wallet's id, a split with TP2 not beyond TP1): nothing is
+  // written, and the answer says why, never "in /feed".
+  const refusal = prep.sealed.refused.find((r) => r.id === thesis.id);
+  if (refusal) return { status: 422, body: { error: "publish_refused", reason: refusal.reason, txHash } };
   await prep.commit(record);
   const saved = prep.sealed.theses.find((t) => t.id === thesis.id) || thesis;
   return {
