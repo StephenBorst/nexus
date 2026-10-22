@@ -110,10 +110,20 @@ is everything built on top:
   not a real break — the next push's superset deploy covers it.
 - **Manual redeploy (2026-10-11):** deploy.yml also has `workflow_dispatch` → Actions → "Build & Deploy to Cloudflare
   Pages" → Run workflow (branch main). Added after Actions went silent: from Oct 4 to Oct 11 NO run started on this
-  repo (the #79 merge deploy, PR checks on #80 and #81). **Cause: Actions was disabled on the repo** (it's a fork, where
-  GitHub can turn workflows off); borst re-enabled it 2026-10-11 and main deployed green (`ad309f8`, manual run). If runs
-  stop again, check repo Settings → Actions → General first. After merging, check that a run started (cloud sessions
-  can't read Actions settings: the proxy 403s that path).
+  repo (the #79 merge deploy, PR checks on #80 and #81). That time it was recorded as Actions disabled on the repo;
+  borst re-enabled it 2026-10-11 and main deployed green (`ad309f8`, manual run). It may have been the account flag below.
+- **⚠️ Actions blocked at the ACCOUNT level (2026-10-17 → 10-22).** Between 06:03 and 19:29 UTC on Oct 17 runs stopped:
+  #133 got no GitHub Actions check suite at all (only Vercel/Pages/Cloudflare/Claude, stuck "queued"), the run history
+  of deploy.yml + pr-checks.yml read empty (old run ids 404'd), and repo Settings still said "Allow all". The tell:
+  a `workflow_dispatch` returned **"Actions has been disabled for this user."** Cause = GitHub's abuse-detection systems
+  flagged the StephenBorst account for manual review as possibly conflicting with the Terms of Service; GitHub never
+  named the activity (borst asked; no answer). Support (ticket) cleared it 2026-10-22; first manual run green on
+  `68d54d4`, push deploys green after. While blocked nothing deploys from GitHub (nexus-landing too, same account) and
+  live Workers/crons keep running. **If runs stop again:** trigger a `workflow_dispatch` FIRST — that error string means
+  the account, not the repo (Settings won't show it; email + support.github.com do). Repo Settings → Actions → General
+  only for any other message. After merging, check that a run started (cloud sessions can't read Actions settings: the
+  proxy 403s that path). A commit that never got a check suite gets none later: it rides the next real change or is
+  merged on borst's word — never an empty commit or a close/reopen.
   **2026-10-18 → 10-23: Actions was disabled ACCOUNT-wide** ("Actions has been disabled for this user": GitHub abuse
   detection flagged the account for manual review). Not the repo setting. GitHub support cleared it 2026-10-23. If that
   message comes back: nothing deploys, hold merges; worker secrets (`wrangler secret put`) still work.
