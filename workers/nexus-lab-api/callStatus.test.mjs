@@ -21,8 +21,8 @@ test("callState: the grader's stamps decide; a split with its TP1 half closed is
   assert.equal(callState(call({ publishMark: { px: 100.1 } })), "OPEN", "posted at the market: filled by the grader's own rule");
 });
 
-test("callState: a call the grader can never grade reads INVALID, not OPEN (Engine B's TP2 = TP1 split)", () => {
-  const bad = call({ exitPlan: "SPLIT_50", takeProfit2: 103, fillState: "OPEN", publishMark: { px: 100 } });
+test("callState: a call the grader can never grade reads INVALID, not OPEN (a split with TP2 short of TP1)", () => {
+  const bad = call({ exitPlan: "SPLIT_50", takeProfit2: 102, fillState: "OPEN", publishMark: { px: 100 } });
   assert.equal(callState(bad), "INVALID");
   const row = callStatusRow(bad, 101);
   assert.equal(row.invalidReason, "split exit with TP2 not beyond TP1");
@@ -32,6 +32,10 @@ test("callState: a call the grader can never grade reads INVALID, not OPEN (Engi
   assert.equal(callStatusRow(call({ stopLoss: 101 }), 100).invalidReason, "stop or target on the wrong side of entry");
   assert.equal(callState(call({ takeProfit2: 103 })), "UNCHECKED", "a TP2 alone declares nothing");
   assert.equal("invalidReason" in callStatusRow(call({ fillState: "OPEN" }), 101), false);
+  // Engine B's v2.1 shape (TP2 = TP1 under a split) is a single-target call since 2026-10-23.
+  const equal = call({ exitPlan: "SPLIT_50", takeProfit2: 103, fillState: "OPEN", publishMark: { px: 100 } });
+  assert.equal(callState(equal), "OPEN");
+  assert.equal(callStatusRow(equal, 101).plannedR.tp2, null, "no runner: it is one target");
 });
 
 test("callStatusRow: a graded call carries the hour it closed", () => {
@@ -42,7 +46,7 @@ test("callStatusRow: a graded call carries the hour it closed", () => {
 
 test("GET /theses/status/:wallet: an invalid call is listed and counted, and alone reads no marks", async () => {
   _resetMarkCache();
-  const env = { LAB_STORE: kv({ [`lab:${W}`]: { theses: [call({ id: "bad", exitPlan: "SPLIT_50", takeProfit2: 103 })] } }) };
+  const env = { LAB_STORE: kv({ [`lab:${W}`]: { theses: [call({ id: "bad", exitPlan: "SPLIT_50", takeProfit2: 102 })] } }) };
   const n = { n: 0 };
   const res = await handleCallStatus(["theses", "status", W], get(`/theses/status/${W}`), env, { fetchImpl: futures({ PERP_BTC_USDC: 101 }, n), now: () => T0 });
   const body = await res.json();

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "./callMath.mjs";
-import { callR } from "../../workers/nexus-lab-api/logic.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitPlan, callInvalidReason, SPLIT_EXIT } from "./callMath.mjs";
+import { callR, splitPlan as graderSplitPlan, SPLIT_EXIT as GRADER_SPLIT } from "../../workers/nexus-lab-api/logic.mjs";
 
 // Shaped like the live Bankr call that showed "R:R 1:5.00": its stored riskReward was to TP2.
 const bankr = { direction: "SHORT", entryPrice: 86000, stopLoss: 86950, takeProfit1: 83530, takeProfit2: 81250, riskReward: 5 };
@@ -37,4 +37,18 @@ test("liveMove reads the move without a position size", () => {
   assert.equal(fmtLiveMove(liveMove({ ...t, direction: "SHORT", stopLoss: 105 }, 102)), "−0.40R · −2.00%");
   assert.equal(liveMove(t, 0), null);
   assert.equal(fmtLiveMove(liveMove({ ...t, stopLoss: 0 }, 102)), "+2.00%");
+});
+
+test("the grader reads the split rule from here: one function, one value", () => {
+  assert.equal(graderSplitPlan, splitPlan);
+  assert.equal(GRADER_SPLIT, SPLIT_EXIT);
+});
+
+test("callInvalidReason: says why a call can never be graded, or null", () => {
+  const long = { direction: "LONG", entryPrice: 100, stopLoss: 98, takeProfit1: 103, takeProfit2: 108, exitPlan: "SPLIT_50" };
+  assert.equal(callInvalidReason(long), null);
+  assert.equal(callInvalidReason({ ...long, takeProfit2: 103 }), null, "TP2 = TP1: one target, gradeable");
+  assert.equal(callInvalidReason({ ...long, takeProfit2: 102 }), "split exit with TP2 not beyond TP1");
+  assert.equal(callInvalidReason({ ...long, stopLoss: 101 }), "stop or target on the wrong side of entry");
+  assert.equal(callInvalidReason({ ...long, exitPlan: undefined, takeProfit2: 0 }), null, "no split declared");
 });

@@ -114,6 +114,9 @@ is everything built on top:
   GitHub can turn workflows off); borst re-enabled it 2026-10-11 and main deployed green (`ad309f8`, manual run). If runs
   stop again, check repo Settings → Actions → General first. After merging, check that a run started (cloud sessions
   can't read Actions settings: the proxy 403s that path).
+  **2026-10-18 → 10-23: Actions was disabled ACCOUNT-wide** ("Actions has been disabled for this user": GitHub abuse
+  detection flagged the account for manual review). Not the repo setting. GitHub support cleared it 2026-10-23. If that
+  message comes back: nothing deploys, hold merges; worker secrets (`wrangler secret put`) still work.
 
 ## Cloudflare Workers (deploy with `npx wrangler deploy` in each dir; needs CF auth)
 - **nexus-lab-api** (`workers/nexus-lab-api`) → `og.nexustradinglabs.com`. This is the `AGENT_API`
@@ -648,6 +651,14 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   `okx.test.mjs` / `flow.snapshot.test.mjs`) changes how often a row lands, never what a row says; it logs
   `[flow] basis N/9 · cvd N/9 · retries R` every hour and `[flow] MISSED …` with reasons. Read history with the holes
   in mind: a pre-fix window has fewer basis hours than its calendar span.
+- **/proof layout (2026-10-18, borst: less words, more show; shipped 2026-10-23 once Actions was back).** Order: the verdict (`FeaturedLead.tsx`: "Graded in public. Nothing has cleared the bar yet." + the bar in
+  one line + the 4 dated receipts) → the signal board **by stage** (`stageGroups` in `app/lib/signalCard.mjs`, tested:
+  registered pipeline reads first by stage, then reads graded on history, then reads worse than random / retired,
+  kept visible) as compact rows; a tap opens the full card → graded calls (the all-calls record stays visible beside
+  the best-by-R cards) + verified callers → agents / arena / desks / carry folded → the ledger line (hash, recompute,
+  on-chain anchor). ⚠️ Don't rank the board by in-sample R: the top row reads as the winner. The in-sample label
+  sits on the column header and each group's note; `RegisteredLine` now shows on every registered read (it used to
+  render only for reads with preset exit grades).
 - **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
   AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
@@ -1021,6 +1032,17 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   `SERVER_FIELDS` + `PASS_FIELDS`) and backfills calls graded before it ONCE (`stampExit`: only when the re-grade agrees
   with the stamp, else `null` = derived, unavailable). Status `graded.exitedAt`. Hold time = exitedAt − filledAt
   (hour precision) — for the engine A/B compare view, held until both engines have ≥20 graded calls in the window.
+- **TP2 = TP1 split = one target (borst, 2026-10-23).** The split rule moved to ONE place, `app/lib/callMath.mjs`
+  (`SPLIT_EXIT`, `splitPlan`, `callInvalidReason`); lab-api `logic.mjs` re-exports it (a test pins the identity). A
+  SPLIT_50 whose TP2 IS its TP1 closes both halves at TP1, so `splitPlan` returns null and the call grades as the
+  single-target call (test: identical grades on win / loss / same-candle / open tapes). TP2 short of TP1 = still INVALID
+  and still refused at publish. Moved exactly 4 calls, all ungraded before (Engine B #21 SOL, #22 ZEC, #23 BTC, #24 ETH;
+  checked old vs new rule on all 321 public calls: 0 of 295 stored grades touched); they re-grade on the next hourly
+  pass (no stamp ⇒ graded every pass). Engine B's v2.1 template (TP2 = TP1 + SPLIT_50) is valid now. **Cards:**
+  `callLifecycle` has state `INVALID` (from the levels, never from gradeCall's INVALID, which also means "no candles");
+  `AwaitingFill` shows "NOT GRADED · <reason> · counts nowhere" + pill "Not graded" on the Feed card, call page, trader
+  profile and the owner's Lab; the share card reads NOT GRADED. Live today: no public call is INVALID. Not done (not
+  asked): refusing levels on the wrong side of entry at publish (the Lab form blocks it; the API doesn't).
 - **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
   (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
   A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from

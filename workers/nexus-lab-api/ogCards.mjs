@@ -183,8 +183,9 @@ export function buildThesisOgSvg({ displayName, wallet, ticker, direction, entry
   const dirColor = bright;
   const dirArrow = direction === "LONG" ? "↑" : "↓";
   const rrColor = bright;
-  const statusMap = { HIT_TP: "HIT TP ✓", STOPPED_OUT: "STOPPED OUT", ACTIVE: "ACTIVE", INVALIDATED: "INVALIDATED" };
-  const statusColorMap = { HIT_TP: win, STOPPED_OUT: loss, ACTIVE: bone, INVALIDATED: muted };
+  // NOT_GRADED = the grader can never grade this call (callMath.mjs callInvalidReason): no money, monochrome.
+  const statusMap = { HIT_TP: "HIT TP ✓", STOPPED_OUT: "STOPPED OUT", ACTIVE: "ACTIVE", INVALIDATED: "INVALIDATED", NOT_GRADED: "NOT GRADED" };
+  const statusColorMap = { HIT_TP: win, STOPPED_OUT: loss, ACTIVE: bone, INVALIDATED: muted, NOT_GRADED: muted };
   const statusLabel = statusMap[status] || status;
   const statusColor = statusColorMap[status] || fog;
   const notesLine = notes ? esc(String(notes).slice(0, chartDataUri ? 46 : 90)) : "";

@@ -97,7 +97,8 @@ export function entryFill(t, cd) {
  *   that also reaches TP2 (and not the stop) closes both halves. Total = 0.5·R1 + 0.5·R2 or
  *   0.5·R1 − 0.5; WIN when the total is above zero. Until the runner closes the call stays PENDING,
  *   with `tp1At` (sec) and `bankedR` so a card can show the half that's done. A declared split whose
- *   TP2 isn't beyond TP1 is INVALID.
+ *   TP2 equals TP1 is the single-target call and grades as one (2026-10-23); one whose TP2 falls
+ *   short of TP1 is INVALID.
  *
  * - EXIT TIME (2026-10-22). A WIN or LOSS carries `exitAt` (sec) = the start of the hour the call
  *   closed in (for a split, the hour its LAST half closed). Hour precision, like `tp1At` and the
@@ -144,20 +145,10 @@ export function gradeCall(t, cd) {
   return { outcome: "PENDING", r: 0 };
 }
 
-/** The declared split exit (see gradeCall). The one value it takes; anything else = a single target. */
-export const SPLIT_EXIT = "SPLIT_50";
-
-/**
- * A call's declared split, or null for a single-target call.
- * @returns {null | { invalid: true } | { r1: number, r2: number }} r2 = reward to TP2 ÷ risk, 2dp
- */
-export function splitPlan(t) {
-  if (t?.exitPlan !== SPLIT_EXIT) return null;
-  const r1 = callR(t);
-  const r2 = callR({ ...t, takeProfit1: t.takeProfit2 });
-  if (r1 == null || r2 == null || !(r2 > r1)) return { invalid: true };
-  return { r1, r2 };
-}
+// The declared split exit (see gradeCall) and the rule that reads it live ONCE in app/lib/callMath.mjs,
+// shared with the publish lock, /theses/status and the cards. A TP2 equal to TP1 = a single target.
+import { SPLIT_EXIT, splitPlan } from "../../app/lib/callMath.mjs";
+export { SPLIT_EXIT, splitPlan };
 
 /**
  * Where a draft's entry sits against the market right now (the latest hour's range), for the

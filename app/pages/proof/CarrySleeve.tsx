@@ -49,7 +49,7 @@ function EquityCurve({ points, capital }: { points: Point[]; capital: number }) 
   );
 }
 
-export default function CarrySleeve() {
+export default function CarrySleeve({ flush }: { flush?: boolean } = {}) {
   const [rec, setRec] = useState<Record | null>(null);
   const [dead, setDead] = useState(false);
 
@@ -82,7 +82,7 @@ export default function CarrySleeve() {
   );
 
   return (
-    <div style={{ marginTop: 26, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${BONE}`, borderRadius: 8, background: SURFACE_ALT, padding: 16 }}>
+    <div style={{ marginTop: flush ? 0 : 26, border: `1px solid ${BORDER}`, borderLeft: `2px solid ${BONE}`, borderRadius: 8, background: SURFACE_ALT, padding: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
         <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: BONE }}>◈ HOUSE CARRY SLEEVE</span>
         <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.1em", color: WATCH, border: `1px solid ${WATCH}55`, borderRadius: 3, padding: "2px 6px" }}>

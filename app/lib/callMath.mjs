@@ -28,6 +28,40 @@ export function runnerRR(t) {
   return r2 != null && r1 != null && r2 > r1 ? r2 : null;
 }
 
+// ── Can the grader grade this call at all? ───────────────────────────────────────────────────
+// ONE rule for the grader (lab-api logic.mjs gradeCall re-exports splitPlan from here), the publish
+// lock, /theses/status and every card that says why a call isn't graded.
+
+/** The declared split exit (lab-api gradeCall): half at TP1, half at TP2, both on the original stop. */
+export const SPLIT_EXIT = "SPLIT_50";
+
+/**
+ * A call's declared split, or null for a single-target call.
+ * A split whose TP2 IS its TP1 closes both halves at TP1: that is the single-target call, and it is
+ * graded as one (borst, 2026-10-23: four Engine B calls posted this shape sat INVALID, ungraded). A
+ * TP2 short of TP1 still makes the split INVALID: there the two halves can't both be honoured.
+ * @returns {null | { invalid: true } | { r1: number, r2: number }} r2 = reward to TP2 ÷ risk, 2dp
+ */
+export function splitPlan(t) {
+  if (t?.exitPlan !== SPLIT_EXIT) return null;
+  const r1 = callRR(t);
+  if (r1 != null && Number(t.takeProfit2) === Number(t.takeProfit1)) return null;
+  const r2 = rTo(t, t?.takeProfit2);
+  if (r1 == null || r2 == null || !(r2 > r1)) return { invalid: true };
+  return { r1, r2 };
+}
+
+/**
+ * Why the grader can never grade this call, from its levels alone, or null. Published calls are
+ * frozen, so this is permanent. (gradeCall also answers INVALID when it has no candles; that is a
+ * missing read, not this.)
+ */
+export function callInvalidReason(t) {
+  if (callRR(t) == null) return "stop or target on the wrong side of entry";
+  if (splitPlan(t)?.invalid) return "split exit with TP2 not beyond TP1";
+  return null;
+}
+
 /** "1:2.60" for TP1, "—" when the levels don't make a call. */
 export const fmtRR = (r) => (r == null ? "—" : `1:${r.toFixed(2)}`);
 

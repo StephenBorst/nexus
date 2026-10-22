@@ -217,7 +217,7 @@ test("tp1HitAt and planV are server fields", () => {
 });
 
 test("a split whose TP2 isn't beyond TP1 is refused at publish and stays private (2026-10-22)", () => {
-  for (const tp2 of [110, 105, 0]) {
+  for (const tp2 of [105, 0]) {
     const r = save([], [call({ isPublic: true, takeProfit2: tp2, exitPlan: "SPLIT_50" })], { v: 1, calls: {}, order: [] });
     assert.equal(r.theses[0].isPublic, false, `TP2 ${tp2}`);
     assert.deepEqual(r.refused, [{ id: "c1", reason: "a split exit needs TP2 beyond TP1" }]);
@@ -228,6 +228,10 @@ test("a split whose TP2 isn't beyond TP1 is refused at publish and stays private
   const ok = save([], [call({ isPublic: true, takeProfit2: 120, exitPlan: "SPLIT_50" })], { v: 1, calls: {}, order: [] });
   assert.equal(ok.theses[0].isPublic, true);
   assert.equal(ok.refused.length, 0);
+  // TP2 = TP1 under a split is the single-target call (2026-10-23): publishes, graded as one target.
+  const equal = save([], [call({ isPublic: true, takeProfit2: 110, exitPlan: "SPLIT_50" })], { v: 1, calls: {}, order: [] });
+  assert.equal(equal.theses[0].isPublic, true);
+  assert.equal(equal.refused.length, 0);
   // A single-target call with a TP2 at or under TP1 declares nothing: unaffected.
   assert.equal(save([], [call({ isPublic: true, takeProfit2: 105 })], { v: 1, calls: {}, order: [] }).theses[0].isPublic, true);
 });

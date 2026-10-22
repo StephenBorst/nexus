@@ -69,3 +69,18 @@ test("unknown wallet → 404; other paths → null; non-GET → 405", async () =
   assert.equal(await handleOgThesis(["og", "identity", W], req(), env, {}), null);
   assert.equal((await handleOgThesis(parts("pub"), req("POST"), env, {})).status, 405);
 });
+
+test("a call the grader can never grade reads NOT GRADED on its card, never ACTIVE", async () => {
+  const W2 = "0x4444444444444444444444444444444444444444";
+  const calls = [
+    { ...base, id: "short-split", isPublic: true, exitPlan: "SPLIT_50", takeProfit2: 105 },   // TP2 short of TP1 (110)
+    { ...base, id: "equal-split", isPublic: true, exitPlan: "SPLIT_50", takeProfit2: 110 },   // Engine B v2.1: one target
+  ];
+  const env2 = { LAB_STORE: { get: async (k) => (k === `lab:${W2}` ? JSON.stringify({ theses: calls }) : null) } };
+  const { deps } = spyDeps();
+  const bad = await (await handleOgThesis(["og", "thesis", W2, "short-split"], req(), env2, deps)).text();
+  assert.match(bad, /NOT GRADED/);
+  const ok = await (await handleOgThesis(["og", "thesis", W2, "equal-split"], req(), env2, deps)).text();
+  assert.doesNotMatch(ok, /NOT GRADED/);
+  assert.match(ok, /ACTIVE/);
+});

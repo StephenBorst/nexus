@@ -8,23 +8,28 @@
 //   CLOSED    graded (first touch of target or stop), or closed by its owner.
 //   UNCHECKED an open call the grader hasn't looked at yet (it stamps `fillState` hourly). A card
 //             shows no P&L for it either: an hour of "checking" beats a phantom win.
+//   INVALID   the grader can never grade it (levels on the wrong side of entry, a split whose TP2
+//             falls short of TP1: callMath.mjs callInvalidReason). It counts nowhere, so a card says
+//             so and why, instead of showing it as a live call forever (2026-10-23).
 //
 // Before this, every unresolved call read as a live position: a LONG with a limit entry at $2,400 and
 // ETH at $2,538 showed "+2.73R at target" with no trade behind it.
 
 // One band, shared with the grader (lab-api logic.mjs) and the call page (entryAtMark.mjs).
 import { ENTRY_AT_MARK_PCT } from "./entryAtMark.mjs";
+import { callInvalidReason } from "./callMath.mjs";
 export { ENTRY_AT_MARK_PCT };
 
 const isClosedStatus = (s) => typeof s === "string" && s !== "" && s !== "ACTIVE";
 
 /**
- * @param {object} t a call { status, gradedOutcome?, fillState?, entryPrice, publishMark? }
- * @returns {"WORKING"|"OPEN"|"CLOSED"|"UNCHECKED"}
+ * @param {object} t a call { status, gradedOutcome?, fillState?, direction, entryPrice, stopLoss, takeProfit1, takeProfit2?, exitPlan?, publishMark? }
+ * @returns {"WORKING"|"OPEN"|"CLOSED"|"UNCHECKED"|"INVALID"}
  */
 export function callLifecycle(t) {
   if (!t) return "UNCHECKED";
   if (t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS") return "CLOSED";
+  if (callInvalidReason(t)) return "INVALID";
   if (isClosedStatus(t.status)) return "CLOSED";
   if (t.fillState === "WORKING") return "WORKING";
   if (t.fillState === "OPEN") return "OPEN";
