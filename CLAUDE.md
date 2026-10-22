@@ -1021,6 +1021,17 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   `SERVER_FIELDS` + `PASS_FIELDS`) and backfills calls graded before it ONCE (`stampExit`: only when the re-grade agrees
   with the stamp, else `null` = derived, unavailable). Status `graded.exitedAt`. Hold time = exitedAt − filledAt
   (hour precision) — for the engine A/B compare view, held until both engines have ≥20 graded calls in the window.
+- **TP2 = TP1 split = one target (borst, 2026-10-23).** The split rule moved to ONE place, `app/lib/callMath.mjs`
+  (`SPLIT_EXIT`, `splitPlan`, `callInvalidReason`); lab-api `logic.mjs` re-exports it (a test pins the identity). A
+  SPLIT_50 whose TP2 IS its TP1 closes both halves at TP1, so `splitPlan` returns null and the call grades as the
+  single-target call (test: identical grades on win / loss / same-candle / open tapes). TP2 short of TP1 = still INVALID
+  and still refused at publish. Moved exactly 4 calls, all ungraded before (Engine B #21 SOL, #22 ZEC, #23 BTC, #24 ETH;
+  checked old vs new rule on all 321 public calls: 0 of 295 stored grades touched); they re-grade on the next hourly
+  pass (no stamp ⇒ graded every pass). Engine B's v2.1 template (TP2 = TP1 + SPLIT_50) is valid now. **Cards:**
+  `callLifecycle` has state `INVALID` (from the levels, never from gradeCall's INVALID, which also means "no candles");
+  `AwaitingFill` shows "NOT GRADED · <reason> · counts nowhere" + pill "Not graded" on the Feed card, call page, trader
+  profile and the owner's Lab; the share card reads NOT GRADED. Live today: no public call is INVALID. Not done (not
+  asked): refusing levels on the wrong side of entry at publish (the Lab form blocks it; the API doesn't).
 - **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
   (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
   A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from

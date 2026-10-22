@@ -1,6 +1,7 @@
 /**
  * What a call card shows INSTEAD of live P&L while the call has no position: its entry is a resting
- * order price hasn't reached (WORKING), or the hourly grader hasn't checked yet (UNCHECKED). Renders
+ * order price hasn't reached (WORKING), the hourly grader hasn't checked yet (UNCHECKED), or the grader
+ * can never grade it (INVALID: the reason, so it doesn't read as a live call forever). Renders
  * nothing for an OPEN or CLOSED call. Rule: app/lib/callLifecycle.mjs. Used by the Feed card, the
  * call's own page and the trader profile, so all three say the same thing.
  *
@@ -9,6 +10,7 @@
  */
 import { C } from "@/config/theme";
 import { callLifecycle, workingLine } from "@/lib/callLifecycle.mjs";
+import { callInvalidReason } from "@/lib/callMath.mjs";
 
 const MONO = "var(--nx-font-mono)";
 
@@ -19,18 +21,33 @@ export const fmtPx = (n: unknown) => {
   return (Number(n) || 0).toFixed(dp);
 };
 
-type Call = { status?: string; gradedOutcome?: string; fillState?: string; entryPrice: number; publishMark?: { px?: number } };
+type Call = {
+  status?: string; gradedOutcome?: string; fillState?: string; publishMark?: { px?: number };
+  direction?: string; entryPrice: number; stopLoss?: number; takeProfit1?: number; takeProfit2?: number; exitPlan?: string;
+};
 
 /** The status pill's text for a call with no position, or null when the card's own label applies. */
 export function awaitingLabel(t: Call): string | null {
   const s = callLifecycle(t);
   if (s === "WORKING") return `Awaiting fill · $${fmtPx(t.entryPrice)}`;
   if (s === "UNCHECKED") return "Checking fill";
+  if (s === "INVALID") return "Not graded";
   return null;
 }
 
 export function AwaitingFill({ thesis, markPrice, style }: { thesis: Call; markPrice?: number | null; style?: React.CSSProperties }) {
   const state = callLifecycle(thesis);
+  if (state === "INVALID") {
+    return (
+      <div style={{ border: `1px dashed ${C.borderStrong}`, borderRadius: 8, padding: "10px 12px", display: "grid", gap: 4, ...style }}>
+        <div style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: C.text.bright }}>NOT GRADED</div>
+        <div style={{ fontFamily: MONO, fontSize: 11.5, color: C.text.fog }}>The grader can’t grade this call: {callInvalidReason(thesis)}.</div>
+        <div style={{ fontFamily: MONO, fontSize: 10.5, color: C.text.muted, lineHeight: 1.5 }}>
+          It stays published and counts nowhere: not a win, not a loss, not open.
+        </div>
+      </div>
+    );
+  }
   if (state !== "WORKING" && state !== "UNCHECKED") return null;
   const working = state === "WORKING";
   const hasMark = markPrice != null && Number(markPrice) > 0;

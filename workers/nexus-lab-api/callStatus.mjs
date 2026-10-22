@@ -12,20 +12,18 @@
 // Pure; display and alerts only. Nothing here changes a grade.
 import { callLifecycle } from "../../app/lib/callLifecycle.mjs";
 import { callR, splitPlan } from "./logic.mjs";
+import { callInvalidReason } from "../../app/lib/callMath.mjs";
 
 const r2 = (n) => Math.round(n * 100) / 100;
 const bare = (s) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
 
 /**
  * Why gradeCall will never grade this call, or null: levels on the wrong side of entry, or a declared
- * split whose TP2 isn't beyond TP1. Published calls are frozen, so this is permanent. (Since
+ * split whose TP2 falls short of TP1. Published calls are frozen, so this is permanent. (Since
  * 2026-10-22 the lock refuses a bad split at publish; calls published before can still carry one.)
+ * The rule is app/lib/callMath.mjs callInvalidReason, so the cards say the same thing.
  */
-export function invalidReason(t) {
-  if (callR(t) == null) return "stop or target on the wrong side of entry";
-  if (splitPlan(t)?.invalid) return "split exit with TP2 not beyond TP1";
-  return null;
-}
+export const invalidReason = callInvalidReason;
 
 /** WIN / LOSS (graded) · INVALID (never gradeable) · CLOSED (closed another way) · WORKING · OPEN · RUNNER (split, TP1 half done) · UNCHECKED. */
 export function callState(t) {

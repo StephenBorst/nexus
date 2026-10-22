@@ -39,3 +39,17 @@ test("distance to a resting entry, either side", () => {
   assert.equal(distanceToEntry(call(), null), null);
   assert.equal(workingLine(call(), undefined), "no position until price trades the entry");
 });
+
+test("callLifecycle: a call the grader can never grade is INVALID, never a live position", () => {
+  // Levels on the wrong side of entry, and a split whose TP2 falls short of TP1.
+  const wrongSide = call({ stopLoss: Number(call().entryPrice) + 10, fillState: "OPEN" });
+  const shortSplit = call({ exitPlan: "SPLIT_50", takeProfit2: Number(call().entryPrice) + 0.5, fillState: "OPEN" });
+  for (const t of [wrongSide, shortSplit]) {
+    assert.equal(callLifecycle(t), "INVALID");
+    assert.equal(showsLivePnl(t), false);
+  }
+  // A grade beats it (a graded call is CLOSED), and TP2 = TP1 under a split is just one target.
+  assert.equal(callLifecycle({ ...wrongSide, gradedOutcome: "LOSS" }), "CLOSED");
+  const c = call();
+  assert.equal(callLifecycle({ ...c, exitPlan: "SPLIT_50", takeProfit2: c.takeProfit1, fillState: "OPEN" }), "OPEN");
+});

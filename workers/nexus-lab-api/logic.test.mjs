@@ -2509,9 +2509,36 @@ test("splitPlan: only the declared value makes a split; a bad TP2 makes it inval
   assert.deepEqual(splitPlan(splitLong), { r1: 1.5, r2: 4 });
   assert.equal(splitPlan({ ...splitLong, exitPlan: undefined }), null, "a TP2 alone declares nothing");
   assert.equal(splitPlan({ ...splitLong, exitPlan: "split" }), null);
-  for (const tp2 of [0, 102, 103, 95]) assert.deepEqual(splitPlan({ ...splitLong, takeProfit2: tp2 }), { invalid: true }, String(tp2));
+  for (const tp2 of [0, 102, 95]) assert.deepEqual(splitPlan({ ...splitLong, takeProfit2: tp2 }), { invalid: true }, String(tp2));
   const short = { direction: "SHORT", entryPrice: 100, stopLoss: 102, takeProfit1: 97, takeProfit2: 92, exitPlan: "SPLIT_50" };
   assert.deepEqual(splitPlan(short), { r1: 1.5, r2: 4 });
+  assert.deepEqual(splitPlan({ ...short, takeProfit2: 98 }), { invalid: true }, "a SHORT's TP2 short of TP1");
+});
+
+// 2026-10-23 (borst): a split whose TP2 IS its TP1 closes both halves at TP1, so it is the
+// single-target call. Four Engine B calls (#21–#24) were published that way and sat INVALID.
+test("splitPlan: TP2 = TP1 declares no split, on either side", () => {
+  assert.equal(splitPlan({ ...splitLong, takeProfit2: 103 }), null);
+  assert.equal(splitPlan({ direction: "SHORT", entryPrice: 100, stopLoss: 102, takeProfit1: 97, takeProfit2: 97, exitPlan: "SPLIT_50" }), null);
+  // Equal targets on levels that don't make a call stay INVALID: the equality doesn't rescue them.
+  assert.deepEqual(splitPlan({ ...splitLong, stopLoss: 101, takeProfit2: 103 }), { invalid: true });
+});
+
+test("gradeCall: a TP2 = TP1 split grades exactly like the same call with no split", () => {
+  const equal = { ...splitLong, takeProfit2: 103 };
+  const single = { ...splitLong, takeProfit2: 103, exitPlan: undefined };
+  const tapes = {
+    win: [{ h: 101, l: 99 }, { h: 103.5, l: 100 }],
+    loss: [{ h: 101, l: 99 }, { h: 100.5, l: 97.5 }],
+    sameCandle: [{ h: 101, l: 99 }, { h: 103.5, l: 97.5 }],
+    open: [{ h: 101, l: 99 }, { h: 102, l: 99 }],
+  };
+  for (const [name, bars] of Object.entries(tapes)) {
+    const cd = series(t0, bars);
+    assert.deepEqual(gradeCall(equal, cd), gradeCall(single, cd), name);
+  }
+  assert.equal(gradeCall(equal, series(t0, tapes.loss)).outcome, "LOSS");
+  assert.equal(gradeCall(equal, series(t0, tapes.loss)).r, -1);
 });
 
 test("gradeCall split: TP1 then TP2 pays 0.5·R1 + 0.5·R2", () => {

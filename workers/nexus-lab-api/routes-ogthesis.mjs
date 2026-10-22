@@ -10,6 +10,7 @@ import { gradeCall, callR } from "./logic.mjs";
 import { gradedStatusOf, isCurrentStamp, fetchGradeHistory } from "./grading.mjs";
 import { buildThesisOgSvg } from "./ogCards.mjs";
 import { isPublicCall } from "./routes-verify.mjs";
+import { callInvalidReason } from "../../app/lib/callMath.mjs";
 
 const notFound = () => new Response("not found", { status: 404 });
 
@@ -36,7 +37,10 @@ export async function handleOgThesis(parts, request, env, deps = {}) {
   const stamped = isCurrentStamp(thesis);
   let ogStatus = stamped ? gradedStatusOf(thesis.gradedOutcome) : "ACTIVE";
   let ogGradedR = stamped && typeof thesis.gradedR === "number" ? thesis.gradedR : null;
-  if (!stamped) {
+  // A call the grader can never grade says so from its levels, never "ACTIVE" forever. (Not from
+  // gradeCall's INVALID: that also means "no candles", a missing read.)
+  if (!stamped && callInvalidReason(thesis)) ogStatus = "NOT_GRADED";
+  else if (!stamped) {
     try {
       const getCandles = deps.getCandles || ((sym, at) => fetchGradeHistory(sym, at, env));
       const g = gradeCall(thesis, await getCandles(thesis.symbol, thesis.createdAt));
