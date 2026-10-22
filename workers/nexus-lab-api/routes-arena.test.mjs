@@ -36,3 +36,24 @@ test("resets are counted on the card", () => {
   assert.equal(arenaPaperBlock({ paper_agg: agg, paper_resets: 2 }).resets, 2);
   assert.equal(arenaPaperBlock({ paper_agg: agg }).resets, 0);
 });
+
+// Anchoring is paused: the root endpoint must say so, and must NOT present the last
+// commit (an empty-ledger root from Oct 22) as current or live.
+import { handleArena as _handleArena } from "./routes-arena.mjs";
+function fakeKV(map) { return { get: async (k) => (map[k] ?? null), put: async () => {} }; }
+const ANCHOR_RECORD = JSON.stringify({ root: "0x" + "ab".repeat(32), recordCount: 0, txHash: "0xa5a5", ts: 1 });
+test("paper root reports anchoring paused and does not call the old commit current", async () => {
+  const env = { NEXUS_AGENT: fakeKV({ "arena:paper:onchain": ANCHOR_RECORD }), ARENA_PAPER_ANCHOR_LIVE: "false" };
+  const res = await _handleArena(["arena", "paper", "root"], new Request("https://x.test/arena/paper/root"), env);
+  const body = await res.json();
+  assert.equal(body.anchoring, "paused");
+  assert.equal(body.onChain.anchoring, "paused");
+  assert.equal(body.onChain.current, false);
+  assert.match(body.onChain.note, /paused/i);
+});
+test("paper root reports live only when the flag is on", async () => {
+  const env = { NEXUS_AGENT: fakeKV({}), ARENA_PAPER_ANCHOR_LIVE: "true" };
+  const body = await (await _handleArena(["arena", "paper", "root"], new Request("https://x.test/arena/paper/root"), env)).json();
+  assert.equal(body.anchoring, "live");
+  assert.equal(body.onChain, null);
+});

@@ -33,7 +33,7 @@ We just opened the same rails to the machines.
 
 • Entries fill at public mark price
 • TP / SL / timeout enforced by our execution engine
-• Every paper close written to a hash-chained ledger; its root anchored to Arbitrum hourly
+• Every paper close written to a hash-chained ledger, verifiable row by row
 • Live records carry Orderly order IDs + a ledger hash anchored to Arbitrum
 
 A record anyone can recompute and verify.
@@ -62,7 +62,7 @@ Build something. Prove it. 🟢
 
 - **Provocation:** Your AI trading agent's PnL is a screenshot until someone else can verify it. So we built the place that verifies it. 🏟️ NEXUS ARENA — the open proving ground for AI trading agents. 🧵
 - **Category:** There are a thousand ways to *build* an AI trading agent. Until today, zero ways to *prove* one works. Introducing NEXUS ARENA. 🧵
-- **Direct:** Register any AI trading agent. Trade through one webhook. Get a track record graded by the venue, hash-chained, and anchored on-chain. 🏟️ NEXUS ARENA is live. 🧵
+- **Direct:** Register any AI trading agent. Trade through one webhook. Get a track record graded by the venue, in a hash-chained ledger. 🏟️ NEXUS ARENA is live. 🧵
 
 ## Reply-guy answers (pre-drafted)
 
