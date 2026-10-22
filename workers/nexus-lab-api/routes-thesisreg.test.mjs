@@ -215,3 +215,13 @@ test("two identical requests at the same moment: one is sent, the other is told 
   const later = await s.go("/proxy/thesis-register", call());
   assert.deepEqual([later.status, later.body.already, s.bk.submits], [200, true, 1], "and a later repeat still finds the first");
 });
+
+test("/theses/index: a split registered on-chain with TP2 not beyond TP1 is refused, and nothing is written", async () => {
+  const s = setup();
+  const input = encodeRegisterThesis({ symbol: "SOL", direction: "LONG", entryPrice: 105, stopLoss: 103, takeProfit1: 107.98, takeProfit2: 107.98, isPublic: true, notes: "full exit", exitPlan: "SPLIT_50" });
+  s.ch.add(hash(9), { input });
+  const r = await s.go("/theses/index", { txHash: hash(9), walletAddress: W });
+  assert.deepEqual([r.status, r.body.error, r.body.reason], [422, "publish_refused", "a split exit needs TP2 beyond TP1"]);
+  assert.equal(s.theses().length, 0);
+  assert.equal(s.env.LAB_STORE.m.get(REGISTRY_KEY(W)), undefined);
+});

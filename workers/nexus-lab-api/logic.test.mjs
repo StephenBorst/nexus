@@ -18,6 +18,8 @@ import {
   catalystToThesis, attachCatalystTheses, catalystHouseCall,
   boardCardRows, boardCardPlay, fundingStretched, readVerdict, entryVsMarket,
 } from "./logic.mjs";
+// The grade without its exit hour, for tests that pin outcome + R only (exitAt has its own tests).
+const noExit = (t, cd) => { const { exitAt, ...g } = gradeCall(t, cd); return g; };
 
 // Helper: candle series starting at t0 (sec), each 1h apart.
 const series = (t0, bars) => ({
@@ -83,7 +85,7 @@ test("R comes from the call's own levels, never the stored riskReward", () => {
   assert.equal(gradeCall(noRR, series(t0, [{ h: 111, l: 99 }])).r, 2);
   // The caller writes riskReward. A record claiming 50R still wins 2R.
   const inflated = { ...noRR, riskReward: 50 };
-  assert.deepEqual(gradeCall(inflated, series(t0, [{ h: 111, l: 99 }])), { outcome: "WIN", r: 2 });
+  assert.deepEqual(noExit(inflated, series(t0, [{ h: 111, l: 99 }])), { outcome: "WIN", r: 2 });
   // A loss is −1R either way.
   assert.equal(gradeCall(inflated, series(t0, [{ h: 101, l: 94 }])).r, -1);
 });
@@ -2352,7 +2354,7 @@ test("gradeCall: an entry the market never traded is not a win, whatever price d
 test("gradeCall: a resting entry counts from the hour price trades it", () => {
   const stale = { direction: "LONG", entryPrice: 90, stopLoss: 88, takeProfit1: 110, createdAt: t0 * 1000 };
   // Dips to 89.5 (fills at 90, stop 88 untouched), then runs to the target: a real 10R.
-  assert.deepEqual(gradeCall(stale, series(t0, [{ h: 101, l: 99 }, { h: 100, l: 89.5 }, { h: 111, l: 95 }])), { outcome: "WIN", r: 10 });
+  assert.deepEqual(noExit(stale, series(t0, [{ h: 101, l: 99 }, { h: 100, l: 89.5 }, { h: 111, l: 95 }])), { outcome: "WIN", r: 10 });
   // The fill hour also reaches the stop: on the way down it filled first, so it's a LOSS.
   assert.equal(gradeCall(stale, series(t0, [{ h: 101, l: 99 }, { h: 95, l: 87 }])).outcome, "LOSS");
   // The fill hour reaches the target too: that can't count (it may have come before the fill).
@@ -2363,21 +2365,21 @@ test("gradeCall: a resting entry counts from the hour price trades it", () => {
 test("gradeCall: resting SHORT entries and stop-entries above the market wait for their price too", () => {
   const shortAbove = { direction: "SHORT", entryPrice: 110, stopLoss: 112, takeProfit1: 90, createdAt: t0 * 1000 };
   assert.equal(gradeCall(shortAbove, series(t0, [{ h: 101, l: 99 }, { h: 95, l: 85 }])).outcome, "PENDING", "never rallied to 110");
-  assert.deepEqual(gradeCall(shortAbove, series(t0, [{ h: 101, l: 99 }, { h: 111, l: 105 }, { h: 100, l: 89 }])), { outcome: "WIN", r: 10 });
+  assert.deepEqual(noExit(shortAbove, series(t0, [{ h: 101, l: 99 }, { h: 111, l: 105 }, { h: 100, l: 89 }])), { outcome: "WIN", r: 10 });
   // A breakout LONG: buy 105 with the market at 100, stop 100, target 115.
   const breakout = { direction: "LONG", entryPrice: 105, stopLoss: 100, takeProfit1: 115, createdAt: t0 * 1000 };
-  assert.deepEqual(gradeCall(breakout, series(t0, [{ h: 101, l: 99 }, { h: 106, l: 101 }, { h: 116, l: 104 }])), { outcome: "WIN", r: 2 });
+  assert.deepEqual(noExit(breakout, series(t0, [{ h: 101, l: 99 }, { h: 106, l: 101 }, { h: 116, l: 104 }])), { outcome: "WIN", r: 2 });
   assert.equal(gradeCall(breakout, series(t0, [{ h: 101, l: 99 }, { h: 104, l: 99.5 }, { h: 104, l: 98 }])).outcome, "PENDING", "never broke out: its stop level printing doesn't grade it");
 });
 
 test("gradeCall: at the market it grades exactly as before; with no candle in the posting hour, the next one is the market", () => {
   // Entry inside the posting hour: same answers as the first-touch tests above.
-  assert.deepEqual(gradeCall(baseLong, series(t0, [{ h: 105, l: 99 }, { h: 111, l: 104 }])), { outcome: "WIN", r: 2 });
+  assert.deepEqual(noExit(baseLong, series(t0, [{ h: 105, l: 99 }, { h: 111, l: 104 }])), { outcome: "WIN", r: 2 });
   // No candle in the hour it was posted (the series starts 30 minutes later): that candle is the market.
-  assert.deepEqual(gradeCall(baseLong, series(t0 + 1800, [{ h: 105, l: 99 }, { h: 111, l: 104 }])), { outcome: "WIN", r: 2 });
+  assert.deepEqual(noExit(baseLong, series(t0 + 1800, [{ h: 105, l: 99 }, { h: 111, l: 104 }])), { outcome: "WIN", r: 2 });
   // The posting hour is the one BEFORE the post when the post isn't on the hour.
   const midHour = { ...baseLong, createdAt: (t0 + 1800) * 1000 };
-  assert.deepEqual(gradeCall(midHour, series(t0, [{ h: 101, l: 99 }, { h: 111, l: 104 }])), { outcome: "WIN", r: 2 });
+  assert.deepEqual(noExit(midHour, series(t0, [{ h: 101, l: 99 }, { h: 111, l: 104 }])), { outcome: "WIN", r: 2 });
   assert.equal(gradeCall(midHour, series(t0, [{ h: 131, l: 120 }, { h: 111, l: 104 }])).outcome, "PENDING", "posted into 120–131: an entry of 100 hasn't traded");
 });
 
@@ -2469,7 +2471,7 @@ test("gradeCall: with a publish mark, an entry from earlier in the hour is a res
 test("gradeCall: with a publish mark, an entry at the market fills at the post", () => {
   const call = { direction: "LONG", entryPrice: 100.2, stopLoss: 98, takeProfit1: 104.6, createdAt: midHour, publishMark: { px: 100, at: midHour } };
   const g = gradeCall(call, series(t0, [{ h: 100.5, l: 99.8 }, { h: 105, l: 99 }]));
-  assert.deepEqual(g, { outcome: "WIN", r: 2 });
+  assert.deepEqual(g, { outcome: "WIN", r: 2, exitAt: t0 + 3600 });
   // The band is ENTRY_AT_MARK_PCT either side of the mark: 0.3% of 100 = 0.3.
   assert.equal(ENTRY_AT_MARK_PCT, 0.3);
   const cd = series(t0, [{ h: 101, l: 99 }, { h: 105, l: 99.6 }]);
@@ -2484,9 +2486,9 @@ test("gradeCall: a resting entry with a mark still fills later, and a stop in th
   const short = { direction: "SHORT", entryPrice: 103, stopLoss: 105, takeProfit1: 99, createdAt: midHour, publishMark: { px: 100, at: midHour } };
   // The posting hour reached 103 (before the post, as far as anyone can tell): not a fill.
   const cd = series(t0, [{ h: 103.5, l: 99 }, { h: 101, l: 99.5 }, { h: 103.2, l: 101 }, { h: 102, l: 98.5 }]);
-  assert.deepEqual(gradeCall(short, cd), { outcome: "WIN", r: 2 }, "fills in hour 2, target in hour 3");
+  assert.deepEqual(noExit(short, cd), { outcome: "WIN", r: 2 }, "fills in hour 2, target in hour 3");
   const stopped = series(t0, [{ h: 101, l: 99 }, { h: 105.5, l: 101 }]);
-  assert.deepEqual(gradeCall(short, stopped), { outcome: "LOSS", r: -1 });
+  assert.deepEqual(noExit(short, stopped), { outcome: "LOSS", r: -1 });
 });
 
 test("gradeCall: a malformed mark falls back to the hour-range rule", () => {
@@ -2514,13 +2516,13 @@ test("splitPlan: only the declared value makes a split; a bad TP2 makes it inval
 
 test("gradeCall split: TP1 then TP2 pays 0.5·R1 + 0.5·R2", () => {
   const g = gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 103.5, l: 100 }, { h: 106, l: 101 }, { h: 108.5, l: 104 }]));
-  assert.deepEqual(g, { outcome: "WIN", r: 2.75, legs: { tp1: "HIT", runner: "TP2" }, tp1At: t0 + 3600, bankedR: 0.75 });
+  assert.deepEqual(g, { outcome: "WIN", r: 2.75, legs: { tp1: "HIT", runner: "TP2" }, tp1At: t0 + 3600, bankedR: 0.75, exitAt: t0 + 3 * 3600 });
 });
 
 test("gradeCall split: TP1 then the original stop pays 0.5·R1 − 0.5 (no breakeven move)", () => {
   // After TP1 price falls to 99.5 (a breakeven stop would have closed it; the original 98 doesn't), then 97.
   const g = gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 103.5, l: 100 }, { h: 101, l: 99.5 }, { h: 100, l: 97 }]));
-  assert.deepEqual(g, { outcome: "WIN", r: 0.25, legs: { tp1: "HIT", runner: "STOP" }, tp1At: t0 + 3600, bankedR: 0.75 });
+  assert.deepEqual(g, { outcome: "WIN", r: 0.25, legs: { tp1: "HIT", runner: "STOP" }, tp1At: t0 + 3600, bankedR: 0.75, exitAt: t0 + 3 * 3600 });
   // With R1 under 1 the same path nets negative: a LOSS.
   const thin = { ...splitLong, takeProfit1: 101.5, takeProfit2: 104 };   // R1 0.75, R2 2
   const l = gradeCall(thin, series(t0, [{ h: 101, l: 99 }, { h: 101.6, l: 100 }, { h: 100, l: 97 }]));
@@ -2529,7 +2531,7 @@ test("gradeCall split: TP1 then the original stop pays 0.5·R1 − 0.5 (no break
 });
 
 test("gradeCall split: the stop before TP1 is −1R on the whole call; same-candle rules stay conservative", () => {
-  assert.deepEqual(gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 102, l: 97.5 }])),
+  assert.deepEqual(noExit(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 102, l: 97.5 }])),
     { outcome: "LOSS", r: -1, legs: { tp1: "STOP", runner: "STOP" } });
   // TP1 + stop in one hour = LOSS, as for any call.
   assert.equal(gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 104, l: 97 }])).r, -1);
@@ -2549,11 +2551,27 @@ test("gradeCall split: SHORT mirrors; a resting split entry waits for its fill l
   const short = { direction: "SHORT", entryPrice: 100, stopLoss: 102, takeProfit1: 97, takeProfit2: 92, exitPlan: "SPLIT_50", createdAt: t0 * 1000 };
   assert.equal(gradeCall(short, series(t0, [{ h: 101, l: 99 }, { h: 100, l: 96.5 }, { h: 98, l: 91.5 }])).r, 2.75);
   const resting = { ...splitLong, entryPrice: 95, stopLoss: 93, takeProfit1: 98, takeProfit2: 103 };
-  assert.deepEqual(gradeCall(resting, series(t0, [{ h: 101, l: 99 }, { h: 110, l: 99 }])), { outcome: "PENDING", r: 0, awaitingEntry: true });
+  assert.deepEqual(noExit(resting, series(t0, [{ h: 101, l: 99 }, { h: 110, l: 99 }])), { outcome: "PENDING", r: 0, awaitingEntry: true });
 });
 
 test("gradeCall split: an undeclared TP2 changes nothing; a declared split with a bad TP2 is INVALID", () => {
   const cd = series(t0, [{ h: 101, l: 99 }, { h: 103.5, l: 100 }, { h: 108.5, l: 104 }]);
-  assert.deepEqual(gradeCall({ ...splitLong, exitPlan: undefined }, cd), { outcome: "WIN", r: 1.5 });
-  assert.deepEqual(gradeCall({ ...splitLong, takeProfit2: 102 }, cd), { outcome: "INVALID", r: 0 });
+  assert.deepEqual(noExit({ ...splitLong, exitPlan: undefined }, cd), { outcome: "WIN", r: 1.5 });
+  assert.deepEqual(noExit({ ...splitLong, takeProfit2: 102 }, cd), { outcome: "INVALID", r: 0 });
+});
+
+// ── Exit time (2026-10-22): the hour a graded call closed, for hold time ─────────────────────
+test("gradeCall exitAt: the hour the call closed (target, stop, a stop in the fill hour, the runner's close)", () => {
+  const long = { direction: "LONG", entryPrice: 100, stopLoss: 98, takeProfit1: 104, createdAt: t0 * 1000 };
+  // Filled at the post (hour 0), target in hour 2.
+  assert.equal(gradeCall(long, series(t0, [{ h: 101, l: 99 }, { h: 102, l: 99 }, { h: 104.5, l: 101 }])).exitAt, t0 + 2 * 3600);
+  // Stopped in hour 1.
+  assert.equal(gradeCall(long, series(t0, [{ h: 101, l: 99 }, { h: 100, l: 97.5 }])).exitAt, t0 + 3600);
+  // A resting entry that fills in hour 2 and stops in that same hour: the exit is the fill hour.
+  const resting = { ...long, entryPrice: 96, stopLoss: 95, takeProfit1: 99 };
+  assert.equal(gradeCall(resting, series(t0, [{ h: 101, l: 99 }, { h: 100, l: 98 }, { h: 97, l: 94.5 }])).exitAt, t0 + 2 * 3600);
+  // A split stopped before TP1 closes in the stop hour; PENDING and INVALID carry no exit.
+  assert.equal(gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 102, l: 97.5 }])).exitAt, t0 + 3600);
+  assert.equal(gradeCall(splitLong, series(t0, [{ h: 101, l: 99 }, { h: 103.5, l: 100 }])).exitAt, undefined);
+  assert.equal(gradeCall({ ...splitLong, takeProfit2: 102 }, series(t0, [{ h: 101, l: 99 }])).exitAt, undefined);
 });

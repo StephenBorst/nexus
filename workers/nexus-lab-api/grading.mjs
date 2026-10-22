@@ -104,7 +104,7 @@ export const isCurrentStamp = (t) => (t?.gradedOutcome === "WIN" || t?.gradedOut
 
 // The fields the hourly pass writes on a public call. When it writes back, it copies ONLY these onto
 // a fresh read of the record, so a save that landed during the pass isn't overwritten.
-const PASS_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "fillState", "filledAt", "tp1HitAt", "planScore", "planFlags", "planV", "regimeTrend", "regimeVol", "regimeAlign", "status"];
+const PASS_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "fillState", "filledAt", "tp1HitAt", "planScore", "planFlags", "planV", "regimeTrend", "regimeVol", "regimeAlign", "status"];
 
 // Where an UNRESOLVED call's entry stands, so a card never shows a live P&L for an order that never
 // filled. "WORKING" = the entry hasn't traded (a resting order); "OPEN" = it has, `filledAt` = the post
@@ -123,6 +123,14 @@ export function applyFillStamp(t, g, cd) {
     delete t.fillState; delete t.filledAt; delete t.tp1HitAt;
   }
   return `${t.fillState}|${t.filledAt}|${t.tp1HitAt}` !== before;
+}
+
+// The hour a graded call closed (ms), from a re-grade on the same candles. Only when the re-grade
+// agrees with the stamp: a stamp is final, and an exit from a different outcome isn't this call's.
+// null = derived, not available (the grade disagrees, or the candles don't reach the exit), so the
+// pass doesn't come back for it every hour. Hold time = exitedAt − filledAt / createdAt.
+export function stampExit(t, g) {
+  t.exitedAt = g && g.outcome === t.gradedOutcome && g.exitAt ? g.exitAt * 1000 : null;
 }
 
 // 1h OHLC from REGIME_PAD_S before the call to now, for gradeCall. Every grader (this cron, the
@@ -187,7 +195,10 @@ export async function gradePublicTheses(env) {
       // calls that predate this feature (backfill). Skipped beyond the history
       // horizon, where the candles we'd need no longer come back.
       const stampable = (t.planScore === undefined || t.planV !== PLAN_V) && t.createdAt > Date.now() - 60 * 86400 * 1000;
-      if (resolved && !stampable) continue;
+      // Exit time (2026-10-22): a call graded before the stamp existed gets it once, from the same
+      // candles. undefined = never derived; null = derived and not available.
+      const needsExit = resolved && t.exitedAt === undefined;
+      if (resolved && !stampable && !needsExit) continue;
 
       // null = the candles don't reach back to this call yet (budget / Orderly refusal): leave it
       // for the next run rather than grade or stamp it on a partial window.
@@ -210,6 +221,11 @@ export async function gradePublicTheses(env) {
         changed = true;
       }
 
+      if (needsExit) {
+        stampExit(t, gradeCall(t, cd));
+        changed = true;
+      }
+
       if (!resolved) {
         const g = gradeCall(t, cd);
         const had = t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS";
@@ -218,12 +234,13 @@ export async function gradePublicTheses(env) {
           t.gradedOutcome = g.outcome;
           t.gradedR = g.r;
           t.gradeV = GRADE_V;
+          t.exitedAt = g.exitAt ? g.exitAt * 1000 : null;
           changed = true;
           if (had) regraded++;
           else { graded++; justResolved.push({ t, outcome: g.outcome, r: g.r }); } // corrections aren't announced
         } else if (had) {
           // An old stamp the call's own window doesn't support: it goes, and the call grades live.
-          delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV;
+          delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV; delete t.exitedAt;
           changed = true; regraded++;
         }
         const before = { fillState: t.fillState, tp1HitAt: t.tp1HitAt };

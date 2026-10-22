@@ -215,3 +215,32 @@ test("a split exit is declared at publish: it can't be added, dropped or changed
 test("tp1HitAt and planV are server fields", () => {
   for (const k of ["tp1HitAt", "planV"]) assert.ok(SERVER_FIELDS.includes(k), k);
 });
+
+test("a split whose TP2 isn't beyond TP1 is refused at publish and stays private (2026-10-22)", () => {
+  for (const tp2 of [110, 105, 0]) {
+    const r = save([], [call({ isPublic: true, takeProfit2: tp2, exitPlan: "SPLIT_50" })], { v: 1, calls: {}, order: [] });
+    assert.equal(r.theses[0].isPublic, false, `TP2 ${tp2}`);
+    assert.deepEqual(r.refused, [{ id: "c1", reason: "a split exit needs TP2 beyond TP1" }]);
+    assert.equal(r.registry.order.length, 0, "nothing frozen");
+    assert.equal(r.theses[0].exitPlan, "SPLIT_50", "the draft is kept as written, to fix and publish again");
+  }
+  // Fixed TP2: publishes.
+  const ok = save([], [call({ isPublic: true, takeProfit2: 120, exitPlan: "SPLIT_50" })], { v: 1, calls: {}, order: [] });
+  assert.equal(ok.theses[0].isPublic, true);
+  assert.equal(ok.refused.length, 0);
+  // A single-target call with a TP2 at or under TP1 declares nothing: unaffected.
+  assert.equal(save([], [call({ isPublic: true, takeProfit2: 105 })], { v: 1, calls: {}, order: [] }).theses[0].isPublic, true);
+});
+
+test("an already-published bad split stays as frozen (the lock never re-checks a registered call)", () => {
+  const reg = { v: 1, calls: { c1: { frozen: call({ takeProfit2: 110, exitPlan: "SPLIT_50" }), publishedAt: NOW - D } }, order: ["c1"] };
+  const r = save([], [call({ isPublic: true, takeProfit2: 110, exitPlan: "SPLIT_50" })], reg);
+  assert.equal(r.theses[0].isPublic, true);
+  assert.equal(r.refused.length, 0);
+});
+
+test("exitedAt is a server field", () => {
+  assert.ok(SERVER_FIELDS.includes("exitedAt"));
+  const r = save([], [call({ exitedAt: 123 })], { v: 1, calls: {}, order: [] });
+  assert.equal("exitedAt" in r.theses[0], false, "a client save can't write it");
+});

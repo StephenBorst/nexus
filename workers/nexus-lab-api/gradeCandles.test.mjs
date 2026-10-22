@@ -10,6 +10,8 @@ import {
 } from "./gradeCandles.mjs";
 import { gradeCall } from "./logic.mjs";
 import { computeCallerStats, gradePublicTheses } from "./grading.mjs";
+// The grade without its exit hour, for tests that pin outcome + R only (exitAt has its own tests).
+const noExit = (t, cd) => { const { exitAt, ...g } = gradeCall(t, cd); return g; };
 
 const H = 3600, D = 86400;
 const NOW_MS = Date.UTC(2026, 8, 27, 18, 20, 37);   // an arbitrary second, not on the hour
@@ -65,7 +67,7 @@ test("the bug: the old fixed window misses an old WIN; the call's own window gra
   const store = await gc.ensure("PERP_BTC_USDC", POSTED_S - REGIME_PAD_S);
   const cd = callWindow(store, CALL.createdAt);
   assert.ok(cd, "the store reaches back to the post");
-  assert.deepEqual(gradeCall(CALL, cd), { outcome: "WIN", r: 2 });
+  assert.deepEqual(noExit(CALL, cd), { outcome: "WIN", r: 2 });
   // What the leaderboard used to see: only [now − 30d − 50h, now].
   const winFrom = NOW_S - 30 * D - REGIME_PAD_S;
   const keep = cd.t.map((t, i) => i).filter((i) => cd.t[i] >= winFrom);

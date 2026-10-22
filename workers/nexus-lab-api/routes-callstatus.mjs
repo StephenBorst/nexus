@@ -6,7 +6,7 @@
 // are no marks (`marksAvailable: false`, `live: null`). `markAt` / `markAgeSec` always say how old.
 // Rows from callStatus.mjs; the response states which clock each part runs on.
 import { json, normalizeAddress } from "./shared.mjs";
-import { callStatusRow } from "./callStatus.mjs";
+import { callState, callStatusRow } from "./callStatus.mjs";
 import { normalizeSymbol } from "./logic.mjs";
 import { orderlyGet } from "./orderlyGet.mjs";
 import { makeRateLimiter } from "./keyProxy.mjs";
@@ -55,7 +55,7 @@ export async function handleCallStatus(parts, request, env, deps = {}) {
   const open = calls.filter((t) => !resolved(t) && (!t.status || t.status === "ACTIVE"));
   const done = calls.filter(resolved).sort((a, b) => (b.gradedAt || 0) - (a.gradedAt || 0)).slice(0, RECENT);
 
-  const mk = open.length ? await readMarks({ fetchImpl: deps.fetchImpl, now, sleep: deps.sleep }) : { at: null, marks: null, stale: false };
+  const mk = open.some((t) => callState(t) !== "INVALID") ? await readMarks({ fetchImpl: deps.fetchImpl, now, sleep: deps.sleep }) : { at: null, marks: null, stale: false };
   const markOf = (t) => (mk.marks ? mk.marks[normalizeSymbol(t.symbol)] ?? null : null);
   const rows = open.map((t) => callStatusRow(t, markOf(t))).sort((a, b) => (b.postedAt || 0) - (a.postedAt || 0));
   const count = (s) => rows.filter((r) => r.state === s).length;
@@ -67,9 +67,9 @@ export async function handleCallStatus(parts, request, env, deps = {}) {
     markAgeSec: mk.at ? Math.max(0, Math.round((now() - mk.at) / 1000)) : null,
     marksAvailable: !!mk.marks,
     marksStale: !!(mk.marks && mk.stale),
-    counts: { working: count("WORKING"), open: count("OPEN"), runner: count("RUNNER"), unchecked: count("UNCHECKED"), recentGraded: done.length },
+    counts: { working: count("WORKING"), open: count("OPEN"), runner: count("RUNNER"), unchecked: count("UNCHECKED"), invalid: count("INVALID"), recentGraded: done.length },
     calls: rows,
     recent: done.map((t) => callStatusRow(t, null)),
-    note: "state = the hourly grader's stamp (WORKING: entry not traded · OPEN: live · RUNNER: split call, TP1 half closed · UNCHECKED: not stamped yet). live = the Orderly mark at markAt (≤20 s old normally; up to 2 min with marksStale: true when Orderly can't be read; none past that), not a grade: a mark through the entry is a fill only once the hourly grade says so. levels.*.r = distance from the mark in units of the call's risk.",
+    note: "state = the hourly grader's stamp (WORKING: entry not traded · OPEN: live · RUNNER: split call, TP1 half closed · UNCHECKED: not stamped yet · INVALID: the grader can never grade it, see invalidReason; it stays published and counts nowhere). live = the Orderly mark at markAt (≤20 s old normally; up to 2 min with marksStale: true when Orderly can't be read; none past that), not a grade: a mark through the entry is a fill only once the hourly grade says so. levels.*.r = distance from the mark in units of the call's risk.",
   }, request);
 }

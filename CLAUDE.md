@@ -1011,6 +1011,16 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   traded AFTER the post (`filledAt > createdAt`; a fill at the post isn't news), TP1 = `tp1HitAt` newly set — and sends
   them after the write via `notifyFillEvent` (resolutions.mjs → `appendNotification`: in-app + phone push + generic
   Telegram; types `call_fill` / `call_tp1`, push topic `calls`). No public feed event. Up to an hour late by design.
+- **Split guard + exit time (2026-10-22, from the Oct 19 A/B read).** (1) Engine B's `eng-b-21-sol-long` was published
+  as SPLIT_50 with TP2 = TP1 through the Lab save (the form warns; the API didn't check) → INVALID forever, and status
+  showed it OPEN. Now `sealTheses` refuses a first publish whose `splitPlan` is invalid ("a split exit needs TP2 beyond
+  TP1": kept private, listed in `refused`); `/theses/index` answers 422 `publish_refused` + reason and writes nothing.
+  Already-published bad calls stay frozen. `/theses/status` reads them as state `INVALID` + `invalidReason` (also levels
+  on the wrong side of entry), no live block, `counts.invalid`. (2) `gradeCall` WIN/LOSS carry `exitAt` (sec, start of
+  the hour the call — for a split, its last half — closed). The hourly pass stamps server field `exitedAt` (ms; in
+  `SERVER_FIELDS` + `PASS_FIELDS`) and backfills calls graded before it ONCE (`stampExit`: only when the re-grade agrees
+  with the stamp, else `null` = derived, unavailable). Status `graded.exitedAt`. Hold time = exitedAt − filledAt
+  (hour precision) — for the engine A/B compare view, held until both engines have ≥20 graded calls in the window.
 - **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
   (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
   A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from

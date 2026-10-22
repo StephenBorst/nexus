@@ -99,9 +99,13 @@ export function entryFill(t, cd) {
  *   with `tp1At` (sec) and `bankedR` so a card can show the half that's done. A declared split whose
  *   TP2 isn't beyond TP1 is INVALID.
  *
+ * - EXIT TIME (2026-10-22). A WIN or LOSS carries `exitAt` (sec) = the start of the hour the call
+ *   closed in (for a split, the hour its LAST half closed). Hour precision, like `tp1At` and the
+ *   fill: candles can't say when inside the hour. Hold time = exitAt − the fill.
+ *
  * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, takeProfit2?, exitPlan?, createdAt, publishMark? }
  * @param {object} cd candles { t:number[] (sec), h:number[], l:number[] } ascending by t
- * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number, awaitingEntry?:true,
+ * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number, awaitingEntry?:true, exitAt?:number,
  *   legs?:{ tp1:"HIT"|"STOP"|"OPEN", runner:"TP2"|"STOP"|"OPEN" }, tp1At?:number, bankedR?:number }}
  */
 export function gradeCall(t, cd) {
@@ -118,20 +122,22 @@ export function gradeCall(t, cd) {
   const f = fill.fillIdx;
   const stopHit = (k) => (long ? cd.l[k] <= stopLoss : cd.h[k] >= stopLoss);
   const reached = (k, px) => (long ? cd.h[k] >= px : cd.l[k] <= px);
-  const stopped = split ? { outcome: "LOSS", r: -1, legs: { tp1: "STOP", runner: "STOP" } } : { outcome: "LOSS", r: -1 };
-  if (f >= 0 && stopHit(f)) return stopped;
+  const stopped = (k) => split
+    ? { outcome: "LOSS", r: -1, legs: { tp1: "STOP", runner: "STOP" }, exitAt: cd.t[k] }
+    : { outcome: "LOSS", r: -1, exitAt: cd.t[k] };
+  if (f >= 0 && stopHit(f)) return stopped(f);
   for (; i < cd.t.length; i++) {
     const tp = reached(i, takeProfit1), sl = stopHit(i);
-    if (sl) return stopped;              // a same-candle target + stop is a LOSS (conservative)
+    if (sl) return stopped(i);           // a same-candle target + stop is a LOSS (conservative)
     if (!tp) continue;
-    if (!split) return { outcome: "WIN", r: R };
+    if (!split) return { outcome: "WIN", r: R, exitAt: cd.t[i] };
     // TP1 banked on half. The runner keeps the original stop.
     const tp1At = cd.t[i], banked = R / 2;
-    const done = (runner, r) => ({ outcome: r > 0 ? "WIN" : "LOSS", r: round(r, 2), legs: { tp1: "HIT", runner }, tp1At, bankedR: round(banked, 2) });
-    if (reached(i, Number(t.takeProfit2))) return done("TP2", banked + split.r2 / 2);
+    const done = (runner, r, k) => ({ outcome: r > 0 ? "WIN" : "LOSS", r: round(r, 2), legs: { tp1: "HIT", runner }, tp1At, bankedR: round(banked, 2), exitAt: cd.t[k] });
+    if (reached(i, Number(t.takeProfit2))) return done("TP2", banked + split.r2 / 2, i);
     for (let k = i + 1; k < cd.t.length; k++) {
-      if (stopHit(k)) return done("STOP", banked - 0.5);   // same-candle TP2 + stop = the stop
-      if (reached(k, Number(t.takeProfit2))) return done("TP2", banked + split.r2 / 2);
+      if (stopHit(k)) return done("STOP", banked - 0.5, k);   // same-candle TP2 + stop = the stop
+      if (reached(k, Number(t.takeProfit2))) return done("TP2", banked + split.r2 / 2, k);
     }
     return { outcome: "PENDING", r: 0, legs: { tp1: "HIT", runner: "OPEN" }, tp1At, bankedR: round(banked, 2) };
   }

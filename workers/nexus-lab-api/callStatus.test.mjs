@@ -21,6 +21,34 @@ test("callState: the grader's stamps decide; a split with its TP1 half closed is
   assert.equal(callState(call({ publishMark: { px: 100.1 } })), "OPEN", "posted at the market: filled by the grader's own rule");
 });
 
+test("callState: a call the grader can never grade reads INVALID, not OPEN (Engine B's TP2 = TP1 split)", () => {
+  const bad = call({ exitPlan: "SPLIT_50", takeProfit2: 103, fillState: "OPEN", publishMark: { px: 100 } });
+  assert.equal(callState(bad), "INVALID");
+  const row = callStatusRow(bad, 101);
+  assert.equal(row.invalidReason, "split exit with TP2 not beyond TP1");
+  assert.equal(row.live, null, "no move in R on a call that will never be graded");
+  assert.equal(row.plannedR.tp2, null);
+  assert.equal(callState(call({ stopLoss: 101 })), "INVALID");
+  assert.equal(callStatusRow(call({ stopLoss: 101 }), 100).invalidReason, "stop or target on the wrong side of entry");
+  assert.equal(callState(call({ takeProfit2: 103 })), "UNCHECKED", "a TP2 alone declares nothing");
+  assert.equal("invalidReason" in callStatusRow(call({ fillState: "OPEN" }), 101), false);
+});
+
+test("callStatusRow: a graded call carries the hour it closed", () => {
+  const r = callStatusRow(call({ gradedOutcome: "LOSS", gradedR: -1, gradedAt: T0 + 9, exitedAt: T0 + 7200e3 }), null);
+  assert.deepEqual(r.graded, { outcome: "LOSS", r: -1, at: T0 + 9, exitedAt: T0 + 7200e3 });
+  assert.equal(callStatusRow(call({ gradedOutcome: "WIN", gradedR: 1.5 }), null).graded.exitedAt, null, "not stamped yet");
+});
+
+test("GET /theses/status/:wallet: an invalid call is listed and counted, and alone reads no marks", async () => {
+  _resetMarkCache();
+  const env = { LAB_STORE: kv({ [`lab:${W}`]: { theses: [call({ id: "bad", exitPlan: "SPLIT_50", takeProfit2: 103 })] } }) };
+  const n = { n: 0 };
+  const res = await handleCallStatus(["theses", "status", W], get(`/theses/status/${W}`), env, { fetchImpl: futures({ PERP_BTC_USDC: 101 }, n), now: () => T0 });
+  const body = await res.json();
+  assert.deepEqual([body.calls[0].state, body.counts.invalid, n.n], ["INVALID", 1, 0]);
+});
+
 test("callStatusRow: distances from the mark in % and R; an open call carries its move in R", () => {
   const r = callStatusRow(call({ fillState: "OPEN", filledAt: T0, exitPlan: "SPLIT_50" }), 101);
   assert.equal(r.state, "OPEN");
@@ -45,7 +73,7 @@ test("callStatusRow: a resting order shows whether price has been through the en
 
 test("callStatusRow: graded calls and calls without a mark carry no live block", () => {
   const g = callStatusRow(call({ gradedOutcome: "LOSS", gradedR: -1, gradedAt: T0 + 5 }), 101);
-  assert.deepEqual(g.graded, { outcome: "LOSS", r: -1, at: T0 + 5 });
+  assert.deepEqual(g.graded, { outcome: "LOSS", r: -1, at: T0 + 5, exitedAt: null });
   assert.equal(g.live, null);
   assert.equal(callStatusRow(call({ fillState: "OPEN" }), null).live, null);
 });
@@ -103,7 +131,7 @@ test("GET /theses/status/:wallet: public open calls with live marks, recent grad
   assert.equal(res.status, 200);
   assert.deepEqual(body.calls.map((c) => c.id), ["work", "open"], "newest first; private, holders-only and copies left out");
   assert.deepEqual(body.recent.map((c) => c.id), ["won"]);
-  assert.deepEqual(body.counts, { working: 1, open: 1, runner: 0, unchecked: 0, recentGraded: 1 });
+  assert.deepEqual(body.counts, { working: 1, open: 1, runner: 0, unchecked: 0, invalid: 0, recentGraded: 1 });
   assert.equal(body.calls[0].live.mark, 2538, "bare symbols map to the Orderly market");
   assert.equal(body.calls[1].live.moveR, 0.5);
   await handleCallStatus(["theses", "status", W], get(`/theses/status/${W}`), env, deps);

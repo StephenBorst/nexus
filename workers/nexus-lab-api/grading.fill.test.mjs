@@ -6,8 +6,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { entryFill, gradeCall } from "./logic.mjs";
-import { applyFillStamp, gradePublicTheses, PLAN_V } from "./grading.mjs";
+import { applyFillStamp, gradePublicTheses, PLAN_V, GRADE_V } from "./grading.mjs";
 import { sealTheses } from "./callLock.mjs";
+// The grade without its exit hour, for tests that pin outcome + R only (exitAt has its own tests).
+const noExit = (t, cd) => { const { exitAt, ...g } = gradeCall(t, cd); return g; };
 
 const H = 3600, D = 86400;
 const W = "0x" + "ab".repeat(20);
@@ -35,7 +37,7 @@ test("a limit price never reaches is not filled, however far price runs the othe
   const cd = tape([[2530, 2510], [2545, 2520], [2560, 2530]]);
   const t = long({ entryPrice: 2400, stopLoss: 2350, takeProfit1: 2700 });
   assert.deepEqual(entryFill(t, cd), { filled: false });
-  assert.deepEqual(gradeCall(t, cd), { outcome: "PENDING", r: 0, awaitingEntry: true }, "the grader agrees: nothing to grade");
+  assert.deepEqual(noExit(t, cd), { outcome: "PENDING", r: 0, awaitingEntry: true }, "the grader agrees: nothing to grade");
 });
 
 test("with a mark read at publish, 'at the market' means within 0.3% of that mark", () => {
@@ -172,4 +174,35 @@ test("a resting order that fills on a later pass alerts its owner once; one fill
   assert.match(notifs[0].message, /^ETH LONG filled at 2400/);
   await withOrderly(dip, () => gradePublicTheses(env2));
   assert.equal(JSON.parse(env2.LAB_STORE.m.get(`notif:${W}`)).length, 1, "no repeat on the next pass");
+});
+
+// ── Exit time (2026-10-22) ────────────────────────────────────────────────────
+test("the pass stamps the hour a call closed; a call graded before the stamp gets it once", () => {
+  const STOP_H = POSTED + 5 * H;
+  const px = (t) => (t === STOP_H ? { h: 2545, l: 2300, c: 2320 } : { h: 2545, l: 2525, c: 2538 });
+  const env = { LAB_STORE: kv({ [`lab:${W}`]: { theses: [
+    call({ id: "new", entryPrice: 2538 }),
+    // Graded LOSS by an earlier pass, no exit stamp: backfilled from the same candles.
+    call({ id: "old", entryPrice: 2538, planV: PLAN_V, gradedOutcome: "LOSS", gradedR: -1, gradedAt: 1, gradeV: GRADE_V }),
+    // A stamp the re-grade doesn't agree with: stamps are final, so no exit is invented (null).
+    call({ id: "odd", entryPrice: 2538, planV: PLAN_V, gradedOutcome: "WIN", gradedR: 2, gradedAt: 1, gradeV: GRADE_V }),
+  ] } }) };
+  return withOrderly(px, async () => {
+    await gradePublicTheses(env);
+    const [fresh, old, odd] = JSON.parse(env.LAB_STORE.m.get(`lab:${W}`)).theses;
+    assert.deepEqual([fresh.gradedOutcome, fresh.exitedAt], ["LOSS", STOP_H * 1000]);
+    assert.deepEqual([old.gradedOutcome, old.gradedAt, old.exitedAt], ["LOSS", 1, STOP_H * 1000], "the grade itself is untouched");
+    assert.deepEqual([odd.gradedOutcome, odd.exitedAt], ["WIN", null]);
+    // Derived once: a second pass has nothing to write.
+    const before = env.LAB_STORE.m.get(`lab:${W}`);
+    await gradePublicTheses(env);
+    assert.equal(env.LAB_STORE.m.get(`lab:${W}`), before);
+  });
+});
+
+test("a client save can't write exitedAt", () => {
+  const prev = [{ ...call({ id: "c", entryPrice: 2538 }), gradedOutcome: "LOSS", exitedAt: 5 }];
+  const reg = { v: 1, calls: { c: { frozen: call({ id: "c", entryPrice: 2538 }), publishedAt: POSTED * 1000 } }, order: ["c"] };
+  const r = sealTheses({ prev, incoming: [{ ...prev[0], exitedAt: 999 }], registry: reg, now: Date.now() });
+  assert.equal(r.theses[0].exitedAt, 5, "only the server's stamp survives");
 });

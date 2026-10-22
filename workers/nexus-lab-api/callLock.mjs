@@ -21,6 +21,7 @@
 // Pure: the caller does the KV reads/writes. Tested in callLock.test.mjs.
 import { appendUpdate, MAX_UPDATES } from "../../app/lib/lifecycle.mjs";
 import { registryEvents } from "../../app/lib/registryEvent.mjs";
+import { splitPlan } from "./logic.mjs";
 
 export const REGISTRY_KEY = (address) => `callreg:${address}`;
 export const MAX_PUBLISHED = 2000;          // per wallet; a publish past this stays private
@@ -36,6 +37,7 @@ export const SERVER_FIELDS = [
   "fillState", "filledAt", // grading.mjs applyFillStamp: has the entry traded yet (WORKING / OPEN)
   "tp1HitAt",      // grading.mjs applyFillStamp: a declared split's TP1 half closed, runner still open
   "planV",         // grading.mjs PLAN_V: the plan-quality rules that wrote planScore/planFlags
+  "exitedAt",      // grading.mjs: the hour a graded call closed (ms), for hold time; null = not derivable
 ];
 /** The only fields the owner may still change on a published call. */
 export const OWNER_FIELDS = ["updates", "lossReason"];
@@ -173,6 +175,9 @@ export function sealTheses({ prev, incoming, registry, now, ownedElsewhere = new
       }
       const why = ownedElsewhere.has(id) ? "another wallet already published this call"
         : reg.order.length >= MAX_PUBLISHED ? `this wallet has ${MAX_PUBLISHED} published calls, the most one wallet can hold`
+        // A declared split whose TP2 isn't beyond TP1 grades INVALID forever once frozen (2026-10-22:
+        // an Engine B call went out with TP2 = TP1). Same rule /proxy/thesis-register refuses before gas.
+        : splitPlan(t)?.invalid ? "a split exit needs TP2 beyond TP1"
         : null;
       if (why) {
         refused.push({ id, reason: why });
