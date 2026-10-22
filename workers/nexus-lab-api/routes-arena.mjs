@@ -207,12 +207,27 @@ export async function handleArena(parts, request, env) {
     }));
     const root = await paperRoot(agents);
     // Is the root we computed the one committed on Arbitrum? (written by the hourly anchor)
+    // Anchoring is PAUSED until the Arena has paper trades worth committing (the
+    // worker's ARENA_PAPER_ANCHOR_LIVE var). While paused, the last commit is shown
+    // as what it is: a past root, with its record count, not a live proof.
+    const anchoring = env.ARENA_PAPER_ANCHOR_LIVE === "true" ? "live" : "paused";
     let onChain = null;
     try {
       const oc = JSON.parse((await AGENT_KV.get("arena:paper:onchain")) || "null");
-      if (oc?.root) onChain = { ...oc, verified: oc.root.toLowerCase() === `0x${root.ledgerHash}`.toLowerCase() };
+      if (oc?.root) {
+        const matches = oc.root.toLowerCase() === `0x${root.ledgerHash}`.toLowerCase();
+        onChain = {
+          ...oc,
+          anchoring,
+          verified: matches,
+          current: matches && anchoring === "live",
+          ...(anchoring === "paused" ? {
+            note: `Anchoring paused. Last commit covers ${Number(oc.recordCount) || 0} paper record(s); it is not updated while paused.`,
+          } : {}),
+        };
+      }
     } catch { /* no anchor yet */ }
-    return json({ ...root, genesis: GENESIS_HEAD, agents: root.count, onChain }, request);
+    return json({ ...root, genesis: GENESIS_HEAD, agents: root.count, anchoring, onChain }, request);
   }
 
   // ── GET /arena/agents — public roster + graded records ─────────────────────
