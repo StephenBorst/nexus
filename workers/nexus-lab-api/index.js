@@ -85,7 +85,7 @@ import { handleAgents } from "./routes-agents.mjs";
 import { handleArena } from "./routes-arena.mjs";
 import { handleFeed } from "./routes-feed.mjs";
 import { handleSocial } from "./routes-social.mjs";
-import { handleAccount, orderHistoryResult } from "./routes-account.mjs";
+import { handleAccount, orderHistoryResult, scrubStoredSeeds } from "./routes-account.mjs";
 import { handleTelegram, secureTelegramWebhook } from "./routes-telegram.mjs";
 import { handleProfile, handleLab } from "./routes-lab.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
@@ -608,6 +608,13 @@ export default {
       })());
       return;
     }
+    // Hourly: remove trading-key seeds older code cached in user:{addr} (routes-account.mjs). Ends itself.
+    ctx.waitUntil((async () => {
+      try {
+        const r = await scrubStoredSeeds(env);
+        if (r.ran) console.log(`[seeds] scrub: ${r.scrubbed} removed of ${r.scanned} records, pass ${r.passes}${r.done ? ", done" : ""}`);
+      } catch (e) { console.error("[seeds] scrub failed:", String(e)); }
+    })());
     // Hourly: register the Telegram webhook's secret header (routes-telegram.mjs). A no-op once done.
     ctx.waitUntil((async () => {
       try {
@@ -907,46 +914,10 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
       return json(result, request);
     }
 
-    // ── /account-snapshot — read positions+orders using stored seed (no walletSig) ─
-    if (parts[0] === "account-snapshot" && request.method === "GET") {
-      const asWallet = url.searchParams.get("wallet");
-      if (!asWallet) return json({ error: "wallet required" }, request, 400);
-      const asNorm = asWallet.toLowerCase().trim();
-      const asRaw = await env.LAB_STORE.get("user:" + asNorm);
-      if (!asRaw) return json({ error: "wallet_not_registered", hint: "Use the Nexus Bankr skill to register." }, request, 404);
-      const asRec = JSON.parse(asRaw);
-      if (!asRec.seed) return json({ error: "session_not_cached", hint: "Run any Nexus command via the Bankr agent (e.g. check balance) to activate." }, request, 403);
-      const AS_HDR = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
-      const asSeedBytes = new Uint8Array(asRec.seed.match(/.{2}/g).map(b => parseInt(b,16)));
-      const asPk8 = new Uint8Array(48); asPk8.set(AS_HDR,0); asPk8.set(asSeedBytes,16);
-      const asSk = await crypto.subtle.importKey("pkcs8", asPk8, { name:"Ed25519" }, false, ["sign"]);
-      const asSign = async (method, path) => {
-        const ts = Date.now();
-        const msg = new TextEncoder().encode(ts + method + path);
-        const s = new Uint8Array(await crypto.subtle.sign("Ed25519", asSk, msg));
-        const b64 = btoa(String.fromCharCode(...s)).replace(/[+]/g,"-").replace(/[/]/g,"_").replace(/=+$/,"");
-        return { "orderly-timestamp": String(ts), "orderly-account-id": asRec.accountId, "orderly-key": asRec.orderlyKey, "orderly-signature": b64 };
-      };
-      const [posFetch, ordFetch] = await Promise.all([
-        fetch("https://api-evm.orderly.org/v1/positions", { headers: await asSign("GET", "/v1/positions") }),
-        fetch("https://api-evm.orderly.org/v1/orders?size=100&page=1", { headers: await asSign("GET", "/v1/orders?size=100&page=1") }),
-      ]);
-      const [posJson, ordJson] = await Promise.all([posFetch.json(), ordFetch.json()]);
-      const positions = (posJson?.data?.rows ?? []).map(p => ({
-        symbol: p.symbol, side: p.position_qty > 0 ? "LONG" : "SHORT",
-        size: Math.abs(p.position_qty), entryPrice: p.average_open_price,
-        markPrice: p.mark_price, unrealizedPnl: p.unrealized_pnl,
-        liquidationPrice: p.est_liq_price, leverage: p.leverage,
-        fundingRate: p.last_funding_rate,
-      }));
-      const orders = (ordJson?.data?.rows ?? []).map(o => ({
-        orderId: o.order_id, symbol: o.symbol, side: o.side, type: o.type,
-        status: o.status, price: o.price, quantity: o.quantity,
-        executedQty: o.executed, avgPrice: o.average_executed_price,
-        fee: o.total_fee, feeCurrency: o.fee_asset, realizedPnl: o.realized_pnl,
-        createdAt: o.created_time, updatedAt: o.updated_time,
-      }));
-      return json({ positions, orders, wallet: asNorm }, request);
+    {
+      // Account setup + the retired snapshot route + seed-scrub progress (routes-account.mjs).
+      const accountRes = await handleAccount(parts, request, env);
+      if (accountRes) return accountRes;
     }
 
     // ── Ph22: /og/thesis/:wallet/:id(.png)? → thesis OG image ─
@@ -2811,10 +2782,6 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       const ohseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(ohhex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
       const ohpk8  = new Uint8Array(48); ohpk8.set(OHHDR, 0); ohpk8.set(ohseed, 16);
       const ohsk   = await crypto.subtle.importKey("pkcs8", ohpk8, { name: "Ed25519" }, false, ["sign"]);
-      if (!ohrec.seed) {
-        const _ohSeedHex = [...ohseed].map(b => b.toString(16).padStart(2,"0")).join("");
-        await env.LAB_STORE.put("user:" + ohNorm, JSON.stringify({ ...ohrec, seed: _ohSeedHex }));
-      }
       const ohsign = async (method, path) => {
         const ts  = Date.now();
         const msg = new TextEncoder().encode(ts + method + path);
@@ -2935,16 +2902,21 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     }
 
     // ── /positions and /balance — proxy to Orderly private API ─────────────
-    // POST body { walletAddress, walletSig } only. walletSig derives the trading key and a URL
-    // lands in logs, so a signature in the URL is refused, never used.
+    // POST body { walletAddress, walletSig } only. The walletSig is what the trading key is derived
+    // from, so it never travels in a URL (URLs land in logs). GET ?wallet=&sig= was accepted until
+    // 2026-10-16; nothing sent it. A request that puts a signature in the URL is refused, not used.
     if ((parts[0] === "positions" || parts[0] === "balance") && (request.method === "GET" || request.method === "POST")) {
       const qp = new URL(request.url).searchParams;
-      if (qp.has("sig") || qp.has("walletSig")) return json({ error: "signature_in_url", hint: "Send walletSig in the JSON body of a POST, never in the URL. Sign again: the one in this URL may be in logs." }, request, 400);
-      if (request.method !== "POST") return json({ error: "method not allowed", hint: "POST { walletAddress, walletSig }" }, request, 405);
+      if (qp.has("sig") || qp.has("walletSig")) {
+        return json({ error: "signature_in_url", hint: "Send walletSig in the JSON body of a POST, never in the URL. Sign again: the one in this URL may be in logs." }, request, 400);
+      }
+      if (request.method !== "POST") {
+        return json({ error: "method not allowed", hint: "POST { walletAddress, walletSig }" }, request, 405);
+      }
       let pb; try { pb = await request.json(); } catch { pb = {}; }
       const wAddr = pb.walletAddress || pb.wallet;
       const wSig  = pb.walletSig    || pb.sig;
-      if (!wAddr || !wSig) return json({ error: "walletAddress and walletSig required — POST { walletAddress, walletSig }" }, request, 400);
+      if (!wAddr || !wSig) return json({ error: "wallet and sig required — POST { walletAddress, walletSig }" }, request, 400);
       const wNorm = wAddr.toLowerCase().trim();
       const uRaw  = await env.LAB_STORE.get("user:" + wNorm);
       if (!uRaw) return json({ error: "wallet_not_registered" }, request, 401);
@@ -2955,10 +2927,6 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         new Uint8Array(phex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
       const ppk8  = new Uint8Array(48); ppk8.set(PHDR, 0); ppk8.set(pseed, 16);
       const psk   = await crypto.subtle.importKey("pkcs8", ppk8, { name: "Ed25519" }, false, ["sign"]);
-      if (!urec.seed) {
-        const _pSeedHex = [...pseed].map(b => b.toString(16).padStart(2,"0")).join("");
-        await env.LAB_STORE.put("user:" + wNorm, JSON.stringify({ ...urec, seed: _pSeedHex }));
-      }
       const OBASE = "https://api-evm.orderly.org";
       const psign = async (method, path) => {
         const ts  = Date.now();
@@ -3882,10 +3850,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         if (!accountId) accountId = regData?.data?.account_id ?? null;
 
         // ── Store in KV ──
-        if (regData.success || regData.data) {
-          const _regSeedHex = [...seed].map(b => b.toString(16).padStart(2,"0")).join("");
+        // Stored only on Orderly's success, and never the seed (routes-account.mjs explains why).
+        if (regData.success === true) {
           await env.LAB_STORE.put("user:" + walletNorm, JSON.stringify({
-            accountId, orderlyKey, seed: _regSeedHex, registeredAt: Date.now(),
+            accountId, orderlyKey, registeredAt: Date.now(),
           }));
           return json({ ok: true, walletAddress: walletNorm, orderlyKey, accountId }, request);
         } else {
@@ -3920,12 +3888,6 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       } catch (e) {
         return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
       }
-    }
-
-    // ── /proxy/register-key — forward a signed AddOrderlyKey; store it only on Orderly's success ──
-    {
-      const accountRes = await handleAccount(parts, request, env);
-      if (accountRes) return accountRes;
     }
 
     // ── /register-orderly-key — deterministic wallet registration ───────────────

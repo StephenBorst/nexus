@@ -816,19 +816,25 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   pass after 2026-10-19: delete `labSaveMessageV1` then. `labAuthScope.test.mjs` lists every worker file that accepts the
   signature and fails if a new one appears, or its use isn't named in the message. The skill's copy of the message (fork
   branch `nexus-lab-signature` = BankrBot/skills#790) must match it word for word.
-  **⚠️ Trading-account record `user:{addr}` (found 2026-10-16; split into two PRs 2026-10-17).** FIXED (this half,
-  `routes-account.mjs`, tests `routes-account.test.mjs`): `/proxy/register-key` stored the record on `success || data`
-  with the key from a top-level body field; now only on `success === true`, with the SIGNED `message.orderlyKey` (a
-  different top-level `orderlyKey` → 400 before Orderly). Not an overwrite hole: Orderly checks the signature against
-  `userAddress` ("address and signature do not match"), so it's hardening. `/positions` + `/balance` take `walletSig`
-  from the POST body only: a signature in the URL → 400 `signature_in_url` (refused, not used), GET → 405 (nothing sent
-  the old `?wallet=&sig=` form). STILL OPEN (PR #130, held): `GET /account-snapshot?wallet=` returns any registered
-  wallet's positions + open orders with NO signature, signing with the order-only key's seed (SHA-256 of walletSig)
-  cached UNENCRYPTED in `user:{addr}.seed` by /order-history, /positions and bankr-register. Bankr's Nexus Trade Tracker
-  app page reads it today and can't sign (sandboxed iframe, no `sign_message`; actions hand off to chat), so retiring
-  it waits for a replacement read path for that page.
+  **Trading-account record `user:{addr}` hardened (2026-10-16, `routes-account.mjs`, tests `routes-account.test.mjs`).**
+  (1) `GET /account-snapshot?wallet=` returned any registered wallet's Orderly positions + open orders with NO signature,
+  signing with a seed cached in the record → RETIRED (410, hint → `POST /positions` / `POST /order-history` with
+  walletSig, which return the same data). Its caller was Bankr's Nexus Trade Tracker app page (sandboxed, can't sign),
+  so this merges only after the tracker reads /smart/xray + the chat-written order snapshot (tracker plan below). (2) The seed (SHA-256 of walletSig = the order-only trading key) was cached UNENCRYPTED by
+  /order-history, /positions and /proxy/bankr-register, and only the snapshot read it → nothing caches it now (a key that
+  isn't stored can't leak; encrypting it would have kept a server-held trading key for a route nobody uses). The hourly
+  cron `scrubStoredSeeds` removes the stored ones (200 records a run, two full passes so an old isolate's last write is
+  caught, a record changed between its two reads is skipped); `GET /ops/seed-scrub` = counts only. A test fails if
+  index.js writes or reads `seed` again. (3) `/proxy/register-key` (+ bankr-register) stored the record on
+  `success || data`; now only on `success === true`, with the key from the SIGNED `message.orderlyKey` (a different
+  top-level `orderlyKey` → 400 before Orderly). ⚠️ Correction to the first write-up: this was NOT an overwrite hole —
+  Orderly checks the signature against `userAddress` ("address and signature do not match"), so a request for someone
+  else's address fails there; it's hardening. `/positions` + `/balance` take `walletSig` from the POST
+  body only: a signature in the URL → 400 `signature_in_url` (refused, not used), GET → 405 (nothing sent the old
+  `?wallet=&sig=` form; walletSig derives the trading key and URLs land in logs). The retired snapshot logs
+  `[account-snapshot] retired route called · ua=…` per call — a hit in the worker logs = a caller we missed.
   **Tracker plan (borst, 2026-10-17):** positions panel → public `/smart/xray`, `nexus_trading` venue only; orders →
-  refreshed ON DEMAND in chat (agent signs as today, calls `/positions` + `/order-history`, writes ONLY a field-by-field
+  refreshed ON DEMAND in chat (spec `docs/bankr-tracker-spec.md`) (agent signs as today, calls `/positions` + `/order-history`, writes ONLY a field-by-field
   result snapshot to Bankr `appkv`). `appkv` is NOT private (owner admin-read, logs, postMessage), so no credential of
   any kind goes there: no walletSig, no Lab signature, no token. No stored Orderly key, no scheduled refresh. The opt-in
   says the tracker's owner (Nexus) and Bankr's logs can see the snapshot. `/order-history` now answers a refused Orderly
