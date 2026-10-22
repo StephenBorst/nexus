@@ -12,6 +12,7 @@
 // hook route enforces it) so they can't become a ride around the PRO webhook gate.
 import { json, normalizeAddress, recoverEthAddress } from "./shared.mjs";
 import { validateArenaRegistration, arenaAgentConfig, aggregateAgentTrades, agentScore, ARENA } from "./logic.mjs";
+import { verifyPaperLog, paperRoot, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
 
 // URL-safe random token — same shape as the PRO webhook mint in index.js.
 function randToken(bytes = 24) {
@@ -164,6 +165,54 @@ export async function handleArena(parts, request, env) {
       note: "SAVE the webhook url + passphrase now — they are never returned again (re-register with rotate:true to mint fresh ones).",
       docs: `${base.includes("nexustradinglabs") ? "https://trade.nexustradinglabs.com" : base}/arena`,
     }, request);
+  }
+
+  // ── GET /arena/agents/:address/paper-log — the agent's paper ledger, verified ──
+  // Every paper close, in order, each with its chain head. `chainOk` = the rows
+  // recompute to the stored head (catches an edited/deleted row). The ANCHORED root
+  // (GET /arena/paper/root → Arbitrum) is what stops the whole chain being rewritten.
+  if (parts[1] === "agents" && parts[2] && parts[3] === "paper-log" && !parts[4] && request.method === "GET") {
+    const address = normalizeAddress(parts[2]);
+    const stateRaw = await AGENT_KV.get(`agent:state:${address}`);
+    let state = null;
+    try { state = stateRaw ? JSON.parse(stateRaw) : null; } catch { /* ignore */ }
+    const seqTop = Number(state?.paper_seq) || 0;
+    const head = state?.paper_head ?? null;
+    if (!seqTop) return json({ wallet: address, count: 0, head: null, chainOk: true, rows: [] }, request);
+    if (seqTop > 500) {
+      return json({ wallet: address, count: seqTop, head, chainOk: null, reason: "too_long_for_one_read", rows: [] }, request);
+    }
+    const got = await Promise.all(Array.from({ length: seqTop }, (_, i) =>
+      AGENT_KV.get(paperSeqKey(address, i + 1)).then((v) => (v ? JSON.parse(v) : null)).catch(() => null)));
+    const entries = got.filter(Boolean);
+    const v = await verifyPaperLog(entries);
+    const chainOk = v.ok && v.count === seqTop && v.head === head;
+    return json({
+      wallet: address, count: seqTop, head, chainOk,
+      ...(chainOk ? {} : { reason: v.reason || "head_mismatch", atSeq: v.atSeq ?? null }),
+      rows: entries.map((e) => ({ seq: e.seq, head: e.head, ...e.row })),
+    }, request);
+  }
+
+  // ── GET /arena/paper/root — one commitment over every agent's paper head ──────
+  // Hourly anchor reads this and commits it on Arbitrum alongside the live ledger.
+  if (parts[1] === "paper" && parts[2] === "root" && !parts[3] && request.method === "GET") {
+    const rosterRaw = await AGENT_KV.get("arena:roster");
+    const roster = rosterRaw ? JSON.parse(rosterRaw) : [];
+    const agents = await Promise.all(roster.map(async (addr) => {
+      const raw = await AGENT_KV.get(`agent:state:${addr}`);
+      let st = null;
+      try { st = raw ? JSON.parse(raw) : null; } catch { /* ignore */ }
+      return { wallet: addr, head: st?.paper_head ?? null, count: Number(st?.paper_seq) || 0 };
+    }));
+    const root = await paperRoot(agents);
+    // Is the root we computed the one committed on Arbitrum? (written by the hourly anchor)
+    let onChain = null;
+    try {
+      const oc = JSON.parse((await AGENT_KV.get("arena:paper:onchain")) || "null");
+      if (oc?.root) onChain = { ...oc, verified: oc.root.toLowerCase() === `0x${root.ledgerHash}`.toLowerCase() };
+    } catch { /* no anchor yet */ }
+    return json({ ...root, genesis: GENESIS_HEAD, agents: root.count, onChain }, request);
   }
 
   // ── GET /arena/agents — public roster + graded records ─────────────────────

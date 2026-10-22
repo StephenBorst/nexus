@@ -16,6 +16,7 @@ import { arbitrum } from "viem/chains";
 
 const AGENT_LEDGER_URL = "https://og.nexustradinglabs.com/agents/ledger";
 const THESES_LEDGER_URL = "https://og.nexustradinglabs.com/theses/ledger";
+const ARENA_PAPER_ROOT_URL = "https://og.nexustradinglabs.com/arena/paper/root";
 
 const ABI = [
   { type: "function", name: "anchor", stateMutability: "nonpayable",
@@ -74,7 +75,9 @@ async function runAnchor(env) {
   // as its own committed root + Arbiscan-visible event. Sequential to avoid nonce races.
   const agents = await anchorOne(env, "agents", AGENT_LEDGER_URL, "agent:ledger:onchain").catch((e) => ({ ok: false, error: e.message }));
   const theses = await anchorOne(env, "theses", THESES_LEDGER_URL, "theses:ledger:onchain").catch((e) => ({ ok: false, error: e.message }));
-  return { ok: true, agents, theses };
+  // Arena paper ledger — one root over every agent's hash-chained paper head.
+  const paper = await anchorOne(env, "arena-paper", ARENA_PAPER_ROOT_URL, "arena:paper:onchain").catch((e) => ({ ok: false, error: e.message }));
+  return { ok: true, agents, theses, paper };
 }
 
 // ─── Ops monitoring ────────────────────────────────────────

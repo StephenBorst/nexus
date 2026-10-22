@@ -15,6 +15,7 @@ import { orderlyGet } from "../nexus-lab-api/orderlyGet.mjs";
 import * as ed from "@noble/ed25519";
 import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
+import { nextPaperHead, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress } from "./logic.mjs";
 
@@ -1289,6 +1290,22 @@ async function partialClose(address, state, config, env, action, cache) {
   console.log(`[exec] ${address.slice(0, 10)} ${paper ? "PAPER " : ""}PARTIAL TP L${action.level} ${action.sizePct}% slice=${slice} pnl=$${pnlUsdc.toFixed(4)} remaining=${afterRemain}`);
 }
 
+// Append this paper close to the wallet's hash-chained paper ledger (app/lib/paperLedger.mjs).
+// Rows live under their own KV keys, so they survive a reset and are never truncated.
+// Never throws: a KV failure is logged loudly and the trade still closes. The head only
+// advances after the row is stored, so a failed write leaves a visible gap, not a fake row.
+async function appendPaperLog(address, state, env, row) {
+  try {
+    const seq = (Number(state.paper_seq) || 0) + 1;
+    const head = await nextPaperHead(state.paper_head || GENESIS_HEAD, seq, row);
+    await env.NEXUS_AGENT.put(paperSeqKey(address, seq), JSON.stringify({ seq, row, head }));
+    state.paper_seq = seq;
+    state.paper_head = head;
+  } catch (e) {
+    console.error(`[exec] ${address.slice(0, 10)} paper log REJECTED:`, String(e?.message || e).slice(0, 200));
+  }
+}
+
 async function closePosition(address, state, env, reason, cache, decisionPrice = null) {
   const pos = state.current_position;
   if (!pos) return;
@@ -1409,6 +1426,7 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
     // ⚠️ That pop is why the window is NOT the record. Accrue the LIFETIME aggregate
     // here, once, at close — it cannot be rebuilt from a truncated window later.
     state.paper_agg = accruePaperAgg(state.paper_agg, auditable);
+    await appendPaperLog(address, state, env, auditable);
   } else {
     await logAgentTrade(address, env, auditable);
   }
