@@ -35,6 +35,41 @@ function statBlock(rows) {
   };
 }
 
+// The PAPER block the board and the agent card ship. `paper_trades` is a rolling
+// last-50 window (exec pops past 50), so ranking on it lets losing trades roll off.
+// The lifetime aggregate `paper_agg` is accrued once per close and never truncated;
+// rank on it whenever it exists. Agents that predate the aggregate fall back to the
+// window, LABELLED as such, so no one reads a 50-trade slice as the whole record.
+// Resets are counted on the state (`paper_resets`) so a wiped record is visible.
+export function arenaPaperBlock(state) {
+  const resets = Number(state?.paper_resets) || 0;
+  const agg = state?.paper_agg;
+  if (agg && Number(agg.trades) > 0) {
+    const trades = Number(agg.trades);
+    const wins = Number(agg.wins) || 0;
+    const grossWin = Number(agg.grossWin) || 0;
+    const grossLoss = Number(agg.grossLoss) || 0;
+    const net = Number(agg.net) || 0;
+    const first = Number(agg.firstTradeAt) || 0;
+    const last = Number(agg.lastTradeAt) || 0;
+    const daysActive = first && last ? Math.max(1, Math.round((last - first) / 86400000)) : 0;
+    const { winRate, profitFactor, score } = agentScore({ trades, wins, grossWin, grossLoss, net, daysActive });
+    return {
+      lifetime: true,
+      trades,
+      wins,
+      winRate: Math.round(winRate * 1000) / 10,
+      netPnl: Math.round(net * 100) / 100,
+      profitFactor: Math.round(Math.min(profitFactor, 99) * 100) / 100,
+      score,
+      daysActive,
+      resets,
+    };
+  }
+  const window = statBlock(state?.paper_trades);
+  return window ? { ...window, lifetime: false, window: "last 50 trades", resets } : null;
+}
+
 export async function handleArena(parts, request, env) {
   if (parts[0] !== "arena") return null;
   const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
@@ -185,7 +220,7 @@ export async function handleArena(parts, request, env) {
         active: !!state?.active,
         mode: config?.mode || "PAPER",
         currentPosition: pos ? { symbol: pos.symbol, direction: pos.direction, paper: !!pos.paper } : null,
-        paper: statBlock(state?.paper_trades),
+        paper: arenaPaperBlock(state),
         live: statBlock(liveByWallet.get(w)),
       };
     }))).filter(Boolean);
@@ -257,7 +292,7 @@ export async function handleArena(parts, request, env) {
         tpPercent: config.tpPercent, slPercent: config.slPercent,
         maxHoldHours: config.maxHoldHours, maxTradesPerDay: config.maxTradesPerDay,
       } : null,
-      paper: { ...(statBlock(state?.paper_trades) || {}), recent: paperRows.map(trimTrade) },
+      paper: { ...(arenaPaperBlock(state) || {}), recent: paperRows.map(trimTrade), resetLog: (state?.paper_reset_log || []).slice(-10) },
       live: { ...(statBlock(liveRows) || {}), recent: liveRows.map(trimTrade) },
       lastActivity,
     }, request);
