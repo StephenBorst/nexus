@@ -112,6 +112,14 @@ jobs:
         working-directory: workers/nexus-agent-brain
         run: npx wrangler@3 deploy
 
+      # Hourly ledger anchor (commits the agent, call and Arena paper roots on Arbitrum).
+      # Was a manual `wrangler deploy`, so the Arena paper root sat unanchored until someone
+      # ran it by hand. Everything it needs is committed (wrangler.toml vars); the signing key
+      # is a secret, which `wrangler deploy` never touches.
+      - name: Deploy Worker (nexus-ledger-anchor)
+        working-directory: workers/nexus-ledger-anchor
+        run: npx wrangler@3 deploy
+
       # Carry engine (sector-neutral funding-carry sleeve). Redeploys from source so a
       # manual `wrangler deploy` can't drift. Stays DISARMED: CARRY_LIVE is not a
       # wrangler.toml var, and `wrangler deploy` never touches secrets/vars — so this
