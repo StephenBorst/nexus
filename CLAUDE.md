@@ -114,9 +114,9 @@ is everything built on top:
   GitHub can turn workflows off); borst re-enabled it 2026-10-11 and main deployed green (`ad309f8`, manual run). If runs
   stop again, check repo Settings → Actions → General first. After merging, check that a run started (cloud sessions
   can't read Actions settings: the proxy 403s that path).
-  **⚠️ 2026-10-18: Actions disabled ACCOUNT-wide** ("Actions has been disabled for this user": GitHub abuse detection
-  flagged the account for manual review; borst replied to support). Not the repo setting. Nothing deploys until support
-  clears it, so hold merges; worker secrets (`wrangler secret put`) still work, they don't go through Actions.
+  **2026-10-18 → 10-23: Actions was disabled ACCOUNT-wide** ("Actions has been disabled for this user": GitHub abuse
+  detection flagged the account for manual review). Not the repo setting. GitHub support cleared it 2026-10-23. If that
+  message comes back: nothing deploys, hold merges; worker secrets (`wrangler secret put`) still work.
 
 ## Cloudflare Workers (deploy with `npx wrangler deploy` in each dir; needs CF auth)
 - **nexus-lab-api** (`workers/nexus-lab-api`) → `og.nexustradinglabs.com`. This is the `AGENT_API`
@@ -651,8 +651,7 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   `okx.test.mjs` / `flow.snapshot.test.mjs`) changes how often a row lands, never what a row says; it logs
   `[flow] basis N/9 · cvd N/9 · retries R` every hour and `[flow] MISSED …` with reasons. Read history with the holes
   in mind: a pre-fix window has fewer basis hours than its calendar span.
-- **/proof layout (2026-10-18, borst: less words, more show; branch `claude/bold-sagan-ucqho1`, merge held while Actions
-  is off).** Order: the verdict (`FeaturedLead.tsx`: "Graded in public. Nothing has cleared the bar yet." + the bar in
+- **/proof layout (2026-10-18, borst: less words, more show; shipped 2026-10-23 once Actions was back).** Order: the verdict (`FeaturedLead.tsx`: "Graded in public. Nothing has cleared the bar yet." + the bar in
   one line + the 4 dated receipts) → the signal board **by stage** (`stageGroups` in `app/lib/signalCard.mjs`, tested:
   registered pipeline reads first by stage, then reads graded on history, then reads worse than random / retired,
   kept visible) as compact rows; a tap opens the full card → graded calls (the all-calls record stays visible beside
