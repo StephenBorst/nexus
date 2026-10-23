@@ -13,7 +13,8 @@ app; there is no second codebase. Phone alerts are Web Push (`workers/nexus-lab-
 - [x] 4. `public/.well-known/assetlinks.json` with both fingerprints (2026-10-14: app signing `DD:F5:…:C7:62`, upload `72:4C:…:02:4C`)
 - [x] 5a. Privacy policy page `nexustradinglabs.com/privacy` (nexus-landing PR #14)
 - [x] 5b. Store listing copy + graphics: `marketing/play-store/` (icon, feature graphic, 3 phone screenshots, listing.md)
-- [x] 5c. Data safety form + store listing saved (borst, 2026-10-14). Not sent for review yet.
+- [x] 5c. Data safety form + store listing saved (borst, 2026-10-14).
+- [x] 5d. **LIVE on Google Play (2026-10-20):** production v1.0.0 approved and published, rollout 100%, listing public, org verification complete. Nothing pending on the Play side.
 - [ ] 6. Solana dApp Store, same package (optional second lane)
 
 ## 1. Turn push on (5 minutes, once)
