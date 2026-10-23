@@ -12,6 +12,8 @@
 // moves and re-check right before writing. That shrinks a race from seconds to milliseconds; it
 // does not make it atomic. A Durable Object would. The daily sim cap stays the hard backstop.
 
+import { LOCK_KEYS } from "./lock.mjs";
+
 export const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 // MiroShark's published Base receiver (x402.miroshark.xyz/.well-known/x402, read 2026-09-27).
 // If they rotate it, runs fail closed with the new address in the error; set the MIROSHARK_PAYTO
@@ -76,42 +78,68 @@ export function alreadyRedeemedMsg(prefix) {
   return what ? `this transaction was already redeemed for ${what}` : "this transaction was already redeemed";
 }
 
+// `lock(key, fn)` = run fn holding that key's lease (lock.mjs withLock, bound to env). The default runs
+// unlocked (tests that don't exercise races, and a worker without the NEXUS_LOCK binding).
+const unlocked = (_key, fn) => fn();
+
 // Re-check, claim the tx, then grant. If the grant throws, release the claim so the payer can
-// retry instead of losing the payment. → { ok:true, value } | { ok:false, as }
-export async function redeemOnce(store, txHash, prefix, owner, grant) {
-  const as = await redeemedAs(store, txHash);
-  if (as) return { ok: false, as };
-  await store.put(prefix + txHash, owner);
-  try {
-    return { ok: true, value: await grant() };
-  } catch (e) {
-    try { await store.delete(prefix + txHash); } catch { /* claim stays; support can clear it */ }
-    throw e;
-  }
+// retry instead of losing the payment. The whole check-claim-grant holds the tx's lease: without it
+// two requests for one tx could both pass the check before either claimed. → { ok:true, value } | { ok:false, as }
+export async function redeemOnce(store, txHash, prefix, owner, grant, lock = unlocked) {
+  return lock(LOCK_KEYS.redeem(txHash), async () => {
+    const as = await redeemedAs(store, txHash);
+    if (as) return { ok: false, as };
+    await store.put(prefix + txHash, owner);
+    try {
+      return { ok: true, value: await grant() };
+    } catch (e) {
+      try { await store.delete(prefix + txHash); } catch { /* claim stays; support can clear it */ }
+      throw e;
+    }
+  });
 }
 
 // ── Sim credits + the daily cap: take the slot before paying, give it back if the run isn't queued ──
 // A failed write throws, so the caller stops BEFORE paying (fail closed).
-export async function takeSimCredit(store, key) {
-  const before = Number(await store.get(key)) || 0;
-  if (before < 1) return { ok: false, left: Math.max(0, before) };
-  await store.put(key, String(before - 1));
-  return { ok: true, left: before - 1 };
+// Every read-modify-write of a wallet's credits (take, refund, and the grant after a purchase) holds
+// that wallet's lease, and the day's cap counter holds the day's lease, so two requests can't both
+// read "1 credit left" and both spend it.
+export async function takeSimCredit(store, key, lock = unlocked) {
+  return lock(LOCK_KEYS.simCredits(key), async () => {
+    const before = Number(await store.get(key)) || 0;
+    if (before < 1) return { ok: false, left: Math.max(0, before) };
+    await store.put(key, String(before - 1));
+    return { ok: true, left: before - 1 };
+  });
 }
 
-export async function refundSimCredit(store, key) {
-  const cur = Number(await store.get(key)) || 0;
-  await store.put(key, String(Math.max(0, cur) + 1));
+export async function refundSimCredit(store, key, lock = unlocked) {
+  return lock(LOCK_KEYS.simCredits(key), async () => {
+    const cur = Number(await store.get(key)) || 0;
+    await store.put(key, String(Math.max(0, cur) + 1));
+  });
 }
 
-export async function takeCapSlot(store, key, cap, ttl) {
-  const used = Number(await store.get(key)) || 0;
-  if (used >= cap) return { ok: false, used };
-  await store.put(key, String(used + 1), { expirationTtl: ttl });
-  return { ok: true, used: used + 1 };
+export async function addSimCredits(store, key, n, lock = unlocked) {
+  return lock(LOCK_KEYS.simCredits(key), async () => {
+    const cur = Number(await store.get(key)) || 0;
+    await store.put(key, String(cur + n));
+    return cur + n;
+  });
 }
 
-export async function releaseCapSlot(store, key, ttl) {
-  const used = Number(await store.get(key)) || 0;
-  await store.put(key, String(Math.max(0, used - 1)), { expirationTtl: ttl });
+export async function takeCapSlot(store, key, cap, ttl, lock = unlocked) {
+  return lock(LOCK_KEYS.simCap(key), async () => {
+    const used = Number(await store.get(key)) || 0;
+    if (used >= cap) return { ok: false, used };
+    await store.put(key, String(used + 1), { expirationTtl: ttl });
+    return { ok: true, used: used + 1 };
+  });
+}
+
+export async function releaseCapSlot(store, key, ttl, lock = unlocked) {
+  return lock(LOCK_KEYS.simCap(key), async () => {
+    const used = Number(await store.get(key)) || 0;
+    await store.put(key, String(Math.max(0, used - 1)), { expirationTtl: ttl });
+  });
 }

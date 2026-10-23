@@ -1008,8 +1008,9 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   same call (a repeat returns the first txHash; 409 `in_flight` while the outcome is unknown; `retry:true` overrides only
   a submit Bankr explicitly refused). ⚠️ KV has no compare-and-set: an isolate-local `inflight` set serialises identical
   requests in ONE isolate (2026-10-13, after BankrBot/skills#777 review: two concurrent identical requests got two
-  txHashes); two landing on different isolates at the same instant can still both send. The skill says "send one, wait
-  for its answer"; a Durable Object would close it (not built); Bankr fetch has a 45 s timeout and accepts `txHash`/`transactionHash`/`hash`; a
+  txHashes); since 2026-10-23 the submit also holds the call's lease in the `NexusLock` Durable Object (lock.mjs, 180 s,
+  no wait), so a second identical request on ANY isolate gets 409 `in_flight`, and an unreachable lock = 503
+  `lock_unavailable`, nothing sent. The skill still says "send one, wait for its answer"; Bankr fetch has a 45 s timeout and accepts `txHash`/`transactionHash`/`hash`; a
   slow receipt = 202 `{pending, txHash}`, never "nothing written". **`POST /theses/index {txHash, walletAddress}`** = no key:
   receipt status 0x1 + EXACTLY ONE registry event naming the wallet + exactly one decodable `registerThesis` in the tx
   input (nested smart-account calls work; one+one so a bundle can't hand a wallet another's levels) + block ≤6h old →
@@ -1728,8 +1729,14 @@ credit and pays `x402.miroshark.xyz/run` $1 Base USDC from secret `MIROSHARK_PAY
   comes back. Check `x402.miroshark.xyz/.well-known/x402` before overriding. ⚠️ Don't delete the pin to "fix" a run.
 - **One payment tx buys ONE product:** both redeem routes check `sub:redeemed:` AND `sim:redeemed:` (a $20 PRO tx
   used to also buy 20 sim credits), claim before granting, roll back if the grant fails.
-- **Credit + daily cap are taken BEFORE paying, returned unless the run queues.** KV has no compare-and-set, so a
-  millisecond race remains (a Durable Object closes it; not built). `MIROSHARK_DAILY_CAP` (20) is the backstop.
+- **Credit + daily cap are taken BEFORE paying, returned unless the run queues.** KV has no compare-and-set, so these
+  read-modify-writes hold a lease in the **`NexusLock` Durable Object** (2026-10-23, `workers/nexus-lab-api/lock.mjs`,
+  binding `NEXUS_LOCK`, SQLite-backed, migration `v1-nexus-lock`): one key per payment tx (`redeem:` — the whole
+  check-claim-grant, so PRO and sim credits racing on one tx still grant once), per wallet's credits (`simcredits:` —
+  take, refund AND the post-purchase grant), per day's cap (`simcap:`). Lease 30 s (expires on its own), wait ≤3 s, then
+  busy (409 on redeem) / unreachable (503) — both stop before any money moves. No binding = the old unlocked path.
+  Tests `lock.test.mjs` run each race unlocked (both win) and locked (one wins); checked once in `wrangler dev --local`.
+  `MIROSHARK_DAILY_CAP` (20) stays as the backstop.
 - A paid run survives the card (`app/lib/simRuns.mjs`: per wallet + scenario, 24h, resume on reopen).
 - `x402.miroshark.xyz` is egress-blocked from cloud sessions; read its PUBLIC docs through our own
   `GET /wargame/status?url=` (GET, miroshark hosts only).

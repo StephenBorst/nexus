@@ -8,10 +8,11 @@
 //   2. The same call from the same wallet can't be sent twice within PENDING_TTL_S. A repeat gets the
 //      first submit's txHash (and is indexed from it), or 409 while the first is still in flight /
 //      its outcome is unknown. `retry: true` overrides only a submit Bankr said FAILED.
-//      KV has no compare-and-set: the marker blocks a repeat that arrives after it's written. Two
-//      identical requests in the same isolate are serialised by `inflight`; two landing on different
-//      isolates at the same instant can both be sent (a Durable Object would close that; not built).
-//      The skill says so: send one request and wait for its answer.
+//      KV has no compare-and-set, so the marker alone can't stop two identical requests that arrive
+//      together. Each send holds the call's lease in the NexusLock Durable Object (lock.mjs) for the
+//      whole submit: a second identical request, from any isolate, gets 409 in_flight. `inflight`
+//      still answers a repeat in the same isolate without a round trip. The skill still says: send
+//      one request and wait for its answer.
 //   3. Bankr /wallet/submit. A receipt not readable within ~15 s answers 202 with the txHash: the
 //      call is on its way, and POST /theses/index {txHash, walletAddress} finishes the job.
 // /theses/index {txHash, walletAddress}: no key. Proves the registration from the chain
@@ -24,6 +25,7 @@ import {
   THESIS_REGISTRY, ARBITRUM_CHAIN_ID, PENDING_TTL_S, INDEX_MAX_AGE_MS, perpSymbol,
 } from "./thesisRegister.mjs";
 import { makeRateLimiter } from "./keyProxy.mjs";
+import { withLock, LockBusy, LockError, LOCK_KEYS } from "./lock.mjs";
 
 const BANKR_SUBMIT = "https://api.bankr.bot/wallet/submit";
 const BANKR_TIMEOUT_MS = 45_000;
@@ -34,6 +36,7 @@ const TX_RE = /^0x[0-9a-f]{64}$/;
 const registerLimiter = makeRateLimiter({ limit: 10, windowMs: 60_000 });
 // Pending keys this isolate is working on right now (see step 2 above).
 const inflight = new Set();
+const IN_FLIGHT = { error: "in_flight", hint: "This exact call is being sent right now. Don't resend: wait for the first request's answer." };
 const indexLimiter = makeRateLimiter({ limit: 30, windowMs: 60_000 });
 
 /** JSON-RPC over the given URLs in order: the first that answers wins. A JSON-RPC error is an
@@ -130,12 +133,18 @@ async function proxyRegister(body, request, env, deps) {
   const calldata = encodeRegisterThesis(body);
   const kv = env.LAB_STORE;
   const key = await pendingKey(wallet, calldata);
-  if (inflight.has(key)) {
-    return json({ error: "in_flight", hint: "This exact call is being sent right now. Don't resend: wait for the first request's answer." }, request, 409);
-  }
+  if (inflight.has(key)) return json(IN_FLIGHT, request, 409);
   inflight.add(key);
   try {
-    return await proxyRegisterOnce(body, request, env, deps, { wallet, calldata, kv, key });
+    // The lease covers Bankr's 45 s timeout + the receipt wait with room to spare; it expires on its
+    // own if this request dies. No waiting: a held lease means this exact call is being sent now.
+    return await withLock(env, LOCK_KEYS.thesisReg(key),
+      () => proxyRegisterOnce(body, request, env, deps, { wallet, calldata, kv, key }),
+      { ttlMs: 180_000, waitMs: 0 });
+  } catch (e) {
+    if (e instanceof LockBusy) return json(IN_FLIGHT, request, 409);
+    if (e instanceof LockError) return json({ error: "lock_unavailable", hint: "Couldn't confirm this call isn't already being sent, so nothing was sent. Try again in a minute." }, request, 503);
+    throw e;
   } finally {
     inflight.delete(key);
   }

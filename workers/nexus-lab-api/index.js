@@ -55,7 +55,11 @@ import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergenc
 import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, AXES, priceByHour } from "./axisbt.mjs";
 import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
-import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
+import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, addSimCredits, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
+import { lockFor, LockBusy, LockError } from "./lock.mjs";
+export { NexusLock } from "./lock.mjs";
+// Leases on the paid paths: held for milliseconds (a KV read + write), so a short wait covers a race.
+const PAY_LOCK = { ttlMs: 30_000, waitMs: 3_000 };
 import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
 import { okxJson } from "./okx.mjs";
 import { rankUniverse, RECORDED_COINS, HOLDOUT_COINS, UNIVERSE_RULES } from "./universe.mjs";
@@ -1300,10 +1304,12 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
             const expiresAt = base + SUB_PERIOD_MS;
             await env.LAB_STORE.put(`sub:${v.from}`, JSON.stringify({ expiresAt, lastTx: txHash, chain, token, amount: v.amount, updatedAt: now }));
             return expiresAt;
-          });
+          }, lockFor(env, PAY_LOCK));
           if (!r.ok) return json({ error: alreadyRedeemedMsg(r.as) }, request, 409);
           return json({ ok: true, address: v.from, expiresAt: r.value, active: true }, request);
         } catch (e) {
+          if (e instanceof LockBusy) return json({ error: "this transaction is being redeemed right now", hint: "Wait a few seconds and check your status; don't resend." }, request, 409);
+          if (e instanceof LockError) return json({ error: "couldn't lock this transaction — nothing was granted. Try again in a minute." }, request, 503);
           return json({ error: "verify failed", detail: String((e && e.message) || e) }, request, 500);
         }
       }
@@ -1356,14 +1362,14 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           if (!v.ok) return json({ error: v.reason || "verification failed", hint: chain === "base" ? `Send ≥ $${SIM_CREDIT_USD} of $NEXUS on Base to ${SUB_RECEIVER}` : `Send ≥ ${SIM_CREDIT_USD} USDC on Arbitrum to ${SUB_RECEIVER}` }, request, 400);
           const bought = simCreditsFor(v.amount, { decimals, usdPerToken, usdPerCredit: SIM_CREDIT_USD, slack: chain === "base" ? NEXUS_TOLERANCE : 0 });
           if (bought < 1) return json({ error: `payment below the 1-credit minimum ($${SIM_CREDIT_USD})` }, request, 400);
-          const r = await redeemOnce(env.LAB_STORE, txHash, "sim:redeemed:", v.from, async () => {
-            const cur = Number(await env.LAB_STORE.get(`sim:credits:${v.from}`)) || 0;
-            await env.LAB_STORE.put(`sim:credits:${v.from}`, String(cur + bought));
-            return cur + bought;
-          });
+          const lock = lockFor(env, PAY_LOCK);
+          const r = await redeemOnce(env.LAB_STORE, txHash, "sim:redeemed:", v.from,
+            () => addSimCredits(env.LAB_STORE, `sim:credits:${v.from}`, bought, lock), lock);
           if (!r.ok) return json({ error: alreadyRedeemedMsg(r.as) }, request, 409);
           return json({ ok: true, address: v.from, added: bought, credits: r.value }, request);
         } catch (e) {
+          if (e instanceof LockBusy) return json({ error: "this transaction is being redeemed right now", hint: "Wait a few seconds and check your credits; don't resend." }, request, 409);
+          if (e instanceof LockError) return json({ error: "couldn't lock this transaction — nothing was granted. Try again in a minute." }, request, 503);
           return json({ error: "verify failed", detail: String((e && e.message) || e) }, request, 500);
         }
       }
@@ -1961,16 +1967,19 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       const cap = Number(env.MIROSHARK_DAILY_CAP || 20);
       const capKey = `miro:runs:${new Date().toISOString().slice(0, 10)}`;
       const CAP_TTL = 172800;
+      // One request at a time per wallet's credits and per day's cap (lock.mjs). Busy or unreachable
+      // lock = the take throws = 503 below, before any money moves.
+      const simLock = lockFor(env, PAY_LOCK);
       // Take the credit and the day's slot BEFORE any money moves (payGuards.mjs); both come back
       // unless the run queues. It used to read, pay (~2s), then write — so parallel requests on one
       // credit each got a paid run. A KV error here stops the run: nothing has been paid yet.
       let credit, slot;
-      try { credit = await takeSimCredit(env.LAB_STORE, creditKey); }
+      try { credit = await takeSimCredit(env.LAB_STORE, creditKey, simLock); }
       catch { return json({ scenario, enabled: true, ran: false, error: "couldn't reserve a sim credit — nothing was charged. Try again." }, request, 503); }
       if (!credit.ok) return json({ scenario, enabled: true, ran: false, error: "no_credits", credits: 0, priceUsd: simPrice, hint: `You're out of sim credits — buy more (USDC on Arbitrum or $NEXUS on Base) to run. $${simPrice} = 1 credit.` }, request, 402);
-      try { slot = await takeCapSlot(env.LAB_STORE, capKey, cap, CAP_TTL); } catch { slot = null; }
+      try { slot = await takeCapSlot(env.LAB_STORE, capKey, cap, CAP_TTL, simLock); } catch { slot = null; }
       if (!slot || !slot.ok) {
-        try { await refundSimCredit(env.LAB_STORE, creditKey); } catch { console.error("[wargame] credit refund failed", simWallet); }
+        try { await refundSimCredit(env.LAB_STORE, creditKey, simLock); } catch { console.error("[wargame] credit refund failed", simWallet); }
         return slot
           ? json({ scenario, enabled: true, ran: false, error: "daily simulation cap reached — try again tomorrow" }, request, 429)
           : json({ scenario, enabled: true, ran: false, error: "couldn't check the daily cap — nothing was charged. Try again." }, request, 503);
@@ -2134,8 +2143,8 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         // Anything short of a queued run gives the credit and the day's slot back — the credit is
         // spent only on a queued run, as before.
         if (!queued) {
-          try { await refundSimCredit(env.LAB_STORE, creditKey); } catch { console.error("[wargame] credit refund failed", simWallet); }
-          try { await releaseCapSlot(env.LAB_STORE, capKey, CAP_TTL); } catch { /* the cap over-counts: fail closed */ }
+          try { await refundSimCredit(env.LAB_STORE, creditKey, simLock); } catch { console.error("[wargame] credit refund failed", simWallet); }
+          try { await releaseCapSlot(env.LAB_STORE, capKey, CAP_TTL, simLock); } catch { /* the cap over-counts: fail closed */ }
         }
       }
     }
