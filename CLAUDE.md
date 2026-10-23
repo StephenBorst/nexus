@@ -1399,7 +1399,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   NEAR Intents for cross-chain. `llms.txt` is ONE file kept identical in `public/llms.txt` (app) and `nexus-landing/llms.txt`
   — edit both, or they drift (they had: the app said ~100 markets, the landing was missing 3 endpoints).
 
-## 📱 Android app + phone alerts (2026-10-10) — runbook `docs/android-app.md`
+## 📱 Android app + phone alerts (2026-10-10; LIVE on Google Play 2026-10-20) — runbook `docs/android-app.md`
 - **The app = the live site in a Trusted Web Activity** (Chrome full-screen, packaged by PWABuilder), Play Store
   under an **Organization** account (LLC; D-U-N-S needed; skips the 12-testers/14-days rule for new personal
   accounts). Package id `com.nexustradinglabs.nexus`. Android first; iOS after. Solana dApp Store = optional 2nd lane.
@@ -1444,7 +1444,8 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   maskable while the repo file looked right. `tools/manifest/manifest.test.mjs` fails a hand edit, a colour off the
   canvas, or an icon whose PNG isn't the size it claims.
 - ✅ `public/.well-known/assetlinks.json` (2026-10-14): Play app-signing key `DD:F5:…:C7:62` + upload key `72:4C:…:02:4C`,
-  package `com.nexustradinglabs.nexus`. First .aab is on internal testing. Regenerate only via
+  package `com.nexustradinglabs.nexus`. **✅ LIVE on Google Play since 2026-10-20** (production v1.0.0, 100% rollout,
+  listing public, org verified; nothing pending on the Play side). Regenerate only via
   `node tools/android/assetlinks.mjs <app-signing> <upload>`; `tools/android/assetlinks.test.mjs` checks the committed file.
   A wrong or missing entry doesn't break the app: it opens with Chrome's address bar instead of full-screen.
 
