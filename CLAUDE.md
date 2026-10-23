@@ -628,6 +628,10 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   `EXPLORER_READS` + `REGISTERED_READS` (holdout + graded exit); cache `axisbt:v13`; /proof rows with `oos` show a
   "Registered · counts from … · the grade above is in-sample" line (`RegisteredLine`). Scorecard CPU on real data
   ~1.0s → ~1.8s (cached 1h). A changed rule = a new name + a new registration.
+  **Stage triggers = `docs/research/pipeline-if-then.md` (written 2026-10-23, before any read reached a stage; SIGNED only
+  once borst's name is on it).** What Lead / Edge / Tradeable / Paper / Retired each do to /proof, paper wallets, x402,
+  the house caller and live money, plus the Basis × CVD graded-exit outcome. Apply it one PR per trigger, from the
+  SERVED `pipeline.reads[].stage`; a changed trigger = a new dated page, never an edit.
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
