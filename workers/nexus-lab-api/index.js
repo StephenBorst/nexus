@@ -77,12 +77,12 @@ import { handleCallStatus } from "./routes-callstatus.mjs";
 import { handleVerify, isPublicCall } from "./routes-verify.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { runAgentWatch } from "./push.mjs";
-import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
+import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg, buildArenaAgentSvg } from "./ogCards.mjs";
 import { loadIdentity, identityCardVersion } from "./identity.mjs";
 import { identityShareText } from "../../app/lib/identityCard.mjs";
 import { handleTheses } from "./routes-theses.mjs";
 import { handleAgents } from "./routes-agents.mjs";
-import { handleArena } from "./routes-arena.mjs";
+import { handleArena, loadArenaCard } from "./routes-arena.mjs";
 import { handleFeed } from "./routes-feed.mjs";
 import { handleSocial } from "./routes-social.mjs";
 import { handleAccount, orderHistoryResult } from "./routes-account.mjs";
@@ -967,6 +967,27 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         },
       });
       if (ogThesisRes) return ogThesisRes;
+    }
+
+    // ── /og/arena/:wallet(.png)? — an Arena agent's PAPER record card ───────────
+    // Only for an agent with a graded paper close (404 otherwise). Paper only: this
+    // path never reads Supabase, so the card can't be slowed by the live ledger.
+    if (parts[0] === "og" && parts[1] === "arena" && parts[2]) {
+      if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
+      const isPng = parts[2].endsWith(".png");
+      const wallet = normalizeAddress(isPng ? parts[2].slice(0, -4) : parts[2]);
+      const card = await loadArenaCard(env, wallet);
+      if (!card) return new Response("no graded arena record", { status: 404, headers: { "Access-Control-Allow-Origin": "*" } });
+      const svg = buildArenaAgentSvg(card);
+      if (isPng) {
+        try {
+          const png = await renderMonoPng(svg);
+          return new Response(png, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=300, stale-while-revalidate=60", "Access-Control-Allow-Origin": "*" } });
+        } catch (e) {
+          console.error("[og arena PNG] failed, falling back to SVG:", String(e));
+        }
+      }
+      return new Response(svg, { headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*" } });
     }
 
     // ── /og/identity/:wallet(.png)? — the graded caller record card ─────────────

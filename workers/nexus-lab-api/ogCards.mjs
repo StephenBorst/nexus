@@ -247,3 +247,51 @@ export function buildThesisOgSvg({ displayName, wallet, ticker, direction, entry
   ${chartDataUri ? "" : `<text x="1152" y="592" fill="${faint}" font-size="13" text-anchor="end">${esc(wallet)}</text>`}
 </svg>`;
 }
+
+// ── Arena agent card (/og/arena) ──────────────────────────────────────────────
+// PAPER record only (the OG path never reads Supabase). Green/red = money (net P&L)
+// only; trades, win rate, qualify and resets stay monochrome. Built ONLY for an
+// agent with at least one graded paper close; the route 404s otherwise.
+export function buildArenaAgentSvg({ name, builder = "", wallet, paper, fontFamily = "'JetBrains Mono'" }) {
+  const { bone: BONE, bright: BRIGHT, muted: MUTED, faint: FAINT, fog: FOG, win: POS, loss: NEG, border: BORDER, panel: PANEL, canvas: CANVAS, brand: MARK } = BRAND;
+  const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const shortAddr = `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
+  const trades = paper.trades;
+  const net = paper.netPnl;
+  const netTxt = `${net < 0 ? "-" : "+"}$${Math.abs(net).toFixed(2)}`;
+  const crit = (paper.qualify?.criteria || []).find((c) => c.key === "trades");
+  const qualifyTxt = paper.qualify?.eligible
+    ? "QUALIFIED FOR THE BOARD"
+    : crit && !crit.met
+      ? `${crit.value} OF ${crit.target} TRADES TO QUALIFY`
+      : "NEEDS 3+ ACTIVE DAYS OR NET-POSITIVE P&L";
+  const resets = paper.resets ? `${paper.resets} RESET${paper.resets === 1 ? "" : "S"} ON RECORD` : "NO RESETS ON RECORD";
+  const cells = [
+    ["CLOSED TRADES", String(trades), `${paper.wins} wins`, BRIGHT],
+    ["WIN RATE", `${paper.winRate}%`, `profit factor ${paper.profitFactor}`, BRIGHT],
+    ["NET P&L (PAPER)", netTxt, `${paper.daysActive} active day${paper.daysActive === 1 ? "" : "s"}`, net >= 0 ? POS : NEG],
+  ];
+  const colX = [96, 500, 872];
+  const cellSvg = cells.map(([lab, val, sub, col], i) => `
+  <text x="${colX[i]}" y="332" fill="${FAINT}" font-size="15" letter-spacing="2">${esc(lab)}</text>
+  <text x="${colX[i]}" y="380" fill="${col}" font-size="40" font-weight="bold">${esc(val)}</text>
+  <text x="${colX[i]}" y="404" fill="${MUTED}" font-size="14">${esc(sub)}</text>`).join("");
+  return `<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <defs><style>text { font-family: ${fontFamily}; }</style></defs>
+  <rect width="1200" height="630" fill="${CANVAS}"/>
+  <rect x="16" y="16" width="1168" height="598" fill="${PANEL}" stroke="${BORDER}" stroke-width="1" rx="10"/>
+  <rect x="16" y="16" width="1168" height="3" fill="${MARK}" rx="1"/>
+  <text x="48" y="86" fill="${BRIGHT}" font-size="24" font-weight="bold" letter-spacing="4">// NEXUS ARENA</text>
+  <text x="48" y="112" fill="${MUTED}" font-size="15" letter-spacing="2">AI TRADING AGENT · PAPER RECORD</text>
+  <line x1="48" y1="150" x2="1152" y2="150" stroke="${BORDER}" stroke-width="1"/>
+  <text x="48" y="236" fill="${BRIGHT}" font-size="${Math.min(58, Math.floor(1000 / (Math.max(name.length, 1) * 0.6)))}" font-weight="bold">${esc(name)}</text>
+  <text x="48" y="276" fill="${FOG}" font-size="18">${esc(builder ? `built by ${builder} · ${shortAddr}` : shortAddr)}</text>
+  <line x1="48" y1="300" x2="1152" y2="300" stroke="${BORDER}" stroke-width="1"/>
+  ${cellSvg}
+  <text x="48" y="456" fill="${BONE}" font-size="20">${esc(qualifyTxt)}</text>
+  <text x="48" y="488" fill="${MUTED}" font-size="15">${esc(resets)}</text>
+  <line x1="48" y1="556" x2="1152" y2="556" stroke="${BORDER}" stroke-width="1"/>
+  <text x="48" y="590" fill="${MUTED}" font-size="15">${esc(name)} · verify → trade.nexustradinglabs.com/arena</text>
+  <text x="1152" y="590" fill="${FAINT}" font-size="14" text-anchor="end">fills graded by the exec engine, not self-reported</text>
+</svg>`;
+}

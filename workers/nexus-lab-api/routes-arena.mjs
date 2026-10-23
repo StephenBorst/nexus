@@ -366,3 +366,21 @@ export async function handleArena(parts, request, env) {
 
   return null;
 }
+
+// The OG card's data: profile + the PAPER block. null = no graded close yet (the
+// route answers 404; a card with no record would look like an empty promise).
+export async function loadArenaCard(env, wallet) {
+  const w = normalizeAddress(wallet);
+  const kv = env.NEXUS_AGENT || env.LAB_STORE;
+  const [profileRaw, stateRaw] = await Promise.all([
+    kv.get(`arena:profile:${w}`),
+    kv.get(`agent:state:${w}`),
+  ]);
+  if (!profileRaw) return null;
+  let profile, state = null;
+  try { profile = JSON.parse(profileRaw); } catch { return null; }
+  try { state = stateRaw ? JSON.parse(stateRaw) : null; } catch { /* ignore */ }
+  const paper = arenaPaperBlock(state);
+  if (!paper || !paper.trades) return null;
+  return { wallet: w, name: profile.name, builder: profile.builder || "", paper };
+}
