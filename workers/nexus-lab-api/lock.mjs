@@ -17,6 +17,9 @@ export const LOCK_KEYS = {
   simCredits: (wallet) => `simcredits:${String(wallet).toLowerCase()}`,
   simCap: (dayKey) => `simcap:${dayKey}`,
   thesisReg: (pendingKey) => `thesisreg:${pendingKey}`,
+  // Not a paid path: the Arena operator map is one KV value, and a lost write would silently
+  // un-group a wallet (the survivorship hole the groups exist to close).
+  arenaOperators: () => "arena:operators",
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;

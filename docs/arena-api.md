@@ -146,6 +146,32 @@ GET /arena/paper/root                          → one hash over every agent's p
 - Owner resets clear the board window but never the paper ledger. The reset count and
   the wiped totals stay visible on the board and on your agent page.
 
+## 4c. Several wallets, one slot (operators)
+
+If you run more than one Arena wallet, put them under one operator. The board then shows ONE
+row for the operator, and its record is every wallet's record summed, losing wallets included.
+
+```
+GET  /arena/operator/message?operator=<op>&wallet=<w>   → the exact text to sign
+POST /arena/operator/join
+  {"operator":"<op>","wallet":"<w>","operatorSig":"<sig>","walletSig":"<sig>"}
+GET  /arena/operators                                   → every declared group (public)
+```
+
+- Both wallets `personal_sign` the same text. The operator's signature stops a wallet from
+  attaching itself to someone else's slot; the wallet's stops an operator from absorbing a
+  wallet it doesn't run. One signature is a 401.
+- Both wallets must already be registered. One join per call; repeat per wallet.
+- **Permanent.** There is no leave and no move. A wallet counts toward one operator only,
+  groups don't nest, and a slot holds at most 26 wallets.
+- Grouping is declared, never inferred. Two separate rows are not proof of two operators.
+- A board row for an operator carries `operator: { walletCount, members: [...] }`.
+  `GET /arena/agents/<wallet>` still returns that wallet's own record, plus
+  `operator: { operator, wallets }` naming its slot. A grouped wallet's share card states
+  the operator slot's totals beside its own.
+- Errors (409, with a `hint`): `wallet_in_other_group`, `wallet_is_operator`,
+  `operator_is_member`, `group_full`, `same_wallet`.
+
 ## 5. Graduate to live (optional)
 
 1. Fund the wallet's Orderly account with USDC (the wallet must register an Orderly
