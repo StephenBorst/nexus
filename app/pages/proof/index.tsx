@@ -2,14 +2,18 @@
 // One destination for every trustless record Nexus produces: our own signals, human
 // callers, autonomous agents, external AI agents (the Arena), and desks (teams). All graded
 // from public data, never self-reported, and anchored to a recomputable on-chain ledger.
-// Order (borst, 2026-10-18: less words, more show): the verdict → the signal board, by stage
-// → graded calls + verified callers → the other records, folded → the ledger line.
+// Order (borst, 2026-10-23: "too dense for normal users"): the verdict + the bar in one sentence
+// → the signals being tested (name · events · needs 30), the rest folded → graded calls, led by the
+// full record → verified callers → the other records, folded → the ledger line → "How we grade".
 // Every board is fail-soft: sparse at cold-start by design, never broken.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import CarrySleeve from "./CarrySleeve";
 import FeaturedLead from "./FeaturedLead";
+import Fold from "./Fold";
+import HowWeGrade from "./HowWeGrade";
+import { callsRecordLine, callersLine } from "@/lib/proofCopy.mjs";
 import SignalBoard, { type Scorecard } from "./SignalBoard";
 import { pressKey } from "@/utils/a11y";
 
@@ -44,34 +48,6 @@ const ANCHOR_EXPLORER = "https://arbiscan.io/address/0x57a698df84a44F3dA3dac3E08
 
 function SectionTitle({ title }: { title: string }) {
   return <h2 style={{ margin: "0 0 12px", fontFamily: UI, fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", color: BRIGHT }}>{title}</h2>;
-}
-
-function BoardShell({ title, count, children }: { title: string; count?: number | null; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 22 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8 }}>
-        <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>{title}</span>
-        {count != null && count > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: MUTED }}>{count}</span>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-// A record set that sits one tap away: the title and its count show, the board opens on tap.
-function Fold({ title, count, children }: { title: string; count?: number | null; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div style={{ borderTop: `1px solid ${BORDER}` }}>
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
-        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", cursor: "pointer", padding: "14px 2px", textAlign: "left" }}>
-        <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>{title}</span>
-        {count != null && <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>{count}</span>}
-        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 12, color: MUTED }}>{open ? "−" : "+"}</span>
-      </button>
-      {open && <div style={{ paddingBottom: 14 }}>{children}</div>}
-    </div>
-  );
 }
 
 const rowStyle = (clickable: boolean): React.CSSProperties => ({
@@ -158,9 +134,16 @@ export default function ProofPage() {
   const [proof, setProof] = useState<ProofOfEdge | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [allCalls, setAllCalls] = useState(false);
+  const [minCalls, setMinCalls] = useState(5);
+  const [howOpen, setHowOpen] = useState(false);
+  const howRef = useRef<HTMLDivElement>(null);
+  const [jumpToHow, setJumpToHow] = useState(0);
+  // "How we grade ↓" at the top opens the section at the foot and brings it into view.
+  useEffect(() => { if (jumpToHow) howRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [jumpToHow]);
+  const openHow = () => { setHowOpen(true); setJumpToHow((n) => n + 1); };
 
   const load = useCallback(() => {
-    fetch(`${API}/theses/leaderboard`).then((r) => r.json()).then((d) => setCallers(Array.isArray(d?.leaderboard) ? d.leaderboard : [])).catch(() => setCallers([]));
+    fetch(`${API}/theses/leaderboard`).then((r) => r.json()).then((d) => { setCallers(Array.isArray(d?.leaderboard) ? d.leaderboard : []); if (Number(d?.criteria?.minCalls) > 0) setMinCalls(Number(d.criteria.minCalls)); }).catch(() => setCallers([]));
     fetch(`${API}/agents/leaderboard`).then((r) => r.json()).then((d) => setAgents(Array.isArray(d?.leaderboard) ? d.leaderboard : [])).catch(() => setAgents([]));
     fetch(`${API}/arena/agents`).then((r) => r.json()).then((d) => setArena(Array.isArray(d?.agents) ? d.agents : [])).catch(() => setArena([]));
     fetch(`${API}/desks`).then((r) => r.json()).then((d) => setDesks(Array.isArray(d?.desks) ? d.desks : [])).catch(() => setDesks([]));
@@ -172,25 +155,27 @@ export default function ProofPage() {
 
   const cards = proof?.cards ?? [];
   const shownCards = allCalls ? cards.slice(0, 12) : cards.slice(0, 6);
+  const record = callsRecordLine(proof?.summary);
 
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", padding: isMobile ? "24px 16px 60px" : "40px 24px 80px" }}>
-      {/* 1 · THE VERDICT — what the Oct 15 re-validation decided (none cleared the bar). */}
-      <FeaturedLead isMobile={isMobile} />
+      {/* 1 · THE VERDICT — nothing has cleared the bar; the bar in one sentence. */}
+      <FeaturedLead isMobile={isMobile} onHowWeGrade={openHow} />
 
-      {/* 2 · THE SIGNAL BOARD — our own reads, by stage. The misses stay on it. */}
+      {/* 2 · THE SIGNALS — the ones being tested, then the rest folded. The misses stay on it. */}
       <SignalBoard scorecard={scorecard} />
 
       {/* 3 · GRADED CALLS + VERIFIED CALLERS — the human record, traced call by call. */}
       <section style={{ marginTop: 44 }}>
         <SectionTitle title="Graded calls" />
-        {/* The cards are the TOP calls by graded R, so they read as wins. The record is every resolved
-            public call, and it stays in plain sight next to them. */}
-        {proof?.summary && proof.summary.resolved > 0 && (
-          <div style={{ marginTop: -4, marginBottom: 12, fontFamily: MONO, fontSize: 10.5, color: FOG, lineHeight: 1.6 }}>
-            All {proof.summary.resolved} resolved public calls: {proof.summary.hitRate}% hit ·{" "}
-            <span style={{ color: proof.summary.avgR >= 0 ? POS : NEG }}>{proof.summary.avgR >= 0 ? "+" : ""}{proof.summary.avgR}R</span> avg.
-            <span style={{ color: MUTED }}> Below: the best by graded R.</span>
+        {/* The cards are the TOP calls by graded R, so they read as wins. The full record leads, so the
+            typical call is stated before the best ones. */}
+        {record && (
+          <div style={{ marginTop: -2, marginBottom: 14, fontFamily: UI, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 15, color: BRIGHT }}>
+              {record.record.split(" · ")[0]} · <span style={{ color: record.avgR >= 0 ? POS : NEG }}>{record.record.split(" · ")[1]}</span>
+            </div>
+            <div style={{ marginTop: 2, fontSize: 13, color: MUTED }}>{record.caveat}</div>
           </div>
         )}
         {cards.length > 0 && (
@@ -209,23 +194,27 @@ export default function ProofPage() {
           </>
         )}
 
-        <div style={{ marginTop: 22 }}>
-          <BoardShell title="VERIFIED CALLERS" count={callers?.length}>
-            {callers === null ? empty("loading…") : callers.length === 0 ? empty("No qualified callers yet: 5+ graded calls and net-positive R to rank.") : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {callers.slice(0, 15).map((c, i) => (
-                  <div role="link" tabIndex={0} key={c.wallet} onClick={() => navigate(`/feed/trader/${c.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${c.wallet}`))} style={{ ...rowStyle(true), ...rowM }}>
-                    <span style={rankCell}>{i + 1}</span>
-                    <Pfp src={c.pfp} />
-                    <span style={nameCell}>{c.displayName || short(c.wallet)}</span>
-                    {c.meritRank?.glyph && <span title={c.meritRank.title} style={{ fontFamily: MONO, fontSize: 10, color: BONE, flexShrink: 0 }}>{c.meritRank.glyph}</span>}
-                    <span style={{ ...statCell, ...statM }}>{c.calls} calls · {c.hitRate}% · {c.avgR >= 0 ? "+" : ""}{c.avgR}R</span>
-                    <span style={{ ...scoreCell, color: c.score > 0 ? BONE : FAINT }}>{c.score || "—"}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </BoardShell>
+        <div style={{ marginTop: 32 }}>
+          <SectionTitle title="Verified callers" />
+          {callers === null ? empty("loading…") : (
+            <>
+              <div style={{ marginTop: -4, marginBottom: 12, fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.5 }}>{callersLine(callers.length, minCalls)}</div>
+              {callers.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {callers.slice(0, 15).map((c, i) => (
+                    <div role="link" tabIndex={0} key={c.wallet} onClick={() => navigate(`/feed/trader/${c.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${c.wallet}`))} style={{ ...rowStyle(true), ...rowM }}>
+                      <span style={rankCell}>{i + 1}</span>
+                      <Pfp src={c.pfp} />
+                      <span style={nameCell}>{c.displayName || short(c.wallet)}</span>
+                      {c.meritRank?.glyph && <span title={c.meritRank.title} style={{ fontFamily: MONO, fontSize: 10, color: BONE, flexShrink: 0 }}>{c.meritRank.glyph}</span>}
+                      <span style={{ ...statCell, ...statM }}>{c.calls} calls · {c.hitRate}% · {c.avgR >= 0 ? "+" : ""}{c.avgR}R</span>
+                      <span style={{ ...scoreCell, color: c.score > 0 ? BONE : FAINT }}>{c.score || "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </section>
 
@@ -291,31 +280,28 @@ export default function ProofPage() {
         </Fold>
       </section>
 
-      {/* 5 · THE LEDGER — how it's graded, and where anyone can check it. */}
-      <footer style={{ marginTop: 28, fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.6 }}>
-        <div style={{ color: FOG }}>Graded, not claimed. One standard for signals, callers, agents and desks.</div>
-        <div style={{ marginTop: 4 }}>
-          Calls: public 1h price once the entry trades; first touch of target vs stop; a candle touching both is a loss.
-          Agents: settled trades with exchange order IDs. Nobody types in a P&amp;L.
-        </div>
-        <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          {ledger?.ledgerHash && (
-            <>
-              <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", color: FOG }}>LEDGER SHA-256</span>
-              <code style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, background: INSET, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "3px 8px" }}>
-                {ledger.ledgerHash.slice(0, 12)}…{ledger.ledgerHash.slice(-10)}
-              </code>
-              {ledger.count != null && <span style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED }}>{ledger.count} records</span>}
-              <a href={`${API}/agents/ledger`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: FOG, textDecoration: "none" }}>Recompute ↗</a>
-            </>
-          )}
-          <a href={ledger?.onChain?.verified && ledger.onChain.explorer ? ledger.onChain.explorer : ANCHOR_EXPLORER} target="_blank" rel="noopener noreferrer"
-            style={{ fontSize: 12, color: BONE, textDecoration: "none", border: `1px solid ${BORDER}`, borderRadius: 4, padding: "6px 12px", background: "#1a1a1e" }}>
-            ⛓ {ledger?.onChain?.verified ? "Anchored on Arbitrum ↗" : "Verify on Arbitrum ↗"}
-          </a>
-          <span role="link" tabIndex={0} onClick={() => navigate("/analyze")} onKeyDown={pressKey(() => navigate("/analyze"))} style={{ fontSize: 12, color: FOG, cursor: "pointer", marginLeft: isMobile ? 0 : "auto" }}>X-ray any wallet →</span>
-        </div>
+      {/* 5 · THE LEDGER — small: where anyone can check it. */}
+      <footer style={{ marginTop: 22, display: "flex", alignItems: "center", gap: "8px 14px", flexWrap: "wrap", fontFamily: UI, fontSize: 12, color: MUTED }}>
+        {ledger?.ledgerHash && (
+          <>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }} title={`Ledger SHA-256: ${ledger.ledgerHash}`}>
+              Ledger {ledger.ledgerHash.slice(0, 6)}…{ledger.ledgerHash.slice(-5)}{ledger.count != null ? ` · ${ledger.count} records` : ""}
+            </span>
+            <a href={`${API}/agents/ledger`} target="_blank" rel="noopener noreferrer" style={{ color: FOG, textDecoration: "none" }}>Recompute ↗</a>
+          </>
+        )}
+        <a href={ledger?.onChain?.verified && ledger.onChain.explorer ? ledger.onChain.explorer : ANCHOR_EXPLORER} target="_blank" rel="noopener noreferrer" style={{ color: FOG, textDecoration: "none" }}>
+          {ledger?.onChain?.verified ? "Anchored on Arbitrum ↗" : "Verify on Arbitrum ↗"}
+        </a>
+        <span role="link" tabIndex={0} onClick={() => navigate("/analyze")} onKeyDown={pressKey(() => navigate("/analyze"))} style={{ color: FOG, cursor: "pointer", marginLeft: isMobile ? 0 : "auto" }}>X-ray any wallet →</span>
       </footer>
+
+      {/* 6 · HOW WE GRADE — the method, the tide and the Oct 15 receipts, one tap away. */}
+      <div ref={howRef} style={{ marginTop: 22, borderBottom: `1px solid ${BORDER}`, scrollMarginTop: 72 }}>
+        <Fold title="How we grade" open={howOpen} onToggle={() => setHowOpen((v) => !v)}>
+          <HowWeGrade scorecard={scorecard} isMobile={isMobile} />
+        </Fold>
+      </div>
     </div>
   );
 }

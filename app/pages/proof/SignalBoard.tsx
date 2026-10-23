@@ -1,9 +1,11 @@
 // ── The signal scoreboard, as an evidence board ───────────────────────────────────────
 // Our own reads, graded the way we grade traders (/intel/axis-backtest). Display only: every
 // number is served by the grader; the one-line verdicts come from app/lib/signalCard.mjs.
-// The board: one row per read, grouped by stage (signalCard.mjs stageGroups); a tap opens the
-// full card underneath: the numbers → the proof → how the agent would trade it (only where a
-// preset trades the exact rule).
+// Layout (borst, 2026-10-23): the registered reads first, as plain rows (name · events so far ·
+// "needs 30", or "failing" with the grader's `next`); their grade on old data opens on tap. Then two
+// folds, "Looked good on old data" and "Worse than random", each with its one-line explanation;
+// inside, the detailed rows (grade, mean R, events, vs random), a tap opens the full card.
+// The tide and the method moved to "How we grade" (HowWeGrade.tsx).
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
@@ -11,6 +13,8 @@ import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { C } from "@/config/theme";
 import { AXIS_BLURB, splitLabel, takeaway, sideBar, stageGroups, randomBar } from "@/lib/signalCard.mjs";
+import { pipelineLine, countingSince } from "@/lib/proofCopy.mjs";
+import Fold from "./Fold";
 
 const API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -27,7 +31,7 @@ type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHold
 type AxisSides = Record<"LONG" | "SHORT", { events: number; r: { samples: number; hitRate: number; meanR: number } }>;
 type RandomSide = { verdict: string; n: number; pctBeaten?: number; realMeanR?: number; randomMedianR?: number; moreTradesNeeded?: number | null };
 type RandomBaseline = { metric: string; runs: number; window: { from: string; to: string; hours: number }; pooled: RandomSide; bySide: Record<"LONG" | "SHORT", RandomSide> };
-type Tide = { metric: string; from: string; to: string; markets: number; LONG: { n: number; meanR: number }; SHORT: { n: number; meanR: number } };
+export type Tide = { metric: string; from: string; to: string; markets: number; LONG: { n: number; meanR: number }; SHORT: { n: number; meanR: number } };
 // A read registered in the read pipeline: the same grade on events after its registration only.
 export type OosGrade = { since: string; verdict: string; r?: { samples: number; meanR: number } | null };
 export type AxisRow = { name: string; label: string; verdict: string; r?: { samples: number; meanR: number; hitRate?: number } | null; best: (Horizon & { bySide?: Record<"LONG" | "SHORT", SideStat> }) | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null; exitGraded?: ExitGrade | null; sides?: AxisSides; random?: RandomBaseline | null; oos?: OosGrade | null };
@@ -376,72 +380,97 @@ function StageRow({ a, reg, minEvents }: { a: AxisRow; reg: Reg; minEvents: numb
   );
 }
 
-const GROUP: Record<string, { title: string; note: string }> = {
-  pipeline: { title: "In the pipeline", note: "Rule frozen at registration. The grade shown is in-sample; only events after the date count." },
-  history: { title: "Graded on recorded history", note: "In-sample. A grade, not an edge." },
-  below: { title: "Worse than random entries", note: "Kept on the board. We publish the misses." },
+// The two groups that sit folded under the tested reads. One plain line each, visible while folded.
+const FOLDS: Record<string, { title: string; note: string }> = {
+  history: { title: "Looked good on old data", note: "Graded on history we already had. Counts for nothing until it repeats on new data." },
+  below: { title: "Worse than random", note: "Lost to random entries on the same markets. Kept here: we publish the misses." },
 };
+
+// One registered read on the "Being tested now" list: its name and how far along it is, nothing
+// else. Its grade on old data stays behind the tap (the full card, labelled as such).
+function TestRow({ a, reg, minEvents, since }: { a: AxisRow; reg: Reg; minEvents: number; since: string }) {
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);
+  const { main, aside } = splitLabel(a.label);
+  const line = pipelineLine(reg, minEvents);
+  return (
+    <div style={{ borderTop: `1px solid ${C.border}` }}>
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+        style={{ width: "100%", background: open ? C.surface : "transparent", border: "none", cursor: "pointer", textAlign: "left", color: BRIGHT,
+          padding: isMobile ? "13px 4px" : "13px 10px", minHeight: 44, display: "flex", alignItems: "flex-start", gap: 12, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+        <span style={{ minWidth: 0, flex: "1 1 220px" }}>
+          <span style={{ fontFamily: UI, fontSize: 14.5, fontWeight: 600, letterSpacing: "-0.01em", color: BRIGHT }}>{main}</span>
+          {aside && <span style={{ fontFamily: UI, fontSize: 13.5, color: MUTED }}> {aside}</span>}
+          {line.sub && <span style={{ display: "block", marginTop: 3, fontFamily: UI, fontSize: 12.5, color: MUTED }}>{line.sub}</span>}
+        </span>
+        <span style={{ display: "flex", alignItems: "baseline", gap: 12, flexShrink: 0, marginLeft: isMobile ? 0 : "auto" }}>
+          <span style={{ fontFamily: MONO, fontSize: 12, color: line.state === "counting" ? FOG : BRIGHT, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{line.text}</span>
+          <span aria-hidden style={{ fontFamily: MONO, fontSize: 12, color: MUTED }}>{open ? "−" : "+"}</span>
+        </span>
+      </button>
+      {open && (
+        <div style={{ padding: isMobile ? "4px 0 14px" : "4px 0 16px" }}>
+          <div style={{ fontFamily: UI, fontSize: 12.5, color: MUTED, lineHeight: 1.5, margin: "0 4px 10px" }}>
+            Its grade on all recorded history, mostly data that existed before the test began. Only events since {since || "registration"} count toward passing.
+          </div>
+          <SignalCard a={a} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The detailed rows inside a fold, with their column header on desktop.
+function DetailRows({ rows, minEvents }: { rows: { a: AxisRow; reg: Reg }[]; minEvents: number }) {
+  const isMobile = useIsMobile();
+  return (
+    <>
+      {!isMobile && (
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 104px 64px 64px 170px 14px", columnGap: 14, padding: "4px 10px 6px", ...label, fontSize: 8.5 }}>
+          <span>Read</span><span>Grade · old data</span><span style={{ textAlign: "right" }}>Mean R</span><span style={{ textAlign: "right" }}>Events</span><span>Beats random · 5% / 95%</span><span />
+        </div>
+      )}
+      <div style={{ borderBottom: `1px solid ${C.border}` }}>
+        {rows.map(({ a, reg }) => <StageRow key={a.name} a={a} reg={reg} minEvents={minEvents} />)}
+      </div>
+    </>
+  );
+}
 
 export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null }) {
   const isMobile = useIsMobile();
-  const tide = scorecard?.tide;
-  const groups = stageGroups(scorecard?.axes, scorecard?.pipeline?.reads);
+  const reads = scorecard?.pipeline?.reads;
+  const groups = stageGroups(scorecard?.axes, reads);
   const minEvents = scorecard?.pipeline?.rules?.minEvents ?? 30;
+  const since = countingSince(reads);
+  const testing = groups.find((g) => g.key === "pipeline");
+
+  const status = (t: string, color: string = FAINT) => <div style={{ fontFamily: UI, fontSize: 13, color, padding: "18px 4px" }}>{t}</div>;
 
   return (
     <section style={{ marginTop: 40 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 26 : 32, fontWeight: 600, letterSpacing: "-0.03em", lineHeight: 1.1, color: BRIGHT }}>Signals, by stage.</h2>
-        {tide && (
-          <span style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
-            {tide.markets} markets · {day(tide.from)} – {day(tide.to)}{scorecard?.asOf ? ` · updated ${day(scorecard.asOf)}` : ""}
-          </span>
-        )}
-      </div>
-      <p style={{ margin: "8px 0 0", fontFamily: UI, fontSize: 13.5, lineHeight: 1.5, color: FOG }}>
-        Our own reads, graded like traders: forward returns, no lookahead, walk-forward.
+      <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 22 : 26, fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.15, color: BRIGHT }}>Being tested now</h2>
+      <p style={{ margin: "6px 0 10px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: MUTED }}>
+        {since ? `Counting since ${since}. ` : ""}Tap a signal for its grade on old data.
       </p>
 
-      {tide && (
-        <div title="Every recorded market-hour, entered at random, under the same frozen R contract the cards use. Not a sample: the whole population."
-          style={{ marginTop: 16, display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "6px 14px", padding: "10px 14px", border: `1px solid ${C.border}`, borderRadius: 10, background: C.surfaceAlt, fontFamily: MONO, fontSize: 11, color: FOG, cursor: "help" }}>
-          <span style={{ ...label, color: MARK }}>The tide</span>
-          <span>random long <span style={{ color: moneyTone(tide.LONG.meanR) }}>{sign(tide.LONG.meanR)}R</span> · random short <span style={{ color: moneyTone(tide.SHORT.meanR) }}>{sign(tide.SHORT.meanR)}R</span></span>
-          <span style={{ marginLeft: isMobile ? 0 : "auto", color: FAINT, fontSize: 10 }}>A read has to beat its side’s tide, not zero.</span>
-        </div>
-      )}
-
-      {!isMobile && groups.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 104px 64px 64px 170px 14px", columnGap: 14, padding: "20px 10px 6px", ...label, fontSize: 8.5 }}>
-          <span>Read</span><span>Grade · in-sample</span><span style={{ textAlign: "right" }}>Mean R</span><span style={{ textAlign: "right" }}>Events</span><span>Beats random · 5% / 95%</span><span />
-        </div>
-      )}
-
-      {scorecard === null ? (
-        <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "24px 0" }}>Loading the board…</div>
-      ) : scorecard.failed ? (
+      {scorecard === null ? status("Loading…") : scorecard.failed ? (
         // A failed read is never shown as an empty board.
-        <div style={{ fontFamily: MONO, fontSize: 11, color: FOG, padding: "24px 0" }}>Couldn’t load the board. Refresh to try again.</div>
-      ) : !groups.length ? (
-        <div style={{ fontFamily: MONO, fontSize: 11, color: FAINT, padding: "24px 0" }}>The scorecard is warming up.</div>
+        status("Couldn’t load the signals. Refresh to try again.", FOG)
       ) : (
-        groups.map((g) => (
-          <div key={g.key} style={{ marginTop: isMobile ? 22 : 14 }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", padding: isMobile ? "0 4px 8px" : "0 10px 8px" }}>
-              <span style={{ ...label, color: BRIGHT }}>{GROUP[g.key].title} · {g.rows.length}</span>
-              <span style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED }}>{GROUP[g.key].note}</span>
-            </div>
-            <div style={{ borderBottom: `1px solid ${C.border}` }}>
-              {g.rows.map(({ a, reg }) => <StageRow key={a.name} a={a} reg={reg} minEvents={minEvents} />)}
-            </div>
+        <>
+          {testing
+            ? <div style={{ borderBottom: `1px solid ${C.border}` }}>{testing.rows.map(({ a, reg }) => <TestRow key={a.name} a={a} reg={reg} minEvents={minEvents} since={since} />)}</div>
+            : status("Nothing is being tested right now.")}
+          <div style={{ marginTop: 18 }}>
+            {groups.filter((g) => g.key !== "pipeline").map((g) => (
+              <Fold key={g.key} title={FOLDS[g.key].title} count={g.rows.length} note={FOLDS[g.key].note}>
+                <DetailRows rows={g.rows} minEvents={minEvents} />
+              </Fold>
+            ))}
           </div>
-        ))
+        </>
       )}
-
-      <p style={{ margin: "14px 0 0", fontFamily: MONO, fontSize: 9.5, color: FAINT, lineHeight: 1.6 }}>
-        {scorecard?.config?.coins?.length ? `Pooled across ${scorecard.config.coins.length} markets · min ${scorecard.config.minSamples} observations to rate · ` : ""}
-        verdicts are graded in R; tap a read for its horizons, sides and exits.
-      </p>
     </section>
   );
 }
