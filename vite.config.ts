@@ -6,7 +6,7 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { isOrderlyHooksDist, patchAmplitudeInit } from "./tools/amplitudeOptOut.mjs";
+import { isOrderlyHooksDist, patchAmplitudeInit, AUTOCAPTURE_IMPORTER } from "./tools/amplitudeOptOut.mjs";
 
 function loadConfigTitle(): string {
   try {
@@ -77,12 +77,18 @@ export function vendorChunk(): Rollup.ManualChunksOption {
 // - lodash: Orderly's hooks import only `debounce` (and its wallet connector `merge`), but lodash is
 //   CommonJS, so the whole library (~565 KB raw) shipped. Those two ESM importers get lodash-es,
 //   which tree-shakes to the functions they name.
-// Both are allowlists by importer path: a new SDK version that imports more needs a look here.
+// - Amplitude's click-capture plugin (2026-10-23): imported up front, never built (see AUTOCAPTURE_IMPORTERS).
+// All are allowlists by importer path: a new SDK version that imports more needs a look here.
 export const LITE_CRYPTO_IMPORTERS = [
   /node_modules\/@layerzerolabs\/lz-solana-sdk-v2\/dist\/index\.mjs$/,
   /node_modules\/@solana\/spl-type-length-value\/lib\/esm\/splDiscriminate\.js$/,
   /node_modules\/brorand\/index\.js$/,
 ];
+// Amplitude's browser client imports its click-capture plugin up front but only builds it when
+// `autocapture` asks for element interactions, which Orderly never sets: it gets a no-op stand-in.
+// The TOP-LEVEL copy only (AUTOCAPTURE_IMPORTER, tools/amplitudeOptOut.mjs): WooFi's lazy widget
+// bundles a newer Amplitude that imports more from the plugin and may use it.
+export const AUTOCAPTURE_IMPORTERS = [AUTOCAPTURE_IMPORTER];
 export const LODASH_ES_IMPORTERS = [
   /node_modules\/@orderly\.network\/hooks\/dist\/index\.mjs$/,
   /node_modules\/@orderly\.network\/wallet-connector\/dist\/index\.mjs$/,
@@ -90,6 +96,7 @@ export const LODASH_ES_IMPORTERS = [
 const isNodeCrypto = (s: string) => s === "crypto" || s === "node:crypto" || /crypto-browserify(\/index\.js)?$/.test(s);
 export function firstLoadTrims(): Plugin {
   const lite = fileURLToPath(new URL("./app/lib/nodeCryptoLite.mjs", import.meta.url));
+  const autocaptureOff = fileURLToPath(new URL("./app/lib/amplitudeAutocaptureOff.mjs", import.meta.url));
   return {
     name: "nexus-first-load-trims",
     enforce: "pre",
@@ -98,6 +105,7 @@ export function firstLoadTrims(): Plugin {
       if (!importer) return null;
       const from = importer.split("?")[0];
       if (isNodeCrypto(source) && LITE_CRYPTO_IMPORTERS.some((r) => r.test(from))) return lite;
+      if (source === "@amplitude/plugin-autocapture-browser" && AUTOCAPTURE_IMPORTERS.some((r) => r.test(from))) return autocaptureOff;
       if (source === "lodash" && LODASH_ES_IMPORTERS.some((r) => r.test(from))) {
         return this.resolve("lodash-es", importer, { skipSelf: true });
       }

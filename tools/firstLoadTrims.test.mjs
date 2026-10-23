@@ -49,3 +49,42 @@ test("vite.config.ts allowlists exactly the importers checked above", () => {
   }
   assert.match(cfg, /firstLoadTrims\(\),/);
 });
+
+// ── Amplitude's click-capture plugin ────────────────────────────────────────────────────────
+test("Amplitude's client builds the autocapture plugin only when config.autocapture asks for it", () => {
+  const src = read("@amplitude/analytics-browser/lib/esm/browser-client.js");
+  const imports = [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]@amplitude\/plugin-autocapture-browser['"]/g)].map((m) => m[1].trim());
+  assert.deepEqual(imports, ["autocapturePlugin"], "the stand-in exports only autocapturePlugin");
+  const uses = [...src.matchAll(/autocapturePlugin\(/g)].length;
+  assert.equal(uses, 1, "built in exactly one place");
+  assert.match(src, /if \(!isElementInteractionsEnabled\(this\.config\.autocapture\)\)[^\n]*\n[^\n]*\n[^\n]*this\.add\(autocapturePlugin\(/,
+    "and only behind isElementInteractionsEnabled(this.config.autocapture)");
+});
+
+test("Orderly never sets autocapture, and unset autocapture means no element interactions", async () => {
+  const hooks = read("@orderly.network/hooks/dist/index.mjs");
+  const start = hooks.indexOf("function getAmplitudeConfig");
+  const body = hooks.slice(start, hooks.indexOf("\n}\n", start));
+  assert.ok(start > 0 && body.length > 0);
+  assert.doesNotMatch(body, /autocapture/, "Orderly's Amplitude options name no autocapture");
+  const { AMPLITUDE_INIT_PATCHED } = await import("./amplitudeOptOut.mjs");
+  assert.doesNotMatch(AMPLITUDE_INIT_PATCHED, /autocapture/);
+  const { isElementInteractionsEnabled } = await import("@amplitude/analytics-client-common");
+  assert.equal(isElementInteractionsEnabled(undefined), false);
+});
+
+test("the stand-in is a plugin that does nothing", async () => {
+  const { autocapturePlugin } = await import("../app/lib/amplitudeAutocaptureOff.mjs");
+  const p = autocapturePlugin({});
+  assert.equal(p.type, "enrichment");
+  assert.equal(await p.setup({}, {}), undefined);
+  const ev = { event_type: "x" };
+  assert.equal(await p.execute(ev), ev);
+});
+
+test("the stand-in reaches only the top-level Amplitude client, never a nested copy (WooFi's)", async () => {
+  const { AUTOCAPTURE_IMPORTER: re } = await import("./amplitudeOptOut.mjs");
+  assert.ok(re.test("/repo/node_modules/@amplitude/analytics-browser/lib/esm/browser-client.js"));
+  assert.ok(!re.test("/repo/node_modules/woofi-swap-widget-kit/node_modules/@amplitude/analytics-browser/lib/esm/browser-client.js"));
+  assert.match(cfg, /AUTOCAPTURE_IMPORTERS = \[AUTOCAPTURE_IMPORTER\]/);
+});

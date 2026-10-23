@@ -1975,6 +1975,13 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   10 routes at 390px render identical text on old vs new build; the only page error in both is the sandbox's blocked
   Orderly fetch. Measure with a temporary `generateBundle` plugin (per-package `renderedLength` per chunk) — a build
   takes ~3 min and ~7 GB.
+- **Amplitude click-capture stand-in (2026-10-23): vendor 2.97 MB → 2.96 MB raw, 881 → 868 KB gz.** Amplitude's
+  browser client imports `@amplitude/plugin-autocapture-browser` up front but builds it only when `config.autocapture`
+  asks for element interactions; Orderly never sets it, so it never ran. The TOP-LEVEL client's import resolves to
+  `app/lib/amplitudeAutocaptureOff.mjs` (no-op). WooFi's lazy widget nests a newer Amplitude that imports MORE from that
+  plugin: the matcher (`AUTOCAPTURE_IMPORTER`, tools/amplitudeOptOut.mjs) skips nested node_modules — the first try
+  didn't and the build failed. Guards in `tools/firstLoadTrims.test.mjs`. What's left in vendor is Orderly's SDK tree
+  (ethers 687 KB, hooks 575, LayerZero Solana SDK 516, ui 371, @solana/web3.js 328, rendered sizes); no more free trims.
 - **Amplitude opt-out (2026-10-11; Orderly/Wuzhong hadn't answered since Oct 3).** Orderly's hooks start Amplitude with
   no `defaultTracking`, which in analytics-browser 2.x means page views, sessions, form interactions, file downloads and
   attribution for every visitor; the SDK exposes no switch. `amplitudeOptOut()` in vite.config.ts (build only) rewrites
