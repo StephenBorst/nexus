@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+@font-face{font-family:Manrope;font-weight:800;src:url(../../public/fonts/Manrope/Manrope-Bold.ttf)}
+@font-face{font-family:'IBM Plex Mono';font-weight:400;src:url(../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2)}
+@font-face{font-family:'IBM Plex Mono';font-weight:500;src:url(../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2)}
+
+html,body{margin:0;background:#0a0a0b;overflow:hidden}
+.wrap{position:relative;overflow:hidden}
+    .nx-atmos{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;background:radial-gradient(60% 55% at 86% 6%,rgba(237,237,240,.07),transparent 70%),radial-gradient(55% 50% at 6% 102%,rgba(237,237,240,.035),transparent 70%)}
+    .nx-atmos i{position:absolute;left:50%;top:50%;display:block}
+    .nx-silk{position:absolute;inset:0}
+    .nx-atmos .nx-sheen{width:200vmax;height:40vmax;margin:-20vmax 0 0 -100vmax;background:radial-gradient(ellipse 50% 50% at 52% 50%,rgba(237,237,240,.085),rgba(237,237,240,.025) 52%,transparent 74%);transform:translate(6vmax,-19vmax) rotate(-17deg);}
+    .nx-atmos .nx-core{width:160vmax;height:8vmax;margin:-4vmax 0 0 -80vmax;background:radial-gradient(ellipse 44% 50% at 47% 50%,rgba(255,255,255,.22),rgba(255,255,255,.06) 48%,transparent 76%);transform:translate(8vmax,-17vmax) rotate(-16deg);}
+    .nx-atmos .nx-edge{width:90vmax;height:1.1vmax;margin:-.55vmax 0 0 -45vmax;background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(255,255,255,.34),rgba(255,255,255,.06) 55%,transparent 80%);transform:translate(4vmax,-16vmax) rotate(-17deg);}
+    .nx-atmos .nx-low{width:200vmax;height:28vmax;margin:-14vmax 0 0 -100vmax;background:radial-gradient(ellipse 50% 50% at 48% 50%,rgba(237,237,240,.05),transparent 72%);transform:translate(-8vmax,26vmax) rotate(-17deg);}
+    .nx-atmos::after{content:"";position:absolute;inset:0;opacity:.07;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='1' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .7 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+/* size from the URL: ?w=1200&h=600 (banner) or ?w=1200&h=1200 (feature graphic) */
+.content{position:absolute;inset:0;display:flex;align-items:center;z-index:1}
+.row{gap:64px;padding:0 110px}
+.col{flex-direction:column;justify-content:center;text-align:center;gap:56px;padding:0 120px}
+.mark{flex-shrink:0}
+.row .mark{width:180px;height:180px}
+.col .mark{width:240px;height:240px}
+h1{margin:0;font:800 72px/1.02 Manrope,system-ui,sans-serif;letter-spacing:-.02em;color:#f4f4f5}
+.col h1{font-size:104px}
+.eyebrow{font:500 17px/1 'IBM Plex Mono',monospace;letter-spacing:.22em;color:#a1a1aa;text-transform:uppercase;margin-bottom:24px}
+.col .eyebrow{font-size:22px;margin-bottom:34px}
+.sub{margin-top:24px;font:400 19px/1.45 'IBM Plex Mono',monospace;color:#a1a1aa}
+.col .sub{font-size:24px;margin-top:36px}
+</style></head><body><div class="wrap" id="card">
+<div class="nx-atmos"><div class="nx-silk"><i class="nx-sheen"></i><i class="nx-low"></i><i class="nx-core"></i><i class="nx-edge"></i></div></div>
+<div class="content" id="content"><img class="mark" src="../../public/logo-mark.png" alt="">
+<div><div class="eyebrow">Nexus Trading Labs</div><h1>Plan it.<br>Run it.<br>Prove it.</h1>
+<div class="sub">An onchain trading terminal<br>Non-custodial perps · Solana wallets welcome</div></div></div>
+</div>
+<script>
+const q=new URLSearchParams(location.search),w=+q.get("w")||1200,h=+q.get("h")||600;
+const wrap=document.getElementById("card");wrap.style.width=w+"px";wrap.style.height=h+"px";
+document.body.style.width=w+"px";document.body.style.height=h+"px";
+document.getElementById("content").classList.add(h>=w?"col":"row");
+</script></body></html>
