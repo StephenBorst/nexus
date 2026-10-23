@@ -95,6 +95,24 @@ jobs:
           if echo "$asset" | grep -qi immutable && ! echo "$asset" | grep -qi no-cache; then echo "assets: cache-forever ✓"; else echo "::warning::hashed assets are not cache-forever: $asset"; fi
           if echo "$html" | grep -qi no-cache; then echo "html: revalidates ✓"; else echo "::warning::HTML may be cached stale: $html"; fi
 
+      # The Play app (a TWA) and store packagers (PWABuilder) read these LIVE, from datacenter IPs.
+      # Prints what an outside fetcher gets: the page's manifest link, the manifest itself, its
+      # icons, and assetlinks. Warns, never fails.
+      - name: Check live manifest + assetlinks
+        continue-on-error: true
+        run: |
+          site=https://trade.nexustradinglabs.com
+          curl -s -A "Mozilla/5.0 (PWABuilder check)" -o /tmp/root.html "$site/" || true
+          grep -o '<link rel="manifest"[^>]*>' /tmp/root.html || echo "::warning::/ has no <link rel=manifest>"
+          for p in /manifest.json /.well-known/assetlinks.json; do
+            curl -s -o /tmp/f.json -w "$p → %{http_code} %{content_type}\n" "$site$p" || true
+            node -e 'JSON.parse(require("fs").readFileSync("/tmp/f.json","utf8"))' && echo "  valid JSON ✓" || echo "::warning::$p is not JSON (SPA fallback or a challenge page?)"
+            if [ "$p" = /manifest.json ]; then cp /tmp/f.json /tmp/manifest.json; fi
+          done
+          for src in $(node -e 'for (const i of JSON.parse(require("fs").readFileSync("/tmp/manifest.json","utf8")).icons||[]) console.log(i.src)' 2>/dev/null); do
+            curl -s -o /dev/null -w "icon $src → %{http_code} %{content_type}\n" "$site$src"
+          done
+
       - name: Deploy Worker (nexus-lab-api)
         working-directory: workers/nexus-lab-api
         run: npm ci && npx wrangler@3 deploy
