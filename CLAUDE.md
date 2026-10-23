@@ -812,8 +812,9 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   follow list (`PUT /follows/:w`) and the notification list (`PUT /notifications/:w/read`, `DELETE
   /notifications/:w/:id`) all took the acting wallet from the body or URL with NO proof. Now each needs the same
   `labAuth` in the body (`workers/nexus-lab-api/socialAuth.mjs provenWallet`, 401 `sign_to_save` + `reason`, checked
-  before any write or notification); notifications + follows moved to `routes-social.mjs`. Reads stay public
-  (`GET /notifications/:w` too: a privacy question, not this fix). Comment/reaction notifications name the author
+  before any write or notification); notifications + follows moved to `routes-social.mjs`. Reads stay public,
+  except the notification list: **private since 2026-10-23 (borst)** — `POST /notifications/:w {labAuth}` returns it
+  (owner only), `GET` answers 401 `sign_to_read` and returns nothing (a signature never goes in a URL). Comment/reaction notifications name the author
   the server FINDS (`verifiedAuthor`: a public, non-copy call in `lab:{authorWallet}`, or a take in
   `takes:{chain}:{ca}` via body `take`), and the market/side from that stored row, never from the body (a caller
   could aim "your BTC LONG call" at any wallet). Client: `sendSigned` (useLabAuth.ts, "explicit"; 401 clears the
