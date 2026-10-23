@@ -859,7 +859,11 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   from the POST body only: a signature in the URL → 400 `signature_in_url` (refused, not used), GET → 405 (nothing sent
   the old `?wallet=&sig=` form). STILL OPEN (PR #130, held): `GET /account-snapshot?wallet=` returns any registered
   wallet's positions + open orders with NO signature, signing with the order-only key's seed (SHA-256 of walletSig)
-  cached UNENCRYPTED in `user:{addr}.seed` by /order-history, /positions and bankr-register. Bankr's Nexus Trade Tracker
+  cached in `user:{addr}.seed` by /order-history, /positions and bankr-register. **The seed is SEALED at rest since
+  2026-10-23** (`seedVault.mjs`, tested): AES-256-GCM under `AGENT_ENC_KEY`, the agent keys' own `v1:` format (lab-api's
+  `encryptSecret` now calls the same function). No secret ⇒ no seed stored, never plaintext; a legacy plain seed is used
+  once and re-sealed; the hourly cron `sealLegacySeeds` re-seals the rest a page at a time (`seedvault:cursor` →
+  `seedvault:done`). The open read itself stays parked until the tracker moves (borst). Bankr's Nexus Trade Tracker
   app page reads it today and can't sign (sandboxed iframe, no `sign_message`; actions hand off to chat), so retiring
   it waits for a replacement read path for that page.
   **Tracker plan (borst, 2026-10-17):** positions panel → public `/smart/xray`, `nexus_trading` venue only; orders →
