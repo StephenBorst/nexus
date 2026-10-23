@@ -81,6 +81,19 @@ FLASH_ATTRIBUTION_CODE = "bc_lrqwbh7u"
 # Optional non-secret tuning — min conviction tier 1..5 (routes default to 3):
 # QUOTIENT_MIN_CONVICTION = "3"
 
+# One-at-a-time leases for the paid paths (lock.mjs NexusLock, exported from index.js): redeeming a
+# payment tx, a wallet's sim credits, the day's sim cap, and a thesis registration's Bankr submit.
+# KV has no compare-and-set; without this two requests at the same instant could both redeem one tx
+# or both spend one credit. SQLite-backed (works on every plan). Remove the binding = the old
+# unlocked behaviour (withLock runs fn directly when NEXUS_LOCK is absent).
+[[durable_objects.bindings]]
+name = "NEXUS_LOCK"
+class_name = "NexusLock"
+
+[[migrations]]
+tag = "v1-nexus-lock"
+new_sqlite_classes = ["NexusLock"]
+
 [observability.logs]
 enabled = true
 invocation_logs = true
