@@ -10,7 +10,7 @@ import { gradeCall, callR } from "./logic.mjs";
 import { gradedStatusOf, isCurrentStamp, fetchGradeHistory } from "./grading.mjs";
 import { buildThesisOgSvg } from "./ogCards.mjs";
 import { isPublicCall } from "./routes-verify.mjs";
-import { callInvalidReason } from "../../app/lib/callMath.mjs";
+import { callInvalidReason, splitRunnerStopped } from "../../app/lib/callMath.mjs";
 
 const notFound = () => new Response("not found", { status: 404 });
 
@@ -52,6 +52,7 @@ export async function handleOgThesis(parts, request, env, deps = {}) {
     direction: thesis.direction, entryPrice: thesis.entryPrice,
     stopLoss: thesis.stopLoss, takeProfit1: thesis.takeProfit1,
     riskReward: callR(thesis) ?? 0, status: ogStatus, gradedR: ogGradedR, notes: thesis.notes || "",
+    runnerStopped: ogGradedR != null && splitRunnerStopped({ ...thesis, gradedOutcome: ogStatus === "HIT_TP" ? "WIN" : ogStatus === "STOPPED_OUT" ? "LOSS" : null, gradedR: ogGradedR }),
   };
   if (isPng && deps.renderPng) {
     try {

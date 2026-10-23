@@ -171,7 +171,7 @@ test("copy bookkeeping still works for a signed save, and can't be triggered uns
 
 test("a newly public call stamps the autocopy key only when the owner signed", async () => {
   const env = envWith();
-  const pub = { theses: [{ id: "p1", symbol: "BTC", direction: "LONG", isPublic: true, createdAt: T0 }], notes: {} };
+  const pub = { theses: [{ id: "p1", symbol: "BTC", direction: "LONG", entryPrice: 100, stopLoss: 95, takeProfit1: 110, isPublic: true, createdAt: T0 }], notes: {} };
   await lab(env, "PUT", `/lab/${A}`, pub);
   assert.equal(env.NEXUS_AGENT.m.get(`caller:latest:${A}`), undefined);
   await lab(env, "PUT", `/lab/${A}`, { ...pub, labAuth: await evmAuth(alice) });

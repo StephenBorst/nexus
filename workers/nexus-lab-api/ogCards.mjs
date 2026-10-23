@@ -174,7 +174,7 @@ export function buildIdentitySvg({ profile, record, wallet, displayName, fontFam
 // `chartDataUri` is optional and already SSRF-gated + size-capped by fetchChartDataUri().
 // With a chart we run a two-column layout; without one we keep the full-width layout so
 // the card never has a dead half.
-export function buildThesisOgSvg({ displayName, wallet, ticker, direction, entryPrice, stopLoss, takeProfit1, riskReward, status, gradedR = null, notes, chartDataUri = null, fontFamily = "'Courier New', Courier, monospace" }) {
+export function buildThesisOgSvg({ displayName, wallet, ticker, direction, entryPrice, stopLoss, takeProfit1, riskReward, status, gradedR = null, runnerStopped = false, notes, chartDataUri = null, fontFamily = "'Courier New', Courier, monospace" }) {
   const shortAddr = `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
   const name = esc(displayName || shortAddr);
   const { canvas, panel, border, bright, bone, fog, muted, faint, win, loss } = BRAND;
@@ -227,10 +227,12 @@ export function buildThesisOgSvg({ displayName, wallet, ticker, direction, entry
     // graded on-chain"), not a 22px corner label. Unresolved keep the calm status.
     const resolved = (status === "HIT_TP" || status === "STOPPED_OUT") && gradedR != null;
     if (resolved) {
+      // A split whose runner was stopped (callMath.mjs splitRunnerStopped): half at TP1, half on the
+      // stop. The headline keeps its WIN / LOSS and R; the line under it says how it closed.
       const won = status === "HIT_TP";
       const rTxt = `${gradedR >= 0 ? "+" : ""}${Math.round(gradedR * 100) / 100}R`;
       return `<text x="1152" y="162" fill="${won ? win : loss}" font-size="60" font-weight="bold" text-anchor="end">${won ? "✓ WIN" : "✗ LOSS"} ${rTxt}</text>
-  <text x="1152" y="196" fill="${muted}" font-size="15" text-anchor="end">GRADED · first-touch vs public price</text>
+  <text x="1152" y="196" fill="${muted}" font-size="15" text-anchor="end">${runnerStopped ? "GRADED · TP1 HIT, RUNNER STOPPED" : "GRADED · first-touch vs public price"}</text>
   <text x="1152" y="228" fill="${fog}" font-size="14" text-anchor="end">${name}</text>
   <text x="1152" y="248" fill="${muted}" font-size="12" text-anchor="end">${esc(shortAddr)}</text>`;
     }

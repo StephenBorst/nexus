@@ -11,7 +11,7 @@ import { useAccount, useCollateral } from "@orderly.network/hooks";
 import { useNavigate } from "react-router-dom";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useLabWallet, appendToLab, sendSigned } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -506,7 +506,9 @@ function FeedCard({
   // The status pill carries the grade. Only a graded result takes a money colour (a win's R in
   // green, a loss's in red); an open call, an invalidation and a close stay monochrome.
   const rTxt = typeof thesis.gradedR === "number" ? ` ${thesis.gradedR >= 0 ? "+" : ""}${thesis.gradedR.toFixed(2)}R` : "";
-  const pill = eff === "HIT_TP" ? { label: `Won${rTxt}`, color: C.pos, border: LINE.pos }
+  const runnerStopped = splitRunnerStopped(thesis);
+  const pill = runnerStopped ? { label: `TP1 hit, runner stopped${rTxt}`, color: (thesis.gradedR ?? 0) >= 0 ? C.pos : C.neg, border: (thesis.gradedR ?? 0) >= 0 ? LINE.pos : LINE.neg }
+    : eff === "HIT_TP" ? { label: `Won${rTxt}`, color: C.pos, border: LINE.pos }
     : eff === "STOPPED_OUT" ? { label: `Stopped out${rTxt}`, color: C.neg, border: LINE.neg }
     : eff === "INVALIDATED" ? { label: "Invalidated", color: C.text.faint, border: C.border }
     : awaitingLabel(thesis) ? { label: awaitingLabel(thesis)!, color: C.text.fog, border: C.borderStrong, dashed: true }

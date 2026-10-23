@@ -84,3 +84,21 @@ test("a call the grader can never grade reads NOT GRADED on its card, never ACTI
   assert.doesNotMatch(ok, /NOT GRADED/);
   assert.match(ok, /ACTIVE/);
 });
+
+test("a split whose runner was stopped says so on its card (2026-10-23)", async () => {
+  const W3 = "0x5555555555555555555555555555555555555555";
+  // entry 100, stop 95, TP1 110 (r1 2), TP2 120: TP1 half +1R, runner stopped −0.5R → +0.5R.
+  const split = { ...base, isPublic: true, exitPlan: "SPLIT_50", takeProfit2: 120, gradeV: 3 };
+  const calls = [
+    { ...split, id: "runner-stopped", gradedOutcome: "WIN", gradedR: 0.5 },
+    { ...split, id: "both-hit", gradedOutcome: "WIN", gradedR: 3 },
+  ];
+  const env3 = { LAB_STORE: { get: async (k) => (k === `lab:${W3}` ? JSON.stringify({ theses: calls }) : null) } };
+  const { deps } = spyDeps();
+  const stopped = await (await handleOgThesis(["og", "thesis", W3, "runner-stopped"], req(), env3, deps)).text();
+  assert.match(stopped, /✓ WIN \+0\.5R/);
+  assert.match(stopped, /TP1 HIT, RUNNER STOPPED/);
+  const both = await (await handleOgThesis(["og", "thesis", W3, "both-hit"], req(), env3, deps)).text();
+  assert.match(both, /first-touch vs public price/);
+  assert.doesNotMatch(both, /RUNNER STOPPED/);
+});

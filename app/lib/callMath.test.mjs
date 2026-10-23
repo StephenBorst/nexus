@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitPlan, callInvalidReason, SPLIT_EXIT } from "./callMath.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitPlan, callInvalidReason, splitRunnerStopped, SPLIT_EXIT } from "./callMath.mjs";
 import { callR, splitPlan as graderSplitPlan, SPLIT_EXIT as GRADER_SPLIT } from "../../workers/nexus-lab-api/logic.mjs";
 
 // Shaped like the live Bankr call that showed "R:R 1:5.00": its stored riskReward was to TP2.
@@ -51,4 +51,22 @@ test("callInvalidReason: says why a call can never be graded, or null", () => {
   assert.equal(callInvalidReason({ ...long, takeProfit2: 102 }), "split exit with TP2 not beyond TP1");
   assert.equal(callInvalidReason({ ...long, stopLoss: 101 }), "stop or target on the wrong side of entry");
   assert.equal(callInvalidReason({ ...long, exitPlan: undefined, takeProfit2: 0 }), null, "no split declared");
+  assert.equal(callInvalidReason({ ...long, takeProfit1: 0 }), "entry, stop or target missing");
+  assert.equal(callInvalidReason({ ...long, entryPrice: undefined }), "entry, stop or target missing");
+});
+
+test("splitRunnerStopped: half at TP1, half on the stop, whichever side of zero it lands (live shapes, 2026-10-23)", () => {
+  // Engine B #18–#20: r1 1.5, r2 4 → 0.5·1.5 − 0.5 = +0.25R, stored as a WIN.
+  const short = { direction: "SHORT", entryPrice: 100, stopLoss: 102, takeProfit1: 97, takeProfit2: 92, exitPlan: "SPLIT_50" };
+  assert.equal(splitRunnerStopped({ ...short, gradedOutcome: "WIN", gradedR: 0.25 }), true);
+  // r1 0.92 → 0.46 − 0.5 = −0.04R: hit TP1 first, stored as a LOSS.
+  const thin = { direction: "SHORT", entryPrice: 100, stopLoss: 102.5, takeProfit1: 97.7, takeProfit2: 92.875, exitPlan: "SPLIT_50" };
+  assert.equal(splitPlan(thin).r1, 0.92);
+  assert.equal(splitRunnerStopped({ ...thin, gradedOutcome: "LOSS", gradedR: -0.04 }), true);
+  // Both halves at target, the stop before TP1, an ungraded call, a call with no split: not this.
+  assert.equal(splitRunnerStopped({ ...short, gradedOutcome: "WIN", gradedR: 2.75 }), false);
+  assert.equal(splitRunnerStopped({ ...short, gradedOutcome: "LOSS", gradedR: -1 }), false);
+  assert.equal(splitRunnerStopped({ ...short }), false);
+  assert.equal(splitRunnerStopped({ ...short, exitPlan: undefined, gradedOutcome: "WIN", gradedR: 0.25 }), false);
+  assert.equal(splitRunnerStopped({ ...short, takeProfit2: 97, gradedOutcome: "WIN", gradedR: 1.5 }), false, "TP2 = TP1 is one target");
 });
