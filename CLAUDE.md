@@ -666,6 +666,15 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   on-chain anchor). ⚠️ Don't rank the board by in-sample R: the top row reads as the winner. The in-sample label
   sits on the column header and each group's note; `RegisteredLine` now shows on every registered read (it used to
   render only for reads with preset exit grades).
+  **Plain-words pass (borst, 2026-10-23: "too dense for normal users").** Headline "Nothing has proven itself yet.
+  Here's the public record." + one sentence on the bar + "How we grade ↓". "Being tested now" = registered reads as
+  name · "N events · needs 30" (`pipelineLine` in `app/lib/proofCopy.mjs`, tested); a read still REGISTERED at/past the
+  count reads "N events · failing" with the grader's `next` as the reason (never "needs 30"); its old-data grade opens
+  on tap. "Looked good on old data" + "Worse than random" are folds with a visible one-line note. Graded calls lead with
+  the full record (`callsRecordLine`: "Most calls lose" only while hit < 50%). Callers line = `callersLine` ("1 caller
+  qualifies for the board: 5+ graded calls and a positive record. Not tested against chance." — callers are never tested
+  vs random). The method, the tide, the bar's stages (read from `pipeline.rules`) and the dated Oct 15 receipts live in
+  `HowWeGrade.tsx` at the foot. ⚠️ The headline is a claim: change it in the same PR that a read clears the bar.
 - **Basis Extreme Fade PAUSED (2026-09-25):** `AXIS_PAUSED` in strategyPresets.ts hides its /proof Load + shows why;
   AXIS_PRESET/AXIS_EXITS untouched so it's still graded. Revert = delete the line. Paper Blotter is now a Collapsible.
 - **⚠️ Same-hour semantics (bug caught 2026-09-24):** the grader builds hour→side Maps by iterating the stored array
