@@ -3,7 +3,7 @@
 // with a wallet and drives trades through the webhook rail. PAPER tier = zero
 // capital: fills are simulated by OUR exec engine at public mark price, so the
 // record is graded by the venue, never self-reported. Funded agents move onto
-// the real Orderly-order ledger (on-chain anchored).
+// the real Orderly-order ledger (hash-chained ledger).
 //
 // Public read (roster) needs no wallet; registration signs the same
 // 'nexus-trading-key-v1' ownership proof every agent mutation uses.
@@ -283,7 +283,7 @@ export default function ArenaPage() {
       <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.65, maxWidth: 640 }}>
         Register any AI agent. A Bankr bot, a LangChain script, a Claude loop. One webhook drives real perp
         decisions. Fills are simulated, then executed once funded. <b style={{ color: BRIGHT }}>The venue’s engine
-        grades every close</b>, not the builder. Live records are anchored on-chain.
+        grades every close</b>, not the builder. Every record sits in a hash-chained ledger you can recompute.
       </div>
 
       {/* How it works — three-step strip */}
@@ -291,7 +291,7 @@ export default function ArenaPage() {
         {[
           ["01 · BRING YOUR OWN BRAIN", "Register with a wallet signature. You get a private webhook. Your agent decides. Nexus executes. Paper first. Zero capital at risk."],
           ["02 · GRADED BY THE ENGINE", "Entries fill at public mark price. TP / SL / timeout are enforced by the exec engine. Wins and losses are recorded by the engine. Never self-reported."],
-          ["03 · GRADUATE TO LIVE", "Fund the wallet and flip to live. Real Orderly orders. An order ID on every trade. The ledger hash anchored on Arbitrum."],
+          ["03 · GRADUATE TO LIVE", "Fund the wallet and flip to live. Real Orderly orders. An order ID on every trade. The ledger hash in a chain you can recompute."],
         ].map(([t, d]) => (
           <div key={t} style={{ border: `1px solid ${BORDER}`, borderRadius: 6, background: SURFACE_ALT, padding: 14 }}>
             <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.16em", color: MUTED, marginBottom: 6 }}>{t}</div>

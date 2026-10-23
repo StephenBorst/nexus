@@ -66,7 +66,15 @@ async function anchorOne(env, label, ledgerUrl, kvKey) {
   return { ok: true, root, txHash };
 }
 
+// On-chain anchoring is PAUSED (ONCHAIN_ANCHOR_LIVE != "true"): no gas is spent on any
+// ledger. The hash-chained ledgers in lab-api keep running; only the on-chain commit stops.
+function anchoringLive(env) { return env.ONCHAIN_ANCHOR_LIVE === "true"; }
+
 async function runAnchor(env) {
+  if (!anchoringLive(env)) {
+    console.log("[anchor] paused (ONCHAIN_ANCHOR_LIVE != true), no on-chain writes");
+    return { ok: true, skipped: true, reason: "paused" };
+  }
   if (!env.ANCHOR_PRIVATE_KEY || !env.LEDGER_ANCHOR_CONTRACT || env.LEDGER_ANCHOR_CONTRACT.startsWith("0x0000")) {
     console.warn("[anchor] not configured (need ANCHOR_PRIVATE_KEY + LEDGER_ANCHOR_CONTRACT)");
     return { ok: false, reason: "not configured" };
@@ -76,16 +84,7 @@ async function runAnchor(env) {
   const agents = await anchorOne(env, "agents", AGENT_LEDGER_URL, "agent:ledger:onchain").catch((e) => ({ ok: false, error: e.message }));
   const theses = await anchorOne(env, "theses", THESES_LEDGER_URL, "theses:ledger:onchain").catch((e) => ({ ok: false, error: e.message }));
   // Arena paper ledger — one root over every agent's hash-chained paper head.
-  // PAUSED by default: the Arena paper ledger is empty, and an empty root is not worth
-  // gas. Set ARENA_PAPER_ANCHOR_LIVE="true" (wrangler.toml) to resume. The hash-chained
-  // ledger itself keeps running in lab-api either way; only this on-chain write stops.
-  let paper;
-  if (env.ARENA_PAPER_ANCHOR_LIVE === "true") {
-    paper = await anchorOne(env, "arena-paper", ARENA_PAPER_ROOT_URL, "arena:paper:onchain").catch((e) => ({ ok: false, error: e.message }));
-  } else {
-    console.log("[anchor:arena-paper] paused (ARENA_PAPER_ANCHOR_LIVE != true), skipping on-chain write");
-    paper = { ok: true, skipped: true, reason: "paused" };
-  }
+  const paper = await anchorOne(env, "arena-paper", ARENA_PAPER_ROOT_URL, "arena:paper:onchain").catch((e) => ({ ok: false, error: e.message }));
   return { ok: true, agents, theses, paper };
 }
 
@@ -119,8 +118,9 @@ async function runMonitor(env) {
   const HOUR = 3600000;
 
   // 1) Anchor signer gas — the silent killer. No gas → anchoring stops.
+  // Muted while anchoring is paused: nothing is spent, so low gas is not an incident.
   try {
-    if (env.ANCHOR_PRIVATE_KEY) {
+    if (env.ANCHOR_PRIVATE_KEY && anchoringLive(env)) {
       const account = privateKeyToAccount(env.ANCHOR_PRIVATE_KEY);
       const pub = createPublicClient({ chain: arbitrum, transport: http(rpc) });
       const bal = await pub.getBalance({ address: account.address });
@@ -131,7 +131,7 @@ async function runMonitor(env) {
 
   // 2) Anchor freshness — ledger drifted from its on-chain root for too long.
   try {
-    const ocRaw = await env.NEXUS_AGENT.get("agent:ledger:onchain");
+    const ocRaw = anchoringLive(env) ? await env.NEXUS_AGENT.get("agent:ledger:onchain") : null;
     if (ocRaw) {
       const oc = JSON.parse(ocRaw);
       const ageH = (Date.now() - (oc.ts || 0)) / HOUR;
