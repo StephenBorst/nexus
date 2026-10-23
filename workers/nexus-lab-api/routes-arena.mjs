@@ -13,6 +13,7 @@
 import { json, normalizeAddress, recoverEthAddress } from "./shared.mjs";
 import { validateArenaRegistration, arenaAgentConfig, aggregateAgentTrades, agentScore, agentStanding, ARENA } from "./logic.mjs";
 import { verifyPaperLog, paperRoot, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
+import { validateBuilderClaim, groupIntoSlots } from "./arenaBuilders.mjs";
 
 // URL-safe random token — same shape as the PRO webhook mint in index.js.
 function randToken(bytes = 24) {
@@ -33,6 +34,8 @@ function statBlock(rows) {
     profitFactor: Math.round(Math.min(profitFactor, 99) * 100) / 100,
     score,
     daysActive: agg.daysActive,
+    grossWin: Math.round(agg.grossWin * 100) / 100,
+    grossLoss: Math.round(agg.grossLoss * 100) / 100,
   };
 }
 
@@ -64,6 +67,8 @@ export function arenaPaperBlock(state) {
       profitFactor: Math.round(Math.min(profitFactor, 99) * 100) / 100,
       score,
       daysActive,
+      grossWin: Math.round(grossWin * 100) / 100,
+      grossLoss: Math.round(grossLoss * 100) / 100,
       resets,
       // Same qualifying rule as the Lab's agent board (AGENT_BOARD), one place.
       qualify: agentStanding({ trades, wins, grossWin, grossLoss, net, daysActive }),
@@ -76,6 +81,45 @@ export function arenaPaperBlock(state) {
 export async function handleArena(parts, request, env) {
   if (parts[0] !== "arena") return null;
   const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
+
+  // ── POST /arena/builder/claim — group registered wallets under one builder name ──
+  // {builder, claims:[{wallet, sig}]}. Each sig = personal_sign(builderMessage(name))
+  // from that wallet. See arenaBuilders.mjs for the rules (all-members consent to
+  // re-claim a name, no moving a wallet between names).
+  if (parts[1] === "builder" && parts[2] === "claim" && !parts[3] && request.method === "POST") {
+    let body;
+    try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
+    const v = validateBuilderClaim(body, recoverEthAddress);
+    if (!v.ok) return json(v, request, 400);
+
+    const profiles = await Promise.all(v.wallets.map((w) => AGENT_KV.get(`arena:profile:${w}`)));
+    const unregistered = v.wallets.filter((_, i) => !profiles[i]);
+    if (unregistered.length) return json({ error: "not_registered", wallets: unregistered, hint: "Register each wallet on the Arena first." }, request, 400);
+
+    const takenRaw = await AGENT_KV.get(`arena:builder:${v.norm}`);
+    if (takenRaw) {
+      let taken = null;
+      try { taken = JSON.parse(takenRaw); } catch { /* treat as taken */ }
+      const missing = (taken?.wallets || []).filter((w) => !v.wallets.includes(w));
+      if (!taken || missing.length) {
+        return json({ error: "builder_name_taken", hint: "This name already has wallets. Re-claiming it needs a signature from every current member." }, request, 409);
+      }
+    }
+
+    const owners = await Promise.all(v.wallets.map((w) => AGENT_KV.get(`arena:builder_of:${w}`)));
+    const clash = v.wallets.filter((w, i) => {
+      if (!owners[i]) return false;
+      try { return JSON.parse(owners[i]).norm !== v.norm; } catch { return true; }
+    });
+    if (clash.length) return json({ error: "wallet_in_other_builder", wallets: clash, hint: "A wallet can be grouped under one builder name only." }, request, 409);
+
+    await AGENT_KV.put(`arena:builder:${v.norm}`, JSON.stringify({ norm: v.norm, name: v.name, wallets: v.wallets, updatedAt: Date.now() }));
+    for (const w of v.wallets) {
+      await AGENT_KV.put(`arena:builder_of:${w}`, JSON.stringify({ norm: v.norm, name: v.name }));
+    }
+    await AGENT_KV.delete("arena:cache:board");
+    return json({ ok: true, name: v.name, wallets: v.wallets, walletCount: v.wallets.length }, request);
+  }
 
   // ── POST /arena/register — open registration for external agents ──────────
   // {name, description?, builder?, config?, walletAddress, walletSig, rotate?}
@@ -266,18 +310,21 @@ export async function handleArena(parts, request, env) {
     }
 
     const agents = (await Promise.all(roster.map(async (w) => {
-      const [profileRaw, configRaw, stateRaw] = await Promise.all([
+      const [profileRaw, configRaw, stateRaw, claimRaw] = await Promise.all([
         AGENT_KV.get(`arena:profile:${w}`),
         AGENT_KV.get(`agent:config:${w}`),
         AGENT_KV.get(`agent:state:${w}`),
+        AGENT_KV.get(`arena:builder_of:${w}`),
       ]);
       if (!profileRaw) return null;
-      let profile, config = null, state = null;
+      let profile, config = null, state = null, claim = null;
       try { profile = JSON.parse(profileRaw); } catch { return null; }
       try { config = configRaw ? JSON.parse(configRaw) : null; } catch { /* ignore */ }
       try { state = stateRaw ? JSON.parse(stateRaw) : null; } catch { /* ignore */ }
+      try { claim = claimRaw ? JSON.parse(claimRaw) : null; } catch { /* ignore */ }
       const pos = state?.current_position || null;
       return {
+        claim,
         wallet: w,
         name: profile.name,
         description: profile.description || "",
@@ -291,14 +338,10 @@ export async function handleArena(parts, request, env) {
       };
     }))).filter(Boolean);
 
-    // Live records outrank paper; within a tier, engine score decides.
-    agents.sort((a, b) =>
-      (b.live ? 1 : 0) - (a.live ? 1 : 0) ||
-      (b.live?.score ?? 0) - (a.live?.score ?? 0) ||
-      (b.paper?.score ?? 0) - (a.paper?.score ?? 0) ||
-      b.createdAt - a.createdAt
-    );
-    const payload = { agents, count: agents.length };
+    // One slot per builder group (signed claim) or per ungrouped wallet. Live records
+    // outrank paper; within a tier, engine score decides (see arenaBuilders.mjs).
+    const slots = groupIntoSlots(agents);
+    const payload = { agents: slots, count: slots.length };
     await AGENT_KV.put("arena:cache:board", JSON.stringify({ ts: Date.now(), payload }), { expirationTtl: 120 });
     return json(payload, request);
   }
@@ -309,12 +352,22 @@ export async function handleArena(parts, request, env) {
   // read; no secrets (webhook token/passphrase never appear here).
   if (parts[1] === "agents" && parts[2] && !parts[3] && request.method === "GET") {
     const address = normalizeAddress(parts[2]);
-    const [profileRaw, configRaw, stateRaw] = await Promise.all([
+    const [profileRaw, configRaw, stateRaw, claimRaw] = await Promise.all([
       AGENT_KV.get(`arena:profile:${address}`),
       AGENT_KV.get(`agent:config:${address}`),
       AGENT_KV.get(`agent:state:${address}`),
+      AGENT_KV.get(`arena:builder_of:${address}`),
     ]);
     if (!profileRaw) return json({ error: "not_found" }, request, 404);
+    // Builder group (signed claim): every wallet in it, so the detail can show the slot.
+    let group = null;
+    try {
+      const claim = claimRaw ? JSON.parse(claimRaw) : null;
+      if (claim?.norm) {
+        const rec = JSON.parse((await AGENT_KV.get(`arena:builder:${claim.norm}`)) || "null");
+        if (rec?.wallets?.length) group = { name: claim.name, wallets: rec.wallets, walletCount: rec.wallets.length };
+      }
+    } catch { /* no group */ }
     let profile, config = null, state = null;
     try { profile = JSON.parse(profileRaw); } catch { return json({ error: "not_found" }, request, 404); }
     try { config = configRaw ? JSON.parse(configRaw) : null; } catch { /* ignore */ }
@@ -351,6 +404,7 @@ export async function handleArena(parts, request, env) {
       createdAt: profile.createdAt || 0,
       active: !!state?.active,
       mode: config?.mode || "PAPER",
+      group,
       signalMode: config?.signalMode || null,
       currentPosition: pos ? { symbol: pos.symbol, direction: pos.direction, paper: !!pos.paper, entry_price: Number(pos.entry_price) || null, opened_at: pos.opened_at || null } : null,
       riskConfig: config ? {
