@@ -204,12 +204,36 @@ test("take: unsigned 401 and nothing written; signed → stored under the signer
 
 const list = [{ id: "n1", type: "copy", message: "x", createdAt: T0 }, { id: "n2", type: "follow", message: "y", createdAt: T0 }];
 
-test("notifications: the read stays public; there is no POST", async () => {
+test("notifications are private: GET returns nothing, POST needs the owner's signature", async () => {
   const env = envWith({ [`notif:${A}`]: list });
-  const r = await social(env, "GET", `/notifications/${A}`);
-  assert.equal(r.status, 200);
-  assert.equal(r.body.length, 2);
-  assert.equal((await social(env, "POST", `/notifications/${A}`, { type: "x", message: "spam" })).status, 405);
+  const get = await social(env, "GET", `/notifications/${A}`);
+  assert.equal(get.status, 401);
+  assert.equal(get.body.error, "sign_to_read");
+  assert.ok(!Array.isArray(get.body), "a GET never returns the list");
+  // unsigned, or the old "create" shape: refused, nothing read or written
+  for (const body of [undefined, {}, { type: "x", message: "spam" }]) {
+    const r = await social(env, "POST", `/notifications/${A}`, body);
+    assert.equal(r.status, 401);
+    assert.equal(r.body.error, "sign_to_read");
+  }
+  // someone else's signature
+  assert.equal((await social(env, "POST", `/notifications/${A}`, { labAuth: await auth(bob) })).status, 401);
+  // an expired one
+  assert.equal((await social(env, "POST", `/notifications/${A}`, { labAuth: await auth(alice, T0 - 25 * 3600_000) })).status, 401);
+  // the owner
+  const ok = await social(env, "POST", `/notifications/${A}`, { labAuth: await auth(alice) });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.body.map((n) => n.id), ["n1", "n2"]);
+  // a wallet with nothing stored reads an empty list, signed
+  assert.deepEqual((await social(env, "POST", `/notifications/${B}`, { labAuth: await auth(bob) })).body, []);
+  assert.equal(env.LAB_STORE.puts.length, 0, "a read writes nothing");
+});
+
+test("notifications: a Solana owner reads its own list with an ed25519 signature", async () => {
+  const key = `notif:${SOL.toLowerCase()}`;
+  const env = envWith({ [key]: list });
+  assert.equal((await social(env, "POST", `/notifications/${SOL}`, { labAuth: solAuth() })).status, 200);
+  assert.equal((await social(env, "POST", `/notifications/${SOL}`, {})).status, 401);
 });
 
 test("mark read: unsigned 401, someone else's signature 401, owner ok", async () => {

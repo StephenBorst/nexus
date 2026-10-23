@@ -2,9 +2,12 @@
 // Moved out of index.js (2026-10-16) when they got the owner check. Both used to trust the URL:
 // anyone could mark another wallet's notifications read, delete them, or rewrite its follow list
 // (and send "started following you" to every wallet in it). Now the writes carry `labAuth` in
-// the JSON body, the wallet's Lab signature (socialAuth.mjs); the reads stay public.
+// the JSON body, the wallet's Lab signature (socialAuth.mjs).
+// The notification list is private too since 2026-10-23: it names who reacted to your calls and when
+// your resting orders filled. Read it with a POST (a signature never goes in a URL); the GET says how.
 //
-//   GET    /notifications/:wallet        → the list, newest first (public)
+//   POST   /notifications/:wallet        → the list, newest first   body { labAuth }
+//   GET    /notifications/:wallet        → 401 sign_to_read (nothing returned)
 //   PUT    /notifications/:wallet/read   → mark all read          body { labAuth }
 //   DELETE /notifications/:wallet/:id    → remove one             body { labAuth }
 //   GET    /follows/:wallet              → { following } (public)
@@ -13,6 +16,13 @@
 // No POST on /notifications: they are written only by the server (appendNotification).
 import { json, normalizeAddress, appendNotification } from "./shared.mjs";
 import { provenWallet, unsignedSocial } from "./socialAuth.mjs";
+
+// The 401 a notification read gets without the owner's signature. Nothing is read when this is sent.
+const unsignedRead = (request, v) => json({
+  error: "sign_to_read",
+  reason: v.reason,
+  hint: "Notifications are private. POST /notifications/:wallet with the wallet's Lab signature as body.labAuth.",
+}, request, 401);
 
 async function bodyOrNull(request) {
   try { return await request.json(); } catch { return null; }
@@ -23,11 +33,16 @@ export async function handleSocial(parts, request, env, { now = Date.now } = {})
     const wallet = normalizeAddress(parts[1]);
     const notifKey = `notif:${wallet}`;
 
-    // GET /notifications/:wallet
-    if (request.method === "GET" && parts.length === 2) {
+    // POST /notifications/:wallet — the list, owner only (the signature rides in the body)
+    if (request.method === "POST" && parts.length === 2) {
+      const who = provenWallet(wallet, (await bodyOrNull(request))?.labAuth, now());
+      if (!who.ok) return unsignedRead(request, who);
       const raw = await env.LAB_STORE.get(notifKey);
       return json(raw ? JSON.parse(raw) : [], request);
     }
+
+    // GET /notifications/:wallet — retired as a public read; never reads the list
+    if (request.method === "GET" && parts.length === 2) return unsignedRead(request, { reason: "missing" });
 
     // PUT /notifications/:wallet/read — mark all read (owner only)
     if (request.method === "PUT" && parts.length === 3 && parts[2] === "read") {
