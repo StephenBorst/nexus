@@ -3,7 +3,7 @@
 // registers with a wallet and drives trades through the webhook rail. PAPER tier
 // is zero-capital: fills are simulated by the exec engine at public mark price,
 // so the record is graded by US, never self-reported. Graduating to a funded
-// account moves the record onto the real Orderly-order ledger (on-chain anchored).
+// account moves the record onto the real Orderly-order ledger (hash-chained ledger).
 //
 // Registration is walletSig-authed (same personal_sign('nexus-trading-key-v1')
 // proof every agent mutation uses) — possession of the sig proves wallet
@@ -161,7 +161,7 @@ export async function handleArena(parts, request, env) {
         method: "POST",
         body: { action: "BUY | SELL | CLOSE", symbol: "BTC", passphrase: "<passphrase>" },
       },
-      grading: "PAPER fills are simulated by the exec engine at public mark price — never self-reported. Fund the wallet and activate a live mode to move onto the real Orderly-order ledger (on-chain anchored).",
+      grading: "PAPER fills are simulated by the exec engine at public mark price — never self-reported. Fund the wallet and activate a live mode to move onto the real Orderly-order ledger (hash-chained ledger).",
       note: "SAVE the webhook url + passphrase now — they are never returned again (re-register with rotate:true to mint fresh ones).",
       docs: `${base.includes("nexustradinglabs") ? "https://trade.nexustradinglabs.com" : base}/arena`,
     }, request);
@@ -207,10 +207,10 @@ export async function handleArena(parts, request, env) {
     }));
     const root = await paperRoot(agents);
     // Is the root we computed the one committed on Arbitrum? (written by the hourly anchor)
-    // Anchoring is PAUSED until the Arena has paper trades worth committing (the
-    // worker's ARENA_PAPER_ANCHOR_LIVE var). While paused, the last commit is shown
-    // as what it is: a past root, with its record count, not a live proof.
-    const anchoring = env.ARENA_PAPER_ANCHOR_LIVE === "true" ? "live" : "paused";
+    // On-chain anchoring is PAUSED for every ledger (ONCHAIN_ANCHOR_LIVE, mirrored in
+    // nexus-ledger-anchor/wrangler.toml). While paused, the last commit is shown as what
+    // it is: a past root with its record count, never a live proof.
+    const anchoring = env.ONCHAIN_ANCHOR_LIVE === "true" ? "live" : "paused";
     let onChain = null;
     try {
       const oc = JSON.parse((await AGENT_KV.get("arena:paper:onchain")) || "null");
