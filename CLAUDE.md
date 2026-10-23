@@ -1470,7 +1470,7 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   banner, 1200×1200 feature graphic from `graphic.html?w=&h=`, 4 screenshots, `listing.md`); runbook = docs/android-app.md
   step 6. The store takes an APK (not .aab), signed with a NEW key (never the Play key; every later dApp Store update uses
   it), published via NFTs from a Solana wallet (~0.2 SOL) at publish.solanamobile.com after KYC/KYB. Same package id.
-  When borst sends the new key's SHA-256, add it as a THIRD fingerprint to assetlinks.json (keep both Play ones).
+  dApp Store key `26:8E:…:F8:45` added as the THIRD assetlinks fingerprint 2026-10-23 (both Play keys kept; the test pins all three).
 
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the
