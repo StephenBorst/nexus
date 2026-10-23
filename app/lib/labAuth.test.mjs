@@ -5,8 +5,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  labSaveMessage, labSaveMessageV1, verifyLabAuth, publicLabView, isEvmAddress, isSolAddress,
-  LAB_AUTH_MAX_AGE_MS, LAB_AUTH_REUSE_MS, LAB_AUTH_SKEW_MS, LAB_AUTH_V1_UNTIL_MS,
+  labSaveMessage, verifyLabAuth, publicLabView, isEvmAddress, isSolAddress,
+  LAB_AUTH_MAX_AGE_MS, LAB_AUTH_REUSE_MS, LAB_AUTH_SKEW_MS,
 } from "./labAuth.mjs";
 
 const EVM = "0xAbCdEf0000000000000000000000000000000001";
@@ -108,26 +108,18 @@ test("rewording: the new message names everything the signature does, and still 
     assert.ok(m.includes(word), word);
   }
   assert.match(m, /No funds move\. No trades\. Valid 24 hours\.$/);
-  assert.notEqual(m, labSaveMessageV1(EVM, T0));
 });
 
-test("rewording: a signature over the OLD wording passes only if it was made before the switch", () => {
-  const before = LAB_AUTH_V1_UNTIL_MS - 3600_000;
-  const after = LAB_AUTH_V1_UNTIL_MS + 60_000;
+// The first wording (retired 2026-10-16, accepted until 2026-10-18 for signatures already held, removed 2026-10-23).
+const OLD_WORDING = (signer, ts) => `Nexus Lab: save and open my calls, notes and profile\nAddress: ${signer}\nTimestamp: ${ts}\nNo funds move. Valid 24 hours.`;
+
+test("a signature over the retired first wording no longer passes, on EVM or Solana", () => {
   const addr = EVM.toLowerCase();
-  const old = (ts) => verifyLabAuth({ address: addr, auth: { ts, sig: SIG }, now: ts + 60_000, recoverEvm: recoverIfSigned(labSaveMessageV1(addr, ts), EVM), verifySol: never });
-  const neu = (ts) => verifyLabAuth({ address: addr, auth: { ts, sig: SIG }, now: ts + 60_000, recoverEvm: recoverIfSigned(labSaveMessage(addr, ts), EVM), verifySol: never });
-  assert.equal(old(before).ok, true);
-  assert.deepEqual(old(after), { ok: false, reason: "wrong_signer" });
-  assert.equal(neu(before).ok, true);
-  assert.equal(neu(after).ok, true);
-  // Solana follows the same rule.
-  const sol = (ts, text) => verifyLabAuth({ address: SOL.toLowerCase(), auth: { ts, sig: SIG, signer: SOL }, now: ts + 60_000, recoverEvm: never, verifySol: (m) => m === text });
-  assert.equal(sol(before, labSaveMessageV1(SOL, before)).ok, true);
-  assert.equal(sol(after, labSaveMessageV1(SOL, after)).ok, false);
-  assert.equal(sol(after, labSaveMessage(SOL, after)).ok, true);
-});
-
-test("rewording: no old-wording signature can still be valid after the switch plus 24h (the code can go)", () => {
-  assert.equal(LAB_AUTH_V1_UNTIL_MS + LAB_AUTH_MAX_AGE_MS, Date.UTC(2026, 9, 19));
+  const evm = verifyLabAuth({ address: addr, auth: { ts: T0, sig: SIG }, now: T0 + 60_000, recoverEvm: recoverIfSigned(OLD_WORDING(addr, T0), EVM), verifySol: never });
+  assert.deepEqual(evm, { ok: false, reason: "wrong_signer" });
+  const sol = verifyLabAuth({ address: SOL.toLowerCase(), auth: { ts: T0, sig: SIG, signer: SOL }, now: T0 + 60_000, recoverEvm: never, verifySol: (m) => m === OLD_WORDING(SOL, T0) });
+  assert.deepEqual(sol, { ok: false, reason: "wrong_signer" });
+  // the current wording still passes on both
+  assert.equal(verifyLabAuth({ address: addr, auth: { ts: T0, sig: SIG }, now: T0 + 60_000, recoverEvm: recoverIfSigned(labSaveMessage(addr, T0), EVM), verifySol: never }).ok, true);
+  assert.equal(verifyLabAuth({ address: SOL.toLowerCase(), auth: { ts: T0, sig: SIG, signer: SOL }, now: T0 + 60_000, recoverEvm: never, verifySol: (m) => m === labSaveMessage(SOL, T0) }).ok, true);
 });
