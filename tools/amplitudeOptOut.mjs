@@ -30,3 +30,8 @@ export function patchAmplitudeInit(code) {
   }
   return code.replace(AMPLITUDE_INIT, AMPLITUDE_INIT_PATCHED);
 }
+
+/** Amplitude's TOP-LEVEL browser client, the one Orderly's SDK loads up front: the only importer whose
+ *  @amplitude/plugin-autocapture-browser gets the no-op stand-in (vite.config.ts firstLoadTrims). A copy
+ *  nested under another package's node_modules (WooFi's widget) is left alone. */
+export const AUTOCAPTURE_IMPORTER = /^(?:(?!node_modules\/).)*node_modules\/@amplitude\/analytics-browser\/lib\/esm\/browser-client\.js$/;

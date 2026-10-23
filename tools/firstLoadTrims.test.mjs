@@ -44,7 +44,7 @@ test("the lodash imports redirected to lodash-es are named imports of real lodas
 });
 
 test("vite.config.ts allowlists exactly the importers checked above", () => {
-  for (const frag of ["lz-solana-sdk-v2", "spl-type-length-value", "brorand", "@orderly\\\\.network\\\\/hooks", "@orderly\\\\.network\\\\/wallet-connector", "@amplitude\\\\/analytics-browser"]) {
+  for (const frag of ["lz-solana-sdk-v2", "spl-type-length-value", "brorand", "@orderly\\\\.network\\\\/hooks", "@orderly\\\\.network\\\\/wallet-connector"]) {
     assert.ok(cfg.includes(frag.replace(/\\\\/g, "\\")), `vite.config.ts no longer names ${frag}`);
   }
   assert.match(cfg, /firstLoadTrims\(\),/);
@@ -80,4 +80,11 @@ test("the stand-in is a plugin that does nothing", async () => {
   assert.equal(await p.setup({}, {}), undefined);
   const ev = { event_type: "x" };
   assert.equal(await p.execute(ev), ev);
+});
+
+test("the stand-in reaches only the top-level Amplitude client, never a nested copy (WooFi's)", async () => {
+  const { AUTOCAPTURE_IMPORTER: re } = await import("./amplitudeOptOut.mjs");
+  assert.ok(re.test("/repo/node_modules/@amplitude/analytics-browser/lib/esm/browser-client.js"));
+  assert.ok(!re.test("/repo/node_modules/woofi-swap-widget-kit/node_modules/@amplitude/analytics-browser/lib/esm/browser-client.js"));
+  assert.match(cfg, /AUTOCAPTURE_IMPORTERS = \[AUTOCAPTURE_IMPORTER\]/);
 });

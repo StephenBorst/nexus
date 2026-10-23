@@ -6,7 +6,7 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { isOrderlyHooksDist, patchAmplitudeInit } from "./tools/amplitudeOptOut.mjs";
+import { isOrderlyHooksDist, patchAmplitudeInit, AUTOCAPTURE_IMPORTER } from "./tools/amplitudeOptOut.mjs";
 
 function loadConfigTitle(): string {
   try {
@@ -86,9 +86,9 @@ export const LITE_CRYPTO_IMPORTERS = [
 ];
 // Amplitude's browser client imports its click-capture plugin up front but only builds it when
 // `autocapture` asks for element interactions, which Orderly never sets: it gets a no-op stand-in.
-export const AUTOCAPTURE_IMPORTERS = [
-  /node_modules\/@amplitude\/analytics-browser\/lib\/esm\/browser-client\.js$/,
-];
+// The TOP-LEVEL copy only (AUTOCAPTURE_IMPORTER, tools/amplitudeOptOut.mjs): WooFi's lazy widget
+// bundles a newer Amplitude that imports more from the plugin and may use it.
+export const AUTOCAPTURE_IMPORTERS = [AUTOCAPTURE_IMPORTER];
 export const LODASH_ES_IMPORTERS = [
   /node_modules\/@orderly\.network\/hooks\/dist\/index\.mjs$/,
   /node_modules\/@orderly\.network\/wallet-connector\/dist\/index\.mjs$/,
