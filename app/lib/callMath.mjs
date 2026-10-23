@@ -57,9 +57,24 @@ export function splitPlan(t) {
  * missing read, not this.)
  */
 export function callInvalidReason(t) {
+  if (!(num(t?.entryPrice) > 0 && num(t?.stopLoss) > 0 && num(t?.takeProfit1) > 0)) return "entry, stop or target missing";
   if (callRR(t) == null) return "stop or target on the wrong side of entry";
   if (splitPlan(t)?.invalid) return "split exit with TP2 not beyond TP1";
   return null;
+}
+
+/**
+ * A graded split whose runner was stopped: half closed at TP1, half on the original stop, so the grade
+ * is 0.5·R1 − 0.5 (a small win, or a small loss when R1 < 1). "HIT TP" or "Stopped out" alone each
+ * tell half of it (2026-10-23: three Engine B splits read HIT TP at +0.25R, one read stopped out at
+ * −0.04R after hitting TP1). Read from the levels + the stored grade; display only.
+ */
+export function splitRunnerStopped(t) {
+  const p = splitPlan(t);
+  if (!p || p.invalid) return false;
+  if (t?.gradedOutcome !== "WIN" && t?.gradedOutcome !== "LOSS") return false;
+  const r = Number(t?.gradedR);
+  return Number.isFinite(r) && Math.abs(r - (0.5 * p.r1 - 0.5)) < 0.011;
 }
 
 /** "1:2.60" for TP1, "—" when the levels don't make a call. */

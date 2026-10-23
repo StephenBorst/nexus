@@ -102,7 +102,7 @@ function normEvents(events, coins) {
 }
 
 // Why the agent could not take an event, per its own rules — or null (then it's drift).
-function explainMiss(ev, entries, config) {
+function explainMiss(ev, entries, config, lastReset = null) {
   const end = ev.t + PARITY_ACT_WINDOW_MS;
   // The brain hands each wallet ONE signal (its best market). An entry on another market
   // inside this window means that market won the tick.
@@ -125,20 +125,33 @@ function explainMiss(ev, entries, config) {
     return { code: "BUSY", text: `in a ${x.coin} ${x.side} (opened ${new Date(x.openedAt).toISOString().slice(5, 16)}Z) — one position at a time` };
   }
   if (other) return { code: "OTHER_MARKET", text: `the brain handed the wallet ${other.coin} ${other.side} that hour` };
-// Daily caps. The live counter resets 24h after its last reset, which the ledger doesn't
-  // record, so this is judged on the trailing 24h — labelled "likely".
-  const day = entries.filter((x) => x.openedAt < ev.t && x.openedAt >= ev.t - DAY_MS);
+// Daily caps. The exec resets its counters on the first tick 24h after the last reset
+  // (shouldResetDaily) and stamps state.last_reset. With that stamp, the day an event fell in is
+  // [reset, reset + 24h), found by stepping back whole days from the stamp; each reset lands on a
+  // tick up to a minute late, so older days drift by ~1 min/day (still "likely"). Without it, the
+  // trailing 24h before the event stands in. A trailing window counted a win from before the
+  // reset and missed a real daily-loss stop (0x325D…, Oct 22 2026).
+  let from = ev.t - DAY_MS, lifts = Infinity;
+  const anchor = Number(lastReset);
+  if (Number.isFinite(anchor) && anchor > 0) {
+    from = ev.t >= anchor ? anchor : anchor - Math.ceil((anchor - ev.t) / DAY_MS) * DAY_MS;
+    lifts = from + DAY_MS; // the next reset clears the cap
+  }
+  // A cap that lifts inside the action window doesn't explain the miss: the agent was free after it.
+  if (lifts < end) return null;
+  const how = Number.isFinite(anchor) && anchor > 0 ? "since the day's reset" : "in the prior 24h";
+  const day = entries.filter((x) => x.openedAt < ev.t && x.openedAt >= from);
   const maxT = Number(config?.maxTradesPerDay) || 0;
-  if (maxT > 0 && day.length >= maxT) return { code: "DAILY_TRADES", text: `likely the ${maxT}-trades/day cap (${day.length} in the prior 24h)` };
+  if (maxT > 0 && day.length >= maxT) return { code: "DAILY_TRADES", text: `likely the ${maxT}-trades/day cap (${day.length} ${how})` };
   const maxL = Number(config?.maxDailyLossUsdc) || 0;
-  const dayPnl = entries.filter((x) => x.closedAt != null && x.closedAt < ev.t && x.closedAt >= ev.t - DAY_MS).reduce((s, x) => s + x.pnl, 0);
-  if (maxL > 0 && dayPnl <= -maxL) return { code: "DAILY_LOSS", text: `likely the $${maxL} daily-loss cap (${dayPnl.toFixed(2)} in the prior 24h)` };
+  const dayPnl = entries.filter((x) => x.closedAt != null && x.closedAt < ev.t && x.closedAt >= from).reduce((s, x) => s + x.pnl, 0);
+  if (maxL > 0 && dayPnl <= -maxL) return { code: "DAILY_LOSS", text: `likely the $${maxL} daily-loss cap (${dayPnl.toFixed(2)} ${how})` };
   return null;
 }
 
 // The check. `events` = the axis's graded events [{coin, t, side}]; `trades` = paper ledger
 // rows; judged over [since, until − settle]. Returns counts, the pairs, and every mismatch.
-export function paperParity({ trades, events, config, since = 0, until = Date.now(), openPosition = null }) {
+export function paperParity({ trades, events, config, since = 0, until = Date.now(), openPosition = null, lastReset = null }) {
   const coins = new Set((config?.symbols || []).map(bare));
   const cutoff = until - PARITY_SETTLE_MS;
   const entries = entriesFromPaperTrades(trades, openPosition).filter((x) => coins.has(x.coin));
@@ -162,7 +175,7 @@ export function paperParity({ trades, events, config, since = 0, until = Date.no
   const explained = [], unexplained = [];
   evs.forEach((e, i) => {
     if (used.has(i)) return;
-    const why = explainMiss(e, entries, config);
+    const why = explainMiss(e, entries, config, lastReset);
     if (why) explained.push({ event: e, ...why });
     else unexplained.push({ event: e });
   });

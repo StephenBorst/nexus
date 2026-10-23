@@ -84,6 +84,46 @@ test("daily trade cap and daily loss cap explain a miss (trailing 24h, labelled 
   assert.equal(loss.missed.explained[0].code, "DAILY_LOSS");
 });
 
+test("daily-loss cap is judged on the wallet's own day (last_reset), not the trailing 24h (Oct 22 2026, 0x325D…)", () => {
+  // The real shape: the day resets at 18:31. A +6.28 win closed at 15:11 the day before (before the reset),
+  // then two stops inside the day (−5.00 at 02:20, −5.07 at 08:15) = −10.07 ≥ the $10 cap.
+  const D = Date.parse("2026-10-21T00:00:00Z"), m = 60000;
+  const reset = D + 18 * H + 31 * m;                  // Oct 21 18:31: the day the misses fall in starts here
+  const stamp = reset + 24 * H;                       // state.last_reset as read later (Oct 22 18:31)
+  const cfg = { ...CFG, symbols: ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC", "PERP_AVAX_USDC"], maxTradesPerDay: 3 };
+  const trades = [
+    row("1", "SOL", "LONG", D - 8 * H, D + 15 * H + 11 * m, 6.28),
+    row("2", "ETH", "LONG", D + 20 * H + 20 * m, D + 26 * H + 20 * m, -5.0),
+    row("3", "AVAX", "LONG", D + 26 * H + 30 * m, D + 32 * H + 15 * m, -5.07),
+  ];
+  const events = [
+    { coin: "SOL", t: D - 8 * H - 5 * m, side: "LONG" }, { coin: "ETH", t: D + 20 * H + 17 * m, side: "LONG" },
+    { coin: "AVAX", t: D + 26 * H + 17 * m, side: "LONG" },
+    { coin: "AVAX", t: D + 32 * H + 17 * m, side: "LONG" }, { coin: "BTC", t: D + 33 * H + 17 * m, side: "LONG" },
+  ];
+  const args = { trades, events, config: cfg, since: D - 9 * H, until: D + 48 * H };
+  // Trailing 24h pulls in the 15:11 win (−3.79) → reads as drift. That was the false alarm.
+  const trailing = paperParity(args);
+  assert.equal(trailing.verdict, "DRIFT");
+  assert.equal(trailing.missed.unexplained.length, 2);
+  // The wallet's own day: −10.07 since the 18:31 reset → both misses are the daily-loss stop.
+  const own = paperParity({ ...args, lastReset: stamp });
+  assert.equal(own.verdict, "CLEAN");
+  assert.deepEqual(own.missed.explained.map((x) => x.code), ["DAILY_LOSS", "DAILY_LOSS"]);
+  assert.match(own.missed.explained[0].text, /since the day's reset/);
+});
+
+test("a daily cap that lifts at the reset inside the action window doesn't explain the miss", () => {
+  const stamp = T0 + 24 * H;
+  // −12 closed before the event, and the day ends 30 min after it: the agent was free for the last half hour.
+  const trades = [row("1", "BTC", "LONG", T0 + 18 * H, T0 + 20 * H, -12)];
+  const events = [{ coin: "BTC", t: T0 + 18 * H - 5 * 60000, side: "LONG" }, { coin: "ETH", t: T0 + 23 * H + 30 * 60000, side: "LONG" }];
+  const p = paperParity({ trades, events, config: { ...CFG, maxTradesPerDay: 9 }, since: T0, until, lastReset: stamp });
+  assert.equal(p.missed.unexplained.length, 1);
+  const held = paperParity({ trades, events: [events[0], { coin: "ETH", t: T0 + 21 * H, side: "LONG" }], config: { ...CFG, maxTradesPerDay: 9 }, since: T0, until, lastReset: stamp });
+  assert.equal(held.missed.explained[0].code, "DAILY_LOSS");
+});
+
 test("cooldown: a window covered by position + cooldown is explained; one that closes early leaves a gap = drift", () => {
   const trades = [row("1", "BTC", "LONG", T0 + 60000, T0 + 2 * H - 50 * 60000)];
   // position to 1h10 + cooldown to 1h25 covers an event at 0h20 (window to 1h20) end to end.

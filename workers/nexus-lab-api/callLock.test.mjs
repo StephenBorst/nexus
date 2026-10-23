@@ -236,6 +236,26 @@ test("a split whose TP2 isn't beyond TP1 is refused at publish and stays private
   assert.equal(save([], [call({ isPublic: true, takeProfit2: 105 })], { v: 1, calls: {}, order: [] }).theses[0].isPublic, true);
 });
 
+test("levels missing or on the wrong side of entry are refused at publish and stay private (2026-10-23)", () => {
+  const empty = { v: 1, calls: {}, order: [] };
+  const cases = [
+    [{ stopLoss: 105 }, "the levels can't be graded: stop or target on the wrong side of entry"],
+    [{ takeProfit1: 95 }, "the levels can't be graded: stop or target on the wrong side of entry"],
+    [{ takeProfit1: 0 }, "the levels can't be graded: entry, stop or target missing"],
+    [{ stopLoss: undefined }, "the levels can't be graded: entry, stop or target missing"],
+  ];
+  for (const [bad, reason] of cases) {
+    const r = save([], [call({ isPublic: true, ...bad })], empty);
+    assert.equal(r.theses[0].isPublic, false, JSON.stringify(bad));
+    assert.deepEqual(r.refused, [{ id: "c1", reason }]);
+    assert.equal(r.registry.order.length, 0, "nothing frozen");
+  }
+  // A private draft with bad levels is just a draft: kept, nothing refused.
+  const draft = save([], [call({ isPublic: false, stopLoss: 105 })], empty);
+  assert.equal(draft.refused.length, 0);
+  assert.equal(draft.theses.length, 1);
+});
+
 test("an already-published bad split stays as frozen (the lock never re-checks a registered call)", () => {
   const reg = { v: 1, calls: { c1: { frozen: call({ takeProfit2: 110, exitPlan: "SPLIT_50" }), publishedAt: NOW - D } }, order: ["c1"] };
   const r = save([], [call({ isPublic: true, takeProfit2: 110, exitPlan: "SPLIT_50" })], reg);

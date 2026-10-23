@@ -4890,7 +4890,7 @@ document.getElementById("btn").addEventListener("click",go);
         // The position the agent is in right now isn't in the (closed-only) ledger yet — pass it,
         // or the event it's trading reads as an unexplained miss.
         const openPosition = state.current_position?.paper ? state.current_position : null;
-        const report = paperParity({ trades: state.paper_trades || [], events, config, since, until, openPosition });
+        const report = paperParity({ trades: state.paper_trades || [], events, config, since, until, openPosition, lastReset: state.last_reset ?? null });
         return json({
           ok: true, address, axis, mode: config.mode, maxHoldHours: config.maxHoldHours ?? null,
           paperResetAt: state.paper_reset_at ? new Date(state.paper_reset_at).toISOString() : null, sinceSource,

@@ -176,7 +176,12 @@ function GradedExitLine({ g }: { g: ExitGrade }) {
         {graded
           ? <><span style={{ color: g.verdict === "PREDICTIVE" ? MARK : g.verdict === "PROMISING" ? BONE : MUTED, fontWeight: 700, letterSpacing: "0.06em" }}>{HZ_WORD[g.verdict] || g.verdict}</span> · <span style={{ color: moneyTone(g.netBps) }}>{sign(g.netBps)} bps</span> net · {g.hitRate}% win · n{g.samples} · {g.exits.TIMEOUT || 0} timed out</>
           : <span style={{ color: FAINT }}>Accruing · n{g.samples}</span>}
-        {g.oos && <span style={{ color: FAINT }}> · since {g.oos.since.slice(5, 10)}: {g.oos.samples ? <>n{g.oos.samples} <span style={{ color: moneyTone(g.oos.netBps) }}>{sign(g.oos.netBps)}</span></> : "no trades yet"}</span>}
+        {g.oos && <span style={{ color: FAINT }}> · since {g.oos.since.slice(5, 10)}: {g.oos.samples ? <>n{g.oos.samples} <span style={{ color: moneyTone(g.oos.netBps) }}>{sign(g.oos.netBps)}</span></> : "none graded yet"}</span>}
+      </div>
+      {/* The paper wallet closes trades days before this line counts them: a trade is graded only once
+          its whole hold window (168h) has passed, so a quick win and a slow loser are judged alike. */}
+      <div style={{ marginTop: 3, fontSize: 9.5, color: FAINT }}>
+        A trade counts here {g.maxHoldHours % 24 === 0 ? `${g.maxHoldHours / 24} days` : `${g.maxHoldHours}h`} after its entry, once its full hold window has passed, even if it closed sooner.
       </div>
     </div>
   );

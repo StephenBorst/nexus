@@ -13,6 +13,7 @@ import type { ThesisTrade, ThesisStatus, ProcessedTrade } from "./types";
 import { LiveRead } from "./LiveRead";
 import { SimComposer } from "./SimComposer";
 import { cardStyle, labelStyle, navBtnStyle, inputStyle, fieldLabelStyle, STATUS_CONFIG, CLOSED_STATUSES } from "./styles";
+import { splitRunnerStopped } from "@/lib/callMath.mjs";
 import { deployToAgent, thesisToAgentConfig, thesisAgentNotice, deployDirectiveFromThesis } from "@/utils/agentPrefill";
 import { formatPnl, chartImageSrc, chartImageList, effectiveStatus, resolveSuggestion, CHART_HOST_HINT, MAX_CHARTS } from "./helpers";
 import { LOSS_REASONS, lossReason } from "@/lib/postmortem.mjs";
@@ -616,7 +617,7 @@ function ThesisAnalyticsSection({ trades }: { trades: ThesisTrade[] }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 9, color: STATUS_CONFIG[effectiveStatus(bestThesis)].color, fontFamily: "var(--nx-font-mono)", letterSpacing: "0.06em" }}>
-                  {STATUS_CONFIG[effectiveStatus(bestThesis)].label}
+                  {splitRunnerStopped(bestThesis) ? "TP1 HIT · RUNNER STOPPED" : STATUS_CONFIG[effectiveStatus(bestThesis)].label}
                 </div>
               </>
             ) : (
@@ -642,7 +643,7 @@ function ThesisAnalyticsSection({ trades }: { trades: ThesisTrade[] }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 9, color: STATUS_CONFIG[effectiveStatus(worstThesis)].color, fontFamily: "var(--nx-font-mono)", letterSpacing: "0.06em" }}>
-                  {STATUS_CONFIG[effectiveStatus(worstThesis)].label}
+                  {splitRunnerStopped(worstThesis) ? "TP1 HIT · RUNNER STOPPED" : STATUS_CONFIG[effectiveStatus(worstThesis)].label}
                 </div>
               </>
             ) : (

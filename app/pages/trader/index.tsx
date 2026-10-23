@@ -10,7 +10,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove } from "@/lib/callMath.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useLabWallet, appendToLab, sendSigned } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -206,7 +206,7 @@ function ThesisRow({
             fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.08em",
             padding: "2px 7px", borderRadius: 3,
             background: cfg.bg, border: `1px ${pendingLabel ? "dashed" : "solid"} ${cfg.border}`, color: pendingLabel ? "#a1a1aa" : cfg.color,
-          }}>{pendingLabel ? pendingLabel.toUpperCase() : cfg.label}</span>
+          }}>{pendingLabel ? pendingLabel.toUpperCase() : splitRunnerStopped(thesis) ? "TP1 HIT · RUNNER STOPPED" : cfg.label}</span>
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", whiteSpace: "nowrap" }}>{timeAgo}</span>
 
           {walletAddress && !isOwn && onCopy && (

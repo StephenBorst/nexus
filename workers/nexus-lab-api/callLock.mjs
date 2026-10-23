@@ -22,6 +22,7 @@
 import { appendUpdate, MAX_UPDATES } from "../../app/lib/lifecycle.mjs";
 import { registryEvents } from "../../app/lib/registryEvent.mjs";
 import { splitPlan } from "./logic.mjs";
+import { callInvalidReason } from "../../app/lib/callMath.mjs";
 
 export const REGISTRY_KEY = (address) => `callreg:${address}`;
 export const MAX_PUBLISHED = 2000;          // per wallet; a publish past this stays private
@@ -175,9 +176,12 @@ export function sealTheses({ prev, incoming, registry, now, ownedElsewhere = new
       }
       const why = ownedElsewhere.has(id) ? "another wallet already published this call"
         : reg.order.length >= MAX_PUBLISHED ? `this wallet has ${MAX_PUBLISHED} published calls, the most one wallet can hold`
-        // A declared split whose TP2 isn't beyond TP1 grades INVALID forever once frozen (2026-10-22:
-        // an Engine B call went out with TP2 = TP1). Same rule /proxy/thesis-register refuses before gas.
+        // A call the grader can never grade would be frozen that way forever, so it isn't published:
+        // a declared split whose TP2 isn't beyond TP1 (2026-10-22: an Engine B call went out with TP2 short
+        // of TP1), and levels missing or on the wrong side of entry (2026-10-23: the Lab form blocked
+        // those, the API didn't). Same rules /proxy/thesis-register checks before gas (callMath.mjs).
         : splitPlan(t)?.invalid ? "a split exit needs TP2 beyond TP1"
+        : callInvalidReason(t) ? `the levels can't be graded: ${callInvalidReason(t)}`
         : null;
       if (why) {
         refused.push({ id, reason: why });

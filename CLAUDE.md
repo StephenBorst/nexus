@@ -522,6 +522,11 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   16:21 and was still holding). The route now passes `state.current_position` (paper) as an entry with `closedAt:null`
   (`open:true` in the report). Entries are keyed by (market, side, opened_at), so paper TP_PARTIAL slices — which carry NO
   `parent_id` — collapse with their position. Before calling DRIFT a brain problem, check the open position.
+  **Daily caps are judged on the wallet's OWN day (fixed 2026-10-23).** The exec resets `daily_pnl` / `trades_today` 24h
+  after `state.last_reset`; parity used the trailing 24h before each event, which pulled in a win from before the reset
+  and flagged the 24h arm `0x325D…` DRIFT on Oct 22 (AVAX 08:17, BTC 09:17) when the $10 daily-loss stop had fired
+  (−$10.07 since 18:31). The route now passes `lastReset`; days step back from it (~1 min/day drift, still "likely"); a
+  cap that lifts inside the action window explains nothing. Replayed live: all three paper wallets CLEAN.
   **Full paper wallets:** graded-exit wallet (12h control until 2026-10-16) `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
   `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE`.
 - **⏸ OCT-15 PREP — STAGED, ALL OFF (2026-09-27, PRs #46 + 2/2).** Nothing below trades or serves until a verdict:
@@ -1061,8 +1066,13 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   pass (no stamp ⇒ graded every pass). Engine B's v2.1 template (TP2 = TP1 + SPLIT_50) is valid now. **Cards:**
   `callLifecycle` has state `INVALID` (from the levels, never from gradeCall's INVALID, which also means "no candles");
   `AwaitingFill` shows "NOT GRADED · <reason> · counts nowhere" + pill "Not graded" on the Feed card, call page, trader
-  profile and the owner's Lab; the share card reads NOT GRADED. Live today: no public call is INVALID. Not done (not
-  asked): refusing levels on the wrong side of entry at publish (the Lab form blocks it; the API doesn't).
+  profile and the owner's Lab; the share card reads NOT GRADED. Live today: no public call is INVALID.
+  **Publish refuses ungradeable levels (2026-10-23):** `sealTheses` also refuses a first publish whose levels are missing
+  or on the wrong side of entry (`callInvalidReason`; reason "the levels can't be graded: …"), so the API and house paths
+  match the Lab form. 0 of 321 live public calls were affected. **Split with a stopped runner** (`splitRunnerStopped`,
+  callMath.mjs: grade ≈ 0.5·R1 − 0.5) reads "TP1 hit, runner stopped ±R" on the feed pill, "TP1 HIT · RUNNER STOPPED" on
+  the call page, trader profile and Lab best/worst, and "GRADED · TP1 HIT, RUNNER STOPPED" on the share card, instead of a
+  bare HIT TP / STOPPED OUT (live: Engine B #18–#20 at +0.25R, one at −0.04R). Display only, grades unchanged.
 - **⚠️ ONE CALL, ONE WALLET — the double-count (2026-09-29).** Root cause fixed: the Lab's device copy is PER WALLET
   (`app/lib/labCache.mjs`: `lab_thesis_trades:{addr}` / `lab_note:{addr}:{day}`; the old shared keys = the guest copy).
   A wallet's first session takes the guest copy's PRIVATE drafts + notes once (published calls never: they come from
