@@ -1447,6 +1447,11 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   listing public, org verified; nothing pending on the Play side). Regenerate only via
   `node tools/android/assetlinks.mjs <app-signing> <upload>`; `tools/android/assetlinks.test.mjs` checks the committed file.
   A wrong or missing entry doesn't break the app: it opens with Chrome's address bar instead of full-screen.
+- ⏳ **Solana dApp Store (2026-10-23, borst: go).** Assets + copy in `marketing/solana-dapp-store/` (icon, 1200×600
+  banner, 1200×1200 feature graphic from `graphic.html?w=&h=`, 4 screenshots, `listing.md`); runbook = docs/android-app.md
+  step 6. The store takes an APK (not .aab), signed with a NEW key (never the Play key; every later dApp Store update uses
+  it), published via NFTs from a Solana wallet (~0.2 SOL) at publish.solanamobile.com after KYC/KYB. Same package id.
+  When borst sends the new key's SHA-256, add it as a THIRD fingerprint to assetlinks.json (keep both Play ones).
 
 ## ✅ Portfolio replay — the backtest of what the AGENT does (2026-09-25)
 - `backtestConfig` used to replay each market on its own; the agent holds ONE position across the watchlist, gets the

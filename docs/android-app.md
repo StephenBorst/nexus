@@ -15,7 +15,7 @@ app; there is no second codebase. Phone alerts are Web Push (`workers/nexus-lab-
 - [x] 5b. Store listing copy + graphics: `marketing/play-store/` (icon, feature graphic, 3 phone screenshots, listing.md)
 - [x] 5c. Data safety form + store listing saved (borst, 2026-10-14).
 - [x] 5d. **LIVE on Google Play (2026-10-20):** production v1.0.0 approved and published, rollout 100%, listing public, org verification complete. Nothing pending on the Play side.
-- [ ] 6. Solana dApp Store, same package (optional second lane)
+- [ ] 6. Solana dApp Store (assets + copy ready: `marketing/solana-dapp-store/`; steps below)
 
 ## 1. Turn push on (5 minutes, once)
 In VS Code's terminal (PowerShell), from the repo:
@@ -82,3 +82,32 @@ with a browser bar on top; after, it's full-screen. Check:
   `appendNotification` (shared.mjs). Agent opens/closes: a 5-minute cron (`runAgentWatch`) that READS
   `agent:state` and writes only `push:agentseen:*`. The first look at a wallet records a baseline.
 - Topics: calls (on), agent (on), social (off: comments, follows, copies, challenges).
+
+## 6. Solana dApp Store (Seeker / Saga)
+Same app, same package id (`com.nexustradinglabs.nexus`), second store. What's different from Play:
+
+- **It takes an APK, not an .aab.** PWABuilder's zip has both; upload the `.apk`.
+- **It needs its own signing key.** Solana Mobile's rule: the dApp Store APK must be signed with a new key, not the
+  one used for Google Play. Every later dApp Store update must use this same new key.
+- **Publishing is onchain.** The publisher, the app and each release are NFTs minted from a Solana wallet you connect
+  to the Publisher Portal. Keep about **0.2 SOL** in that wallet for minting and file storage. The portal also asks
+  for identity/business verification (KYC/KYB) when you set up the publisher profile.
+- One side effect of the second key: a phone that already has the Play version can't install the dApp Store version
+  over it (and the reverse). Each user keeps whichever they installed first.
+
+Steps:
+1. **New package, new key.** pwabuilder.com → `https://trade.nexustradinglabs.com` → Android → Options: same as step 3
+   (package `com.nexustradinglabs.nexus`, name, launcher name, `#0a0a0b` colours, notification delegation ON),
+   **Signing key: Create new**. Download the zip.
+2. **Save the new keystore + passwords** next to the Play one, clearly labelled "dApp Store". It's a second seed
+   phrase: lose it and you can't update the dApp Store listing.
+3. **Send Claude the new key's SHA-256** (from the zip's `assetlinks.json`, or `keytool -list -v -keystore <file>`).
+   Claude adds it as a third fingerprint: `node tools/android/assetlinks.mjs <Play app-signing> <Play upload> <dApp Store>`.
+   Without it the dApp Store build opens with Chrome's address bar on top. Public number, not a secret.
+4. **Publisher Portal** (publish.solanamobile.com): connect the Solana wallet, finish KYC/KYB, create the publisher,
+   then the app (mints the App NFT).
+5. **Listing:** everything is in `marketing/solana-dapp-store/` (icon, 1200×600 banner, 1200×1200 feature graphic,
+   4 screenshots, `listing.md` copy, privacy URL).
+6. **Release:** upload the `.apk` (the portal reads the package name from it), mint the Release NFT, submit for review.
+7. Updates later: bump `versionCode`/`versionName`, sign with the dApp Store key, submit a new release.
+
