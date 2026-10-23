@@ -97,6 +97,7 @@ import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.
 import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
+import { aesGcmEncrypt, openSeed, isSealed, sealSeed, storeSealedSeed, sealLegacySeeds } from "./seedVault.mjs";
 import { readPublishMark } from "./publishMark.mjs";
 import { resolveDuplicates, REPORT_KEY as DEDUPE_REPORT_KEY } from "./callDedupe.mjs";
 import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signal-delivery.mjs";
@@ -209,22 +210,8 @@ async function renderMonoPng(svg) {
 // ── Agent key encryption at rest (AES-256-GCM via Web Crypto) ──────────────────
 // Trading keys are encrypted before being written to KV so a KV dump alone is
 // useless without the AGENT_ENC_KEY Worker secret. Format: "v1:<b64 iv>:<b64 ct>".
-async function importAencKey(env) {
-  const raw = Uint8Array.from(atob(env.AGENT_ENC_KEY), (c) => c.charCodeAt(0));
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
-}
-
 async function encryptSecret(plaintext, env) {
-  if (!env.AGENT_ENC_KEY) throw new Error("AGENT_ENC_KEY not configured");
-  const key = await importAencKey(env);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    new TextEncoder().encode(plaintext)
-  );
-  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-  return `v1:${b64(iv)}:${b64(ct)}`;
+  return aesGcmEncrypt(plaintext, env.AGENT_ENC_KEY); // seedVault.mjs: throws without the secret
 }
 
 // base58 encode (Bitcoin alphabet) — matches the `bs58` npm pkg the exec signer
@@ -619,6 +606,14 @@ export default {
         if (r.result !== "already_secured" && r.result !== "no_token") console.log(`[tg] webhook secret: ${r.result}`);
       } catch (e) { console.error("[tg] webhook secret failed:", String(e)); }
     })());
+    // Hourly: re-seal any trading-account seed still stored in plain text (seedVault.mjs), one
+    // page of user: records per run until the walk completes. A no-op once done or without the secret.
+    ctx.waitUntil((async () => {
+      try {
+        const r = await sealLegacySeeds(env.LAB_STORE, env);
+        if (r.sealed || (r.done && r.scanned)) console.log(`[seedvault] scanned ${r.scanned}, sealed ${r.sealed}${r.done ? ", walk complete" : ""}`);
+      } catch (e) { console.error("[seedvault] sweep failed:", String(e)); }
+    })());
     // Hourly ("17 * * * *"): objectively grade public theses from public price.
     // Every run also grades (cheap, idempotent) so a fresh deploy resolves immediately.
     ctx.waitUntil((async () => {
@@ -919,9 +914,12 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
       const asRaw = await env.LAB_STORE.get("user:" + asNorm);
       if (!asRaw) return json({ error: "wallet_not_registered", hint: "Use the Nexus Bankr skill to register." }, request, 404);
       const asRec = JSON.parse(asRaw);
-      if (!asRec.seed) return json({ error: "session_not_cached", hint: "Run any Nexus command via the Bankr agent (e.g. check balance) to activate." }, request, 403);
+      // The seed is sealed at rest (seedVault.mjs); a legacy plain one is used once and re-sealed.
+      const asOpen = await openSeed(asRec.seed, env);
+      if (!asOpen.hex) return json({ error: "session_not_cached", hint: "Run any Nexus command via the Bankr agent (e.g. check balance) to activate." }, request, 403);
+      if (asOpen.reseal) ctx.waitUntil(storeSealedSeed(env.LAB_STORE, asNorm, asOpen.hex, env).catch(() => {}));
       const AS_HDR = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
-      const asSeedBytes = new Uint8Array(asRec.seed.match(/.{2}/g).map(b => parseInt(b,16)));
+      const asSeedBytes = new Uint8Array(asOpen.hex.match(/.{2}/g).map(b => parseInt(b,16)));
       const asPk8 = new Uint8Array(48); asPk8.set(AS_HDR,0); asPk8.set(asSeedBytes,16);
       const asSk = await crypto.subtle.importKey("pkcs8", asPk8, { name:"Ed25519" }, false, ["sign"]);
       const asSign = async (method, path) => {
@@ -2841,9 +2839,9 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       const ohseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(ohhex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
       const ohpk8  = new Uint8Array(48); ohpk8.set(OHHDR, 0); ohpk8.set(ohseed, 16);
       const ohsk   = await crypto.subtle.importKey("pkcs8", ohpk8, { name: "Ed25519" }, false, ["sign"]);
-      if (!ohrec.seed) {
-        const _ohSeedHex = [...ohseed].map(b => b.toString(16).padStart(2,"0")).join("");
-        await env.LAB_STORE.put("user:" + ohNorm, JSON.stringify({ ...ohrec, seed: _ohSeedHex }));
+      // Cache the seed for /account-snapshot, sealed (seedVault.mjs); re-seals a legacy plain one.
+      if (!isSealed(ohrec.seed)) {
+        await storeSealedSeed(env.LAB_STORE, ohNorm, [...ohseed].map(b => b.toString(16).padStart(2,"0")).join(""), env);
       }
       const ohsign = async (method, path) => {
         const ts  = Date.now();
@@ -2985,9 +2983,9 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         new Uint8Array(phex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
       const ppk8  = new Uint8Array(48); ppk8.set(PHDR, 0); ppk8.set(pseed, 16);
       const psk   = await crypto.subtle.importKey("pkcs8", ppk8, { name: "Ed25519" }, false, ["sign"]);
-      if (!urec.seed) {
-        const _pSeedHex = [...pseed].map(b => b.toString(16).padStart(2,"0")).join("");
-        await env.LAB_STORE.put("user:" + wNorm, JSON.stringify({ ...urec, seed: _pSeedHex }));
+      // Cache the seed for /account-snapshot, sealed (seedVault.mjs); re-seals a legacy plain one.
+      if (!isSealed(urec.seed)) {
+        await storeSealedSeed(env.LAB_STORE, wNorm, [...pseed].map(b => b.toString(16).padStart(2,"0")).join(""), env);
       }
       const OBASE = "https://api-evm.orderly.org";
       const psign = async (method, path) => {
@@ -3913,9 +3911,9 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
 
         // ── Store in KV ──
         if (regData.success || regData.data) {
-          const _regSeedHex = [...seed].map(b => b.toString(16).padStart(2,"0")).join("");
+          const _regSealed = await sealSeed([...seed].map(b => b.toString(16).padStart(2,"0")).join(""), env);
           await env.LAB_STORE.put("user:" + walletNorm, JSON.stringify({
-            accountId, orderlyKey, seed: _regSeedHex, registeredAt: Date.now(),
+            accountId, orderlyKey, ...(_regSealed ? { seed: _regSealed } : {}), registeredAt: Date.now(),
           }));
           return json({ ok: true, walletAddress: walletNorm, orderlyKey, accountId }, request);
         } else {
