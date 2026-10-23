@@ -43,7 +43,7 @@ import { handleArena as _handleArena } from "./routes-arena.mjs";
 function fakeKV(map) { return { get: async (k) => (map[k] ?? null), put: async () => {} }; }
 const ANCHOR_RECORD = JSON.stringify({ root: "0x" + "ab".repeat(32), recordCount: 0, txHash: "0xa5a5", ts: 1 });
 test("paper root reports anchoring paused and does not call the old commit current", async () => {
-  const env = { NEXUS_AGENT: fakeKV({ "arena:paper:onchain": ANCHOR_RECORD }), ARENA_PAPER_ANCHOR_LIVE: "false" };
+  const env = { NEXUS_AGENT: fakeKV({ "arena:paper:onchain": ANCHOR_RECORD }), ONCHAIN_ANCHOR_LIVE: "false" };
   const res = await _handleArena(["arena", "paper", "root"], new Request("https://x.test/arena/paper/root"), env);
   const body = await res.json();
   assert.equal(body.anchoring, "paused");
@@ -52,7 +52,7 @@ test("paper root reports anchoring paused and does not call the old commit curre
   assert.match(body.onChain.note, /paused/i);
 });
 test("paper root reports live only when the flag is on", async () => {
-  const env = { NEXUS_AGENT: fakeKV({}), ARENA_PAPER_ANCHOR_LIVE: "true" };
+  const env = { NEXUS_AGENT: fakeKV({}), ONCHAIN_ANCHOR_LIVE: "true" };
   const body = await (await _handleArena(["arena", "paper", "root"], new Request("https://x.test/arena/paper/root"), env)).json();
   assert.equal(body.anchoring, "live");
   assert.equal(body.onChain, null);
