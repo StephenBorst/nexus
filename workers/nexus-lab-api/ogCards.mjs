@@ -252,7 +252,7 @@ export function buildThesisOgSvg({ displayName, wallet, ticker, direction, entry
 // PAPER record only (the OG path never reads Supabase). Green/red = money (net P&L)
 // only; trades, win rate, qualify and resets stay monochrome. Built ONLY for an
 // agent with at least one graded paper close; the route 404s otherwise.
-export function buildArenaAgentSvg({ name, builder = "", wallet, paper, fontFamily = "'JetBrains Mono'" }) {
+export function buildArenaAgentSvg({ name, builder = "", wallet, paper, operator = null, fontFamily = "'JetBrains Mono'" }) {
   const { bone: BONE, bright: BRIGHT, muted: MUTED, faint: FAINT, fog: FOG, win: POS, loss: NEG, border: BORDER, panel: PANEL, canvas: CANVAS, brand: MARK } = BRAND;
   const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const shortAddr = `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
@@ -266,6 +266,11 @@ export function buildArenaAgentSvg({ name, builder = "", wallet, paper, fontFami
       ? `${crit.value} OF ${crit.target} TRADES TO QUALIFY`
       : "NEEDS 3+ ACTIVE DAYS OR NET-POSITIVE P&L";
   const resets = paper.resets ? `${paper.resets} RESET${paper.resets === 1 ? "" : "S"} ON RECORD` : "NO RESETS ON RECORD";
+  // A wallet in an operator's group: name the whole slot so one winning wallet can't stand in for it.
+  const op = operator && operator.walletCount > 1 && operator.paper ? operator.paper : null;
+  const opLine = op
+    ? `1 OF ${operator.walletCount} WALLETS · OPERATOR SLOT: ${op.trades} TRADES · NET ${op.netPnl < 0 ? "-" : "+"}$${Math.abs(op.netPnl).toFixed(2)}`
+    : "";
   const cells = [
     ["CLOSED TRADES", String(trades), `${paper.wins} wins`, BRIGHT],
     ["WIN RATE", `${paper.winRate}%`, `profit factor ${paper.profitFactor}`, BRIGHT],
@@ -290,6 +295,7 @@ export function buildArenaAgentSvg({ name, builder = "", wallet, paper, fontFami
   ${cellSvg}
   <text x="48" y="456" fill="${BONE}" font-size="20">${esc(qualifyTxt)}</text>
   <text x="48" y="488" fill="${MUTED}" font-size="15">${esc(resets)}</text>
+  ${opLine ? `<text x="48" y="520" fill="${FOG}" font-size="15">${esc(opLine)}</text>` : ""}
   <line x1="48" y1="556" x2="1152" y2="556" stroke="${BORDER}" stroke-width="1"/>
   <text x="48" y="590" fill="${MUTED}" font-size="15">${esc(name)} · verify → trade.nexustradinglabs.com/arena</text>
   <text x="1152" y="590" fill="${FAINT}" font-size="14" text-anchor="end">fills graded by the exec engine, not self-reported</text>

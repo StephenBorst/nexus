@@ -39,6 +39,12 @@ type ArenaAgent = {
   createdAt: number; active: boolean; mode: string;
   currentPosition: { symbol: string; direction: string; paper: boolean } | null;
   paper: ArenaPaper; live: ArenaStat;
+  // Set when this row is an operator's slot: every wallet in the group, summed.
+  openPositions?: number;
+  operator?: {
+    walletCount: number;
+    members: { wallet: string; name: string; paperTrades: number; paperNet: number; liveTrades: number }[];
+  };
 };
 
 type ArenaTrade = {
@@ -229,6 +235,27 @@ function RegisterPanel({ onDone }: { onDone: () => void }) {
   );
 }
 
+// An operator's slot: which wallets it sums. Every wallet counts, including the losing ones.
+function OperatorMembers({ op }: { op: NonNullable<ArenaAgent["operator"]> }) {
+  return (
+    <div style={{ padding: "10px 4px 0" }}>
+      <div style={label}>ONE SLOT · {op.walletCount} WALLETS · EVERY RECORD COUNTED</div>
+      <div style={{ marginTop: 6, overflowX: "auto" }}>
+        <div style={{ minWidth: 420 }}>
+          {op.members.map((m) => (
+            <div key={m.wallet} style={{ display: "grid", gridTemplateColumns: "1fr 110px 70px 90px", gap: 10, padding: "3px 0", fontFamily: MONO, fontSize: 10.5, color: FOG }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
+              <span style={{ color: FAINT }}>{short(m.wallet)}</span>
+              <span style={{ color: MUTED }}>{m.paperTrades}T{m.liveTrades ? ` · ${m.liveTrades} live` : ""}</span>
+              <span style={{ color: m.paperTrades ? (m.paperNet >= 0 ? POS : NEG) : FAINT, textAlign: "right" }}>{m.paperTrades ? usd(m.paperNet) : "—"}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Expanded-row detail: risk config + recent graded trades for one agent.
 function AgentDetail({ wallet }: { wallet: string }) {
   const [detail, setDetail] = useState<ArenaDetail | null | "error">(null);
@@ -344,7 +371,7 @@ export default function ArenaPage() {
       <div style={{ marginTop: 34 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
           <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.22em", color: MUTED }}>THE BOARD · RANKED BY GRADED RECORD</div>
-          <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT }}>LIVE OUTRANKS PAPER · RESETS COUNTED</div>
+          <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT }}>LIVE OUTRANKS PAPER · ONE SLOT PER OPERATOR · RESETS COUNTED</div>
         </div>
         <div style={{ height: 1, background: BORDER, margin: "10px 0 0" }} />
 
@@ -376,12 +403,13 @@ export default function ArenaPage() {
                     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                       <span style={{ fontFamily: MONO, fontSize: 12.5, color: BRIGHT, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>
                       {a.builder && <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.06em", color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "1px 6px" }}>{a.builder}</span>}
+                      {a.operator && <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.06em", color: FOG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "1px 6px" }}>{a.operator.walletCount} WALLETS</span>}
                     </div>
                     <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT, marginTop: 2 }}>{short(a.wallet)}{a.description ? ` · ${a.description.slice(0, 60)}${a.description.length > 60 ? "…" : ""}` : ""}</div>
                   </div>
                   <div style={{ fontFamily: MONO, fontSize: 10.5, color: a.currentPosition ? FOG : FAINT }}>
                     {a.currentPosition
-                      ? <><span className="nx-live-dot" style={{ marginRight: 6 }} />{a.currentPosition.direction} {bareTicker(a.currentPosition.symbol)}</>
+                      ? <><span className="nx-live-dot" style={{ marginRight: 6 }} />{a.currentPosition.direction} {bareTicker(a.currentPosition.symbol)}{(a.openPositions ?? 0) > 1 ? ` +${(a.openPositions ?? 0) - 1}` : ""}</>
                       : "flat"}
                   </div>
                   <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.08em", color: a.live ? BRIGHT : MUTED }}>
@@ -390,12 +418,19 @@ export default function ArenaPage() {
                   <PaperCell s={a.paper} />
                   <StatCell s={a.live} />
                 </div>
+                {expanded === a.wallet && a.operator && <OperatorMembers op={a.operator} />}
                 {expanded === a.wallet && <AgentDetail wallet={a.wallet} />}
                 </React.Fragment>
               ))}
             </div>
           </div>
         )}
+      </div>
+
+      <div style={{ fontFamily: UI, fontSize: 11.5, color: MUTED, lineHeight: 1.55, marginTop: 12, maxWidth: 640 }}>
+        Running several wallets? Put them in one slot: both wallets sign, and the slot shows every wallet’s record
+        summed, losing ones included. Joining is permanent. Grouping is declared by the wallets, never inferred, so
+        separate rows are not proof of separate operators.
       </div>
 
       {/* Builder quickstart */}
@@ -412,7 +447,12 @@ POST <webhook url>   {"action":"TEST","passphrase":"<passphrase>"}
 # 3. Trade — your brain decides, the venue executes + grades
 POST <webhook url>   {"action":"BUY|SELL|CLOSE","symbol":"BTC","passphrase":"<passphrase>"}
 
-# 4. Watch the board (public, no auth)
+# 4. Running several wallets? One slot per operator (both wallets sign, permanent)
+GET  ${AGENT_API}/arena/operator/message?operator=<op>&wallet=<w>   # text to sign
+POST ${AGENT_API}/arena/operator/join
+  {"operator":"<op>","wallet":"<w>","operatorSig":"<sig>","walletSig":"<sig>"}
+
+# 5. Watch the board (public, no auth)
 GET  ${AGENT_API}/arena/agents          # ranked board
 GET  ${AGENT_API}/arena/agents/<wallet> # one agent's record + recent trades`} />
         <div style={{ fontFamily: UI, fontSize: 11.5, color: MUTED, lineHeight: 1.55, marginTop: 8 }}>

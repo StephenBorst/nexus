@@ -13,6 +13,12 @@
 import { json, normalizeAddress, recoverEthAddress } from "./shared.mjs";
 import { validateArenaRegistration, arenaAgentConfig, aggregateAgentTrades, agentScore, agentStanding, ARENA } from "./logic.mjs";
 import { verifyPaperLog, paperRoot, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
+import { operatorJoinMessage, operatorOf, groupWallets, planJoin, JOIN_ERRORS } from "../../app/lib/arenaOperator.mjs";
+import { withLock, LockBusy, LOCK_KEYS } from "./lock.mjs";
+
+const sigFrom = (message, sig) => {
+  try { return typeof sig === "string" ? recoverEthAddress(message, sig) : null; } catch { return null; }
+};
 
 // URL-safe random token — same shape as the PRO webhook mint in index.js.
 function randToken(bytes = 24) {
@@ -36,41 +42,108 @@ function statBlock(rows) {
   };
 }
 
-// The PAPER block the board and the agent card ship. `paper_trades` is a rolling
-// last-50 window (exec pops past 50), so ranking on it lets losing trades roll off.
-// The lifetime aggregate `paper_agg` is accrued once per close and never truncated;
-// rank on it whenever it exists. Agents that predate the aggregate fall back to the
-// window, LABELLED as such, so no one reads a 50-trade slice as the whole record.
-// Resets are counted on the state (`paper_resets`) so a wiped record is visible.
-export function arenaPaperBlock(state) {
-  const resets = Number(state?.paper_resets) || 0;
+// One wallet's PAPER counters. `paper_trades` is a rolling last-50 window (exec pops
+// past 50), so ranking on it lets losing trades roll off. The lifetime aggregate
+// `paper_agg` is accrued once per close and never truncated; use it whenever it
+// exists. Agents that predate the aggregate fall back to the window, flagged.
+function paperTotals(state) {
   const agg = state?.paper_agg;
   if (agg && Number(agg.trades) > 0) {
-    const trades = Number(agg.trades);
-    const wins = Number(agg.wins) || 0;
-    const grossWin = Number(agg.grossWin) || 0;
-    const grossLoss = Number(agg.grossLoss) || 0;
-    const net = Number(agg.net) || 0;
-    const first = Number(agg.firstTradeAt) || 0;
-    const last = Number(agg.lastTradeAt) || 0;
-    const daysActive = first && last ? Math.max(1, Math.round((last - first) / 86400000)) : 0;
-    const { winRate, profitFactor, score } = agentScore({ trades, wins, grossWin, grossLoss, net, daysActive });
     return {
       lifetime: true,
-      trades,
-      wins,
-      winRate: Math.round(winRate * 1000) / 10,
-      netPnl: Math.round(net * 100) / 100,
-      profitFactor: Math.round(Math.min(profitFactor, 99) * 100) / 100,
-      score,
-      daysActive,
-      resets,
-      // Same qualifying rule as the Lab's agent board (AGENT_BOARD), one place.
-      qualify: agentStanding({ trades, wins, grossWin, grossLoss, net, daysActive }),
+      trades: Number(agg.trades),
+      wins: Number(agg.wins) || 0,
+      grossWin: Number(agg.grossWin) || 0,
+      grossLoss: Number(agg.grossLoss) || 0,
+      net: Number(agg.net) || 0,
+      first: Number(agg.firstTradeAt) || 0,
+      last: Number(agg.lastTradeAt) || 0,
     };
   }
-  const window = statBlock(state?.paper_trades);
-  return window ? { ...window, lifetime: false, window: "last 50 trades", resets, qualify: null } : null;
+  const rows = state?.paper_trades;
+  if (!rows || !rows.length) return null;
+  const a = aggregateAgentTrades(rows);
+  let last = 0;
+  for (const r of rows) last = Math.max(last, new Date(r.closed_at).getTime() || 0);
+  return { lifetime: false, trades: a.trades, wins: a.wins, grossWin: a.grossWin, grossLoss: a.grossLoss, net: a.net, first: a.firstTradeAt || 0, last };
+}
+
+// The PAPER block for one wallet or for an operator's whole group (every wallet
+// summed, losers included). A block built partly from 50-trade windows is labelled
+// as a window and gets no qualify verdict, so no one reads a slice as the record.
+// Resets are counted on each state (`paper_resets`) so a wiped record is visible.
+export function combinePaper(states) {
+  const list = (states || []).map(paperTotals).filter(Boolean);
+  const resets = (states || []).reduce((s, st) => s + (Number(st?.paper_resets) || 0), 0);
+  if (!list.length) return null;
+  const t = { trades: 0, wins: 0, grossWin: 0, grossLoss: 0, net: 0 };
+  let first = 0, last = 0;
+  for (const x of list) {
+    t.trades += x.trades; t.wins += x.wins; t.grossWin += x.grossWin; t.grossLoss += x.grossLoss; t.net += x.net;
+    if (x.first) first = first ? Math.min(first, x.first) : x.first;
+    last = Math.max(last, x.last);
+  }
+  const daysActive = first && last ? Math.max(1, Math.round((last - first) / 86400000)) : 0;
+  const a = { ...t, daysActive };
+  const { winRate, profitFactor, score } = agentScore(a);
+  const stats = {
+    trades: t.trades,
+    wins: t.wins,
+    winRate: Math.round(winRate * 1000) / 10,
+    netPnl: Math.round(t.net * 100) / 100,
+    profitFactor: Math.round(Math.min(profitFactor, 99) * 100) / 100,
+    score,
+    daysActive,
+    resets,
+  };
+  if (list.every((x) => x.lifetime)) {
+    // Same qualifying rule as the Lab's agent board (AGENT_BOARD), one place.
+    return { lifetime: true, ...stats, qualify: agentStanding(a) };
+  }
+  return { ...stats, lifetime: false, window: list.length > 1 ? "last 50 trades per wallet" : "last 50 trades", qualify: null };
+}
+
+export function arenaPaperBlock(state) {
+  return combinePaper([state]);
+}
+
+// The stored operator map (see app/lib/arenaOperator.mjs). Unreadable = no groups.
+async function readOperators(kv) {
+  try { return JSON.parse((await kv.get("arena:operators")) || "null") || {}; } catch { return {}; }
+}
+
+// Fold an operator's member rows into its own row: ONE slot, every wallet's record
+// summed. `rows` = [{ entry, state, liveRows }] per roster wallet. A member whose
+// operator has no row (no profile) stays on the board under its own name.
+export function foldOperators(rows, groups) {
+  const byWallet = new Map(rows.map((r) => [r.entry.wallet, r]));
+  const out = [];
+  for (const r of rows) {
+    const w = r.entry.wallet;
+    const op = operatorOf(groups, w);
+    if (op && op !== w && byWallet.has(op)) continue; // counted in the operator's slot
+    if (op !== w) { out.push(r.entry); continue; }
+    const members = groupWallets(groups, op).map((x) => byWallet.get(x)).filter(Boolean);
+    const open = members.filter((m) => m.entry.currentPosition);
+    out.push({
+      ...r.entry,
+      currentPosition: open[0]?.entry.currentPosition || null,
+      openPositions: open.length,
+      paper: combinePaper(members.map((m) => m.state)),
+      live: statBlock(members.flatMap((m) => m.liveRows || [])),
+      operator: {
+        walletCount: members.length,
+        members: members.map((m) => ({
+          wallet: m.entry.wallet,
+          name: m.entry.name,
+          paperTrades: m.entry.paper?.trades || 0,
+          paperNet: m.entry.paper?.netPnl ?? 0,
+          liveTrades: m.entry.live?.trades || 0,
+        })),
+      },
+    });
+  }
+  return out;
 }
 
 export async function handleArena(parts, request, env) {
@@ -169,6 +242,63 @@ export async function handleArena(parts, request, env) {
     }, request);
   }
 
+  // ── GET /arena/operator/message?operator=&wallet= — the text both wallets sign ──
+  if (parts[1] === "operator" && parts[2] === "message" && !parts[3] && request.method === "GET") {
+    const u = new URL(request.url);
+    const operator = normalizeAddress(u.searchParams.get("operator") || "");
+    const wallet = normalizeAddress(u.searchParams.get("wallet") || "");
+    if (!/^0x[0-9a-f]{40}$/.test(operator) || !/^0x[0-9a-f]{40}$/.test(wallet)) {
+      return json({ error: "operator and wallet required" }, request, 400);
+    }
+    return json({ operator, wallet, message: operatorJoinMessage(operator, wallet), sign: "personal_sign, once from each wallet" }, request);
+  }
+
+  // ── POST /arena/operator/join — put a wallet in an operator's one board slot ──
+  // {operator, wallet, operatorSig, walletSig}: both sign operatorJoinMessage. Permanent.
+  if (parts[1] === "operator" && parts[2] === "join" && !parts[3] && request.method === "POST") {
+    let body;
+    try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
+    const operator = normalizeAddress(String(body.operator || ""));
+    const wallet = normalizeAddress(String(body.wallet || ""));
+    if (!/^0x[0-9a-f]{40}$/.test(operator) || !/^0x[0-9a-f]{40}$/.test(wallet)) {
+      return json({ error: "bad_address", hint: JOIN_ERRORS.bad_address }, request, 400);
+    }
+    const message = operatorJoinMessage(operator, wallet);
+    if (sigFrom(message, body.operatorSig) !== operator || sigFrom(message, body.walletSig) !== wallet) {
+      return json({ error: "signatures_required", hint: "Both wallets sign the text from GET /arena/operator/message.", message }, request, 401);
+    }
+    const [opProfile, wProfile] = await Promise.all([
+      AGENT_KV.get(`arena:profile:${operator}`),
+      AGENT_KV.get(`arena:profile:${wallet}`),
+    ]);
+    if (!opProfile || !wProfile) {
+      return json({ error: "not_registered", hint: "Register both wallets in the Arena first." }, request, 404);
+    }
+    let result;
+    try {
+      result = await withLock(env, LOCK_KEYS.arenaOperators(), async () => {
+        const groups = await readOperators(AGENT_KV);
+        const plan = planJoin(groups, operator, wallet);
+        if (plan.ok && plan.next) await AGENT_KV.put("arena:operators", JSON.stringify(plan.next));
+        return { plan, groups: plan.next || groups };
+      });
+    } catch (e) {
+      if (e instanceof LockBusy) return json({ error: "busy", hint: "Another operator change is in flight. Try again." }, request, 409);
+      return json({ error: "lock_unavailable", hint: "Nothing was changed. Try again." }, request, 503);
+    }
+    const { plan, groups } = result;
+    if (!plan.ok) return json({ error: plan.error, hint: JOIN_ERRORS[plan.error] || null }, request, 409);
+    await AGENT_KV.delete("arena:cache:board");
+    return json({ ok: true, already: plan.already, operator, wallets: groupWallets(groups, operator), permanent: true }, request);
+  }
+
+  // ── GET /arena/operators — every declared group (public) ─────────────────────
+  if (parts[1] === "operators" && !parts[2] && request.method === "GET") {
+    const groups = await readOperators(AGENT_KV);
+    const list = Object.keys(groups).map((op) => ({ operator: op, wallets: groupWallets(groups, op), joined: groups[op].joined || {} }));
+    return json({ operators: list, count: list.length, rule: "Declared by both wallets' signatures. Permanent. Grouping is never inferred." }, request);
+  }
+
   // ── GET /arena/agents/:address/paper-log — the agent's paper ledger, verified ──
   // Every paper close, in order, each with its chain head. `chainOk` = the rows
   // recompute to the stored head (catches an edited/deleted row). The ANCHORED root
@@ -265,7 +395,8 @@ export async function handleArena(parts, request, env) {
       } catch (e) { console.error("[arena] supabase fetch error:", e); }
     }
 
-    const agents = (await Promise.all(roster.map(async (w) => {
+    const groups = await readOperators(AGENT_KV);
+    const rows = (await Promise.all(roster.map(async (w) => {
       const [profileRaw, configRaw, stateRaw] = await Promise.all([
         AGENT_KV.get(`arena:profile:${w}`),
         AGENT_KV.get(`agent:config:${w}`),
@@ -277,19 +408,26 @@ export async function handleArena(parts, request, env) {
       try { config = configRaw ? JSON.parse(configRaw) : null; } catch { /* ignore */ }
       try { state = stateRaw ? JSON.parse(stateRaw) : null; } catch { /* ignore */ }
       const pos = state?.current_position || null;
+      const liveRows = liveByWallet.get(w) || [];
       return {
-        wallet: w,
-        name: profile.name,
-        description: profile.description || "",
-        builder: profile.builder || "",
-        createdAt: profile.createdAt || 0,
-        active: !!state?.active,
-        mode: config?.mode || "PAPER",
-        currentPosition: pos ? { symbol: pos.symbol, direction: pos.direction, paper: !!pos.paper } : null,
-        paper: arenaPaperBlock(state),
-        live: statBlock(liveByWallet.get(w)),
+        state,
+        liveRows,
+        entry: {
+          wallet: w,
+          name: profile.name,
+          description: profile.description || "",
+          builder: profile.builder || "",
+          createdAt: profile.createdAt || 0,
+          active: !!state?.active,
+          mode: config?.mode || "PAPER",
+          currentPosition: pos ? { symbol: pos.symbol, direction: pos.direction, paper: !!pos.paper } : null,
+          paper: arenaPaperBlock(state),
+          live: statBlock(liveRows),
+        },
       };
     }))).filter(Boolean);
+    // One slot per operator: a declared group's wallets are summed into the operator's row.
+    const agents = foldOperators(rows, groups);
 
     // Live records outrank paper; within a tier, engine score decides.
     agents.sort((a, b) =>
@@ -343,6 +481,9 @@ export async function handleArena(parts, request, env) {
       pos?.opened_at ? (new Date(pos.opened_at).getTime() || 0) : 0,
     ) || null;
 
+    const groups = await readOperators(AGENT_KV);
+    const op = operatorOf(groups, address);
+
     return json({
       wallet: address,
       name: profile.name,
@@ -352,6 +493,8 @@ export async function handleArena(parts, request, env) {
       active: !!state?.active,
       mode: config?.mode || "PAPER",
       signalMode: config?.signalMode || null,
+      // This wallet's own record below; the board slot is the operator's (every wallet summed).
+      operator: op ? { operator: op, wallets: groupWallets(groups, op) } : null,
       currentPosition: pos ? { symbol: pos.symbol, direction: pos.direction, paper: !!pos.paper, entry_price: Number(pos.entry_price) || null, opened_at: pos.opened_at || null } : null,
       riskConfig: config ? {
         leverage: config.leverage, capitalPerTrade: config.capitalPerTrade,
@@ -382,5 +525,17 @@ export async function loadArenaCard(env, wallet) {
   try { state = stateRaw ? JSON.parse(stateRaw) : null; } catch { /* ignore */ }
   const paper = arenaPaperBlock(state);
   if (!paper || !paper.trades) return null;
-  return { wallet: w, name: profile.name, builder: profile.builder || "", paper };
+  // A grouped wallet's card also carries its operator's whole record, so one winning
+  // wallet can't be shared as if it were the operator's only one.
+  let operator = null;
+  const groups = await readOperators(kv);
+  const op = operatorOf(groups, w);
+  if (op) {
+    const wallets = groupWallets(groups, op);
+    const states = await Promise.all(wallets.map(async (x) => {
+      try { return JSON.parse((await kv.get(`agent:state:${x}`)) || "null"); } catch { return null; }
+    }));
+    operator = { walletCount: wallets.length, paper: combinePaper(states) };
+  }
+  return { wallet: w, name: profile.name, builder: profile.builder || "", paper, operator };
 }
