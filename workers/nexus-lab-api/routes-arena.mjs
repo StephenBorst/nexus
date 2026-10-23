@@ -11,7 +11,7 @@
 // Arena-minted webhook tokens are FREE but scoped to signalMode EXTERNAL (the
 // hook route enforces it) so they can't become a ride around the PRO webhook gate.
 import { json, normalizeAddress, recoverEthAddress } from "./shared.mjs";
-import { validateArenaRegistration, arenaAgentConfig, aggregateAgentTrades, agentScore, ARENA } from "./logic.mjs";
+import { validateArenaRegistration, arenaAgentConfig, aggregateAgentTrades, agentScore, agentStanding, ARENA } from "./logic.mjs";
 import { verifyPaperLog, paperRoot, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
 
 // URL-safe random token — same shape as the PRO webhook mint in index.js.
@@ -65,10 +65,12 @@ export function arenaPaperBlock(state) {
       score,
       daysActive,
       resets,
+      // Same qualifying rule as the Lab's agent board (AGENT_BOARD), one place.
+      qualify: agentStanding({ trades, wins, grossWin, grossLoss, net, daysActive }),
     };
   }
   const window = statBlock(state?.paper_trades);
-  return window ? { ...window, lifetime: false, window: "last 50 trades", resets } : null;
+  return window ? { ...window, lifetime: false, window: "last 50 trades", resets, qualify: null } : null;
 }
 
 export async function handleArena(parts, request, env) {
