@@ -1,6 +1,6 @@
 # The read pipeline · what each stage triggers
 
-Written 2026-10-23, before any registered read has reached a stage. **Signed off: _pending (borst)_.**
+Written 2026-10-23, before any registered read has reached a stage. **Signed off: borst, Oct 23, 2026.**
 
 The five registered reads count events from 2026-10-17T00:00Z (`docs/research/read-pipeline.md`). At today's pace the
 first two reach 30 out-of-sample events within about a week. This page fixes, before those numbers exist, what each
