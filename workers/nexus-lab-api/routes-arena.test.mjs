@@ -77,3 +77,22 @@ test("paper block: window fallback has no qualify (not a lifetime record)", () =
   assert.equal(b.lifetime, false);
   assert.equal(b.qualify, null);
 });
+
+// OG card: only for an agent with a graded paper close; the SVG states the rule in words.
+import { loadArenaCard } from "./routes-arena.mjs";
+import { buildArenaAgentSvg } from "./ogCards.mjs";
+const W = "0x" + "a1".repeat(20);
+test("arena card: no record -> null (route 404s)", async () => {
+  const env = { NEXUS_AGENT: fakeKV({ [`arena:profile:${W}`]: JSON.stringify({ name: "Ada" }) }) };
+  assert.equal(await loadArenaCard(env, W), null);
+});
+test("arena card: graded agent gets a card with the qualify line and no stray colour", async () => {
+  const state = { paper_resets: 0, paper_agg: { trades: 3, wins: 2, grossWin: 20, grossLoss: 5, net: 15, firstTradeAt: Date.now() - 2 * 86400000, lastTradeAt: Date.now() } };
+  const env = { NEXUS_AGENT: fakeKV({ [`arena:profile:${W}`]: JSON.stringify({ name: "Ada", builder: "claude-fable-5" }), [`agent:state:${W}`]: JSON.stringify(state) }) };
+  const card = await loadArenaCard(env, W);
+  assert.equal(card.paper.trades, 3);
+  const svg = buildArenaAgentSvg(card);
+  assert.match(svg, /3 OF 10 TRADES TO QUALIFY/);
+  assert.match(svg, />Ada</);
+  assert.doesNotMatch(svg, /#00ff88/i);
+});
