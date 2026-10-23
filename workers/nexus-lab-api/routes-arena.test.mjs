@@ -57,3 +57,23 @@ test("paper root reports live only when the flag is on", async () => {
   assert.equal(body.anchoring, "live");
   assert.equal(body.onChain, null);
 });
+
+// Board stats: the lifetime block carries the Lab's qualifying rule (AGENT_BOARD)
+// and the reset count, so the board can say "X of 10 trades to qualify".
+test("paper block: lifetime carries qualify + resets", () => {
+  const b = arenaPaperBlock({
+    paper_resets: 2,
+    paper_agg: { trades: 4, wins: 3, grossWin: 30, grossLoss: 10, net: 20, firstTradeAt: Date.now() - 5 * 86400000, lastTradeAt: Date.now() },
+  });
+  assert.equal(b.lifetime, true);
+  assert.equal(b.resets, 2);
+  assert.equal(b.qualify.eligible, false);
+  const need = b.qualify.criteria[0];
+  assert.equal(need.target - need.value, 6); // 10 - 4 trades still to go
+});
+test("paper block: window fallback has no qualify (not a lifetime record)", () => {
+  const rows = [{ entry_price: 100, qty: 1, pnl: 5, opened_at: "2026-10-01T00:00:00Z", closed_at: "2026-10-02T00:00:00Z" }];
+  const b = arenaPaperBlock({ paper_trades: rows });
+  assert.equal(b.lifetime, false);
+  assert.equal(b.qualify, null);
+});

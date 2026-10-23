@@ -28,11 +28,17 @@ type ArenaStat = {
   profitFactor: number; score: number; daysActive: number;
 } | null;
 
+type Criterion = { key: string; label: string; met: boolean; value: number; target: number };
+type ArenaPaper = (ArenaStat & {
+  lifetime?: boolean; resets?: number;
+  qualify?: { eligible: boolean; criteria: Criterion[] } | null;
+}) | null;
+
 type ArenaAgent = {
   wallet: string; name: string; description: string; builder: string;
   createdAt: number; active: boolean; mode: string;
   currentPosition: { symbol: string; direction: string; paper: boolean } | null;
-  paper: ArenaStat; live: ArenaStat;
+  paper: ArenaPaper; live: ArenaStat;
 };
 
 type ArenaTrade = {
@@ -61,6 +67,28 @@ const inputStyle: React.CSSProperties = {
   width: "100%", boxSizing: "border-box", background: "#08080a", border: `1px solid ${BORDER}`,
   borderRadius: 4, color: BRIGHT, fontFamily: MONO, fontSize: 12, padding: "9px 11px", outline: "none",
 };
+
+// PAPER record: lifetime totals, the reset count (a wiped record stays visible),
+// and what is still missing to qualify. The rule is the server's (AGENT_BOARD).
+function PaperCell({ s }: { s: ArenaPaper }) {
+  if (!s || !s.trades) return <span style={{ color: FAINT, fontFamily: MONO, fontSize: 11 }}>—</span>;
+  const unmet = (s.qualify?.criteria || []).filter((c) => !c.met);
+  const tradesLeft = (s.qualify?.criteria || []).find((c) => c.key === "trades");
+  let qLine: string;
+  let qColor = MUTED;
+  if (s.qualify?.eligible) { qLine = "QUALIFIED"; qColor = BRIGHT; }
+  else if (!s.qualify) { qLine = "last 50 trades · rolling"; }
+  else if (tradesLeft && !tradesLeft.met) { qLine = `${tradesLeft.value} of ${tradesLeft.target} trades to qualify`; }
+  else { qLine = `needs ${unmet.map((c) => c.label).join(", ")}`; }
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+      <StatCell s={s} />
+      <span style={{ fontFamily: MONO, fontSize: 9.5, color: qColor, whiteSpace: "nowrap" }}>
+        {qLine}{s.resets ? ` · ${s.resets} reset${s.resets === 1 ? "" : "s"}` : ""}
+      </span>
+    </span>
+  );
+}
 
 function StatCell({ s }: { s: ArenaStat }) {
   if (!s || !s.trades) return <span style={{ color: FAINT, fontFamily: MONO, fontSize: 11 }}>—</span>;
@@ -316,7 +344,7 @@ export default function ArenaPage() {
       <div style={{ marginTop: 34 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
           <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.22em", color: MUTED }}>THE BOARD · RANKED BY GRADED RECORD</div>
-          <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT }}>LIVE OUTRANKS PAPER</div>
+          <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT }}>LIVE OUTRANKS PAPER · RESETS COUNTED</div>
         </div>
         <div style={{ height: 1, background: BORDER, margin: "10px 0 0" }} />
 
@@ -359,7 +387,7 @@ export default function ArenaPage() {
                   <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.08em", color: a.live ? BRIGHT : MUTED }}>
                     {a.live ? "⛓ LIVE" : a.mode === "PAPER" ? "PAPER" : a.mode}
                   </div>
-                  <StatCell s={a.paper} />
+                  <PaperCell s={a.paper} />
                   <StatCell s={a.live} />
                 </div>
                 {expanded === a.wallet && <AgentDetail wallet={a.wallet} />}
