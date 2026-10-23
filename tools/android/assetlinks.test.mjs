@@ -37,3 +37,15 @@ test("the committed assetlinks.json (once it exists) is valid", (t) => {
   assert.deepEqual(got, buildAssetLinks(fps));
   assert.ok(fps.length >= 2, "list both the Play app-signing key and the upload key");
 });
+
+// The live apps. Dropping one sends that store's app back to Chrome's address bar, silently.
+const LIVE_KEYS = {
+  "Play app signing (Google)": "DD:F5:1C:59:61:4D:64:BB:6B:D3:3E:F3:BF:90:1C:AD:27:54:16:EC:1A:EE:B3:67:A1:72:C8:84:99:5F:C7:62",
+  "Play upload key": "72:4C:6D:BA:90:D7:7B:67:8B:90:F3:88:DB:C3:58:B9:B6:33:11:5F:C8:0D:B9:A8:40:FF:43:D1:8C:5C:02:4C",
+  "Solana dApp Store key": "26:8E:93:DF:EE:FA:57:8B:A3:2A:E8:C0:18:ED:F4:E3:7E:EE:1A:72:FD:51:60:6C:F8:53:7A:93:BC:8B:F8:45",
+};
+
+test("assetlinks keeps every live store's key", () => {
+  const fps = JSON.parse(readFileSync(ASSETLINKS_PATH, "utf8"))[0].target.sha256_cert_fingerprints;
+  for (const [name, fp] of Object.entries(LIVE_KEYS)) assert.ok(fps.includes(fp), `assetlinks dropped the ${name}`);
+});
