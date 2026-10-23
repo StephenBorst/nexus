@@ -833,10 +833,12 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   tell a hijacked one from a real one); a user who stopped getting alerts re-links from the Agent tab.
   **The Lab sign message was reworded 2026-10-16** to name everything it covers ("sign in with this wallet … calls, notes,
   profile, comments, reactions, takes, follows, notifications, phone alerts and Telegram link … No funds move. No
-  trades."). Signatures over the old wording pass only if dated before `LAB_AUTH_V1_UNTIL_MS` (2026-10-18), so none can
-  pass after 2026-10-19: delete `labSaveMessageV1` then. `labAuthScope.test.mjs` lists every worker file that accepts the
+  trades."). The old wording was accepted for signatures dated before 2026-10-18 and is
+  GONE since 2026-10-23 (`labSaveMessageV1` deleted; a test pins that an old-wording signature fails). `labAuthScope.test.mjs` lists every worker file that accepts the
   signature and fails if a new one appears, or its use isn't named in the message. The skill's copy of the message (fork
-  branch `nexus-lab-signature` = BankrBot/skills#790) must match it word for word.
+  branch `nexus-lab-signature` = BankrBot/skills#790) must match it word for word (checked byte for byte 2026-10-23: match).
+  #790 also retires Rep Score in the skill (rank from `/theses/leaderboard` + `meritRank`; empty board = "No verified
+  callers yet."). Copy the skill folder back here only after it merges.
   **⚠️ Trading-account record `user:{addr}` (found 2026-10-16; split into two PRs 2026-10-17).** FIXED (this half,
   `routes-account.mjs`, tests `routes-account.test.mjs`): `/proxy/register-key` stored the record on `success || data`
   with the key from a top-level body field; now only on `success === true`, with the SIGNED `message.orderlyKey` (a
