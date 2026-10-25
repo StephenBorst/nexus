@@ -14,7 +14,7 @@ const W = "0x9a3012988d60d61b34660be06a321f7bf7bccb28";
 
 test("a call lab-api doesn't have → 404 + noindex, same app body", async () => {
   const f = answering(404);
-  const res = await gateThesisPage({ wallet: W, id: "nope", next, fetchImpl: f.fetchImpl });
+  const res = await gateThesisPage({ wallet: W, id: "nope", loadApp: next, fetchImpl: f.fetchImpl });
   assert.equal(res.status, 404);
   assert.equal(res.headers.get("X-Robots-Tag"), "noindex");
   assert.equal(res.headers.get("Cache-Control"), "no-cache");
@@ -24,21 +24,21 @@ test("a call lab-api doesn't have → 404 + noindex, same app body", async () =>
 });
 
 test("a public call → 200, indexable", async () => {
-  const res = await gateThesisPage({ wallet: W, id: "reg-bd180a17119ae795", next, fetchImpl: answering(200).fetchImpl });
+  const res = await gateThesisPage({ wallet: W, id: "reg-bd180a17119ae795", loadApp: next, fetchImpl: answering(200).fetchImpl });
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("X-Robots-Tag"), null);
 });
 
 test("fails open: 405 (old lab-api), 5xx, network error, timeout all serve the page as before", async () => {
   for (const s of [405, 500, 503, 429]) {
-    const res = await gateThesisPage({ wallet: W, id: "x", next, fetchImpl: answering(s).fetchImpl });
+    const res = await gateThesisPage({ wallet: W, id: "x", loadApp: next, fetchImpl: answering(s).fetchImpl });
     assert.equal(res.status, 200, `status ${s}`);
     assert.equal(res.headers.get("X-Robots-Tag"), null);
   }
-  const boom = await gateThesisPage({ wallet: W, id: "x", next, fetchImpl: async () => { throw new Error("down"); } });
+  const boom = await gateThesisPage({ wallet: W, id: "x", loadApp: next, fetchImpl: async () => { throw new Error("down"); } });
   assert.equal(boom.status, 200);
   const keepAlive = setTimeout(() => {}, 2000); // AbortSignal.timeout's timer doesn't hold the loop open
-  const slow = await gateThesisPage({ wallet: W, id: "x", next, timeoutMs: 20,
+  const slow = await gateThesisPage({ wallet: W, id: "x", loadApp: next, timeoutMs: 20,
     fetchImpl: (url, { signal }) => new Promise((_, rej) => signal.addEventListener("abort", () => rej(signal.reason))) });
   clearTimeout(keepAlive);
   assert.equal(slow.status, 200);
@@ -49,7 +49,7 @@ test("lookup URL encodes the parts; empty or absurd parts are a 404 without aski
   assert.equal(thesisLookupUrl("", "x"), null);
   assert.equal(thesisLookupUrl(W, "x".repeat(201)), null);
   const f = answering(200);
-  const res = await gateThesisPage({ wallet: W, id: "", next, fetchImpl: f.fetchImpl });
+  const res = await gateThesisPage({ wallet: W, id: "", loadApp: next, fetchImpl: f.fetchImpl });
   assert.equal(res.status, 404);
   assert.equal(f.calls.length, 0);
 });
@@ -61,13 +61,18 @@ test("verdicts", () => {
   assert.equal(lookupVerdict(405), "unknown");
 });
 
-test("the Pages Function: non-GET passes through; an internal error serves the page", async () => {
-  const post = await onRequest({ request: new Request("https://x/feed/thesis/a/b", { method: "POST" }), params: {}, next });
+test("the Pages Function: asks the assets for \"/\"; non-GET passes through; an internal error serves the app", async () => {
+  const asked = [];
+  const env = { ASSETS: { fetch: async (req) => { asked.push(new URL(req.url).pathname); return next(); } } };
+  const post = await onRequest({ request: new Request("https://x/feed/thesis/a/b", { method: "POST" }), params: {}, env, next });
   assert.equal(post.status, 200);
   let n = 0;
-  const flaky = async () => { n++; if (n === 1) throw new Error("asset fetch failed"); return next(); };
-  const res = await onRequest({ request: new Request("https://x/feed/thesis/a/b"), params: { wallet: W, id: "b" }, next: flaky });
+  const flaky = { ASSETS: { fetch: async () => { n++; if (n === 1) throw new Error("asset fetch failed"); return next(); } } };
+  const res = await onRequest({ request: new Request("https://x/feed/thesis/a/b"), params: { wallet: W, id: "b" }, env: flaky, next });
   assert.equal(res.status, 200);
+  const empty = await onRequest({ request: new Request("https://x/feed/thesis/a/b"), params: { wallet: W, id: "" }, env, next });
+  assert.equal(empty.status, 404);
+  assert.deepEqual(asked, ["/"]);
 });
 
 // public/_headers: Cloudflare matches the request path, exact or with a trailing /* splat.

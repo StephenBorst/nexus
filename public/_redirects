@@ -1,0 +1,69 @@
+# Every app route, rewritten (200) to the app (target "/", never "/index.html":
+# Pages 308-redirects that to "/", which would send every route home). Each also has a
+# trailing-slash twin, so /lab/ keeps working. Anything not listed falls to 404.html, which
+# Pages serves with a real 404 status (Search Console Soft 404, 2026-10-19). 404.html is a
+# copy of index.html (vite.config.ts notFoundPage), so a route missing here still renders for
+# people; only its status is wrong. app/lib/appRoutes.test.mjs checks this list against the
+# router in app/main.tsx: add a route there → add it here.
+# /feed/thesis/:wallet/:id is served by functions/feed/thesis/[wallet]/[id].js (404s missing calls).
+
+/lab                      / 200
+/lab/                     / 200
+/analyze                  / 200
+/analyze/                 / 200
+/arena                    / 200
+/arena/                   / 200
+/proof                    / 200
+/proof/                   / 200
+/ops/revenue              / 200
+/ops/revenue/             / 200
+/feed                     / 200
+/feed/                    / 200
+/feed/trader/:wallet      / 200
+/feed/trader/:wallet/     / 200
+/feed/thesis/:wallet/:id  / 200
+/feed/thesis/:wallet/:id/ / 200
+/perp                     / 200
+/perp/                    / 200
+/perp/:symbol             / 200
+/perp/:symbol/            / 200
+/portfolio                / 200
+/portfolio/               / 200
+/portfolio/positions      / 200
+/portfolio/positions/     / 200
+/portfolio/orders         / 200
+/portfolio/orders/        / 200
+/portfolio/assets         / 200
+/portfolio/assets/        / 200
+/portfolio/api-key        / 200
+/portfolio/api-key/       / 200
+/portfolio/fee            / 200
+/portfolio/fee/           / 200
+/portfolio/history        / 200
+/portfolio/history/       / 200
+/portfolio/setting        / 200
+/portfolio/setting/       / 200
+/markets                  / 200
+/markets/                 / 200
+/leaderboard              / 200
+/leaderboard/             / 200
+/rewards                  / 200
+/rewards/                 / 200
+/rewards/affiliate        / 200
+/rewards/affiliate/       / 200
+/vaults                   / 200
+/vaults/                  / 200
+/swap                     / 200
+/swap/                    / 200
+/token                    / 200
+/token/                   / 200
+/token/:query             / 200
+/token/:query/            / 200
+/points                   / 200
+/points/                  / 200
+/intel                    / 200
+/intel/                   / 200
+/messages                 / 200
+/messages/                / 200
+/mini                     / 200
+/mini/                    / 200

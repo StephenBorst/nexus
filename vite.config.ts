@@ -29,6 +29,24 @@ function loadConfigTitle(): string {
   }
 }
 
+// public/404.html for Cloudflare Pages: an unmatched path is served this file WITH a 404 status
+// (Search Console flagged 200 app shells as Soft 404s). It's the built index.html, so the app
+// still boots and shows its own "Not found" screen. Real routes are 200-rewritten in
+// public/_redirects (checked against app/main.tsx by app/lib/appRoutes.test.mjs). Build only.
+function notFoundPage(): Plugin {
+  let outDir = "build/client";
+  return {
+    name: "nexus-404-page",
+    apply: "build",
+    configResolved(c) { outDir = c.build.outDir; },
+    writeBundle() {
+      const index = path.resolve(outDir, "index.html");
+      if (!fs.existsSync(index)) throw new Error("notFoundPage: build has no index.html");
+      fs.copyFileSync(index, path.resolve(outDir, "404.html"));
+    },
+  };
+}
+
 function htmlTitlePlugin(): Plugin {
   const title = loadConfigTitle();
   console.log(`Using title from config.js: ${title}`);
@@ -144,6 +162,7 @@ export default defineConfig(() => {
       react(),
       tsconfigPaths(),
       htmlTitlePlugin(),
+      notFoundPage(),
       cjsInterop({
         dependencies: ["bs58", "@coral-xyz/anchor", "lodash"],
       }),

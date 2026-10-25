@@ -142,6 +142,14 @@ jobs:
           [ "$gone" = 404 ] || echo "::warning::a missing call answered $gone, not 404 (Function not deployed, or lab-api unreachable from Pages: it fails open)"
           echo "$perp" | grep -qi noindex || echo "::warning::/perp has no X-Robots-Tag: noindex"
           [ -z "$feed" ] || echo "::warning::/feed carries an X-Robots-Tag it shouldn't: $feed"
+          # Unknown paths 404 (public/404.html); real routes still 200 via public/_redirects.
+          junk=$(curl -s -o /dev/null -w '%{http_code}' "$site/no-such-page-check")
+          for r in /lab /lab/ /proof /feed "/feed/trader/$w" /token/BTC; do
+            c=$(curl -s -o /dev/null -w '%{http_code}' "$site$r"); echo "$r → $c"
+            [ "$c" = 200 ] || echo "::warning::route $r answered $c, not 200 (missing from public/_redirects?)"
+          done
+          echo "unknown path → $junk"
+          [ "$junk" = 404 ] || echo "::warning::an unknown path answered $junk, not 404 (404.html missing from the build?)"
 
       - name: Deploy Worker (nexus-agent-exec)
         working-directory: workers/nexus-agent-exec

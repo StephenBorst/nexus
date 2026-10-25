@@ -4,11 +4,12 @@
 import { gateThesisPage } from "../../../../app/lib/seoGate.mjs";
 
 export async function onRequest(context) {
-  const { request, params, next } = context;
+  const { request, params, env, next } = context;
   if (request.method !== "GET" && request.method !== "HEAD") return next();
+  const loadApp = () => env.ASSETS.fetch(new Request(new URL("/", request.url)));
   try {
-    return await gateThesisPage({ wallet: params.wallet, id: params.id, next });
+    return await gateThesisPage({ wallet: params.wallet, id: params.id, loadApp });
   } catch {
-    return next();
+    return loadApp();
   }
 }

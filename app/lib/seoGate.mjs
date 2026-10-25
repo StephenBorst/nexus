@@ -37,14 +37,16 @@ export function withStatus(res, status, { noindex = false } = {}) {
   return new Response(res.body, { status, statusText: status === 404 ? "Not Found" : res.statusText, headers });
 }
 
-// The whole decision, with fetch injected so it's testable without the network.
-export async function gateThesisPage({ wallet, id, next, fetchImpl = fetch, timeoutMs = LOOKUP_TIMEOUT_MS }) {
-  const page = await next();
+// The whole decision, with fetch injected so it's testable without the network. `loadApp`
+// returns the app's HTML (the Function asks the static assets for "/"): with public/404.html in
+// place, an unmatched asset path would answer 404, so the Function never relies on the fallback.
+export async function gateThesisPage({ wallet, id, loadApp, fetchImpl = fetch, timeoutMs = LOOKUP_TIMEOUT_MS }) {
+  const page = await loadApp();
   const url = thesisLookupUrl(wallet, id);
   if (!url) return withStatus(page, 404, { noindex: true });
   try {
     const r = await fetchImpl(url, { method: "HEAD", signal: AbortSignal.timeout(timeoutMs) });
     if (lookupVerdict(r.status) === "missing") return withStatus(page, 404, { noindex: true });
   } catch { /* fail open */ }
-  return withStatus(page, page.status);
+  return withStatus(page, 200);
 }
