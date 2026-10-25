@@ -1612,6 +1612,18 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   (n328) · basis_dev 91.5% (n139) · basis_dev_x_cvd 90.5% (n18) · **basis_x_cvd 82.2% (n37, ~81 more events to
   separate)** — the live preset's read. **1 of 5 PREDICTIVE reads beats random** — PREDICTIVE ≠ an edge. One window,
   rising, in-sample; Oct-15 re-reads it. ⚠️ Not a licence to invert any BELOW row.
+- **Search: no Soft 404s (2026-10-25, Search Console flagged 2 URLs on Oct 19).** Every SPA path served a 200 shell,
+  so (1) a call permalink that doesn't exist now answers a real **404 + `X-Robots-Tag: noindex`** from the Pages Function
+  `functions/feed/thesis/[wallet]/[id].js` (rules + tests `app/lib/seoGate.mjs`): it asks lab-api `HEAD /thesis/:w/:id`
+  (same isPublicCall, no live grade) and FAILS OPEN on anything but a 404 (timeout 2.5s, 5xx, 405, network). Only that
+  path runs a Function (generated `_routes.json` = `/feed/thesis/*`), and `public/_headers` doesn't apply to Function
+  responses (it sets its own no-cache). ⚠️ `wrangler pages deploy` compiles `./functions` from the repo ROOT. (2) App
+  routes carry `X-Robots-Tag: noindex` via `public/_headers` (perp, portfolio, markets, leaderboard, rewards, vaults,
+  points, swap, messages, ops); content routes stay indexable (test pins both lists). Crawlable on purpose: no robots
+  Disallow, or Google couldn't read the header. (3) The ErrorBoundary self-heal reload's `?_v=` URL gets a noindex meta +
+  the param dropped (inline script in index.html). `public/robots.txt` exists now (was the SPA fallback). deploy.yml
+  "Check live search signals" (after lab-api deploys) prints the live 404/200/noindex answers. Still a 200: unknown
+  paths caught by the SPA `*` route (client-side noindex only).
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 

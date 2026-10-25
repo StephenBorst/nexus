@@ -22,6 +22,7 @@ import { MessageTraderButton } from "@/components/MessageTraderButton";
 import { SocialBar } from "@/components/SocialBar";
 import { Button, TEXT_ACTION, TEXT_ACTION_BAR } from "@/components/ui";
 import { bareTicker } from "@/utils/utils";
+import { PageMeta } from "@/components/PageMeta";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 const OG_BASE  = "https://og.nexustradinglabs.com";
@@ -141,6 +142,8 @@ export default function ThesisPage() {
   const [thesis, setThesis] = useState<FeedThesis | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // lab-api said 404 (not a network error): tell crawlers the page isn't there.
+  const [gone, setGone] = useState(false);
 
   // Ph25: price verification
   const [verifying, setVerifying] = useState(false);
@@ -158,10 +161,11 @@ export default function ThesisPage() {
     if (!wallet || !id) return;
     setLoading(true);
     setNotFound(false);
+    setGone(false);
     setVerifyResult(null);
     fetch(`${API_BASE}/thesis/${wallet}/${id}`)
       .then((r) => {
-        if (r.status === 404) { setNotFound(true); return null; }
+        if (r.status === 404) { setNotFound(true); setGone(true); return null; }
         return r.json();
       })
       .then((data) => {
@@ -257,6 +261,7 @@ export default function ThesisPage() {
   if (notFound || !thesis) {
     return (
       <div style={{ background: "#0a0a0b", minHeight: "100svh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+        {gone && <PageMeta title="Call not found" noindex />}
         <div aria-hidden style={{ fontSize: 24, color: "#52525b" }}>◆</div>
         <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: "#a1a1aa" }}>This call isn’t public, or doesn’t exist.</div>
         <button onClick={() => navigate("/feed")} className="nx-text-action" style={TEXT_ACTION}>← Back to the feed</button>

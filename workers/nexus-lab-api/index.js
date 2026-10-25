@@ -1084,7 +1084,7 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
 
     // ── Ph22: /thesis/:wallet/:id → single thesis data ─────
     if (parts[0] === "thesis" && parts[1] && parts[2]) {
-      if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
+      if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "method not allowed" }, request, 405);
       const wallet = normalizeAddress(parts[1]);
       const thesisId = parts[2];
       const [raw, profileRaw] = await Promise.all([
@@ -1095,6 +1095,9 @@ Loading the board… <a style="color:#ededf0" href="${appUrl}">open the Lab →<
       const data = JSON.parse(raw);
       const thesis = (data.theses || []).find((t) => t && t.id === thesisId && isPublicCall(t));
       if (!thesis) return json({ error: "not found" }, request, 404);
+      // HEAD = "is this call public?" (the site's permalink Function asks, to 404 missing calls).
+      // Answer before the live grade: no candle read for an existence check.
+      if (request.method === "HEAD") return new Response(null, { status: 200, headers: { "Cache-Control": "public, max-age=60" } });
       const profile = profileRaw ? JSON.parse(profileRaw) : {};
       // Grade LIVE on read (one symbol) unless the current grader already stamped it — the
       // permalink + its OG card should never lag the market by up to an hour, and a stamp from an
