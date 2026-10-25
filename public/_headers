@@ -18,3 +18,46 @@
 /assets/*
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
+
+# Search (Search Console Soft 404, 2026-10-19): these routes are the trading app itself (the
+# Orderly SDK pages, account pages, DMs, ops). Their HTML is the empty app shell until JS and a
+# wallet fill it, so they stay out of the index. Crawlable on purpose (no robots.txt Disallow),
+# so Google can read this header. Indexed: /, /lab, /feed (+ calls and traders), /proof,
+# /analyze, /token, /intel, /arena. Call permalinks that don't exist answer a real 404 from
+# functions/feed/thesis/[wallet]/[id].js (headers here don't apply to Function responses).
+/perp
+  X-Robots-Tag: noindex
+/perp/*
+  X-Robots-Tag: noindex
+/portfolio
+  X-Robots-Tag: noindex
+/portfolio/*
+  X-Robots-Tag: noindex
+/markets
+  X-Robots-Tag: noindex
+/markets/*
+  X-Robots-Tag: noindex
+/leaderboard
+  X-Robots-Tag: noindex
+/leaderboard/*
+  X-Robots-Tag: noindex
+/rewards
+  X-Robots-Tag: noindex
+/rewards/*
+  X-Robots-Tag: noindex
+/vaults
+  X-Robots-Tag: noindex
+/vaults/*
+  X-Robots-Tag: noindex
+/points
+  X-Robots-Tag: noindex
+/points/*
+  X-Robots-Tag: noindex
+/swap
+  X-Robots-Tag: noindex
+/messages
+  X-Robots-Tag: noindex
+/messages/*
+  X-Robots-Tag: noindex
+/ops/*
+  X-Robots-Tag: noindex

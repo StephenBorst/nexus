@@ -122,6 +122,27 @@ jobs:
       # the workers persist across code deploys (wrangler deploy doesn't touch
       # them), so this only pushes code. exec has npm deps (@noble/*, bs58) →
       # npm ci; brain has none → deploy directly.
+      # Search signals (Search Console Soft 404, 2026-10-19), read LIVE after lab-api deploys (the Function asks its HEAD /thesis): a missing call permalink must
+      # answer 404 + noindex (functions/feed/thesis), a real one 200, and an app route like /perp
+      # must carry X-Robots-Tag: noindex (public/_headers). Warns, never fails.
+      - name: Check live search signals
+        continue-on-error: true
+        run: |
+          site=https://trade.nexustradinglabs.com
+          w=0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4
+          real=$(curl -s -o /dev/null -w '%{http_code}' "$site/feed/thesis/$w/reg-bd180a17119ae795")
+          gone=$(curl -s -D /tmp/gone.h -o /dev/null -w '%{http_code}' "$site/feed/thesis/$w/no-such-call-check")
+          echo "real call   → $real"
+          echo "missing call → $gone $(grep -i '^x-robots-tag' /tmp/gone.h | tr -d '\r')"
+          perp=$(curl -s -D - -o /dev/null "$site/perp/PERP_BTC_USDC" | grep -i '^x-robots-tag' | tr -d '\r')
+          feed=$(curl -s -D - -o /dev/null "$site/feed" | grep -i '^x-robots-tag' | tr -d '\r')
+          echo "/perp/…     → ${perp:-no X-Robots-Tag}"
+          echo "/feed       → ${feed:-no X-Robots-Tag}"
+          [ "$real" = 200 ] || echo "::warning::a published call's permalink answered $real"
+          [ "$gone" = 404 ] || echo "::warning::a missing call answered $gone, not 404 (Function not deployed, or lab-api unreachable from Pages: it fails open)"
+          echo "$perp" | grep -qi noindex || echo "::warning::/perp has no X-Robots-Tag: noindex"
+          [ -z "$feed" ] || echo "::warning::/feed carries an X-Robots-Tag it shouldn't: $feed"
+
       - name: Deploy Worker (nexus-agent-exec)
         working-directory: workers/nexus-agent-exec
         run: npm ci && npx wrangler@3 deploy
