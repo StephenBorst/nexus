@@ -1622,8 +1622,14 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   points, swap, messages, ops); content routes stay indexable (test pins both lists). Crawlable on purpose: no robots
   Disallow, or Google couldn't read the header. (3) The ErrorBoundary self-heal reload's `?_v=` URL gets a noindex meta +
   the param dropped (inline script in index.html). `public/robots.txt` exists now (was the SPA fallback). deploy.yml
-  "Check live search signals" (after lab-api deploys) prints the live 404/200/noindex answers. Still a 200: unknown
-  paths caught by the SPA `*` route (client-side noindex only).
+  "Check live search signals" (after lab-api deploys) prints the live 404/200/noindex answers. (4) **Unknown paths
+  404 too (2026-10-25):** the build writes `404.html` = a copy of index.html (`notFoundPage()` in vite.config.ts), which
+  Pages serves WITH a 404 for anything unmatched — that also turns off Pages' SPA fallback, so every router path is
+  200-rewritten in `public/_redirects` (+ a trailing-slash twin). ⚠️ The target must be `/`, never `/index.html`
+  (Pages 308s that to `/`, sending every route home — caught in `wrangler pages dev`). A NEW ROUTE in app/main.tsx needs
+  its two lines in `_redirects`; `app/lib/appRoutes.test.mjs` fails CI otherwise (a missed one still renders for people,
+  404.html being the app, but answers 404). Missing files (`/x.js`) 404 now too. Verify locally:
+  `npx wrangler@3 pages dev <dir>` (NODE_USE_ENV_PROXY=1) with index/404/_redirects/_headers + the functions dir.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
