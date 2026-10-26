@@ -24,7 +24,7 @@ import { SharePoster, type PosterData } from "./SharePoster";
 import { AGENT_API, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentStanding, type SavedStrategy, type CommunityStrategy } from "./agentTypes";
 import type { BacktestResult, SweepResult, ValidationResult } from "./backtestTypes";
 import { errText } from "./helpers";
-import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter } from "./AgentPanels";
+import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter, PaperCostLine } from "./AgentPanels";
 import { gradedExitRefusal } from "@/lib/gradedExit.mjs";
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
@@ -974,6 +974,7 @@ export function AgentView() {
               <AgentTrackRecord title="PAPER TRACK RECORD" accent="#d4d4d8" trades={agentState?.paper_trades ?? []} paper onReset={resetPaperRecord}
                 resetAt={(agentState as unknown as { paper_reset_at?: number } | null)?.paper_reset_at ?? null}
                 summary={paperSummary((agentState as unknown as { paper_agg?: unknown } | null)?.paper_agg ?? null)} />
+              <PaperCostLine address={walletAddress} refreshKey={`${agentState?.paper_trades?.length ?? 0}:${agentState?.paper_trades?.[0]?.closed_at ?? ""}`} />
               <PaperBlotter trades={agentState?.paper_trades ?? []} currentNotional={(config.capitalPerTrade || 0) * (config.leverage || 1)} maxHoldHours={config.maxHoldHours ?? null} />
             </>
           )}
