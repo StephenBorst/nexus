@@ -80,6 +80,7 @@ import { handleThesisRegistration } from "./routes-thesisreg.mjs";
 import { handleCallStatus } from "./routes-callstatus.mjs";
 import { handleVerify, isPublicCall } from "./routes-verify.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
+import { handleCallMeta } from "./routes-callmeta.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg, buildArenaAgentSvg } from "./ogCards.mjs";
 import { loadIdentity, identityCardVersion } from "./identity.mjs";
@@ -949,6 +950,12 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         createdAt: o.created_time, updatedAt: o.updated_time,
       }));
       return json({ positions, orders, wallet: asNorm }, request);
+    }
+
+    // ── /thesis/:wallet/:id/meta → the call page's head tags (routes-callmeta.mjs) ─
+    {
+      const callMetaRes = await handleCallMeta(parts, request, env);
+      if (callMetaRes) return callMetaRes;
     }
 
     // ── Ph22: /og/thesis/:wallet/:id(.png)? → thesis OG image ─

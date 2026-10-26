@@ -1630,6 +1630,12 @@ baked into the code comments. Keep it that way (Howey). The real lawyer-gate is 
   its two lines in `_redirects`; `app/lib/appRoutes.test.mjs` fails CI otherwise (a missed one still renders for people,
   404.html being the app, but answers 404). Missing files (`/x.js`) 404 now too. Verify locally:
   `npx wrangler@3 pages dev <dir>` (NODE_USE_ENV_PROXY=1) with index/404/_redirects/_headers + the functions dir.
+  (5) **Each call page carries its own title/description/grade in the HTML (2026-10-26).** The Function asks lab-api
+  `GET /thesis/:w/:id/meta` (`routes-callmeta.mjs`: public calls only, built from the STORED call, grade only from a
+  current stamp, no candle reads) and writes `callPageMeta` (`app/lib/callPageMeta.mjs`, tested) into the head
+  (title, description, canonical, og/twitter, article:published_time) + a `<noscript>` summary via `injectCallMeta`.
+  Not-yet-graded calls say where they stand (awaiting fill / open / fill not checked / not graded + why), never a
+  stale grade. A reply without `meta` or any failure serves the plain page. deploy.yml checks the live title.
 - Page titles: `app/components/PageMeta.tsx` mounted per custom route in main.tsx (Lab/Analyze/Arena/Proof/Feed/
   Intel/Messages); catch-all `path:'*'` → `app/pages/notfound` (branded 404, noindex, inside the app shell).
 
