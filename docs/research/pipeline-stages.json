@@ -1,0 +1,15 @@
+{
+  "note": "Last recorded stage of each registered read (served pipeline.reads[].stage) and the Basis x CVD graded-exit status (graded-exit-prereg.md bar). Written only by tools/pipeline/watch.mjs --write, inside a pipeline-watch PR. Seeded 2026-10-26: reads as served that day; the graded exit as pipeline-if-then.md recorded it on 2026-10-23 (Not yet), so any change since the signed page is reported.",
+  "recordedAt": "2026-10-26T00:14:49.570Z",
+  "asOf": "2026-10-26T00:14:49.570Z",
+  "reads": {
+    "rsi_reset_deep": { "stage": "REGISTERED", "next": "20 more out-of-sample events", "events": 10 },
+    "level_reclaim": { "stage": "REGISTERED", "next": "4 more out-of-sample events", "events": 26 },
+    "oi_div_reversal": { "stage": "REGISTERED", "next": "18 more out-of-sample events", "events": 12 },
+    "session_momentum": { "stage": "REGISTERED", "next": "mean R > 0 with both halves agreeing", "events": 40 },
+    "confluence_follow": { "stage": "REGISTERED", "next": "7 more out-of-sample events", "events": 23 }
+  },
+  "gradedExit": {
+    "basis_x_cvd": { "status": "NOT_YET", "reason": "30 more out-of-sample trades (as recorded 2026-10-23)", "trades": 0, "netBps": null }
+  }
+}

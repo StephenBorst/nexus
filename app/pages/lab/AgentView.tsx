@@ -28,6 +28,7 @@ import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter } from "./
 import { gradedExitRefusal } from "@/lib/gradedExit.mjs";
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
+import { StrategyShelf } from "./StrategyShelf";
 import { TelegramLinkPanel } from "./TelegramLink";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
 import { bareTicker } from "@/utils/utils";
@@ -886,6 +887,15 @@ export function AgentView() {
               </span>
             ))}
           </div>
+          {/* Strategy shelf: every strategy on its way to the agent, by its served stage. Load only
+              at Paper (app/lib/strategyShelf.mjs). Loads exactly like a Quick-start preset. */}
+          <StrategyShelf onLoad={(id) => {
+            const p = STRATEGY_PRESETS.find((x) => x.id === id);
+            if (!p) return;
+            setConfig((prev) => ({ ...prev, ...EXPERIMENTAL_FILTERS_OFF, ...p.config }));
+            setSuccess(`Loaded "${p.name}" exactly. Filters reset to the preset's. Review and Save below.`);
+            setTimeout(() => setSuccess(null), 5000);
+          }} />
           {/* Quick-start (style + presets) is the ONBOARDING on-ramp — collapsed once the
               user has configured (has symbols), so the config opens on the essentials, not
               the onboarding. Open by default for a fresh, unconfigured agent. */}
