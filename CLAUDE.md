@@ -295,7 +295,10 @@ product is what sits on top:
   re-signing. **Revoked wallets** = worker var `REVOKED_TRADING_WALLETS` (addresses, never the signature):
   `revokedTrading.mjs` refuses their signature in front of every route (403 `trading_signature_revoked`), and the
   Bankr register/deposit flows by `walletAddress`; withdrawals and `/balance` + `/positions` stay open. It doesn't stop
-  the derived key at Orderly directly: empty the account. Listed: `0xd9f7…b449` (until a new signing message is live).
+  the derived key at Orderly directly: withdraw, then `POST /proxy/bankr-remove-key {walletAddress, bankrApiKey}`
+  (`routes-removekey.mjs`: Bankr signs as the owner, refuses `withdraw_first` while funds or positions remain, removes
+  the key at Orderly signed by itself, confirms with the public key lookup; never returns the signature).
+  Listed: `0xd9f7…b449` (until a new signing message is live).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must

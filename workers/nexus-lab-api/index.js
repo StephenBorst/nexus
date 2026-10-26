@@ -99,6 +99,7 @@ import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BAC
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
 import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
 import { revokedWallets, revokedTradingRefusal } from "./revokedTrading.mjs";
+import { handleRemoveKey } from "./routes-removekey.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
 import { aesGcmEncrypt, scrubStoredSeeds } from "./seedVault.mjs";
@@ -772,6 +773,11 @@ export default {
       // Telegram link + bot webhook (routes-telegram.mjs): links need a one-time code from the app.
       const tgRes = await handleTelegram(parts, request, env);
       if (tgRes) return tgRes;
+    }
+    {
+      // POST /proxy/bankr-remove-key: remove a leaked trading key at Orderly (routes-removekey.mjs).
+      const rmRes = await handleRemoveKey(parts, request, env);
+      if (rmRes) return rmRes;
     }
 
     // ── /og/trader/:wallet(.png)? → the graded record card ─────────────────────
