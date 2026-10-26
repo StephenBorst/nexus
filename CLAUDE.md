@@ -575,6 +575,11 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   oct15-results.md). Paper control for it = the nine-market 24h arm `0x325D…95DE` (same markets + entries, preset exit);
   the 12h preset exit is still graded on the scoreboard's `exit` line. Tests: `gradedExit.test.mjs`,
   `axisbt.graded.test.mjs` (incl. exec↔grader level parity on the same candles).
+  **❌ RETIRED 2026-10-26 (borst): FAILS on the read.** basis_x_cvd graded PROMISING (below PREDICTIVE); the prereg's
+  "falls below PREDICTIVE" = Fails at any point. Line at the time: oos 4 trades, +44.9 bps. Recorded under Results in
+  graded-exit-prereg.md + `pipeline-stages.json`; `RETIRED_GRADED_EXITS` (proofCopy.mjs) labels it Retired on /proof and
+  the shelf, final even if the read comes back. Wallet `0x9A30…cB28` keeps running as a record. Engine, the scoreboard
+  line and the Lab's GRADED EXIT toggle unchanged. "Judged only at 30 trades" = a new dated page, never an edit.
   **Net of funding (borst, 2026-10-26; informational, the bar is unchanged).** The graded exit nets taker fees only, and
   its trades can stay open 168h. `exitGraded.funding` (cache `axisbt:v14`) = the same trades ALSO net of the funding
   each paid while open: `heldFundingBps` (`app/lib/funding.mjs`) spreads oi:hist's per-8h rate over the hours held

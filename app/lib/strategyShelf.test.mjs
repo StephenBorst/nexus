@@ -45,19 +45,20 @@ test("a failing read says so, with its retirement count date; retired sorts last
   assert.equal(f.stageWord, "Failing");
   assert.match(f.need, /Retired at 100 events unless it recovers/);
   assert.match(f.eta, /^100 events ~/);
-  assert.equal(rows.at(-1).id, "r");
-  assert.match(rows.at(-1).reason, /never loads/);
+  const reads = rows.filter((x) => x.kind === "read");
+  assert.equal(reads.at(-1).id, "r");
+  assert.match(reads.at(-1).reason, /never loads/);
+  assert.equal(rows.at(-1).stage, "RETIRED", "retired rows (the read + the retired graded exit) sort last");
 });
 
-test("graded-exit row follows the prereg bar and never loads", () => {
-  const ok = shelfRows(sc([]), NOW).find((r) => r.kind === "exit");
-  assert.equal(ok.stageWord, "Testing the exit");
-  assert.equal(ok.canLoad, false);
-  assert.match(ok.eta, /at today's pace/);
-  const failed = shelfRows(sc([], [ex({ verdict: "PROMISING" })]), NOW).find((r) => r.kind === "exit");
-  assert.equal(failed.stageWord, "Failed its bar");
-  assert.equal(failed.need, "");
-  assert.match(failed.note, /^Fails its bar: the read is PROMISING, below PREDICTIVE\.$/);
+test("the retired graded exit stays Retired even if the read grades PREDICTIVE again", () => {
+  for (const verdict of ["PREDICTIVE", "PROMISING"]) {
+    const row = shelfRows(sc([], [ex({ verdict })]), NOW).find((r) => r.kind === "exit");
+    assert.equal(row.stage, "RETIRED");
+    assert.equal(row.stageWord, "Retired");
+    assert.equal(row.canLoad, false);
+    assert.match(row.note, /^Retired Oct 26, 2026: the read fell to PROMISING, below PREDICTIVE\./);
+  }
 });
 
 test("unreadable scorecard → empty shelf, never invented rows", () => {

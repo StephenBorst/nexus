@@ -13,7 +13,7 @@ import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { C } from "@/config/theme";
 import { AXIS_BLURB, splitLabel, takeaway, sideBar, stageGroups, randomBar } from "@/lib/signalCard.mjs";
-import { pipelineLine, countingSince } from "@/lib/proofCopy.mjs";
+import { pipelineLine, countingSince, retiredGradedExit, retiredLine } from "@/lib/proofCopy.mjs";
 import Fold from "./Fold";
 
 const API = "https://og.nexustradinglabs.com";
@@ -167,12 +167,12 @@ function RegisteredLine({ o }: { o: OosGrade }) {
 
 // The scoreboard's own exit (the R contract) graded the way the agent trades it: fees in, a trade
 // still open at 168h closed at the market. A paper wallet trades it; the line is its yardstick.
-function GradedExitLine({ g }: { g: ExitGrade }) {
+function GradedExitLine({ g, retired }: { g: ExitGrade; retired?: string }) {
   const graded = g.verdict !== "INSUFFICIENT";
   return (
     <div title="Stop = 1.2× the coin’s 4-hour ATR at entry, target = 1.5× the stop, held up to 168h. One position per market, net of a taker fee each side, a trade still open at 168h closed at the market. Paper only. Informational: it doesn’t change the read’s grade."
       style={{ marginTop: 12, fontFamily: MONO, fontSize: 10.5, color: FOG, lineHeight: 1.6, cursor: "help" }}>
-      <span style={{ ...label, color: BRIGHT }}>Graded exit, as traded</span>
+      <span style={{ ...label, color: BRIGHT }}>Graded exit, as traded{retired ? " · retired" : ""}</span>
       <span style={{ fontSize: 9.5, color: FAINT }}> · stop {g.atrMult ?? 1.2}× 4h ATR{g.avgSlPercent ? ` (avg ${g.avgSlPercent}%)` : ""} · target {g.rMultiple ?? 1.5}× · {g.maxHoldHours}h · paper only</span>
       <div style={{ marginTop: 4 }}>
         {graded
@@ -180,6 +180,7 @@ function GradedExitLine({ g }: { g: ExitGrade }) {
           : <span style={{ color: FAINT }}>Accruing · n{g.samples}</span>}
         {g.oos && <span style={{ color: FAINT }}> · since {g.oos.since.slice(5, 10)}: {g.oos.samples ? <>n{g.oos.samples} <span style={{ color: moneyTone(g.oos.netBps) }}>{sign(g.oos.netBps)}</span></> : "none graded yet"}</span>}
       </div>
+      {retired && <div style={{ marginTop: 3, color: FOG }}>{retired}</div>}
       {g.funding && <FundingNet f={g.funding} since={g.oos?.since} />}
       {/* The paper wallet closes trades days before this line counts them: a trade is graded only once
           its whole hold window (168h) has passed, so a quick win and a slow loser are judged alike. */}
@@ -241,7 +242,7 @@ function ExitBand({ a, preset, paused, isMobile }: { a: AxisRow; preset?: Return
         )}
         {/* Outside the exit block: a registered read with no preset exit still says its grade is in-sample. */}
         {a.oos && <RegisteredLine o={a.oos} />}
-        {a.exitGraded && <GradedExitLine g={a.exitGraded} />}
+        {a.exitGraded && <GradedExitLine g={a.exitGraded} retired={retiredLine(retiredGradedExit(a.name)) || undefined} />}
         {!preset && (paused || research) && (
           <div style={{ fontFamily: MONO, fontSize: 10, color: FAINT, marginTop: 12 }}>{paused || "Research read · not an agent mode yet"}</div>
         )}

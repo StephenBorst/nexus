@@ -78,3 +78,16 @@ Expect it to take a while. The line accrues per market (about nine positions at 
   paper wallets keep running unchanged" above now reads two: the 24h arm and the nine-market arm.
 - The $10 daily stop is the preset's. With $250 notional, a graded stop past 4% loses the whole day's allowance on one
   trade, so some graded events will be missed on the daily cap; parity names those as explained (likely), not drift.
+
+### Result · 2026-10-26 · FAILS (retired)
+
+- `GET /intel/axis-backtest` at 2026-10-26T01:23:48Z: basis_x_cvd grades **PROMISING** (R +0.04 over 90 events, 40%
+  hit, not stable), below PREDICTIVE. The bar above: "the read itself falls below PREDICTIVE" = Fails, at any point.
+- The line at that moment: out of sample 4 trades, 50% win, +44.9 bps net (since 2026-10-16). LONG vs random 93.5%.
+  Not enough trades to say anything about the exit itself; it fails on the read.
+- borst, 2026-10-26: retired under the bar as written. **The graded-exit variant is retired.** Its paper wallet
+  `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` keeps running and stays as a record; its numbers decide nothing.
+- Final, whatever the read grades later. The scoreboard keeps grading the line (no engine change); /proof and the
+  Agent tab's strategy shelf label it Retired (`RETIRED_GRADED_EXITS`, app/lib/proofCopy.mjs). Recorded in
+  `docs/research/pipeline-stages.json`.
+- A version judged only at 30 trades would be a new dated registration, never an edit to this page.
