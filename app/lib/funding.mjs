@@ -67,3 +67,54 @@ export function fundingFlow(direction, rate) {
   const side = direction === "LONG" || direction === "SHORT" ? direction : null;
   return { payer, youPay: side ? side === payer : null };
 }
+
+// ── Funding paid over a held position (the graded exit's "net of funding" line) ─────────────
+// The graded exit nets taker fees only, and its trades can stay open up to 168h. On a perp the
+// holder also pays (or collects) funding. These turn the hourly rates the brain already records
+// (oi:hist `funding` = Orderly's per-8h rate) into the funding a trade paid while it was open.
+// An ESTIMATE: Orderly settles every 8h, and this spreads each 8h rate over its hours (rate ÷ 8
+// per hour held) rather than counting settlement times. Informational: no grade reads it.
+
+/** Hours a per-8h rate may be carried forward to cover hours with no recorded row. */
+export const FUNDING_CARRY_H = 8;
+
+/**
+ * hour bucket (ms / 3,600,000, rounded, as basisStack.hourBucket) → per-8h rate. The LAST
+ * readable row in an hour wins, matching how the grader reads same-hour rows.
+ * @param {Array<{t:number, funding?:number}>} oiHist
+ * @returns {Map<number, number>}
+ */
+export function fundingByHour(oiHist) {
+  const m = new Map();
+  for (const p of oiHist || []) {
+    const r = finiteOrNull(p && p.funding);
+    if (r == null || !Number.isFinite(Number(p.t))) continue;
+    m.set(Math.round(Number(p.t) / 3600000), r);
+  }
+  return m;
+}
+
+/**
+ * Funding a position paid while held, in bps of notional. POSITIVE = the trade PAID, negative =
+ * it collected (a positive rate charges longs and pays shorts). Covers hours h0 .. h0+holdH−1;
+ * an hour with no row uses the latest rate from the previous FUNDING_CARRY_H hours, else it is
+ * uncovered. Returns null unless every held hour is covered (a partial sum would read as cheap).
+ * @param {Map<number, number>} fmap from fundingByHour
+ * @param {number} h0 entry hour bucket
+ * @param {number} holdH hours held
+ * @param {"LONG"|"SHORT"} side
+ * @returns {number|null}
+ */
+export function heldFundingBps(fmap, h0, holdH, side) {
+  if (!fmap || !fmap.size || !(holdH > 0) || (side !== "LONG" && side !== "SHORT")) return null;
+  const dir = side === "LONG" ? 1 : -1;
+  const perPeriodHours = 24 / (FUNDING_PERIODS_PER_YEAR / 365); // 8
+  let sum = 0, last = null, lastAt = -Infinity;
+  for (let k = 1; k <= FUNDING_CARRY_H; k++) if (fmap.has(h0 - k)) { last = fmap.get(h0 - k); lastAt = h0 - k; break; }
+  for (let h = h0; h < h0 + holdH; h++) {
+    if (fmap.has(h)) { last = fmap.get(h); lastAt = h; }
+    if (last == null || h - lastAt > FUNDING_CARRY_H) return null;
+    sum += dir * (last / perPeriodHours);
+  }
+  return sum * 10_000;
+}
