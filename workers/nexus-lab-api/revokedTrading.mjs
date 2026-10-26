@@ -16,7 +16,8 @@
 // controls.
 //
 // This closes Nexus's own routes only. The derived key still works directly against Orderly until
-// it is removed there or the account holds nothing, so emptying the account is the real containment.
+// it is removed there (POST /proxy/bankr-remove-key, routes-removekey.mjs, passes this gate: it takes
+// no walletSig and can only kill the key) or the account holds nothing.
 // Lift a wallet only once a new signing message is live (`docs/history.md`, 2026-10-26).
 
 export const TRADING_MESSAGE = "nexus-trading-key-v1";

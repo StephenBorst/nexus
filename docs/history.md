@@ -2321,4 +2321,9 @@ network effects from the social layer. Positioning: "The trading terminal that m
 - Lifting the wallet waits for a new signing message. The flag-gated `AUTH_V2` challenge (logic.mjs) adds a per-request
   signature on top of the static one but still derives the Orderly key from the static message, so it doesn't replace it.
 - BankrBot/skills#794 stays in draft until Bankr confirms a design that keeps private data out of shared app storage.
+- Orderly key removal verified 2026-10-26 from Orderly's own Python connector (`orderly-evm-connector` 0.2.9,
+  `rest/_account.py`): `POST /v1/client/remove_orderly_key {orderly_key}`, signed with the normal Orderly key headers (any
+  active key on the account); public `GET /v1/get_orderly_key?account_id=&orderly_key=`. The docs site is blocked from
+  cloud sessions. Not confirmed: whether a key may remove itself (the route passes Orderly's refusal through if not).
+  Built as `POST /proxy/bankr-remove-key`; run once after the withdrawal.
 
