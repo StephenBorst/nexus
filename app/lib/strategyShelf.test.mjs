@@ -75,3 +75,33 @@ test("the copy never calls a shelf row an edge or proven before it is", () => {
   const src = readFileSync(new URL("./strategyShelf.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(src.replace(/^\s*\/\/.*$/gm, ""), /\b(proven|validated|guaranteed)\b/i);
 });
+
+import { regimeFromMs as rwFrom, regimeLimitMs as rwLimit } from "./regimeWindow.mjs";
+
+const rwSc = ({ trades = 6, net = 10, counts = { UP: 4, DOWN: 1, FLAT: 2 } } = {}) => ({
+  pipeline: { reads: [], rules: { killEvents: 100 } },
+  axes: [{ name: "basis_x_cvd", verdict: "PROMISING", regimeWindow: { exitGraded: { samples: trades, netBps: net }, r: { samples: 40, meanR: 0.2, stable: true }, random: { bySide: { LONG: { pctBeaten: 96 } } } } }],
+  holdout: { axes: [{ name: "basis_x_cvd", regimeWindow: { r: { samples: 30, meanR: 0.1 }, random: { bySide: { LONG: { pctBeaten: 85 } } } } }] },
+  regimeWindow: { regime: { counts, missing: 0 } },
+});
+const rwRow = (sc, now) => shelfRows(sc, now).find((r) => r.kind === "test");
+
+test("regime window row: counts from its date, then trades + regime days, never loads", () => {
+  const pre = rwRow(rwSc({ trades: 0 }), rwFrom() - 3600e3);
+  assert.equal(pre.stageWord, "Testing");
+  assert.equal(pre.note, "Counts from Oct 27.");
+  assert.equal(pre.canLoad, false);
+  const mid = rwRow(rwSc(), rwFrom() + 12 * 86_400_000);
+  assert.match(mid.need, /^24 more counted trades and the regime condition/);
+  assert.match(mid.note, /UP 4 · DOWN 1 · FLAT 2 days/);
+  assert.match(mid.eta, /^30 trades ~/);
+});
+
+test("regime window row: a judgment on today's numbers is shown, final only once recorded; an unread board says so", () => {
+  const judged = rwRow(rwSc({ trades: 31, net: -2 }), rwLimit());
+  assert.equal(judged.stageWord, "Failed its bar");
+  assert.match(judged.note, /Final once recorded/);
+  const unread = rwRow({ ...rwSc(), regimeWindow: { regime: { error: "x" } } }, rwFrom() + 86_400_000);
+  assert.match(unread.note, /couldn't be read/);
+  assert.equal(unread.canLoad, false);
+});
