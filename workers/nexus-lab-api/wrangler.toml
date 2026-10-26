@@ -39,6 +39,10 @@ ONCHAIN_ANCHOR_LIVE = "false"
 # plan and what was marked: GET /theses/duplicates. Comment this out to go back to report-only (marks
 # already written stay; they're a server field on each copy).
 CALL_DEDUPE_LIVE = "true"
+# The taker fee the paper record is re-read with (GET /agent/:a/paper-costs, the Lab's AFTER COSTS line), in bps
+# per side. borst's account rate, 2026-10-26: Orderly Builder Gold tier, crypto taker 2.5 bps. Unset = 3, labelled
+# "assumed". Display only: exec and the paper ledger don't read it.
+PAPER_TAKER_FEE_BPS = "2.5"
 # Oct-15 (staged, OFF): serve GET /signals/basis, the graded basis-stack read for the paid feed.
 # Flip only if the re-validation holds: uncomment, commit, merge (CI deploys the worker).
 # BASIS_SIGNALS_LIVE = "true"

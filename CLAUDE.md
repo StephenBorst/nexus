@@ -149,7 +149,7 @@ product is what sits on top:
   accrued once at close (`app/lib/paperStats.mjs`, shared by exec and the Lab). LIVE (Supabase) and PAPER never mix.
   `paper/reset` clears both and stamps `paper_reset_at`. **Paper P&L (`computePnl`) has NO fees and NO funding;**
   `GET /agent/:a/paper-costs` re-reads the retained rows with a taker fee on both legs + recorded funding
-  (`app/lib/paperCosts.mjs`; fee = worker var `PAPER_TAKER_FEE_BPS`, else 3 bps/side labelled "assumed"; a row with no
+  (`app/lib/paperCosts.mjs`; fee = worker var `PAPER_TAKER_FEE_BPS` = 2.5, the account's rate (Gold tier); unset = 3 bps/side labelled "assumed"; a row with no
   recorded rate is counted missing, never free), shown as AFTER COSTS (`PaperCostLine`). Display only.
 - **Parity** (`GET /agent/:a/parity`, `app/lib/paperParity.mjs`): pairs paper entries with the graded events, explains
   misses (busy incl. the OPEN position, daily caps on the wallet's own day via `lastReset`, another market won).
