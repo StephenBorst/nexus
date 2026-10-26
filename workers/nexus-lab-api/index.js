@@ -56,7 +56,7 @@ import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, AXES, priceByHou
 import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, addSimCredits, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
-import { lockFor, LockBusy, LockError } from "./lock.mjs";
+import { lockFor, LockBusy, LockError, LOCK_KEYS } from "./lock.mjs";
 export { NexusLock } from "./lock.mjs";
 // Leases on the paid paths: held for milliseconds (a KV read + write), so a short wait covers a race.
 const PAY_LOCK = { ttlMs: 30_000, waitMs: 3_000 };
@@ -1377,9 +1377,16 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         if (!upstreamCfg) return json({ error: "hosted inference not configured", hint: "set ANTHROPIC_API_KEY (or AI_GATEWAY=bankr + BANKR_LLM_KEY) on nexus-lab-api" }, request, 503);
 
         const usageKey = `ai:usage:${addr}:${hostedModel}:${new Date().toISOString().slice(0, 10)}`;
-        const used = parseInt((await env.LAB_STORE.get(usageKey)) || "0", 10);
-        if (used >= CAP) return json({ error: "daily_limit", model: hostedModel, cap: CAP, hint: `Hosted ${hostedModel} cap is ${CAP}/day (resets 00:00 UTC). Switch to a lighter model in ⚙ for a higher cap, or use your own API key.` }, request, 429);
-        await env.LAB_STORE.put(usageKey, String(used + 1), { expirationTtl: 60 * 60 * 48 });
+        // Read + count under the counter's lease, so two calls at once can't both take the last slot.
+        let slot;
+        try {
+          slot = await takeCapSlot(env.LAB_STORE, usageKey, CAP, 60 * 60 * 48, lockFor(env, { ttlMs: 10_000, waitMs: 3_000 }), LOCK_KEYS.aiUsage(usageKey));
+        } catch (e) {
+          if (e instanceof LockBusy) return json({ error: "busy", hint: "Another NEXUS AI call from this wallet is starting. Try again in a moment." }, request, 409);
+          if (e instanceof LockError) return json({ error: "couldn't check the daily cap — nothing was sent. Try again in a minute." }, request, 503);
+          throw e;
+        }
+        if (!slot.ok) return json({ error: "daily_limit", model: hostedModel, cap: CAP, hint: `Hosted ${hostedModel} cap is ${CAP}/day (resets 00:00 UTC). Switch to a lighter model in ⚙ for a higher cap, or use your own API key.` }, request, 429);
 
         // Forward the resolved (whitelisted) model with a server-set token ceiling; thinking tiers
         // also get effort "low" and lose fields they'd 400 on (shapeHostedBody, logic.mjs).

@@ -43,7 +43,8 @@ is everything built on top:
   → default Sonnet tier) + return its cap; usage counter is keyed PER MODEL (`ai:usage:{addr}:{model}:{date}`).
   Tiers mirrored client-side in `config/assistant.ts` (`HOSTED_TIERS`). Env-tunable caps `HOSTED_CAP_HAIKU/
   SONNET/OPUS` + default tier `HOSTED_AI_DEFAULT_MODEL` (legacy `HOSTED_AI_MODEL` honored as default source);
-  needs `ANTHROPIC_API_KEY` secret (set). Free users keep BYOK.
+  needs `ANTHROPIC_API_KEY` secret (set). Free users keep BYOK. The counter is read + bumped under a NexusLock lease
+  (`LOCK_KEYS.aiUsage`, 2026-10-26; two calls at once used to both pass the last slot): busy → 409, lock down → 503 (nothing sent).
   **+ Three newer tiers (2026-09-30, borst: half caps to start):** Sonnet 5.5 **30** · Opus 5.5 **12** · Fable 5.1 **5**
   (gateway ids `claude-sonnet-5.5` / `claude-opus-5.5` / `claude-fable-5.1`, confirmed on Bankr's /v1/models;
   env `HOSTED_CAP_SONNET55/OPUS55/FABLE`, `BANKR_MODEL_SONNET55/OPUS55/FABLE`). Price-matched caps would be 60/25/10;
