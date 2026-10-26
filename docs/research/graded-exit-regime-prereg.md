@@ -1,7 +1,7 @@
 # Basis × CVD graded exit — regime window · pre-registered before its numbers
 
-Written 2026-10-26. **Not signed yet.** Events count from the next 00:00 UTC after borst signs (the sign-off block at
-the end records both). Until it is signed, nothing on this page counts and no number is read under it.
+Written 2026-10-26. **Signed by borst 2026-10-26** (sign-off block at the end). Events count from
+**2026-10-27T00:00:00Z**, the next 00:00 UTC after the signature.
 
 Everything above "Results" is fixed once signed. A change to any rule below = a new dated page, never an edit here.
 `docs/research/graded-exit-prereg.md` (the retired test) is not edited by this page.
@@ -121,10 +121,11 @@ live-money review, signed by borst in person.
 
 (Appended at signing. Never edited after.)
 
-- Signed by: —
-- Signed at (UTC): —
-- `registeredAt` (the next 00:00 UTC after signing): —
-- Six-month limit (`registeredAt` + six calendar months): —
+- Signed by: borst (Stephen), in his own words to the session that wrote this page: "Sign the regime-window page."
+  Also confirmed in the same message: NOT CLEARED stays; funding stays information-only against the existing measure.
+- Signed at (UTC): 2026-10-26T05:07:59Z
+- `registeredAt` (the next 00:00 UTC after signing): **2026-10-27T00:00:00Z**
+- Six-month limit (`registeredAt` + six calendar months): **2027-04-27T00:00:00Z**
 
 ## Results
 
