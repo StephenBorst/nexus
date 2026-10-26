@@ -17,6 +17,7 @@ import { R_CONTRACT } from "../../app/lib/rContract.mjs";
 import { trailingPct, basisExtremeSide, basisDeviationSide } from "../../app/lib/basisFade.mjs";
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { GRADED_EXIT, gradedExitLevels, GRADED_EXIT_OOS_CUTOFF_MS } from "../../app/lib/gradedExit.mjs";
+import { fundingByHour, heldFundingBps } from "../../app/lib/funding.mjs";
 import { REGISTERED_READS, registeredMs } from "../../app/lib/readPipeline.mjs";
 import { EXPLORER_READS } from "./explorerReads.mjs";
 import { openPosition, stepExit, closedPnlPct, DEFAULT_FEE_BPS, BASELINE_RUNS, BASELINE_MIN_TRADES, baselineVerdict, mulberry32, tradesToSeparate } from "./backtest.mjs";
@@ -557,7 +558,7 @@ export function tradeableExitTrades(all, exit, windowH = Number(exit?.maxHoldHou
       const g = gradeEventExit(cbh, h0, e.side, e.pmap.get(h0), exit);
       if (!g) continue;
       busyThrough = h0 + g.holdH;
-      out.push({ t: e.t, side: e.side, ...g });
+      out.push({ t: e.t, side: e.side, ...g, fundingBps: e.fmap ? heldFundingBps(e.fmap, h0, g.holdH, e.side) : null });
     }
   }
   return out;
@@ -565,9 +566,10 @@ export function tradeableExitTrades(all, exit, windowH = Number(exit?.maxHoldHou
 
 // Pool exit-graded trades → the same verdict discipline as the horizons, but on NET bps
 // (round-trip taker fee deducted — the agent pays it; the horizons are gross).
-export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS, windowH = Number(exit?.maxHoldHours) || 0, oosCutoff = EXIT_OOS_CUTOFF_MS) {
+export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS, windowH = Number(exit?.maxHoldHours) || 0, oosCutoff = EXIT_OOS_CUTOFF_MS, { withFunding = false } = {}) {
   const feePct = (feeBps / 100) * 2;
   const net = [], fst = [], snd = [], oos = [], exits = { TP: 0, SL: 0, TIMEOUT: 0 };
+  const fNet = [], fOos = [], fCost = [], fCostOos = []; let fMissing = 0, fMissingOos = 0;
   const bySideNet = { LONG: [], SHORT: [] };
   let holdSum = 0, slSum = 0;
   for (const g of tradeableExitTrades(all, exit, windowH)) {
@@ -575,6 +577,15 @@ export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS,
     const n = (g.pnlPct - feePct) / 100; // fraction, same unit agg() expects
     net.push(n); (g.t <= medT ? fst : snd).push(n);
     if (g.t > oosCutoff) oos.push(n);
+    if (withFunding) {
+      // The same trade, also net of the funding it paid while open (an estimate; see funding.mjs).
+      if (g.fundingBps == null) { fMissing++; if (g.t > oosCutoff) fMissingOos++; }
+      else {
+        const nf = n - g.fundingBps / 10_000;
+        fNet.push(nf); fCost.push(g.fundingBps);
+        if (g.t > oosCutoff) { fOos.push(nf); fCostOos.push(g.fundingBps); }
+      }
+    }
     if (bySideNet[g.side]) bySideNet[g.side].push(n);
     exits[g.reason] = (exits[g.reason] || 0) + 1;
     holdSum += g.holdH;
@@ -590,6 +601,23 @@ export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS,
     ...(exit.exitContract ? { exitContract: exit.exitContract, avgSlPercent: a.samples ? Math.round((slSum / a.samples) * 100) / 100 : 0 } : {}),
     oos: { since: new Date(oosCutoff).toISOString(), samples: o.samples, hitRate: o.hitRate, netBps: o.meanBps },
     bySide: sideSplit(bySideNet),
+    ...(withFunding ? { funding: fundingLine(fNet, fCost, fMissing, fOos, fCostOos, fMissingOos) } : {}),
+  };
+}
+
+// "Net of funding": the graded exit's trades with the funding each paid while open also taken off
+// (positive costBps = paid on average). INFORMATIONAL ONLY: the verdict, netBps and the
+// pre-registered bar (docs/research/graded-exit-prereg.md: net of fees > 0 over 30 trades) are
+// unchanged and never read this. A trade whose held hours aren't all covered by recorded funding
+// is left out and counted in `missing` (never read as free).
+const meanOf = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+function fundingLine(net, cost, missing, oosNet, oosCost, oosMissing) {
+  const a = agg(net), o = agg(oosNet);
+  const r1 = (x) => Math.round(x * 10) / 10;
+  return {
+    estimate: true,
+    samples: a.samples, missing, netBps: a.meanBps, hitRate: a.hitRate, costBps: r1(meanOf(cost)),
+    oos: { samples: o.samples, missing: oosMissing, netBps: o.meanBps, hitRate: o.hitRate, costBps: r1(meanOf(oosCost)) },
   };
 }
 
@@ -630,7 +658,7 @@ export const GRADED_EXIT_CUTOFFS = Object.freeze({
 export const GRADED_EXIT_AXES = Object.freeze(Object.keys(GRADED_EXIT_CUTOFFS));
 export const GRADED_EXIT_SPEC = Object.freeze({ preset: "graded-exit", exitContract: GRADED_EXIT, maxHoldHours: R_CONTRACT.maxHoldH });
 export function scoreGradedExit(all, medT, minSamples, cutoffMs = GRADED_EXIT_OOS_CUTOFF_MS) {
-  const g = scoreExit(all, GRADED_EXIT_SPEC, medT, minSamples, DEFAULT_FEE_BPS, GRADED_EXIT_SPEC.maxHoldHours, cutoffMs);
+  const g = scoreExit(all, GRADED_EXIT_SPEC, medT, minSamples, DEFAULT_FEE_BPS, GRADED_EXIT_SPEC.maxHoldHours, cutoffMs, { withFunding: true });
   return { ...g, presetExit: false, atrMult: R_CONTRACT.atrMult, rMultiple: R_CONTRACT.rMultiple };
 }
 
@@ -777,7 +805,8 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
     if (pmap.size < 2) return;
     const cbh = candlesByHour(cs.candleHist); // for R grading (first-touch needs highs/lows)
     const mkt = mktKey(cs, i); // the SAME key buildRandomPools uses, so a replay redraws on this market
-    for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, mkt, pmap, cbh, rs: typeof e.rs === "number" ? e.rs : null });
+    const fmap = fundingByHour(cs.oiHist); // hourly per-8h funding (graded exit's "net of funding" line only)
+    for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, mkt, pmap, cbh, fmap, rs: typeof e.rs === "number" ? e.rs : null });
   });
   const gxCut = typeof gradedExit === "number" ? gradedExit : GRADED_EXIT_OOS_CUTOFF_MS;
   if (!all.length) return { random: null, sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples), exitGraded: gradedExit ? scoreGradedExit([], 0, minSamples, gxCut) : null };

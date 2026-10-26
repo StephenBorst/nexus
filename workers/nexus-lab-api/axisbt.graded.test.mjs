@@ -114,3 +114,50 @@ test("runScorecard: only the registered axes carry the graded line (basis_x_cvd 
     else assert.equal(a.exitGraded, null, a.name);
   }
 });
+
+// ── "Net of funding" beside the graded exit (informational) ─────────────────────────────────
+import { fundingByHour } from "../../app/lib/funding.mjs";
+const fundedSet = (rate) => ({
+  coin: "BTC",
+  oiHist: Array.from({ length: 600 }, (_, i) => ({ t: BASE - 100 * HR + i * HR, price: 100, oi: 1, funding: rate })),
+  candleHist: [...hist(GRADED_EXIT_LOOKBACK_H), ...after(flat(400))],
+});
+const oneLong = () => [{ t: BASE, side: "LONG" }];
+const oneShort = () => [{ t: BASE, side: "SHORT" }];
+
+test("net of funding: a long held 168h at +0.01%/8h pays 21 bps; the grade itself is untouched", () => {
+  const paid = scoreEvents([fundedSet(0.0001)], oneLong, { horizons: [4], minSamples: 1, gradedExit: true }).exitGraded;
+  const free = scoreEvents([fundedSet(0)], oneLong, { horizons: [4], minSamples: 1, gradedExit: true }).exitGraded;
+  assert.equal(paid.samples, 1);
+  assert.equal(paid.funding.estimate, true);
+  assert.equal(paid.funding.samples, 1);
+  assert.ok(Math.abs(paid.funding.costBps - 21) < 0.2, `cost ${paid.funding.costBps}`);
+  assert.ok(Math.abs(paid.funding.netBps - (paid.netBps - 21)) < 0.2);
+  assert.ok(Math.abs(paid.funding.oos.costBps - 21) < 0.2, "the oos line carries it too");
+  // the verdict, the fee-net number and everything the pipeline reads are identical with or without funding
+  const { funding: _a, ...gradePaid } = paid, { funding: _b, ...gradeFree } = free;
+  assert.deepEqual(gradePaid, gradeFree);
+  assert.equal(free.funding.costBps, 0);
+});
+
+test("net of funding: a short at the same rate collects it", () => {
+  const g = scoreEvents([fundedSet(0.0001)], oneShort, { horizons: [4], minSamples: 1, gradedExit: true }).exitGraded;
+  assert.ok(g.funding.costBps < -20 && g.funding.netBps > g.netBps);
+});
+
+test("net of funding: a trade with no recorded funding is left out and counted, never read as free", () => {
+  const cs = fundedSet(0.0001);
+  cs.oiHist = cs.oiHist.map((p) => ({ ...p, funding: null }));
+  const g = scoreEvents([cs], oneLong, { horizons: [4], minSamples: 1, gradedExit: true }).exitGraded;
+  assert.equal(g.samples, 1);
+  assert.equal(g.funding.samples, 0);
+  assert.equal(g.funding.missing, 1);
+  assert.ok(fundingByHour(cs.oiHist).size === 0);
+});
+
+test("net of funding rides only the graded exit, not the preset 12h / 24h lines", () => {
+  const s = scoreEvents([fundedSet(0.0001)], oneLong, { horizons: [4], minSamples: 1, exit: AXIS_EXITS.basis_x_cvd, gradedExit: true });
+  assert.equal(s.exit.funding, undefined);
+  assert.equal(s.exit24h.funding, undefined);
+  assert.ok(s.exitGraded.funding);
+});

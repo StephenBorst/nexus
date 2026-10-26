@@ -98,3 +98,40 @@ test("fundingFlow: unknown side → the payer is still known, pay-vs-earn isn't"
   assert.deepEqual(fundingFlow(undefined, 0.01), { payer: "LONG", youPay: null });
   assert.deepEqual(fundingFlow("long", -0.01), { payer: "SHORT", youPay: null }, "case is not guessed");
 });
+
+// ── heldFundingBps: funding a graded-exit trade paid while open ──────────────────────────────
+import { fundingByHour, heldFundingBps, FUNDING_CARRY_H } from "./funding.mjs";
+const H = 3600000;
+const flat = (rate, from, to) => fundingByHour(Array.from({ length: to - from }, (_, i) => ({ t: (from + i) * H, funding: rate })));
+
+test("a long at +0.01%/8h for 8h pays 1 bp; a short collects it", () => {
+  const f = flat(0.0001, 100, 200);
+  assert.ok(Math.abs(heldFundingBps(f, 120, 8, "LONG") - 1) < 1e-9);
+  assert.ok(Math.abs(heldFundingBps(f, 120, 8, "SHORT") + 1) < 1e-9);
+});
+
+test("168h at +0.01%/8h = 21 bps paid (21 funding periods)", () => {
+  assert.ok(Math.abs(heldFundingBps(flat(0.0001, 0, 400), 50, 168, "LONG") - 21) < 1e-9);
+});
+
+test("negative funding pays longs", () => {
+  assert.ok(heldFundingBps(flat(-0.0002, 0, 100), 10, 8, "LONG") < 0);
+});
+
+test("a gap shorter than the carry window is filled from the last rate; a longer one returns null", () => {
+  const rows = [{ t: 10 * H, funding: 0.0001 }, { t: (10 + FUNDING_CARRY_H) * H, funding: 0.0001 }];
+  assert.ok(heldFundingBps(fundingByHour(rows), 10, FUNDING_CARRY_H + 1, "LONG") > 0);
+  const gappy = [{ t: 10 * H, funding: 0.0001 }, { t: (10 + FUNDING_CARRY_H + 5) * H, funding: 0.0001 }];
+  assert.equal(heldFundingBps(fundingByHour(gappy), 10, FUNDING_CARRY_H + 6, "LONG"), null);
+});
+
+test("a rate recorded just before entry covers the first hour; none at all = null", () => {
+  assert.ok(heldFundingBps(fundingByHour([{ t: 5 * H, funding: 0.0001 }]), 8, 2, "LONG") > 0);
+  assert.equal(heldFundingBps(new Map(), 8, 2, "LONG"), null);
+  assert.equal(heldFundingBps(flat(0.0001, 0, 10), 5, 0, "LONG"), null);
+});
+
+test("unreadable funding rows are skipped, never read as 0", () => {
+  const f = fundingByHour([{ t: 1 * H, funding: null }, { t: 2 * H, funding: "" }, { t: 3 * H, funding: 0.0003 }]);
+  assert.deepEqual([...f.entries()], [[3, 0.0003]]);
+});

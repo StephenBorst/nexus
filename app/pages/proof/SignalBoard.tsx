@@ -27,7 +27,9 @@ const BONE = C.accent;
 type SideStat = { samples: number; hitRate: number; meanBps: number };
 type Drift = { baseBps: number; excessBps: number; excessStable: boolean; bySide: Record<"LONG" | "SHORT", { baseBps: number; excessBps: number; samples: number }> };
 type Horizon = { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean; verdict: string; drift?: Drift };
-type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number; presetExit?: boolean; shadowOf?: string; bySide?: Record<"LONG" | "SHORT", SideStat>; oos?: { since: string; samples: number; hitRate: number; netBps: number }; exitContract?: string; avgSlPercent?: number; atrMult?: number; rMultiple?: number };
+type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number; presetExit?: boolean; shadowOf?: string; bySide?: Record<"LONG" | "SHORT", SideStat>; oos?: { since: string; samples: number; hitRate: number; netBps: number }; exitContract?: string; avgSlPercent?: number; atrMult?: number; rMultiple?: number; funding?: FundingLine };
+// The graded exit also net of the funding its trades paid while open (an estimate; the grade above doesn’t use it).
+type FundingLine = { estimate: boolean; samples: number; missing: number; netBps: number; hitRate: number; costBps: number; oos: { samples: number; missing: number; netBps: number; hitRate: number; costBps: number } };
 type AxisSides = Record<"LONG" | "SHORT", { events: number; r: { samples: number; hitRate: number; meanR: number } }>;
 type RandomSide = { verdict: string; n: number; pctBeaten?: number; realMeanR?: number; randomMedianR?: number; moreTradesNeeded?: number | null };
 type RandomBaseline = { metric: string; runs: number; window: { from: string; to: string; hours: number }; pooled: RandomSide; bySide: Record<"LONG" | "SHORT", RandomSide> };
@@ -179,11 +181,29 @@ function GradedExitLine({ g, retired }: { g: ExitGrade; retired?: string }) {
         {g.oos && <span style={{ color: FAINT }}> · since {g.oos.since.slice(5, 10)}: {g.oos.samples ? <>n{g.oos.samples} <span style={{ color: moneyTone(g.oos.netBps) }}>{sign(g.oos.netBps)}</span></> : "none graded yet"}</span>}
       </div>
       {retired && <div style={{ marginTop: 3, color: FOG }}>{retired}</div>}
+      {g.funding && <FundingNet f={g.funding} since={g.oos?.since} />}
       {/* The paper wallet closes trades days before this line counts them: a trade is graded only once
           its whole hold window (168h) has passed, so a quick win and a slow loser are judged alike. */}
       <div style={{ marginTop: 3, fontSize: 9.5, color: FAINT }}>
         A trade counts here {g.maxHoldHours % 24 === 0 ? `${g.maxHoldHours / 24} days` : `${g.maxHoldHours}h`} after its entry, once its full hold window has passed, even if it closed sooner.
       </div>
+    </div>
+  );
+}
+
+// Funding paid while a trade was open, taken off too. The bar is still "net of fees"; this shows how
+// much funding would move that number. Positive costBps = the trades paid funding on average.
+function FundingNet({ f, since }: { f: FundingLine; since?: string }) {
+  const paidWord = (c: number) => (c > 0 ? `paid ${c} bps` : c < 0 ? `collected ${-c} bps` : "no funding");
+  return (
+    <div title="Funding is estimated from the hourly rates the engine records (Orderly’s 8-hour rate spread over the hours held). A trade with gaps in that record is left out, never counted as free. The grade above is net of fees only and doesn’t use this."
+      style={{ marginTop: 4, cursor: "help" }}>
+      <span style={{ color: BONE }}>Net of funding too (est.)</span>
+      {f.samples
+        ? <> · <span style={{ color: moneyTone(f.netBps) }}>{sign(f.netBps)} bps</span> · trades {paidWord(f.costBps)} each on average · n{f.samples}</>
+        : <span style={{ color: FAINT }}> · no trade with a full funding record yet</span>}
+      {f.missing > 0 && <span style={{ color: FAINT }}> · {f.missing} left out (gaps)</span>}
+      {since && <span style={{ color: FAINT }}> · since {since.slice(5, 10)}: {f.oos.samples ? <>n{f.oos.samples} <span style={{ color: moneyTone(f.oos.netBps) }}>{sign(f.oos.netBps)}</span></> : "none yet"}</span>}
     </div>
   );
 }
