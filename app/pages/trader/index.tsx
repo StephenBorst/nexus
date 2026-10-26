@@ -10,7 +10,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped } from "@/lib/callMath.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, copiedExitPlan } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useLabWallet, appendToLab, sendSigned } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -39,6 +39,7 @@ type FeedThesis = {
   stopLoss: number;
   takeProfit1: number;
   takeProfit2: number;
+  exitPlan?: "SPLIT_50";  // declared split exit (lab-api gradeCall); a copy keeps it
   riskReward: number;
   positionSize: number;
   leverage: number;
@@ -354,6 +355,8 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
         id: `copy_${Date.now()}`, symbol: thesis.symbol, direction: thesis.direction,
         entryPrice: thesis.entryPrice, stopLoss: thesis.stopLoss,
         takeProfit1: thesis.takeProfit1, takeProfit2: thesis.takeProfit2,
+        // Keep the source's split: TP2 without exitPlan grades as a TP1-only call (callMath copiedExitPlan).
+        exitPlan: copiedExitPlan(thesis),
         riskPercent: parseFloat(riskPct), accountSize: parseFloat(accountSize),
         fundingRate: parseFloat(fundingRate), positionSize: calc.positionSize,
         leverage: calc.leverage, riskReward: calc.riskReward,

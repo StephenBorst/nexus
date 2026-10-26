@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitPlan, callInvalidReason, splitRunnerStopped, SPLIT_EXIT } from "./callMath.mjs";
-import { callR, splitPlan as graderSplitPlan, SPLIT_EXIT as GRADER_SPLIT } from "../../workers/nexus-lab-api/logic.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitPlan, callInvalidReason, splitRunnerStopped, SPLIT_EXIT, copiedExitPlan } from "./callMath.mjs";
+import { callR, gradeCall, splitPlan as graderSplitPlan, SPLIT_EXIT as GRADER_SPLIT } from "../../workers/nexus-lab-api/logic.mjs";
 
 // Shaped like the live Bankr call that showed "R:R 1:5.00": its stored riskReward was to TP2.
 const bankr = { direction: "SHORT", entryPrice: 86000, stopLoss: 86950, takeProfit1: 83530, takeProfit2: 81250, riskReward: 5 };
@@ -69,4 +69,19 @@ test("splitRunnerStopped: half at TP1, half on the stop, whichever side of zero 
   assert.equal(splitRunnerStopped({ ...short }), false);
   assert.equal(splitRunnerStopped({ ...short, exitPlan: undefined, gradedOutcome: "WIN", gradedR: 0.25 }), false);
   assert.equal(splitRunnerStopped({ ...short, takeProfit2: 97, gradedOutcome: "WIN", gradedR: 1.5 }), false, "TP2 = TP1 is one target");
+});
+
+test("a copy keeps the source's split, so it grades the same trade (BankrBot review, 2026-10-26)", () => {
+  const t0 = 1_790_000_000;
+  const source = { direction: "LONG", entryPrice: 100, stopLoss: 90, takeProfit1: 120, takeProfit2: 140, exitPlan: "SPLIT_50", createdAt: t0 * 1000 };
+  // Posted at the market (hour 0 trades 100), TP1 in hour 1, then the runner stops in hour 2.
+  const cd = { t: [t0, t0 + 3600, t0 + 7200], h: [101, 121, 115], l: [99, 105, 89] };
+  assert.equal(gradeCall(source, cd).r, 0.5, "half at +2R, half on the stop");
+  const { exitPlan: _dropped, ...withoutPlan } = source;
+  assert.equal(gradeCall(withoutPlan, cd).r, 2, "the bug: TP2 kept, exitPlan dropped = a TP1-only call");
+  const copy = { ...withoutPlan, exitPlan: copiedExitPlan(source) };
+  assert.equal(gradeCall(copy, cd).r, 0.5, "the copy grades like its source");
+  assert.equal(copiedExitPlan({ exitPlan: "split" }), undefined, "only the declared value carries over");
+  assert.equal(copiedExitPlan({}), undefined);
+  assert.equal(copiedExitPlan(null), undefined);
 });

@@ -256,7 +256,8 @@ product is what sits on top:
   (or `PLAN_V`) in grading.mjs so the pass re-derives them once.
 - **Split exit:** `exitPlan:"SPLIT_50"` (half TP1, half TP2, both on the original stop); TP2 = TP1 grades as one target;
   TP2 short of TP1 = INVALID. Rules in `app/lib/callMath.mjs` (`splitPlan`, `callInvalidReason`, `callRR`).
-  LATE_ENTRY flags only calls filled at the post.
+  LATE_ENTRY flags only calls filled at the post. A copy keeps the source's split (`copiedExitPlan`, both Lab copy
+  modals): TP2 without `exitPlan` grades TP1-only, a different trade (+2R vs +0.5R on TP1-then-stop).
 - **Cards** read R:R from the levels (`callRR`), show a position only once the entry trades (`callLifecycle.mjs`,
   `AwaitingFill.tsx`), and show NOT GRADED for INVALID. `/feed` carries resolution rows: filter them before treating rows as calls.
 - **One call, one wallet:** the Lab device cache is per wallet (`app/lib/labCache.mjs`); copies held by other wallets
