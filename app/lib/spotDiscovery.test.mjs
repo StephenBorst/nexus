@@ -6,6 +6,7 @@ import {
   needsSolanaFunds, openCallCount, callCountLine,
   isRealMarket, poolFlags, poolCaution,
   safeLogoUrl, fundingPayLine, readBrief, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo,
+  callStrip, isStripCall, openChipLine, labRowLine, readLabOpen, writeLabOpen, LAB_ROW_KEY, GRADED_WINDOW_MS, CALL_STRIP_MAX,
 } from "./spotDiscovery.mjs";
 
 const RAY = "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R";
@@ -208,4 +209,114 @@ test("chip dots: an open call on a listed coin, or a buy of that exact token", (
   const unlisted = chipMarks(viewed, { openCoins: new Set(["RAY"]), listed: new Set(), buys: [] });
   assert.equal(unlisted[chipKey(viewed[0])], undefined);
   assert.deepEqual(chipMarks(viewed, {}), {});
+});
+
+// ── public calls strip ──
+const NOW = Date.UTC(2026, 9, 26, 12);
+const LISTED = new Set(["BTC", "ETH", "SOL", "HYPE"]);
+const call = (o) => ({ id: o.id ?? Math.random().toString(36).slice(2), wallet: "0xaa", symbol: "BTC", direction: "LONG",
+  entryPrice: 100, stopLoss: 90, takeProfit1: 120, status: "ACTIVE", isPublic: true, createdAt: NOW - 3600000, ...o });
+
+test("calls strip: one chip per coin, spellings merged, counts only (no side anywhere)", () => {
+  const s = callStrip([
+    call({ id: "a", symbol: "PERP_BTC_USDC", fillState: "OPEN" }),
+    call({ id: "b", symbol: "BTC", direction: "SHORT", entryPrice: 100, stopLoss: 110, takeProfit1: 80, fillState: "WORKING" }),
+    call({ id: "c", symbol: "btc", fillState: "WORKING" }),
+    call({ id: "d", symbol: "ETH", fillState: "OPEN" }),
+  ], LISTED, { now: NOW });
+  assert.equal(s.mode, "open");
+  assert.deepEqual(s.chips.map((c) => c.coin), ["BTC", "ETH"]);
+  assert.equal(s.chips[0].calls, 3);
+  assert.equal(s.chips[0].awaiting, 2);
+  assert.equal(openChipLine(s.chips[0]), "3 calls · 2 awaiting fill");
+  assert.equal(openChipLine(s.chips[1]), "1 call");
+  // No long/short split and no lean: nothing on a chip names a side.
+  for (const c of s.chips) assert.deepEqual(Object.keys(c).sort(), ["awaiting", "calls", "coin", "losses", "wins"]);
+  assert.doesNotMatch(JSON.stringify(s), /LONG|SHORT/);
+});
+
+test("calls strip: an entry that hasn't traded is never counted as filled", () => {
+  const s = callStrip([call({ fillState: "WORKING" }), call({ fillState: "WORKING" })], LISTED, { now: NOW });
+  assert.equal(s.chips[0].awaiting, 2);
+  assert.equal(openChipLine(s.chips[0]), "2 calls · all awaiting fill");
+  assert.equal(openChipLine({ calls: 1, awaiting: 1 }), "1 call · 1 awaiting fill");
+});
+
+test("calls strip: listed coins only; an unreadable listed set shows nothing", () => {
+  const rows = [call({ symbol: "USDJPY", fillState: "OPEN" }), call({ symbol: "PEPE", fillState: "OPEN" })];
+  assert.deepEqual(callStrip(rows, LISTED, { now: NOW }), { mode: null, chips: [] });
+  assert.deepEqual(callStrip([call({ fillState: "OPEN" })], new Set(), { now: NOW }), { mode: null, chips: [] });
+  assert.deepEqual(callStrip([call({ fillState: "OPEN" })], null, { now: NOW }), { mode: null, chips: [] });
+  assert.deepEqual(callStrip(null, LISTED, { now: NOW }), { mode: null, chips: [] });
+});
+
+test("calls strip: resolution rows, copies, holders-only, private and duplicate rows are skipped", () => {
+  const dupe = call({ id: "same", fillState: "OPEN" });
+  const s = callStrip([
+    { resolution: true, symbol: "BTC", outcome: "WIN" },
+    call({ fillState: "OPEN", duplicateOf: "0xbb" }),
+    call({ fillState: "OPEN", holdersOnly: true }),
+    call({ fillState: "OPEN", isPublic: false }),
+    call({ fillState: "OPEN", entryPrice: 0 }),
+    dupe, { ...dupe },
+  ], LISTED, { now: NOW });
+  assert.equal(s.chips.length, 1);
+  assert.equal(s.chips[0].calls, 1);
+  assert.equal(isStripCall({ resolution: true, symbol: "BTC", entryPrice: 1 }), false);
+});
+
+test("calls strip: invalid calls count nowhere", () => {
+  const bad = call({ direction: "LONG", entryPrice: 100, stopLoss: 110, takeProfit1: 120 }); // stop above a long's entry
+  assert.deepEqual(callStrip([bad], LISTED, { now: NOW }), { mode: null, chips: [] });
+});
+
+test("calls strip: nothing unresolved → wins and losses graded in the last 7 days", () => {
+  const rows = [
+    call({ symbol: "SOL", status: "HIT_TP", gradedOutcome: "WIN", gradedAt: NOW - 86400000 }),
+    call({ symbol: "SOL", status: "STOPPED_OUT", gradedOutcome: "LOSS", gradedAt: NOW - 2 * 86400000 }),
+    call({ symbol: "ETH", status: "STOPPED_OUT", gradedOutcome: "LOSS", gradedAt: NOW - 3 * 86400000 }),
+    call({ symbol: "BTC", status: "HIT_TP", gradedOutcome: "WIN", gradedAt: NOW - GRADED_WINDOW_MS - 1 }), // too old
+    call({ symbol: "HYPE", status: "HIT_TP", gradedOutcome: "WIN", gradedAt: NOW + 60000 }), // future stamp
+    call({ symbol: "ETH", status: "CLOSED" }), // closed by its owner, never graded: not a W or an L
+  ];
+  const s = callStrip(rows, LISTED, { now: NOW });
+  assert.equal(s.mode, "graded");
+  assert.deepEqual(s.chips.map((c) => [c.coin, c.wins, c.losses]), [["SOL", 1, 1], ["ETH", 0, 1]]);
+});
+
+test("calls strip: unresolved calls win over the graded fallback; capped and ranked", () => {
+  const rows = [
+    call({ symbol: "SOL", status: "HIT_TP", gradedOutcome: "WIN", gradedAt: NOW - 1000 }),
+    call({ symbol: "ETH", fillState: "OPEN" }),
+  ];
+  assert.equal(callStrip(rows, LISTED, { now: NOW }).mode, "open");
+  const many = [];
+  const big = new Set();
+  for (let i = 0; i < 12; i++) { big.add(`C${i}`); for (let k = 0; k <= i; k++) many.push(call({ symbol: `C${i}`, fillState: "OPEN" })); }
+  const s = callStrip(many, big, { now: NOW });
+  assert.equal(s.chips.length, CALL_STRIP_MAX);
+  assert.equal(s.chips[0].coin, "C11");
+});
+
+test("lab row line: inputs only, never a verdict", () => {
+  assert.equal(labRowLine({ isPerp: true, fundingAnnualPct: 12.04, callCount: 3 }), "Funding +12.0%/yr, longs pay · 3 public calls open");
+  assert.equal(labRowLine({ isPerp: true, fundingAnnualPct: -5, callCount: 0 }), "Funding −5.0%/yr, shorts pay · no public calls open");
+  assert.equal(labRowLine({ isPerp: true, fundingAnnualPct: 4 }), "Funding +4.0%/yr, longs pay");
+  assert.equal(labRowLine({ isPerp: true }), "Reading the funding tape…");
+  assert.equal(labRowLine({ isPerp: false, coin: "PEPE" }), "Not a Nexus market · ask Nexus about PEPE");
+  for (const t of [labRowLine({ isPerp: true, fundingAnnualPct: 40, callCount: 9 })]) assert.doesNotMatch(t, /edge|proven|graded|buy|sell/i);
+});
+
+test("lab row state: folded by default, remembered per browser, survives a broken storage", () => {
+  const s = memStore();
+  assert.equal(readLabOpen(s), false);
+  writeLabOpen(s, true);
+  assert.equal(s.getItem(LAB_ROW_KEY), "1");
+  assert.equal(readLabOpen(s), true);
+  writeLabOpen(s, false);
+  assert.equal(readLabOpen(s), false);
+  const broken = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
+  assert.equal(readLabOpen(broken), false);
+  assert.doesNotThrow(() => writeLabOpen(broken, true));
+  assert.equal(readLabOpen(undefined), false);
 });
