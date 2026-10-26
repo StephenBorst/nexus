@@ -51,3 +51,14 @@ test("callersLine: the board's entry rule, and that callers aren't tested agains
   assert.equal(callersLine(3, 5), "3 callers qualify for the board: 5+ graded calls and a positive record. Not tested against chance.");
   assert.equal(callersLine(0), "No caller qualifies for the board yet: 5+ graded calls and a positive record.");
 });
+
+test("retired graded exits agree with the recorded snapshot, and read plainly", async () => {
+  const { RETIRED_GRADED_EXITS, retiredGradedExit, retiredLine } = await import("./proofCopy.mjs");
+  const { readFileSync } = await import("node:fs");
+  const snap = JSON.parse(readFileSync(new URL("../../docs/research/pipeline-stages.json", import.meta.url), "utf8"));
+  for (const axis of Object.keys(RETIRED_GRADED_EXITS)) assert.equal(snap.gradedExit[axis]?.status, "FAILS", axis);
+  for (const [axis, g] of Object.entries(snap.gradedExit)) if (g.status === "FAILS") assert.ok(RETIRED_GRADED_EXITS[axis], `${axis} FAILS in the snapshot but /proof doesn't say Retired`);
+  assert.equal(retiredLine(retiredGradedExit("basis_x_cvd")), "Retired Oct 26, 2026: the read fell to PROMISING, below PREDICTIVE. The paper wallet stays as a record.");
+  assert.equal(retiredGradedExit("nope"), null);
+  assert.equal(retiredLine(null), "");
+});
