@@ -632,6 +632,20 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   by borst 2026-10-23).** What Lead / Edge / Tradeable / Paper / Retired each do to /proof, paper wallets, x402,
   the house caller and live money, plus the Basis × CVD graded-exit outcome. Apply it one PR per trigger, from the
   SERVED `pipeline.reads[].stage`; a changed trigger = a new dated page, never an edit.
+  **Daily pipeline watcher (borst, 2026-10-26; prompt `docs/routines/pipeline-watch.md`).** A scheduled task (fresh
+  session each day) runs `node tools/pipeline/watch.mjs --from <saved scorecard>` (rules `app/lib/pipelineWatch.mjs`,
+  tested): it compares the served stages + the Basis × CVD graded-exit status (graded-exit-prereg.md bar:
+  `gradedExitStatus`) with the recorded `docs/research/pipeline-stages.json`. A change = a different stage/status, never
+  a count. No change ⇒ one line, nothing else. A change ⇒ a PR on `pipeline-watch/<date>` that updates the snapshot
+  (`--write`) + the page's DISPLAY steps, with borst's steps listed; **watcher PRs are never merged by a session**.
+  RETIRED and a FAILED graded exit are terminal in the snapshot (a served value leaving them = an issue, not a change).
+  The task stores its own copy of the prompt: after editing the doc, update the task (`update_trigger`).
+  **Strategy shelf (Agent → Config, `StrategyShelf.tsx`, rules `app/lib/strategyShelf.mjs`, tested):** every registered
+  read + the Basis × CVD graded exit, by served stage, what it needs, a rough date at today's pace (counts only). Load
+  is enabled only at PAPER AND when `SHELF_PRESETS` maps the read to a preset that trades its exact rule (empty today;
+  a mapping is its own reviewed PR, after the Edge-stage parity test). **Live money = `docs/research/live-money-review.md`
+  (DRAFT, unsigned, arms nothing).** ⚠️ Paper P&L (`computePnl`) subtracts NO fees and NO funding — "net positive after
+  fees" at the Paper stage means the ledger re-read with the account's real taker fee + recorded funding.
 - **⏸ OCT-15 IF/THEN = `docs/routines/oct15-if-then.md` (written 2026-10-04, BEFORE the read; signed off by borst 2026-10-04).** What
   each result triggers: the /proof lead (Clears / Holds / Fails, plus "both oos exit lines negative at ≥20 trades each →
   off the lead"), the staged switches, no live money on Oct 15, the x402 swap only for a read that CLEARS (PREDICTIVE +
@@ -2115,7 +2129,7 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   green on the current head and it's mergeable — no waiting for borst's word. Still HOLD and tell borst when: CI is red
   or pending · a merge conflict · an unanswered review thread · a failing Claude Approvals check (where it runs) · the PR
   isn't yours or is on another repo (BankrBot/skills, nexus-landing) · it touches the engine during a freeze (see
-  "⛔ ENGINE FREEZE") · it arms live money (`CARRY_LIVE`, carry/agent key secrets, any live-trading switch). After a
+  "⛔ ENGINE FREEZE") · it's a `Pipeline watch:` PR (always borst's) · it arms live money (`CARRY_LIVE`, carry/agent key secrets, any live-trading switch). After a
   merge, check the deploy run started on main (see "Manual redeploy").
 - Env is **Windows PowerShell** — no `&&` chaining; use `;`. `gh` CLI is NOT installed.
 - `tsc --noEmit` baseline is now **0 errors** (cleaned up 2026-08-24 — the old walletConnector
