@@ -584,7 +584,11 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   its trades can stay open 168h. `exitGraded.funding` (cache `axisbt:v14`) = the same trades ALSO net of the funding
   each paid while open: `heldFundingBps` (`app/lib/funding.mjs`) spreads oi:hist's per-8h rate over the hours held
   (rate ÷ 8 per hour, carried ≤8h over gaps; positive = paid), a trade without full coverage is left out and counted in
-  `missing` (never read as free). `{estimate, samples, missing, netBps, hitRate, costBps, oos{…}}`. /proof shows it under
+  `missing` (never read as free). `{estimate, samples, missing, feesNetBps, netBps, hitRate, costBps, oos{…}}` (cache
+  `axisbt:v15`). ⚠️ Compare `netBps` with `feesNetBps` (the fee-net on the SAME covered trades), never with the headline
+  `netBps`: the first cut showed level_reclaim +89.6 headline vs +105 net of funding, a different set of trades, which read
+  as funding ADDING money. First live read (Oct 26): average cost −1.5 to +4 bps per trade (most trades close well before
+  168h and shorts collect), far below the 21 bps worst case. /proof shows it under
   "Graded exit, as traded" as "Net of funding too (est.)". Verdict, `netBps`, `oos` and everything readPipeline /
   pipelineWatch read are byte-identical with or without it (test). Making funding part of the bar = a new dated
   registration, borst's call. At +0.01%/8h a 168h long pays ~21 bps.
