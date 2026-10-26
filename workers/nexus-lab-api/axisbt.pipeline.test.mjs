@@ -91,3 +91,21 @@ test("a coin on both lists is graded out of sample on the holdout line only, nev
   assert.equal(row.oos.sides.LONG.events, btcOnly.oos.sides.LONG.events, "SUI's events are not on the main card's oos grade");
   assert.ok(row.sides.LONG.events > btcOnly.sides.LONG.events, "the in-sample row is unchanged (SUI still in it)");
 });
+
+test("a registered TEST (cfg.tests) adds its own block from its own date and changes nothing else", () => {
+  const base = runScorecard(SETS, { horizons: [4], minSamples: 5 });
+  const withTest = runScorecard(SETS, { horizons: [4], minSamples: 5, tests: [{ axis: "rsi_reset_deep", key: "regimeWindow", fromMs: CUT }] });
+  const strip = (out) => JSON.stringify(out.axes.map(({ regimeWindow, ...rest }) => rest));
+  assert.equal(strip(withTest), strip(base), "every other field of every row is byte-identical");
+  const row = withTest.axes.find((a) => a.name === "rsi_reset_deep");
+  assert.equal(row.regimeWindow.since, new Date(CUT).toISOString());
+  // the same grade as a registration from that date
+  const asReg = runScorecard(SETS, { horizons: [4], minSamples: 5, registered: [{ axis: "rsi_reset_deep", fromMs: CUT }] }).axes.find((a) => a.name === "rsi_reset_deep").oos;
+  assert.deepEqual(row.regimeWindow.r, asReg.r);
+  assert.deepEqual(row.regimeWindow.random, asReg.random);
+  assert.equal(row.regimeWindow.exitGraded.oos.since, new Date(CUT).toISOString(), "graded exit counted from the test's own date");
+  // a test never overwrites an existing field, and other axes carry no block
+  assert.equal(withTest.axes.find((a) => a.name === "funding_fade").regimeWindow, undefined);
+  const clash = runScorecard(SETS, { horizons: [4], minSamples: 5, registered: [{ axis: "rsi_reset_deep", fromMs: CUT }], tests: [{ axis: "rsi_reset_deep", key: "oos", fromMs: T0 }] });
+  assert.equal(clash.axes.find((a) => a.name === "rsi_reset_deep").oos.since, new Date(CUT).toISOString());
+});
