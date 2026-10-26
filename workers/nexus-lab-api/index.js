@@ -98,6 +98,7 @@ import { handleProfile, handleLab } from "./routes-lab.mjs";
 import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BACKTEST_MIN_SAMPLES, MIN_VALIDATE_SYMBOLS, oiCoverageText, shortSymbols, loadFlowHistForBacktest, flowCoverageText, BASIS_BACKTEST_MIN_DAYS, BASIS_BACKTEST_MIN_SAMPLES } from "./strategies.mjs";
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
 import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
+import { revokedWallets, revokedTradingRefusal } from "./revokedTrading.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
 import { aesGcmEncrypt, scrubStoredSeeds } from "./seedVault.mjs";
@@ -728,6 +729,18 @@ export default {
     try {
     const url = new URL(request.url);
     const parts = url.pathname.split("/").filter(Boolean);
+
+    // A wallet whose trading signature leaked is refused here, in front of every route
+    // (revokedTrading.mjs). Off while REVOKED_TRADING_WALLETS is empty.
+    {
+      const revoked = revokedWallets(env);
+      if (revoked.size && request.method !== "GET" && request.method !== "HEAD") {
+        let body = null;
+        try { body = JSON.parse(await request.clone().text()); } catch { body = null; }
+        const refusal = revokedTradingRefusal({ method: request.method, parts, body, revoked, recover: recoverEthAddress });
+        if (refusal) return json(refusal.body, request, refusal.status);
+      }
+    }
 
     // ── GET /smart/board — graded top traders + their live positions ────────────
     // Multi-source: ORDERLY primary (public dashboard indexer — native venue, all

@@ -2303,3 +2303,22 @@ network effects from the social layer. Positioning: "The trading terminal that m
   Basis × CVD Stack in PAPER (presets + the 12h/24h A/B untouched) — DONE, x402 label DONE + live (Bankr v5 redeployed,
   verified by borst 2026-09-25). All three CEO-pass items closed. Vision: the only trading terminal that grades
   itself in public — every read, agent and caller carries a verdict you can check.
+
+---
+
+## 2026-10-26 · Trading signature exposed in the Trade Tracker's app storage
+
+- Bankr's runtime review of BankrBot/skills#794 found a legacy `/apps/nexus-trade-tracker/data/nexusauthsig.json`
+  holding `0xd9f7…b449`'s `nexus-trading-key-v1` signature (borst's Bankr wallet, the tracker instance owner). Owner-mode
+  record storage in Bankr apps is write-isolated, not read-isolated, so any signed-in tracker viewer could have read it.
+- borst deleted the file the same day. Deleting doesn't revoke it: the message is fixed, so the signature is the same on
+  every signing and never expires. Anyone holding a copy can derive the order-only Orderly key, which can trade the
+  account and control its agent, but can't withdraw (withdrawals pay only the wallet and need its own fresh EIP-712
+  signature).
+- Response: the wallet goes on `REVOKED_TRADING_WALLETS` and `revokedTrading.mjs` refuses its trading signature in front
+  of every lab-api route; withdrawals and balance reads stay open. The key still works directly against Orderly, so
+  borst withdraws the account's collateral to the wallet. Engine A publishing is unaffected (it uses the Lab signature).
+- Lifting the wallet waits for a new signing message. The flag-gated `AUTH_V2` challenge (logic.mjs) adds a per-request
+  signature on top of the static one but still derives the Orderly key from the static message, so it doesn't replace it.
+- BankrBot/skills#794 stays in draft until Bankr confirms a design that keeps private data out of shared app storage.
+

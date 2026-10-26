@@ -291,6 +291,11 @@ product is what sits on top:
 - **Trading signature** 'nexus-trading-key-v1' seeds agent keys: body only (`/positions`, `/balance` refuse it in a URL).
   Nothing stores a seed (`scrubStoredSeeds` removes old ones; a test fails if index.js writes `seed`).
   `/account-snapshot` is retired (410). `/proxy/register-key` stores only on `success === true` with the SIGNED key.
+  It is a fixed message, so a wallet's signature never changes or expires: a leaked copy can't be rotated by
+  re-signing. **Revoked wallets** = worker var `REVOKED_TRADING_WALLETS` (addresses, never the signature):
+  `revokedTrading.mjs` refuses their signature in front of every route (403 `trading_signature_revoked`), and the
+  Bankr register/deposit flows by `walletAddress`; withdrawals and `/balance` + `/positions` stay open. It doesn't stop
+  the derived key at Orderly directly: empty the account. Listed: `0xd9f7…b449` (until a new signing message is live).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must
