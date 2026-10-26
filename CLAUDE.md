@@ -214,6 +214,11 @@ product is what sits on top:
   confluence_follow (from 2026-10-17). Unregistered explorer drafts live in `explorerReads.mjs` (a test fails if one is
   graded before registration).
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.
+- **Regime window** (`docs/research/graded-exit-regime-prereg.md`, signed 2026-10-26; counts from 2026-10-27T00:00Z,
+  limit 2027-04-27): the same read + graded exit, judged once by the watcher via `judgeRegimeWindow`
+  (`app/lib/regimeWindow.mjs`, numbers pinned to the page). The scoreboard serves `axes[basis_x_cvd].regimeWindow` (main
+  + holdout) and the BTC day counts (`regimeWindow.regime`, Orderly daily candles). `REGIME_RESULT` is set once by the
+  judging watcher PR and is final.
 - **Pre-registered studies are append-only:** a doc's text above Results is pinned (sha256 tests); verdicts are appended;
   a new idea found on a closed population is a new dated registration (e.g. structure × house fade: CLOSED, not shown).
 - **Daily pipeline watcher** (prompt `docs/routines/pipeline-watch.md`, `tools/pipeline/watch.mjs`,

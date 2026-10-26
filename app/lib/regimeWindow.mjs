@@ -74,3 +74,50 @@ export function regimeLabel(counts) {
   const atMin = ["UP", "DOWN", "FLAT"].filter((s) => (Number(counts?.[s]) || 0) >= REGIME_WINDOW.minDays).length;
   return `${atMin <= 1 ? "one regime only" : "regime condition not met (no DOWN regime)"}: ${parts.join(", ") || "no days counted"}`;
 }
+
+// ── The judgment, word for word from the page's "The window" + "The bar" ──────────────────────
+// Read once a day by the pipeline watcher (pipelineWatch.mjs). Inputs are the served scorecard's
+// `axes[basis_x_cvd].regimeWindow` (main card), the holdout line's same block, and the top-level
+// `regimeWindow.regime` day counts. Returns null when any input can't be read (never a judgment on a
+// missing number). Statuses: COUNTING until judged; then one of INCONCLUSIVE · FAILS · CLEARS ·
+// NOT_CLEARED, all final.
+export const REGIME_OUTCOMES = Object.freeze(["INCONCLUSIVE", "FAILS", "CLEARS", "NOT_CLEARED"]);
+
+export function judgeRegimeWindow({ main, holdout, regime, readVerdict = null }, now = Date.now()) {
+  if (!main || !holdout || !regime || regime.error || !regime.counts) return null;
+  const ex = main.exitGraded || {};
+  const trades = Number(ex.samples) || 0;
+  const net = Number.isFinite(Number(ex.netBps)) ? Number(ex.netBps) : null;
+  const met = regimeConditionMet(regime.counts);
+  const label = regimeLabel(regime.counts);
+  const atLimit = now >= regimeLimitMs();
+  const numbers = { trades, netBps: net, regime: { ...regime.counts }, regimeMet: met, readVerdict };
+  const judged = (trades >= REGIME_WINDOW.minTrades && met) || atLimit;
+  if (!judged) {
+    const need = [];
+    if (trades < REGIME_WINDOW.minTrades) need.push(`${REGIME_WINDOW.minTrades - trades} more counted trades`);
+    if (!met) need.push(`the regime condition (${label})`);
+    return { status: "COUNTING", reason: `needs ${need.join(" and ")}, or the six-month limit (${REGIME_WINDOW.limitAt})`, numbers };
+  }
+  const tag = met ? "" : ` · ${label}`;
+  if (trades < REGIME_WINDOW.minTrades) return { status: "INCONCLUSIVE", reason: `${trades} counted trades at the six-month limit${tag}`, numbers };
+  if (!(net > 0)) return { status: "FAILS", reason: `net after fees ${net ?? "unread"} bps over ${trades} trades${tag}`, numbers };
+  const r = main.r || {}, hr = holdout.r || {};
+  const pct = (b) => (b && Number.isFinite(Number(b.pctBeaten)) ? Number(b.pctBeaten) : null);
+  const longPct = pct(main.random?.bySide?.LONG), hLongPct = pct(holdout.random?.bySide?.LONG);
+  const missed = [];
+  if (!((Number(r.samples) || 0) >= 30)) missed.push(`read out-of-sample events ${r.samples || 0} (needs 30)`);
+  if (!(Number(r.meanR) > 0)) missed.push(`read mean R ${r.meanR ?? "unread"} (needs > 0)`);
+  if (!r.stable) missed.push("read halves disagree");
+  if (!(longPct != null && longPct >= 95)) missed.push(`LONG beats ${longPct ?? "—"}% of random (needs 95%)`);
+  if (!((Number(hr.samples) || 0) >= 30)) missed.push(`holdout events ${hr.samples || 0} (needs 30)`);
+  if (!(Number(hr.meanR) > 0)) missed.push(`holdout mean R ${hr.meanR ?? "unread"} (needs > 0)`);
+  if (!(hLongPct != null && hLongPct >= 80)) missed.push(`holdout LONG beats ${hLongPct ?? "—"}% of random (needs 80%)`);
+  if (missed.length) return { status: "NOT_CLEARED", reason: `net +${net} bps over ${trades} trades, but: ${missed.join("; ")}${tag}`, numbers };
+  return { status: "CLEARS", reason: `net +${net} bps over ${trades} trades; read mean R +${r.meanR}, halves agree, LONG ${longPct}% vs random; holdout ${hr.samples} events, +${hr.meanR}R, ${hLongPct}%${tag}`, numbers };
+}
+
+// The judged result, set ONCE by the watcher PR that records the judgment (null while counting).
+// Final: the shelf and any display read this before the live judge, so a later flip of the served
+// numbers can't change a recorded result. pipelineWatch.test.mjs pins it to the snapshot.
+export const REGIME_RESULT = null;

@@ -36,5 +36,13 @@
       "trades": 4,
       "netBps": 44.9
     }
+  },
+  "tests": {
+    "basis_x_cvd:regime_window": {
+      "status": "COUNTING",
+      "reason": "seeded at signing (2026-10-26): counts from 2026-10-27T00:00:00Z",
+      "belowPredictive": true,
+      "readVerdict": "PROMISING"
+    }
   }
 }

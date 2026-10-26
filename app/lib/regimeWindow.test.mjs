@@ -67,3 +67,55 @@ test("the limit is six calendar months after the registration", () => {
   assert.equal(b.getUTCFullYear() * 12 + b.getUTCMonth() - (a.getUTCFullYear() * 12 + a.getUTCMonth()), 6);
   assert.equal(b.getUTCDate(), a.getUTCDate());
 });
+
+import { judgeRegimeWindow, REGIME_RESULT, REGIME_OUTCOMES } from "./regimeWindow.mjs";
+
+const block = ({ trades = 30, net = 20, events = 40, meanR = 0.2, stable = true, longPct = 96 } = {}) => ({
+  exitGraded: { samples: trades, netBps: net }, r: { samples: events, meanR, stable }, random: { bySide: { LONG: { pctBeaten: longPct } } },
+});
+const hold = ({ events = 30, meanR = 0.1, longPct = 85 } = {}) => ({ r: { samples: events, meanR }, random: { bySide: { LONG: { pctBeaten: longPct } } } });
+const MET = { counts: { UP: 20, DOWN: 15, FLAT: 3 } };
+const NOT_MET = { counts: { UP: 60, DOWN: 2, FLAT: 30 } };
+const MID = regimeFromMs() + 60 * DAY, END = regimeLimitMs();
+
+test("judgment: counting until 30 trades AND the regime, or the six-month limit", () => {
+  assert.equal(judgeRegimeWindow({ main: block({ trades: 29 }), holdout: hold(), regime: MET }, MID).status, "COUNTING");
+  assert.equal(judgeRegimeWindow({ main: block(), holdout: hold(), regime: NOT_MET }, MID).status, "COUNTING");
+  assert.equal(judgeRegimeWindow({ main: block(), holdout: hold(), regime: MET }, MID).status, "CLEARS");
+});
+
+test("judgment order at the limit: INCONCLUSIVE, then FAILS, then CLEARS / NOT CLEARED, labelled without the regime", () => {
+  const inc = judgeRegimeWindow({ main: block({ trades: 12, net: 500 }), holdout: hold(), regime: NOT_MET }, END);
+  assert.equal(inc.status, "INCONCLUSIVE");
+  assert.match(inc.reason, /regime condition not met \(no DOWN regime\)/);
+  assert.equal(judgeRegimeWindow({ main: block({ net: 0 }), holdout: hold(), regime: NOT_MET }, END).status, "FAILS");
+  assert.equal(judgeRegimeWindow({ main: block({ net: -3 }), holdout: hold(), regime: MET }, MID).status, "FAILS");
+  const nc = judgeRegimeWindow({ main: block({ longPct: 90 }), holdout: hold({ events: 12 }), regime: MET }, MID);
+  assert.equal(nc.status, "NOT_CLEARED");
+  assert.match(nc.reason, /LONG beats 90% of random \(needs 95%\)/);
+  assert.match(nc.reason, /holdout events 12 \(needs 30\)/);
+  assert.equal(judgeRegimeWindow({ main: block({ stable: false }), holdout: hold(), regime: MET }, MID).status, "NOT_CLEARED");
+  assert.equal(judgeRegimeWindow({ main: block(), holdout: hold({ longPct: 79 }), regime: MET }, MID).status, "NOT_CLEARED");
+  const c = judgeRegimeWindow({ main: block(), holdout: hold(), regime: NOT_MET }, END);
+  assert.equal(c.status, "CLEARS");
+  assert.match(c.reason, /regime condition not met/, "a clear without the regime carries the label");
+});
+
+test("an unread input is never judged", () => {
+  assert.equal(judgeRegimeWindow({ main: null, holdout: hold(), regime: MET }, END), null);
+  assert.equal(judgeRegimeWindow({ main: block(), holdout: null, regime: MET }, END), null);
+  assert.equal(judgeRegimeWindow({ main: block(), holdout: hold(), regime: { error: "rate_limited 429" } }, END), null);
+});
+
+test("the read's old-data grade never decides", () => {
+  assert.equal(judgeRegimeWindow({ main: block(), holdout: hold(), regime: MET, readVerdict: "NOISE" }, MID).status, "CLEARS");
+});
+
+test("REGIME_RESULT is unset until judged, and one of the four outcomes when set", () => {
+  const snap = JSON.parse(readFileSync(new URL("../../docs/research/pipeline-stages.json", import.meta.url), "utf8"));
+  const rec = snap.tests?.["basis_x_cvd:regime_window"];
+  assert.ok(rec, "the snapshot records the test");
+  if (REGIME_OUTCOMES.includes(rec.status)) assert.equal(REGIME_RESULT, rec.status, "a judged result is recorded in REGIME_RESULT");
+  else assert.equal(REGIME_RESULT, null);
+  for (const o of REGIME_OUTCOMES) assert.match(page, new RegExp(`\\*\\*${o.replace("_", " ")}\\*\\*`), o);
+});
