@@ -19,8 +19,27 @@ test("a call lab-api doesn't have → 404 + noindex, same app body", async () =>
   assert.equal(res.headers.get("X-Robots-Tag"), "noindex");
   assert.equal(res.headers.get("Cache-Control"), "no-cache");
   assert.equal(await res.text(), SHELL); // people still get the page's own "not public" screen
-  assert.equal(f.calls[0].init.method, "HEAD");
-  assert.equal(f.calls[0].url, `https://og.nexustradinglabs.com/thesis/${W}/nope`);
+  assert.equal(f.calls[0].init.method, undefined); // a GET
+  assert.equal(f.calls[0].url, `https://og.nexustradinglabs.com/thesis/${W}/nope/meta`);
+});
+
+test("a public call with meta → 200, the call's own title in the HTML", async () => {
+  const meta = { title: "BTC LONG call by mfer · open, not graded yet | Nexus Trading Labs", description: "Entry $64,100.", headline: "BTC LONG call by mfer", url: "https://trade.nexustradinglabs.com/feed/thesis/x/y", image: "https://og/x.png", publishedAt: null };
+  const html = "<!doctype html><html><head><title>Nexus Trading Labs</title><meta property=\"og:title\" content=\"Nexus Trading Labs\" /></head><body><div id=root></div></body></html>";
+  const res = await gateThesisPage({ wallet: W, id: "y", loadApp: async () => new Response(html, { headers: { "Content-Type": "text/html", "Content-Length": "99" } }),
+    fetchImpl: async () => new Response(JSON.stringify({ meta }), { status: 200 }) });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Content-Length"), null);
+  const out = await res.text();
+  assert.match(out, /<title>BTC LONG call by mfer · open, not graded yet \| Nexus Trading Labs<\/title>/);
+  assert.equal((out.match(/property="og:title"/g) || []).length, 1, "site og:title replaced, not duplicated");
+  assert.match(out, /<noscript><h1>BTC LONG call by mfer<\/h1>/);
+});
+
+test("a 200 without meta (an older lab-api) serves the page unchanged", async () => {
+  const res = await gateThesisPage({ wallet: W, id: "y", loadApp: next, fetchImpl: async () => new Response(JSON.stringify({ thesis: {} }), { status: 200 }) });
+  assert.equal(res.status, 200);
+  assert.equal(await res.text(), SHELL);
 });
 
 test("a public call → 200, indexable", async () => {
@@ -45,7 +64,7 @@ test("fails open: 405 (old lab-api), 5xx, network error, timeout all serve the p
 });
 
 test("lookup URL encodes the parts; empty or absurd parts are a 404 without asking", async () => {
-  assert.equal(thesisLookupUrl(W, "a/b?c"), `https://og.nexustradinglabs.com/thesis/${W}/a%2Fb%3Fc`);
+  assert.equal(thesisLookupUrl(W, "a/b?c"), `https://og.nexustradinglabs.com/thesis/${W}/a%2Fb%3Fc/meta`);
   assert.equal(thesisLookupUrl("", "x"), null);
   assert.equal(thesisLookupUrl(W, "x".repeat(201)), null);
   const f = answering(200);

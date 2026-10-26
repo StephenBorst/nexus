@@ -130,7 +130,9 @@ jobs:
         run: |
           site=https://trade.nexustradinglabs.com
           w=0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4
-          real=$(curl -s -o /dev/null -w '%{http_code}' "$site/feed/thesis/$w/reg-bd180a17119ae795")
+          real=$(curl -s -o /tmp/real.html -w '%{http_code}' "$site/feed/thesis/$w/reg-bd180a17119ae795")
+          echo "real call title → $(grep -o '<title>[^<]*</title>' /tmp/real.html | head -1)"
+          grep -q '<title>[^<]* call by ' /tmp/real.html || echo "::warning::the call page has no call title in its HTML (meta injection not live?)"
           gone=$(curl -s -D /tmp/gone.h -o /dev/null -w '%{http_code}' "$site/feed/thesis/$w/no-such-call-check")
           echo "real call   → $real"
           echo "missing call → $gone $(grep -i '^x-robots-tag' /tmp/gone.h | tr -d '\r')"
