@@ -52,6 +52,14 @@ export function splitPlan(t) {
 }
 
 /**
+ * The exit plan a COPY of a call carries: the source's declared split, or none. A copy that keeps
+ * `takeProfit2` but drops `exitPlan` is graded TP1-only, a different trade from the source (BankrBot
+ * review, 2026-10-26: entry 100, stop 90, TP1 120, TP2 140, TP1 then the stop grades +0.5R on the
+ * source and +2R on such a copy). Every copy flow builds the field from this.
+ */
+export const copiedExitPlan = (source) => (source?.exitPlan === SPLIT_EXIT ? SPLIT_EXIT : undefined);
+
+/**
  * Why the grader can never grade this call, from its levels alone, or null. Published calls are
  * frozen, so this is permanent. (gradeCall also answers INVALID when it has no candles; that is a
  * missing read, not this.)
