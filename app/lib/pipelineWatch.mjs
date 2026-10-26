@@ -16,6 +16,8 @@
 // value later leaves one of them, the watcher keeps the recorded state and reports the disagreement
 // as an issue ("the served stage stands and the disagreement is a bug to fix in its own PR").
 
+import { REGIME_WINDOW, REGIME_OUTCOMES, judgeRegimeWindow, regimeFromMs } from "./regimeWindow.mjs";
+
 export const IF_THEN_PAGE = "docs/research/pipeline-if-then.md";
 export const GRADED_EXIT_PAGE = "docs/research/graded-exit-prereg.md";
 export const SNAPSHOT_PATH = "docs/research/pipeline-stages.json";
@@ -79,6 +81,29 @@ export const GRADED_EXIT_TRIGGERS = Object.freeze({
   FAILS: { section: "**Fails**", does: ["The graded-exit variant is retired; its wallet (0x9A30…cB28) stays as a record."] },
 });
 
+// The Basis × CVD regime window (docs/research/graded-exit-regime-prereg.md, signed 2026-10-26):
+// judged by `judgeRegimeWindow` (regimeWindow.mjs). Its four outcomes are final.
+export const REGIME_PAGE = REGIME_WINDOW.doc;
+export const REGIME_TEST_KEY = "basis_x_cvd:regime_window";
+const PARITY_CHECK = "Before merging: parity on the paper wallet 0x9A30…cB28 (GET /agent/0x9A3012988d60D61b34660BE06a321F7BF7bCcB28/parity?since=2026-10-27T00:00:00Z) must read CLEAN; if it reads DRIFT, the result waits until the drift is explained.";
+const RECORD = "Append the result under Results with the date, the numbers and the reason, and set REGIME_RESULT in app/lib/regimeWindow.mjs to this status (final).";
+export const REGIME_TRIGGERS = Object.freeze({
+  COUNTING: { section: "**Judgment**", does: ["Nothing changes. The window runs to judgment."] },
+  CLEARS: {
+    section: "**CLEARS**",
+    does: [
+      RECORD,
+      "Then pipeline-if-then.md from its Tradeable rules: the /proof headline changes in the same PR (the read, the number of trades, the date).",
+      "A paper-only preset trading it is proposed in its own PR. x402 and the house caller only on borst's go. Live money only through docs/research/live-money-review.md, signed by borst in person.",
+      PARITY_CHECK,
+    ],
+  },
+  FAILS: { section: "**FAILS**", does: [RECORD, "The test is retired: final, no extension. The paper wallet 0x9A30…cB28 stays as a record.", PARITY_CHECK] },
+  NOT_CLEARED: { section: "**NOT CLEARED**", does: [RECORD, "Retired with the missed bar named: final, no extension. The paper wallet stays as a record.", PARITY_CHECK] },
+  INCONCLUSIVE: { section: "**INCONCLUSIVE**", does: [RECORD, "Retired as inconclusive: final, no extension. The paper wallet stays as a record."] },
+  NOTE: { section: "**The read's old-data grade decides nothing.**", does: ["Append one dated line under Results with the read's grade. Nothing else changes; the window runs to judgment."] },
+});
+
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
 // The graded-exit bar, word for word from graded-exit-prereg.md § "Decision rule":
@@ -112,10 +137,10 @@ export function gradedExitStatus(axis) {
  * The state worth recording, from a served scorecard. Returns null when the scorecard can't be read
  * (no pipeline block): an unreadable board is never a change.
  */
-export function stateFromScorecard(sc) {
+export function stateFromScorecard(sc, now = Date.now()) {
   const reads = sc?.pipeline?.reads;
   if (!Array.isArray(reads)) return null;
-  const out = { asOf: sc.asOf || null, reads: {}, gradedExit: {} };
+  const out = { asOf: sc.asOf || null, reads: {}, gradedExit: {}, tests: {} };
   for (const r of reads) {
     if (!r || typeof r.axis !== "string" || typeof r.stage !== "string") continue;
     out.reads[r.axis] = { stage: r.stage, next: r.next ?? null, events: num(r.numbers?.events) };
@@ -123,6 +148,17 @@ export function stateFromScorecard(sc) {
   const axis = Array.isArray(sc.axes) ? sc.axes.find((a) => a?.name === GRADED_EXIT_AXIS) : null;
   const ge = gradedExitStatus(axis);
   if (ge) out.gradedExit[GRADED_EXIT_AXIS] = { status: ge.status, reason: ge.reason, trades: ge.numbers.trades, netBps: ge.numbers.netBps };
+  // The regime window: main-card block, holdout block, BTC day counts. Any of them unread ⇒ no entry
+  // (reported as "not served" against the record, never judged on a missing number).
+  const holdAxis = Array.isArray(sc.holdout?.axes) ? sc.holdout.axes.find((a) => a?.name === REGIME_WINDOW.axis) : null;
+  const j = judgeRegimeWindow({ main: axis?.regimeWindow, holdout: holdAxis?.regimeWindow, regime: sc.regimeWindow?.regime, readVerdict: axis?.verdict ?? null }, now);
+  if (j) {
+    out.tests[REGIME_TEST_KEY] = {
+      status: j.status, reason: j.reason, trades: j.numbers.trades, netBps: j.numbers.netBps, regime: j.numbers.regime,
+      belowPredictive: axis?.verdict ? axis.verdict !== "PREDICTIVE" : null, readVerdict: axis?.verdict ?? null,
+      inWindow: now >= regimeFromMs(),
+    };
+  }
   return out;
 }
 
@@ -179,15 +215,50 @@ export function diffPipeline(prev, cur) {
     issues.push(`${GRADED_EXIT_AXIS} graded exit: not served. Kept as recorded.`);
     next.gradedExit[GRADED_EXIT_AXIS] = { ...prevGe[GRADED_EXIT_AXIS] };
   }
+
+  // Registered tests (the regime window). A judged outcome is final; a grade note is recorded once
+  // per change of side (below PREDICTIVE or back), only inside the window.
+  next.tests = {};
+  const prevT = prev?.tests || {};
+  for (const [key, now] of Object.entries(cur.tests || {})) {
+    const was = prevT[key] || null;
+    if (was && REGIME_OUTCOMES.includes(was.status)) {
+      if (now.status !== was.status) issues.push(`${key}: recorded ${was.status}, which is final; the served numbers now read ${now.status}. Kept as recorded.`);
+      next.tests[key] = { ...was };
+      continue;
+    }
+    const { inWindow, ...rec } = now;
+    next.tests[key] = { ...rec, belowPredictive: inWindow ? now.belowPredictive : (was?.belowPredictive ?? now.belowPredictive) };
+    if ((was?.status ?? null) !== now.status) {
+      changes.push({
+        key: `test:${key}`, name: "basis_x_cvd regime window", kind: "regime_test", from: was?.status ?? null, to: now.status,
+        reason: now.reason, page: REGIME_PAGE, trigger: REGIME_TRIGGERS[now.status],
+      });
+    }
+    if (inWindow && was && now.belowPredictive != null && was.belowPredictive != null && now.belowPredictive !== was.belowPredictive) {
+      changes.push({
+        key: `note:${key}`, name: "basis_x_cvd read grade (regime window)", kind: "regime_note",
+        from: was.belowPredictive ? "below PREDICTIVE" : "PREDICTIVE", to: now.belowPredictive ? `below PREDICTIVE (${now.readVerdict})` : "PREDICTIVE",
+        reason: "Noted only. It does not retire the test.", page: REGIME_PAGE, trigger: REGIME_TRIGGERS.NOTE,
+      });
+    }
+  }
+  for (const key of Object.keys(prevT)) {
+    if (!(key in (cur.tests || {}))) {
+      issues.push(`${key}: not served (scoreboard block or BTC day counts unread). Kept as recorded.`);
+      next.tests[key] = { ...prevT[key] };
+    }
+  }
   return { changes, issues, next };
 }
 
 // The PR title + body for a set of changes (the scheduled run uses it as is).
 export function changeReport(changes, issues = [], asOf = null) {
-  const title = `Pipeline watch: ${changes.map((c) => `${c.key.split(":")[1]} ${c.from ?? "new"} → ${c.to}`).join(", ")}`;
+  const nameOf = (c) => c.name || c.key.split(":")[1];
+  const title = `Pipeline watch: ${changes.map((c) => `${nameOf(c)} ${c.from ?? "new"} → ${c.to}`).join(", ")}`;
   const lines = [`Served by GET /intel/axis-backtest${asOf ? ` (asOf ${asOf})` : ""}.`, ""];
   for (const c of changes) {
-    lines.push(`### ${c.key.split(":")[1]}${c.kind === "graded_exit" ? " (graded exit)" : ""}: ${c.from ?? "new"} → ${c.to}`);
+    lines.push(`### ${nameOf(c)}${c.kind === "graded_exit" ? " (graded exit)" : ""}: ${c.from ?? "new"} → ${c.to}`);
     if (c.reason) lines.push(c.reason);
     lines.push("", `What ${c.page} says (${c.trigger.section.replace(/\*/g, "")}):`);
     for (const d of c.trigger.does) lines.push(`- ${d}`);

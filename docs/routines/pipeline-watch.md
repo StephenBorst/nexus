@@ -28,11 +28,15 @@ are always left for borst.
       change (same read, same from → to), stop: finish with one line naming that PR.
    b. Branch `pipeline-watch/<YYYY-MM-DD>` from main. Run `node tools/pipeline/watch.mjs --from /tmp/sc.json --write`
       (updates `docs/research/pipeline-stages.json`).
-   c. Read `docs/research/pipeline-if-then.md` and, for a graded-exit change, `docs/research/graded-exit-prereg.md`.
-      Apply ONLY what the page says for that stage that is display: /proof copy and placement. Most of it already
-      follows the served stage (`app/lib/proofCopy.mjs`, `app/lib/signalCard.mjs`); add only what is missing, with
-      tests, in the repo's style. Anything the page marks as borst's (a paper wallet, x402, the house caller, a live
-      plan, arming) is NOT done: list it in the PR body under "borst's to do".
+   c. Read `docs/research/pipeline-if-then.md`; for a graded-exit change also `docs/research/graded-exit-prereg.md`; for
+      a regime-window change or note also `docs/research/graded-exit-regime-prereg.md`.
+      Apply ONLY what the page says for that stage that is display or record: /proof copy and placement, a dated line
+      appended under a page's Results (never an edit above it), and for a regime-window judgment `REGIME_RESULT` in
+      `app/lib/regimeWindow.mjs`. Most display already follows the served stage (`app/lib/proofCopy.mjs`,
+      `app/lib/signalCard.mjs`); add only what is missing, with tests, in the repo's style. Anything the page marks as
+      borst's (a paper wallet, x402, the house caller, a live plan, arming) is NOT done: list it in the PR body under
+      "borst's to do". If the trigger names a parity check, run it with curl and put the verdict in the PR body; a
+      DRIFT means the result waits (say so).
    d. A stage the page doesn't cover, or a stage that went backwards, changes nothing but the snapshot: say so in the PR.
    e. Run `node tools/run-tests.mjs` (install deps first: yarn 4 at the root, `npm ci` in workers/nexus-lab-api,
       nexus-agent-exec, nexus-carry-engine) and `npx tsc --noEmit`. Both clean, or no PR.
