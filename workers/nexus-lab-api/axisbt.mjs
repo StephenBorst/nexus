@@ -957,6 +957,12 @@ export function runScorecard(coinSets, cfg = {}) {
     // counted on both lines. The in-sample row above is unchanged.
     const oosSets = cfg.oosExclude ? coinSets.filter((cs) => !cfg.oosExclude(cs.coin)) : coinSets;
     if (reg) row.oos = { since: new Date(reg.fromMs).toISOString(), ...(cfg.oosExclude ? { excludedCoins: coinSets.filter((cs) => cfg.oosExclude(cs.coin)).map((cs) => cs.coin) } : {}), ...registeredGrade(oosSets, a.gen, reg.fromMs, { ...cfg, randomPools, gradedExit: gx === false ? false : reg.fromMs }) };
+    // A registered TEST of a read that isn't a pipeline read (e.g. the Basis × CVD regime window,
+    // app/lib/regimeWindow.mjs): the same grade as `oos`, from its own date, under its own key, with
+    // the graded exit counted from that date. Additive: every other field of the row is unchanged.
+    for (const t of (cfg.tests || []).filter((x) => x.axis === a.name && x.key && !(x.key in row))) {
+      row[t.key] = { since: new Date(t.fromMs).toISOString(), ...(cfg.oosExclude ? { excludedCoins: coinSets.filter((cs) => cfg.oosExclude(cs.coin)).map((cs) => cs.coin) } : {}), ...registeredGrade(oosSets, a.gen, t.fromMs, { ...cfg, randomPools, gradedExit: t.fromMs }) };
+    }
     return row;
   });
   // rank: PREDICTIVE > PROMISING > NOISE > INSUFFICIENT, then by the HEADLINE metric —

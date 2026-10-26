@@ -66,6 +66,7 @@ import { okxJson } from "./okx.mjs";
 import { rankUniverse, RECORDED_COINS, HOLDOUT_COINS, UNIVERSE_RULES } from "./universe.mjs";
 import { FLOW_COINS, HOLDOUT_AXES, HOLDOUT_SIGNED_OFF, isHoldoutCoin } from "../../app/lib/recordedUniverse.mjs";
 import { REGISTERED_READS, PIPELINE_RULES, pipelineStage, registeredMs } from "../../app/lib/readPipeline.mjs";
+import { REGIME_WINDOW, regimeFromMs, btcDailyRegimes, regimeConditionMet, regimeLabel } from "../../app/lib/regimeWindow.mjs";
 // TWAP planner/status — reuse the exec worker's tested logic (wrangler bundles the
 // cross-dir import, same as backtest.mjs). ONE planner, so start-validation and the
 // cron fire from identical rules.
@@ -4414,7 +4415,7 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "intel" && parts[1] === "axis-backtest" && request.method === "GET") {
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
-      const CACHE = `axisbt:v15:min${min}`; // v15 = funding block carries `feesNetBps` (fee-net on the same covered trades) · v14 = + `exitGraded.funding` (the graded exit also net of the funding paid while open, an estimate; informational) · v13 = + the four registered explorer reads (level_reclaim, oi_div_reversal, session_momentum, confluence_follow) · v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
+      const CACHE = `axisbt:v16:min${min}`; // v16 = + `regimeWindow` on basis_x_cvd (main + holdout) and the BTC regime day counts (docs/research/graded-exit-regime-prereg.md) · v15 = funding block carries `feesNetBps` (fee-net on the same covered trades) · v14 = + `exitGraded.funding` (the graded exit also net of the funding paid while open, an estimate; informational) · v13 = + the four registered explorer reads (level_reclaim, oi_div_reversal, session_momentum, confluence_follow) · v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
@@ -4442,19 +4443,34 @@ document.getElementById("btn").addEventListener("click",go);
       // Pipeline reads (app/lib/readPipeline.mjs): each gets an out-of-sample grade (`oos`) from its
       // registration on; the full-history row stays, labelled in-sample.
       const registered = REGISTERED_READS.map((r) => ({ axis: r.axis, fromMs: registeredMs(r) }));
-      const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min, registered, oosExclude: isHoldoutCoin, overlapPairs: [["basis_x_cvd", "rsi_reset_deep"]] });
+      // Registered tests of a read that isn't a pipeline read: the Basis × CVD regime window (signed
+      // 2026-10-26), graded from its own date on both lines. Measurement only.
+      const tests = [{ axis: REGIME_WINDOW.axis, key: "regimeWindow", fromMs: regimeFromMs() }];
+      const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min, registered, oosExclude: isHoldoutCoin, tests, overlapPairs: [["basis_x_cvd", "rsi_reset_deep"]] });
       // Holdout line: the signed-off eight on their own — the basis reads (holdout prereg) + every
       // pipeline read registered with a holdout line (its own registration doc).
       const holdoutSets = await loadSets(HOLDOUT_COINS);
       const holdoutRegs = registered.filter((x) => REGISTERED_READS.find((r) => r.axis === x.axis)?.holdout);
       const holdout = {
         signedOff: HOLDOUT_SIGNED_OFF, listed: [...HOLDOUT_COINS],
-        ...runHoldoutScorecard(holdoutSets, { horizons: [4, 12, 24], minSamples: min, axes: [...HOLDOUT_AXES, ...holdoutRegs.map((x) => x.axis)], registered: holdoutRegs }),
+        ...runHoldoutScorecard(holdoutSets, { horizons: [4, 12, 24], minSamples: min, axes: [...HOLDOUT_AXES, ...holdoutRegs.map((x) => x.axis)], registered: holdoutRegs, tests }),
         note: "Coins the basis read was never looked at on, picked on liquidity only and recorded from the sign-off date. Graded by the same code, never pooled into the main card. Accrues: basis needs 48h of history before it can fire, and the R grade needs hourly prices recorded since the sign-off. See docs/research/holdout-universe-prereg.md.",
       };
+      // The regime window's BTC day counts, from Orderly daily candles (one read). A failed read is
+      // reported as an error, never as zero days.
+      let regime;
+      try {
+        const nowS = Math.floor(Date.now() / 1000), fromS = Math.floor(regimeFromMs() / 1000) - (REGIME_WINDOW.lookbackDays + 2) * 86400;
+        const tv = await orderlyGet(`https://api-evm.orderly.org/tv/history?symbol=${REGIME_WINDOW.symbol}&resolution=D&from=${fromS}&to=${nowS}`);
+        if (tv?.s !== "ok" && tv?.s !== "no_data") throw new Error(`tv/history answered ${tv?.s || "nothing"}`);
+        const daily = (tv.t || []).map((t, i) => ({ t, c: tv.c?.[i] }));
+        const r = btcDailyRegimes(daily);
+        regime = { ...r, met: regimeConditionMet(r.counts), label: regimeLabel(r.counts) };
+      } catch (e) { regime = { error: whyFailed(e) }; }
       const out = {
         asOf: new Date().toISOString(),
         config: { horizonsHours: [4, 12, 24], minSamples: min, coins: coinSets.map((c) => c.coin) },
+        regimeWindow: { ...REGIME_WINDOW, regime, note: "Basis × CVD graded exit, regime window. The axis row's `regimeWindow` block (main card and holdout) grades only events and trades at or after registeredAt. Judged per docs/research/graded-exit-regime-prereg.md; nothing here judges it." },
         ...scorecard,
         holdout,
         pipeline: {
