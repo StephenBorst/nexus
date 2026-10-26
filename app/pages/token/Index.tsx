@@ -16,7 +16,7 @@ import { SectionHeader } from "@/pages/lab/components";
 import { FADE_FUNDING_FLOOR_PCT_YR } from "@/pages/lab/briefing";
 import {
   searchToken, poolCandles, poolTrades, orderlyPerpSet, nexusSignal, swapQuote, chartOverlays,
-  fetchTakes, postTake, deleteTake, fetchCallerMerit, fetchMovers, fetchSymbolCallers,
+  fetchTakes, postTake, deleteTake, fetchCallerMerit, fetchMovers, fetchSymbolCallers, fetchPublicFeed,
   tokenLogo, perpMark, openCallCoins,
   fmtUsd, fmtTapeUsd, fmtPrice, fmtAge, shortAddr,
   type TokenPair, type Candle, type Trade, type NexusSignal, type SwapQuote, type CallMark, type LiqMap, type Take, type CallerMerit, type Mover, type SymbolCallers,
@@ -28,7 +28,8 @@ import { FlashSpotButton } from "./FlashSpotButton";
 import { FlashOrders } from "./FlashOrders";
 import { CrossChainCard } from "./CrossChainCard";
 import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS, majorHref, needsSolanaFunds, openCallCount, callCountLine, poolCaution,
-  readBrief, fundingPayLine, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo, safeLogoUrl } from "@/lib/spotDiscovery.mjs";
+  readBrief, fundingPayLine, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo, safeLogoUrl,
+  callStrip, openChipLine, labRowLine, readLabOpen, writeLabOpen } from "@/lib/spotDiscovery.mjs";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -123,6 +124,9 @@ const UI = "var(--nx-font-ui, sans-serif)";
 const BG = "#0a0a0b", CARD = "#0f0f11", BORD = "#232327", BORD2 = "#1a1a1e";
 const BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUT = "#71717a", FAINT = "#52525b";
 const POS = "#3ecf8e", NEG = "#f7525f";
+// The phone Buy/Sell bar sits at the bottom edge, above the phone's home-indicator inset. Spot has no
+// SDK bottom nav (it shows only on Markets/Trade/Portfolio) and the ◆ orb sits at 84px, clear above it.
+const STICKY_BAR_BOTTOM = "calc(12px + env(safe-area-inset-bottom, 0px))";
 
 // Uniswap `chain` param by DexScreener chainId — the honest spot deep-link for EVM tokens
 // we don't list as a perp. Solana routes to Jupiter; anything else falls back to the pool page.
@@ -389,6 +393,49 @@ function MoversRail({ onPick }: { onPick: (sym: string) => void }) {
   );
 }
 
+// ── PUBLIC CALLS strip (Spot landing, above Movers) — one chip per listed coin with a public call
+// in flight: a count and how many are still awaiting fill, never a side (rules: spotDiscovery.mjs
+// callStrip). Nothing in flight → the coins graded in the last 7 days, as wins and losses. No calls
+// either way, or an unreadable feed or market list → the row isn't drawn. Same /feed the chart reads.
+type StripChip = { coin: string; calls: number; awaiting: number; wins: number; losses: number };
+function PublicCallsStrip({ onPick }: { onPick: (sym: string) => void }) {
+  const [strip, setStrip] = useState<{ mode: "open" | "graded" | null; chips: StripChip[] } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => Promise.all([fetchPublicFeed(), orderlyPerpSet()])
+      .then(([rows, listed]) => { if (alive) setStrip(callStrip(rows, listed) as { mode: "open" | "graded" | null; chips: StripChip[] }); })
+      .catch(() => {});
+    load();
+    const iv = setInterval(load, 60000);
+    return () => { alive = false; clearInterval(iv); };
+  }, []);
+  if (!strip?.mode || !strip.chips.length) return null;
+  const open = strip.mode === "open";
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+        <span style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: BRIGHT }}>{open ? "Public calls" : "Graded this week"}</span>
+        <span style={{ fontFamily: UI, fontSize: 13, color: MUT }}>{open ? "in flight · not graded yet" : "first touch, from public price"}</span>
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {strip.chips.map((c) => (
+          <button key={c.coin} type="button" onClick={() => onPick(c.coin)} className="nx-press"
+            style={{ display: "flex", alignItems: "center", gap: 6, background: CARD, border: `1px solid ${BORD}`, borderRadius: 15, padding: "0 12px", height: 30, cursor: "pointer", fontFamily: UI }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: BRIGHT }}>{c.coin}</span>
+            {open
+              ? <span style={{ fontSize: 12, color: MUT }}>{openChipLine(c)}</span>
+              : <span style={{ fontSize: 12, fontWeight: 600 }}>
+                  {c.wins > 0 && <span style={{ color: POS }}>{c.wins}W</span>}
+                  {c.wins > 0 && c.losses > 0 && <span style={{ color: FAINT, fontWeight: 400 }}> · </span>}
+                  {c.losses > 0 && <span style={{ color: NEG }}>{c.losses}L</span>}
+                </span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── who's positioned on THIS coin — the moat FOMO can't copy ───────────────────
 // Not self-reported "I'm long": credible callers with an OPEN position or an active graded
 // call on this symbol right now, each with earned merit + graded record, and a merit-weighted
@@ -456,6 +503,10 @@ export default function TokenTerminal() {
   const location = useLocation();
   const xcPreset = (location.state as { xcTo?: string; xcRecipient?: string } | null) || null;
   const xcRef = useRef<HTMLDivElement | null>(null);
+  // Phone: a thin Buy/Sell bar sits at the bottom edge whenever the ticket is off screen; a tap
+  // picks the side and brings the ticket into view. Nothing signs from the bar.
+  const ticketRef = useRef<HTMLDivElement | null>(null);
+  const [ticketInView, setTicketInView] = useState(true);
   useEffect(() => {
     if (!xcPreset?.xcTo || query) return;
     const t = setTimeout(() => xcRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
@@ -500,7 +551,11 @@ export default function TokenTerminal() {
   // sold token straight into another token in ONE swap. The sold token is still the only approve.
   const [sellOut, setSellOut] = useState<{ token: string; sym: string; decimals: number } | null>(null);
   const [tradeOpen, setTradeOpen] = useState(true); // collapse the buy/sell panel to give the chart room
-  const [tapeOpen, setTapeOpen] = useState(true);   // collapse the live tape too (same fold-away pattern)
+  // The live tape starts folded on a phone, so the ticket sits right under the chart.
+  const [tapeOpen, setTapeOpen] = useState(() => !isMobile);   // collapse the live tape too (same fold-away pattern)
+  // Phone only: the read + callers fold behind one Lab row, open or folded as this browser last left it.
+  const [labOpen, setLabOpenState] = useState(() => readLabOpen(typeof window !== "undefined" ? window.localStorage : undefined));
+  const setLabOpen = useCallback((open: boolean) => { setLabOpenState(open); writeLabOpen(typeof window !== "undefined" ? window.localStorage : undefined, open); }, []);
   // Spot TAKES — ungraded bull/bear conviction on this token + discussion (FOMO-style, on identity).
   const [takes, setTakes] = useState<Take[]>([]);
   const [takesLoading, setTakesLoading] = useState(false);
@@ -995,6 +1050,21 @@ export default function TokenTerminal() {
     setTradeOpen(true);
     setTimeout(() => document.getElementById("trade-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
   }, []);
+  // The sticky bar: pick the side, unfold the ticket, bring it into view.
+  const jumpToTicket = useCallback((s: "buy" | "sell") => {
+    setSide(s);
+    setTradeOpen(true);
+    setTimeout(() => ticketRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }, []);
+  // Watch the ticket against the viewport (the page scrolls inside the app shell; the observer's
+  // default root still clips by every scrolling ancestor). Phone only; no ticket → nothing to watch.
+  useEffect(() => {
+    const el = ticketRef.current;
+    if (!isMobile || !el || typeof IntersectionObserver === "undefined") { setTicketInView(true); return; }
+    const io = new IntersectionObserver(([e]) => setTicketInView(e.isIntersecting), { threshold: 0.15 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [isMobile, pair?.pairAddress]);
   // Open the cross-chain card preset to USDC on Solana, paying this wallet (router state, never the URL).
   const getUsdcOnSolana = useCallback(() => {
     navigate("/token", { state: { xcTo: "USDC.sol", xcRecipient: solSigner.address || "" } });
@@ -1406,6 +1476,7 @@ export default function TokenTerminal() {
             {/* Majors: Solana names open by their mint, so a guest can't land on a same-ticker copy.
                 No wallet → above Movers (nothing else to start from); a wallet → below, its own chips lead. */}
             {!(wallet || solSigner.address) && <MajorsRow onOpen={(href) => navigate(href)} viewed={viewed} />}
+            <PublicCallsStrip onPick={(s) => submit(s)} />
             <MoversRail onPick={(s) => submit(s)} />
             <div style={{ maxWidth: 640 }}>
               <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 12 }}>
@@ -1527,7 +1598,7 @@ export default function TokenTerminal() {
                   <div style={{ fontFamily: UI, fontSize: 12.5, color: SIGNAL.watch, lineHeight: 1.5 }}>{caution}</div>
                 )}
                 {callers && openCallCount(callers) > 0 && (
-                  <button type="button" onClick={() => { setCallersOpen(true); setTimeout(() => document.getElementById("callers-on-coin")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }}
+                  <button type="button" onClick={() => { setCallersOpen(true); if (isMobile) setLabOpen(true); setTimeout(() => document.getElementById("callers-on-coin")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }}
                     style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontFamily: UI, fontSize: 12.5, color: FOG, cursor: "pointer", textAlign: "left" }}>
                     {callCountLine(openCallCount(callers), pair.baseSymbol)} · <span style={{ color: BRIGHT }}>see who</span>
                   </button>
@@ -1544,10 +1615,13 @@ export default function TokenTerminal() {
             )}
 
             {/* body: chart + tape (left) · trade panel (right) */}
-            <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: "1fr 320px", gap: 12, alignItems: "start" }}>
-              <div style={{ minWidth: 0 }}>
+            {/* Phone: one column, the two column wrappers flatten (display: contents) and `order` sets the
+                sequence: chart → your position → ticket → Lab row (read + callers) → live tape.
+                Desktop: chart + tape on the left, the read, callers and ticket in the 320px sidebar. */}
+            <div style={isMobile ? { display: "flex", flexDirection: "column" } : { display: "grid", gridTemplateColumns: "1fr 320px", gap: 12, alignItems: "start" }}>
+              <div style={isMobile ? { display: "contents" } : { minWidth: 0 }}>
                 {/* chart + timeframe */}
-                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 12, marginBottom: 12, order: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
                     {TIMEFRAMES.map((t, i) => (
                       <Pill key={t.label} size="sm" active={i === tf} onClick={() => setTf(i)}>{t.label}</Pill>
@@ -1559,7 +1633,7 @@ export default function TokenTerminal() {
 
                 {/* ── YOUR POSITION — shown when you hold the token; cost basis from tracked in-app buys ── */}
                 {held && (
-                  <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                  <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginBottom: 12, order: 2 }}>
                     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
                       <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>Your position</span>
                       {position?.pnlPct != null && <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: position.pnl! >= 0 ? POS : NEG }}>{position.pnl! >= 0 ? "+" : ""}{position.pnlPct.toFixed(2)}%</span>}
@@ -1602,7 +1676,7 @@ export default function TokenTerminal() {
                     buy works): reports which source holds the signer, the /sol/rpc health, balance,
                     and every canSolBuy gate. Kept for local debugging; never shown to real users. */}
                 {import.meta.env.DEV && pair.chainId === "solana" && (
-                  <div style={{ background: CARD, border: `1px solid ${canSolBuy ? "#3ecf8e55" : BORD}`, borderRadius: 10, padding: "11px 14px", marginBottom: 12 }}>
+                  <div style={{ background: CARD, border: `1px solid ${canSolBuy ? "#3ecf8e55" : BORD}`, borderRadius: 10, padding: "11px 14px", marginBottom: 12, order: 2 }}>
                     <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: FAINT, textTransform: "uppercase", marginBottom: 6 }}>◎ Solana signer · live check</div>
                     <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUT, lineHeight: 1.65 }}>
                       <div>picked: <span style={{ color: solSigner.src ? POS : NEG }}>{solSigner.src ?? "none"}</span> · sign <span style={{ color: solSigner.hasSign ? POS : NEG }}>{solSigner.hasSign ? "✓" : "✗"}</span> · send <span style={{ color: solSigner.hasSend ? POS : NEG }}>{solSigner.hasSend ? "✓" : "✗"}</span> · net {solSigner.network ?? "—"}</div>
@@ -1621,7 +1695,7 @@ export default function TokenTerminal() {
                 )}
 
                 {/* live tape — collapsible (fold it away to give the chart room, like the trade panel) */}
-                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, overflow: "hidden", order: 5 }}>
                   <button onClick={() => setTapeOpen((o) => !o)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", borderBottom: tapeOpen ? `1px solid ${BORD}` : "none", padding: "12px 14px", cursor: "pointer" }}>
                     <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>Live tape{trades.length ? <span style={{ color: FAINT, fontWeight: 400 }}> · {trades.length}</span> : null}</span>
                     <Chevron open={tapeOpen} />
@@ -1646,11 +1720,28 @@ export default function TokenTerminal() {
                 </div>
               </div>
 
+              <div style={isMobile ? { display: "contents" } : { minWidth: 0 }}>
+              {/* ── LAB ROW (phone) — the read and the callers fold behind one row that still says
+                  something: who pays funding and how many public calls are open (spotDiscovery.mjs
+                  labRowLine). Open or folded as this browser last left it. Desktop shows both open. */}
+              {isMobile && (
+                <button type="button" onClick={() => setLabOpen(!labOpen)} aria-expanded={labOpen} aria-controls="spot-lab-block"
+                  style={{ order: 4, width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left", background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: "12px 14px", marginBottom: 12, cursor: "pointer" }}>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0, flex: 1 }}>
+                    <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT }}>Lab</span>
+                    <span style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.45 }}>
+                      {labRowLine({ isPerp, fundingAnnualPct: sig?.fundingAnnualPct, callCount: callers ? openCallCount(callers) : undefined, coin: pair.baseSymbol })}
+                    </span>
+                  </span>
+                  <Chevron open={labOpen} />
+                </button>
+              )}
+              {(!isMobile || labOpen) && (<>
               {/* ── NEXUS — the read, and the agent you can ask ──────────────────
                   The differentiator vs every other token terminal: a swap page anyone can
                   clone, but not the graded funding verdict beside it, and not an analyst you
                   can interrogate about the thing you're looking at. */}
-              <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginTop: isMobile ? 12 : 0, marginBottom: 12 }}>
+              <div id="spot-lab-block" style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginBottom: 12, order: 4 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
                   <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.brand, textTransform: "uppercase" }}>Nexus read</span>
                   {isPerp && <span style={{ fontFamily: UI, fontSize: 12, color: FAINT }}>· listed market</span>}
@@ -1687,19 +1778,21 @@ export default function TokenTerminal() {
 
               {/* who's positioned on this coin — credible callers, graded, not self-reported */}
               {isPerp && callers && callers.callers.length > 0 && (
-                <div id="callers-on-coin"><CallersStrip coin={pair.baseSymbol} data={callers} onOpen={(w) => navigate(`/trader/${w}`)} expanded={callersOpen} setExpanded={setCallersOpen} /></div>
+                <div id="callers-on-coin" style={{ order: 4 }}><CallersStrip coin={pair.baseSymbol} data={callers} onOpen={(w) => navigate(`/trader/${w}`)} expanded={callersOpen} setExpanded={setCallersOpen} /></div>
               )}
               {/* Nobody on it yet → the next real action is a call, which is what gets graded. */}
               {isPerp && callers && callers.callers.length === 0 && (
-                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                <div style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, marginBottom: 12, order: 4 }}>
                   <div style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: BRIGHT, marginBottom: 4 }}>Callers on {pair.baseSymbol}</div>
                   <div style={{ fontFamily: UI, fontSize: 12.5, color: MUT, marginBottom: 6 }}>No open positions or public calls on {pair.baseSymbol} right now.</div>
                   <button type="button" onClick={() => postCall(pair.baseSymbol)} disabled={postingCall} style={NEXT_ACTION}>{postingCall ? "Reading the mark…" : `Post the first call on ${pair.baseSymbol} →`}</button>
                 </div>
               )}
 
+              </>)}
+
               {/* trade panel — honest routing, no fake fills */}
-              <div id="trade-ticket" style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, scrollMarginTop: 72 }}>
+              <div id="trade-ticket" ref={ticketRef} style={{ background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 14, scrollMarginTop: 72, order: 3, marginBottom: isMobile ? 12 : 0 }}>
                 {/* collapse toggle — fold the buy/sell panel to give the chart + tape the room */}
                 <button onClick={() => setTradeOpen((o) => !o)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", padding: 0, marginBottom: tradeOpen ? 12 : 0, cursor: "pointer" }}>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, minWidth: 0 }}>
@@ -1993,6 +2086,7 @@ export default function TokenTerminal() {
                 </button>
                 </>)}
               </div>
+              </div>
             </div>
 
             {/* ── TAKES — spot thesis + discussion (FOMO-style, on verifiable wallet identity).
@@ -2125,6 +2219,21 @@ export default function TokenTerminal() {
         )}
         </div>
       </div>
+
+      {/* ── STICKY BUY/SELL (phone) — at the bottom edge, below the ◆ orb, only while the ticket is
+          off screen. Each button only picks the side and scrolls to the ticket: the ticket's own
+          quote, checks and confirm step are the only way an order goes out. */}
+      {isMobile && pair && !ticketInView && (
+        <div style={{ position: "fixed", left: 12, right: 12, bottom: STICKY_BAR_BOTTOM, zIndex: 90, display: "flex", gap: 8, padding: 6, background: "rgba(15,15,17,0.94)", border: `1px solid ${C.borderStrong}`, borderRadius: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.45)" }}>
+          {(["buy", "sell"] as const).map((s) => (
+            <button key={s} type="button" onClick={() => jumpToTicket(s)} className="nx-press"
+              style={{ flex: 1, height: 42, fontFamily: UI, fontSize: 14, fontWeight: 600, borderRadius: 10, cursor: "pointer",
+                color: s === "buy" ? "#0a0a0b" : NEG, background: s === "buy" ? POS : "none", border: s === "buy" ? "none" : `1px solid ${NEG}88` }}>
+              {showPerp ? (s === "buy" ? "Long" : "Short") : (s === "buy" ? "Buy" : "Sell")} {pair.baseSymbol}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── WooFi majors-swap panel (modal) — self-custodial widget, its own token picker + chain
           switch + execution. Additive: mounted lazily on open, never touches the Fabric/Jupiter

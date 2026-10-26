@@ -3,6 +3,8 @@
 // that decide WHICH token a tap opens are tested (a recents chip or a pinned major that resolved to
 // a look-alike would put a user on the wrong token).
 
+import { callLifecycle } from "./callLifecycle.mjs";
+
 // ── recently viewed ────────────────────────────────────────────────────────────────────────────
 // The last 5 tokens this browser opened, keyed by chain + contract address (tickers collide: a
 // "RAY" chip must reopen THAT RAY). Works without a wallet. A perp-only major (BTC/ETH…, no
@@ -257,3 +259,86 @@ export function chipMarks(viewed, { openCoins, buys, listed } = {}) {
   return out;
 }
 export const chipKey = (v) => viewedKey(v);
+
+// ── public calls strip (Spot home, above Movers) ─────────────────────────────────────────────────
+// One chip per coin, from the public /feed rows. No sides and no lean (borst, 2026-10-12: not until
+// the verified board has a net-positive caller): a chip is a count. "Open" means what the cards mean
+// by it (callLifecycle.mjs): a call whose entry hasn't traded is WORKING and is counted as awaiting
+// fill, never as a position. Only coins Nexus lists (the callers-card gate), so a tap always opens a
+// token page with a market behind it; an unreadable listed set shows nothing. PERP_BTC_USDC and BTC
+// are one coin. No unresolved calls → the calls graded in the last 7 days, as wins and losses.
+export const CALL_STRIP_MAX = 8;
+export const GRADED_WINDOW_MS = 7 * 86400000;
+
+const stripCoin = (s) => String(s || "").trim().toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
+
+/** A /feed row that is a public call this strip may count (not a resolution row, a copy or holders-only). */
+export function isStripCall(r) {
+  return !!r && typeof r === "object" && !r.resolution && r.isPublic !== false && !r.holdersOnly && !r.duplicateOf
+    && !!stripCoin(r.symbol) && Number(r.entryPrice) > 0;
+}
+
+/**
+ * @param {object[] | null | undefined} rows   /feed rows (null = unreadable)
+ * @param {Set<string> | null | undefined} listed  bare tickers Nexus lists (orderlyPerpSet)
+ * @returns {{ mode: "open"|"graded"|null, chips: { coin:string, calls:number, awaiting:number, wins:number, losses:number }[] }}
+ */
+export function callStrip(rows, listed, { now = Date.now(), max = CALL_STRIP_MAX } = {}) {
+  const none = { mode: null, chips: [] };
+  if (!(listed instanceof Set) || listed.size === 0 || !Array.isArray(rows)) return none;
+  const seen = new Set();
+  const open = new Map(), graded = new Map();
+  const bump = (m, coin) => { if (!m.has(coin)) m.set(coin, { coin, calls: 0, awaiting: 0, wins: 0, losses: 0 }); return m.get(coin); };
+  for (const r of rows) {
+    if (!isStripCall(r)) continue;
+    const coin = stripCoin(r.symbol);
+    if (!listed.has(coin)) continue;
+    const key = `${String(r.wallet || r.walletAddress || "").toLowerCase()}:${r.id ?? `${coin}:${r.createdAt}`}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const stage = callLifecycle(r);
+    if (stage === "WORKING" || stage === "OPEN" || stage === "UNCHECKED") {
+      const c = bump(open, coin);
+      c.calls++;
+      if (stage === "WORKING") c.awaiting++;
+    } else if (r.gradedOutcome === "WIN" || r.gradedOutcome === "LOSS") {
+      const at = Number(r.gradedAt);
+      if (Number.isFinite(at) && at <= now && now - at <= GRADED_WINDOW_MS) {
+        const c = bump(graded, coin);
+        if (r.gradedOutcome === "WIN") c.wins++; else c.losses++;
+      }
+    }
+  }
+  const rank = (m, n) => [...m.values()].sort((a, b) => n(b) - n(a) || a.coin.localeCompare(b.coin)).slice(0, max);
+  if (open.size) return { mode: "open", chips: rank(open, (c) => c.calls) };
+  if (graded.size) return { mode: "graded", chips: rank(graded, (c) => c.wins + c.losses) };
+  return none;
+}
+
+/** "3 calls · 2 awaiting fill" for an open chip. */
+export function openChipLine(chip) {
+  const n = Number(chip?.calls) || 0;
+  if (n < 1) return null;
+  const a = Number(chip?.awaiting) || 0;
+  return `${n} call${n === 1 ? "" : "s"}${a > 0 ? ` · ${a === n && n > 1 ? "all" : a} awaiting fill` : ""}`;
+}
+
+// ── the folded Lab row on a phone's token page ───────────────────────────────────────────────────
+// The read and the callers card fold behind one row that still says something: who pays funding and
+// how many public calls are open (inputs, never a verdict). Same pieces as readBrief.
+export function labRowLine({ isPerp, fundingAnnualPct, callCount, coin }) {
+  if (!isPerp) return `Not a Nexus market · ask Nexus about ${coin || "this token"}`;
+  const f = fundingPayLine(fundingAnnualPct);
+  if (!f) return "Reading the funding tape…";
+  if (!Number.isInteger(callCount) || callCount < 0) return f;
+  return `${f} · ${callCount ? `${callCount} public call${callCount === 1 ? "" : "s"} open` : "no public calls open"}`;
+}
+
+// Open or folded, remembered per browser. Folded unless this browser opened it.
+export const LAB_ROW_KEY = "nx_spot_lab_open_v1";
+export function readLabOpen(storage) {
+  try { return storage?.getItem(LAB_ROW_KEY) === "1"; } catch { return false; }
+}
+export function writeLabOpen(storage, open) {
+  try { storage?.setItem(LAB_ROW_KEY, open ? "1" : "0"); } catch { /* private mode */ }
+}

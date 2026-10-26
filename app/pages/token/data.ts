@@ -398,13 +398,30 @@ export interface NexusSignal {
 export interface CallMark { t: number; entry: number; dir: "LONG" | "SHORT"; pfp: string | null; name: string | null; wallet: string }
 export interface LiqMap { below: { price: number; mag: number }[]; above: { price: number; mag: number }[]; currentPrice: number }
 const bareSym = (s: string) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
+// The public /feed rows, read once and shared by the chart marks and the Spot home calls strip.
+// Cached ~60s; one request in flight at a time. null = unreadable (callers show nothing for it).
+let _feed: { at: number; rows: Record<string, unknown>[] } | null = null;
+let _feedReq: Promise<Record<string, unknown>[] | null> | null = null;
+export async function fetchPublicFeed(): Promise<Record<string, unknown>[] | null> {
+  if (_feed && Date.now() - _feed.at < 60 * 1000) return _feed.rows;
+  if (_feedReq) return _feedReq;
+  _feedReq = (async () => {
+    const feed = await getJson(`${AGENT_API}/feed`).catch(() => null);
+    const list = Array.isArray(feed) ? feed : (feed as { feed?: unknown[]; items?: unknown[] } | null)?.feed ?? (feed as { items?: unknown[] } | null)?.items;
+    if (!Array.isArray(list)) return _feed?.rows ?? null;
+    _feed = { at: Date.now(), rows: list as Record<string, unknown>[] };
+    return _feed.rows;
+  })().finally(() => { _feedReq = null; });
+  return _feedReq;
+}
+
 export async function chartOverlays(coin: string): Promise<{ calls: CallMark[]; liq: LiqMap | null }> {
   const sym = bareSym(coin);
-  const [feed, lm] = await Promise.all([
-    getJson(`${AGENT_API}/feed`).catch(() => null),
+  const [feedRows, lm] = await Promise.all([
+    fetchPublicFeed().catch(() => null),
     getJson(`${AGENT_API}/intel/liqmap/${sym}`).catch(() => null),
   ]);
-  const rows = (Array.isArray(feed) ? feed : (feed as { feed?: unknown[]; items?: unknown[] })?.feed ?? (feed as { items?: unknown[] })?.items ?? []) as Record<string, unknown>[];
+  const rows = feedRows ?? [];
   const calls: CallMark[] = rows
     .map((t) => ({
       wallet: String(t.wallet || ""), pfp: (t.pfp as string) ?? null, name: (t.displayName as string) ?? null,
