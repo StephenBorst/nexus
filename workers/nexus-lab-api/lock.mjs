@@ -20,6 +20,9 @@ export const LOCK_KEYS = {
   // Not a paid path: the Arena operator map is one KV value, and a lost write would silently
   // un-group a wallet (the survivorship hole the groups exist to close).
   arenaOperators: () => "arena:operators",
+  // Hosted AI's per-wallet, per-model daily counter (ai:usage:…): our spend. Two calls at once
+  // could both read N, both pass the cap, and both write N+1.
+  aiUsage: (usageKey) => `aiusage:${usageKey}`,
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;

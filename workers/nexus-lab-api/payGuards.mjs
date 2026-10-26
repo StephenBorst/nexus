@@ -128,8 +128,8 @@ export async function addSimCredits(store, key, n, lock = unlocked) {
   });
 }
 
-export async function takeCapSlot(store, key, cap, ttl, lock = unlocked) {
-  return lock(LOCK_KEYS.simCap(key), async () => {
+export async function takeCapSlot(store, key, cap, ttl, lock = unlocked, lockKey = LOCK_KEYS.simCap(key)) {
+  return lock(lockKey, async () => {
     const used = Number(await store.get(key)) || 0;
     if (used >= cap) return { ok: false, used };
     await store.put(key, String(used + 1), { expirationTtl: ttl });

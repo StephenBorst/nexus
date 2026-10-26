@@ -118,6 +118,20 @@ test("the day's cap: one slot left, two runs at once → one slot", async () => 
   assert.equal(store.m.get("miro:runs:2026-10-23"), "20");
 });
 
+test("hosted AI: one call left today, two at once → unlocked both pass the cap; locked one does", async () => {
+  const key = "ai:usage:0xabc:claude-sonnet-4-6:2026-10-26";
+  const unlocked = slowKv({ [key]: "39" });
+  const u = await Promise.all([takeCapSlot(unlocked, key, 40, 60), takeCapSlot(unlocked, key, 40, 60)]);
+  assert.equal(u.filter((x) => x.ok).length, 2, "the race is real without the lock");
+  const store = slowKv({ [key]: "39" });
+  const ns = lockNs();
+  const lock = lockFor({ NEXUS_LOCK: ns }, fast);
+  const r = await Promise.all([takeCapSlot(store, key, 40, 60, lock, LOCK_KEYS.aiUsage(key)), takeCapSlot(store, key, 40, 60, lock, LOCK_KEYS.aiUsage(key))]);
+  assert.equal(r.filter((x) => x.ok).length, 1);
+  assert.equal(store.m.get(key), "40");
+  assert.equal(LOCK_KEYS.aiUsage(key), `aiusage:${key}`, "its own lease, not the sim cap's");
+});
+
 test("one payment tx redeemed twice at once: unlocked both grant; locked one grants, one is told it's used", async () => {
   const tx = "0x" + "aa".repeat(32);
   let grants = 0;
