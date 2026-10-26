@@ -575,6 +575,11 @@ NOISE** (~46% hit, negative bps over 2.5k samples) — the edge migrated to **BA
   oct15-results.md). Paper control for it = the nine-market 24h arm `0x325D…95DE` (same markets + entries, preset exit);
   the 12h preset exit is still graded on the scoreboard's `exit` line. Tests: `gradedExit.test.mjs`,
   `axisbt.graded.test.mjs` (incl. exec↔grader level parity on the same candles).
+  **❌ RETIRED 2026-10-26 (borst): FAILS on the read.** basis_x_cvd graded PROMISING (below PREDICTIVE); the prereg's
+  "falls below PREDICTIVE" = Fails at any point. Line at the time: oos 4 trades, +44.9 bps. Recorded under Results in
+  graded-exit-prereg.md + `pipeline-stages.json`; `RETIRED_GRADED_EXITS` (proofCopy.mjs) labels it Retired on /proof and
+  the shelf, final even if the read comes back. Wallet `0x9A30…cB28` keeps running as a record. Engine, the scoreboard
+  line and the Lab's GRADED EXIT toggle unchanged. "Judged only at 30 trades" = a new dated page, never an edit.
 - **🌐 RECORDED UNIVERSE (2026-10-16, borst: widen it; list + liquidity filter to him first; record-and-grade ONLY).**
   The basis × CVD read was picked on 9 coins (`RECORDED_COINS` in `workers/nexus-lab-api/universe.mjs`, the list the
   hourly `snapshotFlow` reads). `GET /intel/universe` = read-only report: every Orderly perp OKX also lists as spot + USDT

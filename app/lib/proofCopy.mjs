@@ -53,3 +53,14 @@ export function callersLine(count, minCalls = 5) {
   if (!n) return `No caller qualifies for the board yet: ${rule}.`;
   return `${n} ${n === 1 ? "caller qualifies" : "callers qualify"} for the board: ${rule}. Not tested against chance.`;
 }
+
+// Graded-exit variants retired under their own pre-registered bar (graded-exit-prereg.md "Fails"),
+// with the day and the reason as recorded in docs/research/pipeline-stages.json (proofCopy.test.mjs
+// pins the two together). Retired is final: the scoreboard keeps grading the line, and /proof + the
+// strategy shelf say Retired even if the read's verdict later comes back. Display only.
+export const RETIRED_GRADED_EXITS = Object.freeze({
+  basis_x_cvd: Object.freeze({ on: "2026-10-26", why: "the read fell to PROMISING, below PREDICTIVE" }),
+});
+export const retiredGradedExit = (axis) => RETIRED_GRADED_EXITS[axis] || null;
+export const retiredLine = (r) =>
+  r ? `Retired ${new Date(`${r.on}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}: ${r.why}. The paper wallet stays as a record.` : "";

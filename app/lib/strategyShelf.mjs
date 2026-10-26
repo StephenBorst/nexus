@@ -11,6 +11,7 @@
 
 import { gradedExitStatus, GRADED_EXIT_AXIS } from "./pipelineWatch.mjs";
 import { GRADED_EXIT_OOS_CUTOFF_MS } from "./gradedExit.mjs";
+import { retiredGradedExit, retiredLine } from "./proofCopy.mjs";
 
 // Registered read (scoreboard axis) → the preset id that trades its exact rule. A read joins this map
 // in its own reviewed PR, after the parity test the pipeline page asks for at Edge. Empty until then.
@@ -70,6 +71,15 @@ function readRow(reg, labels, now, killEvents) {
 }
 
 function exitRow(axis, now) {
+  // Retired under its own bar: final, whatever the read grades today.
+  const retired = retiredGradedExit(GRADED_EXIT_AXIS);
+  if (retired) {
+    return {
+      id: `${GRADED_EXIT_AXIS}:graded-exit`, kind: "exit", name: "Basis × CVD, graded exit",
+      stage: "RETIRED", stageWord: "Retired", need: "", note: retiredLine(retired), eta: null,
+      canLoad: false, presetId: null, reason: "Retired. It stays on the record and never loads.",
+    };
+  }
   const ge = gradedExitStatus(axis);
   if (!ge) return null;
   const word = { NOT_YET: "Testing the exit", CLEARS: "Cleared", FAILS: "Failed its bar" }[ge.status];
