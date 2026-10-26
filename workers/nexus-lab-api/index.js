@@ -61,6 +61,7 @@ export { NexusLock } from "./lock.mjs";
 // Leases on the paid paths: held for milliseconds (a KV read + write), so a short wait covers a race.
 const PAY_LOCK = { ttlMs: 30_000, waitMs: 3_000 };
 import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
+import { paperCostReread, paperFeeRate } from "../../app/lib/paperCosts.mjs";
 import { okxJson } from "./okx.mjs";
 import { rankUniverse, RECORDED_COINS, HOLDOUT_COINS, UNIVERSE_RULES } from "./universe.mjs";
 import { FLOW_COINS, HOLDOUT_AXES, HOLDOUT_SIGNED_OFF, isHoldoutCoin } from "../../app/lib/recordedUniverse.mjs";
@@ -4852,6 +4853,28 @@ document.getElementById("btn").addEventListener("click",go);
           ledgerWindowNote: "Checks the retained paper ledger (last 50 rows). Entries older than the oldest retained row can't be checked.",
           openPosition: openPosition ? { symbol: openPosition.symbol, direction: openPosition.direction, openedAt: new Date(openPosition.opened_at).toISOString() } : null,
           ...report,
+        }, request);
+      }
+
+      // GET /agent/:address/paper-costs — the retained paper rows re-read with a taker fee on both
+      // legs and the funding each position paid while held (oi:hist rates). Display only: paper P&L
+      // carries neither, and nothing here writes the ledger. Fee = worker var PAPER_TAKER_FEE_BPS
+      // (the account's rate), else the grader's 3 bps/side, labelled "assumed". Public, like parity.
+      if (request.method === "GET" && parts[2] === "paper-costs") {
+        const stateRaw = await AGENT_KV.get(`agent:state:${address}`);
+        const state = stateRaw ? JSON.parse(stateRaw) : {};
+        const trades = Array.isArray(state.paper_trades) ? state.paper_trades : [];
+        const symbols = [...new Set(trades.map((t) => String(t?.symbol || "")).filter((s) => /^PERP_[A-Z0-9]+_USDC$/.test(s)))];
+        const oiHistBySymbol = {};
+        await Promise.all(symbols.map(async (sym) => {
+          try { const r = await AGENT_KV.get(`oi:hist:${sym}`); oiHistBySymbol[sym] = r ? JSON.parse(r) : []; } catch { oiHistBySymbol[sym] = []; }
+        }));
+        const { feeBps, feeSource } = paperFeeRate(env.PAPER_TAKER_FEE_BPS);
+        const lifetime = Number(state.paper_agg?.trades);
+        return json({
+          ok: true, address, feeSource, ...paperCostReread(trades, { feeBps, oiHistBySymbol }),
+          lifetimeTrades: Number.isFinite(lifetime) ? lifetime : null,
+          note: "Retained paper rows (last 50). Fees = taker rate on entry and exit notional. Funding = an estimate from the hourly recorded rates (each 8h rate spread over its hours).",
         }, request);
       }
 

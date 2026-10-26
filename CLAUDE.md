@@ -188,6 +188,12 @@ is everything built on top:
   ⚠️ **Real exit vocabulary** (don't invent buckets): `SL · TIMEOUT · TRAIL · BE · TP · TP_PARTIAL ·
   KILLED · WEBHOOK_CLOSE`. **There is no "signal flip" exit** — WEBHOOK_CLOSE is the nearest analogue.
   `tp_level` is stamped on PAPER slice rows only (the live Supabase insert keeps its exact column set).
+- **AFTER COSTS line (2026-10-26, display only):** paper P&L (`computePnl`) carries NO fee and NO funding. `GET
+  /agent/:a/paper-costs` (public) re-reads the retained rows with a taker fee on entry + exit notional and the funding
+  each position paid while held (`heldFundingBps` on `oi:hist`), via `app/lib/paperCosts.mjs` (tested); `PaperCostLine`
+  prints gross · fees · funding → net under the paper record. Fee = worker var `PAPER_TAKER_FEE_BPS` (the account's
+  rate), else 3 bps/side labelled "assumed". A row with no recorded rate is counted in `fundingMissing`, never read as
+  free. Exec and the ledger are untouched.
 - API endpoints: `POST /agent/:address/paper/reset` (clear paper ledger), `POST /agent/:address/test-signal`
   (DEV-only force a paper signal; hard-refuses unless mode===PAPER). Force button is gated to
   `import.meta.env.DEV`.

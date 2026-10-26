@@ -11,6 +11,7 @@ import { agentCardStyle, agentLabelStyle, agentInputStyle, navBtnStyle } from ".
 import { fmtUsdCompact, fmtUsdCompactAbs, fmtUsdExact, fmtUsdLoss } from "@/lib/fmtUsd.mjs";
 import { paperBlotter, tradeNotional, holdHours } from "@/lib/paperStats.mjs";
 import { bareTicker } from "@/utils/utils";
+import { AGENT_API } from "./agentTypes";
 
 /**
  * Number input that holds its own text state so you can clear/edit freely
@@ -180,6 +181,46 @@ export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onR
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── AFTER COSTS — the paper record re-read with fees + funding ───────────────
+// Paper P&L is the price move only. A live account also pays a taker fee on both legs and
+// funding while it holds. The worker re-reads the retained rows (GET /agent/:a/paper-costs,
+// app/lib/paperCosts.mjs) and this prints it beside the gross. Display only.
+type PaperCosts = { ok: boolean; trades: number; feeBps: number; feeSource: "account" | "assumed"; grossUsd: number; feesUsd: number; fundingUsd: number; fundingMissing: number; netUsd: number; lifetimeTrades: number | null };
+
+export function PaperCostLine({ address, refreshKey }: { address?: string | null; refreshKey?: string | number }) {
+  const [c, setC] = useState<PaperCosts | null>(null);
+  useEffect(() => {
+    if (!address) { setC(null); return; }
+    let live = true;
+    fetch(`${AGENT_API}/agent/${address.toLowerCase()}/paper-costs`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (live) setC(j && j.ok ? j : null); })
+      .catch(() => { if (live) setC(null); });
+    return () => { live = false; };
+  }, [address, refreshKey]);
+  if (!c || !c.trades) return null;
+  const mono = { fontFamily: "var(--nx-font-mono)", fontSize: 11 } as const;
+  const usd = (v: number) => fmtUsdExact(Math.abs(v)).slice(1);   // "$1.23", sign added below
+  const signed = (v: number) => `${v >= 0 ? "+" : "−"}${usd(v)}`;
+  const span = c.lifetimeTrades && c.lifetimeTrades > c.trades ? `last ${c.trades} of ${c.lifetimeTrades} trades` : `${c.trades} trades`;
+  return (
+    <div style={{ ...agentCardStyle, borderColor: "#232327" }}>
+      <div style={{ ...agentLabelStyle, color: "#d4d4d8" }}>AFTER COSTS · {span}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 8, ...mono, color: "#a1a1aa" }}>
+        <span>gross <span style={{ color: c.grossUsd >= 0 ? "#3ecf8e" : "#f7525f" }}>{signed(c.grossUsd)}</span></span>
+        <span>fees <span style={{ color: "#d4d4d8" }}>−{usd(c.feesUsd)}</span></span>
+        <span>funding <span style={{ color: "#d4d4d8" }}>{c.fundingUsd > 0 ? "−" : c.fundingUsd < 0 ? "+" : ""}{usd(c.fundingUsd)}</span></span>
+        <span>→ net <span style={{ color: c.netUsd >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: 600 }}>{signed(c.netUsd)}</span></span>
+      </div>
+      <div style={{ marginTop: 8, fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#71717a", lineHeight: 1.5 }}>
+        Fee {c.feeBps} bps per side on entry and exit, {c.feeSource === "account" ? "the account's rate" : "assumed (the grader's rate)"}.
+        Funding is an estimate from the recorded hourly rates{c.fundingMissing ? `; ${c.fundingMissing} trade${c.fundingMissing === 1 ? "" : "s"} had no recorded rate and ${c.fundingMissing === 1 ? "is" : "are"} left out of it` : ""}.
+        The record above stays the price move only.
+      </div>
     </div>
   );
 }
