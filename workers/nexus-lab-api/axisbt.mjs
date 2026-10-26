@@ -569,7 +569,7 @@ export function tradeableExitTrades(all, exit, windowH = Number(exit?.maxHoldHou
 export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS, windowH = Number(exit?.maxHoldHours) || 0, oosCutoff = EXIT_OOS_CUTOFF_MS, { withFunding = false } = {}) {
   const feePct = (feeBps / 100) * 2;
   const net = [], fst = [], snd = [], oos = [], exits = { TP: 0, SL: 0, TIMEOUT: 0 };
-  const fNet = [], fOos = [], fCost = [], fCostOos = []; let fMissing = 0, fMissingOos = 0;
+  const fNet = [], fOos = [], fCost = [], fCostOos = [], fFee = [], fFeeOos = []; let fMissing = 0, fMissingOos = 0;
   const bySideNet = { LONG: [], SHORT: [] };
   let holdSum = 0, slSum = 0;
   for (const g of tradeableExitTrades(all, exit, windowH)) {
@@ -582,8 +582,8 @@ export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS,
       if (g.fundingBps == null) { fMissing++; if (g.t > oosCutoff) fMissingOos++; }
       else {
         const nf = n - g.fundingBps / 10_000;
-        fNet.push(nf); fCost.push(g.fundingBps);
-        if (g.t > oosCutoff) { fOos.push(nf); fCostOos.push(g.fundingBps); }
+        fNet.push(nf); fCost.push(g.fundingBps); fFee.push(n);
+        if (g.t > oosCutoff) { fOos.push(nf); fCostOos.push(g.fundingBps); fFeeOos.push(n); }
       }
     }
     if (bySideNet[g.side]) bySideNet[g.side].push(n);
@@ -601,7 +601,7 @@ export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS,
     ...(exit.exitContract ? { exitContract: exit.exitContract, avgSlPercent: a.samples ? Math.round((slSum / a.samples) * 100) / 100 : 0 } : {}),
     oos: { since: new Date(oosCutoff).toISOString(), samples: o.samples, hitRate: o.hitRate, netBps: o.meanBps },
     bySide: sideSplit(bySideNet),
-    ...(withFunding ? { funding: fundingLine(fNet, fCost, fMissing, fOos, fCostOos, fMissingOos) } : {}),
+    ...(withFunding ? { funding: fundingLine(fNet, fCost, fFee, fMissing, fOos, fCostOos, fFeeOos, fMissingOos) } : {}),
   };
 }
 
@@ -609,15 +609,16 @@ export function scoreExit(all, exit, medT, minSamples, feeBps = DEFAULT_FEE_BPS,
 // (positive costBps = paid on average). INFORMATIONAL ONLY: the verdict, netBps and the
 // pre-registered bar (docs/research/graded-exit-prereg.md: net of fees > 0 over 30 trades) are
 // unchanged and never read this. A trade whose held hours aren't all covered by recorded funding
-// is left out and counted in `missing` (never read as free).
+// is left out and counted in `missing` (never read as free). `feesNetBps` = the fee-net mean on the
+// SAME covered trades: compare it with `netBps`, never the headline (a different set of trades).
 const meanOf = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
-function fundingLine(net, cost, missing, oosNet, oosCost, oosMissing) {
+function fundingLine(net, cost, fee, missing, oosNet, oosCost, oosFee, oosMissing) {
   const a = agg(net), o = agg(oosNet);
   const r1 = (x) => Math.round(x * 10) / 10;
   return {
     estimate: true,
-    samples: a.samples, missing, netBps: a.meanBps, hitRate: a.hitRate, costBps: r1(meanOf(cost)),
-    oos: { samples: o.samples, missing: oosMissing, netBps: o.meanBps, hitRate: o.hitRate, costBps: r1(meanOf(oosCost)) },
+    samples: a.samples, missing, feesNetBps: agg(fee).meanBps, netBps: a.meanBps, hitRate: a.hitRate, costBps: r1(meanOf(cost)),
+    oos: { samples: o.samples, missing: oosMissing, feesNetBps: agg(oosFee).meanBps, netBps: o.meanBps, hitRate: o.hitRate, costBps: r1(meanOf(oosCost)) },
   };
 }
 

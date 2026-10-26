@@ -133,6 +133,8 @@ test("net of funding: a long held 168h at +0.01%/8h pays 21 bps; the grade itsel
   assert.equal(paid.funding.samples, 1);
   assert.ok(Math.abs(paid.funding.costBps - 21) < 0.2, `cost ${paid.funding.costBps}`);
   assert.ok(Math.abs(paid.funding.netBps - (paid.netBps - 21)) < 0.2);
+  assert.equal(paid.funding.feesNetBps, paid.netBps, "same trades as the headline when every trade is covered");
+  assert.ok(Math.abs(paid.funding.netBps - (paid.funding.feesNetBps - 21)) < 0.2);
   assert.ok(Math.abs(paid.funding.oos.costBps - 21) < 0.2, "the oos line carries it too");
   // the verdict, the fee-net number and everything the pipeline reads are identical with or without funding
   const { funding: _a, ...gradePaid } = paid, { funding: _b, ...gradeFree } = free;
@@ -152,6 +154,7 @@ test("net of funding: a trade with no recorded funding is left out and counted, 
   assert.equal(g.samples, 1);
   assert.equal(g.funding.samples, 0);
   assert.equal(g.funding.missing, 1);
+  assert.equal(g.funding.feesNetBps, 0, "the fee-net is over the covered trades only (none here)");
   assert.ok(fundingByHour(cs.oiHist).size === 0);
 });
 
@@ -160,4 +163,17 @@ test("net of funding rides only the graded exit, not the preset 12h / 24h lines"
   assert.equal(s.exit.funding, undefined);
   assert.equal(s.exit24h.funding, undefined);
   assert.ok(s.exitGraded.funding);
+});
+
+test("net of funding: with some trades uncovered, fees-net and net-of-funding compare the SAME trades", () => {
+  const covered = fundedSet(0.0001);
+  const gap = { ...fundedSet(0.0001), coin: "ETH" };
+  gap.oiHist = gap.oiHist.map((p) => ({ ...p, funding: null }));
+  // the uncovered market wins big; the covered one times out flat: the headline mixes both
+  gap.candleHist = [...hist(GRADED_EXIT_LOOKBACK_H), ...after([...flat(2), { h: 103.7, l: 100, c: 103.6 }, ...flat(400)])];
+  const g = scoreEvents([covered, gap], oneLong, { horizons: [4], minSamples: 1, gradedExit: true }).exitGraded;
+  assert.equal(g.samples, 2);
+  assert.deepEqual([g.funding.samples, g.funding.missing], [1, 1]);
+  assert.ok(g.netBps > g.funding.feesNetBps, "the headline includes the uncovered winner");
+  assert.ok(Math.abs(g.funding.netBps - (g.funding.feesNetBps - 21)) < 0.2, "funding is the only gap on the same trades");
 });

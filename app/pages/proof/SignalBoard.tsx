@@ -29,7 +29,7 @@ type Drift = { baseBps: number; excessBps: number; excessStable: boolean; bySide
 type Horizon = { h: number; samples: number; hitRate: number; meanBps: number; stable: boolean; verdict: string; drift?: Drift };
 type ExitGrade = { preset: string; tpPercent: number; slPercent: number; maxHoldHours: number; samples: number; hitRate: number; netBps: number; stable: boolean; verdict: string; exits: Record<string, number>; avgHoldH: number; presetExit?: boolean; shadowOf?: string; bySide?: Record<"LONG" | "SHORT", SideStat>; oos?: { since: string; samples: number; hitRate: number; netBps: number }; exitContract?: string; avgSlPercent?: number; atrMult?: number; rMultiple?: number; funding?: FundingLine };
 // The graded exit also net of the funding its trades paid while open (an estimate; the grade above doesn’t use it).
-type FundingLine = { estimate: boolean; samples: number; missing: number; netBps: number; hitRate: number; costBps: number; oos: { samples: number; missing: number; netBps: number; hitRate: number; costBps: number } };
+type FundingLine = { estimate: boolean; samples: number; missing: number; feesNetBps?: number; netBps: number; hitRate: number; costBps: number; oos: { samples: number; missing: number; feesNetBps?: number; netBps: number; hitRate: number; costBps: number } };
 type AxisSides = Record<"LONG" | "SHORT", { events: number; r: { samples: number; hitRate: number; meanR: number } }>;
 type RandomSide = { verdict: string; n: number; pctBeaten?: number; realMeanR?: number; randomMedianR?: number; moreTradesNeeded?: number | null };
 type RandomBaseline = { metric: string; runs: number; window: { from: string; to: string; hours: number }; pooled: RandomSide; bySide: Record<"LONG" | "SHORT", RandomSide> };
@@ -200,7 +200,7 @@ function FundingNet({ f, since }: { f: FundingLine; since?: string }) {
       style={{ marginTop: 4, cursor: "help" }}>
       <span style={{ color: BONE }}>Net of funding too (est.)</span>
       {f.samples
-        ? <> · <span style={{ color: moneyTone(f.netBps) }}>{sign(f.netBps)} bps</span> · trades {paidWord(f.costBps)} each on average · n{f.samples}</>
+        ? <> · trades {paidWord(f.costBps)} each on average · on those {f.samples} trades {f.feesNetBps != null ? <>{sign(f.feesNetBps)} → </> : null}<span style={{ color: moneyTone(f.netBps) }}>{sign(f.netBps)} bps</span></>
         : <span style={{ color: FAINT }}> · no trade with a full funding record yet</span>}
       {f.missing > 0 && <span style={{ color: FAINT }}> · {f.missing} left out (gaps)</span>}
       {since && <span style={{ color: FAINT }}> · since {since.slice(5, 10)}: {f.oos.samples ? <>n{f.oos.samples} <span style={{ color: moneyTone(f.oos.netBps) }}>{sign(f.oos.netBps)}</span></> : "none yet"}</span>}
