@@ -5,7 +5,14 @@
 // actually registered (message.orderlyKey), for the address Orderly checked the signature against
 // (userAddress). Orderly verifies that signature, so this is hardening, not a hole someone could
 // use to rewrite another wallet's record.
+//
+// GET /account-snapshot?wallet= (retired 2026-10-26, borst) returned ANY registered wallet's Orderly
+// positions and open orders with no signature, by signing with a seed cached in that record. It now
+// answers 410 and reads nothing; nothing stores a seed and the cron removes the ones stored
+// (seedVault.mjs scrubStoredSeeds). Same data, signed: POST /positions, POST /order-history.
+// Its caller was Bankr's Nexus Trade Tracker page; the replacement read path is docs/bankr-tracker-spec.md.
 import { json } from "./shared.mjs";
+import { SCRUB_STATE_KEY } from "./seedVault.mjs";
 
 const ORDERLY = "https://api-evm.orderly.org";
 const BROKER = "nexus_trading";
@@ -61,6 +68,22 @@ export function orderHistoryResult(upstreamStatus, text, now = Date.now()) {
 }
 
 export async function handleAccount(parts, request, env, { fetch: f = fetch } = {}) {
+  // GET /account-snapshot: retired. One log line per call so a caller we missed shows up (no wallet).
+  if (parts[0] === "account-snapshot" && parts.length === 1) {
+    console.warn(`[account-snapshot] retired route called · ua=${(request.headers.get("User-Agent") || "-").slice(0, 120)}`);
+    return json({
+      error: "gone",
+      hint: "Retired: it answered without a signature. Positions: GET /smart/xray?address= (public). Positions and orders, signed: POST /positions or POST /order-history with { walletAddress, walletSig }.",
+    }, request, 410);
+  }
+
+  // GET /ops/seed-scrub: progress of removing stored seeds. Counts only.
+  if (parts[0] === "ops" && parts[1] === "seed-scrub" && parts.length === 2 && request.method === "GET") {
+    let st = {};
+    try { st = JSON.parse((await env.LAB_STORE.get(SCRUB_STATE_KEY)) || "{}"); } catch { st = {}; }
+    return json({ done: !!st.done, passes: st.passes || 0, scanned: st.scanned || 0, scrubbed: st.scrubbed || 0, startedAt: st.startedAt || null, doneAt: st.doneAt || null }, request);
+  }
+
   // POST /proxy/register-key — forward a browser-signed AddOrderlyKey to Orderly; store the result.
   if (parts[0] === "proxy" && parts[1] === "register-key" && parts.length === 2 && request.method === "POST") {
     let body;
