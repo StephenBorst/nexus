@@ -861,15 +861,16 @@ The public agents leaderboard ranks on a risk-adjusted score from live `agent_tr
   different top-level `orderlyKey` → 400 before Orderly). Not an overwrite hole: Orderly checks the signature against
   `userAddress` ("address and signature do not match"), so it's hardening. `/positions` + `/balance` take `walletSig`
   from the POST body only: a signature in the URL → 400 `signature_in_url` (refused, not used), GET → 405 (nothing sent
-  the old `?wallet=&sig=` form). STILL OPEN (PR #130, held): `GET /account-snapshot?wallet=` returns any registered
-  wallet's positions + open orders with NO signature, signing with the order-only key's seed (SHA-256 of walletSig)
-  cached in `user:{addr}.seed` by /order-history, /positions and bankr-register. **The seed is SEALED at rest since
-  2026-10-23** (`seedVault.mjs`, tested): AES-256-GCM under `AGENT_ENC_KEY`, the agent keys' own `v1:` format (lab-api's
-  `encryptSecret` now calls the same function). No secret ⇒ no seed stored, never plaintext; a legacy plain seed is used
-  once and re-sealed; the hourly cron `sealLegacySeeds` re-seals the rest a page at a time (`seedvault:cursor` →
-  `seedvault:done`). The open read itself stays parked until the tracker moves (borst). Bankr's Nexus Trade Tracker
-  app page reads it today and can't sign (sandboxed iframe, no `sign_message`; actions hand off to chat), so retiring
-  it waits for a replacement read path for that page.
+  the old `?wallet=&sig=` form). **`GET /account-snapshot` RETIRED (borst, 2026-10-26; supersedes held PR #130).** It returned any registered
+  wallet's positions + open orders with NO signature, signing with the order-only key's seed cached in `user:{addr}.seed`
+  (sealed since 2026-10-23, but the hole was the route). Now 410 `gone` with a hint (routes-account.mjs; one log line per
+  call `[account-snapshot] retired route called · ua=…`, no wallet: a hit = a caller we missed). NOTHING stores a seed:
+  /order-history, /positions and bankr-register stopped (bankr-register also stores only on `success === true`). The
+  hourly cron `scrubStoredSeeds` (seedVault.mjs) removes the stored ones (plain or sealed; 200 records a run, two full
+  passes, a record changed between its two reads is skipped); `GET /ops/seed-scrub` = counts only. seedVault.mjs keeps
+  only the AES helpers the agent keys use. A test fails if index.js writes or reads `seed` again or brings the route
+  back. ⚠️ Bankr's Nexus Trade Tracker page read this route and can't sign, so its positions/orders panels show the 410
+  until it moves to the plan below.
   **Tracker plan (borst, 2026-10-17):** positions panel → public `/smart/xray`, `nexus_trading` venue only; orders →
   refreshed ON DEMAND in chat (agent signs as today, calls `/positions` + `/order-history`, writes ONLY a field-by-field
   result snapshot to Bankr `appkv`). `appkv` is NOT private (owner admin-read, logs, postMessage), so no credential of

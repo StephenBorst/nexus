@@ -1,20 +1,17 @@
-// ── The trading-account seed, encrypted at rest ────────────────────────────────────────────
-// `user:{addr}.seed` = the order-only Orderly key seed (SHA-256 of the wallet's
-// 'nexus-trading-key-v1' signature), cached by /order-history, /positions and bankr-register so
-// /account-snapshot can sign reads for Bankr's tracker page. It sat in KV as plain hex: a KV dump
-// alone could sign as that account (order-only: no withdrawals, but it can trade). Now it's sealed
-// with AES-256-GCM under the same Worker secret as the agent keys (AGENT_ENC_KEY, format
-// "v1:<b64 iv>:<b64 ct>"), so a dump without the secret is useless.
+// ── AES-256-GCM for stored secrets, and the removal of trading-account seeds ───────────────────
+// `aesGcmEncrypt`/`aesGcmDecrypt` = the "v1:<b64 iv>:<b64 ct>" format the agent keys use (Worker secret
+// AGENT_ENC_KEY; exec decryptTradingKey reads it). lab-api's encryptSecret calls it.
 //
-// Rules:
-//   - never write a plaintext seed again: no secret ⇒ store no seed (the snapshot then says
-//     "session_not_cached", as for a wallet that never cached one);
-//   - read either form: a sealed seed is opened, a legacy plain one is used once and re-sealed;
-//   - the hourly cron re-seals any plain seed left in KV (sealLegacySeeds), a page at a time.
+// `user:{addr}.seed` held the order-only Orderly key seed (SHA-256 of the wallet's
+// 'nexus-trading-key-v1' signature), cached by /order-history, /positions and bankr-register so
+// GET /account-snapshot could sign reads with NO signature from the caller: anyone who knew a
+// registered wallet could read its positions and open orders. Sealed at rest since 2026-10-23, but the
+// hole was the route, not the storage. Retired 2026-10-26 (borst): the route answers 410 and nothing
+// stores a seed. A key the server doesn't hold can't leak; sealing it kept a server-held trading key
+// for a route nobody may use. `scrubStoredSeeds` (hourly cron) removes the ones already stored.
 // Pure crypto + a KV walk; no fetch. Tests: seedVault.test.mjs.
 
 const PREFIX = "v1:";
-const HEX64 = /^[0-9a-f]{64}$/i;
 const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
@@ -39,76 +36,45 @@ export async function aesGcmDecrypt(stored, secretB64) {
 }
 
 export const isSealed = (v) => typeof v === "string" && v.startsWith(PREFIX);
-export const isPlainSeed = (v) => typeof v === "string" && HEX64.test(v);
-
-/** The value to store for a seed, or null (no secret ⇒ store nothing, never plaintext). */
-export async function sealSeed(seedHex, env) {
-  if (!isPlainSeed(seedHex) || !env?.AGENT_ENC_KEY) return null;
-  return aesGcmEncrypt(seedHex.toLowerCase(), env.AGENT_ENC_KEY);
-}
 
 /**
- * Open a stored seed. → { hex, reseal } where `reseal` is true for a legacy plain seed (the caller
- * writes the sealed form back). hex null = no usable seed (absent, garbled, or sealed with no secret).
+ * Remove the `seed` field (plain or sealed) from `user:` records, a page per run, resuming from a
+ * stored cursor. Two full passes: a worker copy still on the old code for a few minutes after the
+ * deploy can store one more seed, and the second pass catches it. A record is rewritten only if it
+ * still reads the same right before the write, so a registration landing mid-run isn't reverted.
+ * Idempotent; a no-op once done. → { ran, done, passes, scanned, scrubbed }.
  */
-export async function openSeed(stored, env) {
-  if (isPlainSeed(stored)) return { hex: stored.toLowerCase(), reseal: true };
-  if (!isSealed(stored) || !env?.AGENT_ENC_KEY) return { hex: null, reseal: false };
-  try {
-    const hex = await aesGcmDecrypt(stored, env.AGENT_ENC_KEY);
-    return { hex: isPlainSeed(hex) ? hex : null, reseal: false };
-  } catch { return { hex: null, reseal: false }; }
-}
-
-/**
- * Cache a seed on `user:{addr}` sealed, when the record has none or still holds it in plain text.
- * Reads the record fresh and writes only the `seed` field onto it. → true if it wrote.
- */
-export async function storeSealedSeed(kv, addr, seedHex, env) {
-  const key = "user:" + String(addr).toLowerCase();
-  const raw = await kv.get(key);
-  if (!raw) return false;
-  let rec; try { rec = JSON.parse(raw); } catch { return false; }
-  if (isSealed(rec.seed)) return false;
-  const sealed = await sealSeed(seedHex, env);
-  if (!sealed) {
-    // No secret: drop a plain seed rather than keep it in the clear.
-    if (rec.seed === undefined) return false;
-    const { seed: _drop, ...rest } = rec;
-    await kv.put(key, JSON.stringify(rest));
-    return true;
-  }
-  await kv.put(key, JSON.stringify({ ...rec, seed: sealed }));
-  return true;
-}
-
-/**
- * Re-seal plain seeds left in KV, one `user:` page per run, resuming from a stored cursor until
- * the walk completes (then it records the finish and stops). Without the secret it does nothing.
- * → { scanned, sealed, done }.
- */
-export const SEAL_CURSOR_KEY = "seedvault:cursor";
-export const SEAL_DONE_KEY = "seedvault:done";
-export async function sealLegacySeeds(kv, env, { pageSize = 200 } = {}) {
-  if (!env?.AGENT_ENC_KEY) return { scanned: 0, sealed: 0, done: false, skipped: "no_secret" };
-  if (await kv.get(SEAL_DONE_KEY)) return { scanned: 0, sealed: 0, done: true };
-  const cursor = (await kv.get(SEAL_CURSOR_KEY)) || undefined;
-  const page = await kv.list({ prefix: "user:", limit: pageSize, cursor });
-  let sealed = 0;
-  for (const { name } of page.keys || []) {
+export const SCRUB_STATE_KEY = "ops:seedscrub";
+export const SCRUB_PAGE = 200;
+export async function scrubStoredSeeds(kv, { page = SCRUB_PAGE, now = Date.now } = {}) {
+  let state = {};
+  try { state = JSON.parse((await kv.get(SCRUB_STATE_KEY)) || "{}"); } catch { state = {}; }
+  if (state.done) return { ...state, ran: false };
+  const listed = await kv.list({ prefix: "user:", cursor: state.cursor || undefined, limit: page });
+  let scanned = 0, scrubbed = 0;
+  for (const { name } of listed.keys || []) {
+    scanned++;
     const raw = await kv.get(name);
     if (!raw) continue;
     let rec; try { rec = JSON.parse(raw); } catch { continue; }
-    if (!isPlainSeed(rec.seed)) continue;
-    await kv.put(name, JSON.stringify({ ...rec, seed: await aesGcmEncrypt(rec.seed.toLowerCase(), env.AGENT_ENC_KEY) }));
-    sealed++;
+    if (!rec || typeof rec !== "object" || !("seed" in rec)) continue;
+    const { seed: _drop, ...rest } = rec;
+    if ((await kv.get(name)) !== raw) continue; // changed under us; the next pass looks again
+    await kv.put(name, JSON.stringify(rest));
+    scrubbed++;
   }
-  const scanned = (page.keys || []).length;
-  if (page.list_complete || !page.cursor) {
-    await kv.put(SEAL_DONE_KEY, new Date().toISOString());
-    await kv.delete(SEAL_CURSOR_KEY);
-    return { scanned, sealed, done: true };
-  }
-  await kv.put(SEAL_CURSOR_KEY, page.cursor);
-  return { scanned, sealed, done: false };
+  const passEnded = !!listed.list_complete || !listed.cursor;
+  const passes = (state.passes || 0) + (passEnded ? 1 : 0);
+  const done = passes >= 2;
+  const next = {
+    done, passes,
+    cursor: passEnded ? null : listed.cursor,
+    scanned: (state.scanned || 0) + scanned,
+    scrubbed: (state.scrubbed || 0) + scrubbed,
+    startedAt: state.startedAt || now(),
+    updatedAt: now(),
+    ...(done ? { doneAt: now() } : {}),
+  };
+  await kv.put(SCRUB_STATE_KEY, JSON.stringify(next));
+  return { ...next, ran: true };
 }

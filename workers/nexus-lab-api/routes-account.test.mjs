@@ -4,6 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { scrubStoredSeeds, SCRUB_STATE_KEY } from "./seedVault.mjs";
 import { handleAccount, registerKeyTarget, orderHistoryResult } from "./routes-account.mjs";
 
 const A = "0x" + "a".repeat(40);
@@ -132,4 +133,60 @@ test("order-history: a refused read is a 502, never an empty book", () => {
     assert.equal(r.body.upstreamStatus, status); assert.equal(r.body.code, code);
     assert.equal("orders" in r.body, false); assert.equal("count" in r.body, false);
   }
+});
+
+test("/account-snapshot is retired: 410, and it reads nothing and calls nobody", async () => {
+  const env = { LAB_STORE: kv({ [`user:${A}`]: { accountId: "0xacc", orderlyKey: KEY, seed: "v1:abc:def" } }) };
+  const { f, calls } = fakeOrderly({});
+  const r = await call(env, f, "GET", `/account-snapshot?wallet=${A}`);
+  assert.equal(r.status, 410);
+  assert.equal(r.body.error, "gone");
+  assert.match(r.body.hint, /\/smart\/xray/);
+  assert.match(r.body.hint, /POST \/order-history/);
+  assert.equal(env.LAB_STORE.log.length, 0);
+  assert.equal(calls.length, 0);
+});
+
+test("scrub: removes every stored seed (plain or sealed) over several runs, two passes, touches nothing else", async () => {
+  const init = { "lab:x": { theses: [], seed: "not-a-user-record" } };
+  for (let i = 0; i < 5; i++) init[`user:0x${String(i).repeat(40)}`] = { accountId: `a${i}`, orderlyKey: KEY, seed: i % 2 ? "v1:aa:bb" : "cd".repeat(32) };
+  init[`user:0x${"7".repeat(40)}`] = { accountId: "a7", orderlyKey: KEY }; // no seed: never rewritten
+  const env = { LAB_STORE: kv(init) };
+  let r, runs = 0;
+  do { r = await scrubStoredSeeds(env.LAB_STORE, { page: 2, now: () => 1000 + runs }); runs++; } while (!r.done && runs < 20);
+  assert.equal(r.done, true); assert.equal(r.passes, 2); assert.equal(r.scrubbed, 5);
+  for (const [k, v] of env.LAB_STORE.m) if (k.startsWith("user:")) {
+    const rec = JSON.parse(v);
+    assert.equal("seed" in rec, false, k);
+    assert.equal(rec.orderlyKey, KEY);
+  }
+  assert.equal(JSON.parse(env.LAB_STORE.m.get("lab:x")).seed, "not-a-user-record");
+  assert.equal(env.LAB_STORE.log.filter(([op, k]) => op === "put" && k === `user:0x${"7".repeat(40)}`).length, 0);
+  const before = env.LAB_STORE.log.length;
+  assert.equal((await scrubStoredSeeds(env.LAB_STORE)).ran, false);
+  assert.equal(env.LAB_STORE.log.length, before + 1); // done = just the state read
+  const st = await call(env, fakeOrderly({}).f, "GET", "/ops/seed-scrub");
+  assert.deepEqual(Object.keys(st.body).sort(), ["doneAt", "done", "passes", "scanned", "scrubbed", "startedAt"].sort());
+  assert.equal(st.body.done, true); assert.equal(st.body.scrubbed, 5);
+});
+
+test("scrub: a record rewritten between its two reads is left for the next pass", async () => {
+  const k = `user:${A}`;
+  const store = kv({ [k]: { accountId: "old", orderlyKey: KEY, seed: "ee".repeat(32) } });
+  let reads = 0;
+  const realGet = store.get.bind(store);
+  store.get = async (key) => {
+    if (key === k && ++reads === 2) store.m.set(k, JSON.stringify({ accountId: "new", orderlyKey: OTHER_KEY, registeredAt: 5 }));
+    return realGet(key);
+  };
+  await scrubStoredSeeds(store, { page: 10 });
+  assert.equal(JSON.parse(store.m.get(k)).accountId, "new");
+  assert.equal(JSON.parse(store.m.get(SCRUB_STATE_KEY)).scrubbed, 0);
+});
+
+test("nothing in the worker stores or reads a trading-key seed, and the snapshot route stays gone", () => {
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  assert.equal(/\bseed\s*:/.test(src), false, "a `seed:` field is written somewhere in index.js");
+  assert.equal(/\.seed\b/.test(src), false, "a stored `.seed` is read somewhere in index.js");
+  assert.equal(/parts\[0\] === "account-snapshot"/.test(src), false, "the snapshot route is back in index.js");
 });
