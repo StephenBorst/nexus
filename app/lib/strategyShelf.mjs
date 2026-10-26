@@ -12,6 +12,7 @@
 import { gradedExitStatus, GRADED_EXIT_AXIS } from "./pipelineWatch.mjs";
 import { GRADED_EXIT_OOS_CUTOFF_MS } from "./gradedExit.mjs";
 import { retiredGradedExit, retiredLine } from "./proofCopy.mjs";
+import { REGIME_WINDOW, REGIME_RESULT, judgeRegimeWindow, regimeFromMs } from "./regimeWindow.mjs";
 
 // Registered read (scoreboard axis) → the preset id that trades its exact rule. A read joins this map
 // in its own reviewed PR, after the parity test the pipeline page asks for at Edge. Empty until then.
@@ -104,6 +105,41 @@ function exitRow(axis, now) {
 }
 
 /** Every shelf row from a served scorecard, closest to Paper first, retired last. [] when unreadable. */
+// The Basis × CVD regime window (docs/research/graded-exit-regime-prereg.md, signed 2026-10-26): judged
+// by the same rule the watcher uses (judgeRegimeWindow). A recorded result (REGIME_RESULT) is final and
+// wins over the live numbers. It never loads: a clear only lets a paper-only preset be proposed.
+const REGIME_WORD = { COUNTING: "Testing", CLEARS: "Cleared", FAILS: "Failed its bar", NOT_CLEARED: "Not cleared", INCONCLUSIVE: "Inconclusive" };
+function regimeRow(sc, now) {
+  const base = { id: `${REGIME_WINDOW.axis}:regime-window`, kind: "test", name: "Basis × CVD, graded exit · regime window", canLoad: false, presetId: null, eta: null };
+  const days = (c) => (c ? `BTC regime so far: UP ${c.UP || 0} · DOWN ${c.DOWN || 0} · FLAT ${c.FLAT || 0} days (needs 14+ in two, one DOWN).` : "");
+  const counts = sc?.regimeWindow?.regime?.counts || null;
+  if (REGIME_RESULT) {
+    return { ...base, stage: REGIME_RESULT === "CLEARS" ? "TRADEABLE" : "RETIRED", stageWord: REGIME_WORD[REGIME_RESULT], need: "",
+      note: `Judged: ${REGIME_WORD[REGIME_RESULT]}. Final.`,
+      reason: REGIME_RESULT === "CLEARS" ? "Cleared. A paper-only preset gets proposed in its own PR. Loads only at Paper." : "Judged and final. It never loads." };
+  }
+  const main = (sc?.axes || []).find((a) => a?.name === REGIME_WINDOW.axis)?.regimeWindow;
+  const hold = (sc?.holdout?.axes || []).find((a) => a?.name === REGIME_WINDOW.axis)?.regimeWindow;
+  const j = judgeRegimeWindow({ main, holdout: hold, regime: sc?.regimeWindow?.regime }, now);
+  const start = new Date(regimeFromMs()).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  if (!j) return { ...base, stage: "REGISTERED", stageWord: "Testing", need: "", note: "Its numbers couldn't be read right now.", reason: "Being tested. Loads only at Paper." };
+  if (j.status !== "COUNTING") {
+    // The live numbers reach a judgment; it becomes final when the watcher records it.
+    return { ...base, stage: j.status === "CLEARS" ? "TRADEABLE" : "RETIRED", stageWord: REGIME_WORD[j.status], need: "",
+      note: `Reads ${REGIME_WORD[j.status].toLowerCase()} on today's numbers: ${j.reason}. Final once recorded.`, reason: "Being judged. Loads only at Paper." };
+  }
+  const trades = j.numbers.trades;
+  const elapsed = (now - regimeFromMs()) / 86_400_000;
+  let eta = null;
+  if (trades > 0 && elapsed >= 1 && trades < REGIME_WINDOW.minTrades) {
+    const at = now + ((REGIME_WINDOW.minTrades - trades) / (trades / elapsed)) * 86_400_000;
+    eta = `30 trades ~${new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })} at today's pace`;
+  }
+  return { ...base, stage: "REGISTERED", stageWord: "Testing",
+    need: now < regimeFromMs() ? "" : `${Math.max(0, REGIME_WINDOW.minTrades - trades)} more counted trades and the regime condition, or the limit (Apr 27, 2027)`,
+    note: now < regimeFromMs() ? `Counts from ${start}.` : days(counts), eta, reason: "Being tested. Loads only at Paper." };
+}
+
 export function shelfRows(sc, now = Date.now()) {
   const reads = sc?.pipeline?.reads;
   if (!Array.isArray(reads)) return [];
@@ -112,6 +148,7 @@ export function shelfRows(sc, now = Date.now()) {
   const rows = reads.filter((r) => r && r.axis && r.stage).map((r) => readRow(r, labels, now, kill));
   const ex = exitRow(Array.isArray(sc.axes) ? sc.axes.find((a) => a?.name === GRADED_EXIT_AXIS) : null, now);
   if (ex) rows.push(ex);
+  rows.push(regimeRow(sc, now));
   const rank = (r) => (r.stage === "RETIRED" ? -1 : r.stageWord === "Failing" ? -0.5 : LADDER.indexOf(r.stage));
   return rows.map((r, i) => ({ r, i })).sort((a, b) => rank(b.r) - rank(a.r) || a.i - b.i).map(({ r }) => r);
 }
