@@ -211,7 +211,7 @@ product is what sits on top:
   PAPER, RETIRED. Only out-of-sample events (after `registeredAt`) count; back-graded history never does. A changed rule
   = a new name + a new dated registration. Stage triggers = `docs/research/pipeline-if-then.md`, applied one PR per
   trigger from the SERVED stage. Registered reads: rsi_reset_deep, level_reclaim, oi_div_reversal, session_momentum,
-  confluence_follow (from 2026-10-17); oi_div_reversal_4h (from 2026-10-28, `oi-div-reversal-4h-prereg.md`). Registered
+  confluence_follow (from 2026-10-17); oi_div_reversal_4h and oi_coil_break (from 2026-10-28, their own prereg pages). Registered
   bodies live in `explorerReads.mjs`; unregistered drafts in `explorerDraftsB.mjs` (batch 2, `explorer-drafts-b.md`; tests
   fail if a draft is graded or axisbt imports it). A new registration also adds its read to `pipeline-stages.json`.
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.

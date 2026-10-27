@@ -70,6 +70,17 @@ export const REGISTERED_READS = Object.freeze([
     gradedExit: true,
     paperWallet: null,
   }),
+  // Batch 2, signed by borst 2026-10-27 (docs/research/oi-coil-break-prereg.md): OI builds into a flat
+  // tape, the range break is followed; OI +3%. Out-of-sample from 2026-10-28T00:00Z.
+  Object.freeze({
+    axis: "oi_coil_break",
+    side: "BOTH",
+    registeredAt: "2026-10-28T00:00:00Z",
+    doc: "docs/research/oi-coil-break-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
 ]);
 
 export const registeredMs = (reg) => Date.parse(reg.registeredAt);

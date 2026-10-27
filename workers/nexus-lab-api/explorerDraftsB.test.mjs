@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { oiCoilBreakEvents, OI_COIL, DRAFT_GENS_B, DRAFT_READS_B } from "./explorerDraftsB.mjs";
+import { DRAFT_GENS_B, DRAFT_READS_B } from "./explorerDraftsB.mjs";
 import { AXES } from "./axisbt.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 import { powerCheck } from "../../tools/explorers/powerCheck.mjs";
@@ -21,33 +21,7 @@ test("drafts are not graded: off the scoreboard, unregistered, and axisbt doesn'
   }
   const src = readFileSync(new URL("./axisbt.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(src, /explorerDraftsB/, "axisbt.mjs must not import the drafts");
-  assert.deepEqual(DRAFT_READS_B.map((r) => r.name), ["oi_coil_break"]); // A registered 2026-10-27, C dropped, D parked
-});
-
-// A tape with a steady wobble (so 24h returns have a spread), then a flat final day.
-function coilTape({ oiBuild, breakUp }) {
-  const n = 800, oiHist = [], candleHist = [];
-  for (let i = 0; i < n; i++) {
-    const flat = i >= n - 30;
-    const p = flat ? 100 : 100 + Math.sin(i / 9) * 3;
-    const oi = flat && i >= n - 24 ? 1000 * (1 + oiBuild * (i - (n - 25)) / 24) : 1000;
-    oiHist.push({ t: T0 + i * H + 60000, price: p, oi, funding: 0 });
-    candleHist.push({ t: T0 + i * H, o: p, h: p * 1.001, l: p * 0.999, c: p, v: 1 });
-  }
-  // the hour after the coil: a close outside the 24h range
-  const px = breakUp ? 101 : 99;
-  candleHist.push({ t: T0 + n * H, o: 100, h: Math.max(100, px) * 1.001, l: Math.min(100, px) * 0.999, c: px, v: 1 });
-  return { oiHist, candleHist, coilEnd: T0 + (n - 1) * H };
-}
-
-test("oi_coil_break: OI builds into a flat tape, the range break is followed; no OI build → nothing", () => {
-  const up = oiCoilBreakEvents(coilTape({ oiBuild: 0.06, breakUp: true }));
-  assert.equal(up.at(-1)?.side, "LONG");
-  const down = oiCoilBreakEvents(coilTape({ oiBuild: 0.06, breakUp: false }));
-  assert.equal(down.at(-1)?.side, "SHORT");
-  const t = coilTape({ oiBuild: 0.0, breakUp: true });
-  assert.equal(oiCoilBreakEvents(t).filter((e) => e.t > t.coilEnd).length, 0, "no OI build, no coil");
-  assert.equal(OI_COIL.oiBuild, 0.05);
+  assert.deepEqual(DRAFT_READS_B.map((r) => r.name), []); // batch 2 settled 2026-10-27: A and B registered, C dropped, D parked
 });
 
 // a seeded random tape with funding/OI/candles (the same shape explorerReads.test.mjs uses)
@@ -87,7 +61,7 @@ test("no lookahead: for every draft, the future never changes past events", () =
 test("the power check on the drafts counts and nothing else", () => {
   const t = tape(1600);
   const res = powerCheck([{ coin: "BTC", ...t }], { days: 30, now: T0 + 1600 * H, reads: DRAFT_GENS_B });
-  assert.deepEqual(Object.keys(res).sort(), ["oi_coil_break"]);
+  assert.deepEqual(Object.keys(res).sort(), []);
   for (const per of Object.values(res)) {
     for (const row of Object.values(per)) {
       for (const k of Object.keys(row)) assert.ok(["events", "gradeable", "longs", "coveredDays"].includes(k), `unexpected field ${k}`);
