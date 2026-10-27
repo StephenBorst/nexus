@@ -59,6 +59,17 @@ export const REGISTERED_READS = Object.freeze([
     gradedExit: true,
     paperWallet: null,
   })),
+  // Batch 2, signed by borst 2026-10-27 (docs/research/oi-div-reversal-4h-prereg.md): the 24h
+  // oi_div_reversal rule on a 4h window, OI −2%, 12h cooldown. Out-of-sample from 2026-10-28T00:00Z.
+  Object.freeze({
+    axis: "oi_div_reversal_4h",
+    side: "BOTH",
+    registeredAt: "2026-10-28T00:00:00Z",
+    doc: "docs/research/oi-div-reversal-4h-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
 ]);
 
 export const registeredMs = (reg) => Date.parse(reg.registeredAt);

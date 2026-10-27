@@ -178,11 +178,22 @@ export function confluenceFollowEvents(cs, _pmap, _ctx, p = CONFLUENCE) {
   return ev;
 }
 
+// ── 6 · oi_div_reversal_4h — registered 2026-10-27, counts from 2026-10-28T00:00Z ──────────────
+// docs/research/oi-div-reversal-4h-prereg.md. The registered oi_div_reversal rule on a 4h window,
+// run through the same code path (only the window, the OI drop and the cooldown differ), so the two
+// can't drift apart. Moved unchanged from explorerDraftsB.mjs; borst signed OI −2% and a 12h cooldown.
+export const OI_DIV_4H = Object.freeze({ ...OI_DIV, windowH: 4, oiDrop: 0.02, cooldownH: 12 });
+export function oiDivReversal4hEvents(cs, pmap, ctx, p = OI_DIV_4H) {
+  return oiDivReversalEvents(cs, pmap, ctx, p);
+}
+
 // The four registered 2026-10-16 (docs/research/explorers-prereg.md). Labels are the scoreboard's.
 export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "level_reclaim", label: "Prior-day high/low swept and reclaimed", gen: levelReclaimEvents }),
   Object.freeze({ name: "oi_div_reversal", label: "Extreme 24h move on falling OI, faded", gen: oiDivReversalEvents }),
   Object.freeze({ name: "session_momentum", label: "NY open drive (13–15 UTC), followed", gen: sessionMomentumEvents }),
   Object.freeze({ name: "confluence_follow", label: "Funding × OI confluence, traded with the crowd", gen: confluenceFollowEvents }),
+  // batch 2, registered 2026-10-27 (docs/research/oi-div-reversal-4h-prereg.md)
+  Object.freeze({ name: "oi_div_reversal_4h", label: "Extreme 4h move on falling OI, faded", gen: oiDivReversal4hEvents }),
 ]);
 export const EXPLORER_GENS = Object.freeze(Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.gen])));
