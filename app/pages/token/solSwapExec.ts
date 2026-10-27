@@ -22,9 +22,13 @@
 //       4) program allowlist: every TOP-LEVEL instruction's programId MUST be in ALLOWED_PROGRAMS
 //          (ComputeBudget / Jupiter v6 / SPL-Token / Token-2022 / Associated-Token / System / Memo).
 //          DEX programs are reached by Jupiter via CPI, so they never appear at the top level.
-//       5) simulate: the tx MUST simulate WITHOUT error, and the fee payer's simulated SOL delta MUST
-//          NOT exceed the input amount + a small fee/rent budget (the "no stray SOL past the wrap"
-//          guard, verified from real simulated balance deltas rather than by parsing lamports).
+//       5) simulate: the tx MUST simulate WITHOUT error, and from the simulated balances:
+//          • SOL: the fee payer's drop ≤ the SOL input + a small fee/rent budget (no stray SOL);
+//          • SPEND: the user's input-token accounts drop by AT MOST the typed amount (USDC buys, sells);
+//          • RECEIVE: the user's own output-token accounts gain ≥ the quote's minimum.
+//          All three FAIL CLOSED: a balance we can't read means we don't sign.
+//       6) the quote's minimum received respects the slippage asked (checkMinOut).
+//       Pure checks: app/lib/solSwapGuards.mjs (tested).
 //   • Freshness: a Solana blockhash expires in ~60-90s, so executeSolBuy RE-FETCHES a fresh swap tx
 //     (re-running every guard on the exact bytes it will sign) right before signing — a stale plan is
 //     never signed.
@@ -35,6 +39,7 @@
 // the honest "Swap via Jupiter" deep-link is always still there.
 
 import { Connection, VersionedTransaction, PublicKey } from "@solana/web3.js";
+import { tokenAccountAmount, checkMinOut, checkSpend, checkReceive } from "@/lib/solSwapGuards.mjs";
 
 // Jupiter is reached through OUR worker (og.nexustradinglabs.com/swap/jup/*) so the api.jup.ag
 // x-api-key stays server-side. The response is Jupiter's raw quote/swap, guarded below before signing.
@@ -172,6 +177,9 @@ async function quoteAndBuildGuarded(args: {
   if (String(quote.inAmount) !== String(inAmount)) throw new Error("Quote amount mismatch — refused.");
   // Slippage cap (guard 2) — trust our requested cap, and re-check Jupiter didn't widen it.
   if (typeof quote.slippageBps === "number" && quote.slippageBps > slippageBps) throw new Error("Route widened slippage — refused.");
+  // Guard 6 — the floor baked into the tx must match that cap.
+  const minErr = checkMinOut({ outAmount: quote.outAmount, minOut: quote.otherAmountThreshold, slippageBps });
+  if (minErr) throw new Error(minErr);
 
   // 2) Swap tx — bound to the taker (recipient). Only wrap/unwrap SOL when the input IS native SOL;
   // a USDC input spends the SPL token directly (no wrap).
@@ -214,79 +222,93 @@ async function quoteAndBuildGuarded(args: {
   return { tx, plan };
 }
 
-// Program ids for deriving the taker's output-token ATA (standard SPL Token; a Token-2022 mint yields
-// a different ATA than this derivation, so the guard below just fails open for those — never blocks).
-const SPL_TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-function deriveAta(mint: string, owner: string): string | null {
-  try {
-    const [ata] = PublicKey.findProgramAddressSync(
-      [new PublicKey(owner).toBuffer(), SPL_TOKEN_PROGRAM.toBuffer(), new PublicKey(mint).toBuffer()],
-      ATA_PROGRAM,
-    );
-    return ata.toBase58();
-  } catch { return null; }
-}
-// Decode an SPL token account's `amount` (u64 LE at byte offset 64) from base64 account data.
-function tokenAcctAmount(acct: unknown): number | null {
-  try {
-    const data = (acct as { data?: unknown })?.data;
-    const b64 = Array.isArray(data) ? (data[0] as string) : null;
-    if (!b64) return null;
-    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    if (bytes.length < 72) return null;
-    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    return Number(dv.getBigUint64(64, true));
-  } catch { return null; }
+// The user's token accounts for a mint, with their balances before the swap (base units). Read via
+// getTokenAccountsByOwner, which finds classic SPL and Token-2022 accounts alike. Throws on an RPC
+// failure (the guards fail closed).
+async function ownedTokenAccounts(owner: string, mint: string): Promise<{ address: string; pre: string }[]> {
+  const r = await solRpcCall("getTokenAccountsByOwner", [owner, { mint }, { encoding: "jsonParsed" }]) as
+    { value?: Array<{ pubkey?: string; account?: { data?: { parsed?: { info?: { tokenAmount?: { amount?: string } } } } } }> } | null;
+  const out: { address: string; pre: string }[] = [];
+  for (const a of r?.value ?? []) {
+    const amt = a?.account?.data?.parsed?.info?.tokenAmount?.amount;
+    if (typeof a?.pubkey === "string" && typeof amt === "string" && /^\d+$/.test(amt)) out.push({ address: a.pubkey, pre: amt });
+    else throw new Error("unreadable token account");
+  }
+  return out;
 }
 
-// 5) Simulate the tx and assert (a) the fee payer's SOL delta doesn't exceed input + a fee/rent budget
-// (the "no stray SOL past the wrap" guard) and (b) the taker's OUTPUT token account gains ≥ minOut.
-// Both from simulated post-state. (b) is defense-in-depth on top of the on-chain otherAmountThreshold
-// floor (which already reverts a short-fill), so it FAILS OPEN — any inability to compute it skips
-// rather than blocks a valid swap.
+// The user's associated account for `mint`, derived under the program that OWNS the mint (classic SPL
+// or Token-2022 give different addresses). Where a fresh buy lands when the user holds none yet.
+const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+async function associatedAccount(mint: string, owner: string): Promise<string> {
+  const info = await solRpcCall("getAccountInfo", [mint, { encoding: "base64" }]) as { value?: { owner?: string } | null } | null;
+  const program = info?.value?.owner;
+  if (program !== "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" && program !== "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") throw new Error("not a token mint");
+  const [ata] = PublicKey.findProgramAddressSync(
+    [new PublicKey(owner).toBuffer(), new PublicKey(program).toBuffer(), new PublicKey(mint).toBuffer()],
+    ATA_PROGRAM,
+  );
+  return ata.toBase58();
+}
+
+// A simulated account's token balance: missing (closed / never created) = 0; unreadable = null.
+function simTokenAmount(acct: unknown): bigint | null {
+  if (acct == null) return 0n;
+  const data = (acct as { data?: unknown })?.data;
+  return tokenAccountAmount(Array.isArray(data) ? (data[0] as string) : "");
+}
+
+// 5) Simulate the exact tx and check, from the simulated balances, that it moves no stray SOL, spends
+// no more of the input token than typed, and delivers at least the minimum into the user's OWN
+// accounts. Every read fails CLOSED: what we can't verify, we don't sign.
 async function simulateGuard(conn: Connection, tx: VersionedTransaction, plan: SolBuyPlan): Promise<void> {
   const takerPk = new PublicKey(plan.taker);
   let pre: number;
   try { pre = await conn.getBalance(takerPk, "processed"); } catch { throw new Error("Couldn't read your SOL balance — try again."); }
 
-  // Output-token ATA + its pre-balance (fail-open: unknown → 0, and the check below skips if unusable).
-  const outAta = deriveAta(plan.outputMint, plan.taker);
-  let preOut = 0;
-  if (outAta) {
-    try { const b = await solRpcCall("getTokenAccountBalance", [outAta]) as { value?: { amount?: string } }; preOut = Number(b?.value?.amount ?? 0) || 0; }
-    catch { preOut = 0; } // ATA doesn't exist yet → 0
-  }
+  // The user's input-token accounts (SPL input only; a native-SOL input is covered by the SOL check)
+  // and output-token accounts (existing ones + where a first buy lands).
+  let inputAccts: { address: string; pre: string | null }[] = [];
+  let outputAccts: { address: string; pre: string | null }[] = [];
+  try {
+    if (plan.inputMint !== WSOL_MINT) inputAccts = await ownedTokenAccounts(plan.taker, plan.inputMint);
+    outputAccts = await ownedTokenAccounts(plan.taker, plan.outputMint);
+    const ata = await associatedAccount(plan.outputMint, plan.taker);
+    if (!outputAccts.some((a) => a.address === ata)) outputAccts.push({ address: ata, pre: null });
+  } catch { throw new Error("Couldn't read your token accounts — not signing."); }
+  if (plan.inputMint !== WSOL_MINT && !inputAccts.length) throw new Error(`You don't hold ${plan.inSym} to spend.`);
 
+  const addresses = [plan.taker, ...inputAccts.map((a) => a.address), ...outputAccts.map((a) => a.address)];
   let sim;
   try {
-    sim = await conn.simulateTransaction(tx, { replaceRecentBlockhash: true, sigVerify: false, commitment: "processed", accounts: { encoding: "base64", addresses: outAta ? [plan.taker, outAta] : [plan.taker] } });
+    sim = await conn.simulateTransaction(tx, { replaceRecentBlockhash: true, sigVerify: false, commitment: "processed", accounts: { encoding: "base64", addresses } });
   } catch { throw new Error("Simulation failed to run — not signing."); }
   if (sim.value.err) throw new Error("Swap would fail on-chain (simulation reverted) — not signing.");
+  const after = sim.value.accounts ?? [];
+  if (after.length !== addresses.length) throw new Error("Simulation didn't return your balances — not signing.");
 
-  // (a) The simulated post-balance of the fee payer. The most it may drop is the SOL we're spending
-  // plus a fee/rent budget (priority fee + ATA rent ≈ ≤ 0.02 SOL). More than that = a drain → refuse.
-  const acct = sim.value.accounts?.[0];
-  if (acct && typeof acct.lamports === "number") {
-    const post = acct.lamports;
-    const drop = pre - post;
-    const maxDrop = plan.solSpent + 0.02 * LAMPORTS_PER_SOL; // wSOL input: the wrap + fees; USDC input: fees/rent only
-    if (drop > maxDrop) throw new Error("Transaction would move more SOL than the swap — refused.");
+  // SOL: the most the fee payer may drop is the SOL being spent plus a fee/rent budget (priority fee +
+  // account rent ≈ ≤ 0.02 SOL). More than that = a drain → refuse.
+  const payer = after[0];
+  if (!payer || typeof payer.lamports !== "number") throw new Error("Simulation didn't return your SOL balance — not signing.");
+  if (pre - payer.lamports > plan.solSpent + 0.02 * LAMPORTS_PER_SOL) throw new Error("Transaction would move more SOL than the swap — refused.");
+
+  // SPEND: input-token accounts drop by at most the typed amount.
+  if (plan.inputMint !== WSOL_MINT) {
+    const spendErr = checkSpend({
+      accounts: inputAccts.map((a, i) => ({ pre: a.pre, post: simTokenAmount(after[1 + i]) })),
+      inAmount: plan.inAmount,
+    });
+    if (spendErr) throw new Error(spendErr);
   }
 
-  // (b) Output-ATA gain ≥ minOut (fail-open). 1% tolerance absorbs sim/float noise; only our own
-  // "below the minimum" error propagates — any decode/shape issue defers to the on-chain floor.
-  try {
-    if (outAta && plan.minOut != null && plan.minOut > 0) {
-      const post = tokenAcctAmount(sim.value.accounts?.[1]);
-      if (post != null) {
-        const gained = post - preOut;
-        if (Number.isFinite(gained) && gained < plan.minOut * 0.99) throw new Error("Simulation delivers less than the minimum — refused.");
-      }
-    }
-  } catch (e) {
-    if ((e as Error)?.message?.includes("less than the minimum")) throw e;
-  }
+  // RECEIVE: the user's own output accounts gain at least the quote's minimum.
+  const off = 1 + inputAccts.length;
+  const recvErr = checkReceive({
+    accounts: outputAccts.map((a, i) => ({ pre: a.pre, post: simTokenAmount(after[off + i]) })),
+    minOut: plan.minOut,
+  });
+  if (recvErr) throw new Error(recvErr);
 }
 
 // Preview plan for the confirm modal — quotes, builds, and runs the static guards (1-4). The heavier
