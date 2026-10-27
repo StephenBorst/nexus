@@ -341,6 +341,10 @@ product is what sits on top:
   a new key breaks every device). Endpoint allowlist (SSRF). Subscribe/topics need `labAuth`. "On" = the server knows
   the device (`POST /push/status`). Pushes: graded calls, fills/TP1, agent opens/closes (lab-api `*/5` cron, which must
   RETURN before the hourly jobs). Service worker `public/push-sw.js`, scope `/push/`, no fetch handler, no cache.
+- **XMTP device limit:** every browser/app that turned on messaging is an XMTP installation, capped per wallet. At the
+  cap `Client.create` throws "…already registered N/M installations…"; `useXMTP` catches it (`app/lib/xmtpLimit.mjs`) and
+  the Messages page offers REMOVE OLD DEVICES: one signature, `Client.revokeInstallations` without a client, keeps the 3
+  newest, then enables here.
 - The nav bell is `SignalsNavButton.tsx`. Before adding UI to a component, grep that something mounts it.
 
 ## Spot, swap, cross-chain

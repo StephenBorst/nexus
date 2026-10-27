@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useAccount } from "@orderly.network/hooks";
 import type { Client, Conversation, DecodedMessage } from "@xmtp/browser-sdk";
+import { installationLimit, revokePlan, limitMessage } from "@/lib/xmtpLimit.mjs";
 
 // The XMTP SDK (and its wasm) loads on first use, not with every page: this hook is
 // mounted by the global Messages nav button, so a static import put the SDK in the
@@ -49,6 +50,10 @@ export function useXMTP() {
   const [ready, setReady] = useState(false);
   const [initializing, setInitializing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when Client.create failed on XMTP's per-wallet device limit (app/lib/xmtpLimit.mjs).
+  // signerType = the identity type that hit it, so the revoke signs the same way.
+  const [deviceLimit, setDeviceLimit] = useState<{ inboxId: string | null; used: number | null; max: number | null; signerAddr: string; signerType: "EOA" | "SCW" } | null>(null);
+  const [revoking, setRevoking] = useState(false);
 
   // Restore ready state if client is already cached (e.g. after re-render)
   useEffect(() => {
@@ -104,23 +109,36 @@ export function useXMTP() {
       const opts = { env: "production" as const, dbEncryptionKey: encryptionKey };
 
       let client: Client;
+      let signerType: "EOA" | "SCW" = "EOA";
       try {
-        // Try EOA first — works for standard wallets with no prior XMTP state
-        client = await Client.create({ type: "EOA", getIdentifier: () => identifier, signMessage }, opts);
-      } catch (eoaErr) {
-        const eoaMsg = eoaErr instanceof Error ? eoaErr.message : JSON.stringify(eoaErr);
-        if (!eoaMsg.includes("Wrong chain id") && !eoaMsg.includes("chain")) throw eoaErr;
-        // Wallet has a prior SCW identity — retry with chain ID declared
-        const chainHex = await provider.request({ method: "eth_chainId" }) as string;
-        const chainId = BigInt(chainHex);
-        client = await Client.create({
-          type: "SCW",
-          getIdentifier: () => identifier,
-          signMessage,
-          getChainId: () => chainId,
-        }, opts);
+        try {
+          // Try EOA first — works for standard wallets with no prior XMTP state
+          client = await Client.create({ type: "EOA", getIdentifier: () => identifier, signMessage }, opts);
+        } catch (eoaErr) {
+          const eoaMsg = eoaErr instanceof Error ? eoaErr.message : JSON.stringify(eoaErr);
+          if (!eoaMsg.includes("Wrong chain id") && !eoaMsg.includes("chain")) throw eoaErr;
+          // Wallet has a prior SCW identity — retry with chain ID declared
+          signerType = "SCW";
+          const chainHex = await provider.request({ method: "eth_chainId" }) as string;
+          const chainId = BigInt(chainHex);
+          client = await Client.create({
+            type: "SCW",
+            getIdentifier: () => identifier,
+            signMessage,
+            getChainId: () => chainId,
+          }, opts);
+        }
+      } catch (createErr) {
+        const lim = installationLimit(createErr);
+        if (lim) {
+          setDeviceLimit({ ...lim, signerAddr, signerType });
+          setError(limitMessage(lim));
+          return;
+        }
+        throw createErr;
       }
 
+      setDeviceLimit(null);
       clientCache.set(signerAddr, client);
       setXmtpAddress(signerAddr);
       setReady(true);
@@ -131,6 +149,46 @@ export function useXMTP() {
       setInitializing(false);
     }
   }, [walletAddress, initializing]);
+
+  // One tap: revoke this wallet's OLDEST XMTP devices (keeps the newest KEEP_NEWEST), then turn
+  // messaging on here. Works without a client: the inbox's devices are read from the network and
+  // the revoke is one wallet signature (Client.revokeInstallations). Revoked devices stop
+  // receiving messages until messaging is turned on there again.
+  const revokeOldDevices = useCallback(async (): Promise<{ revoked: number } | null> => {
+    const lim = deviceLimit;
+    const provider = getProvider();
+    if (!lim || !provider || revoking) return null;
+    setRevoking(true);
+    setError(null);
+    try {
+      const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
+      const signerAddr = accounts[0]?.toLowerCase();
+      if (signerAddr !== lim.signerAddr) throw new Error("Switch back to the wallet that hit the limit, then try again.");
+      const sdk = await loadXmtp();
+      const identifier = { identifier: signerAddr, identifierKind: sdk.IdentifierKind.Ethereum };
+      const backend = await sdk.createBackend({ env: "production" });
+      const inboxId = lim.inboxId ?? (await sdk.getInboxIdForIdentifier(backend, identifier));
+      if (!inboxId) throw new Error("Couldn't find this wallet's XMTP inbox.");
+      const [state] = await sdk.Client.fetchInboxStates([inboxId], backend);
+      const plan = revokePlan(state?.installations ?? []);
+      if (!plan.revoke.length) throw new Error("No old devices to remove. Try enabling messaging again.");
+      const signMessage = async (msg: string): Promise<Uint8Array> =>
+        hexToBytes(await provider.request({ method: "personal_sign", params: [strToHex(msg), signerAddr] }) as string);
+      const chainId = lim.signerType === "SCW" ? BigInt(await provider.request({ method: "eth_chainId" }) as string) : null;
+      const signer = chainId != null
+        ? { type: "SCW" as const, getIdentifier: () => identifier, signMessage, getChainId: () => chainId }
+        : { type: "EOA" as const, getIdentifier: () => identifier, signMessage };
+      await sdk.Client.revokeInstallations(signer, inboxId, plan.revoke.map((i: { bytes: Uint8Array }) => i.bytes), backend);
+      setDeviceLimit(null);
+      return { revoked: plan.revoke.length };
+    } catch (e) {
+      console.error("[XMTP] revoke error:", e);
+      setError(e instanceof Error ? e.message : (JSON.stringify(e) ?? String(e)));
+      return null;
+    } finally {
+      setRevoking(false);
+    }
+  }, [deviceLimit, revoking]);
 
   const sendDM = useCallback(async (peerAddress: string, text: string) => {
     const client = getClient();
@@ -212,8 +270,8 @@ export function useXMTP() {
   }, [getClient]);
 
   return {
-    ready, initializing, error,
-    init, sendDM, openDM, getConversations, getMessages, streamMessages, streamAllMessages, canMessage,
+    ready, initializing, error, deviceLimit, revoking,
+    init, revokeOldDevices, sendDM, openDM, getConversations, getMessages, streamMessages, streamAllMessages, canMessage,
     getClient, myAddress: xmtpAddress ?? walletAddress, myInboxId,
   };
 }

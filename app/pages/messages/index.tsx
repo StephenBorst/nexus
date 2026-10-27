@@ -495,7 +495,7 @@ export default function MessagesPage() {
   const reParam = searchParams.get("re"); // "Re: your ZEC LONG call — " context seed
 
   const xmtp = useXMTP();
-  const { ready, initializing, error, init, getConversations, getMessages, streamMessages, myInboxId } = xmtp;
+  const { ready, initializing, error, init, getConversations, getMessages, streamMessages, myInboxId, deviceLimit, revoking, revokeOldDevices } = xmtp;
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
@@ -616,10 +616,28 @@ export default function MessagesPage() {
               you’ll sign twice — once for the encryption key, once to register
             </span>
           </div>
-          {error && <div style={S.errText}>{error}</div>}
-          <button style={S.enableBtn} onClick={init} disabled={initializing}>
-            {initializing ? "enabling..." : "ENABLE MESSAGING"}
-          </button>
+          {deviceLimit ? (
+            <>
+              <div style={{ ...S.centerLabel, color: "#a1a1aa", maxWidth: 320, lineHeight: 1.6 }}>{error}</div>
+              <button
+                style={S.enableBtn}
+                disabled={revoking || initializing}
+                onClick={async () => { if (await revokeOldDevices()) await init(); }}
+              >
+                {revoking ? "removing..." : initializing ? "enabling..." : "REMOVE OLD DEVICES"}
+              </button>
+              <div style={{ color: "#71717a", fontSize: 9, fontFamily: "var(--nx-font-mono)", maxWidth: 320, lineHeight: 1.6, textAlign: "center" }}>
+                Keeps your 3 newest devices. One signature. Removed devices stop getting messages until you turn messaging on there again.
+              </div>
+            </>
+          ) : (
+            <>
+              {error && <div style={S.errText}>{error}</div>}
+              <button style={S.enableBtn} onClick={init} disabled={initializing}>
+                {initializing ? "enabling..." : "ENABLE MESSAGING"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
