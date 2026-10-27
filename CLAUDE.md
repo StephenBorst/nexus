@@ -352,6 +352,11 @@ product is what sits on top:
   type, swapper = recipient = wallet, spend ≤ size + 1 unit, no permits, approvals capped by `approvalPlan` (open
   orders share one allowance), bracket approval sent and capped, balance check, stop triggers checked against FLASH's
   price. Fee `FLASH_FEE_BPS=10` on /quote and /order; builder code `FLASH_ATTRIBUTION_CODE` on /order only.
+  **Check a settled order (read-only):** `GET /flash/settlement[/<orderId>]?funderAddress=0x…` (no id = the wallet's
+  newest filled order; `routes-flashcheck.mjs`, rules `app/lib/flashSettlement.mjs`, ERC-8021 parse checked against ox).
+  `fee` = our bps asked on the order AND paid per fill (`integratorFeeNotional` ÷ `notional`, ±1.5 bps or 1¢);
+  `code` = our builder code at the END of each settlement tx's calldata (Base RPC). PASS / FAIL / PENDING / UNREAD /
+  NOT_BASE; an unreadable tx is never a PASS.
 - **NEAR Intents 1Click** (`CrossChainCard.tsx`, `app/lib/nearIntents.mjs checkQuote`): verify the signature against
   the pinned key AND the signed request (our recipient/refund, pinned assets incl. canonical BTC
   `1cs_v1:btc:native:coin`, exact amount, ≤100 bps, no memo, deadline). Build the deposit tx from `XC_ASSETS`, never the
