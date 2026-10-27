@@ -267,6 +267,8 @@ export const chipKey = (v) => viewedKey(v);
 // fill, never as a position. Only coins Nexus lists (the callers-card gate), so a tap always opens a
 // token page with a market behind it; an unreadable listed set shows nothing. PERP_BTC_USDC and BTC
 // are one coin. No unresolved calls → the calls graded in the last 7 days, as wins and losses.
+// Neither → mode "empty" (the row says so in one line). An unreadable feed or market list → mode null,
+// and the row isn't drawn: "no calls" is never shown for a read that failed.
 export const CALL_STRIP_MAX = 8;
 export const GRADED_WINDOW_MS = 7 * 86400000;
 
@@ -281,7 +283,7 @@ export function isStripCall(r) {
 /**
  * @param {object[] | null | undefined} rows   /feed rows (null = unreadable)
  * @param {Set<string> | null | undefined} listed  bare tickers Nexus lists (orderlyPerpSet)
- * @returns {{ mode: "open"|"graded"|null, chips: { coin:string, calls:number, awaiting:number, wins:number, losses:number }[] }}
+ * @returns {{ mode: "open"|"graded"|"empty"|null, chips: { coin:string, calls:number, awaiting:number, wins:number, losses:number }[] }}
  */
 export function callStrip(rows, listed, { now = Date.now(), max = CALL_STRIP_MAX } = {}) {
   const none = { mode: null, chips: [] };
@@ -312,8 +314,11 @@ export function callStrip(rows, listed, { now = Date.now(), max = CALL_STRIP_MAX
   const rank = (m, n) => [...m.values()].sort((a, b) => n(b) - n(a) || a.coin.localeCompare(b.coin)).slice(0, max);
   if (open.size) return { mode: "open", chips: rank(open, (c) => c.calls) };
   if (graded.size) return { mode: "graded", chips: rank(graded, (c) => c.wins + c.losses) };
-  return none;
+  return { mode: "empty", chips: [] };
 }
+
+/** The one line the row shows when the feed answered and nothing is in flight or graded this week. */
+export const EMPTY_STRIP_LINE = "No public calls in flight or graded this week.";
 
 /** "3 calls · 2 awaiting fill" for an open chip. */
 export function openChipLine(chip) {

@@ -6,7 +6,7 @@ import {
   needsSolanaFunds, openCallCount, callCountLine,
   isRealMarket, poolFlags, poolCaution,
   safeLogoUrl, fundingPayLine, readBrief, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo,
-  callStrip, isStripCall, openChipLine, labRowLine, readLabOpen, writeLabOpen, LAB_ROW_KEY, GRADED_WINDOW_MS, CALL_STRIP_MAX,
+  callStrip, isStripCall, openChipLine, EMPTY_STRIP_LINE, labRowLine, readLabOpen, writeLabOpen, LAB_ROW_KEY, GRADED_WINDOW_MS, CALL_STRIP_MAX,
 } from "./spotDiscovery.mjs";
 
 const RAY = "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R";
@@ -244,7 +244,7 @@ test("calls strip: an entry that hasn't traded is never counted as filled", () =
 
 test("calls strip: listed coins only; an unreadable listed set shows nothing", () => {
   const rows = [call({ symbol: "USDJPY", fillState: "OPEN" }), call({ symbol: "PEPE", fillState: "OPEN" })];
-  assert.deepEqual(callStrip(rows, LISTED, { now: NOW }), { mode: null, chips: [] });
+  assert.deepEqual(callStrip(rows, LISTED, { now: NOW }), { mode: "empty", chips: [] });
   assert.deepEqual(callStrip([call({ fillState: "OPEN" })], new Set(), { now: NOW }), { mode: null, chips: [] });
   assert.deepEqual(callStrip([call({ fillState: "OPEN" })], null, { now: NOW }), { mode: null, chips: [] });
   assert.deepEqual(callStrip(null, LISTED, { now: NOW }), { mode: null, chips: [] });
@@ -267,7 +267,7 @@ test("calls strip: resolution rows, copies, holders-only, private and duplicate 
 
 test("calls strip: invalid calls count nowhere", () => {
   const bad = call({ direction: "LONG", entryPrice: 100, stopLoss: 110, takeProfit1: 120 }); // stop above a long's entry
-  assert.deepEqual(callStrip([bad], LISTED, { now: NOW }), { mode: null, chips: [] });
+  assert.deepEqual(callStrip([bad], LISTED, { now: NOW }), { mode: "empty", chips: [] });
 });
 
 test("calls strip: nothing unresolved → wins and losses graded in the last 7 days", () => {
@@ -319,4 +319,12 @@ test("lab row state: folded by default, remembered per browser, survives a broke
   assert.equal(readLabOpen(broken), false);
   assert.doesNotThrow(() => writeLabOpen(broken, true));
   assert.equal(readLabOpen(undefined), false);
+});
+
+test("calls strip: empty only when the feed answered; a failed read is never shown as \"no calls\"", () => {
+  assert.deepEqual(callStrip([], LISTED, { now: NOW }), { mode: "empty", chips: [] });
+  assert.equal(callStrip(null, LISTED, { now: NOW }).mode, null);      // feed unreadable
+  assert.equal(callStrip([], new Set(), { now: NOW }).mode, null);     // market list unreadable
+  assert.equal(callStrip([], undefined, { now: NOW }).mode, null);
+  assert.match(EMPTY_STRIP_LINE, /^No public calls in flight or graded this week\.$/);
 });

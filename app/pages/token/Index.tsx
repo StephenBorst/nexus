@@ -29,7 +29,7 @@ import { FlashOrders } from "./FlashOrders";
 import { CrossChainCard } from "./CrossChainCard";
 import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS, majorHref, needsSolanaFunds, openCallCount, callCountLine, poolCaution,
   readBrief, fundingPayLine, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo, safeLogoUrl,
-  callStrip, openChipLine, labRowLine, readLabOpen, writeLabOpen } from "@/lib/spotDiscovery.mjs";
+  callStrip, openChipLine, labRowLine, readLabOpen, writeLabOpen, EMPTY_STRIP_LINE } from "@/lib/spotDiscovery.mjs";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -127,6 +127,21 @@ const POS = "#3ecf8e", NEG = "#f7525f";
 // The phone Buy/Sell bar sits at the bottom edge, above the phone's home-indicator inset. Spot has no
 // SDK bottom nav (it shows only on Markets/Trade/Portfolio) and the ◆ orb sits at 84px, clear above it.
 const STICKY_BAR_BOTTOM = "calc(12px + env(safe-area-inset-bottom, 0px))";
+// The gap under the bar (its 12px offset plus 2px of air). A ticket rising from below meets the bar the
+// moment its top passes the bar's BOTTOM edge, so that's where the bar hides. The home-indicator inset
+// is added at runtime (safeAreaBottomPx), since the bar sits that much higher on those phones.
+const STICKY_BAR_CLEARANCE = 14;
+// env(safe-area-inset-bottom) as pixels: CSS knows it, JS doesn't, so read it off a hidden probe.
+function safeAreaBottomPx(): number {
+  try {
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;bottom:0;left:0;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom, 0px)";
+    document.body.appendChild(d);
+    const v = parseFloat(getComputedStyle(d).paddingBottom) || 0;
+    d.remove();
+    return v;
+  } catch { return 0; }
+}
 
 // Uniswap `chain` param by DexScreener chainId — the honest spot deep-link for EVM tokens
 // we don't list as a perp. Solana routes to Jupiter; anything else falls back to the pool page.
@@ -395,21 +410,32 @@ function MoversRail({ onPick }: { onPick: (sym: string) => void }) {
 
 // ── PUBLIC CALLS strip (Spot landing, above Movers) — one chip per listed coin with a public call
 // in flight: a count and how many are still awaiting fill, never a side (rules: spotDiscovery.mjs
-// callStrip). Nothing in flight → the coins graded in the last 7 days, as wins and losses. No calls
-// either way, or an unreadable feed or market list → the row isn't drawn. Same /feed the chart reads.
+// callStrip). Nothing in flight → the coins graded in the last 7 days, as wins and losses. Neither →
+// one line and a way to post. An unreadable feed or market list → the row isn't drawn (never "no calls"
+// for a read that failed). Same /feed the chart reads.
 type StripChip = { coin: string; calls: number; awaiting: number; wins: number; losses: number };
-function PublicCallsStrip({ onPick }: { onPick: (sym: string) => void }) {
-  const [strip, setStrip] = useState<{ mode: "open" | "graded" | null; chips: StripChip[] } | null>(null);
+type StripMode = "open" | "graded" | "empty" | null;
+function PublicCallsStrip({ onPick, onPost }: { onPick: (sym: string) => void; onPost: () => void }) {
+  const [strip, setStrip] = useState<{ mode: StripMode; chips: StripChip[] } | null>(null);
   useEffect(() => {
     let alive = true;
     const load = () => Promise.all([fetchPublicFeed(), orderlyPerpSet()])
-      .then(([rows, listed]) => { if (alive) setStrip(callStrip(rows, listed) as { mode: "open" | "graded" | null; chips: StripChip[] }); })
+      .then(([rows, listed]) => { if (alive) setStrip(callStrip(rows, listed) as { mode: StripMode; chips: StripChip[] }); })
       .catch(() => {});
     load();
     const iv = setInterval(load, 60000);
     return () => { alive = false; clearInterval(iv); };
   }, []);
-  if (!strip?.mode || !strip.chips.length) return null;
+  if (!strip?.mode) return null;
+  if (strip.mode === "empty") {
+    return (
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 20, fontFamily: UI, fontSize: 13, color: MUT }}>
+        <span>{EMPTY_STRIP_LINE}</span>
+        <button type="button" onClick={onPost} style={{ ...NEXT_ACTION, fontSize: 13 }}>Post a call →</button>
+      </div>
+    );
+  }
+  if (!strip.chips.length) return null;
   const open = strip.mode === "open";
   return (
     <div style={{ marginBottom: 20 }}>
@@ -1061,7 +1087,9 @@ export default function TokenTerminal() {
   useEffect(() => {
     const el = ticketRef.current;
     if (!isMobile || !el || typeof IntersectionObserver === "undefined") { setTicketInView(true); return; }
-    const io = new IntersectionObserver(([e]) => setTicketInView(e.isIntersecting), { threshold: 0.15 });
+    // The viewport's bottom edge is pulled up to the bar's bottom edge, so the bar hides the moment the
+    // ticket's top reaches it: the bar never sits over the ticket.
+    const io = new IntersectionObserver(([e]) => setTicketInView(e.isIntersecting), { threshold: 0, rootMargin: `0px 0px -${Math.round(STICKY_BAR_CLEARANCE + safeAreaBottomPx())}px 0px` });
     io.observe(el);
     return () => io.disconnect();
   }, [isMobile, pair?.pairAddress]);
@@ -1476,7 +1504,7 @@ export default function TokenTerminal() {
             {/* Majors: Solana names open by their mint, so a guest can't land on a same-ticker copy.
                 No wallet → above Movers (nothing else to start from); a wallet → below, its own chips lead. */}
             {!(wallet || solSigner.address) && <MajorsRow onOpen={(href) => navigate(href)} viewed={viewed} />}
-            <PublicCallsStrip onPick={(s) => submit(s)} />
+            <PublicCallsStrip onPick={(s) => submit(s)} onPost={() => navigate("/lab?tab=thesis")} />
             <MoversRail onPick={(s) => submit(s)} />
             <div style={{ maxWidth: 640 }}>
               <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 12 }}>
