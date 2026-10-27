@@ -32,6 +32,11 @@
       "stage": "REGISTERED",
       "next": "30 more out-of-sample events",
       "events": 0
+    },
+    "oi_coil_break": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
     }
   },
   "gradedExit": {

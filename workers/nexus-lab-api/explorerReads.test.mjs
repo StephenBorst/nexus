@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   oiDivReversalEvents, sessionMomentumEvents, levelReclaimEvents, confluenceFollowEvents,
-  oiDivReversal4hEvents, EXPLORER_GENS, OI_DIV, OI_DIV_4H, CONFLUENCE,
+  oiDivReversal4hEvents, oiCoilBreakEvents, EXPLORER_GENS, OI_DIV, OI_DIV_4H, OI_COIL, CONFLUENCE,
 } from "./explorerReads.mjs";
 import { AXES } from "./axisbt.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
@@ -20,7 +20,7 @@ test("an explorer is on the scoreboard only once registered, and every registrat
   const registered = new Set(REGISTERED_READS.map((r) => r.axis));
   for (const n of Object.keys(EXPLORER_GENS)) assert.ok(!graded.has(n) || registered.has(n), `${n} is graded but not registered`);
   for (const n of registered) assert.ok(graded.has(n), `${n} is registered but not on the scoreboard`);
-  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "oi_div_reversal", "oi_div_reversal_4h", "session_momentum"]);
+  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_momentum"]);
   assert.ok(!("vol_breakout" in EXPLORER_GENS), "dropped for v1");
 });
 
@@ -161,3 +161,30 @@ test("oi_div_reversal_4h (registered 2026-10-27): the 24h read's own code, only 
   assert.deepEqual(oiDivReversal4hEvents(t, null, {}), oiDivReversalEvents(t, null, {}, OI_DIV_4H));
   assert.ok(oiDivReversal4hEvents(t, null, {}).length > 0);
 });
+
+// A tape with a steady wobble (so 24h returns have a spread), then a flat final day.
+function coilTape({ oiBuild, breakUp }) {
+  const n = 800, oiHist = [], candleHist = [];
+  for (let i = 0; i < n; i++) {
+    const flat = i >= n - 30;
+    const p = flat ? 100 : 100 + Math.sin(i / 9) * 3;
+    const oi = flat && i >= n - 24 ? 1000 * (1 + oiBuild * (i - (n - 25)) / 24) : 1000;
+    oiHist.push({ t: T0 + i * H + 60000, price: p, oi, funding: 0 });
+    candleHist.push({ t: T0 + i * H, o: p, h: p * 1.001, l: p * 0.999, c: p, v: 1 });
+  }
+  // the hour after the coil: a close outside the 24h range
+  const px = breakUp ? 101 : 99;
+  candleHist.push({ t: T0 + n * H, o: 100, h: Math.max(100, px) * 1.001, l: Math.min(100, px) * 0.999, c: px, v: 1 });
+  return { oiHist, candleHist, coilEnd: T0 + (n - 1) * H };
+}
+
+test("oi_coil_break (registered 2026-10-27, OI +3%): OI builds into a flat tape, the range break is followed; no OI build → nothing", () => {
+  const up = oiCoilBreakEvents(coilTape({ oiBuild: 0.06, breakUp: true }));
+  assert.equal(up.at(-1)?.side, "LONG");
+  const down = oiCoilBreakEvents(coilTape({ oiBuild: 0.06, breakUp: false }));
+  assert.equal(down.at(-1)?.side, "SHORT");
+  const t = coilTape({ oiBuild: 0.0, breakUp: true });
+  assert.equal(oiCoilBreakEvents(t).filter((e) => e.t > t.coilEnd).length, 0, "no OI build, no coil");
+  assert.deepEqual({ oiBuild: OI_COIL.oiBuild, flatPct: OI_COIL.flatPct, breakWithinH: OI_COIL.breakWithinH, cooldownH: OI_COIL.cooldownH }, { oiBuild: 0.03, flatPct: 0.3, breakWithinH: 12, cooldownH: 24 });
+});
+

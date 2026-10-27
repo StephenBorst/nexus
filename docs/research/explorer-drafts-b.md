@@ -3,7 +3,7 @@
 **Status (2026-10-27, borst signed):**
 - **A · `oi_div_reversal_4h`: registered** at OI −2% and a 12h cooldown (`oi-div-reversal-4h-prereg.md`), counting from
   2026-10-28T00:00Z.
-- **B · `oi_coil_break`: to be registered at OI +3%** in its own PR.
+- **B · `oi_coil_break`: registered** at OI +3% (`oi-coil-break-prereg.md`), counting from 2026-10-28T00:00Z.
 - **C · `funding_reset`: dropped** for this batch.
 - **D · `funding_basis_split`: parked.** No basis history route this batch.
 

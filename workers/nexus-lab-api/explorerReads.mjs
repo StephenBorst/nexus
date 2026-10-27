@@ -187,6 +187,50 @@ export function oiDivReversal4hEvents(cs, pmap, ctx, p = OI_DIV_4H) {
   return oiDivReversalEvents(cs, pmap, ctx, p);
 }
 
+// ── 7 · oi_coil_break — registered 2026-10-27, counts from 2026-10-28T00:00Z ─────────────────────────────────────────────────────────────────────────
+// Positions build while price goes nowhere, then price leaves the range: follow the break.
+// Coil (decided at hour h, from oi:hist): OI rose at least `oiBuild` over the prior 24h AND |24h
+// return| is at or below the 30th percentile of |24h return| over the prior 30 days.
+// Break: within `breakWithinH` hours after the coil hour, the first hourly candle that CLOSES above
+// the high (→ LONG) or below the low (→ SHORT) of the 24 candles ending at the coil hour.
+// One event per coil; cooldown 24h per coin. Not vol_breakout (dropped): that needed an ATR squeeze
+// and fired a third as often as the bar; this one asks for OI building into a flat tape.
+// docs/research/oi-coil-break-prereg.md. Moved from explorerDraftsB.mjs; borst signed OI +3%.
+export const OI_COIL = Object.freeze({ windowH: 24, lookbackH: MONTH_H, flatPct: 0.3, oiBuild: 0.03, breakWithinH: 12, cooldownH: 24, minHistory: MONTH_H / 2 });
+export function oiCoilBreakEvents(cs, _pmap, _ctx, p = OI_COIL) {
+  const m = oiMap(cs.oiHist), cbh = candleMap(cs.candleHist);
+  const hours = [...m.keys()].sort((a, b) => a - b);
+  const ret = new Map();
+  for (const h of hours) {
+    const a = m.get(h), b = m.get(h - p.windowH);
+    if (!b || !(b.price > 0)) continue;
+    const oiCh = Number(a.oi) > 0 && Number(b.oi) > 0 ? Number(a.oi) / Number(b.oi) - 1 : null;
+    ret.set(h, { r: a.price / b.price - 1, oiCh });
+  }
+  const ev = [];
+  let last = -Infinity;
+  for (const h of hours) {
+    const x = ret.get(h);
+    if (!x || x.oiCh == null || h - last < p.cooldownH) continue;
+    if (!(x.oiCh >= p.oiBuild)) continue;
+    const prior = [];
+    for (let k = h - p.lookbackH; k < h; k++) { const y = ret.get(k); if (y) prior.push(Math.abs(y.r)); }
+    if (prior.length < p.minHistory) continue;
+    if (!(pctRank(prior, Math.abs(x.r)) <= p.flatPct)) continue;
+    // the coil's range: the 24 candles ending at the coil hour (all must exist)
+    let hi = -Infinity, lo = Infinity, full = true;
+    for (let k = h - p.windowH + 1; k <= h; k++) { const c = cbh.get(k); if (!c) { full = false; break; } hi = Math.max(hi, c.h); lo = Math.min(lo, c.l); }
+    if (!full) continue;
+    for (let k = h + 1; k <= h + p.breakWithinH; k++) {
+      const c = cbh.get(k);
+      if (!c) continue;
+      const side = c.c > hi ? "LONG" : c.c < lo ? "SHORT" : null;
+      if (side) { ev.push({ t: Number(c.t) + 3600000, side }); last = k; break; }
+    }
+  }
+  return ev;
+}
+
 // The four registered 2026-10-16 (docs/research/explorers-prereg.md). Labels are the scoreboard's.
 export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "level_reclaim", label: "Prior-day high/low swept and reclaimed", gen: levelReclaimEvents }),
@@ -195,5 +239,7 @@ export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "confluence_follow", label: "Funding × OI confluence, traded with the crowd", gen: confluenceFollowEvents }),
   // batch 2, registered 2026-10-27 (docs/research/oi-div-reversal-4h-prereg.md)
   Object.freeze({ name: "oi_div_reversal_4h", label: "Extreme 4h move on falling OI, faded", gen: oiDivReversal4hEvents }),
+  // batch 2, registered 2026-10-27 (docs/research/oi-coil-break-prereg.md)
+  Object.freeze({ name: "oi_coil_break", label: "OI builds into a flat tape, range break followed", gen: oiCoilBreakEvents }),
 ]);
 export const EXPLORER_GENS = Object.freeze(Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.gen])));
