@@ -30,6 +30,7 @@ import { CrossChainCard } from "./CrossChainCard";
 import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS, majorHref, needsSolanaFunds, openCallCount, callCountLine, poolCaution,
   readBrief, fundingPayLine, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo, safeLogoUrl,
   callStrip, openChipLine, labRowLine, readLabOpen, writeLabOpen, EMPTY_STRIP_LINE } from "@/lib/spotDiscovery.mjs";
+import { swapOutcome } from "@/lib/solSwapGuards.mjs";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -943,7 +944,7 @@ export default function TokenTerminal() {
   const [solBusy, setSolBusy] = useState(false);
   const [solStep, setSolStep] = useState("");
   const [solErr, setSolErr] = useState<string | null>(null);
-  const [solDone, setSolDone] = useState<{ sig: string } | null>(null);
+  const [solDone, setSolDone] = useState<{ sig: string; confirmed: boolean } | null>(null);
   const [solRpcHealth, setSolRpcHealth] = useState<string | null>(null); // raw /sol/rpc status (diagnostic)
   const [solBalanceErr, setSolBalanceErr] = useState<string | null>(null); // why the SOL balance read failed (diagnostic)
   const [solUsdcErr, setSolUsdcErr] = useState<string | null>(null);       // why the USDC balance read failed (diagnostic + card)
@@ -1352,7 +1353,7 @@ export default function TokenTerminal() {
     setSolBusy(true); setSolErr(null); setSolStep("preparing…");
     try {
       const { sig, confirmed } = await executeSolBuy(solProvider, solPlan, setSolStep);
-      setSolDone({ sig });
+      setSolDone({ sig, confirmed });
       setBalNonce((n) => n + 1); // balances moved → re-read the ticket
       // Record the buy lot (USD spent + tokens received) so YOUR POSITION attaches this fill — the
       // Solana buy path recorded nothing before, so a Solana position always read "no buys tracked".
@@ -1397,8 +1398,8 @@ export default function TokenTerminal() {
     if (!solPlan || !solProvider) return;
     setSolBusy(true); setSolErr(null); setSolStep("preparing…");
     try {
-      const { sig } = await executeSolSell(solProvider, solPlan, setSolStep);
-      setSolDone({ sig });
+      const { sig, confirmed } = await executeSolSell(solProvider, solPlan, setSolStep);
+      setSolDone({ sig, confirmed });
       setBalNonce((n) => n + 1); // token balance dropped, USDC rose → re-read the ticket
     } catch (e) {
       const m = (e as Error)?.message || "swap failed";
@@ -2391,9 +2392,17 @@ export default function TokenTerminal() {
                 </>
               ) : (
                 <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
-                  <div style={{ fontSize: 28, marginBottom: 8, color: POS }}>✓</div>
-                  <div style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT, marginBottom: 6 }}>Swap sent</div>
-                  <div style={{ fontFamily: UI, fontSize: 11, color: MUT, marginBottom: 14 }}>Your {solPlan.outSym} lands once it confirms on Solana.</div>
+                  {(() => {
+                    // Only an on-chain confirmation reads as success (app/lib/solSwapGuards.mjs swapOutcome).
+                    const o = swapOutcome(solDone.confirmed);
+                    return (
+                      <>
+                        {o.ok && <div style={{ fontSize: 28, marginBottom: 8, color: POS }}>✓</div>}
+                        <div style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT, marginBottom: 6 }}>{o.title}</div>
+                        <div style={{ fontFamily: UI, fontSize: 11, color: MUT, marginBottom: 14 }}>{o.ok ? `Your ${solPlan.outSym} is in your wallet.` : o.note}</div>
+                      </>
+                    );
+                  })()}
                   <a href={solscanTx(solDone.sig)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: BRIGHT, textDecoration: "none", display: "inline-block", marginBottom: 14, wordBreak: "break-all" }}>view on Solscan ↗</a>
                   <button onClick={closeSolModal} style={{ display: "block", width: "100%", fontFamily: UI, fontSize: 13, fontWeight: 600, color: "#0a0a0b", background: BRIGHT, border: "none", borderRadius: 8, padding: "11px 0", cursor: "pointer" }}>Done</button>
                 </div>

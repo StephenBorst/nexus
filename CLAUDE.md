@@ -371,6 +371,17 @@ product is what sits on top:
   `1cs_v1:btc:native:coin`, exact amount, ≤100 bps, no memo, deadline). Build the deposit tx from `XC_ASSETS`, never the
   response. Fee 10 bps asked (5 bps ours) → borst.eth's intents.near balance (recipient must be an EOA). Quotes go via
   `POST /xc/quote` with `ONE_CLICK_JWT`, falling back to direct.
+- **Solana swap (Jupiter) — the ONE signer is `app/pages/token/solSwapExec.ts`**, BUY (SOL or USDC → token) and SELL
+  (token → USDC), Jupiter via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
+  (re-fetched fresh right before signing): quote bound to our mints + amount; slippage ≤ 300 bps and the quote's
+  minimum respects it (`checkMinOut`); fee payer = the wallet; top-level programs allowlisted; simulation must
+  succeed and, from simulated balances, SOL drop ≤ SOL input + 0.02 SOL, input-token accounts drop ≤ the typed amount
+  (`checkSpend`, summed across all the wallet's accounts for that mint), the wallet's OWN output accounts gain ≥ the
+  minimum (`checkReceive`; first-buy account derived under the mint's own program, classic SPL or Token-2022). Every
+  read fails CLOSED (2026-10-27; the receive check used to fail open and USDC/sell spends weren't checked). Pure checks
+  in `app/lib/solSwapGuards.mjs` (tested). The result screen shows ✓ only on an on-chain confirmation (`swapOutcome`);
+  a timeout reads "Submitted, not confirmed yet · check Solscan". Dry-run any change on a real swap without signing:
+  quote + swap for a public wallet, `simulateTransaction`, run the checks.
 - **Key proxies** (`keyProxy.mjs`): `/flash/*`, `/swap/jup/*`, `/xc/quote` accept only our origins + per-IP budgets.
 - **Discovery** rules in `app/lib/spotDiscovery.mjs` (recent views, address search, real-market floors incl. padded/thin
   pools, safe logo hosts, read brief, callers line). No long/short split on callers until the board has a net-positive caller.
