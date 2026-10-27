@@ -299,6 +299,11 @@ product is what sits on top:
   (`routes-removekey.mjs`: Bankr signs as the owner, refuses `withdraw_first` while funds or positions remain, removes
   the key at Orderly signed by itself, confirms with the public key lookup; never returns the signature).
   Listed: `0xd9f7…b449` (until a new signing message is live).
+- **Auth v2** (`docs/auth-v2-spec.md`, signed off 2026-10-27): random Orderly keys registered via `AddOrderlyKey` (30 days,
+  one per wallet) + a 24h trading session that derives nothing. Built step by step; step 1 = `app/lib/tradingSession.mjs`
+  (one message builder for client and worker) + `routes-session.mjs` (`checkTradingSession`; `POST /v2/session/end-all`
+  ends every session issued before the caller's, the stamp `auth:sessions-after:{addr}` only moves forward). No live
+  route accepts a session yet.
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must
