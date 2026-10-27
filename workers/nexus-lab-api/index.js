@@ -100,6 +100,7 @@ import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.
 import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
 import { revokedWallets, revokedTradingRefusal } from "./revokedTrading.mjs";
 import { handleRemoveKey } from "./routes-removekey.mjs";
+import { handleSession } from "./routes-session.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
 import { aesGcmEncrypt, scrubStoredSeeds } from "./seedVault.mjs";
@@ -778,6 +779,11 @@ export default {
       // POST /proxy/bankr-remove-key: remove a leaked trading key at Orderly (routes-removekey.mjs).
       const rmRes = await handleRemoveKey(parts, request, env);
       if (rmRes) return rmRes;
+    }
+    {
+      // POST /v2/session/end-all: end every older trading session (auth v2, routes-session.mjs).
+      const sessRes = await handleSession(parts, request, env);
+      if (sessRes) return sessRes;
     }
 
     // ── /og/trader/:wallet(.png)? → the graded record card ─────────────────────

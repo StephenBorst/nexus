@@ -146,7 +146,8 @@ custody agents already have. In exchange, a leaked signature stops being a leake
 
 ## Build order (each a PR)
 
-1. Session signatures plus the kill switch: library + verifier, unused.
+1. Session signatures plus the kill switch: library + verifier, unused. **Shipped 2026-10-27:** `app/lib/tradingSession.mjs`
+   (message, `newTradingSession`, `verifyTradingSession`), `routes-session.mjs` (`checkTradingSession`, `POST /v2/session/end-all`).
 2. Begin/complete/remove + key storage behind `AUTH_V2_KEYS="true"`; Bankr register moves to it.
 3. Derive routes read the stored key; exec expiry check.
 4. Bankr skill PR (BankrBot/skills) with the new calls; copy back.
