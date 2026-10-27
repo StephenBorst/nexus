@@ -27,6 +27,7 @@ export const AXIS_BLURB = {
   rs_value_pullback_rotation: "The VWAP pullback, vetoed unless volume rotates in.",
   level_reclaim: "Price sweeps the prior day's high or low, then closes back inside. Fades the sweep.",
   oi_div_reversal: "A big 24h move while open interest falls. Fades it.",
+  oi_div_reversal_4h: "A big 4h move while open interest falls. Fades it.",
   session_momentum: "A bigger-than-usual NY open move (13–15 UTC). Goes with it.",
   confluence_follow: "Funding and OI agree on a fade. Goes the other way, with the crowd.",
 };

@@ -27,6 +27,11 @@
       "stage": "REGISTERED",
       "next": "7 more out-of-sample events",
       "events": 23
+    },
+    "oi_div_reversal_4h": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
     }
   },
   "gradedExit": {

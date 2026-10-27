@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   oiDivReversalEvents, sessionMomentumEvents, levelReclaimEvents, confluenceFollowEvents,
-  EXPLORER_GENS, OI_DIV, CONFLUENCE,
+  oiDivReversal4hEvents, EXPLORER_GENS, OI_DIV, OI_DIV_4H, CONFLUENCE,
 } from "./explorerReads.mjs";
 import { AXES } from "./axisbt.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
@@ -20,7 +20,7 @@ test("an explorer is on the scoreboard only once registered, and every registrat
   const registered = new Set(REGISTERED_READS.map((r) => r.axis));
   for (const n of Object.keys(EXPLORER_GENS)) assert.ok(!graded.has(n) || registered.has(n), `${n} is graded but not registered`);
   for (const n of registered) assert.ok(graded.has(n), `${n} is registered but not on the scoreboard`);
-  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "oi_div_reversal", "session_momentum"]);
+  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "oi_div_reversal", "oi_div_reversal_4h", "session_momentum"]);
   assert.ok(!("vol_breakout" in EXPLORER_GENS), "dropped for v1");
 });
 
@@ -152,4 +152,12 @@ test("the power check counts and nothing else: no returns, rates of success or R
       for (const k of Object.keys(row)) assert.ok(["events", "gradeable", "longs", "coveredDays"].includes(k), `unexpected field ${k}`);
     }
   }
+});
+
+test("oi_div_reversal_4h (registered 2026-10-27): the 24h read's own code, only window, OI drop and cooldown differ", () => {
+  assert.deepEqual({ windowH: OI_DIV_4H.windowH, oiDrop: OI_DIV_4H.oiDrop, cooldownH: OI_DIV_4H.cooldownH }, { windowH: 4, oiDrop: 0.02, cooldownH: 12 });
+  for (const k of ["lookbackH", "pct", "minHistory"]) assert.equal(OI_DIV_4H[k], OI_DIV[k], k);
+  const t = tape(1600);
+  assert.deepEqual(oiDivReversal4hEvents(t, null, {}), oiDivReversalEvents(t, null, {}, OI_DIV_4H));
+  assert.ok(oiDivReversal4hEvents(t, null, {}).length > 0);
 });

@@ -1,8 +1,14 @@
 # Explorer reads, batch 2 · DRAFTS, not registered
 
-**Status (2026-10-27):** drafts for borst's review. Nothing here is registered, dated or graded. No outcome was looked
-at: the only thing run on these rules is the count-only power check (how often a rule fires, never what price did
-after). Signing a read = a dated registration in its own PR that moves its body, unchanged, into the registered set.
+**Status (2026-10-27, borst signed):**
+- **A · `oi_div_reversal_4h`: registered** at OI −2% and a 12h cooldown (`oi-div-reversal-4h-prereg.md`), counting from
+  2026-10-28T00:00Z.
+- **B · `oi_coil_break`: to be registered at OI +3%** in its own PR.
+- **C · `funding_reset`: dropped** for this batch.
+- **D · `funding_basis_split`: parked.** No basis history route this batch.
+
+This page is the record of how the four were defined and counted. It is not a registration. The text below is the
+draft as reviewed; registered bodies moved unchanged out of `explorerDraftsB.mjs`.
 
 Code: `workers/nexus-lab-api/explorerDraftsB.mjs` (never imported by the scoreboard; `explorerDraftsB.test.mjs`
 fails if it is). Count: `node tools/explorers/powerCheck.mjs <dir> 60 --batch=b`.

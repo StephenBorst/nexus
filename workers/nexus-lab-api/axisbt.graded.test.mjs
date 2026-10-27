@@ -107,7 +107,7 @@ test("adding the graded line changes nothing on the 12h / 24h lines", () => {
 });
 
 test("runScorecard: only the registered axes carry the graded line (basis_x_cvd + pipeline reads)", () => {
-  assert.deepEqual([...GRADED_EXIT_AXES], ["basis_x_cvd", "rsi_reset_deep", "level_reclaim", "oi_div_reversal", "session_momentum", "confluence_follow"]);
+  assert.deepEqual([...GRADED_EXIT_AXES], ["basis_x_cvd", "rsi_reset_deep", "level_reclaim", "oi_div_reversal", "session_momentum", "confluence_follow", "oi_div_reversal_4h"]);
   const sc = runScorecard([{ coin: "BTC", oiHist: Array.from({ length: 5 }, (_, i) => ({ t: BASE + i * HR, price: 100, oi: 1, funding: 0 })) }], { horizons: [4], minSamples: 20 });
   for (const a of sc.axes) {
     if (GRADED_EXIT_AXES.includes(a.name)) assert.ok(a.exitGraded, `${a.name} graded line`);

@@ -4,11 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import {
-  oiDivReversal4hEvents, oiCoilBreakEvents, fundingResetEvents,
-  OI_DIV_4H, OI_COIL, FUNDING_RESET, DRAFT_GENS_B, DRAFT_READS_B,
-} from "./explorerDraftsB.mjs";
-import { oiDivReversalEvents, OI_DIV } from "./explorerReads.mjs";
+import { oiCoilBreakEvents, OI_COIL, DRAFT_GENS_B, DRAFT_READS_B } from "./explorerDraftsB.mjs";
 import { AXES } from "./axisbt.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 import { powerCheck } from "../../tools/explorers/powerCheck.mjs";
@@ -25,14 +21,7 @@ test("drafts are not graded: off the scoreboard, unregistered, and axisbt doesn'
   }
   const src = readFileSync(new URL("./axisbt.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(src, /explorerDraftsB/, "axisbt.mjs must not import the drafts");
-  assert.deepEqual(DRAFT_READS_B.map((r) => r.name), ["oi_div_reversal_4h", "oi_coil_break", "funding_reset"]);
-});
-
-test("oi_div_reversal_4h runs the registered read's own code, only the window and two settings differ", () => {
-  assert.equal(OI_DIV_4H.windowH, 4);
-  for (const k of ["lookbackH", "pct", "minHistory"]) assert.equal(OI_DIV_4H[k], OI_DIV[k], k);
-  const t = tape(1600);
-  assert.deepEqual(oiDivReversal4hEvents(t, null, {}), oiDivReversalEvents(t, null, {}, OI_DIV_4H));
+  assert.deepEqual(DRAFT_READS_B.map((r) => r.name), ["oi_coil_break"]); // A registered 2026-10-27, C dropped, D parked
 });
 
 // A tape with a steady wobble (so 24h returns have a spread), then a flat final day.
@@ -59,30 +48,6 @@ test("oi_coil_break: OI builds into a flat tape, the range break is followed; no
   const t = coilTape({ oiBuild: 0.0, breakUp: true });
   assert.equal(oiCoilBreakEvents(t).filter((e) => e.t > t.coilEnd).length, 0, "no OI build, no coil");
   assert.equal(OI_COIL.oiBuild, 0.05);
-});
-
-// funding sits in a band, spikes to a crowd for a few hours, then resets; price either drops or doesn't.
-function resetTape({ priceDrop }) {
-  const n = 800, oiHist = [], candleHist = [];
-  for (let i = 0; i < n; i++) {
-    const spike = i >= n - 12 && i < n - 6;
-    const after = i >= n - 6;
-    const funding = spike ? 0.001 : 0.0001 * Math.sin(i / 7);
-    const p = after && priceDrop ? 100 * (1 - 0.06 * (i - (n - 7)) / 6) : 100 + Math.sin(i / 11) * 0.8;
-    oiHist.push({ t: T0 + i * H + 60000, price: p, oi: 1000, funding: after ? -0.00005 : funding });
-    candleHist.push({ t: T0 + i * H, o: p, h: p * 1.004, l: p * 0.996, c: p, v: 1 });
-  }
-  return { oiHist, candleHist, spikeEnd: T0 + (n - 6) * H };
-}
-
-test("funding_reset: a long crowd cleared by price → LONG after it; cleared funding without the drop → nothing", () => {
-  const yes = resetTape({ priceDrop: true });
-  const evs = fundingResetEvents(yes).filter((e) => e.t > yes.spikeEnd);
-  assert.equal(evs.length, 1);
-  assert.equal(evs[0].side, "LONG");
-  const no = resetTape({ priceDrop: false });
-  assert.equal(fundingResetEvents(no).filter((e) => e.t > no.spikeEnd).length, 0);
-  assert.equal(FUNDING_RESET.crowdPct, 0.9);
 });
 
 // a seeded random tape with funding/OI/candles (the same shape explorerReads.test.mjs uses)
@@ -122,7 +87,7 @@ test("no lookahead: for every draft, the future never changes past events", () =
 test("the power check on the drafts counts and nothing else", () => {
   const t = tape(1600);
   const res = powerCheck([{ coin: "BTC", ...t }], { days: 30, now: T0 + 1600 * H, reads: DRAFT_GENS_B });
-  assert.deepEqual(Object.keys(res).sort(), ["funding_reset", "oi_coil_break", "oi_div_reversal_4h"]);
+  assert.deepEqual(Object.keys(res).sort(), ["oi_coil_break"]);
   for (const per of Object.values(res)) {
     for (const row of Object.values(per)) {
       for (const k of Object.keys(row)) assert.ok(["events", "gradeable", "longs", "coveredDays"].includes(k), `unexpected field ${k}`);
