@@ -1,6 +1,6 @@
 # Auth v2 — trading keys that don't come from a signature
 
-Draft, 2026-10-27, for borst's review. Nothing here is built yet. Decisions marked **Q** are open.
+Signed off by borst 2026-10-27 (decisions below). Nothing here is built yet; the build order is at the end.
 
 ## The problem
 
@@ -152,10 +152,12 @@ custody agents already have. In exchange, a leaked signature stops being a leake
 4. Bankr skill PR (BankrBot/skills) with the new calls; copy back.
 5. Migration step 2; then the dated cut-over.
 
-## Open questions for borst
+## Decisions (borst, 2026-10-27)
 
-- **Q1. Key lifetime.** 30 days (my pick: short enough to matter, one EIP-712 a month) or 90?
-- **Q2. One key per wallet, or separate chat and agent keys?** One is simpler (one EIP-712); two let you stop the agent
-  without touching chat trading. My pick: one.
-- **Q3. Agent keys.** Same 30 days, or longer so an autonomous agent doesn't stall monthly?
-- **Q4. The v1 cut-over date.** Proposal: two weeks after the Bankr skill PR merges.
+- **Q1. Key lifetime: 30 days.**
+- **Q2. One key per wallet**, shared by chat trading and the agent.
+- **Q3. Agent keys: 30 days too.** The agent opens no position whose max hold would run past the key's expiry, and
+  alerts the owner from 3 days out.
+- **Q4. The v1 cut-over: 2 weeks after the Bankr skill PR merges.**
+- **0xd9f7…b449's path back:** register a fresh v2 key through Bankr, withdraw the $1.76 with it, then drop the wallet
+  from `REVOKED_TRADING_WALLETS` (its v1 signature stays refused through the v1-off mark).
