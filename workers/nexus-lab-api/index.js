@@ -55,6 +55,7 @@ import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergenc
 import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, AXES, priceByHour } from "./axisbt.mjs";
 import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
+import { handleFlashSettlement } from "./routes-flashcheck.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, addSimCredits, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { lockFor, LockBusy, LockError, LOCK_KEYS } from "./lock.mjs";
 export { NexusLock } from "./lock.mjs";
@@ -5590,6 +5591,11 @@ document.getElementById("btn").addEventListener("click",go);
       }
     }
 
+    // Read-only check of a settled order: our fee + Base builder code (routes-flashcheck.mjs).
+    {
+      const res = await handleFlashSettlement(parts, request, env);
+      if (res) return res;
+    }
     if (parts[0] === "flash") {
       const up = flashUpstream(request.method, parts, url.searchParams);
       if (!up) return json({ error: "flash_route_not_allowed" }, request, 404);
