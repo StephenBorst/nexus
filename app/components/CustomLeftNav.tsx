@@ -10,6 +10,7 @@ import {
 import { LeftNavProps, LeftNavItem } from "@orderly.network/ui-scaffold";
 import { ExternalLink } from "lucide-react";
 import { withBasePath } from "@/utils/base-path";
+import { groupDrawer } from "@/lib/navGroups.mjs";
 
 type LeftNavUIProps = LeftNavProps &
   {
@@ -67,14 +68,25 @@ const LeftNavSheet = modal.create<LeftNavUIProps>((props) => {
           </div>
           
           <div className="oui-flex oui-h-[calc(100vh-120px)] oui-flex-col oui-items-start oui-overflow-y-auto">
+            {/* Four groups, Trade / Lab / Social / Rewards (navGroups.mjs). Phone drawer only. */}
             {Array.isArray(props?.menus) && props.menus.length > 0 && (
               <>
-                {props.menus?.map((item) => (
-                  <NavItem
-                    item={item}
-                    key={`item-${item.name}`}
-                    onLinkClick={hide}
-                  />
+                {(groupDrawer(props.menus) as { label: string; items: LeftNavItem[] }[]).map((group, gi) => (
+                  <div key={`group-${group.label}`} className="oui-w-full" role="group" aria-label={group.label}>
+                    <div
+                      className="oui-px-3"
+                      style={{ paddingTop: gi === 0 ? 4 : 14, paddingBottom: 2, fontFamily: "var(--nx-font-mono)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "#71717a", borderTop: gi === 0 ? "none" : "1px solid #232327", marginTop: gi === 0 ? 0 : 6 }}
+                    >
+                      {group.label}
+                    </div>
+                    {group.items.map((item) => (
+                      <NavItem
+                        item={item}
+                        key={`item-${item.name}`}
+                        onLinkClick={hide}
+                      />
+                    ))}
+                  </div>
                 ))}
               </>
             )}
@@ -108,7 +120,8 @@ const NavItem: FC<NavItemProps> = ({ item, onLinkClick }) => {
     <Link
       to={href}
       onClick={onLinkClick}
-      className="oui-flex oui-items-center oui-px-3 oui-py-4 oui-w-full hover:oui-bg-base-7 oui-no-underline"
+      className="oui-flex oui-items-center oui-px-3 oui-w-full hover:oui-bg-base-7 oui-no-underline"
+      style={{ paddingTop: 10, paddingBottom: 10 }}
     >
       <div>{icon}</div>
       <div className="oui-text-base oui-font-semibold oui-text-base-contrast-80">
