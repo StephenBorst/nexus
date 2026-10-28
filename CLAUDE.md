@@ -390,6 +390,14 @@ product is what sits on top:
   an initialized token account of the right mint (RPC, cached 10 min) or that fee is off. `GET /swap/jup/fee-status`.
   Price reads pass `nofee=1`. Client refuses a quote with `platformFee.feeBps` > 100 and shows a "Nexus fee" row.
   ⚠️ v1 ("Metis") is marked unmaintained by Jupiter; the successor for our path is V2 `/build` (same fee params).
+- **Spot ledger** (`workers/nexus-lab-api/spotLedger.mjs`, tested; since 2026-10-28) → the "Spot" box on `/ops/revenue`
+  (`spot` in its reply, last 30 days). Counts only what's proven: Flash = the proxy logs each accepted order id
+  (`spot:flash:{id}`, with the funder only until booked) and the hourly job books final orders from Flash (one trade +
+  fills' notional + our `integratorFeeNotional`, on the last fill's day); spanDEX / Jupiter / NEAR = the app calls
+  `POST /spot/fill {route, id, chainId?}` (`app/lib/spotReport.ts`, fire-and-forget) after a confirmed trade and the
+  worker books it only if the receipt is 0x1 / the signature is confirmed / 1Click says SUCCESS; WooFi = widget OPENS
+  (the widget reports no fills). Each id once (`spot:fill:{route}:{id}`), day totals `spot:day:{YYYY-MM-DD}` under a
+  NexusLock lease. No wallet address is stored.
 - **Key proxies** (`keyProxy.mjs`): `/flash/*`, `/swap/jup/*`, `/xc/quote` accept only our origins + per-IP budgets.
 - **Discovery** rules in `app/lib/spotDiscovery.mjs` (recent views, address search, real-market floors incl. padded/thin
   pools, safe logo hosts, read brief, callers line). No long/short split on callers until the board has a net-positive caller.

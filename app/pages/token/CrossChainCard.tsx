@@ -15,6 +15,7 @@
 //      allowance is ever left behind
 //   5. status polled until SUCCESS / REFUNDED / FAILED / INCOMPLETE_DEPOSIT — only
 //      SUCCESS reads as delivered; a refund goes back to the user's own address.
+import { reportSpotFill } from "@/lib/spotReport";
 import { useEffect, useRef, useState } from "react";
 import {
   ONE_CLICK_API, XC_ASSETS, fetchOneClickQuote, CHAIN_NAME, STATUS_TEXT, TERMINAL,
@@ -183,6 +184,7 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
         if (!status || !alive.current) continue;
         const url = j?.swapDetails?.destinationChainTxHashes?.[0]?.explorerUrl;
         setTrack((t) => (t ? { ...t, status, deliveredUrl: typeof url === "string" && url.startsWith("https://") ? url : t.deliveredUrl } : t));
+        if (status === "SUCCESS") reportSpotFill("near", depositAddress); // spot ledger, checked against 1Click
         if (TERMINAL.has(status)) return;
       } catch { /* keep polling */ }
     }

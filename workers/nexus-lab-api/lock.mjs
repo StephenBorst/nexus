@@ -23,6 +23,9 @@ export const LOCK_KEYS = {
   // Hosted AI's per-wallet, per-model daily counter (ai:usage:…): our spend. Two calls at once
   // could both read N, both pass the cap, and both write N+1.
   aiUsage: (usageKey) => `aiusage:${usageKey}`,
+  // Spot ledger (spotLedger.mjs): one day's totals, and one reported fill (book it once).
+  spotDay: (day) => `spotday:${day}`,
+  spotFill: (route, id) => `spotfill:${route}:${id}`,
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;

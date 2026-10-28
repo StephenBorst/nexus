@@ -31,6 +31,7 @@ import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS
   readBrief, fundingPayLine, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo, safeLogoUrl,
   callStrip, openChipLine, labRowLine, readLabOpen, writeLabOpen, EMPTY_STRIP_LINE } from "@/lib/spotDiscovery.mjs";
 import { swapOutcome } from "@/lib/solSwapGuards.mjs";
+import { reportSpotFill } from "@/lib/spotReport";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -1191,6 +1192,7 @@ export default function TokenTerminal() {
     try {
       const { swapHash, confirmed } = await executeSwap(provider, wallet, plan, setSwapStep);
       setSwapDone({ hash: swapHash });
+      if (confirmed) reportSpotFill("spandex", swapHash, plan.chainId); // spot ledger, verified on-chain
       // Follow the fill on a CONFIRMED (status=1) swap. BUY: remember the bought token + show an
       // optimistic chip, then reconcile from chain. SELL: the balance just dropped (USDC rose) —
       // nothing to remember, just reconcile the strip. Either way, refetch from chain.
@@ -1354,6 +1356,7 @@ export default function TokenTerminal() {
     try {
       const { sig, confirmed } = await executeSolBuy(solProvider, solPlan, setSolStep);
       setSolDone({ sig, confirmed });
+      if (confirmed) reportSpotFill("jupiter", sig);
       setBalNonce((n) => n + 1); // balances moved → re-read the ticket
       // Record the buy lot (USD spent + tokens received) so YOUR POSITION attaches this fill — the
       // Solana buy path recorded nothing before, so a Solana position always read "no buys tracked".
@@ -1400,6 +1403,7 @@ export default function TokenTerminal() {
     try {
       const { sig, confirmed } = await executeSolSell(solProvider, solPlan, setSolStep);
       setSolDone({ sig, confirmed });
+      if (confirmed) reportSpotFill("jupiter", sig);
       setBalNonce((n) => n + 1); // token balance dropped, USDC rose → re-read the ticket
     } catch (e) {
       const m = (e as Error)?.message || "swap failed";
@@ -1554,7 +1558,7 @@ export default function TokenTerminal() {
             <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.6, color: MUT, marginBottom: 16 }}>
               There’s no trusted spot pool to price <b style={{ color: BRIGHT }}>{perpOnly}</b> here, so we don’t fake one. Swap the majors in-app via <b style={{ color: BRIGHT }}>WooFi</b>, or trade <b style={{ color: BRIGHT }}>{perpOnly}</b> on the Nexus perp book. A public call on it is graded from public price.
             </div>
-            <button onClick={() => setWooFiOpen(true)} className="nx-press"
+            <button onClick={() => { setWooFiOpen(true); reportSpotFill("woofi"); }} className="nx-press"
               style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#0a0a0b", background: POS, border: "none", borderRadius: 9, padding: "13px 0", cursor: "pointer", marginBottom: 10 }}>
               ⇄ Swap majors in-app · WooFi
             </button>
@@ -2109,7 +2113,7 @@ export default function TokenTerminal() {
                     separate from the per-token routing above. Opens the self-custodial widget in a
                     modal so it gets its own room. Useful when the token here doesn't route but you
                     want to swap a major (get USDC to buy with, rotate BTC/ETH/SOL) without leaving. */}
-                <button onClick={() => setWooFiOpen(true)} className="nx-press"
+                <button onClick={() => { setWooFiOpen(true); reportSpotFill("woofi"); }} className="nx-press"
                   style={{ width: "100%", marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: UI, fontSize: 13, fontWeight: 600, color: FOG, background: "none", border: `1px solid ${BORD}`, borderRadius: 10, padding: "10px 0", cursor: "pointer" }}>
                   ⇄ Swap majors in-app <span style={{ color: FAINT, fontWeight: 400 }}>· WooFi</span>
                 </button>

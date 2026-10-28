@@ -5,6 +5,7 @@
 import { checkLabAuth, json } from "./shared.mjs";
 import { readRevenue, readSafeOwners, isRevenueViewer, toSnapshot, withChanges, compareDay, SNAP_KEY, dayOf } from "./revenue.mjs";
 import { orderlyGet } from "./orderlyGet.mjs";
+import { spotSummary, DAY_KEY, dayOf as spotDayOf } from "./spotLedger.mjs";
 
 const LATEST_KEY = "ops:rev:latest";
 const OWNERS_KEY = "ops:safe:owners";
@@ -69,5 +70,15 @@ export async function handleRevenue(parts, request, env, { now = Date.now, fetch
     rev = await freshRevenue(env, { fetchImpl, nexusPrice, now: now() });
     await env.LAB_STORE.put(LATEST_KEY, JSON.stringify(rev), { expirationTtl: 3600 });
   }
-  return json(await withHistory(env, rev), request);
+  return json({ ...(await withHistory(env, rev)), spot: await readSpot(env, now()) }, request);
+}
+
+const SPOT_DAYS = 30;
+/** The spot ledger's last 30 days (spotLedger.mjs). Not cached: 30 small KV reads. */
+async function readSpot(env, at) {
+  const recs = {};
+  await Promise.all(Array.from({ length: SPOT_DAYS }, (_, i) => spotDayOf(at - i * 86400_000)).map(async (day) => {
+    try { const v = await env.LAB_STORE.get(DAY_KEY(day)); if (v) recs[day] = JSON.parse(v); } catch { /* skip */ }
+  }));
+  return spotSummary(recs, SPOT_DAYS, at);
 }

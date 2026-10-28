@@ -20,7 +20,17 @@ type Revenue = {
   elsewhere: { label: string; where: string; url: string }[];
   totals: { notSwept: number; treasury: number };
   history?: { since: string | null; compareDays: Record<string, string | null> };
+  spot?: { days: number; total: Record<string, { trades: number; feeUsd: number; notionalUsd: number }>; rows: { day: string; routes: Record<string, { trades: number }> }[] };
 };
+
+// Spot ledger routes (workers/nexus-lab-api/spotLedger.mjs). What each count proves.
+const SPOT_ROUTES: { id: string; label: string; note: string }[] = [
+  { id: "flash", label: "Flash", note: "orders filled · fee from Flash's fills" },
+  { id: "spandex", label: "spanDEX", note: "EVM swaps · receipt checked" },
+  { id: "jupiter", label: "Jupiter", note: "Solana swaps · confirmation checked" },
+  { id: "near", label: "NEAR Intents", note: "cross-chain · 1Click SUCCESS checked" },
+  { id: "woofi", label: "WooFi", note: "widget OPENS, not trades (it reports no fills)" },
+];
 
 const CHAIN: Record<string, string> = { arb: "Arbitrum", base: "Base", eth: "Ethereum", sol: "Solana", btc: "Bitcoin" };
 const EXPLORER: Record<string, string> = { arb: "https://arbiscan.io/address/", base: "https://basescan.org/address/" };
@@ -185,6 +195,32 @@ export default function RevenuePage() {
               </div>
             </div>
           ))}
+
+          {rev.spot && (
+            <div style={{ ...box, marginTop: S.lg }}>
+              <div style={label}>Spot · last {rev.spot.days} days</div>
+              <div style={{ fontSize: 12, color: C.text.muted, marginTop: 2 }}>
+                Counted only once the chain proves it. Since the ledger shipped (2026-10-28); earlier trades aren’t here.
+              </div>
+              <div style={{ overflowX: "auto", marginTop: S.sm }}>
+                <div style={{ minWidth: 460 }}>
+                  {SPOT_ROUTES.map((r) => {
+                    const t = rev.spot?.total[r.id];
+                    const week = (rev.spot?.rows || []).slice(0, 7).reduce((n, d) => n + (d.routes[r.id]?.trades || 0), 0);
+                    return (
+                      <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1.4fr 0.7fr 0.7fr 1fr 1fr", gap: S.sm, padding: `${S.xs}px 0`, borderTop: `1px solid ${C.border}`, fontFamily: MONO, fontSize: 12, alignItems: "baseline" }}>
+                        <span>{r.label} <span style={{ color: C.text.faint, fontFamily: UI, fontSize: 11 }}>{r.note}</span></span>
+                        <span style={{ textAlign: "right" }}><span style={{ color: C.text.faint }}>7d </span>{week}</span>
+                        <span style={{ textAlign: "right" }}><span style={{ color: C.text.faint }}>30d </span>{t?.trades ?? 0}</span>
+                        <span style={{ textAlign: "right", color: C.text.fog }}>{r.id === "flash" && t ? `${usd(t.notionalUsd)} vol` : ""}</span>
+                        <span style={{ textAlign: "right" }}>{r.id === "flash" && t ? `${usd(t.feeUsd)} fee` : ""}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={{ ...box, marginTop: S.lg }}>
             <div style={label}>Not read here</div>
