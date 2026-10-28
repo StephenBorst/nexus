@@ -69,6 +69,12 @@ SPOT_FEE_RECIPIENT = "0x34dFC08eB3B7eD60D00e5B2CB611ac27C152B45c"
 # Definitive Flash Portfolio (withdraw at app.definitive.fi). ON 2026-09-30 (borst): 10 bps, so a user
 # pays 20 bps on a Flash fill (Definitive's 10 bps is a promo rate through Dec 2026) plus gas.
 FLASH_FEE_BPS = "10"
+# Our fee on Solana swaps (Jupiter v1, jupFee.mjs): platformFeeBps on the quote + our token account
+# on the swap. Jupiter takes no cut on v1. OFF until a fee account below is set AND checks out over RPC
+# (an initialized token account of the right mint). Check: GET /swap/jup/fee-status.
+JUP_FEE_BPS = "10"
+# JUP_FEE_ACCOUNT_USDC = ""   # USDC token account owned by our fee wallet (USDC buys + all sells)
+# JUP_FEE_ACCOUNT_WSOL = ""   # wrapped-SOL token account owned by the same wallet (SOL buys)
 # Our Base builder code (ERC-8021, registered at base.dev by borst 2026-09-30). Order-only; unset =
 # omitted. A valid but unregistered code never fails an order (it just goes unattributed); a malformed
 # one is dropped.

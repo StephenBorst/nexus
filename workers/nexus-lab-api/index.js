@@ -56,6 +56,7 @@ import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, AXES, priceByHou
 import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { handleFlashSettlement } from "./routes-flashcheck.mjs";
+import { jupFeeConfig, validFeeAccounts, jupQuoteParams, withJupSwapFee } from "./jupFee.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, addSimCredits, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { lockFor, LockBusy, LockError, LOCK_KEYS } from "./lock.mjs";
 export { NexusLock } from "./lock.mjs";
@@ -583,6 +584,20 @@ const jupLimiter = makeRateLimiter({ limit: 120, windowMs: 60000 });
 const xcLimiter = makeRateLimiter({ limit: 60, windowMs: 60000 }); // 1Click quotes (partner key)
 // Gate for a key-carrying proxy: our own origin only, within the per-IP budget. Returns a
 // Response to send (refusal) or null to proceed.
+// Server-side Solana JSON-RPC read (same upstream order as /sol/rpc). Returns `result`; throws on failure.
+async function solRpcServer(env, method, params) {
+  const upstreams = [env.SOLANA_RPC, "https://solana-rpc.publicnode.com", "https://rpc.ankr.com/solana", "https://solana.drpc.org", "https://api.mainnet-beta.solana.com"].filter(Boolean);
+  for (const u of upstreams) {
+    try {
+      const r = await fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+      if (!r.ok) continue;
+      const j = await r.json();
+      if (j && !j.error) return j.result;
+    } catch { /* next */ }
+  }
+  throw new Error("sol rpc unavailable");
+}
+
 function keyProxyGate(request, limiter) {
   if (!keyProxyOriginOk(request.headers.get("Origin"))) return json({ error: "origin_not_allowed" }, request, 403);
   if (limiter(request.headers.get("CF-Connecting-IP") || "unknown")) return json({ error: "rate_limited", retryAfterSec: 60 }, request, 429);
@@ -5626,23 +5641,32 @@ document.getElementById("btn").addEventListener("click",go);
     // then runs every guard (input/amount/output bind, program allowlist, fee-payer, simulate) on the
     // returned bytes before any signature, so this relay adds no trust. Key from env.JUP_API_KEY
     // (JUPITER_API_KEY honored as an alt); with no key it still forwards and Jupiter decides.
+    // OUR FEE (jupFee.mjs): platformFeeBps on the quote + our feeAccount on the swap, both set here from
+    // wrangler vars, never from the browser. Off until JUP_FEE_BPS + a fee account are set and check out.
+    // GET /swap/jup/fee-status — read-only: is our Solana swap fee on, and do its accounts check out?
+    if (parts[0] === "swap" && parts[1] === "jup" && parts[2] === "fee-status" && request.method === "GET") {
+      const cfg = jupFeeConfig(env);
+      const v = await validFeeAccounts(cfg, (method, params) => solRpcServer(env, method, params));
+      return json({ feeBps: cfg.bps, usdc: { account: cfg.usdc || null, ok: v.usdc }, wsol: { account: cfg.wsol || null, ok: v.wsol },
+        on: { usdcTrades: !!(cfg.bps && v.usdc), solBuys: !!(cfg.bps && (v.wsol || false)) } }, request);
+    }
     if (parts[0] === "swap" && parts[1] === "jup" && (parts[2] === "quote" || parts[2] === "swap")) {
       const gated = keyProxyGate(request, jupLimiter); if (gated) return gated;
       const jupKey = env.JUP_API_KEY || env.JUPITER_API_KEY || "";
       const jupHdr = { Accept: "application/json" };
       if (jupKey) jupHdr["x-api-key"] = jupKey;
+      const feeCfg = jupFeeConfig(env);
+      const feeValid = await validFeeAccounts(feeCfg, (method, params) => solRpcServer(env, method, params));
       try {
         if (parts[2] === "quote" && request.method === "GET") {
-          const p = new URLSearchParams();
-          for (const k of ["inputMint", "outputMint", "amount", "slippageBps", "swapMode", "onlyDirectRoutes", "restrictIntermediateTokens", "maxAccounts"]) {
-            const v = url.searchParams.get(k);
-            if (v != null && v !== "") p.set(k, v);
-          }
+          const p = jupQuoteParams(url.searchParams, feeCfg, feeValid);
           const r = await fetch(`https://api.jup.ag/swap/v1/quote?${p.toString()}`, { headers: jupHdr });
           return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
         }
         if (parts[2] === "swap" && request.method === "POST") {
-          const inBody = await request.text(); // { quoteResponse, userPublicKey, wrapAndUnwrapSol, ... }
+          const fee = withJupSwapFee(await request.text(), feeCfg, feeValid); // { quoteResponse, userPublicKey, wrapAndUnwrapSol, ... }
+          if (fee.error) return json({ error: fee.error }, request, fee.status);
+          const inBody = fee.body;
           const r = await fetch("https://api.jup.ag/swap/v1/swap", { method: "POST", headers: { ...jupHdr, "Content-Type": "application/json" }, body: inBody });
           return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
         }

@@ -383,6 +383,13 @@ product is what sits on top:
   in `app/lib/solSwapGuards.mjs` (tested). The result screen shows ✓ only on an on-chain confirmation (`swapOutcome`);
   a timeout reads "Submitted, not confirmed yet · check Solscan". Dry-run any change on a real swap without signing:
   quote + swap for a public wallet, `simulateTransaction`, run the checks.
+- **Our fee on Solana swaps** (`workers/nexus-lab-api/jupFee.mjs`, tested): Jupiter v1 `platformFeeBps` on /quote +
+  our `feeAccount` on /swap, set by the worker only (browser values dropped). Jupiter takes no cut on v1 (V2 /order
+  would keep 20% with a 50 bps floor; V2 enterprise needs a deal). Fee mint: USDC if either side is USDC, else wSOL.
+  `JUP_FEE_BPS` (10) + `JUP_FEE_ACCOUNT_USDC` / `_WSOL` (token-account addresses) in wrangler.toml; an account must be
+  an initialized token account of the right mint (RPC, cached 10 min) or that fee is off. `GET /swap/jup/fee-status`.
+  Price reads pass `nofee=1`. Client refuses a quote with `platformFee.feeBps` > 100 and shows a "Nexus fee" row.
+  ⚠️ v1 ("Metis") is marked unmaintained by Jupiter; the successor for our path is V2 `/build` (same fee params).
 - **Key proxies** (`keyProxy.mjs`): `/flash/*`, `/swap/jup/*`, `/xc/quote` accept only our origins + per-IP budgets.
 - **Discovery** rules in `app/lib/spotDiscovery.mjs` (recent views, address search, real-market floors incl. padded/thin
   pools, safe logo hosts, read brief, callers line). No long/short split on callers until the board has a net-positive caller.
