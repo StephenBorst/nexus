@@ -57,6 +57,7 @@ import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { handleFlashSettlement } from "./routes-flashcheck.mjs";
 import { jupFeeConfig, validFeeAccounts, jupQuoteParams, withJupSwapFee } from "./jupFee.mjs";
+import { parseFillReport, bookFill, logFlashOrder, settleFlashOrders, EVM_RPCS } from "./spotLedger.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, addSimCredits, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { lockFor, LockBusy, LockError, LOCK_KEYS } from "./lock.mjs";
 export { NexusLock } from "./lock.mjs";
@@ -580,6 +581,7 @@ async function generateCatalystHouseCalls(env, { dryRun = false, max = 2 } = {})
 // Per-IP budgets for the routes that spend OUR API keys (see keyProxy.mjs). Isolate-local.
 const flashLimiter = makeRateLimiter({ limit: 30, windowMs: 60000 });
 const flashReadLimiter = makeRateLimiter({ limit: 40, windowMs: 60000 }); // open-orders list + status polls
+const spotFillLimiter = makeRateLimiter({ limit: 30, windowMs: 60000 }); // spot ledger reports (verified on-chain)
 const jupLimiter = makeRateLimiter({ limit: 120, windowMs: 60000 });
 const xcLimiter = makeRateLimiter({ limit: 60, windowMs: 60000 }); // 1Click quotes (partner key)
 // Gate for a key-carrying proxy: our own origin only, within the per-IP budget. Returns a
@@ -621,6 +623,13 @@ export default {
       })());
       return;
     }
+    // Hourly: book finished Flash orders on the spot ledger (their fill + our fee), spotLedger.mjs.
+    ctx.waitUntil((async () => {
+      try {
+        const r = await settleFlashOrders(env, { lock: lockFor(env, { ttlMs: 15_000, waitMs: 5_000 }) });
+        if (r.seen) console.log(`[spot] flash orders: ${r.booked} booked · ${r.waiting} waiting · ${r.dropped} dropped · ${r.failed} failed`);
+      } catch (e) { console.error("[spot] flash settle failed:", String(e)); }
+    })());
     // Hourly: register the Telegram webhook's secret header (routes-telegram.mjs). A no-op once done.
     ctx.waitUntil((async () => {
       try {
@@ -5618,16 +5627,21 @@ document.getElementById("btn").addEventListener("click",go);
       const key = env.FLASH_API_KEY || "";
       if (!key) return json({ error: "flash_not_configured", detail: "FLASH_API_KEY secret is not set" }, request, 503);
       try {
+        const reqText = up.body ? await request.text() : "";
+        const isOrder = /\/order$/.test(up.url);
         const r = await fetch(up.url, {
           method: up.method,
           headers: { "content-type": "application/json", "x-definitive-api-key": key },
           // quote + order carry OUR fee (FLASH_FEE_BPS; omitted when unset) — see withFlashFee;
           // the order also carries our Base builder code (FLASH_ATTRIBUTION_CODE) — withFlashAttribution.
           ...(up.body ? { body: /\/(quote|order)$/.test(up.url)
-            ? withFlashAttribution(withFlashFee(await request.text(), env), env, { isOrder: /\/order$/.test(up.url) })
-            : await request.text() } : {}),
+            ? withFlashAttribution(withFlashFee(reqText, env), env, { isOrder })
+            : reqText } : {}),
         });
-        return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
+        const resText = await r.text();
+        // Spot ledger: remember the order id so the hourly job can book its fill + our fee (spotLedger.mjs).
+        if (isOrder && r.ok) ctx?.waitUntil?.(logFlashOrder(env, resText, reqText));
+        return new Response(resText, { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
       } catch (e) {
         return json({ error: "flash_proxy_failed", detail: String(e?.message || e) }, request, 502);
       }
@@ -5643,6 +5657,37 @@ document.getElementById("btn").addEventListener("click",go);
     // (JUPITER_API_KEY honored as an alt); with no key it still forwards and Jupiter decides.
     // OUR FEE (jupFee.mjs): platformFeeBps on the quote + our feeAccount on the swap, both set here from
     // wrangler vars, never from the browser. Off until JUP_FEE_BPS + a fee account are set and check out.
+    // POST /spot/fill {route, id, chainId?} — the app reports a finished spot trade; booked on the
+    // spot ledger only once the chain / 1Click proves it (spotLedger.mjs). Counts only, no wallet stored.
+    if (parts[0] === "spot" && parts[1] === "fill" && parts.length === 2) {
+      if (request.method !== "POST") return json({ error: "method not allowed" }, request, 405);
+      const gated = keyProxyGate(request, spotFillLimiter); if (gated) return gated;
+      let body; try { body = await request.json(); } catch { return json({ error: "bad_json" }, request, 400); }
+      const rep = parseFillReport(body);
+      if (rep.error) return json({ error: rep.error }, request, 400);
+      const io = {
+        fetchImpl: fetch,
+        solRpc: (method, params) => solRpcServer(env, method, params),
+        evmRpc: async (chainId, method, params) => {
+          for (const u of EVM_RPCS[chainId] || []) {
+            try {
+              const r = await fetch(u, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+              const j = await r.json();
+              if (j && !j.error && j.result !== undefined) return j.result;
+            } catch { /* next */ }
+          }
+          return null;
+        },
+      };
+      try {
+        const result = await bookFill(env, rep, io, { lock: lockFor(env, { ttlMs: 15_000, waitMs: 3_000 }) });
+        return json({ ok: result !== "unproven", result }, request, result === "unproven" ? 409 : 200);
+      } catch (e) {
+        if (e instanceof LockBusy) return json({ error: "busy" }, request, 409);
+        return json({ error: "not_booked" }, request, 503);
+      }
+    }
+
     // GET /swap/jup/fee-status — read-only: is our Solana swap fee on, and do its accounts check out?
     if (parts[0] === "swap" && parts[1] === "jup" && parts[2] === "fee-status" && request.method === "GET") {
       const cfg = jupFeeConfig(env);
