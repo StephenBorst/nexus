@@ -367,6 +367,12 @@ product is what sits on top:
   `fee` = our bps asked on the order AND paid per fill (`integratorFeeNotional` ÷ `notional`, ±1.5 bps or 1¢);
   `code` = our builder code at the END of each settlement tx's calldata (Base RPC). PASS / FAIL / PENDING / UNREAD /
   NOT_BASE; an unreadable tx is never a PASS.
+- **Flash on Solana — guard core only, NOT wired to any screen (2026-10-28):** `app/lib/flashSvm.mjs` (tested on a real
+  quote fixture). A Solana order = an SPL Approve to Flash's delegate (`FLASH_SVM_DELEGATE` pinned from a real quote) +
+  an Ed25519 signature over `DFS|m=<mint>|t=<total>|h=<hash>`; the hash binds the user's OUTPUT account and needs OUR
+  Definitive Solana trading group id (ask Definitive with our org id). No group = refuse (fail closed). Flash's default
+  Solana approval is UNLIMITED (u64 max): request `forceMinimalAllowance`; prebuilt `setupTxs` / `sponsoredDelegateTx`
+  are never signed. The ticket gets built once the group id is in and the first real quote's hash matches.
 - **NEAR Intents 1Click** (`CrossChainCard.tsx`, `app/lib/nearIntents.mjs checkQuote`): verify the signature against
   the pinned key AND the signed request (our recipient/refund, pinned assets incl. canonical BTC
   `1cs_v1:btc:native:coin`, exact amount, ≤100 bps, no memo, deadline). Build the deposit tx from `XC_ASSETS`, never the

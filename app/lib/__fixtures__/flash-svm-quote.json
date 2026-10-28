@@ -1,0 +1,51 @@
+{
+ "quoteId": "65714e2c-0ebe-439a-86e7-ae7d20d978de",
+ "orderType": "market",
+ "side": "buy",
+ "targetAsset": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+ "contraAsset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+ "from": {
+  "asset": "contra",
+  "amount": "0.5",
+  "notional": "0.5"
+ },
+ "to": {
+  "asset": "target",
+  "amount": "1.745695",
+  "notional": "0.494507"
+ },
+ "fees": {
+  "estimatedFeeNotional": "0.0005"
+ },
+ "evm": null,
+ "wrap": null,
+ "svm": {
+  "ataSetupIxs": null,
+  "delegateIx": {
+   "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+   "accounts": [
+    {
+     "pubkey": "FGETo8T8wMcN2wCjav8VK6eh3dLk63evNDPxzLSJra8B",
+     "isSigner": false,
+     "isWritable": true
+    },
+    {
+     "pubkey": "3jBWeQrnfEhw5LY53hwcoYKQJsrTUbtLbmGrNYCr1Fiq",
+     "isSigner": false,
+     "isWritable": false
+    },
+    {
+     "pubkey": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+     "isSigner": true,
+     "isWritable": false
+    }
+   ],
+   "data": "4h6bzpF8MKT4"
+  },
+  "sponsoredDelegateTx": null,
+  "orderMessage": "DFS|m=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v|t=500000|h=VRmsuCzGeADcXvwBN3A5sK",
+  "nonce": "571147912118009858",
+  "deadline": "1793228315"
+ },
+ "_note": "Real Flash quote, Solana market buy of JUP with 0.5 USDC, funder 9WzD (public test wallet), 2026-10-28. Nothing signed or placed."
+}
