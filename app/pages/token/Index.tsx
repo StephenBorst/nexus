@@ -32,6 +32,7 @@ import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS
   callStrip, openChipLine, labRowLine, readLabOpen, writeLabOpen, EMPTY_STRIP_LINE } from "@/lib/spotDiscovery.mjs";
 import { swapOutcome } from "@/lib/solSwapGuards.mjs";
 import { reportSpotFill } from "@/lib/spotReport";
+import { bestLine } from "@/lib/spotBest.mjs";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -850,6 +851,24 @@ export default function TokenTerminal() {
     }, 450);
     return () => { alive = false; clearTimeout(t); };
   }, [pair, probeUsd]);
+
+  // spanDEX vs Flash on an EVM USDC buy at the ticket's size (GET /spot/best, routes-spotbest.mjs):
+  // each router's own "you receive" estimate. Read-only; debounced like the quote probe.
+  const [best, setBest] = useState<{ best: "spandex" | "flash" | "same" | null; spandex: number | null; flash: number | null; edgePct: number | null } | null>(null);
+  useEffect(() => {
+    const evm = pair ? EVM_USDC[pair.chainId] : undefined;
+    const a = parseFloat(amount);
+    const token = pair?.baseAddress;
+    if (!token || !evm || side !== "buy" || !(a > 0)) { setBest(null); return; }
+    let alive = true;
+    const t = setTimeout(() => {
+      fetch(`https://og.nexustradinglabs.com/spot/best?chain=${evm.chainId}&tokenOut=${encodeURIComponent(token)}&amount=${Math.round(Math.min(a, 100000) * 1e6)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => { if (alive) setBest(j && j.ok ? j : null); })
+        .catch(() => { if (alive) setBest(null); });
+    }, 600);
+    return () => { alive = false; clearTimeout(t); };
+  }, [pair, amount, side]);
 
   // The fill affordance, resolved once so the button and the honesty line agree:
   //  perp     → Long/Short on our book (unchanged).
@@ -2089,6 +2108,13 @@ export default function TokenTerminal() {
                         amount; SELL size = the ticket TOKEN quantity (reuse sellTokens, which already
                         resolves MAX→balance and the USD toggle via $/mark) — never the USD label, and
                         empty ticket → empty (no invented default). */}
+                    {side === "buy" && bestLine(best, pair.baseSymbol) && (
+                      <div title="Each router’s own estimate after its fees. Flash’s includes network gas; with spanDEX your wallet pays gas separately."
+                        style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, marginTop: 10, textAlign: "center" }}>
+                        {bestLine(best, pair.baseSymbol)}
+                        <span style={{ color: FAINT }}> · Flash incl. gas</span>
+                      </div>
+                    )}
                     <FlashSpotButton chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : (sellTokens > 0 ? sellTokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : "")} defaultSl={spotSl} defaultTp={spotTp} priceUsd={pair.priceUsd ?? null} walletAddress={wallet} provider={provider} />
                     {/* The wallet's Flash orders: open first, cancel (gasless signature), and the
                         standing approvals to Flash with a one-tap revoke. Hidden when there's nothing. */}

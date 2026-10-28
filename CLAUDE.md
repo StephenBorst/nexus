@@ -407,6 +407,10 @@ product is what sits on top:
   worker books it only if the receipt is 0x1 / the signature is confirmed / 1Click says SUCCESS; WooFi = widget OPENS
   (the widget reports no fills). Each id once (`spot:fill:{route}:{id}`), day totals `spot:day:{YYYY-MM-DD}` under a
   NexusLock lease. No wallet address is stored.
+- **Best price (EVM USDC buys, read-only):** `GET /spot/best?chain=&tokenOut=&amount=` (`routes-spotbest.mjs`, rule
+  `app/lib/spotBest.mjs`) quotes spanDEX (preview, our fee on) and a Flash market quote (our key + fee, no funder) and
+  compares each router's own "you receive" (Flash's includes gas; spanDEX's wallet pays gas separately). Under 5 bps =
+  "about the same". The /token ticket shows one line; it routes nothing and signs nothing. Cached 20 s, origin-gated.
 - **Key proxies** (`keyProxy.mjs`): `/flash/*`, `/swap/jup/*`, `/xc/quote` accept only our origins + per-IP budgets.
 - **Discovery** rules in `app/lib/spotDiscovery.mjs` (recent views, address search, real-market floors incl. padded/thin
   pools, safe logo hosts, read brief, callers line). No long/short split on callers until the board has a net-positive caller.

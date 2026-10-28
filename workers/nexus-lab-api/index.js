@@ -56,6 +56,7 @@ import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, AXES, priceByHou
 import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { handleFlashSettlement } from "./routes-flashcheck.mjs";
+import { handleSpotBest } from "./routes-spotbest.mjs";
 import { jupFeeConfig, validFeeAccounts, jupQuoteParams, withJupSwapFee } from "./jupFee.mjs";
 import { parseFillReport, bookFill, logFlashOrder, settleFlashOrders, EVM_RPCS } from "./spotLedger.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, addSimCredits, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
@@ -582,6 +583,7 @@ async function generateCatalystHouseCalls(env, { dryRun = false, max = 2 } = {})
 const flashLimiter = makeRateLimiter({ limit: 30, windowMs: 60000 });
 const flashReadLimiter = makeRateLimiter({ limit: 40, windowMs: 60000 }); // open-orders list + status polls
 const spotFillLimiter = makeRateLimiter({ limit: 30, windowMs: 60000 }); // spot ledger reports (verified on-chain)
+const spotBestLimiter = makeRateLimiter({ limit: 60, windowMs: 60000 }); // spanDEX vs Flash price compare
 const jupLimiter = makeRateLimiter({ limit: 120, windowMs: 60000 });
 const xcLimiter = makeRateLimiter({ limit: 60, windowMs: 60000 }); // 1Click quotes (partner key)
 // Gate for a key-carrying proxy: our own origin only, within the per-IP budget. Returns a
@@ -5657,6 +5659,11 @@ document.getElementById("btn").addEventListener("click",go);
     // (JUPITER_API_KEY honored as an alt); with no key it still forwards and Jupiter decides.
     // OUR FEE (jupFee.mjs): platformFeeBps on the quote + our feeAccount on the swap, both set here from
     // wrangler vars, never from the browser. Off until JUP_FEE_BPS + a fee account are set and check out.
+    // GET /spot/best — spanDEX vs Flash on an EVM USDC buy (routes-spotbest.mjs). Read-only.
+    {
+      const res = await handleSpotBest(parts, request, env, { gate: (req) => keyProxyGate(req, spotBestLimiter) });
+      if (res) return res;
+    }
     // POST /spot/fill {route, id, chainId?} — the app reports a finished spot trade; booked on the
     // spot ledger only once the chain / 1Click proves it (spotLedger.mjs). Counts only, no wallet stored.
     if (parts[0] === "spot" && parts[1] === "fill" && parts.length === 2) {
