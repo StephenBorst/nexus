@@ -10,6 +10,8 @@
 //
 // Set server-side only (a browser value is always dropped), from wrangler vars:
 //   JUP_FEE_BPS (1..100), JUP_FEE_ACCOUNT_USDC, JUP_FEE_ACCOUNT_WSOL (token-account addresses).
+//   JUP_FEE_LIVE = "true" charges every trade. Anything else = STAGED: the fee applies only to a quote
+//   tagged feetest=1 (the app never sends it), so a dry run can prove the fee path before users pay it.
 // Unset / invalid / an account that isn't an initialized token account of the right mint ⇒ that fee is
 // OFF and swaps go out exactly as before (checked over RPC, cached 10 min). A closed account turns the
 // fee off on its own instead of breaking every swap.
@@ -23,7 +25,7 @@ export function jupFeeConfig(env) {
   const n = Number(env?.JUP_FEE_BPS);
   const bps = Number.isInteger(n) && n > 0 && n <= JUP_FEE_MAX_BPS ? n : 0;
   const acct = (v) => { const s = String(v || "").trim(); return B58.test(s) ? s : ""; };
-  return { bps, usdc: acct(env?.JUP_FEE_ACCOUNT_USDC), wsol: acct(env?.JUP_FEE_ACCOUNT_WSOL) };
+  return { bps, usdc: acct(env?.JUP_FEE_ACCOUNT_USDC), wsol: acct(env?.JUP_FEE_ACCOUNT_WSOL), live: env?.JUP_FEE_LIVE === "true" };
 }
 
 /** The fee account for a pair, or "" (no fee). `valid` = which configured accounts checked out. */
@@ -48,7 +50,8 @@ export function jupQuoteParams(searchParams, cfg, valid) {
     if (v != null && v !== "") p.set(k, v);
   }
   const exactIn = (p.get("swapMode") || "ExactIn") === "ExactIn";
-  const acct = searchParams.get("nofee") === "1" || !exactIn ? "" : feeAccountFor(p.get("inputMint"), p.get("outputMint"), cfg, valid);
+  const wanted = cfg?.live || searchParams.get("feetest") === "1"; // staged = test quotes only
+  const acct = !wanted || searchParams.get("nofee") === "1" || !exactIn ? "" : feeAccountFor(p.get("inputMint"), p.get("outputMint"), cfg, valid);
   if (acct) p.set("platformFeeBps", String(cfg.bps));
   return p;
 }

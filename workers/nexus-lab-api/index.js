@@ -5692,8 +5692,9 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "swap" && parts[1] === "jup" && parts[2] === "fee-status" && request.method === "GET") {
       const cfg = jupFeeConfig(env);
       const v = await validFeeAccounts(cfg, (method, params) => solRpcServer(env, method, params));
-      return json({ feeBps: cfg.bps, usdc: { account: cfg.usdc || null, ok: v.usdc }, wsol: { account: cfg.wsol || null, ok: v.wsol },
-        on: { usdcTrades: !!(cfg.bps && v.usdc), solBuys: !!(cfg.bps && (v.wsol || false)) } }, request);
+      return json({ feeBps: cfg.bps, live: cfg.live, usdc: { account: cfg.usdc || null, ok: v.usdc }, wsol: { account: cfg.wsol || null, ok: v.wsol },
+        on: { usdcTrades: !!(cfg.live && cfg.bps && v.usdc), solBuys: !!(cfg.live && cfg.bps && v.wsol) },
+        staged: !cfg.live && !!(cfg.bps && (v.usdc || v.wsol)) }, request);
     }
     if (parts[0] === "swap" && parts[1] === "jup" && (parts[2] === "quote" || parts[2] === "swap")) {
       const gated = keyProxyGate(request, jupLimiter); if (gated) return gated;

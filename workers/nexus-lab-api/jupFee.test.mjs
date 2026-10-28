@@ -5,13 +5,14 @@ import { jupFeeConfig, feeAccountFor, jupQuoteParams, withJupSwapFee, isTokenAcc
 const USDC_ACCT = "Fee1USDCaccount111111111111111111111111111";
 const WSOL_ACCT = "Fee2WSoLaccount111111111111111111111111111";
 const TOKEN = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
-const ENV = { JUP_FEE_BPS: "10", JUP_FEE_ACCOUNT_USDC: USDC_ACCT, JUP_FEE_ACCOUNT_WSOL: WSOL_ACCT };
+const ENV = { JUP_FEE_BPS: "10", JUP_FEE_ACCOUNT_USDC: USDC_ACCT, JUP_FEE_ACCOUNT_WSOL: WSOL_ACCT, JUP_FEE_LIVE: "true" };
 const CFG = jupFeeConfig(ENV);
 const BOTH = { usdc: true, wsol: true };
 beforeEach(() => _resetJupFeeCache());
 
 test("config: off unless a sane bps; bad addresses dropped", () => {
-  assert.deepEqual(jupFeeConfig(ENV), { bps: 10, usdc: USDC_ACCT, wsol: WSOL_ACCT });
+  assert.deepEqual(jupFeeConfig(ENV), { bps: 10, usdc: USDC_ACCT, wsol: WSOL_ACCT, live: true });
+  assert.equal(jupFeeConfig({ ...ENV, JUP_FEE_LIVE: undefined }).live, false);
   for (const b of [undefined, "", "0", "-1", "101", "2.5", "x"]) assert.equal(jupFeeConfig({ ...ENV, JUP_FEE_BPS: b }).bps, 0);
   assert.equal(jupFeeConfig({ ...ENV, JUP_FEE_ACCOUNT_USDC: "not an address!" }).usdc, "");
 });
@@ -33,6 +34,13 @@ test("quote: our bps added for a fee pair; whitelist only; a browser fee is igno
   assert.equal(p.get("platformFeeBps"), "10");
   assert.equal(p.get("evil"), null);
   assert.equal(jupQuoteParams(sp({}), CFG, { usdc: false, wsol: false }).get("platformFeeBps"), null);
+});
+
+test("staged (not live): only a feetest=1 quote carries the fee", () => {
+  const staged = jupFeeConfig({ ...ENV, JUP_FEE_LIVE: "false" });
+  assert.equal(jupQuoteParams(sp({}), staged, BOTH).get("platformFeeBps"), null);
+  assert.equal(jupQuoteParams(sp({ feetest: "1" }), staged, BOTH).get("platformFeeBps"), "10");
+  assert.equal(jupQuoteParams(sp({ feetest: "1" }), staged, BOTH).get("feetest"), null, "never forwarded to Jupiter");
 });
 
 test("quote: nofee=1 (price read) and ExactOut carry no fee", () => {

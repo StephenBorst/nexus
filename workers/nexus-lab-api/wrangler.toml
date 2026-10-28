@@ -73,7 +73,10 @@ FLASH_FEE_BPS = "10"
 # on the swap. Jupiter takes no cut on v1. OFF until a fee account below is set AND checks out over RPC
 # (an initialized token account of the right mint). Check: GET /swap/jup/fee-status.
 JUP_FEE_BPS = "10"
-# JUP_FEE_ACCOUNT_USDC = ""   # USDC token account owned by our fee wallet (USDC buys + all sells)
+# Fee wallet 6uB2ugTM4m7P1BpEG6pLAc2B327nb75JUqVE6svoMRWT (borst, 2026-10-28). Its USDC account:
+JUP_FEE_ACCOUNT_USDC = "Fqqax7ErDytQbsWRWoRuCodZ8oDx2NgWtzYz6AUwagKr"   # USDC buys + all sells
+# STAGED until borst confirms the dry run: only quotes tagged feetest=1 carry the fee. "true" = every trade.
+JUP_FEE_LIVE = "false"
 # JUP_FEE_ACCOUNT_WSOL = ""   # wrapped-SOL token account owned by the same wallet (SOL buys)
 # Our Base builder code (ERC-8021, registered at base.dev by borst 2026-09-30). Order-only; unset =
 # omitted. A valid but unregistered code never fails an order (it just goes unattributed); a malformed
