@@ -2379,6 +2379,7 @@ export default function TokenTerminal() {
                   <ModalRow label="Receive (est.)" value={recvFmt ? `${recvFmt} ${solPlan.outSym}` : "—"} />
                   <ModalRow label="Minimum received" value={minFmt ? `${minFmt} ${solPlan.outSym}` : "on-chain floor applies"} sub={slip != null ? `reverts below this · ≤${slip.toFixed(2)}% slippage` : "slippage floor enforced on-chain"} accent />
                   <ModalRow label="Route" value={solPlan.router} />
+                  {solPlan.feeBps > 0 && <ModalRow label="Nexus fee" value={`${(solPlan.feeBps / 100).toFixed(2)}%`} sub="included in the amounts above" />}
                   {solPlan.priceImpactPct != null && <ModalRow label="Price impact" value={`~${solPlan.priceImpactPct.toFixed(solPlan.priceImpactPct >= 1 ? 1 : 2)}%`} danger={solPlan.priceImpactPct >= 3} />}
                   <div style={{ fontFamily: UI, fontSize: 10, lineHeight: 1.5, color: FAINT, margin: "12px 0 14px" }}>
                     You sign in your own Solana wallet. The route is <b style={{ color: MUT }}>simulated</b> and its programs allow-listed before signing; the minimum-received floor is enforced on-chain. Non-custodial.

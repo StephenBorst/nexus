@@ -50,6 +50,9 @@ export const WSOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_SOL_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC on Solana (6 decimals)
 const LAMPORTS_PER_SOL = 1_000_000_000;
 export const MAX_SLIPPAGE_BPS = 300; // 3% hard cap — refuse any quote/route asking for more.
+// Our integrator fee is set by the worker (workers/nexus-lab-api/jupFee.mjs, cap 100 bps). A quote
+// carrying more than that didn't come from us: refuse it.
+export const MAX_PLATFORM_FEE_BPS = 100;
 // Route the web3.js Connection through OUR worker Solana-RPC proxy. The public Solana RPC 403s /
 // rate-limits BROWSERS, and the wallet rarely carries a usable rpcUrl — so a direct browser
 // Connection fails on getBalance AND on the simulate/send/confirm that the buy needs. The worker
@@ -99,6 +102,7 @@ export interface SolBuyPlan {
   minOut: number | null;     // otherAmountThreshold (raw token units) — on-chain floor
   priceImpactPct: number | null;
   slippageBps: number;
+  feeBps: number;            // our integrator fee on this swap (quote.platformFee.feeBps), 0 = none
   router: string;            // "Jupiter"
   rpcUrl: string;            // resolved RPC used for simulate/confirm
   outSym: string;            // display symbol
@@ -169,6 +173,7 @@ async function quoteAndBuildGuarded(args: {
   const quote = (await qRes.json().catch(() => null)) as {
     inputMint?: string; outputMint?: string; inAmount?: string; outAmount?: string;
     otherAmountThreshold?: string; priceImpactPct?: string | number; slippageBps?: number;
+    platformFee?: { amount?: string; feeBps?: number } | null;
   } | null;
   if (!quote || !quote.outAmount) throw new Error("No Jupiter route right now — use the deep-link.");
   // Bind the quote to EXACTLY what we asked for (guard 1) — the chosen input mint + our amount.
@@ -177,6 +182,9 @@ async function quoteAndBuildGuarded(args: {
   if (String(quote.inAmount) !== String(inAmount)) throw new Error("Quote amount mismatch — refused.");
   // Slippage cap (guard 2) — trust our requested cap, and re-check Jupiter didn't widen it.
   if (typeof quote.slippageBps === "number" && quote.slippageBps > slippageBps) throw new Error("Route widened slippage — refused.");
+  // Our fee: at most the worker's cap, never a surprise.
+  const feeBps = Number(quote.platformFee?.feeBps ?? 0);
+  if (!Number.isFinite(feeBps) || feeBps < 0 || feeBps > MAX_PLATFORM_FEE_BPS) throw new Error("Quote carries an unexpected fee — refused.");
   // Guard 6 — the floor baked into the tx must match that cap.
   const minErr = checkMinOut({ outAmount: quote.outAmount, minOut: quote.otherAmountThreshold, slippageBps });
   if (minErr) throw new Error(minErr);
@@ -217,7 +225,7 @@ async function quoteAndBuildGuarded(args: {
     solSpent: inputMint === WSOL_MINT ? inAmount : 0, // only native-SOL input drains SOL from the balance
     outputMint, taker,
     outAmount, outDecimals, minOut, priceImpactPct: Number.isFinite(impact) ? impact * 100 : null,
-    slippageBps, router: "Jupiter", rpcUrl: resolveRpc(provider), outSym,
+    slippageBps, feeBps, router: "Jupiter", rpcUrl: resolveRpc(provider), outSym,
   };
   return { tx, plan };
 }
@@ -424,7 +432,8 @@ export async function getSolWalletContext(_provider: SolProvider, pubkey: string
   }
   try {
     // SOL/USD from a Jupiter quote (1 SOL → USDC), through the same worker proxy.
-    const r = await fetch(`${JUP_QUOTE}?inputMint=${WSOL_MINT}&outputMint=${USDC_SOL_MINT}&amount=${LAMPORTS_PER_SOL}&slippageBps=50&swapMode=ExactIn`, { headers: { Accept: "application/json" } });
+    // nofee=1: a price read, not a trade, so the worker leaves our fee off it.
+    const r = await fetch(`${JUP_QUOTE}?inputMint=${WSOL_MINT}&outputMint=${USDC_SOL_MINT}&amount=${LAMPORTS_PER_SOL}&slippageBps=50&swapMode=ExactIn&nofee=1`, { headers: { Accept: "application/json" } });
     const j = (await r.json().catch(() => null)) as { outAmount?: string | number } | null;
     const out = Number(j?.outAmount);
     if (Number.isFinite(out) && out > 0) solUsd = out / 1e6;
