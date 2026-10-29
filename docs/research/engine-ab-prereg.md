@@ -83,4 +83,18 @@ sample size.
 
 ## Results
 
-_None yet._
+### Baseline check · 2026-10-29
+
+A scan reported Engine A's 6 baseline setups at −3.0R. The baseline above says +3.00. Re-checked from public data:
+
+| posted (UTC) | call | side | stored grade | `/verify` re-grade |
+|---|---|---|---|---|
+| Oct 12 07:05 | `reg-38cf11a63c9c0e67` ZEC | LONG | LOSS −1R | MATCH |
+| Oct 13 04:28 | `thesis-btc-long-1791865681877` BTC | LONG | LOSS −1R | MATCH |
+| Oct 13 04:28 | `thesis-sol-long-1791865681877` SOL | LONG | LOSS −1R | MATCH |
+| Oct 15 04:57 | `thesis-btc-long-1792040247401` BTC | LONG | WIN +2R | MATCH |
+| Oct 15 04:57 | `thesis-eth-long-1792040247402` ETH | LONG | WIN +2R | MATCH |
+| Oct 15 04:57 | `thesis-sol-long-1792040247403` SOL | LONG | WIN +2R | MATCH |
+
+Total +3.00R. The baseline stands. −3.0R is the three losses alone, so the scan left out the three Oct 15 wins. No
+change to anything above.
