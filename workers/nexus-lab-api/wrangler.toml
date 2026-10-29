@@ -75,8 +75,8 @@ FLASH_FEE_BPS = "10"
 JUP_FEE_BPS = "10"
 # Fee wallet 6uB2ugTM4m7P1BpEG6pLAc2B327nb75JUqVE6svoMRWT (borst, 2026-10-28). Its USDC account:
 JUP_FEE_ACCOUNT_USDC = "Fqqax7ErDytQbsWRWoRuCodZ8oDx2NgWtzYz6AUwagKr"   # USDC buys + all sells
-# STAGED until borst confirms the dry run: only quotes tagged feetest=1 carry the fee. "true" = every trade.
-JUP_FEE_LIVE = "false"
+# LIVE since 2026-10-29 (borst, after the dry run passed). "false" = staged: only feetest=1 quotes carry the fee.
+JUP_FEE_LIVE = "true"
 # JUP_FEE_ACCOUNT_WSOL = ""   # wrapped-SOL token account owned by the same wallet (SOL buys)
 # Our Base builder code (ERC-8021, registered at base.dev by borst 2026-09-30). Order-only; unset =
 # omitted. A valid but unregistered code never fails an order (it just goes unattributed); a malformed

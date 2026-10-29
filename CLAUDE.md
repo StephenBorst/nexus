@@ -396,8 +396,8 @@ product is what sits on top:
   an initialized token account of the right mint (RPC, cached 10 min) or that fee is off. `GET /swap/jup/fee-status`.
   Price reads pass `nofee=1`. Client refuses a quote with `platformFee.feeBps` > 100 and shows a "Nexus fee" row.
   Fee wallet `6uB2ugTM4m7P1BpEG6pLAc2B327nb75JUqVE6svoMRWT` (borst), USDC account `Fqqax7…wagKr` (never close it). wSOL
-  account skipped for now (SOL buys carry no fee). `JUP_FEE_LIVE` != "true" = STAGED: only quotes tagged `feetest=1` carry
-  the fee (dry runs); flip to "true" only on borst's word after a dry run.
+  account skipped for now (SOL buys carry no fee). **LIVE since 2026-10-29** (`JUP_FEE_LIVE="true"`, borst, after a passing dry run).
+  Set it to anything else = STAGED: only quotes tagged `feetest=1` carry the fee (use that for dry runs of a change).
   ⚠️ v1 ("Metis") is marked unmaintained by Jupiter; the successor for our path is V2 `/build` (same fee params).
 - **Spot ledger** (`workers/nexus-lab-api/spotLedger.mjs`, tested; since 2026-10-28) → the "Spot" box on `/ops/revenue`
   (`spot` in its reply, last 30 days). Counts only what's proven: Flash = the proxy logs each accepted order id
