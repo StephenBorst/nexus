@@ -153,7 +153,10 @@ product is what sits on top:
   recorded rate is counted missing, never free), shown as AFTER COSTS (`PaperCostLine`). Display only.
 - **Parity** (`GET /agent/:a/parity`, `app/lib/paperParity.mjs`): pairs paper entries with the graded events, explains
   misses (busy incl. the OPEN position, daily caps on the wallet's own day via `lastReset`, another market won).
-  Leftovers = DRIFT. Before calling DRIFT a brain bug, check the open position.
+  Leftovers = DRIFT. Before calling DRIFT a brain bug, check the open position. **Known DRIFT cause (2026-10-29,
+  `docs/research/price-spine-drift-2026-10-29.md`):** `priceByHour` rounds `oi:hist` rows to the nearest hour and the
+  LAST row wins, so a row written minutes after the agent acted can rewrite that hour's price for the grader (Oct 28
+  ETH LONG on all three wallets). Fix proposed (first row wins), not applied: borst's call.
 - **Paper wallets:** graded-exit wallet `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
   `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE`.
 - lab-api needs `SUPABASE_URL` / `SUPABASE_ANON_KEY` for History reads.
