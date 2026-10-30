@@ -16,6 +16,7 @@ import * as ed from "@noble/ed25519";
 import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
 import { nextPaperHead, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
+import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress } from "./logic.mjs";
 
@@ -259,6 +260,12 @@ export default {
       // One shared price cache for the whole tick.
       const priceCache = new Map();
 
+      // The owner's live-entry pause (app/lib/liveHalt.mjs), read once per tick. Unreadable = live
+      // entries wait this tick (fail closed); exits and PAPER never read it.
+      let liveHalt;
+      try { liveHalt = parseLiveHalt(await env.NEXUS_AGENT.get(LIVE_HALT_KEY)); }
+      catch (e) { liveHalt = HALT_READ_FAILED; console.error("[exec] halt flag read failed:", e.message); }
+
       // Process users in bounded-concurrency batches: O(users/BATCH) wall-clock
       // instead of O(users), while the price cache keeps public fetches at
       // O(unique symbols) regardless of user count.
@@ -266,7 +273,7 @@ export default {
         const batch = users.slice(i, i + BATCH_SIZE);
         await Promise.all(
           batch.map((address) =>
-            processUser(address, env, priceCache).catch((e) =>
+            processUser(address, env, priceCache, liveHalt).catch((e) =>
               console.error(`[exec] ${address.slice(0, 10)} error:`, e.message)
             )
           )
@@ -468,7 +475,7 @@ async function adoptOrphanPosition(address, state, config, env, _cache) {
   return true;
 }
 
-async function processUser(address, env, cache) {
+async function processUser(address, env, cache, liveHalt = { on: false }) {
   const [stateRaw, killRaw] = await Promise.all([
     env.NEXUS_AGENT.get(`agent:state:${address}`),
     env.NEXUS_AGENT.get(`agent:kill:${address}`),
@@ -684,6 +691,14 @@ async function processUser(address, env, cache) {
     if (pending.length > 20) pending.pop(); // keep last 20
     await env.NEXUS_AGENT.put(`agent:pending:${address}`, JSON.stringify(pending));
     console.log(`[exec] ${address.slice(0, 10)} ASSISTED thesis generated: ${signal.direction} ${signal.symbol}`);
+    return;
+  }
+
+  // ── LIVE-ENTRY PAUSE (owner switch, /ops/halt) ─────────
+  // Live agents open nothing while it's on; the signal is skipped, not queued. A directive stays
+  // ARMED until it expires; a webhook OPEN was consumed above and is dropped. PAPER never stops.
+  if (haltBlocksEntry(liveHalt, config.mode)) {
+    console.log(`[exec] ${address.slice(0, 10)} live entries paused (${liveHalt.reason || "owner switch"}) · skipped ${signal.direction} ${signal.symbol}`);
     return;
   }
 

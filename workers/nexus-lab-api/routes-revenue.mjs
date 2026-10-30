@@ -13,7 +13,7 @@ const LATEST_TTL_MS = 5 * 60 * 1000;
 const SNAP_TTL_S = 400 * 86400;
 const COMPARE = [7, 30];
 
-async function ownersOf(env, fetchImpl) {
+export async function ownersOf(env, fetchImpl) {
   const cached = await env.LAB_STORE.get(OWNERS_KEY);
   if (cached) { try { return JSON.parse(cached); } catch { /* re-read */ } }
   const owners = await readSafeOwners(fetchImpl);

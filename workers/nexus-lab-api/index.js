@@ -81,6 +81,8 @@ import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus
 import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
 import { handleXrayShare } from "./routes-xrayshare.mjs";
 import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
+import { handleHalt } from "./routes-halt.mjs";
+import { LIVE_HALT_KEY, parseLiveHalt, publicHalt } from "../../app/lib/liveHalt.mjs";
 import { handlePush } from "./routes-push.mjs";
 import { handleThesisRegistration } from "./routes-thesisreg.mjs";
 import { handleCallStatus } from "./routes-callstatus.mjs";
@@ -790,6 +792,8 @@ export default {
     {
       const revenueRes = await handleRevenue(parts, request, env, { nexusPrice: getNexusPriceUsd });
       if (revenueRes) return revenueRes;
+      const haltRes = await handleHalt(parts, request, env);
+      if (haltRes) return haltRes;
       const shareRes = await handleXrayShare(parts, request, env, { renderPng: renderMonoPng });
       if (shareRes) return shareRes;
     }
@@ -4955,13 +4959,14 @@ document.getElementById("btn").addEventListener("click",go);
 
       // GET /agent/:address
       if (request.method === "GET" && !parts[2]) {
-        const [configRaw, stateRaw, pendingRaw, signalRaw, whMetaRaw, directiveRaw] = await Promise.all([
+        const [configRaw, stateRaw, pendingRaw, signalRaw, whMetaRaw, directiveRaw, haltRaw] = await Promise.all([
           AGENT_KV.get(`agent:config:${address}`),
           AGENT_KV.get(`agent:state:${address}`),
           AGENT_KV.get(`agent:pending:${address}`),
           AGENT_KV.get(`agent:signal:${address}`),
           AGENT_KV.get(`agent:webhook_meta:${address}`),
           AGENT_KV.get(`agent:directive:${address}`),
+          AGENT_KV.get(LIVE_HALT_KEY),
         ]);
         const config = configRaw ? JSON.parse(configRaw) : null;
         const state = stateRaw ? JSON.parse(stateRaw) : null;
@@ -4991,7 +4996,9 @@ document.getElementById("btn").addEventListener("click",go);
         if (whMetaRaw) { try { webhook = { enabled: !!JSON.parse(whMetaRaw).enabled }; } catch { /* ignore */ } }
         // Whether this wallet has linked a Telegram chat for agent trade alerts.
         const tgLinked = !!(await AGENT_KV.get(`tg:chat:${address}`));
-        return json({ config, state, trades, pending, webhook, directive, tgLinked }, request);
+        // The owner's live-entry pause (app/lib/liveHalt.mjs): live agents open nothing while it's on.
+        const liveHalt = publicHalt(parseLiveHalt(haltRaw));
+        return json({ config, state, trades, pending, webhook, directive, tgLinked, liveHalt }, request);
       }
 
       // POST /agent/:address/webhook/(enable|rotate|disable) — manage the signal

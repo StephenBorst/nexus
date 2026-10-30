@@ -3,11 +3,14 @@
 // the NEAR Intents fee balance and the treasury Safe, and answers only a Safe owner (or an
 // OPS_WALLETS address) who signed the Lab message. This page reads; it moves nothing. Sweeps stay
 // in the wallet. noindex, and not in the nav.
-import { useCallback, useState } from "react";
+// The one control here is the live-entry pause (POST /ops/halt, app/lib/liveHalt.mjs): it stops live
+// agents opening new positions. It closes nothing and moves nothing.
+import { useCallback, useEffect, useState } from "react";
 import { C, MONO, UI, S, RADIUS, SIGNAL } from "@/config/theme";
 import { getLabAuth, useLabWallet, clearLabAuth } from "@/hooks/useLabAuth";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { Button } from "@/components/ui";
+import { signLiveHalt } from "@/lib/liveHalt.mjs";
 
 const API = "https://og.nexustradinglabs.com";
 
@@ -50,6 +53,76 @@ function Change({ v, money = true }: { v: number | null | undefined; money?: boo
     <span style={{ color: v > 0 ? C.pos : C.neg }}>
       {sign}{money ? usd(abs) : amt(abs)}
     </span>
+  );
+}
+
+type Halt = { halted: boolean; since?: number | null; reason?: string };
+
+// Live-entry pause. Each switch is its own signature (5 minutes), checked against the Safe's owners.
+function HaltBox({ address, wallet, box, label }: { address: string; wallet: ReturnType<typeof useLabWallet>; box: React.CSSProperties; label: React.CSSProperties }) {
+  const [halt, setHalt] = useState<Halt | null>(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    fetch(`${API}/ops/halt`).then((r) => r.json()).then((j) => { if (live) setHalt(j as Halt); }).catch(() => { if (live) setMsg("Couldn’t read the switch."); });
+    return () => { live = false; };
+  }, []);
+
+  const flip = async (on: boolean) => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const signed = await signLiveHalt(address, wallet, on);
+      const r = await fetch(`${API}/ops/halt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...signed, reason: on ? reason : undefined }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 403) setMsg(j.ownersRead === false ? "Couldn’t read the Safe’s owners right now. Try again in a minute." : "This wallet isn’t an owner of the treasury Safe.");
+      else if (!r.ok) setMsg(j.error || `HTTP ${r.status}`);
+      else { setHalt(j as Halt); setReason(""); }
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const on = !!halt?.halted;
+  return (
+    <div style={{ ...box, marginBottom: S.lg, borderColor: on ? SIGNAL.watch : C.border }}>
+      <div style={label}>Live agent entries</div>
+      <div style={{ fontSize: 15, fontWeight: 600, marginTop: S.xs, color: on ? SIGNAL.watch : C.text.bright }}>
+        {halt == null ? "Reading…" : on ? "Paused" : "Running"}
+      </div>
+      <div style={{ fontSize: 12, color: C.text.fog, marginTop: S.xs, lineHeight: 1.5 }}>
+        {on
+          ? <>No live agent opens a new position. Open positions keep their exits. Paper agents keep running.{halt?.since ? ` Since ${new Date(halt.since).toUTCString().slice(5, 22)} UTC.` : ""}{halt?.reason ? ` Reason: ${halt.reason}` : ""}</>
+          : "Pausing stops every live agent opening new positions. Open positions keep their exits. Paper agents keep running. Nothing closes."}
+      </div>
+      {halt != null && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: S.sm, marginTop: S.md, alignItems: "center" }}>
+          {!on && (
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={140}
+              placeholder="Reason (shown to users)"
+              aria-label="Reason for the pause"
+              style={{ flex: "1 1 220px", minWidth: 0, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.text.bright, fontFamily: UI, fontSize: 13, padding: `${S.xs}px ${S.sm}px` }}
+            />
+          )}
+          <Button variant={on ? "primary" : "secondary"} disabled={busy} onClick={() => flip(!on)}>
+            {busy ? "Signing…" : on ? "Resume live entries" : "Pause live entries"}
+          </Button>
+        </div>
+      )}
+      {msg && <div style={{ marginTop: S.sm, fontSize: 12, color: C.warn }}>{msg}</div>}
+    </div>
   );
 }
 
@@ -108,6 +181,8 @@ export default function RevenuePage() {
       </div>
 
       {!address && <div style={{ ...box, color: C.text.fog, fontSize: 13 }}>Connect the wallet that owns the treasury Safe.</div>}
+
+      {address && <HaltBox address={address} wallet={wallet} box={box} label={label} />}
 
       {address && !rev && (
         <div style={{ ...box, display: "flex", flexDirection: isMobile ? "column" : "row", gap: S.md, alignItems: isMobile ? "stretch" : "center", justifyContent: "space-between" }}>
