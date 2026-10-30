@@ -168,8 +168,15 @@ export function paperParity({ trades, events, config, since = 0, until = Date.no
       if (dt >= -PARITY_EARLY_MS && dt <= PARITY_MATCH_SLACK_MS) { hit = i; break; }
     }
     if (hit >= 0) { used.add(hit); matched.push({ entry: x, event: evs[hit], lagMin: Math.round((x.openedAt - evs[hit].t) / 60000) }); continue; }
-    const opposite = evs.find((e) => e.coin === x.coin && e.side !== x.side && x.openedAt - e.t >= -PARITY_EARLY_MS && x.openedAt - e.t <= PARITY_MATCH_SLACK_MS);
-    unmatchedTrades.push({ entry: x, reason: opposite ? `graded the OTHER side (${opposite.side}) that hour` : "no graded event in that market within 3h before entry" });
+    const inReach = (e) => x.openedAt - e.t >= -PARITY_EARLY_MS && x.openedAt - e.t <= PARITY_MATCH_SLACK_MS;
+    const opposite = evs.find((e) => e.coin === x.coin && e.side !== x.side && inReach(e));
+    // The same read already paired with an earlier entry: a second entry on one read. Exec
+    // takes each read once since 2026-10-30 (brainSignalKey); before that it could re-enter
+    // after a quick stop. Still DRIFT, named for what it is.
+    const reEntry = !opposite && evs.some((e, i) => used.has(i) && e.coin === x.coin && e.side === x.side && inReach(e));
+    unmatchedTrades.push({ entry: x, reason: opposite ? `graded the OTHER side (${opposite.side}) that hour`
+      : reEntry ? "a second entry on a read already traded (one entry per read since 2026-10-30)"
+      : "no graded event in that market within 3h before entry" });
   }
 
   const explained = [], unexplained = [];

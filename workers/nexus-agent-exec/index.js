@@ -17,7 +17,7 @@ import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
 import { nextPaperHead, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress } from "./logic.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, brainSignalKey, alreadyTradedSignal } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const COOLDOWN_MS = 15 * 60 * 1000; // 15 min between trades
@@ -649,6 +649,8 @@ async function processUser(address, env, cache) {
   // explicit, so they bypass it; only the brain's own signals are cooldown-gated.
   const userAuthored = signal.source === "WEBHOOK" || signal.source === "DIRECTIVE" || signal.source === "COPY";
   if (!userAuthored && state.last_trade_time && now - state.last_trade_time < COOLDOWN_MS) return;
+  // One entry per signal: the brain repeats a read until its next row lands (logic.mjs).
+  if (!userAuthored && alreadyTradedSignal(state, signal)) return;
 
   // Mode check
   if (config.mode === "ASSISTED") {
@@ -899,6 +901,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
   };
   state.last_trade_time = Date.now();
   state.trades_today = (state.trades_today || 0) + 1;
+  { const key = brainSignalKey(signal); if (key) state.last_signal_key = key; } // this read is now traded
 
   // Mark the directive LIVE (a position is now open for it) so the UI/API reflect it
   // and a second directive can't arm on top. Retired to DONE by closePosition.
@@ -1391,6 +1394,10 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
   // Update daily P&L
   state.daily_pnl = (state.daily_pnl || 0) + pnlUsdc;
   state.current_position = null;
+  // The cooldown counts from the exit too, as the reconcile path and parity already assume
+  // (paperParity: an entry occupies [open, close + 15 min)). It used to count from the entry
+  // only, so a stop inside 15 min of the entry allowed an immediate re-entry.
+  state.last_trade_time = Date.now();
 
   const trade = {
     symbol: pos.symbol,

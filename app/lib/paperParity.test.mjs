@@ -244,3 +244,14 @@ test("no open position (or a malformed one) changes nothing", () => {
   assert.deepEqual(entriesFromPaperTrades(trades, null), entriesFromPaperTrades(trades));
   assert.deepEqual(entriesFromPaperTrades(trades, { symbol: "PERP_ETH_USDC", direction: "FLAT", opened_at: T0 }), entriesFromPaperTrades(trades));
 });
+
+test("a second entry on one read is named as such (Oct 29 SOL), still DRIFT", () => {
+  const ev = { coin: "SOL", t: T0 + 2 * H + 17 * 60000, side: "LONG" };
+  const p = run([
+    row("1", "SOL", "LONG", ev.t + 13 * 60000, ev.t + 25 * 60000, -5),  // entered, stopped 12 min later
+    row("2", "SOL", "LONG", ev.t + 29 * 60000, ev.t + 4 * H, -6),       // same read again
+  ], [ev]);
+  assert.equal(p.verdict, "DRIFT");
+  assert.equal(p.counts.matched, 1);
+  assert.match(p.unmatchedTrades[0].reason, /second entry on a read already traded/);
+});
