@@ -87,3 +87,15 @@ It is a measurement fix, not a rule change. The re-scored numbers are logged und
 Not covered: if the brain decides before an hour's first row exists, it sits out ("no price"), and the grader, reading
 later, can still fire on that hour. That shows up as an unexplained miss, not a phantom trade. Closing it means the brain
 writing its row at a fixed minute, a separate change.
+
+## After · 2026-10-30
+
+The Oct 28 ETH trade now matches its graded event on all three wallets. The 24h arm and the nine-market arm read CLEAN.
+
+The graded-exit wallet `0x9A30…cB28` reads DRIFT on a different trade, with a different cause. It entered SOL LONG at
+20:30:41 UTC Oct 29 on the 20:17 basis × CVD event, was stopped out at 20:42:40, and entered SOL LONG again at 20:46:40
+on the same event. The brain keeps sending a signal until the next basis row arrives, and exec's 15-minute cooldown
+counts from the last ENTRY, not the exit, so the re-entry was allowed. The grader counts each event once, so the second
+entry has no event of its own. This isn't a price-spine issue (both entries confirm on the same hour, live and
+graded). A fix would be for exec not to re-enter on a signal it already traded. That's an engine change and borst's
+call.
