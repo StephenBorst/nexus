@@ -33,7 +33,7 @@ import { TelegramLinkPanel } from "./TelegramLink";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 
 export function AgentView() {
   const [config, setConfig] = useState<AgentConfig>(DEFAULT_CONFIG);
@@ -61,6 +61,8 @@ export function AgentView() {
   const [directiveLimitPrice, setDirectiveLimitPrice] = useState("");
   const [directiveBusy, setDirectiveBusy] = useState(false);
   const [tgLinked, setTgLinked] = useState(false);
+  // The owner's live-entry pause (GET /agent/:a liveHalt, app/lib/liveHalt.mjs).
+  const [liveHalt, setLiveHalt] = useState<{ halted: boolean; since?: number | null; reason?: string } | null>(null);
   // History: which trade row is expanded (progressive-disclosure detail panel).
   const [expandedTrade, setExpandedTrade] = useState<string | null>(null);
   // Share poster (in-app branded card) — set to open the modal for a trade.
@@ -199,6 +201,7 @@ export function AgentView() {
         if (data.pending) setPending(data.pending);
         setActiveDirective(data.directive || null);
         setTgLinked(!!data.tgLinked);
+        setLiveHalt(data.liveHalt || null);
         setWebhookEnabled(!!data.webhook?.enabled);
       }
     } catch (e) {
@@ -648,6 +651,13 @@ export function AgentView() {
   return (
     <div>
       {posterData && <SharePoster data={posterData} onClose={() => setPosterData(null)} />}
+      {liveHalt?.halted && config.mode !== "PAPER" && (
+        <div role="status" style={{ border: `1px solid ${SIGNAL.watch}`, borderRadius: 4, padding: "10px 12px", marginBottom: 12, fontSize: 12, lineHeight: 1.5, color: C.text.fog }}>
+          <span style={{ fontFamily: "var(--nx-font-mono)", fontWeight: 600, color: SIGNAL.watch, letterSpacing: "0.08em" }}>LIVE ENTRIES PAUSED</span>
+          {" · "}Live agents open no new positions until this lifts. Open positions keep their exits. Paper agents keep running.
+          {liveHalt.reason ? ` Reason: ${liveHalt.reason}` : ""}
+        </div>
+      )}
       {/* ─── Header ──────────────────────────────────────── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, rowGap: 10, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

@@ -125,6 +125,11 @@ product is what sits on top:
 - **Qty:** snap with `parseFloat((steps*baseTick).toFixed(decimals))` (plain floor×tick → -1104); ceil one step if the
   value dips under min_notional; guard base_min. -1101 = margin too close to balance (keep a buffer;
   `capitalPerTrade ≈ floor(freeCollateral*0.6)`). Orderly position rows have no uPnL field: compute it.
+- **Live-entry pause (owner, platform-wide):** `ops:halt:live` in `NEXUS_AGENT`, switched on `/ops/revenue`
+  (`POST /ops/halt`, `routes-halt.mjs`; its own 5-min EVM signature from a Safe owner / `OPS_WALLETS`, replay-guarded
+  by `ops:halt:log`; public `GET /ops/halt`). exec reads it once per tick (`app/lib/liveHalt.mjs`; unreadable = halted)
+  and skips every non-PAPER entry right before `enterPosition`. Exits, kill, DCA ladders, PAPER and parity untouched;
+  closes nothing. No auto thresholds: a breaker rule is a read, graded first.
 - **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open. KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.
 - **Reconcile:** exec reads the live position first; exchange flat ⇒ clear the stale record. On a read error it manages
