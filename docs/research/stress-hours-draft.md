@@ -1,10 +1,11 @@
-# Market stress hours · DRAFT, not registered
+# Market stress hours · DRAFT (registered 2026-10-30)
 
-**Status (2026-10-30):** a draft for borst's review. Nothing here is registered, graded or traded. No outcome has been
-computed: the check below counts hours and events only.
+**Status (2026-10-30, borst signed):** **registered as drafted**: the rule as proposed, the 24h window, the 30/30 bar,
+the 2027-04-30 limit, the BTC-spike label dropped. Registration: `stress-hours-prereg.md`, out-of-sample from
+2026-10-31T00:00Z. This page is the record of how it was drafted and counted; it is not the registration.
 
-Code: `workers/nexus-lab-api/stressDraft.mjs` (nothing that trades or grades imports it; `stressDraft.test.mjs` fails if
-the scoreboard, the brain, exec or lab-api do). Count: `node tools/explorers/stressCount.mjs <dir> [days]`.
+Code (as reviewed): `workers/nexus-lab-api/stressDraft.mjs`, now `stressHours.mjs` with the side variants removed. Count:
+`node tools/explorers/stressCount.mjs <dir> [days]` (now the registered rule only).
 
 ## The question
 

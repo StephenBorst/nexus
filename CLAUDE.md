@@ -234,6 +234,11 @@ product is what sits on top:
   (`app/lib/regimeWindow.mjs`, numbers pinned to the page). The scoreboard serves `axes[basis_x_cvd].regimeWindow` (main
   + holdout) and the BTC day counts (`regimeWindow.regime`, Orderly daily candles). `REGIME_RESULT` is set once by the
   judging watcher PR and is final.
+- **Stress-hour study** (`docs/research/stress-hours-prereg.md`, signed 2026-10-30; counts from 2026-10-31T00:00Z,
+  limit 2027-04-30): a conditioner, not a read. Stress hour = ≥5 of the 9 main coins OI −2%/4h AND the board's median
+  4h move ≥ its 30-day p90 (`workers/nexus-lab-api/stressHours.mjs`, pinned). Grades the seven reads registered at
+  signing STRESS vs CALM (time-shift null, Holm, 30/30). WORSE_IN_STRESS licenses one reviewed per-read pause PR,
+  nothing automatic. Brain/exec never import it. The judging code is its own PR, before any read hits 30/30.
 - **Pre-registered studies are append-only:** a doc's text above Results is pinned (sha256 tests); verdicts are appended;
   a new idea found on a closed population is a new dated registration (e.g. structure × house fade: CLOSED, not shown).
 - **Daily pipeline watcher** (prompt `docs/routines/pipeline-watch.md`, `tools/pipeline/watch.mjs`,
