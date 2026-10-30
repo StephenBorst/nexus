@@ -156,7 +156,8 @@ product is what sits on top:
   Leftovers = DRIFT. Before calling DRIFT a brain bug, check the open position. **Known DRIFT cause (2026-10-29,
   `docs/research/price-spine-drift-2026-10-29.md`):** `priceByHour` rounds `oi:hist` rows to the nearest hour and the
   LAST row wins, so a row written minutes after the agent acted can rewrite that hour's price for the grader (Oct 28
-  ETH LONG on all three wallets). Fix proposed (first row wins), not applied: borst's call.
+  ETH LONG on all three wallets). Fixed 2026-10-30: the FIRST row in an hour wins (logged under "Measurement
+  changes" in `docs/research/read-pipeline.md`).
 - **Paper wallets:** graded-exit wallet `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
   `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE`.
 - lab-api needs `SUPABASE_URL` / `SUPABASE_ANON_KEY` for History reads.
@@ -197,7 +198,8 @@ product is what sits on top:
   `basis:hist` / `cvd:hist` / `liq:hist` / `sm:hist` / `oi:hist` / `candle:hist` in `NEXUS_AGENT`.
 - **One rule, two users:** traded and graded rules live once in `app/lib/` (`basisFade.mjs`, `basisStack.mjs`,
   `gradedExit.mjs`, `funding.mjs`) and both the brain and the grader import them. Parity tests prove live gate ==
-  graded read hour by hour. Same-hour semantics: the LAST row in an hour with a side wins (`sideAtHour`). Coalesce
+  graded read hour by hour. Same-hour semantics: the LAST row in an hour with a side wins (`sideAtHour`); the price
+  spine (`priceByHour`) keeps the FIRST row in an hour. Coalesce
   option defaults per field (a spread of `undefined` over defaults silently disabled a signal once).
 - **Basis-fade wiring:** `BASIS_FADE` + `basisConfirm` (OFF / CVD / SMART / LIQ). The brain reads the flow series only
   when a user opted in; stale (>3h) or under warmup ⇒ no signal, never a fallback to funding/OI. Zero-anchored basis is

@@ -239,3 +239,29 @@ test("BASIS_FADE + basisConfirm LIQ: enters only when the flush confirms; other 
   assert.match(no.reason, /no liquidation flush/);
   assert.equal(deriveSignal({ basisSide: "SHORT", basisCvdConfirmed: true, basisCvdSide: "SHORT", hasPrev: true }, cfg).direction, "NONE");
 });
+
+// ── The price spine: the FIRST row in an hour wins (2026-10-30) ──
+// Oct 28 2026, ETH: the brain wrote oi:hist rows at 19:30:05, 20:30:05 and 21:25:14. The last two
+// round into hour 21. The agent acted at 21:20 on 2351.36; with the last row winning, the grader
+// later read 2365.57 (written 21:25), the CVD move flipped and the event vanished (parity DRIFT on
+// all three paper wallets). docs/research/price-spine-drift-2026-10-29.md.
+test("priceByHour: first row in an hour wins, so a later row can't rewrite what the agent saw", () => {
+  const oi = [
+    { t: Date.parse("2026-10-28T19:30:05Z"), price: 2358.36 },
+    { t: Date.parse("2026-10-28T20:30:05Z"), price: 2351.36 },
+    { t: Date.parse("2026-10-28T21:25:14Z"), price: 2365.57 },
+  ];
+  const h21 = hourBucket(Date.parse("2026-10-28T21:00:00Z"));
+  assert.equal(priceByHour(oi).get(h21), 2351.36);
+  assert.equal(priceByHour(oi).get(h21 - 1), 2358.36);
+  // Skipped rows (no price) don't claim the hour.
+  assert.equal(priceByHour([{ t: oi[1].t, price: 0 }, oi[2]]).get(h21), 2365.57);
+
+  const cvdHist = [{ t: Date.parse("2026-10-28T21:17:33Z"), cvd: 79354, buy: 255666, sell: 176312 }];
+  const basisT = Date.parse("2026-10-28T21:17:33Z");
+  const entry = Date.parse("2026-10-28T21:20:41Z");
+  const live = basisCvdConfirm({ basisT, side: "LONG", cvdHist, oiHist: oi.filter((r) => r.t <= entry) });
+  const graded = basisCvdConfirm({ basisT, side: "LONG", cvdHist, oiHist: oi });
+  assert.equal(live.confirmed, true, "the brain's view at 21:20");
+  assert.deepEqual(graded, live, "the grader, reading later, sees the same hour");
+});
