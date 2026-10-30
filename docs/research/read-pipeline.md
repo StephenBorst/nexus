@@ -92,3 +92,20 @@ read the same way and keeps every name and registration date. A change to a read
   Basis × CVD on the main card (full history): NOISE, −0.02R over 104 events.
 - **After:** appended below once the change is served (cache `axisbt:v19`). If a read's stage moves because of this
   change alone, it is reported here and on the pipeline watch, never hidden or re-run on the old spine.
+- **After (served 2026-10-30 05:58 UTC, cache `axisbt:v19`):** no stage moved.
+
+| read | stage | events | mean R | vs random | holdout events |
+|---|---|---|---|---|---|
+| rsi_reset_deep | REGISTERED | 17 | −0.26 | 20.7% | 18 |
+| level_reclaim | LEAD | 52 | +0.16 | 84.3% | 36 |
+| oi_div_reversal | REGISTERED | 23 | −0.04 | 41.8% | 0 |
+| session_momentum | REGISTERED | 54 | −0.68 | 0% | 37 |
+| confluence_follow | LEAD | 33 | +0.21 | 82.5% | 13 |
+| oi_div_reversal_4h | REGISTERED | 18 | **+0.56** (was +0.83) | 97.8% | 3 |
+| oi_coil_break | REGISTERED | 10 | +0.00 | 53.3% | 0 |
+
+  The one out-of-sample read the fix really moved is oi_div_reversal_4h, down 0.27R on the same 18 events. It reads
+  price straight off the spine, so a doubled hour changes its move. On the full history (in-sample), 13 of 25 axes
+  shifted by 0.01–0.05R; confluence_follow went from PROMISING to PREDICTIVE (+0.03 → +0.04R, same 209 events). The
+  snapshots are 17 minutes apart, so a few extra events (basis × CVD 104 → 108, CVD 2478 → 2487) are new data, not the
+  fix. Parity after the fix: the Oct 28 ETH trade matches on all three wallets (24h arm and nine-market arm CLEAN).
