@@ -74,3 +74,16 @@ by a handful. Two ways to take it:
 
 Recommendation: 1. It's early, the counts are small, and the grader shouldn't use a price the agent couldn't have
 seen.
+
+## Applied · 2026-10-30
+
+borst's go, 2026-10-30: first row wins, applied in `priceByHour`. The brain, the scoreboard, parity and the backtest all
+read it, so the live view and the grade can't diverge on a rewritten hour again. A test replays the Oct 28 ETH rows: the
+brain's view at 21:20 and the grader's later view give the same answer (`app/lib/basisStack.test.mjs`).
+
+It is a measurement fix, not a rule change. The re-scored numbers are logged under "Measurement changes" in
+`docs/research/read-pipeline.md`, before and after.
+
+Not covered: if the brain decides before an hour's first row exists, it sits out ("no price"), and the grader, reading
+later, can still fire on that hour. That shows up as an unexplained miss, not a phantom trade. Closing it means the brain
+writing its row at a fixed minute, a separate change.

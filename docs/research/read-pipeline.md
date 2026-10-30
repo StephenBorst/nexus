@@ -62,3 +62,33 @@ the same block. The full-history row next to it is in-sample.
 
 The four explorers are two-sided, so each is judged on the pooled random result. vol_breakout was dropped for v1 at
 the power check. Definitions and counts are in `docs/research/explorer-drafts.md`.
+
+## Measurement changes
+
+A change to how the grader measures, rather than to a read's rule, is logged here with its date. It applies to every
+read the same way and keeps every name and registration date. A change to a read's rule is still a new registration.
+
+### 2026-10-30 · the price spine keeps the first row in each hour
+
+- **What changed:** `priceByHour` (`app/lib/basisStack.mjs`), shared by the brain, the scoreboard, parity and the
+  backtest, now keeps the FIRST `oi:hist` row in each hour instead of the last. No read's rule changed.
+- **Why:** the brain writes a row every ≥55 minutes, so about once a day per market two rows round into one hour. With
+  the last row winning, a row written minutes after the agent acted could rewrite that hour's price for the grader. That
+  is a small look-ahead, and it caused the Oct 28 ETH parity drift (`docs/research/price-spine-drift-2026-10-29.md`).
+- **What it re-scores:** only events whose price move or forward return reads one of those doubled hours, roughly 22–27
+  hours per market in the last 30 days. Every read is re-graded on the new spine, back-graded history included.
+- **Before (served 2026-10-30 05:41 UTC, out-of-sample):**
+
+| read | stage | events | mean R | vs random | holdout events |
+|---|---|---|---|---|---|
+| rsi_reset_deep | REGISTERED | 17 | −0.26 | 21.5% | 18 |
+| level_reclaim | LEAD | 52 | +0.16 | 84% | 36 |
+| oi_div_reversal | REGISTERED | 23 | −0.04 | 41.5% | 0 |
+| session_momentum | REGISTERED | 54 | −0.68 | 0% | 37 |
+| confluence_follow | LEAD | 33 | +0.21 | 82.3% | 13 |
+| oi_div_reversal_4h | REGISTERED | 18 | +0.83 | 99.7% | 3 |
+| oi_coil_break | REGISTERED | 10 | +0.00 | 50.8% | 0 |
+
+  Basis × CVD on the main card (full history): NOISE, −0.02R over 104 events.
+- **After:** appended below once the change is served (cache `axisbt:v19`). If a read's stage moves because of this
+  change alone, it is reported here and on the pipeline watch, never hidden or re-run on the old spine.

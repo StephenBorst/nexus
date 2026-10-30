@@ -12,9 +12,17 @@ export function hourBucket(t) { return Math.round(Number(t) / 3600000); }
 
 // Price spine: hour → price, from oi:hist ({t, price, oi, funding}). The grader's forward
 // returns AND the CVD divergence's price move both read this series.
+// The FIRST row in an hour wins (2026-10-30). The brain writes a row every ≥55 min, so two rows
+// can round into one hour; with the last row winning, a row written minutes after the agent
+// acted rewrote the price the grader used (Oct 28 ETH, docs/research/price-spine-drift-2026-10-29.md).
+// The first row is the one the agent could already see.
 export function priceByHour(oiHist) {
   const m = new Map();
-  for (const p of oiHist || []) if (p && Number.isFinite(p.price) && p.price > 0) m.set(hourBucket(p.t), p.price);
+  for (const p of oiHist || []) {
+    if (!p || !Number.isFinite(p.price) || !(p.price > 0)) continue;
+    const h = hourBucket(p.t);
+    if (!m.has(h)) m.set(h, p.price);
+  }
   return m;
 }
 
