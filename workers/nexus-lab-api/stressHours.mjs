@@ -1,34 +1,46 @@
-// ── Market stress hours — a DRAFT conditioner, not registered (docs/research/stress-hours-draft.md) ──
-// A stress hour is a market-wide state, not a trade: many coins delevering at once while the whole
-// board moves hard. The draft question is whether the registered reads behave differently in the
-// 24h after one, which would say whether a live-entry breaker should exist and which reads it covers.
-// Until borst signs a dated registration:
-//   • nothing grades it, and no outcome is computed (the count tool reports counts only);
-//   • the scoreboard (axisbt), the brain and exec never import this file (stressDraft.test.mjs fails if one does).
+// ── Market stress hours — REGISTERED conditioner (docs/research/stress-hours-prereg.md) ──────────────
+// Signed by borst 2026-10-30; out-of-sample from 2026-10-31T00:00:00Z; limit 2027-04-30. A stress hour
+// is a market-wide state, not a trade: many coins delevering at once while the whole board moves hard.
+// The study asks whether the registered reads grade differently in the 24h after one. It never fires a
+// trade and never changes a read. The rule below is frozen: a changed rule = a new name + a new dated
+// registration. Brain and exec never import this file (stressHours.test.mjs fails if one does).
 //
-// Inputs are what we record hourly on the nine main-card coins (RECORDED_COINS): oi:hist (price, OI) and
-// candle:hist. Everything at hour h is decided from data at or before h: the oi:hist row in hour h, and
-// the candle that CLOSED by h (its open is h−1). A stress hour is stamped when its newest input row was
-// written (a few minutes past h), never at the top of the hour before the data existed.
+// Inputs are what we record hourly on the nine main-card coins (RECORDED_COINS): oi:hist (price, OI).
+// Everything at hour h is decided from data at or before h: the oi:hist rows in hour h and h−4. A stress
+// hour is stamped when its newest input row was written (a few minutes past h), never at the top of the
+// hour before the data existed. Moved unchanged from the draft (stressDraft.mjs, PR #201); the counted
+// side variants (DELEVER alone, BTC shock) are not part of the registration and were dropped.
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 
 const H = 3600000;
 const MONTH_H = 30 * 24;
 
-export const STRESS_DRAFT = Object.freeze({
+export const STRESS_RULE = Object.freeze({
   // DELEVER: at least `breadth` of the coins show OI down `oiDrop` or more over `windowH`.
   windowH: 4, oiDrop: 0.02, breadth: 5,
   // MOVE: the median |windowH return| across the coins ranks at or above `movePct` of its own prior 30 days.
   movePct: 0.9, lookbackH: MONTH_H, minHistory: MONTH_H / 2,
   // At least this many coins must be readable at h, or the hour is not judged (never "calm" by default).
   minCoins: 6,
-  // A read's event is "in stress" if it lands in [S, S + afterH) of a stress hour S.
+  // A read's event is STRESS if it lands in [S, S + afterH) of a stress hour S.
   afterH: 24,
-  // Stress hours closer than this belong to one episode.
+  // A read's event is CALM only if it isn't STRESS and at least this many of the afterH hours up to it were judged.
+  minJudgedH: 20,
+  // Stress hours closer than this belong to one episode (reported, not used in the label).
   episodeGapH: 24,
-  // SHOCK (an alternative counted beside the proposal, not part of it): BTC's last closed hourly range
-  // at least `shockX` × its median over the prior 30 days.
-  shockX: 3,
+});
+
+// The study, as signed. The judging code (built in its own PR, before any read reaches the bar) reads these.
+export const STRESS_STUDY = Object.freeze({
+  name: "stress_hours",
+  registeredAt: "2026-10-31T00:00:00Z",
+  limit: "2027-04-30T00:00:00Z",
+  // the reads registered as of the signing; a read registered later is not in this study
+  reads: Object.freeze(["rsi_reset_deep", "level_reclaim", "oi_div_reversal", "session_momentum", "confluence_follow", "oi_div_reversal_4h", "oi_coil_break"]),
+  minEach: 30,        // judged once a read has this many STRESS and this many CALM out-of-sample events
+  minAtLimit: 20,     // fewer STRESS events than this at the limit = NOT_ENOUGH_STRESS
+  shifts: 1000, minShiftDays: 7, seed: 20261031, // time-shift null
+  alpha: 0.05,        // Holm across the reads judged
 });
 
 // last row per hour wins (the reads' same-hour semantics, explorerReads.mjs byHour)
@@ -38,7 +50,6 @@ function byHour(rows, ok) {
   return m;
 }
 const oiMap = (rows) => byHour(rows, (p) => Number.isFinite(p.price) && p.price > 0 && Number.isFinite(p.oi) && p.oi > 0);
-const candleMap = (rows) => byHour(rows, (c) => [c.h, c.l, c.c].every(Number.isFinite) && c.c > 0);
 
 // Percentile rank, ties counted half (as the explorer reads do).
 function pctRank(arr, x) {
@@ -56,11 +67,11 @@ function median(arr) {
 /**
  * The market panel, hour by hour: for each hour with enough readable coins, how many delevered, the
  * median |move|, and whether that median is extreme against its own past. No outcome is read.
- * @param {{coin:string, oiHist:object[], candleHist?:object[]}[]} sets the main-card coins
+ * @param {{coin:string, oiHist:object[]}[]} sets the main-card coins
  * `t` = when the newest row used was written (the hour is known from then on).
  * @returns {{ hour:number, t:number, coins:number, delevered:number, moveMed:number, moveRank:number|null }[]}
  */
-export function stressPanel(sets, p = STRESS_DRAFT) {
+export function stressPanel(sets, p = STRESS_RULE) {
   const maps = sets.map((s) => oiMap(s.oiHist));
   const hours = [...new Set(maps.flatMap((m) => [...m.keys()]))].sort((a, b) => a - b);
   const rows = [];
@@ -86,39 +97,15 @@ export function stressPanel(sets, p = STRESS_DRAFT) {
   return rows;
 }
 
-/** Stress hours (ms timestamps, ascending) under the proposed rule: DELEVER and MOVE together. */
-export function stressHours(sets, p = STRESS_DRAFT) {
+/** Stress hours (ms timestamps, ascending): DELEVER and MOVE in the same hour. */
+export function stressHours(sets, p = STRESS_RULE) {
   return stressPanel(sets, p)
     .filter((r) => r.delevered >= p.breadth && r.moveRank != null && r.moveRank >= p.movePct)
     .map((r) => r.t);
 }
 
-/** DELEVER alone (counted beside the proposal). */
-export function deleverHours(sets, p = STRESS_DRAFT) {
-  return stressPanel(sets, p).filter((r) => r.delevered >= p.breadth).map((r) => r.t);
-}
-
-/** SHOCK alone: BTC's last CLOSED hourly range against its prior 30 days (counted beside the proposal). */
-export function shockHours(btcCandles, p = STRESS_DRAFT) {
-  const cm = candleMap(btcCandles);
-  const opens = [...cm.keys()].sort((a, b) => a - b);
-  const out = [];
-  const past = [];
-  for (const o of opens) {
-    const c = cm.get(o);
-    const rng = (c.h - c.l) / c.c;
-    const prior = past.filter(([po]) => po < o && po >= o - p.lookbackH).map(([, v]) => v);
-    if (prior.length >= p.minHistory) {
-      const med = median(prior);
-      if (med > 0 && rng >= p.shockX * med) out.push((o + 1) * H); // known at the candle's close
-    }
-    past.push([o, rng]);
-  }
-  return out;
-}
-
 /** Group stress hours into episodes (a gap longer than episodeGapH starts a new one). */
-export function stressEpisodes(hoursMs, p = STRESS_DRAFT) {
+export function stressEpisodes(hoursMs, p = STRESS_RULE) {
   const eps = [];
   for (const t of [...hoursMs].sort((a, b) => a - b)) {
     const last = eps[eps.length - 1];
@@ -128,8 +115,26 @@ export function stressEpisodes(hoursMs, p = STRESS_DRAFT) {
 }
 
 /** Is a read's event at `t` inside the window after some stress hour? (`hoursMs` ascending) */
-export function inStress(t, hoursMs, p = STRESS_DRAFT) {
+export function inStress(t, hoursMs, p = STRESS_RULE) {
   let lo = 0, hi = hoursMs.length - 1, best = -1;
   while (lo <= hi) { const mid = (lo + hi) >> 1; if (hoursMs[mid] <= t) { best = mid; lo = mid + 1; } else hi = mid - 1; }
   return best >= 0 && t - hoursMs[best] < p.afterH * H;
+}
+
+/** The judged hours (hour buckets with a move rank), for stressLabel. */
+export function judgedHourSet(sets, p = STRESS_RULE) {
+  return new Set(stressPanel(sets, p).filter((r) => r.moveRank != null).map((r) => r.hour));
+}
+
+/**
+ * One read event's label: STRESS (within afterH after a stress hour), CALM (not STRESS, and at least
+ * minJudgedH of the afterH hours up to it were judged, so a stress hour couldn't have hidden in a gap),
+ * else UNJUDGED (left out of the study).
+ */
+export function stressLabel(t, hoursMs, judged, p = STRESS_RULE) {
+  if (inStress(t, hoursMs, p)) return "STRESS";
+  const h = hourBucket(t);
+  let seen = 0;
+  for (let k = 0; k < p.afterH; k++) if (judged.has(h - k)) seen++;
+  return seen >= p.minJudgedH ? "CALM" : "UNJUDGED";
 }
