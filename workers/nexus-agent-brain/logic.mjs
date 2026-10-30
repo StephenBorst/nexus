@@ -15,6 +15,8 @@
 // Guardrails (loss cap, max trades, kill switch, order-only keys) live in exec and
 // are NOT tunable here — users tune the STRATEGY, never the seatbelts.
 
+import { hourBucket } from "../../app/lib/basisStack.mjs";
+
 // Market-wide regime from a full futures snapshot (all symbols). Pure + testable.
 // Mirrors the frontend MarketRegime: breadth (50%) + BTC trend (40%) + funding
 // crowding (10%) → 0-100 score → RISK_ON / NEUTRAL / RISK_OFF. Used ONLY to gate
@@ -255,14 +257,30 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
 }
 
 // ── Hourly OI snapshot cadence ───────────────────────────────────────────────
-// oi:hist is an HOURLY series but the brain ticks every ~5 min. The append was already
-// gated at write time; the per-symbol Orderly FETCH was not, so 11 of every 12 fetches
-// were thrown away. Checking this BEFORE fetching keeps the series identical and makes
-// widening the symbol set cheap instead of multiplying dead calls.
-export const OI_SNAPSHOT_MIN_GAP_MS = 55 * 60 * 1000;
+// oi:hist is an HOURLY series but the brain ticks every ~5 min, so this gate runs before
+// the fetch. One row per hour, written on the first tick after the top of the hour (minute
+// < 30, so the row's nearest-hour bucket IS that hour) and only if that bucket has no row.
+// Until 2026-10-30 the gate was "≥55 min since the last row": the write minute drifted,
+// about once a day two rows landed in one bucket and the next bucket had none, and the brain
+// could decide before its hour had a price (docs/research/price-spine-drift-2026-10-29.md).
+// Now the hour's price is written at ~:00–:05, before the basis/CVD reads land at ~:17, so
+// every decision in an hour already has that hour's price. A brain back from an outage after
+// :30 waits for the next hour rather than writing a row that rounds into the wrong bucket.
 export function oiSnapshotDue(hist, now = Date.now()) {
+  if (new Date(now).getUTCMinutes() >= 30) return false;          // only the first half-hour
   const rows = Array.isArray(hist) ? hist : [];
   const last = rows[rows.length - 1];
   if (!last || !Number.isFinite(Number(last.t))) return true;   // nothing recorded yet
-  return now - Number(last.t) >= OI_SNAPSHOT_MIN_GAP_MS;
+  return hourBucket(now) > hourBucket(Number(last.t));
+}
+
+
+// The time of the observation a signal came from, so exec can take each read once
+// (2026-10-30). Only basis reads carry one: the brain re-sends the same basis row's signal
+// every tick until the next row lands, and the grader counts that row once. Other modes
+// have no stable source row → null (exec keeps its plain cooldown for them).
+export function signalSourceT(raw, config) {
+  if (config?.signalMode !== "BASIS_FADE" || !raw) return null;
+  const t = config.basisAnchor === "MEAN" ? raw.basisDevT : raw.basisT;
+  return t != null && Number.isFinite(Number(t)) && Number(t) > 0 ? Number(t) : null;
 }

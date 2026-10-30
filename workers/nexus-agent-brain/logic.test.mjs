@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deriveSignal, oiSnapshotDue } from "./logic.mjs";
+import { deriveSignal, oiSnapshotDue, signalSourceT } from "./logic.mjs";
 
 // raw helper: funding in decimal, changes in decimal
 const raw = (o) => ({ fundingRate: 0, priceChange: 0, oiChange: 0, hasPrev: true, ...o });
@@ -308,27 +308,49 @@ test("BASIS_FADE: a quiet tick explains itself", () => {
   assert.equal(deriveSignal({ hasPrev: true }, { signalMode: "BASIS_FADE" }).reason, "no signal");
 });
 
-// ── oiSnapshotDue — the hourly gate that now also skips the FETCH ────────────
-test("oiSnapshotDue: nothing recorded yet ⇒ always due", () => {
-  assert.equal(oiSnapshotDue([], Date.now()), true);
-  assert.equal(oiSnapshotDue(null, Date.now()), true);
-  assert.equal(oiSnapshotDue([{ t: "nope" }], Date.now()), true, "unusable stamp ⇒ record rather than skip");
+// ── oiSnapshotDue — one row per hour, written at the top of the hour (2026-10-30) ──
+const HR = 3600000;
+const at = (iso) => Date.parse(iso);
+test("oiSnapshotDue: nothing recorded yet ⇒ due (in the first half-hour)", () => {
+  assert.equal(oiSnapshotDue([], at("2026-10-28T21:02:00Z")), true);
+  assert.equal(oiSnapshotDue(null, at("2026-10-28T21:02:00Z")), true);
+  assert.equal(oiSnapshotDue([{ t: "nope" }], at("2026-10-28T21:02:00Z")), true, "unusable stamp ⇒ record rather than skip");
 });
 
-test("oiSnapshotDue: within the hour ⇒ skip (no network call)", () => {
-  const now = Date.now();
-  assert.equal(oiSnapshotDue([{ t: now - 5 * 60000 }], now), false, "5 min old");
-  assert.equal(oiSnapshotDue([{ t: now - 54 * 60000 }], now), false, "just inside the gap");
+test("oiSnapshotDue: the hour already has its row ⇒ skip (no network call)", () => {
+  assert.equal(oiSnapshotDue([{ t: at("2026-10-28T21:02:00Z") }], at("2026-10-28T21:07:00Z")), false);
+  // The Oct 28 rewrite: a 20:30:05 row already sits in bucket 21, so 21:25 writes nothing.
+  assert.equal(oiSnapshotDue([{ t: at("2026-10-28T20:30:05Z") }], at("2026-10-28T21:25:00Z")), false);
 });
 
-test("oiSnapshotDue: past the gap ⇒ due", () => {
-  const now = Date.now();
-  assert.equal(oiSnapshotDue([{ t: now - 55 * 60000 }], now), true, "exactly at the gap");
-  assert.equal(oiSnapshotDue([{ t: now - 3 * 3600000 }], now), true);
+test("oiSnapshotDue: a new hour ⇒ due on its first tick; never in the second half-hour", () => {
+  assert.equal(oiSnapshotDue([{ t: at("2026-10-28T20:02:00Z") }], at("2026-10-28T21:02:00Z")), true);
+  assert.equal(oiSnapshotDue([{ t: at("2026-10-28T18:02:00Z") }], at("2026-10-28T21:35:00Z")), false,
+    "back from an outage at :35: wait for 22:00, a row now would round into bucket 22");
+  assert.equal(oiSnapshotDue([{ t: at("2026-10-28T18:02:00Z") }], at("2026-10-28T22:00:00Z")), true);
+});
+
+test("oiSnapshotDue: 5-min ticks over a day write exactly one row per hour, at the top of the hour", () => {
+  const hist = [];
+  const t0 = at("2026-10-28T00:02:00Z");
+  for (let now = t0; now < t0 + 24 * HR; now += 5 * 60000) if (oiSnapshotDue(hist, now)) hist.push({ t: now });
+  assert.equal(hist.length, 24);
+  const buckets = hist.map((r) => Math.round(r.t / HR));
+  for (let i = 1; i < buckets.length; i++) assert.equal(buckets[i], buckets[i - 1] + 1, "one per bucket, none skipped");
+  for (const r of hist) assert.equal(new Date(r.t).getUTCMinutes(), 2, "written before the :17 reads it prices");
 });
 
 test("oiSnapshotDue: reads the LAST row, not the first", () => {
-  const now = Date.now();
-  const hist = [{ t: now - 10 * 3600000 }, { t: now - 2 * 60000 }];
+  const now = at("2026-10-28T21:10:00Z");
+  const hist = [{ t: now - 10 * HR }, { t: at("2026-10-28T21:02:00Z") }];
   assert.equal(oiSnapshotDue(hist, now), false, "an old first row must not force a re-record");
+});
+
+test("signalSourceT: the basis row's time for BASIS_FADE, null otherwise", () => {
+  const raw = { basisT: 1793305055105, basisDevT: 1793305055999 };
+  assert.equal(signalSourceT(raw, { signalMode: "BASIS_FADE" }), 1793305055105);
+  assert.equal(signalSourceT(raw, { signalMode: "BASIS_FADE", basisAnchor: "MEAN" }), 1793305055999);
+  assert.equal(signalSourceT(raw, { signalMode: "FUNDING_ONLY" }), null);
+  assert.equal(signalSourceT({}, { signalMode: "BASIS_FADE" }), null);
+  assert.equal(signalSourceT(null, { signalMode: "BASIS_FADE" }), null);
 });

@@ -109,3 +109,13 @@ read the same way and keeps every name and registration date. A change to a read
   shifted by 0.01–0.05R; confluence_follow went from PROMISING to PREDICTIVE (+0.03 → +0.04R, same 209 events). The
   snapshots are 17 minutes apart, so a few extra events (basis × CVD 104 → 108, CVD 2478 → 2487) are new data, not the
   fix. Parity after the fix: the Oct 28 ETH trade matches on all three wallets (24h arm and nine-market arm CLEAN).
+
+### 2026-10-30 · the hourly price row is written at the top of the hour
+
+- **What changed:** the brain writes `oi:hist` once per hour on its first tick after :00 (minute < 30), only if that
+  hour has no row (`oiSnapshotDue`). Before, a row was written whenever the last one was 55 minutes old, so the write
+  minute drifted between about :10 and :40.
+- **Why:** with the drift, about once a day an hour got two rows and the next got none, and the agent could decide before
+  its hour had a price. Now each hour has one row, written before the ~:17 basis and CVD reads.
+- **What it re-scores:** nothing already recorded. From this date, each hour's price is taken at ~:02 instead of a
+  drifting minute, so a price move over an hour is measured over a fixed clock window. No read's rule changed.

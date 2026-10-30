@@ -527,3 +527,23 @@ export function resolveExitPrice({ paper, decisionPrice, fetchedPrice }) {
   if (paper && Number.isFinite(decisionPrice) && decisionPrice > 0) return decisionPrice;
   return fetchedPrice;
 }
+
+
+// ── One entry per signal (2026-10-30) ─────────────────────────────────────────
+// The brain re-sends a basis signal every tick until the next basis row lands, and the
+// 15-min cooldown used to count only from the last ENTRY. So after a quick stop the agent
+// could take the same read again (Oct 29 SOL LONG, 20:30 and 20:46, one 20:17 read), while
+// the grader counts each read once. The brain now stamps the read's source time
+// (`sourceT`); exec takes a given (symbol, side, sourceT) once. Signals with no source
+// time (other modes) and user-authored intents carry no key and aren't affected.
+export function brainSignalKey(signal) {
+  if (!signal || signal.source) return null;
+  if (signal.sourceT == null || signal.sourceT === "") return null; // Number(null) is 0, not "none"
+  const t = Number(signal.sourceT);
+  if (!signal.symbol || !signal.direction || !Number.isFinite(t) || t <= 0) return null;
+  return `${signal.symbol}|${signal.direction}|${t}`;
+}
+export function alreadyTradedSignal(state, signal) {
+  const key = brainSignalKey(signal);
+  return !!key && state?.last_signal_key === key;
+}
