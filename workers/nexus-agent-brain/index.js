@@ -16,7 +16,7 @@
 // ═══════════════════════════════════════════════════════════
 
 import { orderlyGet } from "../nexus-lab-api/orderlyGet.mjs";
-import { deriveSignal, computeRegime, atrPct, oiSnapshotDue } from "./logic.mjs";
+import { deriveSignal, computeRegime, atrPct, oiSnapshotDue, signalSourceT } from "./logic.mjs";
 import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 import { HOLDOUT_PERPS } from "../../app/lib/recordedUniverse.mjs";
@@ -161,7 +161,7 @@ export default {
             const cons = (config.respectSmartMoney && smartConsensus) ? smartConsensus[coin] : null;
             const sig = deriveSignal(raw, config, config.respectRegime ? regime : null, cons);
             if (sig.direction !== "NONE" && sig.confidence > best.confidence) {
-              best = { symbol: sym, direction: sig.direction, funding: raw.fundingRate, oi: raw.oi, price: raw.price, confidence: sig.confidence, reason: sig.reason };
+              best = { symbol: sym, direction: sig.direction, funding: raw.fundingRate, oi: raw.oi, price: raw.price, confidence: sig.confidence, reason: sig.reason, sourceT: signalSourceT(raw, config) };
             }
           }
           const signalData = { ...best, timestamp: Date.now(), user: address };
@@ -335,11 +335,11 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
 
   return {
     symbol, price: markPrice, oi: openInterest, fundingRate, priceChange, oiChange, hasPrev: !!prev, fundingPct,
-    ...(basis ? { basisSide: basis.side, basisPct: basis.basisPct, basisThr: basis.thr, basisReason: basis.reason } : {}),
+    ...(basis ? { basisSide: basis.side, basisPct: basis.basisPct, basisThr: basis.thr, basisReason: basis.reason, basisT: basis.t } : {}),
     ...(basisCvd ? { basisCvdConfirmed: basisCvd.confirmed, basisCvdSide: basisCvd.cvdSide, basisCvdReason: basisCvd.reason } : {}),
     ...(basisSmart ? { basisSmartConfirmed: basisSmart.confirmed, basisSmartSide: basisSmart.smartSide, basisSmartReason: basisSmart.reason } : {}),
     ...(basisLiq ? { basisLiqConfirmed: basisLiq.confirmed, basisLiqSide: basisLiq.liqSide, basisLiqReason: basisLiq.reason } : {}),
-    ...(basisDev ? { basisDevSide: basisDev.side, basisDevPct: basisDev.basisPct, basisDevThr: basisDev.thr, basisDevReason: basisDev.reason } : {}),
+    ...(basisDev ? { basisDevSide: basisDev.side, basisDevPct: basisDev.basisPct, basisDevThr: basisDev.thr, basisDevReason: basisDev.reason, basisDevT: basisDev.t } : {}),
     ...(basisDevCvd ? { basisDevCvdConfirmed: basisDevCvd.confirmed, basisDevCvdSide: basisDevCvd.cvdSide, basisDevCvdReason: basisDevCvd.reason } : {}),
     // Regime-conditioning inputs for the opt-in session/vol gates in deriveSignal.
     hourUtc: new Date().getUTCHours(),
@@ -368,16 +368,14 @@ async function recordOiForSymbols(symbols, env) {
 }
 
 // Append an hourly {t, price, oi, funding} point to oi:hist:{symbol}. The brain
-// runs every ~5 min, so we only append when the last point is ≥55 min old →
-// an hourly series. Capped to ~90 days.
+// runs every ~5 min; `oiSnapshotDue` allows one row per hour bucket. Capped to ~90 days.
 async function recordOiSnapshot(symbol, env, { price, oi, funding }) {
   try {
     const key = `oi:hist:${symbol}`;
     const raw = await env.NEXUS_AGENT.get(key);
     const hist = raw ? JSON.parse(raw) : [];
     const now = Date.now();
-    const last = hist[hist.length - 1];
-    if (last && now - last.t < 55 * 60 * 1000) return; // keep it hourly
+    if (!oiSnapshotDue(hist, now)) return; // one row per hour bucket (logic.mjs)
     hist.push({ t: now, price, oi, funding });
     if (hist.length > 2200) hist.splice(0, hist.length - 2200); // ~90d hourly
     await env.NEXUS_AGENT.put(key, JSON.stringify(hist));

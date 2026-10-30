@@ -99,3 +99,22 @@ counts from the last ENTRY, not the exit, so the re-entry was allowed. The grade
 entry has no event of its own. This isn't a price-spine issue (both entries confirm on the same hour, live and
 graded). A fix would be for exec not to re-enter on a signal it already traded. That's an engine change and borst's
 call.
+
+## Gaps closed · 2026-10-30
+
+borst, 2026-10-30: "close all the gaps".
+
+1. **One entry per read (exec).** The brain now stamps each basis signal with the time of the basis row it came from
+   (`sourceT`, brain `signalSourceT`). Exec takes a given symbol + side + `sourceT` once (`brainSignalKey`,
+   `alreadyTradedSignal` in exec `logic.mjs`, state `last_signal_key`). Other modes carry no `sourceT` and keep the plain
+   cooldown; webhooks, directives and copies are never keyed.
+2. **The cooldown counts from the exit too.** `closePosition` now stamps `last_trade_time`, as the reconcile path already
+   did and parity already assumed (an entry occupies [open, close + 15 min)). Before, a stop inside 15 minutes of the
+   entry allowed an immediate re-entry.
+3. **One price row per hour, written at the top of the hour (brain).** `oiSnapshotDue` writes a row on the first tick
+   after :00 (minute < 30) when that hour has none. Every decision in the hour (the basis and CVD reads land at ~:17)
+   already has that hour's price, and no hour gets two rows. A brain back from an outage after :30 waits for the next
+   hour. This changes which minute future rows are taken at (~:02, was drifting :10–:40); logged under "Measurement
+   changes" in `read-pipeline.md`.
+4. **Parity names a second entry on one read** ("a second entry on a read already traded"). It still counts as DRIFT;
+   the Oct 29 SOL row keeps showing until it leaves the 50-row window.

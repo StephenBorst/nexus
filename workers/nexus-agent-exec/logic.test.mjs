@@ -585,3 +585,25 @@ test("resolveExitPrice: a TP decided in profit can no longer book red on paper",
   assert.ok(booked > entry, "a profit-labelled exit books a profit");
   assert.equal(booked, decided);
 });
+
+// ── One entry per signal (2026-10-30) ────────────────────────────────────────
+// Oct 29: one SOL basis × CVD read at 20:17, entered 20:30, stopped 20:42, entered again
+// 20:46 on the same read. The grader counts the read once.
+import { brainSignalKey, alreadyTradedSignal } from "./logic.mjs";
+test("brainSignalKey: keyed by symbol, side and the read's source time; nothing else is keyed", () => {
+  const sig = { symbol: "PERP_SOL_USDC", direction: "LONG", sourceT: 1793305055105, timestamp: 1793306800000 };
+  assert.equal(brainSignalKey(sig), "PERP_SOL_USDC|LONG|1793305055105");
+  assert.equal(brainSignalKey({ ...sig, timestamp: sig.timestamp + 60000 }), brainSignalKey(sig), "a re-sent tick is the same read");
+  assert.equal(brainSignalKey({ ...sig, sourceT: null }), null, "modes with no source row keep the plain cooldown");
+  assert.equal(brainSignalKey({ ...sig, source: "WEBHOOK" }), null, "user-authored intents aren't keyed");
+  assert.equal(brainSignalKey(null), null);
+});
+test("alreadyTradedSignal: the same read is taken once; the next read (or the other side) is free", () => {
+  const sig = { symbol: "PERP_SOL_USDC", direction: "LONG", sourceT: 1793305055105 };
+  const state = { last_signal_key: brainSignalKey(sig) };
+  assert.equal(alreadyTradedSignal(state, sig), true, "the 20:46 re-entry is refused");
+  assert.equal(alreadyTradedSignal(state, { ...sig, sourceT: sig.sourceT + 3600000 }), false, "the 21:17 read is new");
+  assert.equal(alreadyTradedSignal(state, { ...sig, direction: "SHORT" }), false);
+  assert.equal(alreadyTradedSignal({}, sig), false, "nothing traded yet");
+  assert.equal(alreadyTradedSignal(state, { ...sig, sourceT: undefined }), false);
+});

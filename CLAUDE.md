@@ -161,8 +161,12 @@ product is what sits on top:
   Leftovers = DRIFT. Before calling DRIFT a brain bug, check the open position. **Known DRIFT cause (2026-10-29,
   `docs/research/price-spine-drift-2026-10-29.md`):** `priceByHour` rounds `oi:hist` rows to the nearest hour and the
   LAST row wins, so a row written minutes after the agent acted can rewrite that hour's price for the grader (Oct 28
-  ETH LONG on all three wallets). Fixed 2026-10-30: the FIRST row in an hour wins (logged under "Measurement
-  changes" in `docs/research/read-pipeline.md`).
+  ETH LONG on all three wallets). Fixed 2026-10-30: the FIRST row in an hour wins, and the brain writes one `oi:hist`
+  row per hour at the top of the hour (`oiSnapshotDue`, minute < 30). Both logged under "Measurement changes" in
+  `docs/research/read-pipeline.md`.
+- **One entry per read:** basis signals carry `sourceT` (the basis row's time, brain `signalSourceT`); exec takes a given
+  symbol + side + `sourceT` once (`brainSignalKey`/`alreadyTradedSignal`, state `last_signal_key`). The 15-min cooldown
+  counts from the exit as well as the entry (`closePosition` stamps `last_trade_time`).
 - **Paper wallets:** graded-exit wallet `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
   `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE`.
 - lab-api needs `SUPABASE_URL` / `SUPABASE_ANON_KEY` for History reads.
