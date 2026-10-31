@@ -12,9 +12,11 @@ import { createConfig, getRawQuotes, nordstern, ZeroXAggregator } from "@spandex
 
 export const SPOT_FEE_MAX_BPS = 100;
 const ADDR = /^0x[a-fA-F0-9]{40}$/;
-// spanDEX needs a swapper on every request. A preview (no wallet yet) quotes for this burn
-// address: the calldata is never returned for signing without a real taker.
-export const PREVIEW_SWAPPER = "0x000000000000000000000000000000000000dEaD";
+// spanDEX needs a swapper on every request. A preview (no wallet yet) quotes for this placeholder:
+// the calldata is never returned for signing without a real taker. It must be ABOVE 0x…ffff: 0x
+// refuses any taker at or below it (INPUT_INVALID "User address must be greater than 0x…ffff"), so the
+// old 0x…dEaD (= 0xdead) silently kept 0x out of every preview. 0x…10000 is no precompile and no key.
+export const PREVIEW_SWAPPER = "0x0000000000000000000000000000000000010000";
 
 // Our fee, or null when it's off (both vars must be valid).
 export function spotFee(env) {

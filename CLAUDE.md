@@ -375,7 +375,8 @@ product is what sits on top:
   `ZEROX_API_KEY` is set (key in a header). Fee `SPOT_FEE_BPS=10` → borst.eth, `feeApplied` only when the provider
   confirms it. The worker drops any quote that spends ≠ the asked amount, approves another token, or carries native
   value. Signing lives ONLY in `app/pages/token/swapExec.ts` (exact-amount approve against OUR USDC, value 0, chain
-  check, receipt status). Fabric is dead (shut down 2026-09-16).
+  check, receipt status). Fabric is dead (shut down 2026-09-16). Previews (no wallet) quote for `PREVIEW_SWAPPER`
+  `0x…10000`: 0x refuses any taker ≤ `0x…ffff` (the old `0x…dEaD` kept 0x out of every preview until 2026-10-31).
 - **Flash (Definitive)**: ticket `FlashSpotButton.tsx`, orders `FlashOrders.tsx`, proxy routes whitelisted by
   `flashUpstream`. Every order signs the same `FlashOrder` (the trigger price is NOT signed). Guards: deadline per
   type, swapper = recipient = wallet, spend ≤ size + 1 unit, no permits, approvals capped by `approvalPlan` (open
