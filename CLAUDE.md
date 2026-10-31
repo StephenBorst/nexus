@@ -178,6 +178,9 @@ product is what sits on top:
 ## Backtest + replay (`workers/nexus-lab-api/backtest.mjs`)
 - ONE engine: imports the deployed `deriveSignal` + `evaluateExit`/`computePnl`; `stepExit` and `entryAt` are shared by
   the per-market replay, the portfolio replay and the random baseline. `tools/backtest` imports it too.
+- **Fills** (`stepExit`, measurement change 2026-10-31, `backtest.fill.test.mjs`): each exit fills at its own level
+  (stop, target, trail, BE, TP slice); a bar that opens past it fills at the open (a gap); TIMEOUT closes at its bar's
+  open. Never at the hour's extreme (the live exec closes at the market within a minute). Logged in `read-pipeline.md`.
 - Routes (PRO, walletSig): `/agent/backtest`, `/agent/backtest/sweep`, `/agent/validate`; publish runs `revalidateStrategy`.
 - **Data:** OI and flow (basis/cvd/sm/liq) come from our recorded hourly KV series, gated PER SYMBOL (≥14 days, ≥200
   samples; `loadOiHistForBacktest`, `loadFlowHistForBacktest`). Run the mature subset and name the excluded markets;
@@ -243,8 +246,8 @@ product is what sits on top:
   a new idea found on a closed population is a new dated registration (e.g. structure × house fade: CLOSED, not shown).
 - **level_reclaim exit gap** (`docs/research/level-reclaim-exit-gap.md`, signed 2026-10-31): the read grades +R while its
   graded exit loses; `tools/explorers/exitBridge.mjs` bridges the two on the same trades (read-only, reconciles with the
-  served `netBps`). First pull: the as-traded line (`stepExit`) fills exits at the hour's EXTREME, the R grade at the
-  levels (S3b ≠ 0), so no cause is named until borst decides that measurement question.
+  served `netBps`). The first pull found the as-traded walker filling exits at the hour's extreme (S3b −23.9 bps); fixed
+  2026-10-31 as a measurement change (below), S3b now 0. Causes are named at 30 trades, per the page.
 - **Daily pipeline watcher** (prompt `docs/routines/pipeline-watch.md`, `tools/pipeline/watch.mjs`,
   `app/lib/pipelineWatch.mjs`): compares served stages with `docs/research/pipeline-stages.json`; a change opens a PR on
   `pipeline-watch/<date>`. **Watcher PRs are never merged by a session.** A scheduled task stores its own copy of the

@@ -181,3 +181,18 @@ On this population that is −23.9 bps of the −118.8 bps move. Live exec check
 so its fills sit near the level, not at the hour's extreme. Whether the as-traded line should fill at the level is a
 measurement change for the shared exit walker. It is borst's call, as its own PR, logged under "Measurement changes"
 in `docs/research/read-pipeline.md`. It would also move the Lab backtest and every exit grade that uses `stepExit`.
+
+### Measurement fix · 2026-10-31
+
+borst's go, 2026-10-31: "fix the fill price as a measurement change". The shared exit walker now fills each exit at
+its own level. A bar that opens past the level fills at the open, and a timeout closes at its bar's open. Logged under
+"Measurement changes" in `docs/research/read-pipeline.md`.
+
+The same pull re-run on the fixed walker, on the same public series:
+
+| S0 | → H4 | S1 | → H2 | S2 | → H3 | S3a | → S3b | S3b | → H1 | S4 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| +46.6 | −59.4 | −12.9 | −29.5 | −42.4 | 0.0 | −42.4 | **0.0** | −42.4 | −6.0 | −48.4 |
+
+S3b is 0, so the bridge now closes and the page's cause rule can run. It runs at 30 trades (24 today). Still
+descriptive: no cause is named here.
