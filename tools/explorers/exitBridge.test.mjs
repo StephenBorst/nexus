@@ -146,14 +146,15 @@ test("on the same population, the bridge's S4 and T equal the scoreboard's grade
   assert.ok(Math.abs(b.S.S4 - served.exitNetBps) <= 0.06, `S4 ${b.S.S4} vs served ${served.exitNetBps}`);
   assert.ok(Math.abs(b.R0 - served.meanR) <= 0.005, `R0 ${b.R0} vs served ${served.meanR}`);
   assert.equal(b.rMissing, 0);
-  assert.ok(Number.isFinite(b.steps.S3b));
+  // since the fill-price fix (2026-10-31) the two walkers agree on touched trades; what's left is
+  // the graded exit's stop rounded to 0.001%
+  assert.ok(Math.abs(b.steps.S3b) < 0.05, `S3b ${b.steps.S3b}`);
 });
 
-// What S3b found on its first run: the as-traded walker (backtest stepExit) fills an exit at the
-// hour's EXTREME (a long's stop at that bar's low, its target at that bar's high), while the R grade
-// books exactly −1R / +1.5R at the levels. This pins that behaviour, so the bridge reports it rather
-// than hiding it in a hypothesis.
-test("S3b: a stop that triggers on a deep wick fills at the wick, not at the stop", () => {
+// What S3b found on its first run (2026-10-31): the as-traded walker filled an exit at the hour's
+// EXTREME while the R grade books the levels. Fixed the same day as a measurement change (stepExit
+// fills at the level, backtest.fill.test.mjs): a deep-wick stop now fills at the stop, and S3b is 0.
+test("S3b: a stop that triggers on a deep wick fills at the stop, so the walkers agree", () => {
   const t0 = Date.UTC(2026, 9, 1), H = 3600e3;
   const candleHist = [], oiHist = [];
   for (let i = 0; i < 300; i++) {
@@ -169,7 +170,7 @@ test("S3b: a stop that triggers on a deep wick fills at the wick, not at the sto
   const [x] = trades;
   assert.equal(x.reason, "SL");
   assert.equal(x.r, -1);
-  assert.ok(Math.abs(x.grossBps - -1000) < 1e-6, `filled at the 90 wick: ${x.grossBps}`);
+  close(x.grossBps, -x.stopBps, 1e-6);
   const b = bridge([{ side: "LONG", r: -1 }], trades);
-  close(b.steps.S3b, -1000 + x.stopBps, 1e-6);
+  close(b.steps.S3b, 0, 1e-6);
 });
