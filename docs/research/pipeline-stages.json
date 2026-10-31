@@ -1,58 +1,65 @@
 {
   "note": "Last recorded stage of each registered read (served pipeline.reads[].stage) and the Basis x CVD graded-exit status (graded-exit-prereg.md bar). Written only by tools/pipeline/watch.mjs --write, inside a pipeline-watch PR. Seeded 2026-10-26: reads as served that day; the graded exit as pipeline-if-then.md recorded it on 2026-10-23 (Not yet), so any change since the signed page is reported.",
-  "recordedAt": "2026-10-26T01:45:33.830Z",
-  "asOf": "2026-10-26T01:23:48.147Z",
+  "recordedAt": "2026-10-31T13:47:21.555Z",
+  "asOf": "2026-10-31T13:47:15.304Z",
   "reads": {
     "rsi_reset_deep": {
       "stage": "REGISTERED",
-      "next": "20 more out-of-sample events",
-      "events": 10
+      "next": "11 more out-of-sample events",
+      "events": 19
     },
     "level_reclaim": {
+      "stage": "LEAD",
+      "next": "beat 95% of random entries (now 91.7%)",
+      "events": 53
+    },
+    "oi_div_reversal": {
       "stage": "REGISTERED",
       "next": "4 more out-of-sample events",
       "events": 26
     },
-    "oi_div_reversal": {
-      "stage": "REGISTERED",
-      "next": "18 more out-of-sample events",
-      "events": 12
-    },
     "session_momentum": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 40
+      "events": 58
     },
     "confluence_follow": {
+      "stage": "LEAD",
+      "next": "beat 95% of random entries (now 85.3%) · 15 more holdout events",
+      "events": 35
+    },
+    "oi_div_reversal_4h": {
       "stage": "REGISTERED",
       "next": "7 more out-of-sample events",
       "events": 23
     },
-    "oi_div_reversal_4h": {
-      "stage": "REGISTERED",
-      "next": "30 more out-of-sample events",
-      "events": 0
-    },
     "oi_coil_break": {
       "stage": "REGISTERED",
-      "next": "30 more out-of-sample events",
-      "events": 0
+      "next": "18 more out-of-sample events",
+      "events": 12
     }
   },
   "gradedExit": {
     "basis_x_cvd": {
       "status": "FAILS",
-      "reason": "the read is PROMISING, below PREDICTIVE",
-      "trades": 4,
-      "netBps": 44.9
+      "reason": "the read is NOISE, below PREDICTIVE",
+      "trades": 15,
+      "netBps": -102.5
     }
   },
   "tests": {
     "basis_x_cvd:regime_window": {
       "status": "COUNTING",
-      "reason": "seeded at signing (2026-10-26): counts from 2026-10-27T00:00:00Z",
+      "reason": "needs 30 more counted trades and the regime condition (one regime only: FLAT 4 days), or the six-month limit (2027-04-27T00:00:00Z)",
+      "trades": 0,
+      "netBps": 0,
+      "regime": {
+        "UP": 0,
+        "DOWN": 0,
+        "FLAT": 4
+      },
       "belowPredictive": true,
-      "readVerdict": "PROMISING"
+      "readVerdict": "NOISE"
     }
   }
 }

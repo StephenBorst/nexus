@@ -24,7 +24,10 @@ test("pipelineLine: past the count but still REGISTERED reads as failing, with t
 test("pipelineLine: an advanced read names its stage and what's next", () => {
   const l = pipelineLine({ stage: "LEAD", next: "95% vs random on its side", numbers: { events: 34 } }, 30);
   assert.equal(l.text, "34 events · a lead");
-  assert.equal(l.sub, "Next: 95% vs random on its side.");
+  assert.equal(l.sub, "A lead. Not an edge yet. Hasn't repeated on coins it was never picked on. Next: 95% vs random on its side.");
+  const m = pipelineLine({ stage: "LEAD", numbers: { events: 53, meanR: 0.23, holdoutEvents: 36, holdoutMeanR: 0.22, holdoutBeatsRandomPct: 90 } }, 30);
+  assert.equal(m.sub, "A lead. Not an edge yet. Mean +0.23R.");
+  assert.ok(/Hasn't repeated/.test(pipelineLine({ stage: "LEAD", numbers: { events: 35, meanR: 0.2, holdoutEvents: 15, holdoutMeanR: -0.53, holdoutBeatsRandomPct: 5 } }).sub));
   assert.equal(pipelineLine({ stage: "TRADEABLE", numbers: { events: 60 } }).text, "60 events · tradeable");
 });
 
