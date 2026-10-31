@@ -145,4 +145,39 @@ That script is its own PR after this page is signed, not part of this one.
 
 ## Results
 
-_Empty until the first pull._
+### First pull · 2026-10-31 (descriptive: names no cause)
+
+`node tools/explorers/exitBridge.mjs <dir> --fetch`, public series read 2026-10-31 ~18:30 UTC. It reconciles with the
+served scoreboard (2026-10-31 17:47 UTC): 53 events, 24 trades, −72.3 bps, S4 − netBps = 0.0 bps.
+
+Main card (24 trades, mean stop 205.7 bps; every step in bps):
+
+| S0 | → H4 | S1 | → H2 | S2 | → H3 | S3a | → S3b | S3b | → H1 | S4 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| +46.6 | −59.4 | −12.9 | −29.5 | −42.4 | 0.0 | −42.4 | **−23.9** | −66.3 | −6.0 | −72.3 |
+
+- The 53 events grade +0.23R. The 24 traded ones grade −0.06R.
+- Exits: 9 TP (mean +287.8 bps net), 15 SL (−288.3), 0 TIMEOUT. Every trade hit a level, and the average hold was
+  11h (winners) and 14h (losers).
+- Stop-width halves: narrow (143.8 bps) +0.25R, +34.5 bps net. Wide (267.6 bps) −0.375R, −179.0 bps net.
+- Out-of-sample forward returns on all 53 events, gross: 4h +84.1 · 12h +88.0 · 24h +70.7 bps.
+- Funding: 0.4 bps per trade (informational).
+- Sides:
+  - LONG: 15 trades, S4 −29.6.
+  - SHORT: 9 trades, S4 −143.3, of which S3b −54.8.
+
+Holdout (18 trades, mean stop 432.2 bps):
+- S0 +91.0 → H4 −43.0 → H2 −45.3 → H3 0.0 → S3b −3.7 → H1 −6.0 → S4 −7.0.
+- 0 TIMEOUT.
+
+**S3b is not 0, so under this page no cause is named until it is resolved.** The script found why. The as-traded line
+(`gradeEventExit` → backtest `stepExit`) walks each hour's adverse extreme, then its favourable extreme, then its
+close, and fills the exit at that price. So a stop fills at the hour's worst price, not at the stop, and a target at the
+hour's best price, not at the target. The R grade books exactly −1R and +1.5R. This page's "Ruled out by code" list
+named the levels as identical (they are) but missed the fill price. That's a gap in this page, recorded here rather
+than edited above.
+
+On this population that is −23.9 bps of the −118.8 bps move. Live exec checks once a minute and closes at the market,
+so its fills sit near the level, not at the hour's extreme. Whether the as-traded line should fill at the level is a
+measurement change for the shared exit walker. It is borst's call, as its own PR, logged under "Measurement changes"
+in `docs/research/read-pipeline.md`. It would also move the Lab backtest and every exit grade that uses `stepExit`.
