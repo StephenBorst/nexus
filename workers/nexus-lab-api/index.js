@@ -57,7 +57,7 @@ import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { handleFlashSettlement } from "./routes-flashcheck.mjs";
 import { handleSpotBest } from "./routes-spotbest.mjs";
-import { jupFeeConfig, validFeeAccounts, jupQuoteParams, withJupSwapFee } from "./jupFee.mjs";
+import { jupFeeConfig, validFeeAccounts, jupQuoteParams, jupBuildParams, withJupSwapFee } from "./jupFee.mjs";
 import { parseFillReport, bookFill, logFlashOrder, settleFlashOrders, EVM_RPCS } from "./spotLedger.mjs";
 import { MIROSHARK_PAYTO, usdcUnits, pickServerPayment, redeemedAs, redeemOnce, alreadyRedeemedMsg, takeSimCredit, refundSimCredit, addSimCredits, takeCapSlot, releaseCapSlot } from "./payGuards.mjs";
 import { lockFor, LockBusy, LockError, LOCK_KEYS } from "./lock.mjs";
@@ -5716,7 +5716,7 @@ document.getElementById("btn").addEventListener("click",go);
         on: { usdcTrades: !!(cfg.live && cfg.bps && v.usdc), solBuys: !!(cfg.live && cfg.bps && v.wsol) },
         staged: !cfg.live && !!(cfg.bps && (v.usdc || v.wsol)) }, request);
     }
-    if (parts[0] === "swap" && parts[1] === "jup" && (parts[2] === "quote" || parts[2] === "swap")) {
+    if (parts[0] === "swap" && parts[1] === "jup" && (parts[2] === "quote" || parts[2] === "swap" || parts[2] === "build")) {
       const gated = keyProxyGate(request, jupLimiter); if (gated) return gated;
       const jupKey = env.JUP_API_KEY || env.JUPITER_API_KEY || "";
       const jupHdr = { Accept: "application/json" };
@@ -5727,6 +5727,13 @@ document.getElementById("btn").addEventListener("click",go);
         if (parts[2] === "quote" && request.method === "GET") {
           const p = jupQuoteParams(url.searchParams, feeCfg, feeValid);
           const r = await fetch(`https://api.jup.ag/swap/v1/quote?${p.toString()}`, { headers: jupHdr });
+          return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
+        }
+        // GET /swap/jup/build — Swap API V2 Router (v1's successor): quote + raw instructions, our fee set
+        // here (jupBuildParams). The browser assembles + checks the transaction itself before signing.
+        if (parts[2] === "build" && request.method === "GET") {
+          const p = jupBuildParams(url.searchParams, feeCfg, feeValid);
+          const r = await fetch(`https://api.jup.ag/swap/v2/build?${p.toString()}`, { headers: jupHdr });
           return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
         }
         if (parts[2] === "swap" && request.method === "POST") {
