@@ -142,6 +142,11 @@ test("a preview (no taker) never returns calldata", async () => {
   assert.equal(calls[0].url.searchParams.get("from"), PREVIEW_SWAPPER);
 });
 
+test("the preview placeholder is one 0x accepts (above 0x…ffff, not the zero address)", () => {
+  assert.match(PREVIEW_SWAPPER, /^0x[0-9a-fA-F]{40}$/);
+  assert.ok(BigInt(PREVIEW_SWAPPER) > 0xffffn, "0x refuses takers at or below 0x…ffff");
+});
+
 test("a provider that refuses the fee still leaves a clean quote", async () => {
   const calls = fakeNet({ nordstern: "refuse_fee" });
   const r = await spotQuote(ENV, qs(REQ));
