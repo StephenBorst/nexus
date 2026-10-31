@@ -430,6 +430,9 @@ product is what sits on top:
   account skipped for now (SOL buys carry no fee). **LIVE since 2026-10-29** (`JUP_FEE_LIVE="true"`, borst, after a passing dry run).
   Set it to anything else = STAGED: only quotes tagged `feetest=1` carry the fee (use that for dry runs of a change).
   ⚠️ v1 ("Metis") is marked unmaintained by Jupiter; the successor for our path is V2 `/build` (same fee params).
+  Migration in progress: `GET /swap/jup/build` (proxy, `jupBuildParams`: whitelisted params, our `platformFeeBps` +
+  `feeAccount` set server-side, payer/destination/tip/version never forwarded) exists; the signer still uses v1 until
+  the /build path passes a dry run.
 - **Spot ledger** (`workers/nexus-lab-api/spotLedger.mjs`, tested; since 2026-10-28) → the "Spot" box on `/ops/revenue`
   (`spot` in its reply, last 30 days). Counts only what's proven: Flash = the proxy logs each accepted order id
   (`spot:flash:{id}`, with the funder only until booked) and the hourly job books final orders from Flash (one trade +
