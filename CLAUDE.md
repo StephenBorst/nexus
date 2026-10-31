@@ -241,6 +241,10 @@ product is what sits on top:
   nothing automatic. Brain/exec never import it. The judging code is its own PR, before any read hits 30/30.
 - **Pre-registered studies are append-only:** a doc's text above Results is pinned (sha256 tests); verdicts are appended;
   a new idea found on a closed population is a new dated registration (e.g. structure × house fade: CLOSED, not shown).
+- **level_reclaim exit gap** (`docs/research/level-reclaim-exit-gap.md`, signed 2026-10-31): the read grades +R while its
+  graded exit loses; `tools/explorers/exitBridge.mjs` bridges the two on the same trades (read-only, reconciles with the
+  served `netBps`). First pull: the as-traded line (`stepExit`) fills exits at the hour's EXTREME, the R grade at the
+  levels (S3b ≠ 0), so no cause is named until borst decides that measurement question.
 - **Daily pipeline watcher** (prompt `docs/routines/pipeline-watch.md`, `tools/pipeline/watch.mjs`,
   `app/lib/pipelineWatch.mjs`): compares served stages with `docs/research/pipeline-stages.json`; a change opens a PR on
   `pipeline-watch/<date>`. **Watcher PRs are never merged by a session.** A scheduled task stores its own copy of the
