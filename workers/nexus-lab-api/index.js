@@ -5734,7 +5734,12 @@ document.getElementById("btn").addEventListener("click",go);
         if (parts[2] === "build" && request.method === "GET") {
           const p = jupBuildParams(url.searchParams, feeCfg, feeValid);
           const r = await fetch(`https://api.jup.ag/swap/v2/build?${p.toString()}`, { headers: jupHdr });
-          return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
+          const text = await r.text();
+          // /build states no fee field, so we say which fee we asked for (the browser checks our
+          // account is in the swap instruction and the bps is within its cap).
+          let out = text;
+          if (r.ok) { try { const j = JSON.parse(text); j.nexus = { feeBps: Number(p.get("platformFeeBps") || 0), feeAccount: p.get("feeAccount") || null }; out = JSON.stringify(j); } catch { /* raw */ } }
+          return new Response(out, { status: r.status, headers: { "Content-Type": "application/json", ...cors(request) } });
         }
         if (parts[2] === "swap" && request.method === "POST") {
           const fee = withJupSwapFee(await request.text(), feeCfg, feeValid); // { quoteResponse, userPublicKey, wrapAndUnwrapSol, ... }

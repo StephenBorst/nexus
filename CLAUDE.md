@@ -410,7 +410,7 @@ product is what sits on top:
   response. Fee 10 bps asked (5 bps ours) → borst.eth's intents.near balance (recipient must be an EOA). Quotes go via
   `POST /xc/quote` with `ONE_CLICK_JWT`, falling back to direct.
 - **Solana swap (Jupiter) — the ONE signer is `app/pages/token/solSwapExec.ts`**, BUY (SOL or USDC → token) and SELL
-  (token → USDC), Jupiter via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
+  (token → USDC), Jupiter `/build` via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
   (re-fetched fresh right before signing): quote bound to our mints + amount; slippage ≤ 300 bps and the quote's
   minimum respects it (`checkMinOut`); fee payer = the wallet; top-level programs allowlisted; simulation must
   succeed and, from simulated balances, SOL drop ≤ SOL input + 0.02 SOL, input-token accounts drop ≤ the typed amount
@@ -429,10 +429,16 @@ product is what sits on top:
   Fee wallet `6uB2ugTM4m7P1BpEG6pLAc2B327nb75JUqVE6svoMRWT` (borst), USDC account `Fqqax7…wagKr` (never close it). wSOL
   account skipped for now (SOL buys carry no fee). **LIVE since 2026-10-29** (`JUP_FEE_LIVE="true"`, borst, after a passing dry run).
   Set it to anything else = STAGED: only quotes tagged `feetest=1` carry the fee (use that for dry runs of a change).
-  ⚠️ v1 ("Metis") is marked unmaintained by Jupiter; the successor for our path is V2 `/build` (same fee params).
-  Migration in progress: `GET /swap/jup/build` (proxy, `jupBuildParams`: whitelisted params, our `platformFeeBps` +
-  `feeAccount` set server-side, payer/destination/tip/version never forwarded) exists; the signer still uses v1 until
-  the /build path passes a dry run.
+- **Jupiter Swap API V2 `/build` (since 2026-10-31; v1 "Metis" is unmaintained).** `GET /swap/jup/build` (proxy,
+  `jupBuildParams`: whitelisted params, our `platformFeeBps` + `feeAccount` set server-side, payer/destination/tip/
+  version never forwarded) returns the quote + RAW instructions + the worker's `nexus {feeBps, feeAccount}` echo. The
+  signer checks the response first (`app/lib/jupBuild.mjs checkBuild`, tested on real replies: mints/amount/ExactIn/
+  slippage/min out, only the wallet signs, no tip, v0, compute-budget price only and clamped, our fee ≤ 100 bps with
+  our account IN the swap instruction), then assembles the v0 tx itself (`compileBuild`: wallet pays, limit from a
+  measuring simulation × 1.2, ≤ 1232 bytes) and runs the simulate guards on the exact bytes. Price reads (SOL/USD,
+  the no-wallet preview) use `/build` with `PRICE_TAKER` (an empty key) + `nofee=1`. The v1 `/swap/jup/quote|swap`
+  routes still exist but nothing in the app calls them. Real-code dry run: bundle solSwapExec.ts with esbuild and
+  give `executeSolBuy` a provider whose `signTransaction` throws.
 - **Spot ledger** (`workers/nexus-lab-api/spotLedger.mjs`, tested; since 2026-10-28) → the "Spot" box on `/ops/revenue`
   (`spot` in its reply, last 30 days). Counts only what's proven: Flash = the proxy logs each accepted order id
   (`spot:flash:{id}`, with the funder only until booked) and the hourly job books final orders from Flash (one trade +
