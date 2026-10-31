@@ -335,6 +335,9 @@ product is what sits on top:
   `agent:key`); `/v2/key/begin|complete|remove` (session; complete/remove also need the challenge, always on) and
   `/v2/key/bankr-register`; rotation removes the old key signed by the new one; NexusLock `LOCK_KEYS.v2Key`. Nothing
   reads the stored key until step 3. #14 is closed into the spec (challenge = §C; `/trade` + kill session-only).
+  Step 3a (built 2026-10-31, same flag): the 10 trading routes accept `{walletAddress, session}` and sign with the stored
+  key (`tradingSigner.mjs v2Signer`: 409 `key_required` / `key_expired`); v1 `walletSig` branch unchanged beside it;
+  `/trade` dropped its per-trade challenge. 3b = agent + exec expiry, 3c = Bankr money flows + `/derive-key`.
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must

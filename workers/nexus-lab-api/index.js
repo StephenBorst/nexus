@@ -108,6 +108,7 @@ import { revokedWallets, revokedTradingRefusal } from "./revokedTrading.mjs";
 import { handleRemoveKey } from "./routes-removekey.mjs";
 import { handleSession } from "./routes-session.mjs";
 import { handleKey } from "./routes-key.mjs";
+import { wantsV2, v2Signer } from "./tradingSigner.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
 import { aesGcmEncrypt, scrubStoredSeeds } from "./seedVault.mjs";
@@ -1539,18 +1540,14 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         signingKey = await crypto.subtle.importKey("pkcs8", pb, { name: "Ed25519" }, false, ["sign"]);
       };
 
-      if (walletSig && walletAddress) {
-        // Phase 3 (#14): request-bound v2 on user-wallet trades. Binds the single-use
-        // challenge to action+wallet+notional, so a leaked static walletSig can't place
-        // an order (or a different-sized one). No-op unless AUTH_V2 is on. Reduce-only
-        // exits (closePosition) skip the gate — they only ever shrink risk.
-        if (!isReduceOnly) {
-          const deniedV2 = await requireOwnerV2(env, request, {
-            action: "trade", wallet: walletAddress.toLowerCase().trim(), amount: String(notional),
-            nonce: body.nonce, v2Sig: body.v2Sig,
-          });
-          if (deniedV2) return deniedV2;
-        }
+      if (wantsV2(body)) {
+        // auth v2 (tradingSigner.mjs): the trading session proves the wallet and the order is signed
+        // with its stored random key. No per-trade challenge (borst, 2026-10-31): the key is random,
+        // so a challenge on each order would add a wallet prompt and no protection.
+        const v2 = await v2Signer(env, body);
+        if (!v2.ok) return json(v2.body, request, v2.status);
+        accountId = v2.accountId; orderlyApiKey = v2.orderlyKey; signingKey = v2.signingKey;
+      } else if (walletSig && walletAddress) {
         // Check KV for a registered per-user Orderly key
         const walletNorm = walletAddress.toLowerCase().trim();
         const userRaw    = await env.LAB_STORE.get("user:" + walletNorm);
@@ -1747,7 +1744,11 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       const OBASE2 = "https://api-evm.orderly.org";
       const HDR2 = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
       let acctId2, apiKey2, signKey2;
-      if (wSig2 && wAddr2) {
+      if (wantsV2(body)) {
+        const v2 = await v2Signer(env, body); // auth v2: session + the stored random key
+        if (!v2.ok) return json(v2.body, request, v2.status);
+        acctId2 = v2.accountId; apiKey2 = v2.orderlyKey; signKey2 = v2.signingKey;
+      } else if (wSig2 && wAddr2) {
         const wn2 = wAddr2.toLowerCase().trim();
         const ur2 = await env.LAB_STORE.get("user:" + wn2);
         if (!ur2) return json({ error: "wallet_not_registered" }, request, 401);
@@ -1831,7 +1832,11 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       const PKCS8_HDR3 = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
       let acctId3, apiKey3, signKey3;
 
-      if (wSig3 && wAddr3) {
+      if (wantsV2(body)) {
+        const v2 = await v2Signer(env, body); // auth v2: session + the stored random key
+        if (!v2.ok) return json(v2.body, request, v2.status);
+        acctId3 = v2.accountId; apiKey3 = v2.orderlyKey; signKey3 = v2.signingKey;
+      } else if (wSig3 && wAddr3) {
         const walletNorm3 = wAddr3.toLowerCase().trim();
         const userRaw3 = await env.LAB_STORE.get("user:" + walletNorm3);
         if (!userRaw3) return json({ error: "wallet_not_registered" }, request, 401);
@@ -2870,16 +2875,23 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     if (parts[0] === "order-history" && request.method === "POST") {
       let ohbody; try { ohbody = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
       const { walletAddress: ohwa, walletSig: ohws, symbol: ohsym, limit: ohlim } = ohbody;
-      if (!ohwa || !ohws) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, symbol?, limit? }" }, request, 401);
-      const ohNorm = ohwa.toLowerCase().trim();
-      const ohRaw  = await env.LAB_STORE.get("user:" + ohNorm);
-      if (!ohRaw) return json({ error: "wallet_not_registered" }, request, 401);
-      const ohrec  = JSON.parse(ohRaw);
-      const OHHDR  = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
-      const ohhex  = ohws.startsWith("0x") ? ohws.slice(2) : ohws;
-      const ohseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(ohhex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
-      const ohpk8  = new Uint8Array(48); ohpk8.set(OHHDR, 0); ohpk8.set(ohseed, 16);
-      const ohsk   = await crypto.subtle.importKey("pkcs8", ohpk8, { name: "Ed25519" }, false, ["sign"]);
+      let ohrec, ohsk;
+      if (wantsV2(ohbody)) {
+        const v2 = await v2Signer(env, ohbody); // auth v2: session + the stored random key
+        if (!v2.ok) return json(v2.body, request, v2.status);
+        ohrec = { accountId: v2.accountId, orderlyKey: v2.orderlyKey }; ohsk = v2.signingKey;
+      } else {
+        if (!ohwa || !ohws) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, symbol?, limit? }" }, request, 401);
+        const ohNorm = ohwa.toLowerCase().trim();
+        const ohRaw  = await env.LAB_STORE.get("user:" + ohNorm);
+        if (!ohRaw) return json({ error: "wallet_not_registered" }, request, 401);
+        ohrec  = JSON.parse(ohRaw);
+        const OHHDR  = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
+        const ohhex  = ohws.startsWith("0x") ? ohws.slice(2) : ohws;
+        const ohseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(ohhex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
+        const ohpk8  = new Uint8Array(48); ohpk8.set(OHHDR, 0); ohpk8.set(ohseed, 16);
+        ohsk   = await crypto.subtle.importKey("pkcs8", ohpk8, { name: "Ed25519" }, false, ["sign"]);
+      }
       const ohsign = async (method, path) => {
         const ts  = Date.now();
         const msg = new TextEncoder().encode(ts + method + path);
@@ -2903,17 +2915,24 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     if (parts[0] === "cancel" && request.method === "POST") {
       let cbody; try { cbody = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
       const { walletAddress: cwa, walletSig: cws, orderId: coid, symbol: csym } = cbody;
-      if (!cwa || !cws) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, orderId, symbol }" }, request, 401);
       if (!coid) return json({ error: "orderId required" }, request, 400);
-      const cwNorm = cwa.toLowerCase().trim();
-      const cuRaw = await env.LAB_STORE.get("user:" + cwNorm);
-      if (!cuRaw) return json({ error: "wallet_not_registered" }, request, 401);
-      const curec = JSON.parse(cuRaw);
-      const CPHDR = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
-      const chex  = cws.startsWith("0x") ? cws.slice(2) : cws;
-      const cseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(chex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
-      const cpk8  = new Uint8Array(48); cpk8.set(CPHDR, 0); cpk8.set(cseed, 16);
-      const csk   = await crypto.subtle.importKey("pkcs8", cpk8, { name: "Ed25519" }, false, ["sign"]);
+      let curec, csk;
+      if (wantsV2(cbody)) {
+        const v2 = await v2Signer(env, cbody); // auth v2: session + the stored random key
+        if (!v2.ok) return json(v2.body, request, v2.status);
+        curec = { accountId: v2.accountId, orderlyKey: v2.orderlyKey }; csk = v2.signingKey;
+      } else {
+        if (!cwa || !cws) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, orderId, symbol }" }, request, 401);
+        const cwNorm = cwa.toLowerCase().trim();
+        const cuRaw = await env.LAB_STORE.get("user:" + cwNorm);
+        if (!cuRaw) return json({ error: "wallet_not_registered" }, request, 401);
+        curec = JSON.parse(cuRaw);
+        const CPHDR = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
+        const chex  = cws.startsWith("0x") ? cws.slice(2) : cws;
+        const cseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(chex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
+        const cpk8  = new Uint8Array(48); cpk8.set(CPHDR, 0); cpk8.set(cseed, 16);
+        csk   = await crypto.subtle.importKey("pkcs8", cpk8, { name: "Ed25519" }, false, ["sign"]);
+      }
       const csign = async (method, path, body2) => {
         const ts  = Date.now();
         const bs2 = body2 ? JSON.stringify(body2) : "";
@@ -2936,17 +2955,24 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     if (parts[0] === "order-status" && request.method === "POST") {
       let osbody; try { osbody = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
       const { walletAddress: oswa, walletSig: osws, orderId: osoid } = osbody;
-      if (!oswa || !osws) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, orderId }" }, request, 401);
       if (!osoid) return json({ error: "orderId required" }, request, 400);
-      const osNorm = oswa.toLowerCase().trim();
-      const osRaw  = await env.LAB_STORE.get("user:" + osNorm);
-      if (!osRaw) return json({ error: "wallet_not_registered" }, request, 401);
-      const osrec  = JSON.parse(osRaw);
-      const OSPHDR = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
-      const oshex  = osws.startsWith("0x") ? osws.slice(2) : osws;
-      const osseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(oshex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
-      const ospk8  = new Uint8Array(48); ospk8.set(OSPHDR, 0); ospk8.set(osseed, 16);
-      const ossk   = await crypto.subtle.importKey("pkcs8", ospk8, { name: "Ed25519" }, false, ["sign"]);
+      let osrec, ossk;
+      if (wantsV2(osbody)) {
+        const v2 = await v2Signer(env, osbody); // auth v2: session + the stored random key
+        if (!v2.ok) return json(v2.body, request, v2.status);
+        osrec = { accountId: v2.accountId, orderlyKey: v2.orderlyKey }; ossk = v2.signingKey;
+      } else {
+        if (!oswa || !osws) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, orderId }" }, request, 401);
+        const osNorm = oswa.toLowerCase().trim();
+        const osRaw  = await env.LAB_STORE.get("user:" + osNorm);
+        if (!osRaw) return json({ error: "wallet_not_registered" }, request, 401);
+        osrec  = JSON.parse(osRaw);
+        const OSPHDR = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
+        const oshex  = osws.startsWith("0x") ? osws.slice(2) : osws;
+        const osseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(oshex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
+        const ospk8  = new Uint8Array(48); ospk8.set(OSPHDR, 0); ospk8.set(osseed, 16);
+        ossk   = await crypto.subtle.importKey("pkcs8", ospk8, { name: "Ed25519" }, false, ["sign"]);
+      }
       const ossign = async (method, path) => {
         const ts  = Date.now();
         const msg = new TextEncoder().encode(ts + method + path);
@@ -3004,22 +3030,29 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // lands in logs, so a signature in the URL is refused, never used.
     if ((parts[0] === "positions" || parts[0] === "balance") && (request.method === "GET" || request.method === "POST")) {
       const qp = new URL(request.url).searchParams;
-      if (qp.has("sig") || qp.has("walletSig")) return json({ error: "signature_in_url", hint: "Send walletSig in the JSON body of a POST, never in the URL. Sign again: the one in this URL may be in logs." }, request, 400);
+      if (qp.has("sig") || qp.has("walletSig") || qp.has("session")) return json({ error: "signature_in_url", hint: "Send walletSig (or session) in the JSON body of a POST, never in the URL. Sign again: the one in this URL may be in logs." }, request, 400);
       if (request.method !== "POST") return json({ error: "method not allowed", hint: "POST { walletAddress, walletSig }" }, request, 405);
       let pb; try { pb = await request.json(); } catch { pb = {}; }
       const wAddr = pb.walletAddress || pb.wallet;
       const wSig  = pb.walletSig    || pb.sig;
-      if (!wAddr || !wSig) return json({ error: "walletAddress and walletSig required — POST { walletAddress, walletSig }" }, request, 400);
-      const wNorm = wAddr.toLowerCase().trim();
-      const uRaw  = await env.LAB_STORE.get("user:" + wNorm);
-      if (!uRaw) return json({ error: "wallet_not_registered" }, request, 401);
-      const urec  = JSON.parse(uRaw);
-      const PHDR  = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
-      const phex  = wSig.startsWith("0x") ? wSig.slice(2) : wSig;
-      const pseed = new Uint8Array(await crypto.subtle.digest("SHA-256",
-        new Uint8Array(phex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
-      const ppk8  = new Uint8Array(48); ppk8.set(PHDR, 0); ppk8.set(pseed, 16);
-      const psk   = await crypto.subtle.importKey("pkcs8", ppk8, { name: "Ed25519" }, false, ["sign"]);
+      let urec, psk;
+      if (wantsV2(pb)) {
+        const v2 = await v2Signer(env, pb); // auth v2: session + the stored random key
+        if (!v2.ok) return json(v2.body, request, v2.status);
+        urec = { accountId: v2.accountId, orderlyKey: v2.orderlyKey }; psk = v2.signingKey;
+      } else {
+        if (!wAddr || !wSig) return json({ error: "walletAddress and walletSig required — POST { walletAddress, walletSig }" }, request, 400);
+        const wNorm = wAddr.toLowerCase().trim();
+        const uRaw  = await env.LAB_STORE.get("user:" + wNorm);
+        if (!uRaw) return json({ error: "wallet_not_registered" }, request, 401);
+        urec  = JSON.parse(uRaw);
+        const PHDR  = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
+        const phex  = wSig.startsWith("0x") ? wSig.slice(2) : wSig;
+        const pseed = new Uint8Array(await crypto.subtle.digest("SHA-256",
+          new Uint8Array(phex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
+        const ppk8  = new Uint8Array(48); ppk8.set(PHDR, 0); ppk8.set(pseed, 16);
+        psk   = await crypto.subtle.importKey("pkcs8", ppk8, { name: "Ed25519" }, false, ["sign"]);
+      }
       const OBASE = "https://api-evm.orderly.org";
       const psign = async (method, path) => {
         const ts  = Date.now();
@@ -3420,17 +3453,25 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     if (parts[0] === "set-leverage" && request.method === "POST") {
       let slbody; try { slbody = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
       const { walletAddress: slwa, walletSig: slws, leverage: slev } = slbody;
-      if (!slwa || !slws || slev == null) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, leverage }" }, request, 401);
+      if (slev == null) return json({ error: "leverage required", hint: "POST { walletAddress, walletSig | session, leverage }" }, request, 400);
       if (typeof slev !== "number" || slev < 1 || slev > 100) return json({ error: "leverage must be a number between 1 and 100" }, request, 400);
-      const slNorm = slwa.toLowerCase().trim();
-      const slRaw  = await env.LAB_STORE.get("user:" + slNorm);
-      if (!slRaw) return json({ error: "wallet_not_registered" }, request, 401);
-      const slrec  = JSON.parse(slRaw);
-      const SLHDR  = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
-      const slhex  = slws.startsWith("0x") ? slws.slice(2) : slws;
-      const slseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(slhex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
-      const slpk8  = new Uint8Array(48); slpk8.set(SLHDR, 0); slpk8.set(slseed, 16);
-      const slsk   = await crypto.subtle.importKey("pkcs8", slpk8, { name: "Ed25519" }, false, ["sign"]);
+      let slrec, slsk;
+      if (wantsV2(slbody)) {
+        const v2 = await v2Signer(env, slbody); // auth v2: session + the stored random key
+        if (!v2.ok) return json(v2.body, request, v2.status);
+        slrec = { accountId: v2.accountId, orderlyKey: v2.orderlyKey }; slsk = v2.signingKey;
+      } else {
+        if (!slwa || !slws || slev == null) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, leverage }" }, request, 401);
+        const slNorm = slwa.toLowerCase().trim();
+        const slRaw  = await env.LAB_STORE.get("user:" + slNorm);
+        if (!slRaw) return json({ error: "wallet_not_registered" }, request, 401);
+        slrec  = JSON.parse(slRaw);
+        const SLHDR  = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
+        const slhex  = slws.startsWith("0x") ? slws.slice(2) : slws;
+        const slseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(slhex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
+        const slpk8  = new Uint8Array(48); slpk8.set(SLHDR, 0); slpk8.set(slseed, 16);
+        slsk   = await crypto.subtle.importKey("pkcs8", slpk8, { name: "Ed25519" }, false, ["sign"]);
+      }
       const slsign = async (method, path, bodyObj) => {
         const ts  = Date.now();
         const bs  = bodyObj ? JSON.stringify(bodyObj) : "";
@@ -3461,16 +3502,23 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     if (parts[0] === "settle-pnl" && request.method === "POST") {
       let spbody; try { spbody = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
       const { walletAddress: spwa, walletSig: spws, symbol: spsym } = spbody;
-      if (!spwa || !spws) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, symbol? }" }, request, 401);
-      const spNorm = spwa.toLowerCase().trim();
-      const spRaw  = await env.LAB_STORE.get("user:" + spNorm);
-      if (!spRaw) return json({ error: "wallet_not_registered" }, request, 401);
-      const sprec  = JSON.parse(spRaw);
-      const SPHDR  = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
-      const sphex  = spws.startsWith("0x") ? spws.slice(2) : spws;
-      const spseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(sphex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
-      const sppk8  = new Uint8Array(48); sppk8.set(SPHDR, 0); sppk8.set(spseed, 16);
-      const spsk   = await crypto.subtle.importKey("pkcs8", sppk8, { name: "Ed25519" }, false, ["sign"]);
+      let sprec, spsk;
+      if (wantsV2(spbody)) {
+        const v2 = await v2Signer(env, spbody); // auth v2: session + the stored random key
+        if (!v2.ok) return json(v2.body, request, v2.status);
+        sprec = { accountId: v2.accountId, orderlyKey: v2.orderlyKey }; spsk = v2.signingKey;
+      } else {
+        if (!spwa || !spws) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, symbol? }" }, request, 401);
+        const spNorm = spwa.toLowerCase().trim();
+        const spRaw  = await env.LAB_STORE.get("user:" + spNorm);
+        if (!spRaw) return json({ error: "wallet_not_registered" }, request, 401);
+        sprec  = JSON.parse(spRaw);
+        const SPHDR  = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
+        const sphex  = spws.startsWith("0x") ? spws.slice(2) : spws;
+        const spseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(sphex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
+        const sppk8  = new Uint8Array(48); sppk8.set(SPHDR, 0); sppk8.set(spseed, 16);
+        spsk   = await crypto.subtle.importKey("pkcs8", sppk8, { name: "Ed25519" }, false, ["sign"]);
+      }
       const spsign = async (method, path, bodyObj) => {
         const ts  = Date.now();
         const bs  = bodyObj ? JSON.stringify(bodyObj) : "";

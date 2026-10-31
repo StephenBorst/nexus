@@ -159,7 +159,16 @@ custody agents already have. In exchange, a leaked signature stops being a leake
        with no registered key. Bankr calls `POST /v2/key/bankr-register` instead.
    - Step 3 moves exec and the derive routes onto the v2 record and points `/proxy/bankr-register` at it.
 3. Derive routes read the stored key; exec expiry check. In the same PR, take the June challenge (`requireOwnerV2`)
-   off `/trade` and agent kill, so it covers exactly section C's list (decisions 2026-10-31).
+   off `/trade` and agent kill, so it covers exactly section C's list (decisions 2026-10-31). Split in three PRs, all
+   behind `AUTH_V2_KEYS`:
+   - **3a (built 2026-10-31):** the trading routes. `/trade`, `/set-sl-tp`, `/close-position`, `/order-history`,
+     `/cancel`, `/order-status`, `/positions`, `/balance`, `/set-leverage` and `/settle-pnl` take `{walletAddress,
+     session}` and sign with the stored key (`tradingSigner.mjs`). The v1 `walletSig` branch is unchanged beside it.
+     `/trade` loses the per-trade challenge.
+   - **3b:** the agent. Activation with an active v2 key, exec reading `v2key:{addr}`, the expiry rule (no position
+     whose max hold runs past `expiresAt`, an alert from 3 days out), `/twap`, and kill without the challenge.
+   - **3c:** Bankr withdraw/deposit, `/withdraw/prepare`, `/proxy/bankr-register` pointed at v2, and `/derive-key`
+     retired.
 4. Bankr skill PR (BankrBot/skills) with the new calls; copy back.
 5. Migration step 2; then the dated cut-over.
 
