@@ -159,3 +159,29 @@ read the same way and keeps every name and registration date. A change to a read
   −244.7 → −208.6 · confluence_follow +62.2 → +49.8. Reads that stop out more than they hit their target improve and
   reads that hit their target more give some back, because the extreme fill had made stops worse and targets better.
 - **After:** appended below once the change is served (cache `axisbt:v20`), as for the price spine.
+- **After (served 2026-10-31 18:51 UTC, cache `axisbt:v20`):** no stage moved. The pipeline numbers match the preview to
+  the decimal. Events, mean R and exit trades are unchanged on every read.
+
+| read | stage | events | mean R | exit trades | exit net bps |
+|---|---|---|---|---|---|
+| rsi_reset_deep | REGISTERED | 19 | −0.24 | 8 | **−116.2** (was −145.5) |
+| level_reclaim | LEAD | 53 | +0.23 | 24 | **−48.4** (was −72.3) |
+| oi_div_reversal | REGISTERED | 26 | −0.02 | 11 | **+11.2** (was +8.7) |
+| session_momentum | REGISTERED | 61 | −0.61 | 35 | **−208.6** (was −244.7) |
+| confluence_follow | LEAD | 35 | +0.20 | 16 | **+49.8** (was +62.2) |
+| oi_div_reversal_4h | REGISTERED | 23 | +0.41 | 0 | — |
+| oi_coil_break | REGISTERED | 12 | +0.00 | 0 | — |
+
+  The preset exit lines (main card, full history, informational) moved more, and three changed sign. Their flat stops
+  (2%) are tight, so the old fill at the hour's extreme had made each stop-out much worse than the stop:
+  - basis_x_cvd: −28.5 → **−7.2** bps (93 trades); 24h: −23.2 → **+3.2** (91).
+  - basis_extreme: −35.8 → **−3.5** (444; 443 before, one new trade); 24h: −33.0 → **−7.1** (369).
+  - basis_dev_x_cvd: −14.2 → **+5.8** (74); 24h: −29.0 → **−8.5** (75).
+  - basis_x_cvd graded exit: −1.3 → **+13.3** bps (66).
+
+  None of these is a bar, and nothing here re-opens a decision taken on the old fill:
+  - The Basis × CVD graded-exit test was retired on 2026-10-26 because the read itself fell below PREDICTIVE. That
+    was a Fail at any point under its page, independent of the fill. It stays retired (final).
+  - The Oct 15 preset-exit results (`graded-exit-prereg.md`, "lost out of sample") were measured on the old fill. They
+    stay as written, under their date.
+  - The regime window had 0 counted trades. It is measured on the new fill from its first trade.
