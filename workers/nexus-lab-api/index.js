@@ -107,6 +107,7 @@ import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } f
 import { revokedWallets, revokedTradingRefusal } from "./revokedTrading.mjs";
 import { handleRemoveKey } from "./routes-removekey.mjs";
 import { handleSession } from "./routes-session.mjs";
+import { handleKey } from "./routes-key.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
 import { aesGcmEncrypt, scrubStoredSeeds } from "./seedVault.mjs";
@@ -815,6 +816,11 @@ export default {
       // POST /v2/session/end-all: end every older trading session (auth v2, routes-session.mjs).
       const sessRes = await handleSession(parts, request, env);
       if (sessRes) return sessRes;
+    }
+    {
+      // /v2/key/*: random trading keys (auth v2 step 2, routes-key.mjs). Off unless AUTH_V2_KEYS="true".
+      const keyRes = await handleKey(parts, request, env);
+      if (keyRes) return keyRes;
     }
 
     // ── /og/trader/:wallet(.png)? → the graded record card ─────────────────────
