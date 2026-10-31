@@ -428,7 +428,10 @@ product is what sits on top:
   NexusLock lease. No wallet address is stored.
 - **Best price (EVM USDC buys, read-only):** `GET /spot/best?chain=&tokenOut=&amount=` (`routes-spotbest.mjs`, rule
   `app/lib/spotBest.mjs`) quotes spanDEX (preview, our fee on) and a Flash market quote (our key + fee, no funder) and
-  compares each router's own "you receive" (Flash's includes gas; spanDEX's wallet pays gas separately). Under 5 bps =
+  compares each router's own "you receive". Flash prices its gas in; for spanDEX the worker takes off an estimate
+  (live `eth_gasPrice` × `SWAP_GAS_UNITS` 200k + the OP-stack L1 fee upper bound on Base/Optimism, in ETH at Orderly's
+  ETH mark, converted at the quote's own rate), so both are "after gas". Approval gas isn't counted (both need one).
+  Any unreadable part (or Polygon, POL unpriced) = no estimate and the line says "Flash incl. gas". Under 5 bps =
   "about the same". The /token ticket shows one line; it routes nothing and signs nothing. Cached 20 s, origin-gated.
 - **Key proxies** (`keyProxy.mjs`): `/flash/*`, `/swap/jup/*`, `/xc/quote` accept only our origins + per-IP budgets.
 - **Discovery** rules in `app/lib/spotDiscovery.mjs` (recent views, address search, real-market floors incl. padded/thin
