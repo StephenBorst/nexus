@@ -13,6 +13,7 @@
 
 import { pairsForAddress, isRealMarket as isRealMarketRule, safeLogoUrl } from "@/lib/spotDiscovery.mjs";
 import { sendSigned, type LabWallet } from "@/hooks/useLabAuth";
+import { PRICE_TAKER } from "@/lib/jupBuild.mjs";
 
 const DS_BASE = "https://api.dexscreener.com/latest/dex";
 const GT_BASE = "https://api.geckoterminal.com/api/v2";
@@ -551,9 +552,9 @@ export async function nexusSignal(symbol: string): Promise<NexusSignal | null> {
 // EVM stays on the honest named deep-link rather than a faked quote. Fail-soft: any error →
 // null → the panel falls back to the deep-link, so a changed Jupiter endpoint never breaks the
 // page, it just hides the badge. This does NOT execute anything; signing is a separate pass.
-// Jupiter quote via OUR worker (og.nexustradinglabs.com/swap/jup/quote) so the api.jup.ag x-api-key
-// stays server-side; response shape is unchanged (Jupiter /swap/v1 == the old /v6 schema).
-const JUP_QUOTE = `${AGENT_API}/swap/jup/quote`;
+// Jupiter quote via OUR worker (og.nexustradinglabs.com/swap/jup/build, Swap API V2) so the api.jup.ag
+// x-api-key stays server-side. /build needs a taker: a price read uses PRICE_TAKER (an empty key).
+const JUP_BUILD = `${AGENT_API}/swap/jup/build`;
 const USDC_SOL = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC mint, Solana
 // USDC by DexScreener chainId → numeric chainId, for the EVM (Fabric) quote probe. Only chains
 // where we know the canonical USDC; anything else simply doesn't get an EVM quote (deep-link).
@@ -576,7 +577,7 @@ export async function swapQuote(pair: TokenPair, probeUsd = 100): Promise<SwapQu
   if (!pair.baseAddress) return null;
   const amount = Math.round(probeUsd * 1e6); // USDC has 6 decimals on both Solana and EVM
   if (pair.chainId === "solana") {
-    const url = `${JUP_QUOTE}?inputMint=${USDC_SOL}&outputMint=${encodeURIComponent(pair.baseAddress)}&amount=${amount}&slippageBps=100`;
+    const url = `${JUP_BUILD}?inputMint=${USDC_SOL}&outputMint=${encodeURIComponent(pair.baseAddress)}&amount=${amount}&slippageBps=100&taker=${PRICE_TAKER}&nofee=1`;
     const j = (await getJson(url)) as { outAmount?: string; priceImpactPct?: string } | null;
     if (!j || !j.outAmount) return null;
     const impact = Number(j.priceImpactPct); // Jupiter returns a fraction (0.012 = 1.2%)
