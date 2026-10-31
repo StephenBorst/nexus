@@ -1,6 +1,6 @@
 # level_reclaim · the read grades positive, the trade loses · a pre-registered look at the gap
 
-Written 2026-10-31, before any per-trade number is pulled. **Signed off: _pending (borst)_.**
+Written 2026-10-31, before any per-trade number is pulled. **Signed off: borst, Oct 31, 2026.**
 
 Docs only. This page changes no rule, threshold, bar, preset, wallet or flag. It fixes the question, the candidate
 explanations and the exact measurements before anyone looks, so the answer can't be fitted to the data afterwards.
