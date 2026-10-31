@@ -323,7 +323,11 @@ product is what sits on top:
   one per wallet) + a 24h trading session that derives nothing. Built step by step; step 1 = `app/lib/tradingSession.mjs`
   (one message builder for client and worker) + `routes-session.mjs` (`checkTradingSession`; `POST /v2/session/end-all`
   ends every session issued before the caller's, the stamp `auth:sessions-after:{addr}` only moves forward). No live
-  route accepts a session yet.
+  route accepts a session yet. Step 2 (built 2026-10-31, OFF unless `AUTH_V2_KEYS="true"`): `v2Keys.mjs` +
+  `routes-key.mjs`: random 32-byte keys, AddOrderlyKey `read,trading`, 30 days, sealed in `v2key:{addr}` (NOT
+  `agent:key`); `/v2/key/begin|complete|remove` (session; complete/remove also need the challenge, always on) and
+  `/v2/key/bankr-register`; rotation removes the old key signed by the new one; NexusLock `LOCK_KEYS.v2Key`. Nothing
+  reads the stored key until step 3. #14 is closed into the spec (challenge = §C; `/trade` + kill session-only).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must

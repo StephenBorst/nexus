@@ -148,8 +148,18 @@ custody agents already have. In exchange, a leaked signature stops being a leake
 
 1. Session signatures plus the kill switch: library + verifier, unused. **Shipped 2026-10-27:** `app/lib/tradingSession.mjs`
    (message, `newTradingSession`, `verifyTradingSession`), `routes-session.mjs` (`checkTradingSession`, `POST /v2/session/end-all`).
-2. Begin/complete/remove + key storage behind `AUTH_V2_KEYS="true"`; Bankr register moves to it.
-3. Derive routes read the stored key; exec expiry check.
+2. Begin/complete/remove + key storage behind `AUTH_V2_KEYS="true"`; Bankr register moves to it. **Built 2026-10-31,
+   off:**
+   - `workers/nexus-lab-api/v2Keys.mjs` (key material, the AddOrderlyKey typed data, the record).
+   - `routes-key.mjs`: `GET /v2/key/:wallet`, `POST /v2/key/begin|complete|remove|bankr-register`.
+   - Two departures from the text above, both until step 3:
+     - (a) The key is stored in its own record `v2key:{addr}`, not `agent:key:{addr}`. v1 DEACTIVATE deletes
+       `agent:key`, so it would delete a v2 key.
+     - (b) `/proxy/bankr-register` is not switched yet. A v2-only registration would leave the v1 trading routes
+       with no registered key. Bankr calls `POST /v2/key/bankr-register` instead.
+   - Step 3 moves exec and the derive routes onto the v2 record and points `/proxy/bankr-register` at it.
+3. Derive routes read the stored key; exec expiry check. In the same PR, take the June challenge (`requireOwnerV2`)
+   off `/trade` and agent kill, so it covers exactly section C's list (decisions 2026-10-31).
 4. Bankr skill PR (BankrBot/skills) with the new calls; copy back.
 5. Migration step 2; then the dated cut-over.
 
@@ -162,3 +172,11 @@ custody agents already have. In exchange, a leaked signature stops being a leake
 - **Q4. The v1 cut-over: 2 weeks after the Bankr skill PR merges.**
 - **0xd9f7…b449's path back:** register a fresh v2 key through Bankr, withdraw the $1.76 with it, then drop the wallet
   from `REVOKED_TRADING_WALLETS` (its v1 signature stays refused through the v1-off mark).
+
+## Decisions (borst, 2026-10-31)
+
+- **Issue #14 folds into v2.** Its request-bound challenge is section C (`docs/auth-v2-issue14-note.md`). #14 is
+  closed.
+- **`/trade`: session only.** No per-trade challenge once keys are random.
+- **Agent kill: session only.** No challenge: stopping stays cheap.
+- **Build step 2 next.** Done, as above.
