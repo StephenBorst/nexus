@@ -109,7 +109,7 @@ test("the PR text names the change, the page and that it doesn't merge", () => {
   const { title, body } = changeReport(changes, [], "2026-10-26T00:00:00Z");
   assert.equal(title, "Pipeline watch: r1 REGISTERED → LEAD");
   assert.match(body, /pipeline-if-then\.md/);
-  assert.match(body, /does not merge/);
+  assert.match(body, /merges only when checks are green/);
 });
 
 test("the committed snapshot reads and covers every registered read", async () => {
