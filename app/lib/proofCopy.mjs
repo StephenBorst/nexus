@@ -30,6 +30,12 @@ export function pipelineLine(reg, minEvents = 30, holdoutMinEvents = 30, holdout
       if (next) parts.push(`Next: ${next}.`);
       return { text, sub: parts.join(" "), state: "advanced" };
     }
+    if (stage === "EDGE") {
+      // pipeline-if-then.md, Edge: the line is fixed; the headline does not change.
+      const parts = ["Beats random on new data and on coins it was never picked on. Not tested as a trade yet."];
+      if (next) parts.push(`Next: ${next}.`);
+      return { text, sub: parts.join(" "), state: "advanced" };
+    }
     return { text, sub: next ? `Next: ${next}.` : "", state: "advanced" };
   }
   if (events < minEvents) return { text: `${ev} · needs ${minEvents}`, sub: "", state: "counting" };
