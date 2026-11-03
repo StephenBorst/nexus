@@ -2327,3 +2327,15 @@ network effects from the social layer. Positioning: "The trading terminal that m
   cloud sessions. Not confirmed: whether a key may remove itself (the route passes Orderly's refusal through if not).
   Built as `POST /proxy/bankr-remove-key`; run once after the withdrawal.
 
+
+## 2026-11-03 · Auth v2 step 3c: withdrawals on the stored key, and the v1-registration switch
+
+- Asked first: can a `read,trading` key withdraw? Orderly's docs site is blocked from cloud sessions. Its own SDK answers
+  it: `@orderly.network/core` 3.4.0 sets `DEFAUL_ORDERLY_KEY_SCOPE = "read,trading"`, and the web withdraw every Orderly
+  DEX runs signs `/v1/withdraw_request` with that key plus the wallet's EIP-712 `Withdraw`. So "can't withdraw" means
+  "can't withdraw ALONE": the wallet's own signature is the gate, and the receiver is the wallet.
+- `/proxy/bankr-withdraw` picks v2 by the RECORD (a Bankr call carries no session): a wallet with `v2key:{addr}` uses it,
+  any other wallet keeps v1. This is 0xd9f7…b449's way out: `AUTH_V2_KEYS="true"` → `/v2/key/bankr-register` →
+  `/proxy/bankr-withdraw`, all open to a revoked wallet (the v1 `/proxy/bankr-register` stays shut to it).
+- `/proxy/bankr-register` was NOT pointed at v2 under `AUTH_V2_KEYS`: the Bankr skill still trades with `walletSig`, which
+  needs the v1 key. It moves under its own switch, `AUTH_V1_REGISTER_OFF`, flipped when the skill PR (step 4) merges.

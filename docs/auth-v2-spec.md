@@ -167,8 +167,24 @@ custody agents already have. In exchange, a leaked signature stops being a leake
      `/trade` loses the per-trade challenge.
    - **3b:** the agent. Activation with an active v2 key, exec reading `v2key:{addr}`, the expiry rule (no position
      whose max hold runs past `expiresAt`, an alert from 3 days out), `/twap`, and kill without the challenge.
-   - **3c:** Bankr withdraw/deposit, `/withdraw/prepare`, `/proxy/bankr-register` pointed at v2, and `/derive-key`
-     retired.
+   - **3c (built 2026-11-03):** the money flows and registration. `withdrawV2.mjs` + `v1Registration.mjs`.
+     - `/proxy/bankr-withdraw`: a wallet that has a `v2key` record withdraws with that key. Bankr signs only the
+       `Withdraw`, which must recover to the wallet before anything is sent; the static message is never asked for.
+       A wallet without a record keeps the v1 path.
+     - `/withdraw/prepare|submit` take `{walletAddress, session}`; submit always needs the `withdraw` challenge, bound
+       to the units signed (`amount` = integer USDC units), burned only after every local check passes.
+     - Scope check: a `read,trading` key can drive a withdrawal the wallet signs (Orderly's own SDK registers
+       `read,trading`, `DEFAUL_ORDERLY_KEY_SCOPE` in `@orderly.network/core`, and its web withdraw runs on that key).
+       It can't withdraw on its own: Orderly also needs the wallet's EIP-712.
+     - `/proxy/bankr-deposit` needed nothing: it never derived a key (it reads the account id and has Bankr send the
+       deposit txs).
+     - Registration sits behind its OWN switch, `AUTH_V1_REGISTER_OFF="true"` (unset): `/proxy/bankr-register` → the v2
+       Bankr registration, `/derive-key` and `/proxy/register-key` → 410, `/register-orderly-key` → a v2 page
+       (`GET /v2/session/new` mints the unsigned session it signs). Not `AUTH_V2_KEYS`, because the Bankr skill still
+       trades with `walletSig` until step 4: flip it when the skill PR merges. The parked mini app registers through
+       `/derive-key`, so its ENABLE step stops when this flips.
+     - With 3c, `AUTH_V2_KEYS="true"` alone is additive: v2 routes appear, v1 is untouched. That is what 0xd9f7…b449's
+       path back needs (`/v2/key/bankr-register`, then `/proxy/bankr-withdraw`).
 4. Bankr skill PR (BankrBot/skills) with the new calls; copy back.
 5. Migration step 2; then the dated cut-over.
 

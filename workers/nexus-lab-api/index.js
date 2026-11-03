@@ -108,7 +108,9 @@ import { revokedWallets, revokedTradingRefusal } from "./revokedTrading.mjs";
 import { handleRemoveKey } from "./routes-removekey.mjs";
 import { handleSession } from "./routes-session.mjs";
 import { handleKey } from "./routes-key.mjs";
-import { wantsV2, v2Signer } from "./tradingSigner.mjs";
+import { wantsV2, v2Signer, hasV2Key, storedKeySigner } from "./tradingSigner.mjs";
+import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, answer as withdrawAnswer } from "./withdrawV2.mjs";
+import { v1RegisterOff, v1RegistrationRefusal, bankrRegisterV2Refusal, registerPageV2Html } from "./v1Registration.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
 import { aesGcmEncrypt, scrubStoredSeeds } from "./seedVault.mjs";
@@ -973,6 +975,9 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
 
     // Account setup, the retired /account-snapshot (410) and seed-scrub progress (routes-account.mjs).
     {
+      // AUTH_V1_REGISTER_OFF="true": /derive-key and /proxy/register-key are retired (v1Registration.mjs).
+      const v1Off = v1RegistrationRefusal(parts, request.method, env);
+      if (v1Off) return json(v1Off.body, request, v1Off.status);
       const accountRes = await handleAccount(parts, request, env);
       if (accountRes) return accountRes;
     }
@@ -3558,6 +3563,15 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       if (!walletAddress || !bankrApiKey || !amount) {
         return json({ error: "walletAddress, bankrApiKey, and amount (USDC) required" }, request, 400);
       }
+      // Auth v2 (step 3c, withdrawV2.mjs): a wallet with a v2 key record withdraws with that key; Bankr
+      // signs only the Withdraw itself, never the static trading message. Off unless AUTH_V2_KEYS="true".
+      const v2Wallet = String(walletAddress).toLowerCase().trim();
+      if (env.AUTH_V2_KEYS === "true" && /^0x[0-9a-f]{40}$/.test(v2Wallet) && await hasV2Key(env, v2Wallet)) {
+        const signer = await storedKeySigner(env, v2Wallet);
+        if (!signer.ok) return json(signer.body, request, signer.status);
+        const out = await withdrawAnswer(() => bankrWithdrawV2(signer, { bankrApiKey, amount }));
+        return json(out.body, request, out.status);
+      }
       try {
         const walletNorm = walletAddress.toLowerCase().trim();
         const ORDERLY_BASE_W = "https://api-evm.orderly.org";
@@ -3726,6 +3740,13 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     if (parts[0] === "withdraw" && (parts[1] === "prepare" || parts[1] === "submit") && request.method === "POST") {
       let body;
       try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
+      if (wantsV2(body)) {
+        // Auth v2 (step 3c, withdrawV2.mjs): session + the stored key; submit always needs the challenge.
+        const v2 = await v2Signer(env, body);
+        if (!v2.ok) return json(v2.body, request, v2.status);
+        const out = await withdrawAnswer(() => parts[1] === "prepare" ? withdrawPrepareV2(v2, body) : withdrawSubmitV2(env, v2, body));
+        return json(out.body, request, out.status);
+      }
       const { walletSig, walletAddress } = body;
       if (!walletSig || !walletAddress) return json({ error: "walletSig and walletAddress required" }, request, 400);
       try {
@@ -3834,6 +3855,12 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // Flow: check account → deposit if new → personal_sign → derive ed25519 → EIP-712 → register → KV
     // depositAmount defaults to 5 USDC. key is used transiently, never stored.
     if (parts[0] === "proxy" && parts[1] === "bankr-register" && request.method === "POST") {
+      // AUTH_V1_REGISTER_OFF="true": the same call registers a random v2 key instead (v1Registration.mjs).
+      if (v1RegisterOff(env)) {
+        const no = bankrRegisterV2Refusal(env);
+        if (no) return json(no.body, request, no.status);
+        return handleKey(["v2", "key", "bankr-register"], request, env);
+      }
       let body;
       try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
 
@@ -4036,6 +4063,9 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // Flow: personal_sign("nexus-trading-key-v1") -> /derive-key -> EIP-712 sign -> /proxy/register-key
     // No private keys stored anywhere. Same wallet = same trading key every session.
     if (parts[0] === "register-orderly-key" && request.method === "GET") {
+      if (v1RegisterOff(env)) {
+        return new Response(registerPageV2Html(), { status: 200, headers: { "Content-Type": "text/html;charset=UTF-8" } });
+      }
       const html = `<!DOCTYPE html>
 <html lang="en">
 <head>

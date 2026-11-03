@@ -34,19 +34,23 @@ export const BANKR_BASE = "https://api.bankr.bot";
 const ADDR = /^0x[0-9a-f]{40}$/;
 const kvOf = (env) => env.NEXUS_AGENT;
 
-class Refused extends Error {
+export class Refused extends Error {
   constructor(status, body) { super(body?.error || "refused"); this.status = status; this.body = body; }
 }
 
 async function readJson(r) { try { return await r.json(); } catch { return null; } }
 
-/** The per-request challenge, always enforced here. Burns the nonce on success. */
-async function checkChallenge(env, { action, wallet, nonce, v2Sig, now }) {
-  if (!nonce || !v2Sig) throw new Refused(401, { error: "challenge_required", hint: `GET /auth/challenge?wallet=${wallet}&action=${action}, sign it, send {nonce, v2Sig}.` });
+/**
+ * The per-request challenge (spec §C), always enforced where it's called. Burns the nonce on success.
+ * `amount` binds it to a value (a withdrawal's units); null = a challenge minted without one.
+ */
+export async function checkChallenge(env, { action, wallet, nonce, v2Sig, now, amount = null }) {
+  const amt = amount == null ? "" : `&amount=${amount}`;
+  if (!nonce || !v2Sig) throw new Refused(401, { error: "challenge_required", hint: `GET /auth/challenge?wallet=${wallet}&action=${action}${amt}, sign it, send {nonce, v2Sig}.` });
   const raw = await kvOf(env).get(`auth:nonce:${nonce}`);
   if (!raw) throw new Refused(401, { error: "challenge_unknown_or_expired" });
   let record; try { record = JSON.parse(raw); } catch { throw new Refused(401, { error: "challenge_corrupt" }); }
-  const v = verifyV2({ record, sig: v2Sig, expected: { action, wallet, amount: null }, now, recover: recoverEthAddress });
+  const v = verifyV2({ record, sig: v2Sig, expected: { action, wallet, amount }, now, recover: recoverEthAddress });
   if (!v.ok) throw new Refused(401, { error: "challenge_failed", reason: v.reason });
   await kvOf(env).delete(`auth:nonce:${nonce}`);
 }
@@ -188,7 +192,7 @@ async function ensureAccount(wallet, bankrApiKey, { fetchImpl, now }) {
   return id;
 }
 
-async function bankrSignTyped(bankrApiKey, typedData, fetchImpl) {
+export async function bankrSignTyped(bankrApiKey, typedData, fetchImpl) {
   let d = null;
   try {
     d = await readJson(await fetchImpl(`${BANKR_BASE}/wallet/sign`, {

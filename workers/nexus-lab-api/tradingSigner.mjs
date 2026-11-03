@@ -33,6 +33,19 @@ export async function v2Signer(env, body, { now = Date.now() } = {}) {
   if (body?.walletSig) return refuse(400, { error: "pick_one_auth", hint: "Send a session or a walletSig, not both." });
   const v = await checkTradingSession(env, wallet, body.session, { now });
   if (!v.ok) return refuse(401, { error: "session_required", reason: v.reason, hint: "Sign a fresh trading session with this wallet and send it as `session`." });
+  return storedKeySigner(env, wallet, { now });
+}
+
+/** Does this wallet have a v2 key record (active or expired)? Used by routes with no session (Bankr). */
+export async function hasV2Key(env, wallet) {
+  try { return JSON.parse((await env.NEXUS_AGENT.get(V2_KEY(String(wallet).toLowerCase()))) || "null")?.v === 2; } catch { return false; }
+}
+
+/**
+ * The stored-key half of v2Signer, for a wallet the CALLER has already proven (a session above, or
+ * Bankr signing as the wallet in /proxy/bankr-withdraw). Never call it on an unproven address.
+ */
+export async function storedKeySigner(env, wallet, { now = Date.now() } = {}) {
   let rec = null;
   try { rec = JSON.parse((await env.NEXUS_AGENT.get(V2_KEY(wallet))) || "null"); } catch { rec = null; }
   const st = publicKeyStatus(rec, now);
