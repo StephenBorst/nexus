@@ -338,7 +338,14 @@ product is what sits on top:
   reads the stored key until step 3. #14 is closed into the spec (challenge = §C; `/trade` + kill session-only).
   Step 3a (built 2026-10-31, same flag): the 10 trading routes accept `{walletAddress, session}` and sign with the stored
   key (`tradingSigner.mjs v2Signer`: 409 `key_required` / `key_expired`); v1 `walletSig` branch unchanged beside it;
-  `/trade` dropped its per-trade challenge. 3b = agent + exec expiry, 3c = Bankr money flows + `/derive-key`.
+  `/trade` dropped its per-trade challenge. Step 3c (built 2026-11-03, same flag, `withdrawV2.mjs`): `/proxy/bankr-withdraw`
+  uses the stored key for a wallet WITH a `v2key` record (Bankr signs only the Withdraw, which must recover to the
+  wallet); `/withdraw/prepare|submit` take a session, submit always needs the `withdraw` challenge bound to the signed
+  units. A `read,trading` key can drive a withdrawal the wallet signs (Orderly's SDK registers that scope) but can't
+  withdraw alone. Second switch `AUTH_V1_REGISTER_OFF="true"` (`v1Registration.mjs`, unset): `/proxy/bankr-register` →
+  the v2 Bankr registration, `/derive-key` + `/proxy/register-key` → 410, `/register-orderly-key` → the v2 page
+  (`GET /v2/session/new` mints the unsigned session). Flip it when the Bankr skill moves (step 4), not before: the skill
+  trades with walletSig. 3b = agent + exec expiry (next).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must
