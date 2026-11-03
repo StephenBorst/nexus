@@ -247,7 +247,8 @@ product is what sits on top:
 - **level_reclaim exit gap** (`docs/research/level-reclaim-exit-gap.md`, signed 2026-10-31): the read grades +R while its
   graded exit loses; `tools/explorers/exitBridge.mjs` bridges the two on the same trades (read-only, reconciles with the
   served `netBps`). The first pull found the as-traded walker filling exits at the hour's extreme (S3b −23.9 bps); fixed
-  2026-10-31 as a measurement change (below), S3b now 0. Causes are named at 30 trades, per the page.
+  2026-10-31 as a measurement change (below), S3b now 0. At 30 trades (2026-11-03) the cause is H2, stop-width
+  weighting: narrow stops +0.50R/+63 bps, wide −0.06R/−60 bps. Recommendation on the page: keep the bps money bar.
 - **Daily pipeline watcher** (prompt `docs/routines/pipeline-watch.md`, `tools/pipeline/watch.mjs`,
   `app/lib/pipelineWatch.mjs`): compares served stages with `docs/research/pipeline-stages.json`; a change opens a PR on
   `pipeline-watch/<date>`. **The watcher merges its own `Pipeline watch:` PR** (borst's go, 2026-11-02) only when checks are green, it is mergeable, the change is display/record only, no parity DRIFT and nothing arms live money; any other session leaves watcher PRs alone. A scheduled task stores its own copy of the

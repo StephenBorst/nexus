@@ -196,3 +196,54 @@ The same pull re-run on the fixed walker, on the same public series:
 
 S3b is 0, so the bridge now closes and the page's cause rule can run. It runs at 30 trades (24 today). Still
 descriptive: no cause is named here.
+
+### Second pull · 2026-11-03 (T reached 30: the cause rule applied)
+
+`node tools/explorers/exitBridge.mjs <dir> --fetch`, public series read 2026-11-03 ~17:40 UTC. It reconciles with the
+served scoreboard (2026-11-03 17:35 UTC): 58 events, 31 trades, −0.8 bps, S4 − netBps = 0.0 bps.
+
+Main card (31 trades, mean stop 200.0 bps; every step in bps):
+
+| S0 | → H4 | S1 | → H2 | S2 | → H3 | S3a | → S3b | S3b | → H1 | S4 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| +56.9 | −15.0 | +41.9 | **−36.7** | +5.2 | 0.0 | +5.2 | 0.0 | +5.2 | −6.0 | −0.8 |
+
+**Cause, by the page's rule: H2 (stop-width weighting).** The move S0 → S4 is −57.7 bps. H2 is −36.7, which is 64% of
+the move: at least a third, the same sign, and it keeps that sign with the single largest trade dropped. No other step
+qualifies:
+- H4 (which events) shrank from −59.4 at 24 trades to −15.0 as the older events were joined by newer ones. It is
+  under a third.
+- H3 (hold decay) and S3b (fill price) are 0.0: every trade hit its stop or its target, none timed out.
+- H1 (fees) is the fixed −6.0.
+
+What H2 looks like:
+- Stop-width halves:
+  - narrow (15 trades, 140.9 bps stops): **+0.50R, +62.7 bps** net;
+  - wide (16 trades, 255.4 bps stops): **−0.06R, −60.3 bps** net.
+- The read calls direction. It earns on tight stops and gives it back on wide ones, and the R grade's equal weighting
+  hides that.
+- Exits: 15 TP (+248.5 bps), 16 SL (−234.4), 0 TIMEOUT. Holds averaged 19.5h (winners) and 16.8h (losers).
+- Sides:
+  - LONG: 20 trades, S4 +40.8.
+  - SHORT: 11 trades, S4 −76.4, with H4 −52.7 and H2 −49.3.
+- Funding: 0.7 bps per trade (informational).
+
+Holdout (21 trades, under 30, so it names nothing):
+- S0 +49.3 → H4 −69.5 → H2 −30.7 → H3 0.0 → S3b 0.0 → H1 −6.0 → S4 −56.9.
+- Stop-width halves: narrow +0.25R, +77.1 bps; wide −0.32R, −178.8 bps.
+- The same shape, not yet a count.
+
+**The note on the money bar (what H2 licenses).** The question is whether the Tradeable bar should stay in bps of
+money (each trade weighted by its stop) or move to R (each trade weighted equally). Recommendation: **keep the bps bar.**
+- Money is what trades, and the R grade is the kinder grade by design.
+- A read that loses its money on wide stops would lose it live too, at any position size that risks a fixed share of
+  price.
+- A bar that sized every trade to the same risk would be a different strategy, and it would need its own registration.
+
+Nothing changes unless borst signs otherwise. The bar stays as written in `read-pipeline.md` and
+`pipeline-if-then.md`.
+
+**What this does not do.**
+- The read's rule, stage and bar are unchanged.
+- A variant that skips the widest stops would be a new read: a new name, a new registration date, its own 30 events.
+- That variant would be the second exit variant tested on these entries, so this page does not propose it.
