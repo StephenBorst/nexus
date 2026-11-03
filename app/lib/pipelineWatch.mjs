@@ -265,6 +265,6 @@ export function changeReport(changes, issues = [], asOf = null) {
     lines.push("");
   }
   if (issues.length) { lines.push("### Issues", ...issues.map((i) => `- ${i}`), ""); }
-  lines.push("Opened by the daily pipeline watcher. It does not merge. Steps marked \"borst's go\" are borst's.");
+  lines.push("Opened by the daily pipeline watcher. It merges only when checks are green and nothing is borst's to arm. Steps marked \"borst's go\" are borst's.");
   return { title: title.length > 120 ? `${title.slice(0, 117)}…` : title, body: lines.join("\n") };
 }

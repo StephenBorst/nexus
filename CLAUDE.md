@@ -250,7 +250,7 @@ product is what sits on top:
   2026-10-31 as a measurement change (below), S3b now 0. Causes are named at 30 trades, per the page.
 - **Daily pipeline watcher** (prompt `docs/routines/pipeline-watch.md`, `tools/pipeline/watch.mjs`,
   `app/lib/pipelineWatch.mjs`): compares served stages with `docs/research/pipeline-stages.json`; a change opens a PR on
-  `pipeline-watch/<date>`. **Watcher PRs are never merged by a session.** A scheduled task stores its own copy of the
+  `pipeline-watch/<date>`. **The watcher merges its own `Pipeline watch:` PR** (borst's go, 2026-11-02) only when checks are green, it is mergeable, the change is display/record only, no parity DRIFT and nothing arms live money; any other session leaves watcher PRs alone. A scheduled task stores its own copy of the
   prompt: after editing the doc, update the task (`update_trigger`).
 - **Live money** = `docs/research/live-money-review.md` (draft, unsigned, arms nothing).
 - `/intel/evidence?axis=&hold=` replays a preset across every mature market (pooled ≠ independent; say so).
@@ -535,7 +535,7 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
   hard-code one here). No model ids in commits, PRs or code.
 - **Merge your own green PR** on `StephenBorst/nexus` once CI is green on the head and it's mergeable. Hold and tell
   borst on: red/pending CI, a conflict, an unanswered review, a failing Claude Approvals check, a PR that isn't yours or
-  is on another repo (BankrBot/skills, nexus-landing), a `Pipeline watch:` PR, or anything that arms live money. After
+  is on another repo (BankrBot/skills, nexus-landing), a `Pipeline watch:` PR you did not open as the watcher, or anything that arms live money. After
   a merge, check the deploy run started.
 - **Bankr skill:** published at `BankrBot/skills` → `nexus-trading-labs/`; our fork `StephenBorst/skills`. Change it in
   BankrBot first (PR from the fork), then copy the folder back here byte for byte; never copy this folder over theirs
