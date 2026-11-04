@@ -2,7 +2,8 @@
 // Pure. Takes the stress hours, the judged hours and each read's events WITH their R already graded by
 // the scoreboard (axisbt gradeEventR: one R, never a second one here), and returns per-read status,
 // statistic, p-value, Holm and verdict. It imports the rule and the labels unchanged from
-// stressHours.mjs. Wiring it into the scoreboard and recording a verdict on the page are their own PRs.
+// stressHours.mjs. The scoreboard runs it live through stressStudy.mjs (`stressStudy` on
+// /intel/axis-backtest); recording a verdict on the page is its own PR.
 // Brain and exec never import it (stressGrading.test.mjs fails if one does).
 //
 // Where the page leaves a choice to the code, this file makes it once, here, before any outcome exists:

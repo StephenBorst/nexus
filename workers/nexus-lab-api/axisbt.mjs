@@ -793,7 +793,10 @@ export function windowTide(pools) {
   return { metric: "R", from: new Date(lo * 3600000).toISOString(), to: new Date(hi * 3600000).toISOString(), markets: pools.size, LONG: side("LONG"), SHORT: side("SHORT") };
 }
 
-export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null, gradedExit = false } = {}) {
+// Every event a read fires on these coin sets, with what grading needs (price spine, candles,
+// funding, market key). ONE builder: scoreEvents grades these, and the stress-hour study
+// (stressStudy.mjs, via eventsWithR) labels the same events with the same R.
+function buildEvents(coinSets, signalGen) {
   // BTC context (regime map + price map) for the RS/veto gens — built once, passed to every gen.
   const btcCs = (coinSets || []).find((c) => String(c.coin || "").toUpperCase() === "BTC");
   // BTC context off the DEEPEST btc series (candle closes preferred) so the RS/veto reaches
@@ -809,6 +812,33 @@ export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSa
     const fmap = fundingByHour(cs.oiHist); // hourly per-8h funding (graded exit's "net of funding" line only)
     for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, mkt, pmap, cbh, fmap, rs: typeof e.rs === "number" ? e.rs : null });
   });
+  return all;
+}
+
+/**
+ * Each event's R exactly as scoreEvents grades it (gradeEventR at the price-spine entry), for a
+ * study that needs the per-event outcome (the stress-hour study). gradeEventR reads "no touch yet"
+ * as 0, the same as a finished no-touch trade, so an event whose 168h window isn't covered by the
+ * coin's recorded candles yet (and hasn't touched a level) is `r: null` (pending), never a 0. An
+ * event the scoreboard can't grade at all (no candles / ATR / entry) is left out, as it is there.
+ * @returns {{ t:number, coin:string, side:string, r:number|null }[]}
+ */
+export function eventsWithR(coinSets, signalGen) {
+  const lastH = new Map(); // per candle map: the newest recorded hour
+  const out = [];
+  for (const e of buildEvents(coinSets, signalGen)) {
+    const h = hourBucket(e.t);
+    const r = gradeEventR(e.cbh, h, e.side, e.pmap.get(h));
+    if (r == null) continue;
+    if (!lastH.has(e.cbh)) { let m = -Infinity; for (const k of e.cbh.keys()) if (k > m) m = k; lastH.set(e.cbh, m); }
+    const settled = r !== 0 || h + R_CONTRACT.maxHoldH <= lastH.get(e.cbh);
+    out.push({ t: e.t, coin: e.coin, side: e.side, r: settled ? r : null });
+  }
+  return out;
+}
+
+export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null, gradedExit = false } = {}) {
+  const all = buildEvents(coinSets, signalGen);
   const gxCut = typeof gradedExit === "number" ? gradedExit : GRADED_EXIT_OOS_CUTOFF_MS;
   if (!all.length) return { random: null, sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples), exitGraded: gradedExit ? scoreGradedExit([], 0, minSamples, gxCut) : null };
   // rs_quartile written on EVERY event row that carries an rs — from closes, NOT candle-gated

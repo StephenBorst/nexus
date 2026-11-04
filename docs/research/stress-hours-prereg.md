@@ -135,3 +135,17 @@ borst ruled on both on 2026-11-04, while every read was still under 30/30 (none 
    any read at the limit with 20 or more STRESS events.
 
 Everything above Results is unchanged.
+
+### 2026-11-04 · the judge runs live on the scoreboard
+
+Not a result. From this date `/intel/axis-backtest` serves `stressStudy`: each read's STRESS / CALM / UNJUDGED counts,
+pending events and status, judged live by `stressGrading.mjs` (`workers/nexus-lab-api/stressStudy.mjs`).
+
+- Stress hours come from the nine `RECORDED_COINS`.
+- Each read's events come from the scoreboard's own generator. They are taken on the main card (holdout coins left
+  out) and, separately, on the holdout line.
+- Each event's R is the scoreboard's own (`eventsWithR`, built by the same code `scoreEvents` uses).
+- An event that hasn't touched its stop or target is **pending** until its 168h window is recorded, never counted as 0.
+
+First live read (2026-11-04, dry run on the public history routes): 1 stress hour (2026-11-04 08:00 UTC), every read
+ACCRUING, the most STRESS events on one read = 1.

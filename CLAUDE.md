@@ -253,7 +253,9 @@ product is what sits on top:
   (mulberry32, golden-pinned); empty-side shifts left out (`validShifts`); interim Holm: p ≤ α/7 in, p > α out, else
   PENDING_HOLM. borst's rulings (2026-11-04, under the page's Results): significantly lower but STRESS mean R ≥ 0 =
   `LOWER_STILL_POSITIVE` ("lower in stress, still positive", licenses nothing; `licensesPause` only on WORSE); ≥20
-  STRESS but <30 CALM at the limit = judged as it stands. Not wired to the scoreboard yet (own PR).
+  STRESS but <30 CALM at the limit = judged as it stands. Served live as `stressStudy` on `/intel/axis-backtest`
+  (`stressStudy.mjs`, 2026-11-04): events + R from axisbt `eventsWithR` (the builder `scoreEvents` uses; a no-touch
+  event is pending until its 168h window is recorded, never a 0). Recording a verdict under Results = its own PR.
 - **Pre-registered studies are append-only:** a doc's text above Results is pinned (sha256 tests); verdicts are appended;
   a new idea found on a closed population is a new dated registration (e.g. structure × house fade: CLOSED, not shown).
 - **level_reclaim exit gap** (`docs/research/level-reclaim-exit-gap.md`, signed 2026-10-31): the read grades +R while its

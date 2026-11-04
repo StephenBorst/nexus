@@ -71,6 +71,7 @@ import { rankUniverse, RECORDED_COINS, HOLDOUT_COINS, UNIVERSE_RULES } from "./u
 import { FLOW_COINS, HOLDOUT_AXES, HOLDOUT_SIGNED_OFF, isHoldoutCoin } from "../../app/lib/recordedUniverse.mjs";
 import { REGISTERED_READS, PIPELINE_RULES, pipelineStage, registeredMs } from "../../app/lib/readPipeline.mjs";
 import { REGIME_WINDOW, regimeFromMs, btcDailyRegimes, regimeConditionMet, regimeLabel } from "../../app/lib/regimeWindow.mjs";
+import { runStressStudy, STRESS_DOC } from "./stressStudy.mjs";
 // TWAP planner/status — reuse the exec worker's tested logic (wrangler bundles the
 // cross-dir import, same as backtest.mjs). ONE planner, so start-validation and the
 // cron fire from identical rules.
@@ -4555,7 +4556,7 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "intel" && parts[1] === "axis-backtest" && request.method === "GET") {
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
-      const CACHE = `axisbt:v20:min${min}`; // v20 = exits fill at their level, not the hour's extreme (stepExit, docs/research/level-reclaim-exit-gap.md) · v19 = price spine: first oi:hist row in an hour wins (docs/research/price-spine-drift-2026-10-29.md) · v18 = + oi_coil_break (registered 2026-10-27, docs/research/oi-coil-break-prereg.md) · v17 = + oi_div_reversal_4h (registered 2026-10-27, docs/research/oi-div-reversal-4h-prereg.md) · v16 = + `regimeWindow` on basis_x_cvd (main + holdout) and the BTC regime day counts (docs/research/graded-exit-regime-prereg.md) · v15 = funding block carries `feesNetBps` (fee-net on the same covered trades) · v14 = + `exitGraded.funding` (the graded exit also net of the funding paid while open, an estimate; informational) · v13 = + the four registered explorer reads (level_reclaim, oi_div_reversal, session_momentum, confluence_follow) · v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
+      const CACHE = `axisbt:v21:min${min}`; // v21 = + `stressStudy` (the registered stress-hour study, judged live by stressGrading.mjs, docs/research/stress-hours-prereg.md) · v20 = exits fill at their level, not the hour's extreme (stepExit, docs/research/level-reclaim-exit-gap.md) · v19 = price spine: first oi:hist row in an hour wins (docs/research/price-spine-drift-2026-10-29.md) · v18 = + oi_coil_break (registered 2026-10-27, docs/research/oi-coil-break-prereg.md) · v17 = + oi_div_reversal_4h (registered 2026-10-27, docs/research/oi-div-reversal-4h-prereg.md) · v16 = + `regimeWindow` on basis_x_cvd (main + holdout) and the BTC regime day counts (docs/research/graded-exit-regime-prereg.md) · v15 = funding block carries `feesNetBps` (fee-net on the same covered trades) · v14 = + `exitGraded.funding` (the graded exit also net of the funding paid while open, an estimate; informational) · v13 = + the four registered explorer reads (level_reclaim, oi_div_reversal, session_momentum, confluence_follow) · v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
@@ -4596,6 +4597,18 @@ document.getElementById("btn").addEventListener("click",go);
         ...runHoldoutScorecard(holdoutSets, { horizons: [4, 12, 24], minSamples: min, axes: [...HOLDOUT_AXES, ...holdoutRegs.map((x) => x.axis)], registered: holdoutRegs, tests }),
         note: "Coins the basis read was never looked at on, picked on liquidity only and recorded from the sign-off date. Graded by the same code, never pooled into the main card. Accrues: basis needs 48h of history before it can fire, and the R grade needs hourly prices recorded since the sign-off. See docs/research/holdout-universe-prereg.md.",
       };
+      // The stress-hour study (signed 2026-10-30): stress hours from the nine RECORDED_COINS, each read's
+      // events + R from this scorecard's own generators on the main card (holdout coins out, as `oos`)
+      // and on the holdout line, judged by stressGrading.mjs. Measurement only; a failure is reported,
+      // never a blank study.
+      let stressStudy;
+      try {
+        stressStudy = runStressStudy({
+          panelSets: coinSets.filter((c) => RECORDED_COINS.includes(c.coin)),
+          mainSets: coinSets.filter((c) => !isHoldoutCoin(c.coin)),
+          holdoutSets,
+        });
+      } catch (e) { stressStudy = { name: "stress_hours", doc: STRESS_DOC, error: whyFailed(e) }; }
       // The regime window's BTC day counts, from Orderly daily candles (one read). A failed read is
       // reported as an error, never as zero days.
       let regime;
@@ -4613,6 +4626,7 @@ document.getElementById("btn").addEventListener("click",go);
         regimeWindow: { ...REGIME_WINDOW, regime, note: "Basis × CVD graded exit, regime window. The axis row's `regimeWindow` block (main card and holdout) grades only events and trades at or after registeredAt. Judged per docs/research/graded-exit-regime-prereg.md; nothing here judges it." },
         ...scorecard,
         holdout,
+        stressStudy,
         pipeline: {
           rules: PIPELINE_RULES,
           reads: REGISTERED_READS.map((reg) => {
