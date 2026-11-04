@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mulberry32, drawShifts, shiftedIsStress, holm, judgeStressStudy, readPopulation, R_HOLD_H } from "./stressGrading.mjs";
+import { mulberry32, drawShifts, shiftedIsStress, holm, judgeStressStudy, readPopulation, R_HOLD_H, VERDICT_LABELS } from "./stressGrading.mjs";
 import { STRESS_RULE, STRESS_STUDY, inStress, stressLabel } from "./stressHours.mjs";
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 
@@ -156,12 +156,30 @@ test("better in stress is named, and licenses nothing", () => {
   assert.equal(judge({ confluence_follow: { main: ev } }, pop.cutoffT + R_HOLD_H * H).reads.confluence_follow.verdict, "BETTER_IN_STRESS");
 });
 
-test("significantly lower but STRESS mean R ≥ 0 is a gap the page doesn't name: no verdict", () => {
+test("ruling R1 (borst, 2026-11-04): significantly lower but STRESS mean R ≥ 0 = lower in stress, still positive; licenses nothing", () => {
   const ev = tape({ rStress: 0.5, rCalm: 1.5 });
   const pop = readPopulation(ev, { hoursMs: HOURS, judged: JUDGED, startMs: START, endMs: LIMIT });
   const r = judge({ oi_coil_break: { main: ev } }, pop.cutoffT + R_HOLD_H * H).reads.oi_coil_break;
-  assert.equal(r.verdict, null);
-  assert.equal(r.gap, "lower_in_stress_but_stress_mean_nonnegative");
+  assert.equal(r.verdict, "LOWER_STILL_POSITIVE");
+  assert.equal(r.label, "lower in stress, still positive");
+  assert.equal(r.licensesPause, false);
+  assert.equal(r.final, true);
+  assert.equal(r.gap, undefined);
+  // the same tape with STRESS below 0 is the one verdict that licenses a pause PR
+  const worse = tape({ rStress: -1, rCalm: 1 });
+  const wp = readPopulation(worse, { hoursMs: HOURS, judged: JUDGED, startMs: START, endMs: LIMIT });
+  const w = judge({ oi_coil_break: { main: worse } }, wp.cutoffT + R_HOLD_H * H).reads.oi_coil_break;
+  assert.equal(w.verdict, "WORSE_IN_STRESS");
+  assert.equal(w.licensesPause, true);
+});
+
+test("only WORSE_IN_STRESS licenses anything, and the labels are the page's words", () => {
+  assert.deepEqual(Object.keys(VERDICT_LABELS).sort(), ["BETTER_IN_STRESS", "LOWER_STILL_POSITIVE", "NOT_ENOUGH_STRESS", "NO_DIFFERENCE", "WORSE_IN_STRESS"]);
+  const page = readFileSync(new URL("../../docs/research/stress-hours-prereg.md", import.meta.url), "utf8");
+  const results = page.slice(page.indexOf("\n## Results"));
+  assert.match(results, /lower in stress, still positive/);
+  assert.match(results, /licenses nothing/);
+  assert.match(results, /judged as it stands/);
 });
 
 test("out-of-sample only; an unresolved event before the cutoff makes the read wait", () => {
@@ -174,7 +192,7 @@ test("out-of-sample only; an unresolved event before the cutoff makes the read w
   assert.equal(judge({ level_reclaim: { main: pending } }, at).reads.level_reclaim.status, "WAITING_ON_PENDING");
 });
 
-test("short of 30/30 before the limit = ACCRUING; at the limit: ≥20 STRESS judged as it stands, <20 NOT_ENOUGH_STRESS, CALM short = gap", () => {
+test("short of 30/30 before the limit = ACCRUING; at the limit: ≥20 STRESS judged as it stands (CALM short too, ruling R2), <20 NOT_ENOUGH_STRESS", () => {
   const at = LIMIT + 2 * D;
   const thin = tape({ rStress: -1, rCalm: 1, perEp: 4 }); // 24 STRESS
   assert.equal(judge({ level_reclaim: { main: thin } }, START + 100 * D).reads.level_reclaim.status, "ACCRUING");
@@ -187,12 +205,17 @@ test("short of 30/30 before the limit = ACCRUING; at the limit: ≥20 STRESS jud
   assert.equal(out.reads.level_reclaim.counts.STRESS, 24);
   assert.equal(out.reads.level_reclaim.judgedAt, LIMIT);
   assert.equal(out.reads.rsi_reset_deep.verdict, "NOT_ENOUGH_STRESS");
-  assert.equal(out.reads.oi_div_reversal.status, "INCOMPLETE");
-  assert.equal(out.reads.oi_div_reversal.gap, "stress_enough_calm_short_at_limit");
+  assert.equal(out.reads.oi_div_reversal.status, "JUDGED", "≥20 STRESS, 25 CALM: judged as it stands");
+  assert.equal(out.reads.oi_div_reversal.counts.CALM, 25);
+  assert.equal(out.reads.oi_div_reversal.judgedAt, LIMIT);
+  assert.equal(out.reads.oi_div_reversal.gap, undefined);
+  assert.equal(out.reads.rsi_reset_deep.label, "not enough stress");
   assert.equal(out.reads.session_momentum.verdict, "NOT_ENOUGH_STRESS", "no events at all");
   assert.equal(out.familyComplete, true);
   assert.equal(out.reads.level_reclaim.holm.familyComplete, true);
-  assert.equal(out.reads.level_reclaim.holm.threshold, 0.05, "one read judged: Holm over a family of one");
+  // two reads judged (level_reclaim, and oi_div_reversal under R2): Holm over a family of two
+  assert.deepEqual([out.reads.level_reclaim.holm.threshold, out.reads.oi_div_reversal.holm.threshold].sort(), [0.025, 0.05]);
+  assert.equal(out.reads.oi_div_reversal.verdict, "WORSE_IN_STRESS");
   assert.equal(out.reads.level_reclaim.verdict, "WORSE_IN_STRESS");
 });
 

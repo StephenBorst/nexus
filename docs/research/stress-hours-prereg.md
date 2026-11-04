@@ -123,3 +123,15 @@ The last 45 days to 2026-10-30T18:00Z: 17 stress hours in 8 episodes, 228 hours 
 ## Results
 
 (Append below. Never edit above this line.)
+
+### 2026-11-04 · rulings on two cases the page doesn't name (borst, before any read reached them)
+
+Not a result. The judge (`workers/nexus-lab-api/stressGrading.mjs`) found two cases the verdicts above don't cover.
+borst ruled on both on 2026-11-04, while every read was still under 30/30 (none could have reached either case):
+
+1. **Significantly lower in stress, but the STRESS mean R ≥ 0.** Labelled **"lower in stress, still positive"**
+   (`LOWER_STILL_POSITIVE`). It licenses nothing. Only WORSE_IN_STRESS licenses the one reviewed pause PR.
+2. **20 or more STRESS events but fewer than 30 CALM at the limit.** The read is **judged as it stands**, the same as
+   any read at the limit with 20 or more STRESS events.
+
+Everything above Results is unchanged.

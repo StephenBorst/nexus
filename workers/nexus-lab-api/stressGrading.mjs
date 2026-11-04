@@ -27,10 +27,21 @@
 //      Until then a read that reached 30/30 is RIPENING.
 //   6. The holdout line is labelled with the main-card stress hours and gets d and p, display only:
 //      never in the Holm family, never a verdict.
-// Two cases the page doesn't name return verdict null with a `gap` for borst to rule on before any
-// read can reach them: significantly lower in stress but STRESS mean R ≥ 0, and ≥20 STRESS but <30
-// CALM at the limit.
+// Two cases the page doesn't name, ruled by borst on 2026-11-04 (dated under the page's Results)
+// before any read could reach them:
+//   R1. Significantly lower in stress but STRESS mean R ≥ 0 = LOWER_STILL_POSITIVE, labelled "lower in
+//       stress, still positive". It licenses nothing (only WORSE_IN_STRESS licenses a pause PR).
+//   R2. ≥20 STRESS but <30 CALM at the limit: judged as it stands, like any read at the limit.
 import { STRESS_RULE, STRESS_STUDY, inStress, stressLabel } from "./stressHours.mjs";
+
+// Verdict words. Only WORSE_IN_STRESS licenses anything (one reviewed per-read pause PR, never automatic).
+export const VERDICT_LABELS = Object.freeze({
+  WORSE_IN_STRESS: "worse in stress",
+  NO_DIFFERENCE: "no difference",
+  BETTER_IN_STRESS: "better in stress",
+  LOWER_STILL_POSITIVE: "lower in stress, still positive",
+  NOT_ENOUGH_STRESS: "not enough stress",
+});
 
 const H = 3600000;
 const EPS = 1e-12;
@@ -176,9 +187,8 @@ export function judgeStressStudy({ hoursMs, judged, events, at, study = STRESS_S
       judgeEnd = limitMs;
       if (pop.reached && !pop.pendingBeforeCutoff) judgedPop = pop.prefix; // reached 30/30 inside the last week
       else if (pop.anyPending) row.status = "WAITING_ON_PENDING";
-      else if (pop.counts.STRESS < study.minAtLimit) { row.status = "NOT_ENOUGH_STRESS"; row.verdict = "NOT_ENOUGH_STRESS"; row.final = true; }
-      else if (pop.counts.CALM < study.minEach) { row.status = "INCOMPLETE"; row.gap = "stress_enough_calm_short_at_limit"; row.final = true; }
-      else judgedPop = pop.all;
+      else if (pop.counts.STRESS < study.minAtLimit) { row.status = "NOT_ENOUGH_STRESS"; row.verdict = "NOT_ENOUGH_STRESS"; row.label = VERDICT_LABELS.NOT_ENOUGH_STRESS; row.licensesPause = false; row.final = true; }
+      else judgedPop = pop.all; // ≥20 STRESS: judged as it stands, CALM short or not (ruling R2)
     } else if (pop.reached) row.status = "RIPENING";
     if (judgedPop) {
       const spanH = Math.floor((judgeEnd - startMs) / H);
@@ -217,7 +227,9 @@ export function judgeStressStudy({ hoursMs, judged, events, at, study = STRESS_S
     if (!significant) r.verdict = "NO_DIFFERENCE";
     else if (r.d > 0) r.verdict = "BETTER_IN_STRESS";
     else if (r.meanStress < 0) r.verdict = "WORSE_IN_STRESS";
-    else { r.verdict = null; r.gap = "lower_in_stress_but_stress_mean_nonnegative"; }
+    else r.verdict = "LOWER_STILL_POSITIVE"; // ruling R1
+    r.label = VERDICT_LABELS[r.verdict];
+    r.licensesPause = r.verdict === "WORSE_IN_STRESS";
   }
   return { at, startMs, endMs, atLimit: at >= limitMs, shifts: study.shifts, familyComplete: complete, reads };
 }
