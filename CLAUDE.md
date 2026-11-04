@@ -163,7 +163,9 @@ product is what sits on top:
   recorded rate is counted missing, never free), shown as AFTER COSTS (`PaperCostLine`). Display only.
 - **Parity** (`GET /agent/:a/parity`, `app/lib/paperParity.mjs`): pairs paper entries with the graded events, explains
   misses (busy incl. the OPEN position, daily caps on the wallet's own day via `lastReset`, another market won).
-  Leftovers = DRIFT. Before calling DRIFT a brain bug, check the open position. **Known DRIFT cause (2026-10-29,
+  Leftovers = DRIFT. A second entry on one read opened before exec's one-entry-per-read fix went live
+  (`ONE_ENTRY_PER_READ_LIVE_MS`, 2026-10-30T17:14:41Z) is listed as explained (`PRE_FIX_REENTRY`); after it = DRIFT.
+  Before calling DRIFT a brain bug, check the open position. **Known DRIFT cause (2026-10-29,
   `docs/research/price-spine-drift-2026-10-29.md`):** `priceByHour` rounds `oi:hist` rows to the nearest hour and the
   LAST row wins, so a row written minutes after the agent acted can rewrite that hour's price for the grader (Oct 28
   ETH LONG on all three wallets). Fixed 2026-10-30: the FIRST row in an hour wins, and the brain writes one `oi:hist`

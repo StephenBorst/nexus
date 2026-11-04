@@ -2,7 +2,8 @@
 // Run: node --test app/lib/paperParity.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { paperParity, axisForConfig, entriesFromPaperTrades, unsimulatedFilters, PARITY_SETTLE_MS } from "./paperParity.mjs";
+import { readFileSync } from "node:fs";
+import { paperParity, axisForConfig, entriesFromPaperTrades, unsimulatedFilters, PARITY_SETTLE_MS, ONE_ENTRY_PER_READ_LIVE_MS } from "./paperParity.mjs";
 
 const H = 3600000;
 const T0 = Date.parse("2026-09-25T08:00:00Z");
@@ -245,13 +246,49 @@ test("no open position (or a malformed one) changes nothing", () => {
   assert.deepEqual(entriesFromPaperTrades(trades, { symbol: "PERP_ETH_USDC", direction: "FLAT", opened_at: T0 }), entriesFromPaperTrades(trades));
 });
 
-test("a second entry on one read is named as such (Oct 29 SOL), still DRIFT", () => {
-  const ev = { coin: "SOL", t: T0 + 2 * H + 17 * 60000, side: "LONG" };
-  const p = run([
-    row("1", "SOL", "LONG", ev.t + 13 * 60000, ev.t + 25 * 60000, -5),  // entered, stopped 12 min later
-    row("2", "SOL", "LONG", ev.t + 29 * 60000, ev.t + 4 * H, -6),       // same read again
-  ], [ev]);
+// The Oct 29 SOL rows on the graded-exit wallet 0x9A30…cB28, as stored (price-spine-drift-2026-10-29.md).
+const SOL_EV = { coin: "SOL", t: Date.parse("2026-10-29T20:17:00Z"), side: "LONG" };
+const SOL_ROWS = [
+  row("1", "SOL", "LONG", Date.parse("2026-10-29T20:30:41Z"), Date.parse("2026-10-29T20:42:40Z"), -5), // entered, stopped 12 min later
+  row("2", "SOL", "LONG", Date.parse("2026-10-29T20:46:40Z"), Date.parse("2026-10-30T00:46:40Z"), -6), // same read again
+];
+const runAt = (trades, events, since, cfg = CFG) => paperParity({ trades, events, config: cfg, since, until: since + 7 * 24 * H });
+
+test("the fix's live time is the deploy run's finish, pinned to the doc", () => {
+  assert.equal(new Date(ONE_ENTRY_PER_READ_LIVE_MS).toISOString(), "2026-10-30T17:14:41.000Z");
+  const doc = readFileSync(new URL("../../docs/research/price-spine-drift-2026-10-29.md", import.meta.url), "utf8");
+  assert.match(doc, /2026-10-30T17:14:41Z/);
+  assert.match(doc, /41096092141/);
+});
+
+test("a second entry on one read BEFORE the fix is explained, not DRIFT (Oct 29 SOL)", () => {
+  const p = runAt(SOL_ROWS, [SOL_EV], Date.parse("2026-10-27T00:00:00Z"));
+  assert.equal(p.verdict, "CLEAN");
+  assert.equal(p.counts.matched, 1);
+  assert.equal(p.counts.unmatchedTrades, 0);
+  assert.equal(p.counts.explainedTrades, 1);
+  assert.equal(p.explainedTrades[0].code, "PRE_FIX_REENTRY");
+  assert.equal(p.explainedTrades[0].entry.openedAt, Date.parse("2026-10-29T20:46:40Z"));
+  assert.match(p.explainedTrades[0].reason, /before exec took each read once/);
+});
+
+test("the same second entry AFTER the fix is DRIFT: the fix didn't hold", () => {
+  const shift = ONE_ENTRY_PER_READ_LIVE_MS + H - SOL_EV.t;
+  const ev = { ...SOL_EV, t: SOL_EV.t + shift };
+  const rows = SOL_ROWS.map((r) => ({ ...r, opened_at: iso(Date.parse(r.opened_at) + shift), closed_at: iso(Date.parse(r.closed_at) + shift) }));
+  const p = runAt(rows, [ev], ONE_ENTRY_PER_READ_LIVE_MS);
   assert.equal(p.verdict, "DRIFT");
   assert.equal(p.counts.matched, 1);
+  assert.equal(p.counts.explainedTrades, 0);
   assert.match(p.unmatchedTrades[0].reason, /second entry on a read already traded/);
+});
+
+test("before the fix, only a re-entry is explained: the other side or no event is still DRIFT", () => {
+  const since = Date.parse("2026-10-27T00:00:00Z");
+  const opp = runAt([row("x", "SOL", "SHORT", SOL_EV.t + 13 * 60000, SOL_EV.t + H)], [SOL_EV], since);
+  assert.equal(opp.verdict, "DRIFT");
+  assert.equal(opp.counts.explainedTrades, 0);
+  const none = runAt([row("y", "ETH", "LONG", SOL_EV.t + 13 * 60000, SOL_EV.t + H)], [], since);
+  assert.equal(none.verdict, "DRIFT");
+  assert.equal(none.counts.explainedTrades, 0);
 });

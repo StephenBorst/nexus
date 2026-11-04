@@ -130,3 +130,23 @@ live-money review, signed by borst in person.
 ## Results
 
 (Append below. Never edit above this line.)
+
+### 2026-11-04 · parity: one pre-fix re-entry, explained
+
+Not a result. A record of why the wallet's parity changed from DRIFT to CLEAN, so the change can be checked.
+
+- **The drift.** `GET /agent/0x9A3012988d60D61b34660BE06a321F7BF7bCcB28/parity?since=2026-10-27T00:00:00Z` read DRIFT
+  on 2026-11-04 (02:34 UTC): 6 entries, 20 events, 5 matched, 15 misses explained, 0 unexplained, and **1 unmatched
+  trade**. That trade was a SOL LONG opened 2026-10-29T20:46:40Z, closed 2026-10-30T00:19:41Z, −6.33 paper. It was a
+  second entry on the 20:17 UTC basis × CVD event, which the wallet had already traded at 20:30:41 (stopped at
+  20:42:40).
+- **The cause.** Before #199, exec could re-enter one read after a quick stop: the cooldown counted from the entry, not
+  the exit, and a signal wasn't keyed to its read. #199 (merged 2026-10-30T17:07:46Z, live when deploy run 41096092141
+  finished at 17:14:41Z) made exec take each read once. This trade was opened ~20.5 hours before that. Written up in
+  `docs/research/price-spine-drift-2026-10-29.md`.
+- **What changed.** The parity report (`app/lib/paperParity.mjs`) now lists a second entry on one read opened before
+  2026-10-30T17:14:41Z as explained (`PRE_FIX_REENTRY`). One opened after that is still DRIFT. The grader, the brain,
+  exec and this page's bar are unchanged.
+- **What it counts as.** The trade was entered inside the window (after `registeredAt`), so it stays in the wallet's
+  paper record. The bar is judged on the graded line, which counts each event once; this trade was never in it. The
+  wallet's own P&L is reported beside the line and doesn't decide.
