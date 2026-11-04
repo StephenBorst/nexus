@@ -23,7 +23,7 @@ import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { hexToBytes, bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, AGENT_BOARD, aggregateAgentTrades, agentStanding, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, orderlyAccountId, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, rankCaller, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, AGENT_BOARD, aggregateAgentTrades, agentStanding, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, orderlyAccountId, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
 // Keep copy:copiers:{leader} = [followers] in sync when a follower's config
@@ -5306,6 +5306,13 @@ document.getElementById("btn").addEventListener("click",go);
         if (config.dcaEnabled && !(await walletIsPro(address, env))) {
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
+        // Operator features (portfolio delta cap + execution push callbacks): validate
+        // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
+        const opv = validateOperatorConfig(config);
+        if (!opv.ok) return json({ error: opv.error, hint: opv.hint }, request, 400);
+        if (opv.usesPro && !(await walletIsPro(address, env))) {
+          return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
+        }
         const prevLeadersAct = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         // Keep the public copiers count in sync (activate can also change autocopy).
@@ -5338,6 +5345,13 @@ document.getElementById("btn").addEventListener("click",go);
         }
         if (config.dcaEnabled && !(await walletIsPro(address, env))) {
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
+        }
+        // Operator features (portfolio delta cap + execution push callbacks): validate
+        // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
+        const opv = validateOperatorConfig(config);
+        if (!opv.ok) return json({ error: opv.error, hint: opv.hint }, request, 400);
+        if (opv.usesPro && !(await walletIsPro(address, env))) {
+          return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
         const prevLeaders = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
@@ -5526,6 +5540,13 @@ document.getElementById("btn").addEventListener("click",go);
         }
         if (config.dcaEnabled && !(await walletIsPro(address, env))) {
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
+        }
+        // Operator features (portfolio delta cap + execution push callbacks): validate
+        // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
+        const opv = validateOperatorConfig(config);
+        if (!opv.ok) return json({ error: opv.error, hint: opv.hint }, request, 400);
+        if (opv.usesPro && !(await walletIsPro(address, env))) {
+          return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
 
         // Live modes need the delegated key. Derive it from the wallet signature

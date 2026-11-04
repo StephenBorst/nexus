@@ -513,3 +513,53 @@ export function twapProgress(state) {
     remaining: slices.length - filled.length,
   };
 }
+
+// ── Portfolio delta cap (PRO) ────────────────────────────────────────────────
+// A unified directional risk cap across EVERY open position on the account, so
+// multiple concurrent signals/triggers can't stack the book in one direction.
+// `positions` is the account's live open positions as signed-notional legs
+// ({ signedQty, mark } — long qty positive, short negative, i.e. Orderly's own
+// position_qty sign). `entryNotional` is the prospective trade's |qty*mark| (always
+// positive); `direction` gives it a sign. The cap is on the ABSOLUTE projected NET
+// delta — a trade that REDUCES net exposure (e.g. a short while net-long) is never
+// blocked, even if the book is already over-cap. cap ≤ 0 / NaN → feature off.
+export function portfolioDeltaCheck(positions, entryNotional, direction, cap) {
+  const capUsd = Number(cap);
+  if (!Number.isFinite(capUsd) || capUsd <= 0) return { blocked: false, cap: 0, existingDelta: 0, projectedDelta: 0 };
+  let existingDelta = 0;
+  for (const p of (positions || [])) {
+    const q = Number(p?.signedQty), m = Number(p?.mark);
+    if (Number.isFinite(q) && Number.isFinite(m)) existingDelta += q * m;
+  }
+  const notional = Math.max(0, Number(entryNotional) || 0);
+  const newDelta = direction === "SHORT" ? -notional : notional;
+  const projectedDelta = existingDelta + newDelta;
+  // Block only when the NEW trade GROWS net directional exposure past the cap.
+  const blocked = Math.abs(projectedDelta) > capUsd && Math.abs(projectedDelta) > Math.abs(existingDelta);
+  return { blocked, cap: capUsd, existingDelta, projectedDelta };
+}
+
+// ── Execution push callbacks (PRO) ───────────────────────────────────────────
+// Build the signed-callback body for an agent execution event. Pure + stable so
+// the HMAC-SHA256 the receiver recomputes over JSON.stringify(payload) matches.
+// `event` ∈ ENTRY | DCA_ADD | PARTIAL_TP | CLOSE. Nullable fields are emitted as
+// null (never dropped) so the wire shape is predictable; reason/pnl only ride when
+// they apply. Pass `ts` for a deterministic timestamp (tests); defaults to now.
+export function buildCallbackPayload(event, { address, symbol, direction, qty, price, leverage, reason, pnl, pnlPercent, paper, ts } = {}) {
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  const payload = {
+    event,
+    address: address ? String(address).toLowerCase() : null,
+    symbol: symbol ?? null,
+    direction: direction ?? null,
+    qty: num(qty),
+    price: num(price),
+    leverage: num(leverage),
+    paper: !!paper,
+    timestamp: Number.isFinite(Number(ts)) ? Number(ts) : Date.now(),
+  };
+  if (reason != null) payload.reason = reason;
+  if (num(pnl) != null) payload.pnl = num(pnl);
+  if (num(pnlPercent) != null) payload.pnlPercent = num(pnlPercent);
+  return payload;
+}

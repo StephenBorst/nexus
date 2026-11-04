@@ -2,7 +2,7 @@
 // Run: node --test workers/nexus-agent-exec/logic.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, exitReason, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, dcaTakeProfitPrice, breakevenArmed, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal } from "./logic.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, exitReason, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, dcaTakeProfitPrice, breakevenArmed, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, portfolioDeltaCheck, buildCallbackPayload } from "./logic.mjs";
 
 // ─── snapQty ───────────────────────────────────────────────
 test("snapQty: snaps cleanly to base_tick (no float artifacts)", () => {
@@ -556,4 +556,80 @@ test("twapProgress: filled/total/notional summary", () => {
   assert.equal(p.filled, 1);
   assert.equal(p.remaining, 2);
   assert.equal(p.filledNotional, 101);
+});
+
+// ─── portfolioDeltaCheck (PRO — unified directional risk cap) ───────────────
+test("portfolioDeltaCheck: cap off (0/NaN) never blocks", () => {
+  assert.equal(portfolioDeltaCheck([], 999999, "LONG", 0).blocked, false);
+  assert.equal(portfolioDeltaCheck([], 999999, "LONG", undefined).blocked, false);
+  assert.equal(portfolioDeltaCheck([{ signedQty: 10, mark: 100 }], 5000, "LONG", NaN).blocked, false);
+});
+
+test("portfolioDeltaCheck: flat account, new entry within cap passes", () => {
+  const r = portfolioDeltaCheck([], 4000, "LONG", 5000);
+  assert.equal(r.blocked, false);
+  assert.equal(r.projectedDelta, 4000);
+});
+
+test("portfolioDeltaCheck: flat account, single trade over cap blocks", () => {
+  const r = portfolioDeltaCheck([], 6000, "LONG", 5000);
+  assert.equal(r.blocked, true);
+});
+
+test("portfolioDeltaCheck: existing long + new long over cap blocks", () => {
+  // existing +4000 (40 * 100), new long +2000 → projected +6000 > 5000
+  const r = portfolioDeltaCheck([{ signedQty: 40, mark: 100 }], 2000, "LONG", 5000);
+  assert.equal(r.existingDelta, 4000);
+  assert.equal(r.projectedDelta, 6000);
+  assert.equal(r.blocked, true);
+});
+
+test("portfolioDeltaCheck: a trade that REDUCES net exposure is never blocked", () => {
+  // Already net +6000 (over a 5000 cap, e.g. from external/manual positions). A SHORT
+  // trims to +4000 — de-risking, so it must pass even though the book is over-cap.
+  const r = portfolioDeltaCheck([{ signedQty: 60, mark: 100 }], 2000, "SHORT", 5000);
+  assert.equal(r.projectedDelta, 4000);
+  assert.equal(r.blocked, false);
+});
+
+test("portfolioDeltaCheck: sums signed notional across multiple coins (longs net shorts)", () => {
+  // +5000 BTC, -3000 ETH → net +2000; a new +2000 long → +4000, within 5000.
+  const positions = [{ signedQty: 0.05, mark: 100000 }, { signedQty: -1, mark: 3000 }];
+  const r = portfolioDeltaCheck(positions, 2000, "LONG", 5000);
+  assert.equal(r.existingDelta, 2000);
+  assert.equal(r.projectedDelta, 4000);
+  assert.equal(r.blocked, false);
+});
+
+// ─── buildCallbackPayload (PRO — execution push callbacks) ───────────────────
+test("buildCallbackPayload: ENTRY has stable shape, address lowercased, ts honored", () => {
+  const p = buildCallbackPayload("ENTRY", { address: "0xABCDEF", symbol: "PERP_BTC_USDC", direction: "LONG", qty: 0.01, price: 65000, leverage: 5, paper: true, ts: 1700000000000 });
+  assert.equal(p.event, "ENTRY");
+  assert.equal(p.address, "0xabcdef");
+  assert.equal(p.symbol, "PERP_BTC_USDC");
+  assert.equal(p.direction, "LONG");
+  assert.equal(p.qty, 0.01);
+  assert.equal(p.price, 65000);
+  assert.equal(p.leverage, 5);
+  assert.equal(p.paper, true);
+  assert.equal(p.timestamp, 1700000000000);
+  // no pnl/reason on an entry
+  assert.equal("reason" in p, false);
+  assert.equal("pnl" in p, false);
+});
+
+test("buildCallbackPayload: CLOSE carries reason + pnl + pnlPercent", () => {
+  const p = buildCallbackPayload("CLOSE", { address: "0x1", symbol: "PERP_ETH_USDC", direction: "SHORT", qty: 1, price: 3000, reason: "SL", pnl: -12.5, pnlPercent: -4.2, ts: 1 });
+  assert.equal(p.event, "CLOSE");
+  assert.equal(p.reason, "SL");
+  assert.equal(p.pnl, -12.5);
+  assert.equal(p.pnlPercent, -4.2);
+});
+
+test("buildCallbackPayload: missing numerics become null (predictable wire shape)", () => {
+  const p = buildCallbackPayload("ENTRY", { address: "0x1", symbol: "PERP_SOL_USDC", direction: "LONG", ts: 1 });
+  assert.equal(p.qty, null);
+  assert.equal(p.price, null);
+  assert.equal(p.leverage, null);
+  assert.equal(p.paper, false);
 });

@@ -16,6 +16,7 @@ import {
   houseCallFromSignal, wargameScenario,
   catalystToThesis, attachCatalystTheses, catalystHouseCall,
   boardCardRows, boardCardPlay, fundingStretched, readVerdict,
+  validateOperatorConfig,
 } from "./logic.mjs";
 
 // Helper: candle series starting at t0 (sec), each 1h apart.
@@ -2090,4 +2091,35 @@ test("fundingStretched + readVerdict: pierce=FADE, in-band=WATCH, thin=WATCH", (
   assert.equal(readVerdict("SHORT", false, 40), "WATCH");   // not pierced → WATCH even if huge
   assert.equal(readVerdict("SHORT", null, 40), "WATCH");    // can't confirm pierce → WATCH, never FADE
   assert.equal(readVerdict("NONE", true, 40), "NONE");
+});
+
+// ─── validateOperatorConfig (PRO — delta caps + execution callbacks) ─────────
+test("validateOperatorConfig: empty/unset config uses no PRO feature", () => {
+  assert.deepEqual(validateOperatorConfig({}), { ok: true, usesPro: false });
+  assert.deepEqual(validateOperatorConfig({ maxPortfolioDeltaUsd: 0, callbackUrl: "" }), { ok: true, usesPro: false });
+});
+
+test("validateOperatorConfig: a positive delta cap is a PRO feature", () => {
+  const r = validateOperatorConfig({ maxPortfolioDeltaUsd: 5000 });
+  assert.equal(r.ok, true);
+  assert.equal(r.usesPro, true);
+});
+
+test("validateOperatorConfig: a negative / non-numeric delta cap is rejected", () => {
+  assert.equal(validateOperatorConfig({ maxPortfolioDeltaUsd: -1 }).ok, false);
+  assert.equal(validateOperatorConfig({ maxPortfolioDeltaUsd: "lots" }).ok, false);
+});
+
+test("validateOperatorConfig: callbackUrl must be https + carry a ≥16-char secret", () => {
+  // valid
+  const ok = validateOperatorConfig({ callbackUrl: "https://ops.example.com/hook", webhookSecret: "0123456789abcdef" });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.usesPro, true);
+  // http rejected
+  assert.equal(validateOperatorConfig({ callbackUrl: "http://ops.example.com", webhookSecret: "0123456789abcdef" }).error, "bad_callbackUrl");
+  // garbage URL rejected
+  assert.equal(validateOperatorConfig({ callbackUrl: "not a url", webhookSecret: "0123456789abcdef" }).error, "bad_callbackUrl");
+  // missing / short secret rejected
+  assert.equal(validateOperatorConfig({ callbackUrl: "https://ops.example.com" }).error, "bad_webhookSecret");
+  assert.equal(validateOperatorConfig({ callbackUrl: "https://ops.example.com", webhookSecret: "short" }).error, "bad_webhookSecret");
 });
