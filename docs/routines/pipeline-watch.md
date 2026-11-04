@@ -41,9 +41,12 @@ readPipeline.mjs rules). Merging the watcher PR is allowed by borst (2026-11-02)
    d. A stage the page doesn't cover, or a stage that went backwards, changes nothing but the snapshot: say so in the PR.
    e. Run `node tools/run-tests.mjs` (install deps first: yarn 4 at the root, `npm ci` in workers/nexus-lab-api,
       nexus-agent-exec, nexus-carry-engine) and `npx tsc --noEmit`. Both clean, or no PR.
-      If an install fails on the network (ENOTFOUND, a timeout, a dropped connection, e.g. corepack fetching Yarn from
-      repo.yarnpkg.com), wait 2 minutes and retry that install once. Still failing → no PR: finish with the change
-      found and the install error, and notify. Never count a test failure caused by missing deps as a result.
+      Install Yarn through the npm registry: cloud sessions can't reach repo.yarnpkg.com, where corepack fetches Yarn
+      by default (blocked every run since 2026-11-03). At the root run
+      `COREPACK_NPM_REGISTRY=https://registry.npmjs.org COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack yarn install --immutable`.
+      If an install still fails on the network (ENOTFOUND, a timeout, a dropped connection), wait 2 minutes and retry
+      it once. Still failing → no PR: finish with the change found and the install error, and notify. Never count a
+      test failure caused by missing deps as a result.
    f. Open the PR with the `pr.title` and `pr.body` the command printed (add what you changed and "borst's to do").
    g. Merge it yourself (squash) only if ALL hold: every check is green on the head, it is mergeable, there is no
       unanswered review, the change is display/record only per step 4c, no parity check read DRIFT, and nothing in
