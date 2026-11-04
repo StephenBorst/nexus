@@ -24,8 +24,10 @@ const DAY_MS = 86400000;
 
 // Which scoreboard axis a config trades — the exact rule, or null when it trades none.
 export function axisForConfig(config) {
-  if (!config || config.signalMode !== "BASIS_FADE") return null;
-  if (config.invertSignal) return null; // an inverted fade trades the mirror image of every axis
+  if (!config || config.invertSignal) return null; // an inverted read trades the mirror image of every axis
+  // The registered level_reclaim read (STAGED in the brain, app/lib/levelReclaim.mjs): its own axis.
+  if (config.signalMode === "LEVEL_RECLAIM") return "level_reclaim";
+  if (config.signalMode !== "BASIS_FADE") return null;
   const c = config.basisConfirm;
   // basisAnchor "MEAN" = the two-sided read; only plain + CVD have scoreboard rows.
   if (config.basisAnchor === "MEAN") return !c ? "basis_dev" : c === "CVD" ? "basis_dev_x_cvd" : null;

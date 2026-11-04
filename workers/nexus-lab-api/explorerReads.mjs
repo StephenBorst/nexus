@@ -10,7 +10,7 @@
 //   - oi:hist reads stamp it at the row's own time.
 // Inputs: cs.oiHist [{t, price, oi, funding}] (hourly, brain) · cs.candleHist [{t,o,h,l,c,v}] (hourly).
 import { hourBucket } from "../../app/lib/basisStack.mjs";
-import { h4Atr14Frac } from "../../app/lib/atr.mjs";
+import { levelReclaimEvents } from "../../app/lib/levelReclaim.mjs";
 
 const H = 3600000;
 const DAY_H = 24;
@@ -40,14 +40,6 @@ function pctRank(arr, x) {
   let below = 0, equal = 0;
   for (const v of arr) { if (v < x) below++; else if (v === x) equal++; }
   return (below + equal / 2) / arr.length;
-}
-
-// H4 ATR-14 (fraction of price) from the 80 hourly candles ending at `hour` (inclusive) — the R
-// grade's own ruler (axisbt atrPctH4At), restated here so this module imports nothing from axisbt.
-function h4AtrFracAt(cbh, hour, lookbackH = 80) {
-  const hourly = [];
-  for (let h = hour - lookbackH; h <= hour; h++) { const c = cbh.get(h); if (c) hourly.push({ t: Number(c.t) / 1000, h: c.h, l: c.l, c: c.c }); }
-  return h4Atr14Frac(hourly);
 }
 
 // ── 1 · oi_div_reversal ─────────────────────────────────────────────────────────────────────
@@ -111,42 +103,9 @@ export function sessionMomentumEvents(cs, _pmap, _ctx, p = SESSION) {
 }
 
 // ── 4 · level_reclaim ───────────────────────────────────────────────────────────────────────
-// Levels: the prior UTC day's high and low only. Sweep: price trades ≥ 0.4 × H4 ATR-14 beyond the
-// level (ATR as known at the bar before the first breach). Reclaim: an hourly close back through the
-// level within 6h of the first breach (the breach bar and the 5 after it; a single bar that sweeps
-// and closes back counts). Entry at that close. Prior-day low reclaimed → LONG, high → SHORT. One
-// event per level per day: only the day's first breach of each level is judged.
-export const LEVEL = Object.freeze({ sweepAtr: 0.4, reclaimH: 6 });
-export function levelReclaimEvents(cs, _pmap, _ctx, p = LEVEL) {
-  const cbh = candleMap(cs.candleHist);
-  const hours = [...cbh.keys()].sort((a, b) => a - b);
-  if (!hours.length) return [];
-  const dayOf = (h) => Math.floor(h / DAY_H); // UTC day index (candle buckets are whole hours)
-  const ev = [];
-  const firstDay = dayOf(hours[0]) + 1, lastDay = dayOf(hours[hours.length - 1]);
-  for (let d = firstDay; d <= lastDay; d++) {
-    const d0 = d * DAY_H; // first hour bucket of day d
-    let pdh = -Infinity, pdl = Infinity, full = true;
-    for (let h = d0 - DAY_H; h < d0; h++) { const c = cbh.get(h); if (!c) { full = false; break; } pdh = Math.max(pdh, c.h); pdl = Math.min(pdl, c.l); }
-    if (!full) continue;
-    for (const lvl of [{ side: "LONG", px: pdl, beyond: (c) => c.l < pdl, depth: (c) => (pdl - c.l) / pdl, back: (c) => c.c > pdl },
-                       { side: "SHORT", px: pdh, beyond: (c) => c.h > pdh, depth: (c) => (c.h - pdh) / pdh, back: (c) => c.c < pdh }]) {
-      let k = null;
-      for (let h = d0; h < d0 + DAY_H; h++) { const c = cbh.get(h); if (c && lvl.beyond(c)) { k = h; break; } }
-      if (k == null) continue;
-      const atr = h4AtrFracAt(cbh, k - 1);
-      if (!(atr > 0)) continue;
-      let deepest = 0;
-      for (let j = k; j < k + p.reclaimH; j++) {
-        const c = cbh.get(j);
-        if (!c) break;
-        deepest = Math.max(deepest, lvl.depth(c));
-        if (deepest >= p.sweepAtr * atr && lvl.back(c)) { ev.push({ t: Number(c.t) + H, side: lvl.side }); break; }
-      }
-    }
-  }
-  return ev.sort((a, b) => a.t - b.t);
-}
+// Moved UNCHANGED to app/lib/levelReclaim.mjs (2026-11-04) so the grader and the brain's staged live
+// gate call one function; re-exported here so every grader import stays as it was.
+export { LEVEL, levelReclaimEvents } from "../../app/lib/levelReclaim.mjs";
 
 // ── 5 · confluence_follow ───────────────────────────────────────────────────────────────────
 // The brain's CONFLUENCE rule at its default thresholds (nexus-agent-brain/logic.mjs deriveSignal:
