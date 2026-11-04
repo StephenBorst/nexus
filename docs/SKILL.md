@@ -197,6 +197,17 @@ the `config` on activate or `PUT /agent/:wallet/config`:
   default to PAPER / record-only**; a live order requires the "Live activation gate" below. Validate a
   strict schema (known `action`, known symbol); reject unknown fields and duplicates. Nonce / replay
   dedup is NOT enforced in this skill — do not claim it; if a duplicate can't be ruled out, fail closed.
+- **Portfolio delta cap (PRO):** `maxPortfolioDeltaUsd` — a unified directional risk cap across EVERY
+  open position on the account (USD of signed notional; `0`/unset = off). A new entry that would push
+  the account's **net** directional exposure past the cap is rejected; a trade that **reduces** net
+  exposure always passes. Stops multiple concurrent same-direction triggers from over-leveraging the
+  book. Set via `PUT /agent/:wallet/config`.
+- **Execution push callbacks (PRO):** `callbackUrl` (https) + `webhookSecret` (≥16 chars) in the agent
+  config. The executor POSTs an **HMAC-SHA256-signed** JSON body (headers `X-Nexus-Signature: sha256=<hex>`
+  + `X-Nexus-Event: <event>`) the tick an event lands — `ENTRY`, `DCA_ADD`, `PARTIAL_TP`, `CLOSE`
+  (CLOSE carries `reason` + `pnl`) — so you never poll for fills. Delivered within-tick with one retry.
+  **Verify the signature with your secret before trusting any payload.** `webhookSecret` is a bearer
+  secret (never print it; last 4 chars max); `callbackUrl` must be https. Set via `PUT /agent/:wallet/config`.
 - Hard guardrails are ALWAYS absolute regardless of config: daily-loss cap, max trades/day, kill
   switch, and the **order-only key that cannot withdraw.**
 
