@@ -4,7 +4,8 @@
 // with a graded event (same market, same side, the basis hour it acted on), and every graded
 // event the agent was free to take must show up as an entry. Misses the agent's own rules
 // explain (a position already open, cooldown, daily caps, the brain handing the wallet a
-// different market) are listed with that reason. What's left — an entry with no graded event,
+// different market) are listed with that reason, as is a second entry on one read from before exec
+// took each read once (a fixed bug). What's left — an entry with no graded event,
 // or a free event with no entry — is DRIFT: the live path and the grade disagree.
 //
 // Pure: no fetch, no KV. Callers pass the paper ledger, the config and the axis events.
@@ -20,6 +21,11 @@ export const PARITY_EARLY_MS = 10 * 60000;
 export const PARITY_SETTLE_MS = 2 * 3600000;
 // exec COOLDOWN_MS (brain signals only).
 export const PARITY_COOLDOWN_MS = 15 * 60000;
+// When exec started taking each read once (#199, merged 2026-10-30T17:07:46Z; its deploy run
+// 41096092141 finished 2026-10-30T17:14:41Z). A second entry on one read before this is the bug
+// that commit fixed, already explained (docs/research/price-spine-drift-2026-10-29.md), so it is
+// listed as explained, not DRIFT. One after it is DRIFT: the fix didn't hold. borst, 2026-11-04.
+export const ONE_ENTRY_PER_READ_LIVE_MS = Date.parse("2026-10-30T17:14:41Z");
 const DAY_MS = 86400000;
 
 // Which scoreboard axis a config trades — the exact rule, or null when it trades none.
@@ -160,7 +166,7 @@ export function paperParity({ trades, events, config, since = 0, until = Date.no
   const judgedEntries = entries.filter((x) => x.openedAt >= since && x.openedAt <= cutoff);
   const evs = normEvents(events, coins).filter((e) => e.t >= since && e.t <= cutoff);
 
-  const used = new Set(), matched = [], unmatchedTrades = [];
+  const used = new Set(), matched = [], unmatchedTrades = [], explainedTrades = [];
   for (const x of judgedEntries) {
     // the latest unused same-market same-side event it could have acted on
     let hit = -1;
@@ -173,9 +179,13 @@ export function paperParity({ trades, events, config, since = 0, until = Date.no
     const inReach = (e) => x.openedAt - e.t >= -PARITY_EARLY_MS && x.openedAt - e.t <= PARITY_MATCH_SLACK_MS;
     const opposite = evs.find((e) => e.coin === x.coin && e.side !== x.side && inReach(e));
     // The same read already paired with an earlier entry: a second entry on one read. Exec
-    // takes each read once since 2026-10-30 (brainSignalKey); before that it could re-enter
-    // after a quick stop. Still DRIFT, named for what it is.
+    // takes each read once since ONE_ENTRY_PER_READ_LIVE_MS (brainSignalKey); before that it
+    // could re-enter after a quick stop, a known, fixed bug: explained. After it: DRIFT.
     const reEntry = !opposite && evs.some((e, i) => used.has(i) && e.coin === x.coin && e.side === x.side && inReach(e));
+    if (reEntry && x.openedAt < ONE_ENTRY_PER_READ_LIVE_MS) {
+      explainedTrades.push({ entry: x, code: "PRE_FIX_REENTRY", reason: "a second entry on a read already traded, before exec took each read once (#199, live 2026-10-30T17:14:41Z)" });
+      continue;
+    }
     unmatchedTrades.push({ entry: x, reason: opposite ? `graded the OTHER side (${opposite.side}) that hour`
       : reEntry ? "a second entry on a read already traded (one entry per read since 2026-10-30)"
       : "no graded event in that market within 3h before entry" });
@@ -197,8 +207,8 @@ export function paperParity({ trades, events, config, since = 0, until = Date.no
   return {
     verdict,
     window: { since: new Date(since).toISOString(), until: new Date(cutoff).toISOString() },
-    counts: { entries: judgedEntries.length, events: evs.length, matched: matched.length, unmatchedTrades: unmatchedTrades.length, missedExplained: explained.length, missedUnexplained: unexplained.length },
+    counts: { entries: judgedEntries.length, events: evs.length, matched: matched.length, unmatchedTrades: unmatchedTrades.length, explainedTrades: explainedTrades.length, missedExplained: explained.length, missedUnexplained: unexplained.length },
     unsimulatedFilters: filters,
-    matched, unmatchedTrades, missed: { explained, unexplained },
+    matched, unmatchedTrades, explainedTrades, missed: { explained, unexplained },
   };
 }
