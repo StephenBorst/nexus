@@ -4976,7 +4976,7 @@ document.getElementById("btn").addEventListener("click",go);
         const config = configRaw ? JSON.parse(configRaw) : null;
         const state = stateRaw ? JSON.parse(stateRaw) : {};
         const axis = axisForConfig(config);
-        if (!axis) return json({ ok: false, error: "no_graded_axis", note: "Parity applies to BASIS_FADE configs (plain, CVD, SMART or LIQ confirm, not inverted) — the modes the scoreboard grades." }, request);
+        if (!axis) return json({ ok: false, error: "no_graded_axis", note: "Parity applies to BASIS_FADE configs (plain, CVD, SMART or LIQ confirm, not inverted) and LEVEL_RECLAIM (not inverted) — the modes the scoreboard grades." }, request);
         const q = new URL(request.url).searchParams;
         const when = (v) => (v == null || v === "" ? null : (/^\d+$/.test(v) ? Number(v) : Date.parse(v)));
         const now = Date.now();
@@ -4996,14 +4996,15 @@ document.getElementById("btn").addEventListener("click",go);
         const coins = [...new Set((config.symbols || []).map((s) => String(s).toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "")))];
         const events = [];
         for (const coin of coins) {
-          const [oiHist, basisHist, cvdHist, smHist, liqHist] = await Promise.all([
+          const [oiHist, basisHist, cvdHist, smHist, liqHist, candleHist] = await Promise.all([
             readJson(`oi:hist:PERP_${coin}_USDC`),
-            readJson(`basis:hist:${coin}`),
+            axis === "level_reclaim" ? [] : readJson(`basis:hist:${coin}`),
             axis === "basis_x_cvd" ? readJson(`cvd:hist:${coin}`) : [],
             axis === "basis_x_smart" ? readJson(`sm:hist:${coin}`) : [],
             axis === "basis_x_liqflush" ? readJson(`liq:hist:${coin}`) : [],
+            axis === "level_reclaim" ? readJson(`candle:hist:PERP_${coin}_USDC`) : [],
           ]);
-          const cs = { coin, oiHist, basisHist, cvdHist, smHist, liqHist, candleHist: [] };
+          const cs = { coin, oiHist, basisHist, cvdHist, smHist, liqHist, candleHist };
           for (const e of gen(cs, priceByHour(oiHist), {}) || []) events.push({ coin, t: e.t, side: e.side });
         }
         // The position the agent is in right now isn't in the (closed-only) ledger yet — pass it,
