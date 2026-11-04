@@ -32,20 +32,25 @@
 //   • Freshness: a Solana blockhash expires in ~60-90s, so executeSolBuy RE-FETCHES a fresh swap tx
 //     (re-running every guard on the exact bytes it will sign) right before signing — a stale plan is
 //     never signed.
+//   • Jupiter Swap API V2 /build (2026-10-31; v1 is unmaintained): one call returns the quote + RAW
+//     instructions, and WE assemble the v0 transaction (fee payer = the wallet, our compute-unit limit
+//     from a measuring simulation, Jupiter's price clamped). checkBuild (app/lib/jupBuild.mjs, tested)
+//     runs on the response first; the guards above then run on the exact compiled bytes.
 //   • A failed/expired confirmation is surfaced as an error, NEVER a fake success.
 //
 // Nothing auto-executes: planSolBuy validates + returns the modal data; executeSolBuy re-validates on
 // fresh bytes and signs only on an explicit confirm. Fail-soft: any miss throws a plain message and
 // the honest "Swap via Jupiter" deep-link is always still there.
 
-import { Connection, VersionedTransaction, PublicKey } from "@solana/web3.js";
-import { tokenAccountAmount, checkMinOut, checkSpend, checkReceive } from "@/lib/solSwapGuards.mjs";
+import { Connection, VersionedTransaction, PublicKey, TransactionMessage, TransactionInstruction, AddressLookupTableAccount } from "@solana/web3.js";
+import { Buffer } from "buffer";
+import { tokenAccountAmount, checkSpend, checkReceive } from "@/lib/solSwapGuards.mjs";
+import { checkBuild, coreInstructions, cuPriceOf, cuLimitData, cuPriceData, COMPUTE_BUDGET, CU_LIMIT_MAX, PRICE_TAKER } from "@/lib/jupBuild.mjs";
 
 // Jupiter is reached through OUR worker (og.nexustradinglabs.com/swap/jup/*) so the api.jup.ag
 // x-api-key stays server-side. The response is Jupiter's raw quote/swap, guarded below before signing.
 const AGENT_API = "https://og.nexustradinglabs.com";
-const JUP_QUOTE = `${AGENT_API}/swap/jup/quote`;
-const JUP_SWAP = `${AGENT_API}/swap/jup/swap`;
+const JUP_BUILD = `${AGENT_API}/swap/jup/build`;
 export const WSOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_SOL_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC on Solana (6 decimals)
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -151,14 +156,65 @@ async function pollConfirm(sig: string, timeoutMs = 45000): Promise<boolean> {
   return false;
 }
 
-// Ask Jupiter for a quote + a swap transaction for `taker`, then run every guard on the returned tx.
-// Returns the deserialized-and-validated tx PLUS the plan the modal renders. Throws a plain message
-// on anything unexpected. Shared by planSolBuy (preview) and executeSolBuy (fresh, right before sign).
+// /build response shapes (the parts we read). Instruction data is base64.
+type ApiIx = { programId: string; accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[]; data: string };
+type BuildResp = {
+  inputMint: string; outputMint: string; inAmount: string; outAmount: string; otherAmountThreshold: string;
+  slippageBps?: number; priceImpactPct?: string | number; swapMode?: string;
+  computeBudgetInstructions: ApiIx[]; setupInstructions: ApiIx[]; swapInstruction: ApiIx;
+  cleanupInstruction: ApiIx | null; otherInstructions: ApiIx[]; tipInstruction: ApiIx | null;
+  addressesByLookupTableAddress: Record<string, string[]> | null;
+  blockhashWithMetadata: { blockhash: number[]; lastValidBlockHeight: number };
+  nexus?: { feeBps?: number; feeAccount?: string | null };
+};
+
+const toIx = (i: ApiIx) => new TransactionInstruction({
+  programId: new PublicKey(i.programId),
+  keys: i.accounts.map((a) => ({ pubkey: new PublicKey(a.pubkey), isSigner: a.isSigner, isWritable: a.isWritable })),
+  data: Buffer.from(i.data, "base64"),
+});
+
+// Assemble the v0 transaction from a CHECKED /build response: our compute-unit limit, Jupiter's price
+// (clamped), then setup → swap → cleanup → other. Fee payer = the wallet. Lookup tables come from the
+// response; the simulation runs against the real on-chain tables, so what it checks is what executes.
+function compileBuild(b: BuildResp, taker: string, cuLimit: number): VersionedTransaction {
+  const price = cuPriceOf(b) ?? 0n;
+  const budget = [toIx({ programId: COMPUTE_BUDGET, accounts: [], data: cuLimitData(cuLimit) })];
+  if (price > 0n) budget.push(toIx({ programId: COMPUTE_BUDGET, accounts: [], data: cuPriceData(price) }));
+  const alts = Object.entries(b.addressesByLookupTableAddress || {}).map(([key, addrs]) => new AddressLookupTableAccount({
+    key: new PublicKey(key),
+    state: { deactivationSlot: BigInt("18446744073709551615"), lastExtendedSlot: 0, lastExtendedSlotStartIndex: 0, authority: undefined, addresses: addrs.map((a) => new PublicKey(a)) },
+  }));
+  const message = new TransactionMessage({
+    payerKey: new PublicKey(taker),
+    recentBlockhash: new PublicKey(Uint8Array.from(b.blockhashWithMetadata.blockhash)).toBase58(), // 32 bytes → base58
+    instructions: [...budget, ...coreInstructions(b).map((i: ApiIx) => toIx(i))],
+  }).compileToV0Message(alts);
+  const tx = new VersionedTransaction(message);
+  staticGuards(tx, taker);
+  return tx;
+}
+
+// Guards 3 + 4 on the compiled bytes: the wallet pays, and every top-level program is known-safe.
+function staticGuards(tx: VersionedTransaction, taker: string): void {
+  const keys = tx.message.staticAccountKeys;
+  if (!keys[0] || !keys[0].equals(new PublicKey(taker))) throw new Error("Transaction isn't payable by your wallet — refused.");
+  for (const ix of tx.message.compiledInstructions) {
+    const pid = keys[ix.programIdIndex];
+    if (!pid || !ALLOWED_PROGRAMS.has(pid.toBase58())) throw new Error("Route touches an unexpected program — refused.");
+  }
+  if (tx.serialize().length > 1232) throw new Error("Route is too large for one transaction — use the deep-link.");
+}
+
+// Ask Jupiter (/build) for the quote + instructions for `taker`, check the response (checkBuild), and
+// assemble it with the maximum compute limit (the measuring copy). Returns the response, that copy and
+// the plan the modal renders. Throws a plain message on anything unexpected. Shared by planSolBuy
+// (preview) and executeSolBuy (fresh, right before sign).
 async function quoteAndBuildGuarded(args: {
   inputMint: string; inSym: string; inDecimals: number; inAmount: number;
   outputMint: string; taker: string; slippageBps: number; provider: SolProvider;
   outSym: string; outDecimals: number | null;
-}): Promise<{ tx: VersionedTransaction; plan: SolBuyPlan }> {
+}): Promise<{ tx: VersionedTransaction; build: BuildResp; plan: SolBuyPlan }> {
   const { inputMint, inSym, inDecimals, inAmount, outputMint, taker, slippageBps, provider, outSym, outDecimals } = args;
   if (!isSolAddr(outputMint)) throw new Error("Bad token mint.");
   if (!isSolAddr(inputMint)) throw new Error("Bad input mint.");
@@ -167,67 +223,30 @@ async function quoteAndBuildGuarded(args: {
   if (!(inAmount > 0)) throw new Error(`Enter an amount of ${inSym} to swap.`);
   if (!(slippageBps > 0) || slippageBps > MAX_SLIPPAGE_BPS) throw new Error("Slippage out of range.");
 
-  // 1) Quote — the chosen input mint (wSOL or USDC) → the token's mint.
-  const qUrl = `${JUP_QUOTE}?inputMint=${encodeURIComponent(inputMint)}&outputMint=${encodeURIComponent(outputMint)}&amount=${inAmount}&slippageBps=${slippageBps}&swapMode=ExactIn`;
-  const qRes = await fetch(qUrl, { headers: { Accept: "application/json" } });
-  const quote = (await qRes.json().catch(() => null)) as {
-    inputMint?: string; outputMint?: string; inAmount?: string; outAmount?: string;
-    otherAmountThreshold?: string; priceImpactPct?: string | number; slippageBps?: number;
-    platformFee?: { amount?: string; feeBps?: number } | null;
-  } | null;
-  if (!quote || !quote.outAmount) throw new Error("No Jupiter route right now — use the deep-link.");
-  // Bind the quote to EXACTLY what we asked for (guard 1) — the chosen input mint + our amount.
-  if (quote.inputMint !== inputMint) throw new Error(`Quote input isn't ${inSym} — refused.`);
-  if (quote.outputMint !== outputMint) throw new Error("Quote output mismatch — refused.");
-  if (String(quote.inAmount) !== String(inAmount)) throw new Error("Quote amount mismatch — refused.");
-  // Slippage cap (guard 2) — trust our requested cap, and re-check Jupiter didn't widen it.
-  if (typeof quote.slippageBps === "number" && quote.slippageBps > slippageBps) throw new Error("Route widened slippage — refused.");
-  // Our fee: at most the worker's cap, never a surprise.
-  const feeBps = Number(quote.platformFee?.feeBps ?? 0);
-  if (!Number.isFinite(feeBps) || feeBps < 0 || feeBps > MAX_PLATFORM_FEE_BPS) throw new Error("Quote carries an unexpected fee — refused.");
-  // Guard 6 — the floor baked into the tx must match that cap.
-  const minErr = checkMinOut({ outAmount: quote.outAmount, minOut: quote.otherAmountThreshold, slippageBps });
-  if (minErr) throw new Error(minErr);
+  // Quote + instructions in one call — the chosen input mint (wSOL or USDC) → the token's mint.
+  const url = `${JUP_BUILD}?inputMint=${encodeURIComponent(inputMint)}&outputMint=${encodeURIComponent(outputMint)}&amount=${inAmount}&taker=${encodeURIComponent(taker)}&slippageBps=${slippageBps}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const build = (await res.json().catch(() => null)) as BuildResp | null;
+  // Guards 1, 2, 6 + signers, tip, compute budget, our fee — on the response, before assembling.
+  const err = checkBuild(build, { inputMint, outputMint, inAmount, slippageBps, taker });
+  if (err || !build) throw new Error(err || "No Jupiter route right now — use the deep-link.");
 
-  // 2) Swap tx — bound to the taker (recipient). Only wrap/unwrap SOL when the input IS native SOL;
-  // a USDC input spends the SPL token directly (no wrap).
-  const sRes = await fetch(JUP_SWAP, {
-    method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ quoteResponse: quote, userPublicKey: taker, wrapAndUnwrapSol: inputMint === WSOL_MINT, dynamicComputeUnitLimit: true, prioritizationFeeLamports: "auto" }),
-  });
-  const swap = (await sRes.json().catch(() => null)) as { swapTransaction?: string } | null;
-  if (!swap?.swapTransaction || typeof swap.swapTransaction !== "string") throw new Error("Jupiter didn't return an executable swap — use the deep-link.");
-
-  // Deserialize the versioned tx from base64.
   let tx: VersionedTransaction;
-  try { tx = VersionedTransaction.deserialize(Uint8Array.from(atob(swap.swapTransaction), (c) => c.charCodeAt(0))); }
-  catch { throw new Error("Couldn't read the swap transaction — refused."); }
+  try { tx = compileBuild(build, taker, CU_LIMIT_MAX); }
+  catch (e) { throw new Error((e as Error)?.message?.includes("refused") || (e as Error)?.message?.includes("deep-link") ? (e as Error).message : "Couldn't assemble the swap transaction — refused."); }
 
-  const takerPk = new PublicKey(taker);
-  const msg = tx.message;
-  const keys = msg.staticAccountKeys;
-
-  // 3) Fee payer / first signer MUST be the connected wallet (recipient of the bought token).
-  if (!keys[0] || !keys[0].equals(takerPk)) throw new Error("Transaction isn't payable by your wallet — refused.");
-
-  // 4) Program allowlist — every top-level instruction's program must be known-safe.
-  for (const ix of msg.compiledInstructions) {
-    const pid = keys[ix.programIdIndex];
-    if (!pid || !ALLOWED_PROGRAMS.has(pid.toBase58())) throw new Error("Route touches an unexpected program — refused.");
-  }
-
-  const outAmount = quote.outAmount != null ? Number(quote.outAmount) : null;
-  const minOut = quote.otherAmountThreshold != null ? Number(quote.otherAmountThreshold) : null;
-  const impact = Number(quote.priceImpactPct); // Jupiter returns a fraction (0.012 = 1.2%)
+  const outAmount = build.outAmount != null ? Number(build.outAmount) : null;
+  const minOut = build.otherAmountThreshold != null ? Number(build.otherAmountThreshold) : null;
+  const impact = Number(build.priceImpactPct); // Jupiter returns a fraction (0.012 = 1.2%)
 
   const plan: SolBuyPlan = {
     inputMint, inSym, inDecimals, inAmount, inDisplay: inAmount / 10 ** inDecimals,
     solSpent: inputMint === WSOL_MINT ? inAmount : 0, // only native-SOL input drains SOL from the balance
     outputMint, taker,
     outAmount, outDecimals, minOut, priceImpactPct: Number.isFinite(impact) ? impact * 100 : null,
-    slippageBps, feeBps, router: "Jupiter", rpcUrl: resolveRpc(provider), outSym,
+    slippageBps, feeBps: Number(build.nexus?.feeBps ?? 0), router: "Jupiter", rpcUrl: resolveRpc(provider), outSym,
   };
-  return { tx, plan };
+  return { tx, build, plan };
 }
 
 // The user's token accounts for a mint, with their balances before the swap (base units). Read via
@@ -431,9 +450,9 @@ export async function getSolWalletContext(_provider: SolProvider, pubkey: string
     const tk = await splBalanceOwned(pubkey, tokenMint); tokenBal = tk.bal;
   }
   try {
-    // SOL/USD from a Jupiter quote (1 SOL → USDC), through the same worker proxy.
-    // nofee=1: a price read, not a trade, so the worker leaves our fee off it.
-    const r = await fetch(`${JUP_QUOTE}?inputMint=${WSOL_MINT}&outputMint=${USDC_SOL_MINT}&amount=${LAMPORTS_PER_SOL}&slippageBps=50&swapMode=ExactIn&nofee=1`, { headers: { Accept: "application/json" } });
+    // SOL/USD from a Jupiter /build quote (1 SOL → USDC), through the same worker proxy. A price read
+    // (nofee=1: no fee on it) for a fixed empty taker, so it never depends on this wallet's balance.
+    const r = await fetch(`${JUP_BUILD}?inputMint=${WSOL_MINT}&outputMint=${USDC_SOL_MINT}&amount=${LAMPORTS_PER_SOL}&slippageBps=50&taker=${PRICE_TAKER}&nofee=1`, { headers: { Accept: "application/json" } });
     const j = (await r.json().catch(() => null)) as { outAmount?: string | number } | null;
     const out = Number(j?.outAmount);
     if (Number.isFinite(out) && out > 0) solUsd = out / 1e6;
@@ -448,14 +467,26 @@ export async function executeSolBuy(provider: SolProvider, plan: SolBuyPlan, onS
   if (typeof provider?.signTransaction !== "function" && typeof provider?.sendTransaction !== "function")
     throw new Error("Your wallet can't sign a Solana transaction here — use the deep-link.");
   onStep("refreshing the route…");
-  // Fresh tx + all static guards on the bytes we're about to sign (freshness + re-bind).
-  const { tx, plan: fresh } = await quoteAndBuildGuarded({
+  // Fresh route + every response check (freshness + re-bind).
+  const { tx: measuring, build, plan: fresh } = await quoteAndBuildGuarded({
     inputMint: plan.inputMint, inSym: plan.inSym, inDecimals: plan.inDecimals, inAmount: plan.inAmount,
     outputMint: plan.outputMint, taker: plan.taker,
     slippageBps: plan.slippageBps, provider, outSym: plan.outSym, outDecimals: plan.outDecimals,
   });
+  // The fee we show must be the fee in the fresh route.
+  if (fresh.feeBps !== plan.feeBps) throw new Error("The fee changed since the preview — review it again.");
   const conn = new Connection(fresh.rpcUrl, "confirmed");
   onStep("simulating…");
+  // Measure compute units on the max-limit copy, then set the limit to 1.2× (Jupiter's /build recipe).
+  let units: number | undefined;
+  try {
+    const m = await conn.simulateTransaction(measuring, { replaceRecentBlockhash: true, sigVerify: false, commitment: "processed" });
+    if (m.value.err) throw new Error("Swap would fail on-chain (simulation reverted) — not signing.");
+    units = m.value.unitsConsumed ?? undefined;
+  } catch (e) { throw new Error((e as Error)?.message?.includes("not signing") ? (e as Error).message : "Simulation failed to run — not signing."); }
+  const cuLimit = units ? Math.min(Math.ceil(units * 1.2), CU_LIMIT_MAX) : CU_LIMIT_MAX;
+  const tx = compileBuild(build, fresh.taker, cuLimit);
+  // Guard 5 on the EXACT bytes we sign.
   await simulateGuard(conn, tx, fresh);
 
   onStep("confirm the swap in your wallet…");

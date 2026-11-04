@@ -148,8 +148,43 @@ custody agents already have. In exchange, a leaked signature stops being a leake
 
 1. Session signatures plus the kill switch: library + verifier, unused. **Shipped 2026-10-27:** `app/lib/tradingSession.mjs`
    (message, `newTradingSession`, `verifyTradingSession`), `routes-session.mjs` (`checkTradingSession`, `POST /v2/session/end-all`).
-2. Begin/complete/remove + key storage behind `AUTH_V2_KEYS="true"`; Bankr register moves to it.
-3. Derive routes read the stored key; exec expiry check.
+2. Begin/complete/remove + key storage behind `AUTH_V2_KEYS="true"`; Bankr register moves to it. **Built 2026-10-31,
+   off:**
+   - `workers/nexus-lab-api/v2Keys.mjs` (key material, the AddOrderlyKey typed data, the record).
+   - `routes-key.mjs`: `GET /v2/key/:wallet`, `POST /v2/key/begin|complete|remove|bankr-register`.
+   - Two departures from the text above, both until step 3:
+     - (a) The key is stored in its own record `v2key:{addr}`, not `agent:key:{addr}`. v1 DEACTIVATE deletes
+       `agent:key`, so it would delete a v2 key.
+     - (b) `/proxy/bankr-register` is not switched yet. A v2-only registration would leave the v1 trading routes
+       with no registered key. Bankr calls `POST /v2/key/bankr-register` instead.
+   - Step 3 moves exec and the derive routes onto the v2 record and points `/proxy/bankr-register` at it.
+3. Derive routes read the stored key; exec expiry check. In the same PR, take the June challenge (`requireOwnerV2`)
+   off `/trade` and agent kill, so it covers exactly section C's list (decisions 2026-10-31). Split in three PRs, all
+   behind `AUTH_V2_KEYS`:
+   - **3a (built 2026-10-31):** the trading routes. `/trade`, `/set-sl-tp`, `/close-position`, `/order-history`,
+     `/cancel`, `/order-status`, `/positions`, `/balance`, `/set-leverage` and `/settle-pnl` take `{walletAddress,
+     session}` and sign with the stored key (`tradingSigner.mjs`). The v1 `walletSig` branch is unchanged beside it.
+     `/trade` loses the per-trade challenge.
+   - **3b:** the agent. Activation with an active v2 key, exec reading `v2key:{addr}`, the expiry rule (no position
+     whose max hold runs past `expiresAt`, an alert from 3 days out), `/twap`, and kill without the challenge.
+   - **3c (built 2026-11-03):** the money flows and registration. `withdrawV2.mjs` + `v1Registration.mjs`.
+     - `/proxy/bankr-withdraw`: a wallet that has a `v2key` record withdraws with that key. Bankr signs only the
+       `Withdraw`, which must recover to the wallet before anything is sent; the static message is never asked for.
+       A wallet without a record keeps the v1 path.
+     - `/withdraw/prepare|submit` take `{walletAddress, session}`; submit always needs the `withdraw` challenge, bound
+       to the units signed (`amount` = integer USDC units), burned only after every local check passes.
+     - Scope check: a `read,trading` key can drive a withdrawal the wallet signs (Orderly's own SDK registers
+       `read,trading`, `DEFAUL_ORDERLY_KEY_SCOPE` in `@orderly.network/core`, and its web withdraw runs on that key).
+       It can't withdraw on its own: Orderly also needs the wallet's EIP-712.
+     - `/proxy/bankr-deposit` needed nothing: it never derived a key (it reads the account id and has Bankr send the
+       deposit txs).
+     - Registration sits behind its OWN switch, `AUTH_V1_REGISTER_OFF="true"` (unset): `/proxy/bankr-register` → the v2
+       Bankr registration, `/derive-key` and `/proxy/register-key` → 410, `/register-orderly-key` → a v2 page
+       (`GET /v2/session/new` mints the unsigned session it signs). Not `AUTH_V2_KEYS`, because the Bankr skill still
+       trades with `walletSig` until step 4: flip it when the skill PR merges. The parked mini app registers through
+       `/derive-key`, so its ENABLE step stops when this flips.
+     - With 3c, `AUTH_V2_KEYS="true"` alone is additive: v2 routes appear, v1 is untouched. That is what 0xd9f7…b449's
+       path back needs (`/v2/key/bankr-register`, then `/proxy/bankr-withdraw`).
 4. Bankr skill PR (BankrBot/skills) with the new calls; copy back.
 5. Migration step 2; then the dated cut-over.
 
@@ -162,3 +197,11 @@ custody agents already have. In exchange, a leaked signature stops being a leake
 - **Q4. The v1 cut-over: 2 weeks after the Bankr skill PR merges.**
 - **0xd9f7…b449's path back:** register a fresh v2 key through Bankr, withdraw the $1.76 with it, then drop the wallet
   from `REVOKED_TRADING_WALLETS` (its v1 signature stays refused through the v1-off mark).
+
+## Decisions (borst, 2026-10-31)
+
+- **Issue #14 folds into v2.** Its request-bound challenge is section C (`docs/auth-v2-issue14-note.md`). #14 is
+  closed.
+- **`/trade`: session only.** No per-trade challenge once keys are random.
+- **Agent kill: session only.** No challenge: stopping stays cheap.
+- **Build step 2 next.** Done, as above.

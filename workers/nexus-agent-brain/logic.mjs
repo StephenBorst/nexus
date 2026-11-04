@@ -9,6 +9,8 @@
 //   BASIS_FADE                      — fade an extreme spot-perp basis (EXPERIMENTAL, paper).
 //                                     basisConfirm:"CVD" | "SMART" | "LIQ" = only when that same-hour read agrees.
 //                                     basisAnchor:"MEAN" = the two-sided read (STAGED, off; plain or CVD only).
+//   LEVEL_RECLAIM                   — the registered level_reclaim read (app/lib/levelReclaim.mjs), STAGED
+//                                     and OFF: only behind worker var LEVEL_RECLAIM_LIVE, PAPER configs only.
 //   MOMENTUM                        — trade WITH a tick price move > priceChangeThreshold (trend-follow).
 //   MEAN_REVERSION                  — FADE a tick price move > priceChangeThreshold (buy dip / sell rip).
 // Thresholds (per user): fundingThreshold (%), oiChangeThreshold (% min OI move to count).
@@ -16,6 +18,7 @@
 // are NOT tunable here — users tune the STRATEGY, never the seatbelts.
 
 import { hourBucket } from "../../app/lib/basisStack.mjs";
+import { levelReclaimRefusal } from "../../app/lib/levelReclaim.mjs";
 
 // Market-wide regime from a full futures snapshot (all symbols). Pure + testable.
 // Mirrors the frontend MarketRegime: breadth (50%) + BTC trend (40%) + funding
@@ -171,6 +174,22 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
       if (config.basisAnchor === "MEAN" && direction !== "NONE") why = why.replace("basis-extreme fade", "two-sided basis fade");
       break;
     }
+    case "LEVEL_RECLAIM": {
+      // The registered level_reclaim read, traded (STAGED, off: pipeline-if-then.md, Edge). The
+      // verdict is the SHARED rule the scoreboard grades with (app/lib/levelReclaim.mjs), computed
+      // by the brain only behind LEVEL_RECLAIM_LIVE; nothing is re-derived here. Flag off ⇒ no
+      // raw.levelReclaim* fields ⇒ it sits out and says so. PAPER only, like the graded exit.
+      const refused = levelReclaimRefusal(config);
+      if (refused) { why = `${refused} — sat out`; break; }
+      if (raw.levelReclaimSide === "LONG" || raw.levelReclaimSide === "SHORT") {
+        direction = raw.levelReclaimSide; confidence = 70; why = `level reclaim · ${raw.levelReclaimReason}`;
+      } else {
+        why = typeof raw.levelReclaimReason === "string" && raw.levelReclaimReason
+          ? `${raw.levelReclaimReason} — sat out`
+          : "level_reclaim is staged (off) — sat out";
+      }
+      break;
+    }
     case "EXTERNAL":
       // Arena / bring-your-own-brain — the house brain stays silent for this agent;
       // entries come ONLY from its own webhook intents. Explicit case so it can
@@ -276,11 +295,14 @@ export function oiSnapshotDue(hist, now = Date.now()) {
 
 
 // The time of the observation a signal came from, so exec can take each read once
-// (2026-10-30). Only basis reads carry one: the brain re-sends the same basis row's signal
-// every tick until the next row lands, and the grader counts that row once. Other modes
-// have no stable source row → null (exec keeps its plain cooldown for them).
+// (2026-10-30). Basis reads carry their basis row's time: the brain re-sends the same row's
+// signal every tick until the next row lands, and the grader counts that row once. A
+// level_reclaim signal carries its event's time (the reclaim bar's close) for the same reason.
+// Other modes have no stable source row → null (exec keeps its plain cooldown for them).
 export function signalSourceT(raw, config) {
-  if (config?.signalMode !== "BASIS_FADE" || !raw) return null;
-  const t = config.basisAnchor === "MEAN" ? raw.basisDevT : raw.basisT;
+  if (!raw) return null;
+  let t = null;
+  if (config?.signalMode === "BASIS_FADE") t = config.basisAnchor === "MEAN" ? raw.basisDevT : raw.basisT;
+  else if (config?.signalMode === "LEVEL_RECLAIM") t = raw.levelReclaimT;
   return t != null && Number.isFinite(Number(t)) && Number(t) > 0 ? Number(t) : null;
 }

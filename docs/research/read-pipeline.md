@@ -119,3 +119,69 @@ read the same way and keeps every name and registration date. A change to a read
   its hour had a price. Now each hour has one row, written before the ~:17 basis and CVD reads.
 - **What it re-scores:** nothing already recorded. From this date, each hour's price is taken at ~:02 instead of a
   drifting minute, so a price move over an hour is measured over a fixed clock window. No read's rule changed.
+
+### 2026-10-31 · exits fill at their level, not at the hour's extreme
+
+- **What changed:** the shared exit walker `stepExit` (`workers/nexus-lab-api/backtest.mjs`) now fills each exit at its
+  own level. Stop, target, trail, breakeven and each take-profit slice fill at their level. A bar that opens past the
+  level fills at the open (a gap). A timeout closes at the open of its bar. Before, the fill was the hour's probe price:
+  a stop filled at the hour's worst price, a target at its best, a timeout at the adverse extreme. borst's go,
+  2026-10-31. No read's rule changed.
+- **Why:** the live exec checks the mark once a minute and closes at the market, so its fills sit near the level. The
+  hourly walker filled at the hour's extreme, so the as-traded line didn't measure what the agent does. Found by the
+  level_reclaim exit bridge (`docs/research/level-reclaim-exit-gap.md`, first pull: S3b −23.9 bps).
+- **What it re-scores:** every as-traded exit line. That covers each pipeline read's graded exit (`exitGraded`, which
+  feeds the Tradeable bar), the preset exit lines (`exit`, `exit24h`), `/intel/evidence`, and the Lab backtest, sweep and
+  validate (and the Lab's random-entry baseline, which replays its random trades through the same walker, so real and
+  random get the same fill). The scoreboard's R grade and its random-entry baseline (`gradeEventR`), event counts and
+  every stage rule below Tradeable are untouched, so **no stage can move from this alone**. The Basis × CVD regime window
+  (`docs/research/graded-exit-regime-prereg.md`) had 0 counted trades when this landed: its first trade counts after
+  2026-11-03, so it is measured on the new fill from its first trade. Strategies already published keep the validation
+  stored at publish; a new publish re-validates on the new fill. Caches: `axisbt:v20`, `evidence:v6`.
+- **Before (served 2026-10-31 17:47 UTC, `axisbt:v19`, out-of-sample graded exit, net of fees):**
+
+| read | stage | events | mean R | exit trades | exit net bps |
+|---|---|---|---|---|---|
+| rsi_reset_deep | REGISTERED | 19 | −0.24 | 8 | −145.5 |
+| level_reclaim | LEAD | 53 | +0.23 | 24 | −72.3 |
+| oi_div_reversal | REGISTERED | 26 | −0.02 | 11 | +8.7 |
+| session_momentum | REGISTERED | 61 | −0.61 | 35 | −244.7 |
+| confluence_follow | LEAD | 35 | +0.20 | 16 | +62.2 |
+| oi_div_reversal_4h | REGISTERED | 23 | +0.41 | 0 | — |
+| oi_coil_break | REGISTERED | 12 | +0.00 | 0 | — |
+
+  Preset exit lines on the main card (full history): basis_x_cvd 93 trades −28.5 bps (24h: 91, −23.2) · basis_extreme
+  443, −35.8 (24h: 369, −33.0) · basis_dev_x_cvd 74, −14.2 (24h: 75, −29.0). basis_x_cvd graded exit: 66 trades,
+  −1.3 bps.
+- **Preview (same public series, the scoreboard's own code run locally before and after; the old code reproduces the
+  served numbers exactly):** exit trades and the exit mix are unchanged on every read; only the fill moves.
+  rsi_reset_deep −145.5 → −116.2 · level_reclaim −72.3 → −48.4 · oi_div_reversal +8.7 → +11.2 · session_momentum
+  −244.7 → −208.6 · confluence_follow +62.2 → +49.8. Reads that stop out more than they hit their target improve and
+  reads that hit their target more give some back, because the extreme fill had made stops worse and targets better.
+- **After:** appended below once the change is served (cache `axisbt:v20`), as for the price spine.
+- **After (served 2026-10-31 18:51 UTC, cache `axisbt:v20`):** no stage moved. The pipeline numbers match the preview to
+  the decimal. Events, mean R and exit trades are unchanged on every read.
+
+| read | stage | events | mean R | exit trades | exit net bps |
+|---|---|---|---|---|---|
+| rsi_reset_deep | REGISTERED | 19 | −0.24 | 8 | **−116.2** (was −145.5) |
+| level_reclaim | LEAD | 53 | +0.23 | 24 | **−48.4** (was −72.3) |
+| oi_div_reversal | REGISTERED | 26 | −0.02 | 11 | **+11.2** (was +8.7) |
+| session_momentum | REGISTERED | 61 | −0.61 | 35 | **−208.6** (was −244.7) |
+| confluence_follow | LEAD | 35 | +0.20 | 16 | **+49.8** (was +62.2) |
+| oi_div_reversal_4h | REGISTERED | 23 | +0.41 | 0 | — |
+| oi_coil_break | REGISTERED | 12 | +0.00 | 0 | — |
+
+  The preset exit lines (main card, full history, informational) moved more, and three changed sign. Their flat stops
+  (2%) are tight, so the old fill at the hour's extreme had made each stop-out much worse than the stop:
+  - basis_x_cvd: −28.5 → **−7.2** bps (93 trades); 24h: −23.2 → **+3.2** (91).
+  - basis_extreme: −35.8 → **−3.5** (444; 443 before, one new trade); 24h: −33.0 → **−7.1** (369).
+  - basis_dev_x_cvd: −14.2 → **+5.8** (74); 24h: −29.0 → **−8.5** (75).
+  - basis_x_cvd graded exit: −1.3 → **+13.3** bps (66).
+
+  None of these is a bar, and nothing here re-opens a decision taken on the old fill:
+  - The Basis × CVD graded-exit test was retired on 2026-10-26 because the read itself fell below PREDICTIVE. That
+    was a Fail at any point under its page, independent of the fill. It stays retired (final).
+  - The Oct 15 preset-exit results (`graded-exit-prereg.md`, "lost out of sample") were measured on the old fill. They
+    stay as written, under their date.
+  - The regime window had 0 counted trades. It is measured on the new fill from its first trade.

@@ -10,8 +10,9 @@ const HR = 3600 * 1000;
 const BASE = 1_000_000_000_000;
 const H0 = hourBucket(BASE);
 const EXIT = { preset: "t", tpPercent: 2.5, slPercent: 2, maxHoldHours: 12 };
-// Candles at hours H0+1.. from [{h,l,c}] (open irrelevant to the exit path).
-const bars = (rows, start = 1) => candlesByHour(rows.map((r, i) => ({ t: BASE + (start + i) * HR, o: r.c, h: r.h, l: r.l, c: r.c })));
+// Candles at hours H0+1.. from [{h,l,c}]. Each bar opens at the previous bar's close (100 for the
+// first): since 2026-10-31 the open matters, a bar that opens past a level fills at the open (a gap).
+const bars = (rows, start = 1) => candlesByHour(rows.map((r, i) => ({ t: BASE + (start + i) * HR, o: i ? rows[i - 1].c : 100, h: r.h, l: r.l, c: r.c })));
 const flat = (n, p = 100) => Array.from({ length: n }, () => ({ h: p * 1.001, l: p * 0.999, c: p }));
 
 test("LONG reaches the target → TP at +tp%, held until that bar", () => {
@@ -19,7 +20,7 @@ test("LONG reaches the target → TP at +tp%, held until that bar", () => {
   const g = gradeEventExit(cbh, H0, "LONG", 100, EXIT);
   assert.equal(g.reason, "TP");
   assert.equal(g.holdH, 3);
-  assert.ok(Math.abs(g.pnlPct - 3) < 1e-9, "fills at the bar's favourable extreme the evaluator first sees past TP");
+  assert.ok(Math.abs(g.pnlPct - 2.5) < 1e-9, "fills at the target, not at the bar's high (measurement change 2026-10-31)");
 });
 
 test("SHORT stop is hit → SL; a bar touching BOTH stop and target stops out (conservative)", () => {
@@ -84,8 +85,9 @@ test("scoreExit: fee deducted, exits tallied, verdict needs samples + stability"
   assert.equal(x.samples, 24);
   assert.deepEqual(x.exits, { TP: 18, SL: 6, TIMEOUT: 0 });
   assert.equal(x.hitRate, 75);
-  // wins fill at 3% (bar high 103 seen after TP threshold) minus 0.06% fee; losses at -3% minus fee
-  assert.ok(Math.abs(x.netBps - ((18 * 294 + 6 * -306) / 24)) < 0.11);
+  // wins fill at the 2.5% target minus the 0.06% fee; losses at the 2% stop minus the fee (each
+  // exit at its own level since 2026-10-31, not at the bar's 103 high / 97 low)
+  assert.ok(Math.abs(x.netBps - ((18 * 244 + 6 * -206) / 24)) < 0.11);
   assert.equal(x.verdict, "PREDICTIVE");
   assert.equal(x.stable, true);
   assert.equal(scoreExit(all.slice(0, 10), EXIT, medT, 20, 3).verdict, "INSUFFICIENT");

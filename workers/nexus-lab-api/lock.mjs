@@ -26,6 +26,9 @@ export const LOCK_KEYS = {
   // Spot ledger (spotLedger.mjs): one day's totals, and one reported fill (book it once).
   spotDay: (day) => `spotday:${day}`,
   spotFill: (route, id) => `spotfill:${route}:${id}`,
+  // Auth v2 keys (routes-key.mjs): begin / complete / remove for one wallet, one at a time, so two
+  // completes can't both store a key or both use one pending record.
+  v2Key: (wallet) => `v2key:${String(wallet).toLowerCase()}`,
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;

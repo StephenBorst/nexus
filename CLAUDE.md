@@ -135,7 +135,12 @@ product is what sits on top:
 - **Reconcile:** exec reads the live position first; exchange flat ⇒ clear the stale record. On a read error it manages
   on cached data, never clears.
 - **Modes** (`deriveSignal`, brain `logic.mjs`): CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE (free); MOMENTUM,
-  MEAN_REVERSION (PRO). Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
+  MEAN_REVERSION (PRO). **LEVEL_RECLAIM = STAGED, OFF** (2026-11-04, pipeline-if-then.md Edge work): the registered
+  read via the SHARED rule `app/lib/levelReclaim.mjs` (the grader's `levelReclaimEvents` moved there unchanged;
+  explorerReads re-exports it), computed by the brain only behind worker var `LEVEL_RECLAIM_LIVE` (commented out in
+  wrangler.toml, a test fails if set) and only for PAPER configs (`levelReclaimRefusal`); fires in the hour after an
+  event, `sourceT` = the event time. No Lab mode, no preset (tested). Parity: `levelReclaim.test.mjs` (hour by hour),
+  `/agent/:a/parity` maps it to the `level_reclaim` axis. Turned on only in the PR that sets up its paper wallet. Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
   evaluates nothing** (no "all" default).
 - **Exits** (`evaluateExit`, exec `logic.mjs`): SL → TIMEOUT → trail before TP; `takeProfits` ladder OVERRIDES
   `tpPercent` (`normTakeProfits`); DCA has its own monitor path. Exit vocabulary: `SL · TIMEOUT · TRAIL · BE · TP ·
@@ -158,7 +163,9 @@ product is what sits on top:
   recorded rate is counted missing, never free), shown as AFTER COSTS (`PaperCostLine`). Display only.
 - **Parity** (`GET /agent/:a/parity`, `app/lib/paperParity.mjs`): pairs paper entries with the graded events, explains
   misses (busy incl. the OPEN position, daily caps on the wallet's own day via `lastReset`, another market won).
-  Leftovers = DRIFT. Before calling DRIFT a brain bug, check the open position. **Known DRIFT cause (2026-10-29,
+  Leftovers = DRIFT. A second entry on one read opened before exec's one-entry-per-read fix went live
+  (`ONE_ENTRY_PER_READ_LIVE_MS`, 2026-10-30T17:14:41Z) is listed as explained (`PRE_FIX_REENTRY`); after it = DRIFT.
+  Before calling DRIFT a brain bug, check the open position. **Known DRIFT cause (2026-10-29,
   `docs/research/price-spine-drift-2026-10-29.md`):** `priceByHour` rounds `oi:hist` rows to the nearest hour and the
   LAST row wins, so a row written minutes after the agent acted can rewrite that hour's price for the grader (Oct 28
   ETH LONG on all three wallets). Fixed 2026-10-30: the FIRST row in an hour wins, and the brain writes one `oi:hist`
@@ -178,6 +185,9 @@ product is what sits on top:
 ## Backtest + replay (`workers/nexus-lab-api/backtest.mjs`)
 - ONE engine: imports the deployed `deriveSignal` + `evaluateExit`/`computePnl`; `stepExit` and `entryAt` are shared by
   the per-market replay, the portfolio replay and the random baseline. `tools/backtest` imports it too.
+- **Fills** (`stepExit`, measurement change 2026-10-31, `backtest.fill.test.mjs`): each exit fills at its own level
+  (stop, target, trail, BE, TP slice); a bar that opens past it fills at the open (a gap); TIMEOUT closes at its bar's
+  open. Never at the hour's extreme (the live exec closes at the market within a minute). Logged in `read-pipeline.md`.
 - Routes (PRO, walletSig): `/agent/backtest`, `/agent/backtest/sweep`, `/agent/validate`; publish runs `revalidateStrategy`.
 - **Data:** OI and flow (basis/cvd/sm/liq) come from our recorded hourly KV series, gated PER SYMBOL (≥14 days, ≥200
   samples; `loadOiHistForBacktest`, `loadFlowHistForBacktest`). Run the mature subset and name the excluded markets;
@@ -244,9 +254,14 @@ product is what sits on top:
   PENDING_HOLM. Not wired to the scoreboard yet (own PR).
 - **Pre-registered studies are append-only:** a doc's text above Results is pinned (sha256 tests); verdicts are appended;
   a new idea found on a closed population is a new dated registration (e.g. structure × house fade: CLOSED, not shown).
+- **level_reclaim exit gap** (`docs/research/level-reclaim-exit-gap.md`, signed 2026-10-31): the read grades +R while its
+  graded exit loses; `tools/explorers/exitBridge.mjs` bridges the two on the same trades (read-only, reconciles with the
+  served `netBps`). The first pull found the as-traded walker filling exits at the hour's extreme (S3b −23.9 bps); fixed
+  2026-10-31 as a measurement change (below), S3b now 0. At 30 trades (2026-11-03) the cause is H2, stop-width
+  weighting: narrow stops +0.50R/+63 bps, wide −0.06R/−60 bps. Recommendation on the page: keep the bps money bar.
 - **Daily pipeline watcher** (prompt `docs/routines/pipeline-watch.md`, `tools/pipeline/watch.mjs`,
   `app/lib/pipelineWatch.mjs`): compares served stages with `docs/research/pipeline-stages.json`; a change opens a PR on
-  `pipeline-watch/<date>`. **Watcher PRs are never merged by a session.** A scheduled task stores its own copy of the
+  `pipeline-watch/<date>`. **The watcher merges its own `Pipeline watch:` PR** (borst's go, 2026-11-02) only when checks are green, it is mergeable, the change is display/record only, no parity DRIFT and nothing arms live money; any other session leaves watcher PRs alone. A scheduled task stores its own copy of the
   prompt: after editing the doc, update the task (`update_trigger`).
 - **Live money** = `docs/research/live-money-review.md` (draft, unsigned, arms nothing).
 - `/intel/evidence?axis=&hold=` replays a preset across every mature market (pooled ≠ independent; say so).
@@ -326,7 +341,21 @@ product is what sits on top:
   one per wallet) + a 24h trading session that derives nothing. Built step by step; step 1 = `app/lib/tradingSession.mjs`
   (one message builder for client and worker) + `routes-session.mjs` (`checkTradingSession`; `POST /v2/session/end-all`
   ends every session issued before the caller's, the stamp `auth:sessions-after:{addr}` only moves forward). No live
-  route accepts a session yet.
+  route accepts a session yet. Step 2 (built 2026-10-31, OFF unless `AUTH_V2_KEYS="true"`): `v2Keys.mjs` +
+  `routes-key.mjs`: random 32-byte keys, AddOrderlyKey `read,trading`, 30 days, sealed in `v2key:{addr}` (NOT
+  `agent:key`); `/v2/key/begin|complete|remove` (session; complete/remove also need the challenge, always on) and
+  `/v2/key/bankr-register`; rotation removes the old key signed by the new one; NexusLock `LOCK_KEYS.v2Key`. Nothing
+  reads the stored key until step 3. #14 is closed into the spec (challenge = §C; `/trade` + kill session-only).
+  Step 3a (built 2026-10-31, same flag): the 10 trading routes accept `{walletAddress, session}` and sign with the stored
+  key (`tradingSigner.mjs v2Signer`: 409 `key_required` / `key_expired`); v1 `walletSig` branch unchanged beside it;
+  `/trade` dropped its per-trade challenge. Step 3c (built 2026-11-03, same flag, `withdrawV2.mjs`): `/proxy/bankr-withdraw`
+  uses the stored key for a wallet WITH a `v2key` record (Bankr signs only the Withdraw, which must recover to the
+  wallet); `/withdraw/prepare|submit` take a session, submit always needs the `withdraw` challenge bound to the signed
+  units. A `read,trading` key can drive a withdrawal the wallet signs (Orderly's SDK registers that scope) but can't
+  withdraw alone. Second switch `AUTH_V1_REGISTER_OFF="true"` (`v1Registration.mjs`, unset): `/proxy/bankr-register` →
+  the v2 Bankr registration, `/derive-key` + `/proxy/register-key` → 410, `/register-orderly-key` → the v2 page
+  (`GET /v2/session/new` mints the unsigned session). Flip it when the Bankr skill moves (step 4), not before: the skill
+  trades with walletSig. 3b = agent + exec expiry (next).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must
@@ -378,7 +407,8 @@ product is what sits on top:
   `ZEROX_API_KEY` is set (key in a header). Fee `SPOT_FEE_BPS=10` → borst.eth, `feeApplied` only when the provider
   confirms it. The worker drops any quote that spends ≠ the asked amount, approves another token, or carries native
   value. Signing lives ONLY in `app/pages/token/swapExec.ts` (exact-amount approve against OUR USDC, value 0, chain
-  check, receipt status). Fabric is dead (shut down 2026-09-16).
+  check, receipt status). Fabric is dead (shut down 2026-09-16). Previews (no wallet) quote for `PREVIEW_SWAPPER`
+  `0x…10000`: 0x refuses any taker ≤ `0x…ffff` (the old `0x…dEaD` kept 0x out of every preview until 2026-10-31).
 - **Flash (Definitive)**: ticket `FlashSpotButton.tsx`, orders `FlashOrders.tsx`, proxy routes whitelisted by
   `flashUpstream`. Every order signs the same `FlashOrder` (the trigger price is NOT signed). Guards: deadline per
   type, swapper = recipient = wallet, spend ≤ size + 1 unit, no permits, approvals capped by `approvalPlan` (open
@@ -401,7 +431,7 @@ product is what sits on top:
   response. Fee 10 bps asked (5 bps ours) → borst.eth's intents.near balance (recipient must be an EOA). Quotes go via
   `POST /xc/quote` with `ONE_CLICK_JWT`, falling back to direct.
 - **Solana swap (Jupiter) — the ONE signer is `app/pages/token/solSwapExec.ts`**, BUY (SOL or USDC → token) and SELL
-  (token → USDC), Jupiter via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
+  (token → USDC), Jupiter `/build` via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
   (re-fetched fresh right before signing): quote bound to our mints + amount; slippage ≤ 300 bps and the quote's
   minimum respects it (`checkMinOut`); fee payer = the wallet; top-level programs allowlisted; simulation must
   succeed and, from simulated balances, SOL drop ≤ SOL input + 0.02 SOL, input-token accounts drop ≤ the typed amount
@@ -420,7 +450,16 @@ product is what sits on top:
   Fee wallet `6uB2ugTM4m7P1BpEG6pLAc2B327nb75JUqVE6svoMRWT` (borst), USDC account `Fqqax7…wagKr` (never close it). wSOL
   account skipped for now (SOL buys carry no fee). **LIVE since 2026-10-29** (`JUP_FEE_LIVE="true"`, borst, after a passing dry run).
   Set it to anything else = STAGED: only quotes tagged `feetest=1` carry the fee (use that for dry runs of a change).
-  ⚠️ v1 ("Metis") is marked unmaintained by Jupiter; the successor for our path is V2 `/build` (same fee params).
+- **Jupiter Swap API V2 `/build` (since 2026-10-31; v1 "Metis" is unmaintained).** `GET /swap/jup/build` (proxy,
+  `jupBuildParams`: whitelisted params, our `platformFeeBps` + `feeAccount` set server-side, payer/destination/tip/
+  version never forwarded) returns the quote + RAW instructions + the worker's `nexus {feeBps, feeAccount}` echo. The
+  signer checks the response first (`app/lib/jupBuild.mjs checkBuild`, tested on real replies: mints/amount/ExactIn/
+  slippage/min out, only the wallet signs, no tip, v0, compute-budget price only and clamped, our fee ≤ 100 bps with
+  our account IN the swap instruction), then assembles the v0 tx itself (`compileBuild`: wallet pays, limit from a
+  measuring simulation × 1.2, ≤ 1232 bytes) and runs the simulate guards on the exact bytes. Price reads (SOL/USD,
+  the no-wallet preview) use `/build` with `PRICE_TAKER` (an empty key) + `nofee=1`. The v1 `/swap/jup/quote|swap`
+  routes still exist but nothing in the app calls them. Real-code dry run: bundle solSwapExec.ts with esbuild and
+  give `executeSolBuy` a provider whose `signTransaction` throws.
 - **Spot ledger** (`workers/nexus-lab-api/spotLedger.mjs`, tested; since 2026-10-28) → the "Spot" box on `/ops/revenue`
   (`spot` in its reply, last 30 days). Counts only what's proven: Flash = the proxy logs each accepted order id
   (`spot:flash:{id}`, with the funder only until booked) and the hourly job books final orders from Flash (one trade +
@@ -431,7 +470,10 @@ product is what sits on top:
   NexusLock lease. No wallet address is stored.
 - **Best price (EVM USDC buys, read-only):** `GET /spot/best?chain=&tokenOut=&amount=` (`routes-spotbest.mjs`, rule
   `app/lib/spotBest.mjs`) quotes spanDEX (preview, our fee on) and a Flash market quote (our key + fee, no funder) and
-  compares each router's own "you receive" (Flash's includes gas; spanDEX's wallet pays gas separately). Under 5 bps =
+  compares each router's own "you receive". Flash prices its gas in; for spanDEX the worker takes off an estimate
+  (live `eth_gasPrice` × `SWAP_GAS_UNITS` 200k + the OP-stack L1 fee upper bound on Base/Optimism, in ETH at Orderly's
+  ETH mark, converted at the quote's own rate), so both are "after gas". Approval gas isn't counted (both need one).
+  Any unreadable part (or Polygon, POL unpriced) = no estimate and the line says "Flash incl. gas". Under 5 bps =
   "about the same". The /token ticket shows one line; it routes nothing and signs nothing. Cached 20 s, origin-gated.
 - **Key proxies** (`keyProxy.mjs`): `/flash/*`, `/swap/jup/*`, `/xc/quote` accept only our origins + per-IP budgets.
 - **Discovery** rules in `app/lib/spotDiscovery.mjs` (recent views, address search, real-market floors incl. padded/thin
@@ -511,7 +553,7 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
   hard-code one here). No model ids in commits, PRs or code.
 - **Merge your own green PR** on `StephenBorst/nexus` once CI is green on the head and it's mergeable. Hold and tell
   borst on: red/pending CI, a conflict, an unanswered review, a failing Claude Approvals check, a PR that isn't yours or
-  is on another repo (BankrBot/skills, nexus-landing), a `Pipeline watch:` PR, or anything that arms live money. After
+  is on another repo (BankrBot/skills, nexus-landing), a `Pipeline watch:` PR you did not open as the watcher, or anything that arms live money. After
   a merge, check the deploy run started.
 - **Bankr skill:** published at `BankrBot/skills` → `nexus-trading-labs/`; our fork `StephenBorst/skills`. Change it in
   BankrBot first (PR from the fork), then copy the folder back here byte for byte; never copy this folder over theirs

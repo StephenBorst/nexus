@@ -19,3 +19,9 @@ invocation_logs = true
 # CI redeploys this worker from the committed file, so the flag lives HERE, not the dashboard.
 # [vars]
 # BASIS_TWO_SIDED_LIVE = "true"
+
+# STAGED (off): the level_reclaim read for PAPER configs with signalMode = "LEVEL_RECLAIM"
+# (pipeline-if-then.md, Edge: the agent rule may be built, but stays off). Uncomment ONLY in the PR
+# that sets up its paper wallet, after level_reclaim is served TRADEABLE. Live configs are refused
+# either way (app/lib/levelReclaim.mjs levelReclaimRefusal). Under the same [vars] table as above.
+# LEVEL_RECLAIM_LIVE = "true"

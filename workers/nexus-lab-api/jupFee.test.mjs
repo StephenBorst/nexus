@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { jupFeeConfig, feeAccountFor, jupQuoteParams, withJupSwapFee, isTokenAccountFor, validFeeAccounts, _resetJupFeeCache, USDC_MINT, WSOL_MINT } from "./jupFee.mjs";
+import { jupBuildParams, jupFeeConfig, feeAccountFor, jupQuoteParams, withJupSwapFee, isTokenAccountFor, validFeeAccounts, _resetJupFeeCache, USDC_MINT, WSOL_MINT } from "./jupFee.mjs";
 
 const USDC_ACCT = "Fee1USDCaccount111111111111111111111111111";
 const WSOL_ACCT = "Fee2WSoLaccount111111111111111111111111111";
@@ -86,4 +86,22 @@ test("validFeeAccounts: checks over RPC, caches, keeps the last answer on an RPC
   let off = 0;
   assert.deepEqual(await validFeeAccounts(jupFeeConfig({}), async () => { off++; }, 0), { usdc: false, wsol: false });
   assert.equal(off, 0);
+});
+
+test("/build: only whitelisted params pass; our fee + feeAccount set server-side; staged/nofee respected", () => {
+  const sp = new URLSearchParams({ inputMint: USDC_MINT, outputMint: TOKEN, amount: "500000", taker: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", slippageBps: "100",
+    feeAccount: "Evil111111111111111111111111111111111111111", payer: "Evil111111111111111111111111111111111111111", destinationTokenAccount: "x", nativeDestinationAccount: "x", tipAmount: "1", transactionVersion: "1", platformFeeBps: "100" });
+  const valid = { usdc: true, wsol: true };
+  const p = jupBuildParams(sp, jupFeeConfig(ENV), valid);
+  for (const k of ["payer", "destinationTokenAccount", "nativeDestinationAccount", "tipAmount", "transactionVersion"]) assert.equal(p.get(k), null, k);
+  assert.equal(p.get("platformFeeBps"), "10");
+  assert.equal(p.get("feeAccount"), USDC_ACCT, "ours, never the browser's");
+  assert.equal(p.get("taker"), "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM");
+  const nofee = jupBuildParams(new URLSearchParams({ inputMint: USDC_MINT, outputMint: TOKEN, amount: "1", nofee: "1", platformFeeBps: "100", feeAccount: "x" }), jupFeeConfig(ENV), valid);
+  assert.equal(nofee.get("platformFeeBps"), null);
+  assert.equal(nofee.get("feeAccount"), null);
+  const staged = jupFeeConfig({ ...ENV, JUP_FEE_LIVE: "false" });
+  assert.equal(jupBuildParams(new URLSearchParams({ inputMint: USDC_MINT, outputMint: TOKEN, amount: "1" }), staged, valid).get("feeAccount"), null);
+  assert.equal(jupBuildParams(new URLSearchParams({ inputMint: USDC_MINT, outputMint: TOKEN, amount: "1", feetest: "1" }), staged, valid).get("feeAccount"), USDC_ACCT);
+  assert.equal(jupBuildParams(new URLSearchParams({ inputMint: TOKEN, outputMint: "Bonk1111111111111111111111111111111111111111", amount: "1" }), jupFeeConfig(ENV), valid).get("feeAccount"), null, "no fee mint on the pair");
 });

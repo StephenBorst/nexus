@@ -118,3 +118,22 @@ borst, 2026-10-30: "close all the gaps".
    changes" in `read-pipeline.md`.
 4. **Parity names a second entry on one read** ("a second entry on a read already traded"). It still counts as DRIFT;
    the Oct 29 SOL row keeps showing until it leaves the 50-row window.
+
+## Pre-fix re-entries explained · 2026-11-04
+
+borst, 2026-11-04: "ship A so the parity check clears to CLEAN and unblocks the watcher, and drop the dated note from B
+on the regime page so there's an explicit audit trail."
+
+Point 4 above kept the Oct 29 SOL re-entry as DRIFT. That blocked the regime window (`graded-exit-regime-prereg.md`
+needs parity CLEAN on `0x9A30…cB28`), and the row would have sat in the 50-row ledger for weeks. Changed:
+
+- Parity now lists a second entry on one read as **explained** (`explainedTrades`, code `PRE_FIX_REENTRY`) when it was
+  opened before exec took each read once: `ONE_ENTRY_PER_READ_LIVE_MS` = **2026-10-30T17:14:41Z**, when deploy run
+  41096092141 for #199 (merged 17:07:46Z) finished. Before that the old exec was live, and this was the bug #199 fixed.
+- A second entry on one read opened at or after that time is still DRIFT: the fix didn't hold.
+- Nothing else moves. An entry on the other side or with no graded event stays DRIFT whatever its date. The grader, the
+  brain and exec are unchanged; this is the parity report only (`app/lib/paperParity.mjs`, tested).
+
+Live read just before the change (2026-11-04 02:34 UTC, `since=2026-10-27T00:00:00Z`): DRIFT, 6 entries, 20 events, 5
+matched, 1 unmatched trade (SOL LONG opened 2026-10-29T20:46:40Z, closed 2026-10-30T00:19:41Z, −6.33), 15 explained
+misses, 0 unexplained.

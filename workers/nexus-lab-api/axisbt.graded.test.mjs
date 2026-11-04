@@ -15,7 +15,8 @@ const H0 = hourBucket(BASE);
 // → every 4H bar has range 2 on a 100 close → H4 ATR-14 = 2% → stop 2.4%, target 3.6%.
 const hist = (n = GRADED_EXIT_LOOKBACK_H, base = BASE) =>
   Array.from({ length: n }, (_, k) => ({ t: base - (n - 1 - k) * HR, o: 100, h: 101, l: 99, c: 100 }));
-const after = (rows, base = BASE) => rows.map((r, i) => ({ t: base + (i + 1) * HR, o: r.c, ...r }));
+// Each future bar opens at the previous close (the history ends at 100): the open is where a gap fills.
+const after = (rows, base = BASE) => rows.map((r, i) => ({ t: base + (i + 1) * HR, o: i ? rows[i - 1].c : 100, ...r }));
 const flat = (n, p = 100) => Array.from({ length: n }, () => ({ h: p * 1.001, l: p * 0.999, c: p }));
 const tapeOf = (future, base = BASE) => candlesByHour([...hist(GRADED_EXIT_LOOKBACK_H, base), ...after(future, base)]);
 const SPEC = GRADED_EXIT_SPEC;
@@ -45,8 +46,9 @@ test("no touch in 168h → closed at the market on that bar, not credited 0 the 
   const g = gradeEventExit(tapeOf(flat(200, 101)), H0, "LONG", 100, SPEC);
   assert.equal(g.reason, "TIMEOUT");
   assert.equal(g.holdH, 168);
-  // stepExit reads the bar's adverse extreme first (101 × 0.999), so the timeout fills there: ~+0.9%
-  assert.ok(Math.abs(g.pnlPct - 0.899) < 1e-6, `got ${g.pnlPct}`);
+  // a timeout closes at the first price of its bar, the open (101), not the bar's adverse extreme
+  // (measurement change 2026-10-31; it used to fill at 101 × 0.999, +0.899%)
+  assert.ok(Math.abs(g.pnlPct - 1) < 1e-6, `got ${g.pnlPct}`);
 });
 
 test("no ATR (too little history) → null: the agent would sit it out, the line leaves it out", () => {

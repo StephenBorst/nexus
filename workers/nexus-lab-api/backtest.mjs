@@ -12,7 +12,7 @@
 // is null → CONFLUENCE / OI_ONLY simply don't fire there (no fabricated divergence).
 // MOMENTUM / MEAN_REVERSION / FUNDING_ONLY + the full exit toolkit are always backtestable.
 import { deriveSignal } from "../nexus-agent-brain/logic.mjs";
-import { computePnl, evaluateExit, breakevenArmed, volScaledLevels, dailyCapBlocked, shouldResetDaily } from "../nexus-agent-exec/logic.mjs";
+import { computePnl, evaluateExit, breakevenArmed, normTakeProfits, volScaledLevels, dailyCapBlocked, shouldResetDaily } from "../nexus-agent-exec/logic.mjs";
 import { percentileRank } from "./logic.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
@@ -173,28 +173,60 @@ export function closedPnlPct(pos, exitPrice) {
   const { pnlPct } = computePnl(pos.direction, pos.entry, exitPrice, 1);
   return pos.realized + pnlPct * pos.remaining;
 }
-// One bar of exit management. Intrabar order is conservative: the ADVERSE extreme first,
-// then the favourable one, then the close (so a bar that touches both stop and target
-// stops out). Mutates pos (trail / scale-out state); returns { px, reason } when the
-// position is fully closed on this bar, else null.
+// The price-move % an exit's own level sits at (the threshold evaluateExit just crossed), or null
+// for an exit with no level (TIMEOUT closes at the market).
+function exitLevelPct(pos, action, pnlPct, config) {
+  const st = pos.state;
+  if (action.type === "PARTIAL_TP") return normTakeProfits(st, config)[action.level]?.pct ?? null;
+  switch (action.reason) {
+    case "SL": return -(st.slPercent ?? config.slPercent);
+    case "BE": return Number(config.breakevenBufferPct) || 0;
+    case "TRAIL": return (st.peak_pnl_pct ?? pnlPct) - (Number(config.trailingStopPct) || 0);
+    case "TP": {
+      const hits = st.tp_hits || [];
+      return normTakeProfits(st, config).find((t, i) => !hits.includes(i) && pnlPct >= t.pct)?.pct ?? null;
+    }
+    default: return null;
+  }
+}
+const pxAtPct = (pos, pct) => (pos.direction === "LONG" ? pos.entry * (1 + pct / 100) : pos.entry * (1 - pct / 100));
+
+// One bar of exit management. The bar is walked open → ADVERSE extreme → favourable extreme →
+// close (conservative: a bar that touches both stop and target stops out). Mutates pos (trail /
+// scale-out state); returns { px, reason } when the position is fully closed on this bar, else null.
+//
+// FILL PRICE (measurement change 2026-10-31, docs/research/level-reclaim-exit-gap.md): an exit
+// fills at its own level (stop, target, trail, breakeven), the way the live exec closes at the
+// market within a minute of the mark crossing it. A bar that OPENS past the level fills at the
+// open (a gap). TIMEOUT closes at the first price of its bar, the open. Before this, the fill was
+// the probe price itself: a stop filled at the hour's worst price and a target at its best.
 export function stepExit(pos, c, holdMs, config) {
   const adv = pos.direction === "LONG" ? c.l : c.h;
   const fav = pos.direction === "LONG" ? c.h : c.l;
-  for (const px of [adv, fav, c.c]) {
+  const path = Number.isFinite(c.o) && c.o > 0 ? [c.o, adv, fav, c.c] : [adv, fav, c.c];
+  let prev = null;
+  for (const px of path) {
     const { pnlPct } = computePnl(pos.direction, pos.entry, px, 1);
     pos.state.be_armed = breakevenArmed(pos.state, pnlPct, config.breakevenTriggerPct);
     const action = evaluateExit(pos.state, pnlPct, holdMs, config);
-    if (!action) continue;
-    if (action.type === "TRAIL_UPDATE") {
+    if (action && action.type !== "TRAIL_UPDATE") {
+      // The fill: the level, kept between the previous probe and this one; the probe itself when
+      // the bar opened past the level (no previous probe) or the exit has no level.
+      const lvl = prev == null ? null : exitLevelPct(pos, action, pnlPct, config);
+      const fillPx = lvl == null ? px : Math.min(Math.max(pxAtPct(pos, lvl), Math.min(prev, px)), Math.max(prev, px));
+      const fillPct = computePnl(pos.direction, pos.entry, fillPx, 1).pnlPct;
+      if (action.type === "PARTIAL_TP") {
+        pos.realized += fillPct * (action.sizePct / 100);
+        pos.remaining -= action.sizePct / 100;
+        pos.state.tp_hits = [...pos.state.tp_hits, action.level];
+        if (pos.remaining <= 1e-9) return { px: fillPx, reason: "TP" };
+      } else if (action.type === "FULL_CLOSE") {
+        return { px: fillPx, reason: action.reason };
+      }
+    } else if (action) {
       pos.state.peak_pnl_pct = action.peak; pos.state.trail_stop = action.trailStop;
-    } else if (action.type === "PARTIAL_TP") {
-      pos.realized += pnlPct * (action.sizePct / 100);
-      pos.remaining -= action.sizePct / 100;
-      pos.state.tp_hits = [...pos.state.tp_hits, action.level];
-      if (pos.remaining <= 1e-9) return { px, reason: "TP" };
-    } else if (action.type === "FULL_CLOSE") {
-      return { px, reason: action.reason };
     }
+    prev = px;
   }
   return null;
 }

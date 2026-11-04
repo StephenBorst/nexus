@@ -76,6 +76,26 @@ export function withJupSwapFee(bodyText, cfg, valid) {
   return { body: JSON.stringify(b) };
 }
 
+// Swap API V2 Router: GET /swap/v2/build = quote + raw instructions in one call (v1's successor;
+// docs swap/migration/metis-to-build). ExactIn only, `taker` required. The fee is the same pair of
+// params, both on this one call: platformFeeBps + feeAccount. Only these params pass; anything that
+// redirects funds or payment (payer, destinationTokenAccount, nativeDestinationAccount, tipAmount,
+// feeAccount from the browser, transactionVersion) is never forwarded.
+const BUILD_PARAMS = ["inputMint", "outputMint", "amount", "taker", "slippageBps", "maxAccounts"];
+
+/** The query we send to Jupiter's /build, with our fee when this pair has a fee account. */
+export function jupBuildParams(searchParams, cfg, valid) {
+  const p = new URLSearchParams();
+  for (const k of BUILD_PARAMS) {
+    const v = searchParams.get(k);
+    if (v != null && v !== "") p.set(k, v);
+  }
+  const wanted = cfg?.live || searchParams.get("feetest") === "1";
+  const acct = !wanted || searchParams.get("nofee") === "1" ? "" : feeAccountFor(p.get("inputMint"), p.get("outputMint"), cfg, valid);
+  if (acct) { p.set("platformFeeBps", String(cfg.bps)); p.set("feeAccount", acct); }
+  return p;
+}
+
 /** Is `info` (getAccountInfo jsonParsed `value`) an initialized token account for `mint`? */
 export function isTokenAccountFor(info, mint) {
   const parsed = info?.data?.parsed;

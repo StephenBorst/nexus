@@ -32,7 +32,7 @@ import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS
   callStrip, openChipLine, labRowLine, readLabOpen, writeLabOpen, EMPTY_STRIP_LINE } from "@/lib/spotDiscovery.mjs";
 import { swapOutcome } from "@/lib/solSwapGuards.mjs";
 import { reportSpotFill } from "@/lib/spotReport";
-import { bestLine } from "@/lib/spotBest.mjs";
+import { bestLine, bestGasNote } from "@/lib/spotBest.mjs";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -854,7 +854,7 @@ export default function TokenTerminal() {
 
   // spanDEX vs Flash on an EVM USDC buy at the ticket's size (GET /spot/best, routes-spotbest.mjs):
   // each router's own "you receive" estimate. Read-only; debounced like the quote probe.
-  const [best, setBest] = useState<{ best: "spandex" | "flash" | "same" | null; spandex: number | null; flash: number | null; edgePct: number | null } | null>(null);
+  const [best, setBest] = useState<{ best: "spandex" | "flash" | "same" | null; spandex: number | null; flash: number | null; edgePct: number | null; gasIncluded?: boolean; gasUsd?: number | null } | null>(null);
   useEffect(() => {
     const evm = pair ? EVM_USDC[pair.chainId] : undefined;
     const a = parseFloat(amount);
@@ -2109,10 +2109,12 @@ export default function TokenTerminal() {
                         resolves MAX→balance and the USD toggle via $/mark) — never the USD label, and
                         empty ticket → empty (no invented default). */}
                     {side === "buy" && bestLine(best, pair.baseSymbol) && (
-                      <div title="Each router’s own estimate after its fees. Flash’s includes network gas; with spanDEX your wallet pays gas separately."
+                      <div title={best?.gasIncluded
+                        ? "Each router’s own estimate after its fees, both after network gas: Flash prices its gas in; for spanDEX an estimate from the live gas price is taken off. The approval isn’t counted (both need one)."
+                        : "Each router’s own estimate after its fees. Flash’s includes network gas; with spanDEX your wallet pays gas separately."}
                         style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, marginTop: 10, textAlign: "center" }}>
                         {bestLine(best, pair.baseSymbol)}
-                        <span style={{ color: FAINT }}> · Flash incl. gas</span>
+                        <span style={{ color: FAINT }}> · {bestGasNote(best)}</span>
                       </div>
                     )}
                     <FlashSpotButton chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : (sellTokens > 0 ? sellTokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : "")} defaultSl={spotSl} defaultTp={spotTp} priceUsd={pair.priceUsd ?? null} walletAddress={wallet} provider={provider} />

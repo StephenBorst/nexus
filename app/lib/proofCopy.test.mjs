@@ -65,3 +65,10 @@ test("retired graded exits agree with the recorded snapshot, and read plainly", 
   assert.equal(retiredGradedExit("nope"), null);
   assert.equal(retiredLine(null), "");
 });
+
+test("pipelineLine: an Edge read states the Edge line from pipeline-if-then.md", () => {
+  const e = pipelineLine({ stage: "EDGE", next: "1 more graded-exit trades", numbers: { events: 60 } }, 30);
+  assert.equal(e.text, "60 events · an edge");
+  assert.ok(e.sub.startsWith("Beats random on new data and on coins it was never picked on. Not tested as a trade yet."));
+  assert.ok(/Next: 1 more graded-exit trades\./.test(e.sub));
+});

@@ -1700,6 +1700,9 @@ export const AUTH_V2_DOMAIN = "og.nexustradinglabs.com";
 export const AUTH_V2_ACTIONS = new Set([
   "trade", "withdraw",
   "agent.activate", "agent.mode", "agent.config", "agent.deactivate", "agent.kill",
+  // auth v2 step 2 (routes-key.mjs): registering / rotating and removing a random trading key.
+  // Enforced there always, not behind AUTH_V2.
+  "key.register", "key.remove",
 ]);
 
 // Canonical challenge string — the ONE format both client and server build, so the

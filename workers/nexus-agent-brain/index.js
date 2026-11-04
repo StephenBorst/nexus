@@ -20,6 +20,7 @@ import { deriveSignal, computeRegime, atrPct, oiSnapshotDue, signalSourceT } fro
 import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 import { HOLDOUT_PERPS } from "../../app/lib/recordedUniverse.mjs";
+import { levelReclaimLive, levelReclaimRefusal } from "../../app/lib/levelReclaim.mjs";
 
 // The markets we ALWAYS record oi:hist for. ⚠️ Keep this in step with
 // VALIDATE_UNIVERSE in nexus-lab-api/strategies.mjs — a symbol the walk-forward asks
@@ -120,10 +121,15 @@ export default {
       const twoSidedLive = env.BASIS_TWO_SIDED_LIVE === "true";
       const needBasisDev = twoSidedLive && Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisAnchor === "MEAN");
       const needBasisDevCvd = needBasisDev && Object.values(userConfigs).some(({ config }) => config.signalMode === "BASIS_FADE" && config.basisAnchor === "MEAN" && config.basisConfirm === "CVD");
+      // STAGED (off): the level_reclaim read (pipeline-if-then.md, Edge). Computed ONLY when the
+      // worker var LEVEL_RECLAIM_LIVE = "true" (commented out in wrangler.toml) AND a PAPER config
+      // trades it. Off ⇒ a LEVEL_RECLAIM config gets no levelReclaim* fields and sits out.
+      const levelLive = env.LEVEL_RECLAIM_LIVE === "true";
+      const needLevel = levelLive && Object.values(userConfigs).some(({ config }) => config.signalMode === "LEVEL_RECLAIM" && !levelReclaimRefusal(config));
       const rawBySymbol = {};
       for (const symbol of symbolSet) {
         try {
-          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis, needBasisCvd, needBasisSmart, needBasisLiq, { dev: needBasisDev, devCvd: needBasisDevCvd });
+          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis, needBasisCvd, needBasisSmart, needBasisLiq, { dev: needBasisDev, devCvd: needBasisDevCvd }, needLevel);
         } catch (e) {
           console.error(`[brain] ${symbol} eval error:`, e.message);
         }
@@ -190,7 +196,7 @@ export default {
 // Fetch one symbol's market data and compute RAW deltas vs last cycle.
 // No strategy interpretation here — deriveSignal() applies each user's mode +
 // thresholds. `market:prev:{symbol}` is stored so price/OI deltas are real.
-async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false, computeBasisCvd = false, computeBasisSmart = false, computeBasisLiq = false, twoSided = { dev: false, devCvd: false }) {
+async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false, computeBasisCvd = false, computeBasisSmart = false, computeBasisLiq = false, twoSided = { dev: false, devCvd: false }, computeLevel = false) {
   const json = await orderlyPublicGet(`${ORDERLY_API}/v1/public/futures/${symbol}`);
   const d = json.data;
 
@@ -333,8 +339,23 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
     }
   }
 
+  // ── level_reclaim (STAGED, off) ─────────────────────────────────────────────
+  // The candle:hist this tick just appended (recordCandlesForSymbols runs first), read through the
+  // SHARED rule the scoreboard grades with (app/lib/levelReclaim.mjs). A failed read sits out.
+  let level = null;
+  if (computeLevel) {
+    try {
+      const raw = await env.NEXUS_AGENT.get(`candle:hist:${symbol}`);
+      level = levelReclaimLive(raw ? JSON.parse(raw) : []);
+    } catch (e) {
+      console.error(`[brain] ${symbol} level_reclaim read failed:`, e.message);
+      level = { side: null, t: null, reason: "candle read failed" };
+    }
+  }
+
   return {
     symbol, price: markPrice, oi: openInterest, fundingRate, priceChange, oiChange, hasPrev: !!prev, fundingPct,
+    ...(level ? { levelReclaimSide: level.side, levelReclaimReason: level.reason, levelReclaimT: level.t } : {}),
     ...(basis ? { basisSide: basis.side, basisPct: basis.basisPct, basisThr: basis.thr, basisReason: basis.reason, basisT: basis.t } : {}),
     ...(basisCvd ? { basisCvdConfirmed: basisCvd.confirmed, basisCvdSide: basisCvd.cvdSide, basisCvdReason: basisCvd.reason } : {}),
     ...(basisSmart ? { basisSmartConfirmed: basisSmart.confirmed, basisSmartSide: basisSmart.smartSide, basisSmartReason: basisSmart.reason } : {}),

@@ -21,16 +21,20 @@ function tape(n, seed, pumps = []) {
   });
 }
 const trade = (symbol, candles, i, direction) => {
-  // resolve the real trade through the same kind of exit the baseline uses (TP/SL/timeout)
+  // resolve the real trade through the same kind of exit the baseline uses (TP/SL/timeout), with the
+  // same fills as stepExit since 2026-10-31: each exit at its level, a bar that opens past it at the
+  // open, a timeout at the open of its bar
   const entry = candles[i].c;
+  const pct = (px) => (direction === "LONG" ? (px - entry) / entry * 100 : (entry - px) / entry * 100);
   let pnlPct = null;
   for (let k = i + 1; k < candles.length && k <= i + CFG.maxHoldHours; k++) {
     const c = candles[k];
-    const adv = direction === "LONG" ? (c.l - entry) / entry * 100 : (entry - c.h) / entry * 100;
-    const fav = direction === "LONG" ? (c.h - entry) / entry * 100 : (entry - c.l) / entry * 100;
-    if (adv <= -CFG.slPercent) { pnlPct = adv; break; }
-    if (k - i >= CFG.maxHoldHours) { pnlPct = direction === "LONG" ? (c.l - entry) / entry * 100 : (entry - c.h) / entry * 100; break; }
-    if (fav >= CFG.tpPercent) { pnlPct = fav; break; }
+    const open = pct(c.o), adv = pct(direction === "LONG" ? c.l : c.h), fav = pct(direction === "LONG" ? c.h : c.l);
+    if (open <= -CFG.slPercent) { pnlPct = open; break; }
+    if (k - i >= CFG.maxHoldHours) { pnlPct = open; break; }
+    if (open >= CFG.tpPercent) { pnlPct = open; break; }
+    if (adv <= -CFG.slPercent) { pnlPct = -CFG.slPercent; break; }
+    if (fav >= CFG.tpPercent) { pnlPct = CFG.tpPercent; break; }
   }
   return { symbol, direction, entryT: candles[i].t, pnlPct };
 };
