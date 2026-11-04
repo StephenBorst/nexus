@@ -28,10 +28,12 @@ readPipeline.mjs rules). Merging the watcher PR is allowed by borst (2026-11-02)
    b. Branch `pipeline-watch/<YYYY-MM-DD>` from main. Run `node tools/pipeline/watch.mjs --from /tmp/sc.json --write`
       (updates `docs/research/pipeline-stages.json`).
    c. Read `docs/research/pipeline-if-then.md`; for a graded-exit change also `docs/research/graded-exit-prereg.md`; for
-      a regime-window change or note also `docs/research/graded-exit-regime-prereg.md`.
+      a regime-window change or note also `docs/research/graded-exit-regime-prereg.md`; for a stress-study verdict
+      (`stress_hours <read>`) also `docs/research/stress-hours-prereg.md`.
       Apply ONLY what the page says for that stage that is display or record: /proof copy and placement, a dated line
       appended under a page's Results (never an edit above it), and for a regime-window judgment `REGIME_RESULT` in
-      `app/lib/regimeWindow.mjs`. Most display already follows the served stage (`app/lib/proofCopy.mjs`,
+      `app/lib/regimeWindow.mjs`. A stress verdict is recorded only: the dated line under the stress page's Results;
+      the per-read pause PR that WORSE_IN_STRESS licenses is borst's to do. Most display already follows the served stage (`app/lib/proofCopy.mjs`,
       `app/lib/signalCard.mjs`); add only what is missing, with tests, in the repo's style. Anything the page marks as
       borst's (a paper wallet, x402, the house caller, a live plan, arming) is NOT done: list it in the PR body under
       "borst's to do". If the trigger names a parity check, run it with curl and put the verdict in the PR body; a

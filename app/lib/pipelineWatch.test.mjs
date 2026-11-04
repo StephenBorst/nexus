@@ -173,3 +173,70 @@ test("every regime trigger's section is on the signed page", () => {
   const p = read(REGIME_PAGE);
   for (const [k, t] of Object.entries(REGIME_TRIGGERS)) assert.ok(p.includes(t.section), `${k}: ${t.section}`);
 });
+
+import { STRESS_TRIGGERS, STRESS_PAGE } from "./pipelineWatch.mjs";
+import { VERDICT_LABELS } from "../../workers/nexus-lab-api/stressGrading.mjs";
+
+const stressRow = ({ status = "ACCRUING", verdict = null, final = false, S = 3, C = 10, extra = {} } = {}) => ({
+  status, verdict, final, counts: { STRESS: S, CALM: C, UNJUDGED: 0, pending: 0 }, label: verdict ? VERDICT_LABELS[verdict] : undefined,
+  d: verdict ? -1.2 : null, p: verdict ? 0.004 : null, meanStress: verdict ? -0.6 : null, meanCalm: verdict ? 0.6 : null,
+  holm: verdict ? { threshold: 0.0071 } : undefined, judgedAt: verdict ? "2027-01-10T00:00:00.000Z" : null, ...extra,
+});
+const stSc = (reads) => ({ asOf: "x", pipeline: { reads: [] }, axes: [], stressStudy: { reads } });
+const st = (d) => ({ ...d, changes: d.changes.filter((c) => c.key.startsWith("stress:")), issues: d.issues.filter((x) => x.startsWith("stress_hours")) });
+
+test("stress study: counts and in-between statuses are recorded quietly; a FINAL verdict is the change, with the page's trigger", () => {
+  const seeded = { reads: {}, gradedExit: {}, tests: {}, stress: { level_reclaim: { status: "ACCRUING", verdict: null, final: false } } };
+  for (const status of ["ACCRUING", "RIPENING", "WAITING_ON_PENDING"]) {
+    assert.deepEqual(st(diffPipeline(seeded, stateFromScorecard(stSc({ level_reclaim: stressRow({ status, S: 31, C: 40 }) })))).changes, [], status);
+  }
+  const pending = stressRow({ status: "JUDGED", S: 30, C: 30, extra: { verdict: null, final: false, pending: "PENDING_HOLM" } });
+  assert.deepEqual(st(diffPipeline(seeded, stateFromScorecard(stSc({ level_reclaim: pending })))).changes, [], "PENDING_HOLM is not final");
+  const worse = stateFromScorecard(stSc({ level_reclaim: stressRow({ status: "JUDGED", verdict: "WORSE_IN_STRESS", final: true, S: 30, C: 34 }) }));
+  const d = st(diffPipeline(seeded, worse));
+  assert.equal(d.changes.length, 1);
+  assert.deepEqual([d.changes[0].from, d.changes[0].to, d.changes[0].page], ["ACCRUING", "WORSE_IN_STRESS", STRESS_PAGE]);
+  assert.equal(d.changes[0].trigger, STRESS_TRIGGERS.WORSE_IN_STRESS);
+  assert.match(d.changes[0].reason, /worse in stress: STRESS -0\.60R vs CALM \+0\.60R \(d -1\.20R\), p 0\.004, Holm threshold 0\.0071, 30 STRESS \/ 34 CALM/);
+  assert.equal(changeReport(d.changes).title, "Pipeline watch: stress_hours level_reclaim ACCRUING → WORSE_IN_STRESS");
+  assert.match(changeReport(d.changes).body, /stress-hours-prereg\.md/);
+  assert.match(changeReport(d.changes).body, /borst's go: it licenses ONE reviewed PR/);
+  // recorded once, then final: the same verdict is quiet, a different one is an issue, the record stands
+  assert.deepEqual(st(diffPipeline(d.next, worse)).changes, []);
+  const flip = st(diffPipeline(d.next, stateFromScorecard(stSc({ level_reclaim: stressRow({ status: "JUDGED", verdict: "NO_DIFFERENCE", final: true }) }))));
+  assert.deepEqual(flip.changes, []);
+  assert.match(flip.issues[0], /recorded WORSE_IN_STRESS, which is final; served NO_DIFFERENCE/);
+  assert.equal(flip.next.stress.level_reclaim.verdict, "WORSE_IN_STRESS");
+});
+
+test("stress study: NOT_ENOUGH_STRESS and LOWER_STILL_POSITIVE are final too; unserved or errored is an issue, never a change", () => {
+  const seeded = { reads: {}, gradedExit: {}, tests: {}, stress: { oi_coil_break: { status: "ACCRUING", verdict: null, final: false } } };
+  const nes = st(diffPipeline(seeded, stateFromScorecard(stSc({ oi_coil_break: stressRow({ status: "NOT_ENOUGH_STRESS", verdict: "NOT_ENOUGH_STRESS", final: true, S: 12, C: 80 }) }))));
+  assert.equal(nes.changes[0].to, "NOT_ENOUGH_STRESS");
+  assert.match(nes.changes[0].reason, /12 STRESS events at the limit \(needs 20\); 80 CALM/);
+  const lsp = st(diffPipeline(seeded, stateFromScorecard(stSc({ oi_coil_break: stressRow({ status: "JUDGED", verdict: "LOWER_STILL_POSITIVE", final: true }) }))));
+  assert.equal(lsp.changes[0].trigger, STRESS_TRIGGERS.LOWER_STILL_POSITIVE);
+  assert.match(lsp.changes[0].trigger.does.join(" "), /licenses nothing/);
+  const err = st(diffPipeline(seeded, stateFromScorecard({ asOf: "x", pipeline: { reads: [] }, axes: [], stressStudy: { error: "boom" } })));
+  assert.deepEqual(err.changes, []);
+  assert.match(err.issues[0], /stress_hours: not served \(boom\)/);
+  assert.equal(err.next.stress.oi_coil_break.status, "ACCRUING", "kept as recorded");
+  const missing = st(diffPipeline(seeded, stateFromScorecard(stSc({}))));
+  assert.match(missing.issues[0], /oi_coil_break: recorded but not served/);
+});
+
+test("every stress verdict has a trigger on the signed page, and none arms anything", () => {
+  const p = read(STRESS_PAGE);
+  for (const [k, t] of Object.entries(STRESS_TRIGGERS)) assert.ok(p.includes(t.section), `${k}: ${t.section}`);
+  assert.deepEqual(Object.keys(STRESS_TRIGGERS).sort(), Object.keys(VERDICT_LABELS).sort(), "one trigger per verdict the judge can give");
+  const all = Object.values(STRESS_TRIGGERS).flatMap((t) => t.does).join("\n");
+  assert.doesNotMatch(all, /\b(arm it|turn on|set CARRY_LIVE|go live)\b/i);
+  assert.match(STRESS_TRIGGERS.WORSE_IN_STRESS.does.join(" "), /The watcher doesn't open it/);
+});
+
+test("the committed snapshot records the stress study for each of its seven reads", async () => {
+  const snap = JSON.parse(read(SNAPSHOT_PATH));
+  const { STRESS_STUDY } = await import("../../workers/nexus-lab-api/stressHours.mjs");
+  assert.deepEqual(Object.keys(snap.stress || {}).sort(), [...STRESS_STUDY.reads].sort());
+  for (const [n, r] of Object.entries(snap.stress)) assert.ok(typeof r.status === "string" && "final" in r, n);
+});

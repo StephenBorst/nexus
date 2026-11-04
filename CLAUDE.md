@@ -265,7 +265,9 @@ product is what sits on top:
   weighting: narrow stops +0.50R/+63 bps, wide −0.06R/−60 bps. Recommendation on the page: keep the bps money bar.
 - **Daily pipeline watcher** (prompt `docs/routines/pipeline-watch.md`, `tools/pipeline/watch.mjs`,
   `app/lib/pipelineWatch.mjs`): compares served stages with `docs/research/pipeline-stages.json`; a change opens a PR on
-  `pipeline-watch/<date>`. **The watcher merges its own `Pipeline watch:` PR** (borst's go, 2026-11-02) only when checks are green, it is mergeable, the change is display/record only, no parity DRIFT and nothing arms live money; any other session leaves watcher PRs alone. A scheduled task stores its own copy of the
+  `pipeline-watch/<date>`. It also watches `stressStudy`: a read's verdict turning FINAL is the change (`STRESS_TRIGGERS`; record a
+  dated line under the stress page's Results; WORSE's pause PR stays borst's), a recorded final verdict is terminal.
+  **The watcher merges its own `Pipeline watch:` PR** (borst's go, 2026-11-02) only when checks are green, it is mergeable, the change is display/record only, no parity DRIFT and nothing arms live money; any other session leaves watcher PRs alone. A scheduled task stores its own copy of the
   prompt: after editing the doc, update the task (`update_trigger`).
 - **Live money** = `docs/research/live-money-review.md` (draft, unsigned, arms nothing).
 - `/intel/evidence?axis=&hold=` replays a preset across every mature market (pooled ≠ independent; say so).
