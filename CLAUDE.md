@@ -248,7 +248,12 @@ product is what sits on top:
   limit 2027-04-30): a conditioner, not a read. Stress hour = ≥5 of the 9 main coins OI −2%/4h AND the board's median
   4h move ≥ its 30-day p90 (`workers/nexus-lab-api/stressHours.mjs`, pinned). Grades the seven reads registered at
   signing STRESS vs CALM (time-shift null, Holm, 30/30). WORSE_IN_STRESS licenses one reviewed per-read pause PR,
-  nothing automatic. Brain/exec never import it. The judging code is its own PR, before any read hits 30/30.
+  nothing automatic. Brain/exec never import it. Judge = `stressGrading.mjs` (pure, R in from axisbt `gradeEventR`):
+  judging time = 30/30 cutoff + 168h (or the limit), so any re-run gives the same p; shifts ≥7d both ways
+  (mulberry32, golden-pinned); empty-side shifts left out (`validShifts`); interim Holm: p ≤ α/7 in, p > α out, else
+  PENDING_HOLM. borst's rulings (2026-11-04, under the page's Results): significantly lower but STRESS mean R ≥ 0 =
+  `LOWER_STILL_POSITIVE` ("lower in stress, still positive", licenses nothing; `licensesPause` only on WORSE); ≥20
+  STRESS but <30 CALM at the limit = judged as it stands. Not wired to the scoreboard yet (own PR).
 - **Pre-registered studies are append-only:** a doc's text above Results is pinned (sha256 tests); verdicts are appended;
   a new idea found on a closed population is a new dated registration (e.g. structure × house fade: CLOSED, not shown).
 - **level_reclaim exit gap** (`docs/research/level-reclaim-exit-gap.md`, signed 2026-10-31): the read grades +R while its
