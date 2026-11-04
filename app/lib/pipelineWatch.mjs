@@ -17,6 +17,11 @@
 // as an issue ("the served stage stands and the disagreement is a bug to fix in its own PR").
 
 import { REGIME_WINDOW, REGIME_OUTCOMES, judgeRegimeWindow, regimeFromMs } from "./regimeWindow.mjs";
+//
+// 3. The stress-hour study (docs/research/stress-hours-prereg.md), as served in `stressStudy`: a read's
+//    verdict turning FINAL is the change (one PR records it under the page's Results). Counts and the
+//    in-between statuses (ACCRUING, RIPENING, PENDING_HOLM, …) are recorded but never news. A recorded
+//    final verdict is terminal, like a retired read.
 
 export const IF_THEN_PAGE = "docs/research/pipeline-if-then.md";
 export const GRADED_EXIT_PAGE = "docs/research/graded-exit-prereg.md";
@@ -104,6 +109,33 @@ export const REGIME_TRIGGERS = Object.freeze({
   NOTE: { section: "**The read's old-data grade decides nothing.**", does: ["Append one dated line under Results with the read's grade. Nothing else changes; the window runs to judgment."] },
 });
 
+// The stress-hour study: the verdicts on its page (§ Verdicts + borst's dated rulings under Results).
+export const STRESS_PAGE = "docs/research/stress-hours-prereg.md";
+const STRESS_RECORD = "Append one dated line under Results on docs/research/stress-hours-prereg.md: the read, the verdict, d (STRESS − CALM mean R), p, the Holm threshold, the STRESS / CALM counts and the judging time. Never an edit above Results.";
+export const STRESS_TRIGGERS = Object.freeze({
+  WORSE_IN_STRESS: {
+    section: "**WORSE_IN_STRESS:**",
+    does: [STRESS_RECORD, "borst's go: it licenses ONE reviewed PR proposing to pause that read's live entries in stress windows. The watcher doesn't open it. Nothing switches on by itself."],
+  },
+  NO_DIFFERENCE: { section: "**NO_DIFFERENCE:**", does: [STRESS_RECORD, "No automatic breaker for that read. Nothing else changes."] },
+  BETTER_IN_STRESS: {
+    section: "**BETTER_IN_STRESS:**",
+    does: [STRESS_RECORD, "Nothing changes. Never a licence to trade only in stress: that would be a new read, registered and graded first."],
+  },
+  LOWER_STILL_POSITIVE: {
+    section: "**\"lower in stress, still positive\"**",
+    does: [STRESS_RECORD, "It licenses nothing (borst's ruling, 2026-11-04). Nothing else changes."],
+  },
+  NOT_ENOUGH_STRESS: { section: "**NOT_ENOUGH_STRESS:**", does: [STRESS_RECORD, "No verdict: fewer than 20 STRESS events at the limit. Nothing changes."] },
+});
+const r4 = (v) => (Number.isFinite(v) ? Math.round(v * 10000) / 10000 : null);
+function stressReason(r) {
+  const c = r.counts || {};
+  if (r.verdict === "NOT_ENOUGH_STRESS") return `${c.STRESS ?? 0} STRESS events at the limit (needs 20); ${c.CALM ?? 0} CALM`;
+  const fmt = (v) => (Number.isFinite(v) ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}R` : "—");
+  return `${r.label || r.verdict}: STRESS ${fmt(r.meanStress)} vs CALM ${fmt(r.meanCalm)} (d ${fmt(r.d)}), p ${r.p ?? "—"}, Holm threshold ${r.holm?.threshold ?? "—"}, ${c.STRESS ?? 0} STRESS / ${c.CALM ?? 0} CALM, judged at ${r.judgedAt || "the limit"}`;
+}
+
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
 // The graded-exit bar, word for word from graded-exit-prereg.md § "Decision rule":
@@ -158,6 +190,22 @@ export function stateFromScorecard(sc, now = Date.now()) {
       belowPredictive: axis?.verdict ? axis.verdict !== "PREDICTIVE" : null, readVerdict: axis?.verdict ?? null,
       inWindow: now >= regimeFromMs(),
     };
+  }
+  // The stress-hour study. Unserved or errored ⇒ `stressError` (reported, never judged on nothing).
+  const ss = sc.stressStudy;
+  if (ss && ss.reads && typeof ss.reads === "object" && !ss.error) {
+    out.stress = {};
+    for (const [name, r] of Object.entries(ss.reads)) {
+      if (!r || typeof r.status !== "string") continue;
+      out.stress[name] = {
+        status: r.status, verdict: r.verdict ?? null, final: r.final === true,
+        stress: num(r.counts?.STRESS) ?? 0, calm: num(r.counts?.CALM) ?? 0,
+        d: r4(r.d), p: r4(r.p), judgedAt: r.judgedAt ?? null,
+        ...(r.final === true && r.verdict ? { reason: stressReason(r) } : {}),
+      };
+    }
+  } else {
+    out.stressError = ss?.error || "stressStudy not served";
   }
   return out;
 }
@@ -247,6 +295,36 @@ export function diffPipeline(prev, cur) {
     if (!(key in (cur.tests || {}))) {
       issues.push(`${key}: not served (scoreboard block or BTC day counts unread). Kept as recorded.`);
       next.tests[key] = { ...prevT[key] };
+    }
+  }
+
+  // The stress-hour study: a verdict turning final is the change; a recorded final verdict is terminal.
+  const prevS = prev?.stress || {};
+  next.stress = {};
+  if (cur.stress) {
+    for (const [name, now] of Object.entries(cur.stress)) {
+      const was = prevS[name] || null;
+      if (was?.final && was.verdict) {
+        if (!(now.final && now.verdict === was.verdict)) issues.push(`stress_hours ${name}: recorded ${was.verdict}, which is final; served ${now.final ? now.verdict : `${now.status} (not final)`}. Kept as recorded.`);
+        next.stress[name] = { ...was };
+        continue;
+      }
+      next.stress[name] = { ...now };
+      if (now.final && now.verdict) {
+        changes.push({
+          key: `stress:${name}`, name: `stress_hours ${name}`, kind: "stress_verdict", from: was?.status ?? null, to: now.verdict,
+          reason: now.reason || "", page: STRESS_PAGE,
+          trigger: STRESS_TRIGGERS[now.verdict] || { section: "?", does: [`Unknown verdict "${now.verdict}": not on the page. Ask borst.`] },
+        });
+      }
+    }
+  } else if (cur.stressError && Object.keys(prevS).length) {
+    issues.push(`stress_hours: not served (${cur.stressError}). Recorded entries kept.`);
+  }
+  for (const name of Object.keys(prevS)) {
+    if (!(name in next.stress)) {
+      if (cur.stress) issues.push(`stress_hours ${name}: recorded but not served. Kept as recorded.`);
+      next.stress[name] = { ...prevS[name] };
     }
   }
   return { changes, issues, next };

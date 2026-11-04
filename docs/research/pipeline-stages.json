@@ -61,5 +61,77 @@
       "belowPredictive": true,
       "readVerdict": "NOISE"
     }
+  },
+  "stress": {
+    "rsi_reset_deep": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "stress": 0,
+      "calm": 8,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "level_reclaim": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "stress": 0,
+      "calm": 8,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "oi_div_reversal": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "stress": 0,
+      "calm": 1,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "session_momentum": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "stress": 0,
+      "calm": 7,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "confluence_follow": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "stress": 0,
+      "calm": 14,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "oi_div_reversal_4h": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "stress": 1,
+      "calm": 13,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "oi_coil_break": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "stress": 0,
+      "calm": 7,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    }
   }
 }
