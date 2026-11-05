@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useCollateral, usePrivateQuery, useAccount } from "@orderly.network/hooks";
 import { useLabStorage } from "@/hooks/useLabStorage";
 import { HoldersRoom } from "@/components/HoldersRoom";
@@ -10,6 +10,8 @@ import { NexusPro } from "@/components/NexusPro";
 import type { TabId, DayGroup, ProcessedTrade } from "./types";
 import { getDayKey } from "./helpers";
 import { useIsMobile } from "./useIsMobile";
+import { deployToAgent } from "@/utils/agentPrefill";
+import { LEVEL_RECLAIM_DEPLOY, LEVEL_RECLAIM_PAPER_CONFIG } from "@/lib/levelReclaim.mjs";
 // Extracted Lab views
 import { AnalyticsView } from "./AnalyticsView";
 import { TradeLogAllView, TradeLogView } from "./TradeLog";
@@ -53,6 +55,18 @@ export default function TheLabPage() {
     const t = normTab(searchParams.get("tab"));
     if (t) setActiveTab(t);
   }, [searchParams]);
+  // The level_reclaim paper wallet's setup (borst, 2026-11-05): a HIDDEN link, linked from nowhere in the app, that
+  // hands the exact registered config (app/lib/levelReclaim.mjs) to the Agent tab as a whole strategy. PAPER only:
+  // the brain refuses this mode on any other config, and lab-api refuses the graded exit off PAPER. deployToAgent
+  // navigates to ?tab=agent, which drops the param, so it loads once.
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (searchParams.get("deploy") !== LEVEL_RECLAIM_DEPLOY) return;
+    deployToAgent({ ...LEVEL_RECLAIM_PAPER_CONFIG, symbols: [...LEVEL_RECLAIM_PAPER_CONFIG.symbols], takeProfits: [] },
+      "the level_reclaim paper setup (as registered)",
+      "level_reclaim, exactly as graded: the registered rule, the graded exit (1.2× H4 ATR stop, 1.5× target, 168h), the 11 main-card coins, PAPER only. Use a FRESH wallet so its record starts at zero. Its 30-trade test is judged after fees (paper-costs), with parity CLEAN.",
+      navigate, { replaceFilters: true });
+  }, [searchParams, navigate]);
   // Programmatic tab switches (deployToAgent / deployDirectiveFromThesis) fire this
   // event so they work even when the URL's ?tab= is stale (tab clicks use local
   // state, not the URL) — a plain navigate would no-op in that case.

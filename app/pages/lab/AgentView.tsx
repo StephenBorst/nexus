@@ -1095,6 +1095,12 @@ export function AgentView() {
 
           <div style={agentCardStyle}>
             <div style={agentLabelStyle}>STRATEGY — SIGNAL MODE</div>
+            {/* LEVEL_RECLAIM has no mode button: only its hidden setup link loads it (paper wallet, 2026-11-05). */}
+            {config.signalMode === "LEVEL_RECLAIM" && (
+              <div style={{ marginTop: 8, display: "inline-block", background: "#ededf015", border: "1px solid #ededf060", borderRadius: 3, padding: "4px 10px", color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 11 }}>
+                level_reclaim · paper · as registered
+              </div>
+            )}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {([
                 { v: "CONFLUENCE", label: "Confluence", hint: "Funding AND OI must agree. Strictest filter. Fewest entries." },
@@ -1131,6 +1137,7 @@ export function AgentView() {
                 OI_ONLY: "Acts on open interest alone. A fast pile-in of new positions. Funding ignored.",
                 MOMENTUM: "Trades with a price move once it clears your threshold. Noisy on small moves. PAPER it first.",
                 MEAN_REVERSION: "Fades a sharp move once it clears your threshold. Bets it snaps back. PAPER it first.",
+                LEVEL_RECLAIM: "The registered level_reclaim read: price sweeps the prior UTC day’s high or low by 0.4× the H4 ATR and closes back inside within 6h; it fades the sweep. Traded on the graded exit only (stop 1.2× H4 ATR, target 1.5×, 168h). PAPER only. Pick another mode above to leave it.",
                 BASIS_FADE: "Fades an extreme spot-perp basis: a perp trading far above spot is froth (short it), far below is capitulation (long it). Extreme is measured against this market's own last week, not a fixed number. The scoreboard grades the read PREDICTIVE. That rates the read, not a strategy. Entries, exits and fees are unproven. EXPERIMENTAL. PAPER only.",
               } as Record<string, string>)[config.signalMode ?? "FUNDING_ONLY"]}
             </div>

@@ -135,12 +135,14 @@ product is what sits on top:
 - **Reconcile:** exec reads the live position first; exchange flat ⇒ clear the stale record. On a read error it manages
   on cached data, never clears.
 - **Modes** (`deriveSignal`, brain `logic.mjs`): CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE (free); MOMENTUM,
-  MEAN_REVERSION (PRO). **LEVEL_RECLAIM = STAGED, OFF** (2026-11-04, pipeline-if-then.md Edge work): the registered
-  read via the SHARED rule `app/lib/levelReclaim.mjs` (the grader's `levelReclaimEvents` moved there unchanged;
-  explorerReads re-exports it), computed by the brain only behind worker var `LEVEL_RECLAIM_LIVE` (commented out in
-  wrangler.toml, a test fails if set) and only for PAPER configs (`levelReclaimRefusal`); fires in the hour after an
-  event, `sourceT` = the event time. No Lab mode, no preset (tested). Parity: `levelReclaim.test.mjs` (hour by hour),
-  `/agent/:a/parity` maps it to the `level_reclaim` axis. Turned on only in the PR that sets up its paper wallet. Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
+  MEAN_REVERSION (PRO). **LEVEL_RECLAIM = ON for PAPER only** (built off 2026-11-04; on 2026-11-05 when level_reclaim
+  was served TRADEABLE): the registered read via the SHARED rule `app/lib/levelReclaim.mjs` (the grader's
+  `levelReclaimEvents` moved there unchanged; explorerReads re-exports it), computed by the brain behind worker var
+  `LEVEL_RECLAIM_LIVE = "true"` (brain wrangler.toml) and only for PAPER configs (`levelReclaimRefusal`); fires in the
+  hour after an event, `sourceT` = the event time. **Loaded only by the hidden link `/lab?tab=agent&deploy=level-reclaim-paper`**
+  (borst: a FRESH wallet, owner-only) with `LEVEL_RECLAIM_PAPER_CONFIG` (graded exit, 11 main-card coins, no filters, wide
+  caps). No mode button, no Strategy Library preset, no /proof Load until its wallet has 30 paper trades with parity
+  CLEAN, judged after fees (`/paper-costs`), tested. Parity: `levelReclaim.test.mjs` (hour by hour), `/agent/:a/parity`. Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
   evaluates nothing** (no "all" default).
 - **Exits** (`evaluateExit`, exec `logic.mjs`): SL → TIMEOUT → trail before TP; `takeProfits` ladder OVERRIDES
   `tpPercent` (`normTakeProfits`); DCA has its own monitor path. Exit vocabulary: `SL · TIMEOUT · TRAIL · BE · TP ·
