@@ -481,8 +481,15 @@ product is what sits on top:
   each listed tx from its own chain (EVM Transfer logs of the PINNED token / native value to the signed recipient,
   Solana token-balance deltas by owner+mint, BTC outputs) and judges vs the SIGNED `minAmountOut` (refund: sent −
   signed `refundFee`), never the status's amounts (`app/lib/nearSettlement.mjs`). Only DELIVERED / REFUNDED are
-  settled; UNREAD / UNPROVEN (native ETH inside a contract call) / CONFIRMING are never green. The card shows green
-  "Delivered · confirmed on <chain>" only on DELIVERED to the recipient it sent the quote for (`settlementLine`).
+  settled; UNREAD / UNPROVEN / CONFIRMING are never green. The card shows green "Delivered · confirmed on <chain>"
+  only on DELIVERED to the recipient it sent the quote for (`settlementLine`). **Native coin paid inside a contract
+  call** (2026-11-05): `debug_traceTransaction` callTracer (only CALL/SELFDESTRUCT value, nothing under a reverted
+  frame) else a balance diff across the block, only if no other tx in that block touches the address; else UNPROVEN.
+  The row's `method` says which (direct / trace / balance); the proof is memoised in LAB_STORE `xc:credit:*` (7 days)
+  by tx + block HASH (`kvMemo`). **Finality:** Ethereum `finalized`; Base/Arbitrum `safe` (falls back to `finalized`;
+  no tag known = not final). The card re-checks ~30 min (15 s × 8, then 60 s) and re-opens itself while a check is
+  open (`hasTransferInFlight`); INCOMPLETE_DEPOSIT keeps polling (it refunds by the deadline). "Copy receipt"
+  (`settlementReceipt` / `receiptWanted`) appears on SHORT / mismatch / UNPROVEN / FAILED / INCOMPLETE / timed out.
 - **Solana swap (Jupiter) — the ONE signer is `app/pages/token/solSwapExec.ts`**, BUY (SOL or USDC → token) and SELL
   (token → USDC), Jupiter `/build` via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
   (re-fetched fresh right before signing): quote bound to our mints + amount; slippage ≤ 300 bps and the quote's
@@ -518,7 +525,8 @@ product is what sits on top:
   (`spot:flash:{id}`, with the funder only until booked) and the hourly job books final orders from Flash (one trade +
   fills' notional + our `integratorFeeNotional`, on the last fill's day); spanDEX / Jupiter / NEAR = the app calls
   `POST /spot/fill {route, id, chainId?}` (`app/lib/spotReport.ts`, fire-and-forget) after a confirmed trade and the
-  worker books it only if the receipt is 0x1 / the signature is confirmed / 1Click says SUCCESS; WooFi = widget OPENS
+  worker books it only if the receipt is 0x1 / the signature is confirmed / NEAR: `settleDeposit` finds the signed
+  minimum on-chain at the recipient (DELIVERED or CONFIRMING; the card reports once the check shows it); WooFi = widget OPENS
   (the widget reports no fills). Each id once (`spot:fill:{route}:{id}`), day totals `spot:day:{YYYY-MM-DD}` under a
   NexusLock lease. No wallet address is stored.
 - **Best price (EVM USDC buys, read-only):** `GET /spot/best?chain=&tokenOut=&amount=` (`routes-spotbest.mjs`, rule

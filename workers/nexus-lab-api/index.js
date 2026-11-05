@@ -56,7 +56,7 @@ import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, AXES, priceByHou
 import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { handleFlashSettlement } from "./routes-flashcheck.mjs";
-import { handleXcSettlement } from "./routes-xcsettle.mjs";
+import { handleXcSettlement, settleDeposit } from "./routes-xcsettle.mjs";
 import { handleSpotBest } from "./routes-spotbest.mjs";
 import { jupFeeConfig, validFeeAccounts, jupQuoteParams, jupBuildParams, withJupSwapFee } from "./jupFee.mjs";
 import { parseFillReport, bookFill, logFlashOrder, settleFlashOrders, EVM_RPCS } from "./spotLedger.mjs";
@@ -5814,6 +5814,7 @@ document.getElementById("btn").addEventListener("click",go);
       if (rep.error) return json({ error: rep.error }, request, 400);
       const io = {
         fetchImpl: fetch,
+        nearSettle: (depositAddress) => settleDeposit(depositAddress, env),
         solRpc: (method, params) => solRpcServer(env, method, params),
         evmRpc: async (chainId, method, params) => {
           for (const u of EVM_RPCS[chainId] || []) {
