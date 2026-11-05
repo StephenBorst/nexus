@@ -493,11 +493,12 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
       {track && (
         <div aria-live="polite" style={{ borderTop: `1px solid ${BORD}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 6, fontFamily: MONO, fontSize: 11.5 }}>
           <ol aria-label="Transfer progress" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexWrap: "wrap", gap: "4px 10px", fontSize: 10.5 }}>
-            {xcSteps(track).map((st, i) => (
+            {xcSteps(track).map((st, i, all) => (
               <li key={st.label} style={{ display: "flex", alignItems: "center", gap: 5, color: st.state === "done" ? FOG : st.state === "active" ? BRIGHT : st.state === "failed" ? NEG : FAINT, fontWeight: st.state === "active" ? 600 : 400 }}>
-                {i > 0 && <span aria-hidden="true" style={{ color: FAINT }}>›</span>}
                 <span aria-hidden="true">{st.state === "done" ? "●" : st.state === "failed" ? "×" : st.state === "active" ? "◐" : "○"}</span>
                 {st.label}
+                {/* separator trails its step, so a wrapped line never starts with one */}
+                {i < all.length - 1 && <span aria-hidden="true" style={{ color: FAINT, fontWeight: 400 }}>›</span>}
               </li>
             ))}
           </ol>
@@ -564,8 +565,8 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
               const tone = line?.tone === "pos" ? POS : line?.tone === "neg" ? NEG : FOG;
               return (
                 <div key={h.depositAddress} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", fontFamily: MONO, fontSize: 11 }}>
-                  <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                    <span style={{ color: tone }}>{text}</span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: "1 1 200px" }}>
+                    <span style={{ color: tone, overflowWrap: "anywhere" }}>{text}</span>
                     <span style={{ color: FAINT, fontSize: 10 }}>{new Date(h.startedAt).toLocaleString()} · {short(h.depositAddress)}</span>
                   </span>
                   <button type="button"
