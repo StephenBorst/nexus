@@ -423,3 +423,18 @@ test("receiptWanted: offered when something needs attention, not while a check i
   assert.equal(receiptWanted({ status: "PROCESSING", timedOut: true }, null), true);
   assert.equal(receiptWanted({ status: "PROCESSING" }, null), false);
 });
+
+import { depositHandoff } from "./nearSettlement.mjs";
+test("depositHandoff: only a PROVEN USDC delivery to the trading account's own wallet, on a chain it deposits from", () => {
+  const ok = { verdict: "DELIVERED", asset: "USDC", chain: "arb", to: USER };
+  assert.equal(depositHandoff(ok, USER.toLowerCase()), true);
+  assert.equal(depositHandoff({ ...ok, chain: "base" }, USER), true);
+  for (const verdict of ["CONFIRMING", "UNREAD", "UNPROVEN", "SHORT", "PENDING"]) assert.equal(depositHandoff({ ...ok, verdict }, USER), false, verdict);
+  assert.equal(depositHandoff({ ...ok, asset: "ETH" }, USER), false, "not USDC");
+  assert.equal(depositHandoff({ ...ok, to: SOLVER }, USER), false, "someone else's wallet");
+  assert.equal(depositHandoff({ ...ok, chain: "sol", to: SOL_USER }, USER), false, "EVM account can't take Solana USDC");
+  assert.equal(depositHandoff({ ...ok, chain: "sol", to: SOL_USER }, SOL_USER), true, "Solana account, Solana USDC");
+  assert.equal(depositHandoff({ ...ok, chain: "arb", to: SOL_USER }, SOL_USER), false);
+  assert.equal(depositHandoff(ok, null), false);
+  assert.equal(depositHandoff(null, USER), false);
+});

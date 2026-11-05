@@ -490,6 +490,18 @@ product is what sits on top:
   no tag known = not final). The card re-checks ~30 min (15 s × 8, then 60 s) and re-opens itself while a check is
   open (`hasTransferInFlight`); INCOMPLETE_DEPOSIT keeps polling (it refunds by the deadline). "Copy receipt"
   (`settlementReceipt` / `receiptWanted`) appears on SHORT / mismatch / UNPROVEN / FAILED / INCOMPLETE / timed out.
+- **1Click FROM Solana** (2026-11-05): SOL / USDC on Solana are send options when a Solana signer is connected (the Spot
+  page's `solProvider`). The ONE signer is `app/pages/token/xcSolSend.ts`; rules in `app/lib/solDeposit.mjs` (tested, with
+  web3.js as referee). SOL = one System transfer; USDC = ATA create-idempotent for the deposit address (1Click's Solana
+  deposit addresses are fresh owners) + one TransferChecked. Only System / SPL Token / ATA programs, v0, no lookup tables,
+  payer = wallet. Simulated on the exact bytes via `/sol/rpc`: deposit side gains the amount, USDC drops ≤ the amount, SOL
+  drops ≤ amount (SOL) + 0.01 SOL. After signing the bytes must still decode to ours (`checkSignedDeposit`: only a capped
+  compute-budget price may be added); we send them. Refunds go to the Solana wallet. Solana→Solana is refused (a swap).
+  An EVM destination with no EVM wallet = a typed address, strict EIP-55. Mainnet dry run (no signing) passed 2026-11-05.
+- **Fund my trading account** (card chip, or `navigate("/token", { state: { xcFund: true } })`): USDC to the trading
+  account's own wallet (EVM account → USDC Arbitrum; Solana account → USDC Solana). Once the delivery is DELIVERED to
+  that wallet (`depositHandoff`), "Deposit to your trading account" opens Orderly's dialog by its registered id
+  `DepositAndWithdrawWithDialogId` (`@orderly.network/ui` modal; `/portfolio` if it isn't registered).
 - **Solana swap (Jupiter) — the ONE signer is `app/pages/token/solSwapExec.ts`**, BUY (SOL or USDC → token) and SELL
   (token → USDC), Jupiter `/build` via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
   (re-fetched fresh right before signing): quote bound to our mints + amount; slippage ≤ 300 bps and the quote's
