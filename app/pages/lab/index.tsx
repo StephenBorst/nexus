@@ -33,6 +33,7 @@ import { CommandPalette } from "./CommandPalette";
 import { CreatorEarnings } from "./CreatorEarnings";
 import { NexusBriefing } from "./NexusBriefing";
 import { DecisionBoard } from "./DecisionBoard";
+import { LabCallsPanel } from "./LabCallsPanel";
 import { LabTitleBar, LabStats, LabTabs, type LabTab } from "./LabHeader";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
 import { C } from "@/config/theme";
@@ -320,7 +321,15 @@ export default function TheLabPage() {
           // The Board (every market, one verifiable read) sits between the narrative
           // Briefing and the deep Market Intel — scan the whole book at a glance. Shown
           // to everyone; it's market-level, no wallet needed.
-          const board = <DecisionBoard onSelectTab={setActiveTab} trades={connected ? processedTrades : undefined} wallet={rootWalletAddress} theses={connected ? theses : undefined} positions={connected ? briefingPositions : undefined} />;
+          // Folded by default (borst, 2026-11-05): Lab home leads with the graded calls; the dense board is one
+          // tap away and remembers being opened.
+          const board = (
+            <Collapsible title="The board · every market, one read" subtitle="funding, crowd and smart money, one line per market" shortTitle="The board" shortSub="every market, one read" storageKey="nx_board_open">
+              <DecisionBoard hideHeader onSelectTab={setActiveTab} trades={connected ? processedTrades : undefined} wallet={rootWalletAddress} theses={connected ? theses : undefined} positions={connected ? briefingPositions : undefined} />
+            </Collapsible>
+          );
+          // ◆ CALLS leads Lab home: the "graded from public price" line + open and graded calls, above every fold.
+          const calls = <LabCallsPanel onSelectTab={setActiveTab} />;
           // Lead with the synthesis (Briefing narrative → the Board's one-line-per-market
           // read); the deep Market Intel (news, movers, OI, long/short) collapses so the
           // tab opens as a read, not a wall of rows.
@@ -386,7 +395,7 @@ export default function TheLabPage() {
           // — lands straight on the Briefing → Board → lenses read. No wallet needed to
           // scan the whole book; only COPY / PUBLISH / ARM LIVE ask for a connect.
           const showSplash = !connected && !guestPreview;
-          return <>{showSplash && <LabWelcome />}{briefing}{board}{lenses}{deep}</>;
+          return <>{showSplash && <LabWelcome />}{calls}{briefing}{board}{lenses}{deep}</>;
         })()}
         {activeTab === "smart" && (
           // Smart Money is now the DEEP WALLET DRILL-DOWN the Intel funnel's Positioning lens

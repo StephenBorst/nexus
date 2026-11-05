@@ -5,21 +5,26 @@ import { C } from "@/config/theme";
 // ── Collapsible — progressive disclosure for the Lab ─────────────────────────
 // The engine surfaces the synthesized read up top; the raw/deep boards live behind
 // a header the user opens on demand, so a tab is one screen by default, not twenty.
-// Remembers its open/closed state per storageKey.
+// Remembers its open/closed state per storageKey. Or controlled: pass `open` + `onToggle` and the
+// caller owns the state (the Briefing keeps its own long-standing key that way).
 
 const UI = "var(--nx-font-ui, sans-serif)";
 
-export function Collapsible({ title, subtitle, shortTitle, shortSub, defaultOpen = false, storageKey, children }: {
+export function Collapsible({ title, subtitle, shortTitle, shortSub, defaultOpen = false, storageKey, open: openProp, onToggle, children }: {
   // Desktop uses title/subtitle. On a phone a long "A · B" title breaks on the mid-dot, so a
   // caller passes shortTitle (one line / two short words) + shortSub (its clause) for a human wrap.
-  title: string; subtitle?: string; shortTitle?: string; shortSub?: string; defaultOpen?: boolean; storageKey?: string; children: React.ReactNode;
+  title: string; subtitle?: string; shortTitle?: string; shortSub?: string; defaultOpen?: boolean; storageKey?: string;
+  open?: boolean; onToggle?: () => void; children: React.ReactNode;
 }) {
   const isMobile = useIsMobile();
-  const [open, setOpen] = useState(() => {
+  const [ownOpen, setOpen] = useState(() => {
     if (storageKey) { try { const v = window.localStorage.getItem(storageKey); if (v != null) return v === "1"; } catch { /* private mode */ } }
     return defaultOpen;
   });
+  const controlled = typeof openProp === "boolean";
+  const open = controlled ? openProp : ownOpen;
   const toggle = () => {
+    if (controlled) { onToggle?.(); return; }
     const n = !open; setOpen(n);
     if (storageKey) { try { window.localStorage.setItem(storageKey, n ? "1" : "0"); } catch { /* ignore */ } }
   };

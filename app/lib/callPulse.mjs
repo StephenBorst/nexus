@@ -12,10 +12,13 @@
 //   - GRADED THIS WEEK = a current grader stamp (WIN or LOSS) whose resolution (`exitedAt`, else
 //     `gradedAt`) falls in the last 7 days.
 // `last` = the most recent graded call of all time, so a quiet week still reads true ("last graded 4d ago").
+// `openCalls` / `recentGraded` = the newest few of each (PULSE_LIST_MAX), for the Lab home's Calls panel.
+// Each row carries the call page's path, which already names the wallet publicly; nothing else about it.
 
 import { callLifecycle } from "./callLifecycle.mjs";
 
 export const PULSE_WINDOW_MS = 7 * 86400000;
+export const PULSE_LIST_MAX = 3;
 
 const bare = (s) => {
   const m = /^PERP_([^_]+)_USDC(?:_.*)?$/.exec(String(s || ""));
@@ -30,36 +33,39 @@ const isGraded = (t) => t?.gradedOutcome === "WIN" || t?.gradedOutcome === "LOSS
  * @param {{ exclude?: string[], isCurrent?: (t:object)=>boolean }} [opts]
  *   exclude   wallets left out (the house caller), any case
  *   isCurrent the grader's "stamp is current" check (grading.mjs isCurrentStamp); a stale stamp counts nowhere
- * @returns {{ open:number, gradedWeek:number, last: null | { symbol:string, direction:string, outcome:"WIN"|"LOSS", r:number|null, at:number, path:string } }}
+ * @returns {{ open:number, gradedWeek:number, last: null | PulseGraded, openCalls: PulseOpen[], recentGraded: PulseGraded[] }}
+ * @typedef {{ symbol:string, direction:string, outcome:"WIN"|"LOSS", r:number|null, at:number, path:string }} PulseGraded
+ * @typedef {{ symbol:string, direction:string, at:number, path:string }} PulseOpen
  */
 export function callPulse(records, now, opts = {}) {
   const exclude = new Set((opts.exclude || []).filter(Boolean).map((a) => String(a).toLowerCase()));
   const isCurrent = typeof opts.isCurrent === "function" ? opts.isCurrent : isGraded;
-  let open = 0, gradedWeek = 0, last = null;
+  let open = 0, gradedWeek = 0;
+  const graded = [], opened = [];
   for (const rec of records || []) {
     const wallet = String(rec?.wallet || "");
     if (!wallet || exclude.has(wallet.toLowerCase())) continue;
     for (const t of rec.theses || []) {
       if (!isPublic(t)) continue;
+      const head = { symbol: bare(t.symbol), direction: String(t.direction || "").toUpperCase(), path: `/feed/thesis/${wallet}/${encodeURIComponent(String(t.id))}` };
       if (isGraded(t)) {
         if (!isCurrent(t)) continue;
         const at = Number(t.exitedAt) || Number(t.gradedAt) || 0;
         if (!(at > 0) || at > now + 10 * 60000) continue;
         if (now - at <= PULSE_WINDOW_MS) gradedWeek += 1;
-        if (!last || at > last.at) {
-          const r = Number(t.gradedR);
-          last = {
-            symbol: bare(t.symbol), direction: String(t.direction || "").toUpperCase(), outcome: t.gradedOutcome,
-            r: Number.isFinite(r) ? Math.round(r * 100) / 100 : null, at,
-            path: `/feed/thesis/${wallet}/${encodeURIComponent(String(t.id))}`,
-          };
-        }
+        const r = Number(t.gradedR);
+        graded.push({ ...head, outcome: t.gradedOutcome, r: Number.isFinite(r) ? Math.round(r * 100) / 100 : null, at });
         continue;
       }
-      if (callLifecycle(t) === "OPEN") open += 1;
+      if (callLifecycle(t) === "OPEN") {
+        open += 1;
+        opened.push({ ...head, at: Number(t.filledAt) || Number(t.createdAt) || 0 });
+      }
     }
   }
-  return { open, gradedWeek, last };
+  graded.sort((a, b) => b.at - a.at);
+  opened.sort((a, b) => b.at - a.at);
+  return { open, gradedWeek, last: graded[0] || null, openCalls: opened.slice(0, PULSE_LIST_MAX), recentGraded: graded.slice(0, PULSE_LIST_MAX) };
 }
 
 /** "45m" · "6h" · "3d" — how long ago, coarse on purpose. */

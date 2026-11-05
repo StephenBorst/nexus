@@ -9,7 +9,7 @@ import { callPulse, PULSE_WINDOW_MS } from "../../app/lib/callPulse.mjs";
 import { proofHeadline } from "../../app/lib/proofCopy.mjs";
 import { isCurrentStamp } from "./grading.mjs";
 
-export const PULSE_CACHE_KEY = "calls:pulse:v1";
+export const PULSE_CACHE_KEY = "calls:pulse:v2"; // v2 = + openCalls / recentGraded (the Lab home Calls panel)
 const PULSE_TTL_S = 300;
 
 const reply = (body, status = 200) => new Response(JSON.stringify(body), {

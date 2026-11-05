@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { callPulse, pulseLine, agoShort, PULSE_WINDOW_MS } from "./callPulse.mjs";
+import { callPulse, pulseLine, agoShort, PULSE_WINDOW_MS, PULSE_LIST_MAX } from "./callPulse.mjs";
 
 const NOW = Date.parse("2026-11-05T12:00:00Z");
 const H = 3600000, D = 86400000;
@@ -27,7 +27,7 @@ test("human, public calls only: private, holders-only, copies and the house wall
     { wallet: "0xA", theses: [{ ...graded, id: "a", isPublic: false }, { ...graded, id: "b", holdersOnly: true }, { ...graded, id: "c", duplicateOf: "x" }] },
     { wallet: "0xHOUSE", theses: [{ ...graded, id: "h" }, { ...base, id: "h2", fillState: "OPEN" }] },
   ], NOW, { exclude: ["0xhouse"] });
-  assert.deepEqual(p, { open: 0, gradedWeek: 0, last: null });
+  assert.deepEqual(p, { open: 0, gradedWeek: 0, last: null, openCalls: [], recentGraded: [] });
 });
 
 test("a stale grader stamp counts nowhere; resolution falls back to gradedAt; the window edge is inclusive", () => {
@@ -52,4 +52,19 @@ test("agoShort is coarse", () => {
   assert.equal(agoShort(NOW - 5 * 60000, NOW), "5m");
   assert.equal(agoShort(NOW - 30 * H, NOW), "30h");
   assert.equal(agoShort(NOW - 3 * D, NOW), "3d");
+});
+
+test("the Calls panel lists: newest first, capped, open by fill time, graded across all time", () => {
+  const theses = [];
+  for (let i = 0; i < 5; i++) theses.push({ ...base, id: `o${i}`, fillState: "OPEN", filledAt: NOW - i * H, createdAt: NOW - 99 * H });
+  for (let i = 0; i < 5; i++) theses.push({ ...base, id: `g${i}`, gradedOutcome: i % 2 ? "LOSS" : "WIN", gradedR: i % 2 ? -1 : 1.5, exitedAt: NOW - (i * 3) * D - H });
+  const p = callPulse([{ wallet: "0xA", theses }], NOW);
+  assert.equal(p.open, 5);
+  assert.equal(p.openCalls.length, PULSE_LIST_MAX);
+  assert.deepEqual(p.openCalls.map((c) => c.path.split("/").pop()), ["o0", "o1", "o2"]);
+  assert.deepEqual(p.recentGraded.map((c) => c.path.split("/").pop()), ["g0", "g1", "g2"]);
+  assert.equal(p.recentGraded[2].at, NOW - 6 * D - H); // older than the week still listed; the count says the week
+  assert.equal(p.gradedWeek, 3);
+  assert.deepEqual(p.last, p.recentGraded[0]);
+  assert.deepEqual(Object.keys(p.openCalls[0]).sort(), ["at", "direction", "path", "symbol"]);
 });
