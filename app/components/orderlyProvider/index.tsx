@@ -10,6 +10,9 @@ import { createSymbolDataAdapter } from "@/utils/symbol-filter";
 import { DemoGraduationChecker } from "@/components/DemoGraduationChecker";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import ServiceDisclaimerDialog from "./ServiceDisclaimerDialog";
+import { xcDepositPlugin } from "./xcDepositPlugin";
+// Stable reference (module scope): the provider registers plugins once.
+const XC_PLUGINS = [xcDepositPlugin];
 
 const NETWORK_ID_KEY = "orderly_network_id";
 
@@ -169,6 +172,7 @@ const OrderlyProvider = (props: { children: ReactNode }) => {
 			restrictedInfo={{
 				customRestrictedRegions: getRuntimeConfigArray('VITE_RESTRICTED_REGIONS'),
 			}}
+			plugins={XC_PLUGINS}
 		>
 			<DemoGraduationChecker />
 			<ServiceDisclaimerDialog />
