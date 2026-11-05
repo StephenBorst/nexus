@@ -159,8 +159,8 @@ export default function ProofPage() {
 
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", padding: isMobile ? "24px 16px 60px" : "40px 24px 80px" }}>
-      {/* 1 · THE VERDICT — nothing has cleared the bar; the bar in one sentence. */}
-      <FeaturedLead isMobile={isMobile} onHowWeGrade={openHow} />
+      {/* 1 · THE VERDICT — computed from the served stages (proofHeadline); the bar in one sentence. */}
+      <FeaturedLead isMobile={isMobile} onHowWeGrade={openHow} scorecard={scorecard} />
 
       {/* 2 · THE SIGNALS — the ones being tested, then the rest folded. The misses stay on it. */}
       <SignalBoard scorecard={scorecard} />
