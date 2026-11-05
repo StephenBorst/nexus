@@ -4,13 +4,16 @@
 //
 //   node tools/android/assetlinks.mjs <SHA-256> [<SHA-256> ...]
 //
-// Pass BOTH fingerprints from docs/android-app.md step 6: Play's App signing key AND your upload key
-// (PWABuilder's). Accepts "AB:CD:…" or plain hex, any case; refuses anything that isn't 32 bytes.
+// Pass every live key: Play's App signing key, the Play upload key, the Solana dApp Store key
+// (docs/android-app.md). Each package in ANDROID_PACKAGES gets its own statement with the same keys.
+// Accepts "AB:CD:…" or plain hex, any case; refuses anything that isn't 32 bytes.
 // Fingerprints are public numbers (they identify a certificate, they can't sign anything).
 import { writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export const ANDROID_PACKAGE = "com.nexustradinglabs.nexus";
+export const ANDROID_PACKAGE = "com.nexustradinglabs.nexus"; // Google Play
+export const DAPP_STORE_PACKAGE = "com.nexustradinglabs.trade.twa"; // Solana dApp Store (PWABuilder's id)
+export const ANDROID_PACKAGES = [ANDROID_PACKAGE, DAPP_STORE_PACKAGE];
 export const ASSETLINKS_PATH = new URL("../../public/.well-known/assetlinks.json", import.meta.url);
 
 export function normalizeFingerprint(raw) {
@@ -19,13 +22,13 @@ export function normalizeFingerprint(raw) {
   return hex.match(/../g).join(":");
 }
 
-export function buildAssetLinks(fingerprints, pkg = ANDROID_PACKAGE) {
+export function buildAssetLinks(fingerprints, pkgs = ANDROID_PACKAGES) {
   const fps = [...new Set(fingerprints.map(normalizeFingerprint))];
   if (!fps.length) throw new Error("give at least one fingerprint");
-  return [{
+  return [...new Set(pkgs)].map((pkg) => ({
     relation: ["delegate_permission/common.handle_all_urls"],
-    target: { namespace: "android_app", package_name: pkg, sha256_cert_fingerprints: fps },
-  }];
+    target: { namespace: "android_app", package_name: pkg, sha256_cert_fingerprints: [...fps] },
+  }));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -33,7 +36,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const out = buildAssetLinks(process.argv.slice(2));
     mkdirSync(new URL(".", ASSETLINKS_PATH), { recursive: true });
     writeFileSync(ASSETLINKS_PATH, JSON.stringify(out, null, 2) + "\n");
-    console.log(`wrote public/.well-known/assetlinks.json (${out[0].target.sha256_cert_fingerprints.length} fingerprint(s), ${ANDROID_PACKAGE})`);
+    console.log(`wrote public/.well-known/assetlinks.json (${out[0].target.sha256_cert_fingerprints.length} fingerprint(s) × ${out.map((o) => o.target.package_name).join(", ")})`);
   } catch (e) {
     console.error(`assetlinks: ${e.message}`);
     process.exit(1);

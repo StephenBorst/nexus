@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { buildAssetLinks, normalizeFingerprint, ANDROID_PACKAGE, ASSETLINKS_PATH } from "./assetlinks.mjs";
+import { buildAssetLinks, normalizeFingerprint, ANDROID_PACKAGE, ANDROID_PACKAGES, DAPP_STORE_PACKAGE, ASSETLINKS_PATH } from "./assetlinks.mjs";
 
 const FP = "14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5";
 
@@ -17,11 +17,13 @@ test("fingerprints normalize to upper-case colon pairs; junk is refused", () => 
 
 test("the statement has Android's exact shape, deduped", () => {
   const out = buildAssetLinks([FP, FP.toLowerCase(), "00".repeat(32)]);
-  assert.equal(out.length, 1);
-  assert.deepEqual(out[0].relation, ["delegate_permission/common.handle_all_urls"]);
-  assert.equal(out[0].target.namespace, "android_app");
-  assert.equal(out[0].target.package_name, ANDROID_PACKAGE);
-  assert.deepEqual(out[0].target.sha256_cert_fingerprints, [FP, normalizeFingerprint("00".repeat(32))]);
+  assert.deepEqual(out.map((o) => o.target.package_name), [ANDROID_PACKAGE, DAPP_STORE_PACKAGE]);
+  for (const o of out) {
+    assert.deepEqual(o.relation, ["delegate_permission/common.handle_all_urls"]);
+    assert.equal(o.target.namespace, "android_app");
+    assert.deepEqual(o.target.sha256_cert_fingerprints, [FP, normalizeFingerprint("00".repeat(32))]);
+  }
+  assert.equal(buildAssetLinks([FP], ["a.b", "a.b"]).length, 1);
   assert.throws(() => buildAssetLinks([]), /at least one/);
 });
 
@@ -34,7 +36,7 @@ test("the committed assetlinks.json (once it exists) is valid", (t) => {
   if (!existsSync(ASSETLINKS_PATH)) return t.skip("not written yet: waiting on the Play fingerprints");
   const got = JSON.parse(readFileSync(ASSETLINKS_PATH, "utf8"));
   const fps = got?.[0]?.target?.sha256_cert_fingerprints || [];
-  assert.deepEqual(got, buildAssetLinks(fps));
+  assert.deepEqual(got, buildAssetLinks(fps), "regenerate with tools/android/assetlinks.mjs (every package, same keys)");
   assert.ok(fps.length >= 2, "list both the Play app-signing key and the upload key");
 });
 
@@ -45,7 +47,11 @@ const LIVE_KEYS = {
   "Solana dApp Store key": "26:8E:93:DF:EE:FA:57:8B:A3:2A:E8:C0:18:ED:F4:E3:7E:EE:1A:72:FD:51:60:6C:F8:53:7A:93:BC:8B:F8:45",
 };
 
-test("assetlinks keeps every live store's key", () => {
-  const fps = JSON.parse(readFileSync(ASSETLINKS_PATH, "utf8"))[0].target.sha256_cert_fingerprints;
-  for (const [name, fp] of Object.entries(LIVE_KEYS)) assert.ok(fps.includes(fp), `assetlinks dropped the ${name}`);
+test("assetlinks keeps every live app's package and every live store's key", () => {
+  const got = JSON.parse(readFileSync(ASSETLINKS_PATH, "utf8"));
+  for (const pkg of ANDROID_PACKAGES) {
+    const row = got.find((o) => o.target.package_name === pkg);
+    assert.ok(row, `assetlinks dropped the package ${pkg}`);
+    for (const [name, fp] of Object.entries(LIVE_KEYS)) assert.ok(row.target.sha256_cert_fingerprints.includes(fp), `${pkg}: assetlinks dropped the ${name}`);
+  }
 });

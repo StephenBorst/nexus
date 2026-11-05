@@ -84,7 +84,7 @@ with a browser bar on top; after, it's full-screen. Check:
 - Topics: calls (on), agent (on), social (off: comments, follows, copies, challenges).
 
 ## 6. Solana dApp Store (Seeker / Saga)
-Same app, same package id (`com.nexustradinglabs.nexus`), second store. What's different from Play:
+Same app, second store, its OWN package id: `com.nexustradinglabs.trade.twa` (PWABuilder's default for the site; the APK was built with it). A different id means the Play and dApp Store builds install side by side, and each store only ever updates its own. The id is permanent once published. What's different from Play:
 
 - **It takes an APK, not an .aab.** PWABuilder's zip has both; upload the `.apk`.
 - **It needs its own signing key.** Solana Mobile's rule: the dApp Store APK must be signed with a new key, not the
@@ -97,7 +97,7 @@ Same app, same package id (`com.nexustradinglabs.nexus`), second store. What's d
 
 Steps:
 1. **New package, new key.** pwabuilder.com → `https://trade.nexustradinglabs.com` → Android → Options: same as step 3
-   (package `com.nexustradinglabs.nexus`, name, launcher name, `#0a0a0b` colours, notification delegation ON),
+   (package `com.nexustradinglabs.trade.twa`, name, launcher name, `#0a0a0b` colours, notification delegation ON),
    **Signing key: Create new**. Download the zip.
 2. **Save the new keystore + passwords** next to the Play one, clearly labelled "dApp Store". It's a second seed
    phrase: lose it and you can't update the dApp Store listing.
@@ -105,6 +105,8 @@ Steps:
    Claude adds it as a third fingerprint: `node tools/android/assetlinks.mjs <Play app-signing> <Play upload> <dApp Store>`.
    Without it the dApp Store build opens with Chrome's address bar on top. Public number, not a secret.
    **Done 2026-10-23:** dApp Store key `26:8E:…:F8:45` added (three fingerprints; `assetlinks.test.mjs` pins all three).
+   **2026-11-05:** assetlinks carries one statement per package (`com.nexustradinglabs.nexus` + `com.nexustradinglabs.trade.twa`),
+   same three keys on each (`ANDROID_PACKAGES` in `tools/android/assetlinks.mjs`).
 4. **Publisher Portal** (publish.solanamobile.com): connect the Solana wallet, finish KYC/KYB, create the publisher,
    then the app (mints the App NFT).
 5. **Listing:** everything is in `marketing/solana-dapp-store/` (icon, 1200×600 banner, 1200×1200 feature graphic,
