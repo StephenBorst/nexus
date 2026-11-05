@@ -109,3 +109,15 @@ test("the /proof headline is computed, not typed: FeaturedLead renders proofHead
   assert.match(src, /proofHeadline\(/);
   assert.ok(!/>\s*Nothing has proven itself yet\./.test(src), "the default line lives in proofCopy.mjs, not typed into the page");
 });
+
+test("PLAIN_WORDS: every tier word the signal board prints has a plain line; no tier is called proven or an edge", async () => {
+  const { PLAIN_WORDS } = await import("./proofCopy.mjs");
+  const { readFileSync } = await import("node:fs");
+  const board = readFileSync(new URL("../pages/proof/SignalBoard.tsx", import.meta.url), "utf8");
+  const shown = [...board.matchAll(/label: "([A-Z]+)"/g)].map((m) => m[1]);
+  assert.ok(shown.length >= 4, "found the board's tier labels");
+  const terms = new Set(PLAIN_WORDS.map((w) => w.term));
+  for (const t of shown) assert.ok(terms.has(t), `plain line for ${t}`);
+  assert.ok(terms.has("R") && terms.has("bps"));
+  for (const w of PLAIN_WORDS) assert.doesNotMatch(w.text, /\bproven\b|\bedge\b/i, w.term);
+});

@@ -13,7 +13,7 @@ import CarrySleeve from "./CarrySleeve";
 import FeaturedLead from "./FeaturedLead";
 import Fold from "./Fold";
 import HowWeGrade from "./HowWeGrade";
-import { callsRecordLine, callersLine } from "@/lib/proofCopy.mjs";
+import { callsRecordLine, callersLine, PLAIN_WORDS } from "@/lib/proofCopy.mjs";
 import SignalBoard, { type Scorecard } from "./SignalBoard";
 import { pressKey } from "@/utils/a11y";
 
@@ -165,6 +165,9 @@ export default function ProofPage() {
     <div style={{ maxWidth: 980, margin: "0 auto", padding: isMobile ? "24px 16px 60px" : "40px 24px 80px" }}>
       {/* 1 · THE VERDICT — computed from the served stages (proofHeadline); the bar in one sentence. */}
       <FeaturedLead isMobile={isMobile} onHowWeGrade={openHow} scorecard={scorecard} />
+
+      {/* The words, in plain English, right where they first appear (tooltips can't be hovered on a phone). */}
+      <PlainWords isMobile={isMobile} />
 
       {/* 2 · THE SIGNALS — the ones being tested, then the rest folded. The misses stay on it. */}
       <SignalBoard scorecard={scorecard} />
@@ -336,5 +339,22 @@ export default function ProofPage() {
         </Fold>
       </div>
     </div>
+  );
+}
+
+// ── The words, in plain English (PLAIN_WORDS, app/lib/proofCopy.mjs) ──
+function PlainWords({ isMobile }: { isMobile: boolean }) {
+  return (
+    <section aria-label="What the words mean" style={{ marginTop: 28, border: `1px solid ${BORDER}`, borderRadius: 10, background: SURFACE_ALT, padding: isMobile ? "12px 14px" : "14px 18px" }}>
+      <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: MUTED, marginBottom: 8 }}>What the words mean</div>
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: isMobile ? "6px 0" : "8px 22px" }}>
+        {PLAIN_WORDS.map((w) => (
+          <div key={w.term} style={{ fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.45 }}>
+            <dt style={{ display: "inline", fontFamily: MONO, fontSize: 11.5, fontWeight: 600, color: BRIGHT, letterSpacing: "0.04em" }}>{w.term}</dt>
+            <dd style={{ display: "inline", margin: 0 }}> · {w.text}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

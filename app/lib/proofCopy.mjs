@@ -114,3 +114,16 @@ export function proofHeadline(scorecard, now = Date.now()) {
     sub: `${cleared.map((r) => `${r.axis} (${trades(r)})`).join(", ")}, each net positive after fees. As of ${day}.`,
   };
 }
+
+// ── The words, in plain English (borst, 2026-11-05: "more normie reading friendly") ──────────────
+// /proof's labels and units, one short line each, shown right above the signal board where they first
+// appear (the board's tier tooltips can't be hovered on a phone). Never says "proven" or "edge" of a
+// tier: PREDICTIVE grades a read, not a strategy. proofCopy.test.mjs pins every board tier word here.
+export const PLAIN_WORDS = Object.freeze([
+  Object.freeze({ term: "R", text: "a result measured in the risk taken. +1R won what was risked, −1R lost it." }),
+  Object.freeze({ term: "bps", text: "hundredths of a percent. 100 bps = 1%." }),
+  Object.freeze({ term: "PREDICTIVE", text: "held up in both halves of the record. A signal worth testing, not yet a way to make money." }),
+  Object.freeze({ term: "PROMISING", text: "positive so far, not yet steady." }),
+  Object.freeze({ term: "NOISE", text: "flat or losing. It stays on the board: we publish the misses." }),
+  Object.freeze({ term: "ACCRUING", text: "not enough data yet to say." }),
+]);
