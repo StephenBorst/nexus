@@ -503,6 +503,11 @@ product is what sits on top:
   account's own wallet (EVM account → USDC Arbitrum; Solana account → USDC Solana). Once the delivery is DELIVERED to
   that wallet (`depositHandoff`), "Deposit to your trading account" opens Orderly's dialog by its registered id
   `DepositAndWithdrawWithDialogId` (`@orderly.network/ui` modal; `/portfolio` if it isn't registered).
+  **"Other chains" tab inside Orderly's own Deposit / Withdraw window** (2026-11-05): an Orderly plugin
+  (`app/components/orderlyProvider/xcDepositPlugin.tsx`, registered via `OrderlyAppProvider plugins={XC_PLUGINS}`)
+  intercepts the SDK's injectable `Transfer.DepositAndWithdraw` and adds one `extraTabs` entry (`withFundTab`,
+  `app/lib/xcFundTab.mjs`, tested: once, keeps others). The tab moves nothing: it closes the window and opens the card in
+  fund mode (`/token` + `{ xcFund: true }`). Same tab in the mobile sheet. SDK upgrade: re-check that target name.
 - **Solana swap (Jupiter) — the ONE signer is `app/pages/token/solSwapExec.ts`**, BUY (SOL or USDC → token) and SELL
   (token → USDC), Jupiter `/build` via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
   (re-fetched fresh right before signing): quote bound to our mints + amount; slippage ≤ 300 bps and the quote's
