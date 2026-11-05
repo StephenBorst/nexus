@@ -8,16 +8,45 @@
 // when one is, it names the read, its trades and the date (pipeline-if-then.md, Tradeable), and it falls back
 // on its own if the read drops under the bar. Loading, failed or stale scoreboard = the default, no claim.
 
+import { useEffect, useState } from "react";
 import { C } from "@/config/theme";
 import { proofHeadline } from "@/lib/proofCopy.mjs";
+import { signalProgress, paperLine, paperWalletsFor } from "@/lib/signalProgress.mjs";
 import type { Scorecard } from "./SignalBoard";
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const { bright: BRIGHT, fog: FOG, muted: MUTED } = C.text;
+const AGENT_API = "https://og.nexustradinglabs.com";
+
+// A cleared read's paper progress: the paper wallet's lifetime trade count (GET /agent/:a, state.paper_agg.trades;
+// a state with no closed trade = 0, unreadable = null). Count only: paper P&L has no fees, so no money number here.
+function usePaperCounts(wallets: string[]) {
+  const [counts, setCounts] = useState<Record<string, number | null>>({});
+  const key = wallets.join(",");
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const out: Record<string, number | null> = {};
+      for (const w of wallets) {
+        try {
+          const d = await (await fetch(`${AGENT_API}/agent/${w}`)).json();
+          const n = Number(d?.state?.paper_agg?.trades);
+          out[w.toLowerCase()] = d?.state ? (Number.isFinite(n) ? n : 0) : null;
+        } catch { out[w.toLowerCase()] = null; }
+      }
+      if (alive) setCounts(out);
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return counts;
+}
 
 export default function FeaturedLead({ isMobile, onHowWeGrade, scorecard }: { isMobile?: boolean; onHowWeGrade: () => void; scorecard?: Scorecard | null }) {
   const head = proofHeadline(scorecard);
+  const counts = usePaperCounts(head.cleared ? (paperWalletsFor(scorecard ?? null) as string[]) : []);
+  const progress = head.cleared ? signalProgress(scorecard ?? null, counts) : [];
   return (
     <header>
       <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.2em", textTransform: "uppercase", color: FOG, marginBottom: 12 }}>The proof</div>
@@ -25,6 +54,13 @@ export default function FeaturedLead({ isMobile, onHowWeGrade, scorecard }: { is
         {head.title}
         <span style={{ display: "block", color: FOG }}>{head.sub}</span>
       </h1>
+      {/* The cleared read's next gate, in plain words (pipeline-if-then.md, Paper): a count, never a P&L. */}
+      {progress.map((p) => (
+        <div key={p.axis} style={{ marginTop: 12, fontFamily: UI, fontSize: 14, color: BRIGHT, lineHeight: 1.5, maxWidth: 640 }}>
+          {paperLine(p)}{" "}
+          <span style={{ color: FOG }}>A live plan is written only after {p.paper?.target ?? 30} paper trades, net positive after fees. Nothing is armed.</span>
+        </div>
+      ))}
       <p style={{ margin: "14px 0 0", fontFamily: UI, fontSize: 15, color: FOG, lineHeight: 1.55, maxWidth: 640 }}>
         To pass, a signal has to beat random entries, make money after fees, and keep doing it on new data, over 30+ trades.
       </p>

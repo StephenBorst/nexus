@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { handlePulse, buildPulse, PULSE_CACHE_KEY } from "./routes-pulse.mjs";
+import { handlePulse, buildPulse, PULSE_CACHE_KEY, PULSE_BOARD_KEY } from "./routes-pulse.mjs";
 import { GRADE_V } from "./grading.mjs";
 import { HEADLINE_DEFAULT } from "../../app/lib/proofCopy.mjs";
 
@@ -92,4 +92,34 @@ test("engines counted apart and named; both house wallets left out; the wrangler
   assert.deepEqual(m[1].split(",").map((a) => a.toLowerCase()).sort(), [
     "0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4", "0x493dc0ce72b8b761844cb25bc17b6aff9a28c086", "0xd9f7b3273b504e1473c3faba6341299d0ec9b449",
   ]);
+});
+
+test("signals: the cleared read with its paper count; last good board reused ≤6h after the scoreboard cache expires, then no claim", async () => {
+  const { registrationFor } = await import("../../app/lib/readPipeline.mjs");
+  const wallet = registrationFor("level_reclaim").paperWallet.toLowerCase();
+  const T0 = Date.parse("2026-11-05T12:00:00Z");
+  const board = { asOf: new Date(T0).toISOString(), pipeline: { reads: [{ axis: "level_reclaim", stage: "PAPER", numbers: { exitTrades: 42, exitNetBps: 25.2 } }] } };
+  const LAB_STORE = fakeKv({ "axisbt:v21:min20": JSON.stringify(board) });
+  const NEXUS_AGENT = fakeKv({ [`agent:state:${wallet}`]: JSON.stringify({ paper_agg: { trades: 3, net: 999 } }) });
+  const env = { LAB_STORE, NEXUS_AGENT };
+  const p = await buildPulse(env, { now: T0 + 60000, scorecardKey: "axisbt:v21:min20" });
+  assert.equal(p.headline.cleared, true);
+  assert.deepEqual(p.signals.map((x) => [x.axis, x.stage, x.trades, x.paper.trades, x.paper.target]), [["level_reclaim", "PAPER", 42, 3, 30]]);
+  assert.equal(JSON.stringify(p.signals).includes("999"), false, "no paper P&L leaves the record");
+  assert.ok(LAB_STORE.puts.some((x) => x.k === PULSE_BOARD_KEY));
+  // the scoreboard cache expires: the last good board still serves (paper count re-read), within 6h of its asOf
+  await LAB_STORE.put("axisbt:v21:min20", undefined); LAB_STORE.get = ((orig) => async (k) => (k === "axisbt:v21:min20" ? null : orig(k)))(LAB_STORE.get);
+  await NEXUS_AGENT.put(`agent:state:${wallet}`, JSON.stringify({ paper_agg: { trades: 4 } }));
+  const later = await buildPulse(env, { now: T0 + 5 * 3600e3, scorecardKey: "axisbt:v21:min20" });
+  assert.equal(later.headline.cleared, true);
+  assert.equal(later.signals[0].paper.trades, 4);
+  const stale = await buildPulse(env, { now: T0 + 7 * 3600e3, scorecardKey: "axisbt:v21:min20" });
+  assert.deepEqual([stale.headline, stale.signals], [null, []]);
+});
+
+test("paper count: a wallet with no state yet is unread (null), never 0", async () => {
+  const board = { asOf: new Date(NOW).toISOString(), pipeline: { reads: [{ axis: "level_reclaim", stage: "PAPER", numbers: { exitTrades: 42, exitNetBps: 25.2 } }] } };
+  const env = { LAB_STORE: fakeKv({ "axisbt:v21:min20": JSON.stringify(board) }), NEXUS_AGENT: fakeKv({}) };
+  const p = await buildPulse(env, { now: NOW, scorecardKey: "axisbt:v21:min20" });
+  assert.equal(p.signals[0].paper.trades, null);
 });
