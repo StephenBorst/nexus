@@ -134,7 +134,7 @@ function resolveRpc(_provider: SolProvider): string {
 // (confirmations===null) from RPCs that omit confirmationStatus. Throws on a real on-chain error;
 // returns false only on a genuine pending timeout so the caller surfaces the sig rather than fake
 // success. NOT a swap guard — this runs AFTER signing, purely to report the outcome.
-async function pollConfirm(sig: string, timeoutMs = 45000): Promise<boolean> {
+export async function pollConfirm(sig: string, timeoutMs = 45000): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {

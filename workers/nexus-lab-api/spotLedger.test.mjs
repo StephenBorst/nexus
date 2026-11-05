@@ -20,7 +20,8 @@ const ID = "40d5fec8-1659-4cdf-9185-c31690543cb5";
 const io = (o = {}) => ({
   evmRpc: async () => o.receipt ?? { status: "0x1" },
   solRpc: async () => o.sol ?? { value: [{ err: null, confirmationStatus: "confirmed" }] },
-  fetchImpl: async () => new Response(JSON.stringify(o.near ?? { status: "SUCCESS" }), { status: 200 }),
+  fetchImpl: async () => { throw new Error("the ledger must not read 1Click directly"); },
+  nearSettle: async () => o.near ?? { verdict: "DELIVERED" },
 });
 
 test("addToDay accumulates per route", () => {
@@ -53,8 +54,13 @@ test("verifyFill: only a proven trade counts", async () => {
   assert.equal(await verifyFill({ route: "spandex", id: HASH, chainId: 8453 }, { ...io(), evmRpc: async () => null }), false);
   assert.equal(await verifyFill({ route: "jupiter", id: SIG }, io({ sol: { value: [{ err: { InstructionError: [] }, confirmationStatus: "confirmed" }] } })), false);
   assert.equal(await verifyFill({ route: "jupiter", id: SIG }, io({ sol: { value: [{ err: null, confirmationStatus: "processed" }] } })), false);
-  assert.equal(await verifyFill({ route: "near", id: "x".repeat(10) }, io({ near: { status: "REFUNDED" } })), false);
+  // NEAR: booked only once the signed minimum shows on-chain at the recipient (settleDeposit's verdict).
   assert.equal(await verifyFill({ route: "near", id: "x".repeat(10) }, io()), true);
+  assert.equal(await verifyFill({ route: "near", id: "x".repeat(10) }, io({ near: { verdict: "CONFIRMING" } })), true);
+  for (const verdict of ["REFUNDED", "SHORT", "UNPROVEN", "UNREAD", "PENDING", "MISMATCH", "MALFORMED", "NOT_SETTLED", "UNKNOWN"])
+    assert.equal(await verifyFill({ route: "near", id: "x".repeat(10) }, io({ near: { verdict } })), false, verdict);
+  assert.equal(await verifyFill({ route: "near", id: "x".repeat(10) }, { ...io(), nearSettle: undefined }), false, "no checker → not proven");
+  assert.equal(await verifyFill({ route: "near", id: "x".repeat(10) }, { ...io(), nearSettle: async () => { throw new Error("down"); } }), false);
 });
 
 test("bookFill: books once, refuses unproven, never stores a wallet", async () => {
