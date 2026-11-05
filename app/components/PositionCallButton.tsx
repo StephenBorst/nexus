@@ -3,10 +3,13 @@
 // Thesis Engine with a draft (side, entry at the mark NOW, the position's TP/SL as stop/target when they
 // sit on the right side: app/lib/positionCall.mjs). The trader reviews and publishes there; nothing here
 // publishes, signs or touches the position, and no size or P&L leaves the account.
+// No position but a resting limit ENTRY on this market → "Post your ETH limit buy as a call": entry = the order's
+// exact limit price, counted once price trades there (orderCallDraft); the draft says a published call is permanent.
 import { useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useAccount, usePositionStream } from "@orderly.network/hooks";
-import { positionCallDraft, openPositionOn } from "@/lib/positionCall.mjs";
+import { useAccount, usePositionStream, useOrderStream } from "@orderly.network/hooks";
+import { OrderStatus } from "@orderly.network/types";
+import { positionCallDraft, openPositionOn, orderCallDraft, restingEntryOrderOn } from "@/lib/positionCall.mjs";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { C, UI } from "@/config/theme";
@@ -22,10 +25,16 @@ function PositionCallButtonInner() {
   const navigate = useNavigate();
   const { symbol } = useParams();
   const [{ rows }] = usePositionStream();
+  const [orders] = useOrderStream({ symbol, status: OrderStatus.INCOMPLETE });
   const row = openPositionOn(rows as unknown[], symbol);
+  const order = row ? null : restingEntryOrderOn(orders as unknown[], symbol);
+  // A position wins; else a resting limit entry. Rebuilt at the tap so the mark is the current one.
+  const build = useCallback(() => (row
+    ? positionCallDraft(row as Parameters<typeof positionCallDraft>[0])
+    : order ? orderCallDraft(order as Parameters<typeof orderCallDraft>[0]) : null), [row, order]);
 
   const post = useCallback(() => {
-    const d = positionCallDraft(row as Parameters<typeof positionCallDraft>[0]);
+    const d = build();
     if (!d) return;
     try { window.localStorage.setItem(THESIS_DRAFT_KEY, JSON.stringify(d)); } catch { /* private mode: the Lab opens without the draft */ }
     try {
@@ -33,14 +42,16 @@ function PositionCallButtonInner() {
       window.dispatchEvent(new CustomEvent("nexus:thesis-draft"));
     } catch { /* non-browser */ }
     navigate("/lab?tab=thesis");
-  }, [row, navigate]);
+  }, [build, navigate]);
 
-  const d = row ? positionCallDraft(row as Parameters<typeof positionCallDraft>[0]) : null;
+  const d = build();
   if (!d) return null;
-  const side = d.direction === "LONG" ? "long" : "short";
+  const side = order ? `limit ${d.direction === "LONG" ? "buy" : "sell"}` : d.direction === "LONG" ? "long" : "short";
   return (
     <button type="button" onClick={post} className="nx-press"
-      title={`Open the Thesis Engine with your ${d.symbol} ${side} as a call: entry at today's mark, your TP/SL as levels. You review and publish; it's graded from public price.`}
+      title={order
+        ? `Open the Thesis Engine with your ${d.symbol} ${side} at ${d.entryPrice} as a call. It counts once price trades there. Published calls are permanent; you review and publish.`
+        : `Open the Thesis Engine with your ${d.symbol} ${side} as a call: entry at today's mark, your TP/SL as levels. You review and publish; it's graded from public price.`}
       style={{
         flexShrink: 0, display: "flex", alignItems: "center", gap: 6, background: C.surface, border: "none",
         borderLeft: `1px solid ${C.border}`, color: C.text.bright, fontFamily: UI, fontSize: 12, fontWeight: 600,

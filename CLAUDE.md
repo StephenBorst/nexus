@@ -420,7 +420,9 @@ product is what sits on top:
   wallet holds a position in the market on screen; one tap opens the Thesis Engine with a draft (`app/lib/positionCall.mjs`):
   side from the position, ENTRY = the mark at the tap (never the average open price: a call starts when posted), stop/target
   = the position's TP/SL only when on the right side of the mark (else dropped, the note says so). No size/P&L in the draft.
-  The trader publishes; nothing auto-posts.
+  The trader publishes; nothing auto-posts. No position but a resting limit ENTRY (LIMIT/POST_ONLY, not reduce-only,
+  newest) → "Post your ETH limit buy as a call" (`orderCallDraft`): entry = the order's EXACT price (never rounded), counted
+  once price trades there like the order; the note says a published call is permanent (cancelling the order won't cancel it).
 - **Folds (2026-11-05):** Lab home's Briefing (`nexus_briefing_collapsed`, folded unless the viewer chose "0") and Board
   (`nx_board_open`) start folded. Spot's Cross-chain card is folded (`nx_xc_open`) but opens itself for a bridge prompt
   (`xcPreset`) or a transfer still moving (`hasTransferInFlight`: tracking only runs while the card is mounted).

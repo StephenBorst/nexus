@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { positionCallDraft, openPositionOn } from "./positionCall.mjs";
+import { positionCallDraft, openPositionOn, orderCallDraft, restingEntryOrderOn } from "./positionCall.mjs";
 import { callInvalidReason } from "./callMath.mjs";
 
 const long = { symbol: "PERP_BTC_USDC", position_qty: 0.02, average_open_price: 90000, mark_price: 101234.56, full_tp_sl: { tp_trigger_price: 110000, sl_trigger_price: 97000 } };
@@ -48,4 +48,36 @@ test("openPositionOn finds the live row for the viewed market only", () => {
   assert.equal(openPositionOn(rows, "PERP_BTC_USDC"), long);
   assert.equal(openPositionOn(rows, "PERP_ETH_USDC"), null);
   assert.equal(openPositionOn(undefined, "PERP_BTC_USDC"), null);
+});
+
+const lim = { symbol: "PERP_ETH_USDC", side: "BUY", type: "LIMIT", price: 2950.456, quantity: 1, executed: 0, reduce_only: false, created_time: 100 };
+
+test("limit order → call: side from BUY/SELL, entry = the limit price, the permanence note; no size", () => {
+  const d = orderCallDraft(lim);
+  assert.deepEqual([d.symbol, d.direction, d.entryPrice], ["ETH", "LONG", "2950.456"]);
+  assert.match(d.notes, /Published calls are permanent: cancelling the order later won.t cancel the call/);
+  assert.deepEqual(Object.keys(d).sort(), ["direction", "entryPrice", "notes", "symbol"]);
+  assert.equal(orderCallDraft({ ...lim, side: "SELL", type: "POST_ONLY" }).direction, "SHORT");
+});
+
+test("only plain resting entries qualify: reduce-only, market, stop orders and priceless rows give no draft", () => {
+  assert.equal(orderCallDraft({ ...lim, reduce_only: true }), null);
+  assert.equal(orderCallDraft({ ...lim, type: "MARKET" }), null);
+  assert.equal(orderCallDraft({ ...lim, type: "STOP_LIMIT" }), null);
+  assert.equal(orderCallDraft({ ...lim, price: null }), null);
+  assert.equal(orderCallDraft({ ...lim, side: "?" }), null);
+});
+
+test("restingEntryOrderOn: the newest unfilled entry on the viewed market only", () => {
+  const rows = [
+    { ...lim, order_id: 1, created_time: 100 },
+    { ...lim, order_id: 2, created_time: 300 },
+    { ...lim, order_id: 3, created_time: 400, reduce_only: true },
+    { ...lim, order_id: 4, created_time: 500, symbol: "PERP_BTC_USDC" },
+    { ...lim, order_id: 5, created_time: 600, executed: 1 },
+    { ...lim, order_id: 6, created_time: 700, algo_order_id: 9 },
+  ];
+  assert.equal(restingEntryOrderOn(rows, "PERP_ETH_USDC").order_id, 2);
+  assert.equal(restingEntryOrderOn(rows, "PERP_SOL_USDC"), null);
+  assert.equal(restingEntryOrderOn(null, "PERP_ETH_USDC"), null);
 });
