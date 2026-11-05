@@ -510,6 +510,12 @@ product is what sits on top:
   intercepts the SDK's injectable `Transfer.DepositAndWithdraw` and adds one `extraTabs` entry (`withFundTab`,
   `app/lib/xcFundTab.mjs`, tested: once, keeps others). The tab moves nothing: it closes the window and opens the card in
   fund mode (`/token` + `{ xcFund: true }`). Same tab in the mobile sheet. SDK upgrade: re-check that target name.
+- **Card polish** (2026-11-05, rules in `app/lib/xcCardKit.mjs`, tested): live "You'll receive ≈" from a signed DRY quote
+  ~0.6 s after typing (`checkPreview`: signature, dry, same assets + amount; never a deposit address; Review still runs
+  checkQuote); balance of the sent asset read on ITS chain (EVM public RPCs, Solana `/sol/rpc`) + Max (`maxSendable`:
+  tokens whole, native keeps `GAS_RESERVE`), over-balance blocks Review; 1Click's errors in plain words
+  (`quoteErrorText`, "try at least N" is base units of the asset SENT); progress timeline (`xcSteps`, last step = the
+  on-chain proof); Recent transfers on this device (`nx_xc_history_v1`, `pushHistory`, 5 max, receipts).
 - **Solana swap (Jupiter) — the ONE signer is `app/pages/token/solSwapExec.ts`**, BUY (SOL or USDC → token) and SELL
   (token → USDC), Jupiter `/build` via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
   (re-fetched fresh right before signing): quote bound to our mints + amount; slippage ≤ 300 bps and the quote's
