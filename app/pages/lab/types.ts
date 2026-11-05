@@ -167,6 +167,18 @@ export interface AgentConfig {
   // leader's currently-open position (symbol+direction), executed at THIS agent's own
   // mode/sizing/guardrails. Written through the normal config path; consumed by exec.
   autocopy?: { enabled: boolean; leaders: string[] };
+  // ── Operator features (PRO — 100M $NEXUS / ARCHITECT, the same gate as momentum /
+  // mean-reversion / DCA). Validated server-side (lab-api validateOperatorConfig) and
+  // enforced in the executor. ──
+  // Unified directional risk cap across EVERY open position on the account, in USD of
+  // signed notional. 0/unset = off. Rejects a NEW entry that would push net directional
+  // exposure past this; a trade that REDUCES net exposure is never blocked.
+  maxPortfolioDeltaUsd?: number;
+  // Execution push callbacks: the executor POSTs an HMAC-SHA256-signed event the tick an
+  // entry / DCA add / partial TP / close lands, so an operator never polls. callbackUrl
+  // must be https; webhookSecret (≥16 chars) signs the body (header X-Nexus-Signature).
+  callbackUrl?: string;
+  webhookSecret?: string;
 }
 
 export interface AgentState {

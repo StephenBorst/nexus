@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { AgentConfig, AgentState, AgentTrade, AgentLeaderboardEntry, AgentPendingThesis } from "./types";
 import { DEFAULT_CONFIG } from "./types";
-import { agentCardStyle, agentLabelStyle, agentBtnStyle, btnPrimary, navBtnStyle } from "./styles";
+import { agentCardStyle, agentLabelStyle, agentInputStyle, agentBtnStyle, btnPrimary, navBtnStyle } from "./styles";
 import { useSubscription } from "@/hooks/useSubscription";
 import { isProStrategy } from "@/config/subscription";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
@@ -1572,6 +1572,65 @@ export function AgentView() {
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <button onClick={() => manageWebhook("rotate")} disabled={saving} style={{ ...navBtnStyle, fontSize: 10, padding: "6px 14px", opacity: saving ? 0.5 : 1 }}>ROTATE URL</button>
                   <button onClick={() => manageWebhook("disable")} disabled={saving} style={{ ...navBtnStyle, fontSize: 10, padding: "6px 14px", color: "#f7525f", borderColor: "#f7525f50", opacity: saving ? 0.5 : 1 }}>DISABLE</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── OPERATOR · PRO — portfolio delta cap + execution push callbacks.
+              Same 100M-$NEXUS gate as strategies/DCA; saved via the config path and
+              enforced in the executor (delta cap rejects over-exposed entries; the
+              callback fires an HMAC-signed POST on each fill/close). ── */}
+          <div style={agentCardStyle}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <div style={agentLabelStyle}>OPERATOR</div>
+              <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0", border: "1px solid #33333a", borderRadius: 3, padding: "2px 8px" }}>◆ PRO</span>
+            </div>
+            {!isPro ? (
+              <div style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 11, marginTop: 10, lineHeight: 1.5 }}>
+                A portfolio-wide directional risk cap + execution push callbacks — your agent POSTs a signed event the moment a fill or close lands, so you never poll. A Nexus PRO feature: hold ARCHITECT-tier $NEXUS or subscribe.
+              </div>
+            ) : (
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* Portfolio delta cap */}
+                <div>
+                  <div style={{ ...agentLabelStyle, fontSize: 9 }}>PORTFOLIO DELTA CAP</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <NumberField
+                      value={config.maxPortfolioDeltaUsd ?? 0}
+                      min={0} max={1000000} step={100}
+                      onCommit={(n) => setConfig({ ...config, maxPortfolioDeltaUsd: n })}
+                    />
+                    <span style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10 }}>USD net (0 = off)</span>
+                  </div>
+                  <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 6, lineHeight: 1.5 }}>
+                    Caps total signed notional across ALL open positions on the account. A new entry that would push net directional exposure past this is rejected; a trade that reduces exposure always passes.
+                  </div>
+                </div>
+                {/* Execution push callbacks */}
+                <div>
+                  <div style={{ ...agentLabelStyle, fontSize: 9 }}>EXECUTION CALLBACK URL (https)</div>
+                  <input
+                    value={config.callbackUrl ?? ""}
+                    onChange={(e) => setConfig({ ...config, callbackUrl: e.target.value.trim() })}
+                    placeholder="https://your-endpoint.example/nexus"
+                    spellCheck={false} autoCapitalize="off" autoCorrect="off"
+                    style={{ ...agentInputStyle, width: "100%", boxSizing: "border-box" }}
+                  />
+                  <div style={{ ...agentLabelStyle, fontSize: 9, marginTop: 8 }}>WEBHOOK SECRET (≥16 chars — HMAC-signs each callback)</div>
+                  <input
+                    value={config.webhookSecret ?? ""}
+                    onChange={(e) => setConfig({ ...config, webhookSecret: e.target.value })}
+                    placeholder="a long random string"
+                    spellCheck={false} autoCapitalize="off" autoCorrect="off"
+                    style={{ ...agentInputStyle, width: "100%", boxSizing: "border-box" }}
+                  />
+                  <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 6, lineHeight: 1.5 }}>
+                    The agent POSTs an HMAC-SHA256-signed JSON body (header <code>X-Nexus-Signature: sha256=…</code>) on ENTRY · DCA_ADD · PARTIAL_TP · CLOSE — within-tick, one retry. Verify the signature with your secret before trusting a payload.
+                  </div>
+                </div>
+                <div style={{ color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 9, lineHeight: 1.5 }}>
+                  Changes apply on SAVE CONFIG below.
                 </div>
               </div>
             )}

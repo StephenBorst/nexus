@@ -34,7 +34,8 @@ product is what sits on top:
   `app/config/subscription.ts` (`PRO_FEATURES`, `PRO_AGENT_STRATEGIES`). PRO is a software subscription: NO revenue
   share / yield / dividends to holders, ever.
 - **Server-enforced PRO gates:** MOMENTUM + MEAN_REVERSION agent modes (402 `pro_strategy_locked` on PUT /agent, PUT
-  /config, bankr/activate), DCA (402 `pro_dca_locked`), webhooks, backtest/sweep/validate, hosted AI. Core modes stay free.
+  /config, bankr/activate), DCA (402 `pro_dca_locked`), operator delta-cap + callbacks (402 `pro_operator_locked`),
+  webhooks, backtest/sweep/validate, hosted AI. Core modes stay free.
 - **Owner revenue page `/ops/revenue`** (noindex, not in nav): `POST /ops/revenue {address, labAuth, refresh?}`
   (`routes-revenue.mjs` + `revenue.mjs`). Reads receivers, the Bankr wallet, borst.eth, the Safe and the NEAR Intents
   fee balance; moves nothing. Only a Lab-signed Safe owner or a wallet in `OPS_WALLETS`. Unreadable holding = "unread",
@@ -152,6 +153,15 @@ product is what sits on top:
   `enterPosition`; lab-api 409 `graded_exit_refused`). Lifting that = its own reviewed PR.
 - **Webhook (PRO):** `POST /agent/hook/:token` → `agent:webhook_signal:{addr}` (600s). **Strategy library:**
   `/agent/:a/strategies` + `/publish`; public board ranks by the author's GRADED record, never backtest.
+- **Operator fields (PRO · same ARCHITECT/100M gate as momentum/mean-rev/DCA; all opt-in, default-OFF):**
+  `config.maxPortfolioDeltaUsd` — exec sums signed notional across the account's live positions before any entry
+  (`portfolioDeltaCheck`, exec `logic.mjs`) and REJECTS one that grows net directional exposure past the cap (a
+  reducing trade always passes; LIVE reads `/v1/positions`, PAPER its own book; fail-OPEN only on a null read).
+  `config.callbackUrl` (https) + `config.webhookSecret` (≥16c) → exec POSTs an HMAC-SHA256-signed body
+  (`X-Nexus-Signature: sha256=…` + `X-Nexus-Event`) on ENTRY/DCA_ADD/PARTIAL_TP/CLOSE (CLOSE carries reason+pnl),
+  within-tick + 1 retry, best-effort (`fireCallback`/`buildCallbackPayload`, exec; never blocks the trade lifecycle).
+  Shape + PRO gate = `validateOperatorConfig` (lab-api `logic.mjs`) on all 3 config-write paths → 400 bad shape /
+  402 `pro_operator_locked`. Surfaced in AgentView's OPERATOR card + the Bankr skill (`docs/SKILL.md`).
 - **Whole-strategy loads reset the experimental filters** (`EXPERIMENTAL_FILTERS_OFF` in `app/utils/agentPrefill.ts`,
   incl. `basisConfirm` and `exitContract`): presets, sweep rows, scoreboard Load, Proof Deploy, trader COPY, saved/copied
   strategies (`deployToAgent(..., { replaceFilters: true })`, applied by the receiver). Partial hand-offs keep filters.
@@ -453,7 +463,17 @@ product is what sits on top:
   the pinned key AND the signed request (our recipient/refund, pinned assets incl. canonical BTC
   `1cs_v1:btc:native:coin`, exact amount, ≤100 bps, no memo, deadline). Build the deposit tx from `XC_ASSETS`, never the
   response. Fee 10 bps asked (5 bps ours) → borst.eth's intents.near balance (recipient must be an EOA). Quotes go via
-  `POST /xc/quote` with `ONE_CLICK_JWT`, falling back to direct.
+  `POST /xc/quote` with `ONE_CLICK_JWT`, falling back to direct. **`quoteRequest.deadline` is NOT signed** (the SDK hash
+  merges request + quote and `quote.deadline` overwrites it): the card passes the deadline it asked for
+  (`intent.deadline`) and the guard uses that, never the reply's copy. Refusal sweep: `nearIntents.attack.test.mjs`
+  (every signed field tampered/injected/removed, real signed quotes for someone else's swap, unsigned fields).
+- **1Click settlement, proven on-chain** (since 2026-11-05): `GET /xc/settlement?depositAddress=` (`routes-xcsettle.mjs`,
+  read-only, own per-IP budget) takes the signed quote 1Click's status echoes (re-verified, same deposit address), reads
+  each listed tx from its own chain (EVM Transfer logs of the PINNED token / native value to the signed recipient,
+  Solana token-balance deltas by owner+mint, BTC outputs) and judges vs the SIGNED `minAmountOut` (refund: sent −
+  signed `refundFee`), never the status's amounts (`app/lib/nearSettlement.mjs`). Only DELIVERED / REFUNDED are
+  settled; UNREAD / UNPROVEN (native ETH inside a contract call) / CONFIRMING are never green. The card shows green
+  "Delivered · confirmed on <chain>" only on DELIVERED to the recipient it sent the quote for (`settlementLine`).
 - **Solana swap (Jupiter) — the ONE signer is `app/pages/token/solSwapExec.ts`**, BUY (SOL or USDC → token) and SELL
   (token → USDC), Jupiter `/build` via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
   (re-fetched fresh right before signing): quote bound to our mints + amount; slippage ≤ 300 bps and the quote's
