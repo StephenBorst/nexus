@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { useOrderlyConfig } from "@/utils/config";
 import { Scaffold } from "@orderly.network/ui-scaffold";
 import { useNav } from "@/hooks/useNav";
+import LabPulseChip from "@/components/LabPulseChip";
 
 // Nexus chrome (top nav + brand lockup + footer) around the token terminal. The terminal
 // itself renders full-bleed inside the Scaffold content area. initialMenu = "/token" so the
@@ -19,6 +20,7 @@ export default function TokenLayout() {
       routerAdapter={{ onRouteChange }}
       bottomNavProps={config.scaffold.bottomNavProps}
     >
+      <LabPulseChip />
       <Outlet />
     </Scaffold>
   );

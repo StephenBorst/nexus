@@ -395,6 +395,10 @@ product is what sits on top:
 ## Engagement surfaces
 - `/agents/live` (uPnL from public marks; humans opt in via signed `POST /live/publish`, ~6-min TTL), Desks (score =
   members' graded calls via `computeCallerStats`), `LiveAlerts`, watch-only banner. Sparse at cold start by design.
+- **Lab pulse** (`GET /calls/pulse`, `routes-pulse.mjs`, rule `app/lib/callPulse.mjs`, 5-min KV cache, CORS `*`):
+  open calls (entry traded) + graded in 7 days + the last grade + the /proof headline read from the scoreboard's
+  own cache (`axisbtCacheKey`). Public human calls only (no copies, no house). Feeds the Trade/Spot strip
+  (`LabPulseChip.tsx`, → /proof) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
 
 ## Phone alerts + Android
 - **Android** = the live site in a Trusted Web Activity, `com.nexustradinglabs.nexus`, live on Google Play. Runbook
