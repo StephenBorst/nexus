@@ -416,6 +416,10 @@ product is what sits on top:
   → /proof's "Our engine callers" fold (losses included, "not a signal service"). A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
   (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
   newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
+  `signals` (pulse v5, `app/lib/signalProgress.mjs`) = reads served TRADEABLE/PAPER with positive exit net + the paper
+  wallet's lifetime trade COUNT vs `PAPER_MIN_TRADES` 30 (`paperWallet` on the registration, `readPipeline.mjs`; no state =
+  null "unread", never 0; never a paper P&L). The last good {headline, signals} sits in `calls:pulse:board:v1` ≤6h, so a cold
+  scoreboard cache no longer blanks the landing. /proof's FeaturedLead prints the same line under the headline.
 - **Position → call (Trade, 2026-11-05):** `PositionCallButton.tsx` sits at the right end of the Trade strip, only when the
   wallet holds a position in the market on screen; one tap opens the Thesis Engine with a draft (`app/lib/positionCall.mjs`):
   side from the position, ENTRY = the mark at the tap (never the average open price: a call starts when posted), stop/target
