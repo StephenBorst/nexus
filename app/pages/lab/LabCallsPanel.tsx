@@ -1,20 +1,27 @@
 // ◆ CALLS — the first thing on Lab home (Market Intel). The graded loop, not the market read:
-// "Every call is scored from public price" (always shown, even when the read fails), the counts
-// (open now · graded this week) and the newest few of each, one tap to the call's own page.
+// "Every call is graded from public price" (always shown, even when the read fails), the counts for
+// PEOPLE and OUR ENGINES on separate lines (never blended, borst 2026-11-05), and the newest calls of
+// both, each row naming its caller and marking engine rows; one tap to the call's own page.
 // Same source and rule as the Trade/Spot strip: GET /calls/pulse (lab-api routes-pulse.mjs,
-// app/lib/callPulse.mjs): public human calls only, no copies, no house. Display only.
+// app/lib/callPulse.mjs): no copies, no house callers. Display only.
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { agoShort, pulseLine } from "@/lib/callPulse.mjs";
+import { agoShort, gradedText } from "@/lib/callPulse.mjs";
 import { useIsMobile } from "./useIsMobile";
 import { C, MONO, UI } from "@/config/theme";
 import type { TabId } from "./types";
 
 const PULSE_URL = "https://og.nexustradinglabs.com/calls/pulse";
 
-interface OpenRow { symbol: string; direction: string; at: number; path: string }
+const LIST_MAX = 4;
+
+interface OpenRow { symbol: string; direction: string; at: number; path: string; caller?: string; engine?: boolean }
 interface GradedRow extends OpenRow { outcome: "WIN" | "LOSS"; r: number | null }
-interface Pulse { ok: boolean; open: number; gradedWeek: number; last: GradedRow | null; openCalls?: OpenRow[]; recentGraded?: GradedRow[] }
+interface Block { open: number; gradedWeek: number; last: GradedRow | null; openCalls?: OpenRow[]; recentGraded?: GradedRow[] }
+interface Pulse extends Block { ok: boolean; engines?: Block }
+
+// Newest first across people and engines; each row already says whose it is.
+const merged = <T extends OpenRow>(a?: T[], b?: T[]) => [...(a || []), ...(b || [])].sort((x, y) => y.at - x.at).slice(0, LIST_MAX);
 
 export function LabCallsPanel({ onSelectTab }: { onSelectTab?: (tab: TabId) => void }) {
   const isMobile = useIsMobile();
@@ -35,8 +42,9 @@ export function LabCallsPanel({ onSelectTab }: { onSelectTab?: (tab: TabId) => v
   }, []);
 
   const now = Date.now();
-  const { parts } = pulseLine(pulse, now);
-  const counts = pulse ? parts.slice(1) : null; // ["3 open calls", "2 graded this week" | "last graded 4d ago"]
+  const blocks: { label: string; b: Block }[] = pulse
+    ? [{ label: "People", b: pulse }, ...(pulse.engines ? [{ label: "Our engines", b: pulse.engines }] : [])]
+    : [];
 
   const label = { fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: C.text.muted };
   const rowStyle = {
@@ -54,8 +62,16 @@ export function LabCallsPanel({ onSelectTab }: { onSelectTab?: (tab: TabId) => v
           const g = "outcome" in c ? c : null;
           return (
             <Link key={c.path} to={c.path} style={rowStyle}>
-              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                <b style={{ fontWeight: 600 }}>{c.symbol}</b> <span style={{ color: C.text.fog }}>{c.direction === "LONG" ? "Long" : c.direction === "SHORT" ? "Short" : c.direction}</span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <b style={{ fontWeight: 600 }}>{c.symbol}</b> <span style={{ color: C.text.fog }}>{c.direction === "LONG" ? "Long" : c.direction === "SHORT" ? "Short" : c.direction}</span>
+                </span>
+                {c.caller && (
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 11.5, color: C.text.muted }}>
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>by {c.caller}</span>
+                    {c.engine && <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", color: C.text.fog, border: `1px solid ${C.borderStrong}`, borderRadius: 3, padding: "0 4px" }}>ENGINE</span>}
+                  </span>
+                )}
               </span>
               <span style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0, color: C.text.muted, fontSize: 12 }}>
                 {g && <span style={{ color: C.text.fog }}>{g.outcome === "WIN" ? "Win" : "Loss"}</span>}
@@ -79,13 +95,17 @@ export function LabCallsPanel({ onSelectTab }: { onSelectTab?: (tab: TabId) => v
       <div style={{ fontFamily: UI, fontSize: isMobile ? 15 : 16, fontWeight: 600, color: C.text.bright, letterSpacing: "-0.01em", lineHeight: 1.35, marginTop: 6 }}>
         Every call is graded from public price. Nothing self-reported.
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 6, fontFamily: UI, fontSize: 13, color: C.text.fog }}>
-        {counts ? counts.map((p, i) => <span key={p}>{i > 0 && <span style={{ color: C.text.faint, marginRight: 14 }}>·</span>}{p}</span>)
-          : <span style={{ color: C.text.muted }}>{failed ? "Live counts unavailable right now." : "Reading the record…"}</span>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, fontFamily: UI, fontSize: 13, color: C.text.fog }}>
+        {blocks.length ? blocks.map(({ label, b }) => (
+          <div key={label} style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.text.muted, minWidth: isMobile ? 0 : 96 }}>{label}</span>
+            <span>{b.open} open · {gradedText(b, now)}</span>
+          </div>
+        )) : <span style={{ color: C.text.muted }}>{failed ? "Live counts unavailable right now." : "Reading the record…"}</span>}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 14 : 28, marginTop: 14 }}>
-        {list("Open now", pulse?.openCalls, "No open calls right now.")}
-        {list("Recently graded", pulse?.recentGraded, "Nothing graded yet.")}
+        {list("Open now", merged(pulse?.openCalls, pulse?.engines?.openCalls), "No open calls right now.")}
+        {list("Recently graded", merged(pulse?.recentGraded, pulse?.engines?.recentGraded), "Nothing graded yet.")}
       </div>
       {onSelectTab && (
         <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 6 }}>

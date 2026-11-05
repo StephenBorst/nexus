@@ -409,7 +409,10 @@ product is what sits on top:
   members' graded calls via `computeCallerStats`), `LiveAlerts`, watch-only banner. Sparse at cold start by design.
 - **Lab pulse** (`GET /calls/pulse`, `routes-pulse.mjs`, rule `app/lib/callPulse.mjs`, 5-min KV cache, CORS `*`):
   open calls (entry traded) + graded in 7 days + the last grade + the /proof headline read from the scoreboard's
-  own cache (`axisbtCacheKey`). Public human calls only (no copies, no house). Feeds the Trade/Spot strip
+  own cache (`axisbtCacheKey`). **People and our engine callers counted APART, never blended** (borst 2026-11-05):
+  top-level = people, `engines` = the wallets in worker var `ENGINE_CALLER_ADDRESSES` (Engine A, "Ember", the Engine B
+  variant); both house callers (`HOUSE_CALLER_ADDRESS`, `HOUSE_CATALYST_ADDRESS`) left out; no copies. Rows carry the
+  caller's display name (`caller`) + `engine`. A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
   (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
   newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
 - **Folds (2026-11-05):** Lab home's Briefing (`nexus_briefing_collapsed`, folded unless the viewer chose "0") and Board

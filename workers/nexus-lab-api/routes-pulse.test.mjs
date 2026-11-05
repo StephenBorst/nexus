@@ -55,7 +55,7 @@ test("route: public GET, any origin, cached 5 minutes; other paths fall through;
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("Access-Control-Allow-Origin"), "*");
   const body = await res.json();
-  assert.deepEqual([body.open, body.gradedWeek, body.last, body.headline], [0, 0, null, null]);
+  assert.deepEqual([body.open, body.gradedWeek, body.last, body.headline, body.engines.open], [0, 0, null, null, 0]);
   assert.deepEqual(LAB_STORE.puts.map((x) => x.k), [PULSE_CACHE_KEY]);
   assert.equal(LAB_STORE.puts[0].o.expirationTtl, 300);
   const post = await handlePulse(["calls", "pulse"], new Request("https://x/calls/pulse", { method: "POST" }), env);
@@ -66,4 +66,29 @@ test("index.js reads the headline from the same key the scoreboard route writes"
   const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
   assert.match(src, /const CACHE = axisbtCacheKey\(min\);/);
   assert.match(src, /handlePulse\(parts, request, env, \{ scorecardKey: axisbtCacheKey\(20\) \}\)/);
+});
+
+test("engines counted apart and named; both house wallets left out; the wrangler var lists the engines", async () => {
+  const g = (id) => call(id, { gradedOutcome: "LOSS", gradedR: -1, gradeV: GRADE_V, exitedAt: NOW - 3600000 });
+  const LAB_STORE = fakeKv({
+    "lab:0xperson": JSON.stringify({ theses: [call("p", { fillState: "OPEN" })] }),
+    "lab:0xember": JSON.stringify({ theses: [g("e1")] }),
+    "lab:0xvariant": JSON.stringify({ theses: [g("v1")] }),
+    "lab:0xhouse": JSON.stringify({ theses: [g("h1")] }),
+    "lab:0xcatalyst": JSON.stringify({ theses: [call("c1", { fillState: "OPEN" })] }),
+    "profile:0xember": JSON.stringify({ displayName: "Ember" }),
+    "profile:0xperson": JSON.stringify({ displayName: "kai" }),
+  });
+  const env = { LAB_STORE, HOUSE_CALLER_ADDRESS: "0xHOUSE", HOUSE_CATALYST_ADDRESS: "0xCatalyst", ENGINE_CALLER_ADDRESSES: "0xEmber, 0xVariant" };
+  const p = await buildPulse(env, { now: NOW });
+  assert.deepEqual([p.open, p.gradedWeek], [1, 0]);
+  assert.equal(p.openCalls[0].caller, "kai");
+  assert.deepEqual([p.engines.open, p.engines.gradedWeek], [0, 2]);
+  assert.deepEqual(p.engines.recentGraded.map((r) => r.caller).sort(), ["0xvari…iant", "Ember"]);
+  const toml = readFileSync(new URL("./wrangler.toml", import.meta.url), "utf8");
+  const m = /^ENGINE_CALLER_ADDRESSES = "([^"]+)"/m.exec(toml);
+  assert.ok(m, "ENGINE_CALLER_ADDRESSES is set in wrangler.toml");
+  assert.deepEqual(m[1].split(",").map((a) => a.toLowerCase()).sort(), [
+    "0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4", "0x493dc0ce72b8b761844cb25bc17b6aff9a28c086", "0xd9f7b3273b504e1473c3faba6341299d0ec9b449",
+  ]);
 });
