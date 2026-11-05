@@ -415,6 +415,11 @@ product is what sits on top:
   caller's display name (`caller`) + `engine`. A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
   (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
   newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
+- **Position → call (Trade, 2026-11-05):** `PositionCallButton.tsx` sits at the right end of the Trade strip, only when the
+  wallet holds a position in the market on screen; one tap opens the Thesis Engine with a draft (`app/lib/positionCall.mjs`):
+  side from the position, ENTRY = the mark at the tap (never the average open price: a call starts when posted), stop/target
+  = the position's TP/SL only when on the right side of the mark (else dropped, the note says so). No size/P&L in the draft.
+  The trader publishes; nothing auto-posts.
 - **Folds (2026-11-05):** Lab home's Briefing (`nexus_briefing_collapsed`, folded unless the viewer chose "0") and Board
   (`nx_board_open`) start folded. Spot's Cross-chain card is folded (`nx_xc_open`) but opens itself for a bridge prompt
   (`xcPreset`) or a transfer still moving (`hasTransferInFlight`: tracking only runs while the card is mounted).
