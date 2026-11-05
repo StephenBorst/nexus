@@ -50,7 +50,12 @@ test("xcSteps: the last step is the on-chain proof; 1Click's word alone never co
   assert.deepEqual(states({ status: "PROCESSING", hash: "0x1" }), ["Sent:done", "Deposit seen:done", "Swapping:active", "Delivered:todo", "Confirmed:todo"]);
   assert.deepEqual(states({ status: "SUCCESS", hash: "0x1" }), ["Sent:done", "Deposit seen:done", "Swapping:done", "Delivered:done", "Confirmed:active"]);
   assert.deepEqual(states({ status: "SUCCESS", hash: "0x1", check: { verdict: "DELIVERED", chain: "base" } }).at(-1), "Confirmed on Base:done");
-  assert.deepEqual(states({ status: "SUCCESS", hash: "0x1", check: { verdict: "SHORT", chain: "base" } }).at(-1), "Confirmed on Base:failed");
+  // A failed proof names the problem; it never reads "Confirmed".
+  assert.deepEqual(states({ status: "SUCCESS", hash: "0x1", check: { verdict: "SHORT", chain: "base" } }).at(-1), "Short on Base:failed");
+  assert.deepEqual(states({ status: "SUCCESS", hash: "0x1", check: { verdict: "MISMATCH", chain: "base" } }).at(-1), "Didn’t match the quote:failed");
+  assert.deepEqual(states({ status: "REFUNDED", hash: "0x1", check: { verdict: "REFUND_SHORT", chain: "arb" } }).at(-1), "Refund short on Arbitrum:failed");
+  for (const t of [{ status: "SUCCESS", check: { verdict: "SHORT", chain: "base" } }, { status: "SUCCESS", check: { verdict: "MALFORMED" } }, { status: "REFUNDED", check: { verdict: "REFUND_SHORT" } }])
+    assert.ok(!xcSteps({ hash: "0x1", ...t }).some((x) => x.state === "failed" && /confirmed/i.test(x.label)), JSON.stringify(t));
   assert.deepEqual(states({ status: "SUCCESS", hash: "0x1", check: { verdict: "UNREAD" } }).at(-1), "Confirmed:active");
   assert.deepEqual(states({ status: "REFUNDED", hash: "0x1", check: { verdict: "REFUNDED", chain: "arb" } }), ["Sent:done", "Deposit seen:done", "Refunded:done", "Refund confirmed on Arbitrum:done"]);
   assert.deepEqual(states({ status: "INCOMPLETE_DEPOSIT", hash: "0x1" }).slice(-2), ["Short deposit · refunding:active", "Refund confirmed:todo"]);
