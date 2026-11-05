@@ -85,6 +85,7 @@ test("engines counted apart and named; both house wallets left out; the wrangler
   assert.equal(p.openCalls[0].caller, "kai");
   assert.deepEqual([p.engines.open, p.engines.gradedWeek], [0, 2]);
   assert.deepEqual(p.engines.recentGraded.map((r) => r.caller).sort(), ["0xvari…iant", "Ember"]);
+  assert.deepEqual(p.engineRecords.map((r) => [r.caller, r.graded, r.wins, r.netR]).sort(), [["0xvari…iant", 1, 0, -1], ["Ember", 1, 0, -1]]);
   const toml = readFileSync(new URL("./wrangler.toml", import.meta.url), "utf8");
   const m = /^ENGINE_CALLER_ADDRESSES = "([^"]+)"/m.exec(toml);
   assert.ok(m, "ENGINE_CALLER_ADDRESSES is set in wrangler.toml");

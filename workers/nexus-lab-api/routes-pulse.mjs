@@ -11,7 +11,7 @@ import { callPulse, PULSE_WINDOW_MS } from "../../app/lib/callPulse.mjs";
 import { proofHeadline } from "../../app/lib/proofCopy.mjs";
 import { isCurrentStamp } from "./grading.mjs";
 
-export const PULSE_CACHE_KEY = "calls:pulse:v3"; // v3 = people vs engines split + caller names · v2 = + openCalls / recentGraded
+export const PULSE_CACHE_KEY = "calls:pulse:v4"; // v4 = + engineRecords (per-engine all-time record, /proof) · v3 = people vs engines split + caller names · v2 = + openCalls / recentGraded
 const PULSE_TTL_S = 300;
 
 const reply = (body, status = 200) => new Response(JSON.stringify(body), {
@@ -39,7 +39,8 @@ const shortAddr = (w) => `${w.slice(0, 6)}…${w.slice(-4)}`;
 /** Puts each listed caller's public display name on its rows (`caller`); no name = the short address
  *  (an engine row says it's an engine through its own `engine` flag). One profile read per distinct wallet. */
 async function nameCallers(env, counts) {
-  const rows = [counts, counts.engines].flatMap((b) => [...b.openCalls, ...b.recentGraded, ...(b.last ? [b.last] : [])]);
+  const rows = [counts, counts.engines].flatMap((b) => [...b.openCalls, ...b.recentGraded, ...(b.last ? [b.last] : [])])
+    .concat((counts.engineRecords || []).map((r) => Object.assign(r, { engine: true })));
   const names = new Map();
   for (const w of new Set(rows.map((r) => r.wallet))) {
     let name = null;

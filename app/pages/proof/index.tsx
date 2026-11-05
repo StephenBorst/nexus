@@ -28,6 +28,8 @@ const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const usd = (n: number) => `${n < 0 ? "-" : "+"}$${Math.abs(n) >= 1000 ? `${(Math.abs(n) / 1000).toFixed(1)}K` : Math.abs(n).toFixed(2)}`;
 
 // ── data types (only the fields we render) ──
+// Our engine callers' all-time graded record (GET /calls/pulse `engineRecords`, app/lib/callPulse.mjs).
+type EngineRecord = { wallet: string; caller?: string; graded: number; wins: number; netR: number; lastAt: number | null };
 type Caller = { wallet: string; displayName?: string; pfp?: string; hitRate: number; avgR: number; calls: number; score: number; meritRank?: { glyph: string; title: string } | null };
 type Agent = { rank: number; wallet: string; displayName?: string; pfp?: string; trades: number; winRate: number; netPnl: number; profitFactor: number; score: number };
 type ArenaAgent = { wallet: string; name: string; builder?: string; currentPosition?: { symbol: string; direction: string } | null; paper?: { trades: number; winRate: number; netPnl: number } | null; live?: { trades: number; winRate: number; netPnl: number } | null };
@@ -130,6 +132,7 @@ export default function ProofPage() {
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [arena, setArena] = useState<ArenaAgent[] | null>(null);
   const [desks, setDesks] = useState<Desk[] | null>(null);
+  const [engineRecs, setEngineRecs] = useState<EngineRecord[] | null>(null);
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [proof, setProof] = useState<ProofOfEdge | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
@@ -147,6 +150,7 @@ export default function ProofPage() {
     fetch(`${API}/agents/leaderboard`).then((r) => r.json()).then((d) => setAgents(Array.isArray(d?.leaderboard) ? d.leaderboard : [])).catch(() => setAgents([]));
     fetch(`${API}/arena/agents`).then((r) => r.json()).then((d) => setArena(Array.isArray(d?.agents) ? d.agents : [])).catch(() => setArena([]));
     fetch(`${API}/desks`).then((r) => r.json()).then((d) => setDesks(Array.isArray(d?.desks) ? d.desks : [])).catch(() => setDesks([]));
+    fetch(`${API}/calls/pulse`).then((r) => r.json()).then((d) => setEngineRecs(Array.isArray(d?.engineRecords) ? d.engineRecords : [])).catch(() => setEngineRecs([]));
     fetch(`${API}/agents/ledger`).then((r) => r.json()).then(setLedger).catch(() => setLedger(null));
     fetch(`${API}/theses/proof-of-edge`).then((r) => r.json()).then((d) => setProof({ cards: Array.isArray(d?.cards) ? d.cards : [], summary: d?.summary })).catch(() => setProof({ cards: [] }));
     fetch(`${API}/intel/axis-backtest`).then((r) => r.json()).then((d) => setScorecard(Array.isArray(d?.axes) ? d : { axes: [] })).catch(() => setScorecard({ axes: [], failed: true }));
@@ -220,6 +224,35 @@ export default function ProofPage() {
 
       {/* 4 · THE OTHER RECORDS — one tap away. */}
       <section style={{ marginTop: 30, borderBottom: `1px solid ${BORDER}` }}>
+        {/* Our engine callers: our own bots post calls from their own wallets and take the same grade as
+            everyone, counted apart from people (callPulse.mjs). Losses stay on it: it's an experiment in the
+            open, not a signal service. */}
+        <Fold title="Our engine callers" count={engineRecs?.length}>
+          {engineRecs === null ? empty("loading…") : engineRecs.length === 0 ? empty("No engine call graded yet.") : (
+            <>
+              <div style={{ marginTop: -2, marginBottom: 10, fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.5 }}>
+                Our own bots post calls from their own wallets. Same grader, same public price, counted apart from people. An experiment in the open, losses included. Not a signal service.
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {engineRecs.map((e) => {
+                  const winPct = e.graded > 0 ? Math.round((e.wins / e.graded) * 100) : 0;
+                  return (
+                    <div role="link" tabIndex={0} key={e.wallet} onClick={() => navigate(`/feed/trader/${e.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${e.wallet}`))} style={{ ...rowStyle(true), ...rowM }}>
+                      <span style={{ ...nameCell, display: "flex", alignItems: "center", gap: 8 }}>
+                        {e.caller || short(e.wallet)}
+                        <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", color: FOG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "0 4px", flexShrink: 0 }}>ENGINE</span>
+                      </span>
+                      <span style={{ ...statCell, ...statM }}>
+                        {e.graded} graded · {winPct}% wins · <span style={{ color: e.netR >= 0 ? POS : NEG }}>{e.netR >= 0 ? "+" : "−"}{Math.abs(e.netR).toFixed(1)}R net</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </Fold>
+
         <Fold title="Autonomous agents" count={agents?.length}>
           {agents === null ? empty("loading…") : agents.length === 0 ? empty("No ranked agents yet: 10 live trades over 3+ days to qualify.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
