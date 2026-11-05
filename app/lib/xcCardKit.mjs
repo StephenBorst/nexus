@@ -70,13 +70,16 @@ export function xcSteps(track) {
   if (refund) {
     const back = st === "REFUNDED" ? "done" : "active";
     const proof = v === "REFUNDED" ? "done" : v === "REFUND_SHORT" ? "failed" : back === "done" ? "active" : "todo";
-    return [sent, seen, s(st === "INCOMPLETE_DEPOSIT" ? "Short deposit · refunding" : "Refunded", back), s(`Refund confirmed${on}`, proof)];
+    // A failed proof says what went wrong; "× Refund confirmed" would read as confirmed at a glance.
+    const proofLabel = proof === "failed" ? `Refund short${on}` : `Refund confirmed${on}`;
+    return [sent, seen, s(st === "INCOMPLETE_DEPOSIT" ? "Short deposit · refunding" : "Refunded", back), s(proofLabel, proof)];
   }
   const swapping = s("Swapping", st === "SUCCESS" ? "done" : st === "PROCESSING" ? "active" : "todo");
   const delivered = s("Delivered", st === "SUCCESS" ? "done" : "todo");
   const bad = v === "SHORT" || v === "MISMATCH" || v === "MALFORMED";
   const proof = st !== "SUCCESS" ? "todo" : v === "DELIVERED" ? "done" : bad ? "failed" : "active";
-  return [sent, seen, swapping, delivered, s(`Confirmed${on}`, proof)];
+  const proofLabel = v === "SHORT" && st === "SUCCESS" ? `Short${on}` : bad && st === "SUCCESS" ? "Didn’t match the quote" : `Confirmed${on}`;
+  return [sent, seen, swapping, delivered, s(proofLabel, proof)];
 }
 
 // ── 5. Recent transfers (this device only) ─────────────────────────────────────────────
