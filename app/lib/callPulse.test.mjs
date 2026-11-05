@@ -27,7 +27,31 @@ test("human, public calls only: private, holders-only, copies and the house wall
     { wallet: "0xA", theses: [{ ...graded, id: "a", isPublic: false }, { ...graded, id: "b", holdersOnly: true }, { ...graded, id: "c", duplicateOf: "x" }] },
     { wallet: "0xHOUSE", theses: [{ ...graded, id: "h" }, { ...base, id: "h2", fillState: "OPEN" }] },
   ], NOW, { exclude: ["0xhouse"] });
-  assert.deepEqual(p, { open: 0, gradedWeek: 0, last: null, openCalls: [], recentGraded: [] });
+  assert.deepEqual(p, { ...{ open: 0, gradedWeek: 0, last: null, openCalls: [], recentGraded: [] }, engines: { open: 0, gradedWeek: 0, last: null, openCalls: [], recentGraded: [] } });
+});
+
+test("people and engines are counted apart; both house wallets are out of both; comma lists split", () => {
+  const graded = (id, h = 1) => ({ ...base, id, gradedOutcome: "LOSS", gradedR: -1, exitedAt: NOW - h * H });
+  const p = callPulse([
+    { wallet: "0xPerson", theses: [{ ...base, id: "p1", fillState: "OPEN", filledAt: NOW - 2 * H }, graded("p2", 30 * 24)] },
+    { wallet: "0xEMBER", theses: [graded("e1", 1), graded("e2", 2), { ...base, id: "e3", fillState: "OPEN" }] },
+    { wallet: "0xVariant", theses: [graded("v1", 3)] },
+    { wallet: "0xHouse", theses: [graded("h1", 1)] },
+    { wallet: "0xCatalyst", theses: [{ ...base, id: "c1", fillState: "OPEN" }] },
+  ], NOW, { exclude: ["0xhouse", "0xCATALYST", undefined], engines: ["0xember,0xvariant", undefined] });
+  // people: the person's own numbers only, quiet week → last grade 30d ago
+  assert.equal(p.open, 1);
+  assert.equal(p.gradedWeek, 0);
+  assert.equal(p.last.wallet, "0xPerson");
+  assert.equal(p.openCalls[0].engine, false);
+  // engines: their own block, every row tagged
+  assert.equal(p.engines.open, 1);
+  assert.equal(p.engines.gradedWeek, 3);
+  assert.ok([...p.engines.openCalls, ...p.engines.recentGraded].every((r) => r.engine));
+  assert.deepEqual(p.engines.recentGraded.map((r) => r.path.split("/").pop()), ["e1", "e2", "v1"]);
+  // houses nowhere
+  const all = [p, p.engines].flatMap((b) => [...b.openCalls, ...b.recentGraded]);
+  assert.equal(all.some((r) => /house|catalyst/i.test(r.wallet)), false);
 });
 
 test("a stale grader stamp counts nowhere; resolution falls back to gradedAt; the window edge is inclusive", () => {
@@ -40,12 +64,18 @@ test("a stale grader stamp counts nowhere; resolution falls back to gradedAt; th
   assert.equal(p.last.r, null);
 });
 
-test("the chip line: real numbers, a quiet week names the last grade's age, unread makes no claim", () => {
-  assert.deepEqual(pulseLine({ open: 3, gradedWeek: 2, last: null }, NOW).parts, ["Lab", "3 open calls", "2 graded this week"]);
-  assert.deepEqual(pulseLine({ open: 1, gradedWeek: 0, last: { at: NOW - 4 * D } }, NOW).parts, ["Lab", "1 open call", "last graded 4d ago"]);
-  assert.deepEqual(pulseLine({ open: 0, gradedWeek: 0, last: null }, NOW).parts, ["Lab", "0 open calls", "0 graded this week"]);
-  assert.equal(pulseLine(null, NOW).parts.some((s) => /\d/.test(s)), false);
-  assert.equal(pulseLine({ open: NaN, gradedWeek: 1 }, NOW).parts.some((s) => /\d/.test(s)), false);
+test("the strip line: People and Our engines as labelled segments; quiet week = last grade's age; unread = no claim", () => {
+  const eng = { open: 0, gradedWeek: 11, last: { at: NOW - H } };
+  const l = pulseLine({ open: 2, gradedWeek: 0, last: { at: NOW - 21 * D }, engines: eng }, NOW);
+  assert.deepEqual(l.segments.map((x) => x.label), ["People", "Our engines"]);
+  assert.equal(l.segments[0].text, "2 open · last graded 21d ago");
+  assert.equal(l.segments[1].text, "0 open · 11 graded this week");
+  assert.equal(l.segments[1].short, "11 graded/wk");
+  assert.equal(pulseLine({ open: 3, gradedWeek: 2, last: null }, NOW).segments[0].text, "3 open · 2 graded this week");
+  // engines with no record at all: no engine segment
+  assert.equal(pulseLine({ open: 0, gradedWeek: 0, last: null, engines: { open: 0, gradedWeek: 0, last: null } }, NOW).segments.length, 1);
+  assert.equal(pulseLine(null, NOW).segments, null);
+  assert.equal(pulseLine({ open: NaN, gradedWeek: 1 }, NOW).segments, null);
 });
 
 test("agoShort is coarse", () => {
@@ -66,5 +96,5 @@ test("the Calls panel lists: newest first, capped, open by fill time, graded acr
   assert.equal(p.recentGraded[2].at, NOW - 6 * D - H); // older than the week still listed; the count says the week
   assert.equal(p.gradedWeek, 3);
   assert.deepEqual(p.last, p.recentGraded[0]);
-  assert.deepEqual(Object.keys(p.openCalls[0]).sort(), ["at", "direction", "path", "symbol"]);
+  assert.deepEqual(Object.keys(p.openCalls[0]).sort(), ["at", "direction", "engine", "path", "symbol", "wallet"]);
 });

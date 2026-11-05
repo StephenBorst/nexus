@@ -36,6 +36,10 @@ id = "c3c0582ec71c4d049d0795872f39f033"
 # once a new signing message is live.
 # 0xd9f7…b449: borst's Bankr wallet; its signature sat in the tracker app's storage (deleted 2026-10-26).
 REVOKED_TRADING_WALLETS = "0xd9f7b3273b504e1473c3faba6341299d0ec9b449"
+# Our engine callers (bots that publish graded calls from their own wallets). /calls/pulse counts them in
+# their own "engines" block, never as people (routes-pulse.mjs, borst 2026-11-05). Engine A (Bankr wallet),
+# Engine B "Ember" (docs/research/engine-ab-prereg.md) and the Engine B variant wallet (eng-b-m… ids).
+ENGINE_CALLER_ADDRESSES = "0xd9f7b3273b504e1473c3faba6341299d0ec9b449,0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4,0x493dc0ce72b8b761844cb25bc17b6aff9a28c086"
 # On-chain anchoring is PAUSED for all ledgers (mirrors nexus-ledger-anchor/wrangler.toml; keep equal).
 # Only the /arena/paper/root "anchoring" field reads this. The hash-chained ledgers are unaffected.
 ONCHAIN_ANCHOR_LIVE = "false"

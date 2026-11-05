@@ -1,8 +1,10 @@
-// ◆ The Lab pulse: a thin strip on Trade and Spot. "Lab · 3 open calls · 2 graded this week" → /proof.
+// ◆ The Lab pulse: a thin strip on Trade and Spot → /proof.
+//   "LAB · PEOPLE 2 open · last graded 21d ago · OUR ENGINES 0 open · 11 graded this week · See the record →"
 // The point is the graded loop on the first screen a trader sees. Counts come from GET /calls/pulse
-// (lab-api routes-pulse.mjs, rule app/lib/callPulse.mjs): public human calls only, no copies, no house.
-// Real numbers always; a quiet week reads "last graded 4d ago" instead of a bare 0. Unreadable = no
-// numbers, just the method line. No wallet, no key, no money: a link and a GET.
+// (lab-api routes-pulse.mjs, rule app/lib/callPulse.mjs): people and our engine callers counted APART,
+// never blended (borst, 2026-11-05); no copies, no house callers. Real numbers always; a quiet week reads
+// "last graded 21d ago" instead of a bare 0. Unreadable = no numbers, just the method line. No wallet,
+// no key, no money: a link and a GET.
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { pulseLine } from "@/lib/callPulse.mjs";
@@ -12,7 +14,8 @@ import { C, MONO, UI } from "@/config/theme";
 const PULSE_URL = "https://og.nexustradinglabs.com/calls/pulse";
 const REFRESH_MS = 5 * 60000;
 
-interface Pulse { open: number; gradedWeek: number; last: { at: number } | null }
+interface Block { open: number; gradedWeek: number; last: { at: number } | null }
+interface Pulse extends Block { engines?: Block }
 
 export default function LabPulseChip() {
   const isMobile = useIsMobile();
@@ -33,14 +36,14 @@ export default function LabPulseChip() {
     return () => { alive = false; clearInterval(iv); };
   }, []);
 
-  const { parts, title } = pulseLine(pulse);
-  const [head, ...rest] = parts;
+  const { segments, title } = pulseLine(pulse);
+  const dot = <span style={{ color: C.text.faint }}>·</span>;
 
   return (
     <Link
       to="/proof"
       title={title}
-      aria-label={`${parts.join(", ")}. See the record.`}
+      aria-label={segments ? `Lab. ${segments.map((s) => `${s.label}: ${s.text}`).join(". ")}. See the record.` : "Lab. Every call is scored from public price. See the record."}
       style={{
         display: "flex", alignItems: "center", gap: 8, height: isMobile ? 26 : 28,
         padding: isMobile ? "0 12px" : "0 16px", background: C.surfaceAlt,
@@ -48,13 +51,16 @@ export default function LabPulseChip() {
         color: C.text.fog, textDecoration: "none", whiteSpace: "nowrap", overflow: "hidden",
       }}
     >
-      <span style={{ fontFamily: MONO, fontSize: 11, color: C.text.bright, letterSpacing: "0.12em", fontWeight: 600, flexShrink: 0 }}>{head.toUpperCase()}</span>
-      {rest.map((p) => (
-        <span key={p} style={{ display: "flex", gap: 8, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-          <span style={{ color: C.text.faint }}>·</span>
-          <span>{p}</span>
+      <span style={{ fontFamily: MONO, fontSize: 11, color: C.text.bright, letterSpacing: "0.12em", fontWeight: 600, flexShrink: 0 }}>LAB</span>
+      {segments ? segments.map((s) => (
+        <span key={s.label} style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+          {dot}
+          <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.1em", color: C.text.muted, textTransform: "uppercase", flexShrink: 0 }}>{isMobile && s.label === "Our engines" ? "Engines" : s.label}</span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{isMobile ? s.short : s.text}</span>
         </span>
-      ))}
+      )) : (
+        <span style={{ display: "flex", gap: 8 }}>{dot}<span>every call scored from public price</span></span>
+      )}
       <span style={{ marginLeft: "auto", color: C.text.muted, flexShrink: 0 }}>{isMobile ? "→" : "See the record →"}</span>
     </Link>
   );
