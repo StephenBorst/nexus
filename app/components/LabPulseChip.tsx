@@ -4,8 +4,9 @@
 // (lab-api routes-pulse.mjs, rule app/lib/callPulse.mjs): people and our engine callers counted APART,
 // never blended (borst, 2026-11-05); no copies, no house callers. Real numbers always; a quiet week reads
 // "last graded 21d ago" instead of a bare 0. Unreadable = no numbers, just the method line. No wallet,
-// no key, no money: a link and a GET.
-import { useEffect, useState } from "react";
+// no key, no money: a link and a GET. `trailing` (Trade only) = the "post your position as a call"
+// button, a sibling of the link (never nested inside it).
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { pulseLine } from "@/lib/callPulse.mjs";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
@@ -17,7 +18,7 @@ const REFRESH_MS = 5 * 60000;
 interface Block { open: number; gradedWeek: number; last: { at: number } | null }
 interface Pulse extends Block { engines?: Block }
 
-export default function LabPulseChip() {
+export default function LabPulseChip({ trailing }: { trailing?: ReactNode } = {}) {
   const isMobile = useIsMobile();
   const [pulse, setPulse] = useState<Pulse | null>(null);
 
@@ -40,14 +41,14 @@ export default function LabPulseChip() {
   const dot = <span style={{ color: C.text.faint }}>·</span>;
 
   return (
+    <div style={{ display: "flex", alignItems: "stretch", background: C.surfaceAlt, borderBottom: `1px solid ${C.border}`, height: isMobile ? 26 : 28 }}>
     <Link
       to="/proof"
       title={title}
       aria-label={segments ? `Lab. ${segments.map((s) => `${s.label}: ${s.text}`).join(". ")}. See the record.` : "Lab. Every call is scored from public price. See the record."}
       style={{
-        display: "flex", alignItems: "center", gap: 8, height: isMobile ? 26 : 28,
-        padding: isMobile ? "0 12px" : "0 16px", background: C.surfaceAlt,
-        borderBottom: `1px solid ${C.border}`, fontFamily: UI, fontSize: 12,
+        display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0,
+        padding: isMobile ? "0 12px" : "0 16px", fontFamily: UI, fontSize: 12,
         color: C.text.fog, textDecoration: "none", whiteSpace: "nowrap", overflow: "hidden",
       }}
     >
@@ -63,5 +64,7 @@ export default function LabPulseChip() {
       )}
       <span style={{ marginLeft: "auto", color: C.text.muted, flexShrink: 0 }}>{isMobile ? "→" : "See the record →"}</span>
     </Link>
+    {trailing}
+    </div>
   );
 }
