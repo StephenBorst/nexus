@@ -185,8 +185,14 @@ export function checkQuote(response, intent) {
   // the price is only good until then) and how long the deposit address stays open
   // (quote.deadline, days out). Sending must beat the EARLIER one, or the user pays into
   // a quote whose price has lapsed.
+  // quoteRequest.deadline is NOT covered by 1Click's signature: the SDK's hash merges the
+  // request and quote fields and quote.deadline overwrites it (nearIntents.attack.test.mjs).
+  // So when the caller passes the deadline it asked for (intent.deadline), that is the price
+  // window and the reply's copy is ignored. Compared as times, never as strings.
   const now = intent.now ?? Date.now();
-  const stamps = [Date.parse(qr.deadline), Date.parse(q.deadline)].filter(Number.isFinite);
+  const asked = intent.deadline != null ? Date.parse(intent.deadline) : NaN;
+  if (intent.deadline != null && !Number.isFinite(asked)) return fail("deadline");
+  const stamps = [Number.isFinite(asked) ? asked : Date.parse(qr.deadline), Date.parse(q.deadline)].filter(Number.isFinite);
   if (!stamps.length) return fail("expired");
   const deadlineMs = Math.min(...stamps);
   if (deadlineMs <= now) return fail("expired");

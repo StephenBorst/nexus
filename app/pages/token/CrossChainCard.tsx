@@ -13,15 +13,20 @@
 //   4. buildDepositTx(): the transfer is built from OUR pinned asset table (token contract,
 //      decimals, chain), never from the response; ERC-20 = transfer(), no approval, so no
 //      allowance is ever left behind
-//   5. status polled until SUCCESS / REFUNDED / FAILED / INCOMPLETE_DEPOSIT — only
-//      SUCCESS reads as delivered; a refund goes back to the user's own address.
+//   5. status polled until SUCCESS / REFUNDED / FAILED / INCOMPLETE_DEPOSIT
+//   6. 1Click's SUCCESS / REFUNDED is a server's word, so it is then CHECKED ON-CHAIN:
+//      GET /xc/settlement reads the destination (or refund) transactions from their own chain
+//      and compares what reached the user's address with the floor 1Click signed
+//      (app/lib/nearSettlement.mjs). "Delivered" shows green only once that check proves it,
+//      to the recipient this card sent the quote for.
 import { reportSpotFill } from "@/lib/spotReport";
 import { useEffect, useRef, useState } from "react";
 import {
   ONE_CLICK_API, XC_ASSETS, fetchOneClickQuote, CHAIN_NAME, STATUS_TEXT, TERMINAL,
   checkQuote, buildDepositTx, recipientFitsChain, toUnits, fromUnits,
-  xcAppFees,
+  xcAppFees, XC_WORKER_API,
 } from "@/lib/nearIntents.mjs";
+import { settlementLine, RECHECK } from "@/lib/nearSettlement.mjs";
 import { getRuntimeConfig } from "@/utils/runtime-config";
 import { ensureChain, explorerTx, type Eip1193 } from "./swapExec";
 import { useEscapeKey } from "@/utils/a11y";
@@ -39,7 +44,10 @@ const short = (a: string) => (a.length > 16 ? `${a.slice(0, 8)}…${a.slice(-6)}
 type Quote = { quote: Record<string, string | number | undefined>; quoteRequest: Record<string, unknown>; signature: string; timestamp: string };
 type Review = { quote: Quote; depositAddress: string; minAmountOut: string; deadlineMs: number; amount: bigint; recipient: string };
 type QuoteCheck = { ok: true; depositAddress: string; minAmountOut: string; deadlineMs: number } | { ok: false; reason: string };
-type Track = { status: string; hash: string; chainId: number; depositAddress: string; deliveredUrl: string | null; startedAt: number; timedOut?: boolean };
+// check = GET /xc/settlement's reply (the on-chain verdict), null until it answers.
+type Check = { verdict?: string; chain?: string; to?: string; final?: boolean; error?: string; reason?: string };
+type Track = { status: string; hash: string; chainId: number; depositAddress: string; deliveredUrl: string | null; startedAt: number; timedOut?: boolean; recipient?: string; refundTo?: string; check?: Check | null };
+const SETTLE_WORDS = new Set(["SUCCESS", "REFUNDED"]);
 
 // Money in flight must survive a refresh: the transfer being tracked is saved locally and
 // tracking resumes on return (within a day). Per-viewer convenience only; the source of
@@ -92,6 +100,7 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
     if (!t) return;
     setTrack(t);
     if (!TERMINAL.has(t.status)) poll(t.depositAddress);
+    else if (SETTLE_WORDS.has(t.status) && (!t.check || RECHECK.has(t.check.verdict || ""))) confirmOnChain(t.depositAddress);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (track) saveTrack(track); }, [track]);
   useEscapeKey(() => setReview(null), !!review && !busy);
@@ -127,6 +136,7 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
       const chk = checkQuote(j, {
         originAsset: body.originAsset, destinationAsset: body.destinationAsset, amount: body.amount,
         recipient, refundTo: walletAddress, originChain: XC_ASSETS[from].chain, maxSlippageBps: MAX_SLIPPAGE_BPS, appFees,
+        deadline, // the price window WE asked for; the reply's copy isn't signed
       }) as QuoteCheck;
       if (!chk.ok) throw new Error(`Quote refused (${chk.reason}). Nothing was sent.`);
       if (alive.current) setReview({ quote: j, depositAddress: chk.depositAddress, minAmountOut: chk.minAmountOut, deadlineMs: chk.deadlineMs, amount: units, recipient });
@@ -163,7 +173,7 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
       // Optional speed-up: tell 1Click which tx paid the address. Best effort only.
       fetch(`${ONE_CLICK_API}/v0/deposit/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ depositAddress: review.depositAddress, txHash: hash }) }).catch(() => {});
       if (!alive.current) return;
-      setTrack({ status: "PENDING_DEPOSIT", hash, chainId, depositAddress: review.depositAddress, deliveredUrl: null, startedAt: Date.now() });
+      setTrack({ status: "PENDING_DEPOSIT", hash, chainId, depositAddress: review.depositAddress, deliveredUrl: null, startedAt: Date.now(), recipient: review.recipient, refundTo: walletAddress, check: null });
       setReview(null);
       poll(review.depositAddress);
     } catch (e) {
@@ -185,10 +195,29 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
         const url = j?.swapDetails?.destinationChainTxHashes?.[0]?.explorerUrl;
         setTrack((t) => (t ? { ...t, status, deliveredUrl: typeof url === "string" && url.startsWith("https://") ? url : t.deliveredUrl } : t));
         if (status === "SUCCESS") reportSpotFill("near", depositAddress); // spot ledger, checked against 1Click
+        if (SETTLE_WORDS.has(status)) { confirmOnChain(depositAddress); return; }
         if (TERMINAL.has(status)) return;
       } catch { /* keep polling */ }
     }
     if (alive.current) setTrack((t) => (t && !TERMINAL.has(t.status) ? { ...t, timedOut: true } : t));
+  }
+
+  // 1Click said SUCCESS / REFUNDED: prove it from the chain. Re-asks while the verdict can still
+  // change (not final yet, a read failed); ~5 min at most. Only the verdict is stored.
+  async function confirmOnChain(depositAddress: string) {
+    for (let i = 0; i < 20 && alive.current; i++) {
+      if (i > 0) await new Promise((res) => setTimeout(res, 15000));
+      let check: Check;
+      try {
+        const r = await fetch(`${XC_WORKER_API}/xc/settlement?depositAddress=${encodeURIComponent(depositAddress)}`);
+        const j = await r.json().catch(() => null);
+        check = j && typeof j === "object" ? (j as Check) : { error: `HTTP ${r.status}` };
+      } catch { check = { error: "unreachable" }; }
+      if (!alive.current) return;
+      const keep: Check = { verdict: check.verdict, chain: check.chain, to: check.to, final: check.final, error: check.error, reason: check.reason };
+      setTrack((t) => (t && t.depositAddress === depositAddress ? { ...t, check: keep } : t));
+      if (!check.error && check.verdict && !RECHECK.has(check.verdict)) return;
+    }
   }
 
   const sel = { background: BG, border: `1px solid ${BORD}`, borderRadius: 10, color: BRIGHT, fontFamily: UI, fontSize: 13.5, padding: "9px 10px", width: "100%" } as const;
@@ -244,9 +273,16 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
 
       {track && (
         <div aria-live="polite" style={{ borderTop: `1px solid ${BORD}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 6, fontFamily: MONO, fontSize: 11.5 }}>
-          <div style={{ color: track.status === "SUCCESS" ? POS : TERMINAL.has(track.status) ? NEG : BRIGHT }}>
-            {STATUS_TEXT[track.status as keyof typeof STATUS_TEXT] || "In progress"}
-          </div>
+          {(() => {
+            // SUCCESS / REFUNDED read from the on-chain check; everything else is 1Click's word.
+            const line = settlementLine(track.status, track.check ?? null, { recipient: track.recipient, refundTo: track.refundTo });
+            if (line) return <div style={{ color: line.tone === "pos" ? POS : line.tone === "neg" ? NEG : line.tone === "muted" ? FOG : BRIGHT }}>{line.text}</div>;
+            return (
+              <div style={{ color: TERMINAL.has(track.status) ? NEG : BRIGHT }}>
+                {STATUS_TEXT[track.status as keyof typeof STATUS_TEXT] || "In progress"}
+              </div>
+            );
+          })()}
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", color: MUT }}>
             {explorerTx(track.chainId, track.hash) && <a href={explorerTx(track.chainId, track.hash) as string} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>your transfer ↗</a>}
             {track.deliveredUrl && <a href={track.deliveredUrl} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>delivery ↗</a>}
