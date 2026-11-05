@@ -217,6 +217,8 @@ product is what sits on top:
 - **Reads:** basis (OKX spot-perp, `flow.mjs`), CVD, liq-flush, smart money, OI, book imbalance, RSI reset, vol regime
   (Deribit). Basis ≠ contango: basis is a signal, contango/backwardation is a conditioner. Recorded hourly as
   `basis:hist` / `cvd:hist` / `liq:hist` / `sm:hist` / `oi:hist` / `candle:hist` in `NEXUS_AGENT`.
+  `spotcvd:hist` (spot-book CVD, same fold as `cvd:hist`, from 2026-11-05) is RECORDING ONLY: nothing reads it until a
+  read on it is registered (`docs/research/spot-perp-cvd-draft.md`).
 - **One rule, two users:** traded and graded rules live once in `app/lib/` (`basisFade.mjs`, `basisStack.mjs`,
   `gradedExit.mjs`, `funding.mjs`) and both the brain and the grader import them. Parity tests prove live gate ==
   graded read hour by hour. Same-hour semantics: the LAST row in an hour with a side wins (`sideAtHour`); the price
