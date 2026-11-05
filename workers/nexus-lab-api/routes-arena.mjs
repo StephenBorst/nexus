@@ -193,7 +193,7 @@ export async function handleArena(parts, request, env) {
     const config = arenaAgentConfig(body.config || {});
     await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
     const stateRaw = await AGENT_KV.get(`agent:state:${address}`);
-    const state = stateRaw ? JSON.parse(stateRaw) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), current_position: null, last_signal: null };
+    const state = stateRaw ? JSON.parse(stateRaw) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), started_at: Date.now(), current_position: null, last_signal: null };
     state.active = true;
     await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
     const usersRaw = await AGENT_KV.get("agent:users");

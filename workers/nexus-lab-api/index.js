@@ -64,7 +64,7 @@ import { lockFor, LockBusy, LockError, LOCK_KEYS } from "./lock.mjs";
 export { NexusLock } from "./lock.mjs";
 // Leases on the paid paths: held for milliseconds (a KV read + write), so a short wait covers a race.
 const PAY_LOCK = { ttlMs: 30_000, waitMs: 3_000 };
-import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
+import { paperParity, axisForConfig, parityWindowStart } from "../../app/lib/paperParity.mjs";
 import { paperCostReread, paperFeeRate } from "../../app/lib/paperCosts.mjs";
 import { okxJson } from "./okx.mjs";
 import { rankUniverse, RECORDED_COINS, HOLDOUT_COINS, UNIVERSE_RULES } from "./universe.mjs";
@@ -4994,7 +4994,7 @@ document.getElementById("btn").addEventListener("click",go);
       // hour) and lists every graded event the agent was free to take but didn't. Explained
       // misses (position open, cooldown, daily caps, brain picked another market) are listed;
       // anything left is DRIFT between the live path and the grade. ?since=&until= (ISO or ms);
-      // since defaults to the last paper reset, else the oldest retained entry, else 24h. Same KV series the
+      // since defaults to where the record began (parityWindowStart), else 24h. Same KV series the
       // scoreboard reads, same axis generator — see app/lib/paperParity.mjs.
       if (request.method === "GET" && parts[2] === "parity") {
         const [configRaw, stateRaw] = await Promise.all([AGENT_KV.get(`agent:config:${address}`), AGENT_KV.get(`agent:state:${address}`)]);
@@ -5005,15 +5005,11 @@ document.getElementById("btn").addEventListener("click",go);
         const q = new URL(request.url).searchParams;
         const when = (v) => (v == null || v === "" ? null : (/^\d+$/.test(v) ? Number(v) : Date.parse(v)));
         const now = Date.now();
-        // Window start: explicit ?since, else the last paper reset, else the oldest retained paper
-        // entry, else the last 24h. (A reset done before paper_reset_at existed leaves no stamp, and
-        // judging events from before the run began would count them all as misses.)
-        const oldestOpen = (state.paper_trades || []).reduce((m, t) => { const o = Date.parse(t?.opened_at); return Number.isFinite(o) ? Math.min(m, o) : m; }, Infinity);
+        // Window start: explicit ?since, else where the record began (parityWindowStart: the later of
+        // the wallet's start and its last paper reset, bounded by the retained ledger), else the
+        // oldest retained entry, else the last 24h. Events from before the run began aren't misses.
         const qSince = when(q.get("since"));
-        const [since, sinceSource] = qSince != null ? [qSince, "query"]
-          : state.paper_reset_at ? [state.paper_reset_at, "paper_reset"]
-          : Number.isFinite(oldestOpen) ? [oldestOpen, "oldest_retained_entry"]
-          : [now - 86400000, "last_24h"];
+        const [since, sinceSource] = qSince != null ? [qSince, "query"] : parityWindowStart(state, now);
         const until = Math.min(when(q.get("until")) ?? now, now);
         if (!Number.isFinite(since) || !Number.isFinite(until) || since >= until) return json({ ok: false, error: "bad_window" }, request, 400);
         const gen = AXES.find((a) => a.name === axis)?.gen;
@@ -5293,7 +5289,7 @@ document.getElementById("btn").addEventListener("click",go);
           await AGENT_KV.put(`agent:key:${address}`, JSON.stringify({ tradingKey: encryptedKey, accountId, registeredAt: Date.now(), enc: "v1" }));
         }
         const existingState = await AGENT_KV.get(`agent:state:${address}`);
-        const state = existingState ? JSON.parse(existingState) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), current_position: null, last_signal: null };
+        const state = existingState ? JSON.parse(existingState) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), started_at: Date.now(), current_position: null, last_signal: null };
         state.active = true;
         await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
         const usersRaw = await AGENT_KV.get("agent:users");
@@ -5448,7 +5444,7 @@ document.getElementById("btn").addEventListener("click",go);
 
         // Activate + register so the exec picks it up next tick.
         const stRaw = await AGENT_KV.get(`agent:state:${address}`);
-        const state = stRaw ? JSON.parse(stRaw) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: now, current_position: null, last_signal: null };
+        const state = stRaw ? JSON.parse(stRaw) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: now, started_at: now, current_position: null, last_signal: null };
         state.active = true;
         await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
         const usersRaw2 = await AGENT_KV.get("agent:users");
@@ -5524,7 +5520,7 @@ document.getElementById("btn").addEventListener("click",go);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         await AGENT_KV.delete(`agent:kill:${address}`); // clear any stale kill flag from a prior KILL
         const existingState = await AGENT_KV.get(`agent:state:${address}`);
-        const state = existingState ? JSON.parse(existingState) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), current_position: null, last_signal: null };
+        const state = existingState ? JSON.parse(existingState) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), started_at: Date.now(), current_position: null, last_signal: null };
         state.active = true;
         await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
         const usersRaw = await AGENT_KV.get("agent:users");
