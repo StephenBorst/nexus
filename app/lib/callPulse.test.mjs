@@ -27,7 +27,7 @@ test("human, public calls only: private, holders-only, copies and the house wall
     { wallet: "0xA", theses: [{ ...graded, id: "a", isPublic: false }, { ...graded, id: "b", holdersOnly: true }, { ...graded, id: "c", duplicateOf: "x" }] },
     { wallet: "0xHOUSE", theses: [{ ...graded, id: "h" }, { ...base, id: "h2", fillState: "OPEN" }] },
   ], NOW, { exclude: ["0xhouse"] });
-  assert.deepEqual(p, { ...{ open: 0, gradedWeek: 0, last: null, openCalls: [], recentGraded: [] }, engines: { open: 0, gradedWeek: 0, last: null, openCalls: [], recentGraded: [] } });
+  assert.deepEqual(p, { ...{ open: 0, gradedWeek: 0, last: null, openCalls: [], recentGraded: [] }, engines: { open: 0, gradedWeek: 0, last: null, openCalls: [], recentGraded: [] }, engineRecords: [] });
 });
 
 test("people and engines are counted apart; both house wallets are out of both; comma lists split", () => {
@@ -97,4 +97,15 @@ test("the Calls panel lists: newest first, capped, open by fill time, graded acr
   assert.equal(p.gradedWeek, 3);
   assert.deepEqual(p.last, p.recentGraded[0]);
   assert.deepEqual(Object.keys(p.openCalls[0]).sort(), ["at", "direction", "engine", "path", "symbol", "wallet"]);
+});
+
+test("engineRecords: each engine's all-time graded record from the grader's own R; people never appear", () => {
+  const g = (id, outcome, r, h) => ({ ...base, id, gradedOutcome: outcome, gradedR: r, exitedAt: NOW - h * H });
+  const p = callPulse([
+    { wallet: "0xEmber", theses: [g("a", "LOSS", -1, 1), g("b", "WIN", 1.5, 50 * 24), g("c", "LOSS", -1, 2), { ...base, id: "o", fillState: "OPEN" }] },
+    { wallet: "0xVariant", theses: [g("d", "LOSS", -1, 3)] },
+    { wallet: "0xPerson", theses: [g("p", "WIN", 2, 1)] },
+  ], NOW, { engines: ["0xember", "0xvariant"] });
+  assert.deepEqual(p.engineRecords.map((x) => [x.wallet, x.graded, x.wins, x.netR]), [["0xEmber", 3, 1, -0.5], ["0xVariant", 1, 0, -1]]);
+  assert.equal(p.engineRecords[0].lastAt, NOW - H);
 });

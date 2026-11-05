@@ -412,7 +412,8 @@ product is what sits on top:
   own cache (`axisbtCacheKey`). **People and our engine callers counted APART, never blended** (borst 2026-11-05):
   top-level = people, `engines` = the wallets in worker var `ENGINE_CALLER_ADDRESSES` (Engine A, "Ember", the Engine B
   variant); both house callers (`HOUSE_CALLER_ADDRESS`, `HOUSE_CATALYST_ADDRESS`) left out; no copies. Rows carry the
-  caller's display name (`caller`) + `engine`. A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
+  caller's display name (`caller`) + `engine`; `engineRecords` = each engine's all-time graded record (graded, wins, net R)
+  → /proof's "Our engine callers" fold (losses included, "not a signal service"). A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
   (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
   newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
 - **Position → call (Trade, 2026-11-05):** `PositionCallButton.tsx` sits at the right end of the Trade strip, only when the

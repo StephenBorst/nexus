@@ -19,6 +19,8 @@
 // `engines` carries the same fields for the engine wallets. `last` = the most recent graded call of all time
 // (a quiet week still reads true: "last graded 21d ago"). Lists = the newest few (PULSE_LIST_MAX), each row
 // tagged `engine` and carrying its `wallet` so the server can attach the caller's display name.
+// `engineRecords` = each engine's ALL-TIME graded record (graded calls, wins, net R from the grader's own
+// `gradedR`), so /proof can show the engines as what they are: a public experiment, graded like everyone.
 
 import { callLifecycle } from "./callLifecycle.mjs";
 
@@ -47,7 +49,8 @@ const finish = (b) => {
  *   exclude   wallets left out entirely (the house callers), any case; comma-separated strings are split
  *   engines   our engine callers' wallets, counted in `engines`, never in the people's numbers
  *   isCurrent the grader's "stamp is current" check (grading.mjs isCurrentStamp); a stale stamp counts nowhere
- * @returns {PulseBlock & { engines: PulseBlock }}
+ * @returns {PulseBlock & { engines: PulseBlock, engineRecords: EngineRecord[] }}
+ * @typedef {{ wallet:string, graded:number, wins:number, netR:number, lastAt:number|null }} EngineRecord
  * @typedef {{ open:number, gradedWeek:number, last: PulseGraded|null, openCalls: PulseOpen[], recentGraded: PulseGraded[] }} PulseBlock
  * @typedef {{ symbol:string, direction:string, at:number, path:string, wallet:string, engine:boolean }} PulseOpen
  * @typedef {PulseOpen & { outcome:"WIN"|"LOSS", r:number|null }} PulseGraded
@@ -57,6 +60,7 @@ export function callPulse(records, now, opts = {}) {
   const engineSet = addrSet(opts.engines);
   const isCurrent = typeof opts.isCurrent === "function" ? opts.isCurrent : isGraded;
   const people = emptyBlock(), engines = emptyBlock();
+  const engineMap = new Map(); // engine wallet -> EngineRecord
   for (const rec of records || []) {
     const wallet = String(rec?.wallet || "");
     const w = wallet.toLowerCase();
@@ -73,6 +77,14 @@ export function callPulse(records, now, opts = {}) {
         if (now - at <= PULSE_WINDOW_MS) b.gradedWeek += 1;
         const r = Number(t.gradedR);
         b.graded.push({ ...head, outcome: t.gradedOutcome, r: Number.isFinite(r) ? Math.round(r * 100) / 100 : null, at });
+        if (engine) {
+          const rec = engineMap.get(wallet) || { wallet, graded: 0, wins: 0, netR: 0, lastAt: null };
+          rec.graded += 1;
+          if (t.gradedOutcome === "WIN") rec.wins += 1;
+          if (Number.isFinite(r)) rec.netR += r;
+          if (!rec.lastAt || at > rec.lastAt) rec.lastAt = at;
+          engineMap.set(wallet, rec);
+        }
         continue;
       }
       if (callLifecycle(t) === "OPEN") {
@@ -81,7 +93,10 @@ export function callPulse(records, now, opts = {}) {
       }
     }
   }
-  return { ...finish(people), engines: finish(engines) };
+  const engineRecords = [...engineMap.values()]
+    .map((x) => ({ ...x, netR: Math.round(x.netR * 100) / 100 }))
+    .sort((a, b) => b.graded - a.graded || (b.lastAt || 0) - (a.lastAt || 0));
+  return { ...finish(people), engines: finish(engines), engineRecords };
 }
 
 /** "45m" · "6h" · "3d" — how long ago, coarse on purpose. */

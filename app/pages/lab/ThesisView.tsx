@@ -13,7 +13,8 @@ import type { ThesisTrade, ThesisStatus, ProcessedTrade } from "./types";
 import { LiveRead } from "./LiveRead";
 import { SimComposer } from "./SimComposer";
 import { cardStyle, labelStyle, navBtnStyle, inputStyle, fieldLabelStyle, STATUS_CONFIG, CLOSED_STATUSES } from "./styles";
-import { splitRunnerStopped } from "@/lib/callMath.mjs";
+import { splitRunnerStopped, callRR, fmtRR } from "@/lib/callMath.mjs";
+import { callShareText } from "@/lib/callShare.mjs";
 import { deployToAgent, thesisToAgentConfig, thesisAgentNotice, deployDirectiveFromThesis } from "@/utils/agentPrefill";
 import { formatPnl, chartImageSrc, chartImageList, effectiveStatus, resolveSuggestion, CHART_HOST_HINT, MAX_CHARTS } from "./helpers";
 import { LOSS_REASONS, lossReason } from "@/lib/postmortem.mjs";
@@ -166,7 +167,8 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
               { label: "STOP", val: `$${nf(t.stopLoss, priceDp(t.stopLoss))}`, color: "#f7525f" },
               { label: "TP1", val: `$${nf(t.takeProfit1, priceDp(t.takeProfit1))}`, color: "#ededf0" },
               { label: "SIZE", val: (Number(t.positionSize) || 0) > 0 ? `$${nf(t.positionSize, 0)}` : "—" },
-              { label: "R:R", val: `1:${nf(t.riskReward, 2)}`, color: (Number(t.riskReward) || 0) >= 2 ? "#ededf0" : "#fbbf24" },
+              // R:R from the levels (callRR), never the stored riskReward: the card and the grade agree.
+              { label: "R:R", val: fmtRR(callRR(t)), color: (callRR(t) ?? 0) >= 2 ? "#ededf0" : "#fbbf24" },
               // Stored as a magnitude; the side comes from the thesis's own rate + direction, so
               // old cards read right too. −$ = you pay, +$ = you collect.
               { label: "72H FUND", val: (Number(t.fundingCost72h) || 0) !== 0 ? `${cardFunding.youPay === true ? "−" : cardFunding.youPay === false ? "+" : ""}$${nf(Math.abs(Number(t.fundingCost72h)), 3)}` : "—", color: cardFunding.youPay === false ? "#3ecf8e" : "#a1a1aa" },
@@ -191,9 +193,9 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
               // (the SPA's JS-injected OG tags are invisible to crawlers). It redirects
               // humans straight to the app page.
               const url = `https://og.nexustradinglabs.com/share/thesis/${walletAddress.toLowerCase()}/${t.id}`;
-              // Use the NaN/undefined-safe formatter (nf) — a public call missing any numeric
-              // field (older/partial theses) otherwise crashed the whole card on render (undefined.toFixed).
-              const text = `${tk} ${t.direction} ${nf(t.leverage, 1)}x.\n\nEntry $${nf(t.entryPrice, 2)}. Stop $${nf(t.stopLoss, 2)}. TP $${nf(t.takeProfit1, 2)}. R:R 1:${nf(t.riskReward, 2)}.\n\nGraded against public price on Nexus Trading Labs.`;
+              // Graded → the grader's result leads; open → the plan, R:R from the levels (callShare.mjs,
+              // NaN-safe: an older/partial call can't crash the card).
+              const text = callShareText(t, tk);
               const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
               return (
                 <a href={xUrl} target="_blank" rel="noopener noreferrer" title="Share this call on X"
