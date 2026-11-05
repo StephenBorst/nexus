@@ -275,7 +275,9 @@ product is what sits on top:
 - **The Read / Briefing / FADE:** show inputs, never a tally or crown of ungraded reads; the Board's FADE is "a
   mechanical rule, not graded yet" with the nearest graded relative's live grade (`app/lib/fadeGrade.mjs`). Never call
   a read "proven" or "graded" unless the scoreboard grades that exact rule.
-- **/proof layout:** verdict (headline is a claim: change it in the same PR a read clears the bar) → board by stage
+- **/proof layout:** verdict (the headline is a claim COMPUTED from the served stage, `proofHeadline` in proofCopy.mjs, since
+  2026-11-05: "Nothing has proven itself yet" until a read is served TRADEABLE/PAPER with positive exit net, then the read,
+  trades and date; unread/stale board = no claim, never "proven") → board by stage
   (`stageGroups`, never ranked by in-sample R) → calls + callers → agents/arena/desks/carry → ledger.
   Plain-words copy in `app/lib/proofCopy.mjs`; method in `HowWeGrade.tsx`.
 - **House caller is OFF** (`HOUSE_SIGNALS_ENABLED` deleted; gates the Catalyst caller too). Check "off" by reading

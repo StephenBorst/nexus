@@ -72,3 +72,40 @@ test("pipelineLine: an Edge read states the Edge line from pipeline-if-then.md",
   assert.ok(e.sub.startsWith("Beats random on new data and on coins it was never picked on. Not tested as a trade yet."));
   assert.ok(/Next: 1 more graded-exit trades\./.test(e.sub));
 });
+
+test("proofHeadline: no claim until a read is SERVED tradeable, net positive after fees, on a fresh board", async () => {
+  const { proofHeadline, HEADLINE_DEFAULT, HEADLINE_MAX_AGE_MS } = await import("./proofCopy.mjs");
+  const now = Date.parse("2026-11-05T03:00:00Z");
+  const asOf = "2026-11-05T02:53:15.484Z";
+  const read = (stage, exitTrades, exitNetBps, axis = "level_reclaim") => ({ axis, stage, numbers: { events: 68, meanR: 0.38, exitTrades, exitNetBps } });
+  const board = (...reads) => ({ asOf, axes: [], pipeline: { reads } });
+  // The default holds while nothing has cleared, and whenever the board can't be trusted.
+  assert.equal(HEADLINE_DEFAULT.title, "Nothing has proven itself yet.");
+  for (const sc of [null, undefined, { failed: true, axes: [] }, { axes: [] }, board(read("EDGE", 31, -0.8)), board(read("LEAD", 0, 0))]) {
+    assert.deepEqual(proofHeadline(sc, now), HEADLINE_DEFAULT);
+  }
+  // Served TRADEABLE → the read, the number of trades, the date (pipeline-if-then.md, Tradeable).
+  const h = proofHeadline(board(read("TRADEABLE", 37, 18.6), read("LEAD", 4, 216.7, "oi_div_reversal_4h")), now);
+  assert.equal(h.cleared, true);
+  assert.equal(h.title, "level_reclaim cleared the bar.");
+  assert.equal(h.sub, "37 trades, net positive after fees. As of Nov 5.");
+  assert.ok(!/proven/i.test(h.title + h.sub), "a cleared read is not called proven: it hasn't traded on paper yet");
+  // It falls back the moment the grade does, and a stale or future-dated board makes no claim.
+  assert.deepEqual(proofHeadline(board(read("EDGE", 38, -3.1)), now), HEADLINE_DEFAULT);
+  assert.deepEqual(proofHeadline(board(read("TRADEABLE", 37, 18.6)), now + HEADLINE_MAX_AGE_MS + 60000), HEADLINE_DEFAULT);
+  assert.deepEqual(proofHeadline({ ...board(read("TRADEABLE", 37, 18.6)), asOf: "2026-11-06T00:00:00Z" }, now), HEADLINE_DEFAULT);
+  assert.deepEqual(proofHeadline({ ...board(read("TRADEABLE", 37, 18.6)), asOf: undefined }, now), HEADLINE_DEFAULT);
+  // A stage label alone isn't enough: the served money line must be positive too.
+  assert.deepEqual(proofHeadline(board(read("TRADEABLE", 37, -1)), now), HEADLINE_DEFAULT);
+  // PAPER is past Tradeable, so it still counts; two cleared reads are both named.
+  const two = proofHeadline(board(read("PAPER", 40, 12), read("TRADEABLE", 31, 5, "x_read")), now);
+  assert.equal(two.title, "2 signals cleared the bar.");
+  assert.equal(two.sub, "level_reclaim (40 trades), x_read (31 trades), each net positive after fees. As of Nov 5.");
+});
+
+test("the /proof headline is computed, not typed: FeaturedLead renders proofHeadline", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../pages/proof/FeaturedLead.tsx", import.meta.url), "utf8");
+  assert.match(src, /proofHeadline\(/);
+  assert.ok(!/>\s*Nothing has proven itself yet\./.test(src), "the default line lives in proofCopy.mjs, not typed into the page");
+});

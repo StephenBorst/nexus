@@ -3,25 +3,27 @@
 // bar, and a link to "How we grade" at the foot of the page. The Oct 15 receipts moved there, still
 // dated (Oct15Result below).
 //
-// ⚠️ The headline is a claim: it stays true while no read has cleared the bar (PREDICTIVE, beats
-// random on its side, profitable as traded out of sample over 30+ trades: docs/routines/oct15-if-then.md
-// and docs/research/read-pipeline.md). When one clears, this header changes in the same PR.
-//
-// Self-contained on purpose: reads no endpoint, so it always renders the same for a demo.
+// ⚠️ The headline is a claim, and it is COMPUTED (borst, 2026-11-05): `proofHeadline` (app/lib/proofCopy.mjs)
+// reads the served pipeline stages. While no read is served TRADEABLE it says "Nothing has proven itself yet.";
+// when one is, it names the read, its trades and the date (pipeline-if-then.md, Tradeable), and it falls back
+// on its own if the read drops under the bar. Loading, failed or stale scoreboard = the default, no claim.
 
 import { C } from "@/config/theme";
+import { proofHeadline } from "@/lib/proofCopy.mjs";
+import type { Scorecard } from "./SignalBoard";
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const { bright: BRIGHT, fog: FOG, muted: MUTED } = C.text;
 
-export default function FeaturedLead({ isMobile, onHowWeGrade }: { isMobile?: boolean; onHowWeGrade: () => void }) {
+export default function FeaturedLead({ isMobile, onHowWeGrade, scorecard }: { isMobile?: boolean; onHowWeGrade: () => void; scorecard?: Scorecard | null }) {
+  const head = proofHeadline(scorecard);
   return (
     <header>
       <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.2em", textTransform: "uppercase", color: FOG, marginBottom: 12 }}>The proof</div>
       <h1 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 28 : 40, fontWeight: 600, color: BRIGHT, letterSpacing: "-0.03em", lineHeight: 1.1, maxWidth: 760 }}>
-        Nothing has proven itself yet.
-        <span style={{ display: "block", color: FOG }}>Here’s the public record.</span>
+        {head.title}
+        <span style={{ display: "block", color: FOG }}>{head.sub}</span>
       </h1>
       <p style={{ margin: "14px 0 0", fontFamily: UI, fontSize: 15, color: FOG, lineHeight: 1.55, maxWidth: 640 }}>
         To pass, a signal has to beat random entries, make money after fees, and keep doing it on new data, over 30+ trades.

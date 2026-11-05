@@ -83,3 +83,34 @@ export const RETIRED_GRADED_EXITS = Object.freeze({
 export const retiredGradedExit = (axis) => RETIRED_GRADED_EXITS[axis] || null;
 export const retiredLine = (r) =>
   r ? `Retired ${new Date(`${r.on}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}: ${r.why}. The paper wallet stays as a record.` : "";
+
+// ── The /proof headline: a claim, computed from the grade (borst, 2026-11-05) ────────────────────
+// pipeline-if-then.md: until a read clears, the headline stays "Nothing has proven itself yet. Here's the public
+// record."; at Tradeable it names "the read, the number of trades, the date". It reads the SERVED stage, so if a
+// read falls back under the bar the claim goes with it: a hand-written headline would stay up after the grade
+// moved. Anything unread, failed or stale makes no claim. Never says "proven" of a cleared read: Tradeable has
+// not traded on paper yet.
+export const HEADLINE_DEFAULT = Object.freeze({ cleared: false, title: "Nothing has proven itself yet.", sub: "Here’s the public record." });
+export const HEADLINE_MAX_AGE_MS = 6 * 3600000; // the scoreboard is cached 1h; older than this = no claim
+const CLEARED_STAGES = new Set(["TRADEABLE", "PAPER"]);
+const asOfDay = (ms) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+export function proofHeadline(scorecard, now = Date.now()) {
+  if (!scorecard || scorecard.failed || !Array.isArray(scorecard?.pipeline?.reads)) return HEADLINE_DEFAULT;
+  const asOf = Date.parse(scorecard.asOf);
+  if (!Number.isFinite(asOf) || now - asOf > HEADLINE_MAX_AGE_MS || asOf - now > 10 * 60000) return HEADLINE_DEFAULT;
+  const cleared = scorecard.pipeline.reads.filter((r) =>
+    r && typeof r.axis === "string" && CLEARED_STAGES.has(r.stage) && Number(r.numbers?.exitTrades) > 0 && Number(r.numbers?.exitNetBps) > 0);
+  if (!cleared.length) return HEADLINE_DEFAULT;
+  const trades = (r) => `${r.numbers.exitTrades} ${r.numbers.exitTrades === 1 ? "trade" : "trades"}`;
+  const day = asOfDay(asOf);
+  if (cleared.length === 1) {
+    const r = cleared[0];
+    return { cleared: true, axes: [r.axis], title: `${r.axis} cleared the bar.`, sub: `${trades(r)}, net positive after fees. As of ${day}.` };
+  }
+  return {
+    cleared: true, axes: cleared.map((r) => r.axis),
+    title: `${cleared.length} signals cleared the bar.`,
+    sub: `${cleared.map((r) => `${r.axis} (${trades(r)})`).join(", ")}, each net positive after fees. As of ${day}.`,
+  };
+}

@@ -37,7 +37,7 @@ export type Tide = { metric: string; from: string; to: string; markets: number; 
 // A read registered in the read pipeline: the same grade on events after its registration only.
 export type OosGrade = { since: string; verdict: string; r?: { samples: number; meanR: number } | null };
 export type AxisRow = { name: string; label: string; verdict: string; r?: { samples: number; meanR: number; hitRate?: number } | null; best: (Horizon & { bySide?: Record<"LONG" | "SHORT", SideStat> }) | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null; exitGraded?: ExitGrade | null; sides?: AxisSides; random?: RandomBaseline | null; oos?: OosGrade | null };
-export type PipelineRead = { axis: string; side?: string; stage: string; registeredAt?: string; next?: string; numbers?: { events: number; meanR: number } };
+export type PipelineRead = { axis: string; side?: string; stage: string; registeredAt?: string; next?: string; numbers?: { events: number; meanR: number; exitTrades?: number; exitNetBps?: number | null } };
 export type Scorecard = { failed?: boolean; axes: AxisRow[]; tide?: Tide | null; pipeline?: { rules?: { minEvents?: number }; reads?: PipelineRead[] } | null; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; asOf?: string };
 type Evidence = { ok: boolean; hold: number; markets: number; marketsGreen: number; trades: number; netUsd: number; caveat?: string; baseline?: { verdict: string; pctBeaten?: number; moreTradesNeeded?: number | null } };
 
