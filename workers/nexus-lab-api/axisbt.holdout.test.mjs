@@ -100,7 +100,7 @@ test("seventeen coins fit the recorder's budget, even at 1s per OKX call", async
   });
   assert.equal(FLOW_COINS.length, 17);
   assert.equal(n, 17);
-  assert.match(logs[0], /basis 17\/17 · cvd 17\/17/);
+  assert.match(logs[0], /basis 17\/17 · cvd 17\/17 · spot cvd 17\/17/);
   assert.ok(clock - started < FLOW_BUDGET_MS * 0.6, `pass took ${(clock - started) / 1000}s of ${FLOW_BUDGET_MS / 1000}s`);
-  for (const c of HOLDOUT_COINS) assert.ok(store.has(`basis:hist:${c}`) && store.has(`cvd:hist:${c}`), c);
+  for (const c of HOLDOUT_COINS) assert.ok(store.has(`basis:hist:${c}`) && store.has(`cvd:hist:${c}`) && store.has(`spotcvd:hist:${c}`), c);
 });

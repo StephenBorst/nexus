@@ -12,7 +12,8 @@
 // it hourly (cvd:hist) so CVD-divergence becomes backtestable as the series matures; the
 // live delta shows aggressor pressure now.
 //
-// Both accumulate hourly (basis:hist / cvd:hist) — same pattern as oi:hist / liq:hist.
+// Both accumulate hourly (basis:hist / cvd:hist) — same pattern as oi:hist / liq:hist. Spot-book CVD
+// is recorded beside them as spotcvd:hist (2026-11-05, recording only, nothing reads it yet).
 // OKX is CF-accessible (unlike Binance). Magnitudes are notional-ish (consistent per symbol).
 
 import { okxJson, okxGetAll, deribitResult } from "./okx.mjs";
@@ -232,7 +233,8 @@ export function classifySkew(hist, current) {
 export const FLOW_TRIES = 4;
 export const FLOW_COIN_GAP_MS = 500;
 export const FLOW_CALL_GAP_MS = 250;
-export const FLOW_BUDGET_MS = 120_000;
+// 180s since spot CVD (2026-11-05) added a fourth call per coin; the cron's wall limit is minutes, not seconds.
+export const FLOW_BUDGET_MS = 180_000;
 const CVD_WINDOW_MS = 65 * 60 * 1000;
 
 export async function snapshotFlow(env, coins, {
@@ -242,7 +244,7 @@ export async function snapshotFlow(env, coins, {
   const KV = env.NEXUS_AGENT || env.LAB_STORE;
   const started = clock();
   const get = { tries: FLOW_TRIES, fetchImpl, sleep, random, deadline: started + FLOW_BUDGET_MS, now: clock };
-  const stat = { basis: 0, cvd: 0, retries: 0, missed: [] };
+  const stat = { basis: 0, cvd: 0, spotCvd: 0, retries: 0, missed: [] };
   let n = 0;
   for (let i = 0; i < coins.length; i++) {
     if (i > 0) await sleep(FLOW_COIN_GAP_MS);
@@ -272,13 +274,28 @@ export async function snapshotFlow(env, coins, {
       } else {
         stat.missed.push(`${bare} cvd: ${c.reason}, ${c.attempts} tries`);
       }
+      // SPOT CVD (2026-11-05): the same trades call and the same fold on the SPOT book, so the
+      // spot-vs-perp flow split ("spot keeps buying, perps are selling") becomes a recorded series.
+      // Like cvd:hist it is the last ≤100 taker trades inside the window, a sample, not the hour's
+      // total: the two series are comparable with each other, not with a full-hour aggregate.
+      // Recording only: nothing grades or trades it until a read on it is registered.
+      await sleep(FLOW_CALL_GAP_MS);
+      const sc = await okxGetAll([`${OKX_TRADES}?instId=${spot}&limit=100`], get);
+      stat.retries += Math.max(0, (sc.attempts || 1) - 1);
+      if (sc.ok) {
+        const s = aggregateCvd(sc.json[0].data || [], clock() - CVD_WINDOW_MS);
+        await appendHist(KV, `spotcvd:hist:${bare}`, { t: now, cvd: s.cvd, buy: s.buy, sell: s.sell }, now);
+        stat.spotCvd++; wrote = true;
+      } else {
+        stat.missed.push(`${bare} spot cvd: ${sc.reason}, ${sc.attempts} tries`);
+      }
     } catch (e) {
       stat.missed.push(`${bare}: ${String((e && e.message) || e).slice(0, 80)}`);
     }
     if (wrote) n++;
   }
   const secs = ((clock() - started) / 1000).toFixed(1);
-  log.log(`[flow] basis ${stat.basis}/${coins.length} · cvd ${stat.cvd}/${coins.length} · retries ${stat.retries} · ${secs}s`);
+  log.log(`[flow] basis ${stat.basis}/${coins.length} · cvd ${stat.cvd}/${coins.length} · spot cvd ${stat.spotCvd}/${coins.length} · retries ${stat.retries} · ${secs}s`);
   if (stat.missed.length) log.error(`[flow] MISSED ${stat.missed.length}: ${stat.missed.join(" | ")}`);
   return n;
 }
