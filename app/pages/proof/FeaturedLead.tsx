@@ -43,7 +43,7 @@ function usePaperCounts(wallets: string[]) {
   return counts;
 }
 
-export default function FeaturedLead({ isMobile, onHowWeGrade, scorecard }: { isMobile?: boolean; onHowWeGrade: () => void; scorecard?: Scorecard | null }) {
+export default function FeaturedLead({ isMobile, onHowWeGrade, scorecard, shareHref }: { isMobile?: boolean; onHowWeGrade: () => void; scorecard?: Scorecard | null; shareHref?: string | null }) {
   const head = proofHeadline(scorecard);
   const counts = usePaperCounts(head.cleared ? (paperWalletsFor(scorecard ?? null) as string[]) : []);
   const progress = head.cleared ? signalProgress(scorecard ?? null, counts) : [];
@@ -64,10 +64,19 @@ export default function FeaturedLead({ isMobile, onHowWeGrade, scorecard }: { is
       <p style={{ margin: "14px 0 0", fontFamily: UI, fontSize: 15, color: FOG, lineHeight: 1.55, maxWidth: 640 }}>
         To pass, a signal has to beat random entries, make money after fees, and keep doing it on new data, over 30+ trades.
       </p>
-      <button type="button" onClick={onHowWeGrade}
-        style={{ marginTop: 10, background: "none", border: "none", padding: "6px 0", minHeight: 32, cursor: "pointer", fontFamily: UI, fontSize: 13, color: BRIGHT, textDecoration: "underline", textUnderlineOffset: 3, textDecorationColor: MUTED }}>
-        How we grade ↓
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap", marginTop: 10 }}>
+        <button type="button" onClick={onHowWeGrade}
+          style={{ background: "none", border: "none", padding: "6px 0", minHeight: 32, cursor: "pointer", fontFamily: UI, fontSize: 13, color: BRIGHT, textDecoration: "underline", textUnderlineOffset: 3, textDecorationColor: MUTED }}>
+          How we grade ↓
+        </button>
+        {/* The week's record as a post (recordShare.mjs): counts from /calls/pulse, people and engines apart. */}
+        {shareHref && (
+          <a href={shareHref} target="_blank" rel="noopener noreferrer"
+            style={{ display: "inline-flex", alignItems: "center", minHeight: 32, fontFamily: UI, fontSize: 13, color: FOG, textDecoration: "none" }}>
+            𝕏 Share this week’s record
+          </a>
+        )}
+      </div>
     </header>
   );
 }
