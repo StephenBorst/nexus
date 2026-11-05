@@ -31,8 +31,9 @@ import {
 } from "@/lib/nearIntents.mjs";
 import { settlementLine, settlementReceipt, receiptWanted, depositHandoff, RECHECK } from "@/lib/nearSettlement.mjs";
 import { SOL_ORIGINS } from "@/lib/solDeposit.mjs";
+import { checkPreview, quoteErrorText, maxSendable, xcSteps, pushHistory } from "@/lib/xcCardKit.mjs";
 import { sendSolDeposit, type SolOriginKey } from "./xcSolSend";
-import { solscanTx, type SolProvider } from "./solSwapExec";
+import { solscanTx, solRpcCall, type SolProvider } from "./solSwapExec";
 import { modal } from "@orderly.network/ui";
 import { isAddress } from "viem";
 import { getRuntimeConfig } from "@/utils/runtime-config";
@@ -83,6 +84,52 @@ export function hasTransferInFlight(): boolean {
   const t = loadTrack();
   return !!t && (statusOpen(t) || checkOpen(t));
 }
+// Recent transfers on THIS device (newest first, 5 max): the finished tracks, so a receipt is still
+// at hand after the card moves on. Per-viewer convenience only; nothing is sent anywhere.
+const HISTORY_KEY = "nx_xc_history_v1";
+function loadHistory(): Track[] {
+  try { const h = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); return Array.isArray(h) ? h.filter((t) => t && typeof t.depositAddress === "string") : []; } catch { return []; }
+}
+function saveHistory(h: Track[]) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch { /* storage off */ }
+}
+
+// Balance of the asset being sent, read on ITS chain (not the wallet's current one): EVM through the
+// same public RPCs the app already reads holdings with, Solana through our /sol/rpc. null = unread.
+const PUBLIC_RPC: Record<string, string[]> = {
+  arb: ["https://arbitrum-one-rpc.publicnode.com", "https://arb1.arbitrum.io/rpc"],
+  base: ["https://base-rpc.publicnode.com", "https://mainnet.base.org"],
+  eth: ["https://ethereum-rpc.publicnode.com", "https://eth.llamarpc.com"],
+};
+async function evmBalance(chain: string, token: string | null, owner: string): Promise<bigint | null> {
+  const call = token
+    ? { method: "eth_call", params: [{ to: token, data: "0x70a08231" + owner.toLowerCase().replace(/^0x/, "").padStart(64, "0") }, "latest"] }
+    : { method: "eth_getBalance", params: [owner, "latest"] };
+  for (const url of PUBLIC_RPC[chain] || []) {
+    try {
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...call }) });
+      const j = await r.json();
+      if (typeof j?.result === "string" && /^0x[0-9a-fA-F]*$/.test(j.result)) return BigInt(j.result === "0x" ? "0x0" : j.result);
+    } catch { /* next */ }
+  }
+  return null;
+}
+async function solBalance(assetKey: AssetKey, owner: string): Promise<bigint | null> {
+  try {
+    const spl = SOL_ORIGINS[assetKey as keyof typeof SOL_ORIGINS] as { kind: string; mint?: string } | undefined;
+    if (!spl) return null;
+    if (spl.kind === "sol") {
+      const r = (await solRpcCall("getBalance", [owner, { commitment: "confirmed" }])) as { value?: number } | null;
+      return typeof r?.value === "number" ? BigInt(r.value) : null;
+    }
+    const r = (await solRpcCall("getTokenAccountsByOwner", [owner, { mint: spl.mint }, { encoding: "jsonParsed" }])) as
+      { value?: Array<{ account?: { data?: { parsed?: { info?: { tokenAmount?: { amount?: string } } } } } }> } | null;
+    let sum = 0n;
+    for (const a of r?.value ?? []) { const amt = a?.account?.data?.parsed?.info?.tokenAmount?.amount; if (typeof amt === "string" && /^\d+$/.test(amt)) sum += BigInt(amt); }
+    return sum;
+  } catch { return null; }
+}
+
 function saveTrack(t: Track | null) {
   try { if (t) localStorage.setItem(TRACK_KEY, JSON.stringify(t)); else localStorage.removeItem(TRACK_KEY); } catch { /* storage off: tracking just won't resume */ }
 }
@@ -126,6 +173,9 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
   const [review, setReview] = useState<Review | null>(null);
   const [track, setTrack] = useState<Track | null>(null);
   const [receipt, setReceipt] = useState<"copied" | "shown" | null>(null);
+  const [history, setHistory] = useState<Track[]>(() => loadHistory());
+  const [preview, setPreview] = useState<{ amountOut?: string; minAmountOut?: string; time?: number | null; error?: string; loading?: boolean } | null>(null);
+  const [balance, setBalance] = useState<bigint | null>(null);
   const reported = useRef<Set<string>>(new Set());
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
@@ -138,6 +188,13 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
     else if (checkOpen(t)) confirmOnChain(t.depositAddress);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (track) saveTrack(track); }, [track]);
+  // A finished transfer (1Click final and the on-chain check settled, or tracking stopped) goes to Recent.
+  useEffect(() => {
+    if (!track) return;
+    const finished = (TERMINAL.has(track.status) && !checkOpen(track) && track.status !== "INCOMPLETE_DEPOSIT") || track.timedOut;
+    if (!finished) return;
+    setHistory((h) => { const next = pushHistory(h, track); saveHistory(next); return next; });
+  }, [track]);
   useEscapeKey(() => setReview(null), !!review && !busy);
 
   const dest = XC_ASSETS[to];
@@ -154,27 +211,68 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
   const sameAsset = XC_ASSETS[from].assetId === dest.assetId;
   const solToSol = fromIsSol && dest.chain === "sol"; // same chain: that's a swap (the Solana ticket), not a bridge
   const inFlight = !!track && !TERMINAL.has(track.status) && !track.timedOut;
-  const canQuote = !!sender && !!units && recipientOk && !sameAsset && !solToSol && !busy && !inFlight;
+  const overBalance = balance != null && !!units && units > balance;
+  const canQuote = !!sender && !!units && recipientOk && !sameAsset && !solToSol && !overBalance && !busy && !inFlight;
   const origins = [...EVM_ORIGINS, ...(solWallet ? SOL_ORIGIN_KEYS : [])];
+
+  // One request shape for the live estimate (dry) and the real quote. Our fee (public/config.js
+  // VITE_XC_FEE_BPS + VITE_XC_FEE_RECIPIENT; empty ⇒ none sent) rides both, so the estimate matches.
+  function quoteBody(dry: boolean, refundTo: string, amt: bigint) {
+    const appFees = xcAppFees(getRuntimeConfig("VITE_XC_FEE_BPS"), getRuntimeConfig("VITE_XC_FEE_RECIPIENT"));
+    const deadline = new Date(Date.now() + 10 * 60_000).toISOString();
+    return {
+      appFees,
+      body: {
+        dry, swapType: "EXACT_INPUT", slippageTolerance: MAX_SLIPPAGE_BPS,
+        originAsset: XC_ASSETS[from].assetId, depositType: "ORIGIN_CHAIN",
+        destinationAsset: dest.assetId, amount: amt.toString(),
+        recipient, recipientType: "DESTINATION_CHAIN",
+        refundTo, refundType: "ORIGIN_CHAIN", deadline,
+        ...(appFees.length ? { appFees } : {}),
+      },
+    };
+  }
+
+  // 1) Live estimate: a signed DRY quote ~0.6 s after typing stops (checkPreview: signature, dry, same
+  // assets + amount). The newest answer wins. It never yields a deposit address.
+  const previewSeq = useRef(0);
+  useEffect(() => {
+    const seq = ++previewSeq.current;
+    if (!sender || !units || !recipientOk || sameAsset || solToSol || review) { setPreview(null); return; }
+    setPreview((p) => ({ ...(p || {}), loading: true, error: undefined }));
+    const t = setTimeout(async () => {
+      try {
+        const { body } = quoteBody(true, sender, units);
+        const { res: r } = await fetchOneClickQuote(body);
+        const j = await r.json().catch(() => null);
+        if (seq !== previewSeq.current || !alive.current) return;
+        if (!r.ok || !j) { setPreview({ error: quoteErrorText(j?.message, XC_ASSETS[from]) }); return; }
+        const pv = checkPreview(j, { originAsset: body.originAsset, destinationAsset: body.destinationAsset, amount: body.amount });
+        setPreview(pv.ok ? { amountOut: pv.amountOut, minAmountOut: pv.minAmountOut, time: pv.timeEstimate } : null);
+      } catch { if (seq === previewSeq.current && alive.current) setPreview(null); }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [from, to, units?.toString(), sender, recipient, recipientOk, sameAsset, solToSol, !!review]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 2) Balance of what's being sent, on its own chain.
+  useEffect(() => {
+    let live = true;
+    setBalance(null);
+    if (!sender) return;
+    const a = XC_ASSETS[from];
+    (fromIsSol ? solBalance(from, sender) : evmBalance(a.chain, a.token, sender)).then((b) => { if (live && alive.current) setBalance(b); });
+    return () => { live = false; };
+  }, [from, sender, fromIsSol, !!track && track.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function getQuote() {
     if (!sender || !units) return;
     setErr(null); setBusy("Getting a verified quote…");
     try {
-      // Our fee (public/config.js VITE_XC_FEE_BPS + VITE_XC_FEE_RECIPIENT); empty ⇒ none sent.
-      const appFees = xcAppFees(getRuntimeConfig("VITE_XC_FEE_BPS"), getRuntimeConfig("VITE_XC_FEE_RECIPIENT"));
-      const deadline = new Date(Date.now() + 10 * 60_000).toISOString();
-      const body = {
-        dry: false, swapType: "EXACT_INPUT", slippageTolerance: MAX_SLIPPAGE_BPS,
-        originAsset: XC_ASSETS[from].assetId, depositType: "ORIGIN_CHAIN",
-        destinationAsset: dest.assetId, amount: units.toString(),
-        recipient, recipientType: "DESTINATION_CHAIN",
-        refundTo: sender, refundType: "ORIGIN_CHAIN", deadline,
-        ...(appFees.length ? { appFees } : {}),
-      };
+      const { body, appFees } = quoteBody(false, sender, units);
+      const deadline = body.deadline;
       const { res: r } = await fetchOneClickQuote(body);
       const j = await r.json().catch(() => null);
-      if (!r.ok || !j) throw new Error((j && typeof j.message === "string" ? j.message : "No quote") + ". Nothing was sent.");
+      if (!r.ok || !j) throw new Error(`${quoteErrorText(j && typeof j.message === "string" ? j.message : "", XC_ASSETS[from])} Nothing was sent.`);
       const chk = checkQuote(j, {
         originAsset: body.originAsset, destinationAsset: body.destinationAsset, amount: body.amount,
         recipient, refundTo: sender, originChain: XC_ASSETS[from].chain, maxSlippageBps: MAX_SLIPPAGE_BPS, appFees,
@@ -336,8 +434,32 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
         </label>
       </div>
 
-      <label style={field}><span style={lab}>AMOUNT ({XC_ASSETS[from].sym})</span>
+      <label style={field}>
+        <span style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <span style={lab}>AMOUNT ({XC_ASSETS[from].sym})</span>
+          {balance != null && (
+            <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUT }}>
+              Balance {fromUnits(balance.toString(), XC_ASSETS[from].decimals)}{" · "}
+              <button type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const a = XC_ASSETS[from];
+                  const max = maxSendable({ balance, native: fromIsSol ? from === "SOL.sol" : !a.token, chain: a.chain });
+                  setAmount(max > 0n ? fromUnits(max.toString(), a.decimals, a.decimals) : "0"); setReview(null);
+                }}
+                style={{ background: "transparent", border: "none", padding: 0, color: FOG, fontFamily: UI, fontSize: 11, fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>Max</button>
+            </span>
+          )}
+        </span>
         <input inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); setReview(null); }} placeholder="0.00" style={sel} />
+        {overBalance && <span style={{ fontFamily: MONO, fontSize: 10.5, color: NEG }}>More than your balance.</span>}
+        {!overBalance && preview && (
+          <span aria-live="polite" style={{ fontFamily: MONO, fontSize: 10.5, color: preview.error ? FOG : MUT }}>
+            {preview.error ? preview.error
+              : preview.amountOut ? <>You’ll receive ≈ <span style={{ color: BRIGHT }}>{fromUnits(preview.amountOut, dest.decimals)} {dest.sym}</span> · at least {fromUnits(preview.minAmountOut as string, dest.decimals)}{preview.time ? ` · ~${preview.time}s` : ""}</>
+              : "Estimating…"}
+          </span>
+        )}
       </label>
 
       {evmDest && !typingEvm ? (
@@ -370,6 +492,15 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
 
       {track && (
         <div aria-live="polite" style={{ borderTop: `1px solid ${BORD}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 6, fontFamily: MONO, fontSize: 11.5 }}>
+          <ol aria-label="Transfer progress" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexWrap: "wrap", gap: "4px 10px", fontSize: 10.5 }}>
+            {xcSteps(track).map((st, i) => (
+              <li key={st.label} style={{ display: "flex", alignItems: "center", gap: 5, color: st.state === "done" ? FOG : st.state === "active" ? BRIGHT : st.state === "failed" ? NEG : FAINT, fontWeight: st.state === "active" ? 600 : 400 }}>
+                {i > 0 && <span aria-hidden="true" style={{ color: FAINT }}>›</span>}
+                <span aria-hidden="true">{st.state === "done" ? "●" : st.state === "failed" ? "×" : st.state === "active" ? "◐" : "○"}</span>
+                {st.label}
+              </li>
+            ))}
+          </ol>
           {(() => {
             // SUCCESS / REFUNDED read from the on-chain check; everything else is 1Click's word.
             const line = settlementLine(track.status, track.check ?? null, { recipient: track.recipient, refundTo: track.refundTo });
@@ -421,6 +552,33 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
               style={{ alignSelf: "flex-start", background: "transparent", color: MUT, border: `1px solid ${BORD}`, borderRadius: 15, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>Clear</button>
           )}
         </div>
+      )}
+
+      {history.filter((h) => h.depositAddress !== track?.depositAddress).length > 0 && (
+        <details style={{ borderTop: `1px solid ${BORD}`, paddingTop: 10 }}>
+          <summary style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: "0.08em", color: MUT, cursor: "pointer" }}>RECENT TRANSFERS · THIS DEVICE</summary>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+            {history.filter((h) => h.depositAddress !== track?.depositAddress).map((h) => {
+              const line = settlementLine(h.status, h.check ?? null, { recipient: h.recipient, refundTo: h.refundTo });
+              const text = line?.text || STATUS_TEXT[h.status as keyof typeof STATUS_TEXT] || (h.timedOut ? "Tracking stopped" : "In progress");
+              const tone = line?.tone === "pos" ? POS : line?.tone === "neg" ? NEG : FOG;
+              return (
+                <div key={h.depositAddress} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", fontFamily: MONO, fontSize: 11 }}>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                    <span style={{ color: tone }}>{text}</span>
+                    <span style={{ color: FAINT, fontSize: 10 }}>{new Date(h.startedAt).toLocaleString()} · {short(h.depositAddress)}</span>
+                  </span>
+                  <button type="button"
+                    onClick={async () => {
+                      const r = settlementReceipt({ ...h, chainName: h.fromChain ? CHAIN_NAME[h.fromChain as keyof typeof CHAIN_NAME] : undefined }, h.check ?? null);
+                      try { await navigator.clipboard.writeText(r); } catch { window.prompt("Copy the receipt", r); }
+                    }}
+                    style={{ background: "transparent", color: FOG, border: `1px solid ${BORD}`, borderRadius: 15, fontFamily: UI, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", cursor: "pointer", flexShrink: 0 }}>Copy receipt</button>
+                </div>
+              );
+            })}
+          </div>
+        </details>
       )}
 
       <div style={{ fontFamily: UI, fontSize: 12, lineHeight: 1.5, color: FAINT }}>
