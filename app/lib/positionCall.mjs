@@ -11,6 +11,13 @@
 //     (LONG: stop < mark < target; SHORT: target < mark < stop). A level on the wrong side would make the
 //     call INVALID (callMath callInvalidReason), so it's dropped and the trader sets it.
 //   - Nothing about size, margin or P&L leaves the account: the draft carries prices only.
+//
+// "Post this limit order as a call" (orderCallDraft): a RESTING limit entry maps onto a resting call. ENTRY = the
+// order's limit price; the grader counts the call only once price trades there (filled at the post if the limit sits
+// within 0.3% of the mark, else graded from its fill hour, never filled = PENDING), exactly like the order. Only plain
+// entries qualify (LIMIT / POST_ONLY, not reduce-only: a reduce-only order closes a position, it isn't a call). The
+// note says the one thing the trader must know: a published call is permanent, so cancelling the order later doesn't
+// cancel the call. Levels: the trader sets stop and target in the Thesis Engine.
 
 import { bareTicker } from "./bookRisk.mjs";
 
@@ -51,4 +58,37 @@ export function positionCallDraft(row) {
 export function openPositionOn(rows, symbol) {
   const s = String(symbol || "");
   return (Array.isArray(rows) ? rows : []).find((r) => r && r.symbol === s && Number(r.position_qty) !== 0) || null;
+}
+
+const ENTRY_ORDER_TYPES = new Set(["LIMIT", "POST_ONLY"]);
+
+/** The newest resting limit ENTRY on `symbol` (Orderly full symbol), or null. */
+export function restingEntryOrderOn(rows, symbol) {
+  const s = String(symbol || "");
+  const ok = (Array.isArray(rows) ? rows : []).filter((o) =>
+    o && o.symbol === s && !o.reduce_only && ENTRY_ORDER_TYPES.has(String(o.type || "").toUpperCase())
+    && (o.side === "BUY" || o.side === "SELL") && pos(o.price) != null && !o.algo_order_id
+    && Number(o.quantity) > Number(o.executed || o.total_executed_quantity || 0));
+  ok.sort((a, b) => (Number(b.created_time) || 0) - (Number(a.created_time) || 0));
+  return ok[0] || null;
+}
+
+/**
+ * @param {{ symbol:string, side:"BUY"|"SELL", type:string, price:number, reduce_only?:boolean }} order
+ * @returns {null | { symbol:string, direction:"LONG"|"SHORT", entryPrice:string, notes:string }}
+ */
+export function orderCallDraft(order) {
+  const px = pos(order?.price);
+  const sym = bareTicker(order?.symbol);
+  if (px == null || order?.reduce_only || !ENTRY_ORDER_TYPES.has(String(order?.type || "").toUpperCase())) return null;
+  if (order?.side !== "BUY" && order?.side !== "SELL") return null;
+  if (!/^[A-Z0-9]{1,16}$/.test(sym)) return null;
+  const direction = order.side === "BUY" ? "LONG" : "SHORT";
+  // The order's EXACT price (exchange prices are already on the tick): rounding would move the call's entry off
+  // the order's, so the call could fill where the order didn't.
+  const entryPrice = String(px);
+  return {
+    symbol: sym, direction, entryPrice,
+    notes: `Your ${sym} limit ${order.side === "BUY" ? "buy" : "sell"} at ${entryPrice} as a call. It counts once price trades at your entry, like the order. Published calls are permanent: cancelling the order later won't cancel the call. Set your stop and target.`,
+  };
 }
