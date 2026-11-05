@@ -423,7 +423,8 @@ product is what sits on top:
 
 ## Phone alerts + Android
 - **Android** = the live site in a Trusted Web Activity, `com.nexustradinglabs.nexus`, live on Google Play. Runbook
-  `docs/android-app.md`. `public/.well-known/assetlinks.json` (3 fingerprints: Play signing, upload, dApp Store) —
+  `docs/android-app.md`. `public/.well-known/assetlinks.json` (3 fingerprints: Play signing, upload, dApp Store, on BOTH packages:
+  Play `com.nexustradinglabs.nexus` + dApp Store `com.nexustradinglabs.trade.twa`) —
   regenerate only via `tools/android/assetlinks.mjs`. Solana dApp Store listing in `marketing/solana-dapp-store/`.
 - **Manifest:** edit `tools/manifest/manifest.mjs`, never `public/manifest.json` (regenerated on every deploy).
 - **Web Push** (`webpush.mjs`, `push.mjs`, `routes-push.mjs`): on when secret `VAPID_PRIVATE_JWK` is set (make it ONCE:
