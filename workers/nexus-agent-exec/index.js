@@ -18,7 +18,7 @@ import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
 import { nextPaperHead, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, brainSignalKey, alreadyTradedSignal } from "./logic.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const COOLDOWN_MS = 15 * 60 * 1000; // 15 min between trades
@@ -138,6 +138,53 @@ async function notifyTelegram(address, env, text) {
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }),
     });
   } catch (e) { console.error(`[exec] ${address.slice(0, 10)} tg notify failed:`, e.message); }
+}
+
+// ── Execution push callbacks (PRO) ───────────────────────────────────────────
+// Outbound, HMAC-SHA256-signed POSTs to a user-registered callbackUrl, fired the
+// tick an agent event lands (entry fill / DCA add / partial TP / close) so an
+// operator never has to poll. Best-effort + bounded (3s/attempt, 1 retry) so a
+// slow or dead endpoint can never stall the executor. Gated purely by the user
+// having set callbackUrl + webhookSecret (PRO-enforced at config-write in lab-api).
+async function hmacHex(secret, message) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function fireCallback(address, config, env, event, data) {
+  const url = config?.callbackUrl, secret = config?.webhookSecret;
+  if (!url || !secret) return;
+  try {
+    const body = JSON.stringify(buildCallbackPayload(event, { address, ...data, ts: Date.now() }));
+    const sig = await hmacHex(secret, body);
+    const headers = { "Content-Type": "application/json", "X-Nexus-Event": event, "X-Nexus-Signature": `sha256=${sig}` };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 3000);
+      try {
+        const r = await fetch(url, { method: "POST", headers, body, signal: ctrl.signal });
+        clearTimeout(t);
+        if (r.ok) return;
+      } catch { clearTimeout(t); }
+      if (attempt === 0) await new Promise((res) => setTimeout(res, 300));
+    }
+    console.warn(`[exec] ${address.slice(0, 10)} callback ${event} undelivered after retry`);
+  } catch (e) { console.error(`[exec] ${address.slice(0, 10)} callback ${event} failed:`, e.message); }
+}
+
+// Live open positions on the account as signed-notional legs for the portfolio
+// delta cap — the WHOLE account (covers manual / Bankr / concurrent trades), not
+// just this agent's tracked position. null = couldn't read (caller fails open).
+async function fetchAccountPositions(keyData) {
+  try {
+    const res = await orderlyRequest(keyData, "GET", "/v1/positions");
+    const rows = res?.data?.rows || [];
+    return rows
+      .map((r) => ({ signedQty: Number(r.position_qty), mark: Number(r.mark_price ?? r.index_price ?? r.average_open_price) }))
+      .filter((p) => Number.isFinite(p.signedQty) && Number.isFinite(p.mark) && p.signedQty !== 0);
+  } catch { return null; }
 }
 
 // ── Decrypt the trading key stored at rest (AES-256-GCM, "v1:<iv>:<ct>") ──────
@@ -488,7 +535,7 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
   // state.kill_requested is still respected for backward compatibility.
   if (killRaw || state.kill_requested) {
     if (state.current_position) {
-      await closePosition(address, state, env, "KILLED", cache);
+      await closePosition(address, state, config, env, "KILLED", cache);
     }
     state.active = false;
     state.kill_requested = false;
@@ -538,7 +585,7 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
       if (now - (wh.timestamp || 0) <= 10 * 60 * 1000) { // ignore stale alerts
         if (wh.action === "CLOSE") {
           if (state.current_position) {
-            await closePosition(address, state, env, "WEBHOOK_CLOSE", cache);
+            await closePosition(address, state, config, env, "WEBHOOK_CLOSE", cache);
             console.log(`[exec] ${address.slice(0, 10)} WEBHOOK CLOSE`);
           }
           return;
@@ -793,6 +840,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
     return;
   }
   const qty = snap.qty;
+  const entryNotional = qty * markPrice;
 
   // Graded-exit levels are read BEFORE anything is placed: no H4 ATR → sit this one out, never a
   // fallback to the flat config % (that would trade an exit the scoreboard didn't grade).
@@ -805,13 +853,39 @@ async function enterPosition(address, state, config, signal, env, cache) {
     }
   }
 
-  let orderId = null;
+  // Load the (decrypted) trading key up front for LIVE — needed for both the
+  // portfolio delta-cap read and the order itself. PAPER never touches a key.
+  let keyData = null;
   if (!paper) {
     const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
     if (!keyRaw) { console.error(`[exec] no key for ${address.slice(0, 10)}`); return; }
-    const keyData = JSON.parse(keyRaw);
+    keyData = JSON.parse(keyRaw);
     keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+  }
 
+  // ── Portfolio delta cap (PRO) ── Reject an entry that would push the account's
+  // NET directional exposure past config.maxPortfolioDeltaUsd. LIVE sums the REAL
+  // account's open positions (manual / Bankr / concurrent trades included); PAPER
+  // has no exchange account, so it checks this agent's own book only. Fail-OPEN
+  // only when the live read truly fails (null) — never silently over-leverage a
+  // real account on a transient read error.
+  if (Number(config.maxPortfolioDeltaUsd) > 0) {
+    const positions = paper
+      ? (state.current_position
+          ? [{ signedQty: (state.current_position.direction === "SHORT" ? -1 : 1) * (state.current_position.total_qty ?? state.current_position.qty ?? 0), mark: state.current_position.current_price }]
+          : [])
+      : await fetchAccountPositions(keyData);
+    if (positions) {
+      const dc = portfolioDeltaCheck(positions, entryNotional, signal.direction, config.maxPortfolioDeltaUsd);
+      if (dc.blocked) {
+        console.log(`[exec] ${address.slice(0, 10)} delta cap: projected $${dc.projectedDelta.toFixed(0)} > cap $${dc.cap} (existing $${dc.existingDelta.toFixed(0)}) — ${signal.direction} ${symbol} entry blocked`);
+        return;
+      }
+    }
+  }
+
+  let orderId = null;
+  if (!paper) {
     // Set leverage
     await orderlyRequest(keyData, "POST", "/v1/client/leverage", {
       symbol, leverage: effLeverage,
@@ -948,6 +1022,10 @@ async function enterPosition(address, state, config, signal, env, cache) {
   await notifyTelegram(address, env,
     `${paper ? "📝 <b>[PAPER]</b> " : "🟢 "}<b>OPEN ${signal.direction} ${tkEnter}</b> @ $${markPrice}\n` +
     `TP ${effTp}% · SL ${effSl}% · ${effLeverage}x${directive ? " · directive" : ` · ${config.signalMode || "CONFLUENCE"}`}`);
+
+  await fireCallback(address, config, env, "ENTRY", {
+    symbol, direction: signal.direction, qty, price: markPrice, leverage: effLeverage, paper,
+  });
 }
 
 // The graded exit's stop/target from the coin's H4 ATR-14 — built from the last 80h of 1h candles by
@@ -1058,7 +1136,7 @@ async function monitorPosition(address, state, config, env, cache) {
   if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
     if (Date.now() - pos.opened_at >= config.maxHoldHours * 60 * 60 * 1000) {
       console.log(`[exec] ${address.slice(0, 10)} no price + past max hold — force TIMEOUT close`);
-      await closePosition(address, state, env, "TIMEOUT", cache);
+      await closePosition(address, state, config, env, "TIMEOUT", cache);
     }
     return;
   }
@@ -1082,21 +1160,21 @@ async function monitorPosition(address, state, config, env, cache) {
     // new safety order or TP so a recovered position can't round-trip to a loss.
     pos.be_armed = breakevenArmed(pos, dcaPnl, config.breakevenTriggerPct);
     if (pos.be_armed && dcaPnl <= (Number(config.breakevenBufferPct) || 0)) {
-      await closePosition(address, state, env, "BE", cache, currentPrice); return;
+      await closePosition(address, state, config, env, "BE", cache, currentPrice); return;
     }
 
     if (dcaPnl >= (pos.dca.takeProfitPct || config.tpPercent)) {
-      await closePosition(address, state, env, "TP", cache, currentPrice); return;
+      await closePosition(address, state, config, env, "TP", cache, currentPrice); return;
     }
     if (holdMs >= config.maxHoldHours * 60 * 60 * 1000) {
-      await closePosition(address, state, env, "TIMEOUT", cache, currentPrice); return;
+      await closePosition(address, state, config, env, "TIMEOUT", cache, currentPrice); return;
     }
     const so = nextSafetyOrder(pos, currentPrice, config.capitalPerTrade, pos.dca);
     if (so.shouldAdd) { await addSafetyOrder(address, state, config, env, so, currentPrice); return; }
     pos.next_safety_price = so.trigger ?? pos.next_safety_price;
     // Final stop — only after the whole ladder is spent (averaging is done).
     if ((pos.filled_safety_orders || 0) >= maxSO && pos.slPercent && dcaPnl <= -pos.slPercent) {
-      await closePosition(address, state, env, "SL", cache, currentPrice); return;
+      await closePosition(address, state, config, env, "SL", cache, currentPrice); return;
     }
     await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
     console.log(`[exec] ${address.slice(0, 10)} ${pos.paper ? "PAPER " : ""}DCA HOLD ${pos.direction} ${pos.symbol.replace("PERP_", "").replace("_USDC", "")} avgPnl=${dcaPnl.toFixed(3)}% SOs=${pos.filled_safety_orders || 0}/${maxSO}`);
@@ -1129,7 +1207,7 @@ async function monitorPosition(address, state, config, env, cache) {
   });
 
   if (action && action.type === "FULL_CLOSE") {
-    await closePosition(address, state, env, action.reason, cache, currentPrice);
+    await closePosition(address, state, config, env, action.reason, cache, currentPrice);
     return;
   }
   if (action && action.type === "PARTIAL_TP") {
@@ -1219,6 +1297,9 @@ async function addSafetyOrder(address, state, config, env, so, price) {
   pos.filled_safety_orders = (pos.filled_safety_orders || 0) + 1;
   await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
   console.log(`[exec] ${address.slice(0, 10)} ${paper ? "PAPER " : ""}DCA SO${so.level} +${addQty} @ ${price} → avg ${pos.avg_entry.toFixed(4)} qty ${pos.total_qty}`);
+  await fireCallback(address, config, env, "DCA_ADD", {
+    symbol: pos.symbol, direction: pos.direction, qty: addQty, price, leverage: config.leverage, paper,
+  });
 }
 
 // Scale OUT a fraction of an open position at a take-profit level (multi-TP). Sends
@@ -1246,7 +1327,7 @@ async function partialClose(address, state, config, env, action, cache) {
   const leftoverDust = afterRemain > 0 && (afterRemain < (pos.base_min || tick) ||
     (pos.min_notional && afterRemain * price < pos.min_notional));
   if (tooSmallSlice || leftoverDust || afterRemain <= 0) {
-    await closePosition(address, state, env, "TP", cache, price);
+    await closePosition(address, state, config, env, "TP", cache, price);
     return;
   }
 
@@ -1306,6 +1387,9 @@ async function partialClose(address, state, config, env, action, cache) {
 
   await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
   console.log(`[exec] ${address.slice(0, 10)} ${paper ? "PAPER " : ""}PARTIAL TP L${action.level} ${action.sizePct}% slice=${slice} pnl=$${pnlUsdc.toFixed(4)} remaining=${afterRemain}`);
+  await fireCallback(address, config, env, "PARTIAL_TP", {
+    symbol: pos.symbol, direction: pos.direction, qty: slice, price, leverage: pos.leverage, reason: "TP_PARTIAL", pnl: pnlUsdc, pnlPercent: pnlPct, paper,
+  });
 }
 
 // Append this paper close to the wallet's hash-chained paper ledger (app/lib/paperLedger.mjs).
@@ -1324,7 +1408,7 @@ async function appendPaperLog(address, state, env, row) {
   }
 }
 
-async function closePosition(address, state, env, reason, cache, decisionPrice = null) {
+async function closePosition(address, state, config, env, reason, cache, decisionPrice = null) {
   const pos = state.current_position;
   if (!pos) return;
   const paper = !!pos.paper;
@@ -1492,4 +1576,9 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
   await notifyTelegram(address, env,
     `${paper ? "📝 <b>[PAPER]</b> " : (pnlUsdc >= 0 ? "✅ " : "🔴 ")}<b>CLOSE ${pos.direction} ${tkClose}</b> · ${reason}\n` +
     `P&L ${sign}$${pnlUsdc.toFixed(2)} (${sign}${pnlPct.toFixed(2)}%)`);
+
+  await fireCallback(address, config, env, "CLOSE", {
+    symbol: pos.symbol, direction: pos.direction, qty: closeQty, price: exitPrice,
+    leverage: pos.leverage, reason, pnl: pnlUsdc, pnlPercent: pnlPct, paper,
+  });
 }

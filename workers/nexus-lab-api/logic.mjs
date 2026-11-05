@@ -2566,3 +2566,31 @@ export function attachCatalystTheses(board, markByCoin, gateByCoin = {}, opts = 
   }));
   return { ...board, catalysts, gradeableCount: catalysts.reduce((n, c) => n + c.impacts.filter((i) => i.thesis).length, 0) };
 }
+
+// ── Operator config validation (PRO) ─────────────────────────────────────────
+// Portfolio delta caps + execution push callbacks are PRO agent features (same
+// 100M-$NEXUS / ARCHITECT gate as momentum, mean-reversion and DCA). This validates
+// their shape so a bad value is a clean 400 (not a silent misconfig), AND reports
+// whether the config actually USES a PRO feature, so the route runs the PRO gate
+// once. A callbackUrl must be https and carry a ≥16-char webhookSecret (used to
+// HMAC-sign every callback). maxPortfolioDeltaUsd must be a positive USD number
+// (0 / omitted = off). Pure + deterministic (URL parsing only).
+export function validateOperatorConfig(config) {
+  const out = { ok: true, usesPro: false };
+  const cap = config?.maxPortfolioDeltaUsd;
+  if (cap != null && cap !== "" && Number(cap) !== 0) {
+    const n = Number(cap);
+    if (!Number.isFinite(n) || n < 0) return { ok: false, error: "bad_maxPortfolioDeltaUsd", hint: "maxPortfolioDeltaUsd must be a positive USD number (or 0/omitted to disable)." };
+    if (n > 0) out.usesPro = true;
+  }
+  const url = config?.callbackUrl;
+  if (url != null && url !== "") {
+    let u;
+    try { u = new URL(String(url)); } catch { return { ok: false, error: "bad_callbackUrl", hint: "callbackUrl must be a valid https:// URL." }; }
+    if (u.protocol !== "https:") return { ok: false, error: "bad_callbackUrl", hint: "callbackUrl must use https://." };
+    const secret = config?.webhookSecret;
+    if (!secret || String(secret).length < 16) return { ok: false, error: "bad_webhookSecret", hint: "A callbackUrl requires a webhookSecret of at least 16 characters — it HMAC-signs every callback." };
+    out.usesPro = true;
+  }
+  return out;
+}

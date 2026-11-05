@@ -54,6 +54,16 @@ for users who don't want to fade a strong trend. Set via config, e.g.
 `leverage`, `capitalPerTrade` (margin per trade), `tpPercent`, `slPercent`,
 `maxHoldHours`, `maxTradesPerDay`, `maxDailyLossUsdc`.
 
+**Operator (PRO · 100M $NEXUS, same gate as momentum / mean-reversion / DCA):**
+`maxPortfolioDeltaUsd` — a unified directional risk cap across EVERY open position on the
+account (USD of net signed notional; `0`/unset = off). An entry that would push net
+directional exposure past it is rejected; a trade that reduces exposure always passes.
+`callbackUrl` (https) + `webhookSecret` (≥16 chars) — the executor POSTs an
+HMAC-SHA256-signed JSON body (`X-Nexus-Signature: sha256=<hex>`, `X-Nexus-Event: <event>`)
+on `ENTRY` / `DCA_ADD` / `PARTIAL_TP` / `CLOSE` (CLOSE carries `reason` + `pnl`), within-tick
+with one retry, so you never poll for fills — verify the signature before trusting a payload.
+Both set via `PUT /agent/:wallet/config`.
+
 **Example prompts → config:**
 - "run my agent in mean-reversion mode on ETH, $40/trade at 3x" →
   `{signalMode:"MEAN_REVERSION", symbols:["PERP_ETH_USDC"], capitalPerTrade:40, leverage:3}` *(PRO)*

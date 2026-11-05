@@ -21,7 +21,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
@@ -5279,6 +5279,13 @@ document.getElementById("btn").addEventListener("click",go);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
         { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        // Operator features (portfolio delta cap + execution push callbacks): validate
+        // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
+        const opv = validateOperatorConfig(config);
+        if (!opv.ok) return json({ error: opv.error, hint: opv.hint }, request, 400);
+        if (opv.usesPro && !(await walletIsPro(address, env))) {
+          return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
+        }
         const prevLeadersAct = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         // Keep the public copiers count in sync (activate can also change autocopy).
@@ -5314,6 +5321,13 @@ document.getElementById("btn").addEventListener("click",go);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
         { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        // Operator features (portfolio delta cap + execution push callbacks): validate
+        // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
+        const opv = validateOperatorConfig(config);
+        if (!opv.ok) return json({ error: opv.error, hint: opv.hint }, request, 400);
+        if (opv.usesPro && !(await walletIsPro(address, env))) {
+          return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
+        }
         const prevLeaders = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         // Keep the public copiers count in sync with autocopy follow/unfollow.
@@ -5504,6 +5518,13 @@ document.getElementById("btn").addEventListener("click",go);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
         { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        // Operator features (portfolio delta cap + execution push callbacks): validate
+        // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
+        const opv = validateOperatorConfig(config);
+        if (!opv.ok) return json({ error: opv.error, hint: opv.hint }, request, 400);
+        if (opv.usesPro && !(await walletIsPro(address, env))) {
+          return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
+        }
 
         // Live modes need the delegated key. Derive it from the wallet signature
         // (auth) + the registered accountId.
