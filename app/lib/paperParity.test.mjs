@@ -292,3 +292,41 @@ test("before the fix, only a re-entry is explained: the other side or no event i
   assert.equal(none.verdict, "DRIFT");
   assert.equal(none.counts.explainedTrades, 0);
 });
+
+// ── Window start (2026-11-05): a fresh wallet is judged from when its record began ──
+test("window start: a fresh wallet with no trades starts at its activation, not 24h back", async () => {
+  const { parityWindowStart } = await import("./paperParity.mjs");
+  const now = Date.parse("2026-11-05T06:00:00Z"), started = now - 2 * 3600000;
+  assert.deepEqual(parityWindowStart({ started_at: started, paper_trades: [] }, now), [started, "started"]);
+  assert.deepEqual(parityWindowStart({}, now), [now - 86400000, "last_24h"], "no stamp, no trades = the old 24h fallback");
+  assert.deepEqual(parityWindowStart(null, now), [now - 86400000, "last_24h"]);
+});
+
+test("window start: the later of start and reset wins; a future or bad stamp is ignored", async () => {
+  const { parityWindowStart } = await import("./paperParity.mjs");
+  const now = Date.parse("2026-11-05T06:00:00Z");
+  assert.deepEqual(parityWindowStart({ started_at: now - 9e6, paper_reset_at: now - 3e6 }, now), [now - 3e6, "paper_reset"]);
+  assert.deepEqual(parityWindowStart({ started_at: now - 3e6, paper_reset_at: now - 9e6 }, now), [now - 3e6, "started"]);
+  assert.deepEqual(parityWindowStart({ started_at: now + 1e6, paper_reset_at: "x" }, now), [now - 86400000, "last_24h"]);
+});
+
+test("window start: older wallets keep their behaviour; a full ledger starts at its oldest retained row", async () => {
+  const { parityWindowStart, PAPER_LEDGER_ROWS } = await import("./paperParity.mjs");
+  const now = Date.parse("2026-11-05T06:00:00Z");
+  const rows = (n) => Array.from({ length: n }, (_, i) => ({ opened_at: new Date(now - (i + 1) * 3600000).toISOString() }));
+  const few = rows(3), full = rows(PAPER_LEDGER_ROWS);
+  const oldestFew = now - 3 * 3600000, oldestFull = now - PAPER_LEDGER_ROWS * 3600000;
+  assert.deepEqual(parityWindowStart({ paper_trades: few }, now), [oldestFew, "oldest_retained_entry"], "no stamp: the oldest entry, as before");
+  assert.deepEqual(parityWindowStart({ paper_reset_at: now - 9e8, paper_trades: few }, now), [now - 9e8, "paper_reset"], "a ledger that isn't full still holds every entry since the reset");
+  assert.deepEqual(parityWindowStart({ paper_reset_at: now - 9e8, paper_trades: full }, now), [oldestFull, "oldest_retained_entry"], "a full ledger lost what came before its oldest row");
+});
+
+test("every route that creates an agent's state stamps started_at", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const f of ["../../workers/nexus-lab-api/index.js", "../../workers/nexus-lab-api/routes-arena.mjs"]) {
+    const src = readFileSync(new URL(f, import.meta.url), "utf8");
+    const fresh = src.match(/\{ active: true, daily_pnl: 0, trades_today: 0,[^}]*\}/g) || [];
+    assert.ok(fresh.length > 0, `${f} creates agent state`);
+    for (const lit of fresh) assert.match(lit, /started_at:/, `${f}: ${lit}`);
+  }
+});

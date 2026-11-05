@@ -28,6 +28,29 @@ export const PARITY_COOLDOWN_MS = 15 * 60000;
 export const ONE_ENTRY_PER_READ_LIVE_MS = Date.parse("2026-10-30T17:14:41Z");
 const DAY_MS = 86400000;
 
+// exec keeps the last 50 paper rows (it pops past 50); a full ledger has lost its older entries.
+export const PAPER_LEDGER_ROWS = 50;
+
+// Where a parity window starts when the caller gives no ?since. The record starts at the LATER of
+// the wallet's start (`started_at`, stamped when activation creates its state, 2026-11-05) and its
+// last paper reset: events from before the record began are not the agent's to have taken (a fresh
+// wallet judged on the last 24h read DRIFT on 7 events from before it existed). Once the retained
+// ledger is full, entries before its oldest row can't be checked, so the window starts there.
+// No stamp at all (wallets older than the stamp) = the oldest retained entry, else the last 24h.
+export function parityWindowStart(state = {}, now = Date.now()) {
+  const trades = (state && state.paper_trades) || [];
+  const oldest = trades.reduce((m, t) => { const o = Date.parse(t?.opened_at); return Number.isFinite(o) ? Math.min(m, o) : m; }, Infinity);
+  const stamps = [[Number(state?.paper_reset_at), "paper_reset"], [Number(state?.started_at), "started"]]
+    .filter(([t]) => Number.isFinite(t) && t > 0 && t <= now);
+  if (stamps.length) {
+    const [t, source] = stamps.reduce((a, b) => (b[0] > a[0] ? b : a));
+    if (trades.length >= PAPER_LEDGER_ROWS && Number.isFinite(oldest) && oldest > t) return [oldest, "oldest_retained_entry"];
+    return [t, source];
+  }
+  if (Number.isFinite(oldest)) return [oldest, "oldest_retained_entry"];
+  return [now - DAY_MS, "last_24h"];
+}
+
 // Which scoreboard axis a config trades — the exact rule, or null when it trades none.
 export function axisForConfig(config) {
   if (!config || config.invertSignal) return null; // an inverted read trades the mirror image of every axis
