@@ -397,6 +397,16 @@ product is what sits on top:
 ## Engagement surfaces
 - `/agents/live` (uPnL from public marks; humans opt in via signed `POST /live/publish`, ~6-min TTL), Desks (score =
   members' graded calls via `computeCallerStats`), `LiveAlerts`, watch-only banner. Sparse at cold start by design.
+- **Lab pulse** (`GET /calls/pulse`, `routes-pulse.mjs`, rule `app/lib/callPulse.mjs`, 5-min KV cache, CORS `*`):
+  open calls (entry traded) + graded in 7 days + the last grade + the /proof headline read from the scoreboard's
+  own cache (`axisbtCacheKey`). Public human calls only (no copies, no house). Feeds the Trade/Spot strip
+  (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
+  newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
+- **Folds (2026-11-05):** Lab home's Briefing (`nexus_briefing_collapsed`, folded unless the viewer chose "0") and Board
+  (`nx_board_open`) start folded. Spot's Cross-chain card is folded (`nx_xc_open`) but opens itself for a bridge prompt
+  (`xcPreset`) or a transfer still moving (`hasTransferInFlight`: tracking only runs while the card is mounted).
+  Header "Total value" reads "Orderly balance" (`common.totalValue` in `public/locales/extend/en.json`; also the SDK's
+  trade/portfolio asset panels, same number).
 
 ## Phone alerts + Android
 - **Android** = the live site in a Trusted Web Activity, `com.nexustradinglabs.nexus`, live on Google Play. Runbook

@@ -53,6 +53,12 @@ function loadTrack(): Track | null {
     return Date.now() - t.startedAt < TRACK_TTL_MS ? t : null;
   } catch { return null; }
 }
+/** A transfer is still moving (saved, under a day old, not finished, not timed out). Spot opens the
+ *  folded card for it, so tracking resumes instead of hiding behind a closed row. */
+export function hasTransferInFlight(): boolean {
+  const t = loadTrack();
+  return !!t && !TERMINAL.has(t.status) && !t.timedOut;
+}
 function saveTrack(t: Track | null) {
   try { if (t) localStorage.setItem(TRACK_KEY, JSON.stringify(t)); else localStorage.removeItem(TRACK_KEY); } catch { /* storage off: tracking just won't resume */ }
 }
@@ -198,7 +204,7 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
   const toName = CHAIN_NAME[dest.chain as keyof typeof CHAIN_NAME];
 
   return (
-    <section aria-labelledby="xc-title" style={{ marginTop: 28, marginBottom: 88, maxWidth: 640, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
+    <section aria-labelledby="xc-title" style={{ marginTop: 8, maxWidth: 640, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
         <h2 id="xc-title" style={{ margin: 0, fontFamily: UI, fontSize: 16, color: BRIGHT, fontWeight: 600 }}>Cross-chain</h2>
         <span style={{ fontFamily: UI, fontSize: 13, color: MUT }}>via NEAR Intents · one transfer · no approval</span>

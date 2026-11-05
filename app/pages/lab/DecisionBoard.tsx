@@ -215,8 +215,9 @@ function personalRead(play: Row["play"], edge: Edge): { tone: "pos" | "caution";
 
 type SortMode = "actionable" | "confluence" | "funding" | "movers" | "mine";
 
-export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }: {
+export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, hideHeader = false }: {
   onSelectTab?: (tab: TabId) => void;
+  hideHeader?: boolean;      // inside a fold row (Lab home): the row carries the title; the live status stays
   trades?: Trade[];          // the user's closed trades. Powers the personal edge lens
   wallet?: string | null;
   theses?: { symbol?: string; direction?: string; gradedOutcome?: string; status?: string }[]; // your active calls (PLAN leg)
@@ -516,11 +517,12 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions }
 
   return (
     <div style={{ marginBottom: 28 }}>
-      <SectionHeader
-        eyebrow="THE BOARD"
-        title="Every market, one read"
-        note={<span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : signalsFails >= SIGNALS_MAX_QUICK_TRIES ? "unavailable" : signalsFailed ? "retrying…" : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""}</span>}
-      />
+      {(() => {
+        const note = <span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : signalsFails >= SIGNALS_MAX_QUICK_TRIES ? "unavailable" : signalsFailed ? "retrying…" : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""}</span>;
+        return hideHeader
+          ? <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted, marginBottom: 14 }}>{note}</div>
+          : <SectionHeader eyebrow="THE BOARD" title="Every market, one read" note={note} />;
+      })()}
 
       {/* The rule in one sentence (phone and desktop alike), then a key for the marks the rows
           use, only for the marks this user will actually see. Without the rule the board reads
