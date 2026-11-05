@@ -56,6 +56,7 @@ import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, AXES, priceByHou
 import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { handleFlashSettlement } from "./routes-flashcheck.mjs";
+import { handleXcSettlement } from "./routes-xcsettle.mjs";
 import { handleSpotBest } from "./routes-spotbest.mjs";
 import { jupFeeConfig, validFeeAccounts, jupQuoteParams, jupBuildParams, withJupSwapFee } from "./jupFee.mjs";
 import { parseFillReport, bookFill, logFlashOrder, settleFlashOrders, EVM_RPCS } from "./spotLedger.mjs";
@@ -5714,6 +5715,11 @@ document.getElementById("btn").addEventListener("click",go);
     // verbatim to the one fixed upstream (oneClickUpstream, keyProxy.mjs). No key ⇒ 503
     // xc_not_configured and the browser quotes 1Click directly, as before (fetchOneClickQuote).
     // The browser checks 1Click's signature on the reply, so this hop adds no trust.
+    // Read-only: did a 1Click swap really settle? Proven from the destination chain (routes-xcsettle.mjs).
+    {
+      const res = await handleXcSettlement(parts, request, env);
+      if (res) return res;
+    }
     if (parts[0] === "xc") {
       const up = oneClickUpstream(request.method, parts);
       if (!up) return json({ error: "xc_route_not_allowed" }, request, 404);
