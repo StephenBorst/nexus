@@ -374,3 +374,16 @@ export function settlementReceipt(track, check, { at = new Date().toISOString(),
   L.push("Explorer: https://explorer.near-intents.org");
   return L.join("\n");
 }
+
+// ── Fund the trading account: the hand-off to Orderly's deposit ────────────────────────
+// Offer "Deposit to your trading account" only once a USDC delivery is PROVEN on-chain (DELIVERED)
+// to the wallet the trading account belongs to, on a chain Orderly takes deposits from for that
+// account type: an EVM account takes USDC on Arbitrum / Base / Ethereum, a Solana account USDC on
+// Solana. account = the Orderly account's address (EVM 0x… or Solana base58).
+export const ORDERLY_DEPOSIT_CHAINS = { evm: new Set(["arb", "base", "eth"]), sol: new Set(["sol"]) };
+export function depositHandoff(check, account) {
+  if (!check || check.verdict !== "DELIVERED" || check.asset !== "USDC" || !account || !check.to) return false;
+  const kind = /^0x[0-9a-fA-F]{40}$/.test(account) ? "evm" : /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(account) ? "sol" : null;
+  if (!kind || !ORDERLY_DEPOSIT_CHAINS[kind].has(check.chain)) return false;
+  return sameAddress(check.to, account);
+}
