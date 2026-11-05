@@ -306,3 +306,120 @@ test("settlementLine: refunds check the refund address; in-flight words get no l
   assert.equal(settlementLine("REFUNDED", { verdict: "REFUNDED", chain: "arb", to: SOLVER }, { refundTo: USER }).tone, "neg");
   for (const s of ["PENDING_DEPOSIT", "PROCESSING", "FAILED"]) assert.equal(settlementLine(s, null, {}), null);
 });
+
+// ── Native coin inside a contract call: trace, then balance; finality tags ─────────────
+import { tracedCredit, FINALITY_TAGS } from "./nearSettlement.mjs";
+
+// A fuller fake EVM node for the native paths. tags = { safe, finalized } block numbers (absent = unknown tag).
+function evmNative({ tx, trace, blockTxs = [], balances = {}, tags = { safe: 1000, finalized: 1000 }, failBalance = false }) {
+  const calls = [];
+  const call = async (method, params) => {
+    calls.push(method);
+    if (method === "eth_getTransactionReceipt") return { blockNumber: hex(tx.block), blockHash: "0xbb" + tx.block, status: "0x1", logs: [] };
+    if (method === "eth_getTransactionByHash") return { to: tx.to, from: tx.from, value: hex(tx.value ?? 0) };
+    if (method === "eth_getBlockByNumber") {
+      const [tag, full] = params;
+      if (tag === "safe" || tag === "finalized") { if (tags[tag] == null) throw new Error("unknown block tag"); return { number: hex(tags[tag]) }; }
+      if (full) return { number: tag, transactions: [{ hash: tx.hash, from: tx.from, to: tx.to }, ...blockTxs] };
+      return { number: tag, hash: "0xbb" + tx.block, timestamp: hex(tx.time) };
+    }
+    if (method === "debug_traceTransaction") { if (!trace) throw new Error("method not found"); return trace; }
+    if (method === "eth_getBalance") { if (failBalance) throw new Error("missing trie node"); return hex(balances[params[1]] ?? 0); }
+    throw new Error(`unexpected ${method}`);
+  };
+  return { call, calls };
+}
+const NATIVE_MIN = BigInt(LIVE.quote.minAmountOut);
+const CONTRACT = "0x3333333333333333333333333333333333333333";
+const NTX = { hash: h(7), block: 900, time: secs(LIVE.timestamp, 60), to: CONTRACT, from: SOLVER, value: 0 };
+const runNative = (node, memo) => checkSettlement(LIVE, status(LIVE, "SUCCESS", { dest: [h(7)] }), { callers: { evm: { base: node.call } }, depositAddress: LIVE.quote.depositAddress, memo });
+
+test("tracedCredit: CALL / SELFDESTRUCT value to the recipient counts; DELEGATECALL, STATICCALL and reverted subtrees don't", () => {
+  const tree = { type: "CALL", from: SOLVER, to: CONTRACT, value: "0x0", calls: [
+    { type: "CALL", to: USER, value: hex(100) },
+    { type: "DELEGATECALL", to: USER, value: hex(1000) },
+    { type: "STATICCALL", to: USER },
+    { type: "CALL", to: CONTRACT, value: "0x0", error: "execution reverted", calls: [{ type: "CALL", to: USER, value: hex(5000) }] },
+    { type: "CALL", to: CONTRACT, value: "0x0", calls: [{ type: "SELFDESTRUCT", to: USER.toLowerCase(), value: hex(7) }] },
+    { type: "CALL", to: SOLVER, value: hex(99999) },
+  ] };
+  assert.equal(tracedCredit(tree, USER), 107n);
+  assert.equal(tracedCredit({ type: "CALL", to: USER, value: hex(9), error: "out of gas" }, USER), 0n);
+});
+
+test("native ETH via a contract call, node can trace → DELIVERED (method trace), and the proof is memoised by block hash", async () => {
+  const trace = { type: "CALL", from: SOLVER, to: CONTRACT, value: "0x0", calls: [{ type: "CALL", to: USER, value: hex(NATIVE_MIN) }] };
+  const store = new Map();
+  const memo = { get: async (k) => store.get(k) ?? null, set: async (k, v) => { store.set(k, v); } };
+  const r = await runNative(evmNative({ tx: NTX, trace }), memo);
+  assert.equal(r.verdict, "DELIVERED", r.reason);
+  assert.equal(r.txs[0].method, "trace");
+  assert.equal(store.size, 1);
+  assert.match([...store.keys()][0], /^base:0x0+7:0x06cd.*:0xbb900$/);
+  // Later the node can't trace any more (or the state is gone): the memo carries the proof.
+  const again = evmNative({ tx: NTX, trace: null, failBalance: true });
+  const r2 = await runNative(again, memo);
+  assert.equal(r2.verdict, "DELIVERED");
+  assert.ok(!again.calls.includes("eth_getBalance"));
+});
+
+test("native ETH, no tracer → balance before/after the block, only when nothing else in the block touches the address", async () => {
+  const pre = hex(899), post = hex(900);
+  const ok = evmNative({ tx: NTX, balances: { [pre]: 5n, [post]: 5n + NATIVE_MIN } });
+  const r = await runNative(ok);
+  assert.equal(r.verdict, "DELIVERED", r.reason);
+  assert.equal(r.txs[0].method, "balance");
+  // Another tx in the same block pays the address: the rise can't be pinned on ours → UNPROVEN.
+  const busy = evmNative({ tx: NTX, balances: { [pre]: 5n, [post]: 5n + NATIVE_MIN }, blockTxs: [{ hash: h(8), from: SOLVER, to: USER }] });
+  assert.equal((await runNative(busy)).verdict, "UNPROVEN");
+  // ...or the address itself sends something in that block.
+  const spends = evmNative({ tx: NTX, balances: { [pre]: 5n, [post]: 5n + NATIVE_MIN }, blockTxs: [{ hash: h(9), from: USER, to: SOLVER }] });
+  assert.equal((await runNative(spends)).verdict, "UNPROVEN");
+  // State already pruned: can't tell → UNPROVEN, never DELIVERED.
+  assert.equal((await runNative(evmNative({ tx: NTX, failBalance: true }))).verdict, "UNPROVEN");
+  // A balance that went DOWN credits nothing.
+  const down = evmNative({ tx: NTX, balances: { [pre]: NATIVE_MIN * 2n, [post]: NATIVE_MIN } });
+  assert.equal((await runNative(down)).verdict, "SHORT");
+});
+
+test("finality: L2s use 'safe' (minutes), falling back to 'finalized' on a node that lacks it; Ethereum uses 'finalized'", async () => {
+  assert.deepEqual(FINALITY_TAGS.base, ["safe", "finalized"]);
+  assert.deepEqual(FINALITY_TAGS.arb, ["safe", "finalized"]);
+  assert.deepEqual(FINALITY_TAGS.eth, ["finalized"]);
+  const direct = { ...NTX, to: USER, value: NATIVE_MIN };
+  assert.equal((await runNative(evmNative({ tx: direct, tags: { safe: 900, finalized: 10 } }))).verdict, "DELIVERED", "safe covers the block");
+  assert.equal((await runNative(evmNative({ tx: direct, tags: { finalized: 900 } }))).verdict, "DELIVERED", "no 'safe' tag → finalized");
+  assert.equal((await runNative(evmNative({ tx: direct, tags: { safe: 899, finalized: 10 } }))).verdict, "CONFIRMING");
+  assert.equal((await runNative(evmNative({ tx: direct, tags: {} }))).verdict, "CONFIRMING", "no tag known = not final, never final by default");
+});
+
+// ── Receipt ───────────────────────────────────────────────────────────────────────────
+import { settlementReceipt, receiptWanted } from "./nearSettlement.mjs";
+
+test("settlementReceipt: every number a support ticket needs, in human units, and nothing private", () => {
+  const track = { status: "SUCCESS", hash: h(1), chainName: "Arbitrum", depositAddress: USDC_BASE.quote.depositAddress, recipient: USER, refundTo: USER };
+  const check = { verdict: "SHORT", reason: "on-chain credit is below the signed floor", kind: "delivery", chain: "base", asset: "USDC", decimals: 6, to: USER, bar: "19793822", credited: "19000000",
+    txs: [{ hash: h(2), ok: true, credited: "19000000", final: true }, { hash: h(3), ok: false, reason: "tx not found" }] };
+  const r = settlementReceipt(track, check, { at: "2026-11-05T07:00:00.000Z" });
+  for (const want of [
+    "Deposit address: " + USDC_BASE.quote.depositAddress, "Your transfer: Arbitrum " + h(1), "1Click status: SUCCESS",
+    "On-chain check: SHORT · on-chain credit is below the signed floor", "Signed minimum: 19.793822 USDC on Base to " + USER,
+    "Credited on-chain (final): 19 USDC", `  tx ${h(2)}  +19`, `  tx ${h(3)}  unread: tx not found`, "Checked at: 2026-11-05T07:00:00.000Z",
+    `/xc/settlement?depositAddress=${USDC_BASE.quote.depositAddress}`,
+  ]) assert.ok(r.includes(want), want);
+  assert.ok(!/signature|walletSig|labAuth|private/i.test(r));
+  assert.match(settlementReceipt({ ...track, status: "REFUNDED" }, { ...check, verdict: "REFUND_SHORT", kind: "refund", chain: "arb" }), /Owed back: 19.793822 USDC on Arbitrum/);
+  assert.match(settlementReceipt({ ...track, status: "FAILED" }, null), /On-chain check: none yet/);
+});
+
+test("receiptWanted: offered when something needs attention, not while a check is still settling or on success", () => {
+  const t = { status: "SUCCESS" };
+  assert.equal(receiptWanted(t, { verdict: "DELIVERED", final: true }), false);
+  assert.equal(receiptWanted(t, { verdict: "CONFIRMING" }), false);
+  assert.equal(receiptWanted(t, { verdict: "UNREAD" }), false);
+  for (const verdict of ["SHORT", "REFUND_SHORT", "MISMATCH", "MALFORMED", "UNPROVEN"]) assert.equal(receiptWanted(t, { verdict, final: verdict !== "UNPROVEN" ? true : false }), true, verdict);
+  assert.equal(receiptWanted({ status: "FAILED" }, null), true);
+  assert.equal(receiptWanted({ status: "INCOMPLETE_DEPOSIT" }, null), true);
+  assert.equal(receiptWanted({ status: "PROCESSING", timedOut: true }, null), true);
+  assert.equal(receiptWanted({ status: "PROCESSING" }, null), false);
+});

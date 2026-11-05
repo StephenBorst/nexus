@@ -57,6 +57,41 @@ export function restCaller(bases, fetchImpl) {
   };
 }
 
+// Native-coin proofs (trace / balance diff) are expensive and the balance one needs recent state,
+// so a proven credit is kept by tx + block HASH for a week: a later re-check (waiting for finality)
+// reuses it, and a reorged block simply misses. Only what we computed from the chain is stored.
+const MEMO_TTL_S = 7 * 86400;
+export function kvMemo(kv) {
+  if (!kv) return null;
+  return {
+    get: async (k) => { const v = await kv.get(`xc:credit:${k}`); return v ? JSON.parse(v) : null; },
+    set: async (k, v) => kv.put(`xc:credit:${k}`, JSON.stringify(v), { expirationTtl: MEMO_TTL_S }),
+  };
+}
+
+/**
+ * One deposit address → the settlement verdict. Shared by GET /xc/settlement and the spot ledger.
+ * @returns {Promise<object>} the judge's result, or { verdict:"UNREAD"|"UNKNOWN", reason }
+ */
+export async function settleDeposit(depositAddress, env, { fetchImpl = fetch } = {}) {
+  let status;
+  try {
+    const r = await fetchImpl(`${ONE_CLICK_API}/v0/status?depositAddress=${encodeURIComponent(depositAddress)}`);
+    if (r.status === 404) return { verdict: "UNKNOWN", final: false, reason: "1Click doesn't know this deposit address" };
+    if (!r.ok) return { verdict: "UNREAD", final: false, reason: `1Click status HTTP ${r.status}` };
+    status = await r.json();
+  } catch (e) {
+    return { verdict: "UNREAD", final: false, reason: `1Click status unreachable: ${String(e?.message || e).slice(0, 80)}` };
+  }
+  if (!status?.quoteResponse) return { verdict: "UNREAD", final: false, reason: "the status carries no signed quote" };
+  const callers = {
+    evm: Object.fromEntries(Object.entries(XC_RPCS).map(([c, urls]) => [c, rpcCaller(urls, fetchImpl)])),
+    sol: rpcCaller(solUpstreams(env), fetchImpl),
+    btc: restCaller(BTC_APIS, fetchImpl),
+  };
+  return checkSettlement(status.quoteResponse, status, { callers, depositAddress, memo: kvMemo(env?.LAB_STORE) });
+}
+
 export async function handleXcSettlement(parts, request, env, { fetchImpl = fetch, overLimit = limiter } = {}) {
   if (!(parts[0] === "xc" && parts[1] === "settlement")) return null;
   if (request.method !== "GET") return json({ error: "method_not_allowed" }, request, 405);
@@ -65,22 +100,7 @@ export async function handleXcSettlement(parts, request, env, { fetchImpl = fetc
     return json({ error: "bad_request", hint: "GET /xc/settlement?depositAddress=<0x deposit address from the quote>" }, request, 400);
   if (overLimit(request.headers.get("cf-connecting-ip") || "unknown")) return json({ error: "rate_limited", retryAfterSec: 60 }, request, 429);
 
-  let status;
-  try {
-    const r = await fetchImpl(`${ONE_CLICK_API}/v0/status?depositAddress=${encodeURIComponent(depositAddress)}`);
-    if (r.status === 404) return json({ error: "unknown_deposit_address" }, request, 404);
-    if (!r.ok) return json({ verdict: "UNREAD", final: false, reason: `1Click status HTTP ${r.status}` }, request);
-    status = await r.json();
-  } catch (e) {
-    return json({ verdict: "UNREAD", final: false, reason: `1Click status unreachable: ${String(e?.message || e).slice(0, 80)}` }, request);
-  }
-  if (!status?.quoteResponse) return json({ verdict: "UNREAD", final: false, reason: "the status carries no signed quote" }, request);
-
-  const callers = {
-    evm: Object.fromEntries(Object.entries(XC_RPCS).map(([c, urls]) => [c, rpcCaller(urls, fetchImpl)])),
-    sol: rpcCaller(solUpstreams(env), fetchImpl),
-    btc: restCaller(BTC_APIS, fetchImpl),
-  };
-  const result = await checkSettlement(status.quoteResponse, status, { callers, depositAddress });
+  const result = await settleDeposit(depositAddress, env, { fetchImpl });
+  if (result.verdict === "UNKNOWN") return json({ error: "unknown_deposit_address" }, request, 404);
   return json({ depositAddress, ...result }, request);
 }

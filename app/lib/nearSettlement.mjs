@@ -43,24 +43,82 @@ const pad32 = (addr) => "0x" + addr.toLowerCase().replace(/^0x/, "").padStart(64
 const big = (v) => { try { return BigInt(v); } catch { return null; } };
 const errMsg = (e) => String((e && e.message) || e).slice(0, 120);
 
+// ── Finality ───────────────────────────────────────────────────────────────────────────
+// Ethereum: "finalized" (~13 min). Base / Arbitrum: "safe" = the L2 block's data is posted to L1
+// (minutes), not "finalized", which waits for L1 finality too (~15–20 min, longer than anyone
+// watches a card). A node that doesn't know the first tag gets the next; none known = not final.
+export const FINALITY_TAGS = { eth: ["finalized"], arb: ["safe", "finalized"], base: ["safe", "finalized"] };
+async function finalBlock(call, chain) {
+  for (const tag of FINALITY_TAGS[chain] || ["finalized"]) {
+    try {
+      const b = await call("eth_getBlockByNumber", [tag, false]);
+      if (b && b.number) return BigInt(b.number);
+    } catch { /* next tag */ }
+  }
+  return null;
+}
+
+// ── Native coin moved inside a contract call ───────────────────────────────────────────
+// A receipt has no log for native value, so a solver paying ETH from a contract leaves nothing
+// to read there. Two ways to still prove it, both fail-soft (null = couldn't tell):
+// 1. trace: the call tree (debug_traceTransaction, callTracer). Only CALL / SELFDESTRUCT frames
+//    move value (a DELEGATECALL's "value" is the parent's, not a transfer), and nothing under a
+//    reverted frame counts.
+export function tracedCredit(frame, to) {
+  let sum = 0n;
+  const walk = (f) => {
+    if (!f || typeof f !== "object" || f.error) return;
+    const type = String(f.type || "").toUpperCase();
+    if ((type === "CALL" || type === "SELFDESTRUCT") && f.to && sameAddress(f.to, to)) {
+      const v = big(f.value ?? "0x0");
+      if (v != null && v > 0n) sum += v;
+    }
+    for (const c of Array.isArray(f.calls) ? f.calls : []) walk(c);
+  };
+  walk(frame);
+  return sum;
+}
+// 2. balance: the recipient's balance just before and just after the block, ONLY when no other
+//    transaction in that block touches the address (from or to) and the address didn't send this
+//    one. Then the rise is this transaction's doing. Needs recent state (read soon after delivery).
+async function balanceCredit(call, { hash, to, blockNumber, txFrom }) {
+  if (txFrom && sameAddress(txFrom, to)) return null;
+  const blk = await call("eth_getBlockByNumber", ["0x" + blockNumber.toString(16), true]);
+  if (!blk || !Array.isArray(blk.transactions)) return null;
+  for (const t of blk.transactions) {
+    if (!t || typeof t !== "object" || String(t.hash).toLowerCase() === hash.toLowerCase()) continue;
+    if ((t.from && sameAddress(t.from, to)) || (t.to && sameAddress(t.to, to))) return null;
+  }
+  const [pre, post] = await Promise.all([
+    call("eth_getBalance", [to, "0x" + (blockNumber - 1n).toString(16)]),
+    call("eth_getBalance", [to, "0x" + blockNumber.toString(16)]),
+  ]);
+  const a = big(pre), b = big(post);
+  if (a == null || b == null) return null;
+  return b > a ? b - a : 0n;
+}
+
 // ── Readers: one tx → what it credited `to`, in base units ─────────────────────────────
 // `call(method, params)` returns the JSON-RPC result or throws. Every reader returns
 // { ok:true, credited:bigint, final:boolean, timeMs, opaque?, note? } or { ok:false, reason }.
 // `opaque` = the chain may have moved value in a way this read can't see (native coin inside a
 // contract call), so a zero is "unproven", not "short".
 
-export async function readEvmCredit({ call, hash, asset, to }) {
+// memo (optional) = { get(key), set(key, value) } for the expensive native proofs (trace / balance),
+// keyed by the block HASH, so a re-check after finality doesn't need old state and a reorg misses it.
+export async function readEvmCredit({ call, hash, asset, to, memo }) {
   try {
     if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return { ok: false, reason: "not an EVM tx hash" };
     const receipt = await call("eth_getTransactionReceipt", [hash]);
     if (!receipt) return { ok: false, reason: "tx not found" };
-    const [block, fin] = await Promise.all([
+    const blockNumber = BigInt(receipt.blockNumber);
+    const [block, finNum] = await Promise.all([
       call("eth_getBlockByNumber", [receipt.blockNumber, false]),
-      call("eth_getBlockByNumber", ["finalized", false]),
+      finalBlock(call, asset.chain),
     ]);
     if (!block) return { ok: false, reason: "block not found" };
     const timeMs = Number(BigInt(block.timestamp)) * 1000;
-    const final = !!fin && BigInt(fin.number) >= BigInt(receipt.blockNumber);
+    const final = finNum != null && finNum >= blockNumber;
     if (receipt.status !== "0x1") return { ok: true, credited: 0n, final, timeMs, note: "reverted" };
 
     if (asset.kind === "erc20") {
@@ -79,8 +137,26 @@ export async function readEvmCredit({ call, hash, asset, to }) {
     if (asset.kind === "native") {
       const tx = await call("eth_getTransactionByHash", [hash]);
       if (!tx) return { ok: false, reason: "tx not found" };
-      if (tx.to && sameAddress(tx.to, to)) return { ok: true, credited: big(tx.value) ?? 0n, final, timeMs };
-      return { ok: true, credited: 0n, final, timeMs, opaque: true, note: "native value not visible in the receipt" };
+      if (tx.to && sameAddress(tx.to, to)) return { ok: true, credited: big(tx.value) ?? 0n, final, timeMs, method: "direct" };
+      const key = `${asset.chain}:${hash.toLowerCase()}:${to.toLowerCase()}:${String(receipt.blockHash || block.hash || "").toLowerCase()}`;
+      try {
+        const hit = memo ? await memo.get(key) : null;
+        if (hit && typeof hit.credited === "string") return { ok: true, credited: BigInt(hit.credited), final, timeMs, method: hit.method };
+      } catch { /* no memo: read again */ }
+      let credited = null, method = null;
+      try {
+        const trace = await call("debug_traceTransaction", [hash, { tracer: "callTracer" }]);
+        if (trace && typeof trace === "object" && trace.type) { credited = tracedCredit(trace, to); method = "trace"; }
+      } catch { /* node has no tracer */ }
+      if (credited == null) {
+        try {
+          const b = await balanceCredit(call, { hash, to, blockNumber, txFrom: tx.from });
+          if (b != null) { credited = b; method = "balance"; }
+        } catch { /* state gone or block unreadable */ }
+      }
+      if (credited == null) return { ok: true, credited: 0n, final, timeMs, opaque: true, note: "native value not visible in the receipt" };
+      try { if (memo) await memo.set(key, { credited: credited.toString(), method }); } catch { /* best effort */ }
+      return { ok: true, credited, final, timeMs, method };
     }
     return { ok: false, reason: `asset kind ${asset.kind} is not EVM` };
   } catch (e) {
@@ -187,6 +263,7 @@ export function judgeSettlement(plan, reads) {
     if (!r.ok) { unread++; row.reason = r.reason; txs.push(row); continue; }
     row.credited = r.credited.toString(); row.final = r.final;
     if (r.note) row.note = r.note;
+    if (r.method) row.method = r.method;
     if (r.opaque) opaque++;
     if (Number.isFinite(plan.notBefore) && r.timeMs && r.timeMs < plan.notBefore) {
       stale++; row.counted = false; row.note = "older than the quote"; txs.push(row); continue;
@@ -211,14 +288,14 @@ export function judgeSettlement(plan, reads) {
 
 // ── One call: status in, chain reads, verdict out ──────────────────────────────────────
 // callers = { evm: { arb, base, eth }, sol, btc } — each a `call` function for that chain.
-export async function checkSettlement(quoteResponse, status, { callers, depositAddress, deposited } = {}) {
+export async function checkSettlement(quoteResponse, status, { callers, depositAddress, deposited, memo } = {}) {
   const plan = planSettlement(quoteResponse, status, { depositAddress, deposited });
   if (plan.verdict) return judgeSettlement(plan, []);
   const kind = chainKind(plan.asset.chain);
   const call = kind === "evm" ? callers?.evm?.[plan.asset.chain] : callers?.[kind];
   if (typeof call !== "function") return { verdict: "UNREAD", final: false, reason: `no reader for ${plan.asset.chain}` };
   const reads = [];
-  for (const hash of plan.hashes) reads.push({ hash, ...(await READERS[kind]({ call, hash, asset: plan.asset, to: plan.to })) });
+  for (const hash of plan.hashes) reads.push({ hash, ...(await READERS[kind]({ call, hash, asset: plan.asset, to: plan.to, memo })) });
   return judgeSettlement(plan, reads);
 }
 
@@ -245,4 +322,55 @@ export function settlementLine(status, check, { recipient, refundTo } = {}) {
     case "MISMATCH": case "MALFORMED": return { text: `${claim}, but its signed quote doesn't match this transfer. Check the explorer.`, tone: "neg" };
     default: return { text: `${claim} · not confirmed on-chain`, tone: "muted" };
   }
+}
+
+// ── A receipt the user can take to 1Click support ──────────────────────────────────────
+// Plain text, built only from what the card kept (its own transfer) and what the on-chain check
+// returned. No signature, no key, nothing private beyond addresses that are already public on-chain.
+// track = { status, hash, chainName?, depositAddress, recipient?, refundTo?, timedOut? }
+// check = /xc/settlement's reply (or null).
+const fmtUnits = (raw, decimals) => {
+  let v;
+  try { v = BigInt(raw); } catch { return String(raw ?? "—"); }
+  if (!Number.isInteger(decimals) || decimals <= 0) return v.toString();
+  const s = v.toString().padStart(decimals + 1, "0");
+  const frac = s.slice(-decimals).replace(/0+$/, "");
+  return frac ? `${s.slice(0, -decimals)}.${frac}` : s.slice(0, -decimals);
+};
+export const RECEIPT_ATTENTION = new Set(["SHORT", "REFUND_SHORT", "MISMATCH", "MALFORMED", "UNPROVEN", "UNSUPPORTED", "NOT_SETTLED"]);
+export function receiptWanted(track, check) {
+  if (!track) return false;
+  if (track.timedOut || track.status === "FAILED" || track.status === "INCOMPLETE_DEPOSIT") return true;
+  if (check?.verdict && RECHECK.has(check.verdict) && !check.final && check.verdict !== "UNPROVEN") return false;
+  return !!check?.verdict && RECEIPT_ATTENTION.has(check.verdict);
+}
+export function settlementReceipt(track, check, { at = new Date().toISOString(), api = "https://og.nexustradinglabs.com" } = {}) {
+  const dep = track?.depositAddress || "—";
+  const L = [
+    "NEAR Intents 1Click · transfer receipt",
+    `Deposit address: ${dep}`,
+    `Your transfer: ${track?.chainName ? `${track.chainName} ` : ""}${track?.hash || "—"}`,
+    `1Click status: ${track?.status || "—"}${track?.timedOut ? " (still in progress when tracking stopped)" : ""}`,
+  ];
+  if (check?.verdict) {
+    L.push(`On-chain check: ${check.verdict}${check.reason ? ` · ${check.reason}` : ""}`);
+    if (check.bar != null) {
+      const what = check.kind === "refund" ? "Owed back" : "Signed minimum";
+      L.push(`${what}: ${fmtUnits(check.bar, check.decimals)} ${check.asset || ""} on ${CHAIN_LABEL[check.chain] || check.chain || "—"} to ${check.to || "—"}`);
+      L.push(`Credited on-chain (final): ${fmtUnits(check.credited ?? "0", check.decimals)} ${check.asset || ""}`);
+    }
+    for (const t of Array.isArray(check.txs) ? check.txs : []) {
+      const amt = t.ok ? `+${fmtUnits(t.credited ?? "0", check.decimals)}${t.final ? "" : " (not final)"}` : `unread: ${t.reason || "?"}`;
+      L.push(`  tx ${t.hash}  ${amt}${t.method ? ` [${t.method}]` : ""}${t.note ? ` · ${t.note}` : ""}`);
+    }
+  } else {
+    L.push("On-chain check: none yet");
+  }
+  L.push(`Recipient this transfer was quoted for: ${track?.recipient || "—"}`);
+  L.push(`Refund address: ${track?.refundTo || "—"}`);
+  L.push(`Checked at: ${at}`);
+  L.push(`Re-run the check: ${api}/xc/settlement?depositAddress=${dep}`);
+  L.push(`1Click status: https://1click.chaindefuser.com/v0/status?depositAddress=${dep}`);
+  L.push("Explorer: https://explorer.near-intents.org");
+  return L.join("\n");
 }

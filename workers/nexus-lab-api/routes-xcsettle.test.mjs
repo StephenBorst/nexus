@@ -131,3 +131,22 @@ test("the worker routes /xc/settlement BEFORE the key-carrying /xc proxy", () =>
   const b = src.indexOf('if (parts[0] === "xc") {');
   assert.ok(a > 0 && b > 0 && a < b);
 });
+
+import { kvMemo, settleDeposit } from "./routes-xcsettle.mjs";
+
+test("kvMemo: credits are kept under xc:credit:* for a week; no KV → no memo", async () => {
+  const puts = [];
+  const kv = { get: async (k) => (k === "xc:credit:a" ? JSON.stringify({ credited: "5", method: "trace" }) : null), put: async (k, v, o) => puts.push([k, v, o]) };
+  const m = kvMemo(kv);
+  assert.deepEqual(await m.get("a"), { credited: "5", method: "trace" });
+  assert.equal(await m.get("b"), null);
+  await m.set("k", { credited: "7", method: "balance" });
+  assert.deepEqual(puts, [["xc:credit:k", JSON.stringify({ credited: "7", method: "balance" }), { expirationTtl: 7 * 86400 }]]);
+  assert.equal(kvMemo(undefined), null);
+});
+
+test("settleDeposit (shared with the spot ledger): same verdicts as the route; unknown address → UNKNOWN", async () => {
+  assert.equal((await settleDeposit(DEP, {}, { fetchImpl: fakeFetch() })).verdict, "DELIVERED");
+  assert.equal((await settleDeposit(DEP, {}, { fetchImpl: fakeFetch({ statusCode: 404 }) })).verdict, "UNKNOWN");
+  assert.equal((await settleDeposit(DEP, {}, { fetchImpl: fakeFetch({ amount: 1n }) })).verdict, "SHORT");
+});

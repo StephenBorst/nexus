@@ -26,7 +26,7 @@ import {
   checkQuote, buildDepositTx, recipientFitsChain, toUnits, fromUnits,
   xcAppFees, XC_WORKER_API,
 } from "@/lib/nearIntents.mjs";
-import { settlementLine, RECHECK } from "@/lib/nearSettlement.mjs";
+import { settlementLine, settlementReceipt, receiptWanted, RECHECK } from "@/lib/nearSettlement.mjs";
 import { getRuntimeConfig } from "@/utils/runtime-config";
 import { ensureChain, explorerTx, type Eip1193 } from "./swapExec";
 import { useEscapeKey } from "@/utils/a11y";
@@ -45,9 +45,14 @@ type Quote = { quote: Record<string, string | number | undefined>; quoteRequest:
 type Review = { quote: Quote; depositAddress: string; minAmountOut: string; deadlineMs: number; amount: bigint; recipient: string };
 type QuoteCheck = { ok: true; depositAddress: string; minAmountOut: string; deadlineMs: number } | { ok: false; reason: string };
 // check = GET /xc/settlement's reply (the on-chain verdict), null until it answers.
-type Check = { verdict?: string; chain?: string; to?: string; final?: boolean; error?: string; reason?: string };
-type Track = { status: string; hash: string; chainId: number; depositAddress: string; deliveredUrl: string | null; startedAt: number; timedOut?: boolean; recipient?: string; refundTo?: string; check?: Check | null };
+type CheckTx = { hash: string; ok: boolean; credited?: string; final?: boolean; reason?: string; note?: string; method?: string };
+type Check = { verdict?: string; chain?: string; to?: string; final?: boolean; error?: string; reason?: string; kind?: string; asset?: string; decimals?: number; bar?: string; credited?: string; txs?: CheckTx[] };
+type Track = { status: string; hash: string; chainId: number; depositAddress: string; deliveredUrl: string | null; startedAt: number; timedOut?: boolean; recipient?: string; refundTo?: string; fromChain?: string; check?: Check | null };
 const SETTLE_WORDS = new Set(["SUCCESS", "REFUNDED"]);
+// The on-chain check can still change its answer (no answer yet, not final, a read failed).
+const checkOpen = (t: Track) => SETTLE_WORDS.has(t.status) && (!t.check || !t.check.verdict || RECHECK.has(t.check.verdict));
+// 1Click can still move: not terminal, or INCOMPLETE_DEPOSIT (which turns into a refund by the deadline).
+const statusOpen = (t: Track) => (!TERMINAL.has(t.status) || t.status === "INCOMPLETE_DEPOSIT") && !t.timedOut;
 
 // Money in flight must survive a refresh: the transfer being tracked is saved locally and
 // tracking resumes on return (within a day). Per-viewer convenience only; the source of
@@ -61,11 +66,12 @@ function loadTrack(): Track | null {
     return Date.now() - t.startedAt < TRACK_TTL_MS ? t : null;
   } catch { return null; }
 }
-/** A transfer is still moving (saved, under a day old, not finished, not timed out). Spot opens the
- *  folded card for it, so tracking resumes instead of hiding behind a closed row. */
+/** A transfer is still moving (saved, under a day old, not finished, not timed out), or its delivery
+ *  is still being confirmed on-chain. Spot opens the folded card for it, so tracking resumes instead
+ *  of hiding behind a closed row. */
 export function hasTransferInFlight(): boolean {
   const t = loadTrack();
-  return !!t && !TERMINAL.has(t.status) && !t.timedOut;
+  return !!t && (statusOpen(t) || checkOpen(t));
 }
 function saveTrack(t: Track | null) {
   try { if (t) localStorage.setItem(TRACK_KEY, JSON.stringify(t)); else localStorage.removeItem(TRACK_KEY); } catch { /* storage off: tracking just won't resume */ }
@@ -98,6 +104,8 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
   const [err, setErr] = useState<string | null>(null);
   const [review, setReview] = useState<Review | null>(null);
   const [track, setTrack] = useState<Track | null>(null);
+  const [receipt, setReceipt] = useState<"copied" | "shown" | null>(null);
+  const reported = useRef<Set<string>>(new Set());
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
   // Resume a transfer still in flight from an earlier visit (mount only).
@@ -105,8 +113,8 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
     const t = loadTrack();
     if (!t) return;
     setTrack(t);
-    if (!TERMINAL.has(t.status)) poll(t.depositAddress);
-    else if (SETTLE_WORDS.has(t.status) && (!t.check || RECHECK.has(t.check.verdict || ""))) confirmOnChain(t.depositAddress);
+    if (statusOpen(t)) poll(t.depositAddress);
+    else if (checkOpen(t)) confirmOnChain(t.depositAddress);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (track) saveTrack(track); }, [track]);
   useEscapeKey(() => setReview(null), !!review && !busy);
@@ -179,7 +187,8 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
       // Optional speed-up: tell 1Click which tx paid the address. Best effort only.
       fetch(`${ONE_CLICK_API}/v0/deposit/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ depositAddress: review.depositAddress, txHash: hash }) }).catch(() => {});
       if (!alive.current) return;
-      setTrack({ status: "PENDING_DEPOSIT", hash, chainId, depositAddress: review.depositAddress, deliveredUrl: null, startedAt: Date.now(), recipient: review.recipient, refundTo: walletAddress, check: null });
+      setTrack({ status: "PENDING_DEPOSIT", hash, chainId, depositAddress: review.depositAddress, deliveredUrl: null, startedAt: Date.now(), recipient: review.recipient, refundTo: walletAddress, fromChain: XC_ASSETS[from].chain, check: null });
+      setReceipt(null);
       setReview(null);
       poll(review.depositAddress);
     } catch (e) {
@@ -200,19 +209,20 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
         if (!status || !alive.current) continue;
         const url = j?.swapDetails?.destinationChainTxHashes?.[0]?.explorerUrl;
         setTrack((t) => (t ? { ...t, status, deliveredUrl: typeof url === "string" && url.startsWith("https://") ? url : t.deliveredUrl } : t));
-        if (status === "SUCCESS") reportSpotFill("near", depositAddress); // spot ledger, checked against 1Click
         if (SETTLE_WORDS.has(status)) { confirmOnChain(depositAddress); return; }
-        if (TERMINAL.has(status)) return;
+        // INCOMPLETE_DEPOSIT isn't the end: 1Click refunds it by the deadline, so keep following.
+        if (TERMINAL.has(status) && status !== "INCOMPLETE_DEPOSIT") return;
       } catch { /* keep polling */ }
     }
-    if (alive.current) setTrack((t) => (t && !TERMINAL.has(t.status) ? { ...t, timedOut: true } : t));
+    if (alive.current) setTrack((t) => (t && statusOpen(t) ? { ...t, timedOut: true } : t));
   }
 
   // 1Click said SUCCESS / REFUNDED: prove it from the chain. Re-asks while the verdict can still
-  // change (not final yet, a read failed); ~5 min at most. Only the verdict is stored.
+  // change (not final yet, a read failed): every 15 s for 2 min, then every minute, ~30 min in all
+  // (L2 "safe" takes minutes, Ethereum "finalized" ~13). Only the verdict and its numbers are kept.
   async function confirmOnChain(depositAddress: string) {
-    for (let i = 0; i < 20 && alive.current; i++) {
-      if (i > 0) await new Promise((res) => setTimeout(res, 15000));
+    for (let i = 0; i < 36 && alive.current; i++) {
+      if (i > 0) await new Promise((res) => setTimeout(res, i <= 8 ? 15000 : 60000));
       let check: Check;
       try {
         const r = await fetch(`${XC_WORKER_API}/xc/settlement?depositAddress=${encodeURIComponent(depositAddress)}`);
@@ -220,8 +230,17 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
         check = j && typeof j === "object" ? (j as Check) : { error: `HTTP ${r.status}` };
       } catch { check = { error: "unreachable" }; }
       if (!alive.current) return;
-      const keep: Check = { verdict: check.verdict, chain: check.chain, to: check.to, final: check.final, error: check.error, reason: check.reason };
+      const keep: Check = {
+        verdict: check.verdict, chain: check.chain, to: check.to, final: check.final, error: check.error, reason: check.reason,
+        kind: check.kind, asset: check.asset, decimals: check.decimals, bar: check.bar, credited: check.credited,
+        txs: Array.isArray(check.txs) ? check.txs.slice(0, 10).map((x) => ({ hash: x.hash, ok: x.ok, credited: x.credited, final: x.final, reason: x.reason, note: x.note, method: x.method })) : undefined,
+      };
       setTrack((t) => (t && t.depositAddress === depositAddress ? { ...t, check: keep } : t));
+      // Spot ledger: report once the delivery shows on-chain; the worker re-checks it before booking.
+      if ((check.verdict === "DELIVERED" || check.verdict === "CONFIRMING") && !reported.current.has(depositAddress)) {
+        reported.current.add(depositAddress);
+        reportSpotFill("near", depositAddress);
+      }
       if (!check.error && check.verdict && !RECHECK.has(check.verdict)) return;
     }
   }
@@ -296,8 +315,24 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
           </div>
           <div style={{ color: FAINT, fontSize: 10.5, wordBreak: "break-all" }}>Deposit address · {track.depositAddress}</div>
           {track.timedOut && <div style={{ color: FOG, fontSize: 10.5 }}>Still in progress. Search the deposit address on the explorer to follow it.</div>}
+          {receiptWanted(track, track.check ?? null) && (() => {
+            const text = settlementReceipt({ ...track, chainName: track.fromChain ? CHAIN_NAME[track.fromChain as keyof typeof CHAIN_NAME] : undefined }, track.check ?? null);
+            return (
+              <>
+                <div style={{ color: FOG, fontSize: 10.5 }}>Something needs a look. The receipt has every number 1Click support will ask for.</div>
+                <button type="button"
+                  onClick={async () => {
+                    try { await navigator.clipboard.writeText(text); setReceipt("copied"); } catch { setReceipt("shown"); }
+                  }}
+                  style={{ alignSelf: "flex-start", background: "transparent", color: FOG, border: `1px solid ${BORD}`, borderRadius: 15, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                  {receipt === "copied" ? "Receipt copied" : "Copy receipt"}
+                </button>
+                {receipt === "shown" && <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all", color: FOG, fontSize: 10.5, userSelect: "all" }}>{text}</pre>}
+              </>
+            );
+          })()}
           {TERMINAL.has(track.status) && (
-            <button type="button" onClick={() => { setTrack(null); saveTrack(null); }}
+            <button type="button" onClick={() => { setTrack(null); saveTrack(null); setReceipt(null); }}
               style={{ alignSelf: "flex-start", background: "transparent", color: MUT, border: `1px solid ${BORD}`, borderRadius: 15, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>Clear</button>
           )}
         </div>
