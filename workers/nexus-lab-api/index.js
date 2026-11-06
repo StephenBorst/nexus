@@ -5390,8 +5390,11 @@ document.getElementById("btn").addEventListener("click",go);
         const denied = await requireOwner(dbody); if (denied) return denied;
         await AGENT_KV.delete(`agent:key:${address}`);
         const stateRaw = await AGENT_KV.get(`agent:state:${address}`);
+        let leftOpen = null; // a LIVE position the agent stops managing (no stop, no TP from here on)
         if (stateRaw) {
           const state = JSON.parse(stateRaw);
+          const p = state.current_position;
+          if (p && !p.paper) leftOpen = { symbol: p.symbol, direction: p.direction, qty: p.remaining_qty ?? p.qty ?? null };
           state.active = false;
           state.current_position = null;
           await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
@@ -5401,7 +5404,9 @@ document.getElementById("btn").addEventListener("click",go);
           const users = JSON.parse(usersRaw).filter((u) => u !== address);
           await AGENT_KV.put("agent:users", JSON.stringify(users));
         }
-        return json({ ok: true }, request);
+        return json(leftOpen
+          ? { ok: true, leftOpen, warning: `The ${String(leftOpen.symbol).replace(/^PERP_|_USDC$/g, "")} ${leftOpen.direction} is still open on Orderly with no stop. Close it yourself, or use kill next time to close before stopping.` }
+          : { ok: true }, request);
       }
 
       // POST /agent/:address/kill — kill switch

@@ -20,7 +20,7 @@ import { runKill } from "./killSwitch.mjs";
 import { resolveKeyRecord, keyHoldRefusal, keyAlertDue, keyAlertText, isKeyPointer } from "./agentKey.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, twapSliceFailed, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload } from "./logic.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, twapSliceFailed, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload, exchangePositionQty, exchangePositionRows } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const COOLDOWN_MS = 15 * 60 * 1000; // 15 min between trades
@@ -182,7 +182,8 @@ async function fireCallback(address, config, env, event, data) {
 async function fetchAccountPositions(keyData) {
   try {
     const res = await orderlyRequest(keyData, "GET", "/v1/positions");
-    const rows = res?.data?.rows || [];
+    const rows = exchangePositionRows(res);
+    if (rows === null) return null; // an error answer is unreadable, never "no positions"
     return rows
       .map((r) => ({ signedQty: Number(r.position_qty), mark: Number(r.mark_price ?? r.index_price ?? r.average_open_price) }))
       .filter((p) => Number.isFinite(p.signedQty) && Number.isFinite(p.mark) && p.signedQty !== 0);
@@ -481,6 +482,7 @@ async function adoptOrphanPosition(address, state, config, env, _cache) {
     // manages one position at a time).
     for (const sym of symbols) {
       const res = await orderlyRequest(keyData, "GET", `/v1/position/${sym}`);
+      if (exchangePositionQty(res) === null) throw new Error(`position read refused for ${sym}`);
       const p = res?.data;
       if (p && Math.abs(parseFloat(p.position_qty) || 0) > 1e-9) { live = { symbol: sym, ...p }; break; }
     }
@@ -1111,7 +1113,9 @@ async function monitorPosition(address, state, config, env, cache) {
     try {
       const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
       const posRes = await orderlyRequest(keyData, "GET", `/v1/position/${pos.symbol}`);
-      const liveQty = Math.abs(parseFloat(posRes?.data?.position_qty ?? 0));
+      // An error answer reads as null (unreadable), never as flat: logic.mjs exchangePositionQty.
+      const liveQty = exchangePositionQty(posRes);
+      if (liveQty === null) throw new Error(`position read refused: ${String(posRes?.message || posRes?.code || "no answer").slice(0, 80)}`);
       // Grace window: a just-opened position may not have propagated to the position
       // endpoint yet — a 0-qty read here would wrongly discard a REAL fill (→ ghost).
       // Defer the reconcile-clear until the position has had time to settle; adoption

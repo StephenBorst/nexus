@@ -607,3 +607,23 @@ export function buildCallbackPayload(event, { address, symbol, direction, qty, p
   if (num(pnlPercent) != null) payload.pnlPercent = num(pnlPercent);
   return payload;
 }
+
+// ── Reading Orderly's answer about a position (2026-11-06) ────────────────────────────────────
+// orderlyRequest returns Orderly's JSON even for an error ({ success:false, code, message }: rate limit,
+// expired or removed key, auth). Reading `data.position_qty ?? 0` off an error said "flat", and the
+// monitor then cleared a LIVE position's record (unmanaged, no stop). Only a successful answer counts:
+//   success true + data      → |position_qty| (0 = flat)
+//   success true, no data    → 0 (nothing open in that symbol)
+//   anything else            → null (unreadable: keep managing on cached data, clear nothing)
+export function exchangePositionQty(res) {
+  if (!res || res.success !== true) return null;
+  if (res.data == null) return 0;
+  const q = parseFloat(res.data.position_qty ?? 0);
+  return Number.isFinite(q) ? Math.abs(q) : null;
+}
+
+/** The account's position rows, or null when Orderly didn't answer successfully. */
+export function exchangePositionRows(res) {
+  if (!res || res.success !== true) return null;
+  return Array.isArray(res.data?.rows) ? res.data.rows : [];
+}

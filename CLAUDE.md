@@ -131,7 +131,8 @@ product is what sits on top:
   by `ops:halt:log`; public `GET /ops/halt`). exec reads it once per tick (`app/lib/liveHalt.mjs`; unreadable = halted)
   and skips every non-PAPER entry right before `enterPosition`. Exits, kill, DCA ladders, PAPER and parity untouched;
   closes nothing. No auto thresholds: a breaker rule is a read, graded first.
-- **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open. KILL =
+- **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open (no stop/TP:
+  the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.
 - **Kill order** (`nexus-agent-exec/killSwitch.mjs`, lab-api `routes-kill.mjs`, fixed 2026-11-06): the route only sets
   `agent:kill:{addr}` (and puts the wallet back on `agent:users`); it never deletes the key or the list entry. Exec closes
@@ -141,7 +142,8 @@ product is what sits on top:
   manage the open position → adopt a ghost → daily caps → entries. **Daily caps gate entries only** (fixed 2026-11-06:
   the cap check used to run first, so the day's last allowed trade went unmanaged until the 24h reset).
 - **Reconcile:** exec reads the live position first; exchange flat ⇒ clear the stale record. On a read error it manages
-  on cached data, never clears.
+  on cached data, never clears. An Orderly ERROR answer (`success:false`: rate limit, expired/removed key) is a read error,
+  never "flat" (`exchangePositionQty` / `exchangePositionRows`, exec `logic.mjs`; fixed 2026-11-06).
 - **Modes** (`deriveSignal`, brain `logic.mjs`): CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE (free); MOMENTUM,
   MEAN_REVERSION (PRO). **LEVEL_RECLAIM = ON for PAPER only** (built off 2026-11-04; on 2026-11-05 when level_reclaim
   was served TRADEABLE): the registered read via the SHARED rule `app/lib/levelReclaim.mjs` (the grader's
