@@ -381,7 +381,8 @@ product is what sits on top:
   one per wallet) + a 24h trading session that derives nothing. Built step by step; step 1 = `app/lib/tradingSession.mjs`
   (one message builder for client and worker) + `routes-session.mjs` (`checkTradingSession`; `POST /v2/session/end-all`
   ends every session issued before the caller's, the stamp `auth:sessions-after:{addr}` only moves forward). No live
-  route accepts a session yet. Step 2 (built 2026-10-31, OFF unless `AUTH_V2_KEYS="true"`): `v2Keys.mjs` +
+  route accepts a session yet. **`AUTH_V2_KEYS = "true"` in lab-api wrangler.toml since 2026-11-06 (borst):
+  additive, v1 walletSig unchanged; test on 0xd9f7…b449's way back before the skill moves.** Step 2 (built 2026-10-31): `v2Keys.mjs` +
   `routes-key.mjs`: random 32-byte keys, AddOrderlyKey `read,trading`, 30 days, sealed in `v2key:{addr}` (NOT
   `agent:key`); `/v2/key/begin|complete|remove` (session; complete/remove also need the challenge, always on) and
   `/v2/key/bankr-register`; rotation removes the old key signed by the new one; NexusLock `LOCK_KEYS.v2Key`. Nothing
