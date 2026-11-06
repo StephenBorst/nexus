@@ -21,6 +21,8 @@ export interface ThesisTrade {
   // Declared at publish, frozen with the call: graded half at TP1 + half at TP2 (lab-api gradeCall).
   // Absent = graded at TP1 only, whatever TP2 holds.
   exitPlan?: "SPLIT_50";
+  timeStopH?: number;     // declared time stop in hours (callMath timeStopPlan); a copy keeps it
+  exitReason?: "TIME";    // server: a declared time stop closed the graded call
   riskPercent: number;
   accountSize: number;
   fundingRate: number;

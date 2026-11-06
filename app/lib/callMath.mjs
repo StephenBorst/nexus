@@ -59,6 +59,49 @@ export function splitPlan(t) {
  */
 export const copiedExitPlan = (source) => (source?.exitPlan === SPLIT_EXIT ? SPLIT_EXIT : undefined);
 
+// ── A declared time stop (borst, 2026-11-06; docs/research/engine-ab-time-stop-note-2026-11-06.md) ─────
+// A call published with `timeStopH: N` that has hit neither its target nor its stop by the close of the
+// Nth hourly bar after entry settles at that bar's close, graded R from entry to that close. Declared by
+// the CALL at publish and frozen with it, like the split: one grader for every caller, no wallet logic.
+// Bar 0 = the posting hour (filled at the post) or the fill hour (a resting order); bars 1..N are graded
+// on as usual, TP and stop first, a same-bar TP + stop still a LOSS; the time stop only settles at bar
+// N's close, and only once that hour has closed. A timeout's R > 0 = WIN, else LOSS; exit reason TIME.
+// Forward-only twice over: only calls published from TIME_STOP_FROM_MS are read for it (a call
+// published earlier grades as before even if it carries the field), and no earlier call declares it.
+
+export const TIME_STOP_MAX_H = 168;
+export const TIME_STOP_FROM_MS = Date.UTC(2026, 10, 6);   // 2026-11-06T00:00Z, the day it shipped
+export const TIME_EXIT = "TIME";
+
+/**
+ * A call's declared time stop: null (none, or published before TIME_STOP_FROM_MS), { invalid, reason }
+ * (refused at publish; INVALID if one slipped through), or { hours }.
+ */
+export function timeStopPlan(t) {
+  if (t?.timeStopH == null) return null;
+  if (!(Number(t?.createdAt) >= TIME_STOP_FROM_MS)) return null;
+  const h = Number(t.timeStopH);
+  if (!Number.isInteger(h) || h < 1 || h > TIME_STOP_MAX_H) return { invalid: true, reason: `timeStopH must be a whole number of hours from 1 to ${TIME_STOP_MAX_H}` };
+  if (t.exitPlan === SPLIT_EXIT) return { invalid: true, reason: "a split exit can't also carry a time stop" };
+  return { hours: h };
+}
+
+/**
+ * A graded call a declared time stop closed (stored `exitReason: "TIME"`), as one label: "CLOSED AT 4H".
+ * Its grade can be a small win or a small loss, so "HIT TP" / "Stopped out" would misread it. null otherwise.
+ */
+export function timeExitLabel(t) {
+  if (t?.exitReason !== TIME_EXIT || (t?.gradedOutcome !== "WIN" && t?.gradedOutcome !== "LOSS")) return null;
+  const h = Number(t?.timeStopH);
+  return Number.isInteger(h) && h > 0 ? `CLOSED AT ${h}H` : "CLOSED ON TIME";
+}
+
+/** The time stop a COPY carries: the source's, or none (a copy without it grades a different trade). */
+export function copiedTimeStop(source) {
+  const h = Number(source?.timeStopH);
+  return source?.timeStopH != null && Number.isInteger(h) && h >= 1 && h <= TIME_STOP_MAX_H && source?.exitPlan !== SPLIT_EXIT ? h : undefined;
+}
+
 /**
  * Why the grader can never grade this call, from its levels alone, or null. Published calls are
  * frozen, so this is permanent. (gradeCall also answers INVALID when it has no candles; that is a
@@ -68,6 +111,8 @@ export function callInvalidReason(t) {
   if (!(num(t?.entryPrice) > 0 && num(t?.stopLoss) > 0 && num(t?.takeProfit1) > 0)) return "entry, stop or target missing";
   if (callRR(t) == null) return "stop or target on the wrong side of entry";
   if (splitPlan(t)?.invalid) return "split exit with TP2 not beyond TP1";
+  const ts = timeStopPlan(t);
+  if (ts?.invalid) return ts.reason;
   return null;
 }
 

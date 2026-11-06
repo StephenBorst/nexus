@@ -49,6 +49,8 @@ export function callStatusRow(t, mark) {
     id: t.id, symbol: t.symbol, direction: long ? "LONG" : "SHORT",
     entryPrice: entry, stopLoss: stop, takeProfit1: tp1, takeProfit2: tp2 > 0 ? tp2 : null,
     exitPlan: t.exitPlan ?? null,
+    timeStopH: t.timeStopH ?? null,
+    exitReason: t.exitReason ?? null,
     plannedR: { tp1: callR(t), tp2: split && !split.invalid ? split.r2 : null },
     postedAt: t.createdAt ?? null,
     state,

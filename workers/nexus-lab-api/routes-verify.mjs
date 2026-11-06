@@ -28,7 +28,7 @@ export function verifyCall(t, cd) {
   const stamped = isCurrentStamp(t) ? { outcome: t.gradedOutcome, r: Number(t.gradedR) } : null;
   if (!cd) return { verdict: "NO_DATA", fresh: null, stamped, candlesChecked: 0 };
   const g = gradeCall(t, cd);
-  const fresh = { outcome: g.outcome, r: g.r, ...(g.awaitingEntry ? { awaitingEntry: true } : {}) };
+  const fresh = { outcome: g.outcome, r: g.r, ...(g.awaitingEntry ? { awaitingEntry: true } : {}), ...(g.exitReason ? { exitReason: g.exitReason } : {}) };
   let verdict = "UNSTAMPED";
   if (stamped) {
     const same = stamped.outcome === fresh.outcome && Math.abs((stamped.r || 0) - (fresh.r || 0)) < R_EPS;

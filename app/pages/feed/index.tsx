@@ -11,7 +11,7 @@ import { useAccount, useCollateral } from "@orderly.network/hooks";
 import { useNavigate } from "react-router-dom";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, copiedExitPlan } from "@/lib/callMath.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, copiedExitPlan, copiedTimeStop, timeExitLabel } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useLabWallet, appendToLab, sendSigned } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -73,6 +73,8 @@ type FeedThesis = {
   takeProfit1: number;
   takeProfit2: number;
   exitPlan?: "SPLIT_50";  // declared split exit (lab-api gradeCall); a copy keeps it
+  timeStopH?: number;     // declared time stop in hours (callMath timeStopPlan); a copy keeps it
+  exitReason?: "TIME";    // server: a declared time stop closed the graded call
   riskReward: number;
   positionSize: number;
   leverage: number;
@@ -235,6 +237,7 @@ function CopyModal({
         takeProfit2: thesis.takeProfit2,
         // Keep the source's split: TP2 without exitPlan grades as a TP1-only call (callMath copiedExitPlan).
         exitPlan: copiedExitPlan(thesis),
+        timeStopH: copiedTimeStop(thesis), // and its time stop: without it the copy grades a different trade
         riskPercent: parseFloat(riskPct),
         accountSize: parseFloat(accountSize),
         fundingRate: parseFloat(fundingRate),
@@ -510,7 +513,9 @@ function FeedCard({
   // green, a loss's in red); an open call, an invalidation and a close stay monochrome.
   const rTxt = typeof thesis.gradedR === "number" ? ` ${thesis.gradedR >= 0 ? "+" : ""}${thesis.gradedR.toFixed(2)}R` : "";
   const runnerStopped = splitRunnerStopped(thesis);
-  const pill = runnerStopped ? { label: `TP1 hit, runner stopped${rTxt}`, color: (thesis.gradedR ?? 0) >= 0 ? C.pos : C.neg, border: (thesis.gradedR ?? 0) >= 0 ? LINE.pos : LINE.neg }
+  const timeExit = timeExitLabel(thesis);
+  const pill = timeExit ? { label: `${timeExit.charAt(0)}${timeExit.slice(1).toLowerCase()}${rTxt}`, color: (thesis.gradedR ?? 0) > 0 ? C.pos : C.neg, border: (thesis.gradedR ?? 0) > 0 ? LINE.pos : LINE.neg }
+    : runnerStopped ? { label: `TP1 hit, runner stopped${rTxt}`, color: (thesis.gradedR ?? 0) >= 0 ? C.pos : C.neg, border: (thesis.gradedR ?? 0) >= 0 ? LINE.pos : LINE.neg }
     : eff === "HIT_TP" ? { label: `Won${rTxt}`, color: C.pos, border: LINE.pos }
     : eff === "STOPPED_OUT" ? { label: `Stopped out${rTxt}`, color: C.neg, border: LINE.neg }
     : eff === "INVALIDATED" ? { label: "Invalidated", color: C.text.faint, border: C.border }
