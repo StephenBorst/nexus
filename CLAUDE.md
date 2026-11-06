@@ -406,6 +406,13 @@ product is what sits on top:
   Session path, always on: arming AUTONOMOUS or raising capital/leverage needs the §C challenge (`configChallengeNeeded`,
   `sessionChallenge`); `/v2/key/remove` refuses under a live agent position or active TWAP (`keyInUse.mjs`).
   Next = step 4, the Bankr skill PR.
+- **Settle PnL** (`workers/nexus-lab-api/settlePnl.mjs`, read from Orderly's SDK 2026-11-06): GET `/v1/settle_nonce` (key-signed)
+  → the WALLET signs EIP-712 `SettlePnl {brokerId, chainId, settleNonce, timestamp}` on the on-chain domain (`0x6F7a…D203`)
+  → POST `/v1/settle_pnl {signature, message+chainType "EVM", userAddress, verifyingContract}`. An empty `{}` settles nothing
+  (every path did that until 2026-11-06). Bankr withdraws settle via Bankr's signature (`runSettle`; a failed settle =
+  502 `settle_failed`, nothing re-sent). `/settle-pnl`: `bankrApiKey` = one call; else prepare (typed data) → submit
+  `{message, signature}`. The code-78 retry sizes from `/v1/positions` `free_collateral`, never the holding; `withdrawnAmount`
+  = what Orderly accepted (0 on a refusal).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must
