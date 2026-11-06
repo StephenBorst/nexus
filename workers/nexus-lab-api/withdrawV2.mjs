@@ -105,7 +105,10 @@ export function freeCollateralFrom(reply) {
   if (!Number.isFinite(free)) return null;
   const rows = Array.isArray(reply?.data?.rows) ? reply.data.rows : [];
   const openPositions = rows.filter((r) => Number(r?.position_qty) !== 0 && Number.isFinite(Number(r?.position_qty))).length;
-  return { free: Math.max(0, free), openPositions };
+  // Closed rows can still carry a loss not yet settled into the balance (seen live: 0xd9f7…b449's SOL
+  // row, qty 0, unsettled_pnl −1.768274 = the whole balance).
+  const unsettledPnl = rows.reduce((a, r) => a + (Number.isFinite(Number(r?.unsettled_pnl)) ? Number(r.unsettled_pnl) : 0), 0);
+  return { free: Math.max(0, free), openPositions, unsettledPnl: Math.round(unsettledPnl * 1e6) / 1e6 };
 }
 
 /** Settle PnL, wait, and read free collateral (the code-78 path). Unreadable = refused, nothing sent. */
@@ -118,12 +121,15 @@ async function settleAndFree(signer, deps) {
 }
 
 /** The refusal when nothing is free, naming what holds the margin. */
-export function insufficientFree({ free, openPositions }) {
+export function insufficientFree({ free, openPositions, unsettledPnl = 0 }) {
+  const loss = unsettledPnl < -0.005 ? Math.abs(unsettledPnl) : 0;
   return {
-    ok: false, error: "insufficient_free_collateral", freeCollateral: free, openPositions, withdrawnAmount: 0,
+    ok: false, error: "insufficient_free_collateral", freeCollateral: free, openPositions, unsettledPnl, withdrawnAmount: 0,
     hint: openPositions > 0
       ? `Free collateral is ${free} USDC: ${openPositions} open position(s) hold the rest. Close them, then withdraw.`
-      : `Free collateral is ${free} USDC after settlement. Open orders hold margin too: cancel them, then withdraw.`,
+      : loss > 0
+        ? `Free collateral is ${free} USDC: an unsettled loss of ${loss.toFixed(2)} USDC from closed trades uses the balance. There is nothing to withdraw.`
+        : `Free collateral is ${free} USDC after settlement. Open orders hold margin too: cancel them, then withdraw.`,
   };
 }
 

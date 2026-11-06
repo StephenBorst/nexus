@@ -304,8 +304,8 @@ test("the revoked wallet's way back stays open: v2 Bankr registration and Bankr 
 // 1.268, was refused with 78 again, and still said withdrawnAmount 1.268.
 
 test("freeCollateralFrom: account-level free_collateral + open positions; unreadable = null", () => {
-  assert.deepEqual(freeCollateralFrom({ success: true, data: { free_collateral: 0.4, rows: [{ position_qty: 0.01 }, { position_qty: 0 }] } }), { free: 0.4, openPositions: 1 });
-  assert.deepEqual(freeCollateralFrom({ success: true, data: { free_collateral: -2, rows: [] } }), { free: 0, openPositions: 0 });
+  assert.deepEqual(freeCollateralFrom({ success: true, data: { free_collateral: 0.4, rows: [{ position_qty: 0.01 }, { position_qty: 0 }] } }), { free: 0.4, openPositions: 1, unsettledPnl: 0 });
+  assert.deepEqual(freeCollateralFrom({ success: true, data: { free_collateral: -2, rows: [] } }), { free: 0, openPositions: 0, unsettledPnl: 0 });
   for (const r of [null, {}, { success: false, data: { free_collateral: 5 } }, { success: true, data: {} }, { success: true, data: { free_collateral: "x" } }]) {
     assert.equal(freeCollateralFrom(r), null, JSON.stringify(r));
   }
@@ -363,4 +363,19 @@ test("v1 bankr-withdraw and /withdraw/prepare size the retry from /v1/positions 
     assert.doesNotMatch(block, /client\/holding/, a);
     assert.match(block, /freeCollateralFrom\(await oReq\("GET", "\/v1\/positions", null\)\)/, a);
   }
+});
+
+test("the live 0xd9f7 account: no positions, no orders, an unsettled loss = the balance → says so, nothing moves", async () => {
+  const live = { success: true, data: { free_collateral: 0, total_collateral_value: 0,
+    rows: [{ symbol: "PERP_SOL_USDC", position_qty: 0, cost_position: 1.768274, unsettled_pnl: -1.768274 }] } };
+  assert.deepEqual(freeCollateralFrom(live), { free: 0, openPositions: 0, unsettledPnl: -1.768274 });
+  const env = envOn();
+  await storeKey(env);
+  const signer = await storedKeySigner(env, A, { now: T0 });
+  const w = world({ answers: [{ success: false, code: 78 }], positionsReply: live, holdingUsdc: 1.768274 });
+  const r = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 1.76 }, deps(w)));
+  assert.deepEqual([r.status, r.body.error, r.body.withdrawnAmount, r.body.freeCollateral], [400, "insufficient_free_collateral", 0, 0]);
+  assert.match(r.body.hint, /unsettled loss of 1\.77 USDC/);
+  assert.doesNotMatch(r.body.hint, /orders/, "no open orders: don't send the owner to cancel some");
+  assert.equal(withdrawCalls(w).length, 1, "no retry when nothing is free");
 });
