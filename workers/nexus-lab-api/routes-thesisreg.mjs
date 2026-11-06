@@ -21,6 +21,7 @@
 //   derived from the txHash, and a call already holding that txHash is returned as is.
 import { json } from "./shared.mjs";
 import { prepareSeal } from "./labWrite.mjs";
+import { notifyFollowersOfCalls } from "./followAlerts.mjs";
 import {
   checkRegistration, encodeRegisterThesis, provenRegistration, thesisFromRegistration, pendingKey,
   THESIS_REGISTRY, ARBITRUM_CHAIN_ID, PENDING_TTL_S, INDEX_MAX_AGE_MS, perpSymbol,
@@ -111,6 +112,7 @@ export async function indexRegistration(env, { txHash, wallet, rpc, readMark, no
   const refusal = prep.sealed.refused.find((r) => r.id === thesis.id);
   if (refusal) return { status: 422, body: { error: "publish_refused", reason: refusal.reason, txHash } };
   await prep.commit(record);
+  await notifyFollowersOfCalls(env, wallet, prep.sealed.newlyPublished);
   const saved = prep.sealed.theses.find((t) => t.id === thesis.id) || thesis;
   return {
     status: 200,

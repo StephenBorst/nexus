@@ -22,3 +22,12 @@ test("missing numbers print a dash instead of crashing", () => {
   assert.ok(s.startsWith("SOL SHORT —x."));
   assert.ok(s.includes("Entry $—. Stop $—. TP $—. R:R —."));
 });
+
+test("share links: the call's OG page (lowercased wallet) and an X intent carrying the share text", async () => {
+  const { callShareLinks, callShareText } = await import("./callShare.mjs");
+  const t = { id: "thesis-btc-1", direction: "LONG", entryPrice: 100, stopLoss: 95, takeProfit1: 110, leverage: 3 };
+  const { url, xUrl } = callShareLinks("0xABCdef0000000000000000000000000000000001", t, "BTC");
+  assert.equal(url, "https://og.nexustradinglabs.com/share/thesis/0xabcdef0000000000000000000000000000000001/thesis-btc-1");
+  assert.ok(xUrl.startsWith(`https://twitter.com/intent/tweet?text=${encodeURIComponent(callShareText(t, "BTC"))}&url=`));
+  assert.ok(xUrl.endsWith(encodeURIComponent(url)));
+});

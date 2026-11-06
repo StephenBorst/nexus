@@ -40,9 +40,9 @@ test("endpoints: only real push services, https, no tricks", () => {
   assert.ok(!validSubscription({ ...sub(), keys: { p256dh: "short", auth: "x" } }));
 });
 
-test("topics: calls + agent on, social off, by default", () => {
-  assert.deepEqual(normTopics(undefined), { calls: true, agent: true, social: false });
-  assert.deepEqual(normTopics({ agent: false, social: true, junk: 1 }), { calls: true, agent: false, social: true });
+test("topics: calls + agent on, social + following off, by default", () => {
+  assert.deepEqual(normTopics(undefined), { calls: true, agent: true, social: false, following: false });
+  assert.deepEqual(normTopics({ agent: false, social: true, junk: 1 }), { calls: true, agent: false, social: true, following: false });
   assert.equal(topicForType("call_resolved"), "calls");
   assert.equal(topicForType("agent_trade"), "agent");
   assert.equal(topicForType("comment"), "social");

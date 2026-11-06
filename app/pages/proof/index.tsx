@@ -12,6 +12,7 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import CarrySleeve from "./CarrySleeve";
 import FeaturedLead from "./FeaturedLead";
 import { recordShareText, recordShareHref, recordShareLink } from "@/lib/recordShare.mjs";
+import { agoShort } from "@/lib/callPulse.mjs";
 import Fold from "./Fold";
 import HowWeGrade from "./HowWeGrade";
 import { callsRecordLine, callersLine, PLAIN_WORDS, engineNote } from "@/lib/proofCopy.mjs";
@@ -249,7 +250,9 @@ export default function ProofPage() {
                         <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", color: FOG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "0 4px", flexShrink: 0 }}>ENGINE</span>
                       </span>
                       <span style={{ ...statCell, ...statM }}>
-                        {e.graded} graded · {winPct}% wins · <span style={{ color: e.netR >= 0 ? POS : NEG }}>{e.netR >= 0 ? "+" : "−"}{Math.abs(e.netR).toFixed(1)}R net</span>
+                        {e.graded} graded · {winPct}% wins · <span style={{ color: e.netR >= 0 ? POS : NEG, whiteSpace: "nowrap" }}>{e.netR >= 0 ? "+" : "−"}{Math.abs(e.netR).toFixed(1)}R net</span>
+                        {/* Freshness: a quiet engine reads as quiet, not alive (lastAt = its newest graded call). */}
+                        {e.lastAt ? <span style={{ whiteSpace: "nowrap" }}> · last graded {agoShort(e.lastAt, Date.now())} ago</span> : null}
                       </span>
                       {/* What it trades, in plain words (ENGINE_NOTES, proofCopy.mjs). */}
                       {note && <span style={{ order: 20, flexBasis: "100%", fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.45, whiteSpace: "normal" }}>{note}</span>}

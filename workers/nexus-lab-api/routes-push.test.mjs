@@ -45,7 +45,7 @@ test("subscribe needs the wallet's own signature", async () => {
 
   const ok = await call(env, "POST", "/push/subscribe", { wallet: A, subscription: SUB, topics: { social: true }, labAuth: await auth(alice) });
   assert.equal(ok.status, 200);
-  assert.deepEqual((await ok.json()).topics, { calls: true, agent: true, social: true });
+  assert.deepEqual((await ok.json()).topics, { calls: true, agent: true, social: true, following: false });
   assert.equal(JSON.parse(env.LAB_STORE.m.get(`push:wallet:${A}`)).length, 1);
 });
 

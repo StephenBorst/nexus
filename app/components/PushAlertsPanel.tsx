@@ -14,6 +14,7 @@ import {
 const TOPIC_ROWS: { key: keyof PushTopics; label: string }[] = [
   { key: "calls", label: "Your calls, when graded" },
   { key: "agent", label: "Your agent opens or closes a trade" },
+  { key: "following", label: "New calls from callers you follow" },
   { key: "social", label: "Comments, follows, copies" },
 ];
 

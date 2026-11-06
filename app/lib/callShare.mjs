@@ -15,3 +15,11 @@ export function callShareText(t, ticker) {
   }
   return `${tk} ${dir} ${num(t?.leverage, 1)}x.\n\nEntry $${num(t?.entryPrice, 2)}. Stop $${num(t?.stopLoss, 2)}. TP $${num(t?.takeProfit1, 2)}. R:R ${fmtRR(callRR(t))}.\n\nGraded against public price on Nexus Trading Labs.`;
 }
+
+/** The share links for one public call: the OG page X unfurls into the call's card (`url`) and the X intent
+ *  carrying callShareText (`xUrl`). One builder for the call card's 𝕏 SHARE and the post-publish prompt. */
+export function callShareLinks(wallet, t, ticker) {
+  const url = `https://og.nexustradinglabs.com/share/thesis/${String(wallet || "").toLowerCase()}/${encodeURIComponent(String(t?.id || ""))}`;
+  const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(callShareText(t, ticker))}&url=${encodeURIComponent(url)}`;
+  return { url, xUrl };
+}
