@@ -20,3 +20,10 @@ test("every /agent/:address mutation checks the owner", () => {
   }).map((m) => m[0].slice(0, 100));
   assert.deepEqual(missing, []);
 });
+
+test("DEACTIVATE reports a live position it leaves open (leftOpen + warning)", () => {
+  const start = src.indexOf("// DELETE /agent/:address — deactivate");
+  const route = src.slice(start, src.indexOf("// POST /agent/:address/kill", start));
+  assert.match(route, /if \(p && !p\.paper\) leftOpen = /);
+  assert.match(route, /leftOpen,\s*warning:/);
+});
