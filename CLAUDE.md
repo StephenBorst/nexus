@@ -137,6 +137,9 @@ product is what sits on top:
   `agent:kill:{addr}` (and puts the wallet back on `agent:users`); it never deletes the key or the list entry. Exec closes
   WITH the key, then stops + deletes it. An unconfirmed close keeps flag + key and retries each tick; after
   `KILL_MAX_ATTEMPTS` (10) it stops anyway, keeps the record and Telegrams the owner to close by hand.
+- **Tick order** (`processUser`, pinned by `nexus-agent-exec/tickOrder.test.mjs`): kill → active/config → webhook CLOSE →
+  manage the open position → adopt a ghost → daily caps → entries. **Daily caps gate entries only** (fixed 2026-11-06:
+  the cap check used to run first, so the day's last allowed trade went unmanaged until the 24h reset).
 - **Reconcile:** exec reads the live position first; exchange flat ⇒ clear the stale record. On a read error it manages
   on cached data, never clears.
 - **Modes** (`deriveSignal`, brain `logic.mjs`): CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE (free); MOMENTUM,
@@ -376,7 +379,8 @@ product is what sits on top:
   one per wallet) + a 24h trading session that derives nothing. Built step by step; step 1 = `app/lib/tradingSession.mjs`
   (one message builder for client and worker) + `routes-session.mjs` (`checkTradingSession`; `POST /v2/session/end-all`
   ends every session issued before the caller's, the stamp `auth:sessions-after:{addr}` only moves forward). No live
-  route accepts a session yet. Step 2 (built 2026-10-31, OFF unless `AUTH_V2_KEYS="true"`): `v2Keys.mjs` +
+  route accepts a session yet. **`AUTH_V2_KEYS = "true"` in lab-api wrangler.toml since 2026-11-06 (borst):
+  additive, v1 walletSig unchanged; test on 0xd9f7…b449's way back before the skill moves.** Step 2 (built 2026-10-31): `v2Keys.mjs` +
   `routes-key.mjs`: random 32-byte keys, AddOrderlyKey `read,trading`, 30 days, sealed in `v2key:{addr}` (NOT
   `agent:key`); `/v2/key/begin|complete|remove` (session; complete/remove also need the challenge, always on) and
   `/v2/key/bankr-register`; rotation removes the old key signed by the new one; NexusLock `LOCK_KEYS.v2Key`. Nothing
@@ -642,7 +646,9 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
 ## Perp page (SDK widgets)
 - **SDK = 3.4.0** (all `@orderly.network/*` aligned; `trading-points` stays 2.0.2). Since 3.3 every SDK feature is ON
   unless explicitly false: **Orderly Predict is OFF** via `features={ORDERLY_FEATURES}` (`app/lib/orderlyFeatures.mjs`,
-  test-pinned). On = borst's product call + a `/predict` route + its own review. After any SDK bump re-check the
+  test-pinned). **Skipped (borst, 2026-11-06): don't pitch or build it.** Read then: BTC 5-min binary rounds, ~1.5% taker
+  fee (builder keeps user rate − tier base), US block is the front end's job, settlement can be recorded by hand, likely
+  conflicts with Google Play's binary-options rule (our Android app is the live site). After any SDK bump re-check the
   `Transfer.DepositAndWithdraw` injectable (Other chains tab), the build's amplitude/trim guards, and `features` defaults.
 - `TradingPage`/`MarketsHomePage` are black boxes: only their props. `disableFeatures={["orderBook"]}` (string literal;
   `key` the page on toggle). Restyle scaffold regions via `classNames={{…}}` + CSS with `!important`.
@@ -704,7 +710,8 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
   `ogCards.test.mjs` enforces card colours.
 
 ## Settled — don't re-raise
-- Cold start / feed liveness is behind us. In-app EVM buy/sell is live and tested. The mini app is parked.
+- Cold start / feed liveness is behind us. In-app EVM buy/sell is live and tested. The mini app is parked. Orderly Predict
+  is skipped (2026-11-06).
 - Focus = the engine and its signals. The engine has no proven edge yet: that's the #1 risk, and the failure mode is
   copy shipping ahead of the grade.
 - The Oct-15 engine freeze is over. Engine work happens when borst asks for it.
