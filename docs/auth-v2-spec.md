@@ -205,6 +205,9 @@ custody agents already have. In exchange, a leaked signature stops being a leake
        `/derive-key`, so its ENABLE step stops when this flips.
      - With 3c, `AUTH_V2_KEYS="true"` alone is additive: v2 routes appear, v1 is untouched. That is what 0xd9f7…b449's
        path back needs (`/v2/key/bankr-register`, then `/proxy/bankr-withdraw`).
+   - **Switched on 2026-11-06 (borst):** `AUTH_V2_KEYS = "true"` in lab-api wrangler.toml, before the skill moves,
+     so v2 can be tested live first on 0xd9f7…b449's way back (register a v2 key via Bankr, withdraw with it).
+     Additive: every v1 `walletSig` path is unchanged. `AUTH_V1_REGISTER_OFF` stays unset.
 4. Bankr skill PR (BankrBot/skills) with the new calls; copy back.
 5. Migration step 2; then the dated cut-over.
 

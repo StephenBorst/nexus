@@ -90,6 +90,11 @@ FLASH_ATTRIBUTION_CODE = "bc_lrqwbh7u"
 # static walletSig only). Set to "true" to REQUIRE a fresh /auth/challenge signature
 # on gated high-risk routes (withdraw first). Flip on only once clients send v2.
 # AUTH_V2 = "true"
+# Auth v2 trading keys + 24h trading sessions (docs/auth-v2-spec.md, build steps 2-3). ON since 2026-11-06
+# (borst): ADDITIVE. The /v2/key/* and /v2/session/* routes answer, and the trading, withdraw, agent and
+# TWAP routes also accept a `session`. Every v1 walletSig path is unchanged. Nothing signs with a v2 key
+# until a wallet registers one. "false"/unset = every v2 route answers v2_keys_off.
+AUTH_V2_KEYS = "true"
 # ── Quotient Q-signals (/intel/quotient) ──────────────────────────────────────
 # Q Signals is a PRO lens whose data is paid PER PULL by the USER'S wallet via x402
 # (an off-chain USDC authorization on Base) — Nexus spends nothing. The client fetches
