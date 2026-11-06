@@ -142,7 +142,8 @@ product is what sits on top:
   manage the open position → adopt a ghost → daily caps → entries. **Daily caps gate entries only** (fixed 2026-11-06:
   the cap check used to run first, so the day's last allowed trade went unmanaged until the 24h reset).
 - **Reconcile:** exec reads the live position first; exchange flat ⇒ clear the stale record. On a read error it manages
-  on cached data, never clears.
+  on cached data, never clears. An Orderly ERROR answer (`success:false`: rate limit, expired/removed key) is a read error,
+  never "flat" (`exchangePositionQty` / `exchangePositionRows`, exec `logic.mjs`; fixed 2026-11-06).
 - **Modes** (`deriveSignal`, brain `logic.mjs`): CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE (free); MOMENTUM,
   MEAN_REVERSION (PRO). **LEVEL_RECLAIM = ON for PAPER only** (built off 2026-11-04; on 2026-11-05 when level_reclaim
   was served TRADEABLE): the registered read via the SHARED rule `app/lib/levelReclaim.mjs` (the grader's

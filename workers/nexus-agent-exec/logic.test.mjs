@@ -710,3 +710,25 @@ test("a skipped slice is never due again, and the schedule can complete", () => 
   const p = twapProgress(st);
   assert.deepEqual([p.filled, p.skipped, p.remaining], [2, 1, 0], "skipped is counted apart from filled");
 });
+
+// ─── Orderly position answers: an error is unreadable, never flat (2026-11-06) ─────────────
+import { exchangePositionQty, exchangePositionRows } from "./logic.mjs";
+
+test("exchangePositionQty: only a successful answer can say flat", () => {
+  assert.equal(exchangePositionQty({ success: true, data: { position_qty: 0.05 } }), 0.05);
+  assert.equal(exchangePositionQty({ success: true, data: { position_qty: -0.05 } }), 0.05);
+  assert.equal(exchangePositionQty({ success: true, data: { position_qty: 0 } }), 0);
+  assert.equal(exchangePositionQty({ success: true, data: null }), 0, "nothing open in that symbol");
+  // The bug: these used to read as 0 (flat) and the monitor cleared a live position's record.
+  for (const err of [{ success: false, code: -1003, message: "orderly key expired" }, { code: 429 }, {}, null, undefined, "x"]) {
+    assert.equal(exchangePositionQty(err), null);
+  }
+  assert.equal(exchangePositionQty({ success: true, data: { position_qty: "abc" } }), null);
+});
+
+test("exchangePositionRows: an error is null, never an empty book", () => {
+  assert.deepEqual(exchangePositionRows({ success: true, data: { rows: [{ position_qty: 1 }] } }), [{ position_qty: 1 }]);
+  assert.deepEqual(exchangePositionRows({ success: true, data: {} }), []);
+  assert.equal(exchangePositionRows({ success: false, message: "rate limited" }), null);
+  assert.equal(exchangePositionRows(null), null);
+});

@@ -33,3 +33,11 @@ test("a live safety order or partial TP with no key books nothing (fails closed)
     assert.match(chunk.slice(keyed), /\} else \{[\s\S]{0,200}?no key[\s\S]{0,80}?return;/, `${fn} returns when there is no key`);
   }
 });
+
+test("position reads go through exchangePositionQty/Rows (an error is never 'flat')", () => {
+  assert.doesNotMatch(src, /posRes\?\.data\?\.position_qty \?\? 0/);
+  assert.match(src, /const liveQty = exchangePositionQty\(posRes\);\s*\n\s*if \(liveQty === null\) throw/);
+  assert.match(src, /exchangePositionRows\(res\);\s*\n\s*if \(rows === null\) return null;/);
+  const adopt = src.slice(src.indexOf("async function adoptOrphanPosition("), src.indexOf("async function processUser("));
+  assert.match(adopt, /exchangePositionQty\(res\) === null\) throw/);
+});
