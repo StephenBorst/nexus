@@ -2375,3 +2375,12 @@ grace the monitor cleared the LIVE position's record ("manual close?"), leaving 
 the same way and found nothing. The delta cap's `/v1/positions` read turned an error into an empty book (an entry passed
 the cap). Now only `success:true` counts (`exchangePositionQty` / `exchangePositionRows`); an error is unreadable, so the
 monitor manages on cached data and the cap fails open only on a real null, as documented.
+
+## 2026-11-06 · Live agent trades were booked at the mark, not the fill
+
+exec booked a live entry at the mark it read before sending the market order, and a live exit at a mark re-read after the
+close (partial TPs and DCA adds the same way). The public live record (Supabase `agent_trades` → `/agents/leaderboard`,
+anchored ledger) therefore never showed slippage. Now each live market order's `average_executed_price` (GET
+`/v1/order/{id}`, FILLED or PARTIAL_FILLED) is what's booked, with the mark only as a tagged fallback (`entry_fill`).
+Rows written before this are mark-priced; nothing rewrites them. Fees are still not in the row's P&L (Supabase columns
+are fixed: an unknown column makes the auditable insert fall back to the core row without order ids).

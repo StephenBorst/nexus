@@ -627,3 +627,18 @@ export function exchangePositionRows(res) {
   if (!res || res.success !== true) return null;
   return Array.isArray(res.data?.rows) ? res.data.rows : [];
 }
+
+// ── Live fills: book the price the exchange filled at, not the mark (2026-11-06) ───────────────
+// Live entries and exits used to be booked at the MARK read when exec decided, so the public live
+// record (Supabase agent_trades → /agents/leaderboard) never showed slippage. After a live market
+// order exec reads GET /v1/order/{id} and books `average_executed_price` when Orderly says the order
+// FILLED (or PARTIAL_FILLED with a price). Anything else (not filled yet, an error answer, a missing
+// price) falls back to the mark, tagged source "mark" so a reader can tell the two apart.
+export function fillPriceFrom(orderRes, fallback) {
+  const d = orderRes && orderRes.success === true ? orderRes.data : null;
+  const p = Number(d?.average_executed_price);
+  if (d && (d.status === "FILLED" || d.status === "PARTIAL_FILLED") && Number.isFinite(p) && p > 0) {
+    return { price: p, source: "exchange" };
+  }
+  return { price: fallback, source: "mark" };
+}
