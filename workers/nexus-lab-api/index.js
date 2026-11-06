@@ -116,6 +116,7 @@ import { wantsV2, v2Signer, hasV2Key, storedKeySigner } from "./tradingSigner.mj
 import { handleAgentKill } from "./routes-kill.mjs";
 import { agentOwnerRefusal, v2KeyPointer, twapFitsKey, configChallengeNeeded } from "./agentAuth.mjs";
 import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, answer as withdrawAnswer, freeCollateralFrom, insufficientFree } from "./withdrawV2.mjs";
+import { runSettle, settleFailure, settleNonceFrom, settleMessage, settleTypedData, settleRefusal, settleSigner, settleRequestBody } from "./settlePnl.mjs";
 import { v1RegisterOff, v1RegistrationRefusal, bankrRegisterV2Refusal, registerPageV2Html } from "./v1Registration.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
@@ -3520,25 +3521,28 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       }, request);
     }
 
-        // ── /settle-pnl — settle unrealized PnL so it clears margin for withdrawal ──
-    // POST { walletAddress, walletSig, symbol? }
-    // symbol is optional — omit to settle all positions, or pass e.g. "SOL" to settle one.
-    // Must be called before withdrawing if unsettled_pnl is negative (code 78).
-    // After calling, wait ~5s for Orderly to process, then retry withdrawal.
+        // ── /settle-pnl — book the account's unsettled PnL into its balance (settlePnl.mjs) ──
+    // Auth as every trading route: { walletAddress, walletSig } or { walletAddress, session }. A settle
+    // needs the WALLET's EIP-712 SettlePnl signature, so three ways in:
+    //   • { …, bankrApiKey }             Bankr signs it; one call does nonce → sign → settle.
+    //   • { … }                           prepare: returns { typedData, message } for the wallet to sign.
+    //   • { …, message, signature }       submit: the signed SettlePnl (must recover to the wallet).
+    // Orderly settles the whole account; `symbol` is ignored. Until 2026-11-06 this route posted
+    // `{symbol}` / `{}`, which Orderly does not take, so nothing was ever settled through it.
     if (parts[0] === "settle-pnl" && request.method === "POST") {
       let spbody; try { spbody = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const { walletAddress: spwa, walletSig: spws, symbol: spsym } = spbody;
-      let sprec, spsk;
+      const { walletAddress: spwa, walletSig: spws } = spbody;
+      let sprec, spsk, spWallet;
       if (wantsV2(spbody)) {
         const v2 = await v2Signer(env, spbody); // auth v2: session + the stored random key
         if (!v2.ok) return json(v2.body, request, v2.status);
-        sprec = { accountId: v2.accountId, orderlyKey: v2.orderlyKey }; spsk = v2.signingKey;
+        sprec = { accountId: v2.accountId, orderlyKey: v2.orderlyKey }; spsk = v2.signingKey; spWallet = v2.wallet;
       } else {
         if (!spwa || !spws) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, symbol? }" }, request, 401);
         const spNorm = spwa.toLowerCase().trim();
         const spRaw  = await env.LAB_STORE.get("user:" + spNorm);
         if (!spRaw) return json({ error: "wallet_not_registered" }, request, 401);
-        sprec  = JSON.parse(spRaw);
+        sprec  = JSON.parse(spRaw); spWallet = spNorm;
         const SPHDR  = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
         const sphex  = spws.startsWith("0x") ? spws.slice(2) : spws;
         const spseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(sphex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
@@ -3551,27 +3555,50 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         const msg = new TextEncoder().encode(ts + method + path + bs);
         const s   = new Uint8Array(await crypto.subtle.sign("Ed25519", spsk, msg));
         const b64 = btoa(String.fromCharCode(...s)).replace(/[+]/g,"-").replace(/[/]/g,"_").replace(/=+$/,"");
-        return { "Content-Type": "application/json", "orderly-timestamp": String(ts), "orderly-account-id": sprec.accountId, "orderly-key": sprec.orderlyKey, "orderly-signature": b64 };
+        return { "Content-Type": method === "GET" ? "application/x-www-form-urlencoded" : "application/json", "orderly-timestamp": String(ts), "orderly-account-id": sprec.accountId, "orderly-key": sprec.orderlyKey, "orderly-signature": b64 };
       };
-      // Optionally scope to a single symbol
-      const settleBody = spsym
-        ? { symbol: spsym.toUpperCase().startsWith("PERP_") ? spsym.toUpperCase() : "PERP_" + spsym.toUpperCase() + "_USDC" }
-        : {};
-      const spHdrs = await spsign("POST", "/v1/settle_pnl", settleBody);
-      const spRes  = await fetch("https://api-evm.orderly.org/v1/settle_pnl", {
-        method: "POST", headers: spHdrs,
-        body: JSON.stringify(settleBody),
-      });
-      const spData = await spRes.json();
-      return json({
-        ok: spData?.success ?? false,
-        settled: spData?.success ?? false,
-        symbol: spsym ?? "all",
-        hint: spData?.success
-          ? "PnL settled. Wait ~5 seconds then retry withdrawal with free_collateral amount."
-          : "Settlement request sent — Orderly processes async. Wait 5-10s then check /balance before withdrawing.",
-        raw: spData,
-      }, request);
+      const spReq = async (method, path, bodyObj) => {
+        const r = await fetch("https://api-evm.orderly.org" + path, { method, headers: await spsign(method, path, bodyObj), body: bodyObj ? JSON.stringify(bodyObj) : undefined });
+        try { return await r.json(); } catch { return null; }
+      };
+      const getNonce = () => spReq("GET", "/v1/settle_nonce", null);
+      const postSettle = (b) => spReq("POST", "/v1/settle_pnl", b);
+      const settledReply = (raw) => json({ ok: raw?.success === true, settled: raw?.success === true, scope: "account",
+        hint: raw?.success === true ? "PnL settled into the balance. Orderly books it within a few seconds; check /positions before withdrawing." : "Orderly refused the settle.",
+        raw }, request, raw?.success === true ? 200 : 502);
+
+      // 1) Bankr signs: the whole settle in one call.
+      if (spbody.bankrApiKey) {
+        const r = await runSettle({
+          wallet: spWallet, now: Date.now(), getNonce, post: postSettle,
+          signTyped: async (td) => {
+            const sr = await fetch("https://api.bankr.bot/wallet/sign", {
+              method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": spbody.bankrApiKey },
+              body: JSON.stringify({ signatureType: "eth_signTypedData_v4", typedData: td }),
+            });
+            return (await sr.json().catch(() => ({})))?.signature || null;
+          },
+        });
+        if (!r.ok) { const f = settleFailure(r); delete f.withdrawnAmount; f.hint = f.hint.replace(" Nothing was withdrawn.", ""); return json(f, request, 502); }
+        return settledReply(r.raw);
+      }
+      // 2) Submit a SettlePnl the wallet signed itself.
+      if (spbody.message && spbody.signature) {
+        const why = settleRefusal(spbody.message);
+        if (why) return json({ ok: false, error: "bad_settle_message", reason: why }, request, 400);
+        if ((await settleSigner(spbody.message, spbody.signature)) !== spWallet) {
+          return json({ ok: false, error: "signature_mismatch", hint: "The SettlePnl must be signed by this wallet, over the typed data this route returned." }, request, 401);
+        }
+        return settledReply(await postSettle(settleRequestBody({ message: spbody.message, signature: spbody.signature, wallet: spWallet })));
+      }
+      // 3) Prepare: the typed data for the wallet to sign.
+      const nonceReply = await getNonce();
+      const settleNonce = settleNonceFrom(nonceReply);
+      if (settleNonce == null) return json({ ok: false, error: "settle_nonce_unavailable", raw: nonceReply }, request, 502);
+      const spMsg = settleMessage({ settleNonce, now: Date.now() });
+      // Not "ok": nothing is settled yet. An agent reading the reply must not take this step as done.
+      return json({ settled: false, step: "sign", typedData: settleTypedData(spMsg), message: spMsg,
+        next: "Nothing is settled yet. Sign typedData with this wallet (eth_signTypedData_v4) and POST /settle-pnl again with the same auth plus { message, signature }, or send bankrApiKey to settle in one call." }, request);
     }
 
     // ── /proxy/bankr-withdraw — server-side withdrawal via Bankr Wallet API ────
@@ -3696,8 +3723,21 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         // settle all positions, wait 4s, fetch free_collateral, retry with safe amount.
         const code78 = withdrawRes?.code === 78 || String(withdrawRes?.message ?? "").includes("occupied");
         if (code78) {
-          // Settle PnL
-          await oReq("POST", "/v1/settle_pnl", {});
+          // Settle PnL for real (settlePnl.mjs): nonce + SettlePnl signed by the wallet (Bankr) + POST.
+          // Until 2026-11-06 this posted `{}`, which settled nothing; a failed settle now stops here.
+          const settled = await runSettle({
+            wallet: walletNorm, now: Date.now(),
+            getNonce: () => oReq("GET", "/v1/settle_nonce", null),
+            signTyped: async (td) => {
+              const sr = await fetch(`${BANKR_API_W}/wallet/sign`, {
+                method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": bankrApiKey },
+                body: JSON.stringify({ signatureType: "eth_signTypedData_v4", typedData: td }),
+              });
+              return (await sr.json().catch(() => ({})))?.signature || null;
+            },
+            post: (body) => oReq("POST", "/v1/settle_pnl", body),
+          });
+          if (!settled.ok) return json(settleFailure(settled), request, 502);
           // Wait for Orderly to process (~4s)
           await new Promise(r => setTimeout(r, 4000));
           // Free collateral from /v1/positions (withdrawV2.mjs freeCollateralFrom), never the holding:
@@ -3822,10 +3862,11 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           if (!amount || Number(amount) <= 0) return json({ error: "amount (USDC) required" }, request, 400);
           let effAmount = Number(amount);
           if (settle) {
-            await oReq("POST", "/v1/settle_pnl", {});
-            await new Promise(r => setTimeout(r, 4000));
+            // A real settle needs the wallet's own SettlePnl signature (settlePnl.mjs) and this wallet signs
+            // on its side, so the server can't settle here: settle:true caps the amount to what is free.
+            // (Until 2026-11-06 it posted an empty settle that did nothing.) To settle: POST /settle-pnl.
             const freeGot = freeCollateralFrom(await oReq("GET", "/v1/positions", null)); // never the holding
-            if (!freeGot) return json({ ok: false, error: "free_collateral_unread", hint: "Couldn't read free collateral after settling. Try again." }, request, 502);
+            if (!freeGot) return json({ ok: false, error: "free_collateral_unread", hint: "Couldn't read free collateral. Try again." }, request, 502);
             effAmount = Math.min(Number(amount), Math.max(0, freeGot.free - 0.5));
             if (effAmount <= 0) return json(insufficientFree(freeGot), request, 400);
           }

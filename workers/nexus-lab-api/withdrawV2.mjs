@@ -15,6 +15,7 @@
 import { recoverTypedDataAddress } from "viem";
 import { checkChallenge, bankrSignTyped, Refused } from "./routes-key.mjs";
 import { BROKER_ID, ORDERLY_CHAIN_ID } from "./v2Keys.mjs";
+import { runSettle, settleFailure } from "./settlePnl.mjs";
 
 export const ORDERLY_BASE = "https://api-evm.orderly.org";
 export const WITHDRAW_VC = "0x6F7a338F2aA472838dEFD3283eB360d4Dff5D203"; // Orderly ledger; passed in the POST body
@@ -111,9 +112,18 @@ export function freeCollateralFrom(reply) {
   return { free: Math.max(0, free), openPositions, unsettledPnl: Math.round(unsettledPnl * 1e6) / 1e6 };
 }
 
-/** Settle PnL, wait, and read free collateral (the code-78 path). Unreadable = refused, nothing sent. */
-async function settleAndFree(signer, deps) {
-  await orderlyCall(signer, "POST", "/v1/settle_pnl", {}, deps);
+/**
+ * Settle PnL for real (settlePnl.mjs: the stored key signs the requests, the WALLET signs SettlePnl via
+ * `signTyped`), wait, then read free collateral (the code-78 path). A failed settle or an unreadable
+ * free collateral = refused, nothing sent.
+ */
+async function settleAndFree(signer, deps, signTyped) {
+  const s = await runSettle({
+    wallet: signer.wallet, now: (deps.clock || Date.now)(), signTyped,
+    getNonce: () => orderlyCall(signer, "GET", "/v1/settle_nonce", null, deps),
+    post: (body) => orderlyCall(signer, "POST", "/v1/settle_pnl", body, deps),
+  });
+  if (!s.ok) throw new Refused(502, settleFailure(s));
   await (deps.sleep || ((ms) => new Promise((r) => setTimeout(r, ms))))(SETTLE_WAIT_MS);
   const got = freeCollateralFrom(await orderlyCall(signer, "GET", "/v1/positions", null, deps));
   if (!got) throw new Refused(502, { ok: false, error: "free_collateral_unread", hint: "Couldn't read free collateral after settling. Nothing was withdrawn; try again." });
@@ -167,7 +177,7 @@ export async function bankrWithdrawV2(signer, { bankrApiKey, amount }, deps = {}
     return { ok, auth: "v2", walletAddress: wallet, amount: Number(amount), amountUnits: units, withdrawnAmount: ok ? Number(amount) : 0,
       withdrawNonce: first.message.withdrawNonce, keyExpiresInDays: signer.keyExpiresInDays, raw: res };
   }
-  const got = await settleAndFree(signer, d);
+  const got = await settleAndFree(signer, d, (td) => bankrSignTyped(bankrApiKey, td, fetchImpl));
   const safe = Math.min(Number(amount), Math.max(0, got.free - SETTLE_BUFFER_USDC));
   const safeUnits = usdcUnits(safe);
   if (!safeUnits) throw new Refused(400, insufficientFree(got));
@@ -189,9 +199,10 @@ export async function withdrawPrepareV2(signer, { amount, settle }, deps = {}) {
   if (!usdcUnits(amount)) throw new Refused(400, { error: "amount (USDC) required" });
   let eff = Number(amount);
   if (settle) {
-    const got = await settleAndFree(signer, d);
-    eff = Math.min(eff, Math.max(0, got.free - SETTLE_BUFFER_USDC));
-    if (!usdcUnits(eff)) throw new Refused(400, insufficientFree(got));
+    // A settle needs the WALLET's own SettlePnl signature (settlePnl.mjs), and here the wallet signs on
+    // its side, so it settles first through /settle-pnl. Before 2026-11-06 this posted an empty settle
+    // that did nothing and then sized the withdraw as if it had.
+    throw new Refused(400, { error: "settle_separately", hint: "Settle first: POST /settle-pnl returns the SettlePnl typed data for the wallet to sign; send it back signed. Then prepare the withdraw without settle." });
   }
   const message = withdrawMessage({ wallet: signer.wallet, units: usdcUnits(eff), withdrawNonce: await withdrawNonce(signer, d), now: clock() });
   return {
