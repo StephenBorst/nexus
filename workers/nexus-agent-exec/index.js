@@ -16,6 +16,7 @@ import * as ed from "@noble/ed25519";
 import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
 import { nextPaperHead, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
+import { runKill } from "./killSwitch.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload } from "./logic.mjs";
@@ -533,17 +534,22 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
   // Kill switch — honored via a DEDICATED agent:kill key (set by lab-api) so an
   // emergency stop can never be lost to a state-write race. Legacy in-flight
   // state.kill_requested is still respected for backward compatibility.
+  // Close first (with the key), then stop + delete the key: killSwitch.mjs.
   if (killRaw || state.kill_requested) {
-    if (state.current_position) {
-      await closePosition(address, state, config, env, "KILLED", cache);
-    }
-    state.active = false;
-    state.kill_requested = false;
-    state.current_position = null;
-    await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
-    await env.NEXUS_AGENT.delete(`agent:kill:${address}`); // consume the flag
-    await env.NEXUS_AGENT.delete(`agent:directive:${address}`); // kill cancels any armed directive
-    console.log(`[exec] ${address.slice(0, 10)} KILLED`);
+    let killConfig = {};
+    try { killConfig = JSON.parse((await env.NEXUS_AGENT.get(`agent:config:${address}`)) || "{}") || {}; } catch { killConfig = {}; }
+    const r = await runKill({
+      state,
+      io: {
+        close: () => closePosition(address, state, killConfig, env, "KILLED", cache),
+        saveState: (s) => env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(s)),
+        clearFlag: () => env.NEXUS_AGENT.delete(`agent:kill:${address}`),
+        clearDirective: () => env.NEXUS_AGENT.delete(`agent:directive:${address}`),
+        deleteKey: () => env.NEXUS_AGENT.delete(`agent:key:${address}`),
+        notify: (text) => notifyTelegram(address, env, text),
+      },
+    });
+    console.log(`[exec] ${address.slice(0, 10)} KILL ${r.outcome} (attempt ${r.attempts})`);
     return;
   }
 

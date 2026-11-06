@@ -133,6 +133,10 @@ product is what sits on top:
   closes nothing. No auto thresholds: a breaker rule is a read, graded first.
 - **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open. KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.
+- **Kill order** (`nexus-agent-exec/killSwitch.mjs`, lab-api `routes-kill.mjs`, fixed 2026-11-06): the route only sets
+  `agent:kill:{addr}` (and puts the wallet back on `agent:users`); it never deletes the key or the list entry. Exec closes
+  WITH the key, then stops + deletes it. An unconfirmed close keeps flag + key and retries each tick; after
+  `KILL_MAX_ATTEMPTS` (10) it stops anyway, keeps the record and Telegrams the owner to close by hand.
 - **Reconcile:** exec reads the live position first; exchange flat ⇒ clear the stale record. On a read error it manages
   on cached data, never clears.
 - **Modes** (`deriveSignal`, brain `logic.mjs`): CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE (free); MOMENTUM,

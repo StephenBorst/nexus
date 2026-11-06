@@ -112,6 +112,7 @@ import { handleRemoveKey } from "./routes-removekey.mjs";
 import { handleSession } from "./routes-session.mjs";
 import { handleKey } from "./routes-key.mjs";
 import { wantsV2, v2Signer, hasV2Key, storedKeySigner } from "./tradingSigner.mjs";
+import { handleAgentKill } from "./routes-kill.mjs";
 import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, answer as withdrawAnswer } from "./withdrawV2.mjs";
 import { v1RegisterOff, v1RegistrationRefusal, bankrRegisterV2Refusal, registerPageV2Html } from "./v1Registration.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
@@ -5296,6 +5297,8 @@ document.getElementById("btn").addEventListener("click",go);
           const encryptedKey = await encryptSecret(tradingKey, env);
           await AGENT_KV.put(`agent:key:${address}`, JSON.stringify({ tradingKey: encryptedKey, accountId, registeredAt: Date.now(), enc: "v1" }));
         }
+        // Re-activating cancels a pending kill (same as bankr/activate); a stale flag would stop it next tick.
+        await AGENT_KV.delete(`agent:kill:${address}`);
         const existingState = await AGENT_KV.get(`agent:state:${address}`);
         const state = existingState ? JSON.parse(existingState) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), started_at: Date.now(), current_position: null, last_signal: null };
         state.active = true;
@@ -5364,17 +5367,10 @@ document.getElementById("btn").addEventListener("click",go);
         // static sig. No-op unless AUTH_V2 is on.
         const deniedV2 = await requireOwnerV2(env, request, { action: "agent.kill", wallet: address, nonce: kbody.nonce, v2Sig: kbody.v2Sig });
         if (deniedV2) return deniedV2;
-        // Emergency stop must be un-clobberable. Write a DEDICATED kill flag the
-        // exec consumes + clears — never rely on a state field the exec also
-        // rewrites every minute (that write could race and drop the kill).
-        await AGENT_KV.put(`agent:kill:${address}`, "1");
-        await AGENT_KV.delete(`agent:key:${address}`);
-        const usersRaw = await AGENT_KV.get("agent:users");
-        if (usersRaw) {
-          const users = JSON.parse(usersRaw).filter((u) => u !== address);
-          await AGENT_KV.put("agent:users", JSON.stringify(users));
-        }
-        return json({ ok: true, message: "Kill switch activated" }, request);
+        // Emergency stop must be un-clobberable: a DEDICATED kill flag the exec consumes +
+        // clears. The key + agent:users entry stay so exec can close first (routes-kill.mjs).
+        const k = await handleAgentKill({ kv: AGENT_KV, address });
+        return json(k.body, request);
       }
 
       // ── POST /agent/:address/directive — arm a directional "trade my thesis"
