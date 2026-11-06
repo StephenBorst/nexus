@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   oiDivReversalEvents, sessionMomentumEvents, levelReclaimEvents, confluenceFollowEvents,
   oiDivReversal4hEvents, oiCoilBreakEvents, EXPLORER_GENS, OI_DIV, OI_DIV_4H, OI_COIL, CONFLUENCE,
+  sessionFadeEvents, levelReclaimTightEvents, spotAbsorbEvents, LEVEL_TIGHT, SPOT_ABSORB, SESSION,
 } from "./explorerReads.mjs";
 import { AXES } from "./axisbt.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
@@ -20,7 +21,7 @@ test("an explorer is on the scoreboard only once registered, and every registrat
   const registered = new Set(REGISTERED_READS.map((r) => r.axis));
   for (const n of Object.keys(EXPLORER_GENS)) assert.ok(!graded.has(n) || registered.has(n), `${n} is graded but not registered`);
   for (const n of registered) assert.ok(graded.has(n), `${n} is registered but not on the scoreboard`);
-  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_momentum"]);
+  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "level_reclaim_tight", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_fade", "session_momentum", "spot_absorb"]);
   assert.ok(!("vol_breakout" in EXPLORER_GENS), "dropped for v1");
 });
 
@@ -123,7 +124,17 @@ function tape(n, seed = 7) {
     candleHist.push({ t: T0 + i * H, o, h: hi, l: lo, c: p, v: 1 });
     oiHist.push({ t: T0 + i * H + 120000, price: p, oi, funding: (rnd() - 0.5) * 0.0006 });
   }
-  return { oiHist, candleHist };
+  // perp + spot CVD rows on their own generator, so the tape the older reads see is unchanged; OI is
+  // flattened on every fifth day so spot_absorb's "OI flat" condition can occur.
+  let f = (seed * 7919) >>> 0;
+  const frnd = () => { f = (f * 1103515245 + 12345) >>> 0; return f / 2 ** 32; };
+  const cvdHist = [], spotCvdHist = [];
+  for (let i = 0; i < n; i++) {
+    cvdHist.push({ t: T0 + i * H + 300000, buy: Math.round(frnd() * 100), sell: Math.round(frnd() * 100) });
+    spotCvdHist.push({ t: T0 + i * H + 300000, buy: Math.round(frnd() * 100), sell: Math.round(frnd() * 100) });
+  }
+  for (const r of oiHist) if (Math.floor((r.t - T0) / H / 24) % 5 === 0) r.oi = 1000;
+  return { oiHist, candleHist, cvdHist, spotCvdHist };
 }
 
 test("no lookahead: for every read, the future never changes past events", () => {
@@ -137,6 +148,8 @@ test("no lookahead: for every read, the future never changes past events", () =>
       const poisoned = {
         oiHist: full.oiHist.map((r) => (r.t > cut ? { ...r, price: r.price * 3, oi: r.oi * 0.1, funding: -r.funding } : r)),
         candleHist: full.candleHist.map((c) => (c.t + H > cut ? { ...c, o: c.o * 3, h: c.h * 3, l: c.l * 0.2, c: c.c * 0.3 } : c)),
+        cvdHist: full.cvdHist.map((r) => (r.t > cut ? { ...r, buy: r.sell * 9, sell: r.buy } : r)),
+        spotCvdHist: full.spotCvdHist.map((r) => (r.t > cut ? { ...r, buy: r.sell, sell: r.buy * 9 } : r)),
       };
       const before = (evs) => evs.filter((e) => e.t <= cut).map((e) => `${e.t}|${e.side}`);
       assert.deepEqual(before(gen(poisoned, null, {})), before(all), `${name} looked past ${cutH}h`);
@@ -188,3 +201,106 @@ test("oi_coil_break (registered 2026-10-27, OI +3%): OI builds into a flat tape,
   assert.deepEqual({ oiBuild: OI_COIL.oiBuild, flatPct: OI_COIL.flatPct, breakWithinH: OI_COIL.breakWithinH, cooldownH: OI_COIL.cooldownH }, { oiBuild: 0.03, flatPct: 0.3, breakWithinH: 12, cooldownH: 24 });
 });
 
+
+// ── Batch 3 (registered 2026-11-06) ───────────────────────────────────────────────────────────
+
+test("session_fade (registered 2026-11-06): session_momentum's exact events, the other side, one code path", () => {
+  const t = tape(1600);
+  const mom = sessionMomentumEvents(t), fade = sessionFadeEvents(t);
+  assert.ok(mom.length > 0);
+  assert.deepEqual(fade.map((e) => e.t), mom.map((e) => e.t));
+  assert.ok(fade.every((e, i) => e.side !== mom[i].side && ["LONG", "SHORT"].includes(e.side)));
+  assert.deepEqual(SESSION, { openUtcH: 13, spanH: 2, lookbackDays: 30, minDays: 20 }, "the signed window is session_momentum's");
+});
+
+// level_reclaim's hand-built LONG (explorerReads.test above), after `days` days of `prefix` bars
+function reclaimAfter(prefixDays, prefix) {
+  const bars = [];
+  const P = prefixDays * 24;
+  for (let i = 0; i < P; i++) bars.push(candle(i, ...prefix));
+  for (let i = P; i < P + 5 * 24; i++) bars.push(candle(i, 100, 101, 99, 100));
+  const d5 = P + 5 * 24;
+  bars.push(candle(d5, 100, 100.2, 98.0, 98.4));
+  bars.push(candle(d5 + 1, 98.4, 99.5, 98.3, 99.3));
+  for (let i = d5 + 2; i < d5 + 24; i++) bars.push(candle(i, 99.3, 99.6, 99.1, 99.3));
+  return { bars, entryT: T0 + (d5 + 2) * H };
+}
+
+test("level_reclaim_tight (registered 2026-11-06): the reclaim is taken when the coin is calm for itself, not when it's wild", () => {
+  assert.deepEqual(LEVEL_TIGHT, { maxRank: 0.5, lookbackH: 30 * 24, stepH: 6, minSamples: 60 });
+  // after a wild month the 2% range is calm for this coin → taken
+  const calmNow = reclaimAfter(30, [100, 110, 90, 100]);
+  const base = levelReclaimEvents({ candleHist: calmNow.bars }).filter((e) => e.t === calmNow.entryT);
+  assert.equal(base.length, 1);
+  assert.deepEqual(levelReclaimTightEvents({ candleHist: calmNow.bars }).filter((e) => e.t === calmNow.entryT), base);
+  // after a dead-flat month the same 2% range is wild for this coin → left out
+  const wildNow = reclaimAfter(30, [100, 100.05, 99.95, 100]);
+  assert.equal(levelReclaimEvents({ candleHist: wildNow.bars }).filter((e) => e.t === wildNow.entryT).length, 1);
+  assert.equal(levelReclaimTightEvents({ candleHist: wildNow.bars }).filter((e) => e.t === wildNow.entryT).length, 0);
+  // too little history to compare with → nothing (needs 60 samples, 15 days at 6h)
+  const young = reclaimAfter(5, [100, 110, 90, 100]);
+  assert.equal(levelReclaimTightEvents({ candleHist: young.bars }).filter((e) => e.t === young.entryT).length, 0);
+});
+
+test("level_reclaim_tight is always a subset of level_reclaim, same time and side", () => {
+  const t = tape(1600);
+  const all = new Set(levelReclaimEvents(t).map((e) => `${e.t}|${e.side}`));
+  const tight = levelReclaimTightEvents(t);
+  assert.ok(tight.length > 0 && tight.length < all.size, "the tape fires both, and the filter removes some");
+  for (const e of tight) assert.ok(all.has(`${e.t}|${e.side}`));
+});
+
+// 14 days of quiet history, then a 4h window shaped by `last` ({ ret, perp: [buy, sell], spot: [buy, sell], oiCh })
+function absorbTape(last, { hours = 14 * 24 + 24 } = {}) {
+  let s = 11;
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32; };
+  const oiHist = [], cvdHist = [], spotCvdHist = [];
+  for (let i = 0; i < hours; i++) {
+    const k = i - (hours - 4); // 0..3 = the final four hours
+    const inLast = k >= 0;
+    const price = inLast ? 100 * (1 + last.ret * (k + 1) / 4) : 100 + (rnd() - 0.5) * 0.2;
+    const oi = inLast ? 1000 * (1 + last.oiCh) : 1000; // the OI change lands with the window
+    oiHist.push({ t: T0 + i * H + 120000, price, oi, funding: 0 });
+    const pb = inLast ? last.perp : [45 + rnd() * 10, 45 + rnd() * 10];
+    const sb = inLast ? last.spot : [50, 50]; // spot exactly balanced before the window: nothing can fire there
+    cvdHist.push({ t: T0 + i * H + 300000, buy: pb[0], sell: pb[1] });
+    spotCvdHist.push({ t: T0 + i * H + 300000, buy: sb[0], sell: sb[1] });
+  }
+  return { oiHist, cvdHist, spotCvdHist, lastT: oiHist[hours - 1].t };
+}
+
+test("spot_absorb (registered 2026-11-06): a perp-led dip that spot buys, OI flat → LONG; the mirror → SHORT", () => {
+  assert.deepEqual(SPOT_ABSORB, { windowH: 4, minRows: 3, lookbackH: 14 * 24, minHistory: 120, pct: 0.2, oiFlat: 0.01, cooldownH: 12 });
+  // the window shows the dip before its last hour, so the read fires once inside the final 4h (then the 12h cooldown)
+  const inWindow = (x) => spotAbsorbEvents(x).filter((e) => e.t > x.lastT - 4 * H);
+  const longCase = absorbTape({ ret: -0.02, perp: [10, 90], spot: [60, 40], oiCh: 0.002 });
+  assert.deepEqual(inWindow(longCase).map((e) => e.side), ["LONG"]);
+  const shortCase = absorbTape({ ret: 0.02, perp: [90, 10], spot: [40, 60], oiCh: -0.002 });
+  assert.deepEqual(inWindow(shortCase).map((e) => e.side), ["SHORT"]);
+  // nothing in the quiet 14 days before it
+  assert.equal(spotAbsorbEvents(longCase).filter((e) => e.t <= longCase.lastT - 4 * H).length, 0);
+});
+
+test("spot_absorb: spot agreeing with perp, OI building, or no spot series → nothing", () => {
+  const at = (x) => spotAbsorbEvents(x).filter((e) => e.t > x.lastT - 4 * H).length;
+  assert.equal(at(absorbTape({ ret: -0.02, perp: [10, 90], spot: [40, 60], oiCh: 0.002 })), 0, "spot sold too: no absorption");
+  assert.equal(at(absorbTape({ ret: -0.02, perp: [10, 90], spot: [60, 40], oiCh: 0.03 })), 0, "OI built: positions are being added");
+  assert.equal(at(absorbTape({ ret: 0.02, perp: [10, 90], spot: [60, 40], oiCh: 0.002 })), 0, "price rose: perp didn't lead the dip");
+  const noSpot = absorbTape({ ret: -0.02, perp: [10, 90], spot: [60, 40], oiCh: 0.002 });
+  assert.deepEqual(spotAbsorbEvents({ ...noSpot, spotCvdHist: [] }), []);
+  assert.equal(at(absorbTape({ ret: -0.02, perp: [10, 90], spot: [60, 40], oiCh: 0.002 }, { hours: 100 })), 0, "under 120 hours of perp history: nothing");
+});
+
+test("batch 3 registrations: future-dated docs, spot_absorb waits for 14 days of spot data, the holdout's spot series stays off the main card", async () => {
+  const reg = (a) => REGISTERED_READS.find((r) => r.axis === a);
+  assert.equal(reg("session_fade").registeredAt, "2026-11-08T00:00:00Z");
+  assert.equal(reg("level_reclaim_tight").registeredAt, "2026-11-08T00:00:00Z");
+  assert.equal(reg("spot_absorb").registeredAt, "2026-11-20T00:00:00Z");
+  for (const a of ["session_fade", "level_reclaim_tight", "spot_absorb"]) assert.ok(reg(a).holdout && reg(a).gradedExit && !reg(a).paperWallet);
+  const { withoutHoldoutFlow } = await import("./axisbt.mjs");
+  const [kept, emptied] = withoutHoldoutFlow([{ coin: "BTC", spotCvdHist: [1] }, { coin: "SUI", spotCvdHist: [1] }], (c) => c === "SUI");
+  assert.deepEqual([kept.spotCvdHist, emptied.spotCvdHist], [[1], []]);
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  assert.match(src, /readJson\(AGENT_KV, `spotcvd:hist:\$\{coin\}`\)/, "the scoreboard loads the spot series");
+});

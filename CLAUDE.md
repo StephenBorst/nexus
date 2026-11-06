@@ -238,8 +238,8 @@ product is what sits on top:
 - **Reads:** basis (OKX spot-perp, `flow.mjs`), CVD, liq-flush, smart money, OI, book imbalance, RSI reset, vol regime
   (Deribit). Basis ≠ contango: basis is a signal, contango/backwardation is a conditioner. Recorded hourly as
   `basis:hist` / `cvd:hist` / `liq:hist` / `sm:hist` / `oi:hist` / `candle:hist` in `NEXUS_AGENT`.
-  `spotcvd:hist` (spot-book CVD, same fold as `cvd:hist`, from 2026-11-05) is RECORDING ONLY: nothing reads it until a
-  read on it is registered (`docs/research/spot-perp-cvd-draft.md`).
+  `spotcvd:hist` (spot-book CVD, same fold as `cvd:hist`, from 2026-11-05) is read ONLY by the registered `spot_absorb`
+  (loaded into each scoreboard coin set as `spotCvdHist`; emptied for holdout coins on the main card like basis/CVD).
 - **One rule, two users:** traded and graded rules live once in `app/lib/` (`basisFade.mjs`, `basisStack.mjs`,
   `gradedExit.mjs`, `funding.mjs`) and both the brain and the grader import them. Parity tests prove live gate ==
   graded read hour by hour. Same-hour semantics: the LAST row in an hour with a side wins (`sideAtHour`); the price
@@ -260,7 +260,10 @@ product is what sits on top:
   PAPER, RETIRED. Only out-of-sample events (after `registeredAt`) count; back-graded history never does. A changed rule
   = a new name + a new dated registration. Stage triggers = `docs/research/pipeline-if-then.md`, applied one PR per
   trigger from the SERVED stage. Registered reads: rsi_reset_deep, level_reclaim, oi_div_reversal, session_momentum,
-  confluence_follow (from 2026-10-17); oi_div_reversal_4h and oi_coil_break (from 2026-10-28, their own prereg pages). Registered
+  confluence_follow (from 2026-10-17); oi_div_reversal_4h and oi_coil_break (from 2026-10-28, their own prereg pages); batch 3
+  (borst's go 2026-11-06, own prereg pages): `session_fade` (session_momentum's event traded the other way, a NEW read) and
+  `level_reclaim_tight` (level_reclaim only when its H4 ATR ranks ≤ its own 30-day median) from 2026-11-08, `spot_absorb`
+  (perp-led 4h move, spot the other way, OI flat → follow spot) from 2026-11-20. Registered
   bodies live in `explorerReads.mjs`; unregistered drafts in `explorerDraftsB.mjs` (batch 2, `explorer-drafts-b.md`; tests
   fail if a draft is graded or axisbt imports it). A new registration also adds its read to `pipeline-stages.json`.
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.

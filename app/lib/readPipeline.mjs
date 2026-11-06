@@ -90,6 +90,38 @@ export const REGISTERED_READS = Object.freeze([
     gradedExit: true,
     paperWallet: null,
   }),
+  // Batch 3, borst's go 2026-11-06 ("make it all happen"): session_momentum's event traded the other way
+  // (an inverted rule is a NEW read, never a licence from the old one's grade), and level_reclaim taken
+  // only when the coin is quiet for itself. Out-of-sample from 2026-11-08T00:00Z.
+  Object.freeze({
+    axis: "session_fade",
+    side: "BOTH",
+    registeredAt: "2026-11-08T00:00:00Z",
+    doc: "docs/research/session-fade-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
+  Object.freeze({
+    axis: "level_reclaim_tight",
+    side: "BOTH",
+    registeredAt: "2026-11-08T00:00:00Z",
+    doc: "docs/research/level-reclaim-tight-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
+  // Batch 3: the spot vs perp CVD split (spot-perp-cvd-draft.md). spotcvd:hist records from 2026-11-05 and
+  // the rule needs 14 days of it, so it counts from 2026-11-20T00:00Z.
+  Object.freeze({
+    axis: "spot_absorb",
+    side: "BOTH",
+    registeredAt: "2026-11-20T00:00:00Z",
+    doc: "docs/research/spot-absorb-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
 ]);
 
 export const registeredMs = (reg) => Date.parse(reg.registeredAt);

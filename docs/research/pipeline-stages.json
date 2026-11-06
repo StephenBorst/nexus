@@ -37,6 +37,21 @@
       "stage": "REGISTERED",
       "next": "8 more out-of-sample events",
       "events": 22
+    },
+    "session_fade": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
+    },
+    "level_reclaim_tight": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
+    },
+    "spot_absorb": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
     }
   },
   "gradedExit": {

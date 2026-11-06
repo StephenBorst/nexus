@@ -59,6 +59,11 @@ the same block. The full-history row next to it is in-sample.
 |---|---|---|
 | rsi_reset_deep | 2026-10-17T00:00:00Z | `docs/research/rsi-reset-deep-prereg.md` |
 | level_reclaim · oi_div_reversal · session_momentum · confluence_follow | 2026-10-17T00:00:00Z | `docs/research/explorers-prereg.md` |
+| oi_div_reversal_4h | 2026-10-28T00:00:00Z | `docs/research/oi-div-reversal-4h-prereg.md` |
+| oi_coil_break | 2026-10-28T00:00:00Z | `docs/research/oi-coil-break-prereg.md` |
+| session_fade | 2026-11-08T00:00:00Z | `docs/research/session-fade-prereg.md` |
+| level_reclaim_tight | 2026-11-08T00:00:00Z | `docs/research/level-reclaim-tight-prereg.md` |
+| spot_absorb | 2026-11-20T00:00:00Z | `docs/research/spot-absorb-prereg.md` |
 
 The four explorers are two-sided, so each is judged on the pooled random result. vol_breakout was dropped for v1 at
 the power check. Definitions and counts are in `docs/research/explorer-drafts.md`.

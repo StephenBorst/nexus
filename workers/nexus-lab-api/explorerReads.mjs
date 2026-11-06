@@ -11,6 +11,7 @@
 // Inputs: cs.oiHist [{t, price, oi, funding}] (hourly, brain) · cs.candleHist [{t,o,h,l,c,v}] (hourly).
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 import { levelReclaimEvents } from "../../app/lib/levelReclaim.mjs";
+import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 
 const H = 3600000;
 const DAY_H = 24;
@@ -190,7 +191,94 @@ export function oiCoilBreakEvents(cs, _pmap, _ctx, p = OI_COIL) {
   return ev;
 }
 
-// The four registered 2026-10-16 (docs/research/explorers-prereg.md). Labels are the scoreboard's.
+// ── 8 · session_fade — registered 2026-11-06, counts from 2026-11-08T00:00Z ───────────────────────
+// docs/research/session-fade-prereg.md. session_momentum's exact event (the NY open drive, 13:00→15:00 UTC,
+// bigger than its own 30-day median), traded the OTHER way. Not a licence from session_momentum's grade:
+// an inverted rule is a new read, so it is registered and counted only from its own date. One code path
+// with session_momentum (only the side differs), so the two can't drift apart.
+export function sessionFadeEvents(cs, pmap, ctx, p = SESSION) {
+  return sessionMomentumEvents(cs, pmap, ctx, p).map((e) => ({ t: e.t, side: e.side === "LONG" ? "SHORT" : "LONG" }));
+}
+
+// ── 9 · level_reclaim_tight — registered 2026-11-06, counts from 2026-11-08T00:00Z ─────────────────
+// docs/research/level-reclaim-tight-prereg.md. level_reclaim's exact event, taken only when the coin is
+// quiet for itself: its H4 ATR-14 (as a fraction of price, the graded stop's own ruler) at the last
+// CLOSED bar before the event ranks at or below the median of the same measure over the prior 30 days
+// (sampled every 6h, mid-rank, ≥ 60 samples). Coin-relative on purpose, so the holdout's wider coins can
+// fire and replicate it. Why: level-reclaim-exit-gap.md found the read's losses in its widest stops.
+export const LEVEL_TIGHT = Object.freeze({ maxRank: 0.5, lookbackH: MONTH_H, stepH: 6, minSamples: 60 });
+export function levelReclaimTightEvents(cs, pmap, ctx, p = LEVEL_TIGHT) {
+  const evs = levelReclaimEvents(cs, pmap, ctx);
+  if (!evs.length) return [];
+  const cbh = candleMap(cs.candleHist);
+  const atrAt = (hour) => {
+    const hourly = [];
+    for (let h = hour - 80; h <= hour; h++) { const c = cbh.get(h); if (c) hourly.push({ t: Number(c.t) / 1000, h: c.h, l: c.l, c: c.c }); }
+    return h4Atr14Frac(hourly);
+  };
+  const out = [];
+  for (const e of evs) {
+    const h = hourBucket(e.t) - 1; // the reclaim bar (closed at e.t): nothing after it is read
+    const now = atrAt(h);
+    if (!(now > 0)) continue;
+    const prior = [];
+    for (let k = h - p.stepH; k >= h - p.lookbackH; k -= p.stepH) { const x = atrAt(k); if (x > 0) prior.push(x); }
+    if (prior.length < p.minSamples) continue;
+    if (pctRank(prior, now) <= p.maxRank) out.push({ t: e.t, side: e.side });
+  }
+  return out;
+}
+
+// ── 10 · spot_absorb — registered 2026-11-06, counts from 2026-11-20T00:00Z ─────────────────────────
+// docs/research/spot-absorb-prereg.md (from spot-perp-cvd-draft.md). A move led by the PERP book while the
+// SPOT book trades the other way, with open interest flat: spot is absorbing it, so follow spot.
+// Decided at hour h from the last 4 hours (h−3 … h) of both CVD series (cvd:hist = perp, spotcvd:hist =
+// spot, both OKX, the same fold) and the oi:hist price spine:
+//   imbalance = Σ(buy − sell) / Σ(buy + sell) over the window, per book (≥ 3 of the 4 hours present in each);
+//   4h return and 4h OI change on oi:hist (rows at h and h − 4);
+//   LONG:  price down over 4h, perp imbalance in the bottom 20% of its own prior 14 days (mid-rank, ≥ 120
+//          hourly values), spot imbalance > 0, |4h OI change| ≤ 1%.
+//   SHORT: the mirror (price up, perp imbalance in the top 20%, spot imbalance < 0, OI flat).
+// Stamped at the oi:hist row at h. Cooldown 12h per coin. Thresholds fixed before any spot data was graded.
+// Measurement limit (spot-perp-cvd-draft.md): each CVD row is the last ≤100 taker trades in the hour, a
+// sample, not the hour's total. Spot and perp are sampled the same way, so the two are comparable.
+export const SPOT_ABSORB = Object.freeze({ windowH: 4, minRows: 3, lookbackH: 14 * DAY_H, minHistory: 120, pct: 0.2, oiFlat: 0.01, cooldownH: 12 });
+export function spotAbsorbEvents(cs, _pmap, _ctx, p = SPOT_ABSORB) {
+  const flowMap = (rows) => byHour(rows, (r) => Number.isFinite(Number(r.buy)) && Number.isFinite(Number(r.sell)));
+  const perp = flowMap(cs.cvdHist), spot = flowMap(cs.spotCvdHist), m = oiMap(cs.oiHist);
+  if (!perp.size || !spot.size || !m.size) return [];
+  const imb = (map, h) => {
+    let b = 0, s = 0, n = 0;
+    for (let k = h - p.windowH + 1; k <= h; k++) { const r = map.get(k); if (!r) continue; b += Number(r.buy); s += Number(r.sell); n++; }
+    return n >= p.minRows && b + s > 0 ? (b - s) / (b + s) : null;
+  };
+  const hours = [...m.keys()].sort((a, b) => a - b);
+  const perpImb = new Map();
+  for (const h of [...perp.keys()]) { const x = imb(perp, h); if (x != null) perpImb.set(h, x); }
+  const ev = [];
+  let last = -Infinity;
+  for (const h of hours) {
+    if (h - last < p.cooldownH) continue;
+    const a = m.get(h), b = m.get(h - p.windowH);
+    if (!b || !(b.price > 0) || !(Number(a.oi) > 0) || !(Number(b.oi) > 0)) continue;
+    const ret = a.price / b.price - 1, oiCh = Number(a.oi) / Number(b.oi) - 1;
+    if (ret === 0 || !(Math.abs(oiCh) <= p.oiFlat)) continue;
+    const pi = perpImb.get(h), si = imb(spot, h);
+    if (pi == null || si == null) continue;
+    const prior = [];
+    for (let k = h - p.lookbackH; k < h; k++) { const x = perpImb.get(k); if (x != null) prior.push(x); }
+    if (prior.length < p.minHistory) continue;
+    const rank = pctRank(prior, pi);
+    const side = ret < 0 && rank <= p.pct && si > 0 ? "LONG" : ret > 0 && rank >= 1 - p.pct && si < 0 ? "SHORT" : null;
+    if (!side) continue;
+    ev.push({ t: a.t, side });
+    last = h;
+  }
+  return ev;
+}
+
+// The four registered 2026-10-16 (docs/research/explorers-prereg.md), batch 2 (2026-10-27) and batch 3
+// (2026-11-06). Labels are the scoreboard's.
 export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "level_reclaim", label: "Prior-day high/low swept and reclaimed", gen: levelReclaimEvents }),
   Object.freeze({ name: "oi_div_reversal", label: "Extreme 24h move on falling OI, faded", gen: oiDivReversalEvents }),
@@ -200,5 +288,9 @@ export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "oi_div_reversal_4h", label: "Extreme 4h move on falling OI, faded", gen: oiDivReversal4hEvents }),
   // batch 2, registered 2026-10-27 (docs/research/oi-coil-break-prereg.md)
   Object.freeze({ name: "oi_coil_break", label: "OI builds into a flat tape, range break followed", gen: oiCoilBreakEvents }),
+  // batch 3, registered 2026-11-06 (session-fade-prereg.md, level-reclaim-tight-prereg.md, spot-absorb-prereg.md)
+  Object.freeze({ name: "session_fade", label: "NY open drive (13–15 UTC), faded", gen: sessionFadeEvents }),
+  Object.freeze({ name: "level_reclaim_tight", label: "Level reclaim, only when the coin is quiet for itself", gen: levelReclaimTightEvents }),
+  Object.freeze({ name: "spot_absorb", label: "Perp-led move, spot on the other side, OI flat: follow spot", gen: spotAbsorbEvents }),
 ]);
 export const EXPLORER_GENS = Object.freeze(Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.gen])));

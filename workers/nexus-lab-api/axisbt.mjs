@@ -1060,7 +1060,7 @@ export function readOverlap(coinSets, nameA, nameB, { windowH = 24 } = {}) {
 // The main card: any holdout coin already on it (SUI, there for its other reads) keeps those reads
 // but gets its basis + CVD series emptied — exactly what the card saw before they were recorded.
 export function withoutHoldoutFlow(coinSets, isHoldout) {
-  return (coinSets || []).map((cs) => (isHoldout(cs.coin) ? { ...cs, basisHist: [], cvdHist: [] } : cs));
+  return (coinSets || []).map((cs) => (isHoldout(cs.coin) ? { ...cs, basisHist: [], cvdHist: [], spotCvdHist: [] } : cs));
 }
 
 // The holdout line: the holdout coins alone, graded by the same runScorecard on `axes` only.
