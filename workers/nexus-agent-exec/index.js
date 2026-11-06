@@ -17,6 +17,7 @@ import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
 import { nextPaperHead, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
 import { runKill } from "./killSwitch.mjs";
+import { resolveKeyRecord, keyHoldRefusal, keyAlertDue, keyAlertText, isKeyPointer } from "./agentKey.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload } from "./logic.mjs";
@@ -202,6 +203,9 @@ async function decryptTradingKey(stored, env) {
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
   return new TextDecoder().decode(pt);
 }
+
+// What resolveKeyRecord needs to follow a v2 pointer (agentKey.mjs) and open a sealed key.
+const keyIo = (address, env) => ({ address, kv: env.NEXUS_AGENT, decrypt: (sealed) => decryptTradingKey(sealed, env) });
 
 // Sign Orderly API request with a user's delegated trading key.
 //
@@ -401,8 +405,7 @@ async function processTwap(address, env, cache) {
   // Decrypt the order-only key once for this tick's fires.
   const keyRaw = await env.NEXUS_AGENT.get(`twap:key:${address}`);
   if (!keyRaw) { console.error(`[twap] no key for ${address.slice(0, 10)}`); return; }
-  const keyData = JSON.parse(keyRaw);
-  keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+  const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
 
   // Set leverage once, before the first fill of the whole schedule.
   if (twapProgress(state).filled === 0 && state.leverage) {
@@ -470,8 +473,7 @@ async function adoptOrphanPosition(address, state, config, env, _cache) {
   const symbols = config.symbols || [];
   let live = null;
   try {
-    const keyData = JSON.parse(keyRaw);
-    keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+    const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
     // Probe each configured symbol with the SAME singular endpoint the reconcile
     // self-heal uses (proven to work with the order-only key) — the plural
     // /v1/positions returned nothing here. Stop at the first live one (the agent
@@ -523,6 +525,17 @@ async function adoptOrphanPosition(address, state, config, env, _cache) {
   return true;
 }
 
+async function keyExpiryAlert(address, state, env) {
+  const rec = JSON.parse((await env.NEXUS_AGENT.get(`agent:key:${address}`)) || "null");
+  if (!isKeyPointer(rec)) return;
+  const key = JSON.parse((await env.NEXUS_AGENT.get(`v2key:${address}`)) || "null");
+  const a = keyAlertDue({ expiresAt: key?.expiresAt, now: Date.now(), lastAlertDay: state.key_alert_day });
+  if (!a.due) return;
+  state.key_alert_day = a.day;
+  await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
+  await notifyTelegram(address, env, keyAlertText(a));
+}
+
 async function processUser(address, env, cache, liveHalt = { on: false }) {
   const [stateRaw, killRaw] = await Promise.all([
     env.NEXUS_AGENT.get(`agent:state:${address}`),
@@ -559,6 +572,12 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
   const configRaw = await env.NEXUS_AGENT.get(`agent:config:${address}`);
   if (!configRaw) return;
   const config = JSON.parse(configRaw);
+
+  // Auth v2: a live agent on the wallet's 30-day key gets one "rotate your key" alert a day from 3
+  // days out (agentKey.mjs). Reads the key's public fields only; never blocks the tick.
+  if (config.mode !== "PAPER") {
+    try { await keyExpiryAlert(address, state, env); } catch (e) { console.error(`[exec] ${address.slice(0, 10)} key alert:`, e.message); }
+  }
 
   // Daily reset check. Persist immediately when it fires — otherwise the reset
   // only mutates the in-memory state and is lost unless the agent happens to
@@ -865,8 +884,10 @@ async function enterPosition(address, state, config, signal, env, cache) {
   if (!paper) {
     const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
     if (!keyRaw) { console.error(`[exec] no key for ${address.slice(0, 10)}`); return; }
-    keyData = JSON.parse(keyRaw);
-    keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+    keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));    // Auth v2: a 30-day key must outlive the position's max hold, or the agent could be left unable
+    // to close it (agentKey.mjs). v1 keys pass.
+    const keyWhy = keyHoldRefusal({ keyData, now: Date.now(), maxHoldHours: config.maxHoldHours });
+    if (keyWhy) { console.error(`[exec] ${address.slice(0, 10)} entry skipped: ${keyWhy}`); return; }
   }
 
   // ── Portfolio delta cap (PRO) ── Reject an entry that would push the account's
@@ -1083,8 +1104,7 @@ async function monitorPosition(address, state, config, env, cache) {
   const keyRaw = pos.paper ? null : await env.NEXUS_AGENT.get(`agent:key:${address}`);
   if (keyRaw) {
     try {
-      const keyData = JSON.parse(keyRaw);
-      keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+      const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
       const posRes = await orderlyRequest(keyData, "GET", `/v1/position/${pos.symbol}`);
       const liveQty = Math.abs(parseFloat(posRes?.data?.position_qty ?? 0));
       // Grace window: a just-opened position may not have propagated to the position
@@ -1286,8 +1306,7 @@ async function addSafetyOrder(address, state, config, env, so, price) {
     const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
     if (keyRaw) {
       try {
-        const keyData = JSON.parse(keyRaw);
-        keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+        const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
         const r = await orderlyRequest(keyData, "POST", "/v1/order", {
           symbol: pos.symbol, order_type: "MARKET", side, order_quantity: addQty, broker_id: "nexus_trading",
         });
@@ -1343,8 +1362,7 @@ async function partialClose(address, state, config, env, action, cache) {
     const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
     if (keyRaw) {
       try {
-        const keyData = JSON.parse(keyRaw);
-        keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+        const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
         const closeSide = pos.direction === "LONG" ? "SELL" : "BUY";
         const r = await orderlyRequest(keyData, "POST", "/v1/order", {
           symbol: pos.symbol, order_type: "MARKET", side: closeSide,
@@ -1437,8 +1455,7 @@ async function closePosition(address, state, config, env, reason, cache, decisio
       closeConfirmed = true;
       console.warn(`[exec] ${address.slice(0, 10)} no key — cannot place close (reason=${reason}); clearing record`);
     } else {
-      const keyData = JSON.parse(keyRaw);
-      keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+      const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
       const closeSide = pos.direction === "LONG" ? "SELL" : "BUY";
 
       try {
