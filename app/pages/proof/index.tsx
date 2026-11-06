@@ -14,7 +14,7 @@ import FeaturedLead from "./FeaturedLead";
 import { recordShareText, recordShareHref } from "@/lib/recordShare.mjs";
 import Fold from "./Fold";
 import HowWeGrade from "./HowWeGrade";
-import { callsRecordLine, callersLine, PLAIN_WORDS } from "@/lib/proofCopy.mjs";
+import { callsRecordLine, callersLine, PLAIN_WORDS, engineNote } from "@/lib/proofCopy.mjs";
 import SignalBoard, { type Scorecard } from "./SignalBoard";
 import { pressKey } from "@/utils/a11y";
 
@@ -241,8 +241,9 @@ export default function ProofPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {engineRecs.map((e) => {
                   const winPct = e.graded > 0 ? Math.round((e.wins / e.graded) * 100) : 0;
+                  const note = engineNote(e.wallet);
                   return (
-                    <div role="link" tabIndex={0} key={e.wallet} onClick={() => navigate(`/feed/trader/${e.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${e.wallet}`))} style={{ ...rowStyle(true), ...rowM }}>
+                    <div role="link" tabIndex={0} key={e.wallet} onClick={() => navigate(`/feed/trader/${e.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${e.wallet}`))} style={{ ...rowStyle(true), ...rowM, flexWrap: "wrap", rowGap: 4, overflowX: "visible" }}>
                       <span style={{ ...nameCell, display: "flex", alignItems: "center", gap: 8 }}>
                         {e.caller || short(e.wallet)}
                         <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", color: FOG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "0 4px", flexShrink: 0 }}>ENGINE</span>
@@ -250,6 +251,8 @@ export default function ProofPage() {
                       <span style={{ ...statCell, ...statM }}>
                         {e.graded} graded · {winPct}% wins · <span style={{ color: e.netR >= 0 ? POS : NEG }}>{e.netR >= 0 ? "+" : "−"}{Math.abs(e.netR).toFixed(1)}R net</span>
                       </span>
+                      {/* What it trades, in plain words (ENGINE_NOTES, proofCopy.mjs). */}
+                      {note && <span style={{ order: 20, flexBasis: "100%", fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.45, whiteSpace: "normal" }}>{note}</span>}
                     </div>
                   );
                 })}
