@@ -63,3 +63,19 @@ export function twapFitsKey({ now, durationMin, expiresAt }) {
   const end = Number(now) + Number(durationMin) * 60000 + TWAP_KEY_MARGIN_MS;
   return Number.isFinite(end) && Number(expiresAt) > end;
 }
+
+/**
+ * Spec §C on the session path: does this config change need the per-request challenge? Arming
+ * AUTONOMOUS, or raising its `capitalPerTrade` or `leverage`. Lowering, PAPER and ASSISTED never do.
+ * The challenge itself is routes-key.mjs `checkChallenge`, enforced always (not behind AUTH_V2).
+ */
+export function configChallengeNeeded(prev, next) {
+  if (next?.mode !== "AUTONOMOUS") return false;
+  if (prev?.mode !== "AUTONOMOUS") return true;
+  const up = (k) => {
+    const a = Number(prev?.[k]), b = Number(next?.[k]);
+    if (!Number.isFinite(b)) return false;
+    return !Number.isFinite(a) || b > a;
+  };
+  return up("capitalPerTrade") || up("leverage");
+}

@@ -111,10 +111,10 @@ import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } f
 import { revokedWallets, revokedTradingRefusal } from "./revokedTrading.mjs";
 import { handleRemoveKey } from "./routes-removekey.mjs";
 import { handleSession } from "./routes-session.mjs";
-import { handleKey } from "./routes-key.mjs";
+import { handleKey, checkChallenge, Refused as KeyRefused } from "./routes-key.mjs";
 import { wantsV2, v2Signer, hasV2Key, storedKeySigner } from "./tradingSigner.mjs";
 import { handleAgentKill } from "./routes-kill.mjs";
-import { agentOwnerRefusal, v2KeyPointer, twapFitsKey } from "./agentAuth.mjs";
+import { agentOwnerRefusal, v2KeyPointer, twapFitsKey, configChallengeNeeded } from "./agentAuth.mjs";
 import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, answer as withdrawAnswer } from "./withdrawV2.mjs";
 import { v1RegisterOff, v1RegistrationRefusal, bankrRegisterV2Refusal, registerPageV2Html } from "./v1Registration.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
@@ -5012,6 +5012,14 @@ document.getElementById("btn").addEventListener("click",go);
         const r = await agentOwnerRefusal(env, address, body, { recover: recoverEthAddress });
         return r ? json(r.body, request, r.status) : null;
       };
+      // Spec §C on the session path, ALWAYS (not behind AUTH_V2): arming AUTONOMOUS, or raising its
+      // capitalPerTrade / leverage, needs the per-request challenge (GET /auth/challenge) on top of the
+      // session, so a stolen session alone can't go live or size up. null = passed (nonce burned).
+      const sessionChallenge = async (body, action) => {
+        try { await checkChallenge(env, { action, wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig, now: Date.now() }); return null; }
+        catch (e) { if (e instanceof KeyRefused) return json(e.body, request, e.status); throw e; }
+      };
+      const storedConfig = async () => { try { return JSON.parse((await AGENT_KV.get(`agent:config:${address}`)) || "null"); } catch { return null; } };
 
       // GET /agent/:address/parity — LIVE-vs-GRADED parity (public, read-only)
       // Pairs every paper entry with the scoreboard event it traded (same market, side, basis
@@ -5316,6 +5324,9 @@ document.getElementById("btn").addEventListener("click",go);
         if (opv.usesPro && !(await walletIsPro(address, env))) {
           return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
+        if (v2Live && configChallengeNeeded(await storedConfig(), config)) {
+          const ch = await sessionChallenge(body, "agent.activate"); if (ch) return ch;
+        }
         const prevLeadersAct = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         // Keep the public copiers count in sync (activate can also change autocopy).
@@ -5361,6 +5372,9 @@ document.getElementById("btn").addEventListener("click",go);
         if (!opv.ok) return json({ error: opv.error, hint: opv.hint }, request, 400);
         if (opv.usesPro && !(await walletIsPro(address, env))) {
           return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
+        }
+        if (wantsV2(body) && configChallengeNeeded(await storedConfig(), config)) {
+          const ch = await sessionChallenge(body, "agent.config"); if (ch) return ch;
         }
         const prevLeaders = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
@@ -5415,7 +5429,7 @@ document.getElementById("btn").addEventListener("click",go);
         if (mode === "AUTONOMOUS" && body?.confirm !== "GO LIVE") {
           return json({ error: "confirm_required", hint: 'A live directive places a real market order — pass confirm:"GO LIVE". The order-only key cannot withdraw.' }, request, 409);
         }
-        if (mode === "AUTONOMOUS") {
+        if (mode === "AUTONOMOUS" && !wantsV2(body)) { // the session path takes its own challenge below, always
           const deniedV2 = await requireOwnerV2(env, request, { action: "agent.activate", wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig });
           if (deniedV2) return deniedV2;
         }
@@ -5445,6 +5459,7 @@ document.getElementById("btn").addEventListener("click",go);
         if (mode === "AUTONOMOUS" && wantsV2(body)) {
           const link = await v2KeyPointer(env, address);
           if (!link.ok) return json(link.body, request, link.status);
+          const ch = await sessionChallenge(body, "agent.activate"); if (ch) return ch; // a live directive = a real order
           await AGENT_KV.put(`agent:key:${address}`, JSON.stringify(link.record)); // a pointer, never the secret
         } else if (mode === "AUTONOMOUS") {
           const haveKey = await AGENT_KV.get(`agent:key:${address}`);
@@ -5530,7 +5545,8 @@ document.getElementById("btn").addEventListener("click",go);
         }
         // Phase 3 (#14): going live (AUTONOMOUS) arms real-money trading → request-bound
         // v2 on top of confirm + static sig. Sim/assisted modes keep the static-sig gate.
-        if (mode === "AUTONOMOUS") {
+        // The session path takes its own challenge below, always.
+        if (mode === "AUTONOMOUS" && !wantsV2(body)) {
           const deniedV2 = await requireOwnerV2(env, request, { action: "agent.activate", wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig });
           if (deniedV2) return deniedV2;
         }
@@ -5559,6 +5575,9 @@ document.getElementById("btn").addEventListener("click",go);
         if (mode !== "PAPER" && wantsV2(body)) {
           const link = await v2KeyPointer(env, address);
           if (!link.ok) return json(link.body, request, link.status);
+          if (configChallengeNeeded(await storedConfig(), config)) {
+            const ch = await sessionChallenge(body, "agent.activate"); if (ch) return ch;
+          }
           await AGENT_KV.put(`agent:key:${address}`, JSON.stringify(link.record)); // a pointer, never the secret
         } else if (mode !== "PAPER") {
           if (!body?.walletSig) return json({ error: "walletSig required", hint: "Call sign_message('nexus-trading-key-v1') and pass walletSig for live modes." }, request, 400);
@@ -5596,7 +5615,8 @@ document.getElementById("btn").addEventListener("click",go);
           return json({ error: "confirm_required", hint: 'Going live needs confirm:"GO LIVE".' }, request, 409);
         }
         // Phase 3 (#14): flipping live → request-bound v2 (same as activate go-live).
-        if (mode === "AUTONOMOUS") {
+        // The session path takes its own challenge below, always.
+        if (mode === "AUTONOMOUS" && !wantsV2(body)) {
           const deniedV2 = await requireOwnerV2(env, request, { action: "agent.mode", wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig });
           if (deniedV2) return deniedV2;
         }
@@ -5610,6 +5630,9 @@ document.getElementById("btn").addEventListener("click",go);
         if (mode !== "PAPER" && wantsV2(body)) {
           const link = await v2KeyPointer(env, address);
           if (!link.ok) return json(link.body, request, link.status);
+          if (configChallengeNeeded(config, { ...config, mode })) {
+            const ch = await sessionChallenge(body, "agent.mode"); if (ch) return ch;
+          }
           await AGENT_KV.put(`agent:key:${address}`, JSON.stringify(link.record)); // a pointer, never the secret
         } else if (mode !== "PAPER") {
           const haveKey = await AGENT_KV.get(`agent:key:${address}`);
