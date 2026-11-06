@@ -177,8 +177,16 @@ custody agents already have. In exchange, a leaked signature stops being a leake
        is retried, never abandoned. No entry whose `maxHoldHours` ends after `expiresAt` (no max hold = refused);
        a Telegram alert once a UTC day from 3 days out. A TWAP on a v2 key must end 1h before expiry (409
        `key_expires_first`).
-     - Kill: no challenge. The section C challenge (`requireOwnerV2`, its own `AUTH_V2` flag) still guards arming
-       AUTONOMOUS on both paths.
+     - Kill: no challenge. On the v1 path the section C challenge (`requireOwnerV2`, its own `AUTH_V2` flag) still
+       guards arming AUTONOMOUS.
+     - **Follow-up (2026-11-06):** on the SESSION path §C is always on (routes-key `checkChallenge`, not behind
+       `AUTH_V2`): arming AUTONOMOUS (`PUT /agent`, `bankr/activate` → `agent.activate`, `bankr/mode` → `agent.mode`,
+       a live directive → `agent.activate`) or raising its `capitalPerTrade` / `leverage` (`PUT /agent/config` →
+       `agent.config`) needs the challenge, checked after the key and before anything is written
+       (`agentAuth.mjs configChallengeNeeded`). `/v2/key/remove` refuses (409 `agent_position_open` / `twap_active`)
+       while a pointer signs for a live agent position or an active TWAP (`keyInUse.mjs`).
+     - Still open until migration: a v1 `walletSig` can change a v2-pointed agent's config without the challenge
+       (the static signature already controls the agent today). The v1-off mark (step 5) closes it.
    - **3c (built 2026-11-03):** the money flows and registration. `withdrawV2.mjs` + `v1Registration.mjs`.
      - `/proxy/bankr-withdraw`: a wallet that has a `v2key` record withdraws with that key. Bankr signs only the
        `Withdraw`, which must recover to the wallet before anything is sent; the static message is never asked for.

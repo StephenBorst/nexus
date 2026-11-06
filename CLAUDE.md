@@ -394,6 +394,8 @@ product is what sits on top:
   mutations take a session too; going live with one stores a POINTER `{v:2, ref:"v2key"}` in `agent:key` / `twap:key`
   (never the secret) once `v2key:{addr}` is active; exec follows it to the current key (a missing key throws, so closes
   retry), opens nothing whose max hold ends after `expiresAt`, alerts daily from 3 days out; kill has no challenge.
+  Session path, always on: arming AUTONOMOUS or raising capital/leverage needs the §C challenge (`configChallengeNeeded`,
+  `sessionChallenge`); `/v2/key/remove` refuses under a live agent position or active TWAP (`keyInUse.mjs`).
   Next = step 4, the Bankr skill PR.
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
