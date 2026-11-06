@@ -121,3 +121,14 @@ test("PLAIN_WORDS: every tier word the signal board prints has a plain line; no 
   assert.ok(terms.has("R") && terms.has("bps"));
   for (const w of PLAIN_WORDS) assert.doesNotMatch(w.text, /\bproven\b|\bedge\b/i, w.term);
 });
+
+test("engine notes: one per engine wallet in wrangler's ENGINE_CALLER_ADDRESSES, no results promised", async () => {
+  const { ENGINE_NOTES, engineNote } = await import("./proofCopy.mjs");
+  const { readFileSync } = await import("node:fs");
+  const toml = readFileSync(new URL("../../workers/nexus-lab-api/wrangler.toml", import.meta.url), "utf8");
+  const engines = /^ENGINE_CALLER_ADDRESSES = "([^"]+)"/m.exec(toml)[1].split(",").map((a) => a.trim().toLowerCase()).sort();
+  assert.deepEqual(Object.keys(ENGINE_NOTES).sort(), engines);
+  for (const t of Object.values(ENGINE_NOTES)) assert.ok(!/proven|edge|profit|guarantee|win rate/i.test(t), t);
+  assert.equal(engineNote("0xD9F7B3273B504E1473C3FABA6341299D0EC9B449"), ENGINE_NOTES["0xd9f7b3273b504e1473c3faba6341299d0ec9b449"]);
+  assert.equal(engineNote("0xperson"), null);
+});

@@ -413,7 +413,10 @@ product is what sits on top:
   top-level = people, `engines` = the wallets in worker var `ENGINE_CALLER_ADDRESSES` (Engine A, "Ember", the Engine B
   variant); both house callers (`HOUSE_CALLER_ADDRESS`, `HOUSE_CATALYST_ADDRESS`) left out; no copies. Rows carry the
   caller's display name (`caller`) + `engine`; `engineRecords` = each engine's all-time graded record (graded, wins, net R)
-  → /proof's "Our engine callers" fold (losses included, "not a signal service"). A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
+  → /proof's "Our engine callers" fold (losses included, "not a signal service"). Each engine row carries a plain
+  line of what it trades (`ENGINE_NOTES` in proofCopy.mjs, keys pinned to `ENGINE_CALLER_ADDRESSES`). Public names (borst
+  2026-11-06): `0xd9f7…b449` = "Engine A", `0x3b2c…bfe4` = "Ember", `0x493d…c086` = "Ember M" (Ember's breakout track); a
+  name lives in the wallet's own profile (PUT /profile, its Lab signature), never set by us. A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
   (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
   newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
   `signals` (pulse v5, `app/lib/signalProgress.mjs`) = reads served TRADEABLE/PAPER with positive exit net + the paper

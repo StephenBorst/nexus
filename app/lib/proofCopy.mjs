@@ -127,3 +127,14 @@ export const PLAIN_WORDS = Object.freeze([
   Object.freeze({ term: "NOISE", text: "flat or losing. It stays on the board: we publish the misses." }),
   Object.freeze({ term: "ACCRUING", text: "not enough data yet to say." }),
 ]);
+
+// ── Our engine callers, one plain line each (borst, 2026-11-06) ────────────────────────────────────
+// What each engine wallet trades, from its own posted notes, under its record in /proof's engine fold. Keyed by
+// lowercased wallet; every key is an ENGINE_CALLER_ADDRESSES wallet (pinned by proofCopy.test.mjs). Describes the
+// rule only: never a promise about results (the record next to it is the result, losses included).
+export const ENGINE_NOTES = Object.freeze({
+  "0xd9f7b3273b504e1473c3faba6341299d0ec9b449": "Range-shelf reads. Posts only at conviction 70+, so it sits out chop.",
+  "0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4": "Breaks of the prior 24h high or low on the 1h close. One target at 1.5R.",
+  "0x493dc0ce72b8b761844cb25bc17b6aff9a28c086": "Ember’s breakout track, filtered by volume and open interest. Half off at 1.5R, the rest at 3R.",
+});
+export const engineNote = (wallet) => ENGINE_NOTES[String(wallet || "").toLowerCase()] || null;
