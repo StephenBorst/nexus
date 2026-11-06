@@ -113,12 +113,16 @@ export async function buildPulse(env, { now = Date.now(), scorecardKey } = {}) {
   return { ok: true, asOf: new Date(now).toISOString(), windowDays: PULSE_WINDOW_MS / 86400000, ...counts, ...board };
 }
 
+/** The pulse from its 5-minute cache, else built and cached. Shared by the route and the record card. Throws if unbuildable. */
+export async function readPulse(env, { scorecardKey } = {}) {
+  try { const c = await env.LAB_STORE.get(PULSE_CACHE_KEY); if (c) return JSON.parse(c); } catch { /* rebuild */ }
+  const pulse = await buildPulse(env, { scorecardKey });
+  try { await env.LAB_STORE.put(PULSE_CACHE_KEY, JSON.stringify(pulse), { expirationTtl: PULSE_TTL_S }); } catch { /* serve uncached */ }
+  return pulse;
+}
+
 export async function handlePulse(parts, request, env, { scorecardKey } = {}) {
   if (!(parts[0] === "calls" && parts[1] === "pulse" && parts.length === 2)) return null;
   if (request.method !== "GET" && request.method !== "HEAD") return reply({ error: "method not allowed" }, 405);
-  try { const c = await env.LAB_STORE.get(PULSE_CACHE_KEY); if (c) return reply(JSON.parse(c)); } catch { /* rebuild */ }
-  let pulse;
-  try { pulse = await buildPulse(env, { scorecardKey }); } catch { return reply({ ok: false, error: "pulse_unavailable" }, 503); }
-  try { await env.LAB_STORE.put(PULSE_CACHE_KEY, JSON.stringify(pulse), { expirationTtl: PULSE_TTL_S }); } catch { /* serve uncached */ }
-  return reply(pulse);
+  try { return reply(await readPulse(env, { scorecardKey })); } catch { return reply({ ok: false, error: "pulse_unavailable" }, 503); }
 }

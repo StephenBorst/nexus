@@ -25,5 +25,40 @@ export function recordShareText(pulse, now = Date.now()) {
 }
 
 export const RECORD_SHARE_URL = "https://trade.nexustradinglabs.com/proof";
-export const recordShareHref = (text) =>
-  `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(RECORD_SHARE_URL)}`;
+/** X post with the text; `url` defaults to /proof, the record page passes recordShareLink (the picture card). */
+export const recordShareHref = (text, url = RECORD_SHARE_URL) =>
+  `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+
+// ── The record as a picture (GET /og/record.png, routes-recordshare.mjs) ─────────────────────────────
+// Same source and words as the post: pulse counts, people and engines apart, the cleared read's paper COUNT.
+// Counts only, so no green/red on the card (brand: green/red = money only). An unreadable pulse = an honest
+// "counts unavailable" card, never zeros.
+export function recordCard(pulse, now = Date.now()) {
+  const ok = !!pulse && pulse.ok !== false && validBlock(pulse);
+  const stamp = new Date(now).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  if (!ok) return { ok: false, stamp, cols: [], signal: null, noneCleared: false };
+  const col = (label, b) => ({ label, value: `${b.open} open`, sub: gradedText(b, now) });
+  const cols = [col("PEOPLE", pulse)];
+  if (validBlock(pulse.engines)) cols.push(col("OUR ENGINES", pulse.engines));
+  const sg = pulse.headline?.cleared && Array.isArray(pulse.signals) ? pulse.signals.find((x) => x && typeof x.axis === "string") : null;
+  const signal = sg ? {
+    title: `${sg.axis} cleared the bar · ${sg.trades} graded trades`,
+    sub: sg.paper && Number.isFinite(sg.paper.trades) ? `On paper: ${sg.paper.trades} of ${sg.paper.target}. Nothing armed.` : "Paper record next. Nothing armed.",
+  } : null;
+  // "Nothing cleared" only when the board was READ and nothing cleared; an unread board makes no claim either way.
+  const noneCleared = !signal && pulse.headline?.cleared === false;
+  return { ok: true, stamp, cols, signal, noneCleared };
+}
+
+/** A version for the card's URLs: changes when the day or any number on the card changes (X caches by URL). */
+export function recordCardVersion(pulse, now = Date.now()) {
+  const c = recordCard(pulse, now);
+  const s = JSON.stringify([c.stamp, c.cols, c.signal]);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return `${new Date(now).toISOString().slice(0, 10)}-${h.toString(36)}`;
+}
+
+export const RECORD_CARD_PAGE = "https://og.nexustradinglabs.com/share/record";
+/** The share link X unfurls into the card; `v` keeps a new week's numbers from showing last week's image. */
+export const recordShareLink = (pulse, now = Date.now()) => `${RECORD_CARD_PAGE}?v=${encodeURIComponent(recordCardVersion(pulse, now))}`;

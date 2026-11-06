@@ -92,6 +92,7 @@ import { handleVerify, isPublicCall } from "./routes-verify.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
+import { handleRecordShare } from "./routes-recordshare.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg, buildArenaAgentSvg } from "./ogCards.mjs";
 import { loadIdentity, identityCardVersion } from "./identity.mjs";
@@ -995,6 +996,11 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
     {
       const pulseRes = await handlePulse(parts, request, env, { scorecardKey: axisbtCacheKey(20) });
       if (pulseRes) return pulseRes;
+    }
+    // ── /share/record + /og/record(.png) → the week's record as a share card (routes-recordshare.mjs) ─
+    {
+      const recordRes = await handleRecordShare(parts, request, env, { renderPng: renderMonoPng, scorecardKey: axisbtCacheKey(20) });
+      if (recordRes) return recordRes;
     }
 
     // ── /thesis/:wallet/:id/meta → the call page's head tags (routes-callmeta.mjs) ─
