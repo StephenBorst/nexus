@@ -433,7 +433,8 @@ product is what sits on top:
   → /proof's "Our engine callers" fold (losses included, "not a signal service"). Each engine row carries a plain
   line of what it trades (`ENGINE_NOTES` in proofCopy.mjs, keys pinned to `ENGINE_CALLER_ADDRESSES`). Public names (borst
   2026-11-06): `0xd9f7…b449` = "Engine A", `0x3b2c…bfe4` = "Ember", `0x493d…c086` = "Ember M" (Ember's breakout track); a
-  name lives in the wallet's own profile (PUT /profile, its Lab signature), never set by us. A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
+  name lives in the wallet's own profile (PUT /profile, its Lab signature), never set by us. Each row shows "last graded Nd
+  ago" (`lastAt`), so a quiet engine reads as quiet. A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
   (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
   newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
   `signals` (pulse v5, `app/lib/signalProgress.mjs`) = reads served TRADEABLE/PAPER with positive exit net + the paper
@@ -453,6 +454,13 @@ product is what sits on top:
   The trader publishes; nothing auto-posts. No position but a resting limit ENTRY (LIMIT/POST_ONLY, not reduce-only,
   newest) → "Post your ETH limit buy as a call" (`orderCallDraft`): entry = the order's EXACT price (never rounded), counted
   once price trades there like the order; the note says a published call is permanent (cancelling the order won't cancel it).
+- **After publish (2026-11-06):** the Thesis Engine shows "Your BTC long is live." + "𝕏 Share your call" (same links as the
+  card's 𝕏 SHARE: `callShareLinks` in `app/lib/callShare.mjs`, the call's OG page) until "Not now".
+- **Follow → new-call alert (2026-11-06, `followAlerts.mjs`):** after a save commits, each call it published for the first
+  time (`sealed.newlyPublished`; public, not holders-only, not a copy; ≤3 per save) notifies the author's followers (scan of
+  `follows:*`, ≤200 per call) as `followed_call` ("kai posted a call: ETH SHORT", links the AUTHOR's call via
+  `thesisWallet`). Both publish paths (`PUT /lab`, `/theses/index`). Phone push only behind its own topic `following`
+  ("New calls from callers you follow"), OFF by default (`DEFAULT_TOPICS`). Telegram links use `thesisWallet` too.
 - **Folds (2026-11-05):** Lab home's Briefing (`nexus_briefing_collapsed`, folded unless the viewer chose "0") and Board
   (`nx_board_open`) start folded. Spot's Cross-chain card is folded (`nx_xc_open`) but opens itself for a bridge prompt
   (`xcPreset`) or a transfer still moving (`hasTransferInFlight`: tracking only runs while the card is mounted).

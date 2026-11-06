@@ -14,7 +14,7 @@ import { LiveRead } from "./LiveRead";
 import { SimComposer } from "./SimComposer";
 import { cardStyle, labelStyle, navBtnStyle, inputStyle, fieldLabelStyle, STATUS_CONFIG, CLOSED_STATUSES } from "./styles";
 import { splitRunnerStopped, callRR, fmtRR, timeExitLabel } from "@/lib/callMath.mjs";
-import { callShareText } from "@/lib/callShare.mjs";
+import { callShareLinks } from "@/lib/callShare.mjs";
 import { deployToAgent, thesisToAgentConfig, thesisAgentNotice, deployDirectiveFromThesis } from "@/utils/agentPrefill";
 import { formatPnl, chartImageSrc, chartImageList, effectiveStatus, resolveSuggestion, CHART_HOST_HINT, MAX_CHARTS } from "./helpers";
 import { LOSS_REASONS, lossReason } from "@/lib/postmortem.mjs";
@@ -192,11 +192,9 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
               // Share via the worker OG proxy so the per-thesis card unfurls on X/etc
               // (the SPA's JS-injected OG tags are invisible to crawlers). It redirects
               // humans straight to the app page.
-              const url = `https://og.nexustradinglabs.com/share/thesis/${walletAddress.toLowerCase()}/${t.id}`;
               // Graded → the grader's result leads; open → the plan, R:R from the levels (callShare.mjs,
               // NaN-safe: an older/partial call can't crash the card).
-              const text = callShareText(t, tk);
-              const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+              const { xUrl } = callShareLinks(walletAddress, t, tk);
               return (
                 <a href={xUrl} target="_blank" rel="noopener noreferrer" title="Share this call on X"
                   style={{ ...navBtnStyle, fontSize: 10, color: "#a1a1aa", borderColor: "#232327", textDecoration: "none", display: "inline-block", textAlign: "center", minHeight: 36, lineHeight: "22px", padding: "6px 12px" }}>
@@ -991,6 +989,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   const [deployed, setDeployed] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
+  // The call just published: the moment to share it (the post-publish prompt below the form). Cleared on dismiss.
+  const [justPublished, setJustPublished] = useState<ThesisTrade | null>(null);
   const [filter, setFilter] = useState<ThesisStatus | "ALL">("ALL");
   const [markBusy, setMarkBusy] = useState(false);
   const [fundingBusy, setFundingBusy] = useState(false);
@@ -1317,12 +1317,14 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
           onChainTxHash: result.hash,
           ...(result.onChainId !== undefined ? { onChainId: result.onChainId } : {}),
         });
+        setJustPublished({ ...t, isPublic: true });
         setPublished(true);
         setTimeout(() => setPublished(false), 2500);
       }
       // result == null → user rejected the signature: stays private, same as the card toggle.
     } catch {
       makePublic(); // on-chain failed (not rejected) — publish anyway so the feed still works
+      setJustPublished({ ...t, isPublic: true });
       setPublished(true);
       setTimeout(() => setPublished(false), 2500);
     } finally {
@@ -2238,6 +2240,30 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                   />
                 )}
 
+                {/* Post-publish: the call is live, so this is the moment to share it (borst 2026-11-06). Same links
+                    as the card's 𝕏 SHARE (callShareLinks): the OG page unfurls into the call's card. */}
+                {justPublished && walletAddress && (() => {
+                  const tk = bareTicker(justPublished.symbol);
+                  const { xUrl } = callShareLinks(walletAddress, justPublished, tk);
+                  return (
+                    <div role="status" style={{ border: "1px solid #33333a", borderRadius: 6, padding: "12px 12px 10px", marginBottom: 10, background: "#0f0f11" }}>
+                      <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13.5, fontWeight: 600, color: "#f4f4f5" }}>Your {tk} {justPublished.direction === "SHORT" ? "short" : "long"} is live.</div>
+                      <div style={{ marginTop: 4, fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", lineHeight: 1.45 }}>
+                        It’s graded from public price from here, win or lose. Share it now: the grade lands on the same link.
+                      </div>
+                      <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                        <a href={xUrl} target="_blank" rel="noopener noreferrer" className="nx-text-action"
+                          style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600, color: "#0a0a0b", background: "#ededf0", borderRadius: 4, padding: "8px 14px", textDecoration: "none", minHeight: 36, display: "inline-flex", alignItems: "center" }}>
+                          𝕏 Share your call
+                        </a>
+                        <button type="button" onClick={() => setJustPublished(null)} className="nx-text-action"
+                          style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", background: "none", border: "none", padding: "8px 2px", minHeight: 36, cursor: "pointer" }}>
+                          Not now
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {/* Deploy buttons */}
                 {!liveConfirm && liveStatus !== "submitting" && (
                   <>
