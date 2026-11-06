@@ -425,7 +425,10 @@ product is what sits on top:
   scoreboard cache no longer blanks the landing. /proof's FeaturedLead prints the same line under the headline.
   **Caller pipeline:** Lab home's Calls panel turns into "Your first call, in 30 seconds." → the Thesis Engine when no person
   has a call open; /proof's "𝕏 Share this week's record" posts `recordShareText` (`app/lib/recordShare.mjs`: pulse counts,
-  people and engines apart, the cleared read's paper count; unreadable pulse = no link).
+  people and engines apart, the cleared read's paper count; unreadable pulse = no link). The post links
+  `og.nexustradinglabs.com/share/record?v=<day-hash>` (`recordShareLink`), which unfurls into the 1200×630 card
+  `/og/record.png` (`routes-recordshare.mjs`, `recordCard`; counts only, no green/red; an unreadable pulse = an honest
+  "counts unavailable" card that claims nothing about the signals) and forwards people to /proof.
 - **Position → call (Trade, 2026-11-05):** `PositionCallButton.tsx` sits at the right end of the Trade strip, only when the
   wallet holds a position in the market on screen; one tap opens the Thesis Engine with a draft (`app/lib/positionCall.mjs`):
   side from the position, ENTRY = the mark at the tap (never the average open price: a call starts when posted), stop/target

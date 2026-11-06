@@ -36,3 +36,25 @@ test("the X link carries the text and the /proof url", () => {
   assert.ok(href.startsWith("https://twitter.com/intent/tweet?text=a%20b&url="));
   assert.ok(href.includes(encodeURIComponent("https://trade.nexustradinglabs.com/proof")));
 });
+
+test("record card: people and engines as columns, the cleared read's paper count; unreadable = honest card", async () => {
+  const { recordCard, recordCardVersion, recordShareLink } = await import("./recordShare.mjs");
+  const p = { ok: true, open: 0, gradedWeek: 0, last: { at: NOW - 63 * 24 * H }, engines: { open: 1, gradedWeek: 10, last: null },
+    headline: { cleared: true }, signals: [{ axis: "level_reclaim", trades: 48, paper: { trades: 1, target: 30 } }] };
+  const c = recordCard(p, NOW);
+  assert.equal(c.stamp, "Nov 5, 2026");
+  assert.deepEqual(c.cols, [
+    { label: "PEOPLE", value: "0 open", sub: "last graded 63d ago" },
+    { label: "OUR ENGINES", value: "1 open", sub: "10 graded this week" },
+  ]);
+  assert.deepEqual(c.signal, { title: "level_reclaim cleared the bar · 48 graded trades", sub: "On paper: 1 of 30. Nothing armed." });
+  assert.deepEqual(recordCard({ ok: false }, NOW), { ok: false, stamp: "Nov 5, 2026", cols: [], signal: null, noneCleared: false });
+  assert.equal(recordCard({ ...p, headline: { cleared: false }, signals: [] }, NOW).noneCleared, true);
+  assert.equal(recordCard({ ...p, headline: null, signals: [] }, NOW).noneCleared, false, "an unread board claims nothing");
+  // the version moves with the numbers and the day, not with the clock inside a day
+  const v = recordCardVersion(p, NOW);
+  assert.equal(recordCardVersion(p, NOW + 60000), v);
+  assert.notEqual(recordCardVersion({ ...p, open: 1 }, NOW), v);
+  assert.notEqual(recordCardVersion(p, NOW + 24 * H), v);
+  assert.ok(recordShareLink(p, NOW).startsWith("https://og.nexustradinglabs.com/share/record?v=2026-11-05-"));
+});
