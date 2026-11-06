@@ -590,12 +590,6 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
     await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
   }
 
-  // Daily limits check (tested in logic.mjs)
-  const cap = dailyCapBlocked(state, config);
-  if (cap.blocked) {
-    console.log(`[exec] ${address.slice(0, 10)} ${cap.reason}`);
-    return;
-  }
 
   // ── WEBHOOK INTENT (TradingView / external) ───────────
   // The user's OWN signal, consumed once (delete on read) and given priority over
@@ -670,6 +664,16 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
   // if the exchange holds a position the agent lost track of, re-adopt + manage it
   // next tick rather than opening a new one on top. AUTONOMOUS-only.
   if (config.mode === "AUTONOMOUS" && await adoptOrphanPosition(address, state, config, env, cache)) return;
+
+  // Daily limits gate NEW entries only (tested in logic.mjs). They sit below the position monitor and
+  // ghost adoption on purpose: until 2026-11-06 this check ran first, so the day's last allowed trade
+  // (trades_today is bumped at entry) was never monitored again until the 24h reset: no SL, TP or
+  // timeout on a live position.
+  const cap = dailyCapBlocked(state, config);
+  if (cap.blocked) {
+    console.log(`[exec] ${address.slice(0, 10)} ${cap.reason}`);
+    return;
+  }
 
   // Flat: make sure no published feed card is still stuck ACTIVE (zombie cleanup).
   if (PUBLISH_AGENT_FEED) await reconcileStaleFeed(address, env);
