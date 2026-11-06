@@ -107,7 +107,22 @@ export function LabCallsPanel({ onSelectTab }: { onSelectTab?: (tab: TabId) => v
         {list("Open now", merged(pulse?.openCalls, pulse?.engines?.openCalls), "No open calls right now.")}
         {list("Recently graded", merged(pulse?.recentGraded, pulse?.engines?.recentGraded), "Nothing graded yet.")}
       </div>
-      {onSelectTab && (
+      {/* No person has a call open: the empty board becomes the invitation (borst's CEO pass, 2026-11-05). Same
+          Thesis Engine as "Post a call"; nothing is pre-filled and nothing posts until the trader publishes. */}
+      {onSelectTab && pulse && pulse.open === 0 ? (
+        <div style={{ marginTop: 12, padding: isMobile ? "12px 12px" : "14px 16px", border: `1px solid ${C.borderStrong}`, borderRadius: 8, display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", justifyContent: "space-between", gap: isMobile ? 10 : 18 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: UI, fontSize: 14.5, fontWeight: 600, color: C.text.bright }}>Your first call, in 30 seconds.</div>
+            <div style={{ marginTop: 4, fontFamily: UI, fontSize: 13, color: C.text.fog, lineHeight: 1.5 }}>
+              Pick a market and a side. Set entry, stop and target. Publish. It’s graded from public price, win or lose, and it stays up.
+            </div>
+          </div>
+          <button type="button" onClick={() => onSelectTab("thesis")} className="nx-text-action"
+            style={{ flexShrink: 0, alignSelf: isMobile ? "flex-start" : "center", fontFamily: UI, fontSize: 13, fontWeight: 600, color: C.text.bright, background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 6, padding: "9px 14px", minHeight: 40, cursor: "pointer", whiteSpace: "nowrap" }}>
+            Start a call →
+          </button>
+        </div>
+      ) : onSelectTab && (
         <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 6 }}>
           <button type="button" onClick={() => onSelectTab("thesis")} className="nx-text-action"
             style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: C.text.fog, background: "none", border: "none", padding: "6px 0", cursor: "pointer" }}>

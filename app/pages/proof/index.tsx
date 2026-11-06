@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import CarrySleeve from "./CarrySleeve";
 import FeaturedLead from "./FeaturedLead";
+import { recordShareText, recordShareHref } from "@/lib/recordShare.mjs";
 import Fold from "./Fold";
 import HowWeGrade from "./HowWeGrade";
 import { callsRecordLine, callersLine, PLAIN_WORDS } from "@/lib/proofCopy.mjs";
@@ -136,6 +137,7 @@ export default function ProofPage() {
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [proof, setProof] = useState<ProofOfEdge | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
+  const [shareText, setShareText] = useState<string | null>(null);
   const [allCalls, setAllCalls] = useState(false);
   const [minCalls, setMinCalls] = useState(5);
   const [howOpen, setHowOpen] = useState(false);
@@ -150,7 +152,7 @@ export default function ProofPage() {
     fetch(`${API}/agents/leaderboard`).then((r) => r.json()).then((d) => setAgents(Array.isArray(d?.leaderboard) ? d.leaderboard : [])).catch(() => setAgents([]));
     fetch(`${API}/arena/agents`).then((r) => r.json()).then((d) => setArena(Array.isArray(d?.agents) ? d.agents : [])).catch(() => setArena([]));
     fetch(`${API}/desks`).then((r) => r.json()).then((d) => setDesks(Array.isArray(d?.desks) ? d.desks : [])).catch(() => setDesks([]));
-    fetch(`${API}/calls/pulse`).then((r) => r.json()).then((d) => setEngineRecs(Array.isArray(d?.engineRecords) ? d.engineRecords : [])).catch(() => setEngineRecs([]));
+    fetch(`${API}/calls/pulse`).then((r) => r.json()).then((d) => { setEngineRecs(Array.isArray(d?.engineRecords) ? d.engineRecords : []); setShareText(recordShareText(d)); }).catch(() => setEngineRecs([]));
     fetch(`${API}/agents/ledger`).then((r) => r.json()).then(setLedger).catch(() => setLedger(null));
     fetch(`${API}/theses/proof-of-edge`).then((r) => r.json()).then((d) => setProof({ cards: Array.isArray(d?.cards) ? d.cards : [], summary: d?.summary })).catch(() => setProof({ cards: [] }));
     fetch(`${API}/intel/axis-backtest`).then((r) => r.json()).then((d) => setScorecard(Array.isArray(d?.axes) ? d : { axes: [] })).catch(() => setScorecard({ axes: [], failed: true }));
@@ -164,7 +166,7 @@ export default function ProofPage() {
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", padding: isMobile ? "24px 16px 60px" : "40px 24px 80px" }}>
       {/* 1 · THE VERDICT — computed from the served stages (proofHeadline); the bar in one sentence. */}
-      <FeaturedLead isMobile={isMobile} onHowWeGrade={openHow} scorecard={scorecard} />
+      <FeaturedLead isMobile={isMobile} onHowWeGrade={openHow} scorecard={scorecard} shareHref={shareText ? recordShareHref(shareText) : null} />
 
       {/* The words, in plain English, right where they first appear (tooltips can't be hovered on a phone). */}
       <PlainWords isMobile={isMobile} />
