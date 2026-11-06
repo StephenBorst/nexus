@@ -2,6 +2,9 @@
 
 **Status (2026-11-05):** recording only. Nothing grades, shows or trades this.
 
+**Registered 2026-11-06 as `spot_absorb`** (`docs/research/spot-absorb-prereg.md`, out-of-sample from 2026-11-20T00:00Z).
+The rule and its thresholds live on that page; this draft stays as the record of how it was framed.
+
 ## The idea
 
 A move down where perps sell and spot keeps buying, with OI flat. The claim traders make from it: spot demand is
