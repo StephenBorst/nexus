@@ -390,7 +390,11 @@ product is what sits on top:
   withdraw alone. Second switch `AUTH_V1_REGISTER_OFF="true"` (`v1Registration.mjs`, unset): `/proxy/bankr-register` →
   the v2 Bankr registration, `/derive-key` + `/proxy/register-key` → 410, `/register-orderly-key` → the v2 page
   (`GET /v2/session/new` mints the unsigned session). Flip it when the Bankr skill moves (step 4), not before: the skill
-  trades with walletSig. 3b = agent + exec expiry (next).
+  trades with walletSig. Step 3b (built 2026-11-06, same flag, `agentAuth.mjs` + exec `agentKey.mjs`): agent + TWAP
+  mutations take a session too; going live with one stores a POINTER `{v:2, ref:"v2key"}` in `agent:key` / `twap:key`
+  (never the secret) once `v2key:{addr}` is active; exec follows it to the current key (a missing key throws, so closes
+  retry), opens nothing whose max hold ends after `expiresAt`, alerts daily from 3 days out; kill has no challenge.
+  Next = step 4, the Bankr skill PR.
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must
