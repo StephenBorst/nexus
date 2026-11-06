@@ -732,3 +732,22 @@ test("exchangePositionRows: an error is null, never an empty book", () => {
   assert.equal(exchangePositionRows({ success: false, message: "rate limited" }), null);
   assert.equal(exchangePositionRows(null), null);
 });
+
+// ─── Live fills: the exchange's average price, never the mark when Orderly has it (2026-11-06) ──
+import { fillPriceFrom } from "./logic.mjs";
+
+test("fillPriceFrom: a FILLED order books its average executed price", () => {
+  assert.deepEqual(fillPriceFrom({ success: true, data: { status: "FILLED", average_executed_price: 3012.4 } }, 3000), { price: 3012.4, source: "exchange" });
+  assert.deepEqual(fillPriceFrom({ success: true, data: { status: "PARTIAL_FILLED", average_executed_price: "2999.5" } }, 3000), { price: 2999.5, source: "exchange" });
+});
+
+test("fillPriceFrom: anything else falls back to the mark, tagged as such", () => {
+  const cases = [
+    { success: true, data: { status: "NEW", average_executed_price: 0 } },          // not filled yet
+    { success: true, data: { status: "FILLED", average_executed_price: null } },    // no price
+    { success: true, data: { status: "CANCELLED", average_executed_price: 3010 } },
+    { success: false, code: -1103, message: "order not found" },                      // an error answer
+    null, undefined, {},
+  ];
+  for (const c of cases) assert.deepEqual(fillPriceFrom(c, 3000), { price: 3000, source: "mark" });
+});

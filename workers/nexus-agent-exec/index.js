@@ -20,7 +20,7 @@ import { runKill } from "./killSwitch.mjs";
 import { resolveKeyRecord, keyHoldRefusal, keyAlertDue, keyAlertText, isKeyPointer } from "./agentKey.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, twapSliceFailed, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload, exchangePositionQty, exchangePositionRows } from "./logic.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, twapSliceFailed, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload, exchangePositionQty, exchangePositionRows, fillPriceFrom } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const COOLDOWN_MS = 15 * 60 * 1000; // 15 min between trades
@@ -207,6 +207,21 @@ async function decryptTradingKey(stored, env) {
 
 // What resolveKeyRecord needs to follow a v2 pointer (agentKey.mjs) and open a sealed key.
 const keyIo = (address, env) => ({ address, kv: env.NEXUS_AGENT, decrypt: (sealed) => decryptTradingKey(sealed, env) });
+
+// The price a live market order actually filled at (logic.mjs fillPriceFrom), read right after the
+// order: once now, once more ~0.5 s later if Orderly hasn't reported the fill yet. Never throws; an
+// unreadable answer books the fallback (the mark) tagged source "mark".
+async function readFill(keyData, orderId, fallback) {
+  if (!orderId) return { price: fallback, source: "mark" };
+  for (let i = 0; i < 2; i++) {
+    try {
+      const f = fillPriceFrom(await orderlyRequest(keyData, "GET", `/v1/order/${orderId}`), fallback);
+      if (f.source === "exchange") return f;
+    } catch { /* fall through */ }
+    if (i === 0) await new Promise((r) => setTimeout(r, 500));
+  }
+  return { price: fallback, source: "mark" };
+}
 
 // Sign Orderly API request with a user's delegated trading key.
 //
@@ -919,6 +934,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
   }
 
   let orderId = null;
+  let entryFill = { price: markPrice, source: paper ? "paper" : "mark" };
   if (!paper) {
     // Set leverage
     await orderlyRequest(keyData, "POST", "/v1/client/leverage", {
@@ -939,6 +955,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
       return;
     }
     orderId = order.data?.order_id;
+    entryFill = await readFill(keyData, orderId, markPrice);
   }
 
   // Effective TP/SL — fixed config %, or volatility-scaled to recent ATR (opt-in
@@ -973,7 +990,8 @@ async function enterPosition(address, state, config, signal, env, cache) {
   state.current_position = {
     symbol,
     direction: signal.direction,
-    entry_price: markPrice,
+    entry_price: entryFill.price,
+    entry_fill: entryFill.source,
     current_price: markPrice,
     pnl_percent: 0,
     qty,
@@ -1016,8 +1034,8 @@ async function enterPosition(address, state, config, signal, env, cache) {
     // the running blended position; TP is taken off avg_entry, not the base.
     ...(dca ? {
       dca: { ...dca, takeProfitPct: config.tpPercent },
-      base_entry_price: markPrice,
-      avg_entry: markPrice,
+      base_entry_price: entryFill.price,
+      avg_entry: entryFill.price,
       total_qty: qty,
       filled_safety_orders: 0,
     } : {}),
@@ -1310,6 +1328,7 @@ async function addSafetyOrder(address, state, config, env, so, price) {
     return;
   }
   const addQty = snap.qty;
+  let addPrice = price; // live: the safety order's own fill (readFill)
   const side = pos.direction === "LONG" ? "BUY" : "SELL";
   if (!paper) {
     const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
@@ -1320,6 +1339,7 @@ async function addSafetyOrder(address, state, config, env, so, price) {
           symbol: pos.symbol, order_type: "MARKET", side, order_quantity: addQty, broker_id: "nexus_trading",
         });
         if (r && r.success === false) { console.error(`[exec] ${address.slice(0, 10)} DCA SO order failed:`, JSON.stringify(r)); return; }
+        addPrice = (await readFill(keyData, r?.data?.order_id, price)).price;
       } catch (e) { console.error(`[exec] ${address.slice(0, 10)} DCA SO error:`, e.message); return; }
     } else {
       // No key = no order placed: never book a safety order that didn't happen.
@@ -1327,7 +1347,7 @@ async function addSafetyOrder(address, state, config, env, so, price) {
       return;
     }
   }
-  const blended = blendAvg(pos.total_qty, pos.avg_entry, addQty, price);
+  const blended = blendAvg(pos.total_qty, pos.avg_entry, addQty, addPrice);
   pos.avg_entry = blended.newAvg;
   pos.total_qty = blended.newQty;
   pos.remaining_qty = blended.newQty;
@@ -1361,6 +1381,7 @@ async function partialClose(address, state, config, env, action, cache) {
   // Dust guard: if the slice is too small to place, or the leftover would be below
   // the exchange minimum, just close the full remainder as a TP.
   const price = pos.current_price;
+  let slicePrice = price; // live: the slice's own fill (readFill)
   const tooSmallSlice = slice < (pos.base_min || tick) || slice <= 0;
   const leftoverDust = afterRemain > 0 && (afterRemain < (pos.base_min || tick) ||
     (pos.min_notional && afterRemain * price < pos.min_notional));
@@ -1386,6 +1407,7 @@ async function partialClose(address, state, config, env, action, cache) {
           return; // leave the position intact; try again next tick
         }
         sliceOrderId = r?.data?.order_id ?? null;
+        slicePrice = (await readFill(keyData, sliceOrderId, price)).price;
       } catch (e) {
         console.error(`[exec] ${address.slice(0, 10)} partial TP error:`, e.message);
         return;
@@ -1398,14 +1420,14 @@ async function partialClose(address, state, config, env, action, cache) {
   }
 
   // Realize this slice's P&L and advance the ladder state.
-  const { pnlPct, pnlUsdc } = computePnl(pos.direction, pos.entry_price, price, slice);
+  const { pnlPct, pnlUsdc } = computePnl(pos.direction, pos.entry_price, slicePrice, slice);
   state.daily_pnl = (state.daily_pnl || 0) + pnlUsdc;
   pos.remaining_qty = afterRemain;
   pos.tp_hits = [...(pos.tp_hits || []), action.level];
 
   const sliceTrade = {
     symbol: pos.symbol, direction: pos.direction, entry_price: pos.entry_price,
-    exit_price: price, qty: slice, leverage: pos.leverage ?? null, pnl: pnlUsdc, pnl_percent: pnlPct,
+    exit_price: slicePrice, qty: slice, leverage: pos.leverage ?? null, pnl: pnlUsdc, pnl_percent: pnlPct,
     reason: "TP_PARTIAL",
     opened_at: new Date(pos.opened_at).toISOString(), closed_at: new Date().toISOString(),
   };
@@ -1454,6 +1476,7 @@ async function closePosition(address, state, config, env, reason, cache, decisio
   if (!pos) return;
   const paper = !!pos.paper;
   let closeOrderId = null;
+  let closeFill = null; // live: { price, source } of the reduce-only close
   // Paper positions never touched the exchange, so the close is always "confirmed".
   // For real positions this only flips true once Orderly ACCEPTS the reduce-only
   // close — otherwise we must NOT mark the trade closed (see the guard below).
@@ -1492,6 +1515,7 @@ async function closePosition(address, state, config, env, reason, cache, decisio
           console.error(`[exec] ${address.slice(0, 10)} close order REJECTED:`, JSON.stringify(closeOrder).slice(0, 200));
         } else {
           closeOrderId = closeOrder?.data?.order_id ?? null;
+          closeFill = await readFill(keyData, closeOrderId, null);
           closeConfirmed = true;
         }
       } catch (e) {
@@ -1517,7 +1541,9 @@ async function closePosition(address, state, config, env, reason, cache, decisio
   // succeeds with a worse one). LIVE still re-fetches — there the fresh mark is the best
   // proxy for the price the exchange actually filled at.
   let exitPrice = pos.current_price;
-  if (paper && Number.isFinite(decisionPrice) && decisionPrice > 0) {
+  if (!paper && closeFill?.source === "exchange") {
+    exitPrice = closeFill.price; // what the exchange actually filled the close at
+  } else if (paper && Number.isFinite(decisionPrice) && decisionPrice > 0) {
     exitPrice = resolveExitPrice({ paper, decisionPrice, fetchedPrice: exitPrice });
   } else {
     try {

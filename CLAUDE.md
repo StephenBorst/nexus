@@ -427,6 +427,10 @@ product is what sits on top:
   trades stop appearing, that secret is wrong; canary `supabase log failed`). `CREATE POLICY` doesn't enable RLS and
   policies are OR'd: verify, don't assume.
 - Rows carry Orderly `entry_order_id` / `close_order_id`; "auditable insert REJECTED" in exec logs = investigate.
+- **Live rows book the exchange's fill, not the mark** (since 2026-11-06): after each live market order (entry, DCA add,
+  partial TP, close) exec reads `GET /v1/order/{id}` and books `average_executed_price` when FILLED (`fillPriceFrom`,
+  exec `logic.mjs`; `readFill` tries twice ~0.5 s apart), else the mark. The position carries `entry_fill`
+  ("exchange" | "mark" | "paper"). Rows before this date are mark-priced (no slippage shown). Paper is unchanged.
 - `GET /agents/ledger` + chain, anchored on Arbitrum by `NexusLedgerAnchor` `0x57a698df84a44F3dA3dac3E08CA455a55A4eff84`
   (dedicated signer, `ANCHOR_PRIVATE_KEY`). The call-ledger hash has a fixed field list: changing it breaks the chain.
 
