@@ -17,12 +17,12 @@ const CARD = "#141416", LINE = "rgba(255,255,255,0.07)";
 const MIN_SLICE_USD = 10; // mirrors the server's effective slice floor (max(10, min_notional))
 
 type Side = "BUY" | "SELL";
-interface TwapSlice { seq: number; qty: number; notionalEst: number; offsetMs: number; done: boolean; orderId: string | null; error: string | null; firedAt?: number; filledNotional?: number }
+interface TwapSlice { seq: number; qty: number; notionalEst: number; offsetMs: number; done: boolean; skipped?: boolean; attempts?: number; orderId: string | null; error: string | null; firedAt?: number; filledNotional?: number }
 interface TwapState {
   status: "ACTIVE" | "COMPLETE" | "CANCELLED";
   symbol: string; side: Side; leverage: number; totalNotional: number;
   startedAt: number; intervalMs: number; slices: TwapSlice[];
-  progress: { total: number; filled: number; filledNotional: number; remaining: number };
+  progress: { total: number; filled: number; filledNotional: number; remaining: number; skipped?: number };
 }
 
 const bare = (s: string) => s.replace(/^PERP_/, "").replace(/_USDC$/, "");
@@ -121,7 +121,7 @@ export function TwapPanel({ symbol }: { symbol: string }) {
       >
         <span style={{ color: active ? POS : BONE }}>⧗ TWAP execution</span>
         <span style={{ color: FAINT, fontWeight: 400, letterSpacing: 0, fontSize: 11 }}>
-          {active ? `running · ${twap!.progress.filled}/${twap!.progress.total} slices` : `split a ${bare(symbol)} order over time`}
+          {active ? `running · ${twap!.progress.filled}/${twap!.progress.total} slices${twap!.progress.skipped ? ` · ${twap!.progress.skipped} skipped` : ""}` : `split a ${bare(symbol)} order over time`}
         </span>
         <span style={{ marginLeft: "auto", color: FAINT }}>{open ? "▾" : "▸"}</span>
       </button>
@@ -141,13 +141,13 @@ export function TwapPanel({ symbol }: { symbol: string }) {
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
                 {twap!.slices.map((s) => (
-                  <span key={s.seq} title={s.error || (s.done ? `filled ~$${s.filledNotional ?? s.notionalEst}` : "pending")} style={{
+                  <span key={s.seq} title={s.skipped ? `skipped after ${s.attempts ?? 3} rejected tries: ${s.error ?? "rejected"}` : s.error || (s.done ? `filled ~$${s.filledNotional ?? s.notionalEst}` : "pending")} style={{
                     width: 22, height: 22, borderRadius: 2, display: "inline-flex", alignItems: "center", justifyContent: "center",
                     fontFamily: "var(--nx-font-mono)", fontSize: 9,
                     background: s.done ? SIGNAL.posBg : s.error ? STATUS_TINT.warn.bg : C.surfaceAlt,
                     border: `1px solid ${s.done ? POS + "66" : s.error ? WARN + "66" : LINE}`,
                     color: s.done ? POS : s.error ? WARN : FAINT,
-                  }}>{s.done ? "✓" : s.error ? "!" : s.seq + 1}</span>
+                  }}>{s.done ? "✓" : s.skipped ? "×" : s.error ? "!" : s.seq + 1}</span>
                 ))}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

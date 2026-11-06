@@ -683,3 +683,30 @@ test("buildCallbackPayload: missing numerics become null (predictable wire shape
   assert.equal(p.leverage, null);
   assert.equal(p.paper, false);
 });
+
+// ─── TWAP retry cap (2026-11-06) ───────────────────────────────────────────────
+import { twapSliceFailed, TWAP_MAX_ATTEMPTS } from "./logic.mjs";
+
+test("twapSliceFailed: a rejected slice is retried, then skipped after TWAP_MAX_ATTEMPTS", () => {
+  let s = { seq: 0, qty: 0.01, notionalEst: 100, offsetMs: 0, done: false };
+  for (let i = 1; i < TWAP_MAX_ATTEMPTS; i++) {
+    s = twapSliceFailed(s, "-1101");
+    assert.deepEqual([s.attempts, s.skipped, s.done], [i, false, false]);
+  }
+  s = twapSliceFailed(s, "-1101");
+  assert.deepEqual([s.attempts, s.skipped, s.error], [TWAP_MAX_ATTEMPTS, true, "-1101"]);
+});
+
+test("a skipped slice is never due again, and the schedule can complete", () => {
+  const start = 1_000_000;
+  const st = twapState(start);
+  st.slices[0] = { ...st.slices[0], done: true };
+  st.slices[1] = { ...st.slices[1], skipped: true, attempts: TWAP_MAX_ATTEMPTS, error: "x" };
+  let r = twapDueSlices(st, start + 10 * 60_000);
+  assert.deepEqual(r.due.map((x) => x.seq), [2], "the skipped slice is not re-sent");
+  st.slices[2] = { ...st.slices[2], done: true };
+  r = twapDueSlices(st, start + 10 * 60_000);
+  assert.equal(r.complete, true);
+  const p = twapProgress(st);
+  assert.deepEqual([p.filled, p.skipped, p.remaining], [2, 1, 0], "skipped is counted apart from filled");
+});

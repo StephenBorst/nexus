@@ -496,9 +496,18 @@ export function twapDueSlices(state, now) {
     return { due: [], complete: false, remaining: 0 };
   }
   const start = Number(state.startedAt) || 0;
-  const pending = state.slices.filter((s) => !s.done);
+  const pending = state.slices.filter((s) => !s.done && !s.skipped);
   const due = pending.filter((s) => (start + (Number(s.offsetMs) || 0)) <= now);
   return { due, complete: pending.length === 0, remaining: pending.length };
+}
+
+// A slice Orderly keeps rejecting (e.g. -1101, not enough margin) used to be retried every tick
+// forever, so the TWAP never ended. After TWAP_MAX_ATTEMPTS failed tries it is skipped: never sent
+// again, counted as skipped (not filled), and the schedule can complete.
+export const TWAP_MAX_ATTEMPTS = 3;
+export function twapSliceFailed(slice, error) {
+  const attempts = (Number(slice.attempts) || 0) + 1;
+  return { ...slice, attempts, error: String(error || "rejected"), skipped: attempts >= TWAP_MAX_ATTEMPTS };
 }
 
 // Progress summary for the status endpoint / UI: filled vs total children and the
@@ -510,7 +519,8 @@ export function twapProgress(state) {
     total: slices.length,
     filled: filled.length,
     filledNotional: parseFloat(filled.reduce((a, s) => a + (Number(s.filledNotional) || Number(s.notionalEst) || 0), 0).toFixed(2)),
-    remaining: slices.length - filled.length,
+    skipped: slices.filter((s) => s.skipped && !s.done).length,
+    remaining: slices.filter((s) => !s.done && !s.skipped).length,
   };
 }
 
