@@ -630,6 +630,10 @@ product is what sits on top:
 limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw = `0x6F7a…D203` in the body).
 
 ## Perp page (SDK widgets)
+- **SDK = 3.4.0** (all `@orderly.network/*` aligned; `trading-points` stays 2.0.2). Since 3.3 every SDK feature is ON
+  unless explicitly false: **Orderly Predict is OFF** via `features={ORDERLY_FEATURES}` (`app/lib/orderlyFeatures.mjs`,
+  test-pinned). On = borst's product call + a `/predict` route + its own review. After any SDK bump re-check the
+  `Transfer.DepositAndWithdraw` injectable (Other chains tab), the build's amplitude/trim guards, and `features` defaults.
 - `TradingPage`/`MarketsHomePage` are black boxes: only their props. `disableFeatures={["orderBook"]}` (string literal;
   `key` the page on toggle). Restyle scaffold regions via `classNames={{…}}` + CSS with `!important`.
 - PnL posters (`public/pnl/poster_bg_*.png`): keep the left side dark/empty (Orderly overlays text + QR there).
