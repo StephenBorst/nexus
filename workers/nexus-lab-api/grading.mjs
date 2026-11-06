@@ -93,6 +93,8 @@ export function gradedStatusOf(outcome) {
 //       exists on calls published from that day, so no stored stamp was made under another rule.
 //   (no bump, 2026-10-12) a declared split exit (`exitPlan: "SPLIT_50"`, gradeCall). No call published
 //       before carries it, so no stored stamp was made under another rule.
+//   (no bump, 2026-11-06) a declared time stop (`timeStopH`, callMath timeStopPlan). Read only on calls
+//       published from TIME_STOP_FROM_MS, so no stored stamp was made under another rule.
 export const GRADE_V = 3;
 
 // The plan-quality rules that wrote `planScore`/`planFlags`. Plan quality describes the moment of the
@@ -104,7 +106,7 @@ export const isCurrentStamp = (t) => (t?.gradedOutcome === "WIN" || t?.gradedOut
 
 // The fields the hourly pass writes on a public call. When it writes back, it copies ONLY these onto
 // a fresh read of the record, so a save that landed during the pass isn't overwritten.
-const PASS_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "fillState", "filledAt", "tp1HitAt", "planScore", "planFlags", "planV", "regimeTrend", "regimeVol", "regimeAlign", "status"];
+const PASS_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "exitReason", "fillState", "filledAt", "tp1HitAt", "planScore", "planFlags", "planV", "regimeTrend", "regimeVol", "regimeAlign", "status"];
 
 // Where an UNRESOLVED call's entry stands, so a card never shows a live P&L for an order that never
 // filled. "WORKING" = the entry hasn't traded (a resting order); "OPEN" = it has, `filledAt` = the post
@@ -235,12 +237,13 @@ export async function gradePublicTheses(env) {
           t.gradedR = g.r;
           t.gradeV = GRADE_V;
           t.exitedAt = g.exitAt ? g.exitAt * 1000 : null;
+          if (g.exitReason) t.exitReason = g.exitReason; else delete t.exitReason; // "TIME": a declared time stop closed it
           changed = true;
           if (had) regraded++;
           else { graded++; justResolved.push({ t, outcome: g.outcome, r: g.r }); } // corrections aren't announced
         } else if (had) {
           // An old stamp the call's own window doesn't support: it goes, and the call grades live.
-          delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV; delete t.exitedAt;
+          delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV; delete t.exitedAt; delete t.exitReason;
           changed = true; regraded++;
         }
         const before = { fillState: t.fillState, tp1HitAt: t.tp1HitAt };

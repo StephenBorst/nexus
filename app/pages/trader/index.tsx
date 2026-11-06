@@ -10,7 +10,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, copiedExitPlan } from "@/lib/callMath.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, copiedExitPlan, copiedTimeStop, timeExitLabel } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useLabWallet, appendToLab, sendSigned } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -40,6 +40,8 @@ type FeedThesis = {
   takeProfit1: number;
   takeProfit2: number;
   exitPlan?: "SPLIT_50";  // declared split exit (lab-api gradeCall); a copy keeps it
+  timeStopH?: number;     // declared time stop in hours (callMath timeStopPlan); a copy keeps it
+  exitReason?: "TIME";    // server: a declared time stop closed the graded call
   riskReward: number;
   positionSize: number;
   leverage: number;
@@ -207,7 +209,7 @@ function ThesisRow({
             fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.08em",
             padding: "2px 7px", borderRadius: 3,
             background: cfg.bg, border: `1px ${pendingLabel ? "dashed" : "solid"} ${cfg.border}`, color: pendingLabel ? "#a1a1aa" : cfg.color,
-          }}>{pendingLabel ? pendingLabel.toUpperCase() : splitRunnerStopped(thesis) ? "TP1 HIT · RUNNER STOPPED" : cfg.label}</span>
+          }}>{pendingLabel ? pendingLabel.toUpperCase() : timeExitLabel(thesis) ?? (splitRunnerStopped(thesis) ? "TP1 HIT · RUNNER STOPPED" : cfg.label)}</span>
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", whiteSpace: "nowrap" }}>{timeAgo}</span>
 
           {walletAddress && !isOwn && onCopy && (
@@ -357,6 +359,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
         takeProfit1: thesis.takeProfit1, takeProfit2: thesis.takeProfit2,
         // Keep the source's split: TP2 without exitPlan grades as a TP1-only call (callMath copiedExitPlan).
         exitPlan: copiedExitPlan(thesis),
+        timeStopH: copiedTimeStop(thesis), // and its time stop: without it the copy grades a different trade
         riskPercent: parseFloat(riskPct), accountSize: parseFloat(accountSize),
         fundingRate: parseFloat(fundingRate), positionSize: calc.positionSize,
         leverage: calc.leverage, riskReward: calc.riskReward,

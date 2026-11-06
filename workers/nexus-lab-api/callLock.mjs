@@ -39,6 +39,7 @@ export const SERVER_FIELDS = [
   "tp1HitAt",      // grading.mjs applyFillStamp: a declared split's TP1 half closed, runner still open
   "planV",         // grading.mjs PLAN_V: the plan-quality rules that wrote planScore/planFlags
   "exitedAt",      // grading.mjs: the hour a graded call closed (ms), for hold time; null = not derivable
+  "exitReason",    // grading.mjs: "TIME" when a declared time stop closed the call (callMath timeStopPlan)
 ];
 /** The only fields the owner may still change on a published call. */
 export const OWNER_FIELDS = ["updates", "lossReason"];
@@ -181,7 +182,9 @@ export function sealTheses({ prev, incoming, registry, now, ownedElsewhere = new
         // of TP1), and levels missing or on the wrong side of entry (2026-10-23: the Lab form blocked
         // those, the API didn't). Same rules /proxy/thesis-register checks before gas (callMath.mjs).
         : splitPlan(t)?.invalid ? "a split exit needs TP2 beyond TP1"
-        : callInvalidReason(t) ? `the levels can't be graded: ${callInvalidReason(t)}`
+        // validated as of the server's publish time (the time stop is read from calls published from
+        // TIME_STOP_FROM_MS, and createdAt becomes `now` below): an old client createdAt can't skip it
+        : callInvalidReason({ ...t, createdAt: now }) ? `the levels can't be graded: ${callInvalidReason({ ...t, createdAt: now })}`
         : null;
       if (why) {
         refused.push({ id, reason: why });

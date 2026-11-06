@@ -13,7 +13,7 @@
 //   - a split whose runner was stopped says so (splitRunnerStopped).
 //   - plain words, numbers, no adjectives (marketing/VOICE.md).
 
-import { callRR, splitRunnerStopped, callInvalidReason } from "./callMath.mjs";
+import { callRR, splitRunnerStopped, callInvalidReason, timeExitLabel } from "./callMath.mjs";
 import { callLifecycle } from "./callLifecycle.mjs";
 
 export const SITE = "https://trade.nexustradinglabs.com";
@@ -58,7 +58,8 @@ export function callPageMeta(t, { wallet, id, displayName = null, graded = null 
   if (graded && (graded.outcome === "WIN" || graded.outcome === "LOSS") && Number.isFinite(Number(graded.r))) {
     const r = Number(graded.r);
     const runner = splitRunnerStopped({ ...t, gradedOutcome: graded.outcome, gradedR: r });
-    result = runner ? `graded: TP1 hit, runner stopped ${fmtR(r)}` : `graded ${graded.outcome} ${fmtR(r)}`;
+    const timed = timeExitLabel({ ...t, gradedOutcome: graded.outcome, gradedR: r, exitReason: graded.exitReason ?? t?.exitReason });
+    result = timed ? `graded: ${timed.toLowerCase()} ${fmtR(r)}` : runner ? `graded: TP1 hit, runner stopped ${fmtR(r)}` : `graded ${graded.outcome} ${fmtR(r)}`;
   } else {
     // Lifecycle on the levels + fill stamps only: an unstamped grade never counts as closed here.
     const lc = callLifecycle({ ...t, gradedOutcome: undefined, gradedR: undefined, status: "ACTIVE" });

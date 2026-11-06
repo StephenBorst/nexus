@@ -13,7 +13,7 @@ import type { ThesisTrade, ThesisStatus, ProcessedTrade } from "./types";
 import { LiveRead } from "./LiveRead";
 import { SimComposer } from "./SimComposer";
 import { cardStyle, labelStyle, navBtnStyle, inputStyle, fieldLabelStyle, STATUS_CONFIG, CLOSED_STATUSES } from "./styles";
-import { splitRunnerStopped, callRR, fmtRR } from "@/lib/callMath.mjs";
+import { splitRunnerStopped, callRR, fmtRR, timeExitLabel } from "@/lib/callMath.mjs";
 import { callShareText } from "@/lib/callShare.mjs";
 import { deployToAgent, thesisToAgentConfig, thesisAgentNotice, deployDirectiveFromThesis } from "@/utils/agentPrefill";
 import { formatPnl, chartImageSrc, chartImageList, effectiveStatus, resolveSuggestion, CHART_HOST_HINT, MAX_CHARTS } from "./helpers";
@@ -619,7 +619,7 @@ function ThesisAnalyticsSection({ trades }: { trades: ThesisTrade[] }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 9, color: STATUS_CONFIG[effectiveStatus(bestThesis)].color, fontFamily: "var(--nx-font-mono)", letterSpacing: "0.06em" }}>
-                  {splitRunnerStopped(bestThesis) ? "TP1 HIT · RUNNER STOPPED" : STATUS_CONFIG[effectiveStatus(bestThesis)].label}
+                  {timeExitLabel(bestThesis) ?? (splitRunnerStopped(bestThesis) ? "TP1 HIT · RUNNER STOPPED" : STATUS_CONFIG[effectiveStatus(bestThesis)].label)}
                 </div>
               </>
             ) : (
@@ -645,7 +645,7 @@ function ThesisAnalyticsSection({ trades }: { trades: ThesisTrade[] }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 9, color: STATUS_CONFIG[effectiveStatus(worstThesis)].color, fontFamily: "var(--nx-font-mono)", letterSpacing: "0.06em" }}>
-                  {splitRunnerStopped(worstThesis) ? "TP1 HIT · RUNNER STOPPED" : STATUS_CONFIG[effectiveStatus(worstThesis)].label}
+                  {timeExitLabel(worstThesis) ?? (splitRunnerStopped(worstThesis) ? "TP1 HIT · RUNNER STOPPED" : STATUS_CONFIG[effectiveStatus(worstThesis)].label)}
                 </div>
               </>
             ) : (

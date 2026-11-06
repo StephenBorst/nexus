@@ -19,7 +19,7 @@
 // a registration first choose how it is graded.
 //
 // Pure: the routes in index.js do the network and KV calls.
-import { callR, splitPlan, SPLIT_EXIT } from "./logic.mjs";
+import { callR, splitPlan, SPLIT_EXIT, timeStopPlan } from "./logic.mjs";
 import { registryEvents, THESIS_REGISTRY } from "../../app/lib/registryEvent.mjs";
 
 export { THESIS_REGISTRY };
@@ -29,6 +29,9 @@ export const REGISTER_SELECTOR = "ce4d0f18";
 export const PRICE_SCALE = 1_000_000;   // the contract stores prices with 6 decimals
 export const RR_SCALE = 10_000;
 export const SPLIT_TAG = "#SPLIT_50";
+// A declared time stop (callMath timeStopPlan) rides in the notes the same way: `#TIMESTOP_4H`.
+export const timeStopTag = (h) => `#TIMESTOP_${h}H`;
+const TIME_TAG_RE = /#TIMESTOP_(\d{1,3})H/;
 export const MAX_NOTES_BYTES = 1000;
 export const MAX_SYMBOL_BYTES = 40;
 // A price the 6-decimal scale moves by more than this is refused: the registered level would not
@@ -54,10 +57,11 @@ export function perpSymbol(s) {
 const scaled = (v) => BigInt(Math.round(Number(v) * PRICE_SCALE));
 const unscaled = (b) => Number(b) / PRICE_SCALE;
 
-/** Notes as registered: the caller's text, plus SPLIT_TAG when the call declares a split. */
-export function registeredNotes(notes, exitPlan) {
-  const base = String(notes || "").replace(SPLIT_TAG, "").trim();
-  return exitPlan === SPLIT_EXIT ? (base ? `${base} ${SPLIT_TAG}` : SPLIT_TAG) : base;
+/** Notes as registered: the caller's text, plus SPLIT_TAG / the time-stop tag when the call declares one. */
+export function registeredNotes(notes, exitPlan, timeStopH) {
+  const base = String(notes || "").replace(SPLIT_TAG, "").replace(TIME_TAG_RE, "").replace(/\s+/g, " ").trim();
+  const tags = [exitPlan === SPLIT_EXIT ? SPLIT_TAG : null, timeStopH != null ? timeStopTag(timeStopH) : null].filter(Boolean);
+  return [base, ...tags].filter(Boolean).join(" ");
 }
 
 /**
@@ -90,7 +94,11 @@ export function checkRegistration(p) {
   if (p.exitPlan === SPLIT_EXIT && splitPlan({ ...call, exitPlan: SPLIT_EXIT }).invalid) {
     return bad("bad_split", "A split exit needs takeProfit2 beyond takeProfit1, on the target side of entry.");
   }
-  if (enc.encode(registeredNotes(p.notes, p.exitPlan)).length > MAX_NOTES_BYTES) {
+  if (p.timeStopH != null) {
+    const ts = timeStopPlan({ ...call, exitPlan: p.exitPlan, timeStopH: p.timeStopH, createdAt: Date.now() });
+    if (ts?.invalid) return bad("bad_time_stop", `${ts.reason}.`);
+  }
+  if (enc.encode(registeredNotes(p.notes, p.exitPlan, p.timeStopH)).length > MAX_NOTES_BYTES) {
     return bad("notes_too_long", `notes are stored on-chain; keep them under ${MAX_NOTES_BYTES} bytes.`);
   }
   return null;
@@ -106,7 +114,7 @@ export function encodeRegisterThesis(p) {
   const entry = Number(p.entryPrice), stop = Number(p.stopLoss), tp1 = Number(p.takeProfit1);
   const rr = Math.abs(tp1 - entry) / Math.abs(entry - stop);
   const symB = enc.encode(perpSymbol(p.symbol));
-  const notesB = enc.encode(registeredNotes(p.notes, p.exitPlan));
+  const notesB = enc.encode(registeredNotes(p.notes, p.exitPlan, p.timeStopH));
   const symData = padHex(bytesHex(symB)) || "0".repeat(64);   // an empty string still takes one word here
   const head = 9 * 32;
   const offSym = head, offNotes = head + 32 + symData.length / 2;
@@ -187,13 +195,15 @@ export function provenRegistration({ receipt, input, wallet, registry = THESIS_R
  */
 export function thesisFromRegistration({ call, onChainId }, { txHash, blockTimeMs, id }) {
   const split = String(call.notes).includes(SPLIT_TAG);
+  const timeTag = String(call.notes).match(TIME_TAG_RE);
   const t = {
     id: id || `reg-${String(txHash).toLowerCase().slice(2, 18)}`,
     symbol: call.symbol, direction: call.direction,
     entryPrice: call.entryPrice, stopLoss: call.stopLoss, takeProfit1: call.takeProfit1, takeProfit2: call.takeProfit2,
     ...(split ? { exitPlan: SPLIT_EXIT } : {}),
+    ...(timeTag ? { timeStopH: Number(timeTag[1]) } : {}),
     riskPercent: 0, accountSize: 0, fundingRate: 0,
-    notes: String(call.notes).replace(SPLIT_TAG, "").trim(),
+    notes: String(call.notes).replace(SPLIT_TAG, "").replace(TIME_TAG_RE, "").replace(/\s+/g, " ").trim(),
     createdAt: blockTimeMs,
     positionSize: 0, leverage: 0,
     riskReward: callR(call) ?? 0,

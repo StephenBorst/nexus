@@ -320,6 +320,13 @@ product is what sits on top:
   TP2 short of TP1 = INVALID. Rules in `app/lib/callMath.mjs` (`splitPlan`, `callInvalidReason`, `callRR`).
   LATE_ENTRY flags only calls filled at the post. A copy keeps the source's split (`copiedExitPlan`, both Lab copy
   modals): TP2 without `exitPlan` grades TP1-only, a different trade (+2R vs +0.5R on TP1-then-stop).
+- **Declared time stop** (borst 2026-11-06, `docs/research/engine-ab-time-stop-note-2026-11-06.md`): `timeStopH: N` (whole
+  hours 1–168) frozen at publish like the split, graded by the shared `gradeCall` for ANY caller (`callMath timeStopPlan`;
+  no wallet logic): no TP/SL by bar N's close ⇒ settle at that close, R = move ÷ risk, R > 0 WIN else LOSS, `exitReason:
+  "TIME"` (server field, carried by the pass). Bar 0 = posting hour (at post) / fill hour (resting); TP/SL first in every
+  bar; window in TIME; settles only once a later bar exists. Read only on calls published from `TIME_STOP_FROM_MS`
+  (2026-11-06); refused with a split; on-chain as `#TIMESTOP_<N>H`; copies keep it (`copiedTimeStop`). Engine B's
+  main track declares 4h; Track M declares none. No `GRADE_V` bump.
 - **Cards** read R:R from the levels (`callRR`), show a position only once the entry trades (`callLifecycle.mjs`,
   `AwaitingFill.tsx`), and show NOT GRADED for INVALID. `/feed` carries resolution rows: filter them before treating rows as calls.
 - **One call, one wallet:** the Lab device cache is per wallet (`app/lib/labCache.mjs`); copies held by other wallets
