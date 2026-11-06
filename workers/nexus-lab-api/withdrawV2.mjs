@@ -93,13 +93,38 @@ async function withdrawNonce(signer, deps) {
   return Number(n);
 }
 
-/** Settle PnL, wait, and read free USDC (the code-78 path; same steps as v1). */
+/**
+ * What a code-78 retry may withdraw, from an Orderly GET /v1/positions reply: its account-level
+ * `free_collateral` (what open positions AND open orders leave free) and how many positions are open.
+ * null = unreadable. Not /v1/client/holding: holding is the whole USDC balance, margin included, so a
+ * retry sized from it is refused with the same code 78 (found live on 0xd9f7…b449, 2026-11-06).
+ */
+export function freeCollateralFrom(reply) {
+  if (!reply || reply.success === false) return null;
+  const free = Number(reply?.data?.free_collateral);
+  if (!Number.isFinite(free)) return null;
+  const rows = Array.isArray(reply?.data?.rows) ? reply.data.rows : [];
+  const openPositions = rows.filter((r) => Number(r?.position_qty) !== 0 && Number.isFinite(Number(r?.position_qty))).length;
+  return { free: Math.max(0, free), openPositions };
+}
+
+/** Settle PnL, wait, and read free collateral (the code-78 path). Unreadable = refused, nothing sent. */
 async function settleAndFree(signer, deps) {
   await orderlyCall(signer, "POST", "/v1/settle_pnl", {}, deps);
   await (deps.sleep || ((ms) => new Promise((r) => setTimeout(r, ms))))(SETTLE_WAIT_MS);
-  const h = await orderlyCall(signer, "GET", "/v1/client/holding", null, deps);
-  const row = (h?.data?.holding ?? []).find((x) => x.token === "USDC");
-  return Number(row?.holding ?? row?.available ?? 0);
+  const got = freeCollateralFrom(await orderlyCall(signer, "GET", "/v1/positions", null, deps));
+  if (!got) throw new Refused(502, { ok: false, error: "free_collateral_unread", hint: "Couldn't read free collateral after settling. Nothing was withdrawn; try again." });
+  return got;
+}
+
+/** The refusal when nothing is free, naming what holds the margin. */
+export function insufficientFree({ free, openPositions }) {
+  return {
+    ok: false, error: "insufficient_free_collateral", freeCollateral: free, openPositions, withdrawnAmount: 0,
+    hint: openPositions > 0
+      ? `Free collateral is ${free} USDC: ${openPositions} open position(s) hold the rest. Close them, then withdraw.`
+      : `Free collateral is ${free} USDC after settlement. Open orders hold margin too: cancel them, then withdraw.`,
+  };
 }
 
 const isCode78 = (r) => r?.code === 78 || String(r?.message ?? "").includes("occupied");
@@ -132,19 +157,21 @@ export async function bankrWithdrawV2(signer, { bankrApiKey, amount }, deps = {}
   const first = await signed(units);
   const res = await submit(signer, first.message, first.signature, d);
   if (!isCode78(res)) {
-    return { ok: res?.success === true, auth: "v2", walletAddress: wallet, amount: Number(amount), amountUnits: units, withdrawNonce: first.message.withdrawNonce, keyExpiresInDays: signer.keyExpiresInDays, raw: res };
+    const ok = res?.success === true;
+    return { ok, auth: "v2", walletAddress: wallet, amount: Number(amount), amountUnits: units, withdrawnAmount: ok ? Number(amount) : 0,
+      withdrawNonce: first.message.withdrawNonce, keyExpiresInDays: signer.keyExpiresInDays, raw: res };
   }
-  const free = await settleAndFree(signer, d);
-  const safe = Math.min(Number(amount), Math.max(0, free - SETTLE_BUFFER_USDC));
+  const got = await settleAndFree(signer, d);
+  const safe = Math.min(Number(amount), Math.max(0, got.free - SETTLE_BUFFER_USDC));
   const safeUnits = usdcUnits(safe);
-  if (!safeUnits) {
-    throw new Refused(400, { ok: false, error: "insufficient_free_collateral", freeCollateral: free,
-      hint: "After settlement, free collateral is too low to withdraw. Close open positions or wait for Orderly's daily settlement." });
-  }
+  if (!safeUnits) throw new Refused(400, insufficientFree(got));
   const second = await signed(safeUnits);
   const res2 = await submit(signer, second.message, second.signature, d);
+  const ok2 = res2?.success === true;
+  // withdrawnAmount is what Orderly ACCEPTED: 0 on a refusal, never the amount we tried.
   return {
-    ok: res2?.success === true, auth: "v2", autoSettled: true, walletAddress: wallet, originalAmount: Number(amount), withdrawnAmount: safe, freeCollateral: free,
+    ok: ok2, auth: "v2", autoSettled: true, walletAddress: wallet, originalAmount: Number(amount), attemptedAmount: safe,
+    withdrawnAmount: ok2 ? safe : 0, freeCollateral: got.free, openPositions: got.openPositions,
     keyExpiresInDays: signer.keyExpiresInDays, raw: res2,
   };
 }
@@ -156,10 +183,9 @@ export async function withdrawPrepareV2(signer, { amount, settle }, deps = {}) {
   if (!usdcUnits(amount)) throw new Refused(400, { error: "amount (USDC) required" });
   let eff = Number(amount);
   if (settle) {
-    const free = await settleAndFree(signer, d);
-    eff = Math.min(eff, Math.max(0, free - SETTLE_BUFFER_USDC));
-    if (!usdcUnits(eff)) throw new Refused(400, { ok: false, error: "insufficient_free_collateral", freeCollateral: free,
-      hint: "Free collateral too low to withdraw after settlement. Close positions or wait for the daily settlement cycle." });
+    const got = await settleAndFree(signer, d);
+    eff = Math.min(eff, Math.max(0, got.free - SETTLE_BUFFER_USDC));
+    if (!usdcUnits(eff)) throw new Refused(400, insufficientFree(got));
   }
   const message = withdrawMessage({ wallet: signer.wallet, units: usdcUnits(eff), withdrawNonce: await withdrawNonce(signer, d), now: clock() });
   return {
