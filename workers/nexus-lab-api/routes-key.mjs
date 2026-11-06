@@ -24,6 +24,7 @@ import { withLock, LOCK_KEYS, LockBusy, LockError } from "./lock.mjs";
 import { aesGcmEncrypt, aesGcmDecrypt } from "./seedVault.mjs";
 import { keyPresent } from "./routes-removekey.mjs";
 import bs58 from "bs58";
+import { keyInUse } from "./keyInUse.mjs";
 import {
   BROKER_ID, ORDERLY_CHAIN_ID, ORDERLY_VC, V2_KEY, V2_PENDING, V2_PENDING_TTL_S,
   newKeyMaterial, orderlyKeyOf, addKeyMessage, addKeyTypedData, addKeyRefusal, keyRecord, publicKeyStatus, orderlyHeaders,
@@ -153,6 +154,8 @@ export async function removeKey(env, wallet, { now = Date.now(), fetchImpl = fet
     let rec = null;
     try { rec = JSON.parse((await kv.get(V2_KEY(wallet))) || "null"); } catch { rec = null; }
     if (!rec || rec.v !== 2) return { ok: true, status: "no_key" };
+    const busy = await keyInUse(kv, wallet); // never under a live agent position or a running TWAP (step 3b)
+    if (busy) throw new Refused(409, busy);
     const secret = await aesGcmDecrypt(rec.tradingKey, env.AGENT_ENC_KEY);
     const keys = [...(rec.retired || []), rec.orderlyKey];
     const left = [];

@@ -56,7 +56,7 @@ test("exec checks the paper-only rule before any price read, key read or order",
   const fn = src.slice(src.indexOf("async function enterPosition("));
   const guard = fn.indexOf("gradedExitRefusal(config, paper)");
   assert.ok(guard > 0, "enterPosition must call gradedExitRefusal(config, paper)");
-  for (const later of ["getMarkPrice(", "agent:key:", "orderlyRequest(", "state.current_position ="]) {
+  for (const later of ["getMarkPrice(", "loadKey(", "orderlyRequest(", "state.current_position ="]) {
     const at = fn.indexOf(later);
     assert.ok(at > guard, `${later} must come after the graded-exit guard`);
   }

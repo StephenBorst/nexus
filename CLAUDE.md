@@ -114,7 +114,7 @@ product is what sits on top:
   dedicated `agent:kill:{addr}` (lab-api sets, exec consumes). lab-api GET merges the signal into the state response.
 - **Every mutation** (`PUT /agent`, `PUT /agent/config`, `DELETE`, `kill`, `bankr/activate|mode`, `pending/:id/*`,
   `paper/reset`, `test-signal`, webhook enable/rotate/disable) needs `walletSig` = sign_message('nexus-trading-key-v1')
-  in the JSON BODY, checked by `requireOwner`. Never via query string. Only `GET /agent/:a` (+ read routes) is public.
+  in the JSON BODY, checked by `requireOwner` (or, with `AUTH_V2_KEYS="true"`, a trading `session`: auth v2 3b below). Never via query string. Only `GET /agent/:a` (+ read routes) is public.
   A new mutation without `requireOwner` is a bug.
 - **Keys:** AES-256-GCM at rest under `AGENT_ENC_KEY` (same value on lab-api + exec), `v1:<iv>:<ct>`. Bankr path:
   `seed = SHA-256(walletSigBytes)` → `bs58Encode(seed)`; never address-only. AUTONOMOUS needs `confirm:"GO LIVE"`.
@@ -390,7 +390,12 @@ product is what sits on top:
   withdraw alone. Second switch `AUTH_V1_REGISTER_OFF="true"` (`v1Registration.mjs`, unset): `/proxy/bankr-register` →
   the v2 Bankr registration, `/derive-key` + `/proxy/register-key` → 410, `/register-orderly-key` → the v2 page
   (`GET /v2/session/new` mints the unsigned session). Flip it when the Bankr skill moves (step 4), not before: the skill
-  trades with walletSig. 3b = agent + exec expiry (next).
+  trades with walletSig. Step 3b (built 2026-11-06, same flag, `agentAuthV2.mjs`): agent mutations + `/twap` take a
+  session; a live agent / TWAP stores only a LINK to `v2key:{addr}` (`app/lib/agentKeyExpiry.mjs`), exec loads through
+  it (`nexus-agent-exec/agentKey.mjs`, read fresh each tick), so DEACTIVATE/KILL drop the link and the wallet keeps its
+  key. Exec opens no LIVE position whose max hold + 1h runs past `expiresAt`; AUTONOMOUS gets a daily Telegram from 3
+  days out. Session path: arming AUTONOMOUS or raising capital/leverage needs the challenge; kill + TWAP don't (kill
+  lost `requireOwnerV2` entirely). `/v2/key/remove` refuses under a live agent position or active TWAP (`keyInUse.mjs`).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must

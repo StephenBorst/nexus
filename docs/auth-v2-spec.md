@@ -165,8 +165,23 @@ custody agents already have. In exchange, a leaked signature stops being a leake
      `/cancel`, `/order-status`, `/positions`, `/balance`, `/set-leverage` and `/settle-pnl` take `{walletAddress,
      session}` and sign with the stored key (`tradingSigner.mjs`). The v1 `walletSig` branch is unchanged beside it.
      `/trade` loses the per-trade challenge.
-   - **3b:** the agent. Activation with an active v2 key, exec reading `v2key:{addr}`, the expiry rule (no position
+   - **3b (built 2026-11-06):** the agent. Activation with an active v2 key, exec reading `v2key:{addr}`, the expiry rule (no position
      whose max hold runs past `expiresAt`, an alert from 3 days out), `/twap`, and kill without the challenge.
+     - Every agent mutation and `/twap` take `walletSig` OR `{session}` (`agentAuthV2.mjs agentOwner`); v1 unchanged.
+     - On the session path a live agent stores only a LINK in `agent:key:{addr}` (`{v:2, source:"v2key"}`,
+       `app/lib/agentKeyExpiry.mjs`); a TWAP the same in `twap:key:{addr}`. Exec loads the key through it
+       (`nexus-agent-exec/agentKey.mjs`), reading `v2key:{addr}` fresh each tick, so a rotation is picked up and
+       DEACTIVATE / KILL delete only the link: the wallet keeps its key (one key per wallet, Q2). Activation needs an
+       active key and never makes one (409 `key_required` / `key_expired`).
+     - Expiry: exec opens no LIVE position whose `maxHoldHours` + 1h would run past `expiresAt` (no max hold = refused);
+       activation and a TWAP (`durationMin`) are refused up front on the same rule. AUTONOMOUS agents get one
+       Telegram a day from 3 days out (`keyAlertDue`).
+     - §C on the session path, always: arming AUTONOMOUS, or raising its `capitalPerTrade` / `leverage`, needs the
+       challenge (`agent.activate` / `agent.mode` / `agent.config`). Kill and TWAP take a session only. Kill lost
+       `requireOwnerV2` on both paths.
+     - `/v2/key/remove` refuses while the key signs for a live agent position or an active TWAP (`keyInUse.mjs`).
+     - Still open until migration: a v1 `walletSig` can change a v2-linked agent's config without the challenge
+       (the static signature already controls the agent today). The v1-off mark (step 5) closes it.
    - **3c (built 2026-11-03):** the money flows and registration. `withdrawV2.mjs` + `v1Registration.mjs`.
      - `/proxy/bankr-withdraw`: a wallet that has a `v2key` record withdraws with that key. Bankr signs only the
        `Withdraw`, which must recover to the wallet before anything is sent; the static message is never asked for.

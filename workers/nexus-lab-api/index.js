@@ -112,6 +112,7 @@ import { handleRemoveKey } from "./routes-removekey.mjs";
 import { handleSession } from "./routes-session.mjs";
 import { handleKey } from "./routes-key.mjs";
 import { wantsV2, v2Signer, hasV2Key, storedKeySigner } from "./tradingSigner.mjs";
+import { agentOwner, v2KeyReady, writeV2Link, configChallengeNeeded, armChallenge, Refused as V2Refused } from "./agentAuthV2.mjs";
 import { handleAgentKill } from "./routes-kill.mjs";
 import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, answer as withdrawAnswer } from "./withdrawV2.mjs";
 import { v1RegisterOff, v1RegistrationRefusal, bankrRegisterV2Refusal, registerPageV2Html } from "./v1Registration.mjs";
@@ -4903,7 +4904,8 @@ document.getElementById("btn").addEventListener("click",go);
       const address = parts[1].toLowerCase();
       const TWAP_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const TWAP_ORDERLY = "https://api-evm.orderly.org";
-      const twapOwns = (walletSig) => typeof walletSig === "string" && recoverEthAddress("nexus-trading-key-v1", walletSig) === address;
+      // walletSig, or (AUTH_V2_KEYS="true") a trading session: agentAuthV2.mjs.
+      const twapOwner = (b) => agentOwner(env, address, b, { recover: recoverEthAddress, hint: "start requires walletSig = sign_message('nexus-trading-key-v1') from the wallet's own signer, or a trading session." });
 
       // GET /twap/:address — public status (progress from the same pure summary).
       if (request.method === "GET" && !parts[2]) {
@@ -4916,7 +4918,8 @@ document.getElementById("btn").addEventListener("click",go);
       // POST /twap/:address/start
       if (request.method === "POST" && parts[2] === "start") {
         let body; try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        if (!twapOwns(body?.walletSig)) return json({ error: "walletSig_required", hint: "start requires walletSig = sign_message('nexus-trading-key-v1') from the wallet's own signer." }, request, 401);
+        const who = await twapOwner(body);
+        if (!who.ok) return json(who.body, request, who.status);
         // One active TWAP per wallet (child orders net per symbol/account anyway).
         const existing = await TWAP_KV.get(`twap:${address}`);
         if (existing) { const s = JSON.parse(existing); if (s.status === "ACTIVE") return json({ error: "twap_active", hint: "A TWAP is already running for this wallet — cancel it first." }, request, 409); }
@@ -4936,6 +4939,14 @@ document.getElementById("btn").addEventListener("click",go);
         if (!(markPrice > 0)) return json({ error: `no mark price for ${symbol}` }, request, 400);
         const plan = twapSchedule({ totalNotional, durationMin, slices, side, markPrice, baseTick: info.base_tick, baseMin: info.base_min, minNotional: info.min_notional ?? 10 });
         if (!plan.ok) return json({ error: "unschedulable", reason: plan.reason, hint: "Increase total size, reduce slices, or check the market." }, request, 400);
+        let keyInfo = null;
+        if (who.via === "v2") {
+          // v2: the schedule runs on the wallet's v2 key, and must finish (plus an hour) before it
+          // expires (app/lib/agentKeyExpiry.mjs). No challenge: orders take none (borst 2026-10-31).
+          try { keyInfo = await v2KeyReady(env, address, { holdHours: durationMin / 60 }); }
+          catch (e) { if (e instanceof V2Refused) return json(e.body, request, e.status); throw e; }
+          await writeV2Link(TWAP_KV, `twap:key:${address}`);
+        } else {
         // Provision the order-only key from walletSig (same derivation as the agent;
         // Orderly order-scope only — can trade, never withdraw).
         const recRaw = await env.LAB_STORE.get("user:" + address);
@@ -4945,6 +4956,7 @@ document.getElementById("btn").addEventListener("click",go);
         const secret = await agentSecretFromWalletSig(body.walletSig);
         const encryptedKey = await encryptSecret(secret, env);
         await TWAP_KV.put(`twap:key:${address}`, JSON.stringify({ tradingKey: encryptedKey, accountId: rec.accountId, registeredAt: Date.now(), enc: "v1" }));
+        }
         await TWAP_KV.delete(`twap:cancel:${address}`);
         const state = {
           status: "ACTIVE", startedAt: Date.now(), createdAt: Date.now(),
@@ -4956,13 +4968,14 @@ document.getElementById("btn").addEventListener("click",go);
         const usersRaw = await TWAP_KV.get("twap:users");
         const users = usersRaw ? JSON.parse(usersRaw) : [];
         if (!users.includes(address)) { users.push(address); await TWAP_KV.put("twap:users", JSON.stringify(users)); }
-        return json({ ok: true, twap: { ...state, progress: twapProgress(state) }, note: "TWAP scheduled — the exec cron fires each slice via your order-only key. Cancel anytime; already-filled slices remain your position." }, request);
+        return json({ ok: true, ...(keyInfo || {}), twap: { ...state, progress: twapProgress(state) }, note: "TWAP scheduled — the exec cron fires each slice via your order-only key. Cancel anytime; already-filled slices remain your position." }, request);
       }
 
       // POST /twap/:address/cancel — dedicated flag key (can't race the state write).
       if (request.method === "POST" && parts[2] === "cancel") {
         let body; try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        if (!twapOwns(body?.walletSig)) return json({ error: "walletSig_required" }, request, 401);
+        const who = await twapOwner(body);
+        if (!who.ok) return json(who.body, request, who.status);
         await TWAP_KV.put(`twap:cancel:${address}`, "1", { expirationTtl: 3600 });
         return json({ ok: true, note: "Cancel requested — the next exec tick stops new slices. Already-filled slices remain your position." }, request);
       }
@@ -4984,12 +4997,15 @@ document.getElementById("btn").addEventListener("click",go);
       // force-close its positions. Auth = a personal_sign of "nexus-trading-key-v1"
       // (same sig the skill/web already produce); we ecrecover it and require the
       // recovered address to equal :address. GET reads stay public.
-      const ownsAgent = (walletSig) =>
-        typeof walletSig === "string" && recoverEthAddress("nexus-trading-key-v1", walletSig) === address;
-      const requireOwner = (walletSig) =>
-        ownsAgent(walletSig)
-          ? null
-          : json({ error: "walletSig_required", hint: "This agent action requires walletSig = sign_message('nexus-trading-key-v1') from the agent's own wallet." }, request, 401);
+      // Auth v2 step 3b (agentAuthV2.mjs): a trading session (`session`) proves the wallet too, only
+      // when AUTH_V2_KEYS === "true". `owner(body)` says which path; `requireOwner(body)` just gates.
+      const owner = (b) => agentOwner(env, address, b, { recover: recoverEthAddress });
+      const requireOwner = async (b) => {
+        const o = await owner(b);
+        return o.ok ? null : json(o.body, request, o.status);
+      };
+      // A Refused from the v2 helpers → its JSON reply; anything else rethrows.
+      const v2Reply = (e) => { if (e instanceof V2Refused) return json(e.body, request, e.status); throw e; };
 
       // GET /agent/:address/parity — LIVE-vs-GRADED parity (public, read-only)
       // Pairs every paper entry with the scoreboard event it traded (same market, side, basis
@@ -5115,7 +5131,7 @@ document.getElementById("btn").addEventListener("click",go);
       // The token is a SECRET — returned ONLY here, never on the public GET.
       if (request.method === "POST" && parts[2] === "webhook" && ["enable", "rotate", "disable"].includes(parts[3])) {
         const wbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(wbody.walletSig); if (denied) return denied;
+        const denied = await requireOwner(wbody); if (denied) return denied;
         const metaKey = `agent:webhook_meta:${address}`;
         const prevRaw = await AGENT_KV.get(metaKey);
         const prev = prevRaw ? JSON.parse(prevRaw) : null;
@@ -5152,7 +5168,7 @@ document.getElementById("btn").addEventListener("click",go);
         }
         if (request.method === "POST" && !parts[3]) {
           const b = await request.json().catch(() => ({}));
-          const denied = requireOwner(b.walletSig); if (denied) return denied;
+          const denied = await requireOwner(b); if (denied) return denied;
           if (!b.name || !b.config) return json({ error: "name and config required" }, request, 400);
           const raw = await AGENT_KV.get(key);
           const list = raw ? JSON.parse(raw) : [];
@@ -5165,7 +5181,7 @@ document.getElementById("btn").addEventListener("click",go);
         // POST /agent/:address/strategies/:id/publish {public} — toggle sharing.
         if (request.method === "POST" && parts[3] && parts[4] === "publish") {
           const b = await request.json().catch(() => ({}));
-          const denied = requireOwner(b.walletSig); if (denied) return denied;
+          const denied = await requireOwner(b); if (denied) return denied;
           const raw = await AGENT_KV.get(key);
           const list = raw ? JSON.parse(raw) : [];
           const s = list.find((x) => x.id === parts[3]);
@@ -5181,7 +5197,7 @@ document.getElementById("btn").addEventListener("click",go);
         }
         if (request.method === "DELETE" && parts[3]) {
           const b = await request.json().catch(() => ({}));
-          const denied = requireOwner(b.walletSig); if (denied) return denied;
+          const denied = await requireOwner(b); if (denied) return denied;
           const raw = await AGENT_KV.get(key);
           const list = (raw ? JSON.parse(raw) : []).filter((s) => s.id !== parts[3]);
           await AGENT_KV.put(key, JSON.stringify(list));
@@ -5192,7 +5208,7 @@ document.getElementById("btn").addEventListener("click",go);
       // POST /agent/:address/pending/:id/(deploy|dismiss) — resolve a thesis
       if (request.method === "POST" && parts[2] === "pending" && parts[3] && parts[4]) {
         const pbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(pbody.walletSig); if (denied) return denied;
+        const denied = await requireOwner(pbody); if (denied) return denied;
         const action = parts[4];
         const pendingRaw = await AGENT_KV.get(`agent:pending:${address}`);
         const list = pendingRaw ? JSON.parse(pendingRaw) : [];
@@ -5204,7 +5220,7 @@ document.getElementById("btn").addEventListener("click",go);
       // POST /agent/:address/paper/reset — clear the simulated paper ledger
       if (request.method === "POST" && parts[2] === "paper" && parts[3] === "reset") {
         const prbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(prbody.walletSig); if (denied) return denied;
+        const denied = await requireOwner(prbody); if (denied) return denied;
         const stateRaw = await AGENT_KV.get(`agent:state:${address}`);
         if (!stateRaw) return json({ ok: true, cleared: 0 }, request);
         const state = JSON.parse(stateRaw);
@@ -5241,7 +5257,7 @@ document.getElementById("btn").addEventListener("click",go);
         if (config.mode !== "PAPER") return json({ error: "test-signal only allowed in PAPER mode" }, request, 403);
         let body = {};
         try { body = await request.json(); } catch { /* optional */ }
-        const denied = requireOwner(body?.walletSig); if (denied) return denied;
+        const denied = await requireOwner(body); if (denied) return denied;
         const direction = body?.direction === "SHORT" ? "SHORT" : "LONG";
         const symbol = (config.symbols && config.symbols[0]) || "PERP_BTC_USDC";
         let price = 0;
@@ -5266,12 +5282,16 @@ document.getElementById("btn").addEventListener("click",go);
       if (request.method === "PUT" && !parts[2]) {
         let body;
         try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        const denied = requireOwner(body.walletSig); if (denied) return denied;
+        const who = await owner(body);
+        if (!who.ok) return json(who.body, request, who.status);
+        const viaV2 = who.via === "v2";
         const { config, tradingKey, accountId } = body;
         // PAPER mode is fully simulated — it never places real orders, so no
         // trading key is required or stored.
         const isPaper = config?.mode === "PAPER";
-        if (!config || (!isPaper && !tradingKey)) return json({ error: "config and tradingKey required" }, request, 400);
+        // v2 (session): the agent runs on the wallet's stored v2 key, never on a key from the client.
+        if (viaV2 && tradingKey) return json({ error: "no_client_key", hint: "With a trading session the agent uses this wallet's registered Nexus key. Don't send tradingKey." }, request, 400);
+        if (!config || (!isPaper && !viaV2 && !tradingKey)) return json({ error: "config and tradingKey required" }, request, 400);
         if (config.signalMode && PRO_STRATEGIES.includes(config.signalMode) && !(await walletIsPro(address, env))) {
           return json({ error: "pro_strategy_locked", strategy: config.signalMode, hint: "MOMENTUM and MEAN_REVERSION require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe. Free: CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE." }, request, 402);
         }
@@ -5287,12 +5307,25 @@ document.getElementById("btn").addEventListener("click",go);
         if (opv.usesPro && !(await walletIsPro(address, env))) {
           return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
+        // v2: a live agent needs an active v2 key (a hold that fits before it expires, for AUTONOMOUS),
+        // and arming AUTONOMOUS (or raising its size/leverage) needs the challenge (§C). All checked
+        // before anything is written; the challenge is burned last.
+        let keyInfo = null;
+        if (viaV2 && !isPaper) {
+          let prevCfg = null; try { prevCfg = JSON.parse((await AGENT_KV.get(`agent:config:${address}`)) || "null"); } catch { prevCfg = null; }
+          try {
+            keyInfo = await v2KeyReady(env, address, { holdHours: config.mode === "AUTONOMOUS" ? config.maxHoldHours : null });
+            if (configChallengeNeeded(prevCfg, config)) await armChallenge(env, { action: "agent.activate", address, body });
+          } catch (e) { return v2Reply(e); }
+        }
         const prevLeadersAct = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         // Keep the public copiers count in sync (activate can also change autocopy).
         const cdAct = diffCopyLeaders(prevLeadersAct, config.autocopy?.leaders, address);
         if (cdAct.added.length || cdAct.removed.length) await applyCopiersDiff(env, address, cdAct.added, cdAct.removed).catch((e) => console.error("[copiers] sync", e));
-        if (!isPaper) {
+        if (!isPaper && viaV2) {
+          await writeV2Link(AGENT_KV, `agent:key:${address}`);
+        } else if (!isPaper) {
           // Encrypt the trading key at rest — KV never holds it in plaintext.
           const encryptedKey = await encryptSecret(tradingKey, env);
           await AGENT_KV.put(`agent:key:${address}`, JSON.stringify({ tradingKey: encryptedKey, accountId, registeredAt: Date.now(), enc: "v1" }));
@@ -5306,14 +5339,15 @@ document.getElementById("btn").addEventListener("click",go);
         const usersRaw = await AGENT_KV.get("agent:users");
         const users = usersRaw ? JSON.parse(usersRaw) : [];
         if (!users.includes(address)) { users.push(address); await AGENT_KV.put("agent:users", JSON.stringify(users)); }
-        return json({ ok: true, state }, request);
+        return json({ ok: true, state, ...(keyInfo || {}) }, request);
       }
 
       // PUT /agent/:address/config — update config only
       if (request.method === "PUT" && parts[2] === "config") {
         let body;
         try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        const denied = requireOwner(body.walletSig); if (denied) return denied;
+        const who = await owner(body);
+        if (!who.ok) return json(who.body, request, who.status);
         const { config } = body;
         if (!config) return json({ error: "config required" }, request, 400);
         if (config.signalMode && PRO_STRATEGIES.includes(config.signalMode) && !(await walletIsPro(address, env))) {
@@ -5331,6 +5365,13 @@ document.getElementById("btn").addEventListener("click",go);
         if (opv.usesPro && !(await walletIsPro(address, env))) {
           return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
+        // v2 (§C): arming AUTONOMOUS here, or raising its capitalPerTrade / leverage, needs the challenge.
+        if (who.via === "v2") {
+          let prevCfg = null; try { prevCfg = JSON.parse((await AGENT_KV.get(`agent:config:${address}`)) || "null"); } catch { prevCfg = null; }
+          if (configChallengeNeeded(prevCfg, config)) {
+            try { await armChallenge(env, { action: "agent.config", address, body }); } catch (e) { return v2Reply(e); }
+          }
+        }
         const prevLeaders = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         // Keep the public copiers count in sync with autocopy follow/unfollow.
@@ -5342,7 +5383,7 @@ document.getElementById("btn").addEventListener("click",go);
       // DELETE /agent/:address — deactivate
       if (request.method === "DELETE" && !parts[2]) {
         const dbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(dbody.walletSig); if (denied) return denied;
+        const denied = await requireOwner(dbody); if (denied) return denied;
         await AGENT_KV.delete(`agent:key:${address}`);
         const stateRaw = await AGENT_KV.get(`agent:state:${address}`);
         if (stateRaw) {
@@ -5362,11 +5403,9 @@ document.getElementById("btn").addEventListener("click",go);
       // POST /agent/:address/kill — kill switch
       if (request.method === "POST" && parts[2] === "kill") {
         const kbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(kbody.walletSig); if (denied) return denied;
-        // Phase 3 (#14): kill force-closes positions → request-bound v2 on top of the
-        // static sig. No-op unless AUTH_V2 is on.
-        const deniedV2 = await requireOwnerV2(env, request, { action: "agent.kill", wallet: address, nonce: kbody.nonce, v2Sig: kbody.v2Sig });
-        if (deniedV2) return deniedV2;
+        // walletSig or a trading session. No per-request challenge (borst 2026-10-31, auth v2 spec):
+        // stopping stays cheap. The flag only closes and stops; it can't open or move anything.
+        const denied = await requireOwner(kbody); if (denied) return denied;
         // Emergency stop must be un-clobberable: a DEDICATED kill flag the exec consumes +
         // clears. The key + agent:users entry stay so exec can close first (routes-kill.mjs).
         const k = await handleAgentKill({ kv: AGENT_KV, address });
@@ -5381,13 +5420,15 @@ document.getElementById("btn").addEventListener("click",go);
       if (request.method === "POST" && parts[2] === "directive") {
         let body;
         try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        const denied = requireOwner(body?.walletSig); if (denied) return denied;
+        const who = await owner(body);
+        if (!who.ok) return json(who.body, request, who.status);
+        const viaV2 = who.via === "v2";
 
         const mode = body?.mode === "AUTONOMOUS" ? "AUTONOMOUS" : "PAPER";
         if (mode === "AUTONOMOUS" && body?.confirm !== "GO LIVE") {
           return json({ error: "confirm_required", hint: 'A live directive places a real market order — pass confirm:"GO LIVE". The order-only key cannot withdraw.' }, request, 409);
         }
-        if (mode === "AUTONOMOUS") {
+        if (mode === "AUTONOMOUS" && !viaV2) {
           const deniedV2 = await requireOwnerV2(env, request, { action: "agent.activate", wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig });
           if (deniedV2) return deniedV2;
         }
@@ -5413,8 +5454,18 @@ document.getElementById("btn").addEventListener("click",go);
           } catch { /* corrupt → overwrite below */ }
         }
 
+        // v2: the directive runs on the wallet's v2 key (a hold that fits before it expires) and
+        // arming it live needs the challenge (§C). Checked before anything is written.
+        if (mode === "AUTONOMOUS" && viaV2) {
+          let holdCfg = null; try { holdCfg = JSON.parse((await AGENT_KV.get(`agent:config:${address}`)) || "null"); } catch { holdCfg = null; }
+          try {
+            await v2KeyReady(env, address, { holdHours: holdCfg?.maxHoldHours ?? 4 });
+            await armChallenge(env, { action: "agent.activate", address, body });
+          } catch (e) { return v2Reply(e); }
+          await writeV2Link(AGENT_KV, `agent:key:${address}`);
+        }
         // AUTONOMOUS needs the order-only key — derive from walletSig (like activate).
-        if (mode === "AUTONOMOUS") {
+        if (mode === "AUTONOMOUS" && !viaV2) {
           const haveKey = await AGENT_KV.get(`agent:key:${address}`);
           if (!haveKey) {
             const recRaw = await env.LAB_STORE.get("user:" + address);
@@ -5473,7 +5524,7 @@ document.getElementById("btn").addEventListener("click",go);
       // use /kill to stop a live one).
       if (request.method === "DELETE" && parts[2] === "directive") {
         const dbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(dbody.walletSig); if (denied) return denied;
+        const denied = await requireOwner(dbody); if (denied) return denied;
         const raw = await AGENT_KV.get(`agent:directive:${address}`);
         if (!raw) return json({ ok: true, cancelled: false }, request);
         let ex = null; try { ex = JSON.parse(raw); } catch { /* ignore */ }
@@ -5491,14 +5542,17 @@ document.getElementById("btn").addEventListener("click",go);
         try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
         // Ownership auth for ALL modes (PAPER included) — activating/reconfiguring an
         // agent is a mutation. Live modes additionally derive the key from this sig below.
-        const denied = requireOwner(body?.walletSig); if (denied) return denied;
+        const who = await owner(body);
+        if (!who.ok) return json(who.body, request, who.status);
+        const viaV2 = who.via === "v2";
         const mode = ["PAPER", "ASSISTED", "AUTONOMOUS"].includes(body?.mode) ? body.mode : "PAPER";
         if (mode === "AUTONOMOUS" && body?.confirm !== "GO LIVE") {
           return json({ error: "confirm_required", hint: 'Live trading needs confirm:"GO LIVE". The agent uses an order-only key that cannot withdraw.' }, request, 409);
         }
         // Phase 3 (#14): going live (AUTONOMOUS) arms real-money trading → request-bound
         // v2 on top of confirm + static sig. Sim/assisted modes keep the static-sig gate.
-        if (mode === "AUTONOMOUS") {
+        // (The v2 session path takes its own challenge below, always.)
+        if (mode === "AUTONOMOUS" && !viaV2) {
           const deniedV2 = await requireOwnerV2(env, request, { action: "agent.activate", wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig });
           if (deniedV2) return deniedV2;
         }
@@ -5522,9 +5576,20 @@ document.getElementById("btn").addEventListener("click",go);
           return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
 
+        // v2: live modes run on the wallet's v2 key; AUTONOMOUS needs a hold that fits before it
+        // expires and the challenge (§C). Checked before anything is written.
+        let keyInfo = null;
+        if (mode !== "PAPER" && viaV2) {
+          let prevCfg = null; try { prevCfg = JSON.parse((await AGENT_KV.get(`agent:config:${address}`)) || "null"); } catch { prevCfg = null; }
+          try {
+            keyInfo = await v2KeyReady(env, address, { holdHours: mode === "AUTONOMOUS" ? config.maxHoldHours : null });
+            if (configChallengeNeeded(prevCfg, config)) await armChallenge(env, { action: "agent.activate", address, body });
+          } catch (e) { return v2Reply(e); }
+          await writeV2Link(AGENT_KV, `agent:key:${address}`);
+        }
         // Live modes need the delegated key. Derive it from the wallet signature
         // (auth) + the registered accountId.
-        if (mode !== "PAPER") {
+        if (mode !== "PAPER" && !viaV2) {
           if (!body?.walletSig) return json({ error: "walletSig required", hint: "Call sign_message('nexus-trading-key-v1') and pass walletSig for live modes." }, request, 400);
           const recRaw = await env.LAB_STORE.get("user:" + address);
           if (!recRaw) return json({ error: "wallet_not_registered", hint: "Register first via POST /proxy/bankr-register, then retry." }, request, 401);
@@ -5544,7 +5609,7 @@ document.getElementById("btn").addEventListener("click",go);
         const usersRaw = await AGENT_KV.get("agent:users");
         const users = usersRaw ? JSON.parse(usersRaw) : [];
         if (!users.includes(address)) { users.push(address); await AGENT_KV.put("agent:users", JSON.stringify(users)); }
-        return json({ ok: true, mode, config, state, note: "Order-only key — the agent can trade but never withdraw or transfer your funds." }, request);
+        return json({ ok: true, mode, config, state, ...(keyInfo || {}), note: "Order-only key — the agent can trade but never withdraw or transfer your funds." }, request);
       }
 
       // ── POST /agent/:address/bankr/mode — change execution mode by chat ──
@@ -5553,14 +5618,16 @@ document.getElementById("btn").addEventListener("click",go);
       if (request.method === "POST" && parts[2] === "bankr" && parts[3] === "mode") {
         let body;
         try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        const denied = requireOwner(body?.walletSig); if (denied) return denied;
+        const who = await owner(body);
+        if (!who.ok) return json(who.body, request, who.status);
+        const viaV2 = who.via === "v2";
         const mode = body?.mode;
         if (!["PAPER", "ASSISTED", "AUTONOMOUS"].includes(mode)) return json({ error: "mode must be PAPER | ASSISTED | AUTONOMOUS" }, request, 400);
         if (mode === "AUTONOMOUS" && body?.confirm !== "GO LIVE") {
           return json({ error: "confirm_required", hint: 'Going live needs confirm:"GO LIVE".' }, request, 409);
         }
         // Phase 3 (#14): flipping live → request-bound v2 (same as activate go-live).
-        if (mode === "AUTONOMOUS") {
+        if (mode === "AUTONOMOUS" && !viaV2) {
           const deniedV2 = await requireOwnerV2(env, request, { action: "agent.mode", wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig });
           if (deniedV2) return deniedV2;
         }
@@ -5569,9 +5636,19 @@ document.getElementById("btn").addEventListener("click",go);
         const config = JSON.parse(configRaw);
         { const why = gradedExitRefusal({ ...config, mode }, mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
 
+        // v2: live modes run on the wallet's v2 key; going AUTONOMOUS needs a hold that fits before
+        // it expires and the challenge (§C). Checked before anything is written.
+        let keyInfo = null;
+        if (mode !== "PAPER" && viaV2) {
+          try {
+            keyInfo = await v2KeyReady(env, address, { holdHours: mode === "AUTONOMOUS" ? config.maxHoldHours : null });
+            if (configChallengeNeeded(config, { ...config, mode })) await armChallenge(env, { action: "agent.mode", address, body });
+          } catch (e) { return v2Reply(e); }
+          await writeV2Link(AGENT_KV, `agent:key:${address}`);
+        }
         // Live modes require the order-only key to exist; provision it from the
         // wallet signature if this agent was previously PAPER (no key stored).
-        if (mode !== "PAPER") {
+        if (mode !== "PAPER" && !viaV2) {
           const haveKey = await AGENT_KV.get(`agent:key:${address}`);
           if (!haveKey) {
             if (!body?.walletSig) return json({ error: "walletSig required", hint: "Going live needs walletSig (sign_message('nexus-trading-key-v1'))." }, request, 400);
@@ -5586,7 +5663,7 @@ document.getElementById("btn").addEventListener("click",go);
 
         config.mode = mode;
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
-        return json({ ok: true, mode }, request);
+        return json({ ok: true, mode, ...(keyInfo || {}) }, request);
       }
 
       return json({ error: "not found" }, request, 404);
