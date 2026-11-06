@@ -571,8 +571,8 @@ export function AgentView() {
         body: JSON.stringify({ walletSig }),
       });
       if (!res.ok) throw new Error("Kill switch failed");
-      setAgentState((prev) => prev ? { ...prev, active: false, current_position: null } : null);
-      setSuccess("Agent killed. Position closed. Key removed.");
+      setAgentState((prev) => prev ? { ...prev, active: false } : null);
+      setSuccess("Kill sent. Within about a minute the agent closes its position, stops, and removes its key.");
       setTimeout(() => setSuccess(null), 5000);
     } catch (e) {
       setError(errText(e));

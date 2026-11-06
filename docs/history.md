@@ -2339,3 +2339,18 @@ network effects from the social layer. Positioning: "The trading terminal that m
   `/proxy/bankr-withdraw`, all open to a revoked wallet (the v1 `/proxy/bankr-register` stays shut to it).
 - `/proxy/bankr-register` was NOT pointed at v2 under `AUTH_V2_KEYS`: the Bankr skill still trades with `walletSig`, which
   needs the v1 key. It moves under its own switch, `AUTH_V1_REGISTER_OFF`, flipped when the skill PR (step 4) merges.
+
+## 2026-11-06 · The kill switch didn't close live positions
+
+Found while reading the agent for auth v2 step 3b. Three faults, any one enough:
+- `POST /agent/:a/kill` deleted `agent:key:{addr}` and dropped the wallet from `agent:users`. Exec only reads wallets on
+  that list, so it never saw the kill flag.
+- Even if it had, the key that places the reduce-only close was already gone (`closePosition`'s "no key" branch clears
+  the record without closing).
+- Exec's kill branch called `closePosition(..., config, ...)` above `const config`: a ReferenceError on every tick with
+  an open position.
+
+Result: KILL on a live position left it open on Orderly with nothing managing it (no exchange-side stop exists; exec
+manages TP/SL), while the Lab said "Position closed." Fixed by `killSwitch.mjs` (close first, then stop + delete the
+key; retry an unconfirmed close for 10 ticks, then stop and alert) and `routes-kill.mjs` (flag only, key and list kept,
+wallet re-added). Wallets killed before the fix keep the stale flag; pressing KILL again now reaches exec.
