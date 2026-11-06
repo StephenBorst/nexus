@@ -2354,3 +2354,15 @@ Result: KILL on a live position left it open on Orderly with nothing managing it
 manages TP/SL), while the Lab said "Position closed." Fixed by `killSwitch.mjs` (close first, then stop + delete the
 key; retry an unconfirmed close for 10 ticks, then stop and alert) and `routes-kill.mjs` (flag only, key and list kept,
 wallet re-added). Wallets killed before the fix keep the stale flag; pressing KILL again now reaches exec.
+
+## 2026-11-06 · Daily caps froze the day's last trade
+
+`processUser` ran `dailyCapBlocked` before the position monitor. `trades_today` is bumped at entry, so the trade that
+reached `maxTradesPerDay` (default 4) made every later tick return before `monitorPosition`: no SL, TP, trail or
+timeout until the 24h reset (`shouldResetDaily`), on live and paper agents alike. A webhook CLOSE was also ignored once
+capped. The cap now sits after the monitor and ghost adoption, so it gates new entries only (its own docstring always
+said "block opening a new trade"). Paper rows closed before this fix may include a capped day's last trade held past its
+stop or timeout and closed late; nothing re-writes them.
+
+Found with a new guard (`tools/useBeforeDefine.test.mjs`): every shipped .js/.mjs is scanned for a const/let read before
+its declaration runs, the class of bug that broke the kill switch. tsc already refuses it in .ts/.tsx.

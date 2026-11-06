@@ -20,7 +20,7 @@ import { runKill } from "./killSwitch.mjs";
 import { resolveKeyRecord, keyHoldRefusal, keyAlertDue, keyAlertText, isKeyPointer } from "./agentKey.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload } from "./logic.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, twapSliceFailed, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const COOLDOWN_MS = 15 * 60 * 1000; // 15 min between trades
@@ -426,10 +426,11 @@ async function processTwap(address, env, cache) {
         broker_id: "nexus_trading",
       });
       if (order && order.success === false) {
-        target.error = String(order.message || order.code || "rejected");
-        console.error(`[twap] ${address.slice(0, 10)} slice ${target.seq} rejected:`, target.error);
-        // Leave it un-done so the next tick retries; a persistent reject stalls the
-        // schedule rather than silently dropping size (visible in the status endpoint).
+        Object.assign(target, twapSliceFailed(target, order.message || order.code || "rejected"));
+        console.error(`[twap] ${address.slice(0, 10)} slice ${target.seq} rejected (try ${target.attempts}${target.skipped ? ", skipped" : ""}):`, target.error);
+        // Retried next tick, up to TWAP_MAX_ATTEMPTS (logic.mjs); then skipped, never sent again, and
+        // shown as skipped (not filled) in the status endpoint and the panel. Retrying forever kept the
+        // TWAP open and could fill a slice hours late at a very different price.
       } else {
         target.done = true;
         target.firedAt = Date.now();
@@ -438,8 +439,8 @@ async function processTwap(address, env, cache) {
         target.error = null;
       }
     } catch (e) {
-      target.error = e.message;
-      console.error(`[twap] ${address.slice(0, 10)} slice ${target.seq} error:`, e.message);
+      Object.assign(target, twapSliceFailed(target, e.message));
+      console.error(`[twap] ${address.slice(0, 10)} slice ${target.seq} error (try ${target.attempts}${target.skipped ? ", skipped" : ""}):`, e.message);
     }
     // Persist after EACH slice → a crash can't double-fire an already-placed slice.
     await env.NEXUS_AGENT.put(`twap:${address}`, JSON.stringify(state));
@@ -590,12 +591,6 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
     await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
   }
 
-  // Daily limits check (tested in logic.mjs)
-  const cap = dailyCapBlocked(state, config);
-  if (cap.blocked) {
-    console.log(`[exec] ${address.slice(0, 10)} ${cap.reason}`);
-    return;
-  }
 
   // ── WEBHOOK INTENT (TradingView / external) ───────────
   // The user's OWN signal, consumed once (delete on read) and given priority over
@@ -670,6 +665,16 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
   // if the exchange holds a position the agent lost track of, re-adopt + manage it
   // next tick rather than opening a new one on top. AUTONOMOUS-only.
   if (config.mode === "AUTONOMOUS" && await adoptOrphanPosition(address, state, config, env, cache)) return;
+
+  // Daily limits gate NEW entries only (tested in logic.mjs). They sit below the position monitor and
+  // ghost adoption on purpose: until 2026-11-06 this check ran first, so the day's last allowed trade
+  // (trades_today is bumped at entry) was never monitored again until the 24h reset: no SL, TP or
+  // timeout on a live position.
+  const cap = dailyCapBlocked(state, config);
+  if (cap.blocked) {
+    console.log(`[exec] ${address.slice(0, 10)} ${cap.reason}`);
+    return;
+  }
 
   // Flat: make sure no published feed card is still stuck ACTIVE (zombie cleanup).
   if (PUBLISH_AGENT_FEED) await reconcileStaleFeed(address, env);
@@ -1312,6 +1317,10 @@ async function addSafetyOrder(address, state, config, env, so, price) {
         });
         if (r && r.success === false) { console.error(`[exec] ${address.slice(0, 10)} DCA SO order failed:`, JSON.stringify(r)); return; }
       } catch (e) { console.error(`[exec] ${address.slice(0, 10)} DCA SO error:`, e.message); return; }
+    } else {
+      // No key = no order placed: never book a safety order that didn't happen.
+      console.error(`[exec] ${address.slice(0, 10)} DCA SO skipped: no key`);
+      return;
     }
   }
   const blended = blendAvg(pos.total_qty, pos.avg_entry, addQty, price);
@@ -1377,6 +1386,10 @@ async function partialClose(address, state, config, env, action, cache) {
         console.error(`[exec] ${address.slice(0, 10)} partial TP error:`, e.message);
         return;
       }
+    } else {
+      // No key = no reduce-only order placed: never book a slice that didn't happen.
+      console.error(`[exec] ${address.slice(0, 10)} partial TP skipped: no key`);
+      return;
     }
   }
 

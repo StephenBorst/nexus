@@ -137,6 +137,9 @@ product is what sits on top:
   `agent:kill:{addr}` (and puts the wallet back on `agent:users`); it never deletes the key or the list entry. Exec closes
   WITH the key, then stops + deletes it. An unconfirmed close keeps flag + key and retries each tick; after
   `KILL_MAX_ATTEMPTS` (10) it stops anyway, keeps the record and Telegrams the owner to close by hand.
+- **Tick order** (`processUser`, pinned by `nexus-agent-exec/tickOrder.test.mjs`): kill → active/config → webhook CLOSE →
+  manage the open position → adopt a ghost → daily caps → entries. **Daily caps gate entries only** (fixed 2026-11-06:
+  the cap check used to run first, so the day's last allowed trade went unmanaged until the 24h reset).
 - **Reconcile:** exec reads the live position first; exchange flat ⇒ clear the stale record. On a read error it manages
   on cached data, never clears.
 - **Modes** (`deriveSignal`, brain `logic.mjs`): CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE (free); MOMENTUM,
