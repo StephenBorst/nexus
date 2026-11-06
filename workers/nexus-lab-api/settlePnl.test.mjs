@@ -88,4 +88,5 @@ test("nothing in lab-api posts an empty settle any more", () => {
   assert.match(route, /runSettle\(/, "Bankr settles in one call");
   assert.match(route, /settleSigner\(spbody\.message, spbody\.signature\)\) !== spWallet/, "a submitted settle must be the wallet's");
   assert.match(route, /settleTypedData\(spMsg\)/, "prepare returns the typed data");
+  assert.match(route, /json\(\{ settled: false, step: "sign"/, "prepare never says ok: an agent must not read it as settled");
 });

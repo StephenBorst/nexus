@@ -3596,8 +3596,9 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       const settleNonce = settleNonceFrom(nonceReply);
       if (settleNonce == null) return json({ ok: false, error: "settle_nonce_unavailable", raw: nonceReply }, request, 502);
       const spMsg = settleMessage({ settleNonce, now: Date.now() });
-      return json({ ok: true, step: "sign", typedData: settleTypedData(spMsg), message: spMsg,
-        next: "Sign typedData with this wallet (eth_signTypedData_v4) and POST /settle-pnl again with the same auth plus { message, signature }." }, request);
+      // Not "ok": nothing is settled yet. An agent reading the reply must not take this step as done.
+      return json({ settled: false, step: "sign", typedData: settleTypedData(spMsg), message: spMsg,
+        next: "Nothing is settled yet. Sign typedData with this wallet (eth_signTypedData_v4) and POST /settle-pnl again with the same auth plus { message, signature }, or send bankrApiKey to settle in one call." }, request);
     }
 
     // ── /proxy/bankr-withdraw — server-side withdrawal via Bankr Wallet API ────
