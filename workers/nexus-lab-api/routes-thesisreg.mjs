@@ -2,7 +2,8 @@
 // Rules in thesisRegister.mjs. This file is the I/O around them: Arbitrum RPC, Bankr, KV.
 //
 // /proxy/thesis-register {walletAddress, bankrApiKey, symbol, direction, entryPrice, stopLoss,
-//   takeProfit1, takeProfit2?, isPublic?, notes?, exitPlan?, retry?}
+//   takeProfit1, takeProfit2?, isPublic?, notes?, exitPlan?, timeStopH?, retry?}
+//   timeStopH (whole hours, 1–168) is declared on-chain as `#TIMESTOP_<N>H` in the notes, like the split.
 //   1. checkRegistration, then an eth_call of the exact calldata from the wallet: a call that would
 //      revert is refused here, before any gas.
 //   2. The same call from the same wallet can't be sent twice within PENDING_TTL_S. A repeat gets the
@@ -117,7 +118,7 @@ export async function indexRegistration(env, { txHash, wallet, rpc, readMark, no
       ok: true, txHash, thesisId: saved.id, onChainId: saved.onChainId ?? null,
       symbol: saved.symbol, direction: saved.direction, entryPrice: saved.entryPrice, stopLoss: saved.stopLoss,
       takeProfit1: saved.takeProfit1, takeProfit2: saved.takeProfit2, riskReward: saved.riskReward,
-      exitPlan: saved.exitPlan ?? null, isPublic: saved.isPublic, publishedAt: saved.publishedAt ?? null,
+      exitPlan: saved.exitPlan ?? null, timeStopH: saved.timeStopH ?? null, isPublic: saved.isPublic, publishedAt: saved.publishedAt ?? null,
       hint: "Registered on-chain and in /feed. Graded from public price from now on.",
     },
   };

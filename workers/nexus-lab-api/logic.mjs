@@ -104,6 +104,15 @@ export function entryFill(t, cd) {
  *   closed in (for a split, the hour its LAST half closed). Hour precision, like `tp1At` and the
  *   fill: candles can't say when inside the hour. Hold time = exitAt − the fill.
  *
+ * - A DECLARED TIME STOP (2026-11-06, callMath `timeStopPlan`). A call published with `timeStopH: N`
+ *   that touches neither level by the close of bar N settles at that close: R = the move from entry
+ *   to the close ÷ the risk (entry to stop), 2dp; WIN when R > 0, else LOSS; `exitReason: "TIME"`.
+ *   Bar 0 = the posting hour (filled at the post) or the fill hour (a resting order); bar 1 starts at
+ *   the first hour graded. The window is counted in TIME, not candles (a thin market can skip an
+ *   hour): it ends at bar 1's start + N hours, and the call settles at the close of the last bar
+ *   printed before that, only once a later bar exists (the store's last bar may be a partial hour).
+ *   TP and stop are checked first in every bar, bar N included; a missing close = PENDING.
+ *
  * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, takeProfit2?, exitPlan?, createdAt, publishMark? }
  * @param {object} cd candles { t:number[] (sec), h:number[], l:number[] } ascending by t
  * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number, awaitingEntry?:true, exitAt?:number,
@@ -116,11 +125,23 @@ export function gradeCall(t, cd) {
   if (R == null) return { outcome: "INVALID", r: 0 };
   const split = splitPlan(t);
   if (split && split.invalid) return { outcome: "INVALID", r: 0 };
+  const stop = timeStopPlan(t);
+  if (stop && stop.invalid) return { outcome: "INVALID", r: 0 };
   const long = String(t.direction).toUpperCase() === "LONG";
   const fill = entryFill(t, cd);
   if (!fill.filled) return { outcome: "PENDING", r: 0, awaitingEntry: true };
   let i = fill.next;
   const f = fill.fillIdx;
+  // The time stop's window end (sec): bar 1 starts at the first hour graded (the hour after a resting
+  // order's fill hour; the first hour starting at or after the post), and runs `hours` hours.
+  const bar1 = fill.atPost ? Math.ceil(fill.fillSec / 3600) * 3600 : cd.t[f] + 3600;
+  const timeEnd = stop ? bar1 + stop.hours * 3600 : Infinity;
+  const timeOut = (k) => {
+    const close = Number(cd.c?.[k]), risk = Math.abs(Number(entryPrice) - Number(stopLoss));
+    if (!(k >= 0) || !Number.isFinite(close) || !(close > 0) || !(risk > 0)) return { outcome: "PENDING", r: 0 };
+    const r = round(((long ? close - entryPrice : entryPrice - close)) / risk, 2);
+    return { outcome: r > 0 ? "WIN" : "LOSS", r, exitAt: cd.t[k], exitReason: TIME_EXIT };
+  };
   const stopHit = (k) => (long ? cd.l[k] <= stopLoss : cd.h[k] >= stopLoss);
   const reached = (k, px) => (long ? cd.h[k] >= px : cd.l[k] <= px);
   const stopped = (k) => split
@@ -128,6 +149,7 @@ export function gradeCall(t, cd) {
     : { outcome: "LOSS", r: -1, exitAt: cd.t[k] };
   if (f >= 0 && stopHit(f)) return stopped(f);
   for (; i < cd.t.length; i++) {
+    if (cd.t[i] >= timeEnd) return timeOut(i - 1); // a bar after the window: the window's last bar has closed
     const tp = reached(i, takeProfit1), sl = stopHit(i);
     if (sl) return stopped(i);           // a same-candle target + stop is a LOSS (conservative)
     if (!tp) continue;
@@ -147,8 +169,8 @@ export function gradeCall(t, cd) {
 
 // The declared split exit (see gradeCall) and the rule that reads it live ONCE in app/lib/callMath.mjs,
 // shared with the publish lock, /theses/status and the cards. A TP2 equal to TP1 = a single target.
-import { SPLIT_EXIT, splitPlan } from "../../app/lib/callMath.mjs";
-export { SPLIT_EXIT, splitPlan };
+import { SPLIT_EXIT, splitPlan, timeStopPlan, TIME_EXIT } from "../../app/lib/callMath.mjs";
+export { SPLIT_EXIT, splitPlan, timeStopPlan, TIME_EXIT };
 
 /**
  * Where a draft's entry sits against the market right now (the latest hour's range), for the
