@@ -115,7 +115,7 @@ import { handleKey, checkChallenge, Refused as KeyRefused } from "./routes-key.m
 import { wantsV2, v2Signer, hasV2Key, storedKeySigner } from "./tradingSigner.mjs";
 import { handleAgentKill } from "./routes-kill.mjs";
 import { agentOwnerRefusal, v2KeyPointer, twapFitsKey, configChallengeNeeded } from "./agentAuth.mjs";
-import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, answer as withdrawAnswer } from "./withdrawV2.mjs";
+import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, answer as withdrawAnswer, freeCollateralFrom, insufficientFree } from "./withdrawV2.mjs";
 import { v1RegisterOff, v1RegistrationRefusal, bankrRegisterV2Refusal, registerPageV2Html } from "./v1Registration.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
@@ -3700,17 +3700,14 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           await oReq("POST", "/v1/settle_pnl", {});
           // Wait for Orderly to process (~4s)
           await new Promise(r => setTimeout(r, 4000));
-          // Fetch free_collateral
-          const holdingRes = await oReq("GET", "/v1/client/holding", null);
-          const holdings   = holdingRes?.data?.holding ?? [];
-          const usdcRow    = holdings.find(h => h.token === "USDC");
-          const freeCol    = Number(usdcRow?.holding ?? usdcRow?.available ?? 0);
+          // Free collateral from /v1/positions (withdrawV2.mjs freeCollateralFrom), never the holding:
+          // holding includes margin held by positions and orders, so a retry sized from it hit 78 again.
+          const freeGot = freeCollateralFrom(await oReq("GET", "/v1/positions", null));
+          if (!freeGot) return json({ ok: false, error: "free_collateral_unread", withdrawnAmount: 0, hint: "Couldn't read free collateral after settling. Nothing was withdrawn; try again." }, request, 502);
+          const freeCol = freeGot.free;
           // Leave 0.5 USDC buffer; cap at original requested amount
           const safeAmount = Math.min(Number(amount), Math.max(0, freeCol - 0.5));
-          if (safeAmount <= 0) {
-            return json({ ok: false, error: "insufficient_free_collateral", freeCollateral: freeCol,
-              hint: "After settlement, free collateral is too low to withdraw. Wait for the daily Orderly settlement cycle or close open positions." }, request, 400);
-          }
+          if (safeAmount <= 0) return json(insufficientFree(freeGot), request, 400);
           const safeUnits = Math.round(safeAmount * 1e6);
           // Rebuild message with safe amount + fresh nonce
           const nonceData2 = await oReq("GET", "/v1/withdraw_nonce", null);
@@ -3729,13 +3726,16 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           withdrawRes = await oReq("POST", "/v1/withdraw_request", {
             message: msg2, signature: sig2Data.signature, userAddress: walletNorm, verifyingContract: VC_W,
           });
+          const retryOk = withdrawRes?.success === true;
           return json({
-            ok: withdrawRes?.success ?? false,
+            ok: retryOk,
             autoSettled: true,
             originalAmount: amount,
-            withdrawnAmount: safeAmount,
+            attemptedAmount: safeAmount,
+            withdrawnAmount: retryOk ? safeAmount : 0, // what Orderly accepted, never what we tried
             freeCollateral: freeCol,
-            hint: safeAmount < Number(amount) ? `Withdrew ${safeAmount} USDC (adjusted from ${amount} to account for unsettled PnL of ~${(freeCol - safeAmount).toFixed(2)} USDC)` : undefined,
+            openPositions: freeGot.openPositions,
+            hint: retryOk && safeAmount < Number(amount) ? `Withdrew ${safeAmount} USDC (adjusted from ${amount}: ${freeCol} USDC was free after settling)` : undefined,
             raw: withdrawRes,
           }, request);
         }
@@ -3824,12 +3824,10 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           if (settle) {
             await oReq("POST", "/v1/settle_pnl", {});
             await new Promise(r => setTimeout(r, 4000));
-            const holdingRes = await oReq("GET", "/v1/client/holding", null);
-            const usdcRow = (holdingRes?.data?.holding ?? []).find(h => h.token === "USDC");
-            const freeCol = Number(usdcRow?.holding ?? usdcRow?.available ?? 0);
-            effAmount = Math.min(Number(amount), Math.max(0, freeCol - 0.5));
-            if (effAmount <= 0) return json({ ok: false, error: "insufficient_free_collateral", freeCollateral: freeCol,
-              hint: "Free collateral too low to withdraw after settlement. Close positions or wait for the daily settlement cycle." }, request, 400);
+            const freeGot = freeCollateralFrom(await oReq("GET", "/v1/positions", null)); // never the holding
+            if (!freeGot) return json({ ok: false, error: "free_collateral_unread", hint: "Couldn't read free collateral after settling. Try again." }, request, 502);
+            effAmount = Math.min(Number(amount), Math.max(0, freeGot.free - 0.5));
+            if (effAmount <= 0) return json(insufficientFree(freeGot), request, 400);
           }
           const nonceData = await oReq("GET", "/v1/withdraw_nonce", null);
           const withdrawNonce = nonceData?.data?.withdraw_nonce;
