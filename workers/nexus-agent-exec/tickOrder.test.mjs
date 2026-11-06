@@ -23,3 +23,13 @@ test("the kill branch runs before everything else", () => {
   const kill = at("if (killRaw || state.kill_requested)");
   for (const later of ["if (!state.active) return;", "dailyCapBlocked(", "await monitorPosition("]) assert.ok(kill < at(later), later);
 });
+
+test("a live safety order or partial TP with no key books nothing (fails closed)", () => {
+  for (const fn of ["async function addSafetyOrder(", "async function partialClose("]) {
+    const start = src.indexOf(fn);
+    const chunk = src.slice(start, src.indexOf("\nasync function ", start + 10));
+    const keyed = chunk.indexOf("if (keyRaw) {");
+    assert.ok(keyed > 0, fn);
+    assert.match(chunk.slice(keyed), /\} else \{[\s\S]{0,200}?no key[\s\S]{0,80}?return;/, `${fn} returns when there is no key`);
+  }
+});

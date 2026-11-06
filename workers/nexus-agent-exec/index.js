@@ -1316,6 +1316,10 @@ async function addSafetyOrder(address, state, config, env, so, price) {
         });
         if (r && r.success === false) { console.error(`[exec] ${address.slice(0, 10)} DCA SO order failed:`, JSON.stringify(r)); return; }
       } catch (e) { console.error(`[exec] ${address.slice(0, 10)} DCA SO error:`, e.message); return; }
+    } else {
+      // No key = no order placed: never book a safety order that didn't happen.
+      console.error(`[exec] ${address.slice(0, 10)} DCA SO skipped: no key`);
+      return;
     }
   }
   const blended = blendAvg(pos.total_qty, pos.avg_entry, addQty, price);
@@ -1381,6 +1385,10 @@ async function partialClose(address, state, config, env, action, cache) {
         console.error(`[exec] ${address.slice(0, 10)} partial TP error:`, e.message);
         return;
       }
+    } else {
+      // No key = no reduce-only order placed: never book a slice that didn't happen.
+      console.error(`[exec] ${address.slice(0, 10)} partial TP skipped: no key`);
+      return;
     }
   }
 
