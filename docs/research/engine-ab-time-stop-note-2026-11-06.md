@@ -74,3 +74,11 @@ never folded into (b). Shape (d) is reported with its TIME exits counted and the
 ## Results
 
 (Append below. Never edit above this line.)
+
+### Correction · 2026-11-06
+
+- **#33 was already closed** when this page listed it as open: `eng-b-33-zec-short`, LOSS −1R (its stop), per the
+  stored grade on `/lab/0x3b2c…e4`. Only m12 (HYPE SHORT) and m13 (ETH SHORT) were still open under the old rule.
+  Nothing above changes: no call published before 2026-11-06 is read for a time stop either way.
+- **The bot side is live (borst):** Engine B's scan sends `timeStopH: 4` on main-track publishes and nothing on
+  Track M. The first call graded with the stop will be #34.
