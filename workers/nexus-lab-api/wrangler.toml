@@ -37,9 +37,13 @@ id = "c3c0582ec71c4d049d0795872f39f033"
 # 0xd9f7…b449: borst's Bankr wallet; its signature sat in the tracker app's storage (deleted 2026-10-26).
 REVOKED_TRADING_WALLETS = "0xd9f7b3273b504e1473c3faba6341299d0ec9b449"
 # Our engine callers (bots that publish graded calls from their own wallets). /calls/pulse counts them in
-# their own "engines" block, never as people (routes-pulse.mjs, borst 2026-11-05). Engine A (Bankr wallet),
-# Engine B "Ember" (docs/research/engine-ab-prereg.md) and the Engine B variant wallet (eng-b-m… ids).
-ENGINE_CALLER_ADDRESSES = "0xd9f7b3273b504e1473c3faba6341299d0ec9b449,0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4,0x493dc0ce72b8b761844cb25bc17b6aff9a28c086"
+# their own "engines" block, never as people (routes-pulse.mjs, borst 2026-11-05). Engine B "Ember"
+# (docs/research/engine-ab-prereg.md) and Ember M, its breakout track (eng-b-m… ids).
+ENGINE_CALLER_ADDRESSES = "0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4,0x493dc0ce72b8b761844cb25bc17b6aff9a28c086"
+# Wallets that were an engine and now post as a person, "0xaddr@ISO": only calls the server stamped
+# publishedAt on/after the date count (as a person); older (bot-made) calls count nowhere (callPulse.mjs).
+# 0xd9f7…b449 = Engine A until it stopped mid-October 2026, "Apex Tape" (manual calls) from 2026-11-08 (borst).
+PERSON_FROM_ADDRESSES = "0xd9f7b3273b504e1473c3faba6341299d0ec9b449@2026-11-08T00:00:00Z"
 # On-chain anchoring is PAUSED for all ledgers (mirrors nexus-ledger-anchor/wrangler.toml; keep equal).
 # Only the /arena/paper/root "anchoring" field reads this. The hash-chained ledgers are unaffected.
 ONCHAIN_ANCHOR_LIVE = "false"

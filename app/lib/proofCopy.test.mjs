@@ -129,6 +129,7 @@ test("engine notes: one per engine wallet in wrangler's ENGINE_CALLER_ADDRESSES,
   const engines = /^ENGINE_CALLER_ADDRESSES = "([^"]+)"/m.exec(toml)[1].split(",").map((a) => a.trim().toLowerCase()).sort();
   assert.deepEqual(Object.keys(ENGINE_NOTES).sort(), engines);
   for (const t of Object.values(ENGINE_NOTES)) assert.ok(!/proven|edge|profit|guarantee|win rate/i.test(t), t);
-  assert.equal(engineNote("0xD9F7B3273B504E1473C3FABA6341299D0EC9B449"), ENGINE_NOTES["0xd9f7b3273b504e1473c3faba6341299d0ec9b449"]);
+  assert.equal(engineNote("0x3B2CD0961AEC641FB9C821661D173EEDF1BCFBE4"), ENGINE_NOTES["0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4"]);
+  assert.equal(engineNote("0xd9f7b3273b504e1473c3faba6341299d0ec9b449"), null, "Apex Tape is a person now, no engine line");
   assert.equal(engineNote("0xperson"), null);
 });

@@ -8,7 +8,12 @@
 //   - a PUBLIC call: isPublic, not holders-only, not a marked copy (`duplicateOf`), same as isPublicCall;
 //   - house callers (HOUSE_CALLER_ADDRESS, HOUSE_CATALYST_ADDRESS) are left out entirely (`exclude`): both are
 //     off, and their old calls are neither a person nor an engine on the record;
-//   - ENGINES = our bot callers (worker var ENGINE_CALLER_ADDRESSES: Engine A, Engine B "Ember", the Engine B
+//   - PERSON FROM = a wallet that was an engine and is now a person (worker var PERSON_FROM_ADDRESSES,
+//     "0xaddr@ISO-date"): only calls the server stamped `publishedAt` on or after that date count, as a person;
+//     its older calls (bot-made) are left out of both blocks, so no engine call is ever counted as human. A call
+//     with no server `publishedAt` is left out too (fails to "not counted", never to "person"). borst
+//     2026-11-07: 0xd9f7…b449, once Engine A, is "Apex Tape" from 2026-11-08, manual calls only;
+//   - ENGINES = our bot callers (worker var ENGINE_CALLER_ADDRESSES: Engine B "Ember" and Ember M, its
 //     variant). Counted in their own block, never mixed into the people's numbers. Agent trades never get
 //     here (they live in agent:feed:, not lab:);
 //   - OPEN = the entry traded and the call isn't graded (callLifecycle "OPEN"). A resting order that never
@@ -35,6 +40,17 @@ const isPublic = (t) => !!t && t.isPublic === true && !t.holdersOnly && !t.dupli
 const isGraded = (t) => t?.gradedOutcome === "WIN" || t?.gradedOutcome === "LOSS";
 const addrSet = (list) => new Set((list || []).flatMap((a) => String(a || "").split(",")).map((a) => a.trim().toLowerCase()).filter(Boolean));
 
+/** "0xa@2026-11-08T00:00:00Z,0xb@…" → Map(lowercased wallet → ms). Unparseable entries are dropped. */
+export function parsePersonFrom(list) {
+  const out = new Map();
+  for (const item of (list || []).flatMap((a) => String(a || "").split(","))) {
+    const [addr, iso] = item.trim().split("@");
+    const ms = Date.parse(String(iso || "").trim());
+    if (addr && addr.trim() && Number.isFinite(ms)) out.set(addr.trim().toLowerCase(), ms);
+  }
+  return out;
+}
+
 const emptyBlock = () => ({ open: 0, gradedWeek: 0, graded: [], opened: [] });
 const finish = (b) => {
   b.graded.sort((x, y) => y.at - x.at);
@@ -45,8 +61,9 @@ const finish = (b) => {
 /**
  * @param {Array<{wallet:string, theses:object[]}>} records one entry per lab:{wallet}
  * @param {number} now ms
- * @param {{ exclude?: string[], engines?: string[], isCurrent?: (t:object)=>boolean }} [opts]
+ * @param {{ exclude?: string[], engines?: string[], personFrom?: string[], isCurrent?: (t:object)=>boolean }} [opts]
  *   exclude   wallets left out entirely (the house callers), any case; comma-separated strings are split
+ *   personFrom "0xaddr@ISO" entries: that wallet counts as a person only for calls published on/after the date
  *   engines   our engine callers' wallets, counted in `engines`, never in the people's numbers
  *   isCurrent the grader's "stamp is current" check (grading.mjs isCurrentStamp); a stale stamp counts nowhere
  * @returns {PulseBlock & { engines: PulseBlock, engineRecords: EngineRecord[] }}
@@ -58,6 +75,7 @@ const finish = (b) => {
 export function callPulse(records, now, opts = {}) {
   const exclude = addrSet(opts.exclude);
   const engineSet = addrSet(opts.engines);
+  const personFrom = parsePersonFrom(opts.personFrom);
   const isCurrent = typeof opts.isCurrent === "function" ? opts.isCurrent : isGraded;
   const people = emptyBlock(), engines = emptyBlock();
   const engineMap = new Map(); // engine wallet -> EngineRecord
@@ -65,10 +83,12 @@ export function callPulse(records, now, opts = {}) {
     const wallet = String(rec?.wallet || "");
     const w = wallet.toLowerCase();
     if (!wallet || exclude.has(w)) continue;
-    const engine = engineSet.has(w);
+    const from = personFrom.get(w);
+    const engine = from === undefined && engineSet.has(w);
     const b = engine ? engines : people;
     for (const t of rec.theses || []) {
       if (!isPublic(t)) continue;
+      if (from !== undefined && !(Number(t.publishedAt) >= from)) continue;
       const head = { symbol: bare(t.symbol), direction: String(t.direction || "").toUpperCase(), path: `/feed/thesis/${wallet}/${encodeURIComponent(String(t.id))}`, wallet, engine };
       if (isGraded(t)) {
         if (!isCurrent(t)) continue;

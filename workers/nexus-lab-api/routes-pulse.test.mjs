@@ -90,8 +90,13 @@ test("engines counted apart and named; both house wallets left out; the wrangler
   const m = /^ENGINE_CALLER_ADDRESSES = "([^"]+)"/m.exec(toml);
   assert.ok(m, "ENGINE_CALLER_ADDRESSES is set in wrangler.toml");
   assert.deepEqual(m[1].split(",").map((a) => a.toLowerCase()).sort(), [
-    "0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4", "0x493dc0ce72b8b761844cb25bc17b6aff9a28c086", "0xd9f7b3273b504e1473c3faba6341299d0ec9b449",
+    "0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4", "0x493dc0ce72b8b761844cb25bc17b6aff9a28c086",
   ]);
+  // Engine A's wallet is a person from 2026-11-08 (Apex Tape), never an engine and never both
+  const pf = /^PERSON_FROM_ADDRESSES = "([^"]+)"/m.exec(toml);
+  assert.ok(pf, "PERSON_FROM_ADDRESSES is set in wrangler.toml");
+  assert.equal(pf[1], "0xd9f7b3273b504e1473c3faba6341299d0ec9b449@2026-11-08T00:00:00Z");
+  assert.ok(!m[1].toLowerCase().includes("0xd9f7b3273b504e1473c3faba6341299d0ec9b449"));
 });
 
 test("signals: the cleared read with its paper count; last good board reused ≤6h after the scoreboard cache expires, then no claim", async () => {
