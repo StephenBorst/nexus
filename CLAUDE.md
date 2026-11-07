@@ -297,7 +297,14 @@ product is what sits on top:
   dated line under the stress page's Results; WORSE's pause PR stays borst's), a recorded final verdict is terminal.
   **The watcher merges its own `Pipeline watch:` PR** (borst's go, 2026-11-02) only when checks are green, it is mergeable, the change is display/record only, no parity DRIFT and nothing arms live money; any other session leaves watcher PRs alone. A scheduled task stores its own copy of the
   prompt: after editing the doc, update the task (`update_trigger`).
-- **Live money** = `docs/research/live-money-review.md` (draft, unsigned, arms nothing).
+- **Live money** = `docs/research/live-money-review.md` (the checklist) + `docs/research/live-plan-level-reclaim.md` (the
+  first concrete plan, DRAFT, unsigned, arms nothing; written 2026-11-07 before the paper gate): $1,000 dedicated wallet,
+  fixed $10 risk a trade (1R) sized from the graded stop, 3×, $30/day, kill at −10R, 10-trade first tranche vs the paper
+  wallet. Needs built first, each its own PR: `riskPerTradeUsd` sizing, an exchange-side backstop stop (exec's stop lives
+  only in the worker today), a one-wallet lift of `gradedExitRefusal`. Arming = borst, in person.
+- **Overlap pairs** (`OVERLAP_PAIRS`, axisbt.mjs → the scoreboard's `overlap` block): basis_x_cvd×rsi_reset_deep,
+  level_reclaim×{level_reclaim_tight, session_fade, spot_absorb}, session_fade×oi_div_reversal_4h. A filtered read and its
+  parent are one bet, never stacked as two.
 - `/intel/evidence?axis=&hold=` replays a preset across every mature market (pooled ≠ independent; say so).
 - basis:hist had holes from our own OKX burst until the paced `snapshotFlow` fix: read older windows with that in mind.
 - **The Read / Briefing / FADE:** show inputs, never a tally or crown of ungraded reads; the Board's FADE is "a
