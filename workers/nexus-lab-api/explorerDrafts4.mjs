@@ -14,7 +14,6 @@
 // reads at the row's own time.
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 
-const H = 3600000;
 const DAY_H = 24;
 const MONTH_H = 30 * DAY_H;
 
