@@ -315,8 +315,10 @@ product is what sits on top:
   first concrete plan, DRAFT, unsigned, arms nothing; written 2026-11-07 before the paper gate): $1,000 dedicated wallet,
   fixed $10 risk a trade (1R) sized from the graded stop, 3×, $30/day, kill at −10R, 10-trade first tranche vs the paper
   wallet. Needs built first, each its own PR: `riskPerTradeUsd` sizing (BUILT 2026-11-07, PAPER only, below), an
-  exchange-side backstop stop (exec's stop lives only in the worker today), a one-wallet lift of `gradedExitRefusal`.
-  Arming = borst, in person.
+  exchange-side backstop stop (BUILT 2026-11-07, #268), a one-wallet lift of `gradedExitRefusal`. **House rules**
+  (live-money-review.md, draft, 2026-11-07) bind every plan: a $10 mechanics test first (backstop shows, KILL clears it;
+  plumbing, not edge), 1R = 1% of a dedicated account, 3R/day, −5R/7d pause, kill at −10R or equity < 90% of deposit,
+  parity CLEAN, size ×2 at most after 30 live trades meeting the bar. Arming and size increases = borst, in person.
 - **Fixed-risk sizing** (`config.riskPerTradeUsd`, `app/lib/riskSizing.mjs`): notional = risk ÷ the trade's own graded
   stop %, so P&L ÷ risk = R. Graded exit + PAPER only, never with `volTargetPct` or DCA (`riskSizingRefusal`: exec
   before any read; lab-api 409 `risk_sizing_refused` on all 4 config paths). `capitalPerTrade` = the margin ceiling.
@@ -324,7 +326,8 @@ product is what sits on top:
   position + paper row (never the Supabase row). Replays book `tradeNotional` per trade (incl. the random baseline).
   Lab: the "FIXED RISK / TRADE" field shows under the graded-exit toggle; whole-strategy loads clear it.
 - **Overlap pairs** (`OVERLAP_PAIRS`, axisbt.mjs → the scoreboard's `overlap` block): basis_x_cvd×rsi_reset_deep,
-  level_reclaim×{level_reclaim_tight, session_fade, spot_absorb}, session_fade×oi_div_reversal_4h. A filtered read and its
+  level_reclaim×{level_reclaim_tight, session_fade, spot_absorb}, session_fade×oi_div_reversal_4h,
+  oi_div_reversal×oi_div_reversal_4h (one rule, two windows). A filtered read and its
   parent are one bet, never stacked as two.
 - `/intel/evidence?axis=&hold=` replays a preset across every mature market (pooled ≠ independent; say so).
 - basis:hist had holes from our own OKX burst until the paced `snapshotFlow` fix: read older windows with that in mind.
