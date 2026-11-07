@@ -7,7 +7,9 @@ import {
   oiDivReversalEvents, sessionMomentumEvents, levelReclaimEvents, confluenceFollowEvents,
   oiDivReversal4hEvents, oiCoilBreakEvents, EXPLORER_GENS, OI_DIV, OI_DIV_4H, OI_COIL, CONFLUENCE,
   sessionFadeEvents, levelReclaimTightEvents, spotAbsorbEvents, LEVEL_TIGHT, SPOT_ABSORB, SESSION,
+  btcLeadLagEvents, LEAD_LAG,
 } from "./explorerReads.mjs";
+import { hourBucket } from "../../app/lib/basisStack.mjs";
 import { AXES } from "./axisbt.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 import { powerCheck } from "../../tools/explorers/powerCheck.mjs";
@@ -21,7 +23,7 @@ test("an explorer is on the scoreboard only once registered, and every registrat
   const registered = new Set(REGISTERED_READS.map((r) => r.axis));
   for (const n of Object.keys(EXPLORER_GENS)) assert.ok(!graded.has(n) || registered.has(n), `${n} is graded but not registered`);
   for (const n of registered) assert.ok(graded.has(n), `${n} is registered but not on the scoreboard`);
-  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "level_reclaim_tight", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_fade", "session_momentum", "spot_absorb"]);
+  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "level_reclaim_tight", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_fade", "session_momentum", "spot_absorb"].concat("btc_lead_lag").sort());
   assert.ok(!("vol_breakout" in EXPLORER_GENS), "dropped for v1");
 });
 
@@ -138,21 +140,28 @@ function tape(n, seed = 7) {
 }
 
 test("no lookahead: for every read, the future never changes past events", () => {
-  const full = tape(1600);
+  // the alt under test is "ETH"; BTC's own tape (another seed) is the context btc_lead_lag reads, and it is
+  // poisoned past the cut too. Reads that don't read BTC ignore the context.
+  const full = { coin: "ETH", ...tape(1600) };
+  const btcTape = tape(1600, 3);
+  const ctxOf = (candles) => ({ btcCandles: new Map(candles.map((c) => [hourBucket(c.t), c])) });
+  const ctx = ctxOf(btcTape.candleHist);
   for (const [name, gen] of Object.entries(EXPLORER_GENS)) {
-    const all = gen(full, null, {});
+    const all = gen(full, null, ctx);
     assert.ok(all.length > 0, `${name}: the tape must make it fire`);
     for (const cutH of [900, 1200, 1500]) {
       const cut = T0 + cutH * H;
       // poison everything after the cut, then compare events stamped at or before it
       const poisoned = {
+        coin: "ETH",
         oiHist: full.oiHist.map((r) => (r.t > cut ? { ...r, price: r.price * 3, oi: r.oi * 0.1, funding: -r.funding } : r)),
         candleHist: full.candleHist.map((c) => (c.t + H > cut ? { ...c, o: c.o * 3, h: c.h * 3, l: c.l * 0.2, c: c.c * 0.3 } : c)),
         cvdHist: full.cvdHist.map((r) => (r.t > cut ? { ...r, buy: r.sell * 9, sell: r.buy } : r)),
         spotCvdHist: full.spotCvdHist.map((r) => (r.t > cut ? { ...r, buy: r.sell, sell: r.buy * 9 } : r)),
       };
       const before = (evs) => evs.filter((e) => e.t <= cut).map((e) => `${e.t}|${e.side}`);
-      assert.deepEqual(before(gen(poisoned, null, {})), before(all), `${name} looked past ${cutH}h`);
+      const pctx = ctxOf(btcTape.candleHist.map((c) => (c.t + H > cut ? { ...c, o: c.o * 3, h: c.h * 3, l: c.l * 0.2, c: c.c * 0.3 } : c)));
+      assert.deepEqual(before(gen(poisoned, null, pctx)), before(all), `${name} looked past ${cutH}h`);
     }
   }
 });
@@ -303,4 +312,66 @@ test("batch 3 registrations: future-dated docs, spot_absorb waits for 14 days of
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
   assert.match(src, /readJson\(AGENT_KV, `spotcvd:hist:\$\{coin\}`\)/, "the scoreboard loads the spot series");
+});
+
+// ── btc_lead_lag (registered 2026-11-07, btc-lead-lag-prereg.md) ──────────────────────────────────────
+function quietBars(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const c = 100 * (1 + (i % 2 ? 0.001 : -0.001));
+    out.push({ t: T0 + i * H, o: 100, h: Math.max(100, c) * 1.001, l: Math.min(100, c) * 0.999, c });
+  }
+  return out;
+}
+const byHourMap = (rows) => new Map(rows.map((c) => [hourBucket(c.t), c]));
+
+test("btc_lead_lag: registered at p90 · lag 0.75, cooldown 12h, 360h of BTC history", () => {
+  assert.deepEqual({ pct: LEAD_LAG.pct, lagFrac: LEAD_LAG.lagFrac, cooldownH: LEAD_LAG.cooldownH, minHistory: LEAD_LAG.minHistory, lookbackH: LEAD_LAG.lookbackH },
+    { pct: 0.9, lagFrac: 0.75, cooldownH: 12, minHistory: 360, lookbackH: 720 });
+  const reg = REGISTERED_READS.find((r) => r.axis === "btc_lead_lag");
+  assert.equal(reg.registeredAt, "2026-11-08T00:00:00Z");
+  assert.ok(reg.holdout && reg.gradedExit && !reg.paperWallet && reg.side === "BOTH");
+});
+
+test("btc_lead_lag: an outsized BTC hour + an alt under 0.75 of it → follow BTC on the alt; BTC never fires; no BTC = nothing", () => {
+  const n = 800, k = 760;
+  const btc = quietBars(n);
+  btc[k] = { ...btc[k], o: btc[k - 1].c, c: btc[k - 1].c * 0.97, l: btc[k - 1].c * 0.969, h: btc[k - 1].c * 1.001 };
+  const ctx = { btcCandles: byHourMap(btc) };
+  const lag = quietBars(n);
+  lag[k] = { ...lag[k], c: lag[k - 1].c * 0.99 }; // −1% vs BTC −3%: under 0.75 of it → lagging
+  assert.deepEqual(btcLeadLagEvents({ coin: "SOL", candleHist: lag }, null, ctx), [{ t: T0 + k * H + H, side: "SHORT" }]);
+  const kept = quietBars(n);
+  kept[k] = { ...kept[k], c: kept[k - 1].c * 0.975 }; // −2.5%: more than 0.75 of BTC's move → caught up
+  assert.deepEqual(btcLeadLagEvents({ coin: "SOL", candleHist: kept }, null, ctx), []);
+  assert.deepEqual(btcLeadLagEvents({ coin: "BTC", candleHist: btc }, null, ctx), []);
+  assert.deepEqual(btcLeadLagEvents({ coin: "SOL", candleHist: lag }, null, {}), []);
+  // under 360 hours of BTC history: nothing
+  const shortCtx = { btcCandles: byHourMap(btc.slice(k - 300)) };
+  assert.deepEqual(btcLeadLagEvents({ coin: "SOL", candleHist: lag }, null, shortCtx), []);
+});
+
+test("btc_lead_lag on the holdout line: BTC rides along as context only, its own events are never graded", async () => {
+  const { runHoldoutScorecard } = await import("./axisbt.mjs");
+  const n = 900;
+  const btc = quietBars(n);
+  for (const k of [500, 600, 700, 800]) btc[k] = { ...btc[k], o: btc[k - 1].c, c: btc[k - 1].c * 1.03, h: btc[k - 1].c * 1.031, l: btc[k - 1].c * 0.999 };
+  const alt = (coin) => {
+    const candleHist = quietBars(n);
+    return { coin, candleHist, oiHist: candleHist.map((c) => ({ t: c.t + 120000, price: c.c, oi: 1000, funding: 0 })) };
+  };
+  const btcSet = { coin: "BTC", candleHist: btc, oiHist: btc.map((c) => ({ t: c.t + 120000, price: c.c, oi: 1000, funding: 0 })) };
+  const cfg = { horizons: [4], minSamples: 1, axes: ["btc_lead_lag"] };
+  const without = runHoldoutScorecard([alt("ZEC"), alt("INJ")], cfg);
+  const withBtc = runHoldoutScorecard([alt("ZEC"), alt("INJ")], { ...cfg, ctxSets: [btcSet] });
+  const samples = (sc) => sc.axes.find((a) => a.name === "btc_lead_lag").horizons[0].samples;
+  assert.equal(samples(without), 0, "no BTC on the holdout line = the read can't fire");
+  assert.ok(samples(withBtc) > 0, "BTC as context lets it fire on the holdout coins");
+  assert.deepEqual(withBtc.coins, ["ZEC", "INJ"], "BTC is not one of the graded coins");
+});
+
+test("the holdout scorecard passes BTC as context only (index.js)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  assert.match(src, /runHoldoutScorecard\(holdoutSets, \{[^}]*ctxSets: coinSets\.filter\(\(c\) => c\.coin === "BTC"\) \}\)/);
 });

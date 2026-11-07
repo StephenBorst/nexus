@@ -122,6 +122,17 @@ export const REGISTERED_READS = Object.freeze([
     gradedExit: true,
     paperWallet: null,
   }),
+  // Batch 4, borst 2026-11-07 ("register lead-lag at p90 / 0.75"): BTC leads, a lagging alt follows. The first
+  // read that uses another coin's tape: on the holdout line BTC's candles ride along as context, never graded.
+  Object.freeze({
+    axis: "btc_lead_lag",
+    side: "BOTH",
+    registeredAt: "2026-11-08T00:00:00Z",
+    doc: "docs/research/btc-lead-lag-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
 ]);
 
 export const registeredMs = (reg) => Date.parse(reg.registeredAt);
