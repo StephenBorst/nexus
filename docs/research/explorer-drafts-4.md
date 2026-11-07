@@ -4,11 +4,11 @@
 - **A · `btc_lead_lag`: registered** at p90 · lag 0.75 (`btc-lead-lag-prereg.md`), counting from 2026-11-08T00:00Z.
 - **B · `funding_settle_snap`: dropped.**
 - **C · `level_reclaim_weekly`: dropped.**
-- **D · `funding_basis_split`: parked** until it is counted on the basis history route, after deploy. Counted
-  2026-11-07 (below): 195 main / 45 holdout at the drafted setting. Waiting on borst.
+- **D · `funding_basis_split`: registered** at the drafted setting (`funding-basis-split-prereg.md`), counting from
+  2026-11-08T00:00Z, after it was counted on the basis history route (below): 195 main / 45 holdout.
 
 This page is the record of how the four were defined and counted. It is not a registration. The text below is the
-draft as reviewed; the registered body moved unchanged out of `explorerDrafts4.mjs`.
+draft as reviewed; the registered bodies moved unchanged out of `explorerDrafts4.mjs`.
 
 Code: `workers/nexus-lab-api/explorerDrafts4.mjs`, checked by `explorerDrafts4.test.mjs`. To count:
 `node tools/explorers/powerCheck.mjs <dir> 60 --batch=4`.

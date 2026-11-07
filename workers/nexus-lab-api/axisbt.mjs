@@ -1028,6 +1028,7 @@ export const OVERLAP_PAIRS = Object.freeze([
   ["level_reclaim", "session_fade"],
   ["level_reclaim", "spot_absorb"],
   ["session_fade", "oi_div_reversal_4h"],
+  ["confluence_follow", "funding_basis_split"],
 ]);
 
 // ── OVERLAP: are two reads one bet? ────────────────────────────────────────────────────────

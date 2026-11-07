@@ -7,7 +7,7 @@ import {
   oiDivReversalEvents, sessionMomentumEvents, levelReclaimEvents, confluenceFollowEvents,
   oiDivReversal4hEvents, oiCoilBreakEvents, EXPLORER_GENS, OI_DIV, OI_DIV_4H, OI_COIL, CONFLUENCE,
   sessionFadeEvents, levelReclaimTightEvents, spotAbsorbEvents, LEVEL_TIGHT, SPOT_ABSORB, SESSION,
-  btcLeadLagEvents, LEAD_LAG,
+  btcLeadLagEvents, LEAD_LAG, fundingBasisSplitEvents, SPLIT,
 } from "./explorerReads.mjs";
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 import { AXES } from "./axisbt.mjs";
@@ -23,7 +23,7 @@ test("an explorer is on the scoreboard only once registered, and every registrat
   const registered = new Set(REGISTERED_READS.map((r) => r.axis));
   for (const n of Object.keys(EXPLORER_GENS)) assert.ok(!graded.has(n) || registered.has(n), `${n} is graded but not registered`);
   for (const n of registered) assert.ok(graded.has(n), `${n} is registered but not on the scoreboard`);
-  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "level_reclaim_tight", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_fade", "session_momentum", "spot_absorb"].concat("btc_lead_lag").sort());
+  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "level_reclaim_tight", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_fade", "session_momentum", "spot_absorb"].concat("btc_lead_lag", "funding_basis_split").sort());
   assert.ok(!("vol_breakout" in EXPLORER_GENS), "dropped for v1");
 });
 
@@ -136,7 +136,13 @@ function tape(n, seed = 7) {
     spotCvdHist.push({ t: T0 + i * H + 300000, buy: Math.round(frnd() * 100), sell: Math.round(frnd() * 100) });
   }
   for (const r of oiHist) if (Math.floor((r.t - T0) / H / 24) % 5 === 0) r.oi = 1000;
-  return { oiHist, candleHist, cvdHist, spotCvdHist };
+  // basis rows on their own generator too (funding_basis_split), so the older reads' tape is unchanged
+  let g = (seed * 104729) >>> 0;
+  const grnd = () => { g = (g * 22695477 + 1) >>> 0; return g / 2 ** 32; };
+  const basisHist = [];
+  let bx = 0;
+  for (let i = 0; i < n; i++) { bx += (grnd() - 0.5) * 0.02; basisHist.push({ t: T0 + i * H + 300000, basisPct: bx }); }
+  return { oiHist, candleHist, cvdHist, spotCvdHist, basisHist };
 }
 
 test("no lookahead: for every read, the future never changes past events", () => {
@@ -158,6 +164,7 @@ test("no lookahead: for every read, the future never changes past events", () =>
         candleHist: full.candleHist.map((c) => (c.t + H > cut ? { ...c, o: c.o * 3, h: c.h * 3, l: c.l * 0.2, c: c.c * 0.3 } : c)),
         cvdHist: full.cvdHist.map((r) => (r.t > cut ? { ...r, buy: r.sell * 9, sell: r.buy } : r)),
         spotCvdHist: full.spotCvdHist.map((r) => (r.t > cut ? { ...r, buy: r.sell, sell: r.buy * 9 } : r)),
+        basisHist: full.basisHist.map((r) => (r.t > cut ? { ...r, basisPct: -r.basisPct * 9 } : r)),
       };
       const before = (evs) => evs.filter((e) => e.t <= cut).map((e) => `${e.t}|${e.side}`);
       const pctx = ctxOf(btcTape.candleHist.map((c) => (c.t + H > cut ? { ...c, o: c.o * 3, h: c.h * 3, l: c.l * 0.2, c: c.c * 0.3 } : c)));
@@ -374,4 +381,36 @@ test("the holdout scorecard passes BTC as context only (index.js)", async () => 
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
   assert.match(src, /runHoldoutScorecard\(holdoutSets, \{[^}]*ctxSets: coinSets\.filter\(\(c\) => c\.coin === "BTC"\) \}\)/);
+});
+
+// ── funding_basis_split (registered 2026-11-07, funding-basis-split-prereg.md) ────────────────────────
+test("funding_basis_split: registered at the drafted setting (p80/20, basis vs its 30-day median, 24h, 360h)", () => {
+  assert.deepEqual({ ...SPLIT }, { lookbackH: 720, minHistory: 360, hi: 0.8, lo: 0.2, cooldownH: 24 });
+  const reg = REGISTERED_READS.find((r) => r.axis === "funding_basis_split");
+  assert.equal(reg.registeredAt, "2026-11-08T00:00:00Z");
+  assert.ok(reg.holdout && reg.gradedExit && !reg.paperWallet && reg.side === "BOTH");
+});
+
+test("funding_basis_split: funding says longs are crowded, basis sits at or below its median → SHORT; the mirror → LONG", () => {
+  const n = 800, h = 700;
+  const oiHist = [], basisHist = [];
+  for (let i = 0; i < n; i++) {
+    oiHist.push({ t: T0 + i * H + 120000, price: 100, oi: 1000, funding: 0.0001 }); // a flat history ranks 0.5: never extreme
+    basisHist.push({ t: T0 + i * H + 300000, basisPct: 0.03 });
+  }
+  oiHist[h] = { ...oiHist[h], funding: 0.01 };
+  basisHist[h] = { ...basisHist[h], basisPct: -0.5 };
+  oiHist[h + 30] = { ...oiHist[h + 30], funding: -0.01 };
+  basisHist[h + 30] = { ...basisHist[h + 30], basisPct: 0.5 };
+  const ev = fundingBasisSplitEvents({ oiHist, basisHist });
+  assert.deepEqual(ev.map((e) => [e.t, e.side]), [[oiHist[h].t, "SHORT"], [oiHist[h + 30].t, "LONG"]]);
+  // funding and basis AGREE (crowded longs, perp bid up): not this read
+  const agree = basisHist.map((r, i) => (i === h ? { ...r, basisPct: 0.5 } : r));
+  assert.ok(!fundingBasisSplitEvents({ oiHist, basisHist: agree }).some((e) => e.t === oiHist[h].t));
+  assert.deepEqual(fundingBasisSplitEvents({ oiHist, basisHist: [] }), [], "no basis series = no events");
+});
+
+test("funding_basis_split is checked for overlap with confluence_follow (both read funding)", async () => {
+  const { OVERLAP_PAIRS } = await import("./axisbt.mjs");
+  assert.ok(OVERLAP_PAIRS.some((p) => p.includes("funding_basis_split") && p.includes("confluence_follow")));
 });

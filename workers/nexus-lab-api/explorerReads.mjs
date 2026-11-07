@@ -313,6 +313,40 @@ export function btcLeadLagEvents(cs, _pmap, ctx = {}, p = LEAD_LAG) {
   return ev;
 }
 
+// ── 12 · funding_basis_split — registered 2026-11-07, counts from 2026-11-08T00:00Z ──────────────────
+// docs/research/funding-basis-split-prereg.md (batch 4 D, explorer-drafts-4.md; borst: "register
+// funding-basis at the drafted setting"). The two leverage prices disagree. At an oi:hist row (hour h) with a
+// basis:hist row in the same hour: funding ranks ≥ 80th percentile of the coin's prior 30 days (longs paying)
+// AND the spot-perp basis is at or below its own prior-30-day median → SHORT; the mirror (funding ≤ 20th,
+// basis ≥ median) → LONG. Each series needs ≥ 360 prior hours. Cooldown 24h per coin. Body moved unchanged
+// from explorerDrafts4.mjs (drafted 2026-10-27 as batch 2's D, before any count).
+export const SPLIT = Object.freeze({ lookbackH: MONTH_H, minHistory: 360, hi: 0.8, lo: 0.2, cooldownH: 24 });
+export function fundingBasisSplitEvents(cs, _pmap, _ctx, p = SPLIT) {
+  const m = byHour(cs.oiHist, (r) => Number.isFinite(Number(r.funding)) && Number(r.price) > 0);
+  const bm = byHour(cs.basisHist, (r) => Number.isFinite(Number(r.basisPct)));
+  if (!m.size || !bm.size) return [];
+  const hours = [...m.keys()].sort((a, b) => a - b);
+  const bHours = [...bm.keys()].sort((a, b) => a - b);
+  const ev = [];
+  let last = -Infinity;
+  for (const h of hours) {
+    if (h - last < p.cooldownH) continue;
+    const b = bm.get(h);
+    if (!b) continue;
+    const fPrior = [], bPrior = [];
+    for (const k of hours) { if (k >= h) break; if (k >= h - p.lookbackH) fPrior.push(Number(m.get(k).funding)); }
+    for (const k of bHours) { if (k >= h) break; if (k >= h - p.lookbackH) bPrior.push(Number(bm.get(k).basisPct)); }
+    if (fPrior.length < p.minHistory || bPrior.length < p.minHistory) continue;
+    const fr = pctRank(fPrior, Number(m.get(h).funding));
+    const bmed = median(bPrior), bx = Number(b.basisPct);
+    const side = fr >= p.hi && bx <= bmed ? "SHORT" : fr <= p.lo && bx >= bmed ? "LONG" : null;
+    if (!side) continue;
+    ev.push({ t: m.get(h).t, side });
+    last = h;
+  }
+  return ev;
+}
+
 // The four registered 2026-10-16 (docs/research/explorers-prereg.md), batch 2 (2026-10-27), batch 3
 // (2026-11-06) and batch 4 (2026-11-07). Labels are the scoreboard's.
 export const EXPLORER_READS = Object.freeze([
@@ -330,5 +364,7 @@ export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "spot_absorb", label: "Perp-led move, spot on the other side, OI flat: follow spot", gen: spotAbsorbEvents }),
   // batch 4, registered 2026-11-07 (btc-lead-lag-prereg.md)
   Object.freeze({ name: "btc_lead_lag", label: "BTC impulse, lagging alt follows", gen: btcLeadLagEvents }),
+  // batch 4, registered 2026-11-07 (funding-basis-split-prereg.md)
+  Object.freeze({ name: "funding_basis_split", label: "Funding and basis disagree: follow the basis", gen: fundingBasisSplitEvents }),
 ]);
 export const EXPLORER_GENS = Object.freeze(Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.gen])));
