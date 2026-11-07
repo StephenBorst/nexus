@@ -98,3 +98,24 @@ A scan reported Engine A's 6 baseline setups at −3.0R. The baseline above says
 
 Total +3.00R. The baseline stands. −3.0R is the three losses alone, so the scan left out the three Oct 15 wins. No
 change to anything above.
+
+### Closed: not runnable · 2026-11-07
+
+**The comparison above cannot run, and is closed.** Engine A's recurring automation on Bankr stopped in mid-October
+when it ran out of executions. Its last call was posted 2026-10-15 04:57 UTC. Bankr keeps only active and pending
+automations, so the original instruction text is gone. Bankr's memory file held a different spec for Engine A
+(flat 0.75% SL / 1.5% TP, 8×, $2,000 margin, 4h hold). That is Ember's execution profile, not what Engine A posted:
+its 30 public calls used structural stops of about 1.2–2.9%, targets at 2.0R, 4× (5× in September), and no orders.
+
+Restarting it from a reconstructed prompt would race a different engine under Engine A's name, so it is not
+restarted. The 3-week silence was a stopped schedule, not Engine A sitting out chop.
+
+Final record in the window (same rules as above, nothing re-graded):
+
+| Engine | Setups | Graded | Total R |
+|---|---|---|---|
+| A | 6 | 6 | +3.00 |
+| B | 34 (1 re-post dropped) | 33 | −5.79 |
+
+Engine A never reached the 20-setup trigger, so no winner is named and the two views were never built. Both records
+stay public as graded. A new benchmark engine gets a new name, a dedicated wallet and its own dated registration.

@@ -459,7 +459,9 @@ product is what sits on top:
   caller's display name (`caller`) + `engine`; `engineRecords` = each engine's all-time graded record (graded, wins, net R)
   → /proof's "Our engine callers" fold (losses included, "not a signal service"). Each engine row carries a plain
   line of what it trades (`ENGINE_NOTES` in proofCopy.mjs, keys pinned to `ENGINE_CALLER_ADDRESSES`). Public names (borst
-  2026-11-06): `0xd9f7…b449` = "Engine A", `0x3b2c…bfe4` = "Ember", `0x493d…c086` = "Ember M" (Ember's breakout track); a
+  2026-11-06): `0xd9f7…b449` = "Engine A" (STOPPED mid-October 2026: its Bankr automation ran out of executions and the
+  original instructions are unrecoverable; not restarted, the A/B comparison is CLOSED as not runnable, see
+  engine-ab-prereg.md Results 2026-11-07; Bankr's memory spec for it was Ember's), `0x3b2c…bfe4` = "Ember", `0x493d…c086` = "Ember M" (Ember's breakout track); a
   name lives in the wallet's own profile (PUT /profile, its Lab signature), never set by us. Each row shows "last graded Nd
   ago" (`lastAt`), so a quiet engine reads as quiet. A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
   (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
