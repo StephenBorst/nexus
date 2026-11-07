@@ -131,7 +131,8 @@ product is what sits on top:
   by `ops:halt:log`; public `GET /ops/halt`). exec reads it once per tick (`app/lib/liveHalt.mjs`; unreadable = halted)
   and skips every non-PAPER entry right before `enterPosition`. Exits, kill, DCA ladders, PAPER and parity untouched;
   closes nothing. No auto thresholds: a breaker rule is a read, graded first.
-- **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open. KILL =
+- **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open (no stop/TP:
+  the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.
 - **Kill order** (`nexus-agent-exec/killSwitch.mjs`, lab-api `routes-kill.mjs`, fixed 2026-11-06): the route only sets
   `agent:kill:{addr}` (and puts the wallet back on `agent:users`); it never deletes the key or the list entry. Exec closes
@@ -141,7 +142,8 @@ product is what sits on top:
   manage the open position → adopt a ghost → daily caps → entries. **Daily caps gate entries only** (fixed 2026-11-06:
   the cap check used to run first, so the day's last allowed trade went unmanaged until the 24h reset).
 - **Reconcile:** exec reads the live position first; exchange flat ⇒ clear the stale record. On a read error it manages
-  on cached data, never clears.
+  on cached data, never clears. An Orderly ERROR answer (`success:false`: rate limit, expired/removed key) is a read error,
+  never "flat" (`exchangePositionQty` / `exchangePositionRows`, exec `logic.mjs`; fixed 2026-11-06).
 - **Modes** (`deriveSignal`, brain `logic.mjs`): CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE (free); MOMENTUM,
   MEAN_REVERSION (PRO). **LEVEL_RECLAIM = ON for PAPER only** (built off 2026-11-04; on 2026-11-05 when level_reclaim
   was served TRADEABLE): the registered read via the SHARED rule `app/lib/levelReclaim.mjs` (the grader's
@@ -404,6 +406,13 @@ product is what sits on top:
   Session path, always on: arming AUTONOMOUS or raising capital/leverage needs the §C challenge (`configChallengeNeeded`,
   `sessionChallenge`); `/v2/key/remove` refuses under a live agent position or active TWAP (`keyInUse.mjs`).
   Next = step 4, the Bankr skill PR.
+- **Settle PnL** (`workers/nexus-lab-api/settlePnl.mjs`, read from Orderly's SDK 2026-11-06): GET `/v1/settle_nonce` (key-signed)
+  → the WALLET signs EIP-712 `SettlePnl {brokerId, chainId, settleNonce, timestamp}` on the on-chain domain (`0x6F7a…D203`)
+  → POST `/v1/settle_pnl {signature, message+chainType "EVM", userAddress, verifyingContract}`. An empty `{}` settles nothing
+  (every path did that until 2026-11-06). Bankr withdraws settle via Bankr's signature (`runSettle`; a failed settle =
+  502 `settle_failed`, nothing re-sent). `/settle-pnl`: `bankrApiKey` = one call; else prepare (typed data) → submit
+  `{message, signature}`. The code-78 retry sizes from `/v1/positions` `free_collateral`, never the holding; `withdrawnAmount`
+  = what Orderly accepted (0 on a refusal).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must
@@ -425,6 +434,10 @@ product is what sits on top:
   trades stop appearing, that secret is wrong; canary `supabase log failed`). `CREATE POLICY` doesn't enable RLS and
   policies are OR'd: verify, don't assume.
 - Rows carry Orderly `entry_order_id` / `close_order_id`; "auditable insert REJECTED" in exec logs = investigate.
+- **Live rows book the exchange's fill, not the mark** (since 2026-11-06): after each live market order (entry, DCA add,
+  partial TP, close) exec reads `GET /v1/order/{id}` and books `average_executed_price` when FILLED (`fillPriceFrom`,
+  exec `logic.mjs`; `readFill` tries twice ~0.5 s apart), else the mark. The position carries `entry_fill`
+  ("exchange" | "mark" | "paper"). Rows before this date are mark-priced (no slippage shown). Paper is unchanged.
 - `GET /agents/ledger` + chain, anchored on Arbitrum by `NexusLedgerAnchor` `0x57a698df84a44F3dA3dac3E08CA455a55A4eff84`
   (dedicated signer, `ANCHOR_PRIVATE_KEY`). The call-ledger hash has a fixed field list: changing it breaks the chain.
 

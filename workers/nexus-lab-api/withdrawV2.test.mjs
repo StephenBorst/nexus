@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { privateKeyToAccount } from "viem/accounts";
 import * as ed from "@noble/ed25519";
 import bs58 from "bs58";
-import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, withdrawRefusal, withdrawMessage, withdrawTypedData, usdcUnits, answer, ORDERLY_BASE, WITHDRAW_VC } from "./withdrawV2.mjs";
+import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, withdrawRefusal, withdrawMessage, withdrawTypedData, usdcUnits, answer, freeCollateralFrom, ORDERLY_BASE, WITHDRAW_VC } from "./withdrawV2.mjs";
 import { storedKeySigner, v2Signer, hasV2Key } from "./tradingSigner.mjs";
 import { newKeyMaterial, addKeyMessage, keyRecord, V2_KEY } from "./v2Keys.mjs";
 import { BANKR_BASE } from "./routes-key.mjs";
@@ -19,6 +19,7 @@ import { handleSession, checkTradingSession } from "./routes-session.mjs";
 import { v1RegisterOff, v1RegistrationRefusal, bankrRegisterV2Refusal, registerPageV2Html } from "./v1Registration.mjs";
 import { revokedTradingRefusal, revokedWallets } from "./revokedTrading.mjs";
 import { recoverEthAddress } from "./shared.mjs";
+import { settleSigner } from "./settlePnl.mjs";
 
 const T0 = 1_790_000_000_000;
 const alice = privateKeyToAccount("0x" + "c3".repeat(32));
@@ -50,7 +51,8 @@ async function challenge(env, account, { action = "withdraw", amount = null, non
 const unb64url = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "==".slice(0, (4 - (s.length % 4)) % 4)), (c) => c.charCodeAt(0));
 
 /** Fake Orderly + Bankr. `bankrAs` = who Bankr signs as; `answers` = withdraw_request replies in order. */
-function world({ bankrAs = alice, answers = [{ success: true, data: { withdraw_id: 1 } }], freeUsdc = 0 } = {}) {
+function world({ bankrAs = alice, answers = [{ success: true, data: { withdraw_id: 1 } }], freeUsdc = 0, holdingUsdc = 99, rows = [], positionsReply = null, settleAnswer = null } = {}) {
+  const settles = [];
   const calls = [];
   let nonce = 7;
   const queue = [...answers];
@@ -65,11 +67,19 @@ function world({ bankrAs = alice, answers = [{ success: true, data: { withdraw_i
     }
     if (u === `${ORDERLY_BASE}/v1/withdraw_nonce`) return ok({ success: true, data: { withdraw_nonce: nonce++ } });
     if (u === `${ORDERLY_BASE}/v1/withdraw_request`) return ok(queue.shift() || { success: true });
-    if (u === `${ORDERLY_BASE}/v1/settle_pnl`) return ok({ success: true });
-    if (u === `${ORDERLY_BASE}/v1/client/holding`) return ok({ success: true, data: { holding: [{ token: "USDC", holding: freeUsdc }] } });
+    if (u === `${ORDERLY_BASE}/v1/settle_nonce`) return ok({ success: true, data: { settle_nonce: 4 } });
+    if (u === `${ORDERLY_BASE}/v1/settle_pnl`) {
+      const b = JSON.parse(init.body || "{}");
+      settles.push(b);
+      return ok(settleAnswer || (b.signature && b.message?.settleNonce === 4 ? { success: true } : { success: false, code: -1, message: "bad settle" }));
+    }
+    // The holding (whole balance, margin included) is deliberately larger than what's free: a retry
+    // sized from it would be wrong, so the code must read free_collateral from /v1/positions.
+    if (u === `${ORDERLY_BASE}/v1/client/holding`) return ok({ success: true, data: { holding: [{ token: "USDC", holding: holdingUsdc }] } });
+    if (u === `${ORDERLY_BASE}/v1/positions`) return ok(positionsReply || { success: true, data: { free_collateral: freeUsdc, total_collateral_value: holdingUsdc, rows } });
     throw new Error("unexpected " + u);
   };
-  return { calls, fetchImpl };
+  return { calls, fetchImpl, settles };
 }
 const orderlyCalls = (w) => w.calls.filter((c) => c.url.startsWith(ORDERLY_BASE));
 const withdrawCalls = (w) => w.calls.filter((c) => c.url.endsWith("/v1/withdraw_request"));
@@ -293,4 +303,123 @@ test("the revoked wallet's way back stays open: v2 Bankr registration and Bankr 
   assert.equal(gate(["v2", "key", "bankr-register"], { walletAddress: A, bankrApiKey: "bk" }), null);
   assert.equal(gate(["proxy", "bankr-withdraw"], { walletAddress: A, bankrApiKey: "bk", amount: 1.76 }), null);
   assert.equal(gate(["proxy", "bankr-register"], { walletAddress: A, bankrApiKey: "bk" }).status, 403, "the v1 Bankr registration stays shut");
+});
+
+
+// ── code 78: the retry is sized from FREE collateral, and reports only what Orderly accepted ──────
+// Found live on 0xd9f7…b449 (2026-11-06): the retry read the holding (1.768, margin included), tried
+// 1.268, was refused with 78 again, and still said withdrawnAmount 1.268.
+
+test("freeCollateralFrom: account-level free_collateral + open positions; unreadable = null", () => {
+  assert.deepEqual(freeCollateralFrom({ success: true, data: { free_collateral: 0.4, rows: [{ position_qty: 0.01 }, { position_qty: 0 }] } }), { free: 0.4, openPositions: 1, unsettledPnl: 0 });
+  assert.deepEqual(freeCollateralFrom({ success: true, data: { free_collateral: -2, rows: [] } }), { free: 0, openPositions: 0, unsettledPnl: 0 });
+  for (const r of [null, {}, { success: false, data: { free_collateral: 5 } }, { success: true, data: {} }, { success: true, data: { free_collateral: "x" } }]) {
+    assert.equal(freeCollateralFrom(r), null, JSON.stringify(r));
+  }
+});
+
+test("code 78: the retry uses free collateral, never the holding", async () => {
+  const env = envOn();
+  await storeKey(env);
+  const signer = await storedKeySigner(env, A, { now: T0 });
+  const w = world({ answers: [{ success: false, code: 78 }, { success: true }], freeUsdc: 1.2, holdingUsdc: 1.768 });
+  const out = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 1.76 }, deps(w)));
+  const [, second] = withdrawCalls(w).map((c) => JSON.parse(c.init.body));
+  assert.equal(second.message.amount, 700_000, "1.2 free − 0.5 buffer, not 1.768 − 0.5");
+  assert.deepEqual([out.body.ok, out.body.withdrawnAmount, out.body.freeCollateral], [true, 0.7, 1.2]);
+  assert.ok(!w.calls.some((c) => c.url.endsWith("/v1/client/holding")), "the holding is never read");
+});
+
+test("code 78 twice: ok false, withdrawnAmount 0, the attempt named separately", async () => {
+  const env = envOn();
+  await storeKey(env);
+  const signer = await storedKeySigner(env, A, { now: T0 });
+  const w = world({ answers: [{ success: false, code: 78 }, { success: false, code: 78, message: "Margin is occupied" }], freeUsdc: 1.768 });
+  const out = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 1.76 }, deps(w)));
+  assert.deepEqual([out.body.ok, out.body.withdrawnAmount, out.body.attemptedAmount], [false, 0, 1.268]);
+  const plain = world({ answers: [{ success: false, code: 5, message: "Amount error" }] });
+  const p = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 1 }, deps(plain)));
+  assert.deepEqual([p.body.ok, p.body.withdrawnAmount], [false, 0], "a plain refusal reports nothing moved");
+  const okw = world();
+  const o = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 1 }, deps(okw)));
+  assert.deepEqual([o.body.ok, o.body.withdrawnAmount], [true, 1]);
+});
+
+test("code 78 with nothing free names what holds the margin; unreadable free collateral sends nothing", async () => {
+  const env = envOn();
+  await storeKey(env);
+  const signer = await storedKeySigner(env, A, { now: T0 });
+  const pos = world({ answers: [{ success: false, code: 78 }], freeUsdc: 0.2, rows: [{ symbol: "PERP_ETH_USDC", position_qty: 0.01 }] });
+  const r = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 1.76 }, deps(pos)));
+  assert.deepEqual([r.status, r.body.error, r.body.openPositions, r.body.withdrawnAmount], [400, "insufficient_free_collateral", 1, 0]);
+  assert.match(r.body.hint, /open position/);
+  const orders = world({ answers: [{ success: false, code: 78 }], freeUsdc: 0.2 });
+  assert.match((await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 1.76 }, deps(orders)))).body.hint, /orders/);
+  const unread = world({ answers: [{ success: false, code: 78 }], positionsReply: { success: false, code: -1003 } });
+  const u = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 1.76 }, deps(unread)));
+  assert.deepEqual([u.status, u.body.error], [502, "free_collateral_unread"]);
+  assert.equal(withdrawCalls(unread).length, 1, "nothing re-sent");
+});
+
+test("v1 bankr-withdraw and /withdraw/prepare size the retry from /v1/positions too", () => {
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  for (const [a, b] of [['parts[1] === "bankr-withdraw"', "/withdraw/prepare + /withdraw/submit"], ['if (parts[1] === "prepare")', "// submit"]]) {
+    const i = src.indexOf(a), j = src.indexOf(b, i);
+    assert.ok(i > 0 && j > i, a);
+    const block = src.slice(i, j);
+    assert.doesNotMatch(block, /client\/holding/, a);
+    assert.match(block, /freeCollateralFrom\(await oReq\("GET", "\/v1\/positions", null\)\)/, a);
+  }
+});
+
+test("the live 0xd9f7 account: no positions, no orders, an unsettled loss = the balance → says so, nothing moves", async () => {
+  const live = { success: true, data: { free_collateral: 0, total_collateral_value: 0,
+    rows: [{ symbol: "PERP_SOL_USDC", position_qty: 0, cost_position: 1.768274, unsettled_pnl: -1.768274 }] } };
+  assert.deepEqual(freeCollateralFrom(live), { free: 0, openPositions: 0, unsettledPnl: -1.768274 });
+  const env = envOn();
+  await storeKey(env);
+  const signer = await storedKeySigner(env, A, { now: T0 });
+  const w = world({ answers: [{ success: false, code: 78 }], positionsReply: live, holdingUsdc: 1.768274 });
+  const r = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 1.76 }, deps(w)));
+  assert.deepEqual([r.status, r.body.error, r.body.withdrawnAmount, r.body.freeCollateral], [400, "insufficient_free_collateral", 0, 0]);
+  assert.match(r.body.hint, /unsettled loss of 1\.77 USDC/);
+  assert.doesNotMatch(r.body.hint, /orders/, "no open orders: don't send the owner to cancel some");
+  assert.equal(withdrawCalls(w).length, 1, "no retry when nothing is free");
+});
+
+// ── code 78 settles for real: the wallet (Bankr) signs SettlePnl; a refused settle stops everything ──
+test("code 78: settle = nonce + a SettlePnl Bankr signs as the wallet, then the retry", async () => {
+  const env = envOn();
+  await storeKey(env);
+  const signer = await storedKeySigner(env, A, { now: T0 });
+  const w = world({ answers: [{ success: false, code: 78 }, { success: true }], freeUsdc: 3 });
+  const out = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 10 }, deps(w)));
+  assert.equal(out.body.ok, true);
+  const [s] = w.settles;
+  assert.equal(s.userAddress, A);
+  assert.equal(s.message.chainType, "EVM");
+  assert.equal(await settleSigner(s.message, s.signature), A, "signed by the wallet, not the key");
+  assert.ok(w.calls.some((c) => c.url.endsWith("/v1/settle_nonce")));
+});
+
+test("a refused settle is reported and nothing is re-sent", async () => {
+  const env = envOn();
+  await storeKey(env);
+  const signer = await storedKeySigner(env, A, { now: T0 });
+  const w = world({ answers: [{ success: false, code: 78 }], freeUsdc: 3, settleAnswer: { success: false, code: 17, message: "nope" } });
+  const out = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 10 }, deps(w)));
+  assert.deepEqual([out.status, out.body.error, out.body.stage, out.body.withdrawnAmount], [502, "settle_failed", "orderly", 0]);
+  assert.equal(withdrawCalls(w).length, 1, "no retry on an unsettled account");
+  // A settle signed by another wallet is refused before it's posted: settlePnl.test.mjs (runSettle).
+});
+
+test("v2 prepare with settle: refused with the signed-settle route to use", async () => {
+  const env = envOn();
+  await storeKey(env);
+  const signer = await storedKeySigner(env, A, { now: T0 });
+  const w = world();
+  const r = await answer(() => withdrawPrepareV2(signer, { amount: 1, settle: true }, deps(w)));
+  assert.deepEqual([r.status, r.body.error], [400, "settle_separately"]);
+  assert.match(r.body.hint, /\/settle-pnl/);
+  assert.equal(w.settles.length, 0);
 });

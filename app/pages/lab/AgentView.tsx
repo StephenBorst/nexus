@@ -26,6 +26,7 @@ import type { BacktestResult, SweepResult, ValidationResult } from "./backtestTy
 import { errText } from "./helpers";
 import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter, PaperCostLine } from "./AgentPanels";
 import { gradedExitRefusal } from "@/lib/gradedExit.mjs";
+import { deactivateWarning, deactivatedMessage } from "@/lib/agentControls.mjs";
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
 import { StrategyShelf } from "./StrategyShelf";
@@ -407,6 +408,10 @@ export function AgentView() {
 
   async function deactivateAgent() {
     if (!walletAddress) return;
+    // A live position stays open with no stop after DEACTIVATE (agentControls.mjs): say so first.
+    const openPos = agentState?.current_position ?? null;
+    const warning = deactivateWarning(openPos);
+    if (warning && !window.confirm(warning)) return;
     setSaving(true);
     try {
       const walletSig = await getAgentSig(walletAddress);
@@ -417,8 +422,8 @@ export function AgentView() {
       });
       if (!res.ok) throw new Error("Failed to deactivate");
       setAgentState((prev) => prev ? { ...prev, active: false, current_position: null } : null);
-      setSuccess("Agent deactivated. Trading key removed.");
-      setTimeout(() => setSuccess(null), 3000);
+      setSuccess(deactivatedMessage(openPos));
+      setTimeout(() => setSuccess(null), openPos && !openPos.paper ? 12000 : 3000);
     } catch (e) {
       setError(errText(e));
     } finally {

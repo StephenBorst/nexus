@@ -33,3 +33,23 @@ test("a live safety order or partial TP with no key books nothing (fails closed)
     assert.match(chunk.slice(keyed), /\} else \{[\s\S]{0,200}?no key[\s\S]{0,80}?return;/, `${fn} returns when there is no key`);
   }
 });
+
+test("position reads go through exchangePositionQty/Rows (an error is never 'flat')", () => {
+  assert.doesNotMatch(src, /posRes\?\.data\?\.position_qty \?\? 0/);
+  assert.match(src, /const liveQty = exchangePositionQty\(posRes\);\s*\n\s*if \(liveQty === null\) throw/);
+  assert.match(src, /exchangePositionRows\(res\);\s*\n\s*if \(rows === null\) return null;/);
+  const adopt = src.slice(src.indexOf("async function adoptOrphanPosition("), src.indexOf("async function processUser("));
+  assert.match(adopt, /exchangePositionQty\(res\) === null\) throw/);
+});
+
+test("every live market order books its exchange fill (readFill), not the mark", () => {
+  const fnBody = (name) => { const i = src.indexOf(`async function ${name}(`); return src.slice(i, src.indexOf("\nasync function ", i + 10)); };
+  assert.match(fnBody("enterPosition"), /entryFill = await readFill\(keyData, orderId, markPrice\)/);
+  assert.match(fnBody("enterPosition"), /entry_price: entryFill\.price,/);
+  assert.match(fnBody("addSafetyOrder"), /addPrice = \(await readFill\(/);
+  assert.match(fnBody("addSafetyOrder"), /blendAvg\(pos\.total_qty, pos\.avg_entry, addQty, addPrice\)/);
+  assert.match(fnBody("partialClose"), /slicePrice = \(await readFill\(/);
+  assert.match(fnBody("partialClose"), /exit_price: slicePrice,/);
+  assert.match(fnBody("closePosition"), /closeFill = await readFill\(keyData, closeOrderId, null\)/);
+  assert.match(fnBody("closePosition"), /if \(!paper && closeFill\?\.source === "exchange"\) \{\s*\n\s*exitPrice = closeFill\.price;/);
+});
