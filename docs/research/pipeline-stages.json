@@ -52,6 +52,11 @@
       "stage": "REGISTERED",
       "next": "30 more out-of-sample events",
       "events": 0
+    },
+    "btc_lead_lag": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
     }
   },
   "gradedExit": {

@@ -277,8 +277,44 @@ export function spotAbsorbEvents(cs, _pmap, _ctx, p = SPOT_ABSORB) {
   return ev;
 }
 
-// The four registered 2026-10-16 (docs/research/explorers-prereg.md), batch 2 (2026-10-27) and batch 3
-// (2026-11-06). Labels are the scoreboard's.
+// ── 11 · btc_lead_lag — registered 2026-11-07, counts from 2026-11-08T00:00Z ────────────────────────
+// docs/research/btc-lead-lag-prereg.md (batch 4, explorer-drafts-4.md; borst: "register lead-lag at p90 /
+// 0.75"). BTC makes an outsized 1h move (|1h return| ≥ the 90th percentile of its own prior 30 days, ≥ 360
+// hours); an alt that moved less than 0.75 of BTC's move in BTC's direction that same hour (or the other way)
+// is lagging. Follow BTC on the alt at that bar's close. Alts only (BTC never fires). Cooldown 12h per coin.
+// Reads ctx.btcCandles (axisbt passes BTC's hour → candle map; on the holdout line BTC rides along as
+// context only, never graded). The body moved unchanged from explorerDrafts4.mjs.
+export const LEAD_LAG = Object.freeze({ pct: 0.9, lookbackH: MONTH_H, minHistory: 360, lagFrac: 0.75, cooldownH: 12 });
+export function btcLeadLagEvents(cs, _pmap, ctx = {}, p = LEAD_LAG) {
+  if (String(cs.coin || "").toUpperCase() === "BTC") return [];
+  const btc = ctx && ctx.btcCandles instanceof Map ? ctx.btcCandles : null;
+  if (!btc || !btc.size) return [];
+  const cbh = candleMap(cs.candleHist);
+  const btcRet = new Map();
+  for (const h of btc.keys()) { const a = btc.get(h), b = btc.get(h - 1); if (b && b.c > 0 && a.c > 0) btcRet.set(h, a.c / b.c - 1); }
+  const hours = [...cbh.keys()].sort((a, b) => a - b);
+  const ev = [];
+  let last = -Infinity;
+  for (const h of hours) {
+    if (h - last < p.cooldownH) continue;
+    const r = btcRet.get(h);
+    if (r == null || r === 0) continue;
+    const a = cbh.get(h), b = cbh.get(h - 1);
+    if (!b) continue;
+    const prior = [];
+    for (let k = h - p.lookbackH; k < h; k++) { const x = btcRet.get(k); if (x != null) prior.push(Math.abs(x)); }
+    if (prior.length < p.minHistory) continue;
+    if (!(pctRank(prior, Math.abs(r)) >= p.pct)) continue;
+    const alt = a.c / b.c - 1;
+    if (!(Math.sign(r) * alt < p.lagFrac * Math.abs(r))) continue;
+    ev.push({ t: Number(a.t) + H, side: r > 0 ? "LONG" : "SHORT" });
+    last = h;
+  }
+  return ev;
+}
+
+// The four registered 2026-10-16 (docs/research/explorers-prereg.md), batch 2 (2026-10-27), batch 3
+// (2026-11-06) and batch 4 (2026-11-07). Labels are the scoreboard's.
 export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "level_reclaim", label: "Prior-day high/low swept and reclaimed", gen: levelReclaimEvents }),
   Object.freeze({ name: "oi_div_reversal", label: "Extreme 24h move on falling OI, faded", gen: oiDivReversalEvents }),
@@ -292,5 +328,7 @@ export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "session_fade", label: "NY open drive (13–15 UTC), faded", gen: sessionFadeEvents }),
   Object.freeze({ name: "level_reclaim_tight", label: "Level reclaim, only when the coin is quiet for itself", gen: levelReclaimTightEvents }),
   Object.freeze({ name: "spot_absorb", label: "Perp-led move, spot on the other side, OI flat: follow spot", gen: spotAbsorbEvents }),
+  // batch 4, registered 2026-11-07 (btc-lead-lag-prereg.md)
+  Object.freeze({ name: "btc_lead_lag", label: "BTC impulse, lagging alt follows", gen: btcLeadLagEvents }),
 ]);
 export const EXPLORER_GENS = Object.freeze(Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.gen])));

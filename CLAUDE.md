@@ -263,10 +263,13 @@ product is what sits on top:
   confluence_follow (from 2026-10-17); oi_div_reversal_4h and oi_coil_break (from 2026-10-28, their own prereg pages); batch 3
   (borst's go 2026-11-06, own prereg pages): `session_fade` (session_momentum's event traded the other way, a NEW read) and
   `level_reclaim_tight` (level_reclaim only when its H4 ATR ranks ≤ its own 30-day median) from 2026-11-08, `spot_absorb`
-  (perp-led 4h move, spot the other way, OI flat → follow spot) from 2026-11-20. Registered
+  (perp-led 4h move, spot the other way, OI flat → follow spot) from 2026-11-20; batch 4 (borst 2026-11-07):
+  `btc_lead_lag` (BTC 1h move ≥ its own 30-day p90, an alt that moved < 0.75 of it follows BTC) from 2026-11-08, the
+  first read on another coin's tape: the holdout line gets the main card's BTC set as CONTEXT only (`ctxSets` in
+  axisbt `buildEvents`, never graded). Registered
   bodies live in `explorerReads.mjs`; unregistered drafts in `explorerDraftsB.mjs` (batch 2, `explorer-drafts-b.md`; tests
-  fail if a draft is graded or axisbt imports it) and `explorerDrafts4.mjs` (batch 4, `explorer-drafts-4.md`, counted
-  2026-11-07, unsigned: btc_lead_lag, funding_settle_snap, level_reclaim_weekly, funding_basis_split; generators get
+  fail if a draft is graded or axisbt imports it) and `explorerDrafts4.mjs` (batch 4, `explorer-drafts-4.md`: A registered, B
+  funding_settle_snap + C level_reclaim_weekly DROPPED, D funding_basis_split PARKED until counted; generators get
   axisbt's `ctx.btcCandles`; `powerCheck.mjs --batch=4`). `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.
 - **Regime window** (`docs/research/graded-exit-regime-prereg.md`, signed 2026-10-26; counts from 2026-10-27T00:00Z,

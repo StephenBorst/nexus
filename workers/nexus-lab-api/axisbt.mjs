@@ -796,9 +796,12 @@ export function windowTide(pools) {
 // Every event a read fires on these coin sets, with what grading needs (price spine, candles,
 // funding, market key). ONE builder: scoreEvents grades these, and the stress-hour study
 // (stressStudy.mjs, via eventsWithR) labels the same events with the same R.
-function buildEvents(coinSets, signalGen) {
+// `ctxSets` = coin sets passed as CONTEXT only, never graded: the holdout line has no BTC, so the main card's
+// BTC set rides along there for the reads that read BTC (btc_lead_lag). A BTC set in coinSets wins.
+function buildEvents(coinSets, signalGen, ctxSets = null) {
   // BTC context (regime map + price map) for the RS/veto gens — built once, passed to every gen.
-  const btcCs = (coinSets || []).find((c) => String(c.coin || "").toUpperCase() === "BTC");
+  const isBtc = (c) => String(c?.coin || "").toUpperCase() === "BTC";
+  const btcCs = (coinSets || []).find(isBtc) || (ctxSets || []).find(isBtc);
   // BTC context off the DEEPEST btc series (candle closes preferred) so the RS/veto reaches
   // back over the candle-depth lookback, not just the shallow oi window.
   const btcSeries = btcCs ? priceSeries(btcCs) : [];
@@ -837,8 +840,8 @@ export function eventsWithR(coinSets, signalGen) {
   return out;
 }
 
-export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null, gradedExit = false } = {}) {
-  const all = buildEvents(coinSets, signalGen);
+export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null, gradedExit = false, ctxSets = null } = {}) {
+  const all = buildEvents(coinSets, signalGen, ctxSets);
   const gxCut = typeof gradedExit === "number" ? gradedExit : GRADED_EXIT_OOS_CUTOFF_MS;
   if (!all.length) return { random: null, sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples), exitGraded: gradedExit ? scoreGradedExit([], 0, minSamples, gxCut) : null };
   // rs_quartile written on EVERY event row that carries an rs — from closes, NOT candle-gated

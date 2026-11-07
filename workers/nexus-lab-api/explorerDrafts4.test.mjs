@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { DRAFT_GENS_4, DRAFT_READS_4, btcLeadLagEvents, fundingSettleSnapEvents, levelReclaimWeeklyEvents, fundingBasisSplitEvents, LEAD_LAG } from "./explorerDrafts4.mjs";
+import { DRAFT_GENS_4, DRAFT_READS_4, fundingBasisSplitEvents } from "./explorerDrafts4.mjs";
 import { AXES } from "./axisbt.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 import { hourBucket } from "../../app/lib/basisStack.mjs";
@@ -24,7 +24,7 @@ test("drafts are not graded: off the scoreboard, unregistered, and nothing else 
   for (const f of ["./axisbt.mjs", "./index.js", "../nexus-agent-brain/index.js", "../nexus-agent-brain/logic.mjs", "../nexus-agent-exec/index.js"]) {
     assert.doesNotMatch(readFileSync(new URL(f, import.meta.url), "utf8"), /explorerDrafts4/, `${f} must not import the drafts`);
   }
-  assert.deepEqual(DRAFT_READS_4.map((r) => r.name), ["btc_lead_lag", "funding_settle_snap", "level_reclaim_weekly", "funding_basis_split"]);
+  assert.deepEqual(DRAFT_READS_4.map((r) => r.name), ["funding_basis_split"]); // A registered, B and C dropped 2026-11-07
 });
 
 // seeded random tape with every series the drafts read; BTC and the alt share a seed offset
@@ -66,63 +66,6 @@ test("no lookahead: for every draft, the future never changes past events", () =
       assert.deepEqual(before(gen({ coin: "ETH", ...poison(full) }, null, pctx)), before(all), `${name} looked past ${cutH}h`);
     }
   }
-});
-
-// a quiet hourly tape: price flat at 100 with a small wiggle, so one hand-placed bar decides an event
-function flat(n, { wiggle = 0.001 } = {}) {
-  const candleHist = [];
-  for (let i = 0; i < n; i++) {
-    const c = 100 * (1 + (i % 2 ? wiggle : -wiggle));
-    candleHist.push({ t: T0 + i * H, o: 100, h: Math.max(100, c) * 1.001, l: Math.min(100, c) * 0.999, c });
-  }
-  return candleHist;
-}
-
-test("btc_lead_lag: an outsized BTC hour + an alt that moved under half of it → follow BTC on the alt; BTC itself never fires", () => {
-  const n = 800, k = 760;
-  const btc = flat(n);
-  btc[k] = { ...btc[k], o: btc[k - 1].c, c: btc[k - 1].c * 1.03, h: btc[k - 1].c * 1.031, l: btc[k - 1].c * 0.999 };
-  const ctx = { btcCandles: candlesMap(btc) };
-  const lag = flat(n);
-  lag[k] = { ...lag[k], c: lag[k - 1].c * 1.005 }; // +0.5% vs BTC +3%: under half → lagging
-  const ev = btcLeadLagEvents({ coin: "SOL", candleHist: lag }, null, ctx);
-  assert.deepEqual(ev, [{ t: T0 + k * H + H, side: "LONG" }]);
-  const kept = flat(n);
-  kept[k] = { ...kept[k], c: kept[k - 1].c * 1.04 }; // the alt already moved more than BTC: not lagging
-  assert.deepEqual(btcLeadLagEvents({ coin: "SOL", candleHist: kept }, null, ctx), []);
-  assert.deepEqual(btcLeadLagEvents({ coin: "BTC", candleHist: btc }, null, ctx), []);
-  assert.deepEqual(btcLeadLagEvents({ coin: "SOL", candleHist: lag }, null, {}), [], "no BTC series = no events");
-  assert.equal(LEAD_LAG.minHistory, 360);
-});
-
-test("funding_settle_snap: payers at an extreme + a pre-settlement move against them → enter with the payers at the settlement close", () => {
-  const n = 800;
-  const candleHist = flat(n);
-  const oiHist = candleHist.map((c, i) => ({ t: c.t + 120000, price: c.c, oi: 1000, funding: 0.0001 * ((i * 7) % 5) / 5 }));
-  // the bar closing at 16:00 UTC on day 32: hour index 32*24+15
-  const h = 32 * 24 + 15;
-  oiHist[h] = { ...oiHist[h], funding: 0.002 }; // longs paying, far above the coin's prior month
-  candleHist[h - 1] = { ...candleHist[h - 1], o: 100 };
-  candleHist[h] = { ...candleHist[h], c: 97, l: 96.9 }; // −3% over the two bars: longs unwound
-  const ev = fundingSettleSnapEvents({ candleHist, oiHist });
-  assert.deepEqual(ev, [{ t: T0 + (h + 1) * H, side: "LONG" }]);
-  assert.equal(new Date(ev[0].t).getUTCHours(), 16);
-  // the same move one hour off a settlement boundary is not this read
-  const off = candleHist.map((c) => ({ ...c })), offOi = oiHist.map((r) => ({ ...r }));
-  offOi[h] = { ...offOi[h], funding: 0.0001 }; offOi[h + 1] = { ...offOi[h + 1], funding: 0.002 };
-  off[h] = { ...candleHist[h + 1] }; off[h].t = T0 + h * H; off[h + 1] = { ...candleHist[h], t: T0 + (h + 1) * H };
-  assert.deepEqual(fundingSettleSnapEvents({ candleHist: off, oiHist: offOi }), []);
-});
-
-test("level_reclaim_weekly: the prior week's low swept by ≥0.4 ATR and closed back above within 6h → LONG at that close", () => {
-  const n = 3 * 168;
-  const candleHist = flat(n);
-  const k = 2 * 168 + 30; // Wednesday of week 3
-  candleHist[k] = { ...candleHist[k], l: 97, c: 99.5 };
-  candleHist[k + 1] = { ...candleHist[k + 1], o: 99.5, l: 99.4, c: 100.05, h: 100.2 };
-  const ev = levelReclaimWeeklyEvents({ candleHist });
-  assert.deepEqual(ev, [{ t: T0 + (k + 2) * H, side: "LONG" }]);
-  assert.equal(new Date(T0).getUTCDay(), 1, "weeks start Monday 00:00 UTC");
 });
 
 test("funding_basis_split: funding says longs are crowded, basis sits at or below its median → SHORT; the mirror → LONG", () => {

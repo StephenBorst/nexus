@@ -1,8 +1,13 @@
 # Explorer reads, batch 4 · DRAFTS, not registered
 
-**Status (2026-11-07):** drafted and counted, nothing signed. borst picked all four ideas on 2026-11-07. This page
-records how each one is defined and how often it fires. It is not a registration. Nothing grades or trades these
-reads, and the tests fail if the scoreboard imports them.
+**Status (2026-11-07, borst signed):**
+- **A · `btc_lead_lag`: registered** at p90 · lag 0.75 (`btc-lead-lag-prereg.md`), counting from 2026-11-08T00:00Z.
+- **B · `funding_settle_snap`: dropped.**
+- **C · `level_reclaim_weekly`: dropped.**
+- **D · `funding_basis_split`: parked** until it is counted on the basis history route, after deploy.
+
+This page is the record of how the four were defined and counted. It is not a registration. The text below is the
+draft as reviewed; the registered body moved unchanged out of `explorerDrafts4.mjs`.
 
 Code: `workers/nexus-lab-api/explorerDrafts4.mjs`, checked by `explorerDrafts4.test.mjs`. To count:
 `node tools/explorers/powerCheck.mjs <dir> 60 --batch=4`.
