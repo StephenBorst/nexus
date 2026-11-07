@@ -63,13 +63,41 @@ test("backstopOrder: a position stop-loss exactly as Orderly's SDK builds one", 
   assert.equal("quantity" in b, false, "a positional stop closes whatever is left (partials need no resize)");
 });
 
-test("the SDK still builds positional TP/SL with these fields (re-check after an SDK bump)", () => {
-  let sdk;
-  try { sdk = readFileSync(new URL("../../node_modules/@orderly.network/hooks/dist/index.mjs", import.meta.url), "utf8"); } catch { return; } // workers-only checkout
-  assert.match(sdk, /algo_type: AlgoOrderType\.STOP_LOSS,\s*reduce_only: true,\s*side,\s*type: values\.sl_order_price \? OrderType\.LIMIT : OrderType\.CLOSE_POSITION,/);
-  assert.match(sdk, /algo_type: values\.position_type === PositionType\.FULL \? AlgoOrderRootType\.POSITIONAL_TP_SL/);
-  assert.match(sdk, /root_algo_status === OrderStatus\.NEW \|\| order\.root_algo_status === OrderStatus\.REPLACED \|\| order\.root_algo_status === OrderStatus\.PARTIAL_FILLED/);
+// Pinned to the SDK version the lockfile installs (CLAUDE.md: SDK = 3.4.0). A stale local install
+// (an older version on disk than yarn.lock) is skipped with a note; CI installs from the lockfile.
+const sdkFile = (pkg) => {
+  try {
+    const root = new URL(`../../node_modules/@orderly.network/${pkg}/`, import.meta.url);
+    const lock = readFileSync(new URL("../../yarn.lock", import.meta.url), "utf8");
+    const want = lock.match(new RegExp(`"@orderly\\.network/${pkg}@npm:[^"]+":\\s*\\n\\s*version: ([^\\s]+)`))?.[1];
+    const have = JSON.parse(readFileSync(new URL("package.json", root), "utf8")).version;
+    if (want && have !== want) return { skip: `node_modules has @orderly.network/${pkg} ${have}, yarn.lock pins ${want}` };
+    return { src: readFileSync(new URL("dist/index.mjs", root), "utf8") };
+  } catch { return { skip: "SDK not installed (workers-only checkout)" }; }
+};
+
+test("the SDK still builds a position stop with these fields (re-check after an SDK bump)", (t) => {
+  const { src: sdk, skip } = sdkFile("hooks");
+  if (skip) return t.skip(skip);
+  const creator = sdk.slice(sdk.indexOf("var TPSLPositionOrderCreator"), sdk.indexOf("crateUpdateOrder", sdk.indexOf("var TPSLPositionOrderCreator")));
+  assert.ok(creator.length > 100, "TPSLPositionOrderCreator found");
+  assert.match(creator, /algo_type: leg === "tp" \? AlgoOrderType\.TAKE_PROFIT : AlgoOrderType\.STOP_LOSS,\s*reduce_only: true,\s*side,\s*type,/);
+  assert.match(creator, /trigger_price_type: TriggerPriceType\.MARK_PRICE,\s*symbol: values\.symbol,\s*is_activated: active/);
+  assert.match(creator, /resolveTPSLOrderType\([^)]*,\s*true\s*\)/, "a full-position leg resolves to CLOSE_POSITION");
+  assert.match(creator, /algo_type: values\.position_type === PositionType\.FULL \? AlgoOrderRootType\.POSITIONAL_TP_SL : AlgoOrderRootType\.TP_SL,\s*trigger_price_type: TriggerPriceType\.MARK_PRICE,\s*symbol: values\.symbol,\s*child_orders,\s*margin_mode: values\.margin_mode \|\| MarginMode\.CROSS/);
+  assert.match(sdk, /algo_type === AlgoOrderRootType\.POSITIONAL_TP_SL && [^;]*root_algo_status === OrderStatus\.NEW \|\| order\.root_algo_status === OrderStatus\.REPLACED \|\| order\.root_algo_status === OrderStatus\.PARTIAL_FILLED\)/, "the statuses the SDK treats as live");
   assert.match(sdk, /useMutation\("\/v1\/algo\/order", "DELETE"\)/);
+  assert.match(sdk, /doCancelAlgolOrder\(null, \{\s*\/\/ @ts-ignore\s*order_id: orderId,\s*symbol: symbol2,/, "cancel = order_id + symbol");
+});
+
+test("the SDK's own rules: CLOSE_POSITION for a full-position leg, and what counts as triggered", (t) => {
+  const { src: u, skip } = sdkFile("utils");
+  if (skip) return t.skip(skip);
+  assert.match(u, /return limit \? OrderType2\.LIMIT : fullPosition \? OrderType2\.CLOSE_POSITION : OrderType2\.MARKET;/);
+  const trig = u.slice(u.indexOf("function isTPSLTriggered("), u.indexOf("\nfunction ", u.indexOf("function isTPSLTriggered(") + 10));
+  for (const part of ["is_triggered === true", "triggered === true", "trigger_time", '"TRIGGERING", "SUCCESS", "FAILED"', '"PARTIAL_FILLED", "FILLED"', "total_executed_quantity", "child_orders"]) {
+    assert.ok(trig.includes(part), `isTPSLTriggered reads ${part} (backstopHit mirrors it)`);
+  }
 });
 
 test("algoOrderIdFrom: the id from any reply shape Orderly uses; refusals = null", () => {
@@ -95,6 +123,10 @@ test("algoTerminal / backstopHit read the order; an unreadable reply is neither"
   assert.equal(backstopHit({ success: true, data: { root_algo_status: "FILLED" } }), true);
   assert.equal(backstopHit({ success: true, data: { is_triggered: true } }), true);
   assert.equal(backstopHit({ success: true, data: { root_algo_status: "CANCELLED", child_orders: [{ is_triggered: false, algo_status: "CANCELLED" }] } }), false);
+  for (const d of [{ triggered: true }, { trigger_time: 1790000000000 }, { trigger_status: "SUCCESS" }, { algo_status: "PARTIAL_FILLED" }, { total_executed_quantity: 0.5 }, { child_orders: [{ executed: 1 }] }]) {
+    assert.equal(backstopHit({ success: true, data: d }), true, JSON.stringify(d));
+  }
+  assert.equal(backstopHit({ success: true, data: { root_algo_status: "NEW", trigger_time: 0, total_executed_quantity: 0, child_orders: [{ trigger_status: "" }] } }), false);
   for (const r of [null, { success: false, data: { is_triggered: true } }]) assert.equal(backstopHit(r), false);
 });
 

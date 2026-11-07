@@ -6,7 +6,7 @@
 // catches a stalled worker. Every exit exec makes cancels it.
 //
 // The order is Orderly's own "position TP/SL" with a stop-loss child only, built field for field the
-// way @orderly.network/hooks builds it (TPSL order creator, FULL position): algo_type
+// way @orderly.network/hooks 3.4.0 builds it (TPSLPositionOrderCreator, FULL position): algo_type
 // POSITIONAL_TP_SL, child STOP_LOSS / CLOSE_POSITION / MARK_PRICE trigger, reduce_only. A positional
 // stop closes whatever is left of the position, so partial take-profits need no resize.
 //
@@ -99,13 +99,23 @@ export function algoTerminal(reply) {
   return s !== null && !LIVE_STATUSES.has(s);
 }
 
-/** Did the backstop fire? Triggered root or child, or a FILLED one. Unreadable = false (never guessed). */
+/**
+ * Did the backstop fire? The SDK's own test (@orderly.network/utils isTPSLTriggered, 3.4.0): triggered
+ * flags, a trigger time or trigger status, a (partly) filled status, any executed quantity, on the root
+ * or any child. Unreadable = false (never guessed).
+ */
 export function backstopHit(reply) {
   if (!reply || reply.success !== true || !reply.data) return false;
-  const d = reply.data;
-  const kids = Array.isArray(d.child_orders) ? d.child_orders : [];
-  const fired = (o) => o?.is_triggered === true || String(o?.algo_status || o?.status || "").toUpperCase() === "FILLED";
-  return fired(d) || statusOf(reply) === "FILLED" || kids.some(fired);
+  const fired = (o) => {
+    if (!o || typeof o !== "object") return false;
+    if (o.is_triggered === true || o.triggered === true) return true;
+    if (Number(o.trigger_time ?? 0) > 0) return true;
+    if (["TRIGGERING", "SUCCESS", "FAILED"].includes(String(o.trigger_status ?? ""))) return true;
+    if (["PARTIAL_FILLED", "FILLED"].includes(String(o.algo_status ?? o.status ?? ""))) return true;
+    if (Number(o.total_executed_quantity ?? o.executed ?? 0) > 0) return true;
+    return Array.isArray(o.child_orders) && o.child_orders.some(fired);
+  };
+  return fired(reply.data) || statusOf(reply) === "FILLED";
 }
 
 /**
