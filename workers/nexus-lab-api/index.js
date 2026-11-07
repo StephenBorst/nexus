@@ -4551,6 +4551,18 @@ document.getElementById("btn").addEventListener("click",go);
       return json({ symbol: parts[2], candles: raw ? JSON.parse(raw) : [] }, request);
     }
 
+    // ── GET /agent/basis-history/:coin — recorded OKX spot-perp basis {t, basisPct} ───────
+    // The flow cron records it hourly into basis:hist:{BARE}. Exposed (read-only, public market data, no
+    // secrets) so a draft read on basis can be COUNTED from outside the worker before it is registered
+    // (tools/explorers/powerCheck.mjs, docs/research/explorer-drafts-4.md D · funding_basis_split).
+    if (parts[0] === "agent" && parts[1] === "basis-history" && parts[2] && request.method === "GET") {
+      const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
+      const coin = String(parts[2]).toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
+      if (!/^[A-Z0-9]{1,12}$/.test(coin)) return json({ error: "bad coin" }, request, 400);
+      const raw = await AGENT_KV.get(`basis:hist:${coin}`);
+      return json({ coin, points: raw ? JSON.parse(raw) : [] }, request);
+    }
+
     // ── GET /intel/persistence/:coin — SETUP MOMENTUM (persistence / decay) ───────
     // The one TIME-DERIVATIVE read: from the recorded oi:hist series, is the crowded
     // funding-fade still BUILDING (funding + OI both rising → you're early) or UNWINDING

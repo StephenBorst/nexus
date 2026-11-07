@@ -265,7 +265,9 @@ product is what sits on top:
   `level_reclaim_tight` (level_reclaim only when its H4 ATR ranks ≤ its own 30-day median) from 2026-11-08, `spot_absorb`
   (perp-led 4h move, spot the other way, OI flat → follow spot) from 2026-11-20. Registered
   bodies live in `explorerReads.mjs`; unregistered drafts in `explorerDraftsB.mjs` (batch 2, `explorer-drafts-b.md`; tests
-  fail if a draft is graded or axisbt imports it). A new registration also adds its read to `pipeline-stages.json`.
+  fail if a draft is graded or axisbt imports it) and `explorerDrafts4.mjs` (batch 4, `explorer-drafts-4.md`, counted
+  2026-11-07, unsigned: btc_lead_lag, funding_settle_snap, level_reclaim_weekly, funding_basis_split; generators get
+  axisbt's `ctx.btcCandles`; `powerCheck.mjs --batch=4`). `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.
 - **Regime window** (`docs/research/graded-exit-regime-prereg.md`, signed 2026-10-26; counts from 2026-10-27T00:00Z,
   limit 2027-04-27): the same read + graded exit, judged once by the watcher via `judgeRegimeWindow`
