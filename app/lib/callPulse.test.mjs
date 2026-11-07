@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { callPulse, pulseLine, agoShort, PULSE_WINDOW_MS, PULSE_LIST_MAX } from "./callPulse.mjs";
+import { callPulse, parsePersonFrom, pulseLine, agoShort, PULSE_WINDOW_MS, PULSE_LIST_MAX } from "./callPulse.mjs";
 
 const NOW = Date.parse("2026-11-05T12:00:00Z");
 const H = 3600000, D = 86400000;
@@ -108,4 +108,24 @@ test("engineRecords: each engine's all-time graded record from the grader's own 
   ], NOW, { engines: ["0xember", "0xvariant"] });
   assert.deepEqual(p.engineRecords.map((x) => [x.wallet, x.graded, x.wins, x.netR]), [["0xEmber", 3, 1, -0.5], ["0xVariant", 1, 0, -1]]);
   assert.equal(p.engineRecords[0].lastAt, NOW - H);
+});
+
+test("personFrom: an ex-engine wallet counts as a person only for calls published on/after its date; older calls count nowhere", () => {
+  const FROM = NOW - 2 * D;
+  const g = (id, pub) => ({ ...base, id, gradedOutcome: "WIN", gradedR: 1.5, exitedAt: NOW - H, ...(pub === undefined ? {} : { publishedAt: pub }) });
+  const p = callPulse([
+    { wallet: "0xApex", theses: [g("old", FROM - 1), g("new", FROM), g("nostamp"), { ...base, id: "o", fillState: "OPEN", publishedAt: FROM + H }] },
+  ], NOW, { engines: ["0xapex"], personFrom: [`0xAPEX@${new Date(FROM).toISOString()}`, "junk", "0xbad@notadate"] });
+  // people: the one graded call from the date on + the open one; never the old bot call or an unstamped one
+  assert.equal(p.gradedWeek, 1);
+  assert.deepEqual(p.recentGraded.map((c) => c.path.split("/").pop()), ["new"]);
+  assert.equal(p.open, 1);
+  assert.ok([...p.openCalls, ...p.recentGraded].every((r) => r.engine === false));
+  // personFrom wins over the engine list: nothing lands in the engine block or the engine records
+  assert.deepEqual([p.engines.open, p.engines.gradedWeek, p.engineRecords.length], [0, 0, 0]);
+});
+
+test("parsePersonFrom: comma list of addr@ISO, lowercased; bad entries dropped", () => {
+  const m = parsePersonFrom(["0xA@2026-11-08T00:00:00Z, 0xb@x", undefined, "nope"]);
+  assert.deepEqual([...m.entries()], [["0xa", Date.parse("2026-11-08T00:00:00Z")]]);
 });

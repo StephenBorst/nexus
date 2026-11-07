@@ -106,6 +106,7 @@ export async function buildPulse(env, { now = Date.now(), scorecardKey } = {}) {
   const counts = callPulse(records, now, {
     exclude: [env.HOUSE_CALLER_ADDRESS, env.HOUSE_CATALYST_ADDRESS],
     engines: [env.ENGINE_CALLER_ADDRESSES],
+    personFrom: [env.PERSON_FROM_ADDRESSES],
     isCurrent: isCurrentStamp,
   });
   await nameCallers(env, counts);
