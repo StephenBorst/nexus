@@ -129,6 +129,7 @@ import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signa
 // wrangler like the other ../ imports.
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { gradedExitRefusal } from "../../app/lib/gradedExit.mjs";
+import { riskSizingRefusal } from "../../app/lib/riskSizing.mjs";
 // Directive level validation lives with the exec's money-path logic (single source);
 // wrangler bundles the cross-dir import (same as backtest.mjs).
 import { directiveLevels } from "../nexus-agent-exec/logic.mjs";
@@ -5357,6 +5358,7 @@ document.getElementById("btn").addEventListener("click",go);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
         { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        { const why = riskSizingRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "risk_sizing_refused", hint: why }, request, 409); }
         // Operator features (portfolio delta cap + execution push callbacks): validate
         // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
         const opv = validateOperatorConfig(config);
@@ -5406,6 +5408,7 @@ document.getElementById("btn").addEventListener("click",go);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
         { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        { const why = riskSizingRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "risk_sizing_refused", hint: why }, request, 409); }
         // Operator features (portfolio delta cap + execution push callbacks): validate
         // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
         const opv = validateOperatorConfig(config);
@@ -5607,6 +5610,7 @@ document.getElementById("btn").addEventListener("click",go);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
         { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        { const why = riskSizingRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "risk_sizing_refused", hint: why }, request, 409); }
         // Operator features (portfolio delta cap + execution push callbacks): validate
         // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
         const opv = validateOperatorConfig(config);
@@ -5669,6 +5673,7 @@ document.getElementById("btn").addEventListener("click",go);
         if (!configRaw) return json({ error: "no_agent", hint: "Activate the agent first via /agent/:address/bankr/activate." }, request, 400);
         const config = JSON.parse(configRaw);
         { const why = gradedExitRefusal({ ...config, mode }, mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        { const why = riskSizingRefusal({ ...config, mode }, mode === "PAPER"); if (why) return json({ error: "risk_sizing_refused", hint: why }, request, 409); }
 
         // Live modes require the order-only key to exist; provision it from the
         // wallet signature if this agent was previously PAPER (no key stored).

@@ -300,8 +300,15 @@ product is what sits on top:
 - **Live money** = `docs/research/live-money-review.md` (the checklist) + `docs/research/live-plan-level-reclaim.md` (the
   first concrete plan, DRAFT, unsigned, arms nothing; written 2026-11-07 before the paper gate): $1,000 dedicated wallet,
   fixed $10 risk a trade (1R) sized from the graded stop, 3×, $30/day, kill at −10R, 10-trade first tranche vs the paper
-  wallet. Needs built first, each its own PR: `riskPerTradeUsd` sizing, an exchange-side backstop stop (exec's stop lives
-  only in the worker today), a one-wallet lift of `gradedExitRefusal`. Arming = borst, in person.
+  wallet. Needs built first, each its own PR: `riskPerTradeUsd` sizing (BUILT 2026-11-07, PAPER only, below), an
+  exchange-side backstop stop (exec's stop lives only in the worker today), a one-wallet lift of `gradedExitRefusal`.
+  Arming = borst, in person.
+- **Fixed-risk sizing** (`config.riskPerTradeUsd`, `app/lib/riskSizing.mjs`): notional = risk ÷ the trade's own graded
+  stop %, so P&L ÷ risk = R. Graded exit + PAPER only, never with `volTargetPct` or DCA (`riskSizingRefusal`: exec
+  before any read; lab-api 409 `risk_sizing_refused` on all 4 config paths). `capitalPerTrade` = the margin ceiling.
+  exec reads the graded stop BEFORE sizing and stamps `sizing:"RISK"`, `risk_usd` (actual, after snap/cap) on the
+  position + paper row (never the Supabase row). Replays book `tradeNotional` per trade (incl. the random baseline).
+  Lab: the "FIXED RISK / TRADE" field shows under the graded-exit toggle; whole-strategy loads clear it.
 - **Overlap pairs** (`OVERLAP_PAIRS`, axisbt.mjs → the scoreboard's `overlap` block): basis_x_cvd×rsi_reset_deep,
   level_reclaim×{level_reclaim_tight, session_fade, spot_absorb}, session_fade×oi_div_reversal_4h. A filtered read and its
   parent are one bet, never stacked as two.
