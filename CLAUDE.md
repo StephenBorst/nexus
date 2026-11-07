@@ -157,6 +157,15 @@ product is what sits on top:
 - **Exits** (`evaluateExit`, exec `logic.mjs`): SL → TIMEOUT → trail before TP; `takeProfits` ladder OVERRIDES
   `tpPercent` (`normTakeProfits`); DCA has its own monitor path. Exit vocabulary: `SL · TIMEOUT · TRAIL · BE · TP ·
   TP_PARTIAL · KILLED · WEBHOOK_CLOSE` (no "signal flip").
+- **Exchange-side backstop stop** (`nexus-agent-exec/backstop.mjs`, 2026-11-07; live plan §5 item 2): each LIVE
+  single-entry position also rests a reduce-only Orderly position stop (`POSITIONAL_TP_SL`, STOP_LOSS child,
+  CLOSE_POSITION, mark trigger, built as the SDK builds it) at 1.5× its stop distance beyond the entry, snapped away
+  from the entry. It only catches a stalled worker; exec's own stop closes first. Placed right after the fill
+  (`ensureBackstop`; retried each tick up to 5×, then Telegram), cancelled once exec's close is confirmed
+  (`cancelBackstop`; a failed cancel queues in `state.backstop_cleanup`, swept before the next live entry, which is
+  refused on a market that still carries one; 10 tries then Telegram). Exchange flat + the order fired = Telegram, NOT
+  booked to `agent_trades` (no fill read). Not on DCA positions or paper; the trail/BE don't move it. DEACTIVATE leaves
+  it resting with the position.
 - **Graded-exit contract** (`exitContract:"R_CONTRACT"`, `app/lib/gradedExit.mjs`): stop 1.2× H4 ATR-14, target 1.5×,
   168h. **PAPER ONLY**: `gradedExitRefusal` refuses non-PAPER configs and extra exit parts (exec at the top of
   `enterPosition`; lab-api 409 `graded_exit_refused`). Lifting that = its own reviewed PR.

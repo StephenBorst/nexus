@@ -17,6 +17,7 @@ import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
 import { nextPaperHead, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
 import { runKill } from "./killSwitch.mjs";
+import { backstopWanted, backstopTrigger, backstopOrder, algoOrderIdFrom, cancelPath, backstopHit, sweepStaleBackstops, BACKSTOP_MAX_TRIES, BACKSTOP_MULT } from "./backstop.mjs";
 import { resolveKeyRecord, keyHoldRefusal, keyAlertDue, keyAlertText, isKeyPointer } from "./agentKey.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
@@ -242,7 +243,8 @@ async function orderlyRequest(keyData, method, path, body = null) {
 
   // Orderly expects application/json for POST/PUT bodies and
   // application/x-www-form-urlencoded for GET (per Handoff 012).
-  const contentType = method === "GET"
+  // DELETE (cancel an algo order, params in the query) is form-encoded too, as the SDK sends it.
+  const contentType = method === "GET" || method === "DELETE"
     ? "application/x-www-form-urlencoded"
     : "application/json";
 
@@ -515,11 +517,12 @@ async function adoptOrphanPosition(address, state, config, env, _cache) {
   if (!(entry > 0)) return false;
 
   // Step/min constraints for future reduce-only slices (mirrors enterPosition).
-  let baseTick = 0.001, baseMin = baseTick, minNotional = 0;
+  let baseTick = 0.001, baseMin = baseTick, minNotional = 0, quoteTick = null;
   try {
     const infoData = await orderlyPublicGet(`${ORDERLY_API}/v1/public/info/${live.symbol}`);
     const info = infoData.data || {};
     baseTick = info.base_tick || baseTick; baseMin = info.base_min || baseTick; minNotional = info.min_notional || 0;
+    quoteTick = Number(info.quote_tick) > 0 ? Number(info.quote_tick) : null;
   } catch { /* fall back to defaults */ }
 
   // opened_at = now: we don't have the true open time, so the max-hold clock restarts
@@ -533,7 +536,7 @@ async function adoptOrphanPosition(address, state, config, env, _cache) {
     strategy: `${(config.maxHoldHours ?? 0) <= 8 ? "DAY" : (config.maxHoldHours ?? 0) <= 120 ? "SWING" : "POSITION"} · ${config.signalMode || "CONFLUENCE"} · adopted`,
     takeProfits: normTakeProfits({ takeProfits: config.takeProfits, tpPercent: config.tpPercent }, config),
     remaining_qty: qty, tp_hits: [], peak_pnl_pct: 0,
-    base_tick: baseTick, base_min: baseMin, min_notional: minNotional,
+    base_tick: baseTick, base_min: baseMin, min_notional: minNotional, quote_tick: quoteTick,
     adopted: true,
   };
   await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
@@ -803,6 +806,66 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
   await enterPosition(address, state, config, signal, env, cache);
 }
 
+// ── Backstop stop (backstop.mjs): a reduce-only stop resting on Orderly, wider than exec's own, so a
+// stalled worker never leaves a live position with no stop. Placed at entry (retried each tick while
+// missing), cancelled on every exit exec makes. Mutates `pos` / `state`; returns true when it changed
+// `pos` (the caller must persist it, or the next tick places a second order).
+async function ensureBackstop(address, pos, keyData, env) {
+  if (!keyData || !backstopWanted(pos) || pos.backstop?.id) return false;
+  const tries = Number(pos.backstop_tries) || 0;
+  if (tries >= BACKSTOP_MAX_TRIES) return false;
+  pos.backstop_tries = tries + 1;
+  const trigger = backstopTrigger({ direction: pos.direction, entryPrice: pos.entry_price, slPercent: pos.slPercent, quoteTick: pos.quote_tick });
+  if (!trigger) return true;
+  let res = null;
+  try { res = await orderlyRequest(keyData, "POST", "/v1/algo/order", backstopOrder({ symbol: pos.symbol, direction: pos.direction, triggerPrice: trigger })); }
+  catch (e) { res = { success: false, message: e.message }; }
+  const id = algoOrderIdFrom(res);
+  if (id) {
+    pos.backstop = { id, trigger, mult: BACKSTOP_MULT, placedAt: Date.now() };
+    console.log(`[exec] ${address.slice(0, 10)} backstop stop placed ${pos.symbol} @ ${trigger} (id ${id})`);
+    return true;
+  }
+  console.error(`[exec] ${address.slice(0, 10)} backstop stop refused (try ${pos.backstop_tries}/${BACKSTOP_MAX_TRIES}):`, JSON.stringify(res).slice(0, 200));
+  if (pos.backstop_tries >= BACKSTOP_MAX_TRIES) {
+    const tk = pos.symbol.replace("PERP_", "").replace("_USDC", "");
+    await notifyTelegram(address, env, `⚠️ <b>No exchange backstop on ${pos.direction} ${tk}</b>\nOrderly refused the resting stop ${BACKSTOP_MAX_TRIES} times. The agent still checks its own stop every minute; set a stop by hand if you want one on the exchange.`);
+  }
+  return true;
+}
+
+// Cancel this position's backstop after exec closed it. A cancel that doesn't go through is kept in
+// state.backstop_cleanup and retried before the next live entry (sweepBackstops).
+async function cancelBackstop(address, state, pos, keyData) {
+  const bs = pos?.backstop;
+  if (!bs?.id) return;
+  let ok = false;
+  if (keyData) {
+    try { ok = (await orderlyRequest(keyData, "DELETE", cancelPath({ id: bs.id, symbol: pos.symbol })))?.success === true; }
+    catch (e) { console.error(`[exec] ${address.slice(0, 10)} backstop cancel failed:`, e.message); }
+  }
+  if (!ok) {
+    state.backstop_cleanup = [...(state.backstop_cleanup || []), { id: bs.id, symbol: pos.symbol, tries: 0 }];
+    console.warn(`[exec] ${address.slice(0, 10)} backstop ${bs.id} not cancelled yet — queued for cleanup`);
+  }
+}
+
+// Retry the queued cancels. Returns the symbols that still carry a stale backstop (no entry there).
+async function sweepBackstops(address, state, keyData, env) {
+  if (!keyData || !(state.backstop_cleanup || []).length) return new Set();
+  const r = await sweepStaleBackstops(state.backstop_cleanup, {
+    cancel: (it) => orderlyRequest(keyData, "DELETE", cancelPath(it)),
+    status: (it) => orderlyRequest(keyData, "GET", `/v1/algo/order/${it.id}`),
+  });
+  state.backstop_cleanup = r.left;
+  for (const it of r.dropped) {
+    const tk = it.symbol.replace("PERP_", "").replace("_USDC", "");
+    await notifyTelegram(address, env, `⚠️ <b>Old backstop stop on ${tk} may still be resting</b>\nCouldn't cancel order ${it.id} after ${it.tries} tries. Check open orders on ${tk} and cancel it by hand.`);
+  }
+  if (r.done.length || r.dropped.length) await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
+  return new Set(r.left.map((it) => it.symbol));
+}
+
 async function enterPosition(address, state, config, signal, env, cache) {
   // PAPER mode simulates the full trade lifecycle without ever touching a real
   // trading key or placing a live order. Everything else (sizing, mark price,
@@ -864,6 +927,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
   const baseTick = info.base_tick || 0.001;
   const baseMin = info.base_min || baseTick;
   const minNotional = info.min_notional || 0;
+  const quoteTick = Number(info.quote_tick) > 0 ? Number(info.quote_tick) : null;
 
   // DCA mode reserves the rest of capitalPerTrade for safety orders, so the BASE
   // order is only a fraction of it (the ladder sums back to capitalPerTrade). DCA is
@@ -929,6 +993,10 @@ async function enterPosition(address, state, config, signal, env, cache) {
     // to close it (agentKey.mjs). v1 keys pass.
     const keyWhy = keyHoldRefusal({ keyData, now: Date.now(), maxHoldHours: config.maxHoldHours });
     if (keyWhy) { console.error(`[exec] ${address.slice(0, 10)} entry skipped: ${keyWhy}`); return; }
+    // A backstop left over from an earlier close must be gone before a new position on that market
+    // (a positional stop would attach to it).
+    const stale = await sweepBackstops(address, state, keyData, env);
+    if (stale.has(symbol)) { console.error(`[exec] ${address.slice(0, 10)} entry skipped: an old backstop on ${symbol} isn't cancelled yet`); return; }
   }
 
   // ── Portfolio delta cap (PRO) ── Reject an entry that would push the account's
@@ -1051,6 +1119,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
     base_tick: baseTick,
     base_min: baseMin,
     min_notional: minNotional,
+    quote_tick: quoteTick,
     // DCA state (averaging mode). The monitor manages these on a separate path:
     // base_entry_price anchors the safety-order triggers; avg_entry/total_qty are
     // the running blended position; TP is taken off avg_entry, not the base.
@@ -1065,6 +1134,10 @@ async function enterPosition(address, state, config, signal, env, cache) {
   state.last_trade_time = Date.now();
   state.trades_today = (state.trades_today || 0) + 1;
   { const key = brainSignalKey(signal); if (key) state.last_signal_key = key; } // this read is now traded
+
+  // The exchange-side backstop: placed right after the fill, before state is saved. A refusal never
+  // undoes the entry (the position is open); monitorPosition retries it each tick.
+  if (!paper) await ensureBackstop(address, state.current_position, keyData, env);
 
   // Mark the directive LIVE (a position is now open for it) so the UI/API reflect it
   // and a second directive can't arm on top. Retired to DONE by closePosition.
@@ -1149,6 +1222,7 @@ async function monitorPosition(address, state, config, env, cache) {
   // manage on cached data rather than risk discarding a real position.
   // Paper positions have no exchange counterpart — skip reconciliation entirely.
   const keyRaw = pos.paper ? null : await env.NEXUS_AGENT.get(`agent:key:${address}`);
+  let liveKey = null; // the key, once the reconcile read worked (the backstop uses it below)
   if (keyRaw) {
     try {
       const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
@@ -1166,6 +1240,18 @@ async function monitorPosition(address, state, config, env, cache) {
       }
       if (Number.isFinite(liveQty) && liveQty < 1e-9) {
         console.log(`[exec] ${address.slice(0, 10)} position flat on exchange (manual close?) — clearing stale record`);
+        // Did our backstop close it (exec stalled past the stop)? Read the order; never guessed.
+        if (pos.backstop?.id) {
+          let fired = false;
+          try { fired = backstopHit(await orderlyRequest(keyData, "GET", `/v1/algo/order/${pos.backstop.id}`)); } catch { fired = false; }
+          if (fired) {
+            state.last_backstop_hit = { symbol: pos.symbol, direction: pos.direction, trigger: pos.backstop.trigger, at: Date.now() };
+            const tkb = pos.symbol.replace("PERP_", "").replace("_USDC", "");
+            await notifyTelegram(address, env, `🛡 <b>Backstop stop closed ${pos.direction} ${tkb}</b> near $${pos.backstop.trigger}\nThe agent missed its own stop (worker delay), so the exchange stop closed it. Check the fill in your Orderly history: this close isn't on the agent's ledger.`);
+          } else {
+            await cancelBackstop(address, state, pos, keyData); // closed some other way: cancel what's resting
+          }
+        }
         // Resolve the published feed card too — otherwise clearing state alone strands
         // it ACTIVE forever (the "zombie" agent position the user sees on the feed while
         // the agent is actually flat). Best-effort exit = current mark; the exchange
@@ -1187,10 +1273,15 @@ async function monitorPosition(address, state, config, env, cache) {
         await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
         return;
       }
+      liveKey = keyData;
     } catch (e) {
       console.error(`[exec] ${address.slice(0, 10)} position reconcile failed, managing on cached data:`, e.message);
     }
   }
+
+  // A live position with no backstop yet (refused at entry, or adopted): try again, and save at once
+  // (some paths below return without a state write).
+  if (liveKey && await ensureBackstop(address, pos, liveKey, env)) await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
 
   // Fetch current price (shared per-symbol cache). If the public price fetch
   // fails (transient Orderly outage / HTML challenge to the worker IP), fall back
@@ -1506,6 +1597,7 @@ async function closePosition(address, state, config, env, reason, cache, decisio
   // After multi-TP scale-outs only the runner remains — close THAT, not the
   // original size (legacy positions have no remaining_qty → fall back to qty).
   const closeQty = pos.remaining_qty ?? pos.qty;
+  let closeKey = null; // live: the key the close was sent with (the backstop cancel uses it)
 
   // Real positions: send a reduce-only market close. Paper positions never
   // touched the exchange, so there's nothing to close — skip straight to P&L.
@@ -1518,6 +1610,7 @@ async function closePosition(address, state, config, env, reason, cache, decisio
       console.warn(`[exec] ${address.slice(0, 10)} no key — cannot place close (reason=${reason}); clearing record`);
     } else {
       const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
+      closeKey = keyData;
       const closeSide = pos.direction === "LONG" ? "SELL" : "BUY";
 
       try {
@@ -1555,6 +1648,9 @@ async function closePosition(address, state, config, env, reason, cache, decisio
     console.warn(`[exec] ${address.slice(0, 10)} close NOT confirmed (reason=${reason}) — keeping position open for retry next tick`);
     return;
   }
+
+  // Closed: the resting backstop goes too (queued for cleanup if the cancel doesn't go through).
+  if (!paper) await cancelBackstop(address, state, pos, closeKey);
 
   // Book the close. PAPER books at the price the exit was DECIDED on — there is no real
   // fill to approximate, and a second mark read only lets the booked price drift from the
