@@ -1016,6 +1016,17 @@ function registeredGrade(coinSets, gen, fromMs, opts) {
   return { verdict: s.verdict, r: s.r, sides: s.sides, random: s.random, exitGraded: s.exitGraded };
 }
 
+// Pairs of reads the scoreboard checks for "one bet counted twice" (readOverlap: same coin, same side, within 24h; counts
+// only). level_reclaim_tight is level_reclaim filtered, so it overlaps by construction; the others share a fade-or-
+// reclaim shape and would be the same bet in a stack (read-pipeline.md: a stack is built only from survivors).
+export const OVERLAP_PAIRS = Object.freeze([
+  ["basis_x_cvd", "rsi_reset_deep"],
+  ["level_reclaim", "level_reclaim_tight"],
+  ["level_reclaim", "session_fade"],
+  ["level_reclaim", "spot_absorb"],
+  ["session_fade", "oi_div_reversal_4h"],
+]);
+
 // ── OVERLAP: are two reads one bet? ────────────────────────────────────────────────────────
 // Two reads that fire on the same coin, same side, within `windowH` hours of each other are the
 // same bet counted twice. Counts only (no outcomes), so it can't be mined for a better subset.

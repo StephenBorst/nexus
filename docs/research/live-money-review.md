@@ -9,7 +9,10 @@ happens at Paper: "After 30 or more paper trades with parity CLEAN and net posit
 (size, daily cap, kill switch, who signs) as its own dated PR. Arming stays borst's call, in person." This is the
 checklist that plan answers to.
 
-## Where it stands (`GET /intel/axis-backtest`, 2026-10-26 00:14 UTC)
+**2026-11-07:** the first concrete plan under this checklist is `docs/research/live-plan-level-reclaim.md` (draft,
+unsigned), written ahead of `level_reclaim`'s paper gate.
+
+## Where it stood (`GET /intel/axis-backtest`, 2026-10-26 00:14 UTC)
 
 - No read is past Registered. Nearest by count: level_reclaim (26 of 30 events, mean R −0.10, halves disagree).
   session_momentum is failing (40 events, −0.76R).
