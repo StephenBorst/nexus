@@ -4,7 +4,8 @@
 - **A · `btc_lead_lag`: registered** at p90 · lag 0.75 (`btc-lead-lag-prereg.md`), counting from 2026-11-08T00:00Z.
 - **B · `funding_settle_snap`: dropped.**
 - **C · `level_reclaim_weekly`: dropped.**
-- **D · `funding_basis_split`: parked** until it is counted on the basis history route, after deploy.
+- **D · `funding_basis_split`: parked** until it is counted on the basis history route, after deploy. Counted
+  2026-11-07 (below): 195 main / 45 holdout at the drafted setting. Waiting on borst.
 
 This page is the record of how the four were defined and counted. It is not a registration. The text below is the
 draft as reviewed; the registered body moved unchanged out of `explorerDrafts4.mjs`.
@@ -101,6 +102,34 @@ is about **100 events per 60 days** on the main card.
   trap that dropped `funding_reset` in batch 2.
 - **C** fires 5–19 times in 60 days at every setting. That is months to a first verdict, which makes it untestable on
   our clock (the same reason `vol_breakout` was dropped in batch 1).
+
+## Power check D · 2026-11-07, after the basis route deployed (counts only)
+
+`/agent/basis-history/:coin` read 2026-11-07 23:10Z for the 19 coins; same counter, same window. Basis is recorded on
+9 of the 11 main-card coins (ARB and WLD have no OKX spot-perp series), from 2026-08-23; on the holdout from
+2026-10-16. The rule needs 360 prior hours of each series, so the main card can fire from about 2026-09-08 and the
+holdout from about 2026-10-31: the 60- and 90-day counts are the same.
+
+| Setting | Main, 60d (9 coins) | Longs | Holdout (since ~Oct 31) | ~100 in 60d? |
+|---|---|---|---|---|
+| **p80/20 · basis vs median · 24h cooldown** (drafted 2026-10-27, before any count) | **195** | 86 | **45** | **Yes** |
+| p90/10 · basis vs median | 119 | 56 | 35 | Yes |
+| p80/20 · 12h cooldown | 290 | 133 | 77 | Yes |
+
+- Per coin (drafted setting, main): BTC 26 · ETH 32 · SOL 28 · XRP 30 · DOGE 16 · BNB 17 · AVAX 11 · LINK 14 · HYPE 21.
+  Holdout: ZEC 7 · NEAR 5 · SUI 4 · PUMP 6 · ENA 5 · ONDO 7 · INJ 6 · ZRO 5, in about a week of eligible history, so
+  the holdout should reach 30 out-of-sample events in a few weeks.
+- **It passes at every setting counted.** The drafted setting was written down on 2026-10-27, eleven days before any
+  count, so it is the cleanest one to register.
+- **Two cautions, before any outcome:**
+  - p80 funding is "elevated", not "extreme". That is fine here: the claim is the DISAGREEMENT between the two prices,
+    not the level of either one. It was never pitched as an extreme read.
+  - `basis:hist` had holes before the paced `snapshotFlow` fix (CLAUDE.md). The rule only fires on an hour that has a
+    basis row, so a hole means a missed event, never a made-up one.
+- **Overlap.** It reads funding, as `confluence_follow` does. If registered, the pair goes in `OVERLAP_PAIRS` (a count,
+  never a grade).
+- **Recommendation: register at the drafted setting** (p80/20 · basis vs its 30-day median · 24h cooldown), counting
+  from the next UTC midnight after you sign. That makes 12 registered reads.
 
 ## Two blockers on B, written before any outcome
 
