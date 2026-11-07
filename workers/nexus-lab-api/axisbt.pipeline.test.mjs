@@ -117,6 +117,7 @@ test("overlap pairs: every pair names two real axes, includes batch 3, and the s
   const has = (a, b) => OVERLAP_PAIRS.some(([x, y]) => x === a && y === b);
   assert.ok(has("basis_x_cvd", "rsi_reset_deep"), "the original pair stays");
   assert.ok(has("level_reclaim", "level_reclaim_tight"), "a filtered read is the same bet as its parent");
+  assert.ok(has("oi_div_reversal", "oi_div_reversal_4h"), "one rule on two windows is one bet");
   for (const r of ["session_fade", "spot_absorb"]) assert.ok(OVERLAP_PAIRS.some((p) => p.includes(r)), `${r} is checked against another read`);
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");

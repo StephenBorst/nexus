@@ -4,7 +4,9 @@ Written 2026-11-07, ahead of time on purpose (borst: "the only item that directl
 something becomes TRADEABLE"). **It arms nothing.** No flag, key, secret, mode, wallet or config changes because of this
 page. borst edits it, then signs it in person, or it stays a draft.
 
-It answers the checklist in `docs/research/live-money-review.md`, for one strategy. The gate it waits for is
+It answers the checklist in `docs/research/live-money-review.md`, for one strategy, and inherits its house rules
+(added 2026-11-07: the $10 mechanics test first, a −5R weekly brake, and the kill also fires at equity below 90% of
+the deposit; the size-increase bar is 30 live trades, not this page's first 10). The gate it waits for is
 `docs/research/pipeline-if-then.md` (Paper): 30+ paper trades, parity CLEAN, net positive after fees and funding.
 
 **Why write it now.** The numbers below are easiest to choose honestly before there is a live P&L to feel. Once a
@@ -78,6 +80,8 @@ read's losses concentrated in its widest stops: fixed sizing would bet the most 
 2. **An exchange-side backstop stop.** Today the stop lives only in exec (checked every minute, closed at market). If the
    worker stalls, an open position has no stop. Each live entry should also place a reduce-only stop order on Orderly
    at 1.5× the graded stop: never hit in normal operation, it only catches a stalled worker. Cancelled on every exit.
+   **Built 2026-11-07** (#268, `nexus-agent-exec/backstop.mjs`), live positions only; its first live check is the
+   house rules' $10 mechanics test.
 3. **Lift `gradedExitRefusal` for this one wallet and this one read only.** It refuses every non-PAPER config today, on
    purpose. The lift is scoped by address and read, tested, and states why no stop cap is needed (fixed-risk sizing
    makes a wide stop a smaller position, not a bigger loss).

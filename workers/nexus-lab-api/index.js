@@ -138,7 +138,7 @@ import { advanceIndex, onchainResponse, ONCHAIN_INDEX_KEY, DEFAULT_LOGS_RPC } fr
 
 // The scoreboard's cache key, one place: GET /intel/axis-backtest writes it and /calls/pulse reads the
 // headline from it. Bump the version here when the scoreboard payload changes (see that route's notes).
-const axisbtCacheKey = (min) => `axisbt:v24:min${min}`;
+const axisbtCacheKey = (min) => `axisbt:v25:min${min}`;
 
 // Orderly sits behind Cloudflare bot-management, which intermittently serves an HTML
 // 403 challenge to header-light Worker fetches — which would break the mini-app money
