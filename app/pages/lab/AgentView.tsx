@@ -26,6 +26,7 @@ import type { BacktestResult, SweepResult, ValidationResult } from "./backtestTy
 import { errText } from "./helpers";
 import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter, PaperCostLine } from "./AgentPanels";
 import { gradedExitRefusal } from "@/lib/gradedExit.mjs";
+import { riskSizingRefusal, RISK_PER_TRADE_MAX_USD } from "@/lib/riskSizing.mjs";
 import { deactivateWarning, deactivatedMessage } from "@/lib/agentControls.mjs";
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
@@ -1286,13 +1287,36 @@ export function AgentView() {
             description={<>The exit the scoreboard grades every read with. Stop = 1.2× the coin&apos;s 4-hour ATR, so it is wider on volatile coins. Target = 1.5× the stop. Holds up to 7 days. No 3% stop cap, which is why it never runs live. Turning it on switches the agent to PAPER and replaces your TP / SL / hold.</>}
             on={!!config.exitContract}
             onToggle={() => setConfig(config.exitContract
-              ? { ...config, exitContract: undefined }
+              ? { ...config, exitContract: undefined, riskPerTradeUsd: undefined }
               : { ...config, exitContract: "R_CONTRACT", mode: "PAPER", maxHoldHours: 168, volScaledStops: false, takeProfits: undefined, trailingStopPct: undefined, breakevenTriggerPct: undefined, dcaEnabled: false })}
           />
           {(() => {
             const why = gradedExitRefusal(config, config.mode === "PAPER");
             return why ? <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#fbbf24", margin: "-4px 0 10px" }}>Graded exit can&apos;t run: {why}.</div> : null;
           })()}
+          {/* Fixed-risk sizing (app/lib/riskSizing.mjs): PAPER + graded exit only. Notional = this many dollars ÷
+              the trade's own graded stop, so a stop-out loses the same dollars on every coin. CAPITAL / TRADE stays
+              the margin ceiling. 0 = off (size by margin, as before). */}
+          {config.exitContract ? (
+            <div style={{ ...agentCardStyle, marginTop: -4 }}>
+              <div style={{ ...agentLabelStyle, fontSize: 9 }}>FIXED RISK / TRADE · PAPER ONLY</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                <NumberField
+                  value={Number(config.riskPerTradeUsd ?? 0)}
+                  min={0} max={RISK_PER_TRADE_MAX_USD} step={1}
+                  onCommit={(n) => setConfig({ ...config, riskPerTradeUsd: n > 0 ? n : undefined })}
+                />
+                <span style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10 }}>USDC lost at the stop (0 = off)</span>
+              </div>
+              <div style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10.5, lineHeight: 1.5, marginTop: 6 }}>
+                Sizes each trade from its own graded stop, so a stop-out costs the same dollars on BTC as on WLD. A win at the target pays 1.5× that. CAPITAL / TRADE caps the margin.
+              </div>
+              {(() => {
+                const why = riskSizingRefusal(config, config.mode === "PAPER");
+                return why ? <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#fbbf24", marginTop: 6 }}>Fixed risk can&apos;t run: {why}.</div> : null;
+              })()}
+            </div>
+          ) : null}
           </Collapsible>
 
           <div style={agentCardStyle}>

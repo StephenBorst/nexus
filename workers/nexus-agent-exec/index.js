@@ -20,6 +20,7 @@ import { runKill } from "./killSwitch.mjs";
 import { resolveKeyRecord, keyHoldRefusal, keyAlertDue, keyAlertText, isKeyPointer } from "./agentKey.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
+import { usesRiskSizing, riskSizingRefusal, riskSizedMargin, riskTaken } from "../../app/lib/riskSizing.mjs";
 import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, twapSliceFailed, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload, exchangePositionQty, exchangePositionRows, fillPriceFrom } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
@@ -819,6 +820,14 @@ async function enterPosition(address, state, config, signal, env, cache) {
     console.error(`[exec] ${address.slice(0, 10)} graded exit refused: ${gradedRefusal}`);
     return;
   }
+  // Fixed-risk sizing (app/lib/riskSizing.mjs): PAPER only, graded exit only, never with DCA or vol-targeted
+  // capital. Refused here, before anything is read or placed. A directive keeps its own size.
+  const riskSized = !directive && usesRiskSizing(config);
+  const riskRefusal = riskSized ? riskSizingRefusal(config, paper) : null;
+  if (riskRefusal) {
+    console.error(`[exec] ${address.slice(0, 10)} fixed-risk sizing refused: ${riskRefusal}`);
+    return;
+  }
   const effLeverage = (directive && directive.leverage > 0) ? directive.leverage : config.leverage;
   let effCapital = (directive && directive.capitalPerTrade > 0) ? directive.capitalPerTrade : config.capitalPerTrade;
 
@@ -876,20 +885,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
     }
   }
 
-  // Calculate qty, snapped to base_tick (tested in logic.mjs — guards the
-  // -1104 step-size float artifact + base_min / min_notional constraints).
-  const snap = snapQty({
-    capitalPerTrade: baseMargin, leverage: effLeverage,
-    markPrice, baseTick, baseMin, minNotional,
-  });
-  if (!snap.ok) {
-    console.error(`[exec] ${address.slice(0, 10)} ${snap.reason} for ${symbol}`);
-    return;
-  }
-  const qty = snap.qty;
-  const entryNotional = qty * markPrice;
-
-  // Graded-exit levels are read BEFORE anything is placed: no H4 ATR → sit this one out, never a
+  // Graded-exit levels are read BEFORE anything is placed (and before sizing: fixed-risk needs the stop): no H4 ATR → sit this one out, never a
   // fallback to the flat config % (that would trade an exit the scoreboard didn't grade).
   let gradedLv = null;
   if (!directive && usesGradedExit(config)) {
@@ -899,6 +895,29 @@ async function enterPosition(address, state, config, signal, env, cache) {
       return;
     }
   }
+
+  // Fixed-risk sizing: the margin that makes this trade's own graded stop lose riskPerTradeUsd, capped at
+  // capitalPerTrade (the margin ceiling).
+  let sizeMargin = baseMargin;
+  if (riskSized) {
+    const rs = riskSizedMargin({ riskPerTradeUsd: config.riskPerTradeUsd, slPercent: gradedLv?.slPercent, leverage: effLeverage, maxMargin: config.capitalPerTrade });
+    if (!rs) { console.error(`[exec] ${address.slice(0, 10)} fixed-risk sizing: no stop for ${symbol}, sitting out`); return; }
+    sizeMargin = rs.margin;
+    console.log(`[exec] ${address.slice(0, 10)} fixed-risk: $${config.riskPerTradeUsd} at sl=${gradedLv.slPercent}% → margin $${rs.margin}${rs.capped ? " (capped at capitalPerTrade)" : ""}`);
+  }
+
+  // Calculate qty, snapped to base_tick (tested in logic.mjs — guards the
+  // -1104 step-size float artifact + base_min / min_notional constraints).
+  const snap = snapQty({
+    capitalPerTrade: sizeMargin, leverage: effLeverage,
+    markPrice, baseTick, baseMin, minNotional,
+  });
+  if (!snap.ok) {
+    console.error(`[exec] ${address.slice(0, 10)} ${snap.reason} for ${symbol}`);
+    return;
+  }
+  const qty = snap.qty;
+  const entryNotional = qty * markPrice;
 
   // Load the (decrypted) trading key up front for LIVE — needed for both the
   // portfolio delta-cap read and the order itself. PAPER never touches a key.
@@ -1001,6 +1020,9 @@ async function enterPosition(address, state, config, signal, env, cache) {
     leverage: effLeverage,
     tpPercent: effTp,
     slPercent: effSl,
+    // Fixed-risk sizing: the dollars this position actually risks to its stop (after snapping and any cap),
+    // so P&L ÷ risk_usd = the trade's R.
+    ...(riskSized ? { sizing: "RISK", risk_target_usd: Number(config.riskPerTradeUsd), risk_usd: riskTaken(qty, entryFill.price, effSl) } : {}),
     // Strategy label stamped at ENTRY (config can change before close) so the trade
     // record + History tab can show which strategy produced each trade.
     strategy: directive
@@ -1593,7 +1615,9 @@ async function closePosition(address, state, config, env, reason, cache, decisio
     // Paper trades live in state (rides along in the API's state response) so
     // they stay completely separate from the real Supabase track record.
     state.paper_trades = state.paper_trades || [];
-    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable });
+    // A fixed-risk position carries the dollars it risked, so the row reads in R (pnl ÷ risk_usd). Paper rows
+    // only: the live Supabase row's columns are unchanged.
+    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable, ...(pos.risk_usd > 0 ? { risk_usd: pos.risk_usd } : {}) });
     if (state.paper_trades.length > 50) state.paper_trades.pop(); // keep last 50
     // ⚠️ That pop is why the window is NOT the record. Accrue the LIFETIME aggregate
     // here, once, at close — it cannot be rebuilt from a truncated window later.

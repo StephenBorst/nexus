@@ -72,6 +72,9 @@ read's losses concentrated in its widest stops: fixed sizing would bet the most 
 
 1. **Fixed-risk sizing.** A config field (`riskPerTradeUsd`) that sizes the notional from the trade's own graded stop,
    in exec, the backtest replay and parity alike (one rule, every surface), so live P&L ÷ $10 = the graded R.
+   **Built 2026-11-07, PAPER only** (`app/lib/riskSizing.mjs`): exec, the per-market + portfolio replays and the
+   random baseline book each trade at its own notional; parity is unaffected (sizing never changes when an entry
+   happens). `capitalPerTrade` is the margin ceiling. Refused live until build #3.
 2. **An exchange-side backstop stop.** Today the stop lives only in exec (checked every minute, closed at market). If the
    worker stalls, an open position has no stop. Each live entry should also place a reduce-only stop order on Orderly
    at 1.5× the graded stop: never hit in normal operation, it only catches a stalled worker. Cancelled on every exit.
