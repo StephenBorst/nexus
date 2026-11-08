@@ -15,6 +15,10 @@ invocation_logs = true
 
 # CI redeploys this worker from the committed file, so the flags live HERE, not the dashboard.
 [vars]
+# One-wallet live lift of the graded exit (app/lib/liveLift.mjs, build #3 of docs/research/live-plan-level-reclaim.md).
+# "0xWALLET@LEVEL_RECLAIM". EMPTY = DISARMED: every non-PAPER graded-exit / fixed-risk / level_reclaim config is refused.
+# Kept identical in lab-api, exec and brain (liveLift.test.mjs). Arming = borst in person, in a PR that records it.
+GRADED_EXIT_LIVE_LIFT = ""
 # ON since 2026-11-05: the level_reclaim read for PAPER configs with signalMode = "LEVEL_RECLAIM". Turned on in
 # the PR that sets up its paper wallet, after level_reclaim was served TRADEABLE (pipeline-if-then.md). Live
 # configs are refused either way (app/lib/levelReclaim.mjs levelReclaimRefusal; the graded exit is paper-only too).

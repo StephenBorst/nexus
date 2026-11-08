@@ -81,7 +81,7 @@ function twoSidedBasisView(raw, config) {
   };
 }
 
-export function deriveSignal(raw, config = {}, regime = null, smartConsensus = null) {
+export function deriveSignal(raw, config = {}, regime = null, smartConsensus = null, { liveLift = false } = {}) {
   const fundingRate = raw.fundingRate || 0;
   const priceChange = raw.priceChange || 0;
   const oiChange = raw.oiChange || 0;
@@ -179,7 +179,7 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
       // verdict is the SHARED rule the scoreboard grades with (app/lib/levelReclaim.mjs), computed
       // by the brain only behind LEVEL_RECLAIM_LIVE; nothing is re-derived here. Flag off ⇒ no
       // raw.levelReclaim* fields ⇒ it sits out and says so. PAPER only, like the graded exit.
-      const refused = levelReclaimRefusal(config);
+      const refused = levelReclaimRefusal(config, { liveLift });
       if (refused) { why = `${refused} — sat out`; break; }
       if (raw.levelReclaimSide === "LONG" || raw.levelReclaimSide === "SHORT") {
         direction = raw.levelReclaimSide; confidence = 70; why = `level reclaim · ${raw.levelReclaimReason}`;

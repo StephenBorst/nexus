@@ -130,6 +130,7 @@ import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signa
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { gradedExitRefusal } from "../../app/lib/gradedExit.mjs";
 import { riskSizingRefusal } from "../../app/lib/riskSizing.mjs";
+import { parseLiveLift, liveLifted, liveLiftNote, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
 // Directive level validation lives with the exec's money-path logic (single source);
 // wrangler bundles the cross-dir import (same as backtest.mjs).
 import { directiveLevels } from "../nexus-agent-exec/logic.mjs";
@@ -5370,8 +5371,10 @@ document.getElementById("btn").addEventListener("click",go);
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
-        { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
-        { const why = riskSizingRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "risk_sizing_refused", hint: why }, request, 409); }
+        // The one-wallet live lift (app/lib/liveLift.mjs, build #3, disarmed: the var is empty in wrangler.toml).
+        { const cfgL = config; const lifts = parseLiveLift(env[LIVE_LIFT_VAR]); const liveLift = liveLifted(cfgL, address, lifts); const note = liveLiftNote(cfgL, address, lifts);
+          { const why = gradedExitRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "graded_exit_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); }
+          { const why = riskSizingRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "risk_sizing_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); } }
         // Operator features (portfolio delta cap + execution push callbacks): validate
         // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
         const opv = validateOperatorConfig(config);
@@ -5420,8 +5423,10 @@ document.getElementById("btn").addEventListener("click",go);
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
-        { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
-        { const why = riskSizingRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "risk_sizing_refused", hint: why }, request, 409); }
+        // The one-wallet live lift (app/lib/liveLift.mjs, build #3, disarmed: the var is empty in wrangler.toml).
+        { const cfgL = config; const lifts = parseLiveLift(env[LIVE_LIFT_VAR]); const liveLift = liveLifted(cfgL, address, lifts); const note = liveLiftNote(cfgL, address, lifts);
+          { const why = gradedExitRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "graded_exit_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); }
+          { const why = riskSizingRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "risk_sizing_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); } }
         // Operator features (portfolio delta cap + execution push callbacks): validate
         // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
         const opv = validateOperatorConfig(config);
@@ -5622,8 +5627,10 @@ document.getElementById("btn").addEventListener("click",go);
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
-        { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
-        { const why = riskSizingRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "risk_sizing_refused", hint: why }, request, 409); }
+        // The one-wallet live lift (app/lib/liveLift.mjs, build #3, disarmed: the var is empty in wrangler.toml).
+        { const cfgL = config; const lifts = parseLiveLift(env[LIVE_LIFT_VAR]); const liveLift = liveLifted(cfgL, address, lifts); const note = liveLiftNote(cfgL, address, lifts);
+          { const why = gradedExitRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "graded_exit_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); }
+          { const why = riskSizingRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "risk_sizing_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); } }
         // Operator features (portfolio delta cap + execution push callbacks): validate
         // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
         const opv = validateOperatorConfig(config);
@@ -5685,8 +5692,10 @@ document.getElementById("btn").addEventListener("click",go);
         const configRaw = await AGENT_KV.get(`agent:config:${address}`);
         if (!configRaw) return json({ error: "no_agent", hint: "Activate the agent first via /agent/:address/bankr/activate." }, request, 400);
         const config = JSON.parse(configRaw);
-        { const why = gradedExitRefusal({ ...config, mode }, mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
-        { const why = riskSizingRefusal({ ...config, mode }, mode === "PAPER"); if (why) return json({ error: "risk_sizing_refused", hint: why }, request, 409); }
+        // The one-wallet live lift (app/lib/liveLift.mjs, build #3, disarmed: the var is empty in wrangler.toml).
+        { const cfgL = { ...config, mode }; const lifts = parseLiveLift(env[LIVE_LIFT_VAR]); const liveLift = liveLifted(cfgL, address, lifts); const note = liveLiftNote(cfgL, address, lifts);
+          { const why = gradedExitRefusal(cfgL, mode === "PAPER", { liveLift }); if (why) return json({ error: "graded_exit_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); }
+          { const why = riskSizingRefusal(cfgL, mode === "PAPER", { liveLift }); if (why) return json({ error: "risk_sizing_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); } }
 
         // Live modes require the order-only key to exist; provision it from the
         // wallet signature if this agent was previously PAPER (no key stored).

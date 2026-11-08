@@ -90,9 +90,10 @@ export function levelReclaimLive(candleHist, now = Date.now(), p = LEVEL_LIVE) {
 
 // The agent side is PAPER ONLY until a live-money review says otherwise (like the graded exit).
 export const usesLevelReclaim = (config) => config?.signalMode === "LEVEL_RECLAIM";
-export function levelReclaimRefusal(config) {
+export function levelReclaimRefusal(config, { liveLift = false } = {}) {
   if (!usesLevelReclaim(config)) return null;
-  return config.mode === "PAPER" ? null : "level_reclaim is paper only: no live trading without its own review";
+  // `liveLift` = app/lib/liveLift.mjs liveLifted() (build #3 of the live plan, disarmed): one listed wallet only.
+  return config.mode === "PAPER" || liveLift === true ? null : "level_reclaim is paper only: no live trading without its own review";
 }
 
 // ── The paper wallet's config, as registered (2026-11-05) ────────────────────────────────────

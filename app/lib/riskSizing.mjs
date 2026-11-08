@@ -31,12 +31,13 @@ export const usesRiskSizing = (config) => num(config?.riskPerTradeUsd) > 0;
  * Why this config can't size by fixed risk, or null when it can (or doesn't ask to). `paper` = will the
  * entry be simulated. One answer for exec (before any order) and lab-api (before storing a config).
  */
-export function riskSizingRefusal(config, paper) {
+export function riskSizingRefusal(config, paper, { liveLift = false } = {}) {
   const v = num(config?.riskPerTradeUsd);
   if (v === null || v === 0) return null;
   if (!Number.isFinite(v) || v < 0) return "riskPerTradeUsd must be a positive number of dollars";
   if (v > RISK_PER_TRADE_MAX_USD) return `riskPerTradeUsd is capped at $${RISK_PER_TRADE_MAX_USD} a trade`;
-  if (!paper) return "fixed-risk sizing is paper-only: no live trading without its own review";
+  // `liveLift` = app/lib/liveLift.mjs liveLifted() (build #3, disarmed): the one wallet the plan lifts.
+  if (!paper && liveLift !== true) return "fixed-risk sizing is paper-only: no live trading without its own review";
   if (!usesGradedExit(config)) return "fixed-risk sizing needs the graded exit, so the stop is known before the entry";
   if (num(config.volTargetPct) > 0) return "fixed-risk sizing and vol-targeted capital size the trade two different ways";
   if (config.dcaEnabled) return "fixed-risk sizing sizes one entry; DCA adds more";

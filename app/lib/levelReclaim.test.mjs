@@ -124,7 +124,8 @@ test("parity route: a LEVEL_RECLAIM config is checked against the level_reclaim 
 test("ON for PAPER only (2026-11-05, its paper-wallet PR): wrangler sets LEVEL_RECLAIM_LIVE, the brain gates on it, live stays refused", () => {
   const src = readFileSync(new URL("../../workers/nexus-agent-brain/index.js", import.meta.url), "utf8");
   assert.match(src, /const levelLive = env\.LEVEL_RECLAIM_LIVE === "true";/);
-  assert.match(src, /config\.signalMode === "LEVEL_RECLAIM" && !levelReclaimRefusal\(config\)/, "only configs the paper-only rule accepts make the brain read candles");
+  assert.match(src, /config\.signalMode === "LEVEL_RECLAIM" && !levelReclaimRefusal\(config, \{ liveLift: liftOf\(address, config\) \}\)/, "only configs the paper-only rule (or the disarmed one-wallet lift) accepts make the brain read candles");
+  assert.match(src, /deriveSignal\(raw, config, config\.respectRegime \? regime : null, cons, \{ liveLift: liftOf\(address, config\) \}\)/);
   const toml = readFileSync(new URL("../../workers/nexus-agent-brain/wrangler.toml", import.meta.url), "utf8");
   assert.match(toml, /^\[vars\]\s*$/m);
   assert.match(toml, /^LEVEL_RECLAIM_LIVE = "true"$/m);
