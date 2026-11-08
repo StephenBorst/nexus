@@ -177,7 +177,9 @@ product is what sits on top:
   lab-api, exec and brain wrangler.toml (`liveLift.test.mjs` fails otherwise); a listed wallet is lifted only for the
   plan's exact config (`livePlanRefusal` / `LIVE_PLAN_LIMITS`: fixed-risk ≤ $10, 3×, margin ≤ $300, ≤ $30/day, ≤ 4/day,
   168h, main coins, no invert/ungraded gate). It passes `{ liveLift }` to `gradedExitRefusal`, `riskSizingRefusal` and
-  `levelReclaimRefusal` (brain `deriveSignal` 5th arg); the Lab never decides it. Arming = borst in person, its own PR.
+  `levelReclaimRefusal` (brain `deriveSignal` 5th arg); the Lab never decides it. A lifted wallet opens only the brain's
+  read on a plan coin (`liftedSignalRefusal`, exec, before any read): no webhook, directive (its own size) or autocopy
+  entry; autocopy on the config un-lifts it (2026-11-08). Arming = borst in person, its own PR.
 - **Webhook (PRO):** `POST /agent/hook/:token` → `agent:webhook_signal:{addr}` (600s). **Strategy library:**
   `/agent/:a/strategies` + `/publish`; public board ranks by the author's GRADED record, never backtest.
 - **Operator fields (PRO · same ARCHITECT/100M gate as momentum/mean-rev/DCA; all opt-in, default-OFF):**

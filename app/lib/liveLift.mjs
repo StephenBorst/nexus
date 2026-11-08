@@ -78,6 +78,23 @@ export function livePlanRefusal(config) {
   if (c.invertSignal) return "an inverted rule is a different read";
   if (c.respectRegime || c.respectSmartMoney || num(c.maxSignalAgeSec) > 0) return "no ungraded gates on the live config";
   if (num(c.volTargetPct) > 0 || c.dcaEnabled) return "fixed-risk sizing only: no vol-targeting, no DCA";
+  if (c.autocopy?.enabled) return "no autocopy on the live-plan wallet: it trades its read only";
+  return null;
+}
+
+/**
+ * On a lifted (live-plan) entry, the trade itself must be the plan's: the brain's own read on one of the plan's
+ * coins. The config check alone can't see this. exec also opens webhook intents (source "WEBHOOK"), the owner's
+ * directives (source "DIRECTIVE", which carry their OWN leverage and capital and skip fixed-risk sizing) and
+ * autocopy picks (source "COPY"), on any market they name. On the plan wallet each would be a non-plan trade on
+ * the plan's record, at a size the plan never set. Brain signals carry no `source`. Refused, never re-sized.
+ * @returns {string|null} why this signal can't open a lifted position, or null
+ */
+export function liftedSignalRefusal(signal, config) {
+  if (!signal || typeof signal !== "object") return "no signal";
+  if (signal.directive || signal.source) return `the live-plan wallet opens only its read; a ${String(signal.source || "DIRECTIVE").toLowerCase()} entry isn't the plan`;
+  const syms = Array.isArray(config?.symbols) ? config.symbols : [];
+  if (!syms.includes(signal.symbol) || !LEVEL_RECLAIM_MAIN_SYMBOLS.includes(signal.symbol)) return `${signal.symbol} isn't one of the plan's coins`;
   return null;
 }
 

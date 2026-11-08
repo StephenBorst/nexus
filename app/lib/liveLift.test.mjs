@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseLiveLift, liveLifted, liveLiftNote, livePlanRefusal, LIVE_PLAN_LIMITS, LIVE_LIFT_VAR } from "./liveLift.mjs";
+import { parseLiveLift, liveLifted, liveLiftNote, livePlanRefusal, liftedSignalRefusal, LIVE_PLAN_LIMITS, LIVE_LIFT_VAR } from "./liveLift.mjs";
 import { gradedExitRefusal } from "./gradedExit.mjs";
 import { riskSizingRefusal } from "./riskSizing.mjs";
 import { levelReclaimRefusal, LEVEL_RECLAIM_PAPER_CONFIG } from "./levelReclaim.mjs";
@@ -75,6 +75,7 @@ test("a lifted wallet still can't trade anything but the plan: every number is a
     "vol targeting": { volTargetPct: 2 },
     "another read": { signalMode: "BASIS_FADE" },
     "no graded exit": { exitContract: undefined },
+    "autocopy": { autocopy: { enabled: true, leaders: [OTHER] } },
   };
   for (const [why, patch] of Object.entries(cases)) assert.equal(off(patch), false, why);
   // a ladder / trail on the lifted config is still refused by the graded exit's own rules
@@ -118,4 +119,31 @@ test("every gate passes the wallet to the lift: exec, brain and all four lab-api
   assert.equal((api.match(/riskSizingRefusal\(cfgL, [^)]*, \{ liveLift \}\)/g) || []).length, 4);
   // nothing else imports the lift: one rule, these three users (and the Lab never decides it)
   assert.doesNotMatch(read("app/pages/lab/AgentView.tsx"), /liveLift/);
+});
+
+test("a lifted entry is the brain's read on a plan coin: no webhook, directive or autocopy, no other market", () => {
+  const coin = LIVE.symbols[0];
+  const brain = { symbol: coin, direction: "LONG", confidence: 70, timestamp: 1 };
+  assert.equal(liftedSignalRefusal(brain, LIVE), null);
+  for (const source of ["WEBHOOK", "DIRECTIVE", "COPY"]) {
+    assert.match(liftedSignalRefusal({ ...brain, source }, LIVE), new RegExp(source.toLowerCase()), source);
+  }
+  // a directive carries its own leverage + capital (skips fixed-risk sizing): refused even untagged
+  assert.match(liftedSignalRefusal({ ...brain, directive: { leverage: 20, capitalPerTrade: 5000 } }, LIVE), /isn't the plan/);
+  assert.match(liftedSignalRefusal({ ...brain, symbol: "PERP_SUI_USDC" }, LIVE), /isn't one of the plan's coins/);
+  assert.match(liftedSignalRefusal({ ...brain, symbol: coin }, { ...LIVE, symbols: [] }), /plan's coins/);
+  for (const bad of [null, undefined, "x"]) assert.equal(liftedSignalRefusal(bad, LIVE), "no signal");
+});
+
+test("exec refuses a non-plan entry on a lifted wallet before anything is read or placed", () => {
+  const exec = read("workers/nexus-agent-exec/index.js");
+  const e = exec.slice(exec.indexOf("async function enterPosition("), exec.indexOf("\nasync function ", exec.indexOf("async function enterPosition(") + 10));
+  const lift = e.indexOf("const liveLift = !paper && liveLifted(config, address, lifts);");
+  const gate = e.indexOf("const why = liftedSignalRefusal(signal, config);");
+  assert.ok(lift > 0 && gate > lift, "after the lift is decided");
+  for (const later of ["getMarkPrice(", "agent:key:", '"/v1/order"', '"/v1/client/leverage"']) {
+    const at = e.indexOf(later);
+    assert.ok(at === -1 || gate < at, `before ${later}`);
+  }
+  assert.match(e, /if \(liveLift\) \{\s*const why = liftedSignalRefusal\(signal, config\);\s*if \(why\) \{ console\.error\([^\n]*\); return; \}/);
 });

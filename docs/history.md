@@ -2403,3 +2403,15 @@ Orderly keeps one untriggered `POSITIONAL_TP_SL` per user per market per side (a
 
 Not verifiable from here: whether Orderly cancels a position TP/SL on its own once the position is flat. The code
 assumes it doesn't (the safe side). The $10 mechanics test can answer it: close by hand, then list algo orders.
+
+## 2026-11-08 · The live lift checked the config, not the trade
+
+`liveLifted` holds the CONFIG to the live plan, but exec opens four kinds of entry: the brain's read, a webhook intent,
+an owner directive and an autocopy pick. On a lifted wallet the last three would have gone through: a directive brings
+its own leverage and capital and skips fixed-risk sizing (a $5,000, 20× trade on the $10-risk plan wallet), and
+webhook / copy signals name any market. Disarmed, so nothing happened. Now `liftedSignalRefusal` (liveLift.mjs) lets a
+lifted entry through only as the brain's own signal (no `source`, no `directive`) on one of the config's plan coins,
+checked in exec right after the lift is decided; `livePlanRefusal` also refuses `autocopy.enabled`.
+
+Not built, on purpose (house rules: a breaker is a read, graded first; and borst runs the stop rules): the −5R/7d brake
+and the −10R / equity < 90% kill are manual today. Someone has to watch for them on the first tranche.
