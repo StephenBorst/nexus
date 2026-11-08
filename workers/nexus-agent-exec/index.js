@@ -17,12 +17,12 @@ import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
 import { nextPaperHead, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
 import { runKill } from "./killSwitch.mjs";
-import { backstopWanted, backstopTrigger, backstopOrder, algoOrderIdFrom, cancelPath, backstopHit, sweepStaleBackstops, BACKSTOP_MAX_TRIES, BACKSTOP_MULT } from "./backstop.mjs";
+import { backstopWanted, backstopTrigger, backstopOrder, algoOrderIdFrom, cancelPath, backstopHit, sweepStaleBackstops, restingListPath, restingBackstop, BACKSTOP_MAX_TRIES, BACKSTOP_MULT } from "./backstop.mjs";
 import { resolveKeyRecord, keyHoldRefusal, keyAlertDue, keyAlertText, isKeyPointer } from "./agentKey.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { usesRiskSizing, riskSizingRefusal, riskSizedMargin, riskTaken } from "../../app/lib/riskSizing.mjs";
-import { parseLiveLift, liveLifted, liveLiftNote, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
+import { parseLiveLift, liveLifted, liveLiftNote, liftedSignalRefusal, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
 import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, twapSliceFailed, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload, exchangePositionQty, exchangePositionRows, fillPriceFrom } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
@@ -582,6 +582,15 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
         clearFlag: () => env.NEXUS_AGENT.delete(`agent:kill:${address}`),
         clearDirective: () => env.NEXUS_AGENT.delete(`agent:directive:${address}`),
         deleteKey: () => env.NEXUS_AGENT.delete(`agent:key:${address}`),
+        // Before the key goes: retry the cancels of backstops left by earlier closes (a stale position
+        // stop would close the owner's next position on that market). Returns what still rests.
+        sweep: async () => {
+          const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
+          if (!keyRaw) return state.backstop_cleanup || [];
+          const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
+          for (let i = 0; i < 2 && (state.backstop_cleanup || []).length; i++) await sweepBackstops(address, state, keyData, env);
+          return state.backstop_cleanup || [];
+        },
         notify: (text) => notifyTelegram(address, env, text),
       },
     });
@@ -817,19 +826,40 @@ async function ensureBackstop(address, pos, keyData, env) {
   if (tries >= BACKSTOP_MAX_TRIES) return false;
   pos.backstop_tries = tries + 1;
   const trigger = backstopTrigger({ direction: pos.direction, entryPrice: pos.entry_price, slPercent: pos.slPercent, quoteTick: pos.quote_tick });
-  if (!trigger) return true;
-  let res = null;
-  try { res = await orderlyRequest(keyData, "POST", "/v1/algo/order", backstopOrder({ symbol: pos.symbol, direction: pos.direction, triggerPrice: trigger })); }
-  catch (e) { res = { success: false, message: e.message }; }
-  const id = algoOrderIdFrom(res);
-  if (id) {
-    pos.backstop = { id, trigger, mult: BACKSTOP_MULT, placedAt: Date.now() };
-    console.log(`[exec] ${address.slice(0, 10)} backstop stop placed ${pos.symbol} @ ${trigger} (id ${id})`);
-    return true;
+  const tk = pos.symbol.replace("PERP_", "").replace("_USDC", "");
+  let res = { success: false, message: "no usable trigger price" };
+  if (trigger) {
+    try { res = await orderlyRequest(keyData, "POST", "/v1/algo/order", backstopOrder({ symbol: pos.symbol, direction: pos.direction, triggerPrice: trigger })); }
+    catch (e) { res = { success: false, message: e.message }; }
+    const id = algoOrderIdFrom(res);
+    if (id) {
+      pos.backstop = { id, trigger, mult: BACKSTOP_MULT, placedAt: Date.now() };
+      console.log(`[exec] ${address.slice(0, 10)} backstop stop placed ${pos.symbol} @ ${trigger} (id ${id})`);
+      return true;
+    }
+    // No id back. Orderly keeps ONE position TP/SL per market + side, so if one is already working
+    // (ours, landed although the reply was lost; or the owner's own) every retry is refused: look.
+    let found = null;
+    try { found = restingBackstop(await orderlyRequest(keyData, "GET", restingListPath(pos.symbol)), { symbol: pos.symbol, trigger }); }
+    catch { found = null; }
+    if (found?.found && found.ours) {
+      pos.backstop = { id: found.id, trigger, mult: BACKSTOP_MULT, placedAt: Date.now(), recovered: true };
+      console.log(`[exec] ${address.slice(0, 10)} backstop stop found resting ${pos.symbol} @ ${trigger} (id ${found.id}): its reply had been lost`);
+      return true;
+    }
+    if (found?.found) {
+      // The owner's own position TP/SL holds the slot: record it so exec never places a second one
+      // and never cancels it (it isn't ours).
+      pos.backstop = { id: found.id, trigger: found.trigger, foreign: true, seenAt: Date.now() };
+      console.warn(`[exec] ${address.slice(0, 10)} ${pos.symbol}: a position TP/SL set outside the agent is resting (id ${found.id}), no backstop placed`);
+      await notifyTelegram(address, env, found.trigger
+        ? `ℹ️ <b>Your own stop is resting on ${tk}</b> at $${found.trigger}\nOrderly allows one position stop per market, so the agent didn't place its backstop. The agent still runs its own stop every minute and won't cancel yours.`
+        : `⚠️ <b>No exchange stop on ${pos.direction} ${tk}</b>\nA position take-profit you set holds Orderly's one TP/SL slot, so the agent couldn't place its backstop stop. Add a stop to that order on the Trade page if you want one on the exchange.`);
+      return true;
+    }
   }
   console.error(`[exec] ${address.slice(0, 10)} backstop stop refused (try ${pos.backstop_tries}/${BACKSTOP_MAX_TRIES}):`, JSON.stringify(res).slice(0, 200));
   if (pos.backstop_tries >= BACKSTOP_MAX_TRIES) {
-    const tk = pos.symbol.replace("PERP_", "").replace("_USDC", "");
     await notifyTelegram(address, env, `⚠️ <b>No exchange backstop on ${pos.direction} ${tk}</b>\nOrderly refused the resting stop ${BACKSTOP_MAX_TRIES} times. The agent still checks its own stop every minute; set a stop by hand if you want one on the exchange.`);
   }
   return true;
@@ -839,7 +869,7 @@ async function ensureBackstop(address, pos, keyData, env) {
 // state.backstop_cleanup and retried before the next live entry (sweepBackstops).
 async function cancelBackstop(address, state, pos, keyData) {
   const bs = pos?.backstop;
-  if (!bs?.id) return;
+  if (!bs?.id || bs.foreign) return; // a stop the owner set is theirs: exec never cancels it
   let ok = false;
   if (keyData) {
     try { ok = (await orderlyRequest(keyData, "DELETE", cancelPath({ id: bs.id, symbol: pos.symbol })))?.success === true; }
@@ -885,6 +915,12 @@ async function enterPosition(address, state, config, signal, env, cache) {
   const liveLift = !paper && liveLifted(config, address, lifts);
   const liftNote = !paper ? liveLiftNote(config, address, lifts) : null;
   if (liftNote) console.error(`[exec] ${address.slice(0, 10)} live lift listed but not lifted: ${liftNote}`);
+  // A lifted wallet opens only the brain's read on the plan's coins: no webhook, directive or autocopy entry
+  // (a directive carries its own size), whatever the config says. Refused before anything is read or placed.
+  if (liveLift) {
+    const why = liftedSignalRefusal(signal, config);
+    if (why) { console.error(`[exec] ${address.slice(0, 10)} live-plan entry refused: ${why}`); return; }
+  }
   const gradedRefusal = gradedExitRefusal(config, paper, { liveLift });
   if (gradedRefusal) {
     console.error(`[exec] ${address.slice(0, 10)} graded exit refused: ${gradedRefusal}`);
@@ -1254,7 +1290,8 @@ async function monitorPosition(address, state, config, env, cache) {
           if (fired) {
             state.last_backstop_hit = { symbol: pos.symbol, direction: pos.direction, trigger: pos.backstop.trigger, at: Date.now() };
             const tkb = pos.symbol.replace("PERP_", "").replace("_USDC", "");
-            await notifyTelegram(address, env, `🛡 <b>Backstop stop closed ${pos.direction} ${tkb}</b> near $${pos.backstop.trigger}\nThe agent missed its own stop (worker delay), so the exchange stop closed it. Check the fill in your Orderly history: this close isn't on the agent's ledger.`);
+            const who = pos.backstop.foreign ? "Your own position stop" : "Backstop stop";
+            await notifyTelegram(address, env, `🛡 <b>${who} closed ${pos.direction} ${tkb}</b> near $${pos.backstop.trigger}\nThe exchange stop closed it before the agent did. Check the fill in your Orderly history: this close isn't on the agent's ledger.`);
           } else {
             await cancelBackstop(address, state, pos, keyData); // closed some other way: cancel what's resting
           }

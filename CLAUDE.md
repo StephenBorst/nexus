@@ -165,7 +165,11 @@ product is what sits on top:
   (`cancelBackstop`; a failed cancel queues in `state.backstop_cleanup`, swept before the next live entry, which is
   refused on a market that still carries one; 10 tries then Telegram). Exchange flat + the order fired = Telegram, NOT
   booked to `agent_trades` (no fill read). Not on DCA positions or paper; the trail/BE don't move it. DEACTIVATE leaves
-  it resting with the position.
+  it resting with the position (the Lab + DELETE reply name it: `agentControls.mjs restingStop`, one copy for both).
+  Orderly keeps ONE position TP/SL per market + side: a refused place reads the market's working one
+  (`restingBackstop`, the SDK's match) and adopts ours by its exact trigger (a reply lost to a timeout); any other
+  is the owner's (`backstop.foreign`): never a second one, never cancelled by exec. KILL retries the queued cancels
+  with the key before deleting it (`io.sweep`), and Telegrams any still resting (fixed 2026-11-08).
 - **Graded-exit contract** (`exitContract:"R_CONTRACT"`, `app/lib/gradedExit.mjs`): stop 1.2× H4 ATR-14, target 1.5×,
   168h. **PAPER ONLY**: `gradedExitRefusal` refuses non-PAPER configs and extra exit parts (exec at the top of
   `enterPosition`; lab-api 409 `graded_exit_refused`). **One-wallet live lift, BUILT DISARMED** (`app/lib/liveLift.mjs`,
@@ -173,7 +177,9 @@ product is what sits on top:
   lab-api, exec and brain wrangler.toml (`liveLift.test.mjs` fails otherwise); a listed wallet is lifted only for the
   plan's exact config (`livePlanRefusal` / `LIVE_PLAN_LIMITS`: fixed-risk ≤ $10, 3×, margin ≤ $300, ≤ $30/day, ≤ 4/day,
   168h, main coins, no invert/ungraded gate). It passes `{ liveLift }` to `gradedExitRefusal`, `riskSizingRefusal` and
-  `levelReclaimRefusal` (brain `deriveSignal` 5th arg); the Lab never decides it. Arming = borst in person, its own PR.
+  `levelReclaimRefusal` (brain `deriveSignal` 5th arg); the Lab never decides it. A lifted wallet opens only the brain's
+  read on a plan coin (`liftedSignalRefusal`, exec, before any read): no webhook, directive (its own size) or autocopy
+  entry; autocopy on the config un-lifts it (2026-11-08). Arming = borst in person, its own PR.
 - **Webhook (PRO):** `POST /agent/hook/:token` → `agent:webhook_signal:{addr}` (600s). **Strategy library:**
   `/agent/:a/strategies` + `/publish`; public board ranks by the author's GRADED record, never backtest.
 - **Operator fields (PRO · same ARCHITECT/100M gate as momentum/mean-rev/DCA; all opt-in, default-OFF):**

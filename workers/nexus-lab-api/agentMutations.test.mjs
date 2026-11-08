@@ -24,6 +24,9 @@ test("every /agent/:address mutation checks the owner", () => {
 test("DEACTIVATE reports a live position it leaves open (leftOpen + warning)", () => {
   const start = src.indexOf("// DELETE /agent/:address — deactivate");
   const route = src.slice(start, src.indexOf("// POST /agent/:address/kill", start));
-  assert.match(route, /if \(p && !p\.paper\) leftOpen = /);
-  assert.match(route, /leftOpen,\s*warning:/);
+  assert.match(route, /if \(p && !p\.paper\) \{\s*leftOpen = /);
+  assert.match(route, /warning = deactivatedMessage\(p\);/, "one copy for the Lab and the server");
+  assert.match(route, /backstop: p\.backstop\?\.id \?/, "says which stop stays resting");
+  assert.match(route, /state\.backstop_cleanup/, "names an old backstop whose cancel never went through");
+  assert.match(route, /\{ ok: true, leftOpen, \.\.\.\(staleStops \? \{ staleStops \} : \{\}\), warning \}/);
 });

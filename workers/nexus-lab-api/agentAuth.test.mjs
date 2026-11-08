@@ -148,7 +148,8 @@ test("lab-api: kill takes no per-request challenge (borst 2026-10-31)", () => {
 
 test("exec: every key read follows the pointer; entries check the key's expiry", () => {
   assert.doesNotMatch(exec, /decryptTradingKey\(keyData\.tradingKey/);
-  assert.equal((exec.match(/resolveKeyRecord\(JSON\.parse\(keyRaw\), keyIo\(address, env\)\)/g) || []).length, 7);
+  assert.equal((exec.match(/resolveKeyRecord\(JSON\.parse\(keyRaw\), keyIo\(address, env\)\)/g) || []).length, 8, "incl. the kill sweep (backstop cleanup before the key goes)");
+  assert.equal((exec.match(/get\(`agent:key:\$\{address\}`\)/g) || []).length, 8, "every raw key read is one of those");
   const enter = exec.slice(exec.indexOf("async function enterPosition("), exec.indexOf("Portfolio delta cap (PRO)"));
   assert.match(enter, /keyHoldRefusal\(/);
 });

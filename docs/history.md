@@ -2384,3 +2384,34 @@ anchored ledger) therefore never showed slippage. Now each live market order's `
 `/v1/order/{id}`, FILLED or PARTIAL_FILLED) is what's booked, with the mark only as a tagged fallback (`entry_fill`).
 Rows written before this are mark-priced; nothing rewrites them. Fees are still not in the row's P&L (Supabase columns
 are fixed: an unknown column makes the auditable insert fall back to the core row without order ids).
+
+## 2026-11-08 · Backstop audit: a lost stop id, and KILL deleting the key first
+
+Orderly keeps one untriggered `POSITIONAL_TP_SL` per user per market per side (algo-order samples). Two holes in the
+#268 backstop followed from that:
+- A place that errored after Orderly took it (a timeout) left a stop resting with no id in state. Every retry was then
+  refused, the owner was told "no exchange backstop" after 5 tries, and that stop was never cancelled at close (a stale
+  position stop closes the owner's next position on that market). Same for a position TP/SL the owner set themselves.
+  Now a refused place lists the market's working position TP/SL (`restingBackstop`, matched as the SDK's
+  `findPositionTPSLFromOrders` does) and adopts it when its stop trigger is exactly ours; any other one is recorded
+  `foreign`: no second order, never cancelled by exec, and the owner is told it's their stop that's resting.
+- KILL deleted the key right after the close, so a backstop whose cancel had failed (queued in
+  `state.backstop_cleanup`, normally swept before the next entry) could never be cancelled. runKill now retries the
+  queue with the key first (`io.sweep`, two passes) and Telegrams the markets still carrying one.
+- The DEACTIVATE copy said "NO stop" while a backstop rests; the Lab prompt and lab-api's reply now share
+  `agentControls.mjs` and name the stop that stays (or NO stop when none is known), plus any stale one.
+
+Not verifiable from here: whether Orderly cancels a position TP/SL on its own once the position is flat. The code
+assumes it doesn't (the safe side). The $10 mechanics test can answer it: close by hand, then list algo orders.
+
+## 2026-11-08 · The live lift checked the config, not the trade
+
+`liveLifted` holds the CONFIG to the live plan, but exec opens four kinds of entry: the brain's read, a webhook intent,
+an owner directive and an autocopy pick. On a lifted wallet the last three would have gone through: a directive brings
+its own leverage and capital and skips fixed-risk sizing (a $5,000, 20× trade on the $10-risk plan wallet), and
+webhook / copy signals name any market. Disarmed, so nothing happened. Now `liftedSignalRefusal` (liveLift.mjs) lets a
+lifted entry through only as the brain's own signal (no `source`, no `directive`) on one of the config's plan coins,
+checked in exec right after the lift is decided; `livePlanRefusal` also refuses `autocopy.enabled`.
+
+Not built, on purpose (house rules: a breaker is a read, graded first; and borst runs the stop rules): the −5R/7d brake
+and the −10R / equity < 90% kill are manual today. Someone has to watch for them on the first tranche.

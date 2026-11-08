@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   BACKSTOP_MULT, BACKSTOP_CLEANUP_TRIES, backstopWanted, backstopTrigger, backstopOrder, algoOrderIdFrom,
-  cancelPath, algoTerminal, backstopHit, sweepStaleBackstops,
+  cancelPath, algoTerminal, backstopHit, sweepStaleBackstops, restingListPath, restingBackstop,
 } from "./backstop.mjs";
 
 const live = { symbol: "PERP_ETH_USDC", direction: "LONG", entry_price: 2000, slPercent: 1, paper: false };
@@ -142,6 +142,40 @@ test("sweepStaleBackstops: cancelled or terminal = done, else counted, dropped a
   assert.deepEqual(await sweepStaleBackstops(undefined, { cancel: async () => ({}), status: async () => ({}) }), { left: [], done: [], dropped: [] });
 });
 
+test("restingListPath: the market's working position TP/SL orders", () => {
+  assert.equal(restingListPath("PERP_ETH_USDC"), "/v1/algo/orders?symbol=PERP_ETH_USDC&algo_type=POSITIONAL_TP_SL&status=INCOMPLETE");
+});
+
+test("restingBackstop: finds the slot-holder the way the SDK finds a position's TP/SL; ours only on the exact trigger", () => {
+  const row = (o = {}) => ({
+    algo_order_id: 501, symbol: "PERP_ETH_USDC", algo_type: "POSITIONAL_TP_SL", margin_mode: "CROSS", root_algo_status: "NEW",
+    child_orders: [{ algo_type: "TAKE_PROFIT", trigger_price: null }, { algo_type: "STOP_LOSS", side: "SELL", trigger_price: 1970 }], ...o,
+  });
+  const reply = (...rows) => ({ success: true, data: { meta: { total: rows.length }, rows } });
+  const q = { symbol: "PERP_ETH_USDC", trigger: 1970 };
+  // a placement that landed although its reply was lost: same trigger = ours
+  assert.deepEqual(restingBackstop(reply(row()), q), { found: true, id: 501, trigger: 1970, ours: true });
+  // the owner's own stop at another price: found, not ours
+  assert.deepEqual(restingBackstop(reply(row({ child_orders: [{ algo_type: "STOP_LOSS", trigger_price: "1990.5" }] })), q), { found: true, id: 501, trigger: 1990.5, ours: false });
+  // a take-profit-only position TP/SL holds the slot with no stop leg
+  assert.deepEqual(restingBackstop(reply(row({ child_orders: [{ algo_type: "TAKE_PROFIT", trigger_price: 2100 }] })), q), { found: true, id: 501, trigger: null, ours: false });
+  // the spec's status field name, and REPLACED / PARTIAL_FILLED still work
+  assert.equal(restingBackstop(reply(row({ root_algo_status: undefined, root_algo_order_status: "REPLACED" })), q).found, true);
+  assert.equal(restingBackstop(reply(row({ root_algo_status: "PARTIAL_FILLED" })), q).found, true);
+  // not the slot-holder: another market, another type, isolated margin, no longer working, no id
+  for (const o of [{ symbol: "PERP_BTC_USDC" }, { algo_type: "TP_SL" }, { margin_mode: "ISOLATED" }, { root_algo_status: "CANCELLED" }, { root_algo_status: "FILLED" }, { algo_order_id: 0 }, { algo_order_id: "x" }]) {
+    assert.deepEqual(restingBackstop(reply(row(o)), q), { found: false }, JSON.stringify(o));
+  }
+  assert.equal(restingBackstop(reply(row({ margin_mode: undefined })), q).found, true, "no margin_mode = CROSS, as the SDK reads it");
+  assert.deepEqual(restingBackstop(reply(), q), { found: false });
+  assert.deepEqual(restingBackstop(reply(row({ symbol: "PERP_BTC_USDC" }), row({ algo_order_id: 502 })), q), { found: true, id: 502, trigger: 1970, ours: true });
+  // unreadable is null, never "none resting"
+  for (const r of [null, {}, { success: false, data: { rows: [row()] } }, { success: true }, { success: true, data: {} }, { success: true, data: { rows: "x" } }]) {
+    assert.equal(restingBackstop(r, q), null, JSON.stringify(r));
+  }
+  assert.equal(restingBackstop(reply(row()), { symbol: "PERP_ETH_USDC", trigger: null }).ours, false, "no computed trigger: never claimed as ours");
+});
+
 // ── where exec places and cancels it (index.js source) ──────────────────────────────────────────
 const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
 const fnBody = (name) => { const i = src.indexOf(`async function ${name}(`); assert.ok(i > 0, name); return src.slice(i, src.indexOf("\nasync function ", i + 10)); };
@@ -183,4 +217,27 @@ test("monitor: retries a missing backstop after the reconcile; a flat exchange c
 
 test("DELETE is sent form-encoded, like the SDK", () => {
   assert.match(fnBody("orderlyRequest"), /method === "GET" \|\| method === "DELETE"\s*\n\s*\? "application\/x-www-form-urlencoded"/);
+});
+
+test("placement: a refused place looks for the order holding Orderly's one slot before giving up", () => {
+  const e = fnBody("ensureBackstop");
+  const post = e.indexOf('orderlyRequest(keyData, "POST", "/v1/algo/order"');
+  const look = e.indexOf('restingBackstop(await orderlyRequest(keyData, "GET", restingListPath(pos.symbol)), { symbol: pos.symbol, trigger })');
+  const refusedLog = e.indexOf("backstop stop refused (try");
+  assert.ok(post > 0 && look > post && refusedLog > look, "place → look → only then count a refusal");
+  assert.ok(e.indexOf("algoOrderIdFrom(res)") < look, "a placed id returns before any lookup");
+  assert.match(e, /if \(found\?\.found && found\.ours\) \{\s*pos\.backstop = \{ id: found\.id, trigger, mult: BACKSTOP_MULT, placedAt: Date\.now\(\), recovered: true \};/);
+  assert.match(e, /pos\.backstop = \{ id: found\.id, trigger: found\.trigger, foreign: true, seenAt: Date\.now\(\) \};/);
+  assert.doesNotMatch(e, /if \(!trigger\) return true;/, "no trigger counts as a refusal (and alerts at the cap)");
+});
+
+test("a stop the owner set is never cancelled by exec", () => {
+  assert.match(fnBody("cancelBackstop"), /if \(!bs\?\.id \|\| bs\.foreign\) return;/);
+});
+
+test("kill: the queued backstop cancels are retried with the key, before runKill deletes it", () => {
+  const p = fnBody("processUser");
+  const k = p.slice(p.indexOf("const r = await runKill({"), p.indexOf("if (!state.active) return;"));
+  assert.match(k, /sweep: async \(\) => \{/);
+  assert.match(k, /await sweepBackstops\(address, state, keyData, env\);/);
 });
