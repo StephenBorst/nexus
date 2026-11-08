@@ -85,6 +85,12 @@ read's losses concentrated in its widest stops: fixed sizing would bet the most 
 3. **Lift `gradedExitRefusal` for this one wallet and this one read only.** It refuses every non-PAPER config today, on
    purpose. The lift is scoped by address and read, tested, and states why no stop cap is needed (fixed-risk sizing
    makes a wide stop a smaller position, not a bigger loss).
+   **Built 2026-11-08, DISARMED** (`app/lib/liveLift.mjs`): worker var `GRADED_EXIT_LIVE_LIFT` ("0xWALLET@LEVEL_RECLAIM")
+   is empty in lab-api, exec and brain, and `liveLift.test.mjs` fails if it isn't. A listed wallet is lifted only for a
+   config that is this page's: fixed-risk ≤ $10, 3×, margin ceiling ≤ $300, ≤ $30/day, ≤ 4 trades/day, 168h, the main
+   coins, no inverted rule or ungraded gate (`LIVE_PLAN_LIMITS`, pinned to this page). It lifts the graded-exit,
+   fixed-risk and level_reclaim paper-only refusals together; every other wallet and every other config stays refused.
+   Arming = borst, in person: the PR that fills the var records the date, the wallet and his signature below.
 4. **A live-vs-paper compare** for the first tranche (slippage, fees, parity), read-only.
 
 ## 6 · Never

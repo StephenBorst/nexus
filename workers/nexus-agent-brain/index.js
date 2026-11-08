@@ -21,6 +21,7 @@ import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/b
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 import { HOLDOUT_PERPS } from "../../app/lib/recordedUniverse.mjs";
 import { levelReclaimLive, levelReclaimRefusal } from "../../app/lib/levelReclaim.mjs";
+import { parseLiveLift, liveLifted, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
 
 // The markets we ALWAYS record oi:hist for. ⚠️ Keep this in step with
 // VALIDATE_UNIVERSE in nexus-lab-api/strategies.mjs — a symbol the walk-forward asks
@@ -125,7 +126,11 @@ export default {
       // worker var LEVEL_RECLAIM_LIVE = "true" (commented out in wrangler.toml) AND a PAPER config
       // trades it. Off ⇒ a LEVEL_RECLAIM config gets no levelReclaim* fields and sits out.
       const levelLive = env.LEVEL_RECLAIM_LIVE === "true";
-      const needLevel = levelLive && Object.values(userConfigs).some(({ config }) => config.signalMode === "LEVEL_RECLAIM" && !levelReclaimRefusal(config));
+      // The one-wallet live lift (app/lib/liveLift.mjs, build #3 of the live plan): EMPTY in wrangler.toml = disarmed,
+      // so every non-PAPER level_reclaim config is still refused.
+      const lifts = parseLiveLift(env[LIVE_LIFT_VAR]);
+      const liftOf = (address, config) => liveLifted(config, address, lifts);
+      const needLevel = levelLive && Object.entries(userConfigs).some(([address, { config }]) => config.signalMode === "LEVEL_RECLAIM" && !levelReclaimRefusal(config, { liveLift: liftOf(address, config) }));
       const rawBySymbol = {};
       for (const symbol of symbolSet) {
         try {
@@ -165,7 +170,7 @@ export default {
             if (!raw) continue;
             const coin = sym.replace("PERP_", "").replace("_USDC", "");
             const cons = (config.respectSmartMoney && smartConsensus) ? smartConsensus[coin] : null;
-            const sig = deriveSignal(raw, config, config.respectRegime ? regime : null, cons);
+            const sig = deriveSignal(raw, config, config.respectRegime ? regime : null, cons, { liveLift: liftOf(address, config) });
             if (sig.direction !== "NONE" && sig.confidence > best.confidence) {
               best = { symbol: sym, direction: sig.direction, funding: raw.fundingRate, oi: raw.oi, price: raw.price, confidence: sig.confidence, reason: sig.reason, sourceT: signalSourceT(raw, config) };
             }

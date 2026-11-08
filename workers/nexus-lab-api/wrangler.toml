@@ -30,6 +30,10 @@ id = "c3c0582ec71c4d049d0795872f39f033"
 # GET /v1/models (claude-opus-4.8 / sonnet-4.6 / haiku-4.5 all present, caching
 # supported). Remove this var to revert to direct Anthropic.
 [vars]
+# One-wallet live lift of the graded exit (app/lib/liveLift.mjs, build #3 of docs/research/live-plan-level-reclaim.md).
+# "0xWALLET@LEVEL_RECLAIM". EMPTY = DISARMED: every non-PAPER graded-exit / fixed-risk / level_reclaim config is refused.
+# Kept identical in lab-api, exec and brain (liveLift.test.mjs). Arming = borst in person, in a PR that records it.
+GRADED_EXIT_LIVE_LIFT = ""
 # Wallets whose trading signature (personal_sign "nexus-trading-key-v1") was exposed. Every request
 # presenting it is refused for trading and agent control; withdrawals to the wallet stay open
 # (revokedTrading.mjs). Comma-separated addresses, never the signature itself. Remove a wallet only

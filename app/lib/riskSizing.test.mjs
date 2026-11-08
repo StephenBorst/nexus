@@ -89,7 +89,7 @@ test("exec: refuses before any read, reads the graded stop before sizing, sizes 
   const start = src.indexOf("async function enterPosition(");
   const body = src.slice(start, src.indexOf("\nasync function ", start + 10));
   const at = (needle) => { const i = body.indexOf(needle); assert.ok(i > 0, `missing: ${needle}`); return i; };
-  assert.ok(at("riskSizingRefusal(config, paper)") < at("await getMarkPrice("), "refused before any price read");
+  assert.ok(at("riskSizingRefusal(config, paper, { liveLift })") < at("await getMarkPrice("), "refused before any price read");
   assert.ok(at("gradedLv = await fetchGradedExitLevels(") < at("riskSizedMargin("), "the stop is known before sizing");
   assert.ok(at("riskSizedMargin(") < at("const snap = snapQty("), "the risk-sized margin feeds the qty");
   assert.match(body, /capitalPerTrade: sizeMargin, leverage: effLeverage/);

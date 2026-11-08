@@ -22,6 +22,7 @@ import { resolveKeyRecord, keyHoldRefusal, keyAlertDue, keyAlertText, isKeyPoint
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { usesRiskSizing, riskSizingRefusal, riskSizedMargin, riskTaken } from "../../app/lib/riskSizing.mjs";
+import { parseLiveLift, liveLifted, liveLiftNote, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
 import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, twapSliceFailed, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload, exchangePositionQty, exchangePositionRows, fillPriceFrom } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
@@ -878,7 +879,13 @@ async function enterPosition(address, state, config, signal, env, cache) {
   // The graded exit (the scoreboard's R contract) is PAPER ONLY and the WHOLE contract. Refused here,
   // before any price read, key read, order or state write (app/lib/gradedExit.mjs; borst 2026-10-15:
   // the uncapped stop never reaches live money without its own review).
-  const gradedRefusal = gradedExitRefusal(config, paper);
+  // The one-wallet live lift (app/lib/liveLift.mjs, build #3 of the live plan): only a listed wallet trading the plan's
+  // exact config. The var is EMPTY in wrangler.toml (disarmed), so this is false for every wallet today.
+  const lifts = parseLiveLift(env[LIVE_LIFT_VAR]);
+  const liveLift = !paper && liveLifted(config, address, lifts);
+  const liftNote = !paper ? liveLiftNote(config, address, lifts) : null;
+  if (liftNote) console.error(`[exec] ${address.slice(0, 10)} live lift listed but not lifted: ${liftNote}`);
+  const gradedRefusal = gradedExitRefusal(config, paper, { liveLift });
   if (gradedRefusal) {
     console.error(`[exec] ${address.slice(0, 10)} graded exit refused: ${gradedRefusal}`);
     return;
@@ -886,7 +893,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
   // Fixed-risk sizing (app/lib/riskSizing.mjs): PAPER only, graded exit only, never with DCA or vol-targeted
   // capital. Refused here, before anything is read or placed. A directive keeps its own size.
   const riskSized = !directive && usesRiskSizing(config);
-  const riskRefusal = riskSized ? riskSizingRefusal(config, paper) : null;
+  const riskRefusal = riskSized ? riskSizingRefusal(config, paper, { liveLift }) : null;
   if (riskRefusal) {
     console.error(`[exec] ${address.slice(0, 10)} fixed-risk sizing refused: ${riskRefusal}`);
     return;

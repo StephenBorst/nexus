@@ -54,9 +54,10 @@ export function gradedExitLevelsFromHourly(hourly) {
  * `paper` = will the entry be simulated. One answer for exec (before any order) and lab-api
  * (before storing a config).
  */
-export function gradedExitRefusal(config, paper) {
+export function gradedExitRefusal(config, paper, { liveLift = false } = {}) {
   if (!usesGradedExit(config)) return null;
-  if (!paper) return "the graded exit is paper-only: no live trading without its own review";
+  // `liveLift` = app/lib/liveLift.mjs liveLifted(): one listed wallet, one read, the live plan's config. Disarmed.
+  if (!paper && liveLift !== true) return "the graded exit is paper-only: no live trading without its own review";
   if (Number(config.maxHoldHours) !== R_CONTRACT.maxHoldH) return `the graded exit holds up to ${R_CONTRACT.maxHoldH}h; this config says ${config.maxHoldHours}h`;
   if (Array.isArray(config.takeProfits) && config.takeProfits.length) return "a take-profit ladder would replace the graded target";
   if (Number(config.trailingStopPct) > 0) return "a trailing stop is not part of the graded exit";

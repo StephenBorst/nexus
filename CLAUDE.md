@@ -168,7 +168,12 @@ product is what sits on top:
   it resting with the position.
 - **Graded-exit contract** (`exitContract:"R_CONTRACT"`, `app/lib/gradedExit.mjs`): stop 1.2× H4 ATR-14, target 1.5×,
   168h. **PAPER ONLY**: `gradedExitRefusal` refuses non-PAPER configs and extra exit parts (exec at the top of
-  `enterPosition`; lab-api 409 `graded_exit_refused`). Lifting that = its own reviewed PR.
+  `enterPosition`; lab-api 409 `graded_exit_refused`). **One-wallet live lift, BUILT DISARMED** (`app/lib/liveLift.mjs`,
+  2026-11-08, build #3 of the live plan): worker var `GRADED_EXIT_LIVE_LIFT` ("0xWALLET@LEVEL_RECLAIM") is EMPTY in
+  lab-api, exec and brain wrangler.toml (`liveLift.test.mjs` fails otherwise); a listed wallet is lifted only for the
+  plan's exact config (`livePlanRefusal` / `LIVE_PLAN_LIMITS`: fixed-risk ≤ $10, 3×, margin ≤ $300, ≤ $30/day, ≤ 4/day,
+  168h, main coins, no invert/ungraded gate). It passes `{ liveLift }` to `gradedExitRefusal`, `riskSizingRefusal` and
+  `levelReclaimRefusal` (brain `deriveSignal` 5th arg); the Lab never decides it. Arming = borst in person, its own PR.
 - **Webhook (PRO):** `POST /agent/hook/:token` → `agent:webhook_signal:{addr}` (600s). **Strategy library:**
   `/agent/:a/strategies` + `/publish`; public board ranks by the author's GRADED record, never backtest.
 - **Operator fields (PRO · same ARCHITECT/100M gate as momentum/mean-rev/DCA; all opt-in, default-OFF):**
@@ -316,7 +321,8 @@ product is what sits on top:
   first concrete plan, DRAFT, unsigned, arms nothing; written 2026-11-07 before the paper gate): $1,000 dedicated wallet,
   fixed $10 risk a trade (1R) sized from the graded stop, 3×, $30/day, kill at −10R, 10-trade first tranche vs the paper
   wallet. Needs built first, each its own PR: `riskPerTradeUsd` sizing (BUILT 2026-11-07, PAPER only, below), an
-  exchange-side backstop stop (BUILT 2026-11-07, #268), a one-wallet lift of `gradedExitRefusal`. **House rules**
+  exchange-side backstop stop (BUILT 2026-11-07, #268), a one-wallet lift of `gradedExitRefusal` (BUILT DISARMED
+  2026-11-08, `liveLift.mjs`). **House rules**
   (live-money-review.md, SIGNED by borst 2026-11-08; a change = a new dated section) bind every plan: a $10 mechanics test first (backstop shows, KILL clears it;
   plumbing, not edge), 1R = 1% of a dedicated account, 3R/day, −5R/7d pause, kill at −10R or equity < 90% of deposit,
   parity CLEAN, size ×2 at most after 30 live trades meeting the bar. Arming and size increases = borst, in person.
