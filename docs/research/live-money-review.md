@@ -54,6 +54,23 @@ unsigned), written ahead of `level_reclaim`'s paper gate.
 | Who signs | borst, in person. The PR records the date and that it was him. |
 | Stop rules | Parity DRIFT, a live record that falls below the paper record by more than fees explain, or the read retiring on the scoreboard ⇒ back to paper the same day. |
 
+## House rules for any live strategy (added 2026-11-07, draft, not signed)
+
+borst's ask: the rules written down before anything is TRADEABLE. Every strategy plan inherits these; a plan may be
+stricter, never looser. Numbers are in R, where 1R = the fixed dollars one trade risks at its graded stop
+(`riskPerTradeUsd`, `app/lib/riskSizing.mjs`).
+
+| rule | the line |
+|---|---|
+| Step 0: mechanics test | Before any strategy arms: one ~$10 live entry on the dedicated wallet. The backstop stop shows on Orderly (Orders → TP/SL, 1.5× the stop beyond the entry), KILL closes the position and the backstop disappears. Recorded in the plan's PR with the date. It proves the plumbing, **not an edge**: passing it unlocks nothing but the strategy's own gate. |
+| Starting size | 1R = **1% of the dedicated account**, fixed in dollars for the whole first tranche (level_reclaim: $10 on $1,000). No deposits or withdrawals on that wallet during a tranche, so R and % stay the same number. |
+| Daily loss cap | **3R** (`maxDailyLossUsdc`). Entries stop for the UTC day; open positions keep their exits. |
+| Weekly brake | **−5R over any rolling 7 days ⇒ entries paused (ASSISTED)** until borst has read the trades. Not a kill. |
+| Kill | **−10R from the start of live, or account equity below 90% of what was deposited, whichever comes first** ⇒ KILL, back to paper, written up. The equity line catches fees, funding and slippage that R alone doesn't count. |
+| Parity | Must read **CLEAN** on the live wallet and on its paper control. DRIFT on either ⇒ back to paper the same day. |
+| No size increase until | **all** of: 30 live trades; net > 0 after fees, funding and slippage; parity CLEAN the whole way; mean entry slippage ≤ 5 bps a side; the drawdown never went past −5R; the read still served at PAPER or better. Then at most **2×** (1R $10 → $20), as a new dated plan. One step per 30 trades. |
+| Who signs | **borst, in person**, for arming and for every size increase. The PR records the date and that it was him. A session, a scheduled task or the watcher never raises size or arms. Lowering size, pausing or KILL needs no sign-off. |
+
 ## What already exists (don't rebuild it)
 
 Daily-loss cap, max trades a day, kill switch on its own KV key (`agent:kill:{addr}`), AUTONOMOUS behind
