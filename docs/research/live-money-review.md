@@ -54,7 +54,7 @@ unsigned), written ahead of `level_reclaim`'s paper gate.
 | Who signs | borst, in person. The PR records the date and that it was him. |
 | Stop rules | Parity DRIFT, a live record that falls below the paper record by more than fees explain, or the read retiring on the scoreboard ⇒ back to paper the same day. |
 
-## House rules for any live strategy (added 2026-11-07, draft, not signed)
+## House rules for any live strategy (added 2026-11-07, SIGNED 2026-11-08)
 
 borst's ask: the rules written down before anything is TRADEABLE. Every strategy plan inherits these; a plan may be
 stricter, never looser. Numbers are in R, where 1R = the fixed dollars one trade risks at its graded stop
@@ -70,6 +70,10 @@ stricter, never looser. Numbers are in R, where 1R = the fixed dollars one trade
 | Parity | Must read **CLEAN** on the live wallet and on its paper control. DRIFT on either ⇒ back to paper the same day. |
 | No size increase until | **all** of: 30 live trades; net > 0 after fees, funding and slippage; parity CLEAN the whole way; mean entry slippage ≤ 5 bps a side; the drawdown never went past −5R; the read still served at PAPER or better. Then at most **2×** (1R $10 → $20), as a new dated plan. One step per 30 trades. |
 | Who signs | **borst, in person**, for arming and for every size increase. The PR records the date and that it was him. A session, a scheduled task or the watcher never raises size or arms. Lowering size, pausing or KILL needs no sign-off. |
+
+**Signed:** borst, 2026-11-08, in his own words: "I sign the house rules as written." This signs the house rules
+above and nothing else. It arms nothing; each strategy's plan is still signed on its own, and every number here is
+now fixed: a changed rule is a new dated section, not an edit.
 
 ## What already exists (don't rebuild it)
 
