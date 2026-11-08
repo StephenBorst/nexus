@@ -240,6 +240,11 @@ product is what sits on top:
 - Don't curate the market list to the winners, and don't loosen fold math to make a verdict pass.
 
 ## Signal engine — the scoreboard
+- **CPU budget:** the scoreboard's cold rebuild (hourly) runs each generator several times and sits near the Worker CPU
+  limit (error 1102 seen 2026-11-08 right after batch 4). A new read's generator must slide its windows (O(n·window)),
+  never re-scan from the start or redo per-coin work that doesn't depend on the coin; time it on the public series
+  before registering. A faster body must fire identical events (kept-reference test, as for btc_lead_lag /
+  funding_basis_split in explorerReads.test.mjs).
 - `GET /intel/axis-backtest` (`axisbt.mjs runScorecard`, cached; bump the `axisbt:vN` key when the payload changes) →
   /proof and the Feed SIGNALS tab. Forward returns, no lookahead, pooled across the recorded markets, half-vs-half
   stability, horizons 4/12/24h, R on a frozen contract (1.2×ATR stop, 1.5R, 168h).

@@ -285,26 +285,48 @@ export function spotAbsorbEvents(cs, _pmap, _ctx, p = SPOT_ABSORB) {
 // Reads ctx.btcCandles (axisbt passes BTC's hour → candle map; on the holdout line BTC rides along as
 // context only, never graded). The body moved unchanged from explorerDrafts4.mjs.
 export const LEAD_LAG = Object.freeze({ pct: 0.9, lookbackH: MONTH_H, minHistory: 360, lagFrac: 0.75, cooldownH: 12 });
+// Performance (2026-11-08, events unchanged): whether BTC's hour is an impulse doesn't depend on the alt, so it is
+// decided ONCE per BTC series and params (memoised on the ctx map) instead of once per alt per hour. Same rule, same
+// checks, same order of outcomes: explorerReads.test.mjs compares it with the registered body event by event.
+const impulseMemo = new WeakMap(); // btc candle map → Map(paramsKey → Map(hour → BTC 1h return, impulse hours only))
+function btcImpulses(btc, p) {
+  const key = `${p.pct}|${p.lookbackH}|${p.minHistory}`;
+  let byParams = impulseMemo.get(btc);
+  if (!byParams) { byParams = new Map(); impulseMemo.set(btc, byParams); }
+  if (byParams.has(key)) return byParams.get(key);
+  const btcRet = new Map();
+  for (const h of btc.keys()) { const a = btc.get(h), b = btc.get(h - 1); if (b && b.c > 0 && a.c > 0) btcRet.set(h, a.c / b.c - 1); }
+  const rh = [...btcRet.keys()].sort((a, b) => a - b);
+  const absv = rh.map((h) => Math.abs(btcRet.get(h)));
+  const out = new Map();
+  let lo = 0;
+  for (let i = 0; i < rh.length; i++) {
+    const h = rh[i], r = btcRet.get(h);
+    while (lo < i && rh[lo] < h - p.lookbackH) lo++;
+    if (r === 0 || i - lo < p.minHistory) continue; // the prior window = rh[lo..i) (every return in [h − lookback, h))
+    const x = Math.abs(r);
+    let below = 0, equal = 0;
+    for (let k = lo; k < i; k++) { const v = absv[k]; if (v < x) below++; else if (v === x) equal++; }
+    if ((below + equal / 2) / (i - lo) >= p.pct) out.set(h, r);
+  }
+  byParams.set(key, out);
+  return out;
+}
 export function btcLeadLagEvents(cs, _pmap, ctx = {}, p = LEAD_LAG) {
   if (String(cs.coin || "").toUpperCase() === "BTC") return [];
   const btc = ctx && ctx.btcCandles instanceof Map ? ctx.btcCandles : null;
   if (!btc || !btc.size) return [];
   const cbh = candleMap(cs.candleHist);
-  const btcRet = new Map();
-  for (const h of btc.keys()) { const a = btc.get(h), b = btc.get(h - 1); if (b && b.c > 0 && a.c > 0) btcRet.set(h, a.c / b.c - 1); }
+  const impulses = btcImpulses(btc, p);
   const hours = [...cbh.keys()].sort((a, b) => a - b);
   const ev = [];
   let last = -Infinity;
   for (const h of hours) {
     if (h - last < p.cooldownH) continue;
-    const r = btcRet.get(h);
-    if (r == null || r === 0) continue;
+    const r = impulses.get(h);
+    if (r == null) continue;
     const a = cbh.get(h), b = cbh.get(h - 1);
     if (!b) continue;
-    const prior = [];
-    for (let k = h - p.lookbackH; k < h; k++) { const x = btcRet.get(k); if (x != null) prior.push(Math.abs(x)); }
-    if (prior.length < p.minHistory) continue;
-    if (!(pctRank(prior, Math.abs(r)) >= p.pct)) continue;
     const alt = a.c / b.c - 1;
     if (!(Math.sign(r) * alt < p.lagFrac * Math.abs(r))) continue;
     ev.push({ t: Number(a.t) + H, side: r > 0 ? "LONG" : "SHORT" });
@@ -321,24 +343,34 @@ export function btcLeadLagEvents(cs, _pmap, ctx = {}, p = LEAD_LAG) {
 // basis ≥ median) → LONG. Each series needs ≥ 360 prior hours. Cooldown 24h per coin. Body moved unchanged
 // from explorerDrafts4.mjs (drafted 2026-10-27 as batch 2's D, before any count).
 export const SPLIT = Object.freeze({ lookbackH: MONTH_H, minHistory: 360, hi: 0.8, lo: 0.2, cooldownH: 24 });
+// Performance (2026-11-08, events unchanged): the two 30-day windows slide with the hour instead of being re-scanned
+// from the start of the series, and the basis median is taken only when funding is at an extreme (the only case it
+// can change the answer). explorerReads.test.mjs compares it with the registered body event by event.
 export function fundingBasisSplitEvents(cs, _pmap, _ctx, p = SPLIT) {
   const m = byHour(cs.oiHist, (r) => Number.isFinite(Number(r.funding)) && Number(r.price) > 0);
   const bm = byHour(cs.basisHist, (r) => Number.isFinite(Number(r.basisPct)));
   if (!m.size || !bm.size) return [];
   const hours = [...m.keys()].sort((a, b) => a - b);
   const bHours = [...bm.keys()].sort((a, b) => a - b);
+  const fVals = hours.map((k) => Number(m.get(k).funding));
+  const bVals = bHours.map((k) => Number(bm.get(k).basisPct));
+  // [lo, hi) of a sorted hour list = the hours in [h − lookback, h); h only grows, so the pointers only move forward
+  const slider = (list) => { let lo = 0, hi = 0; return (h) => { while (hi < list.length && list[hi] < h) hi++; while (lo < hi && list[lo] < h - p.lookbackH) lo++; return [lo, hi]; }; };
+  const fWin = slider(hours), bWin = slider(bHours);
   const ev = [];
   let last = -Infinity;
   for (const h of hours) {
     if (h - last < p.cooldownH) continue;
     const b = bm.get(h);
     if (!b) continue;
-    const fPrior = [], bPrior = [];
-    for (const k of hours) { if (k >= h) break; if (k >= h - p.lookbackH) fPrior.push(Number(m.get(k).funding)); }
-    for (const k of bHours) { if (k >= h) break; if (k >= h - p.lookbackH) bPrior.push(Number(bm.get(k).basisPct)); }
-    if (fPrior.length < p.minHistory || bPrior.length < p.minHistory) continue;
-    const fr = pctRank(fPrior, Number(m.get(h).funding));
-    const bmed = median(bPrior), bx = Number(b.basisPct);
+    const [flo, fhi] = fWin(h), [blo, bhi] = bWin(h);
+    if (fhi - flo < p.minHistory || bhi - blo < p.minHistory) continue;
+    const x = Number(m.get(h).funding);
+    let below = 0, equal = 0;
+    for (let k = flo; k < fhi; k++) { const v = fVals[k]; if (v < x) below++; else if (v === x) equal++; }
+    const fr = (below + equal / 2) / (fhi - flo);
+    if (!(fr >= p.hi || fr <= p.lo)) continue;
+    const bmed = median(bVals.slice(blo, bhi)), bx = Number(b.basisPct);
     const side = fr >= p.hi && bx <= bmed ? "SHORT" : fr <= p.lo && bx >= bmed ? "LONG" : null;
     if (!side) continue;
     ev.push({ t: m.get(h).t, side });

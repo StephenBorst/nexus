@@ -414,3 +414,114 @@ test("funding_basis_split is checked for overlap with confluence_follow (both re
   const { OVERLAP_PAIRS } = await import("./axisbt.mjs");
   assert.ok(OVERLAP_PAIRS.some((p) => p.includes("funding_basis_split") && p.includes("confluence_follow")));
 });
+
+// ── Performance rewrite (2026-11-08): the faster btc_lead_lag / funding_basis_split must fire EXACTLY the events the
+// registered bodies did. The registered bodies are kept here verbatim as the reference.
+const REF = (() => {
+  const H = 3600000;
+  const byHour = (rows, ok) => { const m = new Map(); for (const r of [...(rows || [])].sort((a, b) => Number(a.t) - Number(b.t))) if (r && ok(r)) m.set(hourBucket(r.t), r); return m; };
+  const candleMap = (c) => byHour(c, (x) => [x.o, x.h, x.l, x.c].every(Number.isFinite) && x.c > 0);
+  const pctRank = (arr, x) => { if (!arr.length) return null; let below = 0, equal = 0; for (const v of arr) { if (v < x) below++; else if (v === x) equal++; } return (below + equal / 2) / arr.length; };
+  const median = (arr) => { if (!arr.length) return null; const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.max(0, Math.floor(0.5 * (s.length - 1))))]; };
+  function leadLag(cs, _pmap, ctx = {}, p = LEAD_LAG) {
+    if (String(cs.coin || "").toUpperCase() === "BTC") return [];
+    const btc = ctx && ctx.btcCandles instanceof Map ? ctx.btcCandles : null;
+    if (!btc || !btc.size) return [];
+    const cbh = candleMap(cs.candleHist);
+    const btcRet = new Map();
+    for (const h of btc.keys()) { const a = btc.get(h), b = btc.get(h - 1); if (b && b.c > 0 && a.c > 0) btcRet.set(h, a.c / b.c - 1); }
+    const hours = [...cbh.keys()].sort((a, b) => a - b);
+    const ev = [];
+    let last = -Infinity;
+    for (const h of hours) {
+      if (h - last < p.cooldownH) continue;
+      const r = btcRet.get(h);
+      if (r == null || r === 0) continue;
+      const a = cbh.get(h), b = cbh.get(h - 1);
+      if (!b) continue;
+      const prior = [];
+      for (let k = h - p.lookbackH; k < h; k++) { const x = btcRet.get(k); if (x != null) prior.push(Math.abs(x)); }
+      if (prior.length < p.minHistory) continue;
+      if (!(pctRank(prior, Math.abs(r)) >= p.pct)) continue;
+      const alt = a.c / b.c - 1;
+      if (!(Math.sign(r) * alt < p.lagFrac * Math.abs(r))) continue;
+      ev.push({ t: Number(a.t) + H, side: r > 0 ? "LONG" : "SHORT" });
+      last = h;
+    }
+    return ev;
+  }
+  function split(cs, _pmap, _ctx, p = SPLIT) {
+    const m = byHour(cs.oiHist, (r) => Number.isFinite(Number(r.funding)) && Number(r.price) > 0);
+    const bm = byHour(cs.basisHist, (r) => Number.isFinite(Number(r.basisPct)));
+    if (!m.size || !bm.size) return [];
+    const hours = [...m.keys()].sort((a, b) => a - b);
+    const bHours = [...bm.keys()].sort((a, b) => a - b);
+    const ev = [];
+    let last = -Infinity;
+    for (const h of hours) {
+      if (h - last < p.cooldownH) continue;
+      const b = bm.get(h);
+      if (!b) continue;
+      const fPrior = [], bPrior = [];
+      for (const k of hours) { if (k >= h) break; if (k >= h - p.lookbackH) fPrior.push(Number(m.get(k).funding)); }
+      for (const k of bHours) { if (k >= h) break; if (k >= h - p.lookbackH) bPrior.push(Number(bm.get(k).basisPct)); }
+      if (fPrior.length < p.minHistory || bPrior.length < p.minHistory) continue;
+      const fr = pctRank(fPrior, Number(m.get(h).funding));
+      const bmed = median(bPrior), bx = Number(b.basisPct);
+      const side = fr >= p.hi && bx <= bmed ? "SHORT" : fr <= p.lo && bx >= bmed ? "LONG" : null;
+      if (!side) continue;
+      ev.push({ t: m.get(h).t, side });
+      last = h;
+    }
+    return ev;
+  }
+  return { leadLag, split };
+})();
+
+test("the faster btc_lead_lag and funding_basis_split fire exactly the registered bodies' events (gappy, tied, many seeds)", () => {
+  for (const seed of [1, 3, 7, 11, 29, 101]) {
+    const base = tape(1700, seed), btcT = tape(1700, seed + 50);
+    // gaps and ties: drop every 13th candle / 17th oi row / 11th basis row, and round funding + basis so values repeat
+    const alt = {
+      coin: "ETH",
+      candleHist: base.candleHist.filter((_, i) => i % 13 !== 5),
+      oiHist: base.oiHist.filter((_, i) => i % 17 !== 3).map((r) => ({ ...r, funding: Math.round(r.funding * 1e5) / 1e5 })),
+      basisHist: base.basisHist.filter((_, i) => i % 11 !== 2).map((r) => ({ ...r, basisPct: Math.round(r.basisPct * 100) / 100 })),
+    };
+    const ctx = { btcCandles: new Map(btcT.candleHist.filter((_, i) => i % 19 !== 7).map((c) => [hourBucket(c.t), c])) };
+    for (const p of [LEAD_LAG, { ...LEAD_LAG, pct: 0.95, lagFrac: 0.5 }, { ...LEAD_LAG, minHistory: 100, cooldownH: 0 }]) {
+      const ref = REF.leadLag(alt, null, ctx, p);
+      assert.deepEqual(btcLeadLagEvents(alt, null, ctx, p), ref, `lead-lag seed ${seed}`);
+    }
+    for (const p of [SPLIT, { ...SPLIT, hi: 0.9, lo: 0.1 }, { ...SPLIT, cooldownH: 0, minHistory: 100 }]) {
+      const ref = REF.split(alt, null, null, p);
+      assert.deepEqual(fundingBasisSplitEvents(alt, null, null, p), ref, `split seed ${seed}`);
+    }
+  }
+  // the tape is rich enough that both actually fire (an all-empty comparison would prove nothing)
+  const t = tape(1700, 7), b = tape(1700, 57);
+  assert.ok(REF.leadLag({ coin: "ETH", ...t }, null, { btcCandles: new Map(b.candleHist.map((c) => [hourBucket(c.t), c])) }, { ...LEAD_LAG, minHistory: 100 }).length > 0);
+  assert.ok(REF.split(t, null, null, { ...SPLIT, minHistory: 100 }).length > 0);
+});
+
+test("the 30-day windows include the hour exactly 30 days back (boundary pinned against the registered bodies)", () => {
+  // Continuous hourly data: the window of hour h holds exactly the 720 hours h−720 … h−1. With minHistory 720 the read
+  // fires only if the boundary hour h−720 is counted.
+  const n = 800, k = 760;
+  const flatBars = () => Array.from({ length: n }, (_, i) => { const c = 100 * (1 + (i % 2 ? 0.001 : -0.001)); return { t: T0 + i * H, o: 100, h: Math.max(100, c) * 1.001, l: Math.min(100, c) * 0.999, c }; });
+  const btc = flatBars();
+  btc[k] = { ...btc[k], o: btc[k - 1].c, c: btc[k - 1].c * 1.03, h: btc[k - 1].c * 1.031, l: btc[k - 1].c * 0.999 };
+  const ctx = { btcCandles: new Map(btc.map((c) => [hourBucket(c.t), c])) };
+  const alt = { coin: "SOL", candleHist: flatBars() };
+  const p = { ...LEAD_LAG, minHistory: 720 };
+  assert.equal(REF.leadLag(alt, null, ctx, p).length, 1, "the reference fires with exactly 720 prior hours");
+  assert.deepEqual(btcLeadLagEvents(alt, null, ctx, p), REF.leadLag(alt, null, ctx, p));
+  assert.deepEqual(btcLeadLagEvents(alt, null, ctx, { ...p, minHistory: 721 }), [], "721 is one more than the window holds");
+  const oiHist = [], basisHist = [];
+  for (let i = 0; i < n; i++) { oiHist.push({ t: T0 + i * H + 120000, price: 100, oi: 1000, funding: 0.0001 }); basisHist.push({ t: T0 + i * H + 300000, basisPct: 0.03 }); }
+  oiHist[k] = { ...oiHist[k], funding: 0.01 }; basisHist[k] = { ...basisHist[k], basisPct: -0.5 };
+  const q = { ...SPLIT, minHistory: 720 };
+  assert.equal(REF.split({ oiHist, basisHist }, null, null, q).length, 1);
+  assert.deepEqual(fundingBasisSplitEvents({ oiHist, basisHist }, null, null, q), REF.split({ oiHist, basisHist }, null, null, q));
+  assert.deepEqual(fundingBasisSplitEvents({ oiHist, basisHist }, null, null, { ...q, minHistory: 721 }), []);
+});
