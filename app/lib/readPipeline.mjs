@@ -133,6 +133,17 @@ export const REGISTERED_READS = Object.freeze([
     gradedExit: true,
     paperWallet: null,
   }),
+  // Batch 4 D, borst 2026-11-07 ("register funding-basis at the drafted setting"): funding and the spot-perp
+  // basis disagree; follow the basis. Basis is recorded on 9 of the 11 main-card coins (not ARB, WLD).
+  Object.freeze({
+    axis: "funding_basis_split",
+    side: "BOTH",
+    registeredAt: "2026-11-08T00:00:00Z",
+    doc: "docs/research/funding-basis-split-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
 ]);
 
 export const registeredMs = (reg) => Date.parse(reg.registeredAt);

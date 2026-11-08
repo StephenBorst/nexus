@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { DRAFT_GENS_4, DRAFT_READS_4, fundingBasisSplitEvents } from "./explorerDrafts4.mjs";
+import { DRAFT_GENS_4, DRAFT_READS_4 } from "./explorerDrafts4.mjs";
 import { AXES } from "./axisbt.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 import { hourBucket } from "../../app/lib/basisStack.mjs";
@@ -24,7 +24,7 @@ test("drafts are not graded: off the scoreboard, unregistered, and nothing else 
   for (const f of ["./axisbt.mjs", "./index.js", "../nexus-agent-brain/index.js", "../nexus-agent-brain/logic.mjs", "../nexus-agent-exec/index.js"]) {
     assert.doesNotMatch(readFileSync(new URL(f, import.meta.url), "utf8"), /explorerDrafts4/, `${f} must not import the drafts`);
   }
-  assert.deepEqual(DRAFT_READS_4.map((r) => r.name), ["funding_basis_split"]); // A registered, B and C dropped 2026-11-07
+  assert.deepEqual(DRAFT_READS_4.map((r) => r.name), []); // batch 4 settled 2026-11-07: A and D registered, B and C dropped
 });
 
 // seeded random tape with every series the drafts read; BTC and the alt share a seed offset
@@ -66,22 +66,6 @@ test("no lookahead: for every draft, the future never changes past events", () =
       assert.deepEqual(before(gen({ coin: "ETH", ...poison(full) }, null, pctx)), before(all), `${name} looked past ${cutH}h`);
     }
   }
-});
-
-test("funding_basis_split: funding says longs are crowded, basis sits at or below its median → SHORT; the mirror → LONG", () => {
-  const n = 800, h = 700;
-  const oiHist = [], basisHist = [];
-  for (let i = 0; i < n; i++) {
-    oiHist.push({ t: T0 + i * H + 120000, price: 100, oi: 1000, funding: 0.0001 }); // a flat history ranks 0.5: never extreme
-    basisHist.push({ t: T0 + i * H + 300000, basisPct: 0.03 });
-  }
-  oiHist[h] = { ...oiHist[h], funding: 0.01 };
-  basisHist[h] = { ...basisHist[h], basisPct: -0.5 };
-  oiHist[h + 30] = { ...oiHist[h + 30], funding: -0.01 };
-  basisHist[h + 30] = { ...basisHist[h + 30], basisPct: 0.5 };
-  const ev = fundingBasisSplitEvents({ oiHist, basisHist });
-  assert.deepEqual(ev.map((e) => [e.t, e.side]), [[oiHist[h].t, "SHORT"], [oiHist[h + 30].t, "LONG"]]);
-  assert.deepEqual(fundingBasisSplitEvents({ oiHist, basisHist: [] }), [], "no basis series = no events");
 });
 
 test("GET /agent/basis-history/:coin is read-only: GET only, one KV read of basis:hist, a sanitized coin", () => {

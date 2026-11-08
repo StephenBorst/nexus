@@ -57,6 +57,11 @@
       "stage": "REGISTERED",
       "next": "30 more out-of-sample events",
       "events": 0
+    },
+    "funding_basis_split": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
     }
   },
   "gradedExit": {

@@ -275,11 +275,12 @@ product is what sits on top:
   (perp-led 4h move, spot the other way, OI flat → follow spot) from 2026-11-20; batch 4 (borst 2026-11-07):
   `btc_lead_lag` (BTC 1h move ≥ its own 30-day p90, an alt that moved < 0.75 of it follows BTC) from 2026-11-08, the
   first read on another coin's tape: the holdout line gets the main card's BTC set as CONTEXT only (`ctxSets` in
-  axisbt `buildEvents`, never graded). Registered
+  axisbt `buildEvents`, never graded) and `funding_basis_split` (funding ≥ its 30-day p80 while the basis sits ≤ its
+  30-day median → SHORT, mirror → LONG; 9 main coins, ARB/WLD have no basis) from 2026-11-08. Registered
   bodies live in `explorerReads.mjs`; unregistered drafts in `explorerDraftsB.mjs` (batch 2, `explorer-drafts-b.md`; tests
-  fail if a draft is graded or axisbt imports it) and `explorerDrafts4.mjs` (batch 4, `explorer-drafts-4.md`: A registered, B
-  funding_settle_snap + C level_reclaim_weekly DROPPED, D funding_basis_split PARKED until counted; generators get
-  axisbt's `ctx.btcCandles`; `powerCheck.mjs --batch=4`). `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
+  fail if a draft is graded or axisbt imports it) and `explorerDrafts4.mjs` (batch 4, `explorer-drafts-4.md`: settled, A + D
+  registered, B funding_settle_snap + C level_reclaim_weekly DROPPED; generators get axisbt's `ctx.btcCandles`;
+  `powerCheck.mjs --batch=4`). `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.
 - **Regime window** (`docs/research/graded-exit-regime-prereg.md`, signed 2026-10-26; counts from 2026-10-27T00:00Z,
   limit 2027-04-27): the same read + graded exit, judged once by the watcher via `judgeRegimeWindow`
@@ -327,7 +328,7 @@ product is what sits on top:
   Lab: the "FIXED RISK / TRADE" field shows under the graded-exit toggle; whole-strategy loads clear it.
 - **Overlap pairs** (`OVERLAP_PAIRS`, axisbt.mjs → the scoreboard's `overlap` block): basis_x_cvd×rsi_reset_deep,
   level_reclaim×{level_reclaim_tight, session_fade, spot_absorb}, session_fade×oi_div_reversal_4h,
-  oi_div_reversal×oi_div_reversal_4h (one rule, two windows). A filtered read and its
+  confluence_follow×funding_basis_split, oi_div_reversal×oi_div_reversal_4h (one rule, two windows). A filtered read and its
   parent are one bet, never stacked as two.
 - `/intel/evidence?axis=&hold=` replays a preset across every mature market (pooled ≠ independent; say so).
 - basis:hist had holes from our own OKX burst until the paced `snapshotFlow` fix: read older windows with that in mind.

@@ -1028,6 +1028,7 @@ export const OVERLAP_PAIRS = Object.freeze([
   ["level_reclaim", "session_fade"],
   ["level_reclaim", "spot_absorb"],
   ["session_fade", "oi_div_reversal_4h"],
+  ["confluence_follow", "funding_basis_split"],
   // The same rule on two windows (oi_div_reversal_4h runs oiDivReversalEvents with a 4h window): a 24h
   // fade usually contains a 4h one on the same coin and side, so stacked they are one bet.
   ["oi_div_reversal", "oi_div_reversal_4h"],
