@@ -409,7 +409,7 @@ export function AgentView() {
 
   async function deactivateAgent() {
     if (!walletAddress) return;
-    // A live position stays open with no stop after DEACTIVATE (agentControls.mjs): say so first.
+    // A live position stays open after DEACTIVATE with only what rests on Orderly (agentControls.mjs): say so first.
     const openPos = agentState?.current_position ?? null;
     const warning = deactivateWarning(openPos);
     if (warning && !window.confirm(warning)) return;
@@ -422,9 +422,12 @@ export function AgentView() {
         body: JSON.stringify({ walletSig }),
       });
       if (!res.ok) throw new Error("Failed to deactivate");
+      // The server's line wins: it also names an old backstop that may still rest (staleStops).
+      const reply = await res.json().catch(() => ({}));
+      const said = typeof reply?.warning === "string" && reply.warning ? reply.warning : deactivatedMessage(openPos);
       setAgentState((prev) => prev ? { ...prev, active: false, current_position: null } : null);
-      setSuccess(deactivatedMessage(openPos));
-      setTimeout(() => setSuccess(null), openPos && !openPos.paper ? 12000 : 3000);
+      setSuccess(said);
+      setTimeout(() => setSuccess(null), said !== deactivatedMessage(null) ? 12000 : 3000);
     } catch (e) {
       setError(errText(e));
     } finally {

@@ -2384,3 +2384,22 @@ anchored ledger) therefore never showed slippage. Now each live market order's `
 `/v1/order/{id}`, FILLED or PARTIAL_FILLED) is what's booked, with the mark only as a tagged fallback (`entry_fill`).
 Rows written before this are mark-priced; nothing rewrites them. Fees are still not in the row's P&L (Supabase columns
 are fixed: an unknown column makes the auditable insert fall back to the core row without order ids).
+
+## 2026-11-08 · Backstop audit: a lost stop id, and KILL deleting the key first
+
+Orderly keeps one untriggered `POSITIONAL_TP_SL` per user per market per side (algo-order samples). Two holes in the
+#268 backstop followed from that:
+- A place that errored after Orderly took it (a timeout) left a stop resting with no id in state. Every retry was then
+  refused, the owner was told "no exchange backstop" after 5 tries, and that stop was never cancelled at close (a stale
+  position stop closes the owner's next position on that market). Same for a position TP/SL the owner set themselves.
+  Now a refused place lists the market's working position TP/SL (`restingBackstop`, matched as the SDK's
+  `findPositionTPSLFromOrders` does) and adopts it when its stop trigger is exactly ours; any other one is recorded
+  `foreign`: no second order, never cancelled by exec, and the owner is told it's their stop that's resting.
+- KILL deleted the key right after the close, so a backstop whose cancel had failed (queued in
+  `state.backstop_cleanup`, normally swept before the next entry) could never be cancelled. runKill now retries the
+  queue with the key first (`io.sweep`, two passes) and Telegrams the markets still carrying one.
+- The DEACTIVATE copy said "NO stop" while a backstop rests; the Lab prompt and lab-api's reply now share
+  `agentControls.mjs` and name the stop that stays (or NO stop when none is known), plus any stale one.
+
+Not verifiable from here: whether Orderly cancels a position TP/SL on its own once the position is flat. The code
+assumes it doesn't (the safe side). The $10 mechanics test can answer it: close by hand, then list algo orders.

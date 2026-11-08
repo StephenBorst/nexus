@@ -8,11 +8,12 @@ import { handleAgentKill } from "../nexus-lab-api/routes-kill.mjs";
 
 const POS = { symbol: "PERP_ETH_USDC", direction: "LONG", qty: 0.01, paper: false };
 
-function fakeIo({ closes = true, throws = false } = {}, state) {
+function fakeIo({ closes = true, throws = false, sweep } = {}, state) {
   const log = [];
   return {
     log,
     io: {
+      ...(sweep ? { sweep: async () => { log.push("sweep"); return sweep(state); } } : {}),
       close: async () => { log.push("close"); if (throws) throw new Error("orderly down"); if (closes) state.current_position = null; },
       saveState: async (s) => log.push(`save:${s.active}:${s.current_position ? "pos" : "flat"}`),
       clearFlag: async () => log.push("clearFlag"),
@@ -134,4 +135,42 @@ test("lab-api: both activation paths clear a pending kill flag", () => {
     assert.ok(start > 0 && end > start, marker);
     assert.match(apiSrc.slice(start, end), /delete\(`agent:kill:\$\{address\}`\)/, marker);
   }
+});
+
+test("kill: an old backstop whose cancel failed is retried BEFORE the key goes", async () => {
+  const state = { active: true, current_position: { ...POS }, backstop_cleanup: [{ id: 9, symbol: "PERP_BTC_USDC", tries: 2 }] };
+  const { io, log } = fakeIo({ sweep: (s) => { s.backstop_cleanup = []; return []; } }, state);
+  assert.equal((await runKill({ state, io })).outcome, "DONE");
+  assert.deepEqual(log, ["close", "sweep", "save:false:flat", "clearFlag", "clearDirective", "deleteKey"]);
+});
+
+test("kill: one still resting after the sweep = the owner is told where, the kill still finishes", async () => {
+  const state = { active: true, current_position: null, backstop_cleanup: [{ id: 9, symbol: "PERP_BTC_USDC" }] };
+  const texts = [];
+  const { io, log } = fakeIo({ sweep: (s) => s.backstop_cleanup }, state);
+  io.notify = async (t) => { texts.push(t); log.push("notify"); };
+  assert.equal((await runKill({ state, io })).outcome, "DONE");
+  assert.deepEqual(log, ["sweep", "notify", "save:false:flat", "clearFlag", "clearDirective", "deleteKey"]);
+  assert.match(texts[0], /old backstop stop may still rest on BTC/);
+  // a sweep that throws counts everything as still resting
+  const st2 = { active: true, current_position: null, backstop_cleanup: [{ id: 1, symbol: "PERP_SOL_USDC" }] };
+  const f2 = fakeIo({ sweep: () => { throw new Error("orderly down"); } }, st2);
+  const t2 = [];
+  f2.io.notify = async (t) => t2.push(t);
+  assert.equal((await runKill({ state: st2, io: f2.io })).outcome, "DONE");
+  assert.match(t2[0], /SOL/);
+});
+
+test("kill: nothing queued = no sweep; the give-up names the backstop still guarding the position", async () => {
+  const s1 = { active: true, current_position: null };
+  const f1 = fakeIo({ sweep: () => { throw new Error("must not run"); } }, s1);
+  await runKill({ state: s1, io: f1.io });
+  assert.ok(!f1.log.includes("sweep"));
+
+  const s2 = { active: true, kill_attempts: KILL_MAX_ATTEMPTS - 1, current_position: { ...POS, backstop: { id: 5, trigger: 1970 } } };
+  const f2 = fakeIo({ closes: false }, s2);
+  const texts = [];
+  f2.io.notify = async (t) => texts.push(t);
+  assert.equal((await runKill({ state: s2, io: f2.io })).outcome, "GAVE_UP");
+  assert.match(texts.at(-1), /backstop stop is still resting at \$1970/);
 });

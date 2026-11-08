@@ -165,7 +165,11 @@ product is what sits on top:
   (`cancelBackstop`; a failed cancel queues in `state.backstop_cleanup`, swept before the next live entry, which is
   refused on a market that still carries one; 10 tries then Telegram). Exchange flat + the order fired = Telegram, NOT
   booked to `agent_trades` (no fill read). Not on DCA positions or paper; the trail/BE don't move it. DEACTIVATE leaves
-  it resting with the position.
+  it resting with the position (the Lab + DELETE reply name it: `agentControls.mjs restingStop`, one copy for both).
+  Orderly keeps ONE position TP/SL per market + side: a refused place reads the market's working one
+  (`restingBackstop`, the SDK's match) and adopts ours by its exact trigger (a reply lost to a timeout); any other
+  is the owner's (`backstop.foreign`): never a second one, never cancelled by exec. KILL retries the queued cancels
+  with the key before deleting it (`io.sweep`), and Telegrams any still resting (fixed 2026-11-08).
 - **Graded-exit contract** (`exitContract:"R_CONTRACT"`, `app/lib/gradedExit.mjs`): stop 1.2× H4 ATR-14, target 1.5×,
   168h. **PAPER ONLY**: `gradedExitRefusal` refuses non-PAPER configs and extra exit parts (exec at the top of
   `enterPosition`; lab-api 409 `graded_exit_refused`). **One-wallet live lift, BUILT DISARMED** (`app/lib/liveLift.mjs`,

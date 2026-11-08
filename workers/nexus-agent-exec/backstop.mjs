@@ -15,6 +15,8 @@
 //     fire mid-ladder. DCA keeps exec's stop only.
 //   - The trail and breakeven don't move it: it stays at its entry level. It is a stalled-worker net,
 //     not a second copy of the exit logic.
+//   - A position TP/SL the owner set themselves takes the slot (Orderly keeps one per market + side).
+//     exec records it as `foreign`, never places a second one and never cancels it (restingBackstop).
 //   - A position closed by the backstop isn't booked to agent_trades (the ledger books only closes
 //     exec executes and reads the fill of). exec alerts the owner instead (backstopHit).
 // Pure; tests: backstop.test.mjs.
@@ -82,6 +84,38 @@ export function algoOrderIdFrom(reply) {
   const id = d.order_id ?? d.algo_order_id ?? d.rows?.[0]?.order_id ?? d.rows?.[0]?.algo_order_id;
   const n = num(id);
   return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+/** The read that lists a market's working position TP/SL orders (status INCOMPLETE = NEW + PARTIAL_FILLED). */
+export const restingListPath = (symbol) => `/v1/algo/orders?symbol=${encodeURIComponent(symbol)}&algo_type=POSITIONAL_TP_SL&status=INCOMPLETE`;
+
+/**
+ * The position TP/SL already working on this market, from a GET /v1/algo/orders reply. Orderly keeps
+ * ONE untriggered POSITIONAL_TP_SL per market per side, so while one rests every placement is refused:
+ * a placement that landed although its reply was lost (a timeout), or a stop the owner set on the
+ * Trade page. Matched the way the SDK finds a position's TP/SL (hooks findPositionTPSLFromOrders:
+ * symbol, POSITIONAL_TP_SL, CROSS, root status NEW / REPLACED / PARTIAL_FILLED; the trigger from its
+ * STOP_LOSS child). `ours` = that trigger is exactly the one exec computed for this position.
+ * `trigger` null = a working position TP/SL with no stop leg (a take-profit only).
+ * @returns {null | {found:false} | {found:true, id:number, trigger:number|null, ours:boolean}}
+ *   null = unreadable (never guessed)
+ */
+export function restingBackstop(reply, { symbol, trigger }) {
+  if (!reply || reply.success !== true || !reply.data || !Array.isArray(reply.data.rows)) return null;
+  const want = num(trigger);
+  for (const o of reply.data.rows) {
+    if (!o || o.symbol !== symbol || o.algo_type !== "POSITIONAL_TP_SL") continue;
+    if ((o.margin_mode ?? "CROSS") !== "CROSS") continue;
+    const st = String(o.root_algo_status ?? o.root_algo_order_status ?? o.algo_status ?? "").toUpperCase();
+    if (!LIVE_STATUSES.has(st)) continue;
+    const id = num(o.algo_order_id ?? o.order_id);
+    if (!Number.isSafeInteger(id) || id <= 0) continue;
+    const sl = Array.isArray(o.child_orders) ? o.child_orders.find((c) => c && c.algo_type === "STOP_LOSS") : null;
+    const px = num(sl?.trigger_price);
+    const stop = px > 0 ? px : null;
+    return { found: true, id, trigger: stop, ours: stop !== null && Number.isFinite(want) && stop === want };
+  }
+  return { found: false };
 }
 
 /** The DELETE path that cancels one algo order (query params, as the SDK sends them). */

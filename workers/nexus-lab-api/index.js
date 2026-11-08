@@ -67,6 +67,7 @@ export { NexusLock } from "./lock.mjs";
 const PAY_LOCK = { ttlMs: 30_000, waitMs: 3_000 };
 import { paperParity, axisForConfig, parityWindowStart } from "../../app/lib/paperParity.mjs";
 import { paperCostReread, paperFeeRate } from "../../app/lib/paperCosts.mjs";
+import { deactivatedMessage } from "../../app/lib/agentControls.mjs";
 import { okxJson } from "./okx.mjs";
 import { rankUniverse, RECORDED_COINS, HOLDOUT_COINS, UNIVERSE_RULES } from "./universe.mjs";
 import { FLOW_COINS, HOLDOUT_AXES, HOLDOUT_SIGNED_OFF, isHoldoutCoin } from "../../app/lib/recordedUniverse.mjs";
@@ -5451,11 +5452,22 @@ document.getElementById("btn").addEventListener("click",go);
         const denied = await requireOwner(dbody); if (denied) return denied;
         await AGENT_KV.delete(`agent:key:${address}`);
         const stateRaw = await AGENT_KV.get(`agent:state:${address}`);
-        let leftOpen = null; // a LIVE position the agent stops managing (no stop, no TP from here on)
+        let leftOpen = null; // a LIVE position the agent stops managing (only what rests on Orderly stays)
+        let warning = null;
+        let staleStops = null; // backstops left by earlier closes whose cancel never went through
         if (stateRaw) {
           const state = JSON.parse(stateRaw);
           const p = state.current_position;
-          if (p && !p.paper) leftOpen = { symbol: p.symbol, direction: p.direction, qty: p.remaining_qty ?? p.qty ?? null };
+          if (p && !p.paper) {
+            leftOpen = { symbol: p.symbol, direction: p.direction, qty: p.remaining_qty ?? p.qty ?? null, backstop: p.backstop?.id ? { trigger: p.backstop.trigger ?? null, own: p.backstop.foreign === true } : null };
+            warning = deactivatedMessage(p);
+          }
+          const stale = (state.backstop_cleanup || []).filter((it) => it && it.id && it.symbol);
+          if (stale.length) {
+            staleStops = stale.map((it) => ({ symbol: it.symbol, id: it.id }));
+            const where = [...new Set(stale.map((it) => String(it.symbol).replace(/^PERP_|_USDC$/g, "")))].join(", ");
+            warning = `${warning ? warning + " " : ""}An old backstop stop may still rest on ${where}: cancel it on the Trade page (TP/SL orders) before you trade there.`;
+          }
           state.active = false;
           state.current_position = null;
           await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
@@ -5465,9 +5477,7 @@ document.getElementById("btn").addEventListener("click",go);
           const users = JSON.parse(usersRaw).filter((u) => u !== address);
           await AGENT_KV.put("agent:users", JSON.stringify(users));
         }
-        return json(leftOpen
-          ? { ok: true, leftOpen, warning: `The ${String(leftOpen.symbol).replace(/^PERP_|_USDC$/g, "")} ${leftOpen.direction} is still open on Orderly with no stop. Close it yourself, or use kill next time to close before stopping.` }
-          : { ok: true }, request);
+        return json(warning ? { ok: true, leftOpen, ...(staleStops ? { staleStops } : {}), warning } : { ok: true }, request);
       }
 
       // POST /agent/:address/kill — kill switch
