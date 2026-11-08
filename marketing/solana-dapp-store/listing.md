@@ -11,12 +11,13 @@ Assets in this folder:
 | `banner-1200x600.png` | Banner | 1200×600 PNG. Source: `graphic.html?w=1200&h=600`. |
 | `feature-graphic-1200x1200.png` | Feature graphic (optional, for featured placement) | 1200×1200 PNG. Source: `graphic.html?w=1200&h=1200`. |
 | `phone-1-feed.png` | Screenshot 1 | 1080×1920. The Feed, real calls. |
-| `phone-2-proof.png` | Screenshot 2 | 1080×1920. The Proof page. |
-| `phone-3-scoreboard.png` | Screenshot 3 | 1080×1920. The signal scoreboard, misses included. |
+| `phone-2-proof.png` | Screenshot 2 | 1080×1920. The Proof page: the headline the scoreboard computes. |
+| `phone-3-scoreboard.png` | Screenshot 3 | 1080×1920. The signal board on /proof: every read being tested and where it stands. |
 | `phone-4-spot.png` | Screenshot 4 | 1080×1920. Spot: Solana majors, cross-chain to SOL. |
 
 The store asks for at least 4 screenshots, each at least 1080px on both sides, same orientation. Screenshots
-1–3 are the Play set (2026-10-14); 4 was rendered 2026-10-23. `graphic.html` loads Manrope from
+1–3 are the Play set (1 from 2026-10-14; 2 and 3 re-rendered 2026-11-07 from the live /proof); 4 was rendered
+2026-10-23. Re-render 2 whenever the /proof headline changes: it is a computed claim. `graphic.html` loads Manrope from
 `public/fonts` and IBM Plex Mono from `node_modules/@fontsource`, so render it from a checkout with
 dependencies installed.
 
