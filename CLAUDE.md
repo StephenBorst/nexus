@@ -316,7 +316,7 @@ product is what sits on top:
   fixed $10 risk a trade (1R) sized from the graded stop, 3×, $30/day, kill at −10R, 10-trade first tranche vs the paper
   wallet. Needs built first, each its own PR: `riskPerTradeUsd` sizing (BUILT 2026-11-07, PAPER only, below), an
   exchange-side backstop stop (BUILT 2026-11-07, #268), a one-wallet lift of `gradedExitRefusal`. **House rules**
-  (live-money-review.md, draft, 2026-11-07) bind every plan: a $10 mechanics test first (backstop shows, KILL clears it;
+  (live-money-review.md, SIGNED by borst 2026-11-08; a change = a new dated section) bind every plan: a $10 mechanics test first (backstop shows, KILL clears it;
   plumbing, not edge), 1R = 1% of a dedicated account, 3R/day, −5R/7d pause, kill at −10R or equity < 90% of deposit,
   parity CLEAN, size ×2 at most after 30 live trades meeting the bar. Arming and size increases = borst, in person.
 - **Fixed-risk sizing** (`config.riskPerTradeUsd`, `app/lib/riskSizing.mjs`): notional = risk ÷ the trade's own graded
