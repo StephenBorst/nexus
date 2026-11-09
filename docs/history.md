@@ -2415,3 +2415,18 @@ checked in exec right after the lift is decided; `livePlanRefusal` also refuses 
 
 Not built, on purpose (house rules: a breaker is a read, graded first; and borst runs the stop rules): the −5R/7d brake
 and the −10R / equity < 90% kill are manual today. Someone has to watch for them on the first tranche.
+
+## 2026-11-09 · Solana swap: instructions that grant control without moving a balance
+
+The Solana signer's simulate guard compares balances (SOL drop, input spent, output received). An instruction that
+moves nothing but hands over control passed it: an SPL `Approve` of the wallet's USDC account to a delegate,
+`SetAuthority` on a token account, a System `Assign` of the wallet. The program allowlist let Token / Token-2022 /
+System / ATA through at the top level, so a compromised Jupiter reply (or proxy) could have attached one to a normal
+swap and taken the whole balance later; the EVM side is capped at the trade amount by its exact approve, Solana had no
+cap. Now `instructionShapeRefusal` (jupBuild.mjs) allows only the shapes real /build replies use (ATA create paid by
+and owned by the wallet; System Transfer wallet → its own wSOL account; SyncNative on it; CloseAccount of it back to
+the wallet; Memo) and refuses the rest. A second gap found while fixing it: the transaction was compiled with the
+lookup-table contents the reply CLAIMED while the chain resolves the real ones, so a non-signer account (a close
+destination) could resolve elsewhere on-chain. `altClaimRefusal` now checks each claimed table against the chain
+(index for index, a prefix since tables only grow; unreadable = not signing). Live dry run of the bundled signer
+(USDC → JUP with our fee, SOL → JUP with wrap/unwrap) reached the wallet's sign step on both; nothing signed.

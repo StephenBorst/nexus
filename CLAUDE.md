@@ -632,7 +632,10 @@ product is what sits on top:
 - **Solana swap (Jupiter) — the ONE signer is `app/pages/token/solSwapExec.ts`**, BUY (SOL or USDC → token) and SELL
   (token → USDC), Jupiter `/build` via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
   (re-fetched fresh right before signing): quote bound to our mints + amount; slippage ≤ 300 bps and the quote's
-  minimum respects it (`checkMinOut`); fee payer = the wallet; top-level programs allowlisted; simulation must
+  minimum respects it (`checkMinOut`); fee payer = the wallet; top-level programs allowlisted; every instruction outside
+  Jupiter's program has a swap's shape (`instructionShapeRefusal`, jupBuild.mjs: ATA create for the wallet, wrap/sync/
+  close its own wSOL account; Approve / SetAuthority / Assign / any transfer out refused: the balance-only simulation
+  can't see them); the reply's lookup tables match the chain (`altClaimRefusal`, read via `/sol/rpc`); simulation must
   succeed and, from simulated balances, SOL drop ≤ SOL input + 0.02 SOL, input-token accounts drop ≤ the typed amount
   (`checkSpend`, summed across all the wallet's accounts for that mint), the wallet's OWN output accounts gain ≥ the
   minimum (`checkReceive`; first-buy account derived under the mint's own program, classic SPL or Token-2022). Every
