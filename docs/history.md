@@ -2445,3 +2445,12 @@ destination) could resolve elsewhere on-chain. `altClaimRefusal` now checks each
   isn't stored.
 - The brain stamped `ops:brain:heartbeat` in `finally`, so a run that died on a fatal error still read as alive to the
   monitor. It now stamps only a completed run (the no-active-users exits included).
+
+## 2026-11-09 · Carry engine ops routes failed open
+
+`authed()` was `!need || header === need`: with the secret `CARRY_ADMIN_TOKEN` unset, every POST ops route was open to
+anyone: `/carry/reset` (wipes the public paper record /proof shows), `/carry/tick` (forces rebalances at any time),
+`/carry/unkill`. The live path itself stayed safe (`runLive` checks `CARRY_LIVE`, the kill flag and the key on its own).
+Now `carryAdminOk` (carryAuth.mjs) needs a configured token of ≥ 16 chars and an exact match; no token = 401. Nothing
+automated calls these routes (the crons don't go through `authed`). Whether the secret was ever set isn't readable from a
+cloud session: `npx wrangler secret list` in `workers/nexus-carry-engine`.
