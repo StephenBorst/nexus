@@ -16,6 +16,13 @@ export const SETTLE_BROKER_ID = "nexus_trading";
 export const SETTLE_CHAIN_ID = 42161;
 export const SETTLE_VC = "0x6F7a338F2aA472838dEFD3283eB360d4Dff5D203"; // Orderly ledger, mainnet verifyContractAddress
 
+/**
+ * Orderly's answer when the account has no unsettled PnL (-1117, "no PNL to settle"; seen live on 0xd9f7…b449,
+ * 2026-11-09). Not a failure: there was nothing to book, so the balance is already final.
+ */
+export const SETTLE_NOTHING_CODE = -1117;
+export const nothingToSettle = (reply) => !!reply && reply.success === false && Number(reply.code) === SETTLE_NOTHING_CODE;
+
 /** The settle nonce from an Orderly GET /v1/settle_nonce reply, or null. */
 export function settleNonceFrom(reply) {
   if (!reply || reply.success === false) return null;
@@ -80,7 +87,8 @@ export function settleRequestBody({ message, signature, wallet }) {
  * @param {object} io { getNonce(): Promise<reply>   (key-signed GET /v1/settle_nonce)
  *                      signTyped(typedData): Promise<hex>  (the WALLET's EIP-712 signature, e.g. Bankr)
  *                      post(body): Promise<reply>  (key-signed POST /v1/settle_pnl) }
- * @returns {Promise<{ ok: boolean, stage: "done"|"nonce"|"signer"|"orderly", raw?: object }>}
+ * @returns {Promise<{ ok: boolean, settled?: boolean, stage: "done"|"nothing"|"nonce"|"signer"|"orderly", raw?: object }>}
+ *   ok + stage "nothing" = Orderly answered -1117: nothing to settle, nothing booked (settled false).
  */
 export async function runSettle({ wallet, now = Date.now(), getNonce, signTyped, post }) {
   const w = String(wallet).toLowerCase();
@@ -91,7 +99,8 @@ export async function runSettle({ wallet, now = Date.now(), getNonce, signTyped,
   const signature = await signTyped(settleTypedData(message));
   if ((await settleSigner(message, signature)) !== w) return { ok: false, stage: "signer" };
   const res = await post(settleRequestBody({ message, signature, wallet: w }));
-  return { ok: res?.success === true, stage: res?.success === true ? "done" : "orderly", raw: res ?? null };
+  if (nothingToSettle(res)) return { ok: true, settled: false, stage: "nothing", raw: res };
+  return { ok: res?.success === true, settled: res?.success === true, stage: res?.success === true ? "done" : "orderly", raw: res ?? null };
 }
 
 /** Plain words for a failed settle (route replies). */

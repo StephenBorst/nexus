@@ -8,7 +8,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { definedTypes } from "@orderly.network/types";
 import {
   settleNonceFrom, settleMessage, settleTypedData, settleRefusal, settleSigner, runSettle, settleFailure,
-  SETTLE_VC, SETTLE_BROKER_ID, SETTLE_CHAIN_ID,
+  SETTLE_VC, SETTLE_BROKER_ID, SETTLE_CHAIN_ID, SETTLE_NOTHING_CODE, nothingToSettle,
 } from "./settlePnl.mjs";
 import { WITHDRAW_VC } from "./withdrawV2.mjs";
 
@@ -76,6 +76,26 @@ test("runSettle refuses before posting: no nonce, or a signature from another wa
   const refused = await runSettle({ wallet: A, getNonce: async () => ({ success: true, data: { settle_nonce: 1 } }), signTyped: sign(alice), post: async () => ({ success: false, code: 17 }) });
   assert.deepEqual([refused.ok, refused.stage, refused.raw.code], [false, "orderly", 17]);
   assert.deepEqual([settleFailure(refused).error, settleFailure(refused).withdrawnAmount], ["settle_failed", 0]);
+});
+
+test("-1117 (no PnL to settle) is not a failure: ok, nothing booked; any other refusal still is", async () => {
+  assert.equal(SETTLE_NOTHING_CODE, -1117);
+  const live = { success: false, code: -1117, message: "no PNL to settle" }; // 0xd9f7…b449, 2026-11-09
+  assert.equal(nothingToSettle(live), true);
+  for (const r of [null, { success: true }, { success: false, code: 17 }, { success: false, code: "-1117x" }]) assert.equal(nothingToSettle(r), false, JSON.stringify(r));
+  const run = (reply) => runSettle({ wallet: A, now: T0, getNonce: async () => ({ success: true, data: { settle_nonce: 2 } }), signTyped: sign(alice), post: async () => reply });
+  const nothing = await run(live);
+  assert.deepEqual([nothing.ok, nothing.settled, nothing.stage], [true, false, "nothing"]);
+  const done = await run({ success: true, data: {} });
+  assert.deepEqual([done.ok, done.settled, done.stage], [true, true, "done"]);
+  const refused = await run({ success: false, code: 17 });
+  assert.deepEqual([refused.ok, refused.stage], [false, "orderly"]);
+});
+
+test("/settle-pnl answers -1117 with 200 nothingToSettle, never a 502", () => {
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const route = src.slice(src.indexOf('parts[0] === "settle-pnl"'), src.indexOf("// 3) Prepare"));
+  assert.match(route, /const settledReply = \(raw\) => nothingToSettle\(raw\)\s*\n\s*\? json\(\{ ok: true, settled: false, nothingToSettle: true,/);
 });
 
 test("nothing in lab-api posts an empty settle any more", () => {

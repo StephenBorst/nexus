@@ -413,6 +413,20 @@ test("a refused settle is reported and nothing is re-sent", async () => {
   // A settle signed by another wallet is refused before it's posted: settlePnl.test.mjs (runSettle).
 });
 
+test("code 78 + nothing to settle (-1117): the withdrawal goes on to read free collateral, never settle_failed", async () => {
+  const env = envOn();
+  await storeKey(env);
+  const signer = await storedKeySigner(env, A, { now: T0 });
+  const w = world({ answers: [{ success: false, code: 78 }, { success: true, data: { withdraw_id: 9 } }], freeUsdc: 3, settleAnswer: { success: false, code: -1117, message: "no PNL to settle" } });
+  const out = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 10 }, deps(w)));
+  assert.notEqual(out.body.error, "settle_failed");
+  assert.equal(out.body.ok, true);
+  assert.equal(withdrawCalls(w).length, 2, "retried at the free collateral");
+  const empty = world({ answers: [{ success: false, code: 78 }], freeUsdc: 0, settleAnswer: { success: false, code: -1117 } });
+  const none = await answer(() => bankrWithdrawV2(signer, { bankrApiKey: "bk", amount: 10 }, deps(empty)));
+  assert.deepEqual([none.body.error, none.body.withdrawnAmount], ["insufficient_free_collateral", 0], "nothing free: says so, nothing moves");
+});
+
 test("v2 prepare with settle: refused with the signed-settle route to use", async () => {
   const env = envOn();
   await storeKey(env);
