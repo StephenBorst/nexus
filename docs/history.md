@@ -2430,3 +2430,18 @@ lookup-table contents the reply CLAIMED while the chain resolves the real ones, 
 destination) could resolve elsewhere on-chain. `altClaimRefusal` now checks each claimed table against the chain
 (index for index, a prefix since tables only grow; unreadable = not signing). Live dry run of the bundled signer
 (USDC → JUP with our fee, SOL → JUP with wrap/unwrap) reached the wallet's sign step on both; nothing signed.
+
+## 2026-11-09 · Brain: a days-old price delta, a candle gate that never skipped, a heartbeat that lied
+
+- `market:prev:{symbol}` (the snapshot MOMENTUM / MEAN_REVERSION / OI_ONLY / CONFLUENCE measure their move from) had no
+  age limit; its timestamp was stored and never read. A market is only evaluated while a flat active agent watches it,
+  so the first tick after a quiet stretch read a multi-day move as one 5-minute cycle. After a close the 15-min
+  cooldown absorbed it; a freshly activated agent has no cooldown, so it could enter (live, on AUTONOMOUS) on it. Now a
+  snapshot older than 12 min (`prevSnapshotUsable`, brain logic.mjs) gives no delta that tick. lab-api's /signals and
+  agents routes read the same key for display and still see the old age (not changed here).
+- The candle recorder's hourly gate compared `now - last.t` with 55 min, but `last.t` is the START of the last closed
+  bar, always ≥ 60 min old: every 5-min tick re-fetched tv/history for ~19 markets and dropped the duplicate (~230
+  wasted Orderly calls an hour on the shared 10 req/s budget). `candleFetchDue` fetches only when the last closed bar
+  isn't stored.
+- The brain stamped `ops:brain:heartbeat` in `finally`, so a run that died on a fatal error still read as alive to the
+  monitor. It now stamps only a completed run (the no-active-users exits included).

@@ -16,7 +16,7 @@
 // ═══════════════════════════════════════════════════════════
 
 import { orderlyGet } from "../nexus-lab-api/orderlyGet.mjs";
-import { deriveSignal, computeRegime, atrPct, oiSnapshotDue, signalSourceT } from "./logic.mjs";
+import { deriveSignal, computeRegime, atrPct, oiSnapshotDue, signalSourceT, prevSnapshotUsable, candleFetchDue } from "./logic.mjs";
 import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 import { HOLDOUT_PERPS } from "../../app/lib/recordedUniverse.mjs";
@@ -51,6 +51,7 @@ const orderlyPublicGet = (url) => orderlyGet(url, { httpErrors: "return" });
 
 export default {
   async scheduled(event, env) {
+    let completed = false; // the heartbeat is stamped only for a run that got through (no fatal error)
     try {
       // Core OI history is MARKET DATA, not a per-user artifact — record it every
       // tick BEFORE any early return, so the CONFLUENCE backtest series keeps
@@ -76,9 +77,9 @@ export default {
       await recordCandlesForSymbols([...HARNESS_SYMBOLS, ...HOLDOUT_PERPS.filter((s) => !HARNESS_SYMBOLS.includes(s))], env);
 
       const usersRaw = await env.NEXUS_AGENT.get("agent:users");
-      if (!usersRaw) { console.log("[brain] no active users"); return; }
+      if (!usersRaw) { console.log("[brain] no active users"); completed = true; return; }
       const users = JSON.parse(usersRaw);
-      if (users.length === 0) { console.log("[brain] no active users"); return; }
+      if (users.length === 0) { console.log("[brain] no active users"); completed = true; return; }
 
       console.log(`[brain] processing ${users.length} active user(s)`);
 
@@ -187,13 +188,15 @@ export default {
           console.error(`[brain] assign error for ${address.slice(0, 10)}:`, e.message);
         }
       }
+      completed = true;
     } catch (e) {
       console.error("[brain] fatal error:", e.message);
     } finally {
-      // Liveness heartbeat — stamps every completed run regardless of whether
-      // any signals were emitted (e.g. all active users hold open positions, so
-      // the brain correctly emits nothing). The ops monitor watches this.
-      try { await env.NEXUS_AGENT.put("ops:brain:heartbeat", String(Date.now())); } catch { /* best-effort heartbeat */ }
+      // Liveness heartbeat — stamps every COMPLETED run regardless of whether any signals were
+      // emitted (e.g. all active users hold open positions, so the brain correctly emits nothing).
+      // A run that died on a fatal error doesn't stamp, so the ops monitor's "brain down" alert sees a
+      // brain that crashes every tick (it used to stamp in `finally` regardless).
+      if (completed) { try { await env.NEXUS_AGENT.put("ops:brain:heartbeat", String(Date.now())); } catch { /* best-effort heartbeat */ } }
     }
   },
 };
@@ -248,7 +251,9 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
 
   // Prior snapshot for this symbol (set last cycle).
   const prevRaw = await env.NEXUS_AGENT.get(`market:prev:${symbol}`);
-  const prev = prevRaw ? JSON.parse(prevRaw) : null;
+  const stored = prevRaw ? JSON.parse(prevRaw) : null;
+  // A snapshot from more than ~2 cycles ago isn't "last cycle": no delta this tick (logic.mjs).
+  const prev = prevSnapshotUsable(stored) ? stored : null;
   const priceChange = prev && prev.price ? (markPrice - prev.price) / prev.price : 0;
   const oiChange = prev && prev.oi ? (openInterest - prev.oi) / prev.oi : 0;
 
@@ -448,7 +453,7 @@ async function recordCandlesForSymbols(symbols, env) {
         }
       }
 
-      if (last && now - last.t < 55 * 60 * 1000) continue; // hourly — skip the fetch entirely
+      if (last && !candleFetchDue(last, now)) continue; // the last closed bar is stored: skip the fetch
 
       const nowSec = Math.floor(now / 1000);
       const th = await orderlyPublicGet(`${ORDERLY_API}/tv/history?symbol=${symbol}&resolution=60&from=${nowSec - 3 * 3600}&to=${nowSec}`);

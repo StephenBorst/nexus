@@ -92,7 +92,9 @@ product is what sits on top:
 - **nexus-lab-api** (`workers/nexus-lab-api`) → `og.nexustradinglabs.com` = `AGENT_API`. Its `*.workers.dev` is NOT
   routed (404/1042): always use the custom domain. `GET /agent/:a` returns `state` wholesale.
 - **nexus-agent-exec**: 1-min cron, enters/monitors/closes. Stamps `ops:exec:heartbeat`; `GET /health`.
-- **nexus-agent-brain**: 5-min cron, writes `agent:signal:{addr}` and the hourly history series.
+- **nexus-agent-brain**: 5-min cron, writes `agent:signal:{addr}` and the hourly history series. Its price/OI delta is
+  measured from `market:prev:{symbol}` only when that snapshot is ≤ 12 min old (`prevSnapshotUsable`; else no delta);
+  candles are fetched only when the last closed bar is missing (`candleFetchDue`); the heartbeat stamps completed runs only.
 - **nexus-carry-engine**: sector-neutral funding-carry basket. Hourly = PAPER record; `*/5` = LIVE maker re-quote, a
   no-op unless `CARRY_LIVE=true`. KV `CARRY` = `b34f3af62cfe4bc2b5d03ce9c7b55868`. Reached on
   `https://nexus-carry-engine.stephenpatrick24.workers.dev` (`CARRY_API` in `app/pages/proof/CarrySleeve.tsx` and
