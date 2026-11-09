@@ -101,7 +101,8 @@ product is what sits on top:
   `app/config/assistantTools.ts`); no custom domain exists, don't "fix" it. **Live path is built, deployed DISARMED,
   owner-only:** don't set `CARRY_LIVE` or add key secrets. Guardrails: no key / `carry:kill` / unbalanced plan ⇒ no-op,
   per-order cap, POST_ONLY. Maker execution is mandatory (taker fees ≈ breakeven). Ops routes need header
-  `x-carry-token`. `carryBasket.mjs` is shared with `tools/backtest/relvalue4.mjs`. Read `README.md` before touching it.
+  `x-carry-token` = secret `CARRY_ADMIN_TOKEN` (≥16 chars), FAIL CLOSED: no secret = 401 for everyone (`carryAuth.mjs`;
+  it used to let everyone in, 2026-11-09). `carryBasket.mjs` is shared with `tools/backtest/relvalue4.mjs`. Read `README.md` before touching it.
   Its tests are split by concern; glob the dir.
 - **nexus-ledger-anchor**: hourly anchor + `runMonitor` (Telegram ops alerts: signer gas, ledger drift >6h, brain down
   >15 min via `ops:brain:heartbeat`, exec down >10 min). `GET /monitor-now`.

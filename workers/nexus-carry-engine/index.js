@@ -10,6 +10,7 @@
 import { freshState, stepPaper, summarize } from "./carryPaper.mjs";
 import { snapshotFromFutures, coverage } from "./carryLive.mjs";
 import { runLive } from "./carryLiveExec.mjs";
+import { carryAdminOk } from "./carryAuth.mjs";
 
 const ORDERLY = "https://api-evm.orderly.org";
 const STATE_KEY = "carry:state";
@@ -52,10 +53,8 @@ async function runTick(env, snap) {
 const json = (o, status = 200) => new Response(JSON.stringify(o), {
   status, headers: { "content-type": "application/json", "access-control-allow-origin": "*" },
 });
-const authed = (req, env) => {
-  const need = env.CARRY_ADMIN_TOKEN || "";
-  return !need || req.headers.get("x-carry-token") === need;
-};
+// Fail closed: no CARRY_ADMIN_TOKEN = nobody (carryAuth.mjs). It used to let everybody in.
+const authed = (req, env) => carryAdminOk(req.headers.get("x-carry-token"), env.CARRY_ADMIN_TOKEN);
 
 export default {
   async scheduled(event, env, ctx) {

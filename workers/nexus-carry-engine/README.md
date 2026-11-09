@@ -30,7 +30,8 @@ Run tests: `node --test workers/nexus-carry-engine/carryBasket.test.mjs` (and `c
 
 ## Deploy handoff (needs CF auth)
 1. `npx wrangler kv namespace create CARRY` → paste the id into `wrangler.toml`.
-2. `npx wrangler secret put CARRY_ADMIN_TOKEN` (gates the POST ops routes).
+2. `npx wrangler secret put CARRY_ADMIN_TOKEN` (gates the POST ops routes; ≥16 chars; without it every ops route is
+   refused, `carryAuth.mjs`).
 3. `npx wrangler deploy` from this dir.
 4. (Optional) add it to `.github/workflows/deploy.yml` so CI redeploys it from source, and
    point a route/custom domain at it for the frontend to read `/carry/record`.
