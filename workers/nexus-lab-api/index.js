@@ -117,7 +117,7 @@ import { wantsV2, v2Signer, hasV2Key, storedKeySigner } from "./tradingSigner.mj
 import { handleAgentKill } from "./routes-kill.mjs";
 import { agentOwnerRefusal, v2KeyPointer, twapFitsKey, configChallengeNeeded } from "./agentAuth.mjs";
 import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, answer as withdrawAnswer, freeCollateralFrom, insufficientFree } from "./withdrawV2.mjs";
-import { runSettle, settleFailure, settleNonceFrom, settleMessage, settleTypedData, settleRefusal, settleSigner, settleRequestBody } from "./settlePnl.mjs";
+import { runSettle, settleFailure, settleNonceFrom, settleMessage, settleTypedData, settleRefusal, settleSigner, settleRequestBody, nothingToSettle } from "./settlePnl.mjs";
 import { v1RegisterOff, v1RegistrationRefusal, bankrRegisterV2Refusal, registerPageV2Html } from "./v1Registration.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
@@ -3566,9 +3566,12 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       };
       const getNonce = () => spReq("GET", "/v1/settle_nonce", null);
       const postSettle = (b) => spReq("POST", "/v1/settle_pnl", b);
-      const settledReply = (raw) => json({ ok: raw?.success === true, settled: raw?.success === true, scope: "account",
-        hint: raw?.success === true ? "PnL settled into the balance. Orderly books it within a few seconds; check /positions before withdrawing." : "Orderly refused the settle.",
-        raw }, request, raw?.success === true ? 200 : 502);
+      const settledReply = (raw) => nothingToSettle(raw)
+        ? json({ ok: true, settled: false, nothingToSettle: true, scope: "account",
+          hint: "Nothing to settle: this account has no unsettled PnL, so its balance is already final.", raw }, request)
+        : json({ ok: raw?.success === true, settled: raw?.success === true, scope: "account",
+          hint: raw?.success === true ? "PnL settled into the balance. Orderly books it within a few seconds; check /positions before withdrawing." : "Orderly refused the settle.",
+          raw }, request, raw?.success === true ? 200 : 502);
 
       // 1) Bankr signs: the whole settle in one call.
       if (spbody.bankrApiKey) {

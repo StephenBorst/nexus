@@ -460,7 +460,9 @@ product is what sits on top:
   → POST `/v1/settle_pnl {signature, message+chainType "EVM", userAddress, verifyingContract}`. An empty `{}` settles nothing
   (every path did that until 2026-11-06). Bankr withdraws settle via Bankr's signature (`runSettle`; a failed settle =
   502 `settle_failed`, nothing re-sent). `/settle-pnl`: `bankrApiKey` = one call; else prepare (typed data) → submit
-  `{message, signature}`. The code-78 retry sizes from `/v1/positions` `free_collateral`, never the holding; `withdrawnAmount`
+  `{message, signature}`. Orderly's -1117 ("no PNL to settle") = nothing to settle, not a failure (`nothingToSettle`:
+  runSettle stage `nothing`, /settle-pnl 200 `nothingToSettle:true`, the withdraw retry carries on; 2026-11-09, live on
+  0xd9f7…b449). The code-78 retry sizes from `/v1/positions` `free_collateral`, never the holding; `withdrawnAmount`
   = what Orderly accepted (0 on a refusal).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
