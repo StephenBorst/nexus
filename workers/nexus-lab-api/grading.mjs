@@ -19,6 +19,9 @@ import {
   classifyMacro,
 } from "./logic.mjs";
 import { REGIME_PAD_S, makeGradeCandles, candlesForCall, callWindow, gradeSymbol, neededFrom } from "./gradeCandles.mjs";
+import { loadMinuteWindow } from "./minuteCandles.mjs";
+import { reconcileMinuteIndex } from "./minuteIndex.mjs";
+import { isMinuteGraded } from "../../app/lib/minuteGrade.mjs";
 
 // Candle pages one grading pass may fetch. The hourly cron can take a whole cold backfill (67 pages
 // for the 27 symbols on 2026-09-27); a leaderboard read is a user waiting, so it takes less and
@@ -104,9 +107,68 @@ export const GRADE_V = 3;
 export const PLAN_V = 2;
 export const isCurrentStamp = (t) => (t?.gradedOutcome === "WIN" || t?.gradedOutcome === "LOSS") && t?.gradeV === GRADE_V;
 
-// The fields the hourly pass writes on a public call. When it writes back, it copies ONLY these onto
+// The fields a grading pass writes on a public call. When it writes back, it copies ONLY these onto
 // a fresh read of the record, so a save that landed during the pass isn't overwritten.
-const PASS_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "exitReason", "fillState", "filledAt", "tp1HitAt", "planScore", "planFlags", "planV", "regimeTrend", "regimeVol", "regimeAlign", "status"];
+// Two writers since minute grading (2026-11-12, app/lib/minuteGrade.mjs), each owning its own fields
+// on a minute-graded call so neither copies a stale value over the other's:
+//   GRADE_FIELDS — the grade and the fill: the hourly pass on an hourly call, the minute grader
+//                  (minuteGrader.mjs) on a minute-graded one.
+//   PLAN_FIELDS  — plan quality + regime, read from the hourly bars before the post: the hourly pass.
+export const GRADE_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "exitReason", "fillState", "filledAt", "tp1HitAt", "status"];
+export const PLAN_FIELDS = ["planScore", "planFlags", "planV", "regimeTrend", "regimeVol", "regimeAlign"];
+export const PASS_FIELDS = [...GRADE_FIELDS, ...PLAN_FIELDS];
+
+/**
+ * Stamp one fresh grade onto an unresolved call (the hourly pass and the minute grader share it).
+ * Returns { changed, resolved: {outcome, r} | null (a new grade, to announce), regraded (an older
+ * stamp corrected or dropped: never announced), fills: fill-event kinds (callStatus.mjs) }.
+ */
+export function applyGrade(t, g, cd, nowMs = Date.now()) {
+  let changed = false, resolved = null, regraded = false;
+  const had = t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS";
+  if (g.outcome === "WIN" || g.outcome === "LOSS") {
+    if (!had || t.gradedOutcome !== g.outcome) t.gradedAt = nowMs;
+    t.gradedOutcome = g.outcome;
+    t.gradedR = g.r;
+    t.gradeV = GRADE_V;
+    t.exitedAt = g.exitAt ? g.exitAt * 1000 : null;
+    if (g.exitReason) t.exitReason = g.exitReason; else delete t.exitReason; // "TIME": a declared time stop closed it
+    changed = true;
+    if (had) regraded = true;
+    else resolved = { outcome: g.outcome, r: g.r };
+  } else if (had) {
+    // An old stamp the call's own window doesn't support: it goes, and the call grades live.
+    delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV; delete t.exitedAt; delete t.exitReason;
+    changed = true; regraded = true;
+  }
+  const before = { fillState: t.fillState, tp1HitAt: t.tp1HitAt };
+  const fills = [];
+  if (applyFillStamp(t, g, cd)) { changed = true; fills.push(...fillEvents(before, t)); }
+  const status = gradedStatusOf(t.gradedOutcome);
+  if (t.status !== status) { t.status = status; changed = true; }
+  return { changed, resolved, regraded, fills };
+}
+
+/**
+ * Write a pass's results onto a FRESH read of the record, copying only `fieldsFor(call)` (null =
+ * nothing) for each public call: an owner's save during the pass (a new call, a timeline note), or the
+ * other grading pass's fields, must not be lost to this older copy.
+ */
+export async function writePassFields(env, key, data, fieldsFor) {
+  let fresh = null;
+  try { const f = JSON.parse((await env.LAB_STORE.get(key)) || "null"); if (f && Array.isArray(f.theses)) fresh = f; } catch { fresh = null; }
+  if (fresh) {
+    const mine = new Map((data.theses || []).filter((x) => x && x.id).map((x) => [x.id, x]));
+    for (const ft of fresh.theses) {
+      const m = ft && ft.isPublic ? mine.get(ft.id) : null;
+      const fields = m ? fieldsFor(m) : null;
+      if (!fields) continue;
+      for (const k of fields) { if (m[k] === undefined) delete ft[k]; else ft[k] = m[k]; }
+    }
+    data = fresh;
+  }
+  await env.LAB_STORE.put(key, JSON.stringify(data));
+}
 
 // Where an UNRESOLVED call's entry stands, so a card never shows a live P&L for an order that never
 // filled. "WORKING" = the entry hasn't traded (a resting order); "OPEN" = it has, `filledAt` = the post
@@ -159,9 +221,14 @@ export const ADVICE_FLAG_TEXT = {
 // in one request). null = not gradeable yet (no candles back to the post, or Orderly refused):
 // callers keep the stored status and try again later. The thesis FORM stores BARE tickers
 // ("BTC"); gradeSymbol maps them to the Orderly perp id, which /tv/history needs.
+// A minute-graded call (app/lib/minuteGrade.mjs) reads the 1-minute archive the minute grader keeps
+// (read-only: no Orderly call on a read), so the page, its card and /verify grade it on the same bars.
 export async function fetchGradeHistory(symbol, createdAt, env, opts = {}) {
   if (!env) return null;
-  try { return await candlesForCall(env, symbol, createdAt, opts); }
+  try {
+    if (isMinuteGraded({ createdAt })) return await loadMinuteWindow(env, symbol, createdAt);
+    return await candlesForCall(env, symbol, createdAt, opts);
+  }
   catch (e) { console.error("[grade] history", symbol, String((e && e.message) || e)); return null; }
 }
 
@@ -176,6 +243,7 @@ export async function gradePublicTheses(env) {
   // One candle-store run for the whole pass: each symbol is loaded once and extended back to the
   // oldest call that needs it, within the run's page budget.
   const gc = makeGradeCandles(env, { budget: CRON_PAGE_BUDGET });
+  const openMinute = [];   // minute-graded calls still open: their index keys are re-checked below
   for (const key of listed.keys) {
     const raw = await env.LAB_STORE.get(key.name);
     if (!raw) continue;
@@ -187,11 +255,15 @@ export async function gradePublicTheses(env) {
     const justFilled = [];   // resting orders that traded, split calls whose TP1 half closed (callStatus.mjs)
     for (const t of (data.theses || [])) {
       if (!t.isPublic || !t.symbol || !t.createdAt || t.duplicateOf) continue; // copies: graded in their owner's record
+      // A minute-graded call's grade + fill are the minute grader's (minuteGrader.mjs): this pass only
+      // stamps its plan quality + regime (hourly bars before the post) and keeps it in the open index.
+      const minute = isMinuteGraded(t);
       // A published call's status is the server's grade, never a self-mark (callLock.mjs): a legacy
       // "HIT_TP" or "INVALIDATED" the owner typed reads as live until the grade lands.
       const derived = gradedStatusOf(t.gradedOutcome);
-      if (t.status !== derived) { t.status = derived; changed = true; }
+      if (!minute && t.status !== derived) { t.status = derived; changed = true; }
       const resolved = isCurrentStamp(t); // a stamp from this grader is final
+      if (minute && !resolved) openMinute.push({ wallet: key.name.replace("lab:", ""), t });
       // Plan quality + regime are properties of the MOMENT THE CALL WAS POSTED, so
       // they're stamped once and never revisited — including on already-resolved
       // calls that predate this feature (backfill). Skipped beyond the history
@@ -199,8 +271,8 @@ export async function gradePublicTheses(env) {
       const stampable = (t.planScore === undefined || t.planV !== PLAN_V) && t.createdAt > Date.now() - 60 * 86400 * 1000;
       // Exit time (2026-10-22): a call graded before the stamp existed gets it once, from the same
       // candles. undefined = never derived; null = derived and not available.
-      const needsExit = resolved && t.exitedAt === undefined;
-      if (resolved && !stampable && !needsExit) continue;
+      const needsExit = !minute && resolved && t.exitedAt === undefined;
+      if (minute ? !stampable : (resolved && !stampable && !needsExit)) continue;
 
       // null = the candles don't reach back to this call yet (budget / Orderly refusal): leave it
       // for the next run rather than grade or stamp it on a partial window.
@@ -228,47 +300,17 @@ export async function gradePublicTheses(env) {
         changed = true;
       }
 
-      if (!resolved) {
-        const g = gradeCall(t, cd);
-        const had = t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS";
-        if (g.outcome === "WIN" || g.outcome === "LOSS") {
-          if (!had || t.gradedOutcome !== g.outcome) t.gradedAt = Date.now();
-          t.gradedOutcome = g.outcome;
-          t.gradedR = g.r;
-          t.gradeV = GRADE_V;
-          t.exitedAt = g.exitAt ? g.exitAt * 1000 : null;
-          if (g.exitReason) t.exitReason = g.exitReason; else delete t.exitReason; // "TIME": a declared time stop closed it
-          changed = true;
-          if (had) regraded++;
-          else { graded++; justResolved.push({ t, outcome: g.outcome, r: g.r }); } // corrections aren't announced
-        } else if (had) {
-          // An old stamp the call's own window doesn't support: it goes, and the call grades live.
-          delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV; delete t.exitedAt; delete t.exitReason;
-          changed = true; regraded++;
-        }
-        const before = { fillState: t.fillState, tp1HitAt: t.tp1HitAt };
-        if (applyFillStamp(t, g, cd)) {
-          changed = true;
-          for (const kind of fillEvents(before, t)) justFilled.push({ t, kind });
-        }
-        t.status = gradedStatusOf(t.gradedOutcome);
+      if (!resolved && !minute) {
+        const r = applyGrade(t, gradeCall(t, cd), cd);
+        if (r.changed) changed = true;
+        if (r.regraded) regraded++;
+        if (r.resolved) { graded++; justResolved.push({ t, ...r.resolved }); } // corrections aren't announced
+        for (const kind of r.fills) justFilled.push({ t, kind });
       }
     }
     if (changed) {
-      // Write onto a FRESH read, copying only what this pass computes: an owner's save during the
-      // pass (a new call, a timeline note) must not be lost to this older copy.
-      let fresh = null;
-      try { const f = JSON.parse((await env.LAB_STORE.get(key.name)) || "null"); if (f && Array.isArray(f.theses)) fresh = f; } catch { fresh = null; }
-      if (fresh) {
-        const mine = new Map((data.theses || []).filter((x) => x && x.id).map((x) => [x.id, x]));
-        for (const ft of fresh.theses) {
-          const m = ft && ft.isPublic ? mine.get(ft.id) : null;
-          if (!m) continue;
-          for (const k of PASS_FIELDS) { if (m[k] === undefined) delete ft[k]; else ft[k] = m[k]; }
-        }
-        data = fresh;
-      }
-      await env.LAB_STORE.put(key.name, JSON.stringify(data)); walletsWritten++;
+      // A minute-graded call's grade fields are the minute grader's: only its plan fields go back.
+      await writePassFields(env, key.name, data, (m) => (isMinuteGraded(m) ? PLAN_FIELDS : PASS_FIELDS)); walletsWritten++;
       // Only now that the grade is durable. If the put throws we skip the fan-out and
       // the next pass re-resolves cleanly — better a late notification than a phantom
       // one for a grade that was never saved.
@@ -282,7 +324,10 @@ export async function gradePublicTheses(env) {
     }
   }
   await gc.flush();
-  console.log(`[grade] resolved ${graded} calls (${regraded} older stamps re-derived) across ${walletsWritten} wallets · ${gc.pagesUsed()} candle pages`);
+  let indexed = 0;
+  try { indexed = await reconcileMinuteIndex(env.LAB_STORE, openMinute); }
+  catch (e) { console.error("[grade] minute index reconcile failed:", String(e?.message || e)); }
+  console.log(`[grade] resolved ${graded} calls (${regraded} older stamps re-derived) across ${walletsWritten} wallets · ${gc.pagesUsed()} candle pages · ${openMinute.length} open minute-graded (${indexed} re-indexed)`);
   return graded;
 }
 
@@ -333,8 +378,14 @@ export async function computeCallerStats(env, _unusedHorizonS = 30 * 86400, opts
   for (const { wallet, t } of calls) {
     const sym = gradeSymbol(t.symbol);
     const cd = sym ? callWindow(stores[sym], t.createdAt) : null;
-    if (!cd) continue; // candles don't reach back to this call yet: not graded on this read
-    const g = gradeCall(t, cd);
+    // A minute-graded call counts the minute grader's stamp (server-only fields, sealed by callLock;
+    // /verify re-runs it on the archived minutes). Its regime + plan still read the hourly bars, when
+    // they're loaded. Every other call is graded live on this read, as before.
+    const minute = isMinuteGraded(t);
+    if (!minute && !cd) continue; // candles don't reach back to this call yet: not graded on this read
+    const g = minute
+      ? (isCurrentStamp(t) ? { outcome: t.gradedOutcome, r: Number(t.gradedR) || 0 } : { outcome: "PENDING", r: 0 })
+      : gradeCall(t, cd);
     if (g.outcome === "PENDING" || g.outcome === "INVALID") continue;
     const a = byWallet[wallet] || (byWallet[wallet] = { calls: 0, wins: 0, rSum: 0, resolved: [], regimeRows: [], planScored: [], expRows: [], _macro: [], _contra: { calls: 0, wins: 0, rSum: 0 }, _crowd: { calls: 0, wins: 0, rSum: 0 } });
     a.calls += 1; if (g.outcome === "WIN") a.wins += 1; a.rSum += g.r;
@@ -353,10 +404,10 @@ export async function computeCallerStats(env, _unusedHorizonS = 30 * 86400, opts
 
     // Attribute the SAME graded R to the regime the call was posted into. Same
     // candles, same first-touch outcome — this only asks "in which market?".
-    const reg = classifyRegime(cd, Math.floor((t.createdAt || 0) / 1000));
+    const reg = cd ? classifyRegime(cd, Math.floor((t.createdAt || 0) / 1000)) : null;
     if (reg) a.regimeRows.push({ buckets: regimeBucketsOf(t.direction, reg), r: g.r, win: g.outcome === "WIN" });
     // Process grade: was the call well-formed at post time (public-verifiable half).
-    const pq = planQuality(t, cd);
+    const pq = cd ? planQuality(t, cd) : null;
     if (pq) a.planScored.push(pq);
 
     // Contrarian attribution: was this call made AGAINST the crowd lean that PRECEDED

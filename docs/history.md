@@ -2476,3 +2476,15 @@ reads (taker 0xd9f7…b449, borst + a session): Nordstern Ethereum `0xa929…4dd
 on Ethereum, Base, Arbitrum, Polygon (not seen live on Optimism: 0x refused that probe). Robinhood Chain (4663) has no
 router read yet, so it has no in-app route until one is. The same probes settled "is the 0x key set?": yes; 0x answered
 dust sizes Nordstern 422'd, and loses on price at normal sizes.
+
+## 2026-11-12 · Instant settlement: calls graded on 1-minute bars
+
+Calls sat WORKING / ACTIVE for up to an hour after price traded their level: the only grader was the hourly pass
+on 1-hour candles (`17 * * * *`). A Bankr-drafted brief proposed a Node service grading on Orderly websocket mark
+ticks with heaps and per-exit anchoring. Kept the goal, not the design: a mark tick can't be re-checked by anyone
+else and isn't a trade, there is no Node server or SQL (Workers + KV), per-exit anchoring only burns gas, and the
+agents (exec, 1-min cron) were already fast. Shipped instead (borst's go: cutoff + archive, phases 1 + 2):
+the same `gradeCall` on public 1-minute bars for calls from 2026-11-13T00:00Z, an archive of those bars with no
+expiry so `/verify` keeps working after Orderly ages them out, a 1-minute cron that only re-grades calls whose
+levels traded, and a "· CONFIRMING" hint on cards from the browser's live mark (display only). Phase 3, a
+Durable Object on Orderly's websocket as a faster trigger, is held. Rule: `docs/research/minute-grading.md`.

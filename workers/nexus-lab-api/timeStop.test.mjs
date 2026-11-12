@@ -5,9 +5,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { gradeCall } from "./logic.mjs";
+import { PASS_FIELDS, GRADE_FIELDS } from "./grading.mjs";
 import { sealTheses, SERVER_FIELDS } from "./callLock.mjs";
 import { registeredNotes, thesisFromRegistration, checkRegistration, SPLIT_TAG } from "./thesisRegister.mjs";
 import { timeStopPlan, copiedTimeStop, timeExitLabel, callInvalidReason, TIME_STOP_FROM_MS, TIME_EXIT } from "../../app/lib/callMath.mjs";
+import { _pinMinuteGradeFrom } from "../../app/lib/minuteGrade.mjs";
+// This suite tests the HOURLY grader on calls built from Date.now(): pin it (minuteGrade.mjs).
+_pinMinuteGradeFrom(Infinity);
 
 const H = 3600;
 const HOUR0 = Date.UTC(2026, 10, 10, 12) / 1000;            // a posting hour after the cutoff (sec)
@@ -140,8 +144,9 @@ test("the publish lock refuses a bad declaration, judged at the server's publish
 
 test("exitReason is server-only, and the hourly pass carries it", () => {
   assert.ok(SERVER_FIELDS.includes("exitReason"));
+  // Both grading passes carry it: the hourly pass (PASS_FIELDS) and the minute grader (GRADE_FIELDS).
+  assert.ok(PASS_FIELDS.includes("exitReason") && GRADE_FIELDS.includes("exitReason"));
   const src = readFileSync(new URL("./grading.mjs", import.meta.url), "utf8");
-  assert.match(src, /const PASS_FIELDS = \[[^\]]*"exitReason"/);
   assert.match(src, /if \(g\.exitReason\) t\.exitReason = g\.exitReason; else delete t\.exitReason;/);
 });
 

@@ -77,8 +77,9 @@ export default function HowWeGrade({ scorecard, isMobile }: { scorecard: Scoreca
       </Block>
 
       <Block title="How calls are graded">
-        From public 1-hour prices, once the entry trades. First touch of the target or the stop decides it; a candle touching both is a
-        loss. A win pays the R the posted levels make. Nobody types in a result.
+        From public prices, once the entry trades. Calls posted from 13 Nov 2026 are graded on 1-minute bars and settle within a minute
+        or two; older calls keep their 1-hour grade. First touch of the target or the stop decides it; a bar touching both is a loss.
+        A win pays the R the posted levels make. Nobody types in a result. The minutes are archived, so anyone can re-run the grade.
       </Block>
 
       <Block title="How agents are graded">

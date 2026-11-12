@@ -1,7 +1,7 @@
 // Run: node --test app/lib/callLifecycle.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { callLifecycle, showsLivePnl, distanceToEntry, workingLine, ENTRY_AT_MARK_PCT } from "./callLifecycle.mjs";
+import { callLifecycle, showsLivePnl, distanceToEntry, workingLine, provisionalTouch, ENTRY_AT_MARK_PCT } from "./callLifecycle.mjs";
 import { ENTRY_AT_MARK_PCT as GRADER_PCT } from "../../workers/nexus-lab-api/logic.mjs";
 
 const call = (over = {}) => ({ status: "ACTIVE", direction: "LONG", entryPrice: 2400, stopLoss: 2350, takeProfit1: 2700, ...over });
@@ -52,4 +52,38 @@ test("callLifecycle: a call the grader can never grade is INVALID, never a live 
   assert.equal(callLifecycle({ ...wrongSide, gradedOutcome: "LOSS" }), "CLOSED");
   const c = call();
   assert.equal(callLifecycle({ ...c, exitPlan: "SPLIT_50", takeProfit2: c.takeProfit1, fillState: "OPEN" }), "OPEN");
+});
+
+// ── the live mark's hint before the grader stamps (Phase 1, display only) ─────
+test("a resting LONG limit under the market reads ENTRY once the mark comes down to it, not before", () => {
+  const t = call({ fillState: "WORKING", publishMark: { px: 2538, at: 1 } });   // entry 2400, market above
+  assert.equal(provisionalTouch(t, 2450), null);
+  assert.equal(provisionalTouch(t, 2400), "ENTRY");
+  assert.equal(provisionalTouch(t, 2390), "ENTRY", "through it counts too");
+  // A breakout entry ABOVE the market fills when the mark rises to it.
+  const up = call({ fillState: "WORKING", entryPrice: 2600, stopLoss: 2550, takeProfit1: 2800, publishMark: { px: 2538, at: 1 } });
+  assert.equal(provisionalTouch(up, 2590), null);
+  assert.equal(provisionalTouch(up, 2601), "ENTRY");
+  // No publish mark: only a mark right at the entry says anything.
+  assert.equal(provisionalTouch(call({ fillState: "WORKING" }), 2400.5), "ENTRY");
+  assert.equal(provisionalTouch(call({ fillState: "WORKING" }), 2390), null);
+});
+
+test("an OPEN call reads STOP or TARGET when the mark reaches it; TP2 once the TP1 half has closed", () => {
+  const t = call({ fillState: "OPEN" });
+  assert.equal(provisionalTouch(t, 2500), null);
+  assert.equal(provisionalTouch(t, 2700), "TARGET");
+  assert.equal(provisionalTouch(t, 2350), "STOP");
+  const short = call({ fillState: "OPEN", direction: "SHORT", entryPrice: 100, stopLoss: 102, takeProfit1: 97 });
+  assert.deepEqual([provisionalTouch(short, 96.9), provisionalTouch(short, 102.1), provisionalTouch(short, 99)], ["TARGET", "STOP", null]);
+  const split = call({ fillState: "OPEN", takeProfit2: 2900, exitPlan: "SPLIT_50", tp1HitAt: 1 });
+  assert.equal(provisionalTouch(split, 2750), null, "the runner is aiming at TP2");
+  assert.equal(provisionalTouch(split, 2900), "TARGET");
+});
+
+test("graded, invalid, unchecked or no mark: nothing provisional to say", () => {
+  assert.equal(provisionalTouch(call({ fillState: "OPEN", gradedOutcome: "WIN" }), 2800), null);
+  assert.equal(provisionalTouch(call(), 2400), null, "UNCHECKED: the grader hasn't said where the order stands");
+  assert.equal(provisionalTouch(call({ fillState: "OPEN" }), null), null);
+  assert.equal(provisionalTouch(null, 1), null);
 });

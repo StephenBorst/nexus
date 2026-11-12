@@ -10,6 +10,8 @@ import { json, normalizeAddress } from "./shared.mjs";
 import { gradeCall } from "./logic.mjs";
 import { isCurrentStamp, fetchGradeHistory } from "./grading.mjs";
 import { gradeSymbol } from "./gradeCandles.mjs";
+import { isMinuteGraded } from "../../app/lib/minuteGrade.mjs";
+import { minuteNeededFrom, minuteSourceUrl, daysBetween } from "./minuteCandles.mjs";
 import { makeRateLimiter } from "./keyProxy.mjs";
 
 const limiter = makeRateLimiter({ limit: 30, windowMs: 60_000 });
@@ -24,7 +26,8 @@ export const isPublicCall = (t) => !!t && t.isPublic === true && !t.holdersOnly 
  */
 export function verifyCall(t, cd) {
   const createdSec = Math.floor(Number(t?.createdAt) / 1000);
-  const candlesChecked = cd && Array.isArray(cd.t) ? cd.t.filter((s) => s >= createdSec - 3600).length : 0;
+  const step = Number(cd?.step) > 0 ? Number(cd.step) : 3600;
+  const candlesChecked = cd && Array.isArray(cd.t) ? cd.t.filter((s) => s >= createdSec - step).length : 0;
   const stamped = isCurrentStamp(t) ? { outcome: t.gradedOutcome, r: Number(t.gradedR) } : null;
   if (!cd) return { verdict: "NO_DATA", fresh: null, stamped, candlesChecked: 0 };
   const g = gradeCall(t, cd);
@@ -44,6 +47,20 @@ export function orderlySourceUrl(symbol, createdAtMs, nowMs = Date.now()) {
   return `https://api-evm.orderly.org/tv/history?symbol=${encodeURIComponent(sym)}&resolution=60&from=${from}&to=${Math.floor(nowMs / 1000)}`;
 }
 
+/**
+ * What a minute-graded call is re-graded on: the public Orderly request for its first day of minutes,
+ * and our archive of every day of its window (minuteCandles.mjs), for when Orderly no longer serves them.
+ */
+export function minuteSources(symbol, createdAtMs, nowMs = Date.now()) {
+  const sym = gradeSymbol(symbol), from = minuteNeededFrom(createdAtMs);
+  if (!sym || from == null) return { source: null, archive: [] };
+  const nowSec = Math.floor(nowMs / 1000);
+  return {
+    source: minuteSourceUrl(sym, from, Math.min(nowSec, from + 8 * 3600)),
+    archive: daysBetween(from, nowSec).map((d) => `/candles/1m/${sym}/${d}`),
+  };
+}
+
 export async function handleVerify(parts, request, env, deps = {}) {
   if (!(parts[0] === "verify" && parts.length === 3)) return null;
   if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
@@ -58,6 +75,16 @@ export async function handleVerify(parts, request, env, deps = {}) {
   const getCandles = deps.getCandles || ((sym, at) => fetchGradeHistory(sym, at, env));
   const cd = await getCandles(t.symbol, t.createdAt);
   const v = verifyCall(t, cd);
+  if (isMinuteGraded(t)) {
+    const src = minuteSources(t.symbol, t.createdAt, now());
+    return json({
+      ...v,
+      method: "orderly_1m_regrade",
+      source: src.source,
+      archive: src.archive,
+      rule: "The entry must trade first: at the post, or in the first later minute that reaches it. Then the first touch of TP1 or the stop on 1-minute highs/lows decides; a minute that touches both is a loss. A declared split closes half at TP1 and half at TP2; a declared time stop settles at the close N hours on. The minutes are archived as Orderly served them (archive).",
+    }, request);
+  }
   return json({
     ...v,
     method: "orderly_1h_regrade",
