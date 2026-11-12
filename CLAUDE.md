@@ -530,6 +530,11 @@ product is what sits on top:
   ago" (`lastAt`), so a quiet engine reads as quiet. A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
   (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
   newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
+  **Paper run page** (`/proof/paper/:axis`, 2026-11-12, borst: "no running dollar pnl"): `GET /signals/paper-run/:axis`
+  (`routes-paperrun.mjs`, rule `app/lib/paperRun.mjs`) = the read's paper wallet as n of 30, TP/SL/time-stop counts and
+  each trade's R; NEVER a dollar figure, size, or a sum/average of R until the 30-trade judgment (after fees, own PR).
+  R = move ÷ `sl_percent` (exec stamps it on paper rows from 2026-11-12, record only), else by the contract (TP +1.5,
+  SL −1, labelled). Link card from `functions/proof/paper/[axis].js` (live count; no paper wallet = real 404).
   `signals` (pulse v5, `app/lib/signalProgress.mjs`) = reads served TRADEABLE/PAPER with positive exit net + the paper
   wallet's lifetime trade COUNT vs `PAPER_MIN_TRADES` 30 (`paperWallet` on the registration, `readPipeline.mjs`; no state =
   null "unread", never 0; never a paper P&L). The last good {headline, signals} sits in `calls:pulse:board:v1` ≤6h, so a cold

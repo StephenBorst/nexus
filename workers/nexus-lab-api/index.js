@@ -95,6 +95,7 @@ import { handleMinuteArchive } from "./minuteCandles.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
+import { handlePaperRun } from "./routes-paperrun.mjs";
 import { handleRecordShare } from "./routes-recordshare.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg, buildArenaAgentSvg } from "./ogCards.mjs";
@@ -1015,6 +1016,11 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
     {
       const pulseRes = await handlePulse(parts, request, env, { scorecardKey: axisbtCacheKey(20) });
       if (pulseRes) return pulseRes;
+    }
+    // ── /signals/paper-run/:axis → a cleared read's paper run, trade by trade, in R (routes-paperrun.mjs) ─
+    {
+      const runRes = await handlePaperRun(parts, request, env);
+      if (runRes) return runRes;
     }
     // ── /share/record + /og/record(.png) → the week's record as a share card (routes-recordshare.mjs) ─
     {

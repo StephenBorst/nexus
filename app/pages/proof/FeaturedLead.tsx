@@ -9,6 +9,7 @@
 // on its own if the read drops under the bar. Loading, failed or stale scoreboard = the default, no claim.
 
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { C } from "@/config/theme";
 import { proofHeadline } from "@/lib/proofCopy.mjs";
 import { signalProgress, paperLine, paperWalletsFor } from "@/lib/signalProgress.mjs";
@@ -59,6 +60,9 @@ export default function FeaturedLead({ isMobile, onHowWeGrade, scorecard, shareH
         <div key={p.axis} style={{ marginTop: 12, fontFamily: UI, fontSize: 14, color: BRIGHT, lineHeight: 1.5, maxWidth: 640 }}>
           {paperLine(p)}{" "}
           <span style={{ color: FOG }}>A live plan is written only after {p.paper?.target ?? 30} paper trades, net positive after fees. Nothing is armed.</span>
+          {p.paper && (
+            <>{" "}<Link to={`/proof/paper/${encodeURIComponent(p.axis)}`} style={{ color: BRIGHT, textDecoration: "underline", textUnderlineOffset: 3, textDecorationColor: MUTED }}>Every trade, in R →</Link></>
+          )}
         </div>
       ))}
       <p style={{ margin: "14px 0 0", fontFamily: UI, fontSize: 15, color: FOG, lineHeight: 1.55, maxWidth: 640 }}>

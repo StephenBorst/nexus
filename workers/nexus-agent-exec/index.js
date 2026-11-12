@@ -1756,8 +1756,10 @@ async function closePosition(address, state, config, env, reason, cache, decisio
     // they stay completely separate from the real Supabase track record.
     state.paper_trades = state.paper_trades || [];
     // A fixed-risk position carries the dollars it risked, so the row reads in R (pnl ÷ risk_usd). Paper rows
-    // only: the live Supabase row's columns are unchanged.
-    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable, ...(pos.risk_usd > 0 ? { risk_usd: pos.risk_usd } : {}) });
+    // only: the live Supabase row's columns are unchanged. `sl_percent` = the stop distance this trade was
+    // managed with (the graded stop for R_CONTRACT), so any row reads in R from its own fill: R = the move ÷
+    // sl_percent (app/lib/paperRun.mjs, the /proof/paper page). Record only, 2026-11-12; nothing reads it to trade.
+    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable, ...(pos.risk_usd > 0 ? { risk_usd: pos.risk_usd } : {}), ...(Number(pos.slPercent) > 0 ? { sl_percent: Number(pos.slPercent) } : {}) });
     if (state.paper_trades.length > 50) state.paper_trades.pop(); // keep last 50
     // ⚠️ That pop is why the window is NOT the record. Accrue the LIFETIME aggregate
     // here, once, at close — it cannot be rebuilt from a truncated window later.
