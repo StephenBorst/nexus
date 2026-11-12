@@ -90,6 +90,8 @@ import { handlePush } from "./routes-push.mjs";
 import { handleThesisRegistration } from "./routes-thesisreg.mjs";
 import { handleCallStatus } from "./routes-callstatus.mjs";
 import { handleVerify, isPublicCall } from "./routes-verify.mjs";
+import { runMinuteGrades } from "./minuteGrader.mjs";
+import { handleMinuteArchive } from "./minuteCandles.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
@@ -633,16 +635,25 @@ export default {
   // tracked set from the live HL leaderboard. Fails safe: on error the routes
   // fall back to the static SMART_SEED, so a heavy/failed parse never breaks the tab.
   async scheduled(event, env, ctx) {
-    // Every 5 min: phone alerts for agent opens/closes (push.mjs). Reads agent:state only, and it
-    // RETURNS here: every job below is hourly and must not start running every 5 minutes (several
-    // of them write the engine's history series). No-op until VAPID_PRIVATE_JWK is set.
-    if (event.cron === "*/5 * * * *") {
+    // Every minute: the minute grader (minuteGrader.mjs) fills and settles open minute-graded calls.
+    // Every 5th minute: phone alerts for agent opens/closes (push.mjs; reads agent:state only; no-op
+    // until VAPID_PRIVATE_JWK is set). It RETURNS here: every job below is hourly and must not start
+    // running every minute (several of them write the engine's history series).
+    if (event.cron === "* * * * *") {
       ctx.waitUntil((async () => {
         try {
-          const r = await runAgentWatch(env, (w, n) => appendNotification(env, w, n, { telegram: false }));
-          if (r.events) console.log(`[push] agent watch: ${r.events} alert(s) across ${r.watched} wallets`);
-        } catch (e) { console.error("[push] agent watch failed:", String(e)); }
+          const r = await runMinuteGrades(env);
+          if (r.triggered || r.graded || r.fills || r.skipped) console.log(`[m1] ${JSON.stringify(r)}`);
+        } catch (e) { console.error("[m1] minute grader failed:", String(e?.message || e)); }
       })());
+      if (new Date(event.scheduledTime || Date.now()).getUTCMinutes() % 5 === 0) {
+        ctx.waitUntil((async () => {
+          try {
+            const r = await runAgentWatch(env, (w, n) => appendNotification(env, w, n, { telegram: false }));
+            if (r.events) console.log(`[push] agent watch: ${r.events} alert(s) across ${r.watched} wallets`);
+          } catch (e) { console.error("[push] agent watch failed:", String(e)); }
+        })());
+      }
       return;
     }
     // Hourly: book finished Flash orders on the spot ledger (their fill + our fee), spotLedger.mjs.
@@ -671,6 +682,10 @@ export default {
     ctx.waitUntil((async () => {
       try { const n = await gradePublicTheses(env); console.log(`[grade] cron resolved ${n} calls`); }
       catch (e) { console.error("[grade] cron failed:", String(e)); }
+      // Then the minute grader's full sweep: every open minute-graded call re-graded with no trigger,
+      // the safety net under a run that fetched bars but died before its grade landed.
+      try { const r = await runMinuteGrades(env, { full: true }); console.log(`[m1] full sweep ${JSON.stringify(r)}`); }
+      catch (e) { console.error("[m1] full sweep failed:", String(e?.message || e)); }
     })());
     // Hourly: settle calls copied between wallets (callDedupe.mjs). Report-only until CALL_DEDUPE_LIVE.
     ctx.waitUntil((async () => {
@@ -1249,6 +1264,8 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
 
     // ── /verify/:wallet/:id → re-grade one public call with the real grader (routes-verify.mjs) ─
     {
+      const archiveRes = await handleMinuteArchive(parts, request, env);
+      if (archiveRes) return archiveRes;
       const verifyRes = await handleVerify(parts, request, env);
       if (verifyRes) return verifyRes;
     }

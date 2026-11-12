@@ -9,6 +9,9 @@ import { findCopies, houseProof, resolveDuplicates, REPORT_KEY, PROOF_KEY, THESI
 import { thesisRegistrant, sealTheses } from "./callLock.mjs";
 import { computeCallerStats } from "./grading.mjs";
 import { publicLabView } from "../../app/lib/labAuth.mjs";
+import { _pinMinuteGradeFrom } from "../../app/lib/minuteGrade.mjs";
+// This suite tests the HOURLY grader on calls built from Date.now(): pin it (minuteGrade.mjs).
+_pinMinuteGradeFrom(Infinity);
 
 const HOUSE = "0x" + "fc".repeat(20), A = "0x" + "aa".repeat(20), B = "0x" + "bb".repeat(20), SOL = "82mmcjt8nqxs";
 const TX = "0x" + "12".repeat(32);

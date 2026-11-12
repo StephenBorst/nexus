@@ -5,6 +5,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { verifyCall, handleVerify, orderlySourceUrl, isPublicCall } from "./routes-verify.mjs";
 import { gradeCall } from "./logic.mjs";
+import { _pinMinuteGradeFrom } from "../../app/lib/minuteGrade.mjs";
+// This suite tests the HOURLY grader on calls built from Date.now(): pin it (minuteGrade.mjs).
+_pinMinuteGradeFrom(Infinity);
 
 const H = 3600;
 const T0 = Date.UTC(2026, 9, 1, 12, 0, 0);

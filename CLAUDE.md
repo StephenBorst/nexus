@@ -89,7 +89,8 @@ product is what sits on top:
   Nordstern/0x or GeckoTerminal. Read deploy results in the Action log.
 
 ## Cloudflare Workers
-- **nexus-lab-api** (`workers/nexus-lab-api`) → `og.nexustradinglabs.com` = `AGENT_API`. Its `*.workers.dev` is NOT
+- **nexus-lab-api** (`workers/nexus-lab-api`) → `og.nexustradinglabs.com` = `AGENT_API`. Crons: `17 * * * *` hourly jobs,
+  `0 */12`, and `* * * * *` = the minute grader + (every 5th minute) agent push alerts; it returns before the hourly jobs. Its `*.workers.dev` is NOT
   routed (404/1042): always use the custom domain. `GET /agent/:a` returns `state` wholesale.
 - **nexus-agent-exec**: 1-min cron, enters/monitors/closes. Stamps `ops:exec:heartbeat`; `GET /health`.
 - **nexus-agent-brain**: 5-min cron, writes `agent:signal:{addr}` and the hourly history series. Its price/OI delta is
@@ -371,6 +372,19 @@ product is what sits on top:
   pages; a call whose window isn't loaded is left out, never graded on a partial window). First touch; same candle =
   LOSS. A WIN pays the GEOMETRIC R from the levels (`callR`), never the stored `riskReward`. Wrong-side levels = INVALID.
   `GRADE_FLOOR_MS`: no grading of times before 2026.
+- **Minute grading** (borst 2026-11-12, `docs/research/minute-grading.md`): calls published from `MINUTE_GRADE_FROM_MS`
+  (2026-11-13T00:00Z, `app/lib/minuteGrade.mjs`) are graded by the SAME `gradeCall` on 1-minute bars (`cd.step = 60`;
+  the time stop stays counted in hours). Forward-only, no `GRADE_V` bump. Archive `m1:{PERP}:{day}` (`minuteCandles.mjs`,
+  no expiry, public `GET /candles/1m/:symbol/:day`); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
+  publish in `labWrite commit`, re-built by the hourly pass); grader `minuteGrader.mjs` on lab-api's `* * * * *` cron
+  (re-grades only calls whose levels traded in minutes that are NEW or CHANGED vs the archive, never-stamped calls, or a
+  due time stop: a re-read unchanged minute never re-triggers, since KV reads can be ~60 s stale) + a `full` sweep after
+  the hourly pass; one run at a time (`LOCK_KEYS.minuteGrade`); each fill/grade alert once (`claimOnce`, a NexusLock lease
+  never released). Field ownership on a minute call: the minute grader writes
+  `GRADE_FIELDS`, the hourly pass `PLAN_FIELDS` only (`writePassFields`). The board counts its sealed stamp; `/verify`
+  re-runs it on the archive (`orderly_1m_regrade`). Never grade on the websocket mark: the cards' "· CONFIRMING" hint
+  (`provisionalTouch`) is display only. Hourly suites that build calls from `Date.now()` pin
+  `_pinMinuteGradeFrom(Infinity)` (tests only; a test fails if app/ or workers/ code calls it).
 - **The entry must trade:** filled at the post only if the entry is within 0.3% (`ENTRY_AT_MARK_PCT`, in
   `app/lib/entryAtMark.mjs`) of the server's `publishMark`, else inside the posting hour's range (calls without a mark);
   otherwise a resting order graded from its fill hour; never filled = PENDING. Stamps: `fillState` WORKING/OPEN,
@@ -405,7 +419,7 @@ product is what sits on top:
   walletAddress}` (keyless) builds the call from calldata (`#SPLIT_50` declared on-chain in notes).
 - **Reads:** `GET /theses/leaderboard` (≥5 graded, net-positive R; an empty board is correct when nobody qualifies:
   check `/theses/process/:wallet` before debugging), `/theses/status/:wallet`, `/verify/:wallet/:id` (the grader
-  re-run), `/theses/ledger` (+ chain, anchored). Fill/TP1 alerts go out from the hourly pass.
+  re-run), `/theses/ledger` (+ chain, anchored). Fill/TP1 alerts go out from the pass that stamps them (hourly, or the minute grader).
 - **Ranks:** only graded callers, in the grader's order, then emerging unranked. No self-scored REP anywhere; Rep Score
   code is deleted. Merit ranks (`rankCaller`): Signal / Sharp / Apex. Identity card = `app/lib/identityCard.mjs` on
   `loadIdentity`; no badge unless the grader gave one.

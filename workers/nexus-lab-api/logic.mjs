@@ -45,13 +45,19 @@ export { ENTRY_AT_MARK_PCT };
  *   fillSec = the post time, or the start of the hour the order filled in. fillIdx = that hour's
  *   candle (-1 when filled at the post). next = the first candle that can grade the call.
  */
+/** Seconds per bar of a candle set: `cd.step` when given (60 for minute grading), else the hour. */
+export const barStep = (cd) => (Number(cd?.step) > 0 ? Number(cd.step) : 3600);
+
 export function entryFill(t, cd) {
   const startSec = Math.floor((t?.createdAt || 0) / 1000);
   const n = cd && Array.isArray(cd.t) ? cd.t.length : 0;
   let i = 0;
   while (i < n && cd.t[i] < startSec) i++;          // the first hour that starts at or after the post
   // The market the call was posted into: the hour containing the post, else the first hour after it.
-  const ref = i < n && cd.t[i] === startSec ? i : i > 0 && cd.t[i - 1] > startSec - 3600 ? i - 1 : i;
+  // The bar length: 1h store bars, or 1-minute bars for a call graded on them (cd.step = 60,
+  // app/lib/minuteGrade.mjs). Same rule either way, just a finer bar.
+  const step = barStep(cd);
+  const ref = i < n && cd.t[i] === startSec ? i : i > 0 && cd.t[i - 1] > startSec - step ? i - 1 : i;
   const entry = Number(t?.entryPrice);
   const traded = (k) => cd.l[k] <= entry && entry <= cd.h[k];
   const mark = Number(t?.publishMark?.px);
@@ -104,6 +110,11 @@ export function entryFill(t, cd) {
  *   closed in (for a split, the hour its LAST half closed). Hour precision, like `tp1At` and the
  *   fill: candles can't say when inside the hour. Hold time = exitAt − the fill.
  *
+ * - MINUTE BARS (2026-11-12, app/lib/minuteGrade.mjs). A call published from MINUTE_GRADE_FROM_MS is
+ *   graded on 1-minute bars (cd.step = 60): the same rules with a minute where this says an hour, so
+ *   the fill, tp1At and exitAt carry minute precision and a "same candle" is a same minute. The time
+ *   stop stays counted in hours (see below).
+ *
  * - A DECLARED TIME STOP (2026-11-06, callMath `timeStopPlan`). A call published with `timeStopH: N`
  *   that touches neither level by the close of bar N settles at that close: R = the move from entry
  *   to the close ÷ the risk (entry to stop), 2dp; WIN when R > 0, else LOSS; `exitReason: "TIME"`.
@@ -134,7 +145,9 @@ export function gradeCall(t, cd) {
   const f = fill.fillIdx;
   // The time stop's window end (sec): bar 1 starts at the first hour graded (the hour after a resting
   // order's fill hour; the first hour starting at or after the post), and runs `hours` hours.
-  const bar1 = fill.atPost ? Math.ceil(fill.fillSec / 3600) * 3600 : cd.t[f] + 3600;
+  // Counted in HOURS whatever the bar: on 1-minute bars a resting order's fill minute sits inside its
+  // fill hour, and bar 1 is the hour after that (floor is a no-op on hourly bars).
+  const bar1 = fill.atPost ? Math.ceil(fill.fillSec / 3600) * 3600 : Math.floor(cd.t[f] / 3600) * 3600 + 3600;
   const timeEnd = stop ? bar1 + stop.hours * 3600 : Infinity;
   const timeOut = (k) => {
     const close = Number(cd.c?.[k]), risk = Math.abs(Number(entryPrice) - Number(stopLoss));
