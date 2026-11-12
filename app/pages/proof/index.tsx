@@ -18,6 +18,7 @@ import HowWeGrade from "./HowWeGrade";
 import { callsRecordLine, callersLine, PLAIN_WORDS, engineNote } from "@/lib/proofCopy.mjs";
 import SignalBoard, { type Scorecard } from "./SignalBoard";
 import { pressKey } from "@/utils/a11y";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -124,6 +125,7 @@ function ProofEdgeCard({ c, onClick }: { c: ProofCard; onClick: () => void }) {
 }
 
 export default function ProofPage() {
+  usePageTitle("/proof");
   const isMobile = useIsMobile();
   // Phone: a ranks row wraps instead of scrolling sideways — rank · name · score stay on line 1
   // (the score is the number that matters), the stats drop to line 2 under the name.

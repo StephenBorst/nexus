@@ -7,6 +7,7 @@ import { C } from "@/config/theme";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 // ─── Constants ────────────────────────────────────────────────
 // Palette is DERIVED from the shared design tokens, never re-typed as hex — that's
@@ -306,6 +307,7 @@ function WhyChip({ ticker }: { ticker: string }) {
 
 // ─── Main component ───────────────────────────────────────────
 export default function IntelPage({ embedded = false }: { embedded?: boolean }) {
+  usePageTitle(embedded ? null : "/intel");
   const isMobile = useIsMobile();
   const navigate = useNavigate();
 

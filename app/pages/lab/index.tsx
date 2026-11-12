@@ -37,6 +37,7 @@ import { LabCallsPanel } from "./LabCallsPanel";
 import { LabTitleBar, LabStats, LabTabs, type LabTab } from "./LabHeader";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
 import { C } from "@/config/theme";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 // Legacy alias: the old MISPRICED/GAPS tab was folded into SMART MONEY (Phase 1 re-slice),
 // so any ?tab=mispriced deep-link, shared OG link, or copilot nav resolves to smart.
@@ -49,6 +50,7 @@ const normTab = (t: string | null | undefined): TabId | null =>
   !t ? null : (t === "mispriced" || t === "gaps") ? "smart" : (t as TabId);
 
 export default function TheLabPage() {
+  usePageTitle("/lab");
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabId>(() => normTab(searchParams.get("tab")) || "intel");
   // Honor ?tab= deep-links (e.g. the AI assistant's draft_thesis → /lab?tab=thesis).

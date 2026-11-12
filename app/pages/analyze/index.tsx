@@ -34,6 +34,7 @@ import {
   hlCoinToOrderly, fillsToClosedTrades,
 } from "@/lib/xrayGrade.mjs";
 import { WindowGradeCard, EdgeGateCard, PositionsPanel, type WindowKey, type WindowGrade, type WatchedWin, type DecayCell, type Gate, type PosRow, WINDOW_KEYS, ShareXrayButton } from "./XrayPanels";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 // Shared design tokens — same set the Arena uses, so the two pages read as one system.
 const MONO = "var(--nx-font-mono)";
@@ -123,6 +124,7 @@ const isAddress = (s: string) => /^0x[a-fA-F0-9]{40}$/.test(s.trim());
 const fillsToTrades = (fills: HLFill[]): ProcessedTrade[] => fillsToClosedTrades(fills) as ProcessedTrade[];
 
 export default function AnalyzePage() {
+  usePageTitle("/analyze");
   const [params, setParams] = useSearchParams();
   const [input, setInput] = useState(params.get("address") ?? "");
   const [address, setAddress] = useState<string | null>(params.get("address"));
