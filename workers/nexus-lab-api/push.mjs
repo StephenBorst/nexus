@@ -44,7 +44,7 @@ export function validSubscription(s) {
     && typeof auth === "string" && /^[A-Za-z0-9_-]{16,32}$/.test(auth);
 }
 
-export const DEFAULT_TOPICS = Object.freeze({ calls: true, agent: true, social: false });
+export const DEFAULT_TOPICS = Object.freeze({ calls: true, agent: true, social: false, following: false });
 
 export function normTopics(t) {
   const o = t && typeof t === "object" ? t : {};
@@ -52,6 +52,7 @@ export function normTopics(t) {
     calls: typeof o.calls === "boolean" ? o.calls : DEFAULT_TOPICS.calls,
     agent: typeof o.agent === "boolean" ? o.agent : DEFAULT_TOPICS.agent,
     social: typeof o.social === "boolean" ? o.social : DEFAULT_TOPICS.social,
+    following: typeof o.following === "boolean" ? o.following : DEFAULT_TOPICS.following,
   };
 }
 
@@ -60,6 +61,7 @@ export function topicForType(type) {
   if (type === "call_resolved" || type === "thesis_closed" || type === "call_fill" || type === "call_tp1") return "calls";
   if (type === "agent_trade") return "agent";
   if (["comment", "reaction", "follow", "copy", "challenge"].includes(type)) return "social";
+  if (type === "followed_call") return "following"; // a caller you follow posted a call (followAlerts.mjs)
   return null;
 }
 
@@ -72,6 +74,7 @@ const TITLES = {
   comment: "New comment",
   reaction: "New reaction",
   follow: "New follower",
+  followed_call: "New call",
   copy: "Call copied",
   challenge: "Call challenged",
 };

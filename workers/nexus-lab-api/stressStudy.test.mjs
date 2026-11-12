@@ -103,7 +103,7 @@ test("nothing that trades imports the study, and the scoreboard serves it with a
     assert.doesNotMatch(readFileSync(new URL(f, import.meta.url), "utf8"), /stressStudy|stressGrading|stressHours/, `${f} must not import the study`);
   }
   const idx = readFileSync(new URL("./index.js", import.meta.url), "utf8");
-  assert.match(idx, /axisbt:v21:min/);
+  assert.match(idx, /axisbt:v2[1-9]:min/); // v21 brought the study; later bumps keep it
   assert.match(idx, /stressStudy = runStressStudy\(\{/);
   assert.match(idx, /panelSets: coinSets\.filter\(\(c\) => RECORDED_COINS\.includes\(c\.coin\)\)/);
   assert.match(idx, /mainSets: coinSets\.filter\(\(c\) => !isHoldoutCoin\(c\.coin\)\)/);

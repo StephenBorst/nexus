@@ -496,9 +496,18 @@ export function twapDueSlices(state, now) {
     return { due: [], complete: false, remaining: 0 };
   }
   const start = Number(state.startedAt) || 0;
-  const pending = state.slices.filter((s) => !s.done);
+  const pending = state.slices.filter((s) => !s.done && !s.skipped);
   const due = pending.filter((s) => (start + (Number(s.offsetMs) || 0)) <= now);
   return { due, complete: pending.length === 0, remaining: pending.length };
+}
+
+// A slice Orderly keeps rejecting (e.g. -1101, not enough margin) used to be retried every tick
+// forever, so the TWAP never ended. After TWAP_MAX_ATTEMPTS failed tries it is skipped: never sent
+// again, counted as skipped (not filled), and the schedule can complete.
+export const TWAP_MAX_ATTEMPTS = 3;
+export function twapSliceFailed(slice, error) {
+  const attempts = (Number(slice.attempts) || 0) + 1;
+  return { ...slice, attempts, error: String(error || "rejected"), skipped: attempts >= TWAP_MAX_ATTEMPTS };
 }
 
 // Progress summary for the status endpoint / UI: filled vs total children and the
@@ -510,7 +519,8 @@ export function twapProgress(state) {
     total: slices.length,
     filled: filled.length,
     filledNotional: parseFloat(filled.reduce((a, s) => a + (Number(s.filledNotional) || Number(s.notionalEst) || 0), 0).toFixed(2)),
-    remaining: slices.length - filled.length,
+    skipped: slices.filter((s) => s.skipped && !s.done).length,
+    remaining: slices.filter((s) => !s.done && !s.skipped).length,
   };
 }
 
@@ -546,4 +556,89 @@ export function brainSignalKey(signal) {
 export function alreadyTradedSignal(state, signal) {
   const key = brainSignalKey(signal);
   return !!key && state?.last_signal_key === key;
+}
+
+// ── Portfolio delta cap (PRO) ────────────────────────────────────────────────
+// A unified directional risk cap across EVERY open position on the account, so
+// multiple concurrent signals/triggers can't stack the book in one direction.
+// `positions` is the account's live open positions as signed-notional legs
+// ({ signedQty, mark } — long qty positive, short negative, i.e. Orderly's own
+// position_qty sign). `entryNotional` is the prospective trade's |qty*mark| (always
+// positive); `direction` gives it a sign. The cap is on the ABSOLUTE projected NET
+// delta — a trade that REDUCES net exposure (e.g. a short while net-long) is never
+// blocked, even if the book is already over-cap. cap ≤ 0 / NaN → feature off.
+export function portfolioDeltaCheck(positions, entryNotional, direction, cap) {
+  const capUsd = Number(cap);
+  if (!Number.isFinite(capUsd) || capUsd <= 0) return { blocked: false, cap: 0, existingDelta: 0, projectedDelta: 0 };
+  let existingDelta = 0;
+  for (const p of (positions || [])) {
+    const q = Number(p?.signedQty), m = Number(p?.mark);
+    if (Number.isFinite(q) && Number.isFinite(m)) existingDelta += q * m;
+  }
+  const notional = Math.max(0, Number(entryNotional) || 0);
+  const newDelta = direction === "SHORT" ? -notional : notional;
+  const projectedDelta = existingDelta + newDelta;
+  // Block only when the NEW trade GROWS net directional exposure past the cap.
+  const blocked = Math.abs(projectedDelta) > capUsd && Math.abs(projectedDelta) > Math.abs(existingDelta);
+  return { blocked, cap: capUsd, existingDelta, projectedDelta };
+}
+
+// ── Execution push callbacks (PRO) ───────────────────────────────────────────
+// Build the signed-callback body for an agent execution event. Pure + stable so
+// the HMAC-SHA256 the receiver recomputes over JSON.stringify(payload) matches.
+// `event` ∈ ENTRY | DCA_ADD | PARTIAL_TP | CLOSE. Nullable fields are emitted as
+// null (never dropped) so the wire shape is predictable; reason/pnl only ride when
+// they apply. Pass `ts` for a deterministic timestamp (tests); defaults to now.
+export function buildCallbackPayload(event, { address, symbol, direction, qty, price, leverage, reason, pnl, pnlPercent, paper, ts } = {}) {
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  const payload = {
+    event,
+    address: address ? String(address).toLowerCase() : null,
+    symbol: symbol ?? null,
+    direction: direction ?? null,
+    qty: num(qty),
+    price: num(price),
+    leverage: num(leverage),
+    paper: !!paper,
+    timestamp: Number.isFinite(Number(ts)) ? Number(ts) : Date.now(),
+  };
+  if (reason != null) payload.reason = reason;
+  if (num(pnl) != null) payload.pnl = num(pnl);
+  if (num(pnlPercent) != null) payload.pnlPercent = num(pnlPercent);
+  return payload;
+}
+
+// ── Reading Orderly's answer about a position (2026-11-06) ────────────────────────────────────
+// orderlyRequest returns Orderly's JSON even for an error ({ success:false, code, message }: rate limit,
+// expired or removed key, auth). Reading `data.position_qty ?? 0` off an error said "flat", and the
+// monitor then cleared a LIVE position's record (unmanaged, no stop). Only a successful answer counts:
+//   success true + data      → |position_qty| (0 = flat)
+//   success true, no data    → 0 (nothing open in that symbol)
+//   anything else            → null (unreadable: keep managing on cached data, clear nothing)
+export function exchangePositionQty(res) {
+  if (!res || res.success !== true) return null;
+  if (res.data == null) return 0;
+  const q = parseFloat(res.data.position_qty ?? 0);
+  return Number.isFinite(q) ? Math.abs(q) : null;
+}
+
+/** The account's position rows, or null when Orderly didn't answer successfully. */
+export function exchangePositionRows(res) {
+  if (!res || res.success !== true) return null;
+  return Array.isArray(res.data?.rows) ? res.data.rows : [];
+}
+
+// ── Live fills: book the price the exchange filled at, not the mark (2026-11-06) ───────────────
+// Live entries and exits used to be booked at the MARK read when exec decided, so the public live
+// record (Supabase agent_trades → /agents/leaderboard) never showed slippage. After a live market
+// order exec reads GET /v1/order/{id} and books `average_executed_price` when Orderly says the order
+// FILLED (or PARTIAL_FILLED with a price). Anything else (not filled yet, an error answer, a missing
+// price) falls back to the mark, tagged source "mark" so a reader can tell the two apart.
+export function fillPriceFrom(orderRes, fallback) {
+  const d = orderRes && orderRes.success === true ? orderRes.data : null;
+  const p = Number(d?.average_executed_price);
+  if (d && (d.status === "FILLED" || d.status === "PARTIAL_FILLED") && Number.isFinite(p) && p > 0) {
+    return { price: p, source: "exchange" };
+  }
+  return { price: fallback, source: "mark" };
 }

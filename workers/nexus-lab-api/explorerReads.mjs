@@ -11,6 +11,7 @@
 // Inputs: cs.oiHist [{t, price, oi, funding}] (hourly, brain) · cs.candleHist [{t,o,h,l,c,v}] (hourly).
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 import { levelReclaimEvents } from "../../app/lib/levelReclaim.mjs";
+import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 
 const H = 3600000;
 const DAY_H = 24;
@@ -190,7 +191,196 @@ export function oiCoilBreakEvents(cs, _pmap, _ctx, p = OI_COIL) {
   return ev;
 }
 
-// The four registered 2026-10-16 (docs/research/explorers-prereg.md). Labels are the scoreboard's.
+// ── 8 · session_fade — registered 2026-11-06, counts from 2026-11-08T00:00Z ───────────────────────
+// docs/research/session-fade-prereg.md. session_momentum's exact event (the NY open drive, 13:00→15:00 UTC,
+// bigger than its own 30-day median), traded the OTHER way. Not a licence from session_momentum's grade:
+// an inverted rule is a new read, so it is registered and counted only from its own date. One code path
+// with session_momentum (only the side differs), so the two can't drift apart.
+export function sessionFadeEvents(cs, pmap, ctx, p = SESSION) {
+  return sessionMomentumEvents(cs, pmap, ctx, p).map((e) => ({ t: e.t, side: e.side === "LONG" ? "SHORT" : "LONG" }));
+}
+
+// ── 9 · level_reclaim_tight — registered 2026-11-06, counts from 2026-11-08T00:00Z ─────────────────
+// docs/research/level-reclaim-tight-prereg.md. level_reclaim's exact event, taken only when the coin is
+// quiet for itself: its H4 ATR-14 (as a fraction of price, the graded stop's own ruler) at the last
+// CLOSED bar before the event ranks at or below the median of the same measure over the prior 30 days
+// (sampled every 6h, mid-rank, ≥ 60 samples). Coin-relative on purpose, so the holdout's wider coins can
+// fire and replicate it. Why: level-reclaim-exit-gap.md found the read's losses in its widest stops.
+export const LEVEL_TIGHT = Object.freeze({ maxRank: 0.5, lookbackH: MONTH_H, stepH: 6, minSamples: 60 });
+export function levelReclaimTightEvents(cs, pmap, ctx, p = LEVEL_TIGHT) {
+  const evs = levelReclaimEvents(cs, pmap, ctx);
+  if (!evs.length) return [];
+  const cbh = candleMap(cs.candleHist);
+  const atrAt = (hour) => {
+    const hourly = [];
+    for (let h = hour - 80; h <= hour; h++) { const c = cbh.get(h); if (c) hourly.push({ t: Number(c.t) / 1000, h: c.h, l: c.l, c: c.c }); }
+    return h4Atr14Frac(hourly);
+  };
+  const out = [];
+  for (const e of evs) {
+    const h = hourBucket(e.t) - 1; // the reclaim bar (closed at e.t): nothing after it is read
+    const now = atrAt(h);
+    if (!(now > 0)) continue;
+    const prior = [];
+    for (let k = h - p.stepH; k >= h - p.lookbackH; k -= p.stepH) { const x = atrAt(k); if (x > 0) prior.push(x); }
+    if (prior.length < p.minSamples) continue;
+    if (pctRank(prior, now) <= p.maxRank) out.push({ t: e.t, side: e.side });
+  }
+  return out;
+}
+
+// ── 10 · spot_absorb — registered 2026-11-06, counts from 2026-11-20T00:00Z ─────────────────────────
+// docs/research/spot-absorb-prereg.md (from spot-perp-cvd-draft.md). A move led by the PERP book while the
+// SPOT book trades the other way, with open interest flat: spot is absorbing it, so follow spot.
+// Decided at hour h from the last 4 hours (h−3 … h) of both CVD series (cvd:hist = perp, spotcvd:hist =
+// spot, both OKX, the same fold) and the oi:hist price spine:
+//   imbalance = Σ(buy − sell) / Σ(buy + sell) over the window, per book (≥ 3 of the 4 hours present in each);
+//   4h return and 4h OI change on oi:hist (rows at h and h − 4);
+//   LONG:  price down over 4h, perp imbalance in the bottom 20% of its own prior 14 days (mid-rank, ≥ 120
+//          hourly values), spot imbalance > 0, |4h OI change| ≤ 1%.
+//   SHORT: the mirror (price up, perp imbalance in the top 20%, spot imbalance < 0, OI flat).
+// Stamped at the oi:hist row at h. Cooldown 12h per coin. Thresholds fixed before any spot data was graded.
+// Measurement limit (spot-perp-cvd-draft.md): each CVD row is the last ≤100 taker trades in the hour, a
+// sample, not the hour's total. Spot and perp are sampled the same way, so the two are comparable.
+export const SPOT_ABSORB = Object.freeze({ windowH: 4, minRows: 3, lookbackH: 14 * DAY_H, minHistory: 120, pct: 0.2, oiFlat: 0.01, cooldownH: 12 });
+export function spotAbsorbEvents(cs, _pmap, _ctx, p = SPOT_ABSORB) {
+  const flowMap = (rows) => byHour(rows, (r) => Number.isFinite(Number(r.buy)) && Number.isFinite(Number(r.sell)));
+  const perp = flowMap(cs.cvdHist), spot = flowMap(cs.spotCvdHist), m = oiMap(cs.oiHist);
+  if (!perp.size || !spot.size || !m.size) return [];
+  const imb = (map, h) => {
+    let b = 0, s = 0, n = 0;
+    for (let k = h - p.windowH + 1; k <= h; k++) { const r = map.get(k); if (!r) continue; b += Number(r.buy); s += Number(r.sell); n++; }
+    return n >= p.minRows && b + s > 0 ? (b - s) / (b + s) : null;
+  };
+  const hours = [...m.keys()].sort((a, b) => a - b);
+  const perpImb = new Map();
+  for (const h of [...perp.keys()]) { const x = imb(perp, h); if (x != null) perpImb.set(h, x); }
+  const ev = [];
+  let last = -Infinity;
+  for (const h of hours) {
+    if (h - last < p.cooldownH) continue;
+    const a = m.get(h), b = m.get(h - p.windowH);
+    if (!b || !(b.price > 0) || !(Number(a.oi) > 0) || !(Number(b.oi) > 0)) continue;
+    const ret = a.price / b.price - 1, oiCh = Number(a.oi) / Number(b.oi) - 1;
+    if (ret === 0 || !(Math.abs(oiCh) <= p.oiFlat)) continue;
+    const pi = perpImb.get(h), si = imb(spot, h);
+    if (pi == null || si == null) continue;
+    const prior = [];
+    for (let k = h - p.lookbackH; k < h; k++) { const x = perpImb.get(k); if (x != null) prior.push(x); }
+    if (prior.length < p.minHistory) continue;
+    const rank = pctRank(prior, pi);
+    const side = ret < 0 && rank <= p.pct && si > 0 ? "LONG" : ret > 0 && rank >= 1 - p.pct && si < 0 ? "SHORT" : null;
+    if (!side) continue;
+    ev.push({ t: a.t, side });
+    last = h;
+  }
+  return ev;
+}
+
+// ── 11 · btc_lead_lag — registered 2026-11-07, counts from 2026-11-08T00:00Z ────────────────────────
+// docs/research/btc-lead-lag-prereg.md (batch 4, explorer-drafts-4.md; borst: "register lead-lag at p90 /
+// 0.75"). BTC makes an outsized 1h move (|1h return| ≥ the 90th percentile of its own prior 30 days, ≥ 360
+// hours); an alt that moved less than 0.75 of BTC's move in BTC's direction that same hour (or the other way)
+// is lagging. Follow BTC on the alt at that bar's close. Alts only (BTC never fires). Cooldown 12h per coin.
+// Reads ctx.btcCandles (axisbt passes BTC's hour → candle map; on the holdout line BTC rides along as
+// context only, never graded). The body moved unchanged from explorerDrafts4.mjs.
+export const LEAD_LAG = Object.freeze({ pct: 0.9, lookbackH: MONTH_H, minHistory: 360, lagFrac: 0.75, cooldownH: 12 });
+// Performance (2026-11-08, events unchanged): whether BTC's hour is an impulse doesn't depend on the alt, so it is
+// decided ONCE per BTC series and params (memoised on the ctx map) instead of once per alt per hour. Same rule, same
+// checks, same order of outcomes: explorerReads.test.mjs compares it with the registered body event by event.
+const impulseMemo = new WeakMap(); // btc candle map → Map(paramsKey → Map(hour → BTC 1h return, impulse hours only))
+function btcImpulses(btc, p) {
+  const key = `${p.pct}|${p.lookbackH}|${p.minHistory}`;
+  let byParams = impulseMemo.get(btc);
+  if (!byParams) { byParams = new Map(); impulseMemo.set(btc, byParams); }
+  if (byParams.has(key)) return byParams.get(key);
+  const btcRet = new Map();
+  for (const h of btc.keys()) { const a = btc.get(h), b = btc.get(h - 1); if (b && b.c > 0 && a.c > 0) btcRet.set(h, a.c / b.c - 1); }
+  const rh = [...btcRet.keys()].sort((a, b) => a - b);
+  const absv = rh.map((h) => Math.abs(btcRet.get(h)));
+  const out = new Map();
+  let lo = 0;
+  for (let i = 0; i < rh.length; i++) {
+    const h = rh[i], r = btcRet.get(h);
+    while (lo < i && rh[lo] < h - p.lookbackH) lo++;
+    if (r === 0 || i - lo < p.minHistory) continue; // the prior window = rh[lo..i) (every return in [h − lookback, h))
+    const x = Math.abs(r);
+    let below = 0, equal = 0;
+    for (let k = lo; k < i; k++) { const v = absv[k]; if (v < x) below++; else if (v === x) equal++; }
+    if ((below + equal / 2) / (i - lo) >= p.pct) out.set(h, r);
+  }
+  byParams.set(key, out);
+  return out;
+}
+export function btcLeadLagEvents(cs, _pmap, ctx = {}, p = LEAD_LAG) {
+  if (String(cs.coin || "").toUpperCase() === "BTC") return [];
+  const btc = ctx && ctx.btcCandles instanceof Map ? ctx.btcCandles : null;
+  if (!btc || !btc.size) return [];
+  const cbh = candleMap(cs.candleHist);
+  const impulses = btcImpulses(btc, p);
+  const hours = [...cbh.keys()].sort((a, b) => a - b);
+  const ev = [];
+  let last = -Infinity;
+  for (const h of hours) {
+    if (h - last < p.cooldownH) continue;
+    const r = impulses.get(h);
+    if (r == null) continue;
+    const a = cbh.get(h), b = cbh.get(h - 1);
+    if (!b) continue;
+    const alt = a.c / b.c - 1;
+    if (!(Math.sign(r) * alt < p.lagFrac * Math.abs(r))) continue;
+    ev.push({ t: Number(a.t) + H, side: r > 0 ? "LONG" : "SHORT" });
+    last = h;
+  }
+  return ev;
+}
+
+// ── 12 · funding_basis_split — registered 2026-11-07, counts from 2026-11-08T00:00Z ──────────────────
+// docs/research/funding-basis-split-prereg.md (batch 4 D, explorer-drafts-4.md; borst: "register
+// funding-basis at the drafted setting"). The two leverage prices disagree. At an oi:hist row (hour h) with a
+// basis:hist row in the same hour: funding ranks ≥ 80th percentile of the coin's prior 30 days (longs paying)
+// AND the spot-perp basis is at or below its own prior-30-day median → SHORT; the mirror (funding ≤ 20th,
+// basis ≥ median) → LONG. Each series needs ≥ 360 prior hours. Cooldown 24h per coin. Body moved unchanged
+// from explorerDrafts4.mjs (drafted 2026-10-27 as batch 2's D, before any count).
+export const SPLIT = Object.freeze({ lookbackH: MONTH_H, minHistory: 360, hi: 0.8, lo: 0.2, cooldownH: 24 });
+// Performance (2026-11-08, events unchanged): the two 30-day windows slide with the hour instead of being re-scanned
+// from the start of the series, and the basis median is taken only when funding is at an extreme (the only case it
+// can change the answer). explorerReads.test.mjs compares it with the registered body event by event.
+export function fundingBasisSplitEvents(cs, _pmap, _ctx, p = SPLIT) {
+  const m = byHour(cs.oiHist, (r) => Number.isFinite(Number(r.funding)) && Number(r.price) > 0);
+  const bm = byHour(cs.basisHist, (r) => Number.isFinite(Number(r.basisPct)));
+  if (!m.size || !bm.size) return [];
+  const hours = [...m.keys()].sort((a, b) => a - b);
+  const bHours = [...bm.keys()].sort((a, b) => a - b);
+  const fVals = hours.map((k) => Number(m.get(k).funding));
+  const bVals = bHours.map((k) => Number(bm.get(k).basisPct));
+  // [lo, hi) of a sorted hour list = the hours in [h − lookback, h); h only grows, so the pointers only move forward
+  const slider = (list) => { let lo = 0, hi = 0; return (h) => { while (hi < list.length && list[hi] < h) hi++; while (lo < hi && list[lo] < h - p.lookbackH) lo++; return [lo, hi]; }; };
+  const fWin = slider(hours), bWin = slider(bHours);
+  const ev = [];
+  let last = -Infinity;
+  for (const h of hours) {
+    if (h - last < p.cooldownH) continue;
+    const b = bm.get(h);
+    if (!b) continue;
+    const [flo, fhi] = fWin(h), [blo, bhi] = bWin(h);
+    if (fhi - flo < p.minHistory || bhi - blo < p.minHistory) continue;
+    const x = Number(m.get(h).funding);
+    let below = 0, equal = 0;
+    for (let k = flo; k < fhi; k++) { const v = fVals[k]; if (v < x) below++; else if (v === x) equal++; }
+    const fr = (below + equal / 2) / (fhi - flo);
+    if (!(fr >= p.hi || fr <= p.lo)) continue;
+    const bmed = median(bVals.slice(blo, bhi)), bx = Number(b.basisPct);
+    const side = fr >= p.hi && bx <= bmed ? "SHORT" : fr <= p.lo && bx >= bmed ? "LONG" : null;
+    if (!side) continue;
+    ev.push({ t: m.get(h).t, side });
+    last = h;
+  }
+  return ev;
+}
+
+// The four registered 2026-10-16 (docs/research/explorers-prereg.md), batch 2 (2026-10-27), batch 3
+// (2026-11-06) and batch 4 (2026-11-07). Labels are the scoreboard's.
 export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "level_reclaim", label: "Prior-day high/low swept and reclaimed", gen: levelReclaimEvents }),
   Object.freeze({ name: "oi_div_reversal", label: "Extreme 24h move on falling OI, faded", gen: oiDivReversalEvents }),
@@ -200,5 +390,13 @@ export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "oi_div_reversal_4h", label: "Extreme 4h move on falling OI, faded", gen: oiDivReversal4hEvents }),
   // batch 2, registered 2026-10-27 (docs/research/oi-coil-break-prereg.md)
   Object.freeze({ name: "oi_coil_break", label: "OI builds into a flat tape, range break followed", gen: oiCoilBreakEvents }),
+  // batch 3, registered 2026-11-06 (session-fade-prereg.md, level-reclaim-tight-prereg.md, spot-absorb-prereg.md)
+  Object.freeze({ name: "session_fade", label: "NY open drive (13–15 UTC), faded", gen: sessionFadeEvents }),
+  Object.freeze({ name: "level_reclaim_tight", label: "Level reclaim, only when the coin is quiet for itself", gen: levelReclaimTightEvents }),
+  Object.freeze({ name: "spot_absorb", label: "Perp-led move, spot on the other side, OI flat: follow spot", gen: spotAbsorbEvents }),
+  // batch 4, registered 2026-11-07 (btc-lead-lag-prereg.md)
+  Object.freeze({ name: "btc_lead_lag", label: "BTC impulse, lagging alt follows", gen: btcLeadLagEvents }),
+  // batch 4, registered 2026-11-07 (funding-basis-split-prereg.md)
+  Object.freeze({ name: "funding_basis_split", label: "Funding and basis disagree: follow the basis", gen: fundingBasisSplitEvents }),
 ]);
 export const EXPLORER_GENS = Object.freeze(Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.gen])));

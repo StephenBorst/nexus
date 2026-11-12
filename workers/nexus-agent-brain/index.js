@@ -16,11 +16,12 @@
 // ═══════════════════════════════════════════════════════════
 
 import { orderlyGet } from "../nexus-lab-api/orderlyGet.mjs";
-import { deriveSignal, computeRegime, atrPct, oiSnapshotDue, signalSourceT } from "./logic.mjs";
+import { deriveSignal, computeRegime, atrPct, oiSnapshotDue, signalSourceT, prevSnapshotUsable, candleFetchDue } from "./logic.mjs";
 import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 import { HOLDOUT_PERPS } from "../../app/lib/recordedUniverse.mjs";
 import { levelReclaimLive, levelReclaimRefusal } from "../../app/lib/levelReclaim.mjs";
+import { parseLiveLift, liveLifted, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
 
 // The markets we ALWAYS record oi:hist for. ⚠️ Keep this in step with
 // VALIDATE_UNIVERSE in nexus-lab-api/strategies.mjs — a symbol the walk-forward asks
@@ -50,6 +51,7 @@ const orderlyPublicGet = (url) => orderlyGet(url, { httpErrors: "return" });
 
 export default {
   async scheduled(event, env) {
+    let completed = false; // the heartbeat is stamped only for a run that got through (no fatal error)
     try {
       // Core OI history is MARKET DATA, not a per-user artifact — record it every
       // tick BEFORE any early return, so the CONFLUENCE backtest series keeps
@@ -75,9 +77,9 @@ export default {
       await recordCandlesForSymbols([...HARNESS_SYMBOLS, ...HOLDOUT_PERPS.filter((s) => !HARNESS_SYMBOLS.includes(s))], env);
 
       const usersRaw = await env.NEXUS_AGENT.get("agent:users");
-      if (!usersRaw) { console.log("[brain] no active users"); return; }
+      if (!usersRaw) { console.log("[brain] no active users"); completed = true; return; }
       const users = JSON.parse(usersRaw);
-      if (users.length === 0) { console.log("[brain] no active users"); return; }
+      if (users.length === 0) { console.log("[brain] no active users"); completed = true; return; }
 
       console.log(`[brain] processing ${users.length} active user(s)`);
 
@@ -125,7 +127,11 @@ export default {
       // worker var LEVEL_RECLAIM_LIVE = "true" (commented out in wrangler.toml) AND a PAPER config
       // trades it. Off ⇒ a LEVEL_RECLAIM config gets no levelReclaim* fields and sits out.
       const levelLive = env.LEVEL_RECLAIM_LIVE === "true";
-      const needLevel = levelLive && Object.values(userConfigs).some(({ config }) => config.signalMode === "LEVEL_RECLAIM" && !levelReclaimRefusal(config));
+      // The one-wallet live lift (app/lib/liveLift.mjs, build #3 of the live plan): EMPTY in wrangler.toml = disarmed,
+      // so every non-PAPER level_reclaim config is still refused.
+      const lifts = parseLiveLift(env[LIVE_LIFT_VAR]);
+      const liftOf = (address, config) => liveLifted(config, address, lifts);
+      const needLevel = levelLive && Object.entries(userConfigs).some(([address, { config }]) => config.signalMode === "LEVEL_RECLAIM" && !levelReclaimRefusal(config, { liveLift: liftOf(address, config) }));
       const rawBySymbol = {};
       for (const symbol of symbolSet) {
         try {
@@ -165,7 +171,7 @@ export default {
             if (!raw) continue;
             const coin = sym.replace("PERP_", "").replace("_USDC", "");
             const cons = (config.respectSmartMoney && smartConsensus) ? smartConsensus[coin] : null;
-            const sig = deriveSignal(raw, config, config.respectRegime ? regime : null, cons);
+            const sig = deriveSignal(raw, config, config.respectRegime ? regime : null, cons, { liveLift: liftOf(address, config) });
             if (sig.direction !== "NONE" && sig.confidence > best.confidence) {
               best = { symbol: sym, direction: sig.direction, funding: raw.fundingRate, oi: raw.oi, price: raw.price, confidence: sig.confidence, reason: sig.reason, sourceT: signalSourceT(raw, config) };
             }
@@ -182,13 +188,15 @@ export default {
           console.error(`[brain] assign error for ${address.slice(0, 10)}:`, e.message);
         }
       }
+      completed = true;
     } catch (e) {
       console.error("[brain] fatal error:", e.message);
     } finally {
-      // Liveness heartbeat — stamps every completed run regardless of whether
-      // any signals were emitted (e.g. all active users hold open positions, so
-      // the brain correctly emits nothing). The ops monitor watches this.
-      try { await env.NEXUS_AGENT.put("ops:brain:heartbeat", String(Date.now())); } catch { /* best-effort heartbeat */ }
+      // Liveness heartbeat — stamps every COMPLETED run regardless of whether any signals were
+      // emitted (e.g. all active users hold open positions, so the brain correctly emits nothing).
+      // A run that died on a fatal error doesn't stamp, so the ops monitor's "brain down" alert sees a
+      // brain that crashes every tick (it used to stamp in `finally` regardless).
+      if (completed) { try { await env.NEXUS_AGENT.put("ops:brain:heartbeat", String(Date.now())); } catch { /* best-effort heartbeat */ } }
     }
   },
 };
@@ -243,7 +251,9 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
 
   // Prior snapshot for this symbol (set last cycle).
   const prevRaw = await env.NEXUS_AGENT.get(`market:prev:${symbol}`);
-  const prev = prevRaw ? JSON.parse(prevRaw) : null;
+  const stored = prevRaw ? JSON.parse(prevRaw) : null;
+  // A snapshot from more than ~2 cycles ago isn't "last cycle": no delta this tick (logic.mjs).
+  const prev = prevSnapshotUsable(stored) ? stored : null;
   const priceChange = prev && prev.price ? (markPrice - prev.price) / prev.price : 0;
   const oiChange = prev && prev.oi ? (openInterest - prev.oi) / prev.oi : 0;
 
@@ -443,7 +453,7 @@ async function recordCandlesForSymbols(symbols, env) {
         }
       }
 
-      if (last && now - last.t < 55 * 60 * 1000) continue; // hourly — skip the fetch entirely
+      if (last && !candleFetchDue(last, now)) continue; // the last closed bar is stored: skip the fetch
 
       const nowSec = Math.floor(now / 1000);
       const th = await orderlyPublicGet(`${ORDERLY_API}/tv/history?symbol=${symbol}&resolution=60&from=${nowSec - 3 * 3600}&to=${nowSec}`);

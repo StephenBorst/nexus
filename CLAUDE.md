@@ -34,7 +34,8 @@ product is what sits on top:
   `app/config/subscription.ts` (`PRO_FEATURES`, `PRO_AGENT_STRATEGIES`). PRO is a software subscription: NO revenue
   share / yield / dividends to holders, ever.
 - **Server-enforced PRO gates:** MOMENTUM + MEAN_REVERSION agent modes (402 `pro_strategy_locked` on PUT /agent, PUT
-  /config, bankr/activate), DCA (402 `pro_dca_locked`), webhooks, backtest/sweep/validate, hosted AI. Core modes stay free.
+  /config, bankr/activate), DCA (402 `pro_dca_locked`), operator delta-cap + callbacks (402 `pro_operator_locked`),
+  webhooks, backtest/sweep/validate, hosted AI. Core modes stay free.
 - **Owner revenue page `/ops/revenue`** (noindex, not in nav): `POST /ops/revenue {address, labAuth, refresh?}`
   (`routes-revenue.mjs` + `revenue.mjs`). Reads receivers, the Bankr wallet, borst.eth, the Safe and the NEAR Intents
   fee balance; moves nothing. Only a Lab-signed Safe owner or a wallet in `OPS_WALLETS`. Unreadable holding = "unread",
@@ -88,17 +89,22 @@ product is what sits on top:
   Nordstern/0x or GeckoTerminal. Read deploy results in the Action log.
 
 ## Cloudflare Workers
-- **nexus-lab-api** (`workers/nexus-lab-api`) → `og.nexustradinglabs.com` = `AGENT_API`. Its `*.workers.dev` is NOT
+- **nexus-lab-api** (`workers/nexus-lab-api`) → `og.nexustradinglabs.com` = `AGENT_API`. Crons: `17 * * * *` hourly jobs,
+  `0 */12`, and `* * * * *` = the minute grader + (every 5th minute) agent push alerts; it returns before the hourly jobs. Its `*.workers.dev` is NOT
   routed (404/1042): always use the custom domain. `GET /agent/:a` returns `state` wholesale.
 - **nexus-agent-exec**: 1-min cron, enters/monitors/closes. Stamps `ops:exec:heartbeat`; `GET /health`.
-- **nexus-agent-brain**: 5-min cron, writes `agent:signal:{addr}` and the hourly history series.
+- **nexus-agent-brain**: 5-min cron, writes `agent:signal:{addr}` and the hourly history series. Its price/OI delta is
+  measured from `market:prev:{symbol}` only when that snapshot is ≤ 12 min old (`prevSnapshotUsable`, shared rule
+  `app/lib/marketSnapshot.mjs`; lab-api's `/signals` rows and trend-regime OI use it too, rows carry `delta_fresh`);
+  candles are fetched only when the last closed bar is missing (`candleFetchDue`); the heartbeat stamps completed runs only.
 - **nexus-carry-engine**: sector-neutral funding-carry basket. Hourly = PAPER record; `*/5` = LIVE maker re-quote, a
   no-op unless `CARRY_LIVE=true`. KV `CARRY` = `b34f3af62cfe4bc2b5d03ce9c7b55868`. Reached on
   `https://nexus-carry-engine.stephenpatrick24.workers.dev` (`CARRY_API` in `app/pages/proof/CarrySleeve.tsx` and
   `app/config/assistantTools.ts`); no custom domain exists, don't "fix" it. **Live path is built, deployed DISARMED,
   owner-only:** don't set `CARRY_LIVE` or add key secrets. Guardrails: no key / `carry:kill` / unbalanced plan ⇒ no-op,
   per-order cap, POST_ONLY. Maker execution is mandatory (taker fees ≈ breakeven). Ops routes need header
-  `x-carry-token`. `carryBasket.mjs` is shared with `tools/backtest/relvalue4.mjs`. Read `README.md` before touching it.
+  `x-carry-token` = secret `CARRY_ADMIN_TOKEN` (≥16 chars), FAIL CLOSED: no secret = 401 for everyone (`carryAuth.mjs`;
+  it used to let everyone in, 2026-11-09). `carryBasket.mjs` is shared with `tools/backtest/relvalue4.mjs`. Read `README.md` before touching it.
   Its tests are split by concern; glob the dir.
 - **nexus-ledger-anchor**: hourly anchor + `runMonitor` (Telegram ops alerts: signer gas, ledger drift >6h, brain down
   >15 min via `ops:brain:heartbeat`, exec down >10 min). `GET /monitor-now`.
@@ -130,26 +136,66 @@ product is what sits on top:
   by `ops:halt:log`; public `GET /ops/halt`). exec reads it once per tick (`app/lib/liveHalt.mjs`; unreadable = halted)
   and skips every non-PAPER entry right before `enterPosition`. Exits, kill, DCA ladders, PAPER and parity untouched;
   closes nothing. No auto thresholds: a breaker rule is a read, graded first.
-- **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open. KILL =
+- **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open (no stop/TP:
+  the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.
+- **Kill order** (`nexus-agent-exec/killSwitch.mjs`, lab-api `routes-kill.mjs`, fixed 2026-11-06): the route only sets
+  `agent:kill:{addr}` (and puts the wallet back on `agent:users`); it never deletes the key or the list entry. Exec closes
+  WITH the key, then stops + deletes it. An unconfirmed close keeps flag + key and retries each tick; after
+  `KILL_MAX_ATTEMPTS` (10) it stops anyway, keeps the record and Telegrams the owner to close by hand.
+- **Tick order** (`processUser`, pinned by `nexus-agent-exec/tickOrder.test.mjs`): kill → active/config → webhook CLOSE →
+  manage the open position → adopt a ghost → daily caps → entries. **Daily caps gate entries only** (fixed 2026-11-06:
+  the cap check used to run first, so the day's last allowed trade went unmanaged until the 24h reset).
 - **Reconcile:** exec reads the live position first; exchange flat ⇒ clear the stale record. On a read error it manages
-  on cached data, never clears.
+  on cached data, never clears. An Orderly ERROR answer (`success:false`: rate limit, expired/removed key) is a read error,
+  never "flat" (`exchangePositionQty` / `exchangePositionRows`, exec `logic.mjs`; fixed 2026-11-06).
 - **Modes** (`deriveSignal`, brain `logic.mjs`): CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE (free); MOMENTUM,
-  MEAN_REVERSION (PRO). **LEVEL_RECLAIM = STAGED, OFF** (2026-11-04, pipeline-if-then.md Edge work): the registered
-  read via the SHARED rule `app/lib/levelReclaim.mjs` (the grader's `levelReclaimEvents` moved there unchanged;
-  explorerReads re-exports it), computed by the brain only behind worker var `LEVEL_RECLAIM_LIVE` (commented out in
-  wrangler.toml, a test fails if set) and only for PAPER configs (`levelReclaimRefusal`); fires in the hour after an
-  event, `sourceT` = the event time. No Lab mode, no preset (tested). Parity: `levelReclaim.test.mjs` (hour by hour),
-  `/agent/:a/parity` maps it to the `level_reclaim` axis. Turned on only in the PR that sets up its paper wallet. Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
+  MEAN_REVERSION (PRO). **LEVEL_RECLAIM = ON for PAPER only** (built off 2026-11-04; on 2026-11-05 when level_reclaim
+  was served TRADEABLE): the registered read via the SHARED rule `app/lib/levelReclaim.mjs` (the grader's
+  `levelReclaimEvents` moved there unchanged; explorerReads re-exports it), computed by the brain behind worker var
+  `LEVEL_RECLAIM_LIVE = "true"` (brain wrangler.toml) and only for PAPER configs (`levelReclaimRefusal`); fires in the
+  hour after an event, `sourceT` = the event time. **Loaded only by the hidden link `/lab?tab=agent&deploy=level-reclaim-paper`**
+  (borst: a FRESH wallet, owner-only) with `LEVEL_RECLAIM_PAPER_CONFIG` (graded exit, 11 main-card coins, no filters, wide
+  caps). No mode button, no Strategy Library preset, no /proof Load until its wallet has 30 paper trades with parity
+  CLEAN, judged after fees (`/paper-costs`), tested. Parity: `levelReclaim.test.mjs` (hour by hour), `/agent/:a/parity`. Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
   evaluates nothing** (no "all" default).
 - **Exits** (`evaluateExit`, exec `logic.mjs`): SL → TIMEOUT → trail before TP; `takeProfits` ladder OVERRIDES
   `tpPercent` (`normTakeProfits`); DCA has its own monitor path. Exit vocabulary: `SL · TIMEOUT · TRAIL · BE · TP ·
   TP_PARTIAL · KILLED · WEBHOOK_CLOSE` (no "signal flip").
+- **Exchange-side backstop stop** (`nexus-agent-exec/backstop.mjs`, 2026-11-07; live plan §5 item 2): each LIVE
+  single-entry position also rests a reduce-only Orderly position stop (`POSITIONAL_TP_SL`, STOP_LOSS child,
+  CLOSE_POSITION, mark trigger, built as the SDK builds it) at 1.5× its stop distance beyond the entry, snapped away
+  from the entry. It only catches a stalled worker; exec's own stop closes first. Placed right after the fill
+  (`ensureBackstop`; retried each tick up to 5×, then Telegram), cancelled once exec's close is confirmed
+  (`cancelBackstop`; a failed cancel queues in `state.backstop_cleanup`, swept before the next live entry, which is
+  refused on a market that still carries one; 10 tries then Telegram). Exchange flat + the order fired = Telegram, NOT
+  booked to `agent_trades` (no fill read). Not on DCA positions or paper; the trail/BE don't move it. DEACTIVATE leaves
+  it resting with the position (the Lab + DELETE reply name it: `agentControls.mjs restingStop`, one copy for both).
+  Orderly keeps ONE position TP/SL per market + side: a refused place reads the market's working one
+  (`restingBackstop`, the SDK's match) and adopts ours by its exact trigger (a reply lost to a timeout); any other
+  is the owner's (`backstop.foreign`): never a second one, never cancelled by exec. KILL retries the queued cancels
+  with the key before deleting it (`io.sweep`), and Telegrams any still resting (fixed 2026-11-08).
 - **Graded-exit contract** (`exitContract:"R_CONTRACT"`, `app/lib/gradedExit.mjs`): stop 1.2× H4 ATR-14, target 1.5×,
   168h. **PAPER ONLY**: `gradedExitRefusal` refuses non-PAPER configs and extra exit parts (exec at the top of
-  `enterPosition`; lab-api 409 `graded_exit_refused`). Lifting that = its own reviewed PR.
+  `enterPosition`; lab-api 409 `graded_exit_refused`). **One-wallet live lift, BUILT DISARMED** (`app/lib/liveLift.mjs`,
+  2026-11-08, build #3 of the live plan): worker var `GRADED_EXIT_LIVE_LIFT` ("0xWALLET@LEVEL_RECLAIM") is EMPTY in
+  lab-api, exec and brain wrangler.toml (`liveLift.test.mjs` fails otherwise); a listed wallet is lifted only for the
+  plan's exact config (`livePlanRefusal` / `LIVE_PLAN_LIMITS`: fixed-risk ≤ $10, 3×, margin ≤ $300, ≤ $30/day, ≤ 4/day,
+  168h, main coins, no invert/ungraded gate). It passes `{ liveLift }` to `gradedExitRefusal`, `riskSizingRefusal` and
+  `levelReclaimRefusal` (brain `deriveSignal` 5th arg); the Lab never decides it. A lifted wallet opens only the brain's
+  read on a plan coin (`liftedSignalRefusal`, exec, before any read): no webhook, directive (its own size) or autocopy
+  entry; autocopy on the config un-lifts it (2026-11-08). Arming = borst in person, its own PR.
 - **Webhook (PRO):** `POST /agent/hook/:token` → `agent:webhook_signal:{addr}` (600s). **Strategy library:**
   `/agent/:a/strategies` + `/publish`; public board ranks by the author's GRADED record, never backtest.
+- **Operator fields (PRO · same ARCHITECT/100M gate as momentum/mean-rev/DCA; all opt-in, default-OFF):**
+  `config.maxPortfolioDeltaUsd` — exec sums signed notional across the account's live positions before any entry
+  (`portfolioDeltaCheck`, exec `logic.mjs`) and REJECTS one that grows net directional exposure past the cap (a
+  reducing trade always passes; LIVE reads `/v1/positions`, PAPER its own book; fail-OPEN only on a null read).
+  `config.callbackUrl` (https) + `config.webhookSecret` (≥16c) → exec POSTs an HMAC-SHA256-signed body
+  (`X-Nexus-Signature: sha256=…` + `X-Nexus-Event`) on ENTRY/DCA_ADD/PARTIAL_TP/CLOSE (CLOSE carries reason+pnl),
+  within-tick + 1 retry, best-effort (`fireCallback`/`buildCallbackPayload`, exec; never blocks the trade lifecycle).
+  Shape + PRO gate = `validateOperatorConfig` (lab-api `logic.mjs`) on all 3 config-write paths → 400 bad shape /
+  402 `pro_operator_locked`. Surfaced in AgentView's OPERATOR card + the Bankr skill (`docs/SKILL.md`).
 - **Whole-strategy loads reset the experimental filters** (`EXPERIMENTAL_FILTERS_OFF` in `app/utils/agentPrefill.ts`,
   incl. `basisConfirm` and `exitContract`): presets, sweep rows, scoreboard Load, Proof Deploy, trader COPY, saved/copied
   strategies (`deployToAgent(..., { replaceFilters: true })`, applied by the receiver). Partial hand-offs keep filters.
@@ -163,7 +209,8 @@ product is what sits on top:
   recorded rate is counted missing, never free), shown as AFTER COSTS (`PaperCostLine`). Display only.
 - **Parity** (`GET /agent/:a/parity`, `app/lib/paperParity.mjs`): pairs paper entries with the graded events, explains
   misses (busy incl. the OPEN position, daily caps on the wallet's own day via `lastReset`, another market won).
-  Leftovers = DRIFT. A second entry on one read opened before exec's one-entry-per-read fix went live
+  Leftovers = DRIFT. The window starts where the record began (`parityWindowStart`: the later of `started_at`,
+  stamped when activation creates the state, and `paper_reset_at`; a full 50-row ledger starts at its oldest row). A second entry on one read opened before exec's one-entry-per-read fix went live
   (`ONE_ENTRY_PER_READ_LIVE_MS`, 2026-10-30T17:14:41Z) is listed as explained (`PRE_FIX_REENTRY`); after it = DRIFT.
   Before calling DRIFT a brain bug, check the open position. **Known DRIFT cause (2026-10-29,
   `docs/research/price-spine-drift-2026-10-29.md`):** `priceByHour` rounds `oi:hist` rows to the nearest hour and the
@@ -175,7 +222,8 @@ product is what sits on top:
   symbol + side + `sourceT` once (`brainSignalKey`/`alreadyTradedSignal`, state `last_signal_key`). The 15-min cooldown
   counts from the exit as well as the entry (`closePosition` stamps `last_trade_time`).
 - **Paper wallets:** graded-exit wallet `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
-  `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE`.
+  `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE` · level_reclaim paper (fresh,
+  2026-11-05, the hidden link) `0x95e26E980e300C34360933b849457F42c6Bd7622`.
 - lab-api needs `SUPABASE_URL` / `SUPABASE_ANON_KEY` for History reads.
 - `test-signal` and the Force button are DEV/PAPER-only. Feed bridge: `PUBLISH_AGENT_FEED=true` (real trades only).
 - Multi-strategy concurrency = one Orderly sub-account per strategy, after a proven edge (deferred).
@@ -203,6 +251,11 @@ product is what sits on top:
 - Don't curate the market list to the winners, and don't loosen fold math to make a verdict pass.
 
 ## Signal engine — the scoreboard
+- **CPU budget:** the scoreboard's cold rebuild (hourly) runs each generator several times and sits near the Worker CPU
+  limit (error 1102 seen 2026-11-08 right after batch 4). A new read's generator must slide its windows (O(n·window)),
+  never re-scan from the start or redo per-coin work that doesn't depend on the coin; time it on the public series
+  before registering. A faster body must fire identical events (kept-reference test, as for btc_lead_lag /
+  funding_basis_split in explorerReads.test.mjs).
 - `GET /intel/axis-backtest` (`axisbt.mjs runScorecard`, cached; bump the `axisbt:vN` key when the payload changes) →
   /proof and the Feed SIGNALS tab. Forward returns, no lookahead, pooled across the recorded markets, half-vs-half
   stability, horizons 4/12/24h, R on a frozen contract (1.2×ATR stop, 1.5R, 168h).
@@ -215,6 +268,8 @@ product is what sits on top:
 - **Reads:** basis (OKX spot-perp, `flow.mjs`), CVD, liq-flush, smart money, OI, book imbalance, RSI reset, vol regime
   (Deribit). Basis ≠ contango: basis is a signal, contango/backwardation is a conditioner. Recorded hourly as
   `basis:hist` / `cvd:hist` / `liq:hist` / `sm:hist` / `oi:hist` / `candle:hist` in `NEXUS_AGENT`.
+  `spotcvd:hist` (spot-book CVD, same fold as `cvd:hist`, from 2026-11-05) is read ONLY by the registered `spot_absorb`
+  (loaded into each scoreboard coin set as `spotCvdHist`; emptied for holdout coins on the main card like basis/CVD).
 - **One rule, two users:** traded and graded rules live once in `app/lib/` (`basisFade.mjs`, `basisStack.mjs`,
   `gradedExit.mjs`, `funding.mjs`) and both the brain and the grader import them. Parity tests prove live gate ==
   graded read hour by hour. Same-hour semantics: the LAST row in an hour with a side wins (`sideAtHour`); the price
@@ -235,9 +290,18 @@ product is what sits on top:
   PAPER, RETIRED. Only out-of-sample events (after `registeredAt`) count; back-graded history never does. A changed rule
   = a new name + a new dated registration. Stage triggers = `docs/research/pipeline-if-then.md`, applied one PR per
   trigger from the SERVED stage. Registered reads: rsi_reset_deep, level_reclaim, oi_div_reversal, session_momentum,
-  confluence_follow (from 2026-10-17); oi_div_reversal_4h and oi_coil_break (from 2026-10-28, their own prereg pages). Registered
+  confluence_follow (from 2026-10-17); oi_div_reversal_4h and oi_coil_break (from 2026-10-28, their own prereg pages); batch 3
+  (borst's go 2026-11-06, own prereg pages): `session_fade` (session_momentum's event traded the other way, a NEW read) and
+  `level_reclaim_tight` (level_reclaim only when its H4 ATR ranks ≤ its own 30-day median) from 2026-11-08, `spot_absorb`
+  (perp-led 4h move, spot the other way, OI flat → follow spot) from 2026-11-20; batch 4 (borst 2026-11-07):
+  `btc_lead_lag` (BTC 1h move ≥ its own 30-day p90, an alt that moved < 0.75 of it follows BTC) from 2026-11-08, the
+  first read on another coin's tape: the holdout line gets the main card's BTC set as CONTEXT only (`ctxSets` in
+  axisbt `buildEvents`, never graded) and `funding_basis_split` (funding ≥ its 30-day p80 while the basis sits ≤ its
+  30-day median → SHORT, mirror → LONG; 9 main coins, ARB/WLD have no basis) from 2026-11-08. Registered
   bodies live in `explorerReads.mjs`; unregistered drafts in `explorerDraftsB.mjs` (batch 2, `explorer-drafts-b.md`; tests
-  fail if a draft is graded or axisbt imports it). A new registration also adds its read to `pipeline-stages.json`.
+  fail if a draft is graded or axisbt imports it) and `explorerDrafts4.mjs` (batch 4, `explorer-drafts-4.md`: settled, A + D
+  registered, B funding_settle_snap + C level_reclaim_weekly DROPPED; generators get axisbt's `ctx.btcCandles`;
+  `powerCheck.mjs --batch=4`). `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.
 - **Regime window** (`docs/research/graded-exit-regime-prereg.md`, signed 2026-10-26; counts from 2026-10-27T00:00Z,
   limit 2027-04-27): the same read + graded exit, judged once by the watcher via `judgeRegimeWindow`
@@ -269,13 +333,33 @@ product is what sits on top:
   dated line under the stress page's Results; WORSE's pause PR stays borst's), a recorded final verdict is terminal.
   **The watcher merges its own `Pipeline watch:` PR** (borst's go, 2026-11-02) only when checks are green, it is mergeable, the change is display/record only, no parity DRIFT and nothing arms live money; any other session leaves watcher PRs alone. A scheduled task stores its own copy of the
   prompt: after editing the doc, update the task (`update_trigger`).
-- **Live money** = `docs/research/live-money-review.md` (draft, unsigned, arms nothing).
+- **Live money** = `docs/research/live-money-review.md` (the checklist) + `docs/research/live-plan-level-reclaim.md` (the
+  first concrete plan, DRAFT, unsigned, arms nothing; written 2026-11-07 before the paper gate): $1,000 dedicated wallet,
+  fixed $10 risk a trade (1R) sized from the graded stop, 3×, $30/day, kill at −10R, 10-trade first tranche vs the paper
+  wallet. Needs built first, each its own PR: `riskPerTradeUsd` sizing (BUILT 2026-11-07, PAPER only, below), an
+  exchange-side backstop stop (BUILT 2026-11-07, #268), a one-wallet lift of `gradedExitRefusal` (BUILT DISARMED
+  2026-11-08, `liveLift.mjs`). **House rules**
+  (live-money-review.md, SIGNED by borst 2026-11-08; a change = a new dated section) bind every plan: a $10 mechanics test first (backstop shows, KILL clears it;
+  plumbing, not edge), 1R = 1% of a dedicated account, 3R/day, −5R/7d pause, kill at −10R or equity < 90% of deposit,
+  parity CLEAN, size ×2 at most after 30 live trades meeting the bar. Arming and size increases = borst, in person.
+- **Fixed-risk sizing** (`config.riskPerTradeUsd`, `app/lib/riskSizing.mjs`): notional = risk ÷ the trade's own graded
+  stop %, so P&L ÷ risk = R. Graded exit + PAPER only, never with `volTargetPct` or DCA (`riskSizingRefusal`: exec
+  before any read; lab-api 409 `risk_sizing_refused` on all 4 config paths). `capitalPerTrade` = the margin ceiling.
+  exec reads the graded stop BEFORE sizing and stamps `sizing:"RISK"`, `risk_usd` (actual, after snap/cap) on the
+  position + paper row (never the Supabase row). Replays book `tradeNotional` per trade (incl. the random baseline).
+  Lab: the "FIXED RISK / TRADE" field shows under the graded-exit toggle; whole-strategy loads clear it.
+- **Overlap pairs** (`OVERLAP_PAIRS`, axisbt.mjs → the scoreboard's `overlap` block): basis_x_cvd×rsi_reset_deep,
+  level_reclaim×{level_reclaim_tight, session_fade, spot_absorb}, session_fade×oi_div_reversal_4h,
+  confluence_follow×funding_basis_split, oi_div_reversal×oi_div_reversal_4h (one rule, two windows). A filtered read and its
+  parent are one bet, never stacked as two.
 - `/intel/evidence?axis=&hold=` replays a preset across every mature market (pooled ≠ independent; say so).
 - basis:hist had holes from our own OKX burst until the paced `snapshotFlow` fix: read older windows with that in mind.
 - **The Read / Briefing / FADE:** show inputs, never a tally or crown of ungraded reads; the Board's FADE is "a
   mechanical rule, not graded yet" with the nearest graded relative's live grade (`app/lib/fadeGrade.mjs`). Never call
   a read "proven" or "graded" unless the scoreboard grades that exact rule.
-- **/proof layout:** verdict (headline is a claim: change it in the same PR a read clears the bar) → board by stage
+- **/proof layout:** verdict (the headline is a claim COMPUTED from the served stage, `proofHeadline` in proofCopy.mjs, since
+  2026-11-05: "Nothing has proven itself yet" until a read is served TRADEABLE/PAPER with positive exit net, then the read,
+  trades and date; unread/stale board = no claim, never "proven") → board by stage
   (`stageGroups`, never ranked by in-sample R) → calls + callers → agents/arena/desks/carry → ledger.
   Plain-words copy in `app/lib/proofCopy.mjs`; method in `HowWeGrade.tsx`.
 - **House caller is OFF** (`HOUSE_SIGNALS_ENABLED` deleted; gates the Catalyst caller too). Check "off" by reading
@@ -288,6 +372,19 @@ product is what sits on top:
   pages; a call whose window isn't loaded is left out, never graded on a partial window). First touch; same candle =
   LOSS. A WIN pays the GEOMETRIC R from the levels (`callR`), never the stored `riskReward`. Wrong-side levels = INVALID.
   `GRADE_FLOOR_MS`: no grading of times before 2026.
+- **Minute grading** (borst 2026-11-12, `docs/research/minute-grading.md`): calls published from `MINUTE_GRADE_FROM_MS`
+  (2026-11-13T00:00Z, `app/lib/minuteGrade.mjs`) are graded by the SAME `gradeCall` on 1-minute bars (`cd.step = 60`;
+  the time stop stays counted in hours). Forward-only, no `GRADE_V` bump. Archive `m1:{PERP}:{day}` (`minuteCandles.mjs`,
+  no expiry, public `GET /candles/1m/:symbol/:day`); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
+  publish in `labWrite commit`, re-built by the hourly pass); grader `minuteGrader.mjs` on lab-api's `* * * * *` cron
+  (re-grades only calls whose levels traded in minutes that are NEW or CHANGED vs the archive, never-stamped calls, or a
+  due time stop: a re-read unchanged minute never re-triggers, since KV reads can be ~60 s stale) + a `full` sweep after
+  the hourly pass; one run at a time (`LOCK_KEYS.minuteGrade`); each fill/grade alert once (`claimOnce`, a NexusLock lease
+  never released). Field ownership on a minute call: the minute grader writes
+  `GRADE_FIELDS`, the hourly pass `PLAN_FIELDS` only (`writePassFields`). The board counts its sealed stamp; `/verify`
+  re-runs it on the archive (`orderly_1m_regrade`). Never grade on the websocket mark: the cards' "· CONFIRMING" hint
+  (`provisionalTouch`) is display only. Hourly suites that build calls from `Date.now()` pin
+  `_pinMinuteGradeFrom(Infinity)` (tests only; a test fails if app/ or workers/ code calls it).
 - **The entry must trade:** filled at the post only if the entry is within 0.3% (`ENTRY_AT_MARK_PCT`, in
   `app/lib/entryAtMark.mjs`) of the server's `publishMark`, else inside the posting hour's range (calls without a mark);
   otherwise a resting order graded from its fill hour; never filled = PENDING. Stamps: `fillState` WORKING/OPEN,
@@ -302,6 +399,13 @@ product is what sits on top:
   TP2 short of TP1 = INVALID. Rules in `app/lib/callMath.mjs` (`splitPlan`, `callInvalidReason`, `callRR`).
   LATE_ENTRY flags only calls filled at the post. A copy keeps the source's split (`copiedExitPlan`, both Lab copy
   modals): TP2 without `exitPlan` grades TP1-only, a different trade (+2R vs +0.5R on TP1-then-stop).
+- **Declared time stop** (borst 2026-11-06, `docs/research/engine-ab-time-stop-note-2026-11-06.md`): `timeStopH: N` (whole
+  hours 1–168) frozen at publish like the split, graded by the shared `gradeCall` for ANY caller (`callMath timeStopPlan`;
+  no wallet logic): no TP/SL by bar N's close ⇒ settle at that close, R = move ÷ risk, R > 0 WIN else LOSS, `exitReason:
+  "TIME"` (server field, carried by the pass). Bar 0 = posting hour (at post) / fill hour (resting); TP/SL first in every
+  bar; window in TIME; settles only once a later bar exists. Read only on calls published from `TIME_STOP_FROM_MS`
+  (2026-11-06); refused with a split; on-chain as `#TIMESTOP_<N>H`; copies keep it (`copiedTimeStop`). Engine B's
+  main track declares 4h; Track M declares none. No `GRADE_V` bump.
 - **Cards** read R:R from the levels (`callRR`), show a position only once the entry trades (`callLifecycle.mjs`,
   `AwaitingFill.tsx`), and show NOT GRADED for INVALID. `/feed` carries resolution rows: filter them before treating rows as calls.
 - **One call, one wallet:** the Lab device cache is per wallet (`app/lib/labCache.mjs`); copies held by other wallets
@@ -315,7 +419,7 @@ product is what sits on top:
   walletAddress}` (keyless) builds the call from calldata (`#SPLIT_50` declared on-chain in notes).
 - **Reads:** `GET /theses/leaderboard` (≥5 graded, net-positive R; an empty board is correct when nobody qualifies:
   check `/theses/process/:wallet` before debugging), `/theses/status/:wallet`, `/verify/:wallet/:id` (the grader
-  re-run), `/theses/ledger` (+ chain, anchored). Fill/TP1 alerts go out from the hourly pass.
+  re-run), `/theses/ledger` (+ chain, anchored). Fill/TP1 alerts go out from the pass that stamps them (hourly, or the minute grader).
 - **Ranks:** only graded callers, in the grader's order, then emerging unranked. No self-scored REP anywhere; Rep Score
   code is deleted. Merit ranks (`rankCaller`): Signal / Sharp / Apex. Identity card = `app/lib/identityCard.mjs` on
   `loadIdentity`; no badge unless the grader gave one.
@@ -347,7 +451,8 @@ product is what sits on top:
   one per wallet) + a 24h trading session that derives nothing. Built step by step; step 1 = `app/lib/tradingSession.mjs`
   (one message builder for client and worker) + `routes-session.mjs` (`checkTradingSession`; `POST /v2/session/end-all`
   ends every session issued before the caller's, the stamp `auth:sessions-after:{addr}` only moves forward). No live
-  route accepts a session yet. Step 2 (built 2026-10-31, OFF unless `AUTH_V2_KEYS="true"`): `v2Keys.mjs` +
+  route accepts a session yet. **`AUTH_V2_KEYS = "true"` in lab-api wrangler.toml since 2026-11-06 (borst):
+  additive, v1 walletSig unchanged; test on 0xd9f7…b449's way back before the skill moves.** Step 2 (built 2026-10-31): `v2Keys.mjs` +
   `routes-key.mjs`: random 32-byte keys, AddOrderlyKey `read,trading`, 30 days, sealed in `v2key:{addr}` (NOT
   `agent:key`); `/v2/key/begin|complete|remove` (session; complete/remove also need the challenge, always on) and
   `/v2/key/bankr-register`; rotation removes the old key signed by the new one; NexusLock `LOCK_KEYS.v2Key`. Nothing
@@ -361,7 +466,22 @@ product is what sits on top:
   withdraw alone. Second switch `AUTH_V1_REGISTER_OFF="true"` (`v1Registration.mjs`, unset): `/proxy/bankr-register` →
   the v2 Bankr registration, `/derive-key` + `/proxy/register-key` → 410, `/register-orderly-key` → the v2 page
   (`GET /v2/session/new` mints the unsigned session). Flip it when the Bankr skill moves (step 4), not before: the skill
-  trades with walletSig. 3b = agent + exec expiry (next).
+  trades with walletSig. Step 3b (built 2026-11-06, same flag, `agentAuth.mjs` + exec `agentKey.mjs`): agent + TWAP
+  mutations take a session too; going live with one stores a POINTER `{v:2, ref:"v2key"}` in `agent:key` / `twap:key`
+  (never the secret) once `v2key:{addr}` is active; exec follows it to the current key (a missing key throws, so closes
+  retry), opens nothing whose max hold ends after `expiresAt`, alerts daily from 3 days out; kill has no challenge.
+  Session path, always on: arming AUTONOMOUS or raising capital/leverage needs the §C challenge (`configChallengeNeeded`,
+  `sessionChallenge`); `/v2/key/remove` refuses under a live agent position or active TWAP (`keyInUse.mjs`).
+  Next = step 4, the Bankr skill PR.
+- **Settle PnL** (`workers/nexus-lab-api/settlePnl.mjs`, read from Orderly's SDK 2026-11-06): GET `/v1/settle_nonce` (key-signed)
+  → the WALLET signs EIP-712 `SettlePnl {brokerId, chainId, settleNonce, timestamp}` on the on-chain domain (`0x6F7a…D203`)
+  → POST `/v1/settle_pnl {signature, message+chainType "EVM", userAddress, verifyingContract}`. An empty `{}` settles nothing
+  (every path did that until 2026-11-06). Bankr withdraws settle via Bankr's signature (`runSettle`; a failed settle =
+  502 `settle_failed`, nothing re-sent). `/settle-pnl`: `bankrApiKey` = one call; else prepare (typed data) → submit
+  `{message, signature}`. Orderly's -1117 ("no PNL to settle") = nothing to settle, not a failure (`nothingToSettle`:
+  runSettle stage `nothing`, /settle-pnl 200 `nothingToSettle:true`, the withdraw retry carries on; 2026-11-09, live on
+  0xd9f7…b449). The code-78 retry sizes from `/v1/positions` `free_collateral`, never the holding; `withdrawnAmount`
+  = what Orderly accepted (0 on a refusal).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
 - **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must
@@ -383,16 +503,67 @@ product is what sits on top:
   trades stop appearing, that secret is wrong; canary `supabase log failed`). `CREATE POLICY` doesn't enable RLS and
   policies are OR'd: verify, don't assume.
 - Rows carry Orderly `entry_order_id` / `close_order_id`; "auditable insert REJECTED" in exec logs = investigate.
+- **Live rows book the exchange's fill, not the mark** (since 2026-11-06): after each live market order (entry, DCA add,
+  partial TP, close) exec reads `GET /v1/order/{id}` and books `average_executed_price` when FILLED (`fillPriceFrom`,
+  exec `logic.mjs`; `readFill` tries twice ~0.5 s apart), else the mark. The position carries `entry_fill`
+  ("exchange" | "mark" | "paper"). Rows before this date are mark-priced (no slippage shown). Paper is unchanged.
 - `GET /agents/ledger` + chain, anchored on Arbitrum by `NexusLedgerAnchor` `0x57a698df84a44F3dA3dac3E08CA455a55A4eff84`
   (dedicated signer, `ANCHOR_PRIVATE_KEY`). The call-ledger hash has a fixed field list: changing it breaks the chain.
 
 ## Engagement surfaces
 - `/agents/live` (uPnL from public marks; humans opt in via signed `POST /live/publish`, ~6-min TTL), Desks (score =
   members' graded calls via `computeCallerStats`), `LiveAlerts`, watch-only banner. Sparse at cold start by design.
+- **Lab pulse** (`GET /calls/pulse`, `routes-pulse.mjs`, rule `app/lib/callPulse.mjs`, 5-min KV cache, CORS `*`):
+  open calls (entry traded) + graded in 7 days + the last grade + the /proof headline read from the scoreboard's
+  own cache (`axisbtCacheKey`). **People and our engine callers counted APART, never blended** (borst 2026-11-05):
+  top-level = people, `engines` = the wallets in worker var `ENGINE_CALLER_ADDRESSES` ("Ember", "Ember M"); both house callers (`HOUSE_CALLER_ADDRESS`, `HOUSE_CATALYST_ADDRESS`) left out; no copies. Rows carry the
+  caller's display name (`caller`) + `engine`; `engineRecords` = each engine's all-time graded record (graded, wins, net R)
+  → /proof's "Our engine callers" fold (losses included, "not a signal service"). Each engine row carries a plain
+  line of what it trades (`ENGINE_NOTES` in proofCopy.mjs, keys pinned to `ENGINE_CALLER_ADDRESSES`). Public names (borst
+  2026-11-06): `0x3b2c…bfe4` = "Ember", `0x493d…c086` = "Ember M" (Ember's breakout track). `0xd9f7…b449` was "Engine A"
+  (STOPPED mid-October 2026: its Bankr automation ran out of executions, the original instructions are unrecoverable; the
+  A/B comparison is CLOSED as not runnable, engine-ab-prereg.md Results 2026-11-07; Bankr's memory spec for it was
+  Ember's). Since 2026-11-08 it is "Apex Tape", discretionary manual calls (borst 2026-11-07): worker var
+  `PERSON_FROM_ADDRESSES` (`addr@ISO`) counts it as a PERSON only for calls with server `publishedAt` ≥ that date; its
+  older bot calls count nowhere (`parsePersonFrom`, callPulse.mjs). No engine row for it on /proof. A
+  name lives in the wallet's own profile (PUT /profile, its Lab signature), never set by us. Each row shows "last graded Nd
+  ago" (`lastAt`), so a quiet engine reads as quiet. A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
+  (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
+  newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
+  `signals` (pulse v5, `app/lib/signalProgress.mjs`) = reads served TRADEABLE/PAPER with positive exit net + the paper
+  wallet's lifetime trade COUNT vs `PAPER_MIN_TRADES` 30 (`paperWallet` on the registration, `readPipeline.mjs`; no state =
+  null "unread", never 0; never a paper P&L). The last good {headline, signals} sits in `calls:pulse:board:v1` ≤6h, so a cold
+  scoreboard cache no longer blanks the landing. /proof's FeaturedLead prints the same line under the headline.
+  **Caller pipeline:** Lab home's Calls panel turns into "Your first call, in 30 seconds." → the Thesis Engine when no person
+  has a call open; /proof's "𝕏 Share this week's record" posts `recordShareText` (`app/lib/recordShare.mjs`: pulse counts,
+  people and engines apart, the cleared read's paper count; unreadable pulse = no link). The post links
+  `og.nexustradinglabs.com/share/record?v=<day-hash>` (`recordShareLink`), which unfurls into the 1200×630 card
+  `/og/record.png` (`routes-recordshare.mjs`, `recordCard`; counts only, no green/red; an unreadable pulse = an honest
+  "counts unavailable" card that claims nothing about the signals) and forwards people to /proof.
+- **Position → call (Trade, 2026-11-05):** `PositionCallButton.tsx` sits at the right end of the Trade strip, only when the
+  wallet holds a position in the market on screen; one tap opens the Thesis Engine with a draft (`app/lib/positionCall.mjs`):
+  side from the position, ENTRY = the mark at the tap (never the average open price: a call starts when posted), stop/target
+  = the position's TP/SL only when on the right side of the mark (else dropped, the note says so). No size/P&L in the draft.
+  The trader publishes; nothing auto-posts. No position but a resting limit ENTRY (LIMIT/POST_ONLY, not reduce-only,
+  newest) → "Post your ETH limit buy as a call" (`orderCallDraft`): entry = the order's EXACT price (never rounded), counted
+  once price trades there like the order; the note says a published call is permanent (cancelling the order won't cancel it).
+- **After publish (2026-11-06):** the Thesis Engine shows "Your BTC long is live." + "𝕏 Share your call" (same links as the
+  card's 𝕏 SHARE: `callShareLinks` in `app/lib/callShare.mjs`, the call's OG page) until "Not now".
+- **Follow → new-call alert (2026-11-06, `followAlerts.mjs`):** after a save commits, each call it published for the first
+  time (`sealed.newlyPublished`; public, not holders-only, not a copy; ≤3 per save) notifies the author's followers (scan of
+  `follows:*`, ≤200 per call) as `followed_call` ("kai posted a call: ETH SHORT", links the AUTHOR's call via
+  `thesisWallet`). Both publish paths (`PUT /lab`, `/theses/index`). Phone push only behind its own topic `following`
+  ("New calls from callers you follow"), OFF by default (`DEFAULT_TOPICS`). Telegram links use `thesisWallet` too.
+- **Folds (2026-11-05):** Lab home's Briefing (`nexus_briefing_collapsed`, folded unless the viewer chose "0") and Board
+  (`nx_board_open`) start folded. Spot's Cross-chain card is folded (`nx_xc_open`) but opens itself for a bridge prompt
+  (`xcPreset`) or a transfer still moving (`hasTransferInFlight`: tracking only runs while the card is mounted).
+  Header "Total value" reads "Orderly balance" (`common.totalValue` in `public/locales/extend/en.json`; also the SDK's
+  trade/portfolio asset panels, same number).
 
 ## Phone alerts + Android
 - **Android** = the live site in a Trusted Web Activity, `com.nexustradinglabs.nexus`, live on Google Play. Runbook
-  `docs/android-app.md`. `public/.well-known/assetlinks.json` (3 fingerprints: Play signing, upload, dApp Store) —
+  `docs/android-app.md`. `public/.well-known/assetlinks.json` (3 fingerprints: Play signing, upload, dApp Store, on BOTH packages:
+  Play `com.nexustradinglabs.nexus` + dApp Store `com.nexustradinglabs.trade.twa`) —
   regenerate only via `tools/android/assetlinks.mjs`. Solana dApp Store listing in `marketing/solana-dapp-store/`.
 - **Manifest:** edit `tools/manifest/manifest.mjs`, never `public/manifest.json` (regenerated on every deploy).
 - **Web Push** (`webpush.mjs`, `push.mjs`, `routes-push.mjs`): on when secret `VAPID_PRIVATE_JWK` is set (make it ONCE:
@@ -412,8 +583,12 @@ product is what sits on top:
 - **EVM swap = spanDEX** (`spotQuote.mjs`, `@spandex/core` 0.11.1 pinned): Nordstern always + 0x via `SafeZeroX` when
   `ZEROX_API_KEY` is set (key in a header). Fee `SPOT_FEE_BPS=10` → borst.eth, `feeApplied` only when the provider
   confirms it. The worker drops any quote that spends ≠ the asked amount, approves another token, or carries native
-  value. Signing lives ONLY in `app/pages/token/swapExec.ts` (exact-amount approve against OUR USDC, value 0, chain
-  check, receipt status). Fabric is dead (shut down 2026-09-16). Previews (no wallet) quote for `PREVIEW_SWAPPER`
+  value, and any whose approve target ≠ swap target ≠ a router read live for that chain (`app/lib/spotRouters.mjs`
+  `pinnedRouter`: Nordstern on 1/8453/42161/10/137, 0x AllowanceHolder on 1/8453/42161/137; Robinhood 4663 none yet =
+  deep link only; a provider moving its router = "no in-app route" until added). Signing lives ONLY in
+  `app/pages/token/swapExec.ts` (exact-amount approve against OUR USDC, value 0, chain check, the same router pin at
+  plan time and again right before the approve, receipt status). `ZEROX_API_KEY` IS set (2026-11-12: 0x answered dust
+  quotes Nordstern refused); 0x simply loses on price at normal sizes. Fabric is dead (shut down 2026-09-16). Previews (no wallet) quote for `PREVIEW_SWAPPER`
   `0x…10000`: 0x refuses any taker ≤ `0x…ffff` (the old `0x…dEaD` kept 0x out of every preview until 2026-10-31).
 - **Flash (Definitive)**: ticket `FlashSpotButton.tsx`, orders `FlashOrders.tsx`, proxy routes whitelisted by
   `flashUpstream`. Every order signs the same `FlashOrder` (the trigger price is NOT signed). Guards: deadline per
@@ -435,11 +610,54 @@ product is what sits on top:
   the pinned key AND the signed request (our recipient/refund, pinned assets incl. canonical BTC
   `1cs_v1:btc:native:coin`, exact amount, ≤100 bps, no memo, deadline). Build the deposit tx from `XC_ASSETS`, never the
   response. Fee 10 bps asked (5 bps ours) → borst.eth's intents.near balance (recipient must be an EOA). Quotes go via
-  `POST /xc/quote` with `ONE_CLICK_JWT`, falling back to direct.
+  `POST /xc/quote` with `ONE_CLICK_JWT`, falling back to direct. **`quoteRequest.deadline` is NOT signed** (the SDK hash
+  merges request + quote and `quote.deadline` overwrites it): the card passes the deadline it asked for
+  (`intent.deadline`) and the guard uses that, never the reply's copy. Refusal sweep: `nearIntents.attack.test.mjs`
+  (every signed field tampered/injected/removed, real signed quotes for someone else's swap, unsigned fields).
+- **1Click settlement, proven on-chain** (since 2026-11-05): `GET /xc/settlement?depositAddress=` (`routes-xcsettle.mjs`,
+  read-only, own per-IP budget) takes the signed quote 1Click's status echoes (re-verified, same deposit address), reads
+  each listed tx from its own chain (EVM Transfer logs of the PINNED token / native value to the signed recipient,
+  Solana token-balance deltas by owner+mint, BTC outputs) and judges vs the SIGNED `minAmountOut` (refund: sent −
+  signed `refundFee`), never the status's amounts (`app/lib/nearSettlement.mjs`). Only DELIVERED / REFUNDED are
+  settled; UNREAD / UNPROVEN / CONFIRMING are never green. The card shows green "Delivered · confirmed on <chain>"
+  only on DELIVERED to the recipient it sent the quote for (`settlementLine`). **Native coin paid inside a contract
+  call** (2026-11-05): `debug_traceTransaction` callTracer (only CALL/SELFDESTRUCT value, nothing under a reverted
+  frame) else a balance diff across the block, only if no other tx in that block touches the address; else UNPROVEN.
+  The row's `method` says which (direct / trace / balance); the proof is memoised in LAB_STORE `xc:credit:*` (7 days)
+  by tx + block HASH (`kvMemo`). **Finality:** Ethereum `finalized`; Base/Arbitrum `safe` (falls back to `finalized`;
+  no tag known = not final). The card re-checks ~30 min (15 s × 8, then 60 s) and re-opens itself while a check is
+  open (`hasTransferInFlight`); INCOMPLETE_DEPOSIT keeps polling (it refunds by the deadline). "Copy receipt"
+  (`settlementReceipt` / `receiptWanted`) appears on SHORT / mismatch / UNPROVEN / FAILED / INCOMPLETE / timed out.
+- **1Click FROM Solana** (2026-11-05): SOL / USDC on Solana are send options when a Solana signer is connected (the Spot
+  page's `solProvider`). The ONE signer is `app/pages/token/xcSolSend.ts`; rules in `app/lib/solDeposit.mjs` (tested, with
+  web3.js as referee). SOL = one System transfer; USDC = ATA create-idempotent for the deposit address (1Click's Solana
+  deposit addresses are fresh owners) + one TransferChecked. Only System / SPL Token / ATA programs, v0, no lookup tables,
+  payer = wallet. Simulated on the exact bytes via `/sol/rpc`: deposit side gains the amount, USDC drops ≤ the amount, SOL
+  drops ≤ amount (SOL) + 0.01 SOL. After signing the bytes must still decode to ours (`checkSignedDeposit`: only a capped
+  compute-budget price may be added); we send them. Refunds go to the Solana wallet. Solana→Solana is refused (a swap).
+  An EVM destination with no EVM wallet = a typed address, strict EIP-55. Mainnet dry run (no signing) passed 2026-11-05.
+- **Fund my trading account** (card chip, or `navigate("/token", { state: { xcFund: true } })`): USDC to the trading
+  account's own wallet (EVM account → USDC Arbitrum; Solana account → USDC Solana). Once the delivery is DELIVERED to
+  that wallet (`depositHandoff`), "Deposit to your trading account" opens Orderly's dialog by its registered id
+  `DepositAndWithdrawWithDialogId` (`@orderly.network/ui` modal; `/portfolio` if it isn't registered).
+  **"Other chains" tab inside Orderly's own Deposit / Withdraw window** (2026-11-05): an Orderly plugin
+  (`app/components/orderlyProvider/xcDepositPlugin.tsx`, registered via `OrderlyAppProvider plugins={XC_PLUGINS}`)
+  intercepts the SDK's injectable `Transfer.DepositAndWithdraw` and adds one `extraTabs` entry (`withFundTab`,
+  `app/lib/xcFundTab.mjs`, tested: once, keeps others). The tab moves nothing: it closes the window and opens the card in
+  fund mode (`/token` + `{ xcFund: true }`). Same tab in the mobile sheet. SDK upgrade: re-check that target name.
+- **Card polish** (2026-11-05, rules in `app/lib/xcCardKit.mjs`, tested): live "You'll receive ≈" from a signed DRY quote
+  ~0.6 s after typing (`checkPreview`: signature, dry, same assets + amount; never a deposit address; Review still runs
+  checkQuote); balance of the sent asset read on ITS chain (EVM public RPCs, Solana `/sol/rpc`) + Max (`maxSendable`:
+  tokens whole, native keeps `GAS_RESERVE`), over-balance blocks Review; 1Click's errors in plain words
+  (`quoteErrorText`, "try at least N" is base units of the asset SENT); progress timeline (`xcSteps`, last step = the
+  on-chain proof); Recent transfers on this device (`nx_xc_history_v1`, `pushHistory`, 5 max, receipts).
 - **Solana swap (Jupiter) — the ONE signer is `app/pages/token/solSwapExec.ts`**, BUY (SOL or USDC → token) and SELL
   (token → USDC), Jupiter `/build` via our `/swap/jup/*` proxy, RPC via our `/sol/rpc`. Pre-sign, on the exact bytes it signs
   (re-fetched fresh right before signing): quote bound to our mints + amount; slippage ≤ 300 bps and the quote's
-  minimum respects it (`checkMinOut`); fee payer = the wallet; top-level programs allowlisted; simulation must
+  minimum respects it (`checkMinOut`); fee payer = the wallet; top-level programs allowlisted; every instruction outside
+  Jupiter's program has a swap's shape (`instructionShapeRefusal`, jupBuild.mjs: ATA create for the wallet, wrap/sync/
+  close its own wSOL account; Approve / SetAuthority / Assign / any transfer out refused: the balance-only simulation
+  can't see them); the reply's lookup tables match the chain (`altClaimRefusal`, read via `/sol/rpc`); simulation must
   succeed and, from simulated balances, SOL drop ≤ SOL input + 0.02 SOL, input-token accounts drop ≤ the typed amount
   (`checkSpend`, summed across all the wallet's accounts for that mint), the wallet's OWN output accounts gain ≥ the
   minimum (`checkReceive`; first-buy account derived under the mint's own program, classic SPL or Token-2022). Every
@@ -471,7 +689,8 @@ product is what sits on top:
   (`spot:flash:{id}`, with the funder only until booked) and the hourly job books final orders from Flash (one trade +
   fills' notional + our `integratorFeeNotional`, on the last fill's day); spanDEX / Jupiter / NEAR = the app calls
   `POST /spot/fill {route, id, chainId?}` (`app/lib/spotReport.ts`, fire-and-forget) after a confirmed trade and the
-  worker books it only if the receipt is 0x1 / the signature is confirmed / 1Click says SUCCESS; WooFi = widget OPENS
+  worker books it only if the receipt is 0x1 / the signature is confirmed / NEAR: `settleDeposit` finds the signed
+  minimum on-chain at the recipient (DELIVERED or CONFIRMING; the card reports once the check shows it); WooFi = widget OPENS
   (the widget reports no fills). Each id once (`spot:fill:{route}:{id}`), day totals `spot:day:{YYYY-MM-DD}` under a
   NexusLock lease. No wallet address is stored.
 - **Best price (EVM USDC buys, read-only):** `GET /spot/best?chain=&tokenOut=&amount=` (`routes-spotbest.mjs`, rule
@@ -521,6 +740,12 @@ product is what sits on top:
 limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw = `0x6F7a…D203` in the body).
 
 ## Perp page (SDK widgets)
+- **SDK = 3.4.0** (all `@orderly.network/*` aligned; `trading-points` stays 2.0.2). Since 3.3 every SDK feature is ON
+  unless explicitly false: **Orderly Predict is OFF** via `features={ORDERLY_FEATURES}` (`app/lib/orderlyFeatures.mjs`,
+  test-pinned). **Skipped (borst, 2026-11-06): don't pitch or build it.** Read then: BTC 5-min binary rounds, ~1.5% taker
+  fee (builder keeps user rate − tier base), US block is the front end's job, settlement can be recorded by hand, likely
+  conflicts with Google Play's binary-options rule (our Android app is the live site). After any SDK bump re-check the
+  `Transfer.DepositAndWithdraw` injectable (Other chains tab), the build's amplitude/trim guards, and `features` defaults.
 - `TradingPage`/`MarketsHomePage` are black boxes: only their props. `disableFeatures={["orderBook"]}` (string literal;
   `key` the page on toggle). Restyle scaffold regions via `classNames={{…}}` + CSS with `!important`.
 - PnL posters (`public/pnl/poster_bg_*.png`): keep the left side dark/empty (Orderly overlays text + QR there).
@@ -581,7 +806,8 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
   `ogCards.test.mjs` enforces card colours.
 
 ## Settled — don't re-raise
-- Cold start / feed liveness is behind us. In-app EVM buy/sell is live and tested. The mini app is parked.
+- Cold start / feed liveness is behind us. In-app EVM buy/sell is live and tested. The mini app is parked. Orderly Predict
+  is skipped (2026-11-06).
 - Focus = the engine and its signals. The engine has no proven edge yet: that's the #1 risk, and the failure mode is
   copy shipping ahead of the grade.
 - The Oct-15 engine freeze is over. Engine work happens when borst asks for it.

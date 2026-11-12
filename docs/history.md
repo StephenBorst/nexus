@@ -2339,3 +2339,152 @@ network effects from the social layer. Positioning: "The trading terminal that m
   `/proxy/bankr-withdraw`, all open to a revoked wallet (the v1 `/proxy/bankr-register` stays shut to it).
 - `/proxy/bankr-register` was NOT pointed at v2 under `AUTH_V2_KEYS`: the Bankr skill still trades with `walletSig`, which
   needs the v1 key. It moves under its own switch, `AUTH_V1_REGISTER_OFF`, flipped when the skill PR (step 4) merges.
+
+## 2026-11-06 · The kill switch didn't close live positions
+
+Found while reading the agent for auth v2 step 3b. Three faults, any one enough:
+- `POST /agent/:a/kill` deleted `agent:key:{addr}` and dropped the wallet from `agent:users`. Exec only reads wallets on
+  that list, so it never saw the kill flag.
+- Even if it had, the key that places the reduce-only close was already gone (`closePosition`'s "no key" branch clears
+  the record without closing).
+- Exec's kill branch called `closePosition(..., config, ...)` above `const config`: a ReferenceError on every tick with
+  an open position.
+
+Result: KILL on a live position left it open on Orderly with nothing managing it (no exchange-side stop exists; exec
+manages TP/SL), while the Lab said "Position closed." Fixed by `killSwitch.mjs` (close first, then stop + delete the
+key; retry an unconfirmed close for 10 ticks, then stop and alert) and `routes-kill.mjs` (flag only, key and list kept,
+wallet re-added). Wallets killed before the fix keep the stale flag; pressing KILL again now reaches exec.
+
+## 2026-11-06 · Daily caps froze the day's last trade
+
+`processUser` ran `dailyCapBlocked` before the position monitor. `trades_today` is bumped at entry, so the trade that
+reached `maxTradesPerDay` (default 4) made every later tick return before `monitorPosition`: no SL, TP, trail or
+timeout until the 24h reset (`shouldResetDaily`), on live and paper agents alike. A webhook CLOSE was also ignored once
+capped. The cap now sits after the monitor and ghost adoption, so it gates new entries only (its own docstring always
+said "block opening a new trade"). Paper rows closed before this fix may include a capped day's last trade held past its
+stop or timeout and closed late; nothing re-writes them.
+
+Found with a new guard (`tools/useBeforeDefine.test.mjs`): every shipped .js/.mjs is scanned for a const/let read before
+its declaration runs, the class of bug that broke the kill switch. tsc already refuses it in .ts/.tsx.
+
+## 2026-11-06 · An Orderly error read as "flat"
+
+exec's monitor read `posRes?.data?.position_qty ?? 0`. `orderlyRequest` returns Orderly's JSON for errors too
+(`{success:false, code, message}`), so a rate limit, an expired v2 key or a removed key read as qty 0: after the 2-minute
+grace the monitor cleared the LIVE position's record ("manual close?"), leaving it open with no stop. Ghost adoption read
+the same way and found nothing. The delta cap's `/v1/positions` read turned an error into an empty book (an entry passed
+the cap). Now only `success:true` counts (`exchangePositionQty` / `exchangePositionRows`); an error is unreadable, so the
+monitor manages on cached data and the cap fails open only on a real null, as documented.
+
+## 2026-11-06 · Live agent trades were booked at the mark, not the fill
+
+exec booked a live entry at the mark it read before sending the market order, and a live exit at a mark re-read after the
+close (partial TPs and DCA adds the same way). The public live record (Supabase `agent_trades` → `/agents/leaderboard`,
+anchored ledger) therefore never showed slippage. Now each live market order's `average_executed_price` (GET
+`/v1/order/{id}`, FILLED or PARTIAL_FILLED) is what's booked, with the mark only as a tagged fallback (`entry_fill`).
+Rows written before this are mark-priced; nothing rewrites them. Fees are still not in the row's P&L (Supabase columns
+are fixed: an unknown column makes the auditable insert fall back to the core row without order ids).
+
+## 2026-11-08 · Backstop audit: a lost stop id, and KILL deleting the key first
+
+Orderly keeps one untriggered `POSITIONAL_TP_SL` per user per market per side (algo-order samples). Two holes in the
+#268 backstop followed from that:
+- A place that errored after Orderly took it (a timeout) left a stop resting with no id in state. Every retry was then
+  refused, the owner was told "no exchange backstop" after 5 tries, and that stop was never cancelled at close (a stale
+  position stop closes the owner's next position on that market). Same for a position TP/SL the owner set themselves.
+  Now a refused place lists the market's working position TP/SL (`restingBackstop`, matched as the SDK's
+  `findPositionTPSLFromOrders` does) and adopts it when its stop trigger is exactly ours; any other one is recorded
+  `foreign`: no second order, never cancelled by exec, and the owner is told it's their stop that's resting.
+- KILL deleted the key right after the close, so a backstop whose cancel had failed (queued in
+  `state.backstop_cleanup`, normally swept before the next entry) could never be cancelled. runKill now retries the
+  queue with the key first (`io.sweep`, two passes) and Telegrams the markets still carrying one.
+- The DEACTIVATE copy said "NO stop" while a backstop rests; the Lab prompt and lab-api's reply now share
+  `agentControls.mjs` and name the stop that stays (or NO stop when none is known), plus any stale one.
+
+Not verifiable from here: whether Orderly cancels a position TP/SL on its own once the position is flat. The code
+assumes it doesn't (the safe side). The $10 mechanics test can answer it: close by hand, then list algo orders.
+
+## 2026-11-08 · The live lift checked the config, not the trade
+
+`liveLifted` holds the CONFIG to the live plan, but exec opens four kinds of entry: the brain's read, a webhook intent,
+an owner directive and an autocopy pick. On a lifted wallet the last three would have gone through: a directive brings
+its own leverage and capital and skips fixed-risk sizing (a $5,000, 20× trade on the $10-risk plan wallet), and
+webhook / copy signals name any market. Disarmed, so nothing happened. Now `liftedSignalRefusal` (liveLift.mjs) lets a
+lifted entry through only as the brain's own signal (no `source`, no `directive`) on one of the config's plan coins,
+checked in exec right after the lift is decided; `livePlanRefusal` also refuses `autocopy.enabled`.
+
+Not built, on purpose (house rules: a breaker is a read, graded first; and borst runs the stop rules): the −5R/7d brake
+and the −10R / equity < 90% kill are manual today. Someone has to watch for them on the first tranche.
+
+## 2026-11-09 · Solana swap: instructions that grant control without moving a balance
+
+The Solana signer's simulate guard compares balances (SOL drop, input spent, output received). An instruction that
+moves nothing but hands over control passed it: an SPL `Approve` of the wallet's USDC account to a delegate,
+`SetAuthority` on a token account, a System `Assign` of the wallet. The program allowlist let Token / Token-2022 /
+System / ATA through at the top level, so a compromised Jupiter reply (or proxy) could have attached one to a normal
+swap and taken the whole balance later; the EVM side is capped at the trade amount by its exact approve, Solana had no
+cap. Now `instructionShapeRefusal` (jupBuild.mjs) allows only the shapes real /build replies use (ATA create paid by
+and owned by the wallet; System Transfer wallet → its own wSOL account; SyncNative on it; CloseAccount of it back to
+the wallet; Memo) and refuses the rest. A second gap found while fixing it: the transaction was compiled with the
+lookup-table contents the reply CLAIMED while the chain resolves the real ones, so a non-signer account (a close
+destination) could resolve elsewhere on-chain. `altClaimRefusal` now checks each claimed table against the chain
+(index for index, a prefix since tables only grow; unreadable = not signing). Live dry run of the bundled signer
+(USDC → JUP with our fee, SOL → JUP with wrap/unwrap) reached the wallet's sign step on both; nothing signed.
+
+## 2026-11-09 · Brain: a days-old price delta, a candle gate that never skipped, a heartbeat that lied
+
+- `market:prev:{symbol}` (the snapshot MOMENTUM / MEAN_REVERSION / OI_ONLY / CONFLUENCE measure their move from) had no
+  age limit; its timestamp was stored and never read. A market is only evaluated while a flat active agent watches it,
+  so the first tick after a quiet stretch read a multi-day move as one 5-minute cycle. After a close the 15-min
+  cooldown absorbed it; a freshly activated agent has no cooldown, so it could enter (live, on AUTONOMOUS) on it. Now a
+  snapshot older than 12 min (`prevSnapshotUsable`, brain logic.mjs) gives no delta that tick. lab-api's /signals and
+  agents routes read the same key for display and still see the old age (not changed here).
+- The candle recorder's hourly gate compared `now - last.t` with 55 min, but `last.t` is the START of the last closed
+  bar, always ≥ 60 min old: every 5-min tick re-fetched tv/history for ~19 markets and dropped the duplicate (~230
+  wasted Orderly calls an hour on the shared 10 req/s budget). `candleFetchDue` fetches only when the last closed bar
+  isn't stored.
+- The brain stamped `ops:brain:heartbeat` in `finally`, so a run that died on a fatal error still read as alive to the
+  monitor. It now stamps only a completed run (the no-active-users exits included).
+
+## 2026-11-09 · Carry engine ops routes failed open
+
+`authed()` was `!need || header === need`: with the secret `CARRY_ADMIN_TOKEN` unset, every POST ops route was open to
+anyone: `/carry/reset` (wipes the public paper record /proof shows), `/carry/tick` (forces rebalances at any time),
+`/carry/unkill`. The live path itself stayed safe (`runLive` checks `CARRY_LIVE`, the kill flag and the key on its own).
+Now `carryAdminOk` (carryAuth.mjs) needs a configured token of ≥ 16 chars and an exact match; no token = 401. Nothing
+automated calls these routes (the crons don't go through `authed`). Whether the secret was ever set isn't readable from a
+cloud session: `npx wrangler secret list` in `workers/nexus-carry-engine`.
+
+## 2026-11-12 · /signals sold the same stale delta
+
+The brain fix of 2026-11-09 (a `market:prev` snapshot older than 12 min gives no delta) left lab-api's two readers of
+the key unchecked: `computeSignalRows` (the `/signals` rows, the x402 `nexus-signals` product, the Board and the
+Briefing's "Open interest is surging" line at ≥ 3%) and `snapshotTrendRegimes` (which took that snapshot's OI as
+"current"). The rule moved to `app/lib/marketSnapshot.mjs` (the brain re-exports it) and both readers use it: a stale
+baseline gives 0 deltas and `delta_fresh:false` on the row (additive field), and no regime OI. The same date: borst
+confirmed `CARRY_ADMIN_TOKEN` is set as a production secret on nexus-carry-engine, so the 2026-11-09 fail-open never
+exposed the routes in production; the fix makes a missing secret lock them instead.
+
+## 2026-11-12 · EVM swap: the approve target is pinned
+
+The EVM signer approved the exact input amount to whatever spender the provider named and called whatever `tx.to` it
+named; a hostile or compromised provider could take one trade's input. Now a quote counts only when spender == tx.to ==
+a router read live for that chain (`app/lib/spotRouters.mjs`, used by the worker's `pickSpotQuote`, so the next best
+pinned quote wins, and by `swapExec.ts` at plan time and right before the approve). Addresses from live /swap/quote
+reads (taker 0xd9f7…b449, borst + a session): Nordstern Ethereum `0xa929…4dd1`, Base `0xC87D…fC3d`, Arbitrum
+`0x57f9…491c`, Optimism `0xa575…2C4a`, Polygon `0x99bA…EC23`; 0x AllowanceHolder `0x0000000000001fF3684f28c67538d4D072C22734`
+on Ethereum, Base, Arbitrum, Polygon (not seen live on Optimism: 0x refused that probe). Robinhood Chain (4663) has no
+router read yet, so it has no in-app route until one is. The same probes settled "is the 0x key set?": yes; 0x answered
+dust sizes Nordstern 422'd, and loses on price at normal sizes.
+
+## 2026-11-12 · Instant settlement: calls graded on 1-minute bars
+
+Calls sat WORKING / ACTIVE for up to an hour after price traded their level: the only grader was the hourly pass
+on 1-hour candles (`17 * * * *`). A Bankr-drafted brief proposed a Node service grading on Orderly websocket mark
+ticks with heaps and per-exit anchoring. Kept the goal, not the design: a mark tick can't be re-checked by anyone
+else and isn't a trade, there is no Node server or SQL (Workers + KV), per-exit anchoring only burns gas, and the
+agents (exec, 1-min cron) were already fast. Shipped instead (borst's go: cutoff + archive, phases 1 + 2):
+the same `gradeCall` on public 1-minute bars for calls from 2026-11-13T00:00Z, an archive of those bars with no
+expiry so `/verify` keeps working after Orderly ages them out, a 1-minute cron that only re-grades calls whose
+levels traded, and a "· CONFIRMING" hint on cards from the browser's live mark (display only). Phase 3, a
+Durable Object on Orderly's websocket as a faster trigger, is held. Rule: `docs/research/minute-grading.md`.

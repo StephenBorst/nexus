@@ -81,7 +81,7 @@ function twoSidedBasisView(raw, config) {
   };
 }
 
-export function deriveSignal(raw, config = {}, regime = null, smartConsensus = null) {
+export function deriveSignal(raw, config = {}, regime = null, smartConsensus = null, { liveLift = false } = {}) {
   const fundingRate = raw.fundingRate || 0;
   const priceChange = raw.priceChange || 0;
   const oiChange = raw.oiChange || 0;
@@ -179,7 +179,7 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
       // verdict is the SHARED rule the scoreboard grades with (app/lib/levelReclaim.mjs), computed
       // by the brain only behind LEVEL_RECLAIM_LIVE; nothing is re-derived here. Flag off ⇒ no
       // raw.levelReclaim* fields ⇒ it sits out and says so. PAPER only, like the graded exit.
-      const refused = levelReclaimRefusal(config);
+      const refused = levelReclaimRefusal(config, { liveLift });
       if (refused) { why = `${refused} — sat out`; break; }
       if (raw.levelReclaimSide === "LONG" || raw.levelReclaimSide === "SHORT") {
         direction = raw.levelReclaimSide; confidence = 70; why = `level reclaim · ${raw.levelReclaimReason}`;
@@ -306,3 +306,27 @@ export function signalSourceT(raw, config) {
   else if (config?.signalMode === "LEVEL_RECLAIM") t = raw.levelReclaimT;
   return t != null && Number.isFinite(Number(t)) && Number(t) > 0 ? Number(t) : null;
 }
+
+// ── The price/OI delta's own age (audit 2026-11-09) ──────────────────────────────────────────────
+// MOMENTUM, MEAN_REVERSION, OI_ONLY and CONFLUENCE read the move since `market:prev:{symbol}`, the
+// snapshot the brain left last time it evaluated that market. A market is only evaluated while a FLAT
+// active agent watches it, so after a quiet stretch (every watcher holding a position, nobody active)
+// that snapshot is hours or days old, and the first delta after it is a multi-day move read as one
+// 5-minute cycle. On a freshly activated agent (no cooldown yet) that is an entry. A snapshot older
+// than PREV_MAX_AGE_MS (2 cycles + slack) or without a time is not a previous cycle: no delta this
+// tick (hasPrev false), and the fresh snapshot written now makes the next tick's delta real.
+export { PREV_MAX_AGE_MS, prevSnapshotUsable } from "../../app/lib/marketSnapshot.mjs";
+
+// ── Is a new closed hourly candle due? ────────────────────────────────────────────────────────────
+// `last.t` is the START of the last bar stored. The bar due is the last CLOSED one, which starts one
+// hour before the current hour. Comparing `now - last.t` with 55 minutes (the old gate) was always
+// true, because a closed bar's start is always ≥ 60 minutes old: every 5-minute tick re-fetched
+// tv/history for every market and threw the duplicate away.
+const HOUR_MS = 60 * 60 * 1000;
+export function candleFetchDue(last, now = Date.now()) {
+  const t = Number(last?.t);
+  if (!Number.isFinite(t)) return true;
+  const lastClosedStart = Math.floor(now / HOUR_MS) * HOUR_MS - HOUR_MS;
+  return t < lastClosedStart;
+}
+

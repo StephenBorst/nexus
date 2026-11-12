@@ -90,7 +90,41 @@ export function levelReclaimLive(candleHist, now = Date.now(), p = LEVEL_LIVE) {
 
 // The agent side is PAPER ONLY until a live-money review says otherwise (like the graded exit).
 export const usesLevelReclaim = (config) => config?.signalMode === "LEVEL_RECLAIM";
-export function levelReclaimRefusal(config) {
+export function levelReclaimRefusal(config, { liveLift = false } = {}) {
   if (!usesLevelReclaim(config)) return null;
-  return config.mode === "PAPER" ? null : "level_reclaim is paper only: no live trading without its own review";
+  // `liveLift` = app/lib/liveLift.mjs liveLifted() (build #3 of the live plan, disarmed): one listed wallet only.
+  return config.mode === "PAPER" || liveLift === true ? null : "level_reclaim is paper only: no live trading without its own review";
 }
+
+// ── The paper wallet's config, as registered (2026-11-05) ────────────────────────────────────
+// pipeline-if-then.md, Tradeable: "borst sets up one paper wallet for it with the preset as registered, on the main
+// coins only." level_reclaim was served TRADEABLE on 2026-11-05. borst's call: a FRESH wallet (a zero-start record),
+// loaded through a hidden link (/lab?tab=agent&deploy=level-reclaim-paper), not a public preset, until that wallet
+// has 30 paper trades with parity CLEAN. Exactly what was graded: the registered rule, the graded exit (R contract,
+// 168h, no other exit parts), the scoreboard's main-card coins (SUI is on the holdout line), no filters the grader
+// doesn't simulate, caps wide enough never to bind (parity explains any that do).
+export const LEVEL_RECLAIM_DEPLOY = "level-reclaim-paper";
+export const LEVEL_RECLAIM_MAIN_SYMBOLS = Object.freeze(
+  ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "WLD"].map((c) => `PERP_${c}_USDC`),
+);
+export const LEVEL_RECLAIM_PAPER_CONFIG = Object.freeze({
+  mode: "PAPER",
+  signalMode: "LEVEL_RECLAIM",
+  exitContract: "R_CONTRACT",
+  maxHoldHours: 168,
+  symbols: [...LEVEL_RECLAIM_MAIN_SYMBOLS],
+  leverage: 3,
+  capitalPerTrade: 50,
+  maxTradesPerDay: 24,
+  maxDailyLossUsdc: 1000,
+  // no exit parts beyond the graded exit (gradedExitRefusal), no unsimulated gates (paperParity unsimulatedFilters)
+  takeProfits: [],
+  trailingStopPct: 0,
+  breakevenTriggerPct: 0,
+  dcaEnabled: false,
+  volScaledStops: false,
+  invertSignal: false,
+  respectRegime: false,
+  respectSmartMoney: false,
+  maxSignalAgeSec: 0,
+});

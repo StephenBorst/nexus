@@ -28,6 +28,8 @@ export const EXPERIMENTAL_FILTERS_OFF: Partial<AgentConfig> = {
   basisAnchor: undefined,
   // The graded exit is a whole-strategy choice too: another preset must not inherit its uncapped stop.
   exitContract: undefined,
+  // Fixed-risk sizing needs the graded exit (app/lib/riskSizing.mjs): it goes with it.
+  riskPerTradeUsd: undefined,
 };
 
 export type AgentPrefill = {

@@ -1,7 +1,10 @@
 // ── Cross-chain · NEAR Intents 1Click ──────────────────────────────────────────
-// Move USDC/ETH from Arbitrum, Base or Ethereum to another chain — Solana and Bitcoin
-// included. 1Click answers a quote with a deposit address; the user sends ONE plain
-// transfer there and a solver delivers on the destination chain.
+// Move USDC/ETH from Arbitrum, Base or Ethereum (or SOL/USDC from Solana) to another chain —
+// Solana and Bitcoin included. 1Click answers a quote with a deposit address; the user sends ONE
+// plain transfer there and a solver delivers on the destination chain. From Solana, that transfer is
+// built, simulated and checked in xcSolSend.ts (the one Solana signer for this card).
+// "Fund my trading account" = USDC to the trading account's own wallet, then (once the delivery is
+// proven on-chain) one click into Orderly's deposit dialog.
 //
 // The money path, in order (nothing reaches the wallet until every step passes):
 //   1. quote from 1Click (browser-direct; CORS is open, no key on our side)
@@ -13,15 +16,26 @@
 //   4. buildDepositTx(): the transfer is built from OUR pinned asset table (token contract,
 //      decimals, chain), never from the response; ERC-20 = transfer(), no approval, so no
 //      allowance is ever left behind
-//   5. status polled until SUCCESS / REFUNDED / FAILED / INCOMPLETE_DEPOSIT — only
-//      SUCCESS reads as delivered; a refund goes back to the user's own address.
+//   5. status polled until SUCCESS / REFUNDED / FAILED / INCOMPLETE_DEPOSIT
+//   6. 1Click's SUCCESS / REFUNDED is a server's word, so it is then CHECKED ON-CHAIN:
+//      GET /xc/settlement reads the destination (or refund) transactions from their own chain
+//      and compares what reached the user's address with the floor 1Click signed
+//      (app/lib/nearSettlement.mjs). "Delivered" shows green only once that check proves it,
+//      to the recipient this card sent the quote for.
 import { reportSpotFill } from "@/lib/spotReport";
 import { useEffect, useRef, useState } from "react";
 import {
   ONE_CLICK_API, XC_ASSETS, fetchOneClickQuote, CHAIN_NAME, STATUS_TEXT, TERMINAL,
   checkQuote, buildDepositTx, recipientFitsChain, toUnits, fromUnits,
-  xcAppFees,
+  xcAppFees, XC_WORKER_API,
 } from "@/lib/nearIntents.mjs";
+import { settlementLine, settlementReceipt, receiptWanted, depositHandoff, RECHECK } from "@/lib/nearSettlement.mjs";
+import { SOL_ORIGINS } from "@/lib/solDeposit.mjs";
+import { checkPreview, quoteErrorText, maxSendable, xcSteps, pushHistory } from "@/lib/xcCardKit.mjs";
+import { sendSolDeposit, type SolOriginKey } from "./xcSolSend";
+import { solscanTx, solRpcCall, type SolProvider } from "./solSwapExec";
+import { modal } from "@orderly.network/ui";
+import { isAddress } from "viem";
 import { getRuntimeConfig } from "@/utils/runtime-config";
 import { ensureChain, explorerTx, type Eip1193 } from "./swapExec";
 import { useEscapeKey } from "@/utils/a11y";
@@ -32,14 +46,24 @@ const MAX_SLIPPAGE_BPS = 100;
 
 type AssetKey = keyof typeof XC_ASSETS;
 const KEYS = Object.keys(XC_ASSETS) as AssetKey[];
-const ORIGINS = KEYS.filter((k) => XC_ASSETS[k].origin);
+const EVM_ORIGINS = KEYS.filter((k) => XC_ASSETS[k].origin);
+const SOL_ORIGIN_KEYS = Object.keys(SOL_ORIGINS) as AssetKey[];
+const isSolAddr = (a: unknown): a is string => typeof a === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a);
 const label = (k: AssetKey) => `${XC_ASSETS[k].sym} · ${CHAIN_NAME[XC_ASSETS[k].chain as keyof typeof CHAIN_NAME]}`;
 const short = (a: string) => (a.length > 16 ? `${a.slice(0, 8)}…${a.slice(-6)}` : a);
 
 type Quote = { quote: Record<string, string | number | undefined>; quoteRequest: Record<string, unknown>; signature: string; timestamp: string };
-type Review = { quote: Quote; depositAddress: string; minAmountOut: string; deadlineMs: number; amount: bigint; recipient: string };
+type Review = { quote: Quote; depositAddress: string; minAmountOut: string; deadlineMs: number; amount: bigint; recipient: string; refundTo: string; from: AssetKey };
 type QuoteCheck = { ok: true; depositAddress: string; minAmountOut: string; deadlineMs: number } | { ok: false; reason: string };
-type Track = { status: string; hash: string; chainId: number; depositAddress: string; deliveredUrl: string | null; startedAt: number; timedOut?: boolean };
+// check = GET /xc/settlement's reply (the on-chain verdict), null until it answers.
+type CheckTx = { hash: string; ok: boolean; credited?: string; final?: boolean; reason?: string; note?: string; method?: string };
+type Check = { verdict?: string; chain?: string; to?: string; final?: boolean; error?: string; reason?: string; kind?: string; asset?: string; decimals?: number; bar?: string; credited?: string; txs?: CheckTx[] };
+type Track = { status: string; hash: string; chainId: number; depositAddress: string; deliveredUrl: string | null; startedAt: number; timedOut?: boolean; recipient?: string; refundTo?: string; fromChain?: string; check?: Check | null };
+const SETTLE_WORDS = new Set(["SUCCESS", "REFUNDED"]);
+// The on-chain check can still change its answer (no answer yet, not final, a read failed).
+const checkOpen = (t: Track) => SETTLE_WORDS.has(t.status) && (!t.check || !t.check.verdict || RECHECK.has(t.check.verdict));
+// 1Click can still move: not terminal, or INCOMPLETE_DEPOSIT (which turns into a refund by the deadline).
+const statusOpen = (t: Track) => (!TERMINAL.has(t.status) || t.status === "INCOMPLETE_DEPOSIT") && !t.timedOut;
 
 // Money in flight must survive a refresh: the transfer being tracked is saved locally and
 // tracking resumes on return (within a day). Per-viewer convenience only; the source of
@@ -53,6 +77,59 @@ function loadTrack(): Track | null {
     return Date.now() - t.startedAt < TRACK_TTL_MS ? t : null;
   } catch { return null; }
 }
+/** A transfer is still moving (saved, under a day old, not finished, not timed out), or its delivery
+ *  is still being confirmed on-chain. Spot opens the folded card for it, so tracking resumes instead
+ *  of hiding behind a closed row. */
+export function hasTransferInFlight(): boolean {
+  const t = loadTrack();
+  return !!t && (statusOpen(t) || checkOpen(t));
+}
+// Recent transfers on THIS device (newest first, 5 max): the finished tracks, so a receipt is still
+// at hand after the card moves on. Per-viewer convenience only; nothing is sent anywhere.
+const HISTORY_KEY = "nx_xc_history_v1";
+function loadHistory(): Track[] {
+  try { const h = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); return Array.isArray(h) ? h.filter((t) => t && typeof t.depositAddress === "string") : []; } catch { return []; }
+}
+function saveHistory(h: Track[]) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch { /* storage off */ }
+}
+
+// Balance of the asset being sent, read on ITS chain (not the wallet's current one): EVM through the
+// same public RPCs the app already reads holdings with, Solana through our /sol/rpc. null = unread.
+const PUBLIC_RPC: Record<string, string[]> = {
+  arb: ["https://arbitrum-one-rpc.publicnode.com", "https://arb1.arbitrum.io/rpc"],
+  base: ["https://base-rpc.publicnode.com", "https://mainnet.base.org"],
+  eth: ["https://ethereum-rpc.publicnode.com", "https://eth.llamarpc.com"],
+};
+async function evmBalance(chain: string, token: string | null, owner: string): Promise<bigint | null> {
+  const call = token
+    ? { method: "eth_call", params: [{ to: token, data: "0x70a08231" + owner.toLowerCase().replace(/^0x/, "").padStart(64, "0") }, "latest"] }
+    : { method: "eth_getBalance", params: [owner, "latest"] };
+  for (const url of PUBLIC_RPC[chain] || []) {
+    try {
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, ...call }) });
+      const j = await r.json();
+      if (typeof j?.result === "string" && /^0x[0-9a-fA-F]*$/.test(j.result)) return BigInt(j.result === "0x" ? "0x0" : j.result);
+    } catch { /* next */ }
+  }
+  return null;
+}
+async function solBalance(assetKey: AssetKey, owner: string): Promise<bigint | null> {
+  try {
+    const spl = SOL_ORIGINS[assetKey as keyof typeof SOL_ORIGINS] as { kind: string; mint?: string } | undefined;
+    if (!spl) return null;
+    if (spl.kind === "sol") {
+      const r = (await solRpcCall("getBalance", [owner, { commitment: "confirmed" }])) as { value?: number } | null;
+      return typeof r?.value === "number" ? BigInt(r.value) : null;
+    }
+    const r = (await solRpcCall("getTokenAccountsByOwner", [owner, { mint: spl.mint }, { encoding: "jsonParsed" }])) as
+      { value?: Array<{ account?: { data?: { parsed?: { info?: { tokenAmount?: { amount?: string } } } } } }> } | null;
+    let sum = 0n;
+    for (const a of r?.value ?? []) { const amt = a?.account?.data?.parsed?.info?.tokenAmount?.amount; if (typeof amt === "string" && /^\d+$/.test(amt)) sum += BigInt(amt); }
+    return sum;
+  } catch { return null; }
+}
+
 function saveTrack(t: Track | null) {
   try { if (t) localStorage.setItem(TRACK_KEY, JSON.stringify(t)); else localStorage.removeItem(TRACK_KEY); } catch { /* storage off: tracking just won't resume */ }
 }
@@ -71,19 +148,35 @@ async function originBalance(provider: Eip1193, token: string | null, owner: str
 // initialTo / initialRecipient: a PRESET from the Spot page's "Get USDC on Solana" prompt — the
 // destination and the user's own address, filled in. Nothing is sent until the usual review; the
 // recipient is shape-checked like a typed one and is part of the signed quote checkQuote verifies.
-export function CrossChainCard({ walletAddress: connected, provider, initialTo, initialRecipient }: { walletAddress: string | null; provider: Eip1193 | undefined; initialTo?: string; initialRecipient?: string }) {
-  // The transfer is signed by an EVM wallet; a Solana-only connection can receive (typed
-  // address) but not send from here.
+// fund: open in "Fund my trading account" mode. connected = the trading (Orderly) account's address.
+// solProvider / solAddress: a connected Solana wallet (the Spot page's solSigner), which can SEND.
+export function CrossChainCard({ walletAddress: connected, provider, initialTo, initialRecipient, solProvider, solAddress, fund }: {
+  walletAddress: string | null; provider: Eip1193 | undefined; initialTo?: string; initialRecipient?: string;
+  solProvider?: SolProvider; solAddress?: string | null; fund?: boolean;
+}) {
+  // EVM sends need the EVM wallet; Solana sends need a Solana signer. Either can receive.
   const walletAddress = connected && /^0x[0-9a-fA-F]{40}$/.test(connected) ? connected : null;
-  const [from, setFrom] = useState<AssetKey>("USDC.arb");
+  const solWallet = isSolAddr(solAddress) && solProvider ? solAddress : null;
+  // The trading account: an EVM account deposits USDC from Arbitrum, a Solana account USDC on Solana.
+  const tradingAccount = walletAddress || (isSolAddr(connected) ? connected : null);
+  const fundTo: AssetKey = walletAddress ? "USDC.arb" : "USDC.sol";
+  const fundFrom: AssetKey = fundTo === "USDC.arb" ? (solWallet ? "USDC.sol" : "USDC.base") : "USDC.arb";
+  const [from, setFrom] = useState<AssetKey>(fund ? fundFrom : "USDC.arb");
   const presetTo = initialTo && (KEYS as string[]).includes(initialTo) && !XC_ASSETS[initialTo as AssetKey].origin ? (initialTo as AssetKey) : null;
-  const [to, setTo] = useState<AssetKey>(presetTo || "SOL.sol");
+  const [to, setTo] = useState<AssetKey>(fund ? fundTo : presetTo || "SOL.sol");
+  const [fundMode, setFundMode] = useState(!!fund);
+  const [typedEvm, setTypedEvm] = useState("");
   const [amount, setAmount] = useState("");
   const [typedRecipient, setTypedRecipient] = useState(presetTo && typeof initialRecipient === "string" ? initialRecipient.trim().slice(0, 64) : "");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [review, setReview] = useState<Review | null>(null);
   const [track, setTrack] = useState<Track | null>(null);
+  const [receipt, setReceipt] = useState<"copied" | "shown" | null>(null);
+  const [history, setHistory] = useState<Track[]>(() => loadHistory());
+  const [preview, setPreview] = useState<{ amountOut?: string; minAmountOut?: string; time?: number | null; error?: string; loading?: boolean } | null>(null);
+  const [balance, setBalance] = useState<bigint | null>(null);
+  const reported = useRef<Set<string>>(new Set());
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
   // Resume a transfer still in flight from an earlier visit (mount only).
@@ -91,45 +184,102 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
     const t = loadTrack();
     if (!t) return;
     setTrack(t);
-    if (!TERMINAL.has(t.status)) poll(t.depositAddress);
+    if (statusOpen(t)) poll(t.depositAddress);
+    else if (checkOpen(t)) confirmOnChain(t.depositAddress);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (track) saveTrack(track); }, [track]);
+  // A finished transfer (1Click final and the on-chain check settled, or tracking stopped) goes to Recent.
+  useEffect(() => {
+    if (!track) return;
+    const finished = (TERMINAL.has(track.status) && !checkOpen(track) && track.status !== "INCOMPLETE_DEPOSIT") || track.timedOut;
+    if (!finished) return;
+    setHistory((h) => { const next = pushHistory(h, track); saveHistory(next); return next; });
+  }, [track]);
   useEscapeKey(() => setReview(null), !!review && !busy);
 
   const dest = XC_ASSETS[to];
   const evmDest = dest.chain !== "sol" && dest.chain !== "btc";
-  // EVM destinations always pay the connected wallet — no typed address, no typo risk.
-  const recipient = evmDest ? walletAddress || "" : typedRecipient.trim();
-  const recipientOk = !!recipient && recipientFitsChain(recipient, dest.chain);
+  const fromIsSol = XC_ASSETS[from].chain === "sol";
+  // Who sends (and gets any refund): the Solana wallet for a Solana origin, the EVM wallet otherwise.
+  const sender = fromIsSol ? solWallet : (provider ? walletAddress : null);
+  // EVM destinations pay the connected EVM wallet (no typo risk). Only with no EVM wallet connected
+  // (sending from Solana) is an EVM address typed, and then it must pass a strict checksum check.
+  const typingEvm = evmDest && !walletAddress;
+  const recipient = evmDest ? walletAddress || typedEvm.trim() : typedRecipient.trim() || (dest.chain === "sol" && solWallet ? solWallet : "");
+  const recipientOk = !!recipient && recipientFitsChain(recipient, dest.chain) && (!typingEvm || isAddress(recipient, { strict: true }));
   const units = toUnits(amount, XC_ASSETS[from].decimals);
   const sameAsset = XC_ASSETS[from].assetId === dest.assetId;
+  const solToSol = fromIsSol && dest.chain === "sol"; // same chain: that's a swap (the Solana ticket), not a bridge
   const inFlight = !!track && !TERMINAL.has(track.status) && !track.timedOut;
-  const canQuote = !!walletAddress && !!provider && !!units && recipientOk && !sameAsset && !busy && !inFlight;
+  const overBalance = balance != null && !!units && units > balance;
+  const canQuote = !!sender && !!units && recipientOk && !sameAsset && !solToSol && !overBalance && !busy && !inFlight;
+  const origins = [...EVM_ORIGINS, ...(solWallet ? SOL_ORIGIN_KEYS : [])];
+
+  // One request shape for the live estimate (dry) and the real quote. Our fee (public/config.js
+  // VITE_XC_FEE_BPS + VITE_XC_FEE_RECIPIENT; empty ⇒ none sent) rides both, so the estimate matches.
+  function quoteBody(dry: boolean, refundTo: string, amt: bigint) {
+    const appFees = xcAppFees(getRuntimeConfig("VITE_XC_FEE_BPS"), getRuntimeConfig("VITE_XC_FEE_RECIPIENT"));
+    const deadline = new Date(Date.now() + 10 * 60_000).toISOString();
+    return {
+      appFees,
+      body: {
+        dry, swapType: "EXACT_INPUT", slippageTolerance: MAX_SLIPPAGE_BPS,
+        originAsset: XC_ASSETS[from].assetId, depositType: "ORIGIN_CHAIN",
+        destinationAsset: dest.assetId, amount: amt.toString(),
+        recipient, recipientType: "DESTINATION_CHAIN",
+        refundTo, refundType: "ORIGIN_CHAIN", deadline,
+        ...(appFees.length ? { appFees } : {}),
+      },
+    };
+  }
+
+  // 1) Live estimate: a signed DRY quote ~0.6 s after typing stops (checkPreview: signature, dry, same
+  // assets + amount). The newest answer wins. It never yields a deposit address.
+  const previewSeq = useRef(0);
+  useEffect(() => {
+    const seq = ++previewSeq.current;
+    if (!sender || !units || !recipientOk || sameAsset || solToSol || review) { setPreview(null); return; }
+    setPreview((p) => ({ ...(p || {}), loading: true, error: undefined }));
+    const t = setTimeout(async () => {
+      try {
+        const { body } = quoteBody(true, sender, units);
+        const { res: r } = await fetchOneClickQuote(body);
+        const j = await r.json().catch(() => null);
+        if (seq !== previewSeq.current || !alive.current) return;
+        if (!r.ok || !j) { setPreview({ error: quoteErrorText(j?.message, XC_ASSETS[from]) }); return; }
+        const pv = checkPreview(j, { originAsset: body.originAsset, destinationAsset: body.destinationAsset, amount: body.amount });
+        setPreview(pv.ok ? { amountOut: pv.amountOut, minAmountOut: pv.minAmountOut, time: pv.timeEstimate } : null);
+      } catch { if (seq === previewSeq.current && alive.current) setPreview(null); }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [from, to, units?.toString(), sender, recipient, recipientOk, sameAsset, solToSol, !!review]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 2) Balance of what's being sent, on its own chain.
+  useEffect(() => {
+    let live = true;
+    setBalance(null);
+    if (!sender) return;
+    const a = XC_ASSETS[from];
+    (fromIsSol ? solBalance(from, sender) : evmBalance(a.chain, a.token, sender)).then((b) => { if (live && alive.current) setBalance(b); });
+    return () => { live = false; };
+  }, [from, sender, fromIsSol, !!track && track.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function getQuote() {
-    if (!walletAddress || !units) return;
+    if (!sender || !units) return;
     setErr(null); setBusy("Getting a verified quote…");
     try {
-      // Our fee (public/config.js VITE_XC_FEE_BPS + VITE_XC_FEE_RECIPIENT); empty ⇒ none sent.
-      const appFees = xcAppFees(getRuntimeConfig("VITE_XC_FEE_BPS"), getRuntimeConfig("VITE_XC_FEE_RECIPIENT"));
-      const deadline = new Date(Date.now() + 10 * 60_000).toISOString();
-      const body = {
-        dry: false, swapType: "EXACT_INPUT", slippageTolerance: MAX_SLIPPAGE_BPS,
-        originAsset: XC_ASSETS[from].assetId, depositType: "ORIGIN_CHAIN",
-        destinationAsset: dest.assetId, amount: units.toString(),
-        recipient, recipientType: "DESTINATION_CHAIN",
-        refundTo: walletAddress, refundType: "ORIGIN_CHAIN", deadline,
-        ...(appFees.length ? { appFees } : {}),
-      };
+      const { body, appFees } = quoteBody(false, sender, units);
+      const deadline = body.deadline;
       const { res: r } = await fetchOneClickQuote(body);
       const j = await r.json().catch(() => null);
-      if (!r.ok || !j) throw new Error((j && typeof j.message === "string" ? j.message : "No quote") + ". Nothing was sent.");
+      if (!r.ok || !j) throw new Error(`${quoteErrorText(j && typeof j.message === "string" ? j.message : "", XC_ASSETS[from])} Nothing was sent.`);
       const chk = checkQuote(j, {
         originAsset: body.originAsset, destinationAsset: body.destinationAsset, amount: body.amount,
-        recipient, refundTo: walletAddress, originChain: XC_ASSETS[from].chain, maxSlippageBps: MAX_SLIPPAGE_BPS, appFees,
+        recipient, refundTo: sender, originChain: XC_ASSETS[from].chain, maxSlippageBps: MAX_SLIPPAGE_BPS, appFees,
+        deadline, // the price window WE asked for; the reply's copy isn't signed
       }) as QuoteCheck;
       if (!chk.ok) throw new Error(`Quote refused (${chk.reason}). Nothing was sent.`);
-      if (alive.current) setReview({ quote: j, depositAddress: chk.depositAddress, minAmountOut: chk.minAmountOut, deadlineMs: chk.deadlineMs, amount: units, recipient });
+      if (alive.current) setReview({ quote: j, depositAddress: chk.depositAddress, minAmountOut: chk.minAmountOut, deadlineMs: chk.deadlineMs, amount: units, recipient, refundTo: sender, from });
     } catch (e) {
       if (alive.current) setErr((e as Error).message || "No quote. Nothing was sent.");
     } finally {
@@ -137,24 +287,46 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
     }
   }
 
+  // From Solana: xcSolSend builds, simulates, checks and signs the one transfer.
+  async function sendFromSolana() {
+    if (!review || !solProvider || !isSolAddr(review.refundTo)) return;
+    setErr(null);
+    try {
+      if (Date.now() > review.deadlineMs - 30_000) throw new Error("The quote expired. Get a new one. Nothing was sent.");
+      const { sig, confirmed } = await sendSolDeposit(solProvider, { assetKey: review.from as SolOriginKey, amount: review.amount, from: review.refundTo, depositAddress: review.depositAddress }, (step) => setBusy(step.charAt(0).toUpperCase() + step.slice(1)));
+      fetch(`${ONE_CLICK_API}/v0/deposit/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ depositAddress: review.depositAddress, txHash: sig }) }).catch(() => {});
+      if (!alive.current) return;
+      setTrack({ status: "PENDING_DEPOSIT", hash: sig, chainId: 0, depositAddress: review.depositAddress, deliveredUrl: null, startedAt: Date.now(), recipient: review.recipient, refundTo: review.refundTo, fromChain: "sol", check: null });
+      setReceipt(null);
+      setReview(null);
+      if (!confirmed) setErr("Submitted, not confirmed yet. Check Solscan before trying again: it may still land.");
+      poll(review.depositAddress);
+    } catch (e) {
+      if (alive.current) setErr((e as Error).message || "Transfer not sent.");
+    } finally {
+      if (alive.current) setBusy(null);
+    }
+  }
+
   async function send() {
+    if (review && XC_ASSETS[review.from].chain === "sol") return sendFromSolana();
     if (!review || !provider || !walletAddress) return;
     setErr(null);
     try {
       if (Date.now() > review.deadlineMs - 30_000) throw new Error("The quote expired. Get a new one. Nothing was sent.");
-      const { chainId, tx } = buildDepositTx(from, review.amount, review.depositAddress, walletAddress);
+      const { chainId, tx } = buildDepositTx(review.from, review.amount, review.depositAddress, walletAddress);
       // The wallet must be signing as the account the quote refunds to.
       const accounts = (await provider.request({ method: "eth_accounts" }).catch(() => [])) as string[];
       // Blocks only on a POSITIVE mismatch: some connectors return [] here, and the refund
       // still goes to the connected address either way.
       if (Array.isArray(accounts) && accounts.length > 0 && !accounts.some((a) => typeof a === "string" && a.toLowerCase() === walletAddress.toLowerCase()))
         throw new Error("Your wallet is on a different account than the one connected. Switch back, then review again. Nothing was sent.");
-      setBusy(`Switch to ${CHAIN_NAME[XC_ASSETS[from].chain as keyof typeof CHAIN_NAME]} in your wallet…`);
+      setBusy(`Switch to ${CHAIN_NAME[XC_ASSETS[review.from].chain as keyof typeof CHAIN_NAME]} in your wallet…`);
       await ensureChain(provider, chainId);
       // Check the balance first: an ERC-20 transfer that's short reverts and still costs gas.
-      const bal = await originBalance(provider, XC_ASSETS[from].token, walletAddress);
+      const bal = await originBalance(provider, XC_ASSETS[review.from].token, walletAddress);
       if (bal != null && bal < review.amount)
-        throw new Error(`Not enough ${XC_ASSETS[from].sym} on ${CHAIN_NAME[XC_ASSETS[from].chain as keyof typeof CHAIN_NAME]}. Nothing was sent.`);
+        throw new Error(`Not enough ${XC_ASSETS[review.from].sym} on ${CHAIN_NAME[XC_ASSETS[review.from].chain as keyof typeof CHAIN_NAME]}. Nothing was sent.`);
       setBusy("Confirm the transfer in your wallet…");
       // chainId inside the tx: wallets that honour it (MetaMask and most others) refuse to sign
       // if the user flipped networks between the switch above and this prompt.
@@ -163,7 +335,8 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
       // Optional speed-up: tell 1Click which tx paid the address. Best effort only.
       fetch(`${ONE_CLICK_API}/v0/deposit/submit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ depositAddress: review.depositAddress, txHash: hash }) }).catch(() => {});
       if (!alive.current) return;
-      setTrack({ status: "PENDING_DEPOSIT", hash, chainId, depositAddress: review.depositAddress, deliveredUrl: null, startedAt: Date.now() });
+      setTrack({ status: "PENDING_DEPOSIT", hash, chainId, depositAddress: review.depositAddress, deliveredUrl: null, startedAt: Date.now(), recipient: review.recipient, refundTo: walletAddress, fromChain: XC_ASSETS[review.from].chain, check: null });
+      setReceipt(null);
       setReview(null);
       poll(review.depositAddress);
     } catch (e) {
@@ -184,11 +357,40 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
         if (!status || !alive.current) continue;
         const url = j?.swapDetails?.destinationChainTxHashes?.[0]?.explorerUrl;
         setTrack((t) => (t ? { ...t, status, deliveredUrl: typeof url === "string" && url.startsWith("https://") ? url : t.deliveredUrl } : t));
-        if (status === "SUCCESS") reportSpotFill("near", depositAddress); // spot ledger, checked against 1Click
-        if (TERMINAL.has(status)) return;
+        if (SETTLE_WORDS.has(status)) { confirmOnChain(depositAddress); return; }
+        // INCOMPLETE_DEPOSIT isn't the end: 1Click refunds it by the deadline, so keep following.
+        if (TERMINAL.has(status) && status !== "INCOMPLETE_DEPOSIT") return;
       } catch { /* keep polling */ }
     }
-    if (alive.current) setTrack((t) => (t && !TERMINAL.has(t.status) ? { ...t, timedOut: true } : t));
+    if (alive.current) setTrack((t) => (t && statusOpen(t) ? { ...t, timedOut: true } : t));
+  }
+
+  // 1Click said SUCCESS / REFUNDED: prove it from the chain. Re-asks while the verdict can still
+  // change (not final yet, a read failed): every 15 s for 2 min, then every minute, ~30 min in all
+  // (L2 "safe" takes minutes, Ethereum "finalized" ~13). Only the verdict and its numbers are kept.
+  async function confirmOnChain(depositAddress: string) {
+    for (let i = 0; i < 36 && alive.current; i++) {
+      if (i > 0) await new Promise((res) => setTimeout(res, i <= 8 ? 15000 : 60000));
+      let check: Check;
+      try {
+        const r = await fetch(`${XC_WORKER_API}/xc/settlement?depositAddress=${encodeURIComponent(depositAddress)}`);
+        const j = await r.json().catch(() => null);
+        check = j && typeof j === "object" ? (j as Check) : { error: `HTTP ${r.status}` };
+      } catch { check = { error: "unreachable" }; }
+      if (!alive.current) return;
+      const keep: Check = {
+        verdict: check.verdict, chain: check.chain, to: check.to, final: check.final, error: check.error, reason: check.reason,
+        kind: check.kind, asset: check.asset, decimals: check.decimals, bar: check.bar, credited: check.credited,
+        txs: Array.isArray(check.txs) ? check.txs.slice(0, 10).map((x) => ({ hash: x.hash, ok: x.ok, credited: x.credited, final: x.final, reason: x.reason, note: x.note, method: x.method })) : undefined,
+      };
+      setTrack((t) => (t && t.depositAddress === depositAddress ? { ...t, check: keep } : t));
+      // Spot ledger: report once the delivery shows on-chain; the worker re-checks it before booking.
+      if ((check.verdict === "DELIVERED" || check.verdict === "CONFIRMING") && !reported.current.has(depositAddress)) {
+        reported.current.add(depositAddress);
+        reportSpotFill("near", depositAddress);
+      }
+      if (!check.error && check.verdict && !RECHECK.has(check.verdict)) return;
+    }
   }
 
   const sel = { background: BG, border: `1px solid ${BORD}`, borderRadius: 10, color: BRIGHT, fontFamily: UI, fontSize: 13.5, padding: "9px 10px", width: "100%" } as const;
@@ -198,42 +400,88 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
   const toName = CHAIN_NAME[dest.chain as keyof typeof CHAIN_NAME];
 
   return (
-    <section aria-labelledby="xc-title" style={{ marginTop: 28, marginBottom: 88, maxWidth: 640, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
+    <section aria-labelledby="xc-title" style={{ marginTop: 8, maxWidth: 640, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
         <h2 id="xc-title" style={{ margin: 0, fontFamily: UI, fontSize: 16, color: BRIGHT, fontWeight: 600 }}>Cross-chain</h2>
         <span style={{ fontFamily: UI, fontSize: 13, color: MUT }}>via NEAR Intents · one transfer · no approval</span>
       </div>
 
+      {tradingAccount && (walletAddress || solWallet) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <button type="button" aria-pressed={fundMode}
+            onClick={() => {
+              if (fundMode) { setFundMode(false); return; }
+              setFundMode(true); setTo(fundTo); setReview(null);
+              if (from === fundTo || (fundTo === "USDC.sol" && XC_ASSETS[from].chain === "sol")) setFrom(fundFrom);
+            }}
+            style={{ background: fundMode ? BRIGHT : "transparent", color: fundMode ? "#0a0a0b" : FOG, border: `1px solid ${fundMode ? BRIGHT : BORD}`, borderRadius: 15, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+            Fund my trading account
+          </button>
+          {fundMode && <span style={{ fontFamily: UI, fontSize: 12, color: MUT }}>Lands as USDC on {CHAIN_NAME[XC_ASSETS[fundTo].chain as keyof typeof CHAIN_NAME]} in your trading wallet. Then one click deposits it.</span>}
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <label style={field}><span style={lab}>FROM</span>
           <select value={from} onChange={(e) => { setFrom(e.target.value as AssetKey); setReview(null); }} style={sel}>
-            {ORIGINS.map((k) => <option key={k} value={k}>{label(k)}</option>)}
+            {origins.map((k) => <option key={k} value={k}>{label(k)}</option>)}
           </select>
         </label>
         <label style={field}><span style={lab}>TO</span>
-          <select value={to} onChange={(e) => { setTo(e.target.value as AssetKey); setReview(null); }} style={sel}>
+          <select value={to} onChange={(e) => { setTo(e.target.value as AssetKey); setFundMode(false); setReview(null); }} style={sel}>
             {KEYS.filter((k) => k !== from).map((k) => <option key={k} value={k}>{label(k)}</option>)}
           </select>
         </label>
       </div>
 
-      <label style={field}><span style={lab}>AMOUNT ({XC_ASSETS[from].sym})</span>
+      <label style={field}>
+        <span style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <span style={lab}>AMOUNT ({XC_ASSETS[from].sym})</span>
+          {balance != null && (
+            <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUT }}>
+              Balance {fromUnits(balance.toString(), XC_ASSETS[from].decimals)}{" · "}
+              <button type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const a = XC_ASSETS[from];
+                  const max = maxSendable({ balance, native: fromIsSol ? from === "SOL.sol" : !a.token, chain: a.chain });
+                  setAmount(max > 0n ? fromUnits(max.toString(), a.decimals, a.decimals) : "0"); setReview(null);
+                }}
+                style={{ background: "transparent", border: "none", padding: 0, color: FOG, fontFamily: UI, fontSize: 11, fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>Max</button>
+            </span>
+          )}
+        </span>
         <input inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); setReview(null); }} placeholder="0.00" style={sel} />
+        {overBalance && <span style={{ fontFamily: MONO, fontSize: 10.5, color: NEG }}>More than your balance.</span>}
+        {!overBalance && preview && (
+          <span aria-live="polite" style={{ fontFamily: MONO, fontSize: 10.5, color: preview.error ? FOG : MUT }}>
+            {preview.error ? preview.error
+              : preview.amountOut ? <>You’ll receive ≈ <span style={{ color: BRIGHT }}>{fromUnits(preview.amountOut, dest.decimals)} {dest.sym}</span> · at least {fromUnits(preview.minAmountOut as string, dest.decimals)}{preview.time ? ` · ~${preview.time}s` : ""}</>
+              : "Estimating…"}
+          </span>
+        )}
       </label>
 
-      {evmDest ? (
+      {evmDest && !typingEvm ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: MUT }}>
           Delivered to your wallet on {toName}{walletAddress ? <> · <span style={{ color: FOG }}>{short(walletAddress)}</span></> : null}
         </div>
+      ) : typingEvm ? (
+        <label style={field}><span style={lab}>{toName.toUpperCase()} ADDRESS</span>
+          <input value={typedEvm} onChange={(e) => { setTypedEvm(e.target.value); setReview(null); }} placeholder="0x… address" spellCheck={false} autoComplete="off" style={sel} />
+          {typedEvm && !recipientOk && <span style={{ fontFamily: MONO, fontSize: 10.5, color: NEG }}>Not a valid {toName} address (check the letters’ case).</span>}
+          <span style={{ fontFamily: UI, fontSize: 11.5, color: FAINT }}>No EVM wallet connected, so the address is typed. Check it twice: a wrong address can’t be undone.</span>
+        </label>
       ) : (
         <label style={field}><span style={lab}>{toName.toUpperCase()} ADDRESS</span>
-          <input value={typedRecipient} onChange={(e) => { setTypedRecipient(e.target.value); setReview(null); }} placeholder={dest.chain === "sol" ? "Solana address" : "bc1… address"} spellCheck={false} autoComplete="off" style={sel} />
+          <input value={typedRecipient} onChange={(e) => { setTypedRecipient(e.target.value); setReview(null); }} placeholder={dest.chain === "sol" ? (solWallet ? `Your Solana wallet · ${short(solWallet)}` : "Solana address") : "bc1… address"} spellCheck={false} autoComplete="off" style={sel} />
           {typedRecipient && !recipientOk && <span style={{ fontFamily: MONO, fontSize: 10.5, color: NEG }}>Not a {toName} address.</span>}
         </label>
       )}
 
-      {!walletAddress ? (
-        <div style={{ fontFamily: UI, fontSize: 13, color: MUT }}>{connected ? "Connect an EVM wallet to send from Arbitrum, Base or Ethereum." : "Connect a wallet to move funds across chains."}</div>
+      {solToSol && <div style={{ fontFamily: UI, fontSize: 12.5, color: MUT }}>Both sides are on Solana. Swap it with the Solana ticket above instead.</div>}
+      {!sender ? (
+        <div style={{ fontFamily: UI, fontSize: 13, color: MUT }}>{fromIsSol ? "Connect a Solana wallet to send from Solana." : connected || solWallet ? "Connect an EVM wallet to send from Arbitrum, Base or Ethereum." : "Connect a wallet to move funds across chains."}</div>
       ) : (
         <button type="button" onClick={getQuote} disabled={!canQuote}
           style={{ background: canQuote ? BRIGHT : "transparent", color: canQuote ? "#0a0a0b" : FAINT, border: `1px solid ${canQuote ? BRIGHT : BORD}`, borderRadius: 10, fontFamily: UI, fontSize: 14, fontWeight: 600, padding: "12px 0", cursor: canQuote ? "pointer" : "not-allowed" }}>
@@ -244,21 +492,94 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
 
       {track && (
         <div aria-live="polite" style={{ borderTop: `1px solid ${BORD}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 6, fontFamily: MONO, fontSize: 11.5 }}>
-          <div style={{ color: track.status === "SUCCESS" ? POS : TERMINAL.has(track.status) ? NEG : BRIGHT }}>
-            {STATUS_TEXT[track.status as keyof typeof STATUS_TEXT] || "In progress"}
-          </div>
+          <ol aria-label="Transfer progress" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexWrap: "wrap", gap: "4px 10px", fontSize: 10.5 }}>
+            {xcSteps(track).map((st, i, all) => (
+              <li key={st.label} style={{ display: "flex", alignItems: "center", gap: 5, color: st.state === "done" ? FOG : st.state === "active" ? BRIGHT : st.state === "failed" ? NEG : FAINT, fontWeight: st.state === "active" ? 600 : 400 }}>
+                <span aria-hidden="true">{st.state === "done" ? "●" : st.state === "failed" ? "×" : st.state === "active" ? "◐" : "○"}</span>
+                {st.label}
+                {/* separator trails its step, so a wrapped line never starts with one */}
+                {i < all.length - 1 && <span aria-hidden="true" style={{ color: FAINT, fontWeight: 400 }}>›</span>}
+              </li>
+            ))}
+          </ol>
+          {(() => {
+            // SUCCESS / REFUNDED read from the on-chain check; everything else is 1Click's word.
+            const line = settlementLine(track.status, track.check ?? null, { recipient: track.recipient, refundTo: track.refundTo });
+            if (line) return <div style={{ color: line.tone === "pos" ? POS : line.tone === "neg" ? NEG : line.tone === "muted" ? FOG : BRIGHT }}>{line.text}</div>;
+            return (
+              <div style={{ color: TERMINAL.has(track.status) ? NEG : BRIGHT }}>
+                {STATUS_TEXT[track.status as keyof typeof STATUS_TEXT] || "In progress"}
+              </div>
+            );
+          })()}
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", color: MUT }}>
-            {explorerTx(track.chainId, track.hash) && <a href={explorerTx(track.chainId, track.hash) as string} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>your transfer ↗</a>}
+            {track.fromChain === "sol"
+              ? <a href={solscanTx(track.hash)} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>your transfer ↗</a>
+              : explorerTx(track.chainId, track.hash) && <a href={explorerTx(track.chainId, track.hash) as string} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>your transfer ↗</a>}
             {track.deliveredUrl && <a href={track.deliveredUrl} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>delivery ↗</a>}
             <a href="https://explorer.near-intents.org" target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>NEAR Intents explorer ↗</a>
           </div>
           <div style={{ color: FAINT, fontSize: 10.5, wordBreak: "break-all" }}>Deposit address · {track.depositAddress}</div>
           {track.timedOut && <div style={{ color: FOG, fontSize: 10.5 }}>Still in progress. Search the deposit address on the explorer to follow it.</div>}
+          {depositHandoff(track.check ?? null, tradingAccount) && (
+            <button type="button"
+              onClick={() => {
+                // Orderly's own deposit dialog (registered by the SDK under this id); the portfolio page if it isn't.
+                try { void Promise.resolve(modal.show("DepositAndWithdrawWithDialogId", { activeTab: "deposit" })).catch(() => window.location.assign("/portfolio")); }
+                catch { window.location.assign("/portfolio"); }
+              }}
+              style={{ alignSelf: "flex-start", background: BRIGHT, color: "#0a0a0b", border: `1px solid ${BRIGHT}`, borderRadius: 15, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "6px 14px", cursor: "pointer" }}>
+              Deposit to your trading account
+            </button>
+          )}
+          {receiptWanted(track, track.check ?? null) && (() => {
+            const text = settlementReceipt({ ...track, chainName: track.fromChain ? CHAIN_NAME[track.fromChain as keyof typeof CHAIN_NAME] : undefined }, track.check ?? null);
+            return (
+              <>
+                <div style={{ color: FOG, fontSize: 10.5 }}>Something needs a look. The receipt has every number 1Click support will ask for.</div>
+                <button type="button"
+                  onClick={async () => {
+                    try { await navigator.clipboard.writeText(text); setReceipt("copied"); } catch { setReceipt("shown"); }
+                  }}
+                  style={{ alignSelf: "flex-start", background: "transparent", color: FOG, border: `1px solid ${BORD}`, borderRadius: 15, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>
+                  {receipt === "copied" ? "Receipt copied" : "Copy receipt"}
+                </button>
+                {receipt === "shown" && <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all", color: FOG, fontSize: 10.5, userSelect: "all" }}>{text}</pre>}
+              </>
+            );
+          })()}
           {TERMINAL.has(track.status) && (
-            <button type="button" onClick={() => { setTrack(null); saveTrack(null); }}
+            <button type="button" onClick={() => { setTrack(null); saveTrack(null); setReceipt(null); }}
               style={{ alignSelf: "flex-start", background: "transparent", color: MUT, border: `1px solid ${BORD}`, borderRadius: 15, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "5px 12px", cursor: "pointer" }}>Clear</button>
           )}
         </div>
+      )}
+
+      {history.filter((h) => h.depositAddress !== track?.depositAddress).length > 0 && (
+        <details style={{ borderTop: `1px solid ${BORD}`, paddingTop: 10 }}>
+          <summary style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: "0.08em", color: MUT, cursor: "pointer" }}>RECENT TRANSFERS · THIS DEVICE</summary>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+            {history.filter((h) => h.depositAddress !== track?.depositAddress).map((h) => {
+              const line = settlementLine(h.status, h.check ?? null, { recipient: h.recipient, refundTo: h.refundTo });
+              const text = line?.text || STATUS_TEXT[h.status as keyof typeof STATUS_TEXT] || (h.timedOut ? "Tracking stopped" : "In progress");
+              const tone = line?.tone === "pos" ? POS : line?.tone === "neg" ? NEG : FOG;
+              return (
+                <div key={h.depositAddress} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", fontFamily: MONO, fontSize: 11 }}>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: "1 1 200px" }}>
+                    <span style={{ color: tone, overflowWrap: "anywhere" }}>{text}</span>
+                    <span style={{ color: FAINT, fontSize: 10 }}>{new Date(h.startedAt).toLocaleString()} · {short(h.depositAddress)}</span>
+                  </span>
+                  <button type="button"
+                    onClick={async () => {
+                      const r = settlementReceipt({ ...h, chainName: h.fromChain ? CHAIN_NAME[h.fromChain as keyof typeof CHAIN_NAME] : undefined }, h.check ?? null);
+                      try { await navigator.clipboard.writeText(r); } catch { window.prompt("Copy the receipt", r); }
+                    }}
+                    style={{ background: "transparent", color: FOG, border: `1px solid ${BORD}`, borderRadius: 15, fontFamily: UI, fontSize: 11.5, fontWeight: 600, padding: "4px 10px", cursor: "pointer", flexShrink: 0 }}>Copy receipt</button>
+                </div>
+              );
+            })}
+          </div>
+        </details>
       )}
 
       <div style={{ fontFamily: UI, fontSize: 12, lineHeight: 1.5, color: FAINT }}>
@@ -274,7 +595,7 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
               ["You receive (est.)", `${fromUnits(String(review.quote.quote.amountOut), dest.decimals)} ${dest.sym} on ${toName}`],
               ["Minimum received", `${fromUnits(review.minAmountOut, dest.decimals)} ${dest.sym}`],
               ["Delivered to", review.recipient],
-              ["Refunds to", walletAddress as string],
+              ["Refunds to", review.refundTo],
               ["Deposit address", review.depositAddress],
               ["Time", review.quote.quote.timeEstimate ? `~${review.quote.quote.timeEstimate}s after your transfer confirms` : "—"],
             ].map(([k, v]) => (

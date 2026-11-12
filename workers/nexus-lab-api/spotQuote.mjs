@@ -9,6 +9,7 @@
 // Nothing here signs. A quote that fails any check is dropped, and no usable quote returns
 // ok:false, so the client falls back to the named Uniswap link as before.
 import { createConfig, getRawQuotes, nordstern, ZeroXAggregator } from "@spandex/core";
+import { pinnedRouter } from "../../app/lib/spotRouters.mjs";
 
 export const SPOT_FEE_MAX_BPS = 100;
 const ADDR = /^0x[a-fA-F0-9]{40}$/;
@@ -118,6 +119,8 @@ export function pickSpotQuote(quotes, swap) {
     if ((tx.value ?? 0n) !== 0n) return false;                          // ERC-20 in: no native value
     const ap = q.approval;
     if (!ap || !ADDR.test(ap.spender || "") || String(ap.token).toLowerCase() !== inTok) return false;
+    // approve target == swap target == a router read live for this chain (app/lib/spotRouters.mjs)
+    if (!pinnedRouter(swap.chainId, ap.spender, tx.to)) return false;
     return true;
   });
   usable.sort((a, b) => (b.outputAmount > a.outputAmount ? 1 : b.outputAmount < a.outputAmount ? -1 : 0));

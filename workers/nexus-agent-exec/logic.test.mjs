@@ -2,7 +2,7 @@
 // Run: node --test workers/nexus-agent-exec/logic.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, exitReason, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, dcaTakeProfitPrice, breakevenArmed, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, resolveExitPrice } from "./logic.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, exitReason, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, dcaTakeProfitPrice, breakevenArmed, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, resolveExitPrice, portfolioDeltaCheck, buildCallbackPayload } from "./logic.mjs";
 
 // ─── snapQty ───────────────────────────────────────────────
 test("snapQty: snaps cleanly to base_tick (no float artifacts)", () => {
@@ -606,4 +606,148 @@ test("alreadyTradedSignal: the same read is taken once; the next read (or the ot
   assert.equal(alreadyTradedSignal(state, { ...sig, direction: "SHORT" }), false);
   assert.equal(alreadyTradedSignal({}, sig), false, "nothing traded yet");
   assert.equal(alreadyTradedSignal(state, { ...sig, sourceT: undefined }), false);
+});
+
+// ─── portfolioDeltaCheck (PRO — unified directional risk cap) ───────────────
+test("portfolioDeltaCheck: cap off (0/NaN) never blocks", () => {
+  assert.equal(portfolioDeltaCheck([], 999999, "LONG", 0).blocked, false);
+  assert.equal(portfolioDeltaCheck([], 999999, "LONG", undefined).blocked, false);
+  assert.equal(portfolioDeltaCheck([{ signedQty: 10, mark: 100 }], 5000, "LONG", NaN).blocked, false);
+});
+
+test("portfolioDeltaCheck: flat account, new entry within cap passes", () => {
+  const r = portfolioDeltaCheck([], 4000, "LONG", 5000);
+  assert.equal(r.blocked, false);
+  assert.equal(r.projectedDelta, 4000);
+});
+
+test("portfolioDeltaCheck: flat account, single trade over cap blocks", () => {
+  const r = portfolioDeltaCheck([], 6000, "LONG", 5000);
+  assert.equal(r.blocked, true);
+});
+
+test("portfolioDeltaCheck: existing long + new long over cap blocks", () => {
+  // existing +4000 (40 * 100), new long +2000 → projected +6000 > 5000
+  const r = portfolioDeltaCheck([{ signedQty: 40, mark: 100 }], 2000, "LONG", 5000);
+  assert.equal(r.existingDelta, 4000);
+  assert.equal(r.projectedDelta, 6000);
+  assert.equal(r.blocked, true);
+});
+
+test("portfolioDeltaCheck: a trade that REDUCES net exposure is never blocked", () => {
+  // Already net +6000 (over a 5000 cap, e.g. from external/manual positions). A SHORT
+  // trims to +4000 — de-risking, so it must pass even though the book is over-cap.
+  const r = portfolioDeltaCheck([{ signedQty: 60, mark: 100 }], 2000, "SHORT", 5000);
+  assert.equal(r.projectedDelta, 4000);
+  assert.equal(r.blocked, false);
+});
+
+test("portfolioDeltaCheck: sums signed notional across multiple coins (longs net shorts)", () => {
+  // +5000 BTC, -3000 ETH → net +2000; a new +2000 long → +4000, within 5000.
+  const positions = [{ signedQty: 0.05, mark: 100000 }, { signedQty: -1, mark: 3000 }];
+  const r = portfolioDeltaCheck(positions, 2000, "LONG", 5000);
+  assert.equal(r.existingDelta, 2000);
+  assert.equal(r.projectedDelta, 4000);
+  assert.equal(r.blocked, false);
+});
+
+// ─── buildCallbackPayload (PRO — execution push callbacks) ───────────────────
+test("buildCallbackPayload: ENTRY has stable shape, address lowercased, ts honored", () => {
+  const p = buildCallbackPayload("ENTRY", { address: "0xABCDEF", symbol: "PERP_BTC_USDC", direction: "LONG", qty: 0.01, price: 65000, leverage: 5, paper: true, ts: 1700000000000 });
+  assert.equal(p.event, "ENTRY");
+  assert.equal(p.address, "0xabcdef");
+  assert.equal(p.symbol, "PERP_BTC_USDC");
+  assert.equal(p.direction, "LONG");
+  assert.equal(p.qty, 0.01);
+  assert.equal(p.price, 65000);
+  assert.equal(p.leverage, 5);
+  assert.equal(p.paper, true);
+  assert.equal(p.timestamp, 1700000000000);
+  // no pnl/reason on an entry
+  assert.equal("reason" in p, false);
+  assert.equal("pnl" in p, false);
+});
+
+test("buildCallbackPayload: CLOSE carries reason + pnl + pnlPercent", () => {
+  const p = buildCallbackPayload("CLOSE", { address: "0x1", symbol: "PERP_ETH_USDC", direction: "SHORT", qty: 1, price: 3000, reason: "SL", pnl: -12.5, pnlPercent: -4.2, ts: 1 });
+  assert.equal(p.event, "CLOSE");
+  assert.equal(p.reason, "SL");
+  assert.equal(p.pnl, -12.5);
+  assert.equal(p.pnlPercent, -4.2);
+});
+
+test("buildCallbackPayload: missing numerics become null (predictable wire shape)", () => {
+  const p = buildCallbackPayload("ENTRY", { address: "0x1", symbol: "PERP_SOL_USDC", direction: "LONG", ts: 1 });
+  assert.equal(p.qty, null);
+  assert.equal(p.price, null);
+  assert.equal(p.leverage, null);
+  assert.equal(p.paper, false);
+});
+
+// ─── TWAP retry cap (2026-11-06) ───────────────────────────────────────────────
+import { twapSliceFailed, TWAP_MAX_ATTEMPTS } from "./logic.mjs";
+
+test("twapSliceFailed: a rejected slice is retried, then skipped after TWAP_MAX_ATTEMPTS", () => {
+  let s = { seq: 0, qty: 0.01, notionalEst: 100, offsetMs: 0, done: false };
+  for (let i = 1; i < TWAP_MAX_ATTEMPTS; i++) {
+    s = twapSliceFailed(s, "-1101");
+    assert.deepEqual([s.attempts, s.skipped, s.done], [i, false, false]);
+  }
+  s = twapSliceFailed(s, "-1101");
+  assert.deepEqual([s.attempts, s.skipped, s.error], [TWAP_MAX_ATTEMPTS, true, "-1101"]);
+});
+
+test("a skipped slice is never due again, and the schedule can complete", () => {
+  const start = 1_000_000;
+  const st = twapState(start);
+  st.slices[0] = { ...st.slices[0], done: true };
+  st.slices[1] = { ...st.slices[1], skipped: true, attempts: TWAP_MAX_ATTEMPTS, error: "x" };
+  let r = twapDueSlices(st, start + 10 * 60_000);
+  assert.deepEqual(r.due.map((x) => x.seq), [2], "the skipped slice is not re-sent");
+  st.slices[2] = { ...st.slices[2], done: true };
+  r = twapDueSlices(st, start + 10 * 60_000);
+  assert.equal(r.complete, true);
+  const p = twapProgress(st);
+  assert.deepEqual([p.filled, p.skipped, p.remaining], [2, 1, 0], "skipped is counted apart from filled");
+});
+
+// ─── Orderly position answers: an error is unreadable, never flat (2026-11-06) ─────────────
+import { exchangePositionQty, exchangePositionRows } from "./logic.mjs";
+
+test("exchangePositionQty: only a successful answer can say flat", () => {
+  assert.equal(exchangePositionQty({ success: true, data: { position_qty: 0.05 } }), 0.05);
+  assert.equal(exchangePositionQty({ success: true, data: { position_qty: -0.05 } }), 0.05);
+  assert.equal(exchangePositionQty({ success: true, data: { position_qty: 0 } }), 0);
+  assert.equal(exchangePositionQty({ success: true, data: null }), 0, "nothing open in that symbol");
+  // The bug: these used to read as 0 (flat) and the monitor cleared a live position's record.
+  for (const err of [{ success: false, code: -1003, message: "orderly key expired" }, { code: 429 }, {}, null, undefined, "x"]) {
+    assert.equal(exchangePositionQty(err), null);
+  }
+  assert.equal(exchangePositionQty({ success: true, data: { position_qty: "abc" } }), null);
+});
+
+test("exchangePositionRows: an error is null, never an empty book", () => {
+  assert.deepEqual(exchangePositionRows({ success: true, data: { rows: [{ position_qty: 1 }] } }), [{ position_qty: 1 }]);
+  assert.deepEqual(exchangePositionRows({ success: true, data: {} }), []);
+  assert.equal(exchangePositionRows({ success: false, message: "rate limited" }), null);
+  assert.equal(exchangePositionRows(null), null);
+});
+
+// ─── Live fills: the exchange's average price, never the mark when Orderly has it (2026-11-06) ──
+import { fillPriceFrom } from "./logic.mjs";
+
+test("fillPriceFrom: a FILLED order books its average executed price", () => {
+  assert.deepEqual(fillPriceFrom({ success: true, data: { status: "FILLED", average_executed_price: 3012.4 } }, 3000), { price: 3012.4, source: "exchange" });
+  assert.deepEqual(fillPriceFrom({ success: true, data: { status: "PARTIAL_FILLED", average_executed_price: "2999.5" } }, 3000), { price: 2999.5, source: "exchange" });
+});
+
+test("fillPriceFrom: anything else falls back to the mark, tagged as such", () => {
+  const cases = [
+    { success: true, data: { status: "NEW", average_executed_price: 0 } },          // not filled yet
+    { success: true, data: { status: "FILLED", average_executed_price: null } },    // no price
+    { success: true, data: { status: "CANCELLED", average_executed_price: 3010 } },
+    { success: false, code: -1103, message: "order not found" },                      // an error answer
+    null, undefined, {},
+  ];
+  for (const c of cases) assert.deepEqual(fillPriceFrom(c, 3000), { price: 3000, source: "mark" });
 });

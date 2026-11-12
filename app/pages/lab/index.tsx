@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useCollateral, usePrivateQuery, useAccount } from "@orderly.network/hooks";
 import { useLabStorage } from "@/hooks/useLabStorage";
 import { HoldersRoom } from "@/components/HoldersRoom";
@@ -10,6 +10,8 @@ import { NexusPro } from "@/components/NexusPro";
 import type { TabId, DayGroup, ProcessedTrade } from "./types";
 import { getDayKey } from "./helpers";
 import { useIsMobile } from "./useIsMobile";
+import { deployToAgent } from "@/utils/agentPrefill";
+import { LEVEL_RECLAIM_DEPLOY, LEVEL_RECLAIM_PAPER_CONFIG } from "@/lib/levelReclaim.mjs";
 // Extracted Lab views
 import { AnalyticsView } from "./AnalyticsView";
 import { TradeLogAllView, TradeLogView } from "./TradeLog";
@@ -31,6 +33,7 @@ import { CommandPalette } from "./CommandPalette";
 import { CreatorEarnings } from "./CreatorEarnings";
 import { NexusBriefing } from "./NexusBriefing";
 import { DecisionBoard } from "./DecisionBoard";
+import { LabCallsPanel } from "./LabCallsPanel";
 import { LabTitleBar, LabStats, LabTabs, type LabTab } from "./LabHeader";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
 import { C } from "@/config/theme";
@@ -53,6 +56,18 @@ export default function TheLabPage() {
     const t = normTab(searchParams.get("tab"));
     if (t) setActiveTab(t);
   }, [searchParams]);
+  // The level_reclaim paper wallet's setup (borst, 2026-11-05): a HIDDEN link, linked from nowhere in the app, that
+  // hands the exact registered config (app/lib/levelReclaim.mjs) to the Agent tab as a whole strategy. PAPER only:
+  // the brain refuses this mode on any other config, and lab-api refuses the graded exit off PAPER. deployToAgent
+  // navigates to ?tab=agent, which drops the param, so it loads once.
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (searchParams.get("deploy") !== LEVEL_RECLAIM_DEPLOY) return;
+    deployToAgent({ ...LEVEL_RECLAIM_PAPER_CONFIG, symbols: [...LEVEL_RECLAIM_PAPER_CONFIG.symbols], takeProfits: [] },
+      "the level_reclaim paper setup (as registered)",
+      "level_reclaim, exactly as graded: the registered rule, the graded exit (1.2× H4 ATR stop, 1.5× target, 168h), the 11 main-card coins, PAPER only. Use a FRESH wallet so its record starts at zero. Its 30-trade test is judged after fees (paper-costs), with parity CLEAN.",
+      navigate, { replaceFilters: true });
+  }, [searchParams, navigate]);
   // Programmatic tab switches (deployToAgent / deployDirectiveFromThesis) fire this
   // event so they work even when the URL's ?tab= is stale (tab clicks use local
   // state, not the URL) — a plain navigate would no-op in that case.
@@ -306,7 +321,15 @@ export default function TheLabPage() {
           // The Board (every market, one verifiable read) sits between the narrative
           // Briefing and the deep Market Intel — scan the whole book at a glance. Shown
           // to everyone; it's market-level, no wallet needed.
-          const board = <DecisionBoard onSelectTab={setActiveTab} trades={connected ? processedTrades : undefined} wallet={rootWalletAddress} theses={connected ? theses : undefined} positions={connected ? briefingPositions : undefined} />;
+          // Folded by default (borst, 2026-11-05): Lab home leads with the graded calls; the dense board is one
+          // tap away and remembers being opened.
+          const board = (
+            <Collapsible title="The board · every market, one read" subtitle="funding, crowd and smart money, one line per market" shortTitle="The board" shortSub="every market, one read" storageKey="nx_board_open">
+              <DecisionBoard hideHeader onSelectTab={setActiveTab} trades={connected ? processedTrades : undefined} wallet={rootWalletAddress} theses={connected ? theses : undefined} positions={connected ? briefingPositions : undefined} />
+            </Collapsible>
+          );
+          // ◆ CALLS leads Lab home: the "graded from public price" line + open and graded calls, above every fold.
+          const calls = <LabCallsPanel onSelectTab={setActiveTab} />;
           // Lead with the synthesis (Briefing narrative → the Board's one-line-per-market
           // read); the deep Market Intel (news, movers, OI, long/short) collapses so the
           // tab opens as a read, not a wall of rows.
@@ -372,7 +395,7 @@ export default function TheLabPage() {
           // — lands straight on the Briefing → Board → lenses read. No wallet needed to
           // scan the whole book; only COPY / PUBLISH / ARM LIVE ask for a connect.
           const showSplash = !connected && !guestPreview;
-          return <>{showSplash && <LabWelcome />}{briefing}{board}{lenses}{deep}</>;
+          return <>{showSplash && <LabWelcome />}{calls}{briefing}{board}{lenses}{deep}</>;
         })()}
         {activeTab === "smart" && (
           // Smart Money is now the DEEP WALLET DRILL-DOWN the Intel funnel's Positioning lens

@@ -7,8 +7,10 @@
 //            receipt on that chain says status 0x1.
 //   jupiter  Solana swap: the app reports the signature after confirmation; booked only if the chain
 //            says confirmed/finalized with no error.
-//   near     cross-chain: the app reports the deposit address on SUCCESS; booked only if 1Click's own
-//            status says SUCCESS.
+//   near     cross-chain: the app reports the deposit address once the delivery shows on-chain; booked
+//            only if the settlement check (routes-xcsettle.mjs settleDeposit) finds the signed minimum
+//            credited to the signed recipient on the destination chain (DELIVERED, or CONFIRMING = credited,
+//            not final yet). 1Click's own SUCCESS alone no longer books it.
 //   woofi    the WooFi widget reports no fills, so we count widget OPENS, labelled as opens.
 // Each id is booked once (spot:fill:{route}:{id}). No wallet address is stored: route, day, id only.
 // Day totals are read-modify-written under a NexusLock lease (KV has no compare-and-set).
@@ -16,6 +18,8 @@
 import { LOCK_KEYS } from "./lock.mjs";
 
 export const ROUTES = ["flash", "spandex", "jupiter", "near", "woofi"];
+// The signed minimum is on-chain at the recipient (final, or not final yet). Everything else waits.
+export const NEAR_CREDITED = new Set(["DELIVERED", "CONFIRMING"]);
 export const FILL_TTL_S = 400 * 86400;
 const FLASH_FINAL = new Set(["ORDER_STATUS_FILLED", "ORDER_STATUS_CANCELLED", "ORDER_STATUS_REJECTED", "ORDER_STATUS_TERMINATED"]);
 const FLASH_ORDER_MAX_AGE_MS = 45 * 86400 * 1000;
@@ -79,7 +83,7 @@ export function parseFillReport(body) {
 
 /**
  * Check a report against the chain / 1Click. @returns {Promise<boolean>} true = proven.
- * @param {{ evmRpc: (chainId, method, params) => Promise<any>, solRpc: (method, params) => Promise<any>, fetchImpl: typeof fetch }} io
+ * @param {{ evmRpc: (chainId, method, params) => Promise<any>, solRpc: (method, params) => Promise<any>, fetchImpl: typeof fetch, nearSettle: (depositAddress) => Promise<{verdict:string}> }} io
  */
 export async function verifyFill(rep, io) {
   try {
@@ -93,9 +97,9 @@ export async function verifyFill(rep, io) {
       return !!st && st.err == null && (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized");
     }
     if (rep.route === "near") {
-      const r = await io.fetchImpl(`https://1click.chaindefuser.com/v0/status?depositAddress=${encodeURIComponent(rep.id)}`);
-      if (!r.ok) return false;
-      return (await r.json())?.status === "SUCCESS";
+      if (typeof io.nearSettle !== "function") return false;
+      const r = await io.nearSettle(rep.id);
+      return NEAR_CREDITED.has(r?.verdict);
     }
   } catch { return false; }
   return false;

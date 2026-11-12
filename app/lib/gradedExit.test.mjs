@@ -54,8 +54,10 @@ test("configs without the graded exit are never touched", () => {
 test("exec checks the paper-only rule before any price read, key read or order", () => {
   const src = read("workers/nexus-agent-exec/index.js");
   const fn = src.slice(src.indexOf("async function enterPosition("));
-  const guard = fn.indexOf("gradedExitRefusal(config, paper)");
-  assert.ok(guard > 0, "enterPosition must call gradedExitRefusal(config, paper)");
+  const guard = fn.indexOf("gradedExitRefusal(config, paper, { liveLift })");
+  assert.ok(guard > 0, "enterPosition must call gradedExitRefusal(config, paper, { liveLift })");
+  // the lift is decided from the config + the wallet + the var only, before the guard (app/lib/liveLift.mjs)
+  assert.ok(fn.indexOf("const liveLift = !paper && liveLifted(config, address, lifts);") < guard);
   for (const later of ["getMarkPrice(", "agent:key:", "orderlyRequest(", "state.current_position ="]) {
     const at = fn.indexOf(later);
     assert.ok(at > guard, `${later} must come after the graded-exit guard`);

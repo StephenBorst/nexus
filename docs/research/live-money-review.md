@@ -9,7 +9,10 @@ happens at Paper: "After 30 or more paper trades with parity CLEAN and net posit
 (size, daily cap, kill switch, who signs) as its own dated PR. Arming stays borst's call, in person." This is the
 checklist that plan answers to.
 
-## Where it stands (`GET /intel/axis-backtest`, 2026-10-26 00:14 UTC)
+**2026-11-07:** the first concrete plan under this checklist is `docs/research/live-plan-level-reclaim.md` (draft,
+unsigned), written ahead of `level_reclaim`'s paper gate.
+
+## Where it stood (`GET /intel/axis-backtest`, 2026-10-26 00:14 UTC)
 
 - No read is past Registered. Nearest by count: level_reclaim (26 of 30 events, mean R −0.10, halves disagree).
   session_momentum is failing (40 events, −0.76R).
@@ -50,6 +53,27 @@ checklist that plan answers to.
 | Key | Order-only Orderly key (cannot withdraw), encrypted at rest, scoped to that account. |
 | Who signs | borst, in person. The PR records the date and that it was him. |
 | Stop rules | Parity DRIFT, a live record that falls below the paper record by more than fees explain, or the read retiring on the scoreboard ⇒ back to paper the same day. |
+
+## House rules for any live strategy (added 2026-11-07, SIGNED 2026-11-08)
+
+borst's ask: the rules written down before anything is TRADEABLE. Every strategy plan inherits these; a plan may be
+stricter, never looser. Numbers are in R, where 1R = the fixed dollars one trade risks at its graded stop
+(`riskPerTradeUsd`, `app/lib/riskSizing.mjs`).
+
+| rule | the line |
+|---|---|
+| Step 0: mechanics test | Before any strategy arms: one ~$10 live entry on the dedicated wallet. The backstop stop shows on Orderly (Orders → TP/SL, 1.5× the stop beyond the entry), KILL closes the position and the backstop disappears. Recorded in the plan's PR with the date. It proves the plumbing, **not an edge**: passing it unlocks nothing but the strategy's own gate. |
+| Starting size | 1R = **1% of the dedicated account**, fixed in dollars for the whole first tranche (level_reclaim: $10 on $1,000). No deposits or withdrawals on that wallet during a tranche, so R and % stay the same number. |
+| Daily loss cap | **3R** (`maxDailyLossUsdc`). Entries stop for the UTC day; open positions keep their exits. |
+| Weekly brake | **−5R over any rolling 7 days ⇒ entries paused (ASSISTED)** until borst has read the trades. Not a kill. |
+| Kill | **−10R from the start of live, or account equity below 90% of what was deposited, whichever comes first** ⇒ KILL, back to paper, written up. The equity line catches fees, funding and slippage that R alone doesn't count. |
+| Parity | Must read **CLEAN** on the live wallet and on its paper control. DRIFT on either ⇒ back to paper the same day. |
+| No size increase until | **all** of: 30 live trades; net > 0 after fees, funding and slippage; parity CLEAN the whole way; mean entry slippage ≤ 5 bps a side; the drawdown never went past −5R; the read still served at PAPER or better. Then at most **2×** (1R $10 → $20), as a new dated plan. One step per 30 trades. |
+| Who signs | **borst, in person**, for arming and for every size increase. The PR records the date and that it was him. A session, a scheduled task or the watcher never raises size or arms. Lowering size, pausing or KILL needs no sign-off. |
+
+**Signed:** borst, 2026-11-08, in his own words: "I sign the house rules as written." This signs the house rules
+above and nothing else. It arms nothing; each strategy's plan is still signed on its own, and every number here is
+now fixed: a changed rule is a new dated section, not an edit.
 
 ## What already exists (don't rebuild it)
 

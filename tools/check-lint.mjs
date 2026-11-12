@@ -27,7 +27,7 @@ for (const file of report) {
     if (m.severity !== 2) continue;
     const rule = m.ruleId || "(parse error)";
     counts[rule] = (counts[rule] || 0) + 1;
-    (where[rule] ||= []).push(`${file.filePath.replace(process.cwd() + "/", "")}:${m.line}`);
+    (where[rule] ||= []).push(`${file.filePath.replace(process.cwd() + "/", "")}:${m.line}  ${String(m.message || "").slice(0, 120)}`);
   }
 }
 
@@ -39,7 +39,9 @@ for (const rule of ZERO_RULES) {
 for (const [rule, n] of Object.entries(counts)) {
   if (ZERO_RULES.includes(rule)) continue;
   const allowed = baseline[rule] ?? 0;
-  if (n > allowed) failures.push(`${rule}: ${n} (baseline ${allowed}) — new errors, see eslint output for the file`);
+  // Name the places: CI shows only this script's output, so "see eslint output" left a red run unexplained
+  // (2026-11-07). With a baseline above 0 these are all occurrences, the new ones among them.
+  if (n > allowed) failures.push(`${rule}: ${n} (baseline ${allowed}) — ${allowed ? "occurrences, the new ones among them" : "new errors"}:\n    ${where[rule].slice(0, 10).join("\n    ")}`);
 }
 
 if (process.argv.includes("--update")) {

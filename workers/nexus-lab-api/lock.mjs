@@ -29,6 +29,8 @@ export const LOCK_KEYS = {
   // Auth v2 keys (routes-key.mjs): begin / complete / remove for one wallet, one at a time, so two
   // completes can't both store a key or both use one pending record.
   v2Key: (wallet) => `v2key:${String(wallet).toLowerCase()}`,
+  // The minute grader (minuteGrader.mjs): one run at a time, so a fill or a grade is announced once.
+  minuteGrade: () => "minutegrade:run",
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;
@@ -114,6 +116,22 @@ export async function withLock(env, key, fn, { ttlMs = 30_000, waitMs = 3_000, s
     // The lease runs out on its own; a failed release only delays the next caller until then.
     try { await call("release"); } catch { console.error("[lock] release failed", key); }
   }
+}
+
+/**
+ * Claim `key` once for ttlMs (≤ 10 min) and never release it: true the first time, false while that
+ * claim stands. "Announce once" across overlapping cron runs, where KV (eventually consistent) can't
+ * tell a run what the last one did (the minute grader's fill + grade alerts). No binding, or the lock
+ * unreachable = true: fail open, a rare duplicate alert beats a lost one.
+ */
+export async function claimOnce(env, key, ttlMs = MAX_TTL_MS) {
+  const ns = env && env.NEXUS_LOCK;
+  if (!ns) return true;
+  try {
+    const res = await ns.get(ns.idFromName(key)).fetch(`https://lock/acquire?owner=${crypto.randomUUID()}&ttl=${ttlMs}`);
+    const j = await res.json().catch(() => null);
+    return !res.ok || !j ? true : j.ok === true;
+  } catch { return true; }
 }
 
 /** A `lock(key, fn)` for the payGuards helpers, bound to this env. */

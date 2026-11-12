@@ -54,7 +54,7 @@ export const STAGE_TRIGGERS = Object.freeze({
   TRADEABLE: {
     section: "**Tradeable**",
     does: [
-      "/proof: the headline changes in the same PR, to the read, the number of trades and the date.",
+      "/proof: the headline names the read, the number of trades and the date. It is computed from the served stage (proofHeadline, app/lib/proofCopy.mjs, since 2026-11-05): nothing to edit, and it reverts by itself if the read drops back.",
       "borst sets up one paper wallet for it (preset as registered, main coins only). Parity must read CLEAN.",
       "x402 nexus-signals may switch to it, own PR, on borst's go. House caller may publish it, own PR, new house wallet, on borst's go.",
       "Live money: none.",

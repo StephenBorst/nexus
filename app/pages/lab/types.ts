@@ -21,6 +21,8 @@ export interface ThesisTrade {
   // Declared at publish, frozen with the call: graded half at TP1 + half at TP2 (lab-api gradeCall).
   // Absent = graded at TP1 only, whatever TP2 holds.
   exitPlan?: "SPLIT_50";
+  timeStopH?: number;     // declared time stop in hours (callMath timeStopPlan); a copy keeps it
+  exitReason?: "TIME";    // server: a declared time stop closed the graded call
   riskPercent: number;
   accountSize: number;
   fundingRate: number;
@@ -118,7 +120,8 @@ export interface AgentConfig {
   fundingPercentileMin?: number; // 0=off; fade only when funding is ≥ this percentile vs its history
   volTargetPct?: number; // 0=off; volatility-targeted sizing — scale capital inversely to recent realized vol
   // BASIS_FADE is the scoreboard's PREDICTIVE spot-perp read, traded. EXPERIMENTAL/paper.
-  signalMode: "CONFLUENCE" | "FUNDING_ONLY" | "OI_ONLY" | "MOMENTUM" | "MEAN_REVERSION" | "BASIS_FADE";
+  // LEVEL_RECLAIM: the registered level_reclaim read, PAPER only, loaded only by its hidden setup link (no mode button).
+  signalMode: "CONFLUENCE" | "FUNDING_ONLY" | "OI_ONLY" | "MOMENTUM" | "MEAN_REVERSION" | "BASIS_FADE" | "LEVEL_RECLAIM";
   oiChangeThreshold: number; // % min OI move for the OI-divergence rule to count (0 = any)
   priceChangeThreshold: number; // % price move on the tick that triggers MOMENTUM / MEAN_REVERSION
   respectRegime?: boolean; // opt-in: brain skips NEW entries that fight a strong market regime
@@ -141,6 +144,9 @@ export interface AgentConfig {
   // "R_CONTRACT" = the scoreboard's graded exit: stop 1.2× H4 ATR-14, target 1.5× the stop, 168h hold.
   // PAPER ONLY — exec and lab-api refuse it on any other mode (app/lib/gradedExit.mjs).
   exitContract?: "R_CONTRACT";
+  // Fixed-risk sizing: dollars lost at the graded stop (notional = this ÷ the trade's stop %). PAPER + graded exit
+  // only (app/lib/riskSizing.mjs); capitalPerTrade stays the margin ceiling. Unset/0 = size by margin.
+  riskPerTradeUsd?: number;
   slAtrMult?: number;       // optional: stop = slAtrMult × ATR (default 1.0 in exec)
   // Multi-level take-profit ladder (scale-out). Unset = single 100% TP at tpPercent
   // (legacy). Ascending pct levels; sizePct = fraction of the original position.
@@ -166,6 +172,18 @@ export interface AgentConfig {
   // leader's currently-open position (symbol+direction), executed at THIS agent's own
   // mode/sizing/guardrails. Written through the normal config path; consumed by exec.
   autocopy?: { enabled: boolean; leaders: string[] };
+  // ── Operator features (PRO — 100M $NEXUS / ARCHITECT, the same gate as momentum /
+  // mean-reversion / DCA). Validated server-side (lab-api validateOperatorConfig) and
+  // enforced in the executor. ──
+  // Unified directional risk cap across EVERY open position on the account, in USD of
+  // signed notional. 0/unset = off. Rejects a NEW entry that would push net directional
+  // exposure past this; a trade that REDUCES net exposure is never blocked.
+  maxPortfolioDeltaUsd?: number;
+  // Execution push callbacks: the executor POSTs an HMAC-SHA256-signed event the tick an
+  // entry / DCA add / partial TP / close lands, so an operator never polls. callbackUrl
+  // must be https; webhookSecret (≥16 chars) signs the body (header X-Nexus-Signature).
+  callbackUrl?: string;
+  webhookSecret?: string;
 }
 
 export interface AgentState {

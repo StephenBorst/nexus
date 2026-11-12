@@ -8,6 +8,9 @@ import assert from "node:assert/strict";
 import { entryFill, gradeCall } from "./logic.mjs";
 import { applyFillStamp, gradePublicTheses, PLAN_V, GRADE_V } from "./grading.mjs";
 import { sealTheses } from "./callLock.mjs";
+import { _pinMinuteGradeFrom } from "../../app/lib/minuteGrade.mjs";
+// This suite tests the HOURLY grader on calls built from Date.now(): pin it (minuteGrade.mjs).
+_pinMinuteGradeFrom(Infinity);
 // The grade without its exit hour, for tests that pin outcome + R only (exitAt has its own tests).
 const noExit = (t, cd) => { const { exitAt, ...g } = gradeCall(t, cd); return g; };
 

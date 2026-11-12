@@ -109,3 +109,17 @@ test("a registered TEST (cfg.tests) adds its own block from its own date and cha
   const clash = runScorecard(SETS, { horizons: [4], minSamples: 5, registered: [{ axis: "rsi_reset_deep", fromMs: CUT }], tests: [{ axis: "rsi_reset_deep", key: "oos", fromMs: T0 }] });
   assert.equal(clash.axes.find((a) => a.name === "rsi_reset_deep").oos.since, new Date(CUT).toISOString());
 });
+
+test("overlap pairs: every pair names two real axes, includes batch 3, and the scoreboard route uses this list", async () => {
+  const { OVERLAP_PAIRS, AXES: axes } = await import("./axisbt.mjs");
+  const names = new Set(axes.map((a) => a.name));
+  for (const [a, b] of OVERLAP_PAIRS) { assert.ok(names.has(a), a); assert.ok(names.has(b), b); assert.notEqual(a, b); }
+  const has = (a, b) => OVERLAP_PAIRS.some(([x, y]) => x === a && y === b);
+  assert.ok(has("basis_x_cvd", "rsi_reset_deep"), "the original pair stays");
+  assert.ok(has("level_reclaim", "level_reclaim_tight"), "a filtered read is the same bet as its parent");
+  assert.ok(has("oi_div_reversal", "oi_div_reversal_4h"), "one rule on two windows is one bet");
+  for (const r of ["session_fade", "spot_absorb"]) assert.ok(OVERLAP_PAIRS.some((p) => p.includes(r)), `${r} is checked against another read`);
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  assert.match(src, /overlapPairs: OVERLAP_PAIRS \}\)/);
+});

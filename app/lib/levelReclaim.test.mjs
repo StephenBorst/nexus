@@ -88,7 +88,7 @@ test("live gate: an event older than an hour, or stale candles, sits out with th
   assert.equal(levelReclaimLive([], Date.now()).side, null);
 });
 
-test("brain: LEVEL_RECLAIM ships off — no live fields means it sits out and says why", () => {
+test("brain: with no live fields (the switch off, or no candles read) it sits out and says why", () => {
   const sig = deriveSignal({ fundingRate: 0.01 }, { signalMode: "LEVEL_RECLAIM", mode: "PAPER" });
   assert.equal(sig.direction, "NONE");
   assert.match(sig.reason, /staged \(off\)/);
@@ -121,14 +121,37 @@ test("parity route: a LEVEL_RECLAIM config is checked against the level_reclaim 
   assert.equal(axisForConfig({ signalMode: "LEVEL_RECLAIM", invertSignal: true }), null);
 });
 
-test("it ships OFF: the brain gates on LEVEL_RECLAIM_LIVE and wrangler.toml does not set it", () => {
+test("ON for PAPER only (2026-11-05, its paper-wallet PR): wrangler sets LEVEL_RECLAIM_LIVE, the brain gates on it, live stays refused", () => {
   const src = readFileSync(new URL("../../workers/nexus-agent-brain/index.js", import.meta.url), "utf8");
   assert.match(src, /const levelLive = env\.LEVEL_RECLAIM_LIVE === "true";/);
+  assert.match(src, /config\.signalMode === "LEVEL_RECLAIM" && !levelReclaimRefusal\(config, \{ liveLift: liftOf\(address, config\) \}\)/, "only configs the paper-only rule (or the disarmed one-wallet lift) accepts make the brain read candles");
+  assert.match(src, /deriveSignal\(raw, config, config\.respectRegime \? regime : null, cons, \{ liveLift: liftOf\(address, config\) \}\)/);
   const toml = readFileSync(new URL("../../workers/nexus-agent-brain/wrangler.toml", import.meta.url), "utf8");
-  assert.ok(!/^\s*LEVEL_RECLAIM_LIVE\s*=/m.test(toml), "LEVEL_RECLAIM_LIVE is set: it stays off until level_reclaim is served TRADEABLE and its paper-wallet PR turns it on");
+  assert.match(toml, /^\[vars\]\s*$/m);
+  assert.match(toml, /^LEVEL_RECLAIM_LIVE = "true"$/m);
+  for (const mode of ["AUTONOMOUS", "ASSISTED"]) assert.ok(levelReclaimRefusal({ signalMode: "LEVEL_RECLAIM", mode }), `${mode} is refused`);
 });
 
-test("no mode in the Lab, no preset: nothing in the app offers LEVEL_RECLAIM", () => {
+test("the paper config is exactly what was graded: registered rule, graded exit, main-card coins, nothing else", async () => {
+  const { LEVEL_RECLAIM_PAPER_CONFIG: c, LEVEL_RECLAIM_MAIN_SYMBOLS } = await import("./levelReclaim.mjs");
+  const { gradedExitRefusal } = await import("./gradedExit.mjs");
+  const { unsimulatedFilters } = await import("./paperParity.mjs");
+  const { MAIN_COINS } = await import("../../tools/explorers/exitBridge.mjs");
+  assert.equal(c.mode, "PAPER");
+  assert.equal(c.signalMode, "LEVEL_RECLAIM");
+  assert.equal(c.exitContract, "R_CONTRACT");
+  assert.equal(gradedExitRefusal(c, true), null, "the graded exit accepts it as is");
+  assert.ok(gradedExitRefusal({ ...c, mode: "AUTONOMOUS" }, false), "and refuses it off PAPER");
+  assert.equal(levelReclaimRefusal(c), null);
+  assert.deepEqual(unsimulatedFilters(c), [], "no gate the grader doesn't simulate");
+  assert.equal(c.invertSignal, false);
+  // The scoreboard's main card, out of sample (SUI is on the holdout line).
+  assert.deepEqual([...c.symbols].sort(), MAIN_COINS.map((x) => `PERP_${x}_USDC`).sort());
+  assert.deepEqual([...c.symbols], [...LEVEL_RECLAIM_MAIN_SYMBOLS]);
+  assert.equal(axisForConfig(c), "level_reclaim", "parity checks it against its own axis");
+});
+
+test("no public preset and no public link: only the Lab's hidden ?deploy= handler loads it", () => {
   const roots = ["app/pages", "app/components", "app/config", "app/utils", "app/hooks"].map((d) => new URL(`../../${d}/`, import.meta.url).pathname);
   const hits = [];
   const walk = (dir) => {
@@ -137,11 +160,20 @@ test("no mode in the Lab, no preset: nothing in the app offers LEVEL_RECLAIM", (
     for (const n of names) {
       const p = join(dir, n);
       if (statSync(p).isDirectory()) walk(p);
-      else if (/\.(tsx?|mjs|js)$/.test(n) && readFileSync(p, "utf8").includes("LEVEL_RECLAIM")) hits.push(p);
+      else if (/\.(tsx?|mjs|js)$/.test(n)) {
+        const t = readFileSync(p, "utf8");
+        if (t.includes("LEVEL_RECLAIM") || t.includes("level-reclaim-paper")) hits.push(p.split("/app/")[1]);
+      }
     }
   };
   roots.forEach(walk);
-  assert.deepEqual(hits, []);
+  // the type union, the read-only label in the Agent tab, the hidden link's handler: nothing else
+  assert.deepEqual(hits.sort(), ["pages/lab/AgentView.tsx", "pages/lab/index.tsx", "pages/lab/types.ts"]);
+  const lab = readFileSync(new URL("../pages/lab/index.tsx", import.meta.url), "utf8");
+  assert.match(lab, /searchParams\.get\("deploy"\) !== LEVEL_RECLAIM_DEPLOY/);
+  assert.ok(!lab.includes("href") || !/href[^\n]*deploy=/.test(lab), "the Lab doesn't link to it");
   const exits = readFileSync(new URL("./axisExits.mjs", import.meta.url), "utf8");
   assert.ok(!exits.includes("level_reclaim"), "no preset trades level_reclaim");
+  const presets = readFileSync(new URL("../config/strategyPresets.ts", import.meta.url), "utf8");
+  assert.ok(!/level_reclaim|LEVEL_RECLAIM/.test(presets), "not in the Strategy Library, no /proof Load");
 });

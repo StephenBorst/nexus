@@ -16,9 +16,14 @@ import * as ed from "@noble/ed25519";
 import bs58 from "bs58";
 import { accruePaperAgg } from "../../app/lib/paperStats.mjs";
 import { nextPaperHead, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
+import { runKill } from "./killSwitch.mjs";
+import { backstopWanted, backstopTrigger, backstopOrder, algoOrderIdFrom, cancelPath, backstopHit, sweepStaleBackstops, restingListPath, restingBackstop, BACKSTOP_MAX_TRIES, BACKSTOP_MULT } from "./backstop.mjs";
+import { resolveKeyRecord, keyHoldRefusal, keyAlertDue, keyAlertText, isKeyPointer } from "./agentKey.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
-import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, brainSignalKey, alreadyTradedSignal } from "./logic.mjs";
+import { usesRiskSizing, riskSizingRefusal, riskSizedMargin, riskTaken } from "../../app/lib/riskSizing.mjs";
+import { parseLiveLift, liveLifted, liveLiftNote, liftedSignalRefusal, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
+import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, twapSliceFailed, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload, exchangePositionQty, exchangePositionRows, fillPriceFrom } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const COOLDOWN_MS = 15 * 60 * 1000; // 15 min between trades
@@ -140,6 +145,54 @@ async function notifyTelegram(address, env, text) {
   } catch (e) { console.error(`[exec] ${address.slice(0, 10)} tg notify failed:`, e.message); }
 }
 
+// ── Execution push callbacks (PRO) ───────────────────────────────────────────
+// Outbound, HMAC-SHA256-signed POSTs to a user-registered callbackUrl, fired the
+// tick an agent event lands (entry fill / DCA add / partial TP / close) so an
+// operator never has to poll. Best-effort + bounded (3s/attempt, 1 retry) so a
+// slow or dead endpoint can never stall the executor. Gated purely by the user
+// having set callbackUrl + webhookSecret (PRO-enforced at config-write in lab-api).
+async function hmacHex(secret, message) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function fireCallback(address, config, env, event, data) {
+  const url = config?.callbackUrl, secret = config?.webhookSecret;
+  if (!url || !secret) return;
+  try {
+    const body = JSON.stringify(buildCallbackPayload(event, { address, ...data, ts: Date.now() }));
+    const sig = await hmacHex(secret, body);
+    const headers = { "Content-Type": "application/json", "X-Nexus-Event": event, "X-Nexus-Signature": `sha256=${sig}` };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 3000);
+      try {
+        const r = await fetch(url, { method: "POST", headers, body, signal: ctrl.signal });
+        clearTimeout(t);
+        if (r.ok) return;
+      } catch { clearTimeout(t); }
+      if (attempt === 0) await new Promise((res) => setTimeout(res, 300));
+    }
+    console.warn(`[exec] ${address.slice(0, 10)} callback ${event} undelivered after retry`);
+  } catch (e) { console.error(`[exec] ${address.slice(0, 10)} callback ${event} failed:`, e.message); }
+}
+
+// Live open positions on the account as signed-notional legs for the portfolio
+// delta cap — the WHOLE account (covers manual / Bankr / concurrent trades), not
+// just this agent's tracked position. null = couldn't read (caller fails open).
+async function fetchAccountPositions(keyData) {
+  try {
+    const res = await orderlyRequest(keyData, "GET", "/v1/positions");
+    const rows = exchangePositionRows(res);
+    if (rows === null) return null; // an error answer is unreadable, never "no positions"
+    return rows
+      .map((r) => ({ signedQty: Number(r.position_qty), mark: Number(r.mark_price ?? r.index_price ?? r.average_open_price) }))
+      .filter((p) => Number.isFinite(p.signedQty) && Number.isFinite(p.mark) && p.signedQty !== 0);
+  } catch { return null; }
+}
+
 // ── Decrypt the trading key stored at rest (AES-256-GCM, "v1:<iv>:<ct>") ──────
 // Legacy plaintext keys (no "v1:" prefix) are passed through for backward compat
 // until the user re-activates and the key is re-stored encrypted.
@@ -153,6 +206,24 @@ async function decryptTradingKey(stored, env) {
   const ct = Uint8Array.from(atob(ctB64), (c) => c.charCodeAt(0));
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
   return new TextDecoder().decode(pt);
+}
+
+// What resolveKeyRecord needs to follow a v2 pointer (agentKey.mjs) and open a sealed key.
+const keyIo = (address, env) => ({ address, kv: env.NEXUS_AGENT, decrypt: (sealed) => decryptTradingKey(sealed, env) });
+
+// The price a live market order actually filled at (logic.mjs fillPriceFrom), read right after the
+// order: once now, once more ~0.5 s later if Orderly hasn't reported the fill yet. Never throws; an
+// unreadable answer books the fallback (the mark) tagged source "mark".
+async function readFill(keyData, orderId, fallback) {
+  if (!orderId) return { price: fallback, source: "mark" };
+  for (let i = 0; i < 2; i++) {
+    try {
+      const f = fillPriceFrom(await orderlyRequest(keyData, "GET", `/v1/order/${orderId}`), fallback);
+      if (f.source === "exchange") return f;
+    } catch { /* fall through */ }
+    if (i === 0) await new Promise((r) => setTimeout(r, 500));
+  }
+  return { price: fallback, source: "mark" };
 }
 
 // Sign Orderly API request with a user's delegated trading key.
@@ -173,7 +244,8 @@ async function orderlyRequest(keyData, method, path, body = null) {
 
   // Orderly expects application/json for POST/PUT bodies and
   // application/x-www-form-urlencoded for GET (per Handoff 012).
-  const contentType = method === "GET"
+  // DELETE (cancel an algo order, params in the query) is form-encoded too, as the SDK sends it.
+  const contentType = method === "GET" || method === "DELETE"
     ? "application/x-www-form-urlencoded"
     : "application/json";
 
@@ -353,8 +425,7 @@ async function processTwap(address, env, cache) {
   // Decrypt the order-only key once for this tick's fires.
   const keyRaw = await env.NEXUS_AGENT.get(`twap:key:${address}`);
   if (!keyRaw) { console.error(`[twap] no key for ${address.slice(0, 10)}`); return; }
-  const keyData = JSON.parse(keyRaw);
-  keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+  const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
 
   // Set leverage once, before the first fill of the whole schedule.
   if (twapProgress(state).filled === 0 && state.leverage) {
@@ -375,10 +446,11 @@ async function processTwap(address, env, cache) {
         broker_id: "nexus_trading",
       });
       if (order && order.success === false) {
-        target.error = String(order.message || order.code || "rejected");
-        console.error(`[twap] ${address.slice(0, 10)} slice ${target.seq} rejected:`, target.error);
-        // Leave it un-done so the next tick retries; a persistent reject stalls the
-        // schedule rather than silently dropping size (visible in the status endpoint).
+        Object.assign(target, twapSliceFailed(target, order.message || order.code || "rejected"));
+        console.error(`[twap] ${address.slice(0, 10)} slice ${target.seq} rejected (try ${target.attempts}${target.skipped ? ", skipped" : ""}):`, target.error);
+        // Retried next tick, up to TWAP_MAX_ATTEMPTS (logic.mjs); then skipped, never sent again, and
+        // shown as skipped (not filled) in the status endpoint and the panel. Retrying forever kept the
+        // TWAP open and could fill a slice hours late at a very different price.
       } else {
         target.done = true;
         target.firedAt = Date.now();
@@ -387,8 +459,8 @@ async function processTwap(address, env, cache) {
         target.error = null;
       }
     } catch (e) {
-      target.error = e.message;
-      console.error(`[twap] ${address.slice(0, 10)} slice ${target.seq} error:`, e.message);
+      Object.assign(target, twapSliceFailed(target, e.message));
+      console.error(`[twap] ${address.slice(0, 10)} slice ${target.seq} error (try ${target.attempts}${target.skipped ? ", skipped" : ""}):`, e.message);
     }
     // Persist after EACH slice → a crash can't double-fire an already-placed slice.
     await env.NEXUS_AGENT.put(`twap:${address}`, JSON.stringify(state));
@@ -422,14 +494,14 @@ async function adoptOrphanPosition(address, state, config, env, _cache) {
   const symbols = config.symbols || [];
   let live = null;
   try {
-    const keyData = JSON.parse(keyRaw);
-    keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+    const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
     // Probe each configured symbol with the SAME singular endpoint the reconcile
     // self-heal uses (proven to work with the order-only key) — the plural
     // /v1/positions returned nothing here. Stop at the first live one (the agent
     // manages one position at a time).
     for (const sym of symbols) {
       const res = await orderlyRequest(keyData, "GET", `/v1/position/${sym}`);
+      if (exchangePositionQty(res) === null) throw new Error(`position read refused for ${sym}`);
       const p = res?.data;
       if (p && Math.abs(parseFloat(p.position_qty) || 0) > 1e-9) { live = { symbol: sym, ...p }; break; }
     }
@@ -446,11 +518,12 @@ async function adoptOrphanPosition(address, state, config, env, _cache) {
   if (!(entry > 0)) return false;
 
   // Step/min constraints for future reduce-only slices (mirrors enterPosition).
-  let baseTick = 0.001, baseMin = baseTick, minNotional = 0;
+  let baseTick = 0.001, baseMin = baseTick, minNotional = 0, quoteTick = null;
   try {
     const infoData = await orderlyPublicGet(`${ORDERLY_API}/v1/public/info/${live.symbol}`);
     const info = infoData.data || {};
     baseTick = info.base_tick || baseTick; baseMin = info.base_min || baseTick; minNotional = info.min_notional || 0;
+    quoteTick = Number(info.quote_tick) > 0 ? Number(info.quote_tick) : null;
   } catch { /* fall back to defaults */ }
 
   // opened_at = now: we don't have the true open time, so the max-hold clock restarts
@@ -464,7 +537,7 @@ async function adoptOrphanPosition(address, state, config, env, _cache) {
     strategy: `${(config.maxHoldHours ?? 0) <= 8 ? "DAY" : (config.maxHoldHours ?? 0) <= 120 ? "SWING" : "POSITION"} · ${config.signalMode || "CONFLUENCE"} · adopted`,
     takeProfits: normTakeProfits({ takeProfits: config.takeProfits, tpPercent: config.tpPercent }, config),
     remaining_qty: qty, tp_hits: [], peak_pnl_pct: 0,
-    base_tick: baseTick, base_min: baseMin, min_notional: minNotional,
+    base_tick: baseTick, base_min: baseMin, min_notional: minNotional, quote_tick: quoteTick,
     adopted: true,
   };
   await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
@@ -473,6 +546,17 @@ async function adoptOrphanPosition(address, state, config, env, _cache) {
   await notifyTelegram(address, env,
     `♻️ <b>Adopted untracked ${direction} ${tk}</b>\nA live position with no agent record was found on the exchange — resuming management (TP ${config.tpPercent}% / SL ${config.slPercent}%).`);
   return true;
+}
+
+async function keyExpiryAlert(address, state, env) {
+  const rec = JSON.parse((await env.NEXUS_AGENT.get(`agent:key:${address}`)) || "null");
+  if (!isKeyPointer(rec)) return;
+  const key = JSON.parse((await env.NEXUS_AGENT.get(`v2key:${address}`)) || "null");
+  const a = keyAlertDue({ expiresAt: key?.expiresAt, now: Date.now(), lastAlertDay: state.key_alert_day });
+  if (!a.due) return;
+  state.key_alert_day = a.day;
+  await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
+  await notifyTelegram(address, env, keyAlertText(a));
 }
 
 async function processUser(address, env, cache, liveHalt = { on: false }) {
@@ -486,17 +570,31 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
   // Kill switch — honored via a DEDICATED agent:kill key (set by lab-api) so an
   // emergency stop can never be lost to a state-write race. Legacy in-flight
   // state.kill_requested is still respected for backward compatibility.
+  // Close first (with the key), then stop + delete the key: killSwitch.mjs.
   if (killRaw || state.kill_requested) {
-    if (state.current_position) {
-      await closePosition(address, state, env, "KILLED", cache);
-    }
-    state.active = false;
-    state.kill_requested = false;
-    state.current_position = null;
-    await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
-    await env.NEXUS_AGENT.delete(`agent:kill:${address}`); // consume the flag
-    await env.NEXUS_AGENT.delete(`agent:directive:${address}`); // kill cancels any armed directive
-    console.log(`[exec] ${address.slice(0, 10)} KILLED`);
+    let killConfig = {};
+    try { killConfig = JSON.parse((await env.NEXUS_AGENT.get(`agent:config:${address}`)) || "{}") || {}; } catch { killConfig = {}; }
+    const r = await runKill({
+      state,
+      io: {
+        close: () => closePosition(address, state, killConfig, env, "KILLED", cache),
+        saveState: (s) => env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(s)),
+        clearFlag: () => env.NEXUS_AGENT.delete(`agent:kill:${address}`),
+        clearDirective: () => env.NEXUS_AGENT.delete(`agent:directive:${address}`),
+        deleteKey: () => env.NEXUS_AGENT.delete(`agent:key:${address}`),
+        // Before the key goes: retry the cancels of backstops left by earlier closes (a stale position
+        // stop would close the owner's next position on that market). Returns what still rests.
+        sweep: async () => {
+          const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
+          if (!keyRaw) return state.backstop_cleanup || [];
+          const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
+          for (let i = 0; i < 2 && (state.backstop_cleanup || []).length; i++) await sweepBackstops(address, state, keyData, env);
+          return state.backstop_cleanup || [];
+        },
+        notify: (text) => notifyTelegram(address, env, text),
+      },
+    });
+    console.log(`[exec] ${address.slice(0, 10)} KILL ${r.outcome} (attempt ${r.attempts})`);
     return;
   }
 
@@ -506,6 +604,12 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
   const configRaw = await env.NEXUS_AGENT.get(`agent:config:${address}`);
   if (!configRaw) return;
   const config = JSON.parse(configRaw);
+
+  // Auth v2: a live agent on the wallet's 30-day key gets one "rotate your key" alert a day from 3
+  // days out (agentKey.mjs). Reads the key's public fields only; never blocks the tick.
+  if (config.mode !== "PAPER") {
+    try { await keyExpiryAlert(address, state, env); } catch (e) { console.error(`[exec] ${address.slice(0, 10)} key alert:`, e.message); }
+  }
 
   // Daily reset check. Persist immediately when it fires — otherwise the reset
   // only mutates the in-memory state and is lost unless the agent happens to
@@ -518,12 +622,6 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
     await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
   }
 
-  // Daily limits check (tested in logic.mjs)
-  const cap = dailyCapBlocked(state, config);
-  if (cap.blocked) {
-    console.log(`[exec] ${address.slice(0, 10)} ${cap.reason}`);
-    return;
-  }
 
   // ── WEBHOOK INTENT (TradingView / external) ───────────
   // The user's OWN signal, consumed once (delete on read) and given priority over
@@ -538,7 +636,7 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
       if (now - (wh.timestamp || 0) <= 10 * 60 * 1000) { // ignore stale alerts
         if (wh.action === "CLOSE") {
           if (state.current_position) {
-            await closePosition(address, state, env, "WEBHOOK_CLOSE", cache);
+            await closePosition(address, state, config, env, "WEBHOOK_CLOSE", cache);
             console.log(`[exec] ${address.slice(0, 10)} WEBHOOK CLOSE`);
           }
           return;
@@ -598,6 +696,16 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
   // if the exchange holds a position the agent lost track of, re-adopt + manage it
   // next tick rather than opening a new one on top. AUTONOMOUS-only.
   if (config.mode === "AUTONOMOUS" && await adoptOrphanPosition(address, state, config, env, cache)) return;
+
+  // Daily limits gate NEW entries only (tested in logic.mjs). They sit below the position monitor and
+  // ghost adoption on purpose: until 2026-11-06 this check ran first, so the day's last allowed trade
+  // (trades_today is bumped at entry) was never monitored again until the 24h reset: no SL, TP or
+  // timeout on a live position.
+  const cap = dailyCapBlocked(state, config);
+  if (cap.blocked) {
+    console.log(`[exec] ${address.slice(0, 10)} ${cap.reason}`);
+    return;
+  }
 
   // Flat: make sure no published feed card is still stuck ACTIVE (zombie cleanup).
   if (PUBLISH_AGENT_FEED) await reconcileStaleFeed(address, env);
@@ -708,6 +816,87 @@ async function processUser(address, env, cache, liveHalt = { on: false }) {
   await enterPosition(address, state, config, signal, env, cache);
 }
 
+// ── Backstop stop (backstop.mjs): a reduce-only stop resting on Orderly, wider than exec's own, so a
+// stalled worker never leaves a live position with no stop. Placed at entry (retried each tick while
+// missing), cancelled on every exit exec makes. Mutates `pos` / `state`; returns true when it changed
+// `pos` (the caller must persist it, or the next tick places a second order).
+async function ensureBackstop(address, pos, keyData, env) {
+  if (!keyData || !backstopWanted(pos) || pos.backstop?.id) return false;
+  const tries = Number(pos.backstop_tries) || 0;
+  if (tries >= BACKSTOP_MAX_TRIES) return false;
+  pos.backstop_tries = tries + 1;
+  const trigger = backstopTrigger({ direction: pos.direction, entryPrice: pos.entry_price, slPercent: pos.slPercent, quoteTick: pos.quote_tick });
+  const tk = pos.symbol.replace("PERP_", "").replace("_USDC", "");
+  let res = { success: false, message: "no usable trigger price" };
+  if (trigger) {
+    try { res = await orderlyRequest(keyData, "POST", "/v1/algo/order", backstopOrder({ symbol: pos.symbol, direction: pos.direction, triggerPrice: trigger })); }
+    catch (e) { res = { success: false, message: e.message }; }
+    const id = algoOrderIdFrom(res);
+    if (id) {
+      pos.backstop = { id, trigger, mult: BACKSTOP_MULT, placedAt: Date.now() };
+      console.log(`[exec] ${address.slice(0, 10)} backstop stop placed ${pos.symbol} @ ${trigger} (id ${id})`);
+      return true;
+    }
+    // No id back. Orderly keeps ONE position TP/SL per market + side, so if one is already working
+    // (ours, landed although the reply was lost; or the owner's own) every retry is refused: look.
+    let found = null;
+    try { found = restingBackstop(await orderlyRequest(keyData, "GET", restingListPath(pos.symbol)), { symbol: pos.symbol, trigger }); }
+    catch { found = null; }
+    if (found?.found && found.ours) {
+      pos.backstop = { id: found.id, trigger, mult: BACKSTOP_MULT, placedAt: Date.now(), recovered: true };
+      console.log(`[exec] ${address.slice(0, 10)} backstop stop found resting ${pos.symbol} @ ${trigger} (id ${found.id}): its reply had been lost`);
+      return true;
+    }
+    if (found?.found) {
+      // The owner's own position TP/SL holds the slot: record it so exec never places a second one
+      // and never cancels it (it isn't ours).
+      pos.backstop = { id: found.id, trigger: found.trigger, foreign: true, seenAt: Date.now() };
+      console.warn(`[exec] ${address.slice(0, 10)} ${pos.symbol}: a position TP/SL set outside the agent is resting (id ${found.id}), no backstop placed`);
+      await notifyTelegram(address, env, found.trigger
+        ? `ℹ️ <b>Your own stop is resting on ${tk}</b> at $${found.trigger}\nOrderly allows one position stop per market, so the agent didn't place its backstop. The agent still runs its own stop every minute and won't cancel yours.`
+        : `⚠️ <b>No exchange stop on ${pos.direction} ${tk}</b>\nA position take-profit you set holds Orderly's one TP/SL slot, so the agent couldn't place its backstop stop. Add a stop to that order on the Trade page if you want one on the exchange.`);
+      return true;
+    }
+  }
+  console.error(`[exec] ${address.slice(0, 10)} backstop stop refused (try ${pos.backstop_tries}/${BACKSTOP_MAX_TRIES}):`, JSON.stringify(res).slice(0, 200));
+  if (pos.backstop_tries >= BACKSTOP_MAX_TRIES) {
+    await notifyTelegram(address, env, `⚠️ <b>No exchange backstop on ${pos.direction} ${tk}</b>\nOrderly refused the resting stop ${BACKSTOP_MAX_TRIES} times. The agent still checks its own stop every minute; set a stop by hand if you want one on the exchange.`);
+  }
+  return true;
+}
+
+// Cancel this position's backstop after exec closed it. A cancel that doesn't go through is kept in
+// state.backstop_cleanup and retried before the next live entry (sweepBackstops).
+async function cancelBackstop(address, state, pos, keyData) {
+  const bs = pos?.backstop;
+  if (!bs?.id || bs.foreign) return; // a stop the owner set is theirs: exec never cancels it
+  let ok = false;
+  if (keyData) {
+    try { ok = (await orderlyRequest(keyData, "DELETE", cancelPath({ id: bs.id, symbol: pos.symbol })))?.success === true; }
+    catch (e) { console.error(`[exec] ${address.slice(0, 10)} backstop cancel failed:`, e.message); }
+  }
+  if (!ok) {
+    state.backstop_cleanup = [...(state.backstop_cleanup || []), { id: bs.id, symbol: pos.symbol, tries: 0 }];
+    console.warn(`[exec] ${address.slice(0, 10)} backstop ${bs.id} not cancelled yet — queued for cleanup`);
+  }
+}
+
+// Retry the queued cancels. Returns the symbols that still carry a stale backstop (no entry there).
+async function sweepBackstops(address, state, keyData, env) {
+  if (!keyData || !(state.backstop_cleanup || []).length) return new Set();
+  const r = await sweepStaleBackstops(state.backstop_cleanup, {
+    cancel: (it) => orderlyRequest(keyData, "DELETE", cancelPath(it)),
+    status: (it) => orderlyRequest(keyData, "GET", `/v1/algo/order/${it.id}`),
+  });
+  state.backstop_cleanup = r.left;
+  for (const it of r.dropped) {
+    const tk = it.symbol.replace("PERP_", "").replace("_USDC", "");
+    await notifyTelegram(address, env, `⚠️ <b>Old backstop stop on ${tk} may still be resting</b>\nCouldn't cancel order ${it.id} after ${it.tries} tries. Check open orders on ${tk} and cancel it by hand.`);
+  }
+  if (r.done.length || r.dropped.length) await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
+  return new Set(r.left.map((it) => it.symbol));
+}
+
 async function enterPosition(address, state, config, signal, env, cache) {
   // PAPER mode simulates the full trade lifecycle without ever touching a real
   // trading key or placing a live order. Everything else (sizing, mark price,
@@ -720,9 +909,29 @@ async function enterPosition(address, state, config, signal, env, cache) {
   // The graded exit (the scoreboard's R contract) is PAPER ONLY and the WHOLE contract. Refused here,
   // before any price read, key read, order or state write (app/lib/gradedExit.mjs; borst 2026-10-15:
   // the uncapped stop never reaches live money without its own review).
-  const gradedRefusal = gradedExitRefusal(config, paper);
+  // The one-wallet live lift (app/lib/liveLift.mjs, build #3 of the live plan): only a listed wallet trading the plan's
+  // exact config. The var is EMPTY in wrangler.toml (disarmed), so this is false for every wallet today.
+  const lifts = parseLiveLift(env[LIVE_LIFT_VAR]);
+  const liveLift = !paper && liveLifted(config, address, lifts);
+  const liftNote = !paper ? liveLiftNote(config, address, lifts) : null;
+  if (liftNote) console.error(`[exec] ${address.slice(0, 10)} live lift listed but not lifted: ${liftNote}`);
+  // A lifted wallet opens only the brain's read on the plan's coins: no webhook, directive or autocopy entry
+  // (a directive carries its own size), whatever the config says. Refused before anything is read or placed.
+  if (liveLift) {
+    const why = liftedSignalRefusal(signal, config);
+    if (why) { console.error(`[exec] ${address.slice(0, 10)} live-plan entry refused: ${why}`); return; }
+  }
+  const gradedRefusal = gradedExitRefusal(config, paper, { liveLift });
   if (gradedRefusal) {
     console.error(`[exec] ${address.slice(0, 10)} graded exit refused: ${gradedRefusal}`);
+    return;
+  }
+  // Fixed-risk sizing (app/lib/riskSizing.mjs): PAPER only, graded exit only, never with DCA or vol-targeted
+  // capital. Refused here, before anything is read or placed. A directive keeps its own size.
+  const riskSized = !directive && usesRiskSizing(config);
+  const riskRefusal = riskSized ? riskSizingRefusal(config, paper, { liveLift }) : null;
+  if (riskRefusal) {
+    console.error(`[exec] ${address.slice(0, 10)} fixed-risk sizing refused: ${riskRefusal}`);
     return;
   }
   const effLeverage = (directive && directive.leverage > 0) ? directive.leverage : config.leverage;
@@ -761,6 +970,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
   const baseTick = info.base_tick || 0.001;
   const baseMin = info.base_min || baseTick;
   const minNotional = info.min_notional || 0;
+  const quoteTick = Number(info.quote_tick) > 0 ? Number(info.quote_tick) : null;
 
   // DCA mode reserves the rest of capitalPerTrade for safety orders, so the BASE
   // order is only a fraction of it (the ladder sums back to capitalPerTrade). DCA is
@@ -782,19 +992,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
     }
   }
 
-  // Calculate qty, snapped to base_tick (tested in logic.mjs — guards the
-  // -1104 step-size float artifact + base_min / min_notional constraints).
-  const snap = snapQty({
-    capitalPerTrade: baseMargin, leverage: effLeverage,
-    markPrice, baseTick, baseMin, minNotional,
-  });
-  if (!snap.ok) {
-    console.error(`[exec] ${address.slice(0, 10)} ${snap.reason} for ${symbol}`);
-    return;
-  }
-  const qty = snap.qty;
-
-  // Graded-exit levels are read BEFORE anything is placed: no H4 ATR → sit this one out, never a
+  // Graded-exit levels are read BEFORE anything is placed (and before sizing: fixed-risk needs the stop): no H4 ATR → sit this one out, never a
   // fallback to the flat config % (that would trade an exit the scoreboard didn't grade).
   let gradedLv = null;
   if (!directive && usesGradedExit(config)) {
@@ -805,13 +1003,69 @@ async function enterPosition(address, state, config, signal, env, cache) {
     }
   }
 
-  let orderId = null;
+  // Fixed-risk sizing: the margin that makes this trade's own graded stop lose riskPerTradeUsd, capped at
+  // capitalPerTrade (the margin ceiling).
+  let sizeMargin = baseMargin;
+  if (riskSized) {
+    const rs = riskSizedMargin({ riskPerTradeUsd: config.riskPerTradeUsd, slPercent: gradedLv?.slPercent, leverage: effLeverage, maxMargin: config.capitalPerTrade });
+    if (!rs) { console.error(`[exec] ${address.slice(0, 10)} fixed-risk sizing: no stop for ${symbol}, sitting out`); return; }
+    sizeMargin = rs.margin;
+    console.log(`[exec] ${address.slice(0, 10)} fixed-risk: $${config.riskPerTradeUsd} at sl=${gradedLv.slPercent}% → margin $${rs.margin}${rs.capped ? " (capped at capitalPerTrade)" : ""}`);
+  }
+
+  // Calculate qty, snapped to base_tick (tested in logic.mjs — guards the
+  // -1104 step-size float artifact + base_min / min_notional constraints).
+  const snap = snapQty({
+    capitalPerTrade: sizeMargin, leverage: effLeverage,
+    markPrice, baseTick, baseMin, minNotional,
+  });
+  if (!snap.ok) {
+    console.error(`[exec] ${address.slice(0, 10)} ${snap.reason} for ${symbol}`);
+    return;
+  }
+  const qty = snap.qty;
+  const entryNotional = qty * markPrice;
+
+  // Load the (decrypted) trading key up front for LIVE — needed for both the
+  // portfolio delta-cap read and the order itself. PAPER never touches a key.
+  let keyData = null;
   if (!paper) {
     const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
     if (!keyRaw) { console.error(`[exec] no key for ${address.slice(0, 10)}`); return; }
-    const keyData = JSON.parse(keyRaw);
-    keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+    keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));    // Auth v2: a 30-day key must outlive the position's max hold, or the agent could be left unable
+    // to close it (agentKey.mjs). v1 keys pass.
+    const keyWhy = keyHoldRefusal({ keyData, now: Date.now(), maxHoldHours: config.maxHoldHours });
+    if (keyWhy) { console.error(`[exec] ${address.slice(0, 10)} entry skipped: ${keyWhy}`); return; }
+    // A backstop left over from an earlier close must be gone before a new position on that market
+    // (a positional stop would attach to it).
+    const stale = await sweepBackstops(address, state, keyData, env);
+    if (stale.has(symbol)) { console.error(`[exec] ${address.slice(0, 10)} entry skipped: an old backstop on ${symbol} isn't cancelled yet`); return; }
+  }
 
+  // ── Portfolio delta cap (PRO) ── Reject an entry that would push the account's
+  // NET directional exposure past config.maxPortfolioDeltaUsd. LIVE sums the REAL
+  // account's open positions (manual / Bankr / concurrent trades included); PAPER
+  // has no exchange account, so it checks this agent's own book only. Fail-OPEN
+  // only when the live read truly fails (null) — never silently over-leverage a
+  // real account on a transient read error.
+  if (Number(config.maxPortfolioDeltaUsd) > 0) {
+    const positions = paper
+      ? (state.current_position
+          ? [{ signedQty: (state.current_position.direction === "SHORT" ? -1 : 1) * (state.current_position.total_qty ?? state.current_position.qty ?? 0), mark: state.current_position.current_price }]
+          : [])
+      : await fetchAccountPositions(keyData);
+    if (positions) {
+      const dc = portfolioDeltaCheck(positions, entryNotional, signal.direction, config.maxPortfolioDeltaUsd);
+      if (dc.blocked) {
+        console.log(`[exec] ${address.slice(0, 10)} delta cap: projected $${dc.projectedDelta.toFixed(0)} > cap $${dc.cap} (existing $${dc.existingDelta.toFixed(0)}) — ${signal.direction} ${symbol} entry blocked`);
+        return;
+      }
+    }
+  }
+
+  let orderId = null;
+  let entryFill = { price: markPrice, source: paper ? "paper" : "mark" };
+  if (!paper) {
     // Set leverage
     await orderlyRequest(keyData, "POST", "/v1/client/leverage", {
       symbol, leverage: effLeverage,
@@ -831,6 +1085,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
       return;
     }
     orderId = order.data?.order_id;
+    entryFill = await readFill(keyData, orderId, markPrice);
   }
 
   // Effective TP/SL — fixed config %, or volatility-scaled to recent ATR (opt-in
@@ -865,7 +1120,8 @@ async function enterPosition(address, state, config, signal, env, cache) {
   state.current_position = {
     symbol,
     direction: signal.direction,
-    entry_price: markPrice,
+    entry_price: entryFill.price,
+    entry_fill: entryFill.source,
     current_price: markPrice,
     pnl_percent: 0,
     qty,
@@ -875,6 +1131,9 @@ async function enterPosition(address, state, config, signal, env, cache) {
     leverage: effLeverage,
     tpPercent: effTp,
     slPercent: effSl,
+    // Fixed-risk sizing: the dollars this position actually risks to its stop (after snapping and any cap),
+    // so P&L ÷ risk_usd = the trade's R.
+    ...(riskSized ? { sizing: "RISK", risk_target_usd: Number(config.riskPerTradeUsd), risk_usd: riskTaken(qty, entryFill.price, effSl) } : {}),
     // Strategy label stamped at ENTRY (config can change before close) so the trade
     // record + History tab can show which strategy produced each trade.
     strategy: directive
@@ -903,13 +1162,14 @@ async function enterPosition(address, state, config, signal, env, cache) {
     base_tick: baseTick,
     base_min: baseMin,
     min_notional: minNotional,
+    quote_tick: quoteTick,
     // DCA state (averaging mode). The monitor manages these on a separate path:
     // base_entry_price anchors the safety-order triggers; avg_entry/total_qty are
     // the running blended position; TP is taken off avg_entry, not the base.
     ...(dca ? {
       dca: { ...dca, takeProfitPct: config.tpPercent },
-      base_entry_price: markPrice,
-      avg_entry: markPrice,
+      base_entry_price: entryFill.price,
+      avg_entry: entryFill.price,
       total_qty: qty,
       filled_safety_orders: 0,
     } : {}),
@@ -917,6 +1177,10 @@ async function enterPosition(address, state, config, signal, env, cache) {
   state.last_trade_time = Date.now();
   state.trades_today = (state.trades_today || 0) + 1;
   { const key = brainSignalKey(signal); if (key) state.last_signal_key = key; } // this read is now traded
+
+  // The exchange-side backstop: placed right after the fill, before state is saved. A refusal never
+  // undoes the entry (the position is open); monitorPosition retries it each tick.
+  if (!paper) await ensureBackstop(address, state.current_position, keyData, env);
 
   // Mark the directive LIVE (a position is now open for it) so the UI/API reflect it
   // and a second directive can't arm on top. Retired to DONE by closePosition.
@@ -948,6 +1212,10 @@ async function enterPosition(address, state, config, signal, env, cache) {
   await notifyTelegram(address, env,
     `${paper ? "📝 <b>[PAPER]</b> " : "🟢 "}<b>OPEN ${signal.direction} ${tkEnter}</b> @ $${markPrice}\n` +
     `TP ${effTp}% · SL ${effSl}% · ${effLeverage}x${directive ? " · directive" : ` · ${config.signalMode || "CONFLUENCE"}`}`);
+
+  await fireCallback(address, config, env, "ENTRY", {
+    symbol, direction: signal.direction, qty, price: markPrice, leverage: effLeverage, paper,
+  });
 }
 
 // The graded exit's stop/target from the coin's H4 ATR-14 — built from the last 80h of 1h candles by
@@ -997,12 +1265,14 @@ async function monitorPosition(address, state, config, env, cache) {
   // manage on cached data rather than risk discarding a real position.
   // Paper positions have no exchange counterpart — skip reconciliation entirely.
   const keyRaw = pos.paper ? null : await env.NEXUS_AGENT.get(`agent:key:${address}`);
+  let liveKey = null; // the key, once the reconcile read worked (the backstop uses it below)
   if (keyRaw) {
     try {
-      const keyData = JSON.parse(keyRaw);
-      keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+      const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
       const posRes = await orderlyRequest(keyData, "GET", `/v1/position/${pos.symbol}`);
-      const liveQty = Math.abs(parseFloat(posRes?.data?.position_qty ?? 0));
+      // An error answer reads as null (unreadable), never as flat: logic.mjs exchangePositionQty.
+      const liveQty = exchangePositionQty(posRes);
+      if (liveQty === null) throw new Error(`position read refused: ${String(posRes?.message || posRes?.code || "no answer").slice(0, 80)}`);
       // Grace window: a just-opened position may not have propagated to the position
       // endpoint yet — a 0-qty read here would wrongly discard a REAL fill (→ ghost).
       // Defer the reconcile-clear until the position has had time to settle; adoption
@@ -1013,6 +1283,19 @@ async function monitorPosition(address, state, config, env, cache) {
       }
       if (Number.isFinite(liveQty) && liveQty < 1e-9) {
         console.log(`[exec] ${address.slice(0, 10)} position flat on exchange (manual close?) — clearing stale record`);
+        // Did our backstop close it (exec stalled past the stop)? Read the order; never guessed.
+        if (pos.backstop?.id) {
+          let fired = false;
+          try { fired = backstopHit(await orderlyRequest(keyData, "GET", `/v1/algo/order/${pos.backstop.id}`)); } catch { fired = false; }
+          if (fired) {
+            state.last_backstop_hit = { symbol: pos.symbol, direction: pos.direction, trigger: pos.backstop.trigger, at: Date.now() };
+            const tkb = pos.symbol.replace("PERP_", "").replace("_USDC", "");
+            const who = pos.backstop.foreign ? "Your own position stop" : "Backstop stop";
+            await notifyTelegram(address, env, `🛡 <b>${who} closed ${pos.direction} ${tkb}</b> near $${pos.backstop.trigger}\nThe exchange stop closed it before the agent did. Check the fill in your Orderly history: this close isn't on the agent's ledger.`);
+          } else {
+            await cancelBackstop(address, state, pos, keyData); // closed some other way: cancel what's resting
+          }
+        }
         // Resolve the published feed card too — otherwise clearing state alone strands
         // it ACTIVE forever (the "zombie" agent position the user sees on the feed while
         // the agent is actually flat). Best-effort exit = current mark; the exchange
@@ -1034,10 +1317,15 @@ async function monitorPosition(address, state, config, env, cache) {
         await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
         return;
       }
+      liveKey = keyData;
     } catch (e) {
       console.error(`[exec] ${address.slice(0, 10)} position reconcile failed, managing on cached data:`, e.message);
     }
   }
+
+  // A live position with no backstop yet (refused at entry, or adopted): try again, and save at once
+  // (some paths below return without a state write).
+  if (liveKey && await ensureBackstop(address, pos, liveKey, env)) await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
 
   // Fetch current price (shared per-symbol cache). If the public price fetch
   // fails (transient Orderly outage / HTML challenge to the worker IP), fall back
@@ -1058,7 +1346,7 @@ async function monitorPosition(address, state, config, env, cache) {
   if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
     if (Date.now() - pos.opened_at >= config.maxHoldHours * 60 * 60 * 1000) {
       console.log(`[exec] ${address.slice(0, 10)} no price + past max hold — force TIMEOUT close`);
-      await closePosition(address, state, env, "TIMEOUT", cache);
+      await closePosition(address, state, config, env, "TIMEOUT", cache);
     }
     return;
   }
@@ -1082,21 +1370,21 @@ async function monitorPosition(address, state, config, env, cache) {
     // new safety order or TP so a recovered position can't round-trip to a loss.
     pos.be_armed = breakevenArmed(pos, dcaPnl, config.breakevenTriggerPct);
     if (pos.be_armed && dcaPnl <= (Number(config.breakevenBufferPct) || 0)) {
-      await closePosition(address, state, env, "BE", cache, currentPrice); return;
+      await closePosition(address, state, config, env, "BE", cache, currentPrice); return;
     }
 
     if (dcaPnl >= (pos.dca.takeProfitPct || config.tpPercent)) {
-      await closePosition(address, state, env, "TP", cache, currentPrice); return;
+      await closePosition(address, state, config, env, "TP", cache, currentPrice); return;
     }
     if (holdMs >= config.maxHoldHours * 60 * 60 * 1000) {
-      await closePosition(address, state, env, "TIMEOUT", cache, currentPrice); return;
+      await closePosition(address, state, config, env, "TIMEOUT", cache, currentPrice); return;
     }
     const so = nextSafetyOrder(pos, currentPrice, config.capitalPerTrade, pos.dca);
     if (so.shouldAdd) { await addSafetyOrder(address, state, config, env, so, currentPrice); return; }
     pos.next_safety_price = so.trigger ?? pos.next_safety_price;
     // Final stop — only after the whole ladder is spent (averaging is done).
     if ((pos.filled_safety_orders || 0) >= maxSO && pos.slPercent && dcaPnl <= -pos.slPercent) {
-      await closePosition(address, state, env, "SL", cache, currentPrice); return;
+      await closePosition(address, state, config, env, "SL", cache, currentPrice); return;
     }
     await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
     console.log(`[exec] ${address.slice(0, 10)} ${pos.paper ? "PAPER " : ""}DCA HOLD ${pos.direction} ${pos.symbol.replace("PERP_", "").replace("_USDC", "")} avgPnl=${dcaPnl.toFixed(3)}% SOs=${pos.filled_safety_orders || 0}/${maxSO}`);
@@ -1129,7 +1417,7 @@ async function monitorPosition(address, state, config, env, cache) {
   });
 
   if (action && action.type === "FULL_CLOSE") {
-    await closePosition(address, state, env, action.reason, cache, currentPrice);
+    await closePosition(address, state, config, env, action.reason, cache, currentPrice);
     return;
   }
   if (action && action.type === "PARTIAL_TP") {
@@ -1197,21 +1485,26 @@ async function addSafetyOrder(address, state, config, env, so, price) {
     return;
   }
   const addQty = snap.qty;
+  let addPrice = price; // live: the safety order's own fill (readFill)
   const side = pos.direction === "LONG" ? "BUY" : "SELL";
   if (!paper) {
     const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
     if (keyRaw) {
       try {
-        const keyData = JSON.parse(keyRaw);
-        keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+        const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
         const r = await orderlyRequest(keyData, "POST", "/v1/order", {
           symbol: pos.symbol, order_type: "MARKET", side, order_quantity: addQty, broker_id: "nexus_trading",
         });
         if (r && r.success === false) { console.error(`[exec] ${address.slice(0, 10)} DCA SO order failed:`, JSON.stringify(r)); return; }
+        addPrice = (await readFill(keyData, r?.data?.order_id, price)).price;
       } catch (e) { console.error(`[exec] ${address.slice(0, 10)} DCA SO error:`, e.message); return; }
+    } else {
+      // No key = no order placed: never book a safety order that didn't happen.
+      console.error(`[exec] ${address.slice(0, 10)} DCA SO skipped: no key`);
+      return;
     }
   }
-  const blended = blendAvg(pos.total_qty, pos.avg_entry, addQty, price);
+  const blended = blendAvg(pos.total_qty, pos.avg_entry, addQty, addPrice);
   pos.avg_entry = blended.newAvg;
   pos.total_qty = blended.newQty;
   pos.remaining_qty = blended.newQty;
@@ -1219,6 +1512,9 @@ async function addSafetyOrder(address, state, config, env, so, price) {
   pos.filled_safety_orders = (pos.filled_safety_orders || 0) + 1;
   await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
   console.log(`[exec] ${address.slice(0, 10)} ${paper ? "PAPER " : ""}DCA SO${so.level} +${addQty} @ ${price} → avg ${pos.avg_entry.toFixed(4)} qty ${pos.total_qty}`);
+  await fireCallback(address, config, env, "DCA_ADD", {
+    symbol: pos.symbol, direction: pos.direction, qty: addQty, price, leverage: config.leverage, paper,
+  });
 }
 
 // Scale OUT a fraction of an open position at a take-profit level (multi-TP). Sends
@@ -1242,11 +1538,12 @@ async function partialClose(address, state, config, env, action, cache) {
   // Dust guard: if the slice is too small to place, or the leftover would be below
   // the exchange minimum, just close the full remainder as a TP.
   const price = pos.current_price;
+  let slicePrice = price; // live: the slice's own fill (readFill)
   const tooSmallSlice = slice < (pos.base_min || tick) || slice <= 0;
   const leftoverDust = afterRemain > 0 && (afterRemain < (pos.base_min || tick) ||
     (pos.min_notional && afterRemain * price < pos.min_notional));
   if (tooSmallSlice || leftoverDust || afterRemain <= 0) {
-    await closePosition(address, state, env, "TP", cache, price);
+    await closePosition(address, state, config, env, "TP", cache, price);
     return;
   }
 
@@ -1256,8 +1553,7 @@ async function partialClose(address, state, config, env, action, cache) {
     const keyRaw = await env.NEXUS_AGENT.get(`agent:key:${address}`);
     if (keyRaw) {
       try {
-        const keyData = JSON.parse(keyRaw);
-        keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+        const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
         const closeSide = pos.direction === "LONG" ? "SELL" : "BUY";
         const r = await orderlyRequest(keyData, "POST", "/v1/order", {
           symbol: pos.symbol, order_type: "MARKET", side: closeSide,
@@ -1268,22 +1564,27 @@ async function partialClose(address, state, config, env, action, cache) {
           return; // leave the position intact; try again next tick
         }
         sliceOrderId = r?.data?.order_id ?? null;
+        slicePrice = (await readFill(keyData, sliceOrderId, price)).price;
       } catch (e) {
         console.error(`[exec] ${address.slice(0, 10)} partial TP error:`, e.message);
         return;
       }
+    } else {
+      // No key = no reduce-only order placed: never book a slice that didn't happen.
+      console.error(`[exec] ${address.slice(0, 10)} partial TP skipped: no key`);
+      return;
     }
   }
 
   // Realize this slice's P&L and advance the ladder state.
-  const { pnlPct, pnlUsdc } = computePnl(pos.direction, pos.entry_price, price, slice);
+  const { pnlPct, pnlUsdc } = computePnl(pos.direction, pos.entry_price, slicePrice, slice);
   state.daily_pnl = (state.daily_pnl || 0) + pnlUsdc;
   pos.remaining_qty = afterRemain;
   pos.tp_hits = [...(pos.tp_hits || []), action.level];
 
   const sliceTrade = {
     symbol: pos.symbol, direction: pos.direction, entry_price: pos.entry_price,
-    exit_price: price, qty: slice, leverage: pos.leverage ?? null, pnl: pnlUsdc, pnl_percent: pnlPct,
+    exit_price: slicePrice, qty: slice, leverage: pos.leverage ?? null, pnl: pnlUsdc, pnl_percent: pnlPct,
     reason: "TP_PARTIAL",
     opened_at: new Date(pos.opened_at).toISOString(), closed_at: new Date().toISOString(),
   };
@@ -1306,6 +1607,9 @@ async function partialClose(address, state, config, env, action, cache) {
 
   await env.NEXUS_AGENT.put(`agent:state:${address}`, JSON.stringify(state));
   console.log(`[exec] ${address.slice(0, 10)} ${paper ? "PAPER " : ""}PARTIAL TP L${action.level} ${action.sizePct}% slice=${slice} pnl=$${pnlUsdc.toFixed(4)} remaining=${afterRemain}`);
+  await fireCallback(address, config, env, "PARTIAL_TP", {
+    symbol: pos.symbol, direction: pos.direction, qty: slice, price, leverage: pos.leverage, reason: "TP_PARTIAL", pnl: pnlUsdc, pnlPercent: pnlPct, paper,
+  });
 }
 
 // Append this paper close to the wallet's hash-chained paper ledger (app/lib/paperLedger.mjs).
@@ -1324,11 +1628,12 @@ async function appendPaperLog(address, state, env, row) {
   }
 }
 
-async function closePosition(address, state, env, reason, cache, decisionPrice = null) {
+async function closePosition(address, state, config, env, reason, cache, decisionPrice = null) {
   const pos = state.current_position;
   if (!pos) return;
   const paper = !!pos.paper;
   let closeOrderId = null;
+  let closeFill = null; // live: { price, source } of the reduce-only close
   // Paper positions never touched the exchange, so the close is always "confirmed".
   // For real positions this only flips true once Orderly ACCEPTS the reduce-only
   // close — otherwise we must NOT mark the trade closed (see the guard below).
@@ -1336,6 +1641,7 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
   // After multi-TP scale-outs only the runner remains — close THAT, not the
   // original size (legacy positions have no remaining_qty → fall back to qty).
   const closeQty = pos.remaining_qty ?? pos.qty;
+  let closeKey = null; // live: the key the close was sent with (the backstop cancel uses it)
 
   // Real positions: send a reduce-only market close. Paper positions never
   // touched the exchange, so there's nothing to close — skip straight to P&L.
@@ -1347,8 +1653,8 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
       closeConfirmed = true;
       console.warn(`[exec] ${address.slice(0, 10)} no key — cannot place close (reason=${reason}); clearing record`);
     } else {
-      const keyData = JSON.parse(keyRaw);
-      keyData.tradingKey = await decryptTradingKey(keyData.tradingKey, env);
+      const keyData = await resolveKeyRecord(JSON.parse(keyRaw), keyIo(address, env));
+      closeKey = keyData;
       const closeSide = pos.direction === "LONG" ? "SELL" : "BUY";
 
       try {
@@ -1368,6 +1674,7 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
           console.error(`[exec] ${address.slice(0, 10)} close order REJECTED:`, JSON.stringify(closeOrder).slice(0, 200));
         } else {
           closeOrderId = closeOrder?.data?.order_id ?? null;
+          closeFill = await readFill(keyData, closeOrderId, null);
           closeConfirmed = true;
         }
       } catch (e) {
@@ -1386,6 +1693,9 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
     return;
   }
 
+  // Closed: the resting backstop goes too (queued for cleanup if the cancel doesn't go through).
+  if (!paper) await cancelBackstop(address, state, pos, closeKey);
+
   // Book the close. PAPER books at the price the exit was DECIDED on — there is no real
   // fill to approximate, and a second mark read only lets the booked price drift from the
   // one that triggered the exit (that drift is how a "TP" row gets recorded red: the
@@ -1393,7 +1703,9 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
   // succeeds with a worse one). LIVE still re-fetches — there the fresh mark is the best
   // proxy for the price the exchange actually filled at.
   let exitPrice = pos.current_price;
-  if (paper && Number.isFinite(decisionPrice) && decisionPrice > 0) {
+  if (!paper && closeFill?.source === "exchange") {
+    exitPrice = closeFill.price; // what the exchange actually filled the close at
+  } else if (paper && Number.isFinite(decisionPrice) && decisionPrice > 0) {
     exitPrice = resolveExitPrice({ paper, decisionPrice, fetchedPrice: exitPrice });
   } else {
     try {
@@ -1443,7 +1755,9 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
     // Paper trades live in state (rides along in the API's state response) so
     // they stay completely separate from the real Supabase track record.
     state.paper_trades = state.paper_trades || [];
-    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable });
+    // A fixed-risk position carries the dollars it risked, so the row reads in R (pnl ÷ risk_usd). Paper rows
+    // only: the live Supabase row's columns are unchanged.
+    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable, ...(pos.risk_usd > 0 ? { risk_usd: pos.risk_usd } : {}) });
     if (state.paper_trades.length > 50) state.paper_trades.pop(); // keep last 50
     // ⚠️ That pop is why the window is NOT the record. Accrue the LIFETIME aggregate
     // here, once, at close — it cannot be rebuilt from a truncated window later.
@@ -1492,4 +1806,9 @@ async function closePosition(address, state, env, reason, cache, decisionPrice =
   await notifyTelegram(address, env,
     `${paper ? "📝 <b>[PAPER]</b> " : (pnlUsdc >= 0 ? "✅ " : "🔴 ")}<b>CLOSE ${pos.direction} ${tkClose}</b> · ${reason}\n` +
     `P&L ${sign}$${pnlUsdc.toFixed(2)} (${sign}${pnlPct.toFixed(2)}%)`);
+
+  await fireCallback(address, config, env, "CLOSE", {
+    symbol: pos.symbol, direction: pos.direction, qty: closeQty, price: exitPrice,
+    leverage: pos.leverage, reason, pnl: pnlUsdc, pnlPercent: pnlPct, paper,
+  });
 }

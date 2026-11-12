@@ -8,7 +8,7 @@
 // Deterministic (no LLM, no key, instant), with a one-tap hand-off to Nexus to
 // go deeper. Renders nothing when there's genuinely nothing to say (cold-start safe).
 import { useEffect, useMemo, useState } from "react";
-import { SectionHeader } from "./components";
+import { Collapsible } from "./Collapsible";
 import type { TabId, ProcessedTrade } from "./types";
 import { buildBriefing, buildMarketRead, buildFusion, computeTape, type BriefingTrade, type Insight, type MarketSignal } from "./briefing";
 import { useFadeFamilyGrade } from "./useFadeFamilyGrade";
@@ -86,8 +86,10 @@ export function NexusBriefing({
   const [myContrarian, setMyContrarian] = useState<{ calls: number; avgR: number } | null>(null);
   const [myAlignEdge, setMyAlignEdge] = useState<{ best: { bucket: string; avgR: number } } | null>(null);
   const [process, setProcess] = useState<Record<string, unknown> | null>(null);
+  // Folded by default (borst, 2026-11-05: Lab home leads with the graded calls, the read is one tap
+  // away). Only an explicit earlier "show" ("0" under the old key) opens it on arrival.
   const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
+    try { return localStorage.getItem(COLLAPSE_KEY) !== "0"; } catch { return true; }
   });
 
   // Market context — all public, all fail-soft. Any that fails simply drops the
@@ -245,25 +247,15 @@ export function NexusBriefing({
   }));
 
   return (
-    <div className="nx-fade-in" style={{ marginBottom: 24 }}>
-      {/* Editorial header — congruent with THE BOARD + The Market Terminal (eyebrow →
-          serif headline → amber rule). The live meta (read type · date · tape) and the
-          collapse control ride in the note slot. */}
-      <SectionHeader
-        eyebrow="THE BRIEFING"
-        title="What matters right now"
-        note={
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-            {tape && <span style={{ color: tape.label === "RISK-OFF" ? "#f7525f" : tape.label === "RISK-ON" ? "#ededf0" : "#a1a1aa" }}>{tape.label} tape</span>}
-            <button onClick={toggle} className="nx-text-action" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600, color: "#71717a", background: "none", border: "none", padding: "2px 0", cursor: "pointer" }}>
-              {collapsed ? `Show ${total}` : "Hide"}
-            </button>
-          </span>
-        }
-      />
-
-      {!collapsed && (
-        <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", background: C.surfaceAlt, marginTop: -6 }}>
+    <Collapsible
+      title="The briefing · what matters right now"
+      subtitle={`${total} ${total === 1 ? "read" : "reads"} worth a look${tape ? ` · ${tape.label} tape` : ""}`}
+      shortTitle="The briefing"
+      shortSub={`${total} worth a look${tape ? ` · ${tape.label} tape` : ""}`}
+      open={!collapsed}
+      onToggle={toggle}
+    >
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", background: C.surfaceAlt }}>
           {/* ⭐ THE OPERATOR READ — who you are + your single costliest habit, leading the
               briefing so the you-engine greets you here, not just in Analytics. */}
           {operator && (
@@ -298,7 +290,6 @@ export function NexusBriefing({
             </button>
           </div>
         </div>
-      )}
-    </div>
+    </Collapsible>
   );
 }

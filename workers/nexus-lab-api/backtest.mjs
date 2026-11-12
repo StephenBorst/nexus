@@ -15,6 +15,7 @@ import { deriveSignal } from "../nexus-agent-brain/logic.mjs";
 import { computePnl, evaluateExit, breakevenArmed, normTakeProfits, volScaledLevels, dailyCapBlocked, shouldResetDaily } from "../nexus-agent-exec/logic.mjs";
 import { percentileRank } from "./logic.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
+import { tradeNotional } from "../../app/lib/riskSizing.mjs";
 import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 
@@ -302,7 +303,7 @@ export function runBacktest(candles, fundingAt, config, fundingPctAt = null, oiC
 
   const openTrade = (direction, price, t, lvl = null) => openPosition(config, direction, price, t, lvl);
   const record = (p, exitPrice, reason, exitT) => {
-    trades.push({ direction: p.direction, entry: p.entry, exit: exitPrice, reason, pnlPct: closedPnlPct(p, exitPrice), holdH: (exitT - p.entryT) / 3600, entryT: p.entryT });
+    trades.push({ direction: p.direction, entry: p.entry, exit: exitPrice, reason, pnlPct: closedPnlPct(p, exitPrice), holdH: (exitT - p.entryT) / 3600, entryT: p.entryT, notional: tradeNotional(config, p.state.slPercent) });
   };
 
   for (let i = 1; i < candles.length; i++) {
@@ -341,7 +342,6 @@ export function runPortfolioBacktest(markets, config) {
     .sort((a, b) => a.rank - b.rank);
   const times = [...new Set(mk.flatMap((m) => m.candles.map((c) => c.t)))].sort((a, b) => a - b);
   const cooldownBars = Number.isFinite(config.cooldownBars) ? config.cooldownBars : 1;
-  const notional = (config.capitalPerTrade || 50) * (config.leverage || 1);
   const feePct = ((config.feeBps || 0) / 100) * 2;
   const trades = [];
   const blocked = { busy: 0, otherMarket: 0, dailyCap: 0, cooldown: 0 };
@@ -356,8 +356,9 @@ export function runPortfolioBacktest(markets, config) {
         const hit = stepExit(pos, pos.m.candles[i], (t - pos.entryT) * 1000, config);
         if (hit) {
           const pnlPct = closedPnlPct(pos, hit.px);
-          trades.push({ symbol: pos.m.symbol, direction: pos.direction, entry: pos.entry, exit: hit.px, reason: hit.reason, pnlPct, holdH: (t - pos.entryT) / 3600, entryT: pos.entryT });
-          day.daily_pnl += ((pnlPct - feePct) / 100) * notional;
+          const tn = tradeNotional(config, pos.state.slPercent);
+          trades.push({ symbol: pos.m.symbol, direction: pos.direction, entry: pos.entry, exit: hit.px, reason: hit.reason, pnlPct, holdH: (t - pos.entryT) / 3600, entryT: pos.entryT, notional: tn });
+          day.daily_pnl += ((pnlPct - feePct) / 100) * tn;
           pos = null; lastExitT = t;
           continue; // no re-entry on the exit bar (same as runBacktest)
         }
@@ -429,6 +430,8 @@ export function mulberry32(seed) {
   };
 }
 // One trade from bar i through the shared exit path. Right-censored → null (never credited).
+// Returns { pnlPct, notional }: the notional the real trades book too (tradeNotional), so a fixed-risk
+// config is compared with random entries sized the same way at THEIR own stops.
 function simulateFrom(candles, i, direction, config) {
   const c = candles[i];
   const { skip, lvl } = exitLevelsAt(candles, i, config);
@@ -436,7 +439,7 @@ function simulateFrom(candles, i, direction, config) {
   const pos = openPosition(config, direction, c.c, c.t, lvl);
   for (let k = i + 1; k < candles.length; k++) {
     const hit = stepExit(pos, candles[k], (candles[k].t - c.t) * 1000, config);
-    if (hit) return closedPnlPct(pos, hit.px);
+    if (hit) return { pnlPct: closedPnlPct(pos, hit.px), notional: tradeNotional(config, pos.state.slPercent) };
   }
   return null;
 }
@@ -465,8 +468,8 @@ export function randomEntryBaseline(markets, config, realTrades, { runs = BASELI
       if (hi < 1) continue;
       for (let tries = 0; tries < 8; tries++) {
         const i = 1 + Math.floor(rnd() * hi);
-        const pnlPct = simulateFrom(p.candles, i, p.direction, config);
-        if (pnlPct != null) { sim.push({ pnlPct }); break; }
+        const one = simulateFrom(p.candles, i, p.direction, config);
+        if (one != null) { sim.push(one); break; }
       }
     }
     nets.push(aggregate(sim, config).netUsd);
@@ -566,7 +569,7 @@ export function aggregate(trades, config = {}) {
   const feePct = ((config.feeBps || 0) / 100) * 2;
   let net = 0, grossWin = 0, grossLoss = 0, wins = 0;
   for (const t of trades) {
-    const usd = ((t.pnlPct - feePct) / 100) * notional;
+    const usd = ((t.pnlPct - feePct) / 100) * (t.notional ?? notional); // per-trade under fixed-risk sizing
     net += usd;
     if (usd > 0) { grossWin += usd; wins++; } else { grossLoss += Math.abs(usd); }
   }
@@ -652,7 +655,7 @@ export function portfolioFolds(trades, t0, tN, config, folds) {
   const net = new Array(folds).fill(0), cnt = new Array(folds).fill(0);
   for (const t of trades || []) {
     const k = Math.min(folds - 1, Math.max(0, Math.floor((t.entryT - t0) / span)));
-    net[k] += ((t.pnlPct - feePct) / 100) * notional; cnt[k]++;
+    net[k] += ((t.pnlPct - feePct) / 100) * (t.notional ?? notional); cnt[k]++;
   }
   return { net: net.map((n) => Math.round(n * 100) / 100), cnt };
 }
@@ -813,7 +816,7 @@ export function foldsByEntry(res, candles, config, folds) {
   const net = new Array(folds).fill(0), cnt = new Array(folds).fill(0);
   for (const t of res._trades || []) {
     const k = Math.min(folds - 1, Math.max(0, Math.floor((t.entryT - t0) / span)));
-    net[k] += ((t.pnlPct - feePct) / 100) * notional; cnt[k]++;
+    net[k] += ((t.pnlPct - feePct) / 100) * (t.notional ?? notional); cnt[k]++;
   }
   return { net: net.map((n) => Math.round(n * 100) / 100), cnt };
 }

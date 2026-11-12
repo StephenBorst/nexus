@@ -1,5 +1,6 @@
 import { ReactNode, useCallback, lazy, Suspense } from "react";
 import { OrderlyAppProvider } from "@orderly.network/react-app";
+import { ORDERLY_FEATURES } from "@/lib/orderlyFeatures.mjs";
 import { useOrderlyConfig } from "@/utils/config";
 import type { NetworkId } from "@orderly.network/types";
 import { LocaleProvider, LocaleCode, LocaleEnum, defaultLanguages } from "@orderly.network/i18n";
@@ -10,6 +11,9 @@ import { createSymbolDataAdapter } from "@/utils/symbol-filter";
 import { DemoGraduationChecker } from "@/components/DemoGraduationChecker";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import ServiceDisclaimerDialog from "./ServiceDisclaimerDialog";
+import { xcDepositPlugin } from "./xcDepositPlugin";
+// Stable reference (module scope): the provider registers plugins once.
+const XC_PLUGINS = [xcDepositPlugin];
 
 const NETWORK_ID_KEY = "orderly_network_id";
 
@@ -169,6 +173,8 @@ const OrderlyProvider = (props: { children: ReactNode }) => {
 			restrictedInfo={{
 				customRestrictedRegions: getRuntimeConfigArray('VITE_RESTRICTED_REGIONS'),
 			}}
+			plugins={XC_PLUGINS}
+			features={ORDERLY_FEATURES}
 		>
 			<DemoGraduationChecker />
 			<ServiceDisclaimerDialog />

@@ -21,7 +21,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE } from "./logic.mjs";
+import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
@@ -52,10 +52,11 @@ import { backtestConfig, runSweep, runBasisSweep, walkForwardValidate, runBackte
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
-import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, AXES, priceByHour } from "./axisbt.mjs";
+import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, AXES, priceByHour, OVERLAP_PAIRS } from "./axisbt.mjs";
 import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { handleFlashSettlement } from "./routes-flashcheck.mjs";
+import { handleXcSettlement, settleDeposit } from "./routes-xcsettle.mjs";
 import { handleSpotBest } from "./routes-spotbest.mjs";
 import { jupFeeConfig, validFeeAccounts, jupQuoteParams, jupBuildParams, withJupSwapFee } from "./jupFee.mjs";
 import { parseFillReport, bookFill, logFlashOrder, settleFlashOrders, EVM_RPCS } from "./spotLedger.mjs";
@@ -64,8 +65,9 @@ import { lockFor, LockBusy, LockError, LOCK_KEYS } from "./lock.mjs";
 export { NexusLock } from "./lock.mjs";
 // Leases on the paid paths: held for milliseconds (a KV read + write), so a short wait covers a race.
 const PAY_LOCK = { ttlMs: 30_000, waitMs: 3_000 };
-import { paperParity, axisForConfig } from "../../app/lib/paperParity.mjs";
+import { paperParity, axisForConfig, parityWindowStart } from "../../app/lib/paperParity.mjs";
 import { paperCostReread, paperFeeRate } from "../../app/lib/paperCosts.mjs";
+import { deactivatedMessage } from "../../app/lib/agentControls.mjs";
 import { okxJson } from "./okx.mjs";
 import { rankUniverse, RECORDED_COINS, HOLDOUT_COINS, UNIVERSE_RULES } from "./universe.mjs";
 import { FLOW_COINS, HOLDOUT_AXES, HOLDOUT_SIGNED_OFF, isHoldoutCoin } from "../../app/lib/recordedUniverse.mjs";
@@ -88,8 +90,12 @@ import { handlePush } from "./routes-push.mjs";
 import { handleThesisRegistration } from "./routes-thesisreg.mjs";
 import { handleCallStatus } from "./routes-callstatus.mjs";
 import { handleVerify, isPublicCall } from "./routes-verify.mjs";
+import { runMinuteGrades } from "./minuteGrader.mjs";
+import { handleMinuteArchive } from "./minuteCandles.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
+import { handlePulse } from "./routes-pulse.mjs";
+import { handleRecordShare } from "./routes-recordshare.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg, buildArenaAgentSvg } from "./ogCards.mjs";
 import { loadIdentity, identityCardVersion } from "./identity.mjs";
@@ -108,9 +114,12 @@ import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } f
 import { revokedWallets, revokedTradingRefusal } from "./revokedTrading.mjs";
 import { handleRemoveKey } from "./routes-removekey.mjs";
 import { handleSession } from "./routes-session.mjs";
-import { handleKey } from "./routes-key.mjs";
+import { handleKey, checkChallenge, Refused as KeyRefused } from "./routes-key.mjs";
 import { wantsV2, v2Signer, hasV2Key, storedKeySigner } from "./tradingSigner.mjs";
-import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, answer as withdrawAnswer } from "./withdrawV2.mjs";
+import { handleAgentKill } from "./routes-kill.mjs";
+import { agentOwnerRefusal, v2KeyPointer, twapFitsKey, configChallengeNeeded } from "./agentAuth.mjs";
+import { bankrWithdrawV2, withdrawPrepareV2, withdrawSubmitV2, answer as withdrawAnswer, freeCollateralFrom, insufficientFree } from "./withdrawV2.mjs";
+import { runSettle, settleFailure, settleNonceFrom, settleMessage, settleTypedData, settleRefusal, settleSigner, settleRequestBody, nothingToSettle } from "./settlePnl.mjs";
 import { v1RegisterOff, v1RegistrationRefusal, bankrRegisterV2Refusal, registerPageV2Html } from "./v1Registration.mjs";
 import { gradedStatusOf, fetchGradeHistory, gradePublicTheses, computeCallerStats, snapshotStances, isCurrentStamp, applyFillStamp } from "./grading.mjs";
 import { prepareSeal } from "./labWrite.mjs";
@@ -123,11 +132,17 @@ import { computeSignalRows, deliverSignals, snapshotTrendRegimes } from "./signa
 // wrangler like the other ../ imports.
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { gradedExitRefusal } from "../../app/lib/gradedExit.mjs";
+import { riskSizingRefusal } from "../../app/lib/riskSizing.mjs";
+import { parseLiveLift, liveLifted, liveLiftNote, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
 // Directive level validation lives with the exec's money-path logic (single source);
 // wrangler bundles the cross-dir import (same as backtest.mjs).
 import { directiveLevels } from "../nexus-agent-exec/logic.mjs";
 import { handleBasisSignals } from "./basisSignals.mjs";
 import { advanceIndex, onchainResponse, ONCHAIN_INDEX_KEY, DEFAULT_LOGS_RPC } from "./onchainWallets.mjs";
+
+// The scoreboard's cache key, one place: GET /intel/axis-backtest writes it and /calls/pulse reads the
+// headline from it. Bump the version here when the scoreboard payload changes (see that route's notes).
+const axisbtCacheKey = (min) => `axisbt:v26:min${min}`;
 
 // Orderly sits behind Cloudflare bot-management, which intermittently serves an HTML
 // 403 challenge to header-light Worker fetches — which would break the mini-app money
@@ -620,16 +635,25 @@ export default {
   // tracked set from the live HL leaderboard. Fails safe: on error the routes
   // fall back to the static SMART_SEED, so a heavy/failed parse never breaks the tab.
   async scheduled(event, env, ctx) {
-    // Every 5 min: phone alerts for agent opens/closes (push.mjs). Reads agent:state only, and it
-    // RETURNS here: every job below is hourly and must not start running every 5 minutes (several
-    // of them write the engine's history series). No-op until VAPID_PRIVATE_JWK is set.
-    if (event.cron === "*/5 * * * *") {
+    // Every minute: the minute grader (minuteGrader.mjs) fills and settles open minute-graded calls.
+    // Every 5th minute: phone alerts for agent opens/closes (push.mjs; reads agent:state only; no-op
+    // until VAPID_PRIVATE_JWK is set). It RETURNS here: every job below is hourly and must not start
+    // running every minute (several of them write the engine's history series).
+    if (event.cron === "* * * * *") {
       ctx.waitUntil((async () => {
         try {
-          const r = await runAgentWatch(env, (w, n) => appendNotification(env, w, n, { telegram: false }));
-          if (r.events) console.log(`[push] agent watch: ${r.events} alert(s) across ${r.watched} wallets`);
-        } catch (e) { console.error("[push] agent watch failed:", String(e)); }
+          const r = await runMinuteGrades(env);
+          if (r.triggered || r.graded || r.fills || r.skipped) console.log(`[m1] ${JSON.stringify(r)}`);
+        } catch (e) { console.error("[m1] minute grader failed:", String(e?.message || e)); }
       })());
+      if (new Date(event.scheduledTime || Date.now()).getUTCMinutes() % 5 === 0) {
+        ctx.waitUntil((async () => {
+          try {
+            const r = await runAgentWatch(env, (w, n) => appendNotification(env, w, n, { telegram: false }));
+            if (r.events) console.log(`[push] agent watch: ${r.events} alert(s) across ${r.watched} wallets`);
+          } catch (e) { console.error("[push] agent watch failed:", String(e)); }
+        })());
+      }
       return;
     }
     // Hourly: book finished Flash orders on the spot ledger (their fill + our fee), spotLedger.mjs.
@@ -658,6 +682,10 @@ export default {
     ctx.waitUntil((async () => {
       try { const n = await gradePublicTheses(env); console.log(`[grade] cron resolved ${n} calls`); }
       catch (e) { console.error("[grade] cron failed:", String(e)); }
+      // Then the minute grader's full sweep: every open minute-graded call re-graded with no trigger,
+      // the safety net under a run that fetched bars but died before its grade landed.
+      try { const r = await runMinuteGrades(env, { full: true }); console.log(`[m1] full sweep ${JSON.stringify(r)}`); }
+      catch (e) { console.error("[m1] full sweep failed:", String(e?.message || e)); }
     })());
     // Hourly: settle calls copied between wallets (callDedupe.mjs). Report-only until CALL_DEDUPE_LIVE.
     ctx.waitUntil((async () => {
@@ -983,6 +1011,17 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
       if (accountRes) return accountRes;
     }
 
+    // ── /calls/pulse → open calls + graded this week, for the Trade/Spot chip and the landing (routes-pulse.mjs) ─
+    {
+      const pulseRes = await handlePulse(parts, request, env, { scorecardKey: axisbtCacheKey(20) });
+      if (pulseRes) return pulseRes;
+    }
+    // ── /share/record + /og/record(.png) → the week's record as a share card (routes-recordshare.mjs) ─
+    {
+      const recordRes = await handleRecordShare(parts, request, env, { renderPng: renderMonoPng, scorecardKey: axisbtCacheKey(20) });
+      if (recordRes) return recordRes;
+    }
+
     // ── /thesis/:wallet/:id/meta → the call page's head tags (routes-callmeta.mjs) ─
     {
       const callMetaRes = await handleCallMeta(parts, request, env);
@@ -1225,6 +1264,8 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
 
     // ── /verify/:wallet/:id → re-grade one public call with the real grader (routes-verify.mjs) ─
     {
+      const archiveRes = await handleMinuteArchive(parts, request, env);
+      if (archiveRes) return archiveRes;
       const verifyRes = await handleVerify(parts, request, env);
       if (verifyRes) return verifyRes;
     }
@@ -3500,25 +3541,28 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       }, request);
     }
 
-        // ── /settle-pnl — settle unrealized PnL so it clears margin for withdrawal ──
-    // POST { walletAddress, walletSig, symbol? }
-    // symbol is optional — omit to settle all positions, or pass e.g. "SOL" to settle one.
-    // Must be called before withdrawing if unsettled_pnl is negative (code 78).
-    // After calling, wait ~5s for Orderly to process, then retry withdrawal.
+        // ── /settle-pnl — book the account's unsettled PnL into its balance (settlePnl.mjs) ──
+    // Auth as every trading route: { walletAddress, walletSig } or { walletAddress, session }. A settle
+    // needs the WALLET's EIP-712 SettlePnl signature, so three ways in:
+    //   • { …, bankrApiKey }             Bankr signs it; one call does nonce → sign → settle.
+    //   • { … }                           prepare: returns { typedData, message } for the wallet to sign.
+    //   • { …, message, signature }       submit: the signed SettlePnl (must recover to the wallet).
+    // Orderly settles the whole account; `symbol` is ignored. Until 2026-11-06 this route posted
+    // `{symbol}` / `{}`, which Orderly does not take, so nothing was ever settled through it.
     if (parts[0] === "settle-pnl" && request.method === "POST") {
       let spbody; try { spbody = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-      const { walletAddress: spwa, walletSig: spws, symbol: spsym } = spbody;
-      let sprec, spsk;
+      const { walletAddress: spwa, walletSig: spws } = spbody;
+      let sprec, spsk, spWallet;
       if (wantsV2(spbody)) {
         const v2 = await v2Signer(env, spbody); // auth v2: session + the stored random key
         if (!v2.ok) return json(v2.body, request, v2.status);
-        sprec = { accountId: v2.accountId, orderlyKey: v2.orderlyKey }; spsk = v2.signingKey;
+        sprec = { accountId: v2.accountId, orderlyKey: v2.orderlyKey }; spsk = v2.signingKey; spWallet = v2.wallet;
       } else {
         if (!spwa || !spws) return json({ error: "walletSig_required", hint: "POST { walletAddress, walletSig, symbol? }" }, request, 401);
         const spNorm = spwa.toLowerCase().trim();
         const spRaw  = await env.LAB_STORE.get("user:" + spNorm);
         if (!spRaw) return json({ error: "wallet_not_registered" }, request, 401);
-        sprec  = JSON.parse(spRaw);
+        sprec  = JSON.parse(spRaw); spWallet = spNorm;
         const SPHDR  = new Uint8Array([0x30,0x2e,0x02,0x01,0x00,0x30,0x05,0x06,0x03,0x2b,0x65,0x70,0x04,0x22,0x04,0x20]);
         const sphex  = spws.startsWith("0x") ? spws.slice(2) : spws;
         const spseed = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(sphex.match(/.{1,2}/g).map(b => parseInt(b, 16)))));
@@ -3531,27 +3575,53 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         const msg = new TextEncoder().encode(ts + method + path + bs);
         const s   = new Uint8Array(await crypto.subtle.sign("Ed25519", spsk, msg));
         const b64 = btoa(String.fromCharCode(...s)).replace(/[+]/g,"-").replace(/[/]/g,"_").replace(/=+$/,"");
-        return { "Content-Type": "application/json", "orderly-timestamp": String(ts), "orderly-account-id": sprec.accountId, "orderly-key": sprec.orderlyKey, "orderly-signature": b64 };
+        return { "Content-Type": method === "GET" ? "application/x-www-form-urlencoded" : "application/json", "orderly-timestamp": String(ts), "orderly-account-id": sprec.accountId, "orderly-key": sprec.orderlyKey, "orderly-signature": b64 };
       };
-      // Optionally scope to a single symbol
-      const settleBody = spsym
-        ? { symbol: spsym.toUpperCase().startsWith("PERP_") ? spsym.toUpperCase() : "PERP_" + spsym.toUpperCase() + "_USDC" }
-        : {};
-      const spHdrs = await spsign("POST", "/v1/settle_pnl", settleBody);
-      const spRes  = await fetch("https://api-evm.orderly.org/v1/settle_pnl", {
-        method: "POST", headers: spHdrs,
-        body: JSON.stringify(settleBody),
-      });
-      const spData = await spRes.json();
-      return json({
-        ok: spData?.success ?? false,
-        settled: spData?.success ?? false,
-        symbol: spsym ?? "all",
-        hint: spData?.success
-          ? "PnL settled. Wait ~5 seconds then retry withdrawal with free_collateral amount."
-          : "Settlement request sent — Orderly processes async. Wait 5-10s then check /balance before withdrawing.",
-        raw: spData,
-      }, request);
+      const spReq = async (method, path, bodyObj) => {
+        const r = await fetch("https://api-evm.orderly.org" + path, { method, headers: await spsign(method, path, bodyObj), body: bodyObj ? JSON.stringify(bodyObj) : undefined });
+        try { return await r.json(); } catch { return null; }
+      };
+      const getNonce = () => spReq("GET", "/v1/settle_nonce", null);
+      const postSettle = (b) => spReq("POST", "/v1/settle_pnl", b);
+      const settledReply = (raw) => nothingToSettle(raw)
+        ? json({ ok: true, settled: false, nothingToSettle: true, scope: "account",
+          hint: "Nothing to settle: this account has no unsettled PnL, so its balance is already final.", raw }, request)
+        : json({ ok: raw?.success === true, settled: raw?.success === true, scope: "account",
+          hint: raw?.success === true ? "PnL settled into the balance. Orderly books it within a few seconds; check /positions before withdrawing." : "Orderly refused the settle.",
+          raw }, request, raw?.success === true ? 200 : 502);
+
+      // 1) Bankr signs: the whole settle in one call.
+      if (spbody.bankrApiKey) {
+        const r = await runSettle({
+          wallet: spWallet, now: Date.now(), getNonce, post: postSettle,
+          signTyped: async (td) => {
+            const sr = await fetch("https://api.bankr.bot/wallet/sign", {
+              method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": spbody.bankrApiKey },
+              body: JSON.stringify({ signatureType: "eth_signTypedData_v4", typedData: td }),
+            });
+            return (await sr.json().catch(() => ({})))?.signature || null;
+          },
+        });
+        if (!r.ok) { const f = settleFailure(r); delete f.withdrawnAmount; f.hint = f.hint.replace(" Nothing was withdrawn.", ""); return json(f, request, 502); }
+        return settledReply(r.raw);
+      }
+      // 2) Submit a SettlePnl the wallet signed itself.
+      if (spbody.message && spbody.signature) {
+        const why = settleRefusal(spbody.message);
+        if (why) return json({ ok: false, error: "bad_settle_message", reason: why }, request, 400);
+        if ((await settleSigner(spbody.message, spbody.signature)) !== spWallet) {
+          return json({ ok: false, error: "signature_mismatch", hint: "The SettlePnl must be signed by this wallet, over the typed data this route returned." }, request, 401);
+        }
+        return settledReply(await postSettle(settleRequestBody({ message: spbody.message, signature: spbody.signature, wallet: spWallet })));
+      }
+      // 3) Prepare: the typed data for the wallet to sign.
+      const nonceReply = await getNonce();
+      const settleNonce = settleNonceFrom(nonceReply);
+      if (settleNonce == null) return json({ ok: false, error: "settle_nonce_unavailable", raw: nonceReply }, request, 502);
+      const spMsg = settleMessage({ settleNonce, now: Date.now() });
+      // Not "ok": nothing is settled yet. An agent reading the reply must not take this step as done.
+      return json({ settled: false, step: "sign", typedData: settleTypedData(spMsg), message: spMsg,
+        next: "Nothing is settled yet. Sign typedData with this wallet (eth_signTypedData_v4) and POST /settle-pnl again with the same auth plus { message, signature }, or send bankrApiKey to settle in one call." }, request);
     }
 
     // ── /proxy/bankr-withdraw — server-side withdrawal via Bankr Wallet API ────
@@ -3676,21 +3746,31 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         // settle all positions, wait 4s, fetch free_collateral, retry with safe amount.
         const code78 = withdrawRes?.code === 78 || String(withdrawRes?.message ?? "").includes("occupied");
         if (code78) {
-          // Settle PnL
-          await oReq("POST", "/v1/settle_pnl", {});
+          // Settle PnL for real (settlePnl.mjs): nonce + SettlePnl signed by the wallet (Bankr) + POST.
+          // Until 2026-11-06 this posted `{}`, which settled nothing; a failed settle now stops here.
+          const settled = await runSettle({
+            wallet: walletNorm, now: Date.now(),
+            getNonce: () => oReq("GET", "/v1/settle_nonce", null),
+            signTyped: async (td) => {
+              const sr = await fetch(`${BANKR_API_W}/wallet/sign`, {
+                method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": bankrApiKey },
+                body: JSON.stringify({ signatureType: "eth_signTypedData_v4", typedData: td }),
+              });
+              return (await sr.json().catch(() => ({})))?.signature || null;
+            },
+            post: (body) => oReq("POST", "/v1/settle_pnl", body),
+          });
+          if (!settled.ok) return json(settleFailure(settled), request, 502);
           // Wait for Orderly to process (~4s)
           await new Promise(r => setTimeout(r, 4000));
-          // Fetch free_collateral
-          const holdingRes = await oReq("GET", "/v1/client/holding", null);
-          const holdings   = holdingRes?.data?.holding ?? [];
-          const usdcRow    = holdings.find(h => h.token === "USDC");
-          const freeCol    = Number(usdcRow?.holding ?? usdcRow?.available ?? 0);
+          // Free collateral from /v1/positions (withdrawV2.mjs freeCollateralFrom), never the holding:
+          // holding includes margin held by positions and orders, so a retry sized from it hit 78 again.
+          const freeGot = freeCollateralFrom(await oReq("GET", "/v1/positions", null));
+          if (!freeGot) return json({ ok: false, error: "free_collateral_unread", withdrawnAmount: 0, hint: "Couldn't read free collateral after settling. Nothing was withdrawn; try again." }, request, 502);
+          const freeCol = freeGot.free;
           // Leave 0.5 USDC buffer; cap at original requested amount
           const safeAmount = Math.min(Number(amount), Math.max(0, freeCol - 0.5));
-          if (safeAmount <= 0) {
-            return json({ ok: false, error: "insufficient_free_collateral", freeCollateral: freeCol,
-              hint: "After settlement, free collateral is too low to withdraw. Wait for the daily Orderly settlement cycle or close open positions." }, request, 400);
-          }
+          if (safeAmount <= 0) return json(insufficientFree(freeGot), request, 400);
           const safeUnits = Math.round(safeAmount * 1e6);
           // Rebuild message with safe amount + fresh nonce
           const nonceData2 = await oReq("GET", "/v1/withdraw_nonce", null);
@@ -3709,13 +3789,16 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           withdrawRes = await oReq("POST", "/v1/withdraw_request", {
             message: msg2, signature: sig2Data.signature, userAddress: walletNorm, verifyingContract: VC_W,
           });
+          const retryOk = withdrawRes?.success === true;
           return json({
-            ok: withdrawRes?.success ?? false,
+            ok: retryOk,
             autoSettled: true,
             originalAmount: amount,
-            withdrawnAmount: safeAmount,
+            attemptedAmount: safeAmount,
+            withdrawnAmount: retryOk ? safeAmount : 0, // what Orderly accepted, never what we tried
             freeCollateral: freeCol,
-            hint: safeAmount < Number(amount) ? `Withdrew ${safeAmount} USDC (adjusted from ${amount} to account for unsettled PnL of ~${(freeCol - safeAmount).toFixed(2)} USDC)` : undefined,
+            openPositions: freeGot.openPositions,
+            hint: retryOk && safeAmount < Number(amount) ? `Withdrew ${safeAmount} USDC (adjusted from ${amount}: ${freeCol} USDC was free after settling)` : undefined,
             raw: withdrawRes,
           }, request);
         }
@@ -3802,14 +3885,13 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           if (!amount || Number(amount) <= 0) return json({ error: "amount (USDC) required" }, request, 400);
           let effAmount = Number(amount);
           if (settle) {
-            await oReq("POST", "/v1/settle_pnl", {});
-            await new Promise(r => setTimeout(r, 4000));
-            const holdingRes = await oReq("GET", "/v1/client/holding", null);
-            const usdcRow = (holdingRes?.data?.holding ?? []).find(h => h.token === "USDC");
-            const freeCol = Number(usdcRow?.holding ?? usdcRow?.available ?? 0);
-            effAmount = Math.min(Number(amount), Math.max(0, freeCol - 0.5));
-            if (effAmount <= 0) return json({ ok: false, error: "insufficient_free_collateral", freeCollateral: freeCol,
-              hint: "Free collateral too low to withdraw after settlement. Close positions or wait for the daily settlement cycle." }, request, 400);
+            // A real settle needs the wallet's own SettlePnl signature (settlePnl.mjs) and this wallet signs
+            // on its side, so the server can't settle here: settle:true caps the amount to what is free.
+            // (Until 2026-11-06 it posted an empty settle that did nothing.) To settle: POST /settle-pnl.
+            const freeGot = freeCollateralFrom(await oReq("GET", "/v1/positions", null)); // never the holding
+            if (!freeGot) return json({ ok: false, error: "free_collateral_unread", hint: "Couldn't read free collateral. Try again." }, request, 502);
+            effAmount = Math.min(Number(amount), Math.max(0, freeGot.free - 0.5));
+            if (effAmount <= 0) return json(insufficientFree(freeGot), request, 400);
           }
           const nonceData = await oReq("GET", "/v1/withdraw_nonce", null);
           const withdrawNonce = nonceData?.data?.withdraw_nonce;
@@ -4491,6 +4573,18 @@ document.getElementById("btn").addEventListener("click",go);
       return json({ symbol: parts[2], candles: raw ? JSON.parse(raw) : [] }, request);
     }
 
+    // ── GET /agent/basis-history/:coin — recorded OKX spot-perp basis {t, basisPct} ───────
+    // The flow cron records it hourly into basis:hist:{BARE}. Exposed (read-only, public market data, no
+    // secrets) so a draft read on basis can be COUNTED from outside the worker before it is registered
+    // (tools/explorers/powerCheck.mjs, docs/research/explorer-drafts-4.md D · funding_basis_split).
+    if (parts[0] === "agent" && parts[1] === "basis-history" && parts[2] && request.method === "GET") {
+      const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
+      const coin = String(parts[2]).toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
+      if (!/^[A-Z0-9]{1,12}$/.test(coin)) return json({ error: "bad coin" }, request, 400);
+      const raw = await AGENT_KV.get(`basis:hist:${coin}`);
+      return json({ coin, points: raw ? JSON.parse(raw) : [] }, request);
+    }
+
     // ── GET /intel/persistence/:coin — SETUP MOMENTUM (persistence / decay) ───────
     // The one TIME-DERIVATIVE read: from the recorded oi:hist series, is the crowded
     // funding-fade still BUILDING (funding + OI both rising → you're early) or UNWINDING
@@ -4556,7 +4650,7 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "intel" && parts[1] === "axis-backtest" && request.method === "GET") {
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
-      const CACHE = `axisbt:v21:min${min}`; // v21 = + `stressStudy` (the registered stress-hour study, judged live by stressGrading.mjs, docs/research/stress-hours-prereg.md) · v20 = exits fill at their level, not the hour's extreme (stepExit, docs/research/level-reclaim-exit-gap.md) · v19 = price spine: first oi:hist row in an hour wins (docs/research/price-spine-drift-2026-10-29.md) · v18 = + oi_coil_break (registered 2026-10-27, docs/research/oi-coil-break-prereg.md) · v17 = + oi_div_reversal_4h (registered 2026-10-27, docs/research/oi-div-reversal-4h-prereg.md) · v16 = + `regimeWindow` on basis_x_cvd (main + holdout) and the BTC regime day counts (docs/research/graded-exit-regime-prereg.md) · v15 = funding block carries `feesNetBps` (fee-net on the same covered trades) · v14 = + `exitGraded.funding` (the graded exit also net of the funding paid while open, an estimate; informational) · v13 = + the four registered explorer reads (level_reclaim, oi_div_reversal, session_momentum, confluence_follow) · v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
+      const CACHE = axisbtCacheKey(min); // v26 = + funding_basis_split (registered 2026-11-07, funding-basis-split-prereg.md) + its overlap pair with confluence_follow · v25 = overlap pair oi_div_reversal × oi_div_reversal_4h (#271) · v24 = + btc_lead_lag (registered 2026-11-07, btc-lead-lag-prereg.md); the holdout line gets BTC as context only · v23 = overlap block covers batch 3 (OVERLAP_PAIRS) · v22 = + batch 3 (session_fade, level_reclaim_tight, spot_absorb; registered 2026-11-06) and spotcvd:hist in each coin set · v21 = + `stressStudy` (the registered stress-hour study, judged live by stressGrading.mjs, docs/research/stress-hours-prereg.md) · v20 = exits fill at their level, not the hour's extreme (stepExit, docs/research/level-reclaim-exit-gap.md) · v19 = price spine: first oi:hist row in an hour wins (docs/research/price-spine-drift-2026-10-29.md) · v18 = + oi_coil_break (registered 2026-10-27, docs/research/oi-coil-break-prereg.md) · v17 = + oi_div_reversal_4h (registered 2026-10-27, docs/research/oi-div-reversal-4h-prereg.md) · v16 = + `regimeWindow` on basis_x_cvd (main + holdout) and the BTC regime day counts (docs/research/graded-exit-regime-prereg.md) · v15 = funding block carries `feesNetBps` (fee-net on the same covered trades) · v14 = + `exitGraded.funding` (the graded exit also net of the funding paid while open, an estimate; informational) · v13 = + the four registered explorer reads (level_reclaim, oi_div_reversal, session_momentum, confluence_follow) · v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
       const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
@@ -4564,18 +4658,19 @@ document.getElementById("btn").addEventListener("click",go);
       const loadSets = async (coins) => {
       const coinSets = [];
       for (const coin of coins) {
-        const [oiHist, cvdHist, smHist, candleHist, basisHist, liqHist] = await Promise.all([
+        const [oiHist, cvdHist, smHist, candleHist, basisHist, liqHist, spotCvdHist] = await Promise.all([
           readJson(AGENT_KV, `oi:hist:PERP_${coin}_USDC`),
           readJson(AGENT_KV, `cvd:hist:${coin}`),
           readJson(AGENT_KV, `sm:hist:${coin}`),
           readJson(AGENT_KV, `candle:hist:PERP_${coin}_USDC`),
           readJson(AGENT_KV, `basis:hist:${coin}`),
           readJson(AGENT_KV, `liq:hist:${coin}`),
+          readJson(AGENT_KV, `spotcvd:hist:${coin}`), // spot-book CVD, read only by spot_absorb (spot-absorb-prereg.md)
         ]);
         // Include the coin if EITHER series has data — the candle axes grade off candle:hist
         // depth (backfilled), so a coin with deep candles but shallow oi still belongs. The
         // basis/liq axes ride the same price spine (oi/candle) for forward-return + R grading.
-        if ((oiHist || []).length >= 2 || (candleHist || []).length >= 2) coinSets.push({ coin, oiHist, cvdHist, smHist, candleHist, basisHist, liqHist });
+        if ((oiHist || []).length >= 2 || (candleHist || []).length >= 2) coinSets.push({ coin, oiHist, cvdHist, smHist, candleHist, basisHist, liqHist, spotCvdHist });
       }
       return coinSets;
       };
@@ -4587,14 +4682,15 @@ document.getElementById("btn").addEventListener("click",go);
       // Registered tests of a read that isn't a pipeline read: the Basis × CVD regime window (signed
       // 2026-10-26), graded from its own date on both lines. Measurement only.
       const tests = [{ axis: REGIME_WINDOW.axis, key: "regimeWindow", fromMs: regimeFromMs() }];
-      const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min, registered, oosExclude: isHoldoutCoin, tests, overlapPairs: [["basis_x_cvd", "rsi_reset_deep"]] });
+      const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min, registered, oosExclude: isHoldoutCoin, tests, overlapPairs: OVERLAP_PAIRS });
       // Holdout line: the signed-off eight on their own — the basis reads (holdout prereg) + every
       // pipeline read registered with a holdout line (its own registration doc).
       const holdoutSets = await loadSets(HOLDOUT_COINS);
       const holdoutRegs = registered.filter((x) => REGISTERED_READS.find((r) => r.axis === x.axis)?.holdout);
       const holdout = {
         signedOff: HOLDOUT_SIGNED_OFF, listed: [...HOLDOUT_COINS],
-        ...runHoldoutScorecard(holdoutSets, { horizons: [4, 12, 24], minSamples: min, axes: [...HOLDOUT_AXES, ...holdoutRegs.map((x) => x.axis)], registered: holdoutRegs, tests }),
+        // BTC rides along as CONTEXT only (ctxSets: never graded, never pooled): btc_lead_lag reads BTC's tape.
+        ...runHoldoutScorecard(holdoutSets, { horizons: [4, 12, 24], minSamples: min, axes: [...HOLDOUT_AXES, ...holdoutRegs.map((x) => x.axis)], registered: holdoutRegs, tests, ctxSets: coinSets.filter((c) => c.coin === "BTC") }),
         note: "Coins the basis read was never looked at on, picked on liquidity only and recorded from the sign-off date. Graded by the same code, never pooled into the main card. Accrues: basis needs 48h of history before it can fire, and the R grade needs hourly prices recorded since the sign-off. See docs/research/holdout-universe-prereg.md.",
       };
       // The stress-hour study (signed 2026-10-30): stress hours from the nine RECORDED_COINS, each read's
@@ -4890,7 +4986,11 @@ document.getElementById("btn").addEventListener("click",go);
       const address = parts[1].toLowerCase();
       const TWAP_KV = env.NEXUS_AGENT || env.LAB_STORE;
       const TWAP_ORDERLY = "https://api-evm.orderly.org";
-      const twapOwns = (walletSig) => typeof walletSig === "string" && recoverEthAddress("nexus-trading-key-v1", walletSig) === address;
+      // walletSig (v1) or a trading session (v2, AUTH_V2_KEYS): agentAuth.mjs. null = the owner.
+      const twapRefusal = async (body) => {
+        const r = await agentOwnerRefusal(env, address, body, { recover: recoverEthAddress });
+        return r ? json(r.body, request, r.status) : null;
+      };
 
       // GET /twap/:address — public status (progress from the same pure summary).
       if (request.method === "GET" && !parts[2]) {
@@ -4903,7 +5003,7 @@ document.getElementById("btn").addEventListener("click",go);
       // POST /twap/:address/start
       if (request.method === "POST" && parts[2] === "start") {
         let body; try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        if (!twapOwns(body?.walletSig)) return json({ error: "walletSig_required", hint: "start requires walletSig = sign_message('nexus-trading-key-v1') from the wallet's own signer." }, request, 401);
+        { const denied = await twapRefusal(body); if (denied) return denied; }
         // One active TWAP per wallet (child orders net per symbol/account anyway).
         const existing = await TWAP_KV.get(`twap:${address}`);
         if (existing) { const s = JSON.parse(existing); if (s.status === "ACTIVE") return json({ error: "twap_active", hint: "A TWAP is already running for this wallet — cancel it first." }, request, 409); }
@@ -4923,15 +5023,26 @@ document.getElementById("btn").addEventListener("click",go);
         if (!(markPrice > 0)) return json({ error: `no mark price for ${symbol}` }, request, 400);
         const plan = twapSchedule({ totalNotional, durationMin, slices, side, markPrice, baseTick: info.base_tick, baseMin: info.base_min, minNotional: info.min_notional ?? 10 });
         if (!plan.ok) return json({ error: "unschedulable", reason: plan.reason, hint: "Increase total size, reduce slices, or check the market." }, request, 400);
-        // Provision the order-only key from walletSig (same derivation as the agent;
-        // Orderly order-scope only — can trade, never withdraw).
-        const recRaw = await env.LAB_STORE.get("user:" + address);
-        if (!recRaw) return json({ error: "wallet_not_registered", hint: "Enable trading first (place one manual trade to generate the Orderly key)." }, request, 401);
-        const rec = JSON.parse(recRaw);
-        if (!rec.accountId) return json({ error: "wallet_not_registered", hint: "No Orderly account on file." }, request, 401);
-        const secret = await agentSecretFromWalletSig(body.walletSig);
-        const encryptedKey = await encryptSecret(secret, env);
-        await TWAP_KV.put(`twap:key:${address}`, JSON.stringify({ tradingKey: encryptedKey, accountId: rec.accountId, registeredAt: Date.now(), enc: "v1" }));
+        if (wantsV2(body)) {
+          // v2: link to the wallet's stored key (a pointer, never the secret). The whole schedule must
+          // finish before the key expires at Orderly, or its last slices could never be placed.
+          const link = await v2KeyPointer(env, address);
+          if (!link.ok) return json(link.body, request, link.status);
+          if (!twapFitsKey({ now: Date.now(), durationMin, expiresAt: link.expiresAt })) {
+            return json({ error: "key_expires_first", expiresAt: link.expiresAt, hint: "This TWAP would outlast your trading key. Rotate the key (POST /v2/key/begin) or shorten the TWAP." }, request, 409);
+          }
+          await TWAP_KV.put(`twap:key:${address}`, JSON.stringify(link.record));
+        } else {
+          // Provision the order-only key from walletSig (same derivation as the agent;
+          // Orderly order-scope only — can trade, never withdraw).
+          const recRaw = await env.LAB_STORE.get("user:" + address);
+          if (!recRaw) return json({ error: "wallet_not_registered", hint: "Enable trading first (place one manual trade to generate the Orderly key)." }, request, 401);
+          const rec = JSON.parse(recRaw);
+          if (!rec.accountId) return json({ error: "wallet_not_registered", hint: "No Orderly account on file." }, request, 401);
+          const secret = await agentSecretFromWalletSig(body.walletSig);
+          const encryptedKey = await encryptSecret(secret, env);
+          await TWAP_KV.put(`twap:key:${address}`, JSON.stringify({ tradingKey: encryptedKey, accountId: rec.accountId, registeredAt: Date.now(), enc: "v1" }));
+        }
         await TWAP_KV.delete(`twap:cancel:${address}`);
         const state = {
           status: "ACTIVE", startedAt: Date.now(), createdAt: Date.now(),
@@ -4949,7 +5060,7 @@ document.getElementById("btn").addEventListener("click",go);
       // POST /twap/:address/cancel — dedicated flag key (can't race the state write).
       if (request.method === "POST" && parts[2] === "cancel") {
         let body; try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        if (!twapOwns(body?.walletSig)) return json({ error: "walletSig_required" }, request, 401);
+        { const denied = await twapRefusal(body); if (denied) return denied; }
         await TWAP_KV.put(`twap:cancel:${address}`, "1", { expirationTtl: 3600 });
         return json({ ok: true, note: "Cancel requested — the next exec tick stops new slices. Already-filled slices remain your position." }, request);
       }
@@ -4971,19 +5082,27 @@ document.getElementById("btn").addEventListener("click",go);
       // force-close its positions. Auth = a personal_sign of "nexus-trading-key-v1"
       // (same sig the skill/web already produce); we ecrecover it and require the
       // recovered address to equal :address. GET reads stay public.
-      const ownsAgent = (walletSig) =>
-        typeof walletSig === "string" && recoverEthAddress("nexus-trading-key-v1", walletSig) === address;
-      const requireOwner = (walletSig) =>
-        ownsAgent(walletSig)
-          ? null
-          : json({ error: "walletSig_required", hint: "This agent action requires walletSig = sign_message('nexus-trading-key-v1') from the agent's own wallet." }, request, 401);
+      // Auth v2 step 3b: a body with `session` (AUTH_V2_KEYS) is checked as a trading session instead
+      // (agentAuth.mjs). Pass the whole JSON body.
+      const requireOwner = async (body) => {
+        const r = await agentOwnerRefusal(env, address, body, { recover: recoverEthAddress });
+        return r ? json(r.body, request, r.status) : null;
+      };
+      // Spec §C on the session path, ALWAYS (not behind AUTH_V2): arming AUTONOMOUS, or raising its
+      // capitalPerTrade / leverage, needs the per-request challenge (GET /auth/challenge) on top of the
+      // session, so a stolen session alone can't go live or size up. null = passed (nonce burned).
+      const sessionChallenge = async (body, action) => {
+        try { await checkChallenge(env, { action, wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig, now: Date.now() }); return null; }
+        catch (e) { if (e instanceof KeyRefused) return json(e.body, request, e.status); throw e; }
+      };
+      const storedConfig = async () => { try { return JSON.parse((await AGENT_KV.get(`agent:config:${address}`)) || "null"); } catch { return null; } };
 
       // GET /agent/:address/parity — LIVE-vs-GRADED parity (public, read-only)
       // Pairs every paper entry with the scoreboard event it traded (same market, side, basis
       // hour) and lists every graded event the agent was free to take but didn't. Explained
       // misses (position open, cooldown, daily caps, brain picked another market) are listed;
       // anything left is DRIFT between the live path and the grade. ?since=&until= (ISO or ms);
-      // since defaults to the last paper reset, else the oldest retained entry, else 24h. Same KV series the
+      // since defaults to where the record began (parityWindowStart), else 24h. Same KV series the
       // scoreboard reads, same axis generator — see app/lib/paperParity.mjs.
       if (request.method === "GET" && parts[2] === "parity") {
         const [configRaw, stateRaw] = await Promise.all([AGENT_KV.get(`agent:config:${address}`), AGENT_KV.get(`agent:state:${address}`)]);
@@ -4994,15 +5113,11 @@ document.getElementById("btn").addEventListener("click",go);
         const q = new URL(request.url).searchParams;
         const when = (v) => (v == null || v === "" ? null : (/^\d+$/.test(v) ? Number(v) : Date.parse(v)));
         const now = Date.now();
-        // Window start: explicit ?since, else the last paper reset, else the oldest retained paper
-        // entry, else the last 24h. (A reset done before paper_reset_at existed leaves no stamp, and
-        // judging events from before the run began would count them all as misses.)
-        const oldestOpen = (state.paper_trades || []).reduce((m, t) => { const o = Date.parse(t?.opened_at); return Number.isFinite(o) ? Math.min(m, o) : m; }, Infinity);
+        // Window start: explicit ?since, else where the record began (parityWindowStart: the later of
+        // the wallet's start and its last paper reset, bounded by the retained ledger), else the
+        // oldest retained entry, else the last 24h. Events from before the run began aren't misses.
         const qSince = when(q.get("since"));
-        const [since, sinceSource] = qSince != null ? [qSince, "query"]
-          : state.paper_reset_at ? [state.paper_reset_at, "paper_reset"]
-          : Number.isFinite(oldestOpen) ? [oldestOpen, "oldest_retained_entry"]
-          : [now - 86400000, "last_24h"];
+        const [since, sinceSource] = qSince != null ? [qSince, "query"] : parityWindowStart(state, now);
         const until = Math.min(when(q.get("until")) ?? now, now);
         if (!Number.isFinite(since) || !Number.isFinite(until) || since >= until) return json({ ok: false, error: "bad_window" }, request, 400);
         const gen = AXES.find((a) => a.name === axis)?.gen;
@@ -5106,7 +5221,7 @@ document.getElementById("btn").addEventListener("click",go);
       // The token is a SECRET — returned ONLY here, never on the public GET.
       if (request.method === "POST" && parts[2] === "webhook" && ["enable", "rotate", "disable"].includes(parts[3])) {
         const wbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(wbody.walletSig); if (denied) return denied;
+        const denied = await requireOwner(wbody); if (denied) return denied;
         const metaKey = `agent:webhook_meta:${address}`;
         const prevRaw = await AGENT_KV.get(metaKey);
         const prev = prevRaw ? JSON.parse(prevRaw) : null;
@@ -5143,7 +5258,7 @@ document.getElementById("btn").addEventListener("click",go);
         }
         if (request.method === "POST" && !parts[3]) {
           const b = await request.json().catch(() => ({}));
-          const denied = requireOwner(b.walletSig); if (denied) return denied;
+          const denied = await requireOwner(b); if (denied) return denied;
           if (!b.name || !b.config) return json({ error: "name and config required" }, request, 400);
           const raw = await AGENT_KV.get(key);
           const list = raw ? JSON.parse(raw) : [];
@@ -5156,7 +5271,7 @@ document.getElementById("btn").addEventListener("click",go);
         // POST /agent/:address/strategies/:id/publish {public} — toggle sharing.
         if (request.method === "POST" && parts[3] && parts[4] === "publish") {
           const b = await request.json().catch(() => ({}));
-          const denied = requireOwner(b.walletSig); if (denied) return denied;
+          const denied = await requireOwner(b); if (denied) return denied;
           const raw = await AGENT_KV.get(key);
           const list = raw ? JSON.parse(raw) : [];
           const s = list.find((x) => x.id === parts[3]);
@@ -5172,7 +5287,7 @@ document.getElementById("btn").addEventListener("click",go);
         }
         if (request.method === "DELETE" && parts[3]) {
           const b = await request.json().catch(() => ({}));
-          const denied = requireOwner(b.walletSig); if (denied) return denied;
+          const denied = await requireOwner(b); if (denied) return denied;
           const raw = await AGENT_KV.get(key);
           const list = (raw ? JSON.parse(raw) : []).filter((s) => s.id !== parts[3]);
           await AGENT_KV.put(key, JSON.stringify(list));
@@ -5183,7 +5298,7 @@ document.getElementById("btn").addEventListener("click",go);
       // POST /agent/:address/pending/:id/(deploy|dismiss) — resolve a thesis
       if (request.method === "POST" && parts[2] === "pending" && parts[3] && parts[4]) {
         const pbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(pbody.walletSig); if (denied) return denied;
+        const denied = await requireOwner(pbody); if (denied) return denied;
         const action = parts[4];
         const pendingRaw = await AGENT_KV.get(`agent:pending:${address}`);
         const list = pendingRaw ? JSON.parse(pendingRaw) : [];
@@ -5195,7 +5310,7 @@ document.getElementById("btn").addEventListener("click",go);
       // POST /agent/:address/paper/reset — clear the simulated paper ledger
       if (request.method === "POST" && parts[2] === "paper" && parts[3] === "reset") {
         const prbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(prbody.walletSig); if (denied) return denied;
+        const denied = await requireOwner(prbody); if (denied) return denied;
         const stateRaw = await AGENT_KV.get(`agent:state:${address}`);
         if (!stateRaw) return json({ ok: true, cleared: 0 }, request);
         const state = JSON.parse(stateRaw);
@@ -5232,7 +5347,7 @@ document.getElementById("btn").addEventListener("click",go);
         if (config.mode !== "PAPER") return json({ error: "test-signal only allowed in PAPER mode" }, request, 403);
         let body = {};
         try { body = await request.json(); } catch { /* optional */ }
-        const denied = requireOwner(body?.walletSig); if (denied) return denied;
+        const denied = await requireOwner(body); if (denied) return denied;
         const direction = body?.direction === "SHORT" ? "SHORT" : "LONG";
         const symbol = (config.symbols && config.symbols[0]) || "PERP_BTC_USDC";
         let price = 0;
@@ -5257,12 +5372,19 @@ document.getElementById("btn").addEventListener("click",go);
       if (request.method === "PUT" && !parts[2]) {
         let body;
         try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        const denied = requireOwner(body.walletSig); if (denied) return denied;
+        const denied = await requireOwner(body); if (denied) return denied;
         const { config, tradingKey, accountId } = body;
         // PAPER mode is fully simulated — it never places real orders, so no
         // trading key is required or stored.
         const isPaper = config?.mode === "PAPER";
-        if (!config || (!isPaper && !tradingKey)) return json({ error: "config and tradingKey required" }, request, 400);
+        // v2 (a session): the live agent links to the wallet's stored key; no key travels in the body.
+        const v2Live = !isPaper && wantsV2(body);
+        if (!config || (!isPaper && !v2Live && !tradingKey)) return json({ error: "config and tradingKey required" }, request, 400);
+        let v2Link = null;
+        if (v2Live) {
+          v2Link = await v2KeyPointer(env, address);
+          if (!v2Link.ok) return json(v2Link.body, request, v2Link.status);
+        }
         if (config.signalMode && PRO_STRATEGIES.includes(config.signalMode) && !(await walletIsPro(address, env))) {
           return json({ error: "pro_strategy_locked", strategy: config.signalMode, hint: "MOMENTUM and MEAN_REVERSION require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe. Free: CONFLUENCE, FUNDING_ONLY, OI_ONLY, BASIS_FADE." }, request, 402);
         }
@@ -5270,19 +5392,36 @@ document.getElementById("btn").addEventListener("click",go);
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
-        { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        // The one-wallet live lift (app/lib/liveLift.mjs, build #3, disarmed: the var is empty in wrangler.toml).
+        { const cfgL = config; const lifts = parseLiveLift(env[LIVE_LIFT_VAR]); const liveLift = liveLifted(cfgL, address, lifts); const note = liveLiftNote(cfgL, address, lifts);
+          { const why = gradedExitRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "graded_exit_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); }
+          { const why = riskSizingRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "risk_sizing_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); } }
+        // Operator features (portfolio delta cap + execution push callbacks): validate
+        // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
+        const opv = validateOperatorConfig(config);
+        if (!opv.ok) return json({ error: opv.error, hint: opv.hint }, request, 400);
+        if (opv.usesPro && !(await walletIsPro(address, env))) {
+          return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
+        }
+        if (v2Live && configChallengeNeeded(await storedConfig(), config)) {
+          const ch = await sessionChallenge(body, "agent.activate"); if (ch) return ch;
+        }
         const prevLeadersAct = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         // Keep the public copiers count in sync (activate can also change autocopy).
         const cdAct = diffCopyLeaders(prevLeadersAct, config.autocopy?.leaders, address);
         if (cdAct.added.length || cdAct.removed.length) await applyCopiersDiff(env, address, cdAct.added, cdAct.removed).catch((e) => console.error("[copiers] sync", e));
-        if (!isPaper) {
+        if (v2Link) {
+          await AGENT_KV.put(`agent:key:${address}`, JSON.stringify(v2Link.record)); // a pointer, never the secret
+        } else if (!isPaper) {
           // Encrypt the trading key at rest — KV never holds it in plaintext.
           const encryptedKey = await encryptSecret(tradingKey, env);
           await AGENT_KV.put(`agent:key:${address}`, JSON.stringify({ tradingKey: encryptedKey, accountId, registeredAt: Date.now(), enc: "v1" }));
         }
+        // Re-activating cancels a pending kill (same as bankr/activate); a stale flag would stop it next tick.
+        await AGENT_KV.delete(`agent:kill:${address}`);
         const existingState = await AGENT_KV.get(`agent:state:${address}`);
-        const state = existingState ? JSON.parse(existingState) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), current_position: null, last_signal: null };
+        const state = existingState ? JSON.parse(existingState) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), started_at: Date.now(), current_position: null, last_signal: null };
         state.active = true;
         await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
         const usersRaw = await AGENT_KV.get("agent:users");
@@ -5295,7 +5434,7 @@ document.getElementById("btn").addEventListener("click",go);
       if (request.method === "PUT" && parts[2] === "config") {
         let body;
         try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        const denied = requireOwner(body.walletSig); if (denied) return denied;
+        const denied = await requireOwner(body); if (denied) return denied;
         const { config } = body;
         if (!config) return json({ error: "config required" }, request, 400);
         if (config.signalMode && PRO_STRATEGIES.includes(config.signalMode) && !(await walletIsPro(address, env))) {
@@ -5305,7 +5444,20 @@ document.getElementById("btn").addEventListener("click",go);
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
-        { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        // The one-wallet live lift (app/lib/liveLift.mjs, build #3, disarmed: the var is empty in wrangler.toml).
+        { const cfgL = config; const lifts = parseLiveLift(env[LIVE_LIFT_VAR]); const liveLift = liveLifted(cfgL, address, lifts); const note = liveLiftNote(cfgL, address, lifts);
+          { const why = gradedExitRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "graded_exit_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); }
+          { const why = riskSizingRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "risk_sizing_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); } }
+        // Operator features (portfolio delta cap + execution push callbacks): validate
+        // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
+        const opv = validateOperatorConfig(config);
+        if (!opv.ok) return json({ error: opv.error, hint: opv.hint }, request, 400);
+        if (opv.usesPro && !(await walletIsPro(address, env))) {
+          return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
+        }
+        if (wantsV2(body) && configChallengeNeeded(await storedConfig(), config)) {
+          const ch = await sessionChallenge(body, "agent.config"); if (ch) return ch;
+        }
         const prevLeaders = await prevCopyLeaders(env, address);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         // Keep the public copiers count in sync with autocopy follow/unfollow.
@@ -5317,11 +5469,25 @@ document.getElementById("btn").addEventListener("click",go);
       // DELETE /agent/:address — deactivate
       if (request.method === "DELETE" && !parts[2]) {
         const dbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(dbody.walletSig); if (denied) return denied;
+        const denied = await requireOwner(dbody); if (denied) return denied;
         await AGENT_KV.delete(`agent:key:${address}`);
         const stateRaw = await AGENT_KV.get(`agent:state:${address}`);
+        let leftOpen = null; // a LIVE position the agent stops managing (only what rests on Orderly stays)
+        let warning = null;
+        let staleStops = null; // backstops left by earlier closes whose cancel never went through
         if (stateRaw) {
           const state = JSON.parse(stateRaw);
+          const p = state.current_position;
+          if (p && !p.paper) {
+            leftOpen = { symbol: p.symbol, direction: p.direction, qty: p.remaining_qty ?? p.qty ?? null, backstop: p.backstop?.id ? { trigger: p.backstop.trigger ?? null, own: p.backstop.foreign === true } : null };
+            warning = deactivatedMessage(p);
+          }
+          const stale = (state.backstop_cleanup || []).filter((it) => it && it.id && it.symbol);
+          if (stale.length) {
+            staleStops = stale.map((it) => ({ symbol: it.symbol, id: it.id }));
+            const where = [...new Set(stale.map((it) => String(it.symbol).replace(/^PERP_|_USDC$/g, "")))].join(", ");
+            warning = `${warning ? warning + " " : ""}An old backstop stop may still rest on ${where}: cancel it on the Trade page (TP/SL orders) before you trade there.`;
+          }
           state.active = false;
           state.current_position = null;
           await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
@@ -5331,28 +5497,18 @@ document.getElementById("btn").addEventListener("click",go);
           const users = JSON.parse(usersRaw).filter((u) => u !== address);
           await AGENT_KV.put("agent:users", JSON.stringify(users));
         }
-        return json({ ok: true }, request);
+        return json(warning ? { ok: true, leftOpen, ...(staleStops ? { staleStops } : {}), warning } : { ok: true }, request);
       }
 
       // POST /agent/:address/kill — kill switch
       if (request.method === "POST" && parts[2] === "kill") {
         const kbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(kbody.walletSig); if (denied) return denied;
-        // Phase 3 (#14): kill force-closes positions → request-bound v2 on top of the
-        // static sig. No-op unless AUTH_V2 is on.
-        const deniedV2 = await requireOwnerV2(env, request, { action: "agent.kill", wallet: address, nonce: kbody.nonce, v2Sig: kbody.v2Sig });
-        if (deniedV2) return deniedV2;
-        // Emergency stop must be un-clobberable. Write a DEDICATED kill flag the
-        // exec consumes + clears — never rely on a state field the exec also
-        // rewrites every minute (that write could race and drop the kill).
-        await AGENT_KV.put(`agent:kill:${address}`, "1");
-        await AGENT_KV.delete(`agent:key:${address}`);
-        const usersRaw = await AGENT_KV.get("agent:users");
-        if (usersRaw) {
-          const users = JSON.parse(usersRaw).filter((u) => u !== address);
-          await AGENT_KV.put("agent:users", JSON.stringify(users));
-        }
-        return json({ ok: true, message: "Kill switch activated" }, request);
+        const denied = await requireOwner(kbody); if (denied) return denied;
+        // No per-request challenge on kill (borst 2026-10-31): stopping stays cheap. Owner proof only.
+        // Emergency stop must be un-clobberable: a DEDICATED kill flag the exec consumes +
+        // clears. The key + agent:users entry stay so exec can close first (routes-kill.mjs).
+        const k = await handleAgentKill({ kv: AGENT_KV, address });
+        return json(k.body, request);
       }
 
       // ── POST /agent/:address/directive — arm a directional "trade my thesis"
@@ -5363,13 +5519,13 @@ document.getElementById("btn").addEventListener("click",go);
       if (request.method === "POST" && parts[2] === "directive") {
         let body;
         try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        const denied = requireOwner(body?.walletSig); if (denied) return denied;
+        const denied = await requireOwner(body); if (denied) return denied;
 
         const mode = body?.mode === "AUTONOMOUS" ? "AUTONOMOUS" : "PAPER";
         if (mode === "AUTONOMOUS" && body?.confirm !== "GO LIVE") {
           return json({ error: "confirm_required", hint: 'A live directive places a real market order — pass confirm:"GO LIVE". The order-only key cannot withdraw.' }, request, 409);
         }
-        if (mode === "AUTONOMOUS") {
+        if (mode === "AUTONOMOUS" && !wantsV2(body)) { // the session path takes its own challenge below, always
           const deniedV2 = await requireOwnerV2(env, request, { action: "agent.activate", wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig });
           if (deniedV2) return deniedV2;
         }
@@ -5396,7 +5552,12 @@ document.getElementById("btn").addEventListener("click",go);
         }
 
         // AUTONOMOUS needs the order-only key — derive from walletSig (like activate).
-        if (mode === "AUTONOMOUS") {
+        if (mode === "AUTONOMOUS" && wantsV2(body)) {
+          const link = await v2KeyPointer(env, address);
+          if (!link.ok) return json(link.body, request, link.status);
+          const ch = await sessionChallenge(body, "agent.activate"); if (ch) return ch; // a live directive = a real order
+          await AGENT_KV.put(`agent:key:${address}`, JSON.stringify(link.record)); // a pointer, never the secret
+        } else if (mode === "AUTONOMOUS") {
           const haveKey = await AGENT_KV.get(`agent:key:${address}`);
           if (!haveKey) {
             const recRaw = await env.LAB_STORE.get("user:" + address);
@@ -5437,7 +5598,7 @@ document.getElementById("btn").addEventListener("click",go);
 
         // Activate + register so the exec picks it up next tick.
         const stRaw = await AGENT_KV.get(`agent:state:${address}`);
-        const state = stRaw ? JSON.parse(stRaw) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: now, current_position: null, last_signal: null };
+        const state = stRaw ? JSON.parse(stRaw) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: now, started_at: now, current_position: null, last_signal: null };
         state.active = true;
         await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
         const usersRaw2 = await AGENT_KV.get("agent:users");
@@ -5455,7 +5616,7 @@ document.getElementById("btn").addEventListener("click",go);
       // use /kill to stop a live one).
       if (request.method === "DELETE" && parts[2] === "directive") {
         const dbody = await request.json().catch(() => ({}));
-        const denied = requireOwner(dbody.walletSig); if (denied) return denied;
+        const denied = await requireOwner(dbody); if (denied) return denied;
         const raw = await AGENT_KV.get(`agent:directive:${address}`);
         if (!raw) return json({ ok: true, cancelled: false }, request);
         let ex = null; try { ex = JSON.parse(raw); } catch { /* ignore */ }
@@ -5473,14 +5634,15 @@ document.getElementById("btn").addEventListener("click",go);
         try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
         // Ownership auth for ALL modes (PAPER included) — activating/reconfiguring an
         // agent is a mutation. Live modes additionally derive the key from this sig below.
-        const denied = requireOwner(body?.walletSig); if (denied) return denied;
+        const denied = await requireOwner(body); if (denied) return denied;
         const mode = ["PAPER", "ASSISTED", "AUTONOMOUS"].includes(body?.mode) ? body.mode : "PAPER";
         if (mode === "AUTONOMOUS" && body?.confirm !== "GO LIVE") {
           return json({ error: "confirm_required", hint: 'Live trading needs confirm:"GO LIVE". The agent uses an order-only key that cannot withdraw.' }, request, 409);
         }
         // Phase 3 (#14): going live (AUTONOMOUS) arms real-money trading → request-bound
         // v2 on top of confirm + static sig. Sim/assisted modes keep the static-sig gate.
-        if (mode === "AUTONOMOUS") {
+        // The session path takes its own challenge below, always.
+        if (mode === "AUTONOMOUS" && !wantsV2(body)) {
           const deniedV2 = await requireOwnerV2(env, request, { action: "agent.activate", wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig });
           if (deniedV2) return deniedV2;
         }
@@ -5495,11 +5657,28 @@ document.getElementById("btn").addEventListener("click",go);
           return json({ error: "pro_dca_locked", hint: "DCA / safety-order mode requires Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
         }
         // The graded exit is PAPER ONLY (app/lib/gradedExit.mjs; exec refuses it too) — never stored on a live config.
-        { const why = gradedExitRefusal(config, config.mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        // The one-wallet live lift (app/lib/liveLift.mjs, build #3, disarmed: the var is empty in wrangler.toml).
+        { const cfgL = config; const lifts = parseLiveLift(env[LIVE_LIFT_VAR]); const liveLift = liveLifted(cfgL, address, lifts); const note = liveLiftNote(cfgL, address, lifts);
+          { const why = gradedExitRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "graded_exit_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); }
+          { const why = riskSizingRefusal(cfgL, config.mode === "PAPER", { liveLift }); if (why) return json({ error: "risk_sizing_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); } }
+        // Operator features (portfolio delta cap + execution push callbacks): validate
+        // shape, then gate behind the same PRO check as momentum/mean-reversion/DCA.
+        const opv = validateOperatorConfig(config);
+        if (!opv.ok) return json({ error: opv.error, hint: opv.hint }, request, 400);
+        if (opv.usesPro && !(await walletIsPro(address, env))) {
+          return json({ error: "pro_operator_locked", hint: "Portfolio delta caps and execution callbacks require Nexus PRO — hold ARCHITECT-tier $NEXUS or subscribe." }, request, 402);
+        }
 
         // Live modes need the delegated key. Derive it from the wallet signature
         // (auth) + the registered accountId.
-        if (mode !== "PAPER") {
+        if (mode !== "PAPER" && wantsV2(body)) {
+          const link = await v2KeyPointer(env, address);
+          if (!link.ok) return json(link.body, request, link.status);
+          if (configChallengeNeeded(await storedConfig(), config)) {
+            const ch = await sessionChallenge(body, "agent.activate"); if (ch) return ch;
+          }
+          await AGENT_KV.put(`agent:key:${address}`, JSON.stringify(link.record)); // a pointer, never the secret
+        } else if (mode !== "PAPER") {
           if (!body?.walletSig) return json({ error: "walletSig required", hint: "Call sign_message('nexus-trading-key-v1') and pass walletSig for live modes." }, request, 400);
           const recRaw = await env.LAB_STORE.get("user:" + address);
           if (!recRaw) return json({ error: "wallet_not_registered", hint: "Register first via POST /proxy/bankr-register, then retry." }, request, 401);
@@ -5513,7 +5692,7 @@ document.getElementById("btn").addEventListener("click",go);
         await AGENT_KV.put(`agent:config:${address}`, JSON.stringify(config));
         await AGENT_KV.delete(`agent:kill:${address}`); // clear any stale kill flag from a prior KILL
         const existingState = await AGENT_KV.get(`agent:state:${address}`);
-        const state = existingState ? JSON.parse(existingState) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), current_position: null, last_signal: null };
+        const state = existingState ? JSON.parse(existingState) : { active: true, daily_pnl: 0, trades_today: 0, last_reset: Date.now(), started_at: Date.now(), current_position: null, last_signal: null };
         state.active = true;
         await AGENT_KV.put(`agent:state:${address}`, JSON.stringify(state));
         const usersRaw = await AGENT_KV.get("agent:users");
@@ -5528,25 +5707,36 @@ document.getElementById("btn").addEventListener("click",go);
       if (request.method === "POST" && parts[2] === "bankr" && parts[3] === "mode") {
         let body;
         try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
-        const denied = requireOwner(body?.walletSig); if (denied) return denied;
+        const denied = await requireOwner(body); if (denied) return denied;
         const mode = body?.mode;
         if (!["PAPER", "ASSISTED", "AUTONOMOUS"].includes(mode)) return json({ error: "mode must be PAPER | ASSISTED | AUTONOMOUS" }, request, 400);
         if (mode === "AUTONOMOUS" && body?.confirm !== "GO LIVE") {
           return json({ error: "confirm_required", hint: 'Going live needs confirm:"GO LIVE".' }, request, 409);
         }
         // Phase 3 (#14): flipping live → request-bound v2 (same as activate go-live).
-        if (mode === "AUTONOMOUS") {
+        // The session path takes its own challenge below, always.
+        if (mode === "AUTONOMOUS" && !wantsV2(body)) {
           const deniedV2 = await requireOwnerV2(env, request, { action: "agent.mode", wallet: address, nonce: body?.nonce, v2Sig: body?.v2Sig });
           if (deniedV2) return deniedV2;
         }
         const configRaw = await AGENT_KV.get(`agent:config:${address}`);
         if (!configRaw) return json({ error: "no_agent", hint: "Activate the agent first via /agent/:address/bankr/activate." }, request, 400);
         const config = JSON.parse(configRaw);
-        { const why = gradedExitRefusal({ ...config, mode }, mode === "PAPER"); if (why) return json({ error: "graded_exit_refused", hint: why }, request, 409); }
+        // The one-wallet live lift (app/lib/liveLift.mjs, build #3, disarmed: the var is empty in wrangler.toml).
+        { const cfgL = { ...config, mode }; const lifts = parseLiveLift(env[LIVE_LIFT_VAR]); const liveLift = liveLifted(cfgL, address, lifts); const note = liveLiftNote(cfgL, address, lifts);
+          { const why = gradedExitRefusal(cfgL, mode === "PAPER", { liveLift }); if (why) return json({ error: "graded_exit_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); }
+          { const why = riskSizingRefusal(cfgL, mode === "PAPER", { liveLift }); if (why) return json({ error: "risk_sizing_refused", hint: note ? `${why} (live lift: ${note})` : why }, request, 409); } }
 
         // Live modes require the order-only key to exist; provision it from the
         // wallet signature if this agent was previously PAPER (no key stored).
-        if (mode !== "PAPER") {
+        if (mode !== "PAPER" && wantsV2(body)) {
+          const link = await v2KeyPointer(env, address);
+          if (!link.ok) return json(link.body, request, link.status);
+          if (configChallengeNeeded(config, { ...config, mode })) {
+            const ch = await sessionChallenge(body, "agent.mode"); if (ch) return ch;
+          }
+          await AGENT_KV.put(`agent:key:${address}`, JSON.stringify(link.record)); // a pointer, never the secret
+        } else if (mode !== "PAPER") {
           const haveKey = await AGENT_KV.get(`agent:key:${address}`);
           if (!haveKey) {
             if (!body?.walletSig) return json({ error: "walletSig required", hint: "Going live needs walletSig (sign_message('nexus-trading-key-v1'))." }, request, 400);
@@ -5707,6 +5897,11 @@ document.getElementById("btn").addEventListener("click",go);
     // verbatim to the one fixed upstream (oneClickUpstream, keyProxy.mjs). No key ⇒ 503
     // xc_not_configured and the browser quotes 1Click directly, as before (fetchOneClickQuote).
     // The browser checks 1Click's signature on the reply, so this hop adds no trust.
+    // Read-only: did a 1Click swap really settle? Proven from the destination chain (routes-xcsettle.mjs).
+    {
+      const res = await handleXcSettlement(parts, request, env);
+      if (res) return res;
+    }
     if (parts[0] === "xc") {
       const up = oneClickUpstream(request.method, parts);
       if (!up) return json({ error: "xc_route_not_allowed" }, request, 404);
@@ -5780,6 +5975,7 @@ document.getElementById("btn").addEventListener("click",go);
       if (rep.error) return json({ error: rep.error }, request, 400);
       const io = {
         fetchImpl: fetch,
+        nearSettle: (depositAddress) => settleDeposit(depositAddress, env),
         solRpc: (method, params) => solRpcServer(env, method, params),
         evmRpc: async (chainId, method, params) => {
           for (const u of EVM_RPCS[chainId] || []) {

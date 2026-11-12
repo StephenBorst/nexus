@@ -56,7 +56,7 @@ test("snapshot: writes the SAME row shapes as before (t + basisPct, t + cvd/buy/
   const c = h.hist("cvd:hist:ETH");
   assert.deepEqual(Object.keys(c[0]).sort(), ["buy", "cvd", "sell", "t"]);
   assert.deepEqual([c[0].buy, c[0].sell, c[0].cvd], [200, 100, 100]);
-  assert.match(h.logs.log[0], /basis 2\/2 · cvd 2\/2 · retries 0/);
+  assert.match(h.logs.log[0], /basis 2\/2 · cvd 2\/2 · spot cvd 2\/2 · retries 0/);
   assert.deepEqual(h.logs.error, []);
 });
 
@@ -64,7 +64,7 @@ test("snapshot: a rate-limited ticker is retried and the hour still lands", asyn
   const h = harness({ script: { "ticker:ETH-USDT-SWAP": [LIMITED(), LIMITED(), ticker(99.9)] } });
   await snapshotFlow(h.env, ["BTC", "ETH"], h.opts);
   assert.equal(h.hist("basis:hist:ETH").length, 1, "the hour that used to be dropped is now written");
-  assert.match(h.logs.log[0], /basis 2\/2 · cvd 2\/2 · retries 2/);
+  assert.match(h.logs.log[0], /basis 2\/2 · cvd 2\/2 · spot cvd 2\/2 · retries 2/);
   assert.deepEqual(h.logs.error, []);
 });
 
@@ -75,7 +75,7 @@ test("snapshot: a coin that never answers is skipped LOUDLY, and the others stil
   assert.equal(h.hist("cvd:hist:HYPE").length, 1, "its CVD still lands");
   assert.equal(h.hist("basis:hist:SOL").length, 1, "a later coin is not starved");
   assert.equal(n, 3);
-  assert.match(h.logs.log[0], /basis 2\/3 · cvd 3\/3/);
+  assert.match(h.logs.log[0], /basis 2\/3 · cvd 3\/3 · spot cvd 3\/3/);
   assert.equal(h.logs.error.length, 1);
   assert.match(h.logs.error[0], /MISSED 1: HYPE basis: okx 50011 Too Many Requests \(HTTP 200\), 4 tries/);
 });
@@ -85,7 +85,7 @@ test("snapshot: paced — never more than a coin's two tickers in flight, a gap 
   await snapshotFlow(h.env, ["BTC", "ETH", "SOL", "BNB"], h.opts);
   assert.equal(h.maxInFlight(), 2, "spot + perp together, nothing else alongside");
   assert.equal(h.slept.filter((ms) => ms === FLOW_COIN_GAP_MS).length, 3, "one gap between each pair of coins");
-  assert.equal(h.calls.length, 12, "3 OKX calls per coin when nothing fails");
+  assert.equal(h.calls.length, 16, "4 OKX calls per coin when nothing fails (2 tickers, perp trades, spot trades)");
 });
 
 test("snapshot: a bad tick is logged, not retried, and writes nothing", async () => {
@@ -100,4 +100,28 @@ test("snapshot: the hourly guard is unchanged (a row <55 min old blocks a second
   const h = harness({ kvSeed: { "basis:hist:BTC": [{ t: T0 - 30 * 60 * 1000, basisPct: -0.04 }] } });
   await snapshotFlow(h.env, ["BTC"], h.opts);
   assert.equal(h.hist("basis:hist:BTC").length, 1);
+});
+
+test("snapshot: spot CVD lands in its own series from the SPOT book, same row shape as cvd:hist", async () => {
+  const h = harness({ script: { "trades:BTC-USDT": [resp({ code: "0", data: [
+    { ts: String(T0 - 1000), side: "buy", sz: "5", px: "100" }, { ts: String(T0 - 2000), side: "sell", sz: "1", px: "100" },
+  ] })] } });
+  await snapshotFlow(h.env, ["BTC"], h.opts);
+  assert.ok(h.calls.some((u) => u.includes("/market/trades?instId=BTC-USDT&")), "spot trades are read");
+  const s = h.hist("spotcvd:hist:BTC");
+  assert.equal(s.length, 1);
+  assert.deepEqual(Object.keys(s[0]).sort(), ["buy", "cvd", "sell", "t"]);
+  assert.deepEqual([s[0].buy, s[0].sell, s[0].cvd], [500, 100, 400]);
+  assert.deepEqual(h.hist("cvd:hist:BTC")[0].cvd, 100, "perp CVD is untouched by the spot read");
+});
+
+test("snapshot: a spot-trades failure is logged and leaves basis + perp CVD written", async () => {
+  const h = harness({ script: { "trades:ETH-USDT": [LIMITED()] } });
+  const n = await snapshotFlow(h.env, ["ETH"], h.opts);
+  assert.equal(n, 1);
+  assert.equal(h.hist("spotcvd:hist:ETH").length, 0);
+  assert.equal(h.hist("basis:hist:ETH").length, 1);
+  assert.equal(h.hist("cvd:hist:ETH").length, 1);
+  assert.match(h.logs.log[0], /spot cvd 0\/1/);
+  assert.match(h.logs.error[0], /ETH spot cvd: okx 50011/);
 });

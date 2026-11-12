@@ -34,6 +34,15 @@ export const PIPELINE_RULES = Object.freeze({
 
 export const STAGES = Object.freeze(["REGISTERED", "LEAD", "EDGE", "TRADEABLE", "PAPER", "RETIRED"]);
 
+// The Paper gate (pipeline-if-then.md, signed 2026-10-23): 30+ paper trades, parity CLEAN, net positive after fees,
+// before a written live plan. /proof and the landing count toward it (signalProgress.mjs).
+export const PAPER_MIN_TRADES = 30;
+
+// level_reclaim's paper wallet: set up by borst 2026-11-05 via the hidden link (/lab?tab=agent&deploy=level-reclaim-paper,
+// LEVEL_RECLAIM_PAPER_CONFIG, a fresh wallet). Recording it moves the served stage TRADEABLE → PAPER, as the signed
+// Tradeable rule says ("borst sets up one paper wallet"); the daily watcher records that change in its own PR.
+const LEVEL_RECLAIM_PAPER_WALLET = "0x95e26E980e300C34360933b849457F42c6Bd7622";
+
 // Each registration: the scoreboard axis that IS the rule (frozen in code), the side it trades,
 // the moment from which its events count (always in the future when written, so nothing counted
 // was seen first), the doc that registered it, whether it gets a holdout line and a graded-exit
@@ -57,7 +66,7 @@ export const REGISTERED_READS = Object.freeze([
     doc: "docs/research/explorers-prereg.md",
     holdout: true,
     gradedExit: true,
-    paperWallet: null,
+    paperWallet: axis === "level_reclaim" ? LEVEL_RECLAIM_PAPER_WALLET : null,
   })),
   // Batch 2, signed by borst 2026-10-27 (docs/research/oi-div-reversal-4h-prereg.md): the 24h
   // oi_div_reversal rule on a 4h window, OI −2%, 12h cooldown. Out-of-sample from 2026-10-28T00:00Z.
@@ -77,6 +86,60 @@ export const REGISTERED_READS = Object.freeze([
     side: "BOTH",
     registeredAt: "2026-10-28T00:00:00Z",
     doc: "docs/research/oi-coil-break-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
+  // Batch 3, borst's go 2026-11-06 ("make it all happen"): session_momentum's event traded the other way
+  // (an inverted rule is a NEW read, never a licence from the old one's grade), and level_reclaim taken
+  // only when the coin is quiet for itself. Out-of-sample from 2026-11-08T00:00Z.
+  Object.freeze({
+    axis: "session_fade",
+    side: "BOTH",
+    registeredAt: "2026-11-08T00:00:00Z",
+    doc: "docs/research/session-fade-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
+  Object.freeze({
+    axis: "level_reclaim_tight",
+    side: "BOTH",
+    registeredAt: "2026-11-08T00:00:00Z",
+    doc: "docs/research/level-reclaim-tight-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
+  // Batch 3: the spot vs perp CVD split (spot-perp-cvd-draft.md). spotcvd:hist records from 2026-11-05 and
+  // the rule needs 14 days of it, so it counts from 2026-11-20T00:00Z.
+  Object.freeze({
+    axis: "spot_absorb",
+    side: "BOTH",
+    registeredAt: "2026-11-20T00:00:00Z",
+    doc: "docs/research/spot-absorb-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
+  // Batch 4, borst 2026-11-07 ("register lead-lag at p90 / 0.75"): BTC leads, a lagging alt follows. The first
+  // read that uses another coin's tape: on the holdout line BTC's candles ride along as context, never graded.
+  Object.freeze({
+    axis: "btc_lead_lag",
+    side: "BOTH",
+    registeredAt: "2026-11-08T00:00:00Z",
+    doc: "docs/research/btc-lead-lag-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
+  // Batch 4 D, borst 2026-11-07 ("register funding-basis at the drafted setting"): funding and the spot-perp
+  // basis disagree; follow the basis. Basis is recorded on 9 of the 11 main-card coins (not ARB, WLD).
+  Object.freeze({
+    axis: "funding_basis_split",
+    side: "BOTH",
+    registeredAt: "2026-11-08T00:00:00Z",
+    doc: "docs/research/funding-basis-split-prereg.md",
     holdout: true,
     gradedExit: true,
     paperWallet: null,

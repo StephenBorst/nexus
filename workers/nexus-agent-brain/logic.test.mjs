@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deriveSignal, oiSnapshotDue, signalSourceT } from "./logic.mjs";
+import { deriveSignal, oiSnapshotDue, signalSourceT, prevSnapshotUsable, candleFetchDue, PREV_MAX_AGE_MS } from "./logic.mjs";
+import { readFileSync } from "node:fs";
 
 // raw helper: funding in decimal, changes in decimal
 const raw = (o) => ({ fundingRate: 0, priceChange: 0, oiChange: 0, hasPrev: true, ...o });
@@ -353,4 +354,58 @@ test("signalSourceT: the basis row's time for BASIS_FADE, null otherwise", () =>
   assert.equal(signalSourceT(raw, { signalMode: "FUNDING_ONLY" }), null);
   assert.equal(signalSourceT({}, { signalMode: "BASIS_FADE" }), null);
   assert.equal(signalSourceT(null, { signalMode: "BASIS_FADE" }), null);
+});
+
+test("prevSnapshotUsable: only a recent snapshot is a previous cycle", () => {
+  const now = Date.parse("2026-11-09T12:00:00Z");
+  assert.equal(PREV_MAX_AGE_MS, 12 * 60 * 1000);
+  assert.equal(prevSnapshotUsable({ price: 100, oi: 5, timestamp: now - 5 * 60e3 }, now), true, "one cycle ago");
+  assert.equal(prevSnapshotUsable({ price: 100, oi: 5, timestamp: now - PREV_MAX_AGE_MS }, now), true, "edge");
+  assert.equal(prevSnapshotUsable({ price: 100, oi: 5, timestamp: now - PREV_MAX_AGE_MS - 1 }, now), false);
+  assert.equal(prevSnapshotUsable({ price: 100, oi: 5, timestamp: now - 3 * 86400e3 }, now), false, "a 3-day-old snapshot is not a 5-minute delta");
+  for (const bad of [null, undefined, {}, { price: 100 }, { price: 100, timestamp: "x" }, { price: 0, timestamp: now }, { price: 100, timestamp: now + 60e3 }]) {
+    assert.equal(prevSnapshotUsable(bad, now), false, JSON.stringify(bad));
+  }
+});
+
+test("a stale snapshot gives no delta, so MOMENTUM / OI modes sit out instead of trading a days-old move", () => {
+  // what evaluateSymbol hands deriveSignal when the snapshot is unusable: no prev, zero deltas
+  const raw = { fundingRate: 0, priceChange: 0, oiChange: 0, hasPrev: false };
+  for (const signalMode of ["MOMENTUM", "MEAN_REVERSION", "OI_ONLY", "CONFLUENCE"]) {
+    assert.equal(deriveSignal(raw, { signalMode, priceChangeThreshold: 0.5 }).direction, "NONE", signalMode);
+  }
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const ev = src.slice(src.indexOf("async function evaluateSymbol("), src.indexOf("async function recordOiForSymbols("));
+  assert.match(ev, /const prev = prevSnapshotUsable\(stored\) \? stored : null;/);
+  assert.match(ev, /hasPrev: !!prev/, "hasPrev follows the usable snapshot");
+  assert.ok(ev.indexOf("prevSnapshotUsable(stored)") < ev.indexOf("const priceChange"), "checked before any delta");
+});
+
+test("candleFetchDue: fetch only when the last closed bar isn't stored yet", () => {
+  const H = 3600e3;
+  const now = Date.parse("2026-11-09T12:20:00Z");
+  const closed = Date.parse("2026-11-09T11:00:00Z"); // the bar that closed at 12:00
+  assert.equal(candleFetchDue({ t: closed }, now), false, "stored: no fetch (the old gate fetched here every tick)");
+  assert.equal(candleFetchDue({ t: closed - H }, now), true, "one bar behind: fetch");
+  assert.equal(candleFetchDue({ t: closed }, Date.parse("2026-11-09T13:00:10Z")), true, "a new bar closed at 13:00");
+  assert.equal(candleFetchDue(null, now), true);
+  assert.equal(candleFetchDue({ t: "x" }, now), true);
+  // over a whole hour of 5-minute ticks, with the bar stored, nothing is fetched
+  let fetches = 0;
+  for (let m = 0; m < 60; m += 5) if (candleFetchDue({ t: closed }, Date.parse("2026-11-09T12:00:00Z") + m * 60e3)) fetches++;
+  assert.equal(fetches, 0);
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  assert.match(src, /if \(last && !candleFetchDue\(last, now\)\) continue;/);
+  assert.doesNotMatch(src, /now - last\.t < 55 \* 60 \* 1000/);
+});
+
+test("heartbeat: stamped only by a run that got through, never by one that died", () => {
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const run = src.slice(src.indexOf("async scheduled(event, env)"), src.indexOf("async function evaluateSymbol("));
+  assert.match(run, /finally \{[\s\S]*if \(completed\) \{ try \{ await env\.NEXUS_AGENT\.put\("ops:brain:heartbeat"/);
+  assert.equal((run.match(/ops:brain:heartbeat/g) || []).length, 1, "one stamp, inside the guard");
+  const fatal = run.indexOf('console.error("[brain] fatal error:"');
+  const done = run.lastIndexOf("completed = true;", fatal);
+  assert.ok(done > 0 && done < fatal, "set at the end of the try, before the catch");
+  assert.equal((run.match(/completed = true; return;/g) || []).length, 2, "the healthy no-users exits count as completed");
 });

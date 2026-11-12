@@ -19,6 +19,7 @@ import { normalizeSymbol } from "./logic.mjs";
 import { publicLabView } from "../../app/lib/labAuth.mjs";
 import { prepareSeal, claimLegacyOwners } from "./labWrite.mjs";
 import { readPublishMark } from "./publishMark.mjs";
+import { notifyFollowersOfCalls } from "./followAlerts.mjs";
 import { REGISTRY_KEY, readRegistry, bootstrapRegistry, isPublished } from "./callLock.mjs";
 
 // 401 and nothing else happens. `error` tells the client which action to re-sign for.
@@ -210,6 +211,9 @@ export async function handleLab(parts, request, env, { now = Date.now, readMark 
     // Strip copy metadata + the signature before persisting (a stored signature is a replayable one)
     const { labAuth: _la, copiedFromWallet: _cfw, copiedThesisSymbol: _cts, copiedThesisDirection: _ctd, copiedThesisId: _cti, ...dataToSave } = body;
     await commit(dataToSave);
+    // Followers hear about the calls this save published for the first time (after the write: a failed
+    // save tells nobody). Best-effort, bounded (followAlerts.mjs).
+    await notifyFollowersOfCalls(env, address, sealed.newlyPublished);
     return json({
       ok: true,
       published: sealed.theses.filter((t) => isPublished(sealed.registry, t.id)),

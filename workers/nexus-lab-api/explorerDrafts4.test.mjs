@@ -1,0 +1,80 @@
+// Batch-4 explorer DRAFTS (docs/research/explorer-drafts-4.md). Not registered, so: never on the scoreboard,
+// behaviour on hand-built tapes, no lookahead, and the power check counts only.
+// Run: node --test workers/nexus-lab-api/explorerDrafts4.test.mjs
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { DRAFT_GENS_4, DRAFT_READS_4 } from "./explorerDrafts4.mjs";
+import { AXES } from "./axisbt.mjs";
+import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
+import { hourBucket } from "../../app/lib/basisStack.mjs";
+
+const H = 3600000;
+// A Monday 00:00 UTC, so weekly and 8h settlement boundaries line up with whole bars.
+const T0 = Date.UTC(2026, 6, 6, 0, 0, 0);
+const candlesMap = (rows) => new Map(rows.map((c) => [hourBucket(c.t), c]));
+
+test("drafts are not graded: off the scoreboard, unregistered, and nothing else imports them", () => {
+  const graded = new Set(AXES.map((a) => a.name));
+  const registered = new Set(REGISTERED_READS.map((r) => r.axis));
+  for (const n of Object.keys(DRAFT_GENS_4)) {
+    assert.ok(!graded.has(n), `${n} is on the scoreboard before it is registered`);
+    assert.ok(!registered.has(n), `${n} is registered: move it out of the drafts file in the registration PR`);
+  }
+  for (const f of ["./axisbt.mjs", "./index.js", "../nexus-agent-brain/index.js", "../nexus-agent-brain/logic.mjs", "../nexus-agent-exec/index.js"]) {
+    assert.doesNotMatch(readFileSync(new URL(f, import.meta.url), "utf8"), /explorerDrafts4/, `${f} must not import the drafts`);
+  }
+  assert.deepEqual(DRAFT_READS_4.map((r) => r.name), []); // batch 4 settled 2026-11-07: A and D registered, B and C dropped
+});
+
+// seeded random tape with every series the drafts read; BTC and the alt share a seed offset
+function tape(n, seed = 7, { btc = false } = {}) {
+  let s = seed >>> 0;
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32; };
+  let p = 100, oi = 1000, basis = 0.02;
+  const oiHist = [], candleHist = [], basisHist = [];
+  for (let i = 0; i < n; i++) {
+    const o = p;
+    const shock = rnd() < 0.04 ? (rnd() - 0.5) * 0.08 : 0;
+    p *= 1 + (rnd() - 0.5) * 0.012 + (btc ? shock : shock * 0.2);
+    oi *= 1 + (rnd() - 0.5) * 0.02;
+    basis += (rnd() - 0.5) * 0.02;
+    const hi = Math.max(o, p) * (1 + rnd() * 0.004), lo = Math.min(o, p) * (1 - rnd() * 0.004);
+    candleHist.push({ t: T0 + i * H, o, h: hi, l: lo, c: p, v: 1 });
+    oiHist.push({ t: T0 + i * H + 120000, price: p, oi, funding: (rnd() - 0.5) * 0.0006 + (i % 200 < 30 ? 0.0004 : 0) });
+    basisHist.push({ t: T0 + i * H + 300000, basisPct: basis });
+  }
+  return { oiHist, candleHist, basisHist };
+}
+
+test("no lookahead: for every draft, the future never changes past events", () => {
+  const btcFull = tape(1800, 3, { btc: true });
+  const full = { coin: "ETH", ...tape(1800, 11) };
+  for (const [name, gen] of Object.entries(DRAFT_GENS_4)) {
+    const ctx = { btcCandles: candlesMap(btcFull.candleHist) };
+    const all = gen(full, null, ctx);
+    assert.ok(all.length > 0, `${name}: the tape must make it fire`);
+    for (const cutH of [1100, 1400, 1700]) {
+      const cut = T0 + cutH * H;
+      const poison = (t) => ({
+        oiHist: t.oiHist.map((r) => (r.t > cut ? { ...r, price: r.price * 3, oi: r.oi * 0.1, funding: -r.funding * 5 } : r)),
+        candleHist: t.candleHist.map((c) => (c.t + H > cut ? { ...c, o: c.o * 3, h: c.h * 3, l: c.l * 0.2, c: c.c * 0.3 } : c)),
+        basisHist: t.basisHist.map((r) => (r.t > cut ? { ...r, basisPct: -r.basisPct * 9 } : r)),
+      });
+      const pctx = { btcCandles: candlesMap(poison(btcFull).candleHist) };
+      const before = (evs) => evs.filter((e) => e.t <= cut).map((e) => `${e.t}|${e.side}`);
+      assert.deepEqual(before(gen({ coin: "ETH", ...poison(full) }, null, pctx)), before(all), `${name} looked past ${cutH}h`);
+    }
+  }
+});
+
+test("GET /agent/basis-history/:coin is read-only: GET only, one KV read of basis:hist, a sanitized coin", () => {
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const i = src.indexOf('parts[1] === "basis-history"');
+  assert.ok(i > 0, "the route exists");
+  const block = src.slice(i, src.indexOf("\n    }\n", i));
+  assert.match(block, /request\.method === "GET"/);
+  assert.match(block, /AGENT_KV\.get\(`basis:hist:\$\{coin\}`\)/);
+  assert.match(block, /\/\^\[A-Z0-9\]\{1,12\}\$\/\.test\(coin\)/);
+  assert.doesNotMatch(block, /\.put\(|\.delete\(/, "never writes");
+});

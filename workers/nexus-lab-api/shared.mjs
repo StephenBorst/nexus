@@ -145,7 +145,8 @@ export async function appendNotification(env, wallet, notif, opts = {}) {
     const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
     const chatId = await AGENT_KV.get(`tg:chat:${w}`);
     if (chatId && env.TELEGRAM_TOKEN && notif?.message) {
-      const link = notif?.thesisId ? `\nhttps://trade.nexustradinglabs.com/feed/thesis/${w}/${notif.thesisId}` : "";
+      // The call lives under its AUTHOR's wallet (thesisWallet: a followed caller's or challenger's call), else the recipient's own.
+      const link = notif?.thesisId ? `\nhttps://trade.nexustradinglabs.com/feed/thesis/${String(notif.thesisWallet || w).toLowerCase()}/${notif.thesisId}` : "";
       await fetch(`https://api.telegram.org/bot${env.TELEGRAM_TOKEN}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

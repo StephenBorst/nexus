@@ -45,13 +45,19 @@ export { ENTRY_AT_MARK_PCT };
  *   fillSec = the post time, or the start of the hour the order filled in. fillIdx = that hour's
  *   candle (-1 when filled at the post). next = the first candle that can grade the call.
  */
+/** Seconds per bar of a candle set: `cd.step` when given (60 for minute grading), else the hour. */
+export const barStep = (cd) => (Number(cd?.step) > 0 ? Number(cd.step) : 3600);
+
 export function entryFill(t, cd) {
   const startSec = Math.floor((t?.createdAt || 0) / 1000);
   const n = cd && Array.isArray(cd.t) ? cd.t.length : 0;
   let i = 0;
   while (i < n && cd.t[i] < startSec) i++;          // the first hour that starts at or after the post
   // The market the call was posted into: the hour containing the post, else the first hour after it.
-  const ref = i < n && cd.t[i] === startSec ? i : i > 0 && cd.t[i - 1] > startSec - 3600 ? i - 1 : i;
+  // The bar length: 1h store bars, or 1-minute bars for a call graded on them (cd.step = 60,
+  // app/lib/minuteGrade.mjs). Same rule either way, just a finer bar.
+  const step = barStep(cd);
+  const ref = i < n && cd.t[i] === startSec ? i : i > 0 && cd.t[i - 1] > startSec - step ? i - 1 : i;
   const entry = Number(t?.entryPrice);
   const traded = (k) => cd.l[k] <= entry && entry <= cd.h[k];
   const mark = Number(t?.publishMark?.px);
@@ -104,6 +110,20 @@ export function entryFill(t, cd) {
  *   closed in (for a split, the hour its LAST half closed). Hour precision, like `tp1At` and the
  *   fill: candles can't say when inside the hour. Hold time = exitAt − the fill.
  *
+ * - MINUTE BARS (2026-11-12, app/lib/minuteGrade.mjs). A call published from MINUTE_GRADE_FROM_MS is
+ *   graded on 1-minute bars (cd.step = 60): the same rules with a minute where this says an hour, so
+ *   the fill, tp1At and exitAt carry minute precision and a "same candle" is a same minute. The time
+ *   stop stays counted in hours (see below).
+ *
+ * - A DECLARED TIME STOP (2026-11-06, callMath `timeStopPlan`). A call published with `timeStopH: N`
+ *   that touches neither level by the close of bar N settles at that close: R = the move from entry
+ *   to the close ÷ the risk (entry to stop), 2dp; WIN when R > 0, else LOSS; `exitReason: "TIME"`.
+ *   Bar 0 = the posting hour (filled at the post) or the fill hour (a resting order); bar 1 starts at
+ *   the first hour graded. The window is counted in TIME, not candles (a thin market can skip an
+ *   hour): it ends at bar 1's start + N hours, and the call settles at the close of the last bar
+ *   printed before that, only once a later bar exists (the store's last bar may be a partial hour).
+ *   TP and stop are checked first in every bar, bar N included; a missing close = PENDING.
+ *
  * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, takeProfit2?, exitPlan?, createdAt, publishMark? }
  * @param {object} cd candles { t:number[] (sec), h:number[], l:number[] } ascending by t
  * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number, awaitingEntry?:true, exitAt?:number,
@@ -116,11 +136,25 @@ export function gradeCall(t, cd) {
   if (R == null) return { outcome: "INVALID", r: 0 };
   const split = splitPlan(t);
   if (split && split.invalid) return { outcome: "INVALID", r: 0 };
+  const stop = timeStopPlan(t);
+  if (stop && stop.invalid) return { outcome: "INVALID", r: 0 };
   const long = String(t.direction).toUpperCase() === "LONG";
   const fill = entryFill(t, cd);
   if (!fill.filled) return { outcome: "PENDING", r: 0, awaitingEntry: true };
   let i = fill.next;
   const f = fill.fillIdx;
+  // The time stop's window end (sec): bar 1 starts at the first hour graded (the hour after a resting
+  // order's fill hour; the first hour starting at or after the post), and runs `hours` hours.
+  // Counted in HOURS whatever the bar: on 1-minute bars a resting order's fill minute sits inside its
+  // fill hour, and bar 1 is the hour after that (floor is a no-op on hourly bars).
+  const bar1 = fill.atPost ? Math.ceil(fill.fillSec / 3600) * 3600 : Math.floor(cd.t[f] / 3600) * 3600 + 3600;
+  const timeEnd = stop ? bar1 + stop.hours * 3600 : Infinity;
+  const timeOut = (k) => {
+    const close = Number(cd.c?.[k]), risk = Math.abs(Number(entryPrice) - Number(stopLoss));
+    if (!(k >= 0) || !Number.isFinite(close) || !(close > 0) || !(risk > 0)) return { outcome: "PENDING", r: 0 };
+    const r = round(((long ? close - entryPrice : entryPrice - close)) / risk, 2);
+    return { outcome: r > 0 ? "WIN" : "LOSS", r, exitAt: cd.t[k], exitReason: TIME_EXIT };
+  };
   const stopHit = (k) => (long ? cd.l[k] <= stopLoss : cd.h[k] >= stopLoss);
   const reached = (k, px) => (long ? cd.h[k] >= px : cd.l[k] <= px);
   const stopped = (k) => split
@@ -128,6 +162,7 @@ export function gradeCall(t, cd) {
     : { outcome: "LOSS", r: -1, exitAt: cd.t[k] };
   if (f >= 0 && stopHit(f)) return stopped(f);
   for (; i < cd.t.length; i++) {
+    if (cd.t[i] >= timeEnd) return timeOut(i - 1); // a bar after the window: the window's last bar has closed
     const tp = reached(i, takeProfit1), sl = stopHit(i);
     if (sl) return stopped(i);           // a same-candle target + stop is a LOSS (conservative)
     if (!tp) continue;
@@ -147,8 +182,8 @@ export function gradeCall(t, cd) {
 
 // The declared split exit (see gradeCall) and the rule that reads it live ONCE in app/lib/callMath.mjs,
 // shared with the publish lock, /theses/status and the cards. A TP2 equal to TP1 = a single target.
-import { SPLIT_EXIT, splitPlan } from "../../app/lib/callMath.mjs";
-export { SPLIT_EXIT, splitPlan };
+import { SPLIT_EXIT, splitPlan, timeStopPlan, TIME_EXIT } from "../../app/lib/callMath.mjs";
+export { SPLIT_EXIT, splitPlan, timeStopPlan, TIME_EXIT };
 
 /**
  * Where a draft's entry sits against the market right now (the latest hour's range), for the
@@ -2565,4 +2600,32 @@ export function attachCatalystTheses(board, markByCoin, gateByCoin = {}, opts = 
     }),
   }));
   return { ...board, catalysts, gradeableCount: catalysts.reduce((n, c) => n + c.impacts.filter((i) => i.thesis).length, 0) };
+}
+
+// ── Operator config validation (PRO) ─────────────────────────────────────────
+// Portfolio delta caps + execution push callbacks are PRO agent features (same
+// 100M-$NEXUS / ARCHITECT gate as momentum, mean-reversion and DCA). This validates
+// their shape so a bad value is a clean 400 (not a silent misconfig), AND reports
+// whether the config actually USES a PRO feature, so the route runs the PRO gate
+// once. A callbackUrl must be https and carry a ≥16-char webhookSecret (used to
+// HMAC-sign every callback). maxPortfolioDeltaUsd must be a positive USD number
+// (0 / omitted = off). Pure + deterministic (URL parsing only).
+export function validateOperatorConfig(config) {
+  const out = { ok: true, usesPro: false };
+  const cap = config?.maxPortfolioDeltaUsd;
+  if (cap != null && cap !== "" && Number(cap) !== 0) {
+    const n = Number(cap);
+    if (!Number.isFinite(n) || n < 0) return { ok: false, error: "bad_maxPortfolioDeltaUsd", hint: "maxPortfolioDeltaUsd must be a positive USD number (or 0/omitted to disable)." };
+    if (n > 0) out.usesPro = true;
+  }
+  const url = config?.callbackUrl;
+  if (url != null && url !== "") {
+    let u;
+    try { u = new URL(String(url)); } catch { return { ok: false, error: "bad_callbackUrl", hint: "callbackUrl must be a valid https:// URL." }; }
+    if (u.protocol !== "https:") return { ok: false, error: "bad_callbackUrl", hint: "callbackUrl must use https://." };
+    const secret = config?.webhookSecret;
+    if (!secret || String(secret).length < 16) return { ok: false, error: "bad_webhookSecret", hint: "A callbackUrl requires a webhookSecret of at least 16 characters — it HMAC-signs every callback." };
+    out.usesPro = true;
+  }
+  return out;
 }

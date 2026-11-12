@@ -5,6 +5,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { gradePublicTheses, GRADE_V, isCurrentStamp } from "./grading.mjs";
+import { _pinMinuteGradeFrom } from "../../app/lib/minuteGrade.mjs";
+// This suite tests the HOURLY grader on calls built from Date.now(): pin it (minuteGrade.mjs).
+_pinMinuteGradeFrom(Infinity);
 
 const H = 3600, D = 86400;
 const W = "0x" + "cd".repeat(20);

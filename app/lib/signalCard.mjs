@@ -30,6 +30,9 @@ export const AXIS_BLURB = {
   oi_div_reversal_4h: "A big 4h move while open interest falls. Fades it.",
   oi_coil_break: "Open interest builds while price goes nowhere. Follows the break out of the range.",
   session_momentum: "A bigger-than-usual NY open move (13–15 UTC). Goes with it.",
+  session_fade: "The same bigger-than-usual NY open move (13–15 UTC). Bets against it.",
+  level_reclaim_tight: "The prior-day sweep and reclaim, taken only when the coin is calmer than usual.",
+  spot_absorb: "Perps push price one way while spot trades the other and open interest is flat. Goes with spot.",
   confluence_follow: "Funding and OI agree on a fade. Goes the other way, with the crowd.",
 };
 

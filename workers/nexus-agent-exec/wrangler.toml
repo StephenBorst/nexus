@@ -11,6 +11,10 @@ id = "c3c0582ec71c4d049d0795872f39f033"
 crons = ["* * * * *"]
 
 [vars]
+# One-wallet live lift of the graded exit (app/lib/liveLift.mjs, build #3 of docs/research/live-plan-level-reclaim.md).
+# "0xWALLET@LEVEL_RECLAIM". EMPTY = DISARMED: every non-PAPER graded-exit / fixed-risk / level_reclaim config is refused.
+# Kept identical in lab-api, exec and brain (liveLift.test.mjs). Arming = borst in person, in a PR that records it.
+GRADED_EXIT_LIVE_LIFT = ""
 ORDERLY_API = "https://api-evm.orderly.org"
 
 [observability.logs]

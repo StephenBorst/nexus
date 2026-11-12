@@ -11,9 +11,11 @@ import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import CarrySleeve from "./CarrySleeve";
 import FeaturedLead from "./FeaturedLead";
+import { recordShareText, recordShareHref, recordShareLink } from "@/lib/recordShare.mjs";
+import { agoShort } from "@/lib/callPulse.mjs";
 import Fold from "./Fold";
 import HowWeGrade from "./HowWeGrade";
-import { callsRecordLine, callersLine } from "@/lib/proofCopy.mjs";
+import { callsRecordLine, callersLine, PLAIN_WORDS, engineNote } from "@/lib/proofCopy.mjs";
 import SignalBoard, { type Scorecard } from "./SignalBoard";
 import { pressKey } from "@/utils/a11y";
 
@@ -28,6 +30,8 @@ const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const usd = (n: number) => `${n < 0 ? "-" : "+"}$${Math.abs(n) >= 1000 ? `${(Math.abs(n) / 1000).toFixed(1)}K` : Math.abs(n).toFixed(2)}`;
 
 // ── data types (only the fields we render) ──
+// Our engine callers' all-time graded record (GET /calls/pulse `engineRecords`, app/lib/callPulse.mjs).
+type EngineRecord = { wallet: string; caller?: string; graded: number; wins: number; netR: number; lastAt: number | null };
 type Caller = { wallet: string; displayName?: string; pfp?: string; hitRate: number; avgR: number; calls: number; score: number; meritRank?: { glyph: string; title: string } | null };
 type Agent = { rank: number; wallet: string; displayName?: string; pfp?: string; trades: number; winRate: number; netPnl: number; profitFactor: number; score: number };
 type ArenaAgent = { wallet: string; name: string; builder?: string; currentPosition?: { symbol: string; direction: string } | null; paper?: { trades: number; winRate: number; netPnl: number } | null; live?: { trades: number; winRate: number; netPnl: number } | null };
@@ -130,9 +134,11 @@ export default function ProofPage() {
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [arena, setArena] = useState<ArenaAgent[] | null>(null);
   const [desks, setDesks] = useState<Desk[] | null>(null);
+  const [engineRecs, setEngineRecs] = useState<EngineRecord[] | null>(null);
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [proof, setProof] = useState<ProofOfEdge | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
+  const [shareHref, setShareHref] = useState<string | null>(null);
   const [allCalls, setAllCalls] = useState(false);
   const [minCalls, setMinCalls] = useState(5);
   const [howOpen, setHowOpen] = useState(false);
@@ -147,6 +153,7 @@ export default function ProofPage() {
     fetch(`${API}/agents/leaderboard`).then((r) => r.json()).then((d) => setAgents(Array.isArray(d?.leaderboard) ? d.leaderboard : [])).catch(() => setAgents([]));
     fetch(`${API}/arena/agents`).then((r) => r.json()).then((d) => setArena(Array.isArray(d?.agents) ? d.agents : [])).catch(() => setArena([]));
     fetch(`${API}/desks`).then((r) => r.json()).then((d) => setDesks(Array.isArray(d?.desks) ? d.desks : [])).catch(() => setDesks([]));
+    fetch(`${API}/calls/pulse`).then((r) => r.json()).then((d) => { setEngineRecs(Array.isArray(d?.engineRecords) ? d.engineRecords : []); const t = recordShareText(d); setShareHref(t ? recordShareHref(t, recordShareLink(d)) : null); }).catch(() => setEngineRecs([]));
     fetch(`${API}/agents/ledger`).then((r) => r.json()).then(setLedger).catch(() => setLedger(null));
     fetch(`${API}/theses/proof-of-edge`).then((r) => r.json()).then((d) => setProof({ cards: Array.isArray(d?.cards) ? d.cards : [], summary: d?.summary })).catch(() => setProof({ cards: [] }));
     fetch(`${API}/intel/axis-backtest`).then((r) => r.json()).then((d) => setScorecard(Array.isArray(d?.axes) ? d : { axes: [] })).catch(() => setScorecard({ axes: [], failed: true }));
@@ -159,8 +166,11 @@ export default function ProofPage() {
 
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", padding: isMobile ? "24px 16px 60px" : "40px 24px 80px" }}>
-      {/* 1 · THE VERDICT — nothing has cleared the bar; the bar in one sentence. */}
-      <FeaturedLead isMobile={isMobile} onHowWeGrade={openHow} />
+      {/* 1 · THE VERDICT — computed from the served stages (proofHeadline); the bar in one sentence. */}
+      <FeaturedLead isMobile={isMobile} onHowWeGrade={openHow} scorecard={scorecard} shareHref={shareHref} />
+
+      {/* The words, in plain English, right where they first appear (tooltips can't be hovered on a phone). */}
+      <PlainWords isMobile={isMobile} />
 
       {/* 2 · THE SIGNALS — the ones being tested, then the rest folded. The misses stay on it. */}
       <SignalBoard scorecard={scorecard} />
@@ -220,6 +230,40 @@ export default function ProofPage() {
 
       {/* 4 · THE OTHER RECORDS — one tap away. */}
       <section style={{ marginTop: 30, borderBottom: `1px solid ${BORDER}` }}>
+        {/* Our engine callers: our own bots post calls from their own wallets and take the same grade as
+            everyone, counted apart from people (callPulse.mjs). Losses stay on it: it's an experiment in the
+            open, not a signal service. */}
+        <Fold title="Our engine callers" count={engineRecs?.length}>
+          {engineRecs === null ? empty("loading…") : engineRecs.length === 0 ? empty("No engine call graded yet.") : (
+            <>
+              <div style={{ marginTop: -2, marginBottom: 10, fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.5 }}>
+                Our own bots post calls from their own wallets. Same grader, same public price, counted apart from people. An experiment in the open, losses included. Not a signal service.
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {engineRecs.map((e) => {
+                  const winPct = e.graded > 0 ? Math.round((e.wins / e.graded) * 100) : 0;
+                  const note = engineNote(e.wallet);
+                  return (
+                    <div role="link" tabIndex={0} key={e.wallet} onClick={() => navigate(`/feed/trader/${e.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${e.wallet}`))} style={{ ...rowStyle(true), ...rowM, flexWrap: "wrap", rowGap: 4, overflowX: "visible" }}>
+                      <span style={{ ...nameCell, display: "flex", alignItems: "center", gap: 8 }}>
+                        {e.caller || short(e.wallet)}
+                        <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", color: FOG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "0 4px", flexShrink: 0 }}>ENGINE</span>
+                      </span>
+                      <span style={{ ...statCell, ...statM }}>
+                        {e.graded} graded · {winPct}% wins · <span style={{ color: e.netR >= 0 ? POS : NEG, whiteSpace: "nowrap" }}>{e.netR >= 0 ? "+" : "−"}{Math.abs(e.netR).toFixed(1)}R net</span>
+                        {/* Freshness: a quiet engine reads as quiet, not alive (lastAt = its newest graded call). */}
+                        {e.lastAt ? <span style={{ whiteSpace: "nowrap" }}> · last graded {agoShort(e.lastAt, Date.now())} ago</span> : null}
+                      </span>
+                      {/* What it trades, in plain words (ENGINE_NOTES, proofCopy.mjs). */}
+                      {note && <span style={{ order: 20, flexBasis: "100%", fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.45, whiteSpace: "normal" }}>{note}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </Fold>
+
         <Fold title="Autonomous agents" count={agents?.length}>
           {agents === null ? empty("loading…") : agents.length === 0 ? empty("No ranked agents yet: 10 live trades over 3+ days to qualify.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -303,5 +347,22 @@ export default function ProofPage() {
         </Fold>
       </div>
     </div>
+  );
+}
+
+// ── The words, in plain English (PLAIN_WORDS, app/lib/proofCopy.mjs) ──
+function PlainWords({ isMobile }: { isMobile: boolean }) {
+  return (
+    <section aria-label="What the words mean" style={{ marginTop: 28, border: `1px solid ${BORDER}`, borderRadius: 10, background: SURFACE_ALT, padding: isMobile ? "12px 14px" : "14px 18px" }}>
+      <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: MUTED, marginBottom: 8 }}>What the words mean</div>
+      <dl style={{ margin: 0, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: isMobile ? "6px 0" : "8px 22px" }}>
+        {PLAIN_WORDS.map((w) => (
+          <div key={w.term} style={{ fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.45 }}>
+            <dt style={{ display: "inline", fontFamily: MONO, fontSize: 11.5, fontWeight: 600, color: BRIGHT, letterSpacing: "0.04em" }}>{w.term}</dt>
+            <dd style={{ display: "inline", margin: 0 }}> · {w.text}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

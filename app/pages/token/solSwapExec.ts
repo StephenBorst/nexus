@@ -28,6 +28,11 @@
 //          • RECEIVE: the user's own output-token accounts gain ≥ the quote's minimum.
 //          All three FAIL CLOSED: a balance we can't read means we don't sign.
 //       6) the quote's minimum received respects the slippage asked (checkMinOut).
+//       7) instruction shapes: every instruction outside Jupiter's program is one a swap uses (create
+//          the wallet's own token account, wrap/unwrap its own wSOL). An Approve, SetAuthority or
+//          System Assign moves no balance, so (5) can't see it: refused by shape (jupBuild.mjs).
+//       8) lookup tables: the tables the reply claims match the chain (read via /sol/rpc), so the
+//          accounts checked above are the accounts the chain resolves.
 //       Pure checks: app/lib/solSwapGuards.mjs (tested).
 //   • Freshness: a Solana blockhash expires in ~60-90s, so executeSolBuy RE-FETCHES a fresh swap tx
 //     (re-running every guard on the exact bytes it will sign) right before signing — a stale plan is
@@ -45,7 +50,7 @@
 import { Connection, VersionedTransaction, PublicKey, TransactionMessage, TransactionInstruction, AddressLookupTableAccount } from "@solana/web3.js";
 import { Buffer } from "buffer";
 import { tokenAccountAmount, checkSpend, checkReceive } from "@/lib/solSwapGuards.mjs";
-import { checkBuild, coreInstructions, cuPriceOf, cuLimitData, cuPriceData, COMPUTE_BUDGET, CU_LIMIT_MAX, PRICE_TAKER } from "@/lib/jupBuild.mjs";
+import { checkBuild, altClaimRefusal, coreInstructions, cuPriceOf, cuLimitData, cuPriceData, COMPUTE_BUDGET, CU_LIMIT_MAX, PRICE_TAKER } from "@/lib/jupBuild.mjs";
 
 // Jupiter is reached through OUR worker (og.nexustradinglabs.com/swap/jup/*) so the api.jup.ag
 // x-api-key stays server-side. The response is Jupiter's raw quote/swap, guarded below before signing.
@@ -134,7 +139,7 @@ function resolveRpc(_provider: SolProvider): string {
 // (confirmations===null) from RPCs that omit confirmationStatus. Throws on a real on-chain error;
 // returns false only on a genuine pending timeout so the caller surfaces the sig rather than fake
 // success. NOT a swap guard — this runs AFTER signing, purely to report the outcome.
-async function pollConfirm(sig: string, timeoutMs = 45000): Promise<boolean> {
+export async function pollConfirm(sig: string, timeoutMs = 45000): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -223,13 +228,22 @@ async function quoteAndBuildGuarded(args: {
   if (!(inAmount > 0)) throw new Error(`Enter an amount of ${inSym} to swap.`);
   if (!(slippageBps > 0) || slippageBps > MAX_SLIPPAGE_BPS) throw new Error("Slippage out of range.");
 
+  // The wallet's associated wSOL account: the only place a route may move SOL to, sync or close (guard 7).
+  const wsolAta = PublicKey.findProgramAddressSync(
+    [new PublicKey(taker).toBuffer(), new PublicKey(SPL_TOKEN).toBuffer(), new PublicKey(WSOL_MINT).toBuffer()],
+    ATA_PROGRAM,
+  )[0].toBase58();
+
   // Quote + instructions in one call — the chosen input mint (wSOL or USDC) → the token's mint.
   const url = `${JUP_BUILD}?inputMint=${encodeURIComponent(inputMint)}&outputMint=${encodeURIComponent(outputMint)}&amount=${inAmount}&taker=${encodeURIComponent(taker)}&slippageBps=${slippageBps}`;
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   const build = (await res.json().catch(() => null)) as BuildResp | null;
   // Guards 1, 2, 6 + signers, tip, compute budget, our fee — on the response, before assembling.
-  const err = checkBuild(build, { inputMint, outputMint, inAmount, slippageBps, taker });
+  const err = checkBuild(build, { inputMint, outputMint, inAmount, slippageBps, taker, wsolAta });
   if (err || !build) throw new Error(err || "No Jupiter route right now — use the deep-link.");
+  // Guard 8: the lookup tables we compile with are the chain's.
+  const altErr = altClaimRefusal(build.addressesByLookupTableAddress, await onchainTables(Object.keys(build.addressesByLookupTableAddress || {})));
+  if (altErr) throw new Error(altErr);
 
   let tx: VersionedTransaction;
   try { tx = compileBuild(build, taker, CU_LIMIT_MAX); }
@@ -267,6 +281,22 @@ async function ownedTokenAccounts(owner: string, mint: string): Promise<{ addres
 // The user's associated account for `mint`, derived under the program that OWNS the mint (classic SPL
 // or Token-2022 give different addresses). Where a fresh buy lands when the user holds none yet.
 const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+const SPL_TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+// The addresses each lookup table holds ON-CHAIN (null = unreadable: altClaimRefusal then refuses).
+async function onchainTables(keys: string[]): Promise<Record<string, string[] | null>> {
+  const out: Record<string, string[] | null> = {};
+  for (const key of keys) {
+    try {
+      const info = await solRpcCall("getAccountInfo", [key, { encoding: "base64" }]) as { value?: { owner?: string; data?: unknown } | null } | null;
+      const data = info?.value?.data;
+      if (info?.value?.owner !== "AddressLookupTab1e1111111111111111111111111" || !Array.isArray(data) || typeof data[0] !== "string") { out[key] = null; continue; }
+      const state = AddressLookupTableAccount.deserialize(Uint8Array.from(Buffer.from(data[0], "base64")));
+      out[key] = state.addresses.map((a) => a.toBase58());
+    } catch { out[key] = null; }
+  }
+  return out;
+}
 async function associatedAccount(mint: string, owner: string): Promise<string> {
   const info = await solRpcCall("getAccountInfo", [mint, { encoding: "base64" }]) as { value?: { owner?: string } | null } | null;
   const program = info?.value?.owner;

@@ -796,9 +796,12 @@ export function windowTide(pools) {
 // Every event a read fires on these coin sets, with what grading needs (price spine, candles,
 // funding, market key). ONE builder: scoreEvents grades these, and the stress-hour study
 // (stressStudy.mjs, via eventsWithR) labels the same events with the same R.
-function buildEvents(coinSets, signalGen) {
+// `ctxSets` = coin sets passed as CONTEXT only, never graded: the holdout line has no BTC, so the main card's
+// BTC set rides along there for the reads that read BTC (btc_lead_lag). A BTC set in coinSets wins.
+function buildEvents(coinSets, signalGen, ctxSets = null) {
   // BTC context (regime map + price map) for the RS/veto gens — built once, passed to every gen.
-  const btcCs = (coinSets || []).find((c) => String(c.coin || "").toUpperCase() === "BTC");
+  const isBtc = (c) => String(c?.coin || "").toUpperCase() === "BTC";
+  const btcCs = (coinSets || []).find(isBtc) || (ctxSets || []).find(isBtc);
   // BTC context off the DEEPEST btc series (candle closes preferred) so the RS/veto reaches
   // back over the candle-depth lookback, not just the shallow oi window.
   const btcSeries = btcCs ? priceSeries(btcCs) : [];
@@ -837,8 +840,8 @@ export function eventsWithR(coinSets, signalGen) {
   return out;
 }
 
-export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null, gradedExit = false } = {}) {
-  const all = buildEvents(coinSets, signalGen);
+export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null, gradedExit = false, ctxSets = null } = {}) {
+  const all = buildEvents(coinSets, signalGen, ctxSets);
   const gxCut = typeof gradedExit === "number" ? gradedExit : GRADED_EXIT_OOS_CUTOFF_MS;
   if (!all.length) return { random: null, sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples), exitGraded: gradedExit ? scoreGradedExit([], 0, minSamples, gxCut) : null };
   // rs_quartile written on EVERY event row that carries an rs — from closes, NOT candle-gated
@@ -1016,6 +1019,21 @@ function registeredGrade(coinSets, gen, fromMs, opts) {
   return { verdict: s.verdict, r: s.r, sides: s.sides, random: s.random, exitGraded: s.exitGraded };
 }
 
+// Pairs of reads the scoreboard checks for "one bet counted twice" (readOverlap: same coin, same side, within 24h; counts
+// only). level_reclaim_tight is level_reclaim filtered, so it overlaps by construction; the others share a fade-or-
+// reclaim shape and would be the same bet in a stack (read-pipeline.md: a stack is built only from survivors).
+export const OVERLAP_PAIRS = Object.freeze([
+  ["basis_x_cvd", "rsi_reset_deep"],
+  ["level_reclaim", "level_reclaim_tight"],
+  ["level_reclaim", "session_fade"],
+  ["level_reclaim", "spot_absorb"],
+  ["session_fade", "oi_div_reversal_4h"],
+  ["confluence_follow", "funding_basis_split"],
+  // The same rule on two windows (oi_div_reversal_4h runs oiDivReversalEvents with a 4h window): a 24h
+  // fade usually contains a 4h one on the same coin and side, so stacked they are one bet.
+  ["oi_div_reversal", "oi_div_reversal_4h"],
+]);
+
 // ── OVERLAP: are two reads one bet? ────────────────────────────────────────────────────────
 // Two reads that fire on the same coin, same side, within `windowH` hours of each other are the
 // same bet counted twice. Counts only (no outcomes), so it can't be mined for a better subset.
@@ -1060,7 +1078,7 @@ export function readOverlap(coinSets, nameA, nameB, { windowH = 24 } = {}) {
 // The main card: any holdout coin already on it (SUI, there for its other reads) keeps those reads
 // but gets its basis + CVD series emptied — exactly what the card saw before they were recorded.
 export function withoutHoldoutFlow(coinSets, isHoldout) {
-  return (coinSets || []).map((cs) => (isHoldout(cs.coin) ? { ...cs, basisHist: [], cvdHist: [] } : cs));
+  return (coinSets || []).map((cs) => (isHoldout(cs.coin) ? { ...cs, basisHist: [], cvdHist: [], spotCvdHist: [] } : cs));
 }
 
 // The holdout line: the holdout coins alone, graded by the same runScorecard on `axes` only.

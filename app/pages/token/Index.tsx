@@ -26,7 +26,8 @@ import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken
 import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, EVM_SIGNABLE_ROUTERS, type SwapPlan, type Eip1193 } from "./swapExec";
 import { FlashSpotButton } from "./FlashSpotButton";
 import { FlashOrders } from "./FlashOrders";
-import { CrossChainCard } from "./CrossChainCard";
+import { CrossChainCard, hasTransferInFlight } from "./CrossChainCard";
+import { Collapsible } from "@/pages/lab/Collapsible";
 import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS, majorHref, needsSolanaFunds, openCallCount, callCountLine, poolCaution,
   readBrief, fundingPayLine, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo, safeLogoUrl,
   callStrip, openChipLine, labRowLine, readLabOpen, writeLabOpen, EMPTY_STRIP_LINE } from "@/lib/spotDiscovery.mjs";
@@ -530,17 +531,18 @@ export default function TokenTerminal() {
   // The bridge prompt hands the cross-chain card a destination (+ the user's own Solana address)
   // through router state, never the URL.
   const location = useLocation();
-  const xcPreset = (location.state as { xcTo?: string; xcRecipient?: string } | null) || null;
+  // xcFund: open the card in "Fund my trading account" mode (USDC to the trading wallet, then deposit).
+  const xcPreset = (location.state as { xcTo?: string; xcRecipient?: string; xcFund?: boolean } | null) || null;
   const xcRef = useRef<HTMLDivElement | null>(null);
   // Phone: a thin Buy/Sell bar sits at the bottom edge whenever the ticket is off screen; a tap
   // picks the side and brings the ticket into view. Nothing signs from the bar.
   const ticketRef = useRef<HTMLDivElement | null>(null);
   const [ticketInView, setTicketInView] = useState(true);
   useEffect(() => {
-    if (!xcPreset?.xcTo || query) return;
+    if (!(xcPreset?.xcTo || xcPreset?.xcFund) || query) return;
     const t = setTimeout(() => xcRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
     return () => clearTimeout(t);
-  }, [xcPreset?.xcTo, query]);
+  }, [xcPreset?.xcTo, xcPreset?.xcFund, query]);
   const [searchParams] = useSearchParams();
   // The board's "Trade on Spot" deep-links /token/:sym?venue=spot so a LISTED perp opens on the
   // Spot door, not its own book. Non-perp tokens are spot-only regardless (the toggle is perp-only).
@@ -1536,9 +1538,18 @@ export default function TokenTerminal() {
               </div>
               {(wallet || solSigner.address) && <MajorsRow onOpen={(href) => navigate(href)} viewed={viewed} />}
             </div>
-            <div id="cross-chain" ref={xcRef}>
-              {/* keyed on the preset so "Get USDC on Solana" from this page re-opens the card preset (its in-flight transfers persist + resume) */}
-              <CrossChainCard key={`xc:${xcPreset?.xcTo || ""}:${xcPreset?.xcRecipient || ""}`} walletAddress={wallet} provider={provider} initialTo={xcPreset?.xcTo} initialRecipient={xcPreset?.xcRecipient} />
+            <div id="cross-chain" ref={xcRef} style={{ maxWidth: 640, marginTop: 14, marginBottom: 88 }}>
+              {/* Folded by default (borst, 2026-11-05): Spot leads with tokens. It opens on its own when it is
+                  the reason you're here: a bridge prompt sent you (xcPreset) or a transfer is still moving
+                  (tracking resumes only while the card is mounted). The key re-mounts the fold with the preset. */}
+              <Collapsible key={`xcfold:${xcPreset?.xcTo || ""}:${xcPreset?.xcFund ? "fund" : ""}`} title="Cross-chain · move funds between chains" subtitle="via NEAR Intents · one transfer, no approval"
+                shortTitle="Cross-chain" shortSub="move funds between chains"
+                {...(xcPreset?.xcTo || xcPreset?.xcFund || hasTransferInFlight() ? { defaultOpen: true } : { storageKey: "nx_xc_open" })}>
+                {/* keyed on the preset so "Get USDC on Solana" from this page re-opens the card preset (its in-flight transfers persist + resume) */}
+                <CrossChainCard key={`xc:${xcPreset?.xcTo || ""}:${xcPreset?.xcRecipient || ""}:${xcPreset?.xcFund ? "fund" : ""}`} walletAddress={wallet} provider={provider}
+                  initialTo={xcPreset?.xcTo} initialRecipient={xcPreset?.xcRecipient} fund={!!xcPreset?.xcFund}
+                  solProvider={solProvider} solAddress={solSigner.address} />
+              </Collapsible>
             </div>
           </div>
         )}

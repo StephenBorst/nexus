@@ -5,6 +5,7 @@
 // copy counter only touch server fields on existing calls and write their own way.
 import { sealTheses, publishCandidates, REGISTRY_KEY, OWNER_KEY } from "./callLock.mjs";
 import { marksForPublishes } from "./publishMark.mjs";
+import { indexPublishedCalls } from "./minuteIndex.mjs";
 
 export const MAX_NEW_PUBLISHES_PER_SAVE = 25;
 // Owner-index claims for a wallet's LEGACY public calls, made once when its registry is first
@@ -45,6 +46,10 @@ export async function prepareSeal(env, address, prevTheses, incomingTheses, nowM
     // claim only stops a THIRD wallet publishing it anew.
     await claimLegacyOwners(kv, sealed.bootstrapped, address);
     await kv.put(`lab:${address}`, JSON.stringify({ ...record, theses: sealed.theses }));
+    // After the record: the minute grader (minuteGrader.mjs) starts watching the calls this save
+    // published. Best-effort: the hourly pass re-indexes anything this misses.
+    try { await indexPublishedCalls(kv, address, sealed.newlyPublished); }
+    catch (e) { console.error("[m1] index at publish", String(e?.message || e)); }
   }
   return { sealed, commit };
 }

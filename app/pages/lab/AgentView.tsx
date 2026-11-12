@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { AgentConfig, AgentState, AgentTrade, AgentLeaderboardEntry, AgentPendingThesis } from "./types";
 import { DEFAULT_CONFIG } from "./types";
-import { agentCardStyle, agentLabelStyle, agentBtnStyle, btnPrimary, navBtnStyle } from "./styles";
+import { agentCardStyle, agentLabelStyle, agentInputStyle, agentBtnStyle, btnPrimary, navBtnStyle } from "./styles";
 import { useSubscription } from "@/hooks/useSubscription";
 import { isProStrategy } from "@/config/subscription";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
@@ -26,6 +26,8 @@ import type { BacktestResult, SweepResult, ValidationResult } from "./backtestTy
 import { errText } from "./helpers";
 import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter, PaperCostLine } from "./AgentPanels";
 import { gradedExitRefusal } from "@/lib/gradedExit.mjs";
+import { riskSizingRefusal, RISK_PER_TRADE_MAX_USD } from "@/lib/riskSizing.mjs";
+import { deactivateWarning, deactivatedMessage } from "@/lib/agentControls.mjs";
 import { AgentBacktestCard } from "./AgentBacktestCard";
 import { AgentStrategyLibrary } from "./AgentStrategyLibrary";
 import { StrategyShelf } from "./StrategyShelf";
@@ -407,6 +409,10 @@ export function AgentView() {
 
   async function deactivateAgent() {
     if (!walletAddress) return;
+    // A live position stays open after DEACTIVATE with only what rests on Orderly (agentControls.mjs): say so first.
+    const openPos = agentState?.current_position ?? null;
+    const warning = deactivateWarning(openPos);
+    if (warning && !window.confirm(warning)) return;
     setSaving(true);
     try {
       const walletSig = await getAgentSig(walletAddress);
@@ -416,9 +422,12 @@ export function AgentView() {
         body: JSON.stringify({ walletSig }),
       });
       if (!res.ok) throw new Error("Failed to deactivate");
+      // The server's line wins: it also names an old backstop that may still rest (staleStops).
+      const reply = await res.json().catch(() => ({}));
+      const said = typeof reply?.warning === "string" && reply.warning ? reply.warning : deactivatedMessage(openPos);
       setAgentState((prev) => prev ? { ...prev, active: false, current_position: null } : null);
-      setSuccess("Agent deactivated. Trading key removed.");
-      setTimeout(() => setSuccess(null), 3000);
+      setSuccess(said);
+      setTimeout(() => setSuccess(null), said !== deactivatedMessage(null) ? 12000 : 3000);
     } catch (e) {
       setError(errText(e));
     } finally {
@@ -571,8 +580,8 @@ export function AgentView() {
         body: JSON.stringify({ walletSig }),
       });
       if (!res.ok) throw new Error("Kill switch failed");
-      setAgentState((prev) => prev ? { ...prev, active: false, current_position: null } : null);
-      setSuccess("Agent killed. Position closed. Key removed.");
+      setAgentState((prev) => prev ? { ...prev, active: false } : null);
+      setSuccess("Kill sent. Within about a minute the agent closes its position, stops, and removes its key.");
       setTimeout(() => setSuccess(null), 5000);
     } catch (e) {
       setError(errText(e));
@@ -1095,6 +1104,12 @@ export function AgentView() {
 
           <div style={agentCardStyle}>
             <div style={agentLabelStyle}>STRATEGY — SIGNAL MODE</div>
+            {/* LEVEL_RECLAIM has no mode button: only its hidden setup link loads it (paper wallet, 2026-11-05). */}
+            {config.signalMode === "LEVEL_RECLAIM" && (
+              <div style={{ marginTop: 8, display: "inline-block", background: "#ededf015", border: "1px solid #ededf060", borderRadius: 3, padding: "4px 10px", color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 11 }}>
+                level_reclaim · paper · as registered
+              </div>
+            )}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {([
                 { v: "CONFLUENCE", label: "Confluence", hint: "Funding AND OI must agree. Strictest filter. Fewest entries." },
@@ -1131,6 +1146,7 @@ export function AgentView() {
                 OI_ONLY: "Acts on open interest alone. A fast pile-in of new positions. Funding ignored.",
                 MOMENTUM: "Trades with a price move once it clears your threshold. Noisy on small moves. PAPER it first.",
                 MEAN_REVERSION: "Fades a sharp move once it clears your threshold. Bets it snaps back. PAPER it first.",
+                LEVEL_RECLAIM: "The registered level_reclaim read: price sweeps the prior UTC day’s high or low by 0.4× the H4 ATR and closes back inside within 6h; it fades the sweep. Traded on the graded exit only (stop 1.2× H4 ATR, target 1.5×, 168h). PAPER only. Pick another mode above to leave it.",
                 BASIS_FADE: "Fades an extreme spot-perp basis: a perp trading far above spot is froth (short it), far below is capitulation (long it). Extreme is measured against this market's own last week, not a fixed number. The scoreboard grades the read PREDICTIVE. That rates the read, not a strategy. Entries, exits and fees are unproven. EXPERIMENTAL. PAPER only.",
               } as Record<string, string>)[config.signalMode ?? "FUNDING_ONLY"]}
             </div>
@@ -1274,13 +1290,36 @@ export function AgentView() {
             description={<>The exit the scoreboard grades every read with. Stop = 1.2× the coin&apos;s 4-hour ATR, so it is wider on volatile coins. Target = 1.5× the stop. Holds up to 7 days. No 3% stop cap, which is why it never runs live. Turning it on switches the agent to PAPER and replaces your TP / SL / hold.</>}
             on={!!config.exitContract}
             onToggle={() => setConfig(config.exitContract
-              ? { ...config, exitContract: undefined }
+              ? { ...config, exitContract: undefined, riskPerTradeUsd: undefined }
               : { ...config, exitContract: "R_CONTRACT", mode: "PAPER", maxHoldHours: 168, volScaledStops: false, takeProfits: undefined, trailingStopPct: undefined, breakevenTriggerPct: undefined, dcaEnabled: false })}
           />
           {(() => {
             const why = gradedExitRefusal(config, config.mode === "PAPER");
             return why ? <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#fbbf24", margin: "-4px 0 10px" }}>Graded exit can&apos;t run: {why}.</div> : null;
           })()}
+          {/* Fixed-risk sizing (app/lib/riskSizing.mjs): PAPER + graded exit only. Notional = this many dollars ÷
+              the trade's own graded stop, so a stop-out loses the same dollars on every coin. CAPITAL / TRADE stays
+              the margin ceiling. 0 = off (size by margin, as before). */}
+          {config.exitContract ? (
+            <div style={{ ...agentCardStyle, marginTop: -4 }}>
+              <div style={{ ...agentLabelStyle, fontSize: 9 }}>FIXED RISK / TRADE · PAPER ONLY</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                <NumberField
+                  value={Number(config.riskPerTradeUsd ?? 0)}
+                  min={0} max={RISK_PER_TRADE_MAX_USD} step={1}
+                  onCommit={(n) => setConfig({ ...config, riskPerTradeUsd: n > 0 ? n : undefined })}
+                />
+                <span style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10 }}>USDC lost at the stop (0 = off)</span>
+              </div>
+              <div style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10.5, lineHeight: 1.5, marginTop: 6 }}>
+                Sizes each trade from its own graded stop, so a stop-out costs the same dollars on BTC as on WLD. A win at the target pays 1.5× that. CAPITAL / TRADE caps the margin.
+              </div>
+              {(() => {
+                const why = riskSizingRefusal(config, config.mode === "PAPER");
+                return why ? <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#fbbf24", marginTop: 6 }}>Fixed risk can&apos;t run: {why}.</div> : null;
+              })()}
+            </div>
+          ) : null}
           </Collapsible>
 
           <div style={agentCardStyle}>
@@ -1565,6 +1604,65 @@ export function AgentView() {
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <button onClick={() => manageWebhook("rotate")} disabled={saving} style={{ ...navBtnStyle, fontSize: 10, padding: "6px 14px", opacity: saving ? 0.5 : 1 }}>ROTATE URL</button>
                   <button onClick={() => manageWebhook("disable")} disabled={saving} style={{ ...navBtnStyle, fontSize: 10, padding: "6px 14px", color: "#f7525f", borderColor: "#f7525f50", opacity: saving ? 0.5 : 1 }}>DISABLE</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── OPERATOR · PRO — portfolio delta cap + execution push callbacks.
+              Same 100M-$NEXUS gate as strategies/DCA; saved via the config path and
+              enforced in the executor (delta cap rejects over-exposed entries; the
+              callback fires an HMAC-signed POST on each fill/close). ── */}
+          <div style={agentCardStyle}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <div style={agentLabelStyle}>OPERATOR</div>
+              <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#ededf0", border: "1px solid #33333a", borderRadius: 3, padding: "2px 8px" }}>◆ PRO</span>
+            </div>
+            {!isPro ? (
+              <div style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 11, marginTop: 10, lineHeight: 1.5 }}>
+                A portfolio-wide directional risk cap + execution push callbacks — your agent POSTs a signed event the moment a fill or close lands, so you never poll. A Nexus PRO feature: hold ARCHITECT-tier $NEXUS or subscribe.
+              </div>
+            ) : (
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* Portfolio delta cap */}
+                <div>
+                  <div style={{ ...agentLabelStyle, fontSize: 9 }}>PORTFOLIO DELTA CAP</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <NumberField
+                      value={config.maxPortfolioDeltaUsd ?? 0}
+                      min={0} max={1000000} step={100}
+                      onCommit={(n) => setConfig({ ...config, maxPortfolioDeltaUsd: n })}
+                    />
+                    <span style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10 }}>USD net (0 = off)</span>
+                  </div>
+                  <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 6, lineHeight: 1.5 }}>
+                    Caps total signed notional across ALL open positions on the account. A new entry that would push net directional exposure past this is rejected; a trade that reduces exposure always passes.
+                  </div>
+                </div>
+                {/* Execution push callbacks */}
+                <div>
+                  <div style={{ ...agentLabelStyle, fontSize: 9 }}>EXECUTION CALLBACK URL (https)</div>
+                  <input
+                    value={config.callbackUrl ?? ""}
+                    onChange={(e) => setConfig({ ...config, callbackUrl: e.target.value.trim() })}
+                    placeholder="https://your-endpoint.example/nexus"
+                    spellCheck={false} autoCapitalize="off" autoCorrect="off"
+                    style={{ ...agentInputStyle, width: "100%", boxSizing: "border-box" }}
+                  />
+                  <div style={{ ...agentLabelStyle, fontSize: 9, marginTop: 8 }}>WEBHOOK SECRET (≥16 chars — HMAC-signs each callback)</div>
+                  <input
+                    value={config.webhookSecret ?? ""}
+                    onChange={(e) => setConfig({ ...config, webhookSecret: e.target.value })}
+                    placeholder="a long random string"
+                    spellCheck={false} autoCapitalize="off" autoCorrect="off"
+                    style={{ ...agentInputStyle, width: "100%", boxSizing: "border-box" }}
+                  />
+                  <div style={{ color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 9, marginTop: 6, lineHeight: 1.5 }}>
+                    The agent POSTs an HMAC-SHA256-signed JSON body (header <code>X-Nexus-Signature: sha256=…</code>) on ENTRY · DCA_ADD · PARTIAL_TP · CLOSE — within-tick, one retry. Verify the signature with your secret before trusting a payload.
+                  </div>
+                </div>
+                <div style={{ color: "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 9, lineHeight: 1.5 }}>
+                  Changes apply on SAVE CONFIG below.
                 </div>
               </div>
             )}
