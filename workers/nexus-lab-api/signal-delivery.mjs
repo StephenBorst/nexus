@@ -9,6 +9,7 @@ import { buildSignals } from "../../app/lib/signals.mjs";
 import { annualFundingPct } from "../../app/lib/funding.mjs";
 import { orderlyGet, mapLimit, ORDERLY_CONCURRENCY, ORDERLY_GAP_MS } from "./orderlyGet.mjs";
 import { fetchFourHourBars } from "../../app/lib/fourHourBars.mjs";
+import { prevSnapshotUsable } from "../../app/lib/marketSnapshot.mjs";
 
 const SIGNAL_SYMS = ["PERP_BTC_USDC", "PERP_ETH_USDC", "PERP_SOL_USDC", "PERP_ARB_USDC", "PERP_HYPE_USDC", "PERP_XRP_USDC", "PERP_DOGE_USDC"];
 
@@ -47,8 +48,9 @@ export async function snapshotTrendRegimes(env) {
       // conviction) vs flat/bleeding OI = a squeeze or exhaustion (fakeout risk). Compute
       // the ~hourly OI delta vs the PRIOR regime snapshot, using the brain's market:prev
       // OI reading (no extra fetch). Null on the first run until two snapshots accrue.
+      // Only a fresh snapshot is "current" OI (marketSnapshot.mjs); a stale one gives no OI read.
       const prevMkt = JSON.parse((await KV.get(`market:prev:${sym}`)) || "null");
-      const curOi = Number(prevMkt?.oi) || null;
+      const curOi = prevSnapshotUsable(prevMkt) ? (Number(prevMkt.oi) || null) : null;
       const priorReg = JSON.parse((await KV.get(`regime:${bare}`)) || "null");
       const oiChangePct = (priorReg?.oi && curOi) ? Number((((curOi - priorReg.oi) / priorReg.oi) * 100).toFixed(2)) : null;
       // 4H EMA8/EMA21 — the trend levels traders retest to. Orderly serves no 4H candles
@@ -100,7 +102,10 @@ export async function computeSignalRows(env) {
       if (!d || !d.mark_price) d = (await orderlyGet(`https://api-evm.orderly.org/v1/public/futures/${sym}`))?.data;
       if (!d || !d.mark_price) return null;
       const mark = Number(d.mark_price), funding = Number(d.last_funding_rate) || 0, oi = Number(d.open_interest) || 0;
-      const prev = JSON.parse((await KV.get(`market:prev:${sym}`)) || "null");
+      // The delta is "since the brain's last cycle" only when that snapshot is fresh (≤ 12 min,
+      // marketSnapshot.mjs); a stale one would sell a days-old move as a 5-minute read.
+      const stored = JSON.parse((await KV.get(`market:prev:${sym}`)) || "null");
+      const prev = prevSnapshotUsable(stored) ? stored : null;
       const priceChange = prev?.price ? (mark - prev.price) / prev.price : 0;
       const oiChange = prev?.oi ? (oi - prev.oi) / prev.oi : 0;
       const sig = confluenceSignal({ fundingRate: funding, priceChange, oiChange, hasPrev: !!prev });
@@ -123,6 +128,7 @@ export async function computeSignalRows(env) {
         fade_dir: fadeDir, verdict, stretched,
         price_change_pct: Number((priceChange * 100).toFixed(3)),
         oi_change_pct: Number((oiChange * 100).toFixed(3)),
+        delta_fresh: !!prev, // false = no fresh baseline: the two deltas above are 0, not "no move"
         funding_signal: sig.fundingSignal, oi_signal: sig.oiSignal, confluence: sig.confluence,
         trend: reg?.trend ?? null, trend_move_pct: reg?.movePct ?? null, trend_oi_pct: reg?.oiChangePct ?? null,
         ema8_4h: reg?.ema8 ?? null, ema21_4h: reg?.ema21 ?? null,

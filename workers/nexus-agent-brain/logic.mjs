@@ -315,12 +315,7 @@ export function signalSourceT(raw, config) {
 // 5-minute cycle. On a freshly activated agent (no cooldown yet) that is an entry. A snapshot older
 // than PREV_MAX_AGE_MS (2 cycles + slack) or without a time is not a previous cycle: no delta this
 // tick (hasPrev false), and the fresh snapshot written now makes the next tick's delta real.
-export const PREV_MAX_AGE_MS = 12 * 60 * 1000;
-export function prevSnapshotUsable(prev, now = Date.now()) {
-  if (!prev || !(Number(prev.price) > 0)) return false;
-  const t = Number(prev.timestamp);
-  return Number.isFinite(t) && t <= now && now - t <= PREV_MAX_AGE_MS;
-}
+export { PREV_MAX_AGE_MS, prevSnapshotUsable } from "../../app/lib/marketSnapshot.mjs";
 
 // ── Is a new closed hourly candle due? ────────────────────────────────────────────────────────────
 // `last.t` is the START of the last bar stored. The bar due is the last CLOSED one, which starts one
