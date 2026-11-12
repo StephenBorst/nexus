@@ -2454,3 +2454,13 @@ anyone: `/carry/reset` (wipes the public paper record /proof shows), `/carry/tic
 Now `carryAdminOk` (carryAuth.mjs) needs a configured token of ≥ 16 chars and an exact match; no token = 401. Nothing
 automated calls these routes (the crons don't go through `authed`). Whether the secret was ever set isn't readable from a
 cloud session: `npx wrangler secret list` in `workers/nexus-carry-engine`.
+
+## 2026-11-12 · /signals sold the same stale delta
+
+The brain fix of 2026-11-09 (a `market:prev` snapshot older than 12 min gives no delta) left lab-api's two readers of
+the key unchecked: `computeSignalRows` (the `/signals` rows, the x402 `nexus-signals` product, the Board and the
+Briefing's "Open interest is surging" line at ≥ 3%) and `snapshotTrendRegimes` (which took that snapshot's OI as
+"current"). The rule moved to `app/lib/marketSnapshot.mjs` (the brain re-exports it) and both readers use it: a stale
+baseline gives 0 deltas and `delta_fresh:false` on the row (additive field), and no regime OI. The same date: borst
+confirmed `CARRY_ADMIN_TOKEN` is set as a production secret on nexus-carry-engine, so the 2026-11-09 fail-open never
+exposed the routes in production; the fix makes a missing secret lock them instead.
