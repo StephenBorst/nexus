@@ -12,6 +12,7 @@
 // serves the page exactly as before (no injected tags).
 
 import { injectCallMeta } from "./callPageMeta.mjs";
+import { routeMetaFor } from "./routeMeta.mjs";
 
 export const LAB_API = "https://og.nexustradinglabs.com";
 export const LOOKUP_TIMEOUT_MS = 2500;
@@ -64,4 +65,23 @@ export async function gateThesisPage({ wallet, id, loadApp, fetchImpl = fetch, t
   headers.delete("Content-Length");
   headers.delete("ETag");
   return new Response(injectCallMeta(html, meta), { status: 200, headers });
+}
+
+// An indexed app route (/proof, /lab, …): the same app HTML with that route's own title, description and
+// card (routeMeta.mjs), so a crawler or a link preview reads the page, not the site blurb. Pure string
+// work on the app's HTML; anything unexpected serves the page exactly as before (fail open).
+export async function gateRoutePage({ pathname, loadApp }) {
+  const page = await loadApp();
+  const meta = routeMetaFor(pathname);
+  if (!meta || !page || page.status !== 200) return page;
+  let html;
+  try { html = await page.clone().text(); } catch { return withStatus(page, 200); }
+  const out = injectCallMeta(html, meta);
+  if (out === html) return withStatus(page, 200);
+  const headers = new Headers(page.headers);
+  headers.set("Cache-Control", "no-cache");
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.delete("Content-Length");
+  headers.delete("ETag");
+  return new Response(out, { status: 200, headers });
 }
