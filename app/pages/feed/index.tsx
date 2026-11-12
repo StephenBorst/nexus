@@ -39,7 +39,6 @@ import { bareTicker } from "@/utils/utils";
 import { pressKey, useEscapeKey } from "@/utils/a11y";
 import { C, LINE, SIGNAL } from "@/config/theme";
 import { Button } from "@/components/ui";
-import { usePageTitle } from "@/hooks/usePageTitle";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -1328,7 +1327,6 @@ type DirFilter = "ALL" | "LONG" | "SHORT";
 const FEED_PAGE = 20;
 
 export default function FeedPage() {
-  usePageTitle("/feed");
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const [feed, setFeed] = useState<FeedThesis[]>([]);

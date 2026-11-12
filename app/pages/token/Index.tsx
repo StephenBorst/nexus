@@ -44,7 +44,6 @@ import { useEscapeKey } from "@/utils/a11y";
 import { useLabWallet } from "@/hooks/useLabAuth";
 import { C, SIGNAL } from "@/config/theme";
 import { Chevron, Pill, Stat, Tabs } from "@/components/ui";
-import { usePageTitle } from "@/hooks/usePageTitle";
 
 // WooFi majors-swap widget — the in-app fill for the majors WooFi routes (BTC/ETH/SOL/USDC etc.),
 // restored as an additive Spot panel (the old standalone /swap now redirects to /token). Lazy so its
@@ -526,7 +525,6 @@ function ModalRow({ label, value, sub, accent, danger }: { label: string; value:
 }
 
 export default function TokenTerminal() {
-  usePageTitle("/token");
   const isMobile = useIsMobile();
   const { query } = useParams();
   const navigate = useNavigate();

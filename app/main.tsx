@@ -136,7 +136,7 @@ const router = createBrowserRouter([
       // ✅ LAB ROUTE ADDED
       {
         path: 'lab',
-        element: <><PageMeta title="The Lab" description="Plan it. Run it. Prove it. Theses, an agent and a graded record in one terminal." /><LabLayout /></>,
+        element: <><PageMeta route="/lab" /><LabLayout /></>,
         children: [
           { index: true, element: <TheLabPage /> },
         ],
@@ -145,7 +145,7 @@ const router = createBrowserRouter([
       // ✅ ANALYZE ROUTE (public wallet x-ray)
       {
         path: 'analyze',
-        element: <><PageMeta title="Wallet X-Ray" description="Read any Hyperliquid wallet from public data. Positions. P&L. Habits." /><AnalyzeLayout /></>,
+        element: <><PageMeta route="/analyze" /><AnalyzeLayout /></>,
         children: [
           { index: true, element: <AnalyzePage /> },
         ],
@@ -154,7 +154,7 @@ const router = createBrowserRouter([
       // ✅ ARENA ROUTE (open proving ground for AI trading agents)
       {
         path: 'arena',
-        element: <><PageMeta title="Arena" description="An open proving ground for AI trading agents. Every close graded from public price." /><ArenaLayout /></>,
+        element: <><PageMeta route="/arena" /><ArenaLayout /></>,
         children: [
           { index: true, element: <ArenaPage /> },
         ],
@@ -163,7 +163,7 @@ const router = createBrowserRouter([
       // ✅ PROOF ROUTE (unified track-records hub)
       {
         path: 'proof',
-        element: <><PageMeta title="Proof" description="Records for callers, agents and desks. Graded from public price. Anchored on Arbitrum." /><ProofLayout /></>,
+        element: <><PageMeta route="/proof" /><ProofLayout /></>,
         children: [
           { index: true, element: <ProofPage /> },
         ],
@@ -181,7 +181,7 @@ const router = createBrowserRouter([
       // ✅ FEED ROUTE
       {
         path: 'feed',
-        element: <><PageMeta title="Feed" description="Live calls, verified callers and the signal scoreboard." /><FeedLayout /></>,
+        element: <><PageMeta route="/feed" /><FeedLayout /></>,
         children: [
           { index: true, element: <FeedPage /> },
           { path: 'trader/:wallet', element: <TraderPage /> },
@@ -245,7 +245,7 @@ const router = createBrowserRouter([
       { path: 'swap', element: <Navigate to="/token" replace /> },
       {
         path: 'token',
-        element: <TokenLayout />,
+        element: <><PageMeta route="/token" /><TokenLayout /></>,
         children: [
           { index: true, element: <TokenIndex /> },
           { path: ':query', element: <TokenIndex /> },
@@ -262,7 +262,7 @@ const router = createBrowserRouter([
       // ✅ INTEL ROUTE
       {
         path: 'intel',
-        element: <><PageMeta title="Market Intel" description="Funding, open interest and smart-money positioning. Live." /><IntelLayout /></>,
+        element: <><PageMeta route="/intel" /><IntelLayout /></>,
         children: [
           { index: true, element: <IntelPage /> },
         ],

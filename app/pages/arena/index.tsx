@@ -14,7 +14,6 @@ import { getAgentSig } from "@/pages/lab/agentKeys";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
 import { C } from "@/config/theme";
-import { usePageTitle } from "@/hooks/usePageTitle";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -306,7 +305,6 @@ function AgentDetail({ wallet }: { wallet: string }) {
 }
 
 export default function ArenaPage() {
-  usePageTitle("/arena");
   const isMobile = useIsMobile();
   const [agents, setAgents] = useState<ArenaAgent[] | null>(null);
   const [showRegister, setShowRegister] = useState(false);

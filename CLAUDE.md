@@ -763,7 +763,7 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
   permalink Function fails open on anything but a 404.
 - **Page meta** (2026-11-12): `app/lib/routeMeta.mjs` = ONE title/description per indexed route (/proof /lab /feed /arena
   /analyze /token /intel). `functions/<route>/index.js` writes it into the HTML head (`gateRoutePage`, seoGate.mjs, the call
-  pages' `injectCallMeta`; fail open) for crawlers + X/Telegram previews; pages set the tab title with `usePageTitle`.
+  pages' `injectCallMeta`; fail open) for crawlers + X/Telegram previews; the tab title = the route's `<PageMeta route=… />` (main.tsx, Helmet).
   `public/sitemap.xml` is generated from it (test-pinned); robots.txt points at it. A new indexed route = all four.
 - `git add` new files and check `git status` before trusting a local build (CI builds a clean checkout).
 

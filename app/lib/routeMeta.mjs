@@ -3,7 +3,7 @@
 // to a search engine and to a link preview on X or Telegram (neither runs JavaScript). ONE source:
 //   - the Pages Functions (functions/<route>.js) write it into the HTML head before any script runs
 //     (injectCallMeta, the same injector the call permalinks use; fail open: the plain page on any error);
-//   - each page sets the same title on in-app navigation (usePageTitle).
+//   - the route's PageMeta (app/components/PageMeta.tsx, react-helmet) sets the same title + description in the tab.
 // The routes are the ones public/_headers leaves indexable. Copy follows marketing/VOICE.md: what the
 // page is, in plain words, numbers over adjectives, never "proven".
 

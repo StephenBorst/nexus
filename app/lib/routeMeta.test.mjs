@@ -1,5 +1,5 @@
 // routeMeta: each indexed route's own title/description, in the HTML (Pages Function) and the tab
-// (usePageTitle), one source; sitemap + robots; fail open.
+// (PageMeta route=…), one source; sitemap + robots; fail open.
 // Run: node --test app/lib/routeMeta.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -10,11 +10,6 @@ import { gateRoutePage } from "./seoGate.mjs";
 const root = new URL("../../", import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), "utf8");
 const ROUTES = Object.keys(ROUTE_META);
-const PAGE_OF = {
-  "/proof": "app/pages/proof/index.tsx", "/lab": "app/pages/lab/index.tsx", "/feed": "app/pages/feed/index.tsx",
-  "/arena": "app/pages/arena/index.tsx", "/analyze": "app/pages/analyze/index.tsx", "/token": "app/pages/token/Index.tsx",
-  "/intel": "app/pages/intel/index.tsx",
-};
 
 test("every named route is indexable: an app route, and not under a noindex header", () => {
   const redirects = read("public/_redirects");
@@ -93,13 +88,12 @@ test("one Function per named route, each calling the shared gate; no Function fo
   for (const d of dirs) if (existsSync(new URL(`functions${d}/index.js`, root))) assert.ok(ROUTES.includes(d), `functions${d}/index.js has no ROUTE_META entry`);
 });
 
-test("each page sets the same tab title (usePageTitle with its route)", () => {
-  for (const [r, f] of Object.entries(PAGE_OF)) {
-    const src = read(f);
-    assert.match(src, /import \{ usePageTitle \} from "@\/hooks\/usePageTitle";/, f);
-    assert.ok(src.includes(`usePageTitle(${r === "/intel" ? 'embedded ? null : "/intel"' : `"${r}"`});`), `${f} sets ${r}`);
-  }
-  assert.deepEqual(Object.keys(PAGE_OF).sort(), [...ROUTES].sort());
+test("the tab title comes from the same source: each route's PageMeta names its route", () => {
+  const main = read("app/main.tsx");
+  for (const r of ROUTES) assert.ok(main.includes(`<PageMeta route="${r}" />`), `main.tsx: ${r}`);
+  const pm = read("app/components/PageMeta.tsx");
+  assert.match(pm, /import \{ routeMetaFor \} from "@\/lib\/routeMeta\.mjs";/);
+  assert.match(pm, /const full = rm \? rm\.title : generatePageTitle\(title \|\| ""\);/);
 });
 
 test("sitemap.xml is generated from this file and robots.txt points at it", () => {
