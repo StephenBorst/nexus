@@ -569,8 +569,12 @@ product is what sits on top:
 - **EVM swap = spanDEX** (`spotQuote.mjs`, `@spandex/core` 0.11.1 pinned): Nordstern always + 0x via `SafeZeroX` when
   `ZEROX_API_KEY` is set (key in a header). Fee `SPOT_FEE_BPS=10` → borst.eth, `feeApplied` only when the provider
   confirms it. The worker drops any quote that spends ≠ the asked amount, approves another token, or carries native
-  value. Signing lives ONLY in `app/pages/token/swapExec.ts` (exact-amount approve against OUR USDC, value 0, chain
-  check, receipt status). Fabric is dead (shut down 2026-09-16). Previews (no wallet) quote for `PREVIEW_SWAPPER`
+  value, and any whose approve target ≠ swap target ≠ a router read live for that chain (`app/lib/spotRouters.mjs`
+  `pinnedRouter`: Nordstern on 1/8453/42161/10/137, 0x AllowanceHolder on 1/8453/42161/137; Robinhood 4663 none yet =
+  deep link only; a provider moving its router = "no in-app route" until added). Signing lives ONLY in
+  `app/pages/token/swapExec.ts` (exact-amount approve against OUR USDC, value 0, chain check, the same router pin at
+  plan time and again right before the approve, receipt status). `ZEROX_API_KEY` IS set (2026-11-12: 0x answered dust
+  quotes Nordstern refused); 0x simply loses on price at normal sizes. Fabric is dead (shut down 2026-09-16). Previews (no wallet) quote for `PREVIEW_SWAPPER`
   `0x…10000`: 0x refuses any taker ≤ `0x…ffff` (the old `0x…dEaD` kept 0x out of every preview until 2026-10-31).
 - **Flash (Definitive)**: ticket `FlashSpotButton.tsx`, orders `FlashOrders.tsx`, proxy routes whitelisted by
   `flashUpstream`. Every order signs the same `FlashOrder` (the trigger price is NOT signed). Guards: deadline per

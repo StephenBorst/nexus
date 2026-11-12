@@ -7,7 +7,7 @@ const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const WETH = "0x4200000000000000000000000000000000000006";
 const TAKER = "0x1111111111111111111111111111111111111111";
 const FEE_TO = "0x34dFC08eB3B7eD60D00e5B2CB611ac27C152B45c";
-const ROUTER = "0x2222222222222222222222222222222222222222";
+const ROUTER = "0xC87De04e2EC1F4282dFF2933A2D58199f688fC3d"; // Nordstern's Base router, read live 2026-11-12 (pinned: app/lib/spotRouters.mjs)
 const ENV = { SPOT_FEE_BPS: "10", SPOT_FEE_RECIPIENT: FEE_TO };
 const qs = (o) => new URLSearchParams(o);
 const REQ = { chain: "8453", tokenIn: USDC, tokenOut: WETH, amount: "20000000", taker: TAKER };
@@ -208,4 +208,13 @@ test("feeEcho reads 0x's integratorFee and a positive fee-named field, nothing e
   assert.equal(feeEcho({ provider: "0x", details: { fees: { integratorFee: null } } }), null);
   assert.equal(feeEcho({ provider: "nordstern", details: { convenienceFee: "0" } }), null);
   assert.deepEqual(feeEcho({ provider: "nordstern", details: { convenienceFeeAmount: "12" } }), { field: "convenienceFeeAmount", amount: "12" });
+});
+
+test("pickSpotQuote: a better price on an unpinned contract loses to the pinned router", () => {
+  const swap = { chainId: 8453, inputToken: USDC, inputAmount: 20000000n };
+  const q = (provider, to, out) => ({ success: true, provider, inputAmount: 20000000n, outputAmount: out, txData: { to, data: "0x" }, approval: { token: USDC, spender: to } });
+  const EVIL = "0x000000000000000000000000000000000000bEEF";
+  assert.equal(pickSpotQuote([q("x", EVIL, 999n), q("nordstern", ROUTER, 5n)], swap).provider, "nordstern");
+  assert.equal(pickSpotQuote([q("x", EVIL, 999n)], swap), null, "nothing pinned = no route (the deep link stays)");
+  assert.equal(pickSpotQuote([q("nordstern", ROUTER, 5n)], { ...swap, chainId: 4663 }), null, "an unlisted chain has no in-app route");
 });
