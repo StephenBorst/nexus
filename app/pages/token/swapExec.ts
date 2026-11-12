@@ -1,4 +1,4 @@
-// ── Spot in-app SWAP EXECUTION (EVM · Fabric · BUY + SELL) ────────────────────
+// ── Spot in-app SWAP EXECUTION (EVM · spanDEX · BUY + SELL) ───────────────────
 // The one place in the terminal that signs. Everything else on /token is a read or a
 // deep-link; this is the gated, additive path that lets a connected wallet complete a
 // swap WITHOUT leaving for Uniswap. It is deliberately narrow and ONE audited path for
@@ -25,6 +25,8 @@
 // Nothing auto-executes: the UI plans (planBuy/planSell → shows the modal) then executes
 // only on an explicit confirm (executeSwap). Fail-soft: any miss throws a plain message
 // and the honest Uniswap/Jupiter deep-link is always still there as the fallback.
+
+import { pinnedRouter } from "@/lib/spotRouters.mjs";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 
@@ -185,6 +187,8 @@ async function quoteAndGuard(args: {
   if (!isAddr(j.approval.spender)) throw new Error("Bad approval target — refused.");
   if (!isAddr(j.tx.to)) throw new Error("Bad swap target — refused.");
   if (!/^0x[0-9a-fA-F]+$/.test(j.tx.data)) throw new Error("Bad swap data — refused.");
+  // 4b) approve target == swap target == a router read live for this chain (app/lib/spotRouters.mjs).
+  if (!pinnedRouter(chainId, j.approval.spender, j.tx.to)) throw new Error("Route uses a contract we haven't verified — refused. Use the deep-link.");
 
   const outAmount = j.outAmount != null ? safeBig(j.outAmount) : null;
   const minOut = j.minOut != null ? safeBig(j.minOut) : null;
@@ -343,6 +347,8 @@ export async function executeSwap(
   if (!isAddr(owner) || owner.toLowerCase() !== plan.taker.toLowerCase())
     throw new Error("Wallet changed — re-open the swap.");
   await ensureChain(provider, plan.chainId);
+  // The plan was checked when built; check the pin again right before anything is approved.
+  if (!pinnedRouter(plan.chainId, plan.spender, plan.tx.to)) throw new Error("Route uses a contract we haven't verified — refused.");
 
   const label = plan.dir === "buy" ? "USDC" : "the token";
   // Only approve if the existing allowance is short — and then EXACTLY the spend amount.

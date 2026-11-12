@@ -2464,3 +2464,15 @@ Briefing's "Open interest is surging" line at ≥ 3%) and `snapshotTrendRegimes`
 baseline gives 0 deltas and `delta_fresh:false` on the row (additive field), and no regime OI. The same date: borst
 confirmed `CARRY_ADMIN_TOKEN` is set as a production secret on nexus-carry-engine, so the 2026-11-09 fail-open never
 exposed the routes in production; the fix makes a missing secret lock them instead.
+
+## 2026-11-12 · EVM swap: the approve target is pinned
+
+The EVM signer approved the exact input amount to whatever spender the provider named and called whatever `tx.to` it
+named; a hostile or compromised provider could take one trade's input. Now a quote counts only when spender == tx.to ==
+a router read live for that chain (`app/lib/spotRouters.mjs`, used by the worker's `pickSpotQuote`, so the next best
+pinned quote wins, and by `swapExec.ts` at plan time and right before the approve). Addresses from live /swap/quote
+reads (taker 0xd9f7…b449, borst + a session): Nordstern Ethereum `0xa929…4dd1`, Base `0xC87D…fC3d`, Arbitrum
+`0x57f9…491c`, Optimism `0xa575…2C4a`, Polygon `0x99bA…EC23`; 0x AllowanceHolder `0x0000000000001fF3684f28c67538d4D072C22734`
+on Ethereum, Base, Arbitrum, Polygon (not seen live on Optimism: 0x refused that probe). Robinhood Chain (4663) has no
+router read yet, so it has no in-app route until one is. The same probes settled "is the 0x key set?": yes; 0x answered
+dust sizes Nordstern 422'd, and loses on price at normal sizes.
