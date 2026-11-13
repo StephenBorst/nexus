@@ -4,10 +4,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  pendingItems, alertsFor, alertText, digestText, digestDue, receiversFrom, digestState,
+  pendingItems, alertsFor, alertText, digestText, digestDue, receiversFrom, digestState, verdictSteps,
   DIGEST_STATE_KEY, DIGEST_DAY_KEY, DIGEST_HOUR_UTC, DIGEST_RUN_MINUTE,
 } from "../../app/lib/opsDigest.mjs";
 import { runOpsDigest, gatherFacts } from "./opsDigest.mjs";
+import { PJUDGE_KEY } from "./paperJudge.mjs";
+import { LIVE_PLAN_SIGS_KEY } from "../../app/lib/livePlanSign.mjs";
+import { LIVE_PLAN_TEXT } from "../../app/lib/livePlanText.mjs";
 
 const NOW = Date.parse("2026-11-14T16:49:00Z");
 const LR = "0x95e26e980e300c34360933b849457f42c6bd7622";
@@ -83,6 +86,49 @@ test("the digest: what needs you, each paper run in R with its tape, the board; 
   assert.match(digestText(facts({ stages: null })), /Scoreboard unread right now: no stage claims\./);
 });
 
+test("after a PASS: the steps in order, what's done marked, the first open one is next", () => {
+  const plan = { doc: "docs/research/live-plan-level-reclaim.md", signed: false };
+  const fresh = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan });
+  assert.match(fresh.head, /level_reclaim PASSED its 30-trade judgment \(https:\/\/trade\.nexustradinglabs\.com\/proof\/paper\/level_reclaim\)/);
+  assert.deepEqual(fresh.steps.map((s) => s.state), ["next", "later", "later", "later", "later"]);
+  assert.match(fresh.steps[0].text, /sign it on https:\/\/trade\.nexustradinglabs\.com\/ops\/revenue\. Signing arms nothing\..*live-plan-level-reclaim\.md/);
+  assert.match(fresh.steps[2].text, /GRADED_EXIT_LIVE_LIFT, in person/);
+  assert.match(fresh.steps[3].text, /\$10 mechanics test.*preflight\?wallet=<the new wallet>/);
+  const signed = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan: { ...plan, signed: true } });
+  assert.deepEqual(signed.steps.map((s) => s.state), ["done", "next", "later", "later", "later"]);
+  const W = "0x" + "c".repeat(40);
+  const armed = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan: { ...plan, signed: true }, liftWallet: W });
+  assert.deepEqual(armed.steps.map((s) => s.state), ["done", "done", "done", "next", "later"]);
+  assert.match(armed.steps[3].text, new RegExp(`preflight\\?wallet=${W}`));
+  const noPlan = verdictSteps({ axis: "oi_div_reversal_4h", verdict: "PASS" });
+  assert.match(noPlan.steps[0].text, /Have Claude draft oi_div_reversal_4h's live plan: none exists yet/);
+});
+
+test("after a FAIL or RESET: nothing goes live, one next step; no verdict = no steps", () => {
+  const f = verdictSteps({ axis: "level_reclaim", verdict: "FAIL" });
+  assert.match(f.head, /FAILED.*Nothing goes live\./);
+  assert.match(f.steps[0].text, /gap question/);
+  assert.match(verdictSteps({ axis: "x", verdict: "RESET" }).steps[0].text, /new dated rules page/);
+  assert.equal(verdictSteps({ axis: "x", verdict: null }), null);
+  assert.equal(verdictSteps({ axis: "x", verdict: "HELD" }), null);
+});
+
+test("a PASS alert points at the next step; the digest lists every step under Needs you", () => {
+  const prev = digestState(facts());
+  const judged = facts();
+  judged.paper[0] = { ...judged.paper[0], verdict: "PASS", plan: { doc: "docs/research/live-plan-level-reclaim.md", signed: false }, liftWallet: null };
+  assert.match(alertsFor(prev, judged)[0].text, /PASS\. It licenses nothing by itself\. Next: refresh and sign the live plan on \/ops\/revenue \(it arms nothing\)/);
+  const t = digestText(judged);
+  assert.doesNotMatch(t, /Nothing waiting on you/);
+  assert.match(t, /· level_reclaim PASSED its 30-trade judgment/);
+  assert.match(t, / {2}1\. \[next\] Refresh the live plan/);
+  assert.match(t, / {2}2\. \[ \] Fund a NEW dedicated wallet/);
+  assert.match(t, / {2}5\. \[ \] After 10 live trades/);
+  const failed = facts();
+  failed.paper[0] = { ...failed.paper[0], verdict: "FAIL" };
+  assert.match(alertsFor(prev, failed)[0].text, /FAIL\. It licenses nothing by itself\. Nothing goes live\./);
+});
+
 test("served text is escaped for Telegram HTML", () => {
   const f = facts();
   f.paper[0].quiet = { text: "<b>x</b> & y", stale: true };
@@ -153,6 +199,22 @@ test("the runner reads only, sends to the owner's chat, and remembers what it sa
   await runOpsDigest(e, { scorecardKey: KEY, nowMs: () => NOW + 3600_000, fetchImpl: again.fetchImpl, eventsFor: noEvents, revenue: noRevenue });
   assert.equal(again.sent.length, 0, "an hour later, nothing new: nothing sent");
   for (const k of e.NEXUS_AGENT.m.keys()) assert.ok(k.startsWith("agent:"), "agent keys are only read");
+});
+
+test("the runner hands a PASS its plan (signed or not) and the armed wallet for its mode, read from the lift var", async () => {
+  const e = env();
+  e.LAB_STORE.m.set(PJUDGE_KEY("level_reclaim"), JSON.stringify({ verdict: "PASS" }));
+  let lr = (await gatherFacts(e, { scorecardKey: KEY, nowMs: NOW, eventsFor: noEvents })).paper.find((p) => p.axis === "level_reclaim");
+  assert.deepEqual(lr.plan, { doc: LIVE_PLAN_TEXT.level_reclaim.doc, signed: false });
+  assert.equal(lr.liftWallet, null, "the lift is empty: nothing armed");
+  e.LAB_STORE.m.set(LIVE_PLAN_SIGS_KEY, JSON.stringify({ level_reclaim: { [LIVE_PLAN_TEXT.level_reclaim.sha256]: { by: LR } } }));
+  const W = "0x" + "c".repeat(40);
+  e.GRADED_EXIT_LIVE_LIFT = `${W}@LEVEL_RECLAIM`;
+  lr = (await gatherFacts(e, { scorecardKey: KEY, nowMs: NOW, eventsFor: noEvents })).paper.find((p) => p.axis === "level_reclaim");
+  assert.equal(lr.plan.signed, true);
+  assert.equal(lr.liftWallet, W);
+  const other = (await gatherFacts(e, { scorecardKey: KEY, nowMs: NOW, eventsFor: noEvents })).paper.find((p) => p.axis === "oi_div_reversal_4h");
+  assert.equal(other.plan, undefined, "no verdict = no after-verdict facts");
 });
 
 test("a failed send keeps the old state, so the alert goes out next run (never lost, never doubled)", async () => {

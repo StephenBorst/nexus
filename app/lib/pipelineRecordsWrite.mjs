@@ -11,6 +11,7 @@
 
 import { registrationFor } from "./readPipeline.mjs";
 import { paperClaimMessage } from "./paperClaim.mjs";
+import { livePlanSignMessage, planAboveSignoff, signedPlanLine } from "./livePlanSign.mjs";
 import {
   renderJudgmentPage, pageAboveResults, judgmentSignMessage, judgmentEntry, signedResultsLine, judgmentDocPath,
 } from "./paperJudgePage.mjs";
@@ -125,4 +126,34 @@ export function recordsReport(changes, issues) {
     "", "Arms nothing. No stage rule, preset or wallet setting is touched.",
   ].join("\n");
   return { title, body };
+}
+
+// ── Live plan signatures (livePlanSign.mjs) → a line under the page's Sign-off ─────────────────────────────
+/**
+ * @param {object} p
+ * @param {Record<string, object>} p.served  axis → GET /pipeline/live-plan/:axis (its `signed` record, if any)
+ * @param {Record<string, {doc, sha256, text}>} p.plans LIVE_PLAN_TEXT (generated from the pages in git)
+ * @param {Record<string, string|null>} p.docs  path → the page as in git
+ * @param {(message: string, sig: string) => Promise<string>} p.recover
+ * @param {(text: string) => string} p.sha256
+ * @returns {Promise<{ writes: Record<string,string>, changes: string[], issues: string[] }>}
+ */
+export async function nextPlanRecords({ served = {}, plans = {}, docs = {}, recover, sha256 }) {
+  const writes = {}, changes = [], issues = [];
+  for (const [axis, s] of Object.entries(served)) {
+    const rec = s?.signed;
+    const plan = plans[axis];
+    if (!rec || !plan) continue;
+    const page = docs[plan.doc];
+    if (page == null) { issues.push(`${axis}: ${plan.doc} is missing; nothing written`); continue; }
+    const above = planAboveSignoff(page);
+    if (!above || sha256(above) !== plan.sha256 || rec.sha256 !== plan.sha256) { issues.push(`${axis}: the signed hash isn't the page in git; nothing written`); continue; }
+    let ok = false;
+    try { ok = lower(await recover(livePlanSignMessage(rec.by, axis, rec.sha256, rec.sigTs), rec.sig)) === lower(rec.by); } catch { ok = false; }
+    if (!ok) { issues.push(`${axis}: the live plan signature doesn't recover to ${rec.by}; nothing written`); continue; }
+    if (page.includes(rec.sig)) continue;
+    writes[plan.doc] = `${page.replace(/\n*$/, "\n")}\n${signedPlanLine(rec)}`;
+    changes.push(`${axis}: live plan signed by ${rec.by} (arms nothing)`);
+  }
+  return { writes, changes, issues };
 }

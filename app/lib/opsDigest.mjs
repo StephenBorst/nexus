@@ -36,6 +36,46 @@ export function pendingItems(reads) {
   return out;
 }
 
+// ── After a recorded 30-trade verdict: what happens next, in order (borst 2026-11-14) ─────────────────────────
+// The judgment's rule 8: "PASS: a written live plan may be signed (its own PR). The house rules still bind: the $10
+// mechanics test first; arming and size are borst's, in person. FAIL: nothing goes live; the gap between graded and
+// traded is the next question, written down before it is looked at." The digest turns that into steps with what's
+// already done marked, so the path is a glance, not a reread. It decides nothing and does none of the steps.
+const APP = "https://trade.nexustradinglabs.com";
+const REPO = "https://github.com/StephenBorst/nexus/blob/main";
+
+/**
+ * @param {object} p   a paper run row: { axis, verdict, wallet }
+ * @param {{ plan?: { doc: string, signed: boolean } | null, liftWallet?: string | null }} [ctx]
+ * @returns {null | { head: string, steps: Array<{ state: "done"|"next"|"later", text: string }> }}
+ */
+export function verdictSteps(p, { plan = null, liftWallet = null } = {}) {
+  if (!p?.verdict) return null;
+  if (p.verdict === "FAIL") {
+    return { head: `${p.axis} FAILED its 30-trade judgment. Nothing goes live.`, steps: [
+      { state: "next", text: "Write down the gap question (graded vs traded) before anyone looks at why. The read stays on the scoreboard." },
+    ] };
+  }
+  if (p.verdict === "RESET") {
+    return { head: `${p.axis}'s paper run was reset: the judgment ended RESET.`, steps: [
+      { state: "next", text: "A new run needs a new dated rules page before its first trade." },
+    ] };
+  }
+  if (p.verdict !== "PASS") return null;
+  const steps = [
+    plan
+      ? { state: plan.signed ? "done" : "todo", text: `Refresh the live plan's numbers with Claude (they date from its draft), then sign it on ${APP}/ops/revenue. Signing arms nothing. ${REPO}/${plan.doc}` }
+      : { state: "todo", text: `Have Claude draft ${p.axis}'s live plan: none exists yet. Then sign it on ${APP}/ops/revenue.` },
+    { state: liftWallet ? "done" : "todo", text: "Fund a NEW dedicated wallet with the plan's account size and nothing else. Never the Safe, never borst.eth." },
+    { state: liftWallet ? "done" : "todo", text: "Arm it: your own PR that puts that wallet in GRADED_EXIT_LIVE_LIFT, in person. Nothing else arms it." },
+    { state: "todo", text: `The $10 mechanics test before the first real trade (house rules): the backstop shows on Orderly and KILL clears it. Line by line: ${APP}/ops/preflight?wallet=${liftWallet || "<the new wallet>"}` },
+    { state: "todo", text: "After 10 live trades: the written compare against the paper wallet (slippage, fees, parity) before trade 11." },
+  ];
+  let marked = false;
+  for (const s of steps) if (s.state === "todo") { s.state = marked ? "later" : "next"; marked = true; }
+  return { head: `${p.axis} PASSED its 30-trade judgment (${APP}/proof/paper/${p.axis}). Next, in order:`, steps };
+}
+
 /** The state a run leaves for the next one to compare against. */
 export function digestState(facts) {
   return {
@@ -70,7 +110,9 @@ export function alertsFor(prev, facts) {
       out.push({ key: `parity:${r.axis}:CLEAN`, text: `${r.axis} paper parity is CLEAN again.` });
     }
     if (r.verdict && r.verdict !== (p?.verdicts?.[r.axis] ?? null) && p) {
-      out.push({ key: `verdict:${r.axis}:${r.verdict}`, text: `${r.axis}: the 30-trade judgment is recorded: ${r.verdict}. It licenses nothing by itself.` });
+      const next = r.verdict === "PASS" ? " Next: refresh and sign the live plan on /ops/revenue (it arms nothing). The digest lists every step."
+        : r.verdict === "FAIL" ? " Nothing goes live." : "";
+      out.push({ key: `verdict:${r.axis}:${r.verdict}`, text: `${r.axis}: the 30-trade judgment is recorded: ${r.verdict}. It licenses nothing by itself.${next}` });
     }
   }
   if (p) {
@@ -106,7 +148,12 @@ export function digestText(facts) {
   if (facts.pending?.length) for (const x of facts.pending) L.push(`· ${esc(x.text)}`);
   const drift = (facts.paper || []).filter((p) => BLOCKING_PARITY.has(p.parity));
   for (const p of drift) L.push(`· ${esc(p.axis)} parity reads ${esc(p.parity)}: explain it before anything else moves.`);
-  if (!facts.pending?.length && !drift.length) L.push("Nothing waiting on you.");
+  const after = (facts.paper || []).map((p) => verdictSteps(p, { plan: p.plan || null, liftWallet: p.liftWallet || null })).filter(Boolean);
+  for (const v of after) {
+    L.push(`· ${esc(v.head)}`);
+    v.steps.forEach((s, i) => L.push(`  ${i + 1}. ${s.state === "done" ? "[done]" : s.state === "next" ? "[next]" : "[ ]"} ${esc(s.text)}`));
+  }
+  if (!facts.pending?.length && !drift.length && !after.length) L.push("Nothing waiting on you.");
 
   if (facts.paper?.length) {
     L.push("", "<b>Paper runs</b>");

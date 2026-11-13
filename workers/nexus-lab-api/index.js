@@ -88,6 +88,7 @@ import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handleHalt } from "./routes-halt.mjs";
 import { handlePaperClaim, readPaperClaims } from "./routes-paperclaim.mjs";
 import { handleJudgeSign } from "./routes-judgesign.mjs";
+import { handlePlanSign } from "./routes-plansign.mjs";
 import { runOpsDigest } from "./opsDigest.mjs";
 import { DIGEST_RUN_MINUTE } from "../../app/lib/opsDigest.mjs";
 import { readsWithClaims } from "../../app/lib/paperClaim.mjs";
@@ -965,6 +966,8 @@ export default {
       if (claimRes) return claimRes;
       const judgeSignRes = await handleJudgeSign(parts, request, env);
       if (judgeSignRes) return judgeSignRes;
+      const planSignRes = await handlePlanSign(parts, request, env);
+      if (planSignRes) return planSignRes;
       const haltRes = await handleHalt(parts, request, env);
       if (haltRes) return haltRes;
       const shareRes = await handleXrayShare(parts, request, env, { renderPng: renderMonoPng });

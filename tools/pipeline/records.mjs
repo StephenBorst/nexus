@@ -15,7 +15,8 @@ import { dirname, resolve } from "node:path";
 import { recoverMessageAddress } from "viem";
 import { PAPER_WALLET_RECORDS, JUDGMENT_RECORDS } from "../../app/lib/pipelineRecords.mjs";
 import { PAPER_JUDGMENTS } from "../../app/lib/paperJudge.mjs";
-import { nextRecords, recordsModuleSource, recordsReport } from "../../app/lib/pipelineRecordsWrite.mjs";
+import { nextRecords, nextPlanRecords, recordsModuleSource, recordsReport } from "../../app/lib/pipelineRecordsWrite.mjs";
+import { LIVE_PLAN_TEXT } from "../../app/lib/livePlanText.mjs";
 import { judgmentDocPath } from "../../app/lib/paperJudgePage.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -50,11 +51,29 @@ try {
 } catch (e) { fail(`judgment pages unreadable: ${String(e?.message || e).slice(0, 160)}`); }
 for (const k of Object.keys(drafts)) if (!drafts[k]) delete drafts[k];
 
+// Live plans: a signature the owner gave on /ops (after a PASS) goes under the page's Sign-off.
+const planServed = {};
+const planDocs = {};
+try {
+  for (const [axis, plan] of Object.entries(LIVE_PLAN_TEXT)) {
+    planServed[axis] = curlJson(`${API}/pipeline/live-plan/${encodeURIComponent(axis)}`, { allow404: true });
+    planDocs[plan.doc] = existsSync(resolve(ROOT, plan.doc)) ? readFileSync(resolve(ROOT, plan.doc), "utf8") : null;
+  }
+} catch (e) { fail(`live plans unreadable: ${String(e?.message || e).slice(0, 160)}`); }
+
 const out = await nextRecords({
   walletRecords: PAPER_WALLET_RECORDS, judgmentRecords: JUDGMENT_RECORDS, codedJudgments: coded, claims, drafts, docs,
   recover: (message, signature) => recoverMessageAddress({ message, signature }),
   sha256: (t) => createHash("sha256").update(t).digest("hex"),
 });
+const plansOut = await nextPlanRecords({
+  served: planServed, plans: LIVE_PLAN_TEXT, docs: planDocs,
+  recover: (message, signature) => recoverMessageAddress({ message, signature }),
+  sha256: (t) => createHash("sha256").update(t).digest("hex"),
+});
+Object.assign(out.writes, plansOut.writes);
+out.changes.push(...plansOut.changes);
+out.issues.push(...plansOut.issues);
 const moduleSrc = recordsModuleSource(out.walletRecords, out.judgmentRecords);
 const modulePath = resolve(ROOT, "app/lib/pipelineRecords.mjs");
 const moduleChanged = readFileSync(modulePath, "utf8") !== moduleSrc;
