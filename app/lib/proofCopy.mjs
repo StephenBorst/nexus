@@ -108,6 +108,10 @@ export const retiredReadLine = (r) => {
 // moved. Anything unread, failed or stale makes no claim. Never says "proven" of a cleared read: Tradeable has
 // not traded on paper yet.
 export const HEADLINE_DEFAULT = Object.freeze({ cleared: false, title: "Nothing has proven itself yet.", sub: "Here’s the public record." });
+// The bar in one sentence, and a cleared read's next gate: one copy for /proof's header (FeaturedLead) and the
+// HTML snapshot its Function writes before the app boots (proofSnapshot.mjs).
+export const PROOF_BAR_LINE = "To pass, a signal has to beat random entries, make money after fees, and keep doing it on new data, over 30+ trades.";
+export const paperGateLine = (target = 30) => `A live plan is written only after ${target} paper trades, net positive after fees. Nothing is armed.`;
 export const HEADLINE_MAX_AGE_MS = 6 * 3600000; // the scoreboard is cached 1h; older than this = no claim
 const CLEARED_STAGES = new Set(["TRADEABLE", "PAPER"]);
 const asOfDay = (ms) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });

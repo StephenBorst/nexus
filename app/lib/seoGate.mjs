@@ -14,6 +14,7 @@
 import { injectCallMeta } from "./callPageMeta.mjs";
 import { routeMetaFor, SITE_TITLE } from "./routeMeta.mjs";
 import { paperRunLine, paperRunSnapshotHtml } from "./paperRun.mjs";
+import { proofSnapshotHtml } from "./proofSnapshot.mjs";
 import { SITE } from "./callPageMeta.mjs";
 
 export const LAB_API = "https://og.nexustradinglabs.com";
@@ -80,6 +81,30 @@ export async function gateRoutePage({ pathname, loadApp }) {
   try { html = await page.clone().text(); } catch { return withStatus(page, 200); }
   const out = injectCallMeta(html, meta);
   if (out === html) return withStatus(page, 200);
+  const headers = new Headers(page.headers);
+  headers.set("Cache-Control", "no-cache");
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.delete("Content-Length");
+  headers.delete("ETag");
+  return new Response(out, { status: 200, headers });
+}
+
+// /proof: the route's meta (gateRoutePage) plus a static copy of the page's header in place of the boot screen
+// (proofSnapshot.mjs), from GET /calls/pulse cached at the edge for 60 s. An unreadable pulse, a slow one or any
+// error = the page with its meta only, exactly as gateRoutePage serves it (fail open).
+export async function gateProofPage({ pathname, loadApp, fetchImpl = fetch, timeoutMs = LOOKUP_TIMEOUT_MS }) {
+  const page = await gateRoutePage({ pathname, loadApp });
+  if (!page || page.status !== 200) return page;
+  let snapshot = null;
+  try {
+    const r = await fetchImpl(`${LAB_API}/calls/pulse`, { signal: AbortSignal.timeout(timeoutMs), cf: { cacheTtl: 60, cacheEverything: true } });
+    if (r.status >= 200 && r.status < 300) snapshot = proofSnapshotHtml(await r.json());
+  } catch { /* fail open */ }
+  if (!snapshot) return page;
+  let html;
+  try { html = await page.clone().text(); } catch { return page; }
+  const out = withSnapshot(html, snapshot);
+  if (out === html) return page;
   const headers = new Headers(page.headers);
   headers.set("Cache-Control", "no-cache");
   headers.set("Content-Type", "text/html; charset=utf-8");

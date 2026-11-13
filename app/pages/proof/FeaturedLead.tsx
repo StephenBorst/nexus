@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { C } from "@/config/theme";
-import { proofHeadline } from "@/lib/proofCopy.mjs";
+import { proofHeadline, PROOF_BAR_LINE, paperGateLine } from "@/lib/proofCopy.mjs";
 import { signalProgress, paperLine, paperWalletsFor } from "@/lib/signalProgress.mjs";
 import type { Scorecard } from "./SignalBoard";
 
@@ -59,14 +59,14 @@ export default function FeaturedLead({ isMobile, onHowWeGrade, scorecard, shareH
       {progress.map((p) => (
         <div key={p.axis} style={{ marginTop: 12, fontFamily: UI, fontSize: 14, color: BRIGHT, lineHeight: 1.5, maxWidth: 640 }}>
           {paperLine(p)}{" "}
-          <span style={{ color: FOG }}>A live plan is written only after {p.paper?.target ?? 30} paper trades, net positive after fees. Nothing is armed.</span>
+          <span style={{ color: FOG }}>{paperGateLine(p.paper?.target ?? 30)}</span>
           {p.paper && (
             <>{" "}<Link to={`/proof/paper/${encodeURIComponent(p.axis)}`} style={{ color: BRIGHT, textDecoration: "underline", textUnderlineOffset: 3, textDecorationColor: MUTED }}>Every trade, in R →</Link></>
           )}
         </div>
       ))}
       <p style={{ margin: "14px 0 0", fontFamily: UI, fontSize: 15, color: FOG, lineHeight: 1.55, maxWidth: 640 }}>
-        To pass, a signal has to beat random entries, make money after fees, and keep doing it on new data, over 30+ trades.
+        {PROOF_BAR_LINE}
       </p>
       <div style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap", marginTop: 10 }}>
         <button type="button" onClick={onHowWeGrade}
