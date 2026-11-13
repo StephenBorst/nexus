@@ -8,6 +8,7 @@
 // page is, in plain words, numbers over adjectives, never "proven".
 
 import { SITE } from "./callPageMeta.mjs";
+import { REGISTERED_READS } from "./readPipeline.mjs";
 
 export const SITE_TITLE = "Nexus Trading Labs";
 const SUFFIX = ` | ${SITE_TITLE}`;
@@ -66,9 +67,12 @@ export function routeTitle(pathname) {
   return routeMetaFor(pathname)?.title || SITE_TITLE;
 }
 
-/** The public sitemap: the site root + every route above. */
+/** Each cleared read's paper run page (/proof/paper/:axis): every registration that names a paper wallet. */
+export const paperRunPaths = () => REGISTERED_READS.filter((r) => r.paperWallet).map((r) => `/proof/paper/${r.axis}`);
+
+/** The public sitemap: the site root, every route above, and each paper run page. */
 export function sitemapXml() {
-  const urls = ["/", ...Object.keys(ROUTE_META)];
+  const urls = ["/", ...Object.keys(ROUTE_META), ...paperRunPaths()];
   const rows = urls.map((p) => `  <url><loc>${SITE}${p === "/" ? "/" : p}</loc></url>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${rows.join("\n")}\n</urlset>\n`;
 }

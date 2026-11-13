@@ -12,7 +12,9 @@
 // serves the page exactly as before (no injected tags).
 
 import { injectCallMeta } from "./callPageMeta.mjs";
-import { routeMetaFor } from "./routeMeta.mjs";
+import { routeMetaFor, SITE_TITLE } from "./routeMeta.mjs";
+import { paperRunLine } from "./paperRun.mjs";
+import { SITE } from "./callPageMeta.mjs";
 
 export const LAB_API = "https://og.nexustradinglabs.com";
 export const LOOKUP_TIMEOUT_MS = 2500;
@@ -84,4 +86,43 @@ export async function gateRoutePage({ pathname, loadApp }) {
   headers.delete("Content-Length");
   headers.delete("ETag");
   return new Response(out, { status: 200, headers });
+}
+
+// A cleared read's paper run (/proof/paper/:axis): the live count in the head, so a shared link reads
+// "level_reclaim on paper: 5 of 30 trades. 2 TP · 3 SL." A read with no paper wallet = a real 404 (lab-api
+// answers 404). Anything else unexpected serves the page as before (fail open).
+export function paperRunMeta(axis, run) {
+  const line = paperRunLine(run);
+  if (!line) return null;
+  const a = encodeURIComponent(String(axis));
+  return {
+    title: `${line.replace(/\.$/, "").split(". ")[0]} | ${SITE_TITLE}`,
+    headline: line,
+    description: `${line} Every trade in R, graded on public price. No dollar P&L until the sample is complete.`,
+    url: `${SITE}/proof/paper/${a}`,
+    image: "https://og.nexustradinglabs.com/og/record.png",
+    type: "website",
+    publishedAt: null,
+  };
+}
+
+export async function gatePaperRunPage({ axis, loadApp, fetchImpl = fetch, timeoutMs = LOOKUP_TIMEOUT_MS }) {
+  const page = await loadApp();
+  const a = String(axis || "").trim();
+  if (!a || a.length > 64) return withStatus(page, 404, { noindex: true });
+  let meta = null;
+  try {
+    const r = await fetchImpl(`${LAB_API}/signals/paper-run/${encodeURIComponent(a)}`, { signal: AbortSignal.timeout(timeoutMs) });
+    if (r.status === 404) return withStatus(page, 404, { noindex: true });
+    if (r.status >= 200 && r.status < 300) { const d = await r.json(); if (d?.ok) meta = paperRunMeta(a, d); }
+  } catch { /* fail open */ }
+  if (!meta || !page || page.status !== 200) return withStatus(page, page?.status === 200 ? 200 : page.status);
+  let html;
+  try { html = await page.text(); } catch { return withStatus(page, 200); }
+  const headers = new Headers(page.headers);
+  headers.set("Cache-Control", "no-cache");
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.delete("Content-Length");
+  headers.delete("ETag");
+  return new Response(injectCallMeta(html, meta), { status: 200, headers });
 }

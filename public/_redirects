@@ -15,6 +15,8 @@
 /arena/                   / 200
 /proof                    / 200
 /proof/                   / 200
+/proof/paper/:axis        / 200
+/proof/paper/:axis/       / 200
 /ops/revenue              / 200
 /ops/revenue/             / 200
 /feed                     / 200

@@ -63,6 +63,7 @@ const ArenaLayout = lazy(() => import('./pages/arena/Layout'));
 // ✅ PROOF PAGE (unified track-records hub)
 const ProofPage = lazy(() => import('./pages/proof'));
 const ProofLayout = lazy(() => import('./pages/proof/Layout'));
+const PaperRunPage = lazy(() => import('./pages/proof/PaperRun'));
 const RevenuePage = lazy(() => import('./pages/ops/revenue'));
 const OpsLayout = lazy(() => import('./pages/ops/Layout'));
 
@@ -166,6 +167,7 @@ const router = createBrowserRouter([
         element: <><PageMeta route="/proof" /><ProofLayout /></>,
         children: [
           { index: true, element: <ProofPage /> },
+          { path: 'paper/:axis', element: <PaperRunPage /> },
         ],
       },
 
