@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 import { PageMeta } from "@/components/PageMeta";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { paperRunLine } from "@/lib/paperRun.mjs";
@@ -22,13 +22,28 @@ type Trade = {
   n: number; coin: string; side: "LONG" | "SHORT"; openedAt: string | null; closedAt: string; holdH: number | null;
   entry: number | null; exit: number | null; reason: string | null; outcome: string; movePct: number | null;
   r: number | null; rBasis: "fill" | "contract" | null;
+  tape?: { entry: string; exit: string };
 };
+type TapeSummary = { fills: number; judged: number; onTape: number; near: number; off: number; noTrades: number; noData: number; averaged: number; pending: number; line: string | null };
 type Run = {
   ok?: boolean; error?: string; axis: string; wallet: string; target: number; unread?: boolean; count: number;
   remaining: number; complete: boolean; startedAt: string | null; windowed: boolean;
   tally: { win: number; loss: number; time: number; other: number };
   open: { coin: string; side: string; openedAt: string | null } | null; trades: Trade[];
+  tape?: TapeSummary;
 };
+
+// Each fill against Orderly's public 1-minute tape (app/lib/paperTape.mjs). Not money: no green or red.
+const TAPE_MARK: Record<string, { mark: string; word: string }> = {
+  ON_TAPE: { mark: "✓", word: "traded inside that minute’s range" },
+  NEAR: { mark: "≈", word: "within 0.1% of that minute’s range (the mark is an index, not a trade)" },
+  OFF: { mark: "✕", word: "outside that minute’s range" },
+  NO_TRADES: { mark: "·", word: "no trades printed that minute" },
+  NO_DATA: { mark: "?", word: "Orderly no longer serves that minute" },
+  AVERAGED: { mark: "avg", word: "an average of several entries, not one trade" },
+  PENDING: { mark: "…", word: "not checked yet (within the hour)" },
+};
+const tapeMark = (v: string) => TAPE_MARK[v] || TAPE_MARK.PENDING;
 
 const fmtR = (r: number | null) => (r == null ? "unread" : `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(2)}R`);
 const fmtDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : "—");
@@ -118,10 +133,10 @@ export default function PaperRunPage() {
             <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.2em", textTransform: "uppercase", color: FOG, marginBottom: 10 }}>Every trade</div>
             {run.trades.length === 0 ? <p style={{ color: FOG, fontSize: 14 }}>No closed trade yet.</p> : (
               <div style={{ overflowX: "auto" }}>
-                <table style={{ minWidth: 640, width: "100%", borderCollapse: "collapse", fontFamily: MONO, fontSize: 12.5 }}>
+                <table style={{ minWidth: 700, width: "100%", borderCollapse: "collapse", fontFamily: MONO, fontSize: 12.5 }}>
                   <thead>
                     <tr style={{ color: FOG, textAlign: "left" }}>
-                      {["#", "Market", "Side", "Opened", "Held", "Entry → exit", "Exit", "R"].map((h) => (
+                      {["#", "Market", "Side", "Opened", "Held", "Entry → exit", "Tape", "Exit", "R"].map((h) => (
                         <th key={h} style={{ padding: "8px 10px 8px 0", fontWeight: 500, borderBottom: `1px solid ${MUTED}`, textAlign: h === "R" ? "right" : "left" }}>{h}</th>
                       ))}
                     </tr>
@@ -135,6 +150,16 @@ export default function PaperRunPage() {
                         <td style={{ padding: "9px 10px 9px 0", color: FOG }}>{fmtDay(t.openedAt)}</td>
                         <td style={{ padding: "9px 10px 9px 0", color: FOG }}>{fmtHold(t.holdH)}</td>
                         <td style={{ padding: "9px 10px 9px 0", color: FOG }}>{t.entry ?? "—"} → {t.exit ?? "—"}</td>
+                        <td style={{ padding: "9px 10px 9px 0", whiteSpace: "nowrap" }}
+                            title={t.tape ? `Entry: ${tapeMark(t.tape.entry).word}. Exit: ${tapeMark(t.tape.exit).word}.` : undefined}>
+                          {t.tape ? (
+                            <>
+                              <span style={{ color: t.tape.entry === "OFF" ? SIGNAL.watch : BRIGHT }}>{tapeMark(t.tape.entry).mark}</span>
+                              <span style={{ color: MUTED }}> → </span>
+                              <span style={{ color: t.tape.exit === "OFF" ? SIGNAL.watch : BRIGHT }}>{tapeMark(t.tape.exit).mark}</span>
+                            </>
+                          ) : <span style={{ color: FOG }}>—</span>}
+                        </td>
                         <td style={{ padding: "9px 10px 9px 0" }}>{EXIT_WORD[t.reason || ""] || t.reason || "—"}</td>
                         <td style={{ padding: "9px 0", textAlign: "right" }}>
                           {fmtR(t.r)}{t.rBasis === "contract" ? <span style={{ color: FOG }}> *</span> : null}
@@ -151,6 +176,14 @@ export default function PaperRunPage() {
               </p>
             )}
             {run.windowed && <p style={{ margin: "8px 0 0", color: FOG, fontSize: 12.5 }}>Showing the last 50 trades of {run.count}.</p>}
+            {run.tape && run.trades.length > 0 && (
+              <p style={{ margin: "10px 0 0", color: FOG, fontSize: 12.5, lineHeight: 1.6, maxWidth: 680 }}>
+                <span style={{ color: BRIGHT }}>Tape check.</span>{" "}
+                {run.tape.line ? `${run.tape.line}.` : "No fill checked yet: each one is checked within the hour of its minute closing."}{" "}
+                Paper fills are prices our own agent wrote down. Each one is checked against the public 1-minute bar for that minute, and the bar is kept.{" "}
+                <a href={`${AGENT_API}/agent/${run.wallet}/tape`} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>The checks and their sources (JSON)</a>
+              </p>
+            )}
           </section>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 22, marginTop: 28, fontSize: 13 }}>

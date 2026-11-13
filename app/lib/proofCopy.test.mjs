@@ -66,6 +66,17 @@ test("retired graded exits agree with the recorded snapshot, and read plainly", 
   assert.equal(retiredLine(null), "");
 });
 
+test("retired reads agree with the recorded snapshot, and read plainly", async () => {
+  const { RETIRED_READS, retiredRead, retiredReadLine } = await import("./proofCopy.mjs");
+  const { readFileSync } = await import("node:fs");
+  const snap = JSON.parse(readFileSync(new URL("../../docs/research/pipeline-stages.json", import.meta.url), "utf8"));
+  for (const axis of Object.keys(RETIRED_READS)) assert.equal(snap.reads[axis]?.stage, "RETIRED", axis);
+  for (const [axis, r] of Object.entries(snap.reads)) if (r.stage === "RETIRED") assert.ok(RETIRED_READS[axis], `${axis} is RETIRED in the snapshot but /proof doesn't record the date`);
+  assert.equal(retiredReadLine(retiredRead("session_momentum")), "Retired Nov 13, 2026: 112 out-of-sample events, mean \u22120.33R, worse than random. Never re-tuned.");
+  assert.equal(retiredRead("nope"), null);
+  assert.equal(retiredReadLine(null), "");
+});
+
 test("pipelineLine: an Edge read states the Edge line from pipeline-if-then.md", () => {
   const e = pipelineLine({ stage: "EDGE", next: "1 more graded-exit trades", numbers: { events: 60 } }, 30);
   assert.equal(e.text, "60 events · an edge");

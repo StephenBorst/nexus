@@ -12,7 +12,8 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
-import { showsLivePnl } from "@/lib/callLifecycle.mjs";
+import { showsLivePnl, callPollMs } from "@/lib/callLifecycle.mjs";
+import { isMinuteGraded } from "@/lib/minuteGrade.mjs";
 import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, timeExitLabel } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
@@ -64,6 +65,8 @@ type VerifyResult = {
   stamped?: { outcome: string; r: number } | null;
   candlesChecked?: number;
   source?: string | null;
+  archive?: string[];
+  method?: string;
   rule?: string;
   error?: string;
 };
@@ -74,6 +77,9 @@ const VERDICT_LINE: Record<string, { label: string; color: string; note: string 
   UNSTAMPED: { label: "GRADED NOW",          color: "#a1a1aa", note: "No stored grade yet. This is what the grader says right now." },
   NO_DATA:   { label: "CANDLES NOT LOADED",  color: "#a1a1aa", note: "The candles for this call’s window aren’t loaded yet. Try again in a few minutes." },
 };
+
+// A call graded on minutes (app/lib/minuteGrade.mjs) is re-checked every minute, not every hour.
+const MINUTE_MISMATCH_NOTE = "A fresh grade disagrees with the stored one. The minute grader re-checks it; check back in a couple of minutes.";
 
 function gradeText(g?: { outcome: string; r: number } | null): string {
   if (!g) return "—";
@@ -157,6 +163,22 @@ export default function ThesisPage() {
   const livePrices = useLivePrices(activeSymbols);
 
   // ── Fetch thesis ────────────────────────────────────────────────────────────
+  // Agent-feed theses can arrive without the full numeric fields; the render
+  // calls .toFixed() on them (entryPrice/stopLoss/…), which crashed the page.
+  // Coerce to safe numbers on load — same guard as the trader profile.
+  const readThesis = (data: { thesis?: FeedThesis } | null): FeedThesis | null => {
+    if (!data?.thesis) return null;
+    const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const t = data.thesis;
+    return {
+      ...t,
+      entryPrice: num(t.entryPrice), stopLoss: num(t.stopLoss),
+      takeProfit1: num(t.takeProfit1), takeProfit2: num(t.takeProfit2),
+      riskReward: num(t.riskReward), positionSize: num(t.positionSize),
+      leverage: num(t.leverage),
+      actualPnl: t.actualPnl == null ? null : num(t.actualPnl),
+    };
+  };
   useEffect(() => {
     if (!wallet || !id) return;
     setLoading(true);
@@ -168,26 +190,28 @@ export default function ThesisPage() {
         if (r.status === 404) { setNotFound(true); setGone(true); return null; }
         return r.json();
       })
-      .then((data) => {
-        // Agent-feed theses can arrive without the full numeric fields; the render
-        // calls .toFixed() on them (entryPrice/stopLoss/…), which crashed the page.
-        // Coerce to safe numbers on load — same guard as the trader profile.
-        if (data?.thesis) {
-          const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-          const t = data.thesis;
-          setThesis({
-            ...t,
-            entryPrice: num(t.entryPrice), stopLoss: num(t.stopLoss),
-            takeProfit1: num(t.takeProfit1), takeProfit2: num(t.takeProfit2),
-            riskReward: num(t.riskReward), positionSize: num(t.positionSize),
-            leverage: num(t.leverage),
-            actualPnl: t.actualPnl == null ? null : num(t.actualPnl),
-          });
-        }
-      })
+      .then((data) => { const t = readThesis(data); if (t) setThesis(t); })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [wallet, id]);
+
+  // ── Keep an open call live ──────────────────────────────────────────────────
+  // While the call is open, re-read it every 30 s (callPollMs) so a fill or a grade shows up without a
+  // reload; it stops once the call is graded. Quiet: no spinner, and a failed read keeps what's shown.
+  // Skipped while the tab is hidden.
+  const pollMs = thesis ? callPollMs(thesis) : null;
+  useEffect(() => {
+    if (!wallet || !id || !pollMs) return;
+    let off = false;
+    const iv = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetch(`${API_BASE}/thesis/${wallet}/${id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => { const t = readThesis(data); if (t && !off) setThesis(t); })
+        .catch(() => { /* keep the last good read */ });
+    }, pollMs);
+    return () => { off = true; clearInterval(iv); };
+  }, [wallet, id, pollMs]);
 
   // ── OG meta tags ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -493,7 +517,9 @@ export default function ThesisPage() {
             <div style={{ flex: 1, minWidth: 200 }}>
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", letterSpacing: "0.05em" }}>CHECK THE GRADE</div>
               <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", marginTop: 4, lineHeight: 1.5 }}>
-                Re-runs the grader on Orderly’s 1h candles and ignores the stored result.
+                {thesis && isMinuteGraded(thesis)
+                  ? "Re-runs the grader on Orderly’s 1-minute bars (the copy we archived) and ignores the stored result."
+                  : "Re-runs the grader on Orderly’s 1h candles and ignores the stored result."}
               </div>
             </div>
             {!verifyResult && (
@@ -510,7 +536,9 @@ export default function ThesisPage() {
                   Couldn’t check it: {verifyResult.error}
                 </div>
               ) : (() => {
-                const v = VERDICT_LINE[verifyResult.verdict || "NO_DATA"] || VERDICT_LINE.NO_DATA;
+                const base = VERDICT_LINE[verifyResult.verdict || "NO_DATA"] || VERDICT_LINE.NO_DATA;
+                const minute = verifyResult.method === "orderly_1m_regrade";
+                const v = minute && verifyResult.verdict === "MISMATCH" ? { ...base, note: MINUTE_MISMATCH_NOTE } : base;
                 const fresh = verifyResult.fresh;
                 const money = (o?: string) => (o === "WIN" ? "#3ecf8e" : o === "LOSS" ? "#f7525f" : "#d4d4d8");
                 return (
@@ -531,7 +559,7 @@ export default function ThesisPage() {
                         </div>
                       </div>
                       <div>
-                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>CANDLES</div>
+                        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>{minute ? "MINUTE BARS" : "CANDLES"}</div>
                         <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#d4d4d8" }}>{verifyResult.candlesChecked ?? 0}</div>
                       </div>
                     </div>
@@ -540,8 +568,18 @@ export default function ThesisPage() {
                     )}
                     {verifyResult.source && (
                       <a href={verifyResult.source} target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#d4d4d8" }}>
-                        The candles, straight from Orderly ↗
+                        {minute ? "The first day’s minutes, straight from Orderly ↗" : "The candles, straight from Orderly ↗"}
                       </a>
+                    )}
+                    {minute && (verifyResult.archive || []).length > 0 && (
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontFamily: "var(--nx-font-ui)", fontSize: 12 }}>
+                        <span style={{ color: "#71717a" }}>Archived bars:</span>
+                        {(verifyResult.archive || []).map((p) => (
+                          <a key={p} href={`${API_BASE}${p}`} target="_blank" rel="noopener noreferrer" style={{ color: "#d4d4d8" }}>
+                            {p.split("/").pop()} ↗
+                          </a>
+                        ))}
+                      </div>
                     )}
                   </div>
                 );

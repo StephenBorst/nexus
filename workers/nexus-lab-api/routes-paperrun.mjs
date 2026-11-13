@@ -1,8 +1,9 @@
 // ── GET /signals/paper-run/:axis — a cleared read's paper run, trade by trade, in R ─────────────────
 // Read by /proof/paper/:axis and its link card (functions/proof/paper/[axis].js). Rule: app/lib/paperRun.mjs.
-// One KV read of the paper wallet's state (exec's record). No dollars, no totals, nothing written.
+// Two KV reads: the paper wallet's state (exec's record) and its tape checks. No dollars, no totals, nothing written.
 // Public, read-only, any origin. 404 = the read has no paper wallet; an unreadable state = `unread: true`.
 import { paperRun } from "../../app/lib/paperRun.mjs";
+import { readTape } from "./paperTape.mjs";
 
 const reply = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -24,5 +25,8 @@ export async function handlePaperRun(parts, request, env) {
     const raw = await (env.NEXUS_AGENT || env.LAB_STORE).get(`agent:state:${probe.wallet.toLowerCase()}`);
     state = raw ? JSON.parse(raw) : null;
   } catch { state = null; }
-  return reply({ ok: true, asOf: new Date().toISOString(), ...paperRun(axis, state) });
+  // Each fill checked against Orderly's public 1-minute tape (paperTape.mjs). Unreadable = no tape block.
+  let tape = null;
+  try { tape = state ? await readTape(env.LAB_STORE, probe.wallet) : null; } catch { tape = null; }
+  return reply({ ok: true, asOf: new Date().toISOString(), ...paperRun(axis, state, tape) });
 }
