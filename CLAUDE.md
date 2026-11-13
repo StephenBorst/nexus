@@ -250,7 +250,8 @@ product is what sits on top:
   hourly at :47 records PASS/FAIL/RESET ONCE in LAB_STORE `pjudge:{axis}` (the 30 trades as judged), never rewritten;
   `GET /signals/paper-judge/:axis`; the paper run page's verdict block. Licenses nothing automatic. **oi_div_reversal_4h** has the same rules
   (`paper-judgment-oi-div-reversal-4h.md`, drafted 2026-11-13 at 0 trades, a word-for-word copy, test-checked) with
-  `signature: "pending"`: no PASS/FAIL is final until borst's signature is recorded under its Results and the flag flips. Events for parity come
+  signed by borst 2026-11-13 (recorded under its Results; `signature: "signed"`). A new page starts `"pending"`: no PASS/FAIL
+  is final until it is signed. Events for parity come
   from `parityEvents.mjs` (one copy with `GET /agent/:a/parity`).
 - **Live fills on the tape + $10 preflight** (borst 2026-11-13): the tape checker also checks each exchange-confirmed live
   fill in `state.live_slip` (`liveLegs`, keys `l:{order_id}`, kind `live_<kind>`), counted APART from paper

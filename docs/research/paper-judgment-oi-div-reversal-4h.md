@@ -63,4 +63,9 @@ rules are level_reclaim's, written before this read had a paper wallet.
 
 ## Results
 
-(none yet)
+### 2026-11-13 · signed
+
+Signed by borst on 2026-11-13 ("signed"), after reading the rules above. That was at about 20:00 UTC, with 0 trades on
+the wallet. The text above Results is unchanged from the draft, and its sha256 is pinned by `paperJudge.test.mjs`. The
+code's `signature` flag flips to "signed" in the same PR, so a PASS or FAIL at trade 30 is now final and is recorded
+once.
