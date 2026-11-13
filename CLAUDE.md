@@ -157,7 +157,14 @@ product is what sits on top:
   hour after an event, `sourceT` = the event time. **Loaded only by the hidden link `/lab?tab=agent&deploy=level-reclaim-paper`**
   (borst: a FRESH wallet, owner-only) with `LEVEL_RECLAIM_PAPER_CONFIG` (graded exit, 11 main-card coins, no filters, wide
   caps). No mode button, no Strategy Library preset, no /proof Load until its wallet has 30 paper trades with parity
-  CLEAN, judged after fees (`/paper-costs`), tested. Parity: `levelReclaim.test.mjs` (hour by hour), `/agent/:a/parity`. Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
+  CLEAN, judged after fees (`/paper-costs`), tested. Parity: `levelReclaim.test.mjs` (hour by hour), `/agent/:a/parity`. **OI_DIV_4H = ON for PAPER only**
+  (2026-11-13, oi_div_reversal_4h served TRADEABLE that day, #299): same pattern. Shared rule `app/lib/oiDivReversal.mjs`
+  (the grader's `oiDivReversalEvents` + `oiDivReversal4hEvents` moved there unchanged; explorerReads re-exports them),
+  computed by the brain on `oi:hist` behind `OI_DIV_4H_LIVE = "true"`, PAPER only (`oiDiv4hRefusal`, no live lift);
+  fires in the hour after its row, `sourceT` = the row time. Hidden link `/lab?tab=agent&deploy=oi-div-4h-paper`
+  (`OI_DIV_4H_PAPER_CONFIG`, a FRESH wallet, borst sets it up); `paperWallet` on its registration stays null until he
+  does (recording it moves the served stage → PAPER). Parity: `oiDivReversal.test.mjs`. ~0.4 s brain CPU per tick for
+  the 11 coins while that wallet is flat (full-history re-run, the same as the grader). Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
   evaluates nothing** (no "all" default).
 - **Exits** (`evaluateExit`, exec `logic.mjs`): SL → TIMEOUT → trail before TP; `takeProfits` ladder OVERRIDES
   `tpPercent` (`normTakeProfits`); DCA has its own monitor path. Exit vocabulary: `SL · TIMEOUT · TRAIL · BE · TP ·

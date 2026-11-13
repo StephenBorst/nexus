@@ -56,6 +56,8 @@ export function axisForConfig(config) {
   if (!config || config.invertSignal) return null; // an inverted read trades the mirror image of every axis
   // The registered level_reclaim read (STAGED in the brain, app/lib/levelReclaim.mjs): its own axis.
   if (config.signalMode === "LEVEL_RECLAIM") return "level_reclaim";
+  // The registered oi_div_reversal_4h read (app/lib/oiDivReversal.mjs): its own axis.
+  if (config.signalMode === "OI_DIV_4H") return "oi_div_reversal_4h";
   if (config.signalMode !== "BASIS_FADE") return null;
   const c = config.basisConfirm;
   // basisAnchor "MEAN" = the two-sided read; only plain + CVD have scoreboard rows.

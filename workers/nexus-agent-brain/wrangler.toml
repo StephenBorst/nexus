@@ -23,6 +23,10 @@ GRADED_EXIT_LIVE_LIFT = ""
 # the PR that sets up its paper wallet, after level_reclaim was served TRADEABLE (pipeline-if-then.md). Live
 # configs are refused either way (app/lib/levelReclaim.mjs levelReclaimRefusal; the graded exit is paper-only too).
 LEVEL_RECLAIM_LIVE = "true"
+# ON since 2026-11-13: the oi_div_reversal_4h read for PAPER configs with signalMode = "OI_DIV_4H" (served TRADEABLE
+# that day, #299). Only its hidden setup link loads that mode. Non-PAPER configs are refused either way
+# (app/lib/oiDivReversal.mjs oiDiv4hRefusal; the graded exit is paper-only too).
+OI_DIV_4H_LIVE = "true"
 
 # STAGED (off): the two-sided basis read for configs with basisAnchor = "MEAN"
 # (scoreboard axes basis_dev / basis_dev_x_cvd). Uncomment ONLY after it grades PREDICTIVE

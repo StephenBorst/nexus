@@ -44,36 +44,10 @@ function pctRank(arr, x) {
 }
 
 // ── 1 · oi_div_reversal ─────────────────────────────────────────────────────────────────────
-// Extreme 24h move (|24h return| ≥ the 90th percentile of |24h return| over the prior 30 days) AND
-// OI fell ≥3% over the same 24h → fade it: rally on falling OI → SHORT, drop on falling OI → LONG.
-// Cooldown 24h per coin. Rising OI against the move does NOT fire.
-export const OI_DIV = Object.freeze({ windowH: 24, lookbackH: MONTH_H, pct: 0.9, oiDrop: 0.03, cooldownH: 24, minHistory: MONTH_H / 2 });
-export function oiDivReversalEvents(cs, _pmap, _ctx, p = OI_DIV) {
-  const m = oiMap(cs.oiHist);
-  const hours = [...m.keys()].sort((a, b) => a - b);
-  const ret = new Map(); // hour → { r, oiCh }
-  for (const h of hours) {
-    const a = m.get(h), b = m.get(h - p.windowH);
-    if (!b || !(b.price > 0)) continue;
-    const r = a.price / b.price - 1;
-    const oiCh = Number(a.oi) > 0 && Number(b.oi) > 0 ? Number(a.oi) / Number(b.oi) - 1 : null;
-    ret.set(h, { r, oiCh });
-  }
-  const ev = [];
-  let last = -Infinity;
-  for (const h of hours) {
-    const x = ret.get(h);
-    if (!x || x.oiCh == null || h - last < p.cooldownH) continue;
-    const prior = [];
-    for (let k = h - p.lookbackH; k < h; k++) { const y = ret.get(k); if (y) prior.push(Math.abs(y.r)); }
-    if (prior.length < p.minHistory) continue; // warm-up: half the 30-day window must exist
-    if (!(pctRank(prior, Math.abs(x.r)) >= p.pct) || x.r === 0) continue;
-    if (!(x.oiCh <= -p.oiDrop)) continue;
-    ev.push({ t: m.get(h).t, side: x.r > 0 ? "SHORT" : "LONG" });
-    last = h;
-  }
-  return ev;
-}
+// Moved UNCHANGED to app/lib/oiDivReversal.mjs (2026-11-13), the one copy the brain's live gate and
+// this grader share; re-exported here so every existing import keeps working.
+export { OI_DIV, oiDivReversalEvents } from "../../app/lib/oiDivReversal.mjs";
+import { oiDivReversalEvents, oiDivReversal4hEvents } from "../../app/lib/oiDivReversal.mjs";
 
 // ── 2 · vol_breakout — DROPPED for v1 (borst, 2026-10-16) ────────────────────────────────────
 // Its power check counted 33 events in 60 days on the main card, a third of the bar. A looser
@@ -139,13 +113,9 @@ export function confluenceFollowEvents(cs, _pmap, _ctx, p = CONFLUENCE) {
 }
 
 // ── 6 · oi_div_reversal_4h — registered 2026-10-27, counts from 2026-10-28T00:00Z ──────────────
-// docs/research/oi-div-reversal-4h-prereg.md. The registered oi_div_reversal rule on a 4h window,
-// run through the same code path (only the window, the OI drop and the cooldown differ), so the two
-// can't drift apart. Moved unchanged from explorerDraftsB.mjs; borst signed OI −2% and a 12h cooldown.
-export const OI_DIV_4H = Object.freeze({ ...OI_DIV, windowH: 4, oiDrop: 0.02, cooldownH: 12 });
-export function oiDivReversal4hEvents(cs, pmap, ctx, p = OI_DIV_4H) {
-  return oiDivReversalEvents(cs, pmap, ctx, p);
-}
+// docs/research/oi-div-reversal-4h-prereg.md. Moved UNCHANGED to app/lib/oiDivReversal.mjs (2026-11-13)
+// with the 24h rule it runs through; re-exported here.
+export { OI_DIV_4H, oiDivReversal4hEvents } from "../../app/lib/oiDivReversal.mjs";
 
 // ── 7 · oi_coil_break — registered 2026-10-27, counts from 2026-10-28T00:00Z ─────────────────────────────────────────────────────────────────────────
 // Positions build while price goes nowhere, then price leaves the range: follow the break.
