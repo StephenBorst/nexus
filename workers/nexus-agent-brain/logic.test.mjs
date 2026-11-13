@@ -409,3 +409,37 @@ test("heartbeat: stamped only by a run that got through, never by one that died"
   assert.ok(done > 0 && done < fatal, "set at the end of the try, before the catch");
   assert.equal((run.match(/completed = true; return;/g) || []).length, 2, "the healthy no-users exits count as completed");
 });
+
+// ── the no-signal summary (quietReason, 2026-11-13) ────────────────────────────────────────────────────
+import { quietReason } from "./logic.mjs";
+import { readFileSync as readSrc } from "node:fs";
+
+test("quietReason: one shared sit-out reason reads as N of N markets", () => {
+  const r = quietReason(Array(11).fill("no extreme 4h move on falling OI this hour — sat out"), 0);
+  assert.equal(r, "no signal · 11 of 11 markets: no extreme 4h move on falling OI this hour");
+});
+
+test("quietReason: 'switched off' and 'nothing qualified' no longer look the same", () => {
+  const off = quietReason(Array(11).fill("oi_div_reversal_4h is off — sat out"), 0);
+  const quiet = quietReason(Array(11).fill("no extreme 4h move on falling OI this hour — sat out"), 0);
+  assert.notEqual(off, quiet);
+  assert.match(off, /is off/);
+});
+
+test("quietReason: mixed reasons are grouped and counted, most common first, capped at 3 groups", () => {
+  const r = quietReason(["a", "b", "a", "c", "d", "a", "b"], 0);
+  assert.equal(r, "no signal · a (3) · b (2) · c (1) · +1 other reasons");
+});
+
+test("quietReason: markets the brain couldn't evaluate are counted apart", () => {
+  assert.equal(quietReason(["x — sat out", "x"], 2), "no signal · x (2) · 2 of 4 markets unread this tick");
+  assert.equal(quietReason([], 3), "no signal · 3 of 3 markets unread this tick");
+  assert.equal(quietReason([], 0), "no signal · no markets evaluated");
+});
+
+test("brain: the summary replaces the bare default only when no market fired", () => {
+  const src = readSrc(new URL("./index.js", import.meta.url), "utf8");
+  assert.match(src, /if \(sig\.direction === "NONE"\) quiet\.push\(sig\.reason\);/);
+  assert.match(src, /if \(!best\.symbol\) best\.reason = quietReason\(quiet, unread\);/);
+  assert.match(src, /if \(!raw\) \{ unread\+\+; continue; \}/);
+});
