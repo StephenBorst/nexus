@@ -84,15 +84,25 @@ test("stageGroups: registered reads first by stage, then history, then reads wor
     { axis: "not-on-board", stage: "EDGE" },
   ];
   const g = stageGroups(list, reads);
-  assert.deepEqual(g.map((x) => x.key), ["pipeline", "history", "below"]);
+  assert.deepEqual(g.map((x) => x.key), ["pipeline", "history", "below", "retired"]);
   // The best in-sample read is NOT on top: a further stage beats a better in-sample number.
   assert.deepEqual(g[0].rows.map((r) => r.a.name), ["reg-lead", "reg-registered", "reg-below"]);
   assert.equal(g[0].rows[0].reg.stage, "LEAD");
   assert.deepEqual(g[1].rows.map((r) => r.a.name), ["top-insample", "noise"]);
-  // Worse-than-random and retired reads stay on the board, at the bottom.
-  assert.deepEqual(g[2].rows.map((r) => r.a.name).sort(), ["retired", "worse"]);
+  // Worse-than-random reads stay on the board; a retired read moves to its own "Retired" group, last.
+  assert.deepEqual(g[2].rows.map((r) => r.a.name), ["worse"]);
+  assert.deepEqual(g[3].rows.map((r) => r.a.name), ["retired"]);
   // Every read on the board appears exactly once.
   assert.equal(g.reduce((n, x) => n + x.rows.length, 0), list.length);
+});
+
+test("stageGroups: a recorded retirement is final, whatever stage is served later", () => {
+  const list = [axis({ name: "gone" }), axis({ name: "live" })];
+  const reads = [{ axis: "gone", stage: "REGISTERED" }, { axis: "live", stage: "REGISTERED" }];
+  const g = stageGroups(list, reads, ["gone"]);
+  assert.deepEqual(g.map((x) => x.key), ["pipeline", "retired"]);
+  assert.deepEqual(g[0].rows.map((r) => r.a.name), ["live"]);
+  assert.deepEqual(g[1].rows.map((r) => r.a.name), ["gone"]);
 });
 
 test("stageGroups: no pipeline served → history and below only; empty groups dropped", () => {

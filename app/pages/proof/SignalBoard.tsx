@@ -2,8 +2,8 @@
 // Our own reads, graded the way we grade traders (/intel/axis-backtest). Display only: every
 // number is served by the grader; the one-line verdicts come from app/lib/signalCard.mjs.
 // Layout (borst, 2026-10-23): the registered reads first, as plain rows (name · events so far ·
-// "needs 30", or "failing" with the grader's `next`); their grade on old data opens on tap. Then two
-// folds, "Looked good on old data" and "Worse than random", each with its one-line explanation;
+// "needs 30", or "failing" with the grader's `next`); their grade on old data opens on tap. Then the
+// folds, "Looked good on old data", "Worse than random" and "Retired" (pipeline-if-then.md: name, numbers, date), each with its one-line explanation;
 // inside, the detailed rows (grade, mean R, events, vs random), a tap opens the full card.
 // The tide and the method moved to "How we grade" (HowWeGrade.tsx).
 import { useEffect, useState } from "react";
@@ -13,7 +13,7 @@ import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { C } from "@/config/theme";
 import { AXIS_BLURB, splitLabel, takeaway, sideBar, stageGroups, randomBar } from "@/lib/signalCard.mjs";
-import { pipelineLine, countingSince, retiredGradedExit, retiredLine } from "@/lib/proofCopy.mjs";
+import { pipelineLine, countingSince, retiredGradedExit, retiredLine, RETIRED_READS, retiredRead, retiredReadLine } from "@/lib/proofCopy.mjs";
 import Fold from "./Fold";
 
 const API = "https://og.nexustradinglabs.com";
@@ -359,7 +359,13 @@ function StageRow({ a, reg, minEvents }: { a: AxisRow; reg: Reg; minEvents: numb
   const { main, aside } = splitLabel(a.label);
   const r = a.r && a.r.samples ? a.r : null;
   const n = reg?.numbers;
-  const sub = reg ? (
+  const gone = retiredReadLine(retiredRead(a.name));
+  const sub = gone ? (
+    <div style={{ marginTop: 4, fontFamily: MONO, fontSize: 9.5, color: MUTED, lineHeight: 1.5 }}>
+      <span style={{ color: FOG }}>{gone}</span>
+      {reg?.registeredAt && <> · counted from {day(reg.registeredAt)}</>}
+    </div>
+  ) : reg ? (
     <div style={{ marginTop: 4, fontFamily: MONO, fontSize: 9.5, color: MUTED, lineHeight: 1.5 }}>
       <span style={{ color: FOG }}>{reg.stage === "REGISTERED" ? "Registered" : reg.stage}</span>
       {reg.registeredAt && <> · counts from {day(reg.registeredAt)}</>}
@@ -410,6 +416,7 @@ function StageRow({ a, reg, minEvents }: { a: AxisRow; reg: Reg; minEvents: numb
 const FOLDS: Record<string, { title: string; note: string }> = {
   history: { title: "Looked good on old data", note: "Graded on history we already had. Counts for nothing until it repeats on new data." },
   below: { title: "Worse than random", note: "Lost to random entries on the same markets. Kept here: we publish the misses." },
+  retired: { title: "Retired", note: "Failed its bar on new data. Kept here with its numbers and the date. Never re-tuned: a variant is a new read." },
 };
 
 // One registered read on the "Being tested now" list: its name and how far along it is, nothing
@@ -466,7 +473,7 @@ function DetailRows({ rows, minEvents }: { rows: { a: AxisRow; reg: Reg }[]; min
 export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null }) {
   const isMobile = useIsMobile();
   const reads = scorecard?.pipeline?.reads;
-  const groups = stageGroups(scorecard?.axes, reads);
+  const groups = stageGroups(scorecard?.axes, reads, Object.keys(RETIRED_READS));
   const minEvents = scorecard?.pipeline?.rules?.minEvents ?? 30;
   const since = countingSince(reads);
   const testing = groups.find((g) => g.key === "pipeline");
