@@ -34,6 +34,7 @@ import { StrategyShelf } from "./StrategyShelf";
 import { TelegramLinkPanel } from "./TelegramLink";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
 import { bareTicker } from "@/utils/utils";
+import { quietLine, quietAgeText } from "@/lib/quietLine.mjs";
 import { pressKey } from "@/utils/a11y";
 import { C, SIGNAL } from "@/config/theme";
 
@@ -2017,9 +2018,23 @@ export function AgentView() {
               <div style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>
                 {"// "}SCANNING FOR SIGNALS ON {config.symbols.map(s => s.replace("PERP_", "").replace("_USDC", "")).join(", ")}
               </div>
-              <div style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10, marginTop: 6 }}>
-                Funding threshold: {config.fundingThreshold}% · Checking every 5 minutes
-              </div>
+              {/* Why it's quiet: the brain's last check (agent:signal, brain quietReason → app/lib/quietLine.mjs). */}
+              {(() => {
+                const q = quietLine(agentState?.last_signal ?? null);
+                if (!q) return (
+                  <div style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10, marginTop: 6 }}>
+                    Checking every 5 minutes · no check recorded yet
+                  </div>
+                );
+                return (
+                  <div style={{ marginTop: 8, lineHeight: 1.5 }}>
+                    <div style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>{q.text}</div>
+                    <div style={{ color: q.stale ? SIGNAL.watch : "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 10, marginTop: 4 }}>
+                      {quietAgeText(q)} · the brain checks every 5 minutes
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

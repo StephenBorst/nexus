@@ -12,6 +12,7 @@ import { C, SIGNAL } from "@/config/theme";
 import { PageMeta } from "@/components/PageMeta";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { paperRunLine } from "@/lib/paperRun.mjs";
+import { quietAgeText } from "@/lib/quietLine.mjs";
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
@@ -31,6 +32,7 @@ type Run = {
   tally: { win: number; loss: number; time: number; other: number };
   open: { n?: number; coin: string; side: string; openedAt: string | null; entry?: number | null; tape?: { entry: string } } | null; trades: Trade[];
   tape?: TapeSummary;
+  quiet?: { text: string; ageMin: number; stale: boolean; checkedAt: number } | null;
 };
 type Judgment = { ok?: boolean; verdict: string; target: number; signedAt: string; feeBps: number; line: string | null; recorded?: boolean };
 
@@ -135,6 +137,12 @@ export default function PaperRunPage() {
             {run.complete ? <span style={{ color: FOG }}> · Sample complete.</span>
               : <span style={{ color: FOG }}>{` · ${run.remaining} to go.`}</span>}
           </p>
+          {/* Flat and waiting: why, from the brain's last check (app/lib/quietLine.mjs). Not a grade, not a forecast. */}
+          {!run.open && !run.complete && run.quiet && (
+            <p style={{ margin: "8px 0 0", fontFamily: MONO, fontSize: 12, lineHeight: 1.6, color: FOG, maxWidth: 680 }}>
+              Waiting for the read: {run.quiet.text} · {quietAgeText(run.quiet)}.
+            </p>
+          )}
 
           <section style={{ marginTop: 28, borderTop: `1px solid ${MUTED}`, paddingTop: 18, maxWidth: 720 }}>
             <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.2em", textTransform: "uppercase", color: FOG, marginBottom: 10 }}>The rules, fixed before the first trade</div>

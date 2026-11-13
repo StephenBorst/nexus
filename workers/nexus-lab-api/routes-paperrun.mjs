@@ -1,10 +1,12 @@
 // ── GET /signals/paper-run/:axis — a cleared read's paper run, trade by trade, in R ─────────────────
 // Read by /proof/paper/:axis and its link card (functions/proof/paper/[axis].js). Rule: app/lib/paperRun.mjs.
-// Two KV reads: the paper wallet's state (exec's record) and its tape checks. No dollars, no totals, nothing written.
+// Three KV reads: the paper wallet's state (exec's record), its tape checks and, while flat, the brain's last check
+// (`quiet`, app/lib/quietLine.mjs). No dollars, no totals, nothing written.
 // Public, read-only, any origin. 404 = the read has no paper wallet; an unreadable state = `unread: true`.
 import { paperRun } from "../../app/lib/paperRun.mjs";
 import { readTape } from "./paperTape.mjs";
 import { readPaperClaims } from "./routes-paperclaim.mjs";
+import { quietLine } from "../../app/lib/quietLine.mjs";
 
 const reply = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -32,5 +34,10 @@ export async function handlePaperRun(parts, request, env) {
   // Each fill checked against Orderly's public 1-minute tape (paperTape.mjs). Unreadable = no tape block.
   let tape = null;
   try { tape = state ? await readTape(env.LAB_STORE, probe.wallet) : null; } catch { tape = null; }
-  return reply({ ok: true, asOf: new Date().toISOString(), ...paperRun(axis, state, tape, { wallet: claimed }) });
+  // Why the wallet isn't trading right now (the brain's last check), only while it is flat. Display only.
+  let quiet = null;
+  if (state && !state.current_position) {
+    try { quiet = quietLine(JSON.parse((await (env.NEXUS_AGENT || env.LAB_STORE).get(`agent:signal:${probe.wallet.toLowerCase()}`)) || "null")); } catch { quiet = null; }
+  }
+  return reply({ ok: true, asOf: new Date().toISOString(), ...paperRun(axis, state, tape, { wallet: claimed }), quiet });
 }
