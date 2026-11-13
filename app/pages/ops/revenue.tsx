@@ -13,6 +13,7 @@ import { Button } from "@/components/ui";
 import { signLiveHalt } from "@/lib/liveHalt.mjs";
 import { signPaperClaim } from "@/lib/paperClaim.mjs";
 import { signJudgment } from "@/lib/paperJudgePage.mjs";
+import { signLivePlan, LIVE_PLANS } from "@/lib/livePlanSign.mjs";
 
 const API = "https://og.nexustradinglabs.com";
 
@@ -180,6 +181,69 @@ function JudgmentSign({ axis, address, wallet }: { axis: string; address: string
   );
 }
 
+type PlanState = { axis: string; doc: string; text: string; sha256: string; verdict: string | null; licensed: boolean; signed: { by: string; at: string } | null };
+
+// Live plans (app/lib/livePlanSign.mjs): read the page, sign its sha256 once the 30-trade verdict is PASS. Arms nothing.
+function LivePlansBox({ address, wallet, box, label }: { address: string; wallet: ReturnType<typeof useLabWallet>; box: React.CSSProperties; label: React.CSSProperties }) {
+  const [plans, setPlans] = useState<PlanState[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<Record<string, string>>({});
+  const load = useCallback(() => {
+    Promise.all(Object.keys(LIVE_PLANS).map((axis) => fetch(`${API}/pipeline/live-plan/${axis}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)))
+      .then((rows) => setPlans(rows.filter((x): x is PlanState => !!x && typeof x.text === "string")));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const sign = async (p: PlanState) => {
+    setBusy(p.axis);
+    setMsg((m) => ({ ...m, [p.axis]: "" }));
+    try {
+      const signed = await signLivePlan(address, wallet, p.axis, p.sha256);
+      const r = await fetch(`${API}/pipeline/live-plan/${p.axis}/sign`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(signed) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) load();
+      else setMsg((m) => ({ ...m, [p.axis]: `${j.error || `HTTP ${r.status}`}${j.detail ? `: ${j.detail}` : ""}` }));
+    } catch (e) {
+      setMsg((m) => ({ ...m, [p.axis]: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setBusy(null);
+    }
+  };
+  if (!plans?.length) return null;
+  return (
+    <div style={{ ...box, marginBottom: S.lg }}>
+      <div style={label}>Live plans</div>
+      <div style={{ fontSize: 12, color: C.text.fog, marginTop: S.xs, lineHeight: 1.5 }}>
+        A plan can be signed only after its read’s 30-trade verdict is PASS. Signing arms nothing: arming is its own PR, in person.
+      </div>
+      {plans.map((p) => (
+        <div key={p.axis} style={{ borderTop: `1px solid ${C.border}`, marginTop: S.md, paddingTop: S.md }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: S.sm, alignItems: "baseline" }}>
+            <span style={{ fontFamily: MONO, fontSize: 13, color: C.text.bright }}>{p.axis}</span>
+            <span style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted }}>{p.verdict ? `verdict ${p.verdict}` : "no 30-trade verdict yet"}</span>
+          </div>
+          <details style={{ marginTop: S.xs }}>
+            <summary style={{ fontSize: 12, color: C.text.bright, cursor: "pointer" }}>Read the plan</summary>
+            <pre style={{ whiteSpace: "pre-wrap", fontFamily: MONO, fontSize: 11, color: C.text.fog, lineHeight: 1.55, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, padding: S.sm, marginTop: S.xs, maxHeight: 360, overflowY: "auto" }}>{p.text}</pre>
+          </details>
+          {p.signed ? (
+            <div style={{ fontSize: 12, color: C.text.fog, marginTop: S.xs }}>
+              Signed by <span style={{ fontFamily: MONO }}>{short(p.signed.by)}</span> on {p.signed.at.slice(0, 10)}. The watcher writes it under the page’s Sign-off.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: S.sm, marginTop: S.xs, alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: C.text.muted, fontFamily: MONO }}>sha256 {p.sha256.slice(0, 12)}…</span>
+              <Button variant="secondary" disabled={!p.licensed || busy === p.axis} onClick={() => sign(p)}>
+                {busy === p.axis ? "Signing…" : p.licensed ? "Sign this plan" : "Locked until a PASS"}
+              </Button>
+            </div>
+          )}
+          {msg[p.axis] && <div style={{ marginTop: S.xs, fontSize: 12, color: C.warn }}>{msg[p.axis]}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 type PaperRow = { axis: string; stage: string | null; deploy: string; wallet: string | null; source: "code" | "claim" | null; registeredAt: string | null };
 
 // Paper wallets (app/lib/paperClaim.mjs): bind a fresh paper wallet to a TRADEABLE read with one signature. The
@@ -316,6 +380,7 @@ export default function RevenuePage() {
 
       {address && <HaltBox address={address} wallet={wallet} box={box} label={label} />}
       {address && <PaperWalletsBox address={address} wallet={wallet} box={box} label={label} />}
+      {address && <LivePlansBox address={address} wallet={wallet} box={box} label={label} />}
 
       {address && !rev && (
         <div style={{ ...box, display: "flex", flexDirection: isMobile ? "column" : "row", gap: S.md, alignItems: isMobile ? "stretch" : "center", justifyContent: "space-between" }}>

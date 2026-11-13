@@ -36,6 +36,8 @@ export const LOCK_KEYS = {
   paperClaims: () => "pipeline:paperwallets",
   // Judgment signatures (routes-judgesign.mjs): one KV value, each read signed once.
   judgeSigs: () => "pipeline:judgsigs",
+  // Live plan signatures (routes-planSign.mjs): one KV value, each page signed once.
+  planSigs: () => "pipeline:plansigs",
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;

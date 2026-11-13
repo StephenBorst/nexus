@@ -17,6 +17,9 @@ import {
 } from "../../app/lib/opsDigest.mjs";
 import { readPaperClaims } from "./routes-paperclaim.mjs";
 import { readJudgmentSigs } from "./routes-judgesign.mjs";
+import { readPlanSigs } from "./routes-plansign.mjs";
+import { LIVE_PLAN_TEXT } from "../../app/lib/livePlanText.mjs";
+import { parseLiveLift } from "../../app/lib/liveLift.mjs";
 import { readTape } from "./paperTape.mjs";
 import { parityEvents } from "./parityEvents.mjs";
 import { readRecordedJudgment } from "./paperJudge.mjs";
@@ -33,6 +36,16 @@ export async function gatherFacts(env, { scorecardKey, nowMs = Date.now(), event
   const stages = board ? Object.fromEntries(board.pipeline.reads.filter((r) => r?.axis && r.stage).map((r) => [r.axis, r.stage])) : null;
   const claims = await readPaperClaims(env);
   const sigs = await readJudgmentSigs(env);
+  const planSigs = await readPlanSigs(env);
+  const lifts = parseLiveLift(env.GRADED_EXIT_LIVE_LIFT); // empty = disarmed (the house default)
+  // After a PASS: the read's live plan (signed or not) and the wallet armed for its mode, if any. Display only.
+  const afterVerdict = (axis) => {
+    const plan = LIVE_PLAN_TEXT[axis] ? { doc: LIVE_PLAN_TEXT[axis].doc, signed: !!planSigs[axis]?.[LIVE_PLAN_TEXT[axis].sha256] } : null;
+    const mode = PAPER_SETUPS[axis]?.config?.signalMode;
+    let liftWallet = null;
+    for (const [w, modes] of lifts) if (mode && modes.has(mode)) liftWallet = w;
+    return { plan, liftWallet };
+  };
   const reads = readsWithClaims(claims).map((r) => ({
     axis: r.axis, stage: stages?.[r.axis] ?? null, wallet: r.paperWallet || null, hasSetup: !!PAPER_SETUPS[r.axis],
     // A rules page is owed only for a wallet the pipeline registered (a claim) that the code doesn't judge yet.
@@ -68,6 +81,7 @@ export async function gatherFacts(env, { scorecardKey, nowMs = Date.now(), event
       closed24h: (run?.trades || []).filter((t) => nowMs - Date.parse(t.closedAt) <= DAY_MS),
       open: run?.open || null, quiet: state.current_position ? null : quietLine(signal, nowMs),
       parity, parityNote, verdict: recorded?.verdict || null,
+      ...(recorded?.verdict ? afterVerdict(r.axis) : {}),
     });
   }
 

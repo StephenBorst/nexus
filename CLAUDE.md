@@ -122,6 +122,18 @@ product is what sits on top:
   (needs you · paper runs in R with tape, open trade or quiet reason, parity · stages · receivers not swept, tokens only).
   The first run sends "digest is on". Writes only `ops:digest:state:v1` + `ops:digest:sent:{day}`; a failed send keeps
   the old state so the alert retries next run. Moves, signs and trades nothing.
+  **After a verdict** (`verdictSteps`): a PASS lists the ordered path under "Needs you", marked done / next: sign the live
+  plan → fund a NEW dedicated wallet → arm it (borst's own PR into `GRADED_EXIT_LIVE_LIFT`) → the $10 mechanics test
+  (`/ops/preflight?wallet=`) → the written compare after 10 live trades. Plan signed + the lifted wallet are read live
+  (`readPlanSigs`, `parseLiveLift`); FAIL = "Nothing goes live" + the gap question; RESET = a new dated rules page.
+- **Live plan signing (borst 2026-11-14, `app/lib/livePlanSign.mjs`, `routes-plansign.mjs`):** the judgment's rule 8
+  ("PASS: a written live plan may be signed") done with the owner wallet on `/ops/revenue` (Live plans box). Signs the
+  sha256 of the plan page's text above `## Sign-off`, served from the GENERATED `app/lib/livePlanText.mjs` (after
+  editing a plan page run `node tools/pipeline/livePlans.mjs --write`; `livePlanSign.test.mjs` fails otherwise). Refused
+  until the read's `pjudge:{axis}` verdict is PASS (`not_licensed`), on another hash (`page_changed`) or twice; Safe
+  owner / `OPS_WALLETS`, 5 min, NexusLock `planSigs`, LAB_STORE `pipeline:plansigs:v1`. The watcher's step 5
+  (`nextPlanRecords`) appends the signed line under Sign-off once, after re-checking hash + signer. A plan is listed in
+  `LIVE_PLANS`. **Signing ARMS NOTHING:** `GRADED_EXIT_LIVE_LIFT` stays empty (test-pinned); arming is borst's own PR.
 - KV: brain/exec/lab-api agent routes share `NEXUS_AGENT` = `c3c0582ec71c4d049d0795872f39f033`; lab data = `LAB_STORE`.
   Agent keys: `agent:users|config|key|state|signal|pending|kill:{addr}`.
 - Observability logs on in every wrangler.toml. "Agents down" is usually idle by design (`direction:NONE`): check the
