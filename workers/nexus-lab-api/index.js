@@ -87,6 +87,7 @@ import { handleXrayShare } from "./routes-xrayshare.mjs";
 import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handleHalt } from "./routes-halt.mjs";
 import { handlePaperClaim, readPaperClaims } from "./routes-paperclaim.mjs";
+import { handleJudgeSign } from "./routes-judgesign.mjs";
 import { readsWithClaims } from "../../app/lib/paperClaim.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, publicHalt } from "../../app/lib/liveHalt.mjs";
 import { handlePush } from "./routes-push.mjs";
@@ -952,6 +953,8 @@ export default {
       if (revenueRes) return revenueRes;
       const claimRes = await handlePaperClaim(parts, request, env, { scorecardKey: axisbtCacheKey(20) });
       if (claimRes) return claimRes;
+      const judgeSignRes = await handleJudgeSign(parts, request, env);
+      if (judgeSignRes) return judgeSignRes;
       const haltRes = await handleHalt(parts, request, env);
       if (haltRes) return haltRes;
       const shareRes = await handleXrayShare(parts, request, env, { renderPng: renderMonoPng });

@@ -12,6 +12,7 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { Button } from "@/components/ui";
 import { signLiveHalt } from "@/lib/liveHalt.mjs";
 import { signPaperClaim } from "@/lib/paperClaim.mjs";
+import { signJudgment } from "@/lib/paperJudgePage.mjs";
 
 const API = "https://og.nexustradinglabs.com";
 
@@ -127,6 +128,58 @@ function HaltBox({ address, wallet, box, label }: { address: string; wallet: Ret
   );
 }
 
+type JudgeSig = { by: string; at: string; tradesAtSigning: number; pageSha256: string };
+type JudgeDraft = { page: string; sha256: string; signed: JudgeSig | null };
+
+// The read's drafted 30-trade judgment page (app/lib/paperJudgePage.mjs): read it, then sign its sha256 once.
+function JudgmentSign({ axis, address, wallet }: { axis: string; address: string; wallet: ReturnType<typeof useLabWallet> }) {
+  const [draft, setDraft] = useState<JudgeDraft | null | "none">(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    let live = true;
+    fetch(`${API}/pipeline/judgment/${axis}`).then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (live) setDraft(j && typeof j.page === "string" ? (j as JudgeDraft) : "none"); })
+      .catch(() => { if (live) setDraft("none"); });
+    return () => { live = false; };
+  }, [axis]);
+  if (draft == null || draft === "none") return null;
+  const sign = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const signed = await signJudgment(address, wallet, axis, draft.sha256);
+      const r = await fetch(`${API}/pipeline/judgment/${axis}/sign`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(signed) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.signed) setDraft({ ...draft, signed: j.signed as JudgeSig });
+      else setMsg(`${j.error || `HTTP ${r.status}`}${j.detail ? `: ${j.detail}` : ""}`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div style={{ marginTop: S.sm }}>
+      <details>
+        <summary style={{ fontSize: 12, color: C.text.bright, cursor: "pointer" }}>30-trade judgment rules{draft.signed ? " · signed" : " · signature pending"}</summary>
+        <pre style={{ whiteSpace: "pre-wrap", fontFamily: MONO, fontSize: 11, color: C.text.fog, lineHeight: 1.55, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, padding: S.sm, marginTop: S.xs, maxHeight: 360, overflowY: "auto" }}>{draft.page}</pre>
+      </details>
+      {draft.signed ? (
+        <div style={{ fontSize: 12, color: C.text.fog, marginTop: S.xs }}>
+          Signed by <span style={{ fontFamily: MONO }}>{short(draft.signed.by)}</span> at {draft.signed.tradesAtSigning} trades. The watcher writes it into the code.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: S.sm, marginTop: S.xs, alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: C.text.muted, fontFamily: MONO }}>sha256 {draft.sha256.slice(0, 12)}…</span>
+          <Button variant="secondary" disabled={busy} onClick={sign}>{busy ? "Signing…" : "Sign these rules"}</Button>
+        </div>
+      )}
+      {msg && <div style={{ marginTop: S.xs, fontSize: 12, color: C.warn }}>{msg}</div>}
+    </div>
+  );
+}
+
 type PaperRow = { axis: string; stage: string | null; deploy: string; wallet: string | null; source: "code" | "claim" | null; registeredAt: string | null };
 
 // Paper wallets (app/lib/paperClaim.mjs): bind a fresh paper wallet to a TRADEABLE read with one signature. The
@@ -178,6 +231,7 @@ function PaperWalletsBox({ address, wallet, box, label }: { address: string; wal
             <div style={{ fontSize: 12, color: C.text.fog, marginTop: S.xs }}>
               Paper wallet <span style={{ fontFamily: MONO, color: C.text.bright }}>{short(r.wallet)}</span>
               {r.source === "claim" ? " · registered here, the watcher writes it into the code" : " · recorded in the code"}
+              {r.source === "claim" && <JudgmentSign axis={r.axis} address={address} wallet={wallet} />}
             </div>
           ) : r.stage !== "TRADEABLE" ? (
             <div style={{ fontSize: 12, color: C.text.muted, marginTop: S.xs }}>Not TRADEABLE: nothing to register yet.</div>
