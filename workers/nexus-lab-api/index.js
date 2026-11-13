@@ -93,6 +93,7 @@ import { handleVerify, isPublicCall } from "./routes-verify.mjs";
 import { runMinuteGrades } from "./minuteGrader.mjs";
 import { handleMinuteArchive } from "./minuteCandles.mjs";
 import { runPaperTape, handlePaperTape } from "./paperTape.mjs";
+import { handleSlippage } from "./routes-slippage.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
@@ -1284,6 +1285,8 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       if (archiveRes) return archiveRes;
       const paperTapeRes = await handlePaperTape(parts, request, env);
       if (paperTapeRes) return paperTapeRes;
+      const slipRes = await handleSlippage(parts, request, env);
+      if (slipRes) return slipRes;
       const verifyRes = await handleVerify(parts, request, env);
       if (verifyRes) return verifyRes;
     }
