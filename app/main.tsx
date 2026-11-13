@@ -65,6 +65,7 @@ const ProofPage = lazy(() => import('./pages/proof'));
 const ProofLayout = lazy(() => import('./pages/proof/Layout'));
 const PaperRunPage = lazy(() => import('./pages/proof/PaperRun'));
 const RevenuePage = lazy(() => import('./pages/ops/revenue'));
+const PreflightPage = lazy(() => import('./pages/ops/preflight'));
 const OpsLayout = lazy(() => import('./pages/ops/Layout'));
 
 // ✅ TRADER PROFILE PAGE
@@ -177,6 +178,15 @@ const router = createBrowserRouter([
         element: <><PageMeta title="Revenue" noindex /><OpsLayout /></>,
         children: [
           { index: true, element: <RevenuePage /> },
+        ],
+      },
+
+      // The $10 live mechanics test, read-only (not in the nav): GET /agent/:a/preflight
+      {
+        path: 'ops/preflight',
+        element: <><PageMeta title="Live preflight" noindex /><OpsLayout /></>,
+        children: [
+          { index: true, element: <PreflightPage /> },
         ],
       },
 

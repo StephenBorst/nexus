@@ -15,7 +15,7 @@
 // fill that old Orderly has REFUSED on TAPE_MAX_TRIES runs (2026-11-13: Orderly appears to serve 1-minute
 // bars for about 2 days and to refuse older ranges rather than answer empty, so those fills retried every
 // hour forever). NO_DATA carries the reason; it is never a pass.
-import { walletLegs, judgeFill, judgeTrigger, tapeSummary, tapeLine, TAPE_TOL_BPS } from "../../app/lib/paperTape.mjs";
+import { walletLegs, liveLegs, judgeFill, judgeTrigger, tapeSummary, tapeLine, liveTapeLine, TAPE_TOL_BPS } from "../../app/lib/paperTape.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 import { orderlyJson } from "./backtest.mjs";
 import { minuteBarsFrom, minuteSourceUrl } from "./minuteCandles.mjs";
@@ -86,7 +86,8 @@ export async function runPaperTape(env, { fetchJson = orderlyJson, nowMs = () =>
   const todo = [];
   for (const w of wallets) {
     const state = parse(await agentKv.get(`agent:state:${w}`), null);
-    const legs = walletLegs(state);
+    // Paper fills and the exchange's own live fills (state.live_slip), checked the same way, kept apart.
+    const legs = [...walletLegs(state), ...liveLegs(state)];
     if (!legs.length) continue;
     stats.wallets++; stats.fills += legs.length;
     const rec = await readTape(kv, w);
@@ -154,11 +155,9 @@ export function tapeView(state, rec) {
   const legs = walletLegs(state);
   const checks = rec?.checks || {};
   const summary = tapeSummary(legs, checks);
-  return {
-    summary,
-    line: tapeLine(summary),
-    tolBps: TAPE_TOL_BPS,
-    fills: legs.map((l) => {
+  const live = liveLegs(state);
+  const liveSummary = tapeSummary(live, checks);
+  const row = (l) => {
       const c = l.averaged ? null : checks[l.key] || null;
       return {
         key: l.key, kind: l.kind, symbol: l.symbol, t: l.t, px: l.px,
@@ -166,8 +165,16 @@ export function tapeView(state, rec) {
         ...(c?.bps != null ? { bps: c.bps } : {}), ...(c?.bar ? { bar: c.bar } : {}), ...(c?.source ? { source: c.source } : {}),
         ...(c?.reason ? { reason: c.reason } : {}),
         ...(c?.trigger ? { trigger: { verdict: c.trigger.verdict, side: c.trigger.side, level: c.trigger.level, ...(c.trigger.bps != null ? { bps: c.trigger.bps } : {}) } } : {}),
+        ...(l.orderId ? { orderId: l.orderId } : {}),
       };
-    }),
+  };
+  return {
+    summary,
+    line: tapeLine(summary),
+    tolBps: TAPE_TOL_BPS,
+    fills: legs.map(row),
+    // The exchange's own fills (live orders), apart from paper: the same check, its own counts.
+    live: { summary: liveSummary, line: liveTapeLine(liveSummary), fills: live.map(row) },
   };
 }
 
@@ -185,6 +192,6 @@ export async function handlePaperTape(parts, request, env) {
   const rec = await readTape(env.LAB_STORE, wallet);
   return reply({
     ok: true, wallet, ...tapeView(state, rec),
-    rule: `Each paper fill is checked against Orderly’s public 1-minute bar for the minute it was taken (or the minute before). ON_TAPE = inside that minute’s traded low–high. NEAR = outside it by at most ${TAPE_TOL_BPS} bps: paper fills at the mark, an index price, not a trade. OFF = further out. NO_TRADES = no bar in either minute. AVERAGED = a DCA average entry, which no single trade printed. For a stop or target exit, the trigger check asks whether any bar from 2 minutes before the exit through its minute traded at or through the level: TRADED, or MARK_ONLY (the exit fired on the mark alone). Each check keeps the bars and the public request they came from.`,
+    rule: `Each paper fill is checked against Orderly’s public 1-minute bar for the minute it was taken (or the minute before). ON_TAPE = inside that minute’s traded low–high. NEAR = outside it by at most ${TAPE_TOL_BPS} bps: paper fills at the mark, an index price, not a trade. OFF = further out. NO_TRADES = no bar in either minute. AVERAGED = a DCA average entry, which no single trade printed. For a stop or target exit, the trigger check asks whether any bar from 2 minutes before the exit through its minute traded at or through the level: TRADED, or MARK_ONLY (the exit fired on the mark alone). Each check keeps the bars and the public request they came from. The live block = the exchange’s own fills on live orders (exec books Orderly’s average_executed_price), checked the same way and counted apart from paper: a live fill is a trade, so it should be ON_TAPE.`,
   });
 }

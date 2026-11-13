@@ -19,6 +19,8 @@
 /proof/paper/:axis/       / 200
 /ops/revenue              / 200
 /ops/revenue/             / 200
+/ops/preflight            / 200
+/ops/preflight/           / 200
 /feed                     / 200
 /feed/                    / 200
 /feed/trader/:wallet      / 200
