@@ -81,8 +81,8 @@ test("one Function per named route, each calling the shared gate; no Function fo
     const f = `functions${r}/index.js`;
     assert.ok(existsSync(new URL(f, root)), f);
     const src = read(f);
-    // /proof's gate (gateProofPage) runs gateRoutePage first, then adds its snapshot (proofSnapshot.mjs).
-    const gate = r === "/proof" ? "gateProofPage" : "gateRoutePage";
+    // /proof's and /analyze's gates run gateRoutePage first, then add their snapshot (proofSnapshot / xraySnapshot).
+    const gate = { "/proof": "gateProofPage", "/analyze": "gateAnalyzePage" }[r] || "gateRoutePage";
     assert.match(src, new RegExp(`import \\{ ${gate} \\} from "\\.\\./\\.\\./app/lib/seoGate\\.mjs";`), `${f} calls ${gate}`);
     assert.match(src, /try \{ return await loadApp\(\); \} catch \{ return next\(\); \}/, `${f} fails open`);
   }

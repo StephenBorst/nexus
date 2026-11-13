@@ -24,6 +24,8 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { AnalyticsView } from "@/pages/lab/AnalyticsView";
 import { TrackedRecordCard, type XrayTrack } from "@/components/TrackedRecordCard";
 import { SectionHeader } from "@/pages/lab/components";
+// The header, one copy with the HTML frame the page's Function writes before the app boots (xraySnapshot.mjs).
+import { XRAY_EYEBROW, XRAY_TITLE, XRAY_NOTE } from "@/lib/xraySnapshot.mjs";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import type { ProcessedTrade } from "@/pages/lab/types";
 import { deployDirectiveFromThesis } from "@/utils/agentPrefill";
@@ -331,9 +333,9 @@ export default function AnalyzePage() {
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "20px 14px 60px" : "32px 24px 80px", color: BRIGHT }}>
       <SectionHeader
-        eyebrow="WALLET X-RAY"
-        title="X-ray any trader. Grade the tape."
-        note="NO LOGIN · PUBLIC DATA"
+        eyebrow={XRAY_EYEBROW}
+        title={XRAY_TITLE}
+        note={XRAY_NOTE}
       />
 
       <p style={{ fontFamily: UI, fontSize: 13.5, color: FOG, maxWidth: 640, lineHeight: 1.65, margin: "0 0 22px" }}>

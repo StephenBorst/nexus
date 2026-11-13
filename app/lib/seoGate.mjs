@@ -15,6 +15,7 @@ import { injectCallMeta } from "./callPageMeta.mjs";
 import { routeMetaFor, SITE_TITLE } from "./routeMeta.mjs";
 import { paperRunLine, paperRunSnapshotHtml } from "./paperRun.mjs";
 import { proofSnapshotHtml } from "./proofSnapshot.mjs";
+import { xraySnapshotHtml, xrayAddressFrom } from "./xraySnapshot.mjs";
 import { SITE } from "./callPageMeta.mjs";
 
 export const LAB_API = "https://og.nexustradinglabs.com";
@@ -104,6 +105,24 @@ export async function gateProofPage({ pathname, loadApp, fetchImpl = fetch, time
   let html;
   try { html = await page.clone().text(); } catch { return page; }
   const out = withSnapshot(html, snapshot);
+  if (out === html) return page;
+  const headers = new Headers(page.headers);
+  headers.set("Cache-Control", "no-cache");
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.delete("Content-Length");
+  headers.delete("ETag");
+  return new Response(out, { status: 200, headers });
+}
+
+// /analyze: the route's meta (gateRoutePage) plus the X-Ray frame in place of the boot screen (xraySnapshot.mjs):
+// the header, and for a shared link (?address=0x…) that wallet with an "analyzing" line. No fetch, so no wait.
+// Anything unexpected = the page with its meta only (fail open).
+export async function gateAnalyzePage({ pathname, search = "", loadApp }) {
+  const page = await gateRoutePage({ pathname, loadApp });
+  if (!page || page.status !== 200) return page;
+  let html;
+  try { html = await page.clone().text(); } catch { return page; }
+  const out = withSnapshot(html, xraySnapshotHtml(xrayAddressFrom(search)));
   if (out === html) return page;
   const headers = new Headers(page.headers);
   headers.set("Cache-Control", "no-cache");
