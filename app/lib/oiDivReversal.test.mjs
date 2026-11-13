@@ -15,6 +15,7 @@ import { brainSignalKey } from "../../workers/nexus-agent-exec/logic.mjs";
 import { axisForConfig, PARITY_ACT_WINDOW_MS, unsimulatedFilters } from "./paperParity.mjs";
 import { gradedExitRefusal } from "./gradedExit.mjs";
 import { LEVEL_RECLAIM_MAIN_SYMBOLS } from "./levelReclaim.mjs";
+import { hourBucket } from "./basisStack.mjs";
 
 const H = 3600000;
 const T0 = Date.UTC(2026, 7, 1);
@@ -172,4 +173,56 @@ test("no public preset and no public link: only the Lab's hidden ?deploy= handle
   assert.ok(!/href[^\n]*deploy=/.test(lab), "the Lab doesn't link to it");
   const presets = readFileSync(new URL("../config/strategyPresets.ts", import.meta.url), "utf8");
   assert.ok(!/oi_div_reversal_4h|OI_DIV_4H/.test(presets), "not in the Strategy Library, no /proof Load");
+});
+
+// ── Performance rewrite (2026-11-13): the cheap tests now run before the 30-day window is built. The faster body must
+// fire EXACTLY the registered body's events. The registered body is kept here verbatim as the reference.
+const REF_OI_DIV = (() => {
+  const byHour = (rows, ok) => { const m = new Map(); for (const r of [...(rows || [])].sort((a, b) => Number(a.t) - Number(b.t))) if (r && ok(r)) m.set(hourBucket(r.t), r); return m; };
+  const pctRank = (arr, x) => { if (!arr.length) return null; let below = 0, equal = 0; for (const v of arr) { if (v < x) below++; else if (v === x) equal++; } return (below + equal / 2) / arr.length; };
+  return function oiDivReversalEvents(cs, _pmap, _ctx, p = OI_DIV) {
+    const m = byHour(cs.oiHist, (q) => Number.isFinite(q.price) && q.price > 0);
+    const hours = [...m.keys()].sort((a, b) => a - b);
+    const ret = new Map();
+    for (const h of hours) {
+      const a = m.get(h), b = m.get(h - p.windowH);
+      if (!b || !(b.price > 0)) continue;
+      const r = a.price / b.price - 1;
+      const oiCh = Number(a.oi) > 0 && Number(b.oi) > 0 ? Number(a.oi) / Number(b.oi) - 1 : null;
+      ret.set(h, { r, oiCh });
+    }
+    const ev = [];
+    let last = -Infinity;
+    for (const h of hours) {
+      const x = ret.get(h);
+      if (!x || x.oiCh == null || h - last < p.cooldownH) continue;
+      const prior = [];
+      for (let k = h - p.lookbackH; k < h; k++) { const y = ret.get(k); if (y) prior.push(Math.abs(y.r)); }
+      if (prior.length < p.minHistory) continue;
+      if (!(pctRank(prior, Math.abs(x.r)) >= p.pct) || x.r === 0) continue;
+      if (!(x.oiCh <= -p.oiDrop)) continue;
+      ev.push({ t: m.get(h).t, side: x.r > 0 ? "SHORT" : "LONG" });
+      last = h;
+    }
+    return ev;
+  };
+})();
+
+test("the faster oi_div_reversal / 4h body fires exactly the registered body's events (gappy, flat, many seeds)", () => {
+  let fired = 0;
+  for (const seed of [1, 2, 5, 13, 42, 77, 314]) {
+    const rows = tape(seed, 2200);
+    // flat stretches (r = 0 and ties in the window), rows with no OI (oiCh null), and two rows in one hour
+    const odd = rows.map((r, i) => (i % 97 < 6 ? { ...r, price: rows[i - (i % 97)].price } : i % 61 === 3 ? { ...r, oi: 0 } : r));
+    odd.push({ ...odd[500], t: odd[500].t + 60000, price: odd[500].price * 1.002 });
+    for (const cs of [{ oiHist: rows }, { oiHist: odd }]) {
+      for (const p of [OI_DIV, OI_DIV_4H, { ...OI_DIV_4H, cooldownH: 0 }, { ...OI_DIV, pct: 0.8, oiDrop: 0.01, minHistory: 100 }]) {
+        const ref = REF_OI_DIV(cs, null, null, p);
+        assert.deepEqual(oiDivReversalEvents(cs, null, null, p), ref, `seed ${seed}`);
+        fired += ref.length;
+      }
+      assert.deepEqual(oiDivReversal4hEvents(cs), REF_OI_DIV(cs, null, null, OI_DIV_4H));
+    }
+  }
+  assert.ok(fired > 50, `the tapes fire (${fired}): an all-empty comparison would prove nothing`);
 });

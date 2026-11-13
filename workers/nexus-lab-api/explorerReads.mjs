@@ -11,7 +11,6 @@
 // Inputs: cs.oiHist [{t, price, oi, funding}] (hourly, brain) · cs.candleHist [{t,o,h,l,c,v}] (hourly).
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 import { levelReclaimEvents } from "../../app/lib/levelReclaim.mjs";
-import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 
 const H = 3600000;
 const DAY_H = 24;
@@ -176,15 +175,58 @@ export function sessionFadeEvents(cs, pmap, ctx, p = SESSION) {
 // CLOSED bar before the event ranks at or below the median of the same measure over the prior 30 days
 // (sampled every 6h, mid-rank, ≥ 60 samples). Coin-relative on purpose, so the holdout's wider coins can
 // fire and replicate it. Why: level-reclaim-exit-gap.md found the read's losses in its widest stops.
+// h4Atr14Frac (app/lib/atr.mjs) over the hours hour−80 … hour of a coin's candles, as level_reclaim_tight has
+// always called it, without the per-call copy, sort and Map. `dense` holds the hour → candle map as an array
+// indexed by hour − h0 (denseHours). The candles already have finite h/l/c (candleMap), one per hour, so walking
+// the hours upward visits them in time order (h4Atr14Frac's sort) and its 4h buckets arrive in order. The float
+// operations are the same, in the same order. Returns null where it returns null.
+const ATR_SPAN_H = 80, ATR_BARS = 15;
+const atrH = new Float64Array(ATR_SPAN_H + 1), atrL = new Float64Array(ATR_SPAN_H + 1), atrC = new Float64Array(ATR_SPAN_H + 1);
+export function denseHours(cbh) {
+  if (!cbh.size) return { dense: [], h0: 0 };
+  let h0 = Infinity, h1 = -Infinity;
+  for (const h of cbh.keys()) { if (h < h0) h0 = h; if (h > h1) h1 = h; }
+  const dense = new Array(h1 - h0 + 1).fill(null);
+  for (const [h, c] of cbh) dense[h - h0] = c;
+  return { dense, h0 };
+}
+export function h4AtrAtHour({ dense, h0 }, hour) {
+  let n = 0, count = 0, key = NaN;
+  const from = Math.max(hour - ATR_SPAN_H, h0), to = Math.min(hour, h0 + dense.length - 1);
+  for (let h = from; h <= to; h++) {
+    const c = dense[h - h0];
+    if (!c) continue;
+    count++;
+    if (!(Number.isFinite(c.h) && Number.isFinite(c.l) && Number.isFinite(c.c))) continue;
+    const b = Math.floor((Number(c.t) / 1000) / (4 * 3600));
+    if (b !== key) { atrH[n] = c.h; atrL[n] = c.l; atrC[n] = c.c; n++; key = b; }
+    else { const i = n - 1; atrH[i] = Math.max(atrH[i], c.h); atrL[i] = Math.min(atrL[i], c.l); atrC[i] = c.c; }
+  }
+  if (count < ATR_BARS || n < ATR_BARS) return null;
+  let trSum = 0;
+  for (let i = n - ATR_BARS + 1; i < n; i++) {
+    trSum += Math.max(atrH[i] - atrL[i], Math.abs(atrH[i] - atrC[i - 1]), Math.abs(atrL[i] - atrC[i - 1]));
+  }
+  const atr = trSum / 14;
+  const px = atrC[n - 1];
+  return px > 0 && Number.isFinite(atr) ? atr / px : null;
+}
+
 export const LEVEL_TIGHT = Object.freeze({ maxRank: 0.5, lookbackH: MONTH_H, stepH: 6, minSamples: 60 });
 export function levelReclaimTightEvents(cs, pmap, ctx, p = LEVEL_TIGHT) {
   const evs = levelReclaimEvents(cs, pmap, ctx);
   if (!evs.length) return [];
   const cbh = candleMap(cs.candleHist);
+  // Cached by hour, and computed without building the window (2026-11-13, CPU): the measure at an hour is
+  // a pure function of that coin's candles, so each hour is computed once per call, by h4AtrAtHour, which
+  // does h4Atr14Frac's exact arithmetic on the same 81 hours (read from a dense array, not the Map). Same events (kept-reference test in
+  // explorerReads.test.mjs, and h4AtrAtHour == h4Atr14Frac on every hour there).
+  const dh = denseHours(cbh);
+  const memo = new Map();
   const atrAt = (hour) => {
-    const hourly = [];
-    for (let h = hour - 80; h <= hour; h++) { const c = cbh.get(h); if (c) hourly.push({ t: Number(c.t) / 1000, h: c.h, l: c.l, c: c.c }); }
-    return h4Atr14Frac(hourly);
+    let v = memo.get(hour);
+    if (v === undefined) { v = h4AtrAtHour(dh, hour); memo.set(hour, v); }
+    return v;
   };
   const out = [];
   for (const e of evs) {

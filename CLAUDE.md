@@ -337,6 +337,10 @@ product is what sits on top:
   never re-scan from the start or redo per-coin work that doesn't depend on the coin; time it on the public series
   before registering. A faster body must fire identical events (kept-reference test, as for btc_lead_lag /
   funding_basis_split in explorerReads.test.mjs).
+  2026-11-13 timing on the public series (19 coins, local node, per pass): level_reclaim_tight 328 → 45 ms (`h4AtrAtHour`,
+  a dense hour array + per-hour cache), oi_div_reversal / _4h 221 / 215 → ~75 / ~50 ms (cheap tests before the 30-day
+  window; the brain's live gate shares it), all reads ~975 → ~400 ms; 581 live events identical. Kept references in
+  explorerReads.test.mjs + oiDivReversal.test.mjs. Next slowest: funding_basis_split ~100, oi_coil_break ~75.
 - **Built on a schedule, not in a request (2026-11-13, `scoreboardCache.mjs`):** the minute cron rebuilds the min-20 board at
   `SCOREBOARD_REBUILD_MINUTE` (:53) via `buildAxisScorecard(env, min)` (index.js; the route's old body moved unchanged) and
   stores it for 2h + a 24h last-good copy. A request serves the stored copy, builds only when none exists, and serves the
