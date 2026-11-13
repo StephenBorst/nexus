@@ -10,6 +10,7 @@ import type { AgentTrade } from "./types";
 import { agentCardStyle, agentLabelStyle, agentInputStyle, navBtnStyle } from "./styles";
 import { fmtUsdCompact, fmtUsdCompactAbs, fmtUsdExact, fmtUsdLoss } from "@/lib/fmtUsd.mjs";
 import { paperBlotter, tradeNotional, holdHours } from "@/lib/paperStats.mjs";
+import { slippageSummary, slippageLine } from "@/lib/slippage.mjs";
 import { bareTicker } from "@/utils/utils";
 import { AGENT_API } from "./agentTypes";
 
@@ -190,6 +191,25 @@ export function AgentTrackRecord({ title, accent, trades: tradesProp, paper, onR
 // funding while it holds. The worker re-reads the retained rows (GET /agent/:a/paper-costs,
 // app/lib/paperCosts.mjs) and this prints it beside the gross. Display only.
 type PaperCosts = { ok: boolean; trades: number; feeBps: number; feeSource: "account" | "assumed"; grossUsd: number; feesUsd: number; fundingUsd: number; fundingMissing: number; netUsd: number; lifetimeTrades: number | null };
+
+/**
+ * Live execution cost: each exchange-confirmed fill vs the mark it was decided on (app/lib/slippage.mjs,
+ * exec's state.live_slip). Nothing shows until a live order has filled: paper has no slippage to measure.
+ */
+export function LiveSlippageLine({ slip }: { slip?: unknown }) {
+  const s = slippageSummary(Array.isArray(slip) ? slip : []);
+  const line = slippageLine(s);
+  if (!line) return null;
+  return (
+    <div style={{ ...agentCardStyle, borderColor: "#232327" }}>
+      <div style={{ ...agentLabelStyle, color: "#d4d4d8" }}>LIVE EXECUTION</div>
+      <div style={{ marginTop: 8, fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", lineHeight: 1.5 }}>{line}.</div>
+      <div style={{ marginTop: 6, fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#71717a", lineHeight: 1.5 }}>
+        From Orderly’s own fill for each order. Paper fills at the mark, so it shows none of this.
+      </div>
+    </div>
+  );
+}
 
 export function PaperCostLine({ address, refreshKey }: { address?: string | null; refreshKey?: string | number }) {
   const [c, setC] = useState<PaperCosts | null>(null);

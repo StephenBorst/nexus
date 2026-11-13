@@ -20,6 +20,8 @@ import { runKill } from "./killSwitch.mjs";
 import { backstopWanted, backstopTrigger, backstopOrder, algoOrderIdFrom, cancelPath, backstopHit, sweepStaleBackstops, restingListPath, restingBackstop, BACKSTOP_MAX_TRIES, BACKSTOP_MULT } from "./backstop.mjs";
 import { resolveKeyRecord, keyHoldRefusal, keyAlertDue, keyAlertText, isKeyPointer } from "./agentKey.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, HALT_READ_FAILED, haltBlocksEntry } from "../../app/lib/liveHalt.mjs";
+// Live slippage: each exchange-confirmed fill vs the mark it was decided on (state.live_slip, record only).
+import { slipRecord, pushSlip } from "../../app/lib/slippage.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { usesRiskSizing, riskSizingRefusal, riskSizedMargin, riskTaken } from "../../app/lib/riskSizing.mjs";
 import { parseLiveLift, liveLifted, liveLiftNote, liftedSignalRefusal, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
@@ -1086,6 +1088,7 @@ async function enterPosition(address, state, config, signal, env, cache) {
     }
     orderId = order.data?.order_id;
     entryFill = await readFill(keyData, orderId, markPrice);
+    state.live_slip = pushSlip(state.live_slip, slipRecord({ t: Date.now(), symbol, direction: signal.direction, kind: "entry", mark: markPrice, fill: entryFill, orderId }));
   }
 
   // Effective TP/SL — fixed config %, or volatility-scaled to recent ATR (opt-in
@@ -1496,7 +1499,9 @@ async function addSafetyOrder(address, state, config, env, so, price) {
           symbol: pos.symbol, order_type: "MARKET", side, order_quantity: addQty, broker_id: "nexus_trading",
         });
         if (r && r.success === false) { console.error(`[exec] ${address.slice(0, 10)} DCA SO order failed:`, JSON.stringify(r)); return; }
-        addPrice = (await readFill(keyData, r?.data?.order_id, price)).price;
+        const addFill = await readFill(keyData, r?.data?.order_id, price);
+        addPrice = addFill.price;
+        state.live_slip = pushSlip(state.live_slip, slipRecord({ t: Date.now(), symbol: pos.symbol, direction: pos.direction, kind: "add", mark: price, fill: addFill, orderId: r?.data?.order_id }));
       } catch (e) { console.error(`[exec] ${address.slice(0, 10)} DCA SO error:`, e.message); return; }
     } else {
       // No key = no order placed: never book a safety order that didn't happen.
@@ -1564,7 +1569,9 @@ async function partialClose(address, state, config, env, action, cache) {
           return; // leave the position intact; try again next tick
         }
         sliceOrderId = r?.data?.order_id ?? null;
-        slicePrice = (await readFill(keyData, sliceOrderId, price)).price;
+        const sliceFill = await readFill(keyData, sliceOrderId, price);
+        slicePrice = sliceFill.price;
+        state.live_slip = pushSlip(state.live_slip, slipRecord({ t: Date.now(), symbol: pos.symbol, direction: pos.direction, kind: "partial", mark: price, fill: sliceFill, orderId: sliceOrderId }));
       } catch (e) {
         console.error(`[exec] ${address.slice(0, 10)} partial TP error:`, e.message);
         return;
@@ -1685,6 +1692,8 @@ async function closePosition(address, state, config, env, reason, cache, decisio
           closeOrderId = closeOrder?.data?.order_id ?? null;
           closeFill = await readFill(keyData, closeOrderId, null);
           closeConfirmed = true;
+          // The mark the close was decided on: the monitor's price, else the position's last mark.
+          state.live_slip = pushSlip(state.live_slip, slipRecord({ t: Date.now(), symbol: pos.symbol, direction: pos.direction, kind: "close", mark: Number.isFinite(decisionPrice) && decisionPrice > 0 ? decisionPrice : pos.current_price, fill: closeFill, orderId: closeOrderId }));
         }
       } catch (e) {
         console.error(`[exec] ${address.slice(0, 10)} close order failed:`, e.message);

@@ -517,6 +517,10 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   partial TP, close) exec reads `GET /v1/order/{id}` and books `average_executed_price` when FILLED (`fillPriceFrom`,
   exec `logic.mjs`; `readFill` tries twice ~0.5 s apart), else the mark. The position carries `entry_fill`
   ("exchange" | "mark" | "paper"). Rows before this date are mark-priced (no slippage shown). Paper is unchanged.
+- **Live slippage** (borst 2026-11-13, `app/lib/slippage.mjs`): at each live market order (entry, DCA add, partial,
+  close) exec records the exchange fill vs the mark it decided on, bps signed so + = paid worse, in `state.live_slip`
+  (last 100; only `source:"exchange"` fills, a mark fallback is unknown, never 0). `GET /agent/:a/slippage` + the
+  Lab's LIVE EXECUTION line. Record only, nothing trades on it; paper has none by construction.
 - `GET /agents/ledger` + chain, anchored on Arbitrum by `NexusLedgerAnchor` `0x57a698df84a44F3dA3dac3E08CA455a55A4eff84`
   (dedicated signer, `ANCHOR_PRIVATE_KEY`). The call-ledger hash has a fixed field list: changing it breaks the chain.
 

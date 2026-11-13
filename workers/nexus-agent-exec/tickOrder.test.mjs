@@ -46,9 +46,10 @@ test("every live market order books its exchange fill (readFill), not the mark",
   const fnBody = (name) => { const i = src.indexOf(`async function ${name}(`); return src.slice(i, src.indexOf("\nasync function ", i + 10)); };
   assert.match(fnBody("enterPosition"), /entryFill = await readFill\(keyData, orderId, markPrice\)/);
   assert.match(fnBody("enterPosition"), /entry_price: entryFill\.price,/);
-  assert.match(fnBody("addSafetyOrder"), /addPrice = \(await readFill\(/);
+  // The fill is read once and also recorded for live slippage (app/lib/slippage.mjs, 2026-11-13): same price.
+  assert.match(fnBody("addSafetyOrder"), /const addFill = await readFill\(keyData, r\?\.data\?\.order_id, price\);\s*\n\s*addPrice = addFill\.price;/);
   assert.match(fnBody("addSafetyOrder"), /blendAvg\(pos\.total_qty, pos\.avg_entry, addQty, addPrice\)/);
-  assert.match(fnBody("partialClose"), /slicePrice = \(await readFill\(/);
+  assert.match(fnBody("partialClose"), /const sliceFill = await readFill\(keyData, sliceOrderId, price\);\s*\n\s*slicePrice = sliceFill\.price;/);
   assert.match(fnBody("partialClose"), /exit_price: slicePrice,/);
   assert.match(fnBody("closePosition"), /closeFill = await readFill\(keyData, closeOrderId, null\)/);
   assert.match(fnBody("closePosition"), /if \(!paper && closeFill\?\.source === "exchange"\) \{\s*\n\s*exitPrice = closeFill\.price;/);

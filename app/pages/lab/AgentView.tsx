@@ -24,7 +24,7 @@ import { SharePoster, type PosterData } from "./SharePoster";
 import { AGENT_API, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentStanding, type SavedStrategy, type CommunityStrategy } from "./agentTypes";
 import type { BacktestResult, SweepResult, ValidationResult } from "./backtestTypes";
 import { errText } from "./helpers";
-import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter, PaperCostLine } from "./AgentPanels";
+import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter, PaperCostLine, LiveSlippageLine } from "./AgentPanels";
 import { gradedExitRefusal } from "@/lib/gradedExit.mjs";
 import { riskSizingRefusal, RISK_PER_TRADE_MAX_USD } from "@/lib/riskSizing.mjs";
 import { deactivateWarning, deactivatedMessage } from "@/lib/agentControls.mjs";
@@ -997,6 +997,9 @@ export function AgentView() {
               <PaperBlotter trades={agentState?.paper_trades ?? []} currentNotional={(config.capitalPerTrade || 0) * (config.leverage || 1)} maxHoldHours={config.maxHoldHours ?? null} />
             </>
           )}
+
+          {/* Live execution cost: shows once a live order has filled (nothing on paper to measure). */}
+          <LiveSlippageLine slip={(agentState as { live_slip?: unknown } | null)?.live_slip} />
 
           {/* Graduation nudge — once a paper agent is proven, bridge to live */}
           {config.mode === "PAPER" && (() => {
