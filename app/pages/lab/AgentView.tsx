@@ -1113,6 +1113,12 @@ export function AgentView() {
                 level_reclaim · paper · as registered
               </div>
             )}
+            {/* OI_DIV_4H has no mode button either: only its hidden setup link loads it (paper wallet, 2026-11-13). */}
+            {config.signalMode === "OI_DIV_4H" && (
+              <div style={{ marginTop: 8, display: "inline-block", background: "#ededf015", border: "1px solid #ededf060", borderRadius: 3, padding: "4px 10px", color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 11 }}>
+                oi_div_reversal_4h · paper · as registered
+              </div>
+            )}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {([
                 { v: "CONFLUENCE", label: "Confluence", hint: "Funding AND OI must agree. Strictest filter. Fewest entries." },
@@ -1150,6 +1156,7 @@ export function AgentView() {
                 MOMENTUM: "Trades with a price move once it clears your threshold. Noisy on small moves. PAPER it first.",
                 MEAN_REVERSION: "Fades a sharp move once it clears your threshold. Bets it snaps back. PAPER it first.",
                 LEVEL_RECLAIM: "The registered level_reclaim read: price sweeps the prior UTC day’s high or low by 0.4× the H4 ATR and closes back inside within 6h; it fades the sweep. Traded on the graded exit only (stop 1.2× H4 ATR, target 1.5×, 168h). PAPER only. Pick another mode above to leave it.",
+                OI_DIV_4H: "The registered oi_div_reversal_4h read: a 4h move at or above its own 90th percentile of the last 30 days while open interest fell at least 2% over the same 4h; it fades the move. 12h cooldown per coin. Traded on the graded exit only (stop 1.2× H4 ATR, target 1.5×, 168h). PAPER only. Pick another mode above to leave it.",
                 BASIS_FADE: "Fades an extreme spot-perp basis: a perp trading far above spot is froth (short it), far below is capitulation (long it). Extreme is measured against this market's own last week, not a fixed number. The scoreboard grades the read PREDICTIVE. That rates the read, not a strategy. Entries, exits and fees are unproven. EXPERIMENTAL. PAPER only.",
               } as Record<string, string>)[config.signalMode ?? "FUNDING_ONLY"]}
             </div>

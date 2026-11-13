@@ -2497,3 +2497,26 @@ alerts: "proof and trust come before growth hooks." Each paper entry and exit is
 independent reader, against Orderly's public 1-minute bar for its minute, and the bar is kept with its
 source. Paper exits were deliberately left as mark-price market exits (no wick fills). Rule:
 `docs/research/paper-tape.md`.
+
+## 2026-11-13 · level_reclaim's 30-trade judgment, locked at trade 6
+
+The Paper gate ("30 trades, parity CLEAN, net positive after fees", pipeline-if-then.md) had no code: at trade 30
+someone would pull the numbers by hand and choose how to count fees, off-tape fills and missing data after seeing
+them. borst: "lock the pass/fail rules with tests before trade 30." Signed page
+`docs/research/paper-judgment-level-reclaim.md`, rules in `app/lib/paperJudge.mjs`. His two calls that day: an
+OFF fill is judged at the worse of its price and the nearest traded price (a fake price can only hurt), and a
+NO_DATA fill (7 of the first 12, from before the tape check) counts at its paper price and is named in the line.
+Two choices made in the build, written on the page: the first 30 trades exactly (no picking a good moment), and the
+parity window ends at the 30th ENTRY (+10 min), since an event while trade 30 is held is its own and a window ending
+at its close could read the next trade's entry as DRIFT. The verdict is decided on the unrounded mean.
+
+## 2026-11-13 · The $10 live test gets a preflight
+
+Before the house rules' step 0 (one ~$10 live entry: the backstop shows, KILL clears it), readiness was a feeling:
+check the pause by hand, remember the lift is disarmed, look for the backstop on Orderly. borst asked for a read-only
+page that confirms the safety stop, the pause switch and the one-wallet permission. `/ops/preflight` reads
+`GET /agent/:a/preflight` and prints each point as PASS / FAIL / WAIT / INFO. Choice made in the build: the backstop line
+shows what exec recorded, never a key-signed read of the owner's account from a public route, so the test still says
+"see it on Orderly". The lift is a FAIL only for a live graded-exit config (it would refuse every entry); the $10 test
+doesn't need it. Same PR: live fills (`state.live_slip`) now go through the public 1-minute tape check, kept apart
+from paper.

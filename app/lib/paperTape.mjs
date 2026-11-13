@@ -169,3 +169,33 @@ export function tapeLine(s) {
   if (s.triggers) parts.push(s.markOnly ? `${s.markOnly} of ${s.triggers} stop/target exits fired on the mark with no trade at the level` : `all ${s.triggers} stop/target exits traded at their level`);
   return parts.join(" · ");
 }
+
+// ── Live fills, on the same tape (borst 2026-11-13, the $10 live test's readiness) ───────────────────
+// A live fill is the exchange's own (`average_executed_price`, exec books it; app/lib/slippage.mjs keeps each one
+// with its mark in `state.live_slip`). It is a trade, so it should sit inside its minute's range: ON_TAPE. This
+// checks that the price the record shows is the price the market printed, by a reader that isn't exec. Kept
+// apart from the paper fills (LIVE and PAPER never mix): its own keys, summary and line. Only exchange-confirmed
+// fills are recorded; a fill that fell back to the mark is unknown and isn't checked.
+
+/** The key of one live fill: its Orderly order id, else its market, kind and time. */
+export const liveKey = (r) => `l:${r?.order_id != null ? r.order_id : `${r?.symbol}:${r?.kind}:${ms(r?.t)}`}`;
+
+/** A wallet's live fills to check, newest first: [{ key, kind: "live_<kind>", symbol, t, px, live: true }]. */
+export function liveLegs(state) {
+  const out = [];
+  for (const r of Array.isArray(state?.live_slip) ? state.live_slip : []) {
+    const t = ms(r?.t), px = Number(r?.fill);
+    if (t == null || !(px > 0) || !r?.symbol) continue;
+    out.push({ key: liveKey(r), kind: `live_${r.kind}`, symbol: r.symbol, t, px, live: true, ...(r.order_id != null ? { orderId: String(r.order_id) } : {}) });
+  }
+  return out.sort((a, b) => b.t - a.t);
+}
+
+/** The one line for live fills, or null when none is judged yet. */
+export function liveTapeLine(s) {
+  if (!s || !s.judged) return null;
+  const parts = [`${s.onTape} of ${s.judged} live fills sit inside Orderly’s public 1-minute range`];
+  if (s.near) parts.push(`${s.near} within ${TAPE_TOL_BPS / 100}%`);
+  parts.push(`${s.off} off`);
+  return parts.join(" · ");
+}

@@ -57,3 +57,11 @@ No agent mode, preset or wallet exists for this read, and none is added before i
 ## Results
 
 (Append below. Never edit above this line.)
+
+### 2026-11-13 · served TRADEABLE, paper mode built
+
+The daily watcher recorded the served stage TRADEABLE on 2026-11-13 (#299): 76 out-of-sample events at +0.39R, beating
+99.7% of random entries; holdout 32 events at +0.16R, beating 87.8% (bar 80%); graded exit +57.7 bps net over 50
+trades. As pipeline-if-then.md's Tradeable rule allows, the agent can now trade this read on paper only: mode `OI_DIV_4H`,
+the rule above moved unchanged into `app/lib/oiDivReversal.mjs` so the brain and the grader share one copy, parity
+tested hour by hour. Nothing above changed. No paper wallet exists yet; borst sets one up, fresh, on the main coins.

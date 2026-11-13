@@ -157,7 +157,14 @@ product is what sits on top:
   hour after an event, `sourceT` = the event time. **Loaded only by the hidden link `/lab?tab=agent&deploy=level-reclaim-paper`**
   (borst: a FRESH wallet, owner-only) with `LEVEL_RECLAIM_PAPER_CONFIG` (graded exit, 11 main-card coins, no filters, wide
   caps). No mode button, no Strategy Library preset, no /proof Load until its wallet has 30 paper trades with parity
-  CLEAN, judged after fees (`/paper-costs`), tested. Parity: `levelReclaim.test.mjs` (hour by hour), `/agent/:a/parity`. Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
+  CLEAN, judged after fees (`/paper-costs`), tested. Parity: `levelReclaim.test.mjs` (hour by hour), `/agent/:a/parity`. **OI_DIV_4H = ON for PAPER only**
+  (2026-11-13, oi_div_reversal_4h served TRADEABLE that day, #299): same pattern. Shared rule `app/lib/oiDivReversal.mjs`
+  (the grader's `oiDivReversalEvents` + `oiDivReversal4hEvents` moved there unchanged; explorerReads re-exports them),
+  computed by the brain on `oi:hist` behind `OI_DIV_4H_LIVE = "true"`, PAPER only (`oiDiv4hRefusal`, no live lift);
+  fires in the hour after its row, `sourceT` = the row time. Hidden link `/lab?tab=agent&deploy=oi-div-4h-paper`
+  (`OI_DIV_4H_PAPER_CONFIG`, a FRESH wallet); its paper wallet is recorded on the registration (`paperWallet`, readPipeline.mjs),
+  which moves the served stage → PAPER. Parity: `oiDivReversal.test.mjs`. ~0.4 s brain CPU per tick for
+  the 11 coins while that wallet is flat (full-history re-run, the same as the grader). Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
   evaluates nothing** (no "all" default).
 - **Exits** (`evaluateExit`, exec `logic.mjs`): SL → TIMEOUT → trail before TP; `takeProfits` ladder OVERRIDES
   `tpPercent` (`normTakeProfits`); DCA has its own monitor path. Exit vocabulary: `SL · TIMEOUT · TRAIL · BE · TP ·
@@ -223,7 +230,8 @@ product is what sits on top:
   counts from the exit as well as the entry (`closePosition` stamps `last_trade_time`).
 - **Paper wallets:** graded-exit wallet `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
   `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE` · level_reclaim paper (fresh,
-  2026-11-05, the hidden link) `0x95e26E980e300C34360933b849457F42c6Bd7622`.
+  2026-11-05, the hidden link) `0x95e26E980e300C34360933b849457F42c6Bd7622` · oi_div_reversal_4h paper (fresh, 2026-11-13
+  19:35 UTC, the hidden link) `0xd446acE5934a0A337A9ee5F0D8ad37FdF8a1e2CD`.
 - **Paper tape check** (borst 2026-11-13, `docs/research/paper-tape.md`): every paper fill (entry + exit) is checked
   against Orderly's public 1-minute bar for its minute or the one before (`app/lib/paperTape.mjs`: ON_TAPE / NEAR ≤
   `TAPE_TOL_BPS` 10 / OFF / NO_TRADES / NO_DATA / AVERAGED for a DCA blended entry, `entry_avg` on paper rows / PENDING).
@@ -233,6 +241,24 @@ product is what sits on top:
   market exits at the mark (no wick fills); this only proves the price was real. **Trigger check:** an SL/TP row with
   its level (`sl_percent` / `tp_percent`, exec stamps both, record only, pinned) also gets TRADED or MARK_ONLY (the exit
   fired on the mark, no trade reached the level). A fill > 3 days old Orderly refused on 3 runs = NO_DATA + reason.
+- **30-trade paper judgment** (borst 2026-11-13, `docs/research/paper-judgment-level-reclaim.md`, signed; text above
+  Results sha256-pinned): `app/lib/paperJudge.mjs` (`PAPER_JUDGMENTS`, `judgePaperRun`) judges the FIRST 30 closed trades
+  from the record start: per trade net bps = move − 2.5 bps taker each side (frozen) − funding paid; mean (unrounded) > 0
+  = PASS, ≤ 0 = FAIL. Prices from the tape: OFF = the worse of the paper price and the bar's nearest traded edge;
+  NO_DATA/NO_TRADES = paper price, counted; PENDING waits. Parity (`paperParity`) over record start → 30th ENTRY + 10 min,
+  read once settled: DRIFT/UNVERIFIABLE = HELD. A paper reset after signing = RESET (final). lab-api `paperJudge.mjs`
+  hourly at :47 records PASS/FAIL/RESET ONCE in LAB_STORE `pjudge:{axis}` (the 30 trades as judged), never rewritten;
+  `GET /signals/paper-judge/:axis`; the paper run page's verdict block. Licenses nothing automatic. **oi_div_reversal_4h** has the same rules
+  (`paper-judgment-oi-div-reversal-4h.md`, drafted 2026-11-13 at 0 trades, a word-for-word copy, test-checked) with
+  `signature: "pending"`: no PASS/FAIL is final until borst's signature is recorded under its Results and the flag flips. Events for parity come
+  from `parityEvents.mjs` (one copy with `GET /agent/:a/parity`).
+- **Live fills on the tape + $10 preflight** (borst 2026-11-13): the tape checker also checks each exchange-confirmed live
+  fill in `state.live_slip` (`liveLegs`, keys `l:{order_id}`, kind `live_<kind>`), counted APART from paper
+  (`tapeView().live`, `liveTapeLine`). `GET /agent/:a/preflight` (`routes-preflight.mjs`, rule `app/lib/livePreflight.mjs`,
+  public, read-only, never asks Orderly) = the house rules' step-0 test line by line: exec heartbeat, `ops:halt:live`, a
+  pending kill, mode + key stored (yes/no), the lift (FAIL only for a live graded-exit config not listed / not the plan's;
+  INFO otherwise), the backstop exec RECORDED (1.5× the stop, snapped away; see it on Orderly too), queued cancels, live
+  fills on the tape, slippage. Page `/ops/preflight?wallet=` (noindex, not in the nav, re-reads every 15 s).
 - lab-api needs `SUPABASE_URL` / `SUPABASE_ANON_KEY` for History reads.
 - `test-signal` and the Force button are DEV/PAPER-only. Feed bridge: `PUBLISH_AGENT_FEED=true` (real trades only).
 - Multi-strategy concurrency = one Orderly sub-account per strategy, after a proven edge (deferred).
@@ -265,6 +291,11 @@ product is what sits on top:
   never re-scan from the start or redo per-coin work that doesn't depend on the coin; time it on the public series
   before registering. A faster body must fire identical events (kept-reference test, as for btc_lead_lag /
   funding_basis_split in explorerReads.test.mjs).
+- **Built on a schedule, not in a request (2026-11-13, `scoreboardCache.mjs`):** the minute cron rebuilds the min-20 board at
+  `SCOREBOARD_REBUILD_MINUTE` (:53) via `buildAxisScorecard(env, min)` (index.js; the route's old body moved unchanged) and
+  stores it for 2h + a 24h last-good copy. A request serves the stored copy, builds only when none exists, and serves the
+  last good one marked `stale` if that build fails (503 `scoreboard_unavailable` only with nothing stored). Check
+  `[scoreboard] rebuilt in N ms` in the lab-api logs.
 - `GET /intel/axis-backtest` (`axisbt.mjs runScorecard`, cached; bump the `axisbt:vN` key when the payload changes) →
   /proof and the Feed SIGNALS tab. Forward returns, no lookahead, pooled across the recorded markets, half-vs-half
   stability, horizons 4/12/24h, R on a frozen contract (1.2×ATR stop, 1.5R, 168h).
@@ -546,7 +577,7 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
   **Paper run page** (`/proof/paper/:axis`, 2026-11-12, borst: "no running dollar pnl"): `GET /signals/paper-run/:axis`
   (`routes-paperrun.mjs`, rule `app/lib/paperRun.mjs`) = the read's paper wallet as n of 30, TP/SL/time-stop counts and
-  each trade's R; NEVER a dollar figure, size, or a sum/average of R until the 30-trade judgment (after fees, own PR).
+  each trade's R; NEVER a dollar figure, size, or a sum/average of R until the 30-trade judgment (`paperJudge.mjs`, bps after fees).
   R = move ÷ `sl_percent` (exec stamps it on paper rows from 2026-11-12, record only), else by the contract (TP +1.5,
   SL −1, labelled). Link card from `functions/proof/paper/[axis].js` (live count; no paper wallet = real 404).
   That Function also swaps index.html's boot screen for a static copy of the run (`paperRunSnapshotHtml` + `withSnapshot`,

@@ -11,6 +11,8 @@
 //                                     basisAnchor:"MEAN" = the two-sided read (STAGED, off; plain or CVD only).
 //   LEVEL_RECLAIM                   — the registered level_reclaim read (app/lib/levelReclaim.mjs), STAGED
 //                                     and OFF: only behind worker var LEVEL_RECLAIM_LIVE, PAPER configs only.
+//   OI_DIV_4H                       — the registered oi_div_reversal_4h read (app/lib/oiDivReversal.mjs):
+//                                     only behind worker var OI_DIV_4H_LIVE, PAPER configs only.
 //   MOMENTUM                        — trade WITH a tick price move > priceChangeThreshold (trend-follow).
 //   MEAN_REVERSION                  — FADE a tick price move > priceChangeThreshold (buy dip / sell rip).
 // Thresholds (per user): fundingThreshold (%), oiChangeThreshold (% min OI move to count).
@@ -19,6 +21,7 @@
 
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 import { levelReclaimRefusal } from "../../app/lib/levelReclaim.mjs";
+import { oiDiv4hRefusal } from "../../app/lib/oiDivReversal.mjs";
 
 // Market-wide regime from a full futures snapshot (all symbols). Pure + testable.
 // Mirrors the frontend MarketRegime: breadth (50%) + BTC trend (40%) + funding
@@ -190,6 +193,21 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
       }
       break;
     }
+    case "OI_DIV_4H": {
+      // The registered oi_div_reversal_4h read, traded on paper (served TRADEABLE 2026-11-13). The verdict
+      // is the SHARED rule the scoreboard grades with (app/lib/oiDivReversal.mjs), computed by the brain only
+      // behind OI_DIV_4H_LIVE; nothing is re-derived here. No raw.oiDiv4h* fields ⇒ it sits out and says so.
+      const refused = oiDiv4hRefusal(config);
+      if (refused) { why = `${refused} — sat out`; break; }
+      if (raw.oiDiv4hSide === "LONG" || raw.oiDiv4hSide === "SHORT") {
+        direction = raw.oiDiv4hSide; confidence = 70; why = `oi div reversal 4h · ${raw.oiDiv4hReason}`;
+      } else {
+        why = typeof raw.oiDiv4hReason === "string" && raw.oiDiv4hReason
+          ? `${raw.oiDiv4hReason} — sat out`
+          : "oi_div_reversal_4h is off — sat out";
+      }
+      break;
+    }
     case "EXTERNAL":
       // Arena / bring-your-own-brain — the house brain stays silent for this agent;
       // entries come ONLY from its own webhook intents. Explicit case so it can
@@ -297,13 +315,15 @@ export function oiSnapshotDue(hist, now = Date.now()) {
 // The time of the observation a signal came from, so exec can take each read once
 // (2026-10-30). Basis reads carry their basis row's time: the brain re-sends the same row's
 // signal every tick until the next row lands, and the grader counts that row once. A
-// level_reclaim signal carries its event's time (the reclaim bar's close) for the same reason.
+// level_reclaim signal carries its event's time (the reclaim bar's close) for the same reason, and an
+// oi_div_reversal_4h signal its event's oi:hist row time.
 // Other modes have no stable source row → null (exec keeps its plain cooldown for them).
 export function signalSourceT(raw, config) {
   if (!raw) return null;
   let t = null;
   if (config?.signalMode === "BASIS_FADE") t = config.basisAnchor === "MEAN" ? raw.basisDevT : raw.basisT;
   else if (config?.signalMode === "LEVEL_RECLAIM") t = raw.levelReclaimT;
+  else if (config?.signalMode === "OI_DIV_4H") t = raw.oiDiv4hT;
   return t != null && Number.isFinite(Number(t)) && Number(t) > 0 ? Number(t) : null;
 }
 
