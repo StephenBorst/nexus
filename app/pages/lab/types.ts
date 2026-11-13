@@ -207,6 +207,7 @@ export interface AgentState {
     funding: number;
     confidence: number;
     timestamp: number;
+    reason?: string; // why: the fired rule, or the grouped sit-out reasons when nothing fired (brain quietReason)
   } | null;
 }
 
