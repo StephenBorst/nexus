@@ -35,6 +35,22 @@ export const PAPER_JUDGMENTS = Object.freeze({
     parityEarlyMs: PARITY_EARLY_MS,   // 10 min: parity's clock slack past the 30th entry
     paritySettleMs: PARITY_SETTLE_MS, // 2h: parity's settle time
     passAboveBps: 0,               // mean net > 0 = PASS
+    signature: "signed",           // borst, 2026-11-13 (the page's opening line)
+  }),
+  // A copy of level_reclaim's rules for the oi_div_reversal_4h paper wallet (drafted 2026-11-13, 0 trades). Until borst's
+  // signature is recorded under the page's Results (and `signature` flips to "signed" in that PR), no PASS or FAIL is
+  // final. A reset still ends the run (rule 3): a record can't be wiped before the judgment either way.
+  oi_div_reversal_4h: Object.freeze({
+    doc: "docs/research/paper-judgment-oi-div-reversal-4h.md",
+    signedAt: "2026-11-13T00:00:00Z", // the reset cut-off (rule 3): any reset after this date = RESET
+    wallet: "0xd446acE5934a0A337A9ee5F0D8ad37FdF8a1e2CD",
+    trades: PAPER_MIN_TRADES,
+    feeBps: 2.5,
+    tapeTolBps: TAPE_TOL_BPS,
+    parityEarlyMs: PARITY_EARLY_MS,
+    paritySettleMs: PARITY_SETTLE_MS,
+    passAboveBps: 0,
+    signature: "pending",
   }),
 });
 
@@ -183,6 +199,10 @@ export function judgePaperRun(axis, { state, tape = null, oiHistBySymbol = {}, p
       reason: `Parity reads ${parity.verdict}: no verdict until it is explained (pipeline-if-then.md).` };
   }
   const pass = exactMean > rule.passAboveBps;
+  // Rules not signed yet: the numbers show, nothing is final (nothing is recorded in pjudge:*).
+  if (rule.signature !== "signed") {
+    return { ...base, verdict: "PENDING", parity: "CLEAN", ...numbers, reason: "The judgment rules are drafted but not signed yet." };
+  }
   return { ...base, verdict: pass ? "PASS" : "FAIL", final: true, parity: "CLEAN", ...numbers,
     line: judgmentLine({ verdict: pass ? "PASS" : "FAIL", meanNetBps, target: rule.trades, fills }) };
 }

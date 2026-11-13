@@ -205,3 +205,45 @@ test("trades from before the run started don't count; first trades lost from the
   const j = judgePaperRun("level_reclaim", { state: lost, tape: tapeFor(lost), parity: CLEAN, nowMs: after(lost) });
   assert.deepEqual([j.verdict, j.final], ["LOST", false]);
 });
+
+// ── oi_div_reversal_4h: the same rules, drafted 2026-11-13 (docs/research/paper-judgment-oi-div-reversal-4h.md) ──────
+const DOC_4H = readFileSync(new URL("../../docs/research/paper-judgment-oi-div-reversal-4h.md", import.meta.url), "utf8");
+const RULE_4H = PAPER_JUDGMENTS.oi_div_reversal_4h;
+const PREFIX_4H_SHA256 = "b0e0455bd8253ebd110a892e50dc060e0ee6f611b6dca074c11e228e27b62210";
+
+test("oi_div_reversal_4h: the rules above Results are exactly as drafted", () => {
+  const cut = DOC_4H.indexOf("\n## Results");
+  assert.ok(cut > 0, "the Results heading is missing");
+  assert.equal(createHash("sha256").update(DOC_4H.slice(0, cut)).digest("hex"), PREFIX_4H_SHA256);
+});
+
+test("oi_div_reversal_4h: its rules are level_reclaim's, word for word, except the read, wallet and config", () => {
+  const rules = (d) => d.slice(d.indexOf("## The rules"), d.indexOf("\n## Results"));
+  const norm = (d) => rules(d)
+    .replace(/0x95e26E980e300C34360933b849457F42c6Bd7622|0xd446acE5934a0A337A9ee5F0D8ad37FdF8a1e2CD/g, "WALLET")
+    .replace(/level_reclaim|oi_div_reversal_4h/g, "READ").replace(/LEVEL_RECLAIM_PAPER_CONFIG|OI_DIV_4H_PAPER_CONFIG/g, "CONFIG")
+    .replace(/was signed|was written/g, "was DATED").replace(/day of signing|day of writing/g, "day of DATING")
+    .replace(/\s+/g, " ");
+  const a = norm(DOC), b = norm(DOC_4H);
+  // rule 8's PASS line names level_reclaim's own plan; this read has none yet. Everything else is identical.
+  const cut8 = (x) => x.slice(0, x.indexOf("8. **What a verdict licenses.**"));
+  assert.equal(cut8(b), cut8(a));
+  for (const k of ["trades", "feeBps", "tapeTolBps", "parityEarlyMs", "paritySettleMs", "passAboveBps", "signedAt"]) assert.equal(RULE_4H[k], RULE[k], k);
+  assert.equal(RULE_4H.doc, "docs/research/paper-judgment-oi-div-reversal-4h.md");
+  assert.match(DOC_4H, new RegExp(RULE_4H.wallet));
+  assert.equal(registrationFor("oi_div_reversal_4h").paperWallet, RULE_4H.wallet, "the read's registered paper wallet");
+});
+
+test("oi_div_reversal_4h: unsigned, a passing run stays PENDING and nothing is final", () => {
+  assert.equal(RULE.signature, "signed");
+  assert.equal(RULE_4H.signature, "pending", "flip this only in the PR that records borst's signature under Results");
+  assert.match(DOC_4H, /\*\*Signature: pending\.\*\*/);
+  assert.doesNotMatch(DOC_4H.slice(DOC_4H.indexOf("\n## Results")), /Signed/, "no signature recorded yet");
+  const s = run(30);
+  const j = judgePaperRun("oi_div_reversal_4h", { state: s, tape: tapeFor(s), parity: CLEAN, nowMs: judgeWindow("oi_div_reversal_4h", s).readableAt + 1 });
+  assert.equal(j.verdict, "PENDING");
+  assert.equal(j.final, false);
+  assert.equal(j.meanNetBps, 95, "the numbers still show");
+  assert.match(j.reason, /not signed/);
+  assert.equal(judgePaperRun("oi_div_reversal_4h", { state: run(4) }).verdict, "ACCRUING");
+});
