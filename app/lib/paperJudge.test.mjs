@@ -234,16 +234,19 @@ test("oi_div_reversal_4h: its rules are level_reclaim's, word for word, except t
   assert.equal(registrationFor("oi_div_reversal_4h").paperWallet, RULE_4H.wallet, "the read's registered paper wallet");
 });
 
-test("oi_div_reversal_4h: unsigned, a passing run stays PENDING and nothing is final", () => {
+test("oi_div_reversal_4h: signed under Results; a passing run is final", () => {
   assert.equal(RULE.signature, "signed");
-  assert.equal(RULE_4H.signature, "pending", "flip this only in the PR that records borst's signature under Results");
-  assert.match(DOC_4H, /\*\*Signature: pending\.\*\*/);
-  assert.doesNotMatch(DOC_4H.slice(DOC_4H.indexOf("\n## Results")), /Signed/, "no signature recorded yet");
+  assert.equal(RULE_4H.signature, "signed");
+  assert.match(DOC_4H.slice(DOC_4H.indexOf("\n## Results")), /Signed by borst on 2026-11-13/);
   const s = run(30);
   const j = judgePaperRun("oi_div_reversal_4h", { state: s, tape: tapeFor(s), parity: CLEAN, nowMs: judgeWindow("oi_div_reversal_4h", s).readableAt + 1 });
-  assert.equal(j.verdict, "PENDING");
-  assert.equal(j.final, false);
-  assert.equal(j.meanNetBps, 95, "the numbers still show");
-  assert.match(j.reason, /not signed/);
+  assert.equal(j.verdict, "PASS");
+  assert.equal(j.final, true);
+  assert.equal(j.meanNetBps, 95);
   assert.equal(judgePaperRun("oi_div_reversal_4h", { state: run(4) }).verdict, "ACCRUING");
+});
+
+test("a rule entry whose signature is pending records no PASS or FAIL (the guard stays for the next page)", () => {
+  const src = readFileSync(new URL("./paperJudge.mjs", import.meta.url), "utf8");
+  assert.match(src, /if \(rule\.signature !== "signed"\) \{\s*return \{ \.\.\.base, verdict: "PENDING"/);
 });
