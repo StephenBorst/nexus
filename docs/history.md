@@ -2488,3 +2488,12 @@ the same `gradeCall` on public 1-minute bars for calls from 2026-11-13T00:00Z, a
 expiry so `/verify` keeps working after Orderly ages them out, a 1-minute cron that only re-grades calls whose
 levels traded, and a "· CONFIRMING" hint on cards from the browser's live mark (display only). Phase 3, a
 Durable Object on Orderly's websocket as a faster trigger, is held. Rule: `docs/research/minute-grading.md`.
+
+## 2026-11-13 · Paper fills checked against the public tape
+
+Live agent rows were checkable against the exchange by order id; paper rows were prices our own exec wrote
+down, provable only as unedited (the hash-chained paper log), not as real. borst picked this over follower
+alerts: "proof and trust come before growth hooks." Each paper entry and exit is now checked by lab-api, an
+independent reader, against Orderly's public 1-minute bar for its minute, and the bar is kept with its
+source. Paper exits were deliberately left as mark-price market exits (no wick fills). Rule:
+`docs/research/paper-tape.md`.

@@ -224,6 +224,13 @@ product is what sits on top:
 - **Paper wallets:** graded-exit wallet `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
   `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE` · level_reclaim paper (fresh,
   2026-11-05, the hidden link) `0x95e26E980e300C34360933b849457F42c6Bd7622`.
+- **Paper tape check** (borst 2026-11-13, `docs/research/paper-tape.md`): every paper fill (entry + exit) is checked
+  against Orderly's public 1-minute bar for its minute or the one before (`app/lib/paperTape.mjs`: ON_TAPE / NEAR ≤
+  `TAPE_TOL_BPS` 10 / OFF / NO_TRADES / NO_DATA / AVERAGED for a DCA blended entry, `entry_avg` on paper rows / PENDING).
+  Checker = lab-api `paperTape.mjs`, hourly at :41 on the minute cron: READS agent state, writes only `ptape:{wallet}` in
+  LAB_STORE (the bar + its public source per fill, final). Served at `GET /agent/:a/tape`, on `/proof/paper/:axis`
+  (Tape column + line, `paperRun(axis, state, tape)`) and Arena rows (`tape`, summed per operator). Paper exits stay
+  market exits at the mark (no wick fills); this only proves the price was real.
 - lab-api needs `SUPABASE_URL` / `SUPABASE_ANON_KEY` for History reads.
 - `test-signal` and the Force button are DEV/PAPER-only. Feed bridge: `PUBLISH_AGENT_FEED=true` (real trades only).
 - Multi-strategy concurrency = one Orderly sub-account per strategy, after a proven edge (deferred).

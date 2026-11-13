@@ -92,6 +92,7 @@ import { handleCallStatus } from "./routes-callstatus.mjs";
 import { handleVerify, isPublicCall } from "./routes-verify.mjs";
 import { runMinuteGrades } from "./minuteGrader.mjs";
 import { handleMinuteArchive } from "./minuteCandles.mjs";
+import { runPaperTape, handlePaperTape } from "./paperTape.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
@@ -647,7 +648,16 @@ export default {
           if (r.triggered || r.graded || r.fills || r.skipped) console.log(`[m1] ${JSON.stringify(r)}`);
         } catch (e) { console.error("[m1] minute grader failed:", String(e?.message || e)); }
       })());
-      if (new Date(event.scheduledTime || Date.now()).getUTCMinutes() % 5 === 0) {
+      const minute = new Date(event.scheduledTime || Date.now()).getUTCMinutes();
+      // Once an hour, its own invocation, away from the :17 jobs: paper fills against the public
+      // 1-minute tape (paperTape.mjs; reads agent state, writes only its own ptape:* keys).
+      if (minute === 41) {
+        ctx.waitUntil((async () => {
+          try { const r = await runPaperTape(env); console.log(`[tape] ${JSON.stringify(r)}`); }
+          catch (e) { console.error("[tape] run failed:", String(e?.message || e)); }
+        })());
+      }
+      if (minute % 5 === 0) {
         ctx.waitUntil((async () => {
           try {
             const r = await runAgentWatch(env, (w, n) => appendNotification(env, w, n, { telegram: false }));
@@ -1272,6 +1282,8 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     {
       const archiveRes = await handleMinuteArchive(parts, request, env);
       if (archiveRes) return archiveRes;
+      const paperTapeRes = await handlePaperTape(parts, request, env);
+      if (paperTapeRes) return paperTapeRes;
       const verifyRes = await handleVerify(parts, request, env);
       if (verifyRes) return verifyRes;
     }
