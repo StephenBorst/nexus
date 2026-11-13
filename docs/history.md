@@ -2497,3 +2497,15 @@ alerts: "proof and trust come before growth hooks." Each paper entry and exit is
 independent reader, against Orderly's public 1-minute bar for its minute, and the bar is kept with its
 source. Paper exits were deliberately left as mark-price market exits (no wick fills). Rule:
 `docs/research/paper-tape.md`.
+
+## 2026-11-13 · level_reclaim's 30-trade judgment, locked at trade 6
+
+The Paper gate ("30 trades, parity CLEAN, net positive after fees", pipeline-if-then.md) had no code: at trade 30
+someone would pull the numbers by hand and choose how to count fees, off-tape fills and missing data after seeing
+them. borst: "lock the pass/fail rules with tests before trade 30." Signed page
+`docs/research/paper-judgment-level-reclaim.md`, rules in `app/lib/paperJudge.mjs`. His two calls that day: an
+OFF fill is judged at the worse of its price and the nearest traded price (a fake price can only hurt), and a
+NO_DATA fill (7 of the first 12, from before the tape check) counts at its paper price and is named in the line.
+Two choices made in the build, written on the page: the first 30 trades exactly (no picking a good moment), and the
+parity window ends at the 30th ENTRY (+10 min), since an event while trade 30 is held is its own and a window ending
+at its close could read the next trade's entry as DRIFT. The verdict is decided on the unrounded mean.
