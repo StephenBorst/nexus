@@ -4,7 +4,8 @@
 // UNCHANGED from workers/nexus-lab-api/explorerReads.mjs (which re-exports them), so the scoreboard's
 // grader and the brain's live gate call the same function and cannot drift, the guarantee
 // levelReclaim.mjs gives level_reclaim. The helpers below are copied from explorerReads as they were.
-// A changed rule = a new name and a new registration; these bodies are frozen.
+// A changed rule = a new name and a new registration; these bodies are frozen. A faster body must fire
+// exactly the same events (oiDivReversal.test.mjs keeps the registered body as the reference).
 //
 // The agent side trades the 4h read only (served TRADEABLE 2026-11-13, pipeline-if-then.md, Tradeable:
 // "borst sets up one paper wallet for it with the preset as registered, on the main coins only"). The
@@ -55,11 +56,14 @@ export function oiDivReversalEvents(cs, _pmap, _ctx, p = OI_DIV) {
   for (const h of hours) {
     const x = ret.get(h);
     if (!x || x.oiCh == null || h - last < p.cooldownH) continue;
+    // The cheap tests run before the 30-day window is built (2026-11-13, CPU): every test here is pure and
+    // the event fires only when all of them pass, so the order changes nothing that fires
+    // (kept-reference test in oiDivReversal.test.mjs).
+    if (x.r === 0 || !(x.oiCh <= -p.oiDrop)) continue;
     const prior = [];
     for (let k = h - p.lookbackH; k < h; k++) { const y = ret.get(k); if (y) prior.push(Math.abs(y.r)); }
     if (prior.length < p.minHistory) continue; // warm-up: half the 30-day window must exist
-    if (!(pctRank(prior, Math.abs(x.r)) >= p.pct) || x.r === 0) continue;
-    if (!(x.oiCh <= -p.oiDrop)) continue;
+    if (!(pctRank(prior, Math.abs(x.r)) >= p.pct)) continue;
     ev.push({ t: m.get(h).t, side: x.r > 0 ? "SHORT" : "LONG" });
     last = h;
   }

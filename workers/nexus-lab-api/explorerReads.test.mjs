@@ -7,8 +7,9 @@ import {
   oiDivReversalEvents, sessionMomentumEvents, levelReclaimEvents, confluenceFollowEvents,
   oiDivReversal4hEvents, oiCoilBreakEvents, EXPLORER_GENS, OI_DIV, OI_DIV_4H, OI_COIL, CONFLUENCE,
   sessionFadeEvents, levelReclaimTightEvents, spotAbsorbEvents, LEVEL_TIGHT, SPOT_ABSORB, SESSION,
-  btcLeadLagEvents, LEAD_LAG, fundingBasisSplitEvents, SPLIT,
+  btcLeadLagEvents, LEAD_LAG, fundingBasisSplitEvents, SPLIT, h4AtrAtHour, denseHours,
 } from "./explorerReads.mjs";
+import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 import { AXES } from "./axisbt.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
@@ -524,4 +525,64 @@ test("the 30-day windows include the hour exactly 30 days back (boundary pinned 
   assert.equal(REF.split({ oiHist, basisHist }, null, null, q).length, 1);
   assert.deepEqual(fundingBasisSplitEvents({ oiHist, basisHist }, null, null, q), REF.split({ oiHist, basisHist }, null, null, q));
   assert.deepEqual(fundingBasisSplitEvents({ oiHist, basisHist }, null, null, { ...q, minHistory: 721 }), []);
+});
+
+// ── Performance rewrite (2026-11-13): level_reclaim_tight reads its H4 ATR through h4AtrAtHour (a dense hour array,
+// no per-call copy/sort/Map) and caches it by hour. It must fire EXACTLY the registered body's events, and the helper
+// must equal h4Atr14Frac on the same 81 hours everywhere. The registered body is kept here verbatim as the reference.
+const REF_TIGHT = (() => {
+  const byHour = (rows, ok) => { const m = new Map(); for (const r of [...(rows || [])].sort((a, b) => Number(a.t) - Number(b.t))) if (r && ok(r)) m.set(hourBucket(r.t), r); return m; };
+  const candleMap = (c) => byHour(c, (x) => [x.o, x.h, x.l, x.c].every(Number.isFinite) && x.c > 0);
+  const pctRank = (arr, x) => { if (!arr.length) return null; let below = 0, equal = 0; for (const v of arr) { if (v < x) below++; else if (v === x) equal++; } return (below + equal / 2) / arr.length; };
+  const atrWindow = (cbh, hour) => {
+    const hourly = [];
+    for (let h = hour - 80; h <= hour; h++) { const c = cbh.get(h); if (c) hourly.push({ t: Number(c.t) / 1000, h: c.h, l: c.l, c: c.c }); }
+    return h4Atr14Frac(hourly);
+  };
+  function tight(cs, pmap, ctx, p = LEVEL_TIGHT) {
+    const evs = levelReclaimEvents(cs, pmap, ctx);
+    if (!evs.length) return [];
+    const cbh = candleMap(cs.candleHist);
+    const out = [];
+    for (const e of evs) {
+      const h = hourBucket(e.t) - 1;
+      const now = atrWindow(cbh, h);
+      if (!(now > 0)) continue;
+      const prior = [];
+      for (let k = h - p.stepH; k >= h - p.lookbackH; k -= p.stepH) { const x = atrWindow(cbh, k); if (x > 0) prior.push(x); }
+      if (prior.length < p.minSamples) continue;
+      if (pctRank(prior, now) <= p.maxRank) out.push({ t: e.t, side: e.side });
+    }
+    return out;
+  }
+  return { tight, candleMap, atrWindow };
+})();
+
+test("the faster level_reclaim_tight fires exactly the registered body's events; h4AtrAtHour == h4Atr14Frac at every hour", () => {
+  let fired = 0, hoursChecked = 0, nonNull = 0;
+  for (const seed of [1, 3, 7, 11, 29, 101, 2024]) {
+    const base = tape(1900, seed);
+    // gaps (single hours and a 30-hour hole that leaves partial 4h buckets) and an off-the-hour candle stamp
+    const gappy = base.candleHist
+      .filter((_, i) => i % 13 !== 5 && !(i >= 900 && i < 930))
+      .map((c, i) => (i % 211 === 9 ? { ...c, t: c.t + 17 * 60000 } : c));
+    for (const cs of [{ coin: "ETH", ...base }, { coin: "ETH", oiHist: base.oiHist, candleHist: gappy }]) {
+      for (const p of [LEVEL_TIGHT, { ...LEVEL_TIGHT, maxRank: 0.8, minSamples: 20 }, { ...LEVEL_TIGHT, stepH: 5, lookbackH: 400 }]) {
+        const ref = REF_TIGHT.tight(cs, null, null, p);
+        assert.deepEqual(levelReclaimTightEvents(cs, null, null, p), ref, `seed ${seed}`);
+        fired += ref.length;
+      }
+      const cbh = REF_TIGHT.candleMap(cs.candleHist);
+      const dh = denseHours(cbh);
+      const hs = [...cbh.keys()];
+      for (let h = Math.min(...hs) - 5; h <= Math.max(...hs) + 5; h++) {
+        const want = REF_TIGHT.atrWindow(cbh, h);
+        assert.equal(h4AtrAtHour(dh, h), want, `hour ${h} seed ${seed}`);
+        hoursChecked++; if (want != null) nonNull++;
+      }
+    }
+  }
+  assert.ok(fired > 20, `the tapes fire (${fired}): an all-empty comparison would prove nothing`);
+  assert.ok(nonNull > 1000 && nonNull < hoursChecked, "both a value and null (too few bars) are compared");
+  assert.equal(h4AtrAtHour(denseHours(new Map()), 500000), null, "no candles = null, as h4Atr14Frac");
 });
