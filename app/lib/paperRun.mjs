@@ -46,11 +46,13 @@ export function tradeR(row) {
  * @param {object|null} state the paper wallet's agent state (null = unread)
  * @param {object|null} [tape] the wallet's tape checks (lab-api paperTape.mjs `ptape:{wallet}`): each trade then
  *   carries `tape: { entry, exit }` verdicts and the run a `tape` summary + line (paperTape.mjs). Omitted = none.
+ * @param {{ wallet?: string|null }} [opts] `wallet` = a signed claim (paperClaim.mjs) not yet written into the code;
+ *   the code registration wins when it names one.
  * @returns {null | object} null when the read has no paper wallet
  */
-export function paperRun(axis, state, tape = null) {
+export function paperRun(axis, state, tape = null, { wallet: claimed = null } = {}) {
   const reg = registrationFor(axis);
-  const wallet = reg?.paperWallet || null;
+  const wallet = reg?.paperWallet || (reg ? claimed : null) || null;
   if (!wallet) return null;
   const base = { axis, wallet, target: PAPER_MIN_TRADES, registeredAt: reg.registeredAt || null, doc: reg.doc || null };
   if (!state || typeof state !== "object") return { ...base, unread: true };

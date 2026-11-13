@@ -163,7 +163,16 @@ product is what sits on top:
   computed by the brain on `oi:hist` behind `OI_DIV_4H_LIVE = "true"`, PAPER only (`oiDiv4hRefusal`, no live lift);
   fires in the hour after its row, `sourceT` = the row time. Hidden link `/lab?tab=agent&deploy=oi-div-4h-paper`
   (`OI_DIV_4H_PAPER_CONFIG`, a FRESH wallet); its paper wallet is recorded on the registration (`paperWallet`, readPipeline.mjs),
-  which moves the served stage → PAPER. Parity: `oiDivReversal.test.mjs`. ~0.4 s brain CPU per tick for
+  which moves the served stage → PAPER. Parity: `oiDivReversal.test.mjs`. **Paper-wallet registration (borst 2026-11-14, `app/lib/paperClaim.mjs`,
+  `routes-paperclaim.mjs`):** no more hand-made PR per wallet. On `/ops/revenue` (Paper wallets box) the owner pastes a
+  fresh wallet and signs `paperClaimMessage` (5 min; Safe owner / `OPS_WALLETS`). `POST /pipeline/paper-wallet` binds it
+  only if the read is SERVED TRADEABLE (stored scoreboard, unread = 503), has a `PAPER_SETUPS` entry (brain mode + preset;
+  a new read's brain wiring stays its own reviewed PR), no wallet yet (code or claim), the wallet isn't another read's,
+  config = the preset (`paperConfigMismatch`; tp/slPercent ignored, the graded exit sets its own) and the record is fresh
+  (`freshnessRefusal`: started_at, 0 trades, no open position, never reset). NexusLock `paperClaims`; first wins, never
+  overwritten. Stored in LAB_STORE `pipeline:paperwallets:v1`; the scoreboard build fills `paperWallet` on its rows
+  (`readsWithClaims`, code wins) → PAPER at the next build; paper run page, pulse and tape checker read it too.
+  `GET /pipeline/paper-wallets` (public). ~0.4 s brain CPU per tick for
   the 11 coins while that wallet is flat (full-history re-run, the same as the grader). Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
   evaluates nothing** (no "all" default).
 - **Exits** (`evaluateExit`, exec `logic.mjs`): SL → TIMEOUT → trail before TP; `takeProfits` ladder OVERRIDES

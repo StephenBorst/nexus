@@ -31,6 +31,9 @@ export const LOCK_KEYS = {
   v2Key: (wallet) => `v2key:${String(wallet).toLowerCase()}`,
   // The minute grader (minuteGrader.mjs): one run at a time, so a fill or a grade is announced once.
   minuteGrade: () => "minutegrade:run",
+  // Paper-wallet claims (routes-paperclaim.mjs): one KV value for every read; first registration wins, so two
+  // signed claims at once must not both read "no wallet yet" and both write.
+  paperClaims: () => "pipeline:paperwallets",
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;
