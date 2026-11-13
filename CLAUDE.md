@@ -174,7 +174,12 @@ product is what sits on top:
   (`freshnessRefusal`: started_at, 0 trades, no open position, never reset). NexusLock `paperClaims`; first wins, never
   overwritten. Stored in LAB_STORE `pipeline:paperwallets:v1`; the scoreboard build fills `paperWallet` on its rows
   (`readsWithClaims`, code wins) → PAPER at the next build; paper run page, pulse and tape checker read it too.
-  `GET /pipeline/paper-wallets` (public). ~0.4 s brain CPU per tick for
+  `GET /pipeline/paper-wallets` (public). **Its judgment page (`app/lib/paperJudgePage.mjs`, `routes-judgesign.mjs`):** for a claimed
+  read with no `PAPER_JUDGMENTS` entry, `GET /pipeline/judgment/:axis` renders the page from the claim (`RULES_TEMPLATE` =
+  oi_div_reversal_4h's signed rules, test-pinned byte for byte) + its sha256; the owner signs `judgmentSignMessage` over
+  that hash in the same /ops box (`POST …/sign`: page as served, Safe owner / OPS, < 30 trades, once, NexusLock
+  `judgeSigs`, LAB_STORE `pipeline:judgsigs:v1`). The judge reads only the code entry: the watcher writes page,
+  `signedResultsLine` and `judgmentEntry` into the repo. ~0.4 s brain CPU per tick for
   the 11 coins while that wallet is flat (full-history re-run, the same as the grader). Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
   evaluates nothing** (no "all" default).
 - **Exits** (`evaluateExit`, exec `logic.mjs`): SL → TIMEOUT → trail before TP; `takeProfits` ladder OVERRIDES

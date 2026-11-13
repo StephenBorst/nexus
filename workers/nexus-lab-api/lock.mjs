@@ -34,6 +34,8 @@ export const LOCK_KEYS = {
   // Paper-wallet claims (routes-paperclaim.mjs): one KV value for every read; first registration wins, so two
   // signed claims at once must not both read "no wallet yet" and both write.
   paperClaims: () => "pipeline:paperwallets",
+  // Judgment signatures (routes-judgesign.mjs): one KV value, each read signed once.
+  judgeSigs: () => "pipeline:judgsigs",
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;

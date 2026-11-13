@@ -27,8 +27,8 @@ export const CLAIM_SIG_SKEW_MS = 60 * 1000;
 // A read can be put on paper only once the brain trades its exact rule (a shared rule + parity test, its own
 // reviewed PR). Each entry: the preset its paper wallet must run, and the hidden setup link that loads it.
 export const PAPER_SETUPS = Object.freeze({
-  level_reclaim: Object.freeze({ config: LEVEL_RECLAIM_PAPER_CONFIG, deploy: LEVEL_RECLAIM_DEPLOY }),
-  oi_div_reversal_4h: Object.freeze({ config: OI_DIV_4H_PAPER_CONFIG, deploy: OI_DIV_4H_DEPLOY }),
+  level_reclaim: Object.freeze({ config: LEVEL_RECLAIM_PAPER_CONFIG, configName: "LEVEL_RECLAIM_PAPER_CONFIG", deploy: LEVEL_RECLAIM_DEPLOY }),
+  oi_div_reversal_4h: Object.freeze({ config: OI_DIV_4H_PAPER_CONFIG, configName: "OI_DIV_4H_PAPER_CONFIG", deploy: OI_DIV_4H_DEPLOY }),
 });
 
 // Filters and sizing the presets leave unset: on a paper wallet they must stay off, or the record isn't the read's.
@@ -174,11 +174,10 @@ export function paperSetupRows(claims, stages) {
 }
 
 const toHex = (bytes) => "0x" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-/** Browser: the owner signs one claim with the connected EVM wallet (same flow as signLiveHalt). */
-export async function signPaperClaim(addr, wallet, axis, paperWallet, { now = Date.now() } = {}) {
+/** Browser: the connected owner wallet signs `message(address, ts)` (personal_sign, same flow as signLiveHalt). */
+export async function ownerSign(addr, wallet, message, { now = Date.now() } = {}) {
   const provider = wallet?.provider;
   if (!isEvm(addr)) throw new Error("Connect an EVM wallet (a treasury Safe owner).");
-  if (!isEvm(paperWallet)) throw new Error("Paste the paper wallet’s 0x address.");
   if (typeof provider?.request !== "function") throw new Error("This wallet can’t sign messages here.");
   const me = lower(addr);
   const accounts = (await provider.request({ method: "eth_accounts" }).catch(() => [])) || [];
@@ -186,9 +185,16 @@ export async function signPaperClaim(addr, wallet, axis, paperWallet, { now = Da
     || (typeof wallet?.address === "string" && wallet.address.toLowerCase() === me ? wallet.address : null);
   if (!account) throw new Error(`Switch your wallet to ${addr.slice(0, 6)}…${addr.slice(-4)}.`);
   const ts = now;
-  const sig = await provider.request({ method: "personal_sign", params: [toHex(new TextEncoder().encode(paperClaimMessage(me, axis, paperWallet, ts))), account] });
+  const sig = await provider.request({ method: "personal_sign", params: [toHex(new TextEncoder().encode(message(me, ts))), account] });
   if (typeof sig !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(sig)) throw new Error("The wallet returned no signature.");
-  return { address: me, axis, wallet: lower(paperWallet), ts, sig };
+  return { address: me, ts, sig };
+}
+
+/** Browser: the owner signs one paper-wallet claim. */
+export async function signPaperClaim(addr, wallet, axis, paperWallet, opts = {}) {
+  if (!isEvm(paperWallet)) throw new Error("Paste the paper wallet’s 0x address.");
+  const s = await ownerSign(addr, wallet, (me, ts) => paperClaimMessage(me, axis, paperWallet, ts), opts);
+  return { ...s, axis, wallet: lower(paperWallet) };
 }
 
 /** What anyone may read about the claims (all of it is public: the wallets are on /proof anyway). */
