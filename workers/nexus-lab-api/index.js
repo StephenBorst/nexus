@@ -52,7 +52,7 @@ import { backtestConfig, runSweep, runBasisSweep, walkForwardValidate, runBackte
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { snapshotLiquidations, fetchLiquidations, classifyFlush, estimatePendingLevels } from "./liquidations.mjs";
 import { snapshotFlow, fetchBasis, fetchCvd, classifyBasis, classifyCvdDivergence, fetchOrderbook, classifyOrderbook } from "./flow.mjs";
-import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, AXES, priceByHour, OVERLAP_PAIRS } from "./axisbt.mjs";
+import { runScorecard, runHoldoutScorecard, withoutHoldoutFlow, OVERLAP_PAIRS } from "./axisbt.mjs";
 import { pickHouseBoard, houseRunSummary } from "./houseBoard.mjs";
 import { keyProxyOriginOk, makeRateLimiter, flashUpstream, withFlashFee, withFlashAttribution, oneClickUpstream, XC_BODY_MAX } from "./keyProxy.mjs";
 import { handleFlashSettlement } from "./routes-flashcheck.mjs";
@@ -98,6 +98,8 @@ import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
+import { parityEvents } from "./parityEvents.mjs";
+import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
 import { handleRecordShare } from "./routes-recordshare.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg, buildArenaAgentSvg } from "./ogCards.mjs";
@@ -658,6 +660,14 @@ export default {
           catch (e) { console.error("[tape] run failed:", String(e?.message || e)); }
         })());
       }
+      // Once an hour, after the tape check: the 30-trade paper judgment (paperJudge.mjs; rules locked in
+      // docs/research/paper-judgment-level-reclaim.md). Reads only; writes a FINAL verdict once to pjudge:*.
+      if (minute === 47) {
+        ctx.waitUntil((async () => {
+          try { const r = await runPaperJudge(env); console.log(`[judge] ${JSON.stringify(r)}`); }
+          catch (e) { console.error("[judge] run failed:", String(e?.message || e)); }
+        })());
+      }
       if (minute % 5 === 0) {
         ctx.waitUntil((async () => {
           try {
@@ -1032,6 +1042,11 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
     {
       const runRes = await handlePaperRun(parts, request, env);
       if (runRes) return runRes;
+    }
+    // ── /signals/paper-judge/:axis → the 30-trade paper judgment, rules locked before trade 30 (paperJudge.mjs) ─
+    {
+      const judgeRes = await handlePaperJudge(parts, request, env);
+      if (judgeRes) return judgeRes;
     }
     // ── /share/record + /og/record(.png) → the week's record as a share card (routes-recordshare.mjs) ─
     {
@@ -5141,22 +5156,7 @@ document.getElementById("btn").addEventListener("click",go);
         const [since, sinceSource] = qSince != null ? [qSince, "query"] : parityWindowStart(state, now);
         const until = Math.min(when(q.get("until")) ?? now, now);
         if (!Number.isFinite(since) || !Number.isFinite(until) || since >= until) return json({ ok: false, error: "bad_window" }, request, 400);
-        const gen = AXES.find((a) => a.name === axis)?.gen;
-        const readJson = async (key) => { try { const r = await AGENT_KV.get(key); return r ? JSON.parse(r) : []; } catch { return []; } };
-        const coins = [...new Set((config.symbols || []).map((s) => String(s).toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "")))];
-        const events = [];
-        for (const coin of coins) {
-          const [oiHist, basisHist, cvdHist, smHist, liqHist, candleHist] = await Promise.all([
-            readJson(`oi:hist:PERP_${coin}_USDC`),
-            axis === "level_reclaim" ? [] : readJson(`basis:hist:${coin}`),
-            axis === "basis_x_cvd" ? readJson(`cvd:hist:${coin}`) : [],
-            axis === "basis_x_smart" ? readJson(`sm:hist:${coin}`) : [],
-            axis === "basis_x_liqflush" ? readJson(`liq:hist:${coin}`) : [],
-            axis === "level_reclaim" ? readJson(`candle:hist:PERP_${coin}_USDC`) : [],
-          ]);
-          const cs = { coin, oiHist, basisHist, cvdHist, smHist, liqHist, candleHist };
-          for (const e of gen(cs, priceByHour(oiHist), {}) || []) events.push({ coin, t: e.t, side: e.side });
-        }
+        const events = await parityEvents(AGENT_KV, config, axis); // parityEvents.mjs (shared with the 30-trade judge)
         // The position the agent is in right now isn't in the (closed-only) ledger yet — pass it,
         // or the event it's trading reads as an unexplained miss.
         const openPosition = state.current_position?.paper ? state.current_position : null;

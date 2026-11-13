@@ -32,6 +32,7 @@ type Run = {
   open: { n?: number; coin: string; side: string; openedAt: string | null; entry?: number | null; tape?: { entry: string } } | null; trades: Trade[];
   tape?: TapeSummary;
 };
+type Judgment = { ok?: boolean; verdict: string; target: number; signedAt: string; feeBps: number; line: string | null; recorded?: boolean };
 
 // Each fill against Orderly's public 1-minute tape (app/lib/paperTape.mjs). Not money: no green or red.
 const TAPE_MARK: Record<string, { mark: string; word: string }> = {
@@ -55,6 +56,8 @@ export default function PaperRunPage() {
   const isMobile = useIsMobile();
   const [run, setRun] = useState<Run | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "missing" | "failed">("loading");
+  // The 30-trade judgment (GET /signals/paper-judge/:axis, rule app/lib/paperJudge.mjs). Unread = the block hides.
+  const [judge, setJudge] = useState<Judgment | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -68,6 +71,20 @@ export default function PaperRunPage() {
         if (!d?.ok) { setState("failed"); return; }
         setRun(d); setState("ok");
       } catch { if (alive) setState("failed"); }
+    })();
+    return () => { alive = false; };
+  }, [axis]);
+
+  useEffect(() => {
+    let alive = true;
+    setJudge(null);
+    (async () => {
+      try {
+        const res = await fetch(`${AGENT_API}/signals/paper-judge/${encodeURIComponent(axis)}`);
+        if (!res.ok) return;
+        const d = (await res.json()) as Judgment;
+        if (alive && d?.ok) setJudge(d);
+      } catch { /* no judgment block */ }
     })();
     return () => { alive = false; };
   }, [axis]);
@@ -115,7 +132,7 @@ export default function PaperRunPage() {
             {run.tally.win} hit the target · {run.tally.loss} hit the stop · {run.tally.time} closed at the time stop
             {run.tally.other ? ` · ${run.tally.other} other` : ""}
             {run.open ? <span style={{ color: FOG }}>{` · 1 open: ${run.open.coin} ${run.open.side}, since ${fmtDay(run.open.openedAt)}`}</span> : null}
-            {run.complete ? <span style={{ color: FOG }}> · Sample complete. The judgment (after fees, parity clean) is published under the live plan.</span>
+            {run.complete ? <span style={{ color: FOG }}> · Sample complete.</span>
               : <span style={{ color: FOG }}>{` · ${run.remaining} to go.`}</span>}
           </p>
 
@@ -128,6 +145,25 @@ export default function PaperRunPage() {
               <li>No dollar P&amp;L and no running total here. Paper has no fees and no funding, so a total would overstate. After {run.target} trades the run is judged after fees.</li>
             </ul>
           </section>
+
+          {judge && (
+            <section style={{ marginTop: 28, borderTop: `1px solid ${MUTED}`, paddingTop: 18, maxWidth: 720 }}>
+              <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.2em", textTransform: "uppercase", color: FOG, marginBottom: 10 }}>
+                The verdict at {judge.target} · rules locked {String(judge.signedAt).slice(0, 10)}
+              </div>
+              {judge.line && <p style={{ margin: "0 0 10px", fontSize: 15, lineHeight: 1.6, color: BRIGHT }}>{judge.line}</p>}
+              <ul style={{ margin: 0, paddingLeft: 18, color: FOG, fontSize: 14, lineHeight: 1.7 }}>
+                <li>The first {judge.target} trades only. Each one’s net = its move − {judge.feeBps} bps taker fee on each side − the funding it paid while held.</li>
+                <li>Mean net above 0 bps = pass. At or below 0 = fail. Each trade weighs the same.</li>
+                <li>Fill prices come from the public tape. A fill outside what traded is judged at the worse of its price and the nearest traded price: it can only hurt the run. A fill with no bar to check is counted and named.</li>
+                <li>Parity must read clean: every entry paired with a graded event, every event the agent was free to take taken. Drift holds the verdict until it’s explained.</li>
+                <li>A reset after the rules were locked ends the run unjudged. The verdict is recorded once and never rewritten. It arms nothing.</li>
+              </ul>
+              <p style={{ margin: "10px 0 0", fontSize: 12.5 }}>
+                <a href={`${AGENT_API}/signals/paper-judge/${encodeURIComponent(axis)}`} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>The judgment, as computed (JSON)</a>
+              </p>
+            </section>
+          )}
 
           <section style={{ marginTop: 28 }}>
             <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.2em", textTransform: "uppercase", color: FOG, marginBottom: 10 }}>Every trade</div>

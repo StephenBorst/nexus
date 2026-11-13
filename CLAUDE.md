@@ -233,6 +233,15 @@ product is what sits on top:
   market exits at the mark (no wick fills); this only proves the price was real. **Trigger check:** an SL/TP row with
   its level (`sl_percent` / `tp_percent`, exec stamps both, record only, pinned) also gets TRADED or MARK_ONLY (the exit
   fired on the mark, no trade reached the level). A fill > 3 days old Orderly refused on 3 runs = NO_DATA + reason.
+- **30-trade paper judgment** (borst 2026-11-13, `docs/research/paper-judgment-level-reclaim.md`, signed; text above
+  Results sha256-pinned): `app/lib/paperJudge.mjs` (`PAPER_JUDGMENTS`, `judgePaperRun`) judges the FIRST 30 closed trades
+  from the record start: per trade net bps = move − 2.5 bps taker each side (frozen) − funding paid; mean (unrounded) > 0
+  = PASS, ≤ 0 = FAIL. Prices from the tape: OFF = the worse of the paper price and the bar's nearest traded edge;
+  NO_DATA/NO_TRADES = paper price, counted; PENDING waits. Parity (`paperParity`) over record start → 30th ENTRY + 10 min,
+  read once settled: DRIFT/UNVERIFIABLE = HELD. A paper reset after signing = RESET (final). lab-api `paperJudge.mjs`
+  hourly at :47 records PASS/FAIL/RESET ONCE in LAB_STORE `pjudge:{axis}` (the 30 trades as judged), never rewritten;
+  `GET /signals/paper-judge/:axis`; the paper run page's verdict block. Licenses nothing automatic. Events for parity come
+  from `parityEvents.mjs` (one copy with `GET /agent/:a/parity`).
 - lab-api needs `SUPABASE_URL` / `SUPABASE_ANON_KEY` for History reads.
 - `test-signal` and the Force button are DEV/PAPER-only. Feed bridge: `PUBLISH_AGENT_FEED=true` (real trades only).
 - Multi-strategy concurrency = one Orderly sub-account per strategy, after a proven edge (deferred).
@@ -546,7 +555,7 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
   **Paper run page** (`/proof/paper/:axis`, 2026-11-12, borst: "no running dollar pnl"): `GET /signals/paper-run/:axis`
   (`routes-paperrun.mjs`, rule `app/lib/paperRun.mjs`) = the read's paper wallet as n of 30, TP/SL/time-stop counts and
-  each trade's R; NEVER a dollar figure, size, or a sum/average of R until the 30-trade judgment (after fees, own PR).
+  each trade's R; NEVER a dollar figure, size, or a sum/average of R until the 30-trade judgment (`paperJudge.mjs`, bps after fees).
   R = move ÷ `sl_percent` (exec stamps it on paper rows from 2026-11-12, record only), else by the contract (TP +1.5,
   SL −1, labelled). Link card from `functions/proof/paper/[axis].js` (live count; no paper wallet = real 404).
   That Function also swaps index.html's boot screen for a static copy of the run (`paperRunSnapshotHtml` + `withSnapshot`,
