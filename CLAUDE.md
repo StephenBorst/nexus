@@ -97,6 +97,8 @@ product is what sits on top:
   measured from `market:prev:{symbol}` only when that snapshot is ≤ 12 min old (`prevSnapshotUsable`, shared rule
   `app/lib/marketSnapshot.mjs`; lab-api's `/signals` rows and trend-regime OI use it too, rows carry `delta_fresh`);
   candles are fetched only when the last closed bar is missing (`candleFetchDue`); the heartbeat stamps completed runs only.
+  When no market fires, `agent:signal.reason` carries the grouped sit-out reasons (`quietReason`, brain `logic.mjs`, 2026-11-13:
+  "no signal · 11 of 11 markets: …", plus markets unread that tick), so "switched off" and "nothing qualified" differ.
 - **nexus-carry-engine**: sector-neutral funding-carry basket. Hourly = PAPER record; `*/5` = LIVE maker re-quote, a
   no-op unless `CARRY_LIVE=true`. KV `CARRY` = `b34f3af62cfe4bc2b5d03ce9c7b55868`. Reached on
   `https://nexus-carry-engine.stephenpatrick24.workers.dev` (`CARRY_API` in `app/pages/proof/CarrySleeve.tsx` and
