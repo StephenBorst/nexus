@@ -11,8 +11,11 @@
 // /proof's paper wallets first (readPipeline `paperWallet`), then every agent in `agent:users`, a capped slice
 // per run from a rotating cursor. A fill is checked once its minute has closed (TAPE_SETTLE_MS), newest
 // first, within TAPE_RUN_BUDGET Orderly requests. A failed read is retried next run; an empty answer for a
-// fill older than TAPE_GIVE_UP_MS is recorded NO_DATA (Orderly no longer serves that minute).
-import { walletLegs, judgeFill, tapeSummary, tapeLine, TAPE_TOL_BPS } from "../../app/lib/paperTape.mjs";
+// fill older than TAPE_GIVE_UP_MS is recorded NO_DATA (Orderly no longer serves that minute), and so is a
+// fill that old Orderly has REFUSED on TAPE_MAX_TRIES runs (2026-11-13: Orderly appears to serve 1-minute
+// bars for about 2 days and to refuse older ranges rather than answer empty, so those fills retried every
+// hour forever). NO_DATA carries the reason; it is never a pass.
+import { walletLegs, judgeFill, judgeTrigger, tapeSummary, tapeLine, TAPE_TOL_BPS } from "../../app/lib/paperTape.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 import { orderlyJson } from "./backtest.mjs";
 import { minuteBarsFrom, minuteSourceUrl } from "./minuteCandles.mjs";
@@ -26,6 +29,7 @@ export const TAPE_WALLETS_PER_RUN = 200;         // agent states a run may read,
 export const TAPE_SETTLE_MS = 3 * 60_000;        // younger fills wait: their minute may still be printing
 export const TAPE_GIVE_UP_MS = 3 * 86_400_000;   // an empty answer older than this = NO_DATA, final
 export const TAPE_MAX_CHECKS = 300;              // kept per wallet (its live fills first)
+export const TAPE_MAX_TRIES = 3;                 // refused runs before an old fill is recorded NO_DATA
 const MIN = 60;
 
 const lower = (a) => String(a || "").toLowerCase();
@@ -36,7 +40,8 @@ export const proofPaperWallets = () => [...new Set(REGISTERED_READS.map((r) => r
 
 export async function readTape(kv, wallet) {
   const rec = parse(await kv.get(PTAPE_KEY(wallet)), null);
-  return rec && rec.v === 1 && rec.checks && typeof rec.checks === "object" ? rec : { v: 1, checks: {} };
+  if (!(rec && rec.v === 1 && rec.checks && typeof rec.checks === "object")) return { v: 1, checks: {}, tries: {} };
+  return { ...rec, tries: rec.tries && typeof rec.tries === "object" ? rec.tries : {} };
 }
 
 /** Keep the checks of the fills the state still shows, then the newest others, up to TAPE_MAX_CHECKS. */
@@ -87,22 +92,46 @@ export async function runPaperTape(env, { fetchJson = orderlyJson, nowMs = () =>
     const rec = await readTape(kv, w);
     open.set(w, { rec, legs, dirty: false });
     for (const leg of legs) {
-      if (leg.averaged || rec.checks[leg.key] || now - leg.t < TAPE_SETTLE_MS || !fillWindow(leg.symbol, leg.t)) continue;
-      todo.push({ w, leg });
+      if (leg.averaged || now - leg.t < TAPE_SETTLE_MS || !fillWindow(leg.symbol, leg.t)) continue;
+      const have = rec.checks[leg.key];
+      // A stop/target exit checked before the trigger check existed is asked again, once, while Orderly
+      // still serves its minutes (it can't be once they're gone).
+      const triggerMissing = have && leg.level && !have.trigger && have.verdict !== "NO_DATA" && now - leg.t < TAPE_GIVE_UP_MS;
+      if (have && !triggerMissing) continue;
+      todo.push({ w, leg, recheck: !!triggerMissing });
     }
   }
   todo.sort((a, b) => b.leg.t - a.leg.t);
-  await mapLimit(todo.slice(0, budget), 3, async ({ w, leg }) => {
+  await mapLimit(todo.slice(0, budget), 3, async ({ w, leg, recheck }) => {
     const win = fillWindow(leg.symbol, leg.t);
-    let bars;
-    try { bars = minuteBarsFrom(await fetchJson(win.url), win.from, win.to); }
-    catch { stats.retried++; return; }                              // Orderly refused: next run
-    if (!bars.length && now - leg.t < TAPE_GIVE_UP_MS) { stats.retried++; return; }
-    const g = bars.length ? judgeFill(leg.px, leg.t, bars) : { verdict: "NO_DATA" };
     const o = open.get(w);
+    const old = now - leg.t >= TAPE_GIVE_UP_MS;
+    let bars, refused = null;
+    try { bars = minuteBarsFrom(await fetchJson(win.url), win.from, win.to); }
+    catch (e) { refused = String(e?.message || e).slice(0, 120); }
+    if (refused != null && recheck) { stats.retried++; return; }   // keep the check it has
+    if (refused != null) {
+      // A young fill just waits for the next run. An old one counts its refusals and, at TAPE_MAX_TRIES,
+      // is recorded NO_DATA with the reason instead of asking Orderly every hour forever.
+      if (!old) { stats.retried++; return; }
+      const tries = (Number(o.rec.tries[leg.key]) || 0) + 1;
+      o.dirty = true;
+      if (tries < TAPE_MAX_TRIES) { o.rec.tries[leg.key] = tries; stats.retried++; return; }
+      delete o.rec.tries[leg.key];
+      o.rec.checks[leg.key] = { kind: leg.kind, symbol: leg.symbol, t: leg.t, px: leg.px, verdict: "NO_DATA", reason: `Orderly refused ${tries} times: ${refused}`, source: win.url, checkedAt: now };
+      stats.gaveUp = (stats.gaveUp || 0) + 1;
+      return;
+    }
+    if (!bars.length && (!old || recheck)) { stats.retried++; return; }
+    const g = bars.length ? judgeFill(leg.px, leg.t, bars) : { verdict: "NO_DATA" };
+    // A stop/target exit: did the tape trade at its level, or did it fire on the mark alone?
+    const trig = leg.level && bars.length ? judgeTrigger(leg.level, leg.t, bars) : null;
+    delete o.rec.tries[leg.key];
     o.rec.checks[leg.key] = {
       kind: leg.kind, symbol: leg.symbol, t: leg.t, px: leg.px, verdict: g.verdict,
       ...(g.bps != null ? { bps: g.bps } : {}), ...(g.bar ? { bar: g.bar } : {}),
+      ...(g.verdict === "NO_DATA" ? { reason: "Orderly answered no bars for that minute" } : {}),
+      ...(trig ? { trigger: { ...trig, side: leg.level.side, span: bars.filter((b) => b[0] >= win.from && b[0] <= win.from + 2 * MIN) } } : {}),
       source: win.url, checkedAt: now,
     };
     o.dirty = true; stats.checked++;
@@ -110,7 +139,9 @@ export async function runPaperTape(env, { fetchJson = orderlyJson, nowMs = () =>
   for (const [w, o] of open) {
     if (!o.dirty) continue;
     try {
-      await kv.put(PTAPE_KEY(w), JSON.stringify({ v: 1, checks: pruneChecks(o.rec.checks, o.legs) }));
+      const live = new Set(o.legs.map((l) => l.key));
+      const tries = Object.fromEntries(Object.entries(o.rec.tries || {}).filter(([k]) => live.has(k)));
+      await kv.put(PTAPE_KEY(w), JSON.stringify({ v: 1, checks: pruneChecks(o.rec.checks, o.legs), ...(Object.keys(tries).length ? { tries } : {}) }));
       stats.written++;
     } catch (e) { console.error("[tape] write", w, String(e?.message || e)); }
   }
@@ -133,6 +164,8 @@ export function tapeView(state, rec) {
         key: l.key, kind: l.kind, symbol: l.symbol, t: l.t, px: l.px,
         verdict: l.averaged ? "AVERAGED" : c?.verdict || "PENDING",
         ...(c?.bps != null ? { bps: c.bps } : {}), ...(c?.bar ? { bar: c.bar } : {}), ...(c?.source ? { source: c.source } : {}),
+        ...(c?.reason ? { reason: c.reason } : {}),
+        ...(c?.trigger ? { trigger: { verdict: c.trigger.verdict, side: c.trigger.side, level: c.trigger.level, ...(c.trigger.bps != null ? { bps: c.trigger.bps } : {}) } } : {}),
       };
     }),
   };
@@ -152,6 +185,6 @@ export async function handlePaperTape(parts, request, env) {
   const rec = await readTape(env.LAB_STORE, wallet);
   return reply({
     ok: true, wallet, ...tapeView(state, rec),
-    rule: `Each paper fill is checked against Orderly’s public 1-minute bar for the minute it was taken (or the minute before). ON_TAPE = inside that minute’s traded low–high. NEAR = outside it by at most ${TAPE_TOL_BPS} bps: paper fills at the mark, an index price, not a trade. OFF = further out. NO_TRADES = no bar in either minute. AVERAGED = a DCA average entry, which no single trade printed. Each check keeps the bar and the public request it came from.`,
+    rule: `Each paper fill is checked against Orderly’s public 1-minute bar for the minute it was taken (or the minute before). ON_TAPE = inside that minute’s traded low–high. NEAR = outside it by at most ${TAPE_TOL_BPS} bps: paper fills at the mark, an index price, not a trade. OFF = further out. NO_TRADES = no bar in either minute. AVERAGED = a DCA average entry, which no single trade printed. For a stop or target exit, the trigger check asks whether any bar from 2 minutes before the exit through its minute traded at or through the level: TRADED, or MARK_ONLY (the exit fired on the mark alone). Each check keeps the bars and the public request they came from.`,
   });
 }

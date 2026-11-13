@@ -113,14 +113,18 @@ test("the run page's head: the live count; a read with no paper wallet = a real 
   assert.equal(paperRunMeta("level_reclaim", null), null);
 });
 
-test("exec stamps the stop on PAPER rows only (record, nothing reads it to trade)", () => {
+test("exec stamps the stop, target and average-entry flag on PAPER rows only (record, nothing reads them to trade)", () => {
   const src = read("workers/nexus-agent-exec/index.js");
-  assert.match(src, /state\.paper_trades\.unshift\(\{ id: `paper_\$\{Date\.now\(\)\}`, \.\.\.auditable, .*\.\.\.\(Number\(pos\.slPercent\) > 0 \? \{ sl_percent: Number\(pos\.slPercent\) \} : \{\}\)(?:, \.\.\.\(pos\.dca \? \{ entry_avg: true \} : \{\}\))? \}\);/);
-  assert.equal((src.match(/sl_percent:/g) || []).length, 1, "only the paper row carries it");
-  assert.doesNotMatch(src.replace(/\/\/.*$/gm, ""), /\.sl_percent\b/, "exec never reads it back");
-  // The tape check's label for a DCA average entry (paperTape.mjs, 2026-11-13): same rules.
-  assert.equal((src.match(/entry_avg:/g) || []).length, 1, "only the paper row carries entry_avg");
-  assert.doesNotMatch(src.replace(/\/\/.*$/gm, ""), /\.entry_avg\b/, "exec never reads entry_avg back");
+  const row = src.split("\n").find((l) => l.includes("state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable"));
+  assert.ok(row, "the paper close row");
+  assert.ok(row.includes("...(Number(pos.slPercent) > 0 ? { sl_percent: Number(pos.slPercent) } : {})"));
+  assert.ok(row.includes("...(paperTpPercent(pos) ? { tp_percent: paperTpPercent(pos) } : {})"));
+  assert.ok(row.includes("...(pos.dca ? { entry_avg: true } : {})"));
+  const code = src.replace(/\/\/.*$/gm, "");
+  for (const f of ["sl_percent", "tp_percent", "entry_avg"]) {
+    assert.equal((src.match(new RegExp(`${f}:`, "g")) || []).length, 1, `only the paper row carries ${f}`);
+    assert.doesNotMatch(code, new RegExp(`\\.${f}\\b`), `exec never reads ${f} back`);
+  }
 });
 
 test("the page shows no dollars or totals, links from /proof, and is routed + in the sitemap", () => {

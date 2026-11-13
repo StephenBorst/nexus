@@ -2,7 +2,7 @@
 // Paper fills checked against the public 1-minute tape (paperTape.mjs). Hand-built bars; no network.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { judgeFill, legsOf, openLeg, walletLegs, tapeSummary, tapeLine, addSummaries, entryKey, exitKey, TAPE_TOL_BPS } from "./paperTape.mjs";
+import { judgeFill, judgeTrigger, exitLevel, legsOf, openLeg, walletLegs, tapeSummary, tapeLine, addSummaries, entryKey, exitKey, exitKeyOf, TAPE_TOL_BPS } from "./paperTape.mjs";
 
 const M = 60;
 const T = Date.UTC(2026, 10, 13, 12, 30);              // 12:30:00Z (ms)
@@ -80,4 +80,41 @@ test("a row without an id is still checked, keyed by its market and close time",
   const legs = legsOf(row({ id: undefined }));
   assert.equal(legs.length, 2);
   assert.equal(legs[1].key, `x:PERP_ETH_USDC:${T + 3_600_000}`);
+});
+
+// ── trigger check: did the tape trade at the exit's level? ─────────────────────
+test("a stop or target exit's level comes from its own row; other exits have none", () => {
+  assert.deepEqual(exitLevel(row({ reason: "SL", sl_percent: 2 })), { side: "STOP", long: true, px: 98 });
+  assert.deepEqual(exitLevel(row({ reason: "SL", sl_percent: 2, direction: "SHORT" })), { side: "STOP", long: false, px: 102 });
+  assert.deepEqual(exitLevel(row({ reason: "TP", tp_percent: 3 })), { side: "TARGET", long: true, px: 103 });
+  assert.equal(exitLevel(row({ reason: "TP" })), null, "no tp_percent on the row: not judged");
+  assert.equal(exitLevel(row({ reason: "TRAIL", sl_percent: 2 })), null);
+  assert.equal(exitLevel(row({ reason: "SL", sl_percent: 2, entry_avg: true })), null, "a DCA average has no single level");
+  assert.ok(legsOf(row({ reason: "SL", sl_percent: 2 }))[1].level);
+});
+
+test("TRADED when a bar in the exit's span reached the level; MARK_ONLY with the gap when none did", () => {
+  const stop = { side: "STOP", long: true, px: 98 };
+  const span = [bar(m - 2 * M, 99, 98.5), bar(m - M, 98.6, 97.9), bar(m, 98.4, 98.1)];
+  assert.deepEqual(judgeTrigger(stop, T, span), { verdict: "TRADED", level: 98 });
+  const wick = [bar(m - 2 * M, 99, 98.5), bar(m - M, 98.6, 98.2), bar(m, 98.4, 98.1)];
+  const g = judgeTrigger(stop, T, wick);
+  assert.equal(g.verdict, "MARK_ONLY", "the mark crossed 98, the trades bottomed at 98.1");
+  assert.equal(g.bps, 10.2);
+  assert.equal(judgeTrigger(stop, T, [bar(m - 3 * M, 97, 96), bar(m + M, 97, 96)]).verdict, "NO_TRADES", "only bars inside the span count");
+  // A short's stop is above; a long's target is above; a short's target is below.
+  assert.equal(judgeTrigger({ side: "STOP", long: false, px: 102 }, T, [bar(m, 102, 101)]).verdict, "TRADED");
+  assert.equal(judgeTrigger({ side: "TARGET", long: true, px: 103 }, T, [bar(m, 102.9, 101)]).verdict, "MARK_ONLY");
+  assert.equal(judgeTrigger({ side: "TARGET", long: false, px: 97 }, T, [bar(m, 98, 96.9)]).verdict, "TRADED");
+});
+
+test("the summary counts checked triggers and the mark-only ones, and says so in its line", () => {
+  const r = row({ id: "s", reason: "SL", sl_percent: 2 });
+  const legs = legsOf(r);
+  const checks = { [legs[0].key]: { verdict: "ON_TAPE" }, [exitKeyOf(r)]: { verdict: "ON_TAPE", trigger: { verdict: "MARK_ONLY" } } };
+  const s = tapeSummary(legs, checks);
+  assert.deepEqual([s.triggers, s.markOnly], [1, 1]);
+  assert.match(tapeLine(s), /1 of 1 stop\/target exits fired on the mark with no trade at the level/);
+  const ok = tapeSummary(legs, { ...checks, [exitKeyOf(r)]: { verdict: "ON_TAPE", trigger: { verdict: "TRADED" } } });
+  assert.match(tapeLine(ok), /all 1 stop\/target exits traded at their level/);
 });
