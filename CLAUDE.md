@@ -543,6 +543,9 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   each trade's R; NEVER a dollar figure, size, or a sum/average of R until the 30-trade judgment (after fees, own PR).
   R = move ÷ `sl_percent` (exec stamps it on paper rows from 2026-11-12, record only), else by the contract (TP +1.5,
   SL −1, labelled). Link card from `functions/proof/paper/[axis].js` (live count; no paper wallet = real 404).
+  That Function also swaps index.html's boot screen for a static copy of the run (`paperRunSnapshotHtml` + `withSnapshot`,
+  pinned to the boot markup by test; React replaces it on mount) and reads lab-api through a 60 s edge cache. The open
+  trade is a table row (number, entry, tape; "Open", R "—" until it closes).
   `signals` (pulse v5, `app/lib/signalProgress.mjs`) = reads served TRADEABLE/PAPER with positive exit net + the paper
   wallet's lifetime trade COUNT vs `PAPER_MIN_TRADES` 30 (`paperWallet` on the registration, `readPipeline.mjs`; no state =
   null "unread", never 0; never a paper P&L). The last good {headline, signals} sits in `calls:pulse:board:v1` ≤6h, so a cold
