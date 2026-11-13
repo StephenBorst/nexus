@@ -242,6 +242,13 @@ product is what sits on top:
   hourly at :47 records PASS/FAIL/RESET ONCE in LAB_STORE `pjudge:{axis}` (the 30 trades as judged), never rewritten;
   `GET /signals/paper-judge/:axis`; the paper run page's verdict block. Licenses nothing automatic. Events for parity come
   from `parityEvents.mjs` (one copy with `GET /agent/:a/parity`).
+- **Live fills on the tape + $10 preflight** (borst 2026-11-13): the tape checker also checks each exchange-confirmed live
+  fill in `state.live_slip` (`liveLegs`, keys `l:{order_id}`, kind `live_<kind>`), counted APART from paper
+  (`tapeView().live`, `liveTapeLine`). `GET /agent/:a/preflight` (`routes-preflight.mjs`, rule `app/lib/livePreflight.mjs`,
+  public, read-only, never asks Orderly) = the house rules' step-0 test line by line: exec heartbeat, `ops:halt:live`, a
+  pending kill, mode + key stored (yes/no), the lift (FAIL only for a live graded-exit config not listed / not the plan's;
+  INFO otherwise), the backstop exec RECORDED (1.5× the stop, snapped away; see it on Orderly too), queued cancels, live
+  fills on the tape, slippage. Page `/ops/preflight?wallet=` (noindex, not in the nav, re-reads every 15 s).
 - lab-api needs `SUPABASE_URL` / `SUPABASE_ANON_KEY` for History reads.
 - `test-signal` and the Force button are DEV/PAPER-only. Feed bridge: `PUBLISH_AGENT_FEED=true` (real trades only).
 - Multi-strategy concurrency = one Orderly sub-account per strategy, after a proven edge (deferred).

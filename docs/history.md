@@ -2509,3 +2509,14 @@ NO_DATA fill (7 of the first 12, from before the tape check) counts at its paper
 Two choices made in the build, written on the page: the first 30 trades exactly (no picking a good moment), and the
 parity window ends at the 30th ENTRY (+10 min), since an event while trade 30 is held is its own and a window ending
 at its close could read the next trade's entry as DRIFT. The verdict is decided on the unrounded mean.
+
+## 2026-11-13 · The $10 live test gets a preflight
+
+Before the house rules' step 0 (one ~$10 live entry: the backstop shows, KILL clears it), readiness was a feeling:
+check the pause by hand, remember the lift is disarmed, look for the backstop on Orderly. borst asked for a read-only
+page that confirms the safety stop, the pause switch and the one-wallet permission. `/ops/preflight` reads
+`GET /agent/:a/preflight` and prints each point as PASS / FAIL / WAIT / INFO. Choice made in the build: the backstop line
+shows what exec recorded, never a key-signed read of the owner's account from a public route, so the test still says
+"see it on Orderly". The lift is a FAIL only for a live graded-exit config (it would refuse every entry); the $10 test
+doesn't need it. Same PR: live fills (`state.live_slip`) now go through the public 1-minute tape check, kept apart
+from paper.
