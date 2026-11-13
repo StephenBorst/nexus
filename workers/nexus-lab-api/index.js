@@ -23,6 +23,7 @@ import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
+import { serveScoreboard, rebuildScoreboard, SCOREBOARD_REBUILD_MINUTE } from "./scoreboardCache.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
 // Keep copy:copiers:{leader} = [followers] in sync when a follower's config
@@ -636,6 +637,94 @@ function keyProxyGate(request, limiter) {
   return null;
 }
 
+// The scoreboard payload for GET /intel/axis-backtest (moved unchanged from the route, 2026-11-13). Built by the
+// minute cron once an hour and on a request only when no stored copy exists (scoreboardCache.mjs).
+async function buildAxisScorecard(env, min) {
+  const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
+  const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
+  const readJson = async (kv, key) => { try { const r = await kv.get(key); return r ? JSON.parse(r) : []; } catch { return []; } };
+  const loadSets = async (coins) => {
+  const coinSets = [];
+  for (const coin of coins) {
+    const [oiHist, cvdHist, smHist, candleHist, basisHist, liqHist, spotCvdHist] = await Promise.all([
+      readJson(AGENT_KV, `oi:hist:PERP_${coin}_USDC`),
+      readJson(AGENT_KV, `cvd:hist:${coin}`),
+      readJson(AGENT_KV, `sm:hist:${coin}`),
+      readJson(AGENT_KV, `candle:hist:PERP_${coin}_USDC`),
+      readJson(AGENT_KV, `basis:hist:${coin}`),
+      readJson(AGENT_KV, `liq:hist:${coin}`),
+      readJson(AGENT_KV, `spotcvd:hist:${coin}`), // spot-book CVD, read only by spot_absorb (spot-absorb-prereg.md)
+    ]);
+    // Include the coin if EITHER series has data — the candle axes grade off candle:hist
+    // depth (backfilled), so a coin with deep candles but shallow oi still belongs. The
+    // basis/liq axes ride the same price spine (oi/candle) for forward-return + R grading.
+    if ((oiHist || []).length >= 2 || (candleHist || []).length >= 2) coinSets.push({ coin, oiHist, cvdHist, smHist, candleHist, basisHist, liqHist, spotCvdHist });
+  }
+  return coinSets;
+  };
+  // Main card: the twelve, with any holdout coin's basis + CVD left out (never pooled).
+  const coinSets = withoutHoldoutFlow(await loadSets(COINS), isHoldoutCoin);
+  // Pipeline reads (app/lib/readPipeline.mjs): each gets an out-of-sample grade (`oos`) from its
+  // registration on; the full-history row stays, labelled in-sample.
+  const registered = REGISTERED_READS.map((r) => ({ axis: r.axis, fromMs: registeredMs(r) }));
+  // Registered tests of a read that isn't a pipeline read: the Basis × CVD regime window (signed
+  // 2026-10-26), graded from its own date on both lines. Measurement only.
+  const tests = [{ axis: REGIME_WINDOW.axis, key: "regimeWindow", fromMs: regimeFromMs() }];
+  const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min, registered, oosExclude: isHoldoutCoin, tests, overlapPairs: OVERLAP_PAIRS });
+  // Holdout line: the signed-off eight on their own — the basis reads (holdout prereg) + every
+  // pipeline read registered with a holdout line (its own registration doc).
+  const holdoutSets = await loadSets(HOLDOUT_COINS);
+  const holdoutRegs = registered.filter((x) => REGISTERED_READS.find((r) => r.axis === x.axis)?.holdout);
+  const holdout = {
+    signedOff: HOLDOUT_SIGNED_OFF, listed: [...HOLDOUT_COINS],
+    // BTC rides along as CONTEXT only (ctxSets: never graded, never pooled): btc_lead_lag reads BTC's tape.
+    ...runHoldoutScorecard(holdoutSets, { horizons: [4, 12, 24], minSamples: min, axes: [...HOLDOUT_AXES, ...holdoutRegs.map((x) => x.axis)], registered: holdoutRegs, tests, ctxSets: coinSets.filter((c) => c.coin === "BTC") }),
+    note: "Coins the basis read was never looked at on, picked on liquidity only and recorded from the sign-off date. Graded by the same code, never pooled into the main card. Accrues: basis needs 48h of history before it can fire, and the R grade needs hourly prices recorded since the sign-off. See docs/research/holdout-universe-prereg.md.",
+  };
+  // The stress-hour study (signed 2026-10-30): stress hours from the nine RECORDED_COINS, each read's
+  // events + R from this scorecard's own generators on the main card (holdout coins out, as `oos`)
+  // and on the holdout line, judged by stressGrading.mjs. Measurement only; a failure is reported,
+  // never a blank study.
+  let stressStudy;
+  try {
+    stressStudy = runStressStudy({
+      panelSets: coinSets.filter((c) => RECORDED_COINS.includes(c.coin)),
+      mainSets: coinSets.filter((c) => !isHoldoutCoin(c.coin)),
+      holdoutSets,
+    });
+  } catch (e) { stressStudy = { name: "stress_hours", doc: STRESS_DOC, error: whyFailed(e) }; }
+  // The regime window's BTC day counts, from Orderly daily candles (one read). A failed read is
+  // reported as an error, never as zero days.
+  let regime;
+  try {
+    const nowS = Math.floor(Date.now() / 1000), fromS = Math.floor(regimeFromMs() / 1000) - (REGIME_WINDOW.lookbackDays + 2) * 86400;
+    const tv = await orderlyGet(`https://api-evm.orderly.org/tv/history?symbol=${REGIME_WINDOW.symbol}&resolution=D&from=${fromS}&to=${nowS}`);
+    if (tv?.s !== "ok" && tv?.s !== "no_data") throw new Error(`tv/history answered ${tv?.s || "nothing"}`);
+    const daily = (tv.t || []).map((t, i) => ({ t, c: tv.c?.[i] }));
+    const r = btcDailyRegimes(daily);
+    regime = { ...r, met: regimeConditionMet(r.counts), label: regimeLabel(r.counts) };
+  } catch (e) { regime = { error: whyFailed(e) }; }
+  const out = {
+    asOf: new Date().toISOString(),
+    config: { horizonsHours: [4, 12, 24], minSamples: min, coins: coinSets.map((c) => c.coin) },
+    regimeWindow: { ...REGIME_WINDOW, regime, note: "Basis × CVD graded exit, regime window. The axis row's `regimeWindow` block (main card and holdout) grades only events and trades at or after registeredAt. Judged per docs/research/graded-exit-regime-prereg.md; nothing here judges it." },
+    ...scorecard,
+    holdout,
+    stressStudy,
+    pipeline: {
+      rules: PIPELINE_RULES,
+      reads: REGISTERED_READS.map((reg) => {
+        const main = scorecard.axes.find((a) => a.name === reg.axis);
+        const hold = (holdout.axes || []).find((a) => a.name === reg.axis);
+        return { axis: reg.axis, side: reg.side, registeredAt: reg.registeredAt, doc: reg.doc, ...pipelineStage(reg, main?.oos || null, hold?.oos || null) };
+      }),
+      note: "Stages count out-of-sample events only (after each read's registration). The axis rows above are the whole recorded history = in-sample. docs/research/read-pipeline.md.",
+    },
+    note: "Walk-forward event study on self-logged history — forward returns, no lookahead, first/second-half stability. Axes read INSUFFICIENT until the series matures. A read is not an edge until it's PREDICTIVE here. `exit` (on reads a preset trades) grades the read through that preset's own TP/SL/max-hold along the logged candles, one position per market, net of a 3 bps/side taker fee; `exit24h` is the same exit with a 24h hold on the same entry window; `oos` counts only trades entered after 2026-09-25 04:00 UTC. Informational — they do not change the read's verdict. `random` replays every R-graded event at a random hour — same market, same side, same frozen R contract, drawn only from the window the read fired in — 300 seeded runs, pooled and per side; BEATS_RANDOM (≥95% of replays beaten) / LEANS_ABOVE (≥80%) / NOT_DISTINGUISHABLE / BELOW_RANDOM (≤5% — reliably worse than random; not a licence to invert) / TOO_FEW (<5 events), the same ladder as the Lab backtest. It separates 'the signal picked good moments' from 'the window did the work'. `tide` is what a random long vs a random short earned under the same R contract across every recorded market-hour — what a read's side has to beat. (Distinct from each horizon's `drift`, which subtracts the coin's average h-hour move over its whole recorded history, in bps.) Informational — neither changes any verdict.",
+  };
+  return out;
+}
+
 export default {
   // Cron (wrangler.toml [triggers]) — best-effort refresh of the Smart Money
   // tracked set from the live HL leaderboard. Fails safe: on error the routes
@@ -667,6 +756,15 @@ export default {
         ctx.waitUntil((async () => {
           try { const r = await runPaperJudge(env); console.log(`[judge] ${JSON.stringify(r)}`); }
           catch (e) { console.error("[judge] run failed:", String(e?.message || e)); }
+        })());
+      }
+      // Once an hour, its own invocation: rebuild the scoreboard (GET /intel/axis-backtest) so no visitor ever waits on
+      // it, and a failed build leaves the last good board served (scoreboardCache.mjs). Same payload, new home.
+      if (minute === SCOREBOARD_REBUILD_MINUTE) {
+        ctx.waitUntil((async () => {
+          const t0 = Date.now();
+          try { await rebuildScoreboard(env.LAB_STORE, axisbtCacheKey(20), () => buildAxisScorecard(env, 20)); console.log(`[scoreboard] rebuilt in ${Date.now() - t0} ms`); }
+          catch (e) { console.error("[scoreboard] rebuild failed:", whyFailed(e)); }
         })());
       }
       if (minute % 5 === 0) {
@@ -4690,91 +4788,10 @@ document.getElementById("btn").addEventListener("click",go);
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
       const CACHE = axisbtCacheKey(min); // v26 = + funding_basis_split (registered 2026-11-07, funding-basis-split-prereg.md) + its overlap pair with confluence_follow · v25 = overlap pair oi_div_reversal × oi_div_reversal_4h (#271) · v24 = + btc_lead_lag (registered 2026-11-07, btc-lead-lag-prereg.md); the holdout line gets BTC as context only · v23 = overlap block covers batch 3 (OVERLAP_PAIRS) · v22 = + batch 3 (session_fade, level_reclaim_tight, spot_absorb; registered 2026-11-06) and spotcvd:hist in each coin set · v21 = + `stressStudy` (the registered stress-hour study, judged live by stressGrading.mjs, docs/research/stress-hours-prereg.md) · v20 = exits fill at their level, not the hour's extreme (stepExit, docs/research/level-reclaim-exit-gap.md) · v19 = price spine: first oi:hist row in an hour wins (docs/research/price-spine-drift-2026-10-29.md) · v18 = + oi_coil_break (registered 2026-10-27, docs/research/oi-coil-break-prereg.md) · v17 = + oi_div_reversal_4h (registered 2026-10-27, docs/research/oi-div-reversal-4h-prereg.md) · v16 = + `regimeWindow` on basis_x_cvd (main + holdout) and the BTC regime day counts (docs/research/graded-exit-regime-prereg.md) · v15 = funding block carries `feesNetBps` (fee-net on the same covered trades) · v14 = + `exitGraded.funding` (the graded exit also net of the funding paid while open, an estimate; informational) · v13 = + the four registered explorer reads (level_reclaim, oi_div_reversal, session_momentum, confluence_follow) · v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
-      try { const c = await env.LAB_STORE.get(CACHE); if (c) return json(JSON.parse(c), request); } catch { /* ignore */ }
-      const AGENT_KV = env.NEXUS_AGENT || env.LAB_STORE;
-      const COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ARB", "AVAX", "LINK", "HYPE", "SUI", "WLD"];
-      const readJson = async (kv, key) => { try { const r = await kv.get(key); return r ? JSON.parse(r) : []; } catch { return []; } };
-      const loadSets = async (coins) => {
-      const coinSets = [];
-      for (const coin of coins) {
-        const [oiHist, cvdHist, smHist, candleHist, basisHist, liqHist, spotCvdHist] = await Promise.all([
-          readJson(AGENT_KV, `oi:hist:PERP_${coin}_USDC`),
-          readJson(AGENT_KV, `cvd:hist:${coin}`),
-          readJson(AGENT_KV, `sm:hist:${coin}`),
-          readJson(AGENT_KV, `candle:hist:PERP_${coin}_USDC`),
-          readJson(AGENT_KV, `basis:hist:${coin}`),
-          readJson(AGENT_KV, `liq:hist:${coin}`),
-          readJson(AGENT_KV, `spotcvd:hist:${coin}`), // spot-book CVD, read only by spot_absorb (spot-absorb-prereg.md)
-        ]);
-        // Include the coin if EITHER series has data — the candle axes grade off candle:hist
-        // depth (backfilled), so a coin with deep candles but shallow oi still belongs. The
-        // basis/liq axes ride the same price spine (oi/candle) for forward-return + R grading.
-        if ((oiHist || []).length >= 2 || (candleHist || []).length >= 2) coinSets.push({ coin, oiHist, cvdHist, smHist, candleHist, basisHist, liqHist, spotCvdHist });
-      }
-      return coinSets;
-      };
-      // Main card: the twelve, with any holdout coin's basis + CVD left out (never pooled).
-      const coinSets = withoutHoldoutFlow(await loadSets(COINS), isHoldoutCoin);
-      // Pipeline reads (app/lib/readPipeline.mjs): each gets an out-of-sample grade (`oos`) from its
-      // registration on; the full-history row stays, labelled in-sample.
-      const registered = REGISTERED_READS.map((r) => ({ axis: r.axis, fromMs: registeredMs(r) }));
-      // Registered tests of a read that isn't a pipeline read: the Basis × CVD regime window (signed
-      // 2026-10-26), graded from its own date on both lines. Measurement only.
-      const tests = [{ axis: REGIME_WINDOW.axis, key: "regimeWindow", fromMs: regimeFromMs() }];
-      const scorecard = runScorecard(coinSets, { horizons: [4, 12, 24], minSamples: min, registered, oosExclude: isHoldoutCoin, tests, overlapPairs: OVERLAP_PAIRS });
-      // Holdout line: the signed-off eight on their own — the basis reads (holdout prereg) + every
-      // pipeline read registered with a holdout line (its own registration doc).
-      const holdoutSets = await loadSets(HOLDOUT_COINS);
-      const holdoutRegs = registered.filter((x) => REGISTERED_READS.find((r) => r.axis === x.axis)?.holdout);
-      const holdout = {
-        signedOff: HOLDOUT_SIGNED_OFF, listed: [...HOLDOUT_COINS],
-        // BTC rides along as CONTEXT only (ctxSets: never graded, never pooled): btc_lead_lag reads BTC's tape.
-        ...runHoldoutScorecard(holdoutSets, { horizons: [4, 12, 24], minSamples: min, axes: [...HOLDOUT_AXES, ...holdoutRegs.map((x) => x.axis)], registered: holdoutRegs, tests, ctxSets: coinSets.filter((c) => c.coin === "BTC") }),
-        note: "Coins the basis read was never looked at on, picked on liquidity only and recorded from the sign-off date. Graded by the same code, never pooled into the main card. Accrues: basis needs 48h of history before it can fire, and the R grade needs hourly prices recorded since the sign-off. See docs/research/holdout-universe-prereg.md.",
-      };
-      // The stress-hour study (signed 2026-10-30): stress hours from the nine RECORDED_COINS, each read's
-      // events + R from this scorecard's own generators on the main card (holdout coins out, as `oos`)
-      // and on the holdout line, judged by stressGrading.mjs. Measurement only; a failure is reported,
-      // never a blank study.
-      let stressStudy;
-      try {
-        stressStudy = runStressStudy({
-          panelSets: coinSets.filter((c) => RECORDED_COINS.includes(c.coin)),
-          mainSets: coinSets.filter((c) => !isHoldoutCoin(c.coin)),
-          holdoutSets,
-        });
-      } catch (e) { stressStudy = { name: "stress_hours", doc: STRESS_DOC, error: whyFailed(e) }; }
-      // The regime window's BTC day counts, from Orderly daily candles (one read). A failed read is
-      // reported as an error, never as zero days.
-      let regime;
-      try {
-        const nowS = Math.floor(Date.now() / 1000), fromS = Math.floor(regimeFromMs() / 1000) - (REGIME_WINDOW.lookbackDays + 2) * 86400;
-        const tv = await orderlyGet(`https://api-evm.orderly.org/tv/history?symbol=${REGIME_WINDOW.symbol}&resolution=D&from=${fromS}&to=${nowS}`);
-        if (tv?.s !== "ok" && tv?.s !== "no_data") throw new Error(`tv/history answered ${tv?.s || "nothing"}`);
-        const daily = (tv.t || []).map((t, i) => ({ t, c: tv.c?.[i] }));
-        const r = btcDailyRegimes(daily);
-        regime = { ...r, met: regimeConditionMet(r.counts), label: regimeLabel(r.counts) };
-      } catch (e) { regime = { error: whyFailed(e) }; }
-      const out = {
-        asOf: new Date().toISOString(),
-        config: { horizonsHours: [4, 12, 24], minSamples: min, coins: coinSets.map((c) => c.coin) },
-        regimeWindow: { ...REGIME_WINDOW, regime, note: "Basis × CVD graded exit, regime window. The axis row's `regimeWindow` block (main card and holdout) grades only events and trades at or after registeredAt. Judged per docs/research/graded-exit-regime-prereg.md; nothing here judges it." },
-        ...scorecard,
-        holdout,
-        stressStudy,
-        pipeline: {
-          rules: PIPELINE_RULES,
-          reads: REGISTERED_READS.map((reg) => {
-            const main = scorecard.axes.find((a) => a.name === reg.axis);
-            const hold = (holdout.axes || []).find((a) => a.name === reg.axis);
-            return { axis: reg.axis, side: reg.side, registeredAt: reg.registeredAt, doc: reg.doc, ...pipelineStage(reg, main?.oos || null, hold?.oos || null) };
-          }),
-          note: "Stages count out-of-sample events only (after each read's registration). The axis rows above are the whole recorded history = in-sample. docs/research/read-pipeline.md.",
-        },
-        note: "Walk-forward event study on self-logged history — forward returns, no lookahead, first/second-half stability. Axes read INSUFFICIENT until the series matures. A read is not an edge until it's PREDICTIVE here. `exit` (on reads a preset trades) grades the read through that preset's own TP/SL/max-hold along the logged candles, one position per market, net of a 3 bps/side taker fee; `exit24h` is the same exit with a 24h hold on the same entry window; `oos` counts only trades entered after 2026-09-25 04:00 UTC. Informational — they do not change the read's verdict. `random` replays every R-graded event at a random hour — same market, same side, same frozen R contract, drawn only from the window the read fired in — 300 seeded runs, pooled and per side; BEATS_RANDOM (≥95% of replays beaten) / LEANS_ABOVE (≥80%) / NOT_DISTINGUISHABLE / BELOW_RANDOM (≤5% — reliably worse than random; not a licence to invert) / TOO_FEW (<5 events), the same ladder as the Lab backtest. It separates 'the signal picked good moments' from 'the window did the work'. `tide` is what a random long vs a random short earned under the same R contract across every recorded market-hour — what a read's side has to beat. (Distinct from each horizon's `drift`, which subtracts the coin's average h-hour move over its whole recorded history, in bps.) Informational — neither changes any verdict.",
-      };
-      try { await env.LAB_STORE.put(CACHE, JSON.stringify(out), { expirationTtl: 3600 }); } catch { /* best-effort */ }
-      return json(out, request);
+      // Built on the minute cron (SCOREBOARD_REBUILD_MINUTE), served from KV; a request builds only when no copy
+      // exists, and a failed build serves the last good copy marked stale (scoreboardCache.mjs).
+      try { return json(await serveScoreboard(env.LAB_STORE, CACHE, () => buildAxisScorecard(env, min)), request); }
+      catch (e) { return json({ ok: false, error: "scoreboard_unavailable", detail: whyFailed(e) }, request, 503); }
     }
 
     // ── GET /intel/evidence?axis=basis_x_cvd&hold=12|24 — does the SIGNAL carry information? ──

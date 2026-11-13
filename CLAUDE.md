@@ -291,6 +291,11 @@ product is what sits on top:
   never re-scan from the start or redo per-coin work that doesn't depend on the coin; time it on the public series
   before registering. A faster body must fire identical events (kept-reference test, as for btc_lead_lag /
   funding_basis_split in explorerReads.test.mjs).
+- **Built on a schedule, not in a request (2026-11-13, `scoreboardCache.mjs`):** the minute cron rebuilds the min-20 board at
+  `SCOREBOARD_REBUILD_MINUTE` (:53) via `buildAxisScorecard(env, min)` (index.js; the route's old body moved unchanged) and
+  stores it for 2h + a 24h last-good copy. A request serves the stored copy, builds only when none exists, and serves the
+  last good one marked `stale` if that build fails (503 `scoreboard_unavailable` only with nothing stored). Check
+  `[scoreboard] rebuilt in N ms` in the lab-api logs.
 - `GET /intel/axis-backtest` (`axisbt.mjs runScorecard`, cached; bump the `axisbt:vN` key when the payload changes) →
   /proof and the Feed SIGNALS tab. Forward returns, no lookahead, pooled across the recorded markets, half-vs-half
   stability, horizons 4/12/24h, R on a frozen contract (1.2×ATR stop, 1.5R, 168h).
