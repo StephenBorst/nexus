@@ -97,6 +97,8 @@ product is what sits on top:
   measured from `market:prev:{symbol}` only when that snapshot is ≤ 12 min old (`prevSnapshotUsable`, shared rule
   `app/lib/marketSnapshot.mjs`; lab-api's `/signals` rows and trend-regime OI use it too, rows carry `delta_fresh`);
   candles are fetched only when the last closed bar is missing (`candleFetchDue`); the heartbeat stamps completed runs only.
+  When no market fires, `agent:signal.reason` carries the grouped sit-out reasons (`quietReason`, brain `logic.mjs`, 2026-11-13:
+  "no signal · 11 of 11 markets: …", plus markets unread that tick), so "switched off" and "nothing qualified" differ.
 - **nexus-carry-engine**: sector-neutral funding-carry basket. Hourly = PAPER record; `*/5` = LIVE maker re-quote, a
   no-op unless `CARRY_LIVE=true`. KV `CARRY` = `b34f3af62cfe4bc2b5d03ce9c7b55868`. Reached on
   `https://nexus-carry-engine.stephenpatrick24.workers.dev` (`CARRY_API` in `app/pages/proof/CarrySleeve.tsx` and
@@ -259,7 +261,8 @@ product is what sits on top:
   hourly at :47 records PASS/FAIL/RESET ONCE in LAB_STORE `pjudge:{axis}` (the 30 trades as judged), never rewritten;
   `GET /signals/paper-judge/:axis`; the paper run page's verdict block. Licenses nothing automatic. **oi_div_reversal_4h** has the same rules
   (`paper-judgment-oi-div-reversal-4h.md`, drafted 2026-11-13 at 0 trades, a word-for-word copy, test-checked) with
-  `signature: "pending"`: no PASS/FAIL is final until borst's signature is recorded under its Results and the flag flips. Events for parity come
+  signed by borst 2026-11-13 (recorded under its Results; `signature: "signed"`). A new page starts `"pending"`: no PASS/FAIL
+  is final until it is signed. Events for parity come
   from `parityEvents.mjs` (one copy with `GET /agent/:a/parity`).
 - **Live fills on the tape + $10 preflight** (borst 2026-11-13): the tape checker also checks each exchange-confirmed live
   fill in `state.live_slip` (`liveLegs`, keys `l:{order_id}`, kind `live_<kind>`), counted APART from paper

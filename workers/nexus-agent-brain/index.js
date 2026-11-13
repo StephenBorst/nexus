@@ -16,7 +16,7 @@
 // ═══════════════════════════════════════════════════════════
 
 import { orderlyGet } from "../nexus-lab-api/orderlyGet.mjs";
-import { deriveSignal, computeRegime, atrPct, oiSnapshotDue, signalSourceT, prevSnapshotUsable, candleFetchDue } from "./logic.mjs";
+import { deriveSignal, computeRegime, atrPct, oiSnapshotDue, signalSourceT, prevSnapshotUsable, candleFetchDue, quietReason } from "./logic.mjs";
 import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/basisFade.mjs";
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 import { HOLDOUT_PERPS } from "../../app/lib/recordedUniverse.mjs";
@@ -171,16 +171,20 @@ export default {
       for (const [address, { config }] of Object.entries(userConfigs)) {
         try {
           let best = { symbol: null, direction: "NONE", funding: 0, oi: 0, confidence: 0, price: 0, reason: "no signal" };
+          const quiet = []; // each market's sit-out reason, for the no-signal summary (logic.mjs quietReason)
+          let unread = 0;
           for (const sym of config.symbols || []) {
             const raw = rawBySymbol[sym];
-            if (!raw) continue;
+            if (!raw) { unread++; continue; }
             const coin = sym.replace("PERP_", "").replace("_USDC", "");
             const cons = (config.respectSmartMoney && smartConsensus) ? smartConsensus[coin] : null;
             const sig = deriveSignal(raw, config, config.respectRegime ? regime : null, cons, { liveLift: liftOf(address, config) });
+            if (sig.direction === "NONE") quiet.push(sig.reason);
             if (sig.direction !== "NONE" && sig.confidence > best.confidence) {
               best = { symbol: sym, direction: sig.direction, funding: raw.fundingRate, oi: raw.oi, price: raw.price, confidence: sig.confidence, reason: sig.reason, sourceT: signalSourceT(raw, config) };
             }
           }
+          if (!best.symbol) best.reason = quietReason(quiet, unread);
           const signalData = { ...best, timestamp: Date.now(), user: address };
           // The brain ONLY owns agent:signal. It must never write agent:state —
           // that key is single-writer-owned by the exec Worker (risk counters,

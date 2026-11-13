@@ -350,3 +350,24 @@ export function candleFetchDue(last, now = Date.now()) {
   return t < lastClosedStart;
 }
 
+
+// ── Why a wallet got no signal (2026-11-13) ───────────────────────────────────────────────────────────────
+// When no market fires, the brain used to write the bare default "no signal", so "nothing qualified this hour" and
+// "this read is switched off / couldn't read its data" looked the same on the wallet. Now the signal carries the
+// sit-out reasons deriveSignal already returns, grouped and counted, plus the markets the brain couldn't evaluate
+// this tick (a failed fetch). Display only: it changes no direction, confidence or market.
+//   quietReason(["no extreme 4h move on falling OI this hour — sat out" ×11], 0)
+//     → "no signal · 11 of 11 markets: no extreme 4h move on falling OI this hour"
+export const QUIET_MAX_GROUPS = 3;
+export function quietReason(reasons = [], unread = 0) {
+  const clean = (r) => String(r || "no signal").replace(/\s+—\s+sat out$/, "").trim() || "no signal";
+  const counts = new Map();
+  for (const r of reasons) { const k = clean(r); counts.set(k, (counts.get(k) || 0) + 1); }
+  const total = reasons.length + unread;
+  if (!total) return "no signal · no markets evaluated";
+  const groups = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const parts = groups.slice(0, QUIET_MAX_GROUPS).map(([r, n]) => (groups.length === 1 && !unread ? `${n} of ${total} markets: ${r}` : `${r} (${n})`));
+  if (groups.length > QUIET_MAX_GROUPS) parts.push(`+${groups.length - QUIET_MAX_GROUPS} other reasons`);
+  if (unread) parts.push(`${unread} of ${total} markets unread this tick`);
+  return ["no signal", ...parts].join(" · ");
+}

@@ -37,9 +37,9 @@ export const PAPER_JUDGMENTS = Object.freeze({
     passAboveBps: 0,               // mean net > 0 = PASS
     signature: "signed",           // borst, 2026-11-13 (the page's opening line)
   }),
-  // A copy of level_reclaim's rules for the oi_div_reversal_4h paper wallet (drafted 2026-11-13, 0 trades). Until borst's
-  // signature is recorded under the page's Results (and `signature` flips to "signed" in that PR), no PASS or FAIL is
-  // final. A reset still ends the run (rule 3): a record can't be wiped before the judgment either way.
+  // A copy of level_reclaim's rules for the oi_div_reversal_4h paper wallet (drafted 2026-11-13 at 0 trades, signed by
+  // borst the same day; the signature is recorded under the page's Results). A rule entry with signature "pending"
+  // shows its numbers but records no PASS or FAIL; a reset still ends the run (rule 3) either way.
   oi_div_reversal_4h: Object.freeze({
     doc: "docs/research/paper-judgment-oi-div-reversal-4h.md",
     signedAt: "2026-11-13T00:00:00Z", // the reset cut-off (rule 3): any reset after this date = RESET
@@ -50,7 +50,7 @@ export const PAPER_JUDGMENTS = Object.freeze({
     parityEarlyMs: PARITY_EARLY_MS,
     paritySettleMs: PARITY_SETTLE_MS,
     passAboveBps: 0,
-    signature: "pending",
+    signature: "signed",           // borst, 2026-11-13 ("signed"), recorded under the page's Results
   }),
 });
 
