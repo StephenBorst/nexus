@@ -88,6 +88,8 @@ import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handleHalt } from "./routes-halt.mjs";
 import { handlePaperClaim, readPaperClaims } from "./routes-paperclaim.mjs";
 import { handleJudgeSign } from "./routes-judgesign.mjs";
+import { runOpsDigest } from "./opsDigest.mjs";
+import { DIGEST_RUN_MINUTE } from "../../app/lib/opsDigest.mjs";
 import { readsWithClaims } from "../../app/lib/paperClaim.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, publicHalt } from "../../app/lib/liveHalt.mjs";
 import { handlePush } from "./routes-push.mjs";
@@ -761,6 +763,14 @@ export default {
         ctx.waitUntil((async () => {
           try { const r = await runPaperJudge(env); console.log(`[judge] ${JSON.stringify(r)}`); }
           catch (e) { console.error("[judge] run failed:", String(e?.message || e)); }
+        })());
+      }
+      // Once an hour, after the judge: the owner's Telegram alerts (what changed and needs attention) and, once a
+      // day, the digest (opsDigest.mjs; rules app/lib/opsDigest.mjs). Reads only; sends to OPS_TELEGRAM_CHAT_ID.
+      if (minute === DIGEST_RUN_MINUTE) {
+        ctx.waitUntil((async () => {
+          try { const r = await runOpsDigest(env, { scorecardKey: axisbtCacheKey(20) }); if (r.alerts || r.digest || !r.sent) console.log(`[digest] ${JSON.stringify(r)}`); }
+          catch (e) { console.error("[digest] run failed:", String(e?.message || e)); }
         })());
       }
       // Once an hour, its own invocation: rebuild the scoreboard (GET /intel/axis-backtest) so no visitor ever waits on

@@ -113,6 +113,15 @@ product is what sits on top:
 - **nexus-ledger-anchor**: hourly anchor + `runMonitor` (Telegram ops alerts: signer gas, ledger drift >6h, brain down
   >15 min via `ops:brain:heartbeat`, exec down >10 min). `GET /monitor-now`.
 - **nexus-lab-alerts**: alerts worker. Other legit CF apps: nexus-landing, orderly-proxy.
+- **Owner digest + alerts (lab-api, borst 2026-11-14, rules `app/lib/opsDigest.mjs`, runner `opsDigest.mjs`):** hourly at :49
+  on the minute cron (after the :47 judge). READS the stored scoreboard, each paper wallet's state/config/signal, tape,
+  recorded judgment, parity (`parityEvents` + `paperParity`, as `/agent/:a/parity`), claims + judgment signatures, and
+  once a day the receivers (`readRevenue`). Sends to `OPS_TELEGRAM_CHAT_ID` (lab-api wrangler.toml, the ops monitor's
+  chat) via `TELEGRAM_TOKEN`: an ALERT when something changed that needs the owner (stage move, parity DRIFT /
+  UNVERIFIABLE or clean again, verdict recorded, a new register / wire / sign item); the DIGEST once a day from 15:00 UTC
+  (needs you · paper runs in R with tape, open trade or quiet reason, parity · stages · receivers not swept, tokens only).
+  The first run sends "digest is on". Writes only `ops:digest:state:v1` + `ops:digest:sent:{day}`; a failed send keeps
+  the old state so the alert retries next run. Moves, signs and trades nothing.
 - KV: brain/exec/lab-api agent routes share `NEXUS_AGENT` = `c3c0582ec71c4d049d0795872f39f033`; lab data = `LAB_STORE`.
   Agent keys: `agent:users|config|key|state|signal|pending|kill:{addr}`.
 - Observability logs on in every wrangler.toml. "Agents down" is usually idle by design (`direction:NONE`): check the
