@@ -1628,6 +1628,15 @@ async function appendPaperLog(address, state, env, row) {
   }
 }
 
+// A paper row's target % for the tape's trigger check: the one level a single-target position closes at, else
+// null (a ladder of several levels, or none). Record only: nothing trades on it.
+function paperTpPercent(pos) {
+  const ladder = Array.isArray(pos?.takeProfits) ? pos.takeProfits.filter((l) => Number(l?.pct) > 0) : [];
+  if (ladder.length > 1) return null;
+  const tp = ladder.length === 1 ? Number(ladder[0].pct) : Number(pos?.tpPercent);
+  return tp > 0 ? tp : null;
+}
+
 async function closePosition(address, state, config, env, reason, cache, decisionPrice = null) {
   const pos = state.current_position;
   if (!pos) return;
@@ -1759,10 +1768,12 @@ async function closePosition(address, state, config, env, reason, cache, decisio
     // only: the live Supabase row's columns are unchanged. `sl_percent` = the stop distance this trade was
     // managed with (the graded stop for R_CONTRACT), so any row reads in R from its own fill: R = the move ÷
     // sl_percent (app/lib/paperRun.mjs, the /proof/paper page). Record only, 2026-11-12; nothing reads it to trade.
+    // `tp_percent`: a single-target position's target, so the tape check can ask whether a TP exit's level
+    // actually traded (paperTape.mjs trigger check). A TP ladder has no one level: not stamped. Record only.
     // `entry_avg`: a DCA position's entry_price is the blended average of its adds, a price no single trade
     // printed, so the tape check (lab-api paperTape.mjs) labels it AVERAGED instead of judging it. Record
     // only, 2026-11-13.
-    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable, ...(pos.risk_usd > 0 ? { risk_usd: pos.risk_usd } : {}), ...(Number(pos.slPercent) > 0 ? { sl_percent: Number(pos.slPercent) } : {}), ...(pos.dca ? { entry_avg: true } : {}) });
+    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable, ...(pos.risk_usd > 0 ? { risk_usd: pos.risk_usd } : {}), ...(Number(pos.slPercent) > 0 ? { sl_percent: Number(pos.slPercent) } : {}), ...(paperTpPercent(pos) ? { tp_percent: paperTpPercent(pos) } : {}), ...(pos.dca ? { entry_avg: true } : {}) });
     if (state.paper_trades.length > 50) state.paper_trades.pop(); // keep last 50
     // ⚠️ That pop is why the window is NOT the record. Accrue the LIFETIME aggregate
     // here, once, at close — it cannot be rebuilt from a truncated window later.

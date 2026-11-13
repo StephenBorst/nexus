@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runPaperTape, handlePaperTape, walletsForRun, pruneChecks, proofPaperWallets, PTAPE_KEY, TAPE_SETTLE_MS, TAPE_GIVE_UP_MS } from "./paperTape.mjs";
-import { entryKey, exitKey } from "../../app/lib/paperTape.mjs";
+import { entryKey, exitKey, exitKeyOf } from "../../app/lib/paperTape.mjs";
 
 const M = 60;
 const W = "0x" + "ab".repeat(20);
@@ -109,4 +109,57 @@ test("wallet order: /proof's paper wallets always, then a rotating slice of the 
 test("pruning keeps every fill the state still shows, then the newest others", () => {
   const checks = { a: { t: 1 }, b: { t: 5 }, c: { t: 3 }, live: { t: 0 } };
   assert.deepEqual(Object.keys(pruneChecks(checks, [{ key: "live" }], 2)), ["live", "b"]);
+});
+
+test("an old fill Orderly keeps refusing is recorded NO_DATA with the reason after 3 runs, never retried forever", async () => {
+  const env = envWith({ paper_trades: [row()] });
+  const o = orderly({ fail: true });
+  const old = () => T_OUT + TAPE_GIVE_UP_MS + 3_600_000;
+  const r1 = await runPaperTape(env, { fetchJson: o.fetchJson, nowMs: old });
+  assert.equal(r1.retried, 2);
+  let rec = JSON.parse(env.LAB_STORE.m.get(PTAPE_KEY(W)));
+  assert.equal(rec.tries[exitKeyOf(row())], 1, "the refusal is counted");
+  await runPaperTape(env, { fetchJson: o.fetchJson, nowMs: old });
+  const r3 = await runPaperTape(env, { fetchJson: o.fetchJson, nowMs: old });
+  assert.equal(r3.gaveUp, 2);
+  rec = JSON.parse(env.LAB_STORE.m.get(PTAPE_KEY(W)));
+  const c = rec.checks[exitKeyOf(row())];
+  assert.equal(c.verdict, "NO_DATA");
+  assert.match(c.reason, /^Orderly refused 3 times: orderly 429/);
+  assert.equal(rec.tries, undefined, "no counters left behind");
+  const calls = o.calls.length;
+  await runPaperTape(env, { fetchJson: o.fetchJson, nowMs: old });
+  assert.equal(o.calls.length, calls, "settled: Orderly isn't asked again");
+});
+
+test("a young fill's refusals don't count toward giving up", async () => {
+  const env = envWith({ paper_trades: [row()] });
+  const o = orderly({ fail: true });
+  for (let i = 0; i < 4; i++) await runPaperTape(env, { fetchJson: o.fetchJson, nowMs: () => NOW });
+  assert.equal(env.LAB_STORE.m.has(PTAPE_KEY(W)), false, "nothing recorded: it just waits");
+});
+
+test("a stop exit is checked for its trigger too, and one checked before the trigger existed is asked again once", async () => {
+  // LONG from 100, 2% stop = 98. ETH around the exit traded 104–105 in this fake: the stop never traded.
+  const env = envWith({ paper_trades: [row({ reason: "SL", sl_percent: 2, exit_price: 97.9 })] });
+  const o = orderly();
+  await runPaperTape(env, { fetchJson: o.fetchJson, nowMs: () => NOW });
+  let rec = JSON.parse(env.LAB_STORE.m.get(PTAPE_KEY(W)));
+  const c = rec.checks[exitKeyOf(row())];
+  assert.equal(c.trigger.verdict, "MARK_ONLY");
+  assert.equal(c.trigger.side, "STOP");
+  assert.equal(c.trigger.span.length, 3, "the bars it judged are kept");
+
+  // An old-style check (no trigger) gets one more look; a refusal then keeps the check it has.
+  delete rec.checks[exitKeyOf(row())].trigger;
+  env.LAB_STORE.m.set(PTAPE_KEY(W), JSON.stringify(rec));
+  await runPaperTape(env, { fetchJson: orderly({ fail: true }).fetchJson, nowMs: () => NOW });
+  rec = JSON.parse(env.LAB_STORE.m.get(PTAPE_KEY(W)));
+  assert.equal(rec.checks[exitKeyOf(row())].verdict, "OFF", "kept as it was");
+  await runPaperTape(env, { fetchJson: o.fetchJson, nowMs: () => NOW });
+  rec = JSON.parse(env.LAB_STORE.m.get(PTAPE_KEY(W)));
+  assert.equal(rec.checks[exitKeyOf(row())].trigger.verdict, "MARK_ONLY");
+  const res = await (await handlePaperTape(["agent", W, "tape"], new Request("https://x/"), env)).json();
+  assert.equal(res.fills.find((f) => f.kind === "exit").trigger.verdict, "MARK_ONLY");
+  assert.equal(res.summary.markOnly, 1);
 });

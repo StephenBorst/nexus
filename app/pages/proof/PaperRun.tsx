@@ -22,9 +22,9 @@ type Trade = {
   n: number; coin: string; side: "LONG" | "SHORT"; openedAt: string | null; closedAt: string; holdH: number | null;
   entry: number | null; exit: number | null; reason: string | null; outcome: string; movePct: number | null;
   r: number | null; rBasis: "fill" | "contract" | null;
-  tape?: { entry: string; exit: string };
+  tape?: { entry: string; exit: string; trigger?: string };
 };
-type TapeSummary = { fills: number; judged: number; onTape: number; near: number; off: number; noTrades: number; noData: number; averaged: number; pending: number; line: string | null };
+type TapeSummary = { fills: number; judged: number; onTape: number; near: number; off: number; noTrades: number; noData: number; averaged: number; pending: number; triggers?: number; markOnly?: number; line: string | null };
 type Run = {
   ok?: boolean; error?: string; axis: string; wallet: string; target: number; unread?: boolean; count: number;
   remaining: number; complete: boolean; startedAt: string | null; windowed: boolean;
@@ -151,12 +151,13 @@ export default function PaperRunPage() {
                         <td style={{ padding: "9px 10px 9px 0", color: FOG }}>{fmtHold(t.holdH)}</td>
                         <td style={{ padding: "9px 10px 9px 0", color: FOG }}>{t.entry ?? "—"} → {t.exit ?? "—"}</td>
                         <td style={{ padding: "9px 10px 9px 0", whiteSpace: "nowrap" }}
-                            title={t.tape ? `Entry: ${tapeMark(t.tape.entry).word}. Exit: ${tapeMark(t.tape.exit).word}.` : undefined}>
+                            title={t.tape ? `Entry: ${tapeMark(t.tape.entry).word}. Exit: ${tapeMark(t.tape.exit).word}.${t.tape.trigger === "MARK_ONLY" ? " The exit fired on the mark: no trade reached its level." : t.tape.trigger === "TRADED" ? " The tape traded at the exit’s level." : ""}` : undefined}>
                           {t.tape ? (
                             <>
                               <span style={{ color: t.tape.entry === "OFF" ? SIGNAL.watch : BRIGHT }}>{tapeMark(t.tape.entry).mark}</span>
                               <span style={{ color: MUTED }}> → </span>
                               <span style={{ color: t.tape.exit === "OFF" ? SIGNAL.watch : BRIGHT }}>{tapeMark(t.tape.exit).mark}</span>
+                              {t.tape.trigger === "MARK_ONLY" && <span style={{ color: SIGNAL.watch }}> mark only</span>}
                             </>
                           ) : <span style={{ color: FOG }}>—</span>}
                         </td>

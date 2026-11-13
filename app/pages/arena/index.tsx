@@ -35,7 +35,7 @@ type ArenaPaper = (ArenaStat & {
   qualify?: { eligible: boolean; criteria: Criterion[] } | null;
 }) | null;
 
-type TapeSummary = { fills: number; judged: number; onTape: number; near: number; off: number; noTrades: number; noData: number; averaged: number; pending: number };
+type TapeSummary = { fills: number; judged: number; onTape: number; near: number; off: number; noTrades: number; noData: number; averaged: number; pending: number; triggers?: number; markOnly?: number };
 
 type ArenaAgent = {
   wallet: string; name: string; description: string; builder: string;
@@ -87,8 +87,8 @@ function TapeLine({ t, wallet }: { t?: TapeSummary | null; wallet?: string }) {
   const title = tapeLine(t) || "";
   return (
     <span title={wallet ? `${title}. Checks + sources: og.nexustradinglabs.com/agent/${wallet}/tape` : title}
-          style={{ fontFamily: MONO, fontSize: 9.5, color: t.off ? SIGNAL.watch : MUTED, whiteSpace: "nowrap" }}>
-      tape ✓{t.onTape} ≈{t.near} ✕{t.off}
+          style={{ fontFamily: MONO, fontSize: 9.5, color: t.off || t.markOnly ? SIGNAL.watch : MUTED, whiteSpace: "nowrap" }}>
+      tape ✓{t.onTape} ≈{t.near} ✕{t.off}{t.markOnly ? ` · ${t.markOnly} mark-only exit${t.markOnly === 1 ? "" : "s"}` : ""}
     </span>
   );
 }

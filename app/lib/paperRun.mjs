@@ -75,6 +75,8 @@ export function paperRun(axis, state, tape = null) {
       ...(tape ? { tape: {
         entry: t.entry_avg ? "AVERAGED" : tape.checks?.[entryKey(t.symbol, opened)]?.verdict || "PENDING",
         exit: tape.checks?.[exitKeyOf(t)]?.verdict || "PENDING",
+        // A stop/target exit: did the tape trade at its level (TRADED) or did it fire on the mark alone (MARK_ONLY)?
+        ...(tape.checks?.[exitKeyOf(t)]?.trigger ? { trigger: tape.checks[exitKeyOf(t)].trigger.verdict } : {}),
       } } : {}),
     };
   });

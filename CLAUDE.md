@@ -230,7 +230,9 @@ product is what sits on top:
   Checker = lab-api `paperTape.mjs`, hourly at :41 on the minute cron: READS agent state, writes only `ptape:{wallet}` in
   LAB_STORE (the bar + its public source per fill, final). Served at `GET /agent/:a/tape`, on `/proof/paper/:axis`
   (Tape column + line, `paperRun(axis, state, tape)`) and Arena rows (`tape`, summed per operator). Paper exits stay
-  market exits at the mark (no wick fills); this only proves the price was real.
+  market exits at the mark (no wick fills); this only proves the price was real. **Trigger check:** an SL/TP row with
+  its level (`sl_percent` / `tp_percent`, exec stamps both, record only, pinned) also gets TRADED or MARK_ONLY (the exit
+  fired on the mark, no trade reached the level). A fill > 3 days old Orderly refused on 3 runs = NO_DATA + reason.
 - lab-api needs `SUPABASE_URL` / `SUPABASE_ANON_KEY` for History reads.
 - `test-signal` and the Force button are DEV/PAPER-only. Feed bridge: `PUBLISH_AGENT_FEED=true` (real trades only).
 - Multi-strategy concurrency = one Orderly sub-account per strategy, after a proven edge (deferred).

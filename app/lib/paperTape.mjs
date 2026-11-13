@@ -15,6 +15,16 @@
 //   AVERAGED   a DCA position's entry is the blended average of several adds: no single price traded. Its
 //              entry is labelled, not judged (its exit still is).
 //
+// TRIGGER CHECK (2026-11-13, borst's go). A stop or target exit fires when the MARK crosses its level. The
+// mark can spike past a level that no trade ever reached: a "phantom" stop, a measurement error on paper and
+// real money lost to an index wick live. For an SL or TP row whose level the row carries (`sl_percent`,
+// `tp_percent`: exec stamps both on paper rows, record only), the exit check also asks: did the tape trade
+// at or through that level in the minutes up to the exit?
+//   TRADED      some bar from 2 minutes before the exit's minute through that minute reached the level
+//               (exec checks once a minute, so the cross happened inside that span)
+//   MARK_ONLY   no bar reached it: the exit fired on the mark alone. Shown with how far the tape stayed off.
+// TRAIL / BE / TIMEOUT / KILLED / WEBHOOK_CLOSE and TP ladders carry no fixed level: nothing to judge.
+//
 // Pure. The checker that fetches the bars and keeps the evidence is lab-api paperTape.mjs (hourly, read-only
 // on agent state: exec writes the trades, something else checks them). Paper exits stay market-order exits
 // at the mark, as live executes: this checks that the price was real, not that a wick could have filled it.
@@ -31,6 +41,39 @@ export const exitKey = (rowId) => `x:${rowId}`;
 /** A row's exit key: its id (exec stamps `paper_<ms>`), else its market + close time, so no row is skipped. */
 export const exitKeyOf = (row) => exitKey(row?.id || `${row?.symbol}:${ms(row?.closed_at)}`);
 
+/**
+ * The level a stop or target exit fired at, from the row's own stop/target %, or null (no fixed level, or the
+ * row doesn't carry it, or its entry is a DCA average). `side`: STOP or TARGET.
+ */
+export function exitLevel(row) {
+  const e = Number(row?.entry_price);
+  if (!(e > 0) || row?.entry_avg) return null;
+  const long = row?.direction !== "SHORT";
+  const sl = Number(row?.sl_percent), tp = Number(row?.tp_percent);
+  if (row?.reason === "SL" && sl > 0) return { side: "STOP", long, px: e * (1 + (long ? -sl : sl) / 100) };
+  if (row?.reason === "TP" && tp > 0) return { side: "TARGET", long, px: e * (1 + (long ? tp : -tp) / 100) };
+  return null;
+}
+
+/**
+ * Did the tape trade at or through an exit's level in the minutes up to the exit (TRADED), or did the exit fire
+ * on the mark alone (MARK_ONLY, with `bps` = how far the tape's extreme stayed from the level)?
+ * @returns {{ verdict: "TRADED"|"MARK_ONLY"|"NO_TRADES", level: number, bps?: number }}
+ */
+export function judgeTrigger(level, tMs, bars) {
+  const m = Math.floor(tMs / 1000 / MIN) * MIN;
+  const span = (Array.isArray(bars) ? bars : []).filter((b) => Array.isArray(b) && b[0] >= m - 2 * MIN && b[0] <= m);
+  const lvl = Math.round(level.px * 1e8) / 1e8;
+  if (!span.length) return { verdict: "NO_TRADES", level: lvl };
+  const lo = Math.min(...span.map((b) => Number(b[3]))), hi = Math.max(...span.map((b) => Number(b[2])));
+  // A long's stop / a short's target is below the price: the tape must reach DOWN to it. Else UP.
+  const below = (level.side === "STOP") === level.long;
+  const reached = below ? lo <= level.px : hi >= level.px;
+  if (reached) return { verdict: "TRADED", level: lvl };
+  const bps = Math.round(((below ? lo - level.px : level.px - hi) / level.px) * 10_000 * 10) / 10;
+  return { verdict: "MARK_ONLY", level: lvl, bps };
+}
+
 /** The fills one closed paper row asks to check: [{ key, kind, symbol, t (ms), px }] plus averaged entries. */
 export function legsOf(row) {
   const out = [];
@@ -42,7 +85,10 @@ export function legsOf(row) {
       ? { key: entryKey(row.symbol, opened), kind: "entry", symbol: row.symbol, t: opened, px: entry, averaged: true }
       : { key: entryKey(row.symbol, opened), kind: "entry", symbol: row.symbol, t: opened, px: entry });
   }
-  if (closed != null && exit > 0) out.push({ key: exitKeyOf(row), kind: "exit", symbol: row.symbol, t: closed, px: exit });
+  if (closed != null && exit > 0) {
+    const level = exitLevel(row);
+    out.push({ key: exitKeyOf(row), kind: "exit", symbol: row.symbol, t: closed, px: exit, ...(level ? { level } : {}) });
+  }
   return out;
 }
 
@@ -97,7 +143,14 @@ export function tapeSummary(legs, checks) {
     n[VERDICTS.includes(v) ? v : "PENDING"]++;
   }
   const judged = n.ON_TAPE + n.NEAR + n.OFF;
-  return { fills: legs.length, judged, onTape: n.ON_TAPE, near: n.NEAR, off: n.OFF, noTrades: n.NO_TRADES, noData: n.NO_DATA, averaged: n.AVERAGED, pending: n.PENDING };
+  // Stop / target exits whose trigger was checked, and those that fired on the mark alone.
+  let triggers = 0, markOnly = 0;
+  for (const leg of legs) {
+    const t = leg.level ? checks?.[leg.key]?.trigger?.verdict : null;
+    if (t === "TRADED" || t === "MARK_ONLY") triggers++;
+    if (t === "MARK_ONLY") markOnly++;
+  }
+  return { fills: legs.length, judged, onTape: n.ON_TAPE, near: n.NEAR, off: n.OFF, noTrades: n.NO_TRADES, noData: n.NO_DATA, averaged: n.AVERAGED, pending: n.PENDING, triggers, markOnly };
 }
 
 /** Add two summaries (an Arena operator's wallets read as one slot). */
@@ -113,5 +166,6 @@ export function tapeLine(s) {
   const parts = [`${s.onTape} of ${s.judged} paper fills traded inside Orderly’s public 1-minute range`];
   if (s.near) parts.push(`${s.near} within ${TAPE_TOL_BPS / 100}%`);
   parts.push(`${s.off} off`);
+  if (s.triggers) parts.push(s.markOnly ? `${s.markOnly} of ${s.triggers} stop/target exits fired on the mark with no trade at the level` : `all ${s.triggers} stop/target exits traded at their level`);
   return parts.join(" · ");
 }
