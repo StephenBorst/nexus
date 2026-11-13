@@ -1,7 +1,7 @@
 // Run: node --test app/lib/callLifecycle.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { callLifecycle, showsLivePnl, distanceToEntry, workingLine, provisionalTouch, ENTRY_AT_MARK_PCT } from "./callLifecycle.mjs";
+import { callLifecycle, showsLivePnl, distanceToEntry, workingLine, provisionalTouch, callPollMs, CALL_POLL_MS, ENTRY_AT_MARK_PCT } from "./callLifecycle.mjs";
 import { ENTRY_AT_MARK_PCT as GRADER_PCT } from "../../workers/nexus-lab-api/logic.mjs";
 
 const call = (over = {}) => ({ status: "ACTIVE", direction: "LONG", entryPrice: 2400, stopLoss: 2350, takeProfit1: 2700, ...over });
@@ -86,4 +86,14 @@ test("graded, invalid, unchecked or no mark: nothing provisional to say", () => 
   assert.equal(provisionalTouch(call(), 2400), null, "UNCHECKED: the grader hasn't said where the order stands");
   assert.equal(provisionalTouch(call({ fillState: "OPEN" }), null), null);
   assert.equal(provisionalTouch(null, 1), null);
+});
+
+test("a call page re-reads an open call every 30 s and stops once it can't change", () => {
+  assert.equal(CALL_POLL_MS, 30_000);
+  assert.equal(callPollMs(call({ fillState: "WORKING" })), 30_000, "a resting order can fill");
+  assert.equal(callPollMs(call({ fillState: "OPEN" })), 30_000, "an open call can settle");
+  assert.equal(callPollMs(call()), 30_000, "not checked yet");
+  assert.equal(callPollMs(call({ fillState: "OPEN", gradedOutcome: "WIN" })), null, "graded: final");
+  assert.equal(callPollMs(call({ takeProfit1: 2300 })), null, "invalid levels never grade");
+  assert.equal(callPollMs(call({ fillState: "OPEN", status: "STOPPED_OUT" })), null, "closed by its status");
 });

@@ -161,3 +161,48 @@ test("GET /candles/1m/:symbol/:day serves the archived day as stored, with its O
   assert.equal((await handleMinuteArchive(parts("/candles/1m/ETH/yesterday"), req("/x"), env)).status, 400);
   assert.equal(await handleMinuteArchive(parts("/candles/1h/ETH/x"), req("/x"), env), null, "not this route");
 });
+
+test("steady state reads only today's chunk: finished days are vouched for, not re-read every minute", async () => {
+  const gets = [];
+  const env = { LAB_STORE: kv() };
+  const realGet = env.LAB_STORE.get.bind(env.LAB_STORE);
+  env.LAB_STORE.get = async (key) => { gets.push(key); return realGet(key); };
+  const o = orderly(flat);
+  const need = DAY + 10 * 3600;                      // a call posted on day 1, still open on day 4
+  let now = (DAY + 3 * D + 2 * 3600) * 1000;
+  const run = async () => { const mc = makeMinuteCandles(env, { fetchJson: o.fetchJson, nowMs: () => now }); await mc.ensure("ETH", need); await mc.flush(); return mc; };
+
+  await run();                                        // first run: walks all four days, then vouches
+  const today = JSON.parse(env.LAB_STORE.m.get(M1_KEY(SYM, dayOf(now / 1000))));
+  assert.equal(today.contigFrom, need, "today's chunk vouches back to the call's window");
+
+  gets.length = 0; now += 60_000;
+  const mc = await run();
+  assert.deepEqual(gets, [M1_KEY(SYM, dayOf(now / 1000))], "one read a run, not one per day");
+  const stored = JSON.parse(env.LAB_STORE.m.get(M1_KEY(SYM, dayOf(now / 1000))));
+  assert.equal(stored.to, now / 1000, "today's tail still moves");
+  assert.equal(stored.contigFrom, need, "and keeps its stamp");
+  assert.notEqual(await mc.window("ETH", need), null, "the window is still whole");
+
+  // A call older than the stamp sends it back to the full walk once.
+  gets.length = 0; now += 60_000;
+  const mc2 = makeMinuteCandles(env, { fetchJson: o.fetchJson, nowMs: () => now });
+  await mc2.ensure("ETH", DAY + 3600);
+  assert.ok(gets.length >= 4, "every day read again");
+
+  // A new day: no chunk to vouch yet, so the walk runs once more and stamps the new day.
+  now = (DAY + 4 * D + 120) * 1000;
+  await run();
+  assert.equal(JSON.parse(env.LAB_STORE.m.get(M1_KEY(SYM, dayOf(now / 1000)))).contigFrom, need);
+});
+
+test("no stamp when the walk leaves a hole", async () => {
+  const env = { LAB_STORE: kv() };
+  const o = orderly(flat, { fail: (from) => from < DAY + D });   // day 1 can't be fetched
+  const now = (DAY + D + 3600) * 1000;
+  const mc = makeMinuteCandles(env, { fetchJson: o.fetchJson, nowMs: () => now });
+  assert.equal(await mc.ensure("ETH", DAY + 3600), false);
+  await mc.flush();
+  const today = env.LAB_STORE.m.get(M1_KEY(SYM, dayOf(now / 1000)));
+  assert.equal(today ? JSON.parse(today).contigFrom : undefined, undefined);
+});

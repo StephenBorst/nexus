@@ -99,6 +99,7 @@ export function applyMinutePage(chunk, sym, day, page, bars) {
     v: 1, sym, day,
     from: chunk ? Math.min(chunk.from, page.from) : page.from,
     to: chunk ? Math.max(chunk.to, page.to) : page.to,
+    ...(chunk && Number.isFinite(chunk.contigFrom) ? { contigFrom: chunk.contigFrom } : {}),
     t: rows.map((r) => r[0]), o: rows.map((r) => r[1]), h: rows.map((r) => r[2]), l: rows.map((r) => r[3]), c: rows.map((r) => r[4]),
   };
 }
@@ -189,7 +190,14 @@ export function makeMinuteCandles(env, { budget = M1_RUN_BUDGET, fetchJson = ord
     const sym = gradeSymbol(rawSym);
     if (!sym || needFrom == null) return false;
     const nowSec = Math.floor(nowMs() / 1000);
-    const days = daysBetween(needFrom, nowSec).reverse();   // today first: what the grader waits on
+    const today = dayOf(nowSec);
+    // Steady state: today's chunk vouches (`contigFrom`) that the archive is complete and gap-free from
+    // there to today's start, and finished days never change, so only today's tail is read. Without
+    // that (a new day, or a call older than the chunk vouches for) every day is walked once and today's
+    // chunk is stamped again. Before this every run re-read every day back to the oldest open call.
+    const top = await load(sym, today);
+    const vouched = !!top && Number.isFinite(top.contigFrom) && top.contigFrom <= floorMin(needFrom);
+    const days = vouched ? [today] : daysBetween(needFrom, nowSec).reverse();   // today first: what the grader waits on
     for (const day of days) {
       if (failed.has(sym)) return false;
       for (;;) {
@@ -200,7 +208,20 @@ export function makeMinuteCandles(env, { budget = M1_RUN_BUDGET, fetchJson = ord
         catch (e) { failed.add(sym); console.error("[m1]", sym, day, page.kind, String((e && e.message) || e)); return false; }
       }
     }
+    if (!vouched) vouch(sym, needFrom, nowSec);
     return true;
+  }
+
+  /** After a full walk: stamp today's chunk with where the gap-free archive starts, if it is gap-free. */
+  function vouch(sym, needFrom, nowSec) {
+    const days = daysBetween(needFrom, nowSec);
+    const map = new Map(days.map((d) => [d, chunks.get(k(sym, d)) || null]));
+    if (!windowFrom(map, floorMin(needFrom), nowSec)) return;
+    const today = days[days.length - 1], c = chunks.get(k(sym, today));
+    const from = map.get(days[0]).from;
+    if (!c || (Number.isFinite(c.contigFrom) && c.contigFrom <= from)) return;
+    chunks.set(k(sym, today), { ...c, contigFrom: from });
+    changed.add(k(sym, today));
   }
 
   /** The contiguous window from `fromSec` for a symbol (loads its days), or null. */
