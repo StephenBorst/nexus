@@ -12,6 +12,7 @@ import { getDayKey } from "./helpers";
 import { useIsMobile } from "./useIsMobile";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { LEVEL_RECLAIM_DEPLOY, LEVEL_RECLAIM_PAPER_CONFIG } from "@/lib/levelReclaim.mjs";
+import { OI_DIV_4H_DEPLOY, OI_DIV_4H_PAPER_CONFIG } from "@/lib/oiDivReversal.mjs";
 // Extracted Lab views
 import { AnalyticsView } from "./AnalyticsView";
 import { TradeLogAllView, TradeLogView } from "./TradeLog";
@@ -66,6 +67,15 @@ export default function TheLabPage() {
     deployToAgent({ ...LEVEL_RECLAIM_PAPER_CONFIG, symbols: [...LEVEL_RECLAIM_PAPER_CONFIG.symbols], takeProfits: [] },
       "the level_reclaim paper setup (as registered)",
       "level_reclaim, exactly as graded: the registered rule, the graded exit (1.2× H4 ATR stop, 1.5× target, 168h), the 11 main-card coins, PAPER only. Use a FRESH wallet so its record starts at zero. Its 30-trade test is judged after fees (paper-costs), with parity CLEAN.",
+      navigate, { replaceFilters: true });
+  }, [searchParams, navigate]);
+  // The oi_div_reversal_4h paper wallet's setup (served TRADEABLE 2026-11-13): the same kind of hidden link, the same
+  // rules (app/lib/oiDivReversal.mjs). PAPER only: the brain refuses this mode on any other config.
+  useEffect(() => {
+    if (searchParams.get("deploy") !== OI_DIV_4H_DEPLOY) return;
+    deployToAgent({ ...OI_DIV_4H_PAPER_CONFIG, symbols: [...OI_DIV_4H_PAPER_CONFIG.symbols], takeProfits: [] },
+      "the oi_div_reversal_4h paper setup (as registered)",
+      "oi_div_reversal_4h, exactly as graded: the registered rule, the graded exit (1.2× H4 ATR stop, 1.5× target, 168h), the 11 main-card coins, PAPER only. Use a FRESH wallet so its record starts at zero. Parity must read CLEAN.",
       navigate, { replaceFilters: true });
   }, [searchParams, navigate]);
   // Programmatic tab switches (deployToAgent / deployDirectiveFromThesis) fire this

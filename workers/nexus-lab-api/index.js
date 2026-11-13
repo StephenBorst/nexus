@@ -5148,7 +5148,7 @@ document.getElementById("btn").addEventListener("click",go);
         const config = configRaw ? JSON.parse(configRaw) : null;
         const state = stateRaw ? JSON.parse(stateRaw) : {};
         const axis = axisForConfig(config);
-        if (!axis) return json({ ok: false, error: "no_graded_axis", note: "Parity applies to BASIS_FADE configs (plain, CVD, SMART or LIQ confirm, not inverted) and LEVEL_RECLAIM (not inverted) — the modes the scoreboard grades." }, request);
+        if (!axis) return json({ ok: false, error: "no_graded_axis", note: "Parity applies to BASIS_FADE configs (plain, CVD, SMART or LIQ confirm, not inverted) LEVEL_RECLAIM and OI_DIV_4H (not inverted) — the modes the scoreboard grades." }, request);
         const q = new URL(request.url).searchParams;
         const when = (v) => (v == null || v === "" ? null : (/^\d+$/.test(v) ? Number(v) : Date.parse(v)));
         const now = Date.now();

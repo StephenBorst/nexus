@@ -15,7 +15,7 @@ export async function parityEvents(kv, config, axis) {
   for (const coin of coins) {
     const [oiHist, basisHist, cvdHist, smHist, liqHist, candleHist] = await Promise.all([
       readJson(`oi:hist:PERP_${coin}_USDC`),
-      axis === "level_reclaim" ? [] : readJson(`basis:hist:${coin}`),
+      axis === "level_reclaim" || axis === "oi_div_reversal_4h" ? [] : readJson(`basis:hist:${coin}`), // oi_div reads oi:hist only
       axis === "basis_x_cvd" ? readJson(`cvd:hist:${coin}`) : [],
       axis === "basis_x_smart" ? readJson(`sm:hist:${coin}`) : [],
       axis === "basis_x_liqflush" ? readJson(`liq:hist:${coin}`) : [],

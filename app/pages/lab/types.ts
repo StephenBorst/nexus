@@ -121,7 +121,8 @@ export interface AgentConfig {
   volTargetPct?: number; // 0=off; volatility-targeted sizing — scale capital inversely to recent realized vol
   // BASIS_FADE is the scoreboard's PREDICTIVE spot-perp read, traded. EXPERIMENTAL/paper.
   // LEVEL_RECLAIM: the registered level_reclaim read, PAPER only, loaded only by its hidden setup link (no mode button).
-  signalMode: "CONFLUENCE" | "FUNDING_ONLY" | "OI_ONLY" | "MOMENTUM" | "MEAN_REVERSION" | "BASIS_FADE" | "LEVEL_RECLAIM";
+  // OI_DIV_4H: the registered oi_div_reversal_4h read, PAPER only, loaded only by its hidden setup link (no mode button).
+  signalMode: "CONFLUENCE" | "FUNDING_ONLY" | "OI_ONLY" | "MOMENTUM" | "MEAN_REVERSION" | "BASIS_FADE" | "LEVEL_RECLAIM" | "OI_DIV_4H";
   oiChangeThreshold: number; // % min OI move for the OI-divergence rule to count (0 = any)
   priceChangeThreshold: number; // % price move on the tick that triggers MOMENTUM / MEAN_REVERSION
   respectRegime?: boolean; // opt-in: brain skips NEW entries that fight a strong market regime

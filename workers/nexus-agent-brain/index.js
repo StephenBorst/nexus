@@ -21,6 +21,7 @@ import { basisFadeFromHistory, basisDeviationFromHistory } from "../../app/lib/b
 import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/lib/basisStack.mjs";
 import { HOLDOUT_PERPS } from "../../app/lib/recordedUniverse.mjs";
 import { levelReclaimLive, levelReclaimRefusal } from "../../app/lib/levelReclaim.mjs";
+import { oiDiv4hLive, oiDiv4hRefusal } from "../../app/lib/oiDivReversal.mjs";
 import { parseLiveLift, liveLifted, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
 
 // The markets we ALWAYS record oi:hist for. ⚠️ Keep this in step with
@@ -132,10 +133,14 @@ export default {
       const lifts = parseLiveLift(env[LIVE_LIFT_VAR]);
       const liftOf = (address, config) => liveLifted(config, address, lifts);
       const needLevel = levelLive && Object.entries(userConfigs).some(([address, { config }]) => config.signalMode === "LEVEL_RECLAIM" && !levelReclaimRefusal(config, { liveLift: liftOf(address, config) }));
+      // The oi_div_reversal_4h read (served TRADEABLE 2026-11-13): computed ONLY when worker var OI_DIV_4H_LIVE = "true"
+      // AND a PAPER config trades it. Off ⇒ an OI_DIV_4H config gets no oiDiv4h* fields and sits out.
+      const oiDivLive = env.OI_DIV_4H_LIVE === "true";
+      const needOiDiv4h = oiDivLive && Object.values(userConfigs).some(({ config }) => config.signalMode === "OI_DIV_4H" && !oiDiv4hRefusal(config));
       const rawBySymbol = {};
       for (const symbol of symbolSet) {
         try {
-          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis, needBasisCvd, needBasisSmart, needBasisLiq, { dev: needBasisDev, devCvd: needBasisDevCvd }, needLevel);
+          rawBySymbol[symbol] = await evaluateSymbol(symbol, env, needFundingPct, needVol, needBasis, needBasisCvd, needBasisSmart, needBasisLiq, { dev: needBasisDev, devCvd: needBasisDevCvd }, needLevel, needOiDiv4h);
         } catch (e) {
           console.error(`[brain] ${symbol} eval error:`, e.message);
         }
@@ -204,7 +209,7 @@ export default {
 // Fetch one symbol's market data and compute RAW deltas vs last cycle.
 // No strategy interpretation here — deriveSignal() applies each user's mode +
 // thresholds. `market:prev:{symbol}` is stored so price/OI deltas are real.
-async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false, computeBasisCvd = false, computeBasisSmart = false, computeBasisLiq = false, twoSided = { dev: false, devCvd: false }, computeLevel = false) {
+async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol = false, computeBasis = false, computeBasisCvd = false, computeBasisSmart = false, computeBasisLiq = false, twoSided = { dev: false, devCvd: false }, computeLevel = false, computeOiDiv4h = false) {
   const json = await orderlyPublicGet(`${ORDERLY_API}/v1/public/futures/${symbol}`);
   const d = json.data;
 
@@ -363,8 +368,23 @@ async function evaluateSymbol(symbol, env, computeFundingPct = false, computeVol
     }
   }
 
+  // ── oi_div_reversal_4h (paper) ───────────────────────────────────────────────
+  // The oi:hist this tick already appended (recordOiForSymbols runs first), read through the SHARED rule
+  // the scoreboard grades with (app/lib/oiDivReversal.mjs). A failed read sits out.
+  let oiDiv = null;
+  if (computeOiDiv4h) {
+    try {
+      const raw = await env.NEXUS_AGENT.get(`oi:hist:${symbol}`);
+      oiDiv = oiDiv4hLive(raw ? JSON.parse(raw) : []);
+    } catch (e) {
+      console.error(`[brain] ${symbol} oi_div_reversal_4h read failed:`, e.message);
+      oiDiv = { side: null, t: null, reason: "OI history read failed" };
+    }
+  }
+
   return {
     symbol, price: markPrice, oi: openInterest, fundingRate, priceChange, oiChange, hasPrev: !!prev, fundingPct,
+    ...(oiDiv ? { oiDiv4hSide: oiDiv.side, oiDiv4hReason: oiDiv.reason, oiDiv4hT: oiDiv.t } : {}),
     ...(level ? { levelReclaimSide: level.side, levelReclaimReason: level.reason, levelReclaimT: level.t } : {}),
     ...(basis ? { basisSide: basis.side, basisPct: basis.basisPct, basisThr: basis.thr, basisReason: basis.reason, basisT: basis.t } : {}),
     ...(basisCvd ? { basisCvdConfirmed: basisCvd.confirmed, basisCvdSide: basisCvd.cvdSide, basisCvdReason: basisCvd.reason } : {}),
