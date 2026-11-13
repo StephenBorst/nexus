@@ -787,6 +787,9 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
   /analyze /token /intel). `functions/<route>/index.js` writes it into the HTML head (`gateRoutePage`, seoGate.mjs, the call
   pages' `injectCallMeta`; fail open) for crawlers + X/Telegram previews; the tab title = the route's `<PageMeta route=… />` (main.tsx, Helmet).
   `public/sitemap.xml` is generated from it (test-pinned); robots.txt points at it. A new indexed route = all four.
+  /proof's Function also swaps the boot screen for a static header from `GET /calls/pulse` (`gateProofPage` →
+  `app/lib/proofSnapshot.mjs`, 60 s edge cache): the served headline (null = the no-claim default), paper COUNT, the bar
+  line (`PROOF_BAR_LINE`, one copy with FeaturedLead), people and engines apart. Unreadable pulse = boot screen, fail open.
 - `git add` new files and check `git status` before trusting a local build (CI builds a clean checkout).
 
 ## Build + mobile load
