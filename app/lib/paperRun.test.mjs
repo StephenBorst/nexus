@@ -114,9 +114,12 @@ test("the run page's head: the live count; a read with no paper wallet = a real 
 
 test("exec stamps the stop on PAPER rows only (record, nothing reads it to trade)", () => {
   const src = read("workers/nexus-agent-exec/index.js");
-  assert.match(src, /state\.paper_trades\.unshift\(\{ id: `paper_\$\{Date\.now\(\)\}`, \.\.\.auditable, .*\.\.\.\(Number\(pos\.slPercent\) > 0 \? \{ sl_percent: Number\(pos\.slPercent\) \} : \{\}\) \}\);/);
+  assert.match(src, /state\.paper_trades\.unshift\(\{ id: `paper_\$\{Date\.now\(\)\}`, \.\.\.auditable, .*\.\.\.\(Number\(pos\.slPercent\) > 0 \? \{ sl_percent: Number\(pos\.slPercent\) \} : \{\}\)(?:, \.\.\.\(pos\.dca \? \{ entry_avg: true \} : \{\}\))? \}\);/);
   assert.equal((src.match(/sl_percent:/g) || []).length, 1, "only the paper row carries it");
   assert.doesNotMatch(src.replace(/\/\/.*$/gm, ""), /\.sl_percent\b/, "exec never reads it back");
+  // The tape check's label for a DCA average entry (paperTape.mjs, 2026-11-13): same rules.
+  assert.equal((src.match(/entry_avg:/g) || []).length, 1, "only the paper row carries entry_avg");
+  assert.doesNotMatch(src.replace(/\/\/.*$/gm, ""), /\.entry_avg\b/, "exec never reads entry_avg back");
 });
 
 test("the page shows no dollars or totals, links from /proof, and is routed + in the sitemap", () => {
@@ -127,4 +130,21 @@ test("the page shows no dollars or totals, links from /proof, and is routed + in
   assert.match(read("app/main.tsx"), /\{ path: 'paper\/:axis', element: <PaperRunPage \/> \}/);
   assert.match(read("functions/proof/paper/[axis].js"), /gatePaperRunPage\(\{ axis: params\.axis, loadApp \}\)/);
   assert.ok(sitemapXml().includes("<loc>https://trade.nexustradinglabs.com/proof/paper/level_reclaim</loc>"));
+});
+
+test("with the tape checks, each trade carries its entry/exit verdict and the run a summary in plain words", async () => {
+  const { entryKey, exitKeyOf } = await import("./paperTape.mjs");
+  const rows = LIVE_ROWS.map((r, i) => ({ ...r, id: `paper_${i}` }));
+  const checks = {
+    [entryKey("PERP_ARB_USDC", Date.parse("2026-11-05T17:01:51.139Z"))]: { verdict: "ON_TAPE" },
+    [exitKeyOf(rows[2])]: { verdict: "NEAR", bps: 3 },
+    [exitKeyOf(rows[0])]: { verdict: "OFF", bps: 40 },
+  };
+  const run = paperRun("level_reclaim", state({ paper_trades: rows }), { v: 1, checks });
+  const arb = run.trades.find((t) => t.coin === "ARB");
+  assert.deepEqual(arb.tape, { entry: "ON_TAPE", exit: "NEAR" });
+  assert.deepEqual(run.trades.find((t) => t.coin === "LINK").tape, { entry: "PENDING", exit: "OFF" });
+  assert.deepEqual([run.tape.fills, run.tape.judged, run.tape.onTape, run.tape.near, run.tape.off, run.tape.pending], [7, 3, 1, 1, 1, 4], "3 rows × 2 + the open WLD entry");
+  assert.match(run.tape.line, /^1 of 3 paper fills traded inside/);
+  assert.equal(paperRun("level_reclaim", state()).tape, undefined, "no tape record = no tape block");
 });

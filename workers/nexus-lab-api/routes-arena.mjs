@@ -10,6 +10,8 @@
 // ownership, so nobody can squat a roster slot for someone else's address.
 // Arena-minted webhook tokens are FREE but scoped to signalMode EXTERNAL (the
 // hook route enforces it) so they can't become a ride around the PRO webhook gate.
+import { walletLegs, tapeSummary, addSummaries } from "../../app/lib/paperTape.mjs";
+import { PTAPE_KEY } from "./paperTape.mjs";
 import { json, normalizeAddress, recoverEthAddress } from "./shared.mjs";
 import { validateArenaRegistration, arenaAgentConfig, aggregateAgentTrades, agentScore, agentStanding, ARENA } from "./logic.mjs";
 import { verifyPaperLog, paperRoot, paperSeqKey, GENESIS_HEAD } from "../../app/lib/paperLedger.mjs";
@@ -130,6 +132,8 @@ export function foldOperators(rows, groups) {
       currentPosition: open[0]?.entry.currentPosition || null,
       openPositions: open.length,
       paper: combinePaper(members.map((m) => m.state)),
+      // The tape check over every member's paper fills (paperTape.mjs), summed like the record.
+      tape: members.map((m) => m.entry.tape || null).reduce(addSummaries, null),
       live: statBlock(members.flatMap((m) => m.liveRows || [])),
       operator: {
         walletCount: members.length,
@@ -397,10 +401,11 @@ export async function handleArena(parts, request, env) {
 
     const groups = await readOperators(AGENT_KV);
     const rows = (await Promise.all(roster.map(async (w) => {
-      const [profileRaw, configRaw, stateRaw] = await Promise.all([
+      const [profileRaw, configRaw, stateRaw, tapeRaw] = await Promise.all([
         AGENT_KV.get(`arena:profile:${w}`),
         AGENT_KV.get(`agent:config:${w}`),
         AGENT_KV.get(`agent:state:${w}`),
+        env.LAB_STORE ? env.LAB_STORE.get(PTAPE_KEY(w)).catch(() => null) : null,
       ]);
       if (!profileRaw) return null;
       let profile, config = null, state = null;
@@ -409,6 +414,11 @@ export async function handleArena(parts, request, env) {
       try { state = stateRaw ? JSON.parse(stateRaw) : null; } catch { /* ignore */ }
       const pos = state?.current_position || null;
       const liveRows = liveByWallet.get(w) || [];
+      // Paper fills checked against Orderly's public 1-minute tape (paperTape.mjs). No paper fills = no block.
+      let tapeChecks = {};
+      try { tapeChecks = (tapeRaw ? JSON.parse(tapeRaw) : null)?.checks || {}; } catch { /* unread: all pending */ }
+      const legs = walletLegs(state);
+      const tape = legs.length ? tapeSummary(legs, tapeChecks) : null;
       return {
         state,
         liveRows,
@@ -422,6 +432,7 @@ export async function handleArena(parts, request, env) {
           mode: config?.mode || "PAPER",
           currentPosition: pos ? { symbol: pos.symbol, direction: pos.direction, paper: !!pos.paper } : null,
           paper: arenaPaperBlock(state),
+          tape,
           live: statBlock(liveRows),
         },
       };

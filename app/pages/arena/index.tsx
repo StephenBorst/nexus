@@ -13,7 +13,8 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { getAgentSig } from "@/pages/lab/agentKeys";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
+import { tapeLine } from "@/lib/paperTape.mjs";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
@@ -34,11 +35,15 @@ type ArenaPaper = (ArenaStat & {
   qualify?: { eligible: boolean; criteria: Criterion[] } | null;
 }) | null;
 
+type TapeSummary = { fills: number; judged: number; onTape: number; near: number; off: number; noTrades: number; noData: number; averaged: number; pending: number };
+
 type ArenaAgent = {
   wallet: string; name: string; description: string; builder: string;
   createdAt: number; active: boolean; mode: string;
   currentPosition: { symbol: string; direction: string; paper: boolean } | null;
   paper: ArenaPaper; live: ArenaStat;
+  // Paper fills checked against Orderly's public 1-minute tape (app/lib/paperTape.mjs); null = no paper fills.
+  tape?: TapeSummary | null;
   // Set when this row is an operator's slot: every wallet in the group, summed.
   openPositions?: number;
   operator?: {
@@ -76,7 +81,19 @@ const inputStyle: React.CSSProperties = {
 
 // PAPER record: lifetime totals, the reset count (a wiped record stays visible),
 // and what is still missing to qualify. The rule is the server's (AGENT_BOARD).
-function PaperCell({ s }: { s: ArenaPaper }) {
+/** "tape ✓11 ≈1 ✕0": the agent's paper fills inside / within 0.1% of / outside their minute on Orderly's public tape. */
+function TapeLine({ t, wallet }: { t?: TapeSummary | null; wallet?: string }) {
+  if (!t || !t.judged) return null;
+  const title = tapeLine(t) || "";
+  return (
+    <span title={wallet ? `${title}. Checks + sources: og.nexustradinglabs.com/agent/${wallet}/tape` : title}
+          style={{ fontFamily: MONO, fontSize: 9.5, color: t.off ? SIGNAL.watch : MUTED, whiteSpace: "nowrap" }}>
+      tape ✓{t.onTape} ≈{t.near} ✕{t.off}
+    </span>
+  );
+}
+
+function PaperCell({ s, tape, wallet }: { s: ArenaPaper; tape?: TapeSummary | null; wallet?: string }) {
   if (!s || !s.trades) return <span style={{ color: FAINT, fontFamily: MONO, fontSize: 11 }}>—</span>;
   const unmet = (s.qualify?.criteria || []).filter((c) => !c.met);
   const tradesLeft = (s.qualify?.criteria || []).find((c) => c.key === "trades");
@@ -92,6 +109,7 @@ function PaperCell({ s }: { s: ArenaPaper }) {
       <span style={{ fontFamily: MONO, fontSize: 9.5, color: qColor, whiteSpace: "nowrap" }}>
         {qLine}{s.resets ? ` · ${s.resets} reset${s.resets === 1 ? "" : "s"}` : ""}
       </span>
+      <TapeLine t={tape} wallet={wallet} />
     </span>
   );
 }
@@ -415,7 +433,7 @@ export default function ArenaPage() {
                   <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.08em", color: a.live ? BRIGHT : MUTED }}>
                     {a.live ? "⛓ LIVE" : a.mode === "PAPER" ? "PAPER" : a.mode}
                   </div>
-                  <PaperCell s={a.paper} />
+                  <PaperCell s={a.paper} tape={a.tape} wallet={a.operator ? undefined : a.wallet} />
                   <StatCell s={a.live} />
                 </div>
                 {expanded === a.wallet && a.operator && <OperatorMembers op={a.operator} />}

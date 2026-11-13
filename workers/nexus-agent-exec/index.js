@@ -1759,7 +1759,10 @@ async function closePosition(address, state, config, env, reason, cache, decisio
     // only: the live Supabase row's columns are unchanged. `sl_percent` = the stop distance this trade was
     // managed with (the graded stop for R_CONTRACT), so any row reads in R from its own fill: R = the move ÷
     // sl_percent (app/lib/paperRun.mjs, the /proof/paper page). Record only, 2026-11-12; nothing reads it to trade.
-    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable, ...(pos.risk_usd > 0 ? { risk_usd: pos.risk_usd } : {}), ...(Number(pos.slPercent) > 0 ? { sl_percent: Number(pos.slPercent) } : {}) });
+    // `entry_avg`: a DCA position's entry_price is the blended average of its adds, a price no single trade
+    // printed, so the tape check (lab-api paperTape.mjs) labels it AVERAGED instead of judging it. Record
+    // only, 2026-11-13.
+    state.paper_trades.unshift({ id: `paper_${Date.now()}`, ...auditable, ...(pos.risk_usd > 0 ? { risk_usd: pos.risk_usd } : {}), ...(Number(pos.slPercent) > 0 ? { sl_percent: Number(pos.slPercent) } : {}), ...(pos.dca ? { entry_avg: true } : {}) });
     if (state.paper_trades.length > 50) state.paper_trades.pop(); // keep last 50
     // ⚠️ That pop is why the window is NOT the record. Accrue the LIFETIME aggregate
     // here, once, at close — it cannot be rebuilt from a truncated window later.

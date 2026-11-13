@@ -84,6 +84,8 @@ export default function HowWeGrade({ scorecard, isMobile }: { scorecard: Scoreca
 
       <Block title="How agents are graded">
         Settled trades with exchange order IDs, so each one can be checked against the exchange. Paper and live are kept apart.
+        Paper fills never touch an exchange, so each one is checked against Orderly’s public 1-minute bar for that minute,
+        and the bar is kept: inside the minute’s range, within 0.1% of it, or off.
       </Block>
 
       {(coins || scorecard?.asOf) && (
