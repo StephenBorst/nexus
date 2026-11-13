@@ -1,7 +1,7 @@
 // ── /pipeline/paper-wallet — bind a paper wallet to a TRADEABLE read, signed by the owner ─────────────
 // Rules + the signed message: app/lib/paperClaim.mjs. Read by the scoreboard build (the served stage moves
 // TRADEABLE → PAPER on its next hourly build), the paper run page and the tape checker.
-//   GET  /pipeline/paper-wallets → { claims: [{ axis, wallet, at, startedAt, by }], reads: paperSetupRows } (public)
+//   GET  /pipeline/paper-wallets → { claims: [{ axis, wallet, at, startedAt, by, sigTs, sig }], reads: paperSetupRows } (public)
 //   POST /pipeline/paper-wallet  { address, axis, wallet, ts, sig } → a treasury Safe owner or an OPS_WALLETS
 //        address signing paperClaimMessage within 5 minutes. Under a NexusLock lease: first registration wins,
 //        never overwritten. Trades nothing, moves nothing.
@@ -68,7 +68,7 @@ export async function handlePaperClaim(parts, request, env, { scorecardKey, now 
       ]);
       const no = claimRefusal({ axis: sig.axis, wallet: sig.wallet, stage, claims, config, state, ...(setups ? { setups } : {}) });
       if (no) return json(no, request, no.status);
-      const rec = claimRecord({ axis: sig.axis, wallet: sig.wallet, address: sig.address, ts: sig.ts, state, now: at });
+      const rec = claimRecord({ axis: sig.axis, wallet: sig.wallet, address: sig.address, ts: sig.ts, sig: sig.sig, state, now: at });
       await env.LAB_STORE.put(PAPER_CLAIMS_KEY, JSON.stringify({ ...claims, [sig.axis]: rec }));
       console.log(`[pipeline] ${sig.axis} paper wallet ${sig.wallet.slice(0, 10)} registered by ${sig.address.slice(0, 10)}`);
       return json({ ok: true, claim: rec, note: "The served stage moves to PAPER on the next scoreboard build (within the hour). The daily watcher writes it into the code." }, request);
