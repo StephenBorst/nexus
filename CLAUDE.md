@@ -162,8 +162,8 @@ product is what sits on top:
   (the grader's `oiDivReversalEvents` + `oiDivReversal4hEvents` moved there unchanged; explorerReads re-exports them),
   computed by the brain on `oi:hist` behind `OI_DIV_4H_LIVE = "true"`, PAPER only (`oiDiv4hRefusal`, no live lift);
   fires in the hour after its row, `sourceT` = the row time. Hidden link `/lab?tab=agent&deploy=oi-div-4h-paper`
-  (`OI_DIV_4H_PAPER_CONFIG`, a FRESH wallet, borst sets it up); `paperWallet` on its registration stays null until he
-  does (recording it moves the served stage → PAPER). Parity: `oiDivReversal.test.mjs`. ~0.4 s brain CPU per tick for
+  (`OI_DIV_4H_PAPER_CONFIG`, a FRESH wallet); its paper wallet is recorded on the registration (`paperWallet`, readPipeline.mjs),
+  which moves the served stage → PAPER. Parity: `oiDivReversal.test.mjs`. ~0.4 s brain CPU per tick for
   the 11 coins while that wallet is flat (full-history re-run, the same as the grader). Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
   evaluates nothing** (no "all" default).
 - **Exits** (`evaluateExit`, exec `logic.mjs`): SL → TIMEOUT → trail before TP; `takeProfits` ladder OVERRIDES
@@ -230,7 +230,8 @@ product is what sits on top:
   counts from the exit as well as the entry (`closePosition` stamps `last_trade_time`).
 - **Paper wallets:** graded-exit wallet `0x9A3012988d60D61b34660BE06a321F7BF7bCcB28` · 24h arm
   `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE` · level_reclaim paper (fresh,
-  2026-11-05, the hidden link) `0x95e26E980e300C34360933b849457F42c6Bd7622`.
+  2026-11-05, the hidden link) `0x95e26E980e300C34360933b849457F42c6Bd7622` · oi_div_reversal_4h paper (fresh, 2026-11-13
+  19:35 UTC, the hidden link) `0xd446acE5934a0A337A9ee5F0D8ad37FdF8a1e2CD`.
 - **Paper tape check** (borst 2026-11-13, `docs/research/paper-tape.md`): every paper fill (entry + exit) is checked
   against Orderly's public 1-minute bar for its minute or the one before (`app/lib/paperTape.mjs`: ON_TAPE / NEAR ≤
   `TAPE_TOL_BPS` 10 / OFF / NO_TRADES / NO_DATA / AVERAGED for a DCA blended entry, `entry_avg` on paper rows / PENDING).

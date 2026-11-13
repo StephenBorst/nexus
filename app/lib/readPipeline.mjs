@@ -42,6 +42,10 @@ export const PAPER_MIN_TRADES = 30;
 // LEVEL_RECLAIM_PAPER_CONFIG, a fresh wallet). Recording it moves the served stage TRADEABLE → PAPER, as the signed
 // Tradeable rule says ("borst sets up one paper wallet"); the daily watcher records that change in its own PR.
 const LEVEL_RECLAIM_PAPER_WALLET = "0x95e26E980e300C34360933b849457F42c6Bd7622";
+// oi_div_reversal_4h's paper wallet: set up by borst 2026-11-13 (19:35 UTC) via the hidden link
+// (/lab?tab=agent&deploy=oi-div-4h-paper, OI_DIV_4H_PAPER_CONFIG, a fresh wallet; app/lib/oiDivReversal.mjs).
+// Recording it moves the served stage TRADEABLE → PAPER; the daily watcher records that change in its own PR.
+const OI_DIV_4H_PAPER_WALLET = "0xd446acE5934a0A337A9ee5F0D8ad37FdF8a1e2CD";
 
 // Each registration: the scoreboard axis that IS the rule (frozen in code), the side it trades,
 // the moment from which its events count (always in the future when written, so nothing counted
@@ -77,7 +81,7 @@ export const REGISTERED_READS = Object.freeze([
     doc: "docs/research/oi-div-reversal-4h-prereg.md",
     holdout: true,
     gradedExit: true,
-    paperWallet: null,
+    paperWallet: OI_DIV_4H_PAPER_WALLET,
   }),
   // Batch 2, signed by borst 2026-10-27 (docs/research/oi-coil-break-prereg.md): OI builds into a flat
   // tape, the range break is followed; OI +3%. Out-of-sample from 2026-10-28T00:00Z.
