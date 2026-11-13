@@ -23,7 +23,8 @@ export function signalProgress(scorecard, paperTrades = {}) {
   for (const r of reads) {
     const trades = Number(r?.numbers?.exitTrades), netBps = Number(r?.numbers?.exitNetBps);
     if (!r || typeof r.axis !== "string" || !CLEARED.has(r.stage) || !(trades > 0) || !(netBps > 0)) continue;
-    const wallet = registrationFor(r.axis)?.paperWallet || null;
+    // The served row carries the wallet (code registration or a signed claim, paperClaim.mjs); older payloads don't.
+    const wallet = registrationFor(r.axis)?.paperWallet || (typeof r.paperWallet === "string" ? r.paperWallet : null);
     const count = wallet ? paperTrades[wallet.toLowerCase()] : undefined;
     out.push({
       axis: r.axis, stage: r.stage, trades, netBps: Math.round(netBps * 10) / 10,

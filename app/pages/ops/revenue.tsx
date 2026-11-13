@@ -11,6 +11,7 @@ import { getLabAuth, useLabWallet, clearLabAuth } from "@/hooks/useLabAuth";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { Button } from "@/components/ui";
 import { signLiveHalt } from "@/lib/liveHalt.mjs";
+import { signPaperClaim } from "@/lib/paperClaim.mjs";
 
 const API = "https://og.nexustradinglabs.com";
 
@@ -126,6 +127,83 @@ function HaltBox({ address, wallet, box, label }: { address: string; wallet: Ret
   );
 }
 
+type PaperRow = { axis: string; stage: string | null; deploy: string; wallet: string | null; source: "code" | "claim" | null; registeredAt: string | null };
+
+// Paper wallets (app/lib/paperClaim.mjs): bind a fresh paper wallet to a TRADEABLE read with one signature. The
+// server checks the preset and that the record is a zero start; the first registration is permanent.
+function PaperWalletsBox({ address, wallet, box, label }: { address: string; wallet: ReturnType<typeof useLabWallet>; box: React.CSSProperties; label: React.CSSProperties }) {
+  const [rows, setRows] = useState<PaperRow[] | null>(null);
+  const [input, setInput] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<Record<string, string>>({});
+
+  const load = useCallback(() => {
+    fetch(`${API}/pipeline/paper-wallets`).then((r) => r.json()).then((j) => setRows(Array.isArray(j?.reads) ? j.reads : []))
+      .catch(() => setMsg((m) => ({ ...m, _: "Couldn’t read the paper wallets." })));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const register = async (axis: string) => {
+    setBusy(axis);
+    setMsg((m) => ({ ...m, [axis]: "" }));
+    try {
+      const signed = await signPaperClaim(address, wallet, axis, (input[axis] || "").trim());
+      const r = await fetch(`${API}/pipeline/paper-wallet`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(signed) });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 403) setMsg((m) => ({ ...m, [axis]: j.ownersRead === false ? "Couldn’t read the Safe’s owners right now. Try again in a minute." : "This wallet isn’t an owner of the treasury Safe." }));
+      else if (!r.ok) setMsg((m) => ({ ...m, [axis]: `${j.error || `HTTP ${r.status}`}${j.detail ? `: ${j.detail}` : ""}` }));
+      else { setMsg((m) => ({ ...m, [axis]: "Registered. /proof shows it on paper after the next scoreboard build (within the hour)." })); load(); }
+    } catch (e) {
+      setMsg((m) => ({ ...m, [axis]: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div style={{ ...box, marginBottom: S.lg }}>
+      <div style={label}>Paper wallets</div>
+      <div style={{ fontSize: 12, color: C.text.fog, marginTop: S.xs, lineHeight: 1.5 }}>
+        A read that reaches TRADEABLE gets one paper wallet. Open its setup link in a FRESH wallet, activate the agent, then paste that wallet here and sign. Register before its first trade: a wallet with a trade, an open position or a reset is refused. Permanent once registered.
+      </div>
+      {rows == null && !msg._ && <div style={{ fontSize: 12, color: C.text.muted, marginTop: S.sm }}>Reading…</div>}
+      {msg._ && <div style={{ marginTop: S.sm, fontSize: 12, color: C.warn }}>{msg._}</div>}
+      {(rows || []).map((r) => (
+        <div key={r.axis} style={{ borderTop: `1px solid ${C.border}`, marginTop: S.md, paddingTop: S.md }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: S.sm, alignItems: "baseline" }}>
+            <span style={{ fontFamily: MONO, fontSize: 13, color: C.text.bright }}>{r.axis}</span>
+            <span style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted }}>{r.stage ?? "stage unread"}</span>
+          </div>
+          {r.wallet ? (
+            <div style={{ fontSize: 12, color: C.text.fog, marginTop: S.xs }}>
+              Paper wallet <span style={{ fontFamily: MONO, color: C.text.bright }}>{short(r.wallet)}</span>
+              {r.source === "claim" ? " · registered here, the watcher writes it into the code" : " · recorded in the code"}
+            </div>
+          ) : r.stage !== "TRADEABLE" ? (
+            <div style={{ fontSize: 12, color: C.text.muted, marginTop: S.xs }}>Not TRADEABLE: nothing to register yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: S.sm, marginTop: S.sm, alignItems: "center" }}>
+              <a href={r.deploy} style={{ fontSize: 12, color: C.text.bright, textDecoration: "underline", textUnderlineOffset: 3 }}>Setup link</a>
+              <input
+                value={input[r.axis] || ""}
+                onChange={(e) => setInput((m) => ({ ...m, [r.axis]: e.target.value }))}
+                placeholder="0x… the fresh paper wallet"
+                aria-label={`${r.axis} paper wallet`}
+                spellCheck={false}
+                style={{ flex: "1 1 260px", minWidth: 0, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.text.bright, fontFamily: MONO, fontSize: 12, padding: `${S.xs}px ${S.sm}px` }}
+              />
+              <Button variant="secondary" disabled={busy === r.axis} onClick={() => register(r.axis)}>
+                {busy === r.axis ? "Signing…" : "Register"}
+              </Button>
+            </div>
+          )}
+          {msg[r.axis] && <div style={{ marginTop: S.xs, fontSize: 12, color: msg[r.axis].startsWith("Registered") ? C.text.fog : C.warn }}>{msg[r.axis]}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function RevenuePage() {
   const wallet = useLabWallet();
   const isMobile = useIsMobile();
@@ -183,6 +261,7 @@ export default function RevenuePage() {
       {!address && <div style={{ ...box, color: C.text.fog, fontSize: 13 }}>Connect the wallet that owns the treasury Safe.</div>}
 
       {address && <HaltBox address={address} wallet={wallet} box={box} label={label} />}
+      {address && <PaperWalletsBox address={address} wallet={wallet} box={box} label={label} />}
 
       {address && !rev && (
         <div style={{ ...box, display: "flex", flexDirection: isMobile ? "column" : "row", gap: S.md, alignItems: isMobile ? "stretch" : "center", justifyContent: "space-between" }}>

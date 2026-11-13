@@ -21,6 +21,7 @@ import { orderlyJson } from "./backtest.mjs";
 import { minuteBarsFrom, minuteSourceUrl } from "./minuteCandles.mjs";
 import { gradeSymbol } from "./gradeCandles.mjs";
 import { mapLimit } from "./orderlyGet.mjs";
+import { PAPER_CLAIMS_KEY, parseClaims } from "../../app/lib/paperClaim.mjs";
 
 export const PTAPE_KEY = (a) => `ptape:${String(a).toLowerCase()}`;
 const CURSOR_KEY = "ptape:cursor";
@@ -35,8 +36,10 @@ const MIN = 60;
 const lower = (a) => String(a || "").toLowerCase();
 const parse = (raw, fallback) => { try { return raw ? JSON.parse(raw) : fallback; } catch { return fallback; } };
 
-/** The wallets /proof shows a paper run for. */
-export const proofPaperWallets = () => [...new Set(REGISTERED_READS.map((r) => r.paperWallet).filter(Boolean).map(lower))];
+/** The wallets /proof shows a paper run for: the code registrations, then any signed claim (paperClaim.mjs). */
+export const proofPaperWallets = (claims = {}) => [...new Set([
+  ...REGISTERED_READS.map((r) => r.paperWallet), ...Object.values(claims || {}).map((c) => c?.wallet),
+].filter(Boolean).map(lower))];
 
 export async function readTape(kv, wallet) {
   const rec = parse(await kv.get(PTAPE_KEY(wallet)), null);
@@ -80,7 +83,9 @@ export async function runPaperTape(env, { fetchJson = orderlyJson, nowMs = () =>
   const now = nowMs();
   const users = parse(await agentKv.get("agent:users"), []);
   const cursor = Number(parse(await kv.get(CURSOR_KEY), 0));
-  const { wallets, next } = walletsForRun(proofPaperWallets(), Array.isArray(users) ? users : [], cursor);
+  let claims = {};
+  try { claims = parseClaims(await kv.get(PAPER_CLAIMS_KEY)); } catch { claims = {}; }
+  const { wallets, next } = walletsForRun(proofPaperWallets(claims), Array.isArray(users) ? users : [], cursor);
   const stats = { wallets: 0, fills: 0, checked: 0, retried: 0, written: 0 };
   const open = new Map();   // wallet → { rec, legs, dirty }
   const todo = [];

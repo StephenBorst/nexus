@@ -86,6 +86,8 @@ import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
 import { handleXrayShare } from "./routes-xrayshare.mjs";
 import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handleHalt } from "./routes-halt.mjs";
+import { handlePaperClaim, readPaperClaims } from "./routes-paperclaim.mjs";
+import { readsWithClaims } from "../../app/lib/paperClaim.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, publicHalt } from "../../app/lib/liveHalt.mjs";
 import { handlePush } from "./routes-push.mjs";
 import { handleThesisRegistration } from "./routes-thesisreg.mjs";
@@ -704,6 +706,7 @@ async function buildAxisScorecard(env, min) {
     const r = btcDailyRegimes(daily);
     regime = { ...r, met: regimeConditionMet(r.counts), label: regimeLabel(r.counts) };
   } catch (e) { regime = { error: whyFailed(e) }; }
+  const paperClaims = await readPaperClaims(env); // unreadable = {} (a read stays TRADEABLE, never PAPER on a guess)
   const out = {
     asOf: new Date().toISOString(),
     config: { horizonsHours: [4, 12, 24], minSamples: min, coins: coinSets.map((c) => c.coin) },
@@ -713,10 +716,11 @@ async function buildAxisScorecard(env, min) {
     stressStudy,
     pipeline: {
       rules: PIPELINE_RULES,
-      reads: REGISTERED_READS.map((reg) => {
+      // A signed paper-wallet claim (routes-paperclaim.mjs) fills `paperWallet` until the watcher writes it into the code.
+      reads: readsWithClaims(paperClaims).map((reg) => {
         const main = scorecard.axes.find((a) => a.name === reg.axis);
         const hold = (holdout.axes || []).find((a) => a.name === reg.axis);
-        return { axis: reg.axis, side: reg.side, registeredAt: reg.registeredAt, doc: reg.doc, ...pipelineStage(reg, main?.oos || null, hold?.oos || null) };
+        return { axis: reg.axis, side: reg.side, registeredAt: reg.registeredAt, doc: reg.doc, paperWallet: reg.paperWallet || null, ...pipelineStage(reg, main?.oos || null, hold?.oos || null) };
       }),
       note: "Stages count out-of-sample events only (after each read's registration). The axis rows above are the whole recorded history = in-sample. docs/research/read-pipeline.md.",
     },
@@ -946,6 +950,8 @@ export default {
     {
       const revenueRes = await handleRevenue(parts, request, env, { nexusPrice: getNexusPriceUsd });
       if (revenueRes) return revenueRes;
+      const claimRes = await handlePaperClaim(parts, request, env, { scorecardKey: axisbtCacheKey(20) });
+      if (claimRes) return claimRes;
       const haltRes = await handleHalt(parts, request, env);
       if (haltRes) return haltRes;
       const shareRes = await handleXrayShare(parts, request, env, { renderPng: renderMonoPng });

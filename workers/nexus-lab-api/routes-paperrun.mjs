@@ -4,6 +4,7 @@
 // Public, read-only, any origin. 404 = the read has no paper wallet; an unreadable state = `unread: true`.
 import { paperRun } from "../../app/lib/paperRun.mjs";
 import { readTape } from "./paperTape.mjs";
+import { readPaperClaims } from "./routes-paperclaim.mjs";
 
 const reply = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -18,7 +19,10 @@ export async function handlePaperRun(parts, request, env) {
   if (!(parts[0] === "signals" && parts[1] === "paper-run" && parts.length === 3)) return null;
   if (request.method !== "GET" && request.method !== "HEAD") return reply({ error: "method not allowed" }, 405);
   const axis = String(parts[2] || "").slice(0, 64);
-  const probe = paperRun(axis, null);
+  // A signed claim (paperClaim.mjs) counts from the moment it's stored; the code registration wins once written.
+  let claimed = null;
+  try { claimed = (await readPaperClaims(env))[axis]?.wallet || null; } catch { claimed = null; }
+  const probe = paperRun(axis, null, null, { wallet: claimed });
   if (!probe) return reply({ ok: false, error: "no_paper_wallet", axis }, 404);
   let state = null;
   try {
@@ -28,5 +32,5 @@ export async function handlePaperRun(parts, request, env) {
   // Each fill checked against Orderly's public 1-minute tape (paperTape.mjs). Unreadable = no tape block.
   let tape = null;
   try { tape = state ? await readTape(env.LAB_STORE, probe.wallet) : null; } catch { tape = null; }
-  return reply({ ok: true, asOf: new Date().toISOString(), ...paperRun(axis, state, tape) });
+  return reply({ ok: true, asOf: new Date().toISOString(), ...paperRun(axis, state, tape, { wallet: claimed }) });
 }
