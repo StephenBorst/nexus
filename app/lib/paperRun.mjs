@@ -22,6 +22,7 @@
 import { registrationFor, PAPER_MIN_TRADES } from "./readPipeline.mjs";
 import { R_CONTRACT } from "./rContract.mjs";
 import { entryKey, exitKeyOf, walletLegs, tapeSummary, tapeLine } from "./paperTape.mjs";
+import { BRAND } from "./brand.mjs";
 
 const OUTCOME = Object.freeze({ TP: "WIN", SL: "LOSS", TIMEOUT: "TIME" });
 const coinOf = (symbol) => String(symbol || "").replace(/^PERP_/, "").replace(/_USDC$/, "");
@@ -79,8 +80,14 @@ export function paperRun(axis, state, tape = null) {
     };
   });
   const p = state.current_position;
+  // The open trade: its number, market, side, entry and tape check. No P&L and no R until it closes.
+  const pOpened = p ? ms(p.opened_at) : null;
   const open = p && p.paper && p.symbol
-    ? { coin: coinOf(p.symbol), side: p.direction === "SHORT" ? "SHORT" : "LONG", openedAt: ms(p.opened_at) != null ? new Date(ms(p.opened_at)).toISOString() : null }
+    ? {
+      n: count + 1, coin: coinOf(p.symbol), side: p.direction === "SHORT" ? "SHORT" : "LONG",
+      openedAt: pOpened != null ? new Date(pOpened).toISOString() : null, entry: Number(p.entry_price) || null,
+      ...(tape ? { tape: { entry: p.entry_avg ? "AVERAGED" : tape.checks?.[entryKey(p.symbol, pOpened)]?.verdict || "PENDING" } } : {}),
+    }
     : null;
   return {
     ...base,
@@ -102,6 +109,32 @@ export function paperRunLine(run) {
   const t = run.tally;
   const parts = [`${t.win} TP`, `${t.loss} SL`, ...(t.time ? [`${t.time} at the time stop`] : []), ...(t.other ? [`${t.other} other`] : [])];
   return `${run.axis} on paper: ${run.count} of ${run.target} trades. ${parts.join(" · ")}.`;
+}
+
+// ── The run, written into the HTML by the page's Function (functions/proof/paper/[axis].js) ──────────
+// The app takes seconds to boot on a phone (the Orderly SDK); until then the HTML's boot screen is all
+// anyone sees. This static copy of the run replaces it, so the count and every trade show at once.
+// React replaces it when the live page mounts. Same rules as the page: no dollars, no totals.
+const escH = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const fmtRs = (r) => (r == null ? "—" : `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(2)}R`);
+const EXIT_WORDS = { TP: "Target", SL: "Stop", TIMEOUT: "Time stop" };
+export function paperRunSnapshotHtml(run) {
+  if (!run || run.unread || !Array.isArray(run.trades)) return null;
+  const B = BRAND;
+  const cell = (v, color = B.bright, align = "left") => `<td style="padding:8px 10px 8px 0;color:${color};text-align:${align}">${escH(v)}</td>`;
+  const rows = [
+    ...(run.open ? [`<tr>${cell(run.open.n, B.fog)}${cell(run.open.coin)}${cell(run.open.side)}${cell("Open", B.fog)}${cell("—", B.fog, "right")}</tr>`] : []),
+    ...[...run.trades].reverse().map((t) => `<tr>${cell(t.n, B.fog)}${cell(t.coin)}${cell(t.side)}${cell(EXIT_WORDS[t.reason] || t.reason || "—")}${cell(fmtRs(t.r) + (t.rBasis === "contract" ? " *" : ""), B.bright, "right")}</tr>`),
+  ].join("");
+  const th = (h, align = "left") => `<th style="padding:6px 10px 6px 0;font-weight:500;color:${B.fog};text-align:${align};border-bottom:1px solid ${B.border}">${h}</th>`;
+  return `<div class="nx-paper-snapshot" style="min-height:100vh;background:${B.canvas};color:${B.bright};font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">`
+    + `<main style="max-width:920px;margin:0 auto;padding:28px 16px 48px">`
+    + `<div style="font:500 10px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.2em;text-transform:uppercase;color:${B.fog};margin-bottom:12px">The proof · On paper</div>`
+    + `<h1 style="margin:0;font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.15">${escH(run.axis)} on paper.<span style="display:block;color:${B.fog}">${escH(run.count)} of ${escH(run.target)} trades.</span></h1>`
+    + `<p style="margin:14px 0 18px;font-size:15px;line-height:1.6">${escH(run.tally.win)} hit the target · ${escH(run.tally.loss)} hit the stop · ${escH(run.tally.time)} closed at the time stop${run.open ? ` <span style="color:${B.fog}">· 1 open: ${escH(run.open.coin)} ${escH(run.open.side)}</span>` : ""}</p>`
+    + (rows ? `<div style="overflow-x:auto"><table style="width:100%;min-width:320px;border-collapse:collapse;font:12.5px ui-monospace,Menlo,monospace"><thead><tr>${th("#")}${th("Market")}${th("Side")}${th("Exit")}${th("R", "right")}</tr></thead><tbody>${rows}</tbody></table></div>` : "")
+    + `<p style="margin:16px 0 0;font-size:12.5px;color:${B.muted}">No dollar P&amp;L until the ${escH(run.target)}-trade sample is complete. Loading the full page…</p>`
+    + `</main></div>`;
 }
 
 /** Every read with a paper wallet (for the sitemap). */

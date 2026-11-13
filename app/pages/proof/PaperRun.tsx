@@ -29,7 +29,7 @@ type Run = {
   ok?: boolean; error?: string; axis: string; wallet: string; target: number; unread?: boolean; count: number;
   remaining: number; complete: boolean; startedAt: string | null; windowed: boolean;
   tally: { win: number; loss: number; time: number; other: number };
-  open: { coin: string; side: string; openedAt: string | null } | null; trades: Trade[];
+  open: { n?: number; coin: string; side: string; openedAt: string | null; entry?: number | null; tape?: { entry: string } } | null; trades: Trade[];
   tape?: TapeSummary;
 };
 
@@ -131,7 +131,7 @@ export default function PaperRunPage() {
 
           <section style={{ marginTop: 28 }}>
             <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.2em", textTransform: "uppercase", color: FOG, marginBottom: 10 }}>Every trade</div>
-            {run.trades.length === 0 ? <p style={{ color: FOG, fontSize: 14 }}>No closed trade yet.</p> : (
+            {run.trades.length === 0 && !run.open ? <p style={{ color: FOG, fontSize: 14 }}>No trade yet.</p> : (
               <div style={{ overflowX: "auto" }}>
                 <table style={{ minWidth: 700, width: "100%", borderCollapse: "collapse", fontFamily: MONO, fontSize: 12.5 }}>
                   <thead>
@@ -142,6 +142,29 @@ export default function PaperRunPage() {
                     </tr>
                   </thead>
                   <tbody>
+                    {/* The open trade first: its entry and tape check, no P&L and no R until it closes. */}
+                    {run.open && (
+                      <tr style={{ color: BRIGHT }}>
+                        <td style={{ padding: "9px 10px 9px 0", color: FOG }}>{run.open.n ?? run.count + 1}</td>
+                        <td style={{ padding: "9px 10px 9px 0" }}>{run.open.coin}</td>
+                        <td style={{ padding: "9px 10px 9px 0" }}>{run.open.side}</td>
+                        <td style={{ padding: "9px 10px 9px 0", color: FOG }}>{fmtDay(run.open.openedAt)}</td>
+                        <td style={{ padding: "9px 10px 9px 0", color: FOG }}>{run.open.openedAt ? `${fmtHold((Date.now() - Date.parse(run.open.openedAt)) / 3600000)} so far` : "—"}</td>
+                        <td style={{ padding: "9px 10px 9px 0", color: FOG }}>{run.open.entry ?? "—"} → open</td>
+                        <td style={{ padding: "9px 10px 9px 0", whiteSpace: "nowrap" }}
+                            title={run.open.tape ? `Entry: ${tapeMark(run.open.tape.entry).word}.` : undefined}>
+                          {run.open.tape ? (
+                            <>
+                              <span style={{ color: run.open.tape.entry === "OFF" ? SIGNAL.watch : BRIGHT }}>{tapeMark(run.open.tape.entry).mark}</span>
+                              <span style={{ color: MUTED }}> → </span>
+                              <span style={{ color: FOG }}>—</span>
+                            </>
+                          ) : <span style={{ color: FOG }}>—</span>}
+                        </td>
+                        <td style={{ padding: "9px 10px 9px 0", color: FOG }}>Open</td>
+                        <td style={{ padding: "9px 0", textAlign: "right", color: FOG }} title="R is read when the trade closes.">—</td>
+                      </tr>
+                    )}
                     {[...run.trades].reverse().map((t) => (
                       <tr key={t.n} style={{ color: BRIGHT }}>
                         <td style={{ padding: "9px 10px 9px 0", color: FOG }}>{t.n}</td>

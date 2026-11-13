@@ -13,7 +13,7 @@
 
 import { injectCallMeta } from "./callPageMeta.mjs";
 import { routeMetaFor, SITE_TITLE } from "./routeMeta.mjs";
-import { paperRunLine } from "./paperRun.mjs";
+import { paperRunLine, paperRunSnapshotHtml } from "./paperRun.mjs";
 import { SITE } from "./callPageMeta.mjs";
 
 export const LAB_API = "https://og.nexustradinglabs.com";
@@ -110,11 +110,12 @@ export async function gatePaperRunPage({ axis, loadApp, fetchImpl = fetch, timeo
   const page = await loadApp();
   const a = String(axis || "").trim();
   if (!a || a.length > 64) return withStatus(page, 404, { noindex: true });
-  let meta = null;
+  let meta = null, run = null;
   try {
-    const r = await fetchImpl(`${LAB_API}/signals/paper-run/${encodeURIComponent(a)}`, { signal: AbortSignal.timeout(timeoutMs) });
+    // Cached at the edge for 60 s (the route's own max-age), so the HTML rarely waits on lab-api.
+    const r = await fetchImpl(`${LAB_API}/signals/paper-run/${encodeURIComponent(a)}`, { signal: AbortSignal.timeout(timeoutMs), cf: { cacheTtl: 60, cacheEverything: true } });
     if (r.status === 404) return withStatus(page, 404, { noindex: true });
-    if (r.status >= 200 && r.status < 300) { const d = await r.json(); if (d?.ok) meta = paperRunMeta(a, d); }
+    if (r.status >= 200 && r.status < 300) { const d = await r.json(); if (d?.ok) { meta = paperRunMeta(a, d); run = d; } }
   } catch { /* fail open */ }
   if (!meta || !page || page.status !== 200) return withStatus(page, page?.status === 200 ? 200 : page.status);
   let html;
@@ -124,5 +125,13 @@ export async function gatePaperRunPage({ axis, loadApp, fetchImpl = fetch, timeo
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.delete("Content-Length");
   headers.delete("ETag");
-  return new Response(injectCallMeta(html, meta), { status: 200, headers });
+  return new Response(withSnapshot(injectCallMeta(html, meta), paperRunSnapshotHtml(run)), { status: 200, headers });
+}
+
+// The boot screen inside #root (index.html: `<div id="root"><div class="nx-boot" …>…</div></div>`) swapped for
+// a static snapshot of the page. No boot screen in the expected shape = the HTML unchanged.
+const BOOT = /<div id="root">\s*<div class="nx-boot"[\s\S]*?<div class="nx-boot-sub">[^<]*<\/div>\s*<\/div>\s*<\/div>/;
+export function withSnapshot(html, snapshot) {
+  if (!snapshot || !BOOT.test(html)) return html;
+  return html.replace(BOOT, () => `<div id="root">${snapshot}</div>`);
 }

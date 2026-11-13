@@ -4,7 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { tradeR, paperRun, paperRunLine } from "./paperRun.mjs";
-import { gatePaperRunPage, paperRunMeta } from "./seoGate.mjs";
+import { gatePaperRunPage, paperRunMeta, withSnapshot } from "./seoGate.mjs";
+import { paperRunSnapshotHtml } from "./paperRun.mjs";
 import { handlePaperRun } from "../../workers/nexus-lab-api/routes-paperrun.mjs";
 import { sitemapXml } from "./routeMeta.mjs";
 
@@ -39,7 +40,7 @@ test("paperRun: count, tally, numbering, the open trade without its P&L", () => 
   assert.deepEqual([run.count, run.target, run.remaining, run.complete], [3, 30, 27, false]);
   assert.deepEqual(run.tally, { win: 1, loss: 2, time: 0, other: 0 });
   assert.deepEqual(run.trades.map((t) => [t.n, t.coin, t.reason, t.r]), [[1, "ARB", "TP", 1.5], [2, "XRP", "SL", -1], [3, "LINK", "SL", -1]], "oldest first");
-  assert.deepEqual(run.open, { coin: "WLD", side: "LONG", openedAt: "2026-11-12T14:01:42.603Z" });
+  assert.deepEqual(run.open, { n: 4, coin: "WLD", side: "LONG", openedAt: "2026-11-12T14:01:42.603Z", entry: 0.2994 }, "numbered after the closed trades, its entry, no P&L");
   assert.equal(paperRunLine(run), "level_reclaim on paper: 3 of 30 trades. 1 TP · 2 SL.");
 });
 
@@ -147,4 +148,45 @@ test("with the tape checks, each trade carries its entry/exit verdict and the ru
   assert.deepEqual([run.tape.fills, run.tape.judged, run.tape.onTape, run.tape.near, run.tape.off, run.tape.pending], [7, 3, 1, 1, 1, 4], "3 rows × 2 + the open WLD entry");
   assert.match(run.tape.line, /^1 of 3 paper fills traded inside/);
   assert.equal(paperRun("level_reclaim", state()).tape, undefined, "no tape record = no tape block");
+});
+
+test("the open trade is a row on the page: entry, tape and Open, never a P&L or an R", () => {
+  const page = read("app/pages/proof/PaperRun.tsx");
+  assert.match(page, /\{run\.open && \(\n\s+<tr/);
+  assert.match(page, />Open<\/td>/);
+  assert.match(page, /title="R is read when the trade closes\.">—<\/td>/);
+  assert.match(page, /run\.trades\.length === 0 && !run\.open/, "the table shows when the only trade is open");
+});
+
+test("the server snapshot: the run in the HTML in place of the boot screen, no dollars, fails open", () => {
+  const run = { ok: true, ...paperRun("level_reclaim", state()) };
+  const snap = paperRunSnapshotHtml(run);
+  assert.match(snap, /level_reclaim on paper\.<span[^>]*>3 of 30 trades\.<\/span>/);
+  assert.match(snap, /<td[^>]*>4<\/td><td[^>]*>WLD<\/td><td[^>]*>LONG<\/td><td[^>]*>Open<\/td><td[^>]*>—<\/td>/, "the open trade first, no R");
+  assert.match(snap, /<td[^>]*>ARB<\/td><td[^>]*>LONG<\/td><td[^>]*>Target<\/td><td[^>]*>\+1\.50R \*<\/td>/);
+  assert.doesNotMatch(snap.replace(/No dollar P&amp;L/, ""), /\$|pnl|P&amp;L/i, "no dollar figure");
+  assert.doesNotMatch(snap, /#3ecf8e|#f7525f/i, "green/red is for money and price only");
+  assert.equal(paperRunSnapshotHtml(paperRun("level_reclaim", null)), null, "unread = no snapshot");
+  assert.ok(!snap.includes("<script"), "inert HTML only");
+  const evil = paperRunSnapshotHtml({ ...run, axis: "<img src=x onerror=alert(1)>" });
+  assert.doesNotMatch(evil, /<img/, "escaped");
+  // pinned to the real boot screen in index.html: a change there must fail here, not silently skip the snapshot
+  const html = read("index.html");
+  const out = withSnapshot(html, snap);
+  assert.notEqual(out, html);
+  assert.ok(out.includes(`<div id="root">${snap}</div>`));
+  assert.doesNotMatch(out, /class="nx-boot-sub"/);
+  assert.equal(withSnapshot("<div id=\"root\"></div>", snap), "<div id=\"root\"></div>", "no boot screen = unchanged");
+  assert.equal(withSnapshot(html, null), html);
+});
+
+test("the page's Function writes the snapshot and asks lab-api through the edge cache", async () => {
+  const run = { ok: true, ...paperRun("level_reclaim", state()) };
+  let asked = null;
+  const appHtml = read("index.html");
+  const res = await gatePaperRunPage({ axis: "level_reclaim", loadApp: async () => new Response(appHtml, { status: 200 }), fetchImpl: async (u, o) => { asked = o; return new Response(JSON.stringify(run), { status: 200 }); } });
+  const html = await res.text();
+  assert.deepEqual(asked.cf, { cacheTtl: 60, cacheEverything: true });
+  assert.match(html, /class="nx-paper-snapshot"/);
+  assert.match(html, /<title>level_reclaim on paper: 3 of 30 trades/);
 });
