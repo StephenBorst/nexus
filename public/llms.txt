@@ -56,6 +56,12 @@ signature, valid 24 hours, no funds move. The exact message and the rules:
   beside each. Click a market to draft the fade into the thesis engine.
 - [Feed](https://trade.nexustradinglabs.com/feed): graded public calls and verified callers.
 - [Proof](https://trade.nexustradinglabs.com/proof): the Signal Scoreboard, rendered.
+- [How grading works](https://nexustradinglabs.com/grading): every call and signal graded
+  from public price — first touch of target or stop, nothing self-reported, losses stay up.
+- [Paper mode](https://nexustradinglabs.com/paper): the whole workflow and the agent on
+  simulated fills — no funds at risk, paper and live records never mix.
+- [Agent safety](https://nexustradinglabs.com/agent-safety): the agent trades your rules
+  inside hard limits — order-only key, paper by default, one-tap kill.
 - [Spot & cross-chain](https://trade.nexustradinglabs.com/token): spot swaps (spanDEX, Jupiter,
   Definitive Flash, WOOFi) and cross-chain transfers via NEAR Intents. Your wallet signs.
 - [Wallet X-Ray](https://trade.nexustradinglabs.com/analyze): public perp record for any wallet.
