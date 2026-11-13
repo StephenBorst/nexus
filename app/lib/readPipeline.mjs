@@ -23,6 +23,7 @@
 //               or worse than random (BELOW_RANDOM) on its side. Shown publicly; never re-tuned.
 //               A changed rule = a NEW registration with a new date and a new name.
 
+import { PAPER_WALLET_RECORDS } from "./pipelineRecords.mjs";
 export const PIPELINE_RULES = Object.freeze({
   minEvents: 30,
   edgePct: 95,
@@ -51,7 +52,7 @@ const OI_DIV_4H_PAPER_WALLET = "0xd446acE5934a0A337A9ee5F0D8ad37FdF8a1e2CD";
 // the moment from which its events count (always in the future when written, so nothing counted
 // was seen first), the doc that registered it, whether it gets a holdout line and a graded-exit
 // line, and a paper wallet once it has earned one.
-export const REGISTERED_READS = Object.freeze([
+const CODED_READS = Object.freeze([
   Object.freeze({
     axis: "rsi_reset_deep",
     side: "LONG",
@@ -149,6 +150,11 @@ export const REGISTERED_READS = Object.freeze([
     paperWallet: null,
   }),
 ]);
+
+// A paper wallet the owner registered with a signature (paperClaim.mjs), written into git by the watcher
+// (pipelineRecords.mjs). A wallet named in the code above always wins.
+export const REGISTERED_READS = Object.freeze(CODED_READS.map((r) => (r.paperWallet || !PAPER_WALLET_RECORDS[r.axis]?.wallet
+  ? r : Object.freeze({ ...r, paperWallet: PAPER_WALLET_RECORDS[r.axis].wallet }))));
 
 export const registeredMs = (reg) => Date.parse(reg.registeredAt);
 export const registrationFor = (axis) => REGISTERED_READS.find((r) => r.axis === axis) || null;

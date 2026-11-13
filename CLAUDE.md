@@ -179,7 +179,13 @@ product is what sits on top:
   oi_div_reversal_4h's signed rules, test-pinned byte for byte) + its sha256; the owner signs `judgmentSignMessage` over
   that hash in the same /ops box (`POST …/sign`: page as served, Safe owner / OPS, < 30 trades, once, NexusLock
   `judgeSigs`, LAB_STORE `pipeline:judgsigs:v1`). The judge reads only the code entry: the watcher writes page,
-  `signedResultsLine` and `judgmentEntry` into the repo. ~0.4 s brain CPU per tick for
+  `signedResultsLine` and `judgmentEntry` into the repo. **Into git (step 5 of the daily watcher, `tools/pipeline/records.mjs`,
+  rules `app/lib/pipelineRecordsWrite.mjs`):** copies claims + signed pages into the machine-written
+  `app/lib/pipelineRecords.mjs` (`PAPER_WALLET_RECORDS`, `JUDGMENT_RECORDS`; never edit by hand, a test diffs it against
+  the writer), `docs/research/paper-judgment-<read>.md` and `public/sitemap.xml`. It recovers every signature and
+  re-renders every page itself; a mismatch is an issue, never a write; a page in git is never rewritten (the signed
+  line is appended once). `readPipeline.mjs` (`CODED_READS`) and `paperJudge.mjs` (`CODED_JUDGMENTS`) merge the records;
+  hand-written entries win. `pipelineRecords.test.mjs` re-checks every recorded signature. ~0.4 s brain CPU per tick for
   the 11 coins while that wallet is flat (full-history re-run, the same as the grader). Thresholds and risk params are read live each cycle. **An empty `config.symbols` = the brain
   evaluates nothing** (no "all" default).
 - **Exits** (`evaluateExit`, exec `logic.mjs`): SL → TIMEOUT → trail before TP; `takeProfits` ladder OVERRIDES

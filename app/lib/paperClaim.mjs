@@ -49,7 +49,7 @@ export function paperClaimMessage(address, axis, wallet, ts) {
 
 /**
  * The signature part of a request. `recover(message, sig)` returns the signer (the worker injects it).
- * @returns {{ ok: true, address, axis, wallet, ts } | { ok: false, status, error }}
+ * @returns {{ ok: true, address, axis, wallet, ts, sig } | { ok: false, status, error }}
  */
 export function checkClaimSignature(body, { now = Date.now(), recover } = {}) {
   const address = lower(body?.address);
@@ -66,7 +66,7 @@ export function checkClaimSignature(body, { now = Date.now(), recover } = {}) {
   let signer = null;
   try { signer = recover(paperClaimMessage(address, axis, wallet, ts), sig); } catch { signer = null; }
   if (!signer || lower(signer) !== address) return { ok: false, status: 401, error: "bad_signature" };
-  return { ok: true, address, axis, wallet, ts };
+  return { ok: true, address, axis, wallet, ts, sig };
 }
 
 const sameSet = (a, b) => {
@@ -154,8 +154,8 @@ export function claimRefusal({ axis, wallet, stage, claims, config, state, setup
 }
 
 /** The stored record: who signed, when, and the start of the record it binds. Never rewritten. */
-export function claimRecord({ axis, wallet, address, ts, state, now = Date.now() }) {
-  return { axis, wallet: lower(wallet), by: lower(address), at: new Date(now).toISOString(), sigTs: ts, startedAt: new Date(ms(state.started_at)).toISOString() };
+export function claimRecord({ axis, wallet, address, ts, sig, state, now = Date.now() }) {
+  return { axis, wallet: lower(wallet), by: lower(address), at: new Date(now).toISOString(), sigTs: ts, sig: String(sig || ""), startedAt: new Date(ms(state.started_at)).toISOString() };
 }
 
 /**
@@ -198,4 +198,5 @@ export async function signPaperClaim(addr, wallet, axis, paperWallet, opts = {})
 }
 
 /** What anyone may read about the claims (all of it is public: the wallets are on /proof anyway). */
-export const publicClaims = (claims) => Object.values(claims || {}).map((c) => ({ axis: c.axis, wallet: c.wallet, at: c.at, startedAt: c.startedAt, by: c.by }));
+// The signature is public on purpose: anyone can recover the signer from paperClaimMessage(by, axis, wallet, sigTs).
+export const publicClaims = (claims) => Object.values(claims || {}).map((c) => ({ axis: c.axis, wallet: c.wallet, at: c.at, startedAt: c.startedAt, by: c.by, sigTs: c.sigTs ?? null, sig: c.sig || null }));

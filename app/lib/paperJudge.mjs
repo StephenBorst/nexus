@@ -22,9 +22,10 @@ import { entryKey, exitKeyOf, TAPE_TOL_BPS } from "./paperTape.mjs";
 import { fundingByHour, heldFundingBps } from "./funding.mjs";
 import { PARITY_SETTLE_MS, PARITY_EARLY_MS } from "./paperParity.mjs";
 import { tradeR } from "./paperRun.mjs";
+import { JUDGMENT_RECORDS } from "./pipelineRecords.mjs";
 
 /** Each judged run, as its page signed it. A new run = a new dated page and a new entry, never an edit. */
-export const PAPER_JUDGMENTS = Object.freeze({
+const CODED_JUDGMENTS = Object.freeze({
   level_reclaim: Object.freeze({
     doc: "docs/research/paper-judgment-level-reclaim.md",
     signedAt: "2026-11-13T00:00:00Z",
@@ -52,6 +53,17 @@ export const PAPER_JUDGMENTS = Object.freeze({
     passAboveBps: 0,
     signature: "signed",           // borst, 2026-11-13 ("signed"), recorded under the page's Results
   }),
+});
+
+// Pages the pipeline drafted and the owner signed with the owner wallet (paperJudgePage.mjs), written into git by the
+// watcher (pipelineRecords.mjs): the same rules with the same constants. An entry written above always wins.
+export const PAPER_JUDGMENTS = Object.freeze({
+  ...Object.fromEntries(Object.entries(JUDGMENT_RECORDS).map(([axis, e]) => [axis, Object.freeze({
+    doc: e.doc, signedAt: e.signedAt, wallet: e.wallet, trades: PAPER_MIN_TRADES, feeBps: e.feeBps,
+    tapeTolBps: TAPE_TOL_BPS, parityEarlyMs: PARITY_EARLY_MS, paritySettleMs: PARITY_SETTLE_MS, passAboveBps: 0,
+    signature: e.signature === "signed" ? "signed" : "pending",
+  })])),
+  ...CODED_JUDGMENTS,
 });
 
 export const FINAL_VERDICTS = Object.freeze(["PASS", "FAIL", "RESET"]);
