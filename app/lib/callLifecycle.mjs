@@ -93,3 +93,14 @@ export function provisionalTouch(t, mark) {
   }
   return null;
 }
+
+/**
+ * How often a page showing ONE call re-reads it, in ms, or null to stop: every 30 s while the call is
+ * still open (WORKING, OPEN, UNCHECKED), so a fill or a grade the minute grader stamps shows up without
+ * a reload. A CLOSED or INVALID call never changes again: no polling (2026-11-13).
+ */
+export const CALL_POLL_MS = 30_000;
+export function callPollMs(t) {
+  const s = callLifecycle(t);
+  return s === "WORKING" || s === "OPEN" || s === "UNCHECKED" ? CALL_POLL_MS : null;
+}

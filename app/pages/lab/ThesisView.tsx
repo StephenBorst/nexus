@@ -115,7 +115,8 @@ function ThesisCard({ t, onUpdate, onRemove, walletAddress, isMobile, markPrice 
   // chroma; active/other stay a quiet neutral.
   const leftRule = eff === "HIT_TP" ? "#3ecf8e" : eff === "STOPPED_OUT" ? "#f7525f" : eff === "INVALIDATED" ? "#3f3f46" : "#33333a";
   const cardFunding = fundingFlow(t.direction, t.fundingRate);
-  // A published call is a position only once its entry trades (the hourly grader stamps fillState).
+  // A published call is a position only once its entry trades (the grader stamps fillState: every
+  // minute for calls graded on minutes, app/lib/minuteGrade.mjs; hourly before).
   // Until then it shows the order, not P&L, the same as the Feed card and the call page. Private
   // calls are the owner's own plan and are never stamped, so they keep the live P&L row.
   const noPositionYet = t.isPublic && eff === "ACTIVE" && !showsLivePnl(t);

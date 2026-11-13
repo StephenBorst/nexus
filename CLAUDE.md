@@ -375,7 +375,8 @@ product is what sits on top:
 - **Minute grading** (borst 2026-11-12, `docs/research/minute-grading.md`): calls published from `MINUTE_GRADE_FROM_MS`
   (2026-11-13T00:00Z, `app/lib/minuteGrade.mjs`) are graded by the SAME `gradeCall` on 1-minute bars (`cd.step = 60`;
   the time stop stays counted in hours). Forward-only, no `GRADE_V` bump. Archive `m1:{PERP}:{day}` (`minuteCandles.mjs`,
-  no expiry, public `GET /candles/1m/:symbol/:day`); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
+  no expiry, public `GET /candles/1m/:symbol/:day`; today's chunk carries `contigFrom` so finished days aren't re-read
+every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   publish in `labWrite commit`, re-built by the hourly pass); grader `minuteGrader.mjs` on lab-api's `* * * * *` cron
   (re-grades only calls whose levels traded in minutes that are NEW or CHANGED vs the archive, never-stamped calls, or a
   due time stop: a re-read unchanged minute never re-triggers, since KV reads can be ~60 s stale) + a `full` sweep after
@@ -406,7 +407,7 @@ product is what sits on top:
   bar; window in TIME; settles only once a later bar exists. Read only on calls published from `TIME_STOP_FROM_MS`
   (2026-11-06); refused with a split; on-chain as `#TIMESTOP_<N>H`; copies keep it (`copiedTimeStop`). Engine B's
   main track declares 4h; Track M declares none. No `GRADE_V` bump.
-- **Cards** read R:R from the levels (`callRR`), show a position only once the entry trades (`callLifecycle.mjs`,
+- **Cards** re-read an open call every 30 s on its own page (`callPollMs`, stops once graded). They read R:R from the levels (`callRR`), show a position only once the entry trades (`callLifecycle.mjs`,
   `AwaitingFill.tsx`), and show NOT GRADED for INVALID. `/feed` carries resolution rows: filter them before treating rows as calls.
 - **One call, one wallet:** the Lab device cache is per wallet (`app/lib/labCache.mjs`); copies held by other wallets
   are marked `duplicateOf` (`callDedupe.mjs`, `CALL_DEDUPE_LIVE="true"`), only on proof (house id or the registry

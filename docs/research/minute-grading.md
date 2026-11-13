@@ -67,8 +67,10 @@ Sub-second is not possible on KV and wasn't the goal.
 
 ## Cost
 
-Per market with an open call: one Orderly request and one KV write a minute (~43k writes a month a market),
-plus one KV list a minute. The archive grows ~60 KB a market a day for markets with open calls.
+Per market with an open call: one Orderly request, one KV read and one KV write a minute (~43k writes a month a
+market), plus one KV list a minute. Finished days are read once, not every minute (2026-11-13): today's chunk
+carries `contigFrom`, where the gap-free archive behind it starts, so a call open for weeks doesn't cost a read
+per day per minute. A new day, or a call older than the stamp, walks every day once and stamps again. The archive grows ~60 KB a market a day for markets with open calls.
 
 ## Not done here
 
