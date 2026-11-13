@@ -84,6 +84,23 @@ export const retiredGradedExit = (axis) => RETIRED_GRADED_EXITS[axis] || null;
 export const retiredLine = (r) =>
   r ? `Retired ${new Date(`${r.on}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}: ${r.why}. The paper wallet stays as a record.` : "";
 
+// Reads retired under pipeline-if-then.md "Retired" (100+ out-of-sample events with mean R ≤ 0 or worse than
+// random), with the day the watcher first saw it served and the grader's numbers that day, as recorded in
+// docs/research/pipeline-stages.json (proofCopy.test.mjs pins the two together). Retired is final: /proof keeps
+// the row under "Retired" even if a later number comes back. Never re-tuned: a variant is a new read with a new
+// name and a new registration date. Display only.
+export const RETIRED_READS = Object.freeze({
+  session_momentum: Object.freeze({ on: "2026-11-13", events: 112, meanR: -0.33, why: "worse than random" }),
+});
+export const retiredRead = (axis) => RETIRED_READS[axis] || null;
+export const retiredReadLine = (r) => {
+  if (!r) return "";
+  const d = new Date(`${r.on}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  const m = Number(r.meanR);
+  const mean = `${m > 0 ? "+" : m < 0 ? "\u2212" : ""}${Math.abs(m).toFixed(2)}R`;
+  return `Retired ${d}: ${r.events} out-of-sample events, mean ${mean}, ${r.why}. Never re-tuned.`;
+};
+
 // ── The /proof headline: a claim, computed from the grade (borst, 2026-11-05) ────────────────────
 // pipeline-if-then.md: until a read clears, the headline stays "Nothing has proven itself yet. Here's the public
 // record."; at Tradeable it names "the read, the number of trades, the date". It reads the SERVED stage, so if a

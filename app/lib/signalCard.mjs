@@ -117,15 +117,19 @@ export function sideBar(a, side) {
 // Display only: stages and verdicts come from /intel/axis-backtest as served.
 export const STAGE_LADDER = ["PAPER", "TRADEABLE", "EDGE", "LEAD", "REGISTERED"];
 
-export function stageGroups(axes, reads) {
+// `retired` = reads with a recorded retirement (proofCopy RETIRED_READS): they stay under "Retired" even if
+// the served stage later changes (pipeline-if-then.md: retired is final). A read served RETIRED goes there too.
+export function stageGroups(axes, reads, retired = []) {
   const regBy = new Map((Array.isArray(reads) ? reads : []).filter((r) => r && r.axis).map((r) => [r.axis, r]));
+  const done = new Set(Array.isArray(retired) ? retired : []);
   const ranked = rankAxes(axes);
-  const pipeline = [], history = [], below = [];
+  const pipeline = [], history = [], below = [], gone = [];
   for (const a of ranked) {
     const reg = regBy.get(a.name) || null;
     const step = reg ? STAGE_LADDER.indexOf(reg.stage) : -1;
-    if (step >= 0) pipeline.push({ a, reg, step });
-    else if ((reg && reg.stage === "RETIRED") || a?.random?.pooled?.verdict === "BELOW_RANDOM") below.push({ a, reg });
+    if (done.has(a.name) || (reg && reg.stage === "RETIRED")) gone.push({ a, reg });
+    else if (step >= 0) pipeline.push({ a, reg, step });
+    else if (a?.random?.pooled?.verdict === "BELOW_RANDOM") below.push({ a, reg });
     else history.push({ a, reg: null });
   }
   // Sort is stable, so equal stages keep rankAxes order.
@@ -134,6 +138,7 @@ export function stageGroups(axes, reads) {
     { key: "pipeline", rows: pipeline.map(({ a, reg }) => ({ a, reg })) },
     { key: "history", rows: history },
     { key: "below", rows: below },
+    { key: "retired", rows: gone },
   ].filter((g) => g.rows.length);
 }
 
