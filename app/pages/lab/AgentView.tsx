@@ -2,6 +2,7 @@
 // track-record panels, and the Orderly delegated-key readers.
 // Extracted from index.tsx (god-file split).
 import { useState, useEffect, useRef } from "react";
+import { useIsMobile } from "./useIsMobile";
 import type { AgentConfig, AgentState, AgentTrade, AgentLeaderboardEntry, AgentPendingThesis } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 import { agentCardStyle, agentLabelStyle, agentInputStyle, agentBtnStyle, btnPrimary, navBtnStyle } from "./styles";
@@ -39,6 +40,7 @@ import { pressKey } from "@/utils/a11y";
 import { C, SIGNAL } from "@/config/theme";
 
 export function AgentView() {
+  const isMobile = useIsMobile();
   const [config, setConfig] = useState<AgentConfig>(DEFAULT_CONFIG);
   // The config editor is a working copy: load the server config ONCE, then it's the
   // user's to edit. Without this, the 10s status poll re-set config on every tick and
@@ -2104,12 +2106,14 @@ export function AgentView() {
                   : "No trades recorded yet. Agent will log trades here once active."}
               </div>
             ) : (
-              <div style={{ marginTop: 8, overflowX: "auto" }}>
+              <div style={{ marginTop: 8, overflowX: isMobile ? "visible" : "auto" }}>
+                {!isMobile && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 0.6fr 1fr 1fr 0.8fr 0.6fr 1.3fr", gap: 8, minWidth: 580, padding: "6px 0", borderBottom: "1px solid #232327" }}>
                   {["SYMBOL", "DIR", "ENTRY", "EXIT", "P&L", "REASON", "STRATEGY"].map((h) => (
                     <span key={h} style={{ ...agentLabelStyle, fontSize: 9, marginBottom: 0 }}>{h}</span>
                   ))}
                 </div>
+                )}
                 {histTrades.map((trade, i) => {
                   const rowId = trade.id || String(i);
                   const open = expandedTrade === rowId;
@@ -2134,11 +2138,30 @@ export function AgentView() {
                   <div
                     key={rowId}
                     className={`nx-trade-row is-clickable${open ? " is-open" : ""}`}
-                    style={{ minWidth: 580, borderBottom: "1px solid #232327" }}
+                    style={{ minWidth: isMobile ? undefined : 580, borderBottom: "1px solid #232327" }}
                     onClick={() => setExpandedTrade(open ? null : rowId)}
                     role="button" tabIndex={0}
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedTrade(open ? null : rowId); } }}
                   >
+                    {/* Phone: two lines, nothing off-screen (the 580px row scrolled sideways and hid the P&L).
+                        Tap still opens the same detail panel. */}
+                    {isMobile ? (
+                    <div style={{ padding: "10px 0" }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                        <span style={{ color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 600 }}>{asset}</span>
+                        <span style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>{trade.direction}</span>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: trade.reason === "TP" ? "#3ecf8e" : trade.reason === "SL" ? "#f7525f" : trade.reason === "BE" ? "#d4d4d8" : "#fbbf24" }}>{trade.reason}</span>
+                        <span style={{ marginLeft: "auto", color: trade.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 600 }}>
+                          {trade.pnl >= 0 ? "+" : ""}${trade.pnl.toFixed(2)}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>
+                        <span style={{ whiteSpace: "nowrap" }}>${trade.entry_price.toLocaleString()} → ${trade.exit_price.toLocaleString()}</span>
+                        <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={trade.strategy ?? undefined}>{trade.strategy ?? ""}</span>
+                        <span className="nx-chevron" style={{ flexShrink: 0, fontSize: 10 }}>&#9656;</span>
+                      </div>
+                    </div>
+                    ) : (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 0.6fr 1fr 1fr 0.8fr 0.6fr 1.3fr", gap: 8, padding: "9px 0" }}>
                       <span style={{ color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>{asset}</span>
                       <span style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 12 }}>
@@ -2159,6 +2182,7 @@ export function AgentView() {
                         <span className="nx-chevron" style={{ marginLeft: "auto", flexShrink: 0, fontSize: 10 }}>&#9656;</span>
                       </span>
                     </div>
+                    )}
                     {/* Progressive-disclosure detail panel */}
                     <div className={`nx-expand${open ? " is-open" : ""}`}>
                       <div className="nx-expand-inner">
@@ -2340,16 +2364,18 @@ export function AgentView() {
               </div>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowX: "auto" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowX: isMobile ? "visible" : "auto" }}>
               {leaderboard.map((e) => {
                 const isMe = e.wallet.toLowerCase() === (walletAddress ?? "").toLowerCase();
                 const isCopying = (config.autocopy?.leaders || []).map((w) => w.toLowerCase()).includes(e.wallet.toLowerCase());
                 const who = e.displayName || `${e.wallet.slice(0, 6)}…${e.wallet.slice(-4)}`;
                 const medal = e.rank === 1 ? "#ffd700" : e.rank === 2 ? "#d4d4d8" : e.rank === 3 ? "#cd7f32" : "#52525b";
                 return (
-                  <div key={e.wallet} style={{ ...agentCardStyle, borderColor: isMe ? "#ededf0" : "#232327", display: "grid", gridTemplateColumns: "34px 1fr repeat(4, auto) 134px", gap: 12, minWidth: 540, alignItems: "center" }}>
-                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: medal, textAlign: "center" }}>{e.rank}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <div key={e.wallet} style={isMobile
+                    ? { ...agentCardStyle, borderColor: isMe ? "#ededf0" : "#232327", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }
+                    : { ...agentCardStyle, borderColor: isMe ? "#ededf0" : "#232327", display: "grid", gridTemplateColumns: "34px 1fr repeat(4, auto) 134px", gap: 12, minWidth: 540, alignItems: "center" }}>
+                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: 700, color: medal, textAlign: "center", width: isMobile ? 28 : undefined }}>{e.rank}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: isMobile ? "1 1 calc(100% - 44px)" : undefined }}>
                       {e.pfp
                         ? <img src={e.pfp} alt="" style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                         : <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#1a1a1e", border: "1px solid #232327", flexShrink: 0 }} />}
@@ -2373,17 +2399,17 @@ export function AgentView() {
                     </div>
                     {[
                       { label: "SCORE", val: e.score.toFixed(1), color: "#ededf0" },
-                      { label: "NET P&L", val: `+$${e.netPnl.toFixed(0)}`, color: "#3ecf8e" },
-                      { label: "WIN", val: `${e.winRate.toFixed(0)}%`, color: e.winRate >= 50 ? "#3ecf8e" : "#fbbf24" },
+                      { label: "NET P&L", val: `${e.netPnl >= 0 ? "+" : "−"}$${Math.abs(e.netPnl).toFixed(0)}`, color: e.netPnl >= 0 ? "#3ecf8e" : "#f7525f" },
+                      { label: "WIN", val: `${e.winRate.toFixed(0)}%`, color: "#d4d4d8" },
                       { label: "PF", val: e.profitFactor.toFixed(2), color: "#d4d4d8" },
                     ].map(({ label, val, color }) => (
-                      <div key={label} style={{ textAlign: "right" }}>
+                      <div key={label} style={{ textAlign: isMobile ? "left" : "right", flex: isMobile ? "1 1 20%" : undefined }}>
                         <div style={{ ...agentLabelStyle, fontSize: 8 }}>{label}</div>
                         <div style={{ color, fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 600 }}>{val}</div>
                         {label === "SCORE" && <div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{e.trades}t · {e.daysActive}d</div>}
                       </div>
                     ))}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: 6, flex: isMobile ? "1 1 100%" : undefined }}>
                       {/* ⚡ AUTOCOPY — the flagship: your agent mirrors theirs, trustlessly. */}
                       <button
                         onClick={() => toggleAutocopy(e.wallet)}
