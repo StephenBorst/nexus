@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 import { Link } from "react-router-dom";
 import { fusePositioning } from "@/lib/positioning.mjs";
 import { fetchDeribitTerm } from "@/lib/deribit.mjs";
@@ -207,9 +208,9 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
     if (!coin) { setFused(undefined); setCallers(null); return; }
     let off = false; setFused(undefined); setCallers(null);
     Promise.all([
-      fetch(`${AGENT_API}/intel/mispriced`).then((r) => r.json()).catch(() => null),
-      fetch(`${AGENT_API}/smart/board`).then((r) => r.json()).catch(() => null),
-      fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json()).catch(() => null),
+      sharedJson(`${AGENT_API}/intel/mispriced`).catch(() => null),
+      sharedJson(`${AGENT_API}/smart/board`).catch(() => null),
+      sharedJson(`${AGENT_API}/theses/consensus`).catch(() => null),
     ]).then(([mp, sb, cons]) => {
       if (off) return;
       const rows = fusePositioning(mp?.markets ?? [], sb?.traders ?? []) as Fused[];

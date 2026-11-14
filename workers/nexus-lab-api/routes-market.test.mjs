@@ -63,3 +63,25 @@ test("index.js routes /intel/market through the worker's own handler, in-process
   assert.match(src, /export default worker;/);
   assert.match(src, /handleMarket\(parts, request, env, \{\s*dispatch: \(path\) => worker\.fetch\(/);
 });
+
+test("/intel/fade-grade returns only the fade's grade, from the stored scoreboard, through the worker's own handler", async () => {
+  const { handleFadeGrade } = await import("./routes-market.mjs");
+  const board = { axes: [{ name: "funding_fade", verdict: "NOISE", r: { samples: 3905 }, random: { pooled: { verdict: "BELOW_RANDOM" } } }, { name: "other", verdict: "PREDICTIVE" }] };
+  const asked = [];
+  const r = await handleFadeGrade(["intel", "fade-grade"], req("/intel/fade-grade"), { dispatch: async (p) => { asked.push(p); return ok(board); } });
+  const body = await r.json();
+  assert.deepEqual(asked, ["/intel/axis-backtest"]);
+  assert.equal(body.grade.tier, "NOISE");
+  assert.equal(body.grade.samples, 3905);
+  assert.equal(r.headers.get("Cache-Control"), "public, max-age=300");
+  assert.ok(JSON.stringify(body).length < 200, "a few bytes, not the 200 KB board");
+  const down = await handleFadeGrade(["intel", "fade-grade"], req("/intel/fade-grade"), { dispatch: async () => new Response("x", { status: 503 }) });
+  assert.deepEqual(await down.json(), { grade: null });
+  assert.equal(await handleFadeGrade(["intel", "market"], req("/intel/market"), { dispatch: async () => ok({}) }), null);
+});
+
+test("Lab home reads the slim grade, not the whole scoreboard", () => {
+  const hook = readFileSync(new URL("../../app/pages/lab/useFadeFamilyGrade.ts", import.meta.url), "utf8");
+  assert.match(hook, /\/intel\/fade-grade/);
+  assert.doesNotMatch(hook, /axis-backtest"/);
+});

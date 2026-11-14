@@ -15,6 +15,7 @@
 // the Feed where they belong). A new call is the primary alpha event, so following someone
 // now pings you the moment they call, not just when they take a position.
 import { useEffect, useRef, useState } from "react";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 import { useAccount } from "@orderly.network/hooks";
 import { bareTicker } from "@/utils/utils";
 import { SIGNAL } from "@/config/theme";
@@ -84,7 +85,7 @@ export default function LiveAlerts() {
       const follows = followRef.current;
       // ── position OPENS (everyone in pulse mode; followed get starred + prioritized) ──
       try {
-        const d = await (await fetch(`${API_BASE}/agents/live`)).json();
+        const d = await sharedJson(`${API_BASE}/agents/live`);
         const positions: LivePos[] = Array.isArray(d?.positions) ? d.positions : [];
         if (!alive) return;
         const keys = positions.map(keyOf);

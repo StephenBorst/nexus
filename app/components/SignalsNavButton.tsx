@@ -4,6 +4,7 @@
 // straight into the relevant Lab tab. This is the retention layer: a live reason to
 // return, not a stale dashboard. All sources are public + fail-soft; no wallet, no key.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 import { useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { buildSignals, countUnseen } from "@/lib/signals.mjs";
@@ -34,9 +35,9 @@ export default function SignalsNavButton() {
     if (typeof document !== "undefined" && document.hidden) return;
     try {
       const [sg, cs, ev] = await Promise.all([
-        fetch(`${AGENT_API}/signals`).then((r) => r.json()).catch(() => null),
-        fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json()).catch(() => null),
-        fetch(`${AGENT_API}/smart/xray/events`).then((r) => r.json()).catch(() => null),
+        sharedJson(`${AGENT_API}/signals`).catch(() => null),
+        sharedJson(`${AGENT_API}/theses/consensus`).catch(() => null),
+        sharedJson(`${AGENT_API}/smart/xray/events`).catch(() => null),
       ]);
       const built = buildSignals({
         signals: Array.isArray(sg?.signals) ? sg.signals : [],

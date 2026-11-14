@@ -13,6 +13,7 @@
 // Sits between the Briefing (the narrative read) and Market Intel (the deep detail):
 // Briefing = "what matters now", Board = "scan the whole book", Intel = "go deep".
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 import { CoinLink } from "@/components/CoinLink";
 import { fundingWords, agreeWords, trendWords } from "@/lib/boardWords.mjs";
 import { Link, useSearchParams } from "react-router-dom";
@@ -321,10 +322,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
     };
     const load = () => {
       loadSignals();
-      fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json()).then((j) => { if (alive) setConsensus(j?.consensus ?? null); }).catch(() => { /* no crowd lean */ });
+      sharedJson(`${AGENT_API}/theses/consensus`).then((j) => { if (alive) setConsensus(j?.consensus ?? null); }).catch(() => { /* no crowd lean */ });
       // Three more INDEPENDENT lenses to fuse into the read — smart money, catalysts,
       // forecasters. Each fail-soft (an absent lens just shows "·", never blocks the board).
-      fetch(`${AGENT_API}/smart/consensus`).then((r) => r.json()).then((j) => {
+      sharedJson(`${AGENT_API}/smart/consensus`).then((j) => {
         if (!alive) return;
         const m: Record<string, Dir> = {};
         for (const [k, v] of Object.entries((j?.consensus ?? {}) as Record<string, { side?: string }>)) {
