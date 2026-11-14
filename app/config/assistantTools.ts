@@ -16,7 +16,7 @@ import { callRR } from "@/lib/callMath.mjs";
 import { buildOperatorProfile, profileNarrative, PUBLIC_READS } from "@/lib/operatorProfile.mjs";
 import { bookConcentration } from "@/lib/bookRisk.mjs";
 import { fusePositioning, positioningRead } from "@/lib/positioning.mjs";
-import { rankConviction, convictionLevel } from "@/lib/conviction.mjs";
+import { rankConviction } from "@/lib/conviction.mjs";
 import { fetchDeribitTerm } from "@/lib/deribit.mjs";
 import { fetchHLTape, fetchHLPortfolio } from "@/utils/hyperliquid";
 import { xraySummary, fmtPf } from "@/lib/xrayGrade.mjs";
@@ -393,9 +393,32 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "get_market_read",
+    description:
+      "THE default for 'read ETH for me', 'what's going on with SOL', 'what do the boards say on X'. Returns the same one-coin read the market drawer shows: funding, tape, smart money, graded callers, forecasts, catalysts and open calls, each as one plain line, and under each lens the LIVE grade of its nearest graded rule from the scoreboard (or 'not graded'). Relay the lens lines and their grade lines as given. NEVER add the lenses up into a verdict, score or conviction, and never call a lens 'graded' unless its grade line says the exact rule is. Offer to open the coin's drawer read in the app or draft a call the trader sets the side for.",
+    input_schema: {
+      type: "object",
+      properties: { symbol: { type: "string", description: "Ticker (BTC, ETH, SOL…)." } },
+      required: ["symbol"],
+    },
+    run: async (args) => {
+      const coin = shortTicker(String(args.symbol ?? ""));
+      if (!coin) return JSON.stringify({ error: "pass a symbol (BTC, ETH, SOL…)" });
+      const d = await fetch(`${AGENT_API}/intel/market/${encodeURIComponent(coin)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (!d?.lenses) return JSON.stringify({ error: `couldn't read ${coin} right now` });
+      type Lens = { id: string; label: string; line: string; detail?: string; graded?: string };
+      return JSON.stringify({
+        coin: d.coin, price: d.price, change_24h_pct: d.change24hPct,
+        lenses: (d.lenses as Lens[]).map((l) => ({ lens: l.label, read: l.line, caution: l.detail ?? null, grade: l.graded ?? null })),
+        unread: d.unread ?? [],
+        note: "Inputs, not a verdict. None of these is a graded signal on this coin; each grade line names exactly what the scoreboard graded. Don't sum them into a call.",
+      });
+    },
+  },
+  {
     name: "get_read",
     description:
-      "Get THE READ — the full multi-axis synthesis for ONE coin, the same engine the Lab shows at the decision. Fuses every orthogonal axis into a conviction verdict for a fade: funding fade + on-chain smart money + graded callers + historical base rate + spot-perp basis + CVD aggressor-flow divergence + order-book imbalance + liq-magnet pull (target vs counter) + the pending liquidation magnets + the options vol regime. PLUS two meta-reads that modulate trust: setup MOMENTUM (is the setup still BUILDING → you're early, or UNWINDING → you're late) and BTC BETA (how much of the move is just market beta — a high-beta single-name read is really a BTC bet). Use for 'give me the full read on BTC', 'should I fade X', 'break down the setup on SOL', or any deep single-coin question — this is THE tool for one coin (get_conviction is the market-wide triage). Returns which reads CONFIRM vs push back. Not advice; when the reads are thin say so.",
+      "Get THE READ — every input on ONE coin, the same inputs the Lab's Read panel shows at the decision, for a deeper look than get_market_read: funding fade + on-chain smart money + graded callers + historical base rate + spot-perp basis + CVD aggressor-flow divergence + order-book imbalance + liq-magnet pull (target vs counter) + the pending liquidation magnets + the options vol regime. PLUS two meta-reads that modulate trust: setup MOMENTUM (is the setup still BUILDING → you're early, or UNWINDING → you're late) and BTC BETA (how much of the move is just market beta — a high-beta single-name read is really a BTC bet). Use for 'break down every input on SOL' or a deep single-coin question after get_market_read. Lists which inputs point with the side being weighed and which point against it. These are INPUTS, not graded rules: never add them up into a conviction, score or verdict (get_market_read carries the grades). Not advice; when the inputs are thin say so.",
     input_schema: {
       type: "object",
       properties: { symbol: { type: "string", description: "Ticker (BTC, ETH, SOL…)." }, direction: { type: "string", enum: ["LONG", "SHORT"], description: "Optional — the direction being weighed; defaults to the funding-fade side." } },
@@ -439,14 +462,12 @@ export const TOOLS: ToolDef[] = [
         else if (hs >= ts * 1.3 && head) liqPull = { side: dir === "SHORT" ? "LONG" : "SHORT", targetPrice: head.price };
         if (liqPull) (liqPull.side === dir ? confirm : against).push("liq pull");
       }
-      const net = confirm.length - against.length;
-      const conviction = !dir ? "N/A" : net >= 4 ? "HIGH" : net >= 2 ? "MODERATE" : against.length > confirm.length ? "AGAINST" : "LOW";
       // Meta/context (NOT votes) — setup momentum (early vs late) + BTC beta (idiosyncratic vs market).
       const momentum = mom?.available && mom.state !== "FLAT" ? { state: mom.state, note: mom.headline } : null;
       const btcBeta = beta?.available ? { driven_pct: beta.drivenPct, verdict: beta.verdict, beta: beta.beta } : null;
       return JSON.stringify({
-        coin, direction: dir || "(no funding extreme — pick a side)", conviction,
-        confirming: confirm, pushing_back: against,
+        coin, side_weighed: dir || "(no funding extreme — the trader picks a side)",
+        inputs_pointing_with_it: confirm, inputs_pointing_against_it: against,
         funding_annual_pct: mkt?.fundingAnnualPct ?? null,
         smart_money: smSide || "n/a", graded_callers: cSide || "n/a",
         base_rate: br?.available ? { hit_rate_pct: br.hitRate, expectancy_r: br.expectancyR, samples: br.samples } : "insufficient history",
@@ -458,20 +479,21 @@ export const TOOLS: ToolDef[] = [
         btc_beta: btcBeta || "n/a (BTC or thin history)",
         vol_regime: term?.structure || "n/a (BTC/ETH/SOL only)",
         liq_magnets: lm?.available ? { downside_pull: lm.below?.[0]?.price ?? null, upside_pull: lm.above?.[0]?.price ?? null } : "n/a",
-        note: "Agreement across uncorrelated axes is the signal. Momentum tells you EARLY (building) vs LATE (unwinding); high BTC-beta means a single-name read is really a BTC bet. A below-break-even base rate = 'trust your own thesis, not the fade.' A read, not advice. Offer to draft_thesis or open_symbol.",
+        note: "Inputs, not a verdict: none is graded as an edge in this form, so never count them into a conviction. Momentum says whether the stretch is building or unwinding; high BTC beta means a single-name read is largely a BTC bet; a below-break-even base rate means this market's past fades bled. For each lens's live grade use get_market_read. Not advice. Offer to draft_thesis (the trader sets the side) or open_symbol.",
       });
     },
   },
   {
     name: "get_conviction",
     description:
-      "Get the CONVICTION SCANNER — the multi-axis engine ranked across the whole market. For every funding-stretched coin it tallies how many INDEPENDENT reads (the funding fade + on-chain smart money + the graded caller crowd) point the SAME way, and ranks by net agreement. Use for 'what's the highest-conviction setup right now', 'where do the signals agree', 'what should I be watching', or to triage the board before a deeper look. HIGH = 2+ independent reads confirm the fade; CONFLICTED = the reads disagree. This is a triage of AGREEMENT, not advice — the real depth is in THE READ (open_conviction sends the user there). Offer to draft_thesis on a HIGH-conviction row.",
+      "Get the market-wide scan of funding-stretched coins: for each, which inputs (smart money, the graded caller crowd) point the same way as the funding fade and which don't. Use for 'where do the inputs line up', 'what should I be watching', or to triage the board before get_market_read on one coin. ALWAYS relay fade_grade: the plain funding fade's live scoreboard grade (it has graded NOISE, worse than random entries). Inputs lining up is NOT a grade: never call a row high-conviction, strong or an edge. Not advice.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
-      const [mp, sm, cons] = await Promise.all([
+      const [mp, sm, cons, fg] = await Promise.all([
         fetch(`${AGENT_API}/intel/mispriced`).then((r) => r.json()).catch(() => null),
         fetch(`${AGENT_API}/smart/consensus`).then((r) => r.json()).catch(() => null),
         fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json()).catch(() => null),
+        fetch(`${AGENT_API}/intel/fade-grade`).then((r) => r.json()).catch(() => null),
       ]);
       type CRead = { label: string; ok: boolean };
       type CRow = { coin: string; direction: string; reads: CRead[]; fundingAnnualPct: number; extra: number; against: number };
@@ -479,11 +501,12 @@ export const TOOLS: ToolDef[] = [
       if (!ranked.length) return JSON.stringify({ error: "no funding-stretched markets right now (quiet tape)" });
       return JSON.stringify({
         board: ranked.map((r: CRow) => ({
-          coin: r.coin, fade_direction: r.direction, conviction: convictionLevel(r),
-          confirming: r.reads.filter((x: CRead) => x.ok).map((x: CRead) => x.label), against: r.reads.filter((x: CRead) => !x.ok).map((x: CRead) => x.label),
+          coin: r.coin, fade_direction: r.direction,
+          inputs_with_the_fade: r.reads.filter((x: CRead) => x.ok).map((x: CRead) => x.label), inputs_against_it: r.reads.filter((x: CRead) => !x.ok).map((x: CRead) => x.label),
           funding_annual_pct: r.fundingAnnualPct,
         })),
-        note: "Ranked by how many independent reads (funding + smart money + graded callers) confirm the fade. HIGH = 2+ confirm. Agreement across uncorrelated sources is the signal — but it's triage, not advice. The full ~12-axis breakdown for one coin is in THE READ.",
+        fade_grade: fg?.grade ? `The plain funding fade grades ${fg.grade.tier}${fg.grade.vsRandom ? `, ${fg.grade.vsRandom}` : ""}${fg.grade.samples ? ` (${fg.grade.samples} samples)` : ""}.` : "unread right now",
+        note: "Inputs lined up against the fade, ranked by how many point its way. Counting ungraded inputs is not a grade, and the fade itself is graded above. Triage only, not advice; get_market_read gives one coin with its grades.",
       });
     },
   },
@@ -517,18 +540,18 @@ export const TOOLS: ToolDef[] = [
   {
     name: "open_conviction",
     description:
-      "Open the CONVICTION SCANNER (the market-wide multi-axis board, at the top of the Smart Money tab). Use when the user wants to browse the highest-conviction setups across markets. Read-only; places no order.",
+      "Open the CONVICTION SCANNER (the market-wide multi-axis board, at the top of the Smart Money tab). Use when the user wants to browse the stretched-funding markets with their inputs side by side. Read-only; places no order.",
     input_schema: { type: "object", properties: {} },
     run: async (_args, ctx) => {
       ctx.navigate?.(`/lab?tab=smart`);
       try { window.dispatchEvent(new CustomEvent("nexus:lab-tab", { detail: { tab: "smart" } })); } catch { /* deep-link handles it */ }
-      return JSON.stringify({ navigated: "/lab?tab=smart", note: "Opened the Conviction Scanner — the highest-agreement fades across the board. A HIGH-conviction row can be drafted into a graded thesis." });
+      return JSON.stringify({ navigated: "/lab?tab=smart", note: "Opened the scanner: stretched-funding markets with the inputs beside them. Any row can be drafted into a call the trader sets the side for; it is graded from public price once posted." });
     },
   },
   {
     name: "get_smart_money",
     description:
-      "Get what the top on-chain traders (Smart Money) are doing right now: the highest-conviction CONSENSUS coins (where multiple top traders hold the same side), the top-ranked traders with their live positions, and the most recent opens/closes. Sourced live from Orderly + Hyperliquid public settlement data. Use for 'what is smart money doing', 'are the whales long or short X', 'who's the best trader on-chain', or to sanity-check a directional idea against the crowd.",
+      "Get what the top on-chain traders (Smart Money) are doing right now: the CONSENSUS coins (where multiple top traders hold the same side; context, not a graded read), the top-ranked traders with their live positions, and the most recent opens/closes. Sourced live from Orderly + Hyperliquid public settlement data. Use for 'what is smart money doing', 'are the whales long or short X', 'who's the best trader on-chain', or to sanity-check a directional idea against the crowd.",
     input_schema: {
       type: "object",
       properties: { symbol: { type: "string", description: "Optional ticker (BTC, ETH, SOL…) to focus the answer on." } },
@@ -564,7 +587,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_positioning",
     description:
-      "Get the POSITIONING read — the CROWD (funding) fused with the SMART MONEY (sharp wallets) per coin, the lead of the Smart Money tab. CONFLUENCE = the funding-fade and the smart money point the SAME way (both sides of positioning agree — high conviction); SPLIT = the smart money is WITH the crowd, against the fade (the fade is contested — the interesting debate). Use for 'where do the crowd and smart money agree', 'what's the highest-conviction fade', 'is the fade contested', or as the best single 'what should I be looking at' positioning answer. This is a read on positioning, NOT advice — confluence tightens the odds, it doesn't guarantee them; a stretched market can stay stretched. Offer to draft a thesis on a CONFLUENCE (draft_thesis, side = the fade direction).",
+      "Get the POSITIONING read — the CROWD (funding) fused with the SMART MONEY (sharp wallets) per coin, the lead of the Smart Money tab. CONFLUENCE = the funding-fade and the smart money point the SAME way (two inputs line up; context, not a verdict); SPLIT = the smart money is WITH the crowd, against the fade (the fade is contested — the interesting debate). Use for 'where do the crowd and smart money agree', 'is the fade contested', or as the best single 'what should I be looking at' positioning answer. This is a read on positioning, NOT advice, and inputs lining up is not a grade (get_signal_scoreboard grades the plain fade and the fade × smart money rule). A stretched market can stay stretched. Offer to draft a call the trader sets the side for.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
       const [mp, sb] = await Promise.all([

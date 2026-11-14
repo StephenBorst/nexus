@@ -58,6 +58,10 @@ product is what sits on top:
 - **Copilot** (`NexusAssistant.tsx`, `config/assistant.ts`, `config/assistantTools.ts`): BYOK keys stay in the browser.
   Bounded tool loop (max 5), models listed live from the key, thesis drafts via localStorage `nexus_thesis_draft` →
   `/lab?tab=thesis` (bare ticker, not `PERP_`). Its prompt must not call PREDICTIVE an edge or suggest inverting a read.
+  **Grades (2026-11-14, pinned by `app/lib/assistantGrades.test.mjs`):** `get_market_read` = the drawer's
+  `/intel/market/:coin` (each lens + its grade line), the default for "read X for me". No tool hands the model a
+  conviction verdict over ungraded inputs (`get_read` lists inputs with / against a side; `get_conviction` counts them
+  and carries the plain fade's own grade from `/intel/fade-grade`); the prompt's GRADES rule forbids summing inputs.
 
 ## Stack
 - React + Vite + react-router-dom, TypeScript. Orderly SDK (`@orderly.network/*`), `@xmtp/browser-sdk` v7, wagmi.

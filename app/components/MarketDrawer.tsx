@@ -96,7 +96,7 @@ export default function MarketDrawer() {
     } catch { /* non-browser */ }
   };
   const ask = () => {
-    window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: `Read ${coin} for me: funding, smart money, forecasts, catalysts and open calls. What would change your mind, and what's the cleanest way to put it as a graded call?` } }));
+    window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: `Read ${coin} for me with get_market_read: each lens and its grade line, no verdict. Then: what would change the picture, and how would a call on ${coin} be graded?` } }));
     close();
   };
   const ch = data?.change24hPct;
