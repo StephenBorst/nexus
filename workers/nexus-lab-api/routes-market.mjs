@@ -9,7 +9,7 @@ import { json } from "./shared.mjs";
 import { fadeFamilyGrade } from "../../app/lib/fadeGrade.mjs";
 import { marketSnapshot, normCoins } from "../../app/lib/marketAlerts.mjs";
 
-export const MARKET_CACHE_PREFIX = "intel:market:v1:";
+export const MARKET_CACHE_PREFIX = "intel:market:v2:"; // v2 = + facts
 export const MARKET_TTL_MS = 60_000;
 const SOURCE_TIMEOUT_MS = 8_000;
 

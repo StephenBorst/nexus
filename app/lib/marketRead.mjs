@@ -10,7 +10,7 @@ import { forecastRead } from "./forecastRead.mjs";
 import { CONSENSUS_RATIO } from "./smartConsensus.mjs";
 import { lensGradeLine } from "./fadeGrade.mjs";
 
-export const MARKET_READ_V = 1;
+export const MARKET_READ_V = 2; // v2 = + facts (2026-11-14)
 
 /** "PERP_ETH_USDC" | "eth" | "ETH" → "ETH"; anything else → "". */
 export function marketCoin(s) {
@@ -112,7 +112,16 @@ export function composeMarket({ coin, mispriced, signals, smart, callers, foreca
     const g = lensGradeLine(l.id, scorecard);
     if (g) l.graded = g;
   }
-  return { coin: c, v: MARKET_READ_V, price: num(mp?.markPrice) ?? num(sig?.mark_price), change24hPct: ch, lenses };
+  // The same inputs as numbers, for compact surfaces (the trade page strip, marketStrip.mjs). Null = unread.
+  const smL = sm ? num(sm.long) : null, smS = sm ? num(sm.short) : null;
+  const facts = {
+    fundAnnual,
+    stretched: fundAnnual == null ? null : !!(mp?.stretched ?? sig?.stretched ?? false),
+    smartLong: smL, smartShort: smS,
+    smartClear: smL == null && smS == null ? null : (() => { const L = smL ?? 0, S = smS ?? 0, lead = Math.max(L, S), other = Math.min(L, S); return lead >= 2 && lead > other && lead >= CONSENSUS_RATIO * other ? (S > L ? "SHORT" : "LONG") : "NONE"; })(),
+    oiChangePct: oi,
+  };
+  return { coin: c, v: MARKET_READ_V, price: num(mp?.markPrice) ?? num(sig?.mark_price), change24hPct: ch, lenses, facts };
 }
 
 function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
