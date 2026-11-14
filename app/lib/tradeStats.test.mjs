@@ -125,7 +125,8 @@ test("hold time, leverage and session slices read the trade's own fields; missin
   const lev = moneyLeaks([...mix(20, -6), ...mix(2, 1)]);
   assert.equal(lev.leaks[0].label, "10–25x leverage");
   assert.equal(lev.leaks[0].net, -36);
-  assert.equal(lev.strengths[0].label, "1–5x leverage");
+  assert.ok(!lev.strengths.some((x) => x.label === "1–5x leverage")); // its mirror: everything else
+
 
   // Sessions are UTC: a trade opened 03:00 UTC is Asia hours on every device.
   const at = (iso, c, pnl) => { const open = Date.parse(iso); return { symbol: `PERP_${c}_USDC`, direction: "LONG", pnl, openTimestamp: open, timestamp: open + H, leverage: 3 }; };
@@ -134,7 +135,20 @@ test("hold time, leverage and session slices read the trade's own fields; missin
   const ses = moneyLeaks([...asia, ...us]);
   assert.equal(ses.leaks[0].key, "ASIA");
   assert.equal(ses.leaks[0].label, "Opened in Asia hours (00–08 UTC)");
-  assert.equal(ses.strengths[0].key, "US");
+  assert.ok(!ses.strengths.some((x) => x.key === "US")); // its mirror: everything else
+});
+
+test("a strength that is only a leak's mirror (everything else) is not named twice", () => {
+  // Every ETH trade is a short and every other trade a long: "Longs win" is just "ETH shorts lose" turned over.
+  const rows = [
+    ...Array.from({ length: 6 }, () => tr("ETH", "SHORT", -20)),
+    ...Array.from({ length: 6 }, (_, i) => tr("BTC", "LONG", i % 2 ? 20 : -2)),
+    ...Array.from({ length: 6 }, (_, i) => tr("SOL", "LONG", i % 2 ? 6 : -1)),
+  ];
+  const m = moneyLeaks(rows);
+  assert.equal(m.leaks[0].trades, 6);
+  assert.ok(!m.strengths.some((s) => s.key === "LONG"), "Longs = everything but the leak");
+  assert.equal(m.strengths[0].key, "BTC"); // a real finding inside the rest stays
 });
 
 test("money copy: a real minus sign, cents under $100", () => {

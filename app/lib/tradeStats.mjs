@@ -109,15 +109,23 @@ function sliceKeys(t) {
   return out;
 }
 
-function pick(cands, cmp, keep) {
+const sharedCount = (a, b) => {
+  let shared = 0;
+  for (const i of a.idx) if (b.idx.has(i)) shared++;
+  return shared;
+};
+
+// `mirrors`: findings already named on the other side. A slice that is (nearly) everything outside one of them is
+// that same finding seen from the other side ("ETH shorts lose" ⇔ "the rest wins"), so it is not named twice.
+function pick(cands, cmp, keep, n, mirrors = []) {
   const chosen = [];
   for (const c of cands.filter(keep).sort(cmp)) {
-    const dup = chosen.some((p) => {
-      let shared = 0;
-      for (const i of c.idx) if (p.idx.has(i)) shared++;
-      return shared / Math.max(c.idx.size, p.idx.size) >= SAME_FINDING;
+    const dup = chosen.some((p) => sharedCount(c, p) / Math.max(c.idx.size, p.idx.size) >= SAME_FINDING);
+    const mirror = mirrors.some((m) => {
+      const outside = c.idx.size - sharedCount(c, m); // c's trades outside m
+      return outside / Math.max(c.idx.size, n - m.idx.size) >= SAME_FINDING;
     });
-    if (!dup) chosen.push(c);
+    if (!dup && !mirror) chosen.push(c);
     if (chosen.length >= MAX_FINDINGS) break;
   }
   return chosen;
@@ -155,9 +163,9 @@ export function moneyLeaks(trades, { minTrades = SLICE_MIN_TRADES } = {}) {
     restTrades: n - s.trades,
     restNet: total - s.net,
   });
-  const leaks = pick(cands, (a, b) => a.net - b.net, (s) => s.net < 0).map(shape);
-  const strengths = pick(cands, (a, b) => b.net - a.net, (s) => s.net > 0).map(shape);
-  return { trades: n, net: total, minTrades, leaks, strengths };
+  const leakSets = pick(cands, (a, b) => a.net - b.net, (s) => s.net < 0, n);
+  const strengths = pick(cands, (a, b) => b.net - a.net, (s) => s.net > 0, n, leakSets).map(shape);
+  return { trades: n, net: total, minTrades, leaks: leakSets.map(shape), strengths };
 }
 
 /** "−$142" / "+$80" with cents under $100, whole dollars above. */
