@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { ProcessedTrade, ThesisTrade } from "./types";
 import { cardStyle, labelStyle } from "./styles";
-import { ProcessSection } from "./ProcessView";
+import { ProcessSection, PlanAdherenceCard } from "./ProcessView";
 import { OperatorProfileCard } from "./OperatorProfile";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
 import { formatPnl, formatPnlCompact, formatUsdCompact } from "./helpers";
@@ -424,7 +424,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
 
   return (
     <div className="nx-fade-in nx-spotlight" style={{ ...cardStyle, marginBottom: 8 }}>
-      <div style={labelStyle}>&#9670; YOUR EDGE</div>
+      <div style={labelStyle}>&#9670; WHERE YOU DO BEST</div>
       <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", marginTop: -2, marginBottom: 10 }}>where you actually make money. From your own closed trades</div>
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 8, marginBottom: 8 }}>
         {symTile("STRONGEST SYMBOL", best_symbol, "pos")}
@@ -449,7 +449,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
           style={{ background: "transparent", border: "1px solid #232327", borderRadius: 6, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, padding: "7px 11px", cursor: "pointer" }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "#ededf0"; e.currentTarget.style.borderColor = "#33333a"; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#232327"; }}
-        >◆ ask nexus to coach my edge</button>
+        >◆ ask nexus to coach me on this</button>
         <span style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{sample_note}</span>
       </div>
     </div>
@@ -508,6 +508,9 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       {/* Measured, not scored: the record in dollars + the slices costing and paying you (app/lib/tradeStats.mjs). */}
       <YourRecordCard orders={orders} />
       <MoneyGoesCard orders={orders} />
+      {/* Calls vs trades: did you trade the plan you wrote? Lifted out of the deep fold 2026-11-14 (it was the
+          most useful read on this tab for an active trader). Renders nothing until you have both. */}
+      <PlanAdherenceCard theses={theses} orders={orders} />
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 240px", gap: 8, marginBottom: 8 }}>
         <div style={cardStyle}>
@@ -553,13 +556,13 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       {/* Core analytics (operator read, key stats, equity curve) stay up top; the deeper
           drill-downs collapse so the tab reads as a synthesis, not an instrument dump. */}
       {orders.length > 0 && (
-        <Collapsible title="Deeper breakdowns" subtitle="hold time, leverage, timing, streaks, top assets, process coaching" storageKey="nx_analytics_deep_open">
+        <Collapsible title="Deeper breakdowns" subtitle="hold time, leverage, timing, streaks, top assets, regime and loss tags" storageKey="nx_analytics_deep_open">
           <BreakdownRow orders={orders} />
           <TimingAndRisk orders={orders} />
           <PerformanceAnalysis orders={orders} />
           <TopAssets orders={orders} />
           {/* PROCESS — outcome analytics say how you did; these say how to get better. */}
-          <ProcessSection wallet={wallet} theses={theses} orders={orders} />
+          <ProcessSection wallet={wallet} theses={theses} />
         </Collapsible>
       )}
 

@@ -49,3 +49,19 @@ test("the Thesis Engine leads with Quick Call, and a call names a read, not an e
   assert.match(recipe, /read/);
   assert.doesNotMatch(visible(src), /fill in entry, stop, tp1/);
 });
+
+test("nothing ungraded is called an edge: your own splits, inverted configs, NOISE reads (2026-11-14 sweep)", () => {
+  const banned = [
+    ["../pages/proof/SignalBoard.tsx", /avg edge/],
+    ["../pages/proof/FeaturedLead.tsx", /gave the edge back/],
+    ["../pages/lab/AgentView.tsx", /fade the edge|the edge is the fade|The edge is yours|operator of[\s\S]{0,60}edge —/],
+    ["../pages/lab/AnalyticsView.tsx", /YOUR EDGE|coach my edge/],
+    ["../pages/lab/ProcessView.tsx", /Your edge lives in|It disappears in|&#9632; REGIME EDGE/],
+    ["./operatorProfile.mjs", /your edge is real/],
+    ["../pages/lab/PositioningBoard.tsx", /MY EDGE|you’re proven on|your proven markets/],
+    ["../pages/lab/DecisionBoard.tsx", /on your graded edge/],
+    ["../pages/lab/NexusBriefing.tsx", /the edge only pays/],
+    ["../components/NexusAssistant.tsx", /Where's my edge/],
+  ];
+  for (const [file, re] of banned) assert.doesNotMatch(visible(read(file)), re, file);
+});

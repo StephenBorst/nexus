@@ -278,7 +278,7 @@ function SignalCard({ a }: { a: AxisRow }) {
     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, auto)", columnGap: isMobile ? 16 : 28, rowGap: 16, justifyContent: isMobile ? "stretch" : "end", textAlign: isMobile ? "left" : "right" }}>
       <Stat v={`${cur.h}h`} l="horizon" tip="How far ahead the move is measured." />
       <Stat v={`${cur.hitRate}%`} l="hit rate" tip="Share of times price moved the predicted way." />
-      <Stat v={sign(cur.meanBps)} l="avg edge · bps" color={moneyTone(cur.meanBps)} tip="Average forward move caught, in basis points (100 bps = 1%). Gross, close to close." />
+      <Stat v={sign(cur.meanBps)} l="avg move · bps" color={moneyTone(cur.meanBps)} tip="Average forward move caught, in basis points (100 bps = 1%). Gross, close to close." />
       <Stat v={cur.samples.toLocaleString()} l="samples" tip="Times this read fired at this horizon. More samples, more weight." />
     </div>
   ) : null;

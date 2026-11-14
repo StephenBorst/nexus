@@ -195,7 +195,7 @@ export function buildOperatorProfile({ process, edge, adherence, leaks, trades, 
     reads.push({
       kind: "REGIME", provenance: "graded", severity: 3,
       best: re.best.bucket, worst: re.worst.bucket, gapR: re.gapR,
-      text: `your edge is real in ${word(re.best.bucket)} (${re.best.avgR > 0 ? "+" : ""}${re.best.avgR}R over ${re.best.calls}) and gone in ${word(re.worst.bucket)} (${re.worst.avgR > 0 ? "+" : ""}${re.worst.avgR}R over ${re.worst.calls})`,
+      text: `you have done best in ${word(re.best.bucket)} (${re.best.avgR > 0 ? "+" : ""}${re.best.avgR}R over ${re.best.calls}) and worst in ${word(re.worst.bucket)} (${re.worst.avgR > 0 ? "+" : ""}${re.worst.avgR}R over ${re.worst.calls})`,
     });
   }
 

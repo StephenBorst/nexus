@@ -109,7 +109,7 @@ export function Oct15Result({ isMobile }: { isMobile?: boolean }) {
         ))}
       </div>
       <p style={{ margin: "10px 0 0", fontFamily: UI, fontSize: 12.5, color: MUTED, lineHeight: 1.55 }}>
-        Better entries than chance; its exits gave the edge back. Three other basis reads fell to noise. Paper wallets
+        Better entries than chance; its exits gave it back. Three other basis reads fell to noise. Paper wallets
         keep running. Measured Oct 15, 19:06 UTC.
       </p>
     </div>
