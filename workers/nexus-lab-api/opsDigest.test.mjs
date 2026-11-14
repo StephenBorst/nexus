@@ -144,8 +144,25 @@ test("receivers: tokens summed outside the Safe; unread counted, never 0", () =>
     { id: "x402", rows: [{ sym: "$NEXUS", amount: 3e6 }, { sym: "ETH", amount: 0.01 }, { sym: "USDC", amount: null }] },
     { id: "treasury", rows: [{ sym: "USDC", amount: 99999 }] },
   ] };
-  assert.deepEqual(receiversFrom(rev), { usdc: 212.5, nexus: 4e6, eth: 0.01, unread: 1 });
+  const got = receiversFrom(rev);
+  assert.deepEqual({ ...got, unreadRows: undefined }, { usdc: 212.5, nexus: 4e6, eth: 0.01, unread: 1, unreadRows: undefined });
+  assert.equal(got.unreadRows.length, 1);
   assert.equal(receiversFrom(null), null);
+});
+
+test("the digest names each unread balance (a failed read is never a zero)", () => {
+  const rev = { groups: [
+    { id: "subs", rows: [{ sym: "USDC", chain: "arb", amount: null }, { sym: "$NEXUS", chain: "base", amount: 5e6 }] },
+    { id: "x402", rows: [{ sym: "$NEXUS", chain: "base", amount: null }] },
+    { id: "treasury", rows: [{ sym: "USDC", chain: "arb", amount: null }] },
+  ] };
+  const r = receiversFrom(rev);
+  assert.deepEqual(r.unreadRows, ["subs receiver USDC on Arbitrum", "Bankr wallet $NEXUS on Base"], "the Safe isn't a receiver");
+  const t = digestText(facts({ receivers: r }));
+  assert.match(t, /5\.00M \$NEXUS\.\nUnread: subs receiver USDC on Arbitrum, Bankr wallet \$NEXUS on Base\./);
+  const none = digestText(facts({ receivers: { usdc: 0, nexus: 0, eth: 0, unread: 2, unreadRows: ["a", "b"] } }));
+  assert.match(none, /<b>Receivers, not swept<\/b>\nUnread: a, b\./);
+  assert.match(digestText(facts({ receivers: { usdc: 0, nexus: 0, eth: 0, unread: 0, unreadRows: [] } })), /Nothing waiting\./);
 });
 
 test("timing: once a day from 15:00 UTC, on the :49 run (after the :47 judge)", () => {

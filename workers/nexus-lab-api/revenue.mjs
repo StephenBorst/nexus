@@ -62,7 +62,7 @@ export const ELSEWHERE = [
 
 export const RPC = {
   base: ["https://base-rpc.publicnode.com", "https://mainnet.base.org", "https://base.llamarpc.com"],
-  arb: ["https://arbitrum-one-rpc.publicnode.com", "https://arb1.arbitrum.io/rpc"],
+  arb: ["https://arbitrum-one-rpc.publicnode.com", "https://arb1.arbitrum.io/rpc", "https://arbitrum.llamarpc.com"],
 };
 const NEAR_RPC = ["https://rpc.mainnet.near.org", "https://near.lava.build"];
 
@@ -163,6 +163,21 @@ export async function readRevenue({ fetchImpl = globalThis.fetch, prices = {}, n
     }));
     return { id: w.id, label: w.label, note: w.note, address: w.address, rows };
   }));
+  // The first pass reads every holding at once, and public RPCs rate-limit a burst from Cloudflare's shared IPs
+  // (the 2026-11-13 digest had 3 balances unread). Each holding that failed gets ONE more try, one at a time.
+  // Still failing = unread, never 0.
+  for (const w of REVENUE_WALLETS) {
+    const g = groups.find((x) => x.id === w.id);
+    for (const row of g.rows) {
+      if (row.amount != null) continue;
+      const k = row.key.slice(w.id.length + 1), a = A[k];
+      const raw = await readHolding(a, w.address, fetchImpl, rpc);
+      if (raw == null) continue;
+      row.amount = toUnits(raw, a.decimals);
+      row.usd = usdOf(row.amount, a.price);
+      row.retried = true;
+    }
+  }
   const near = await readNearIntents(fetchImpl);
   groups.push({
     id: NEAR_INTENTS.id, label: NEAR_INTENTS.label, note: NEAR_INTENTS.note, address: NEAR_INTENTS.account,

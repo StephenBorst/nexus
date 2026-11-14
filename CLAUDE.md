@@ -39,7 +39,8 @@ product is what sits on top:
 - **Owner revenue page `/ops/revenue`** (noindex, not in nav): `POST /ops/revenue {address, labAuth, refresh?}`
   (`routes-revenue.mjs` + `revenue.mjs`). Reads receivers, the Bankr wallet, borst.eth, the Safe and the NEAR Intents
   fee balance; moves nothing. Only a Lab-signed Safe owner or a wallet in `OPS_WALLETS`. Unreadable holding = "unread",
-  never 0. Flash + Orderly broker fees aren't on-chain readable.
+  never 0; a holding the parallel burst lost gets ONE retry on its own (`readRevenue`, 2026-11-14), and the digest names
+  each still-unread one ("Unread: Bankr wallet $NEXUS on Base"). Flash + Orderly broker fees aren't on-chain readable.
 
 ## Hosted AI (`POST /ai/chat`, PRO)
 - Wallet-signed, PRO-gated proxy with our key, prompt caching and a **per-MODEL daily cap**

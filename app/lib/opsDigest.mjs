@@ -180,7 +180,10 @@ export function digestText(facts) {
     if (r.nexus > 0) parts.push(`${r.nexus >= 1e6 ? `${(r.nexus / 1e6).toFixed(2)}M` : Math.round(r.nexus).toLocaleString("en-US")} $NEXUS`);
     if (r.eth > 0) parts.push(`${r.eth.toFixed(4)} ETH`);
     L.push("", "<b>Receivers, not swept</b>");
-    L.push(parts.length ? `${parts.join(" · ")}${r.unread ? ` (${r.unread} balance(s) unread)` : ""}.` : r.unread ? "Unread right now." : "Nothing waiting.");
+    if (parts.length) L.push(`${parts.join(" · ")}.`);
+    else if (!r.unread) L.push("Nothing waiting.");
+    // Name what couldn't be read (a failed read is never a zero), so a broken source shows which one it is.
+    if (r.unread) L.push(`Unread: ${esc(unreadList(r))}.`);
     if (r.usdc >= SWEEP_NUDGE_USDC) L.push("Worth a sweep to the treasury Safe when you're ready. Nothing moves on its own.");
   }
   if (facts.boardAsOf) L.push("", `Scoreboard as of ${esc(String(facts.boardAsOf).slice(11, 16))} UTC.`);
@@ -192,17 +195,27 @@ export function digestDue(nowMs, sentToday) {
   return !sentToday && new Date(nowMs).getUTCHours() >= DIGEST_HOUR_UTC;
 }
 
+const RECEIVER_NAMES = { subs: "subs receiver", x402: "Bankr wallet", fees: "borst.eth", near: "NEAR Intents" };
+const CHAIN_NAMES = { arb: "Arbitrum", base: "Base", eth: "Ethereum", sol: "Solana", btc: "Bitcoin" };
+
 /**
  * Receivers' unswept holdings from a readRevenue() result (revenue.mjs): tokens only, summed across every group
  * but the treasury Safe. Stablecoins are exact; $NEXUS and ETH are shown in tokens, never priced here.
  */
+function unreadList(r) {
+  const rows = r.unreadRows || [];
+  if (!rows.length) return `${r.unread} balance(s)`;
+  if (rows.length > 6) return `${rows.slice(0, 6).join(", ")} and ${rows.length - 6} more`;
+  return rows.join(", ");
+}
+
 export function receiversFrom(rev) {
   if (!rev?.groups) return null;
-  const out = { usdc: 0, nexus: 0, eth: 0, unread: 0 };
+  const out = { usdc: 0, nexus: 0, eth: 0, unread: 0, unreadRows: [] };
   for (const g of rev.groups) {
     if (g.id === "treasury") continue;
     for (const row of g.rows || []) {
-      if (row.amount == null) { out.unread++; continue; }
+      if (row.amount == null) { out.unread++; out.unreadRows.push(`${RECEIVER_NAMES[g.id] || g.id} ${row.sym} on ${CHAIN_NAMES[row.chain] || row.chain}`); continue; }
       if (row.sym === "USDC") out.usdc += row.amount;
       else if (row.sym === "NEXUS" || row.sym === "$NEXUS") out.nexus += row.amount;
       else if (row.sym === "ETH" || row.sym === "WETH") out.eth += row.amount;
