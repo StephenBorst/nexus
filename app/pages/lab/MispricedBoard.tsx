@@ -889,20 +889,12 @@ export function MispricedBoard() {
         note={scanned > 0 ? <span><span style={{ color: C.text.bright }}>{scanned}</span> scanned · <span style={{ color: C.accent }}>{mispricedCount}</span> mispriced{board?.stale && board.asOf ? <span style={{ color: C.text.faint }}> · delayed, as of {new Date(board.asOf).toISOString().slice(11, 16)} UTC</span> : null}</span> : "FUNDING LENS"}
       />
 
-      <p style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, lineHeight: 1.6, maxWidth: 680, margin: "0 0 14px" }}>
-        Funding is the crowd’s mispricing made explicit. When one side pays to hold, the book is lopsided —
-        and the mean-revert play is to <b style={{ color: C.text.bright }}>fade it</b>: a mechanical rule, not graded yet. Annualized and ranked, so the top is where
-        positioning is most stretched right now. Open a market to understand it; tap to draft the fade.
+      {/* One explainer, said once (it was a paragraph + a "How to read this" box saying the same thing). */}
+      <p style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, lineHeight: 1.6, maxWidth: 720, margin: "0 0 18px" }}>
+        Funding is what one side of the crowd pays to hold a perp. A big number means that side is crowded, and crowding
+        often unwinds, so the <b style={{ color: C.text.bright }}>fade bets the other way</b>: a mechanical rule, not graded yet.
+        Ranked by how stretched each market is against its own range. Green/red is just today’s price move. Tap a market to open it.
       </p>
-
-      {/* How to read — plain, once, for everyone */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 18, padding: "11px 13px", border: `1px solid ${C.border}`, borderLeft: `2px solid ${C.text.muted}`, borderRadius: RADIUS.md, background: C.surfaceAlt }}>
-        <span style={{ fontFamily: MONO, fontSize: 12, color: C.text.muted, flexShrink: 0 }}>?</span>
-        <span style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, color: C.text.fog }}>
-          <b style={{ color: C.text.bright }}>How to read this:</b> a big number means one side of the crowd is paying a lot to stay in the trade.
-          That crowding often unwinds, so the <b style={{ color: C.text.bright }}>fade bets the other way</b>. It’s a mechanical rule, not graded yet. Green/red is just today’s price move.
-        </span>
-      </div>
 
       {markets === null ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "12px 2px" }}>loading board…</div>
@@ -911,7 +903,8 @@ export function MispricedBoard() {
           {err ? "Market data unavailable. Retrying." : "No liquid markets to price right now."}
         </div>
       ) : (
-        <>
+        <div style={{ display: "grid", gridTemplateColumns: !isMobile && mispriced.length > 0 && fair.length > 0 ? "minmax(0,1fr) minmax(0,1fr)" : "1fr", gap: 24, alignItems: "start" }}>
+          <div style={{ minWidth: 0 }}>
           {/* SIGNAL — the stretched few, as cards */}
           {mispriced.length > 0 && (
             <>
@@ -920,7 +913,7 @@ export function MispricedBoard() {
                 <span style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint }}>{mispriced.length}</span>
                 <span style={{ flex: 1, height: 1, background: C.border }} />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile || fair.length > 0 ? "1fr" : "repeat(2, 1fr)", gap: 14 }}>
                 {mispriced.map((m) => {
                   const l = lean[m.coin];
                   // ONE verdict (Grok #1): the card reads the SAME server pierce (m.stretched)
@@ -986,10 +979,11 @@ export function MispricedBoard() {
             </>
           )}
 
+          </div>
           {/* PRICED FAIR — the quiet many, as a rail */}
           {fair.length > 0 && (
-            <>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 10, margin: "26px 0 12px" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, margin: isMobile && mispriced.length > 0 ? "26px 0 12px" : "6px 0 12px" }}>
                 <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: C.text.muted }}>PRICED FAIR</span>
                 <span style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint }}>{fair.length} · sorted by stretch</span>
                 <span style={{ flex: 1, height: 1, background: C.border }} />
@@ -998,7 +992,7 @@ export function MispricedBoard() {
                 {fair.map((m, i) => (
                   <div role="button" tabIndex={0} key={m.symbol} onClick={() => setOpenCoin(m.coin)} onKeyDown={pressKey(() => setOpenCoin(m.coin))}
                     className="nx-card-interactive"
-                    style={{ display: "grid", gridTemplateColumns: isMobile ? "56px 1fr 138px" : "90px 1fr 190px 84px", gap: 12, alignItems: "center", padding: "9px 13px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
+                    style={{ display: "grid", gridTemplateColumns: isMobile ? "56px 1fr 138px" : "72px minmax(40px,1fr) 176px 36px", gap: 12, alignItems: "center", padding: "9px 13px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
                     <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: C.text.fog }}>{m.coin}</span>
                     {!isMobile && <div style={{ height: 4, borderRadius: 3, background: C.inset, border: `1px solid ${C.border}`, position: "relative" }}>
                       <div style={{ position: "absolute", top: 0, bottom: 0, background: C.borderStrong, ...(m.direction === "LONG" ? { right: "50%" } : { left: "50%" }), width: `${Math.min(46, (m.edge / maxEdge) * 46)}%` }} />
@@ -1009,9 +1003,9 @@ export function MispricedBoard() {
                   </div>
                 ))}
               </div>
-            </>
+            </div>
           )}
-        </>
+        </div>
       )}
 
       <p style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint, lineHeight: 1.6, marginTop: 18, letterSpacing: "0.02em" }}>
