@@ -105,7 +105,7 @@ import { handleSlippage } from "./routes-slippage.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
-import { handleMarket, handleFadeGrade } from "./routes-market.mjs";
+import { handleMarket, handleMarkets, handleFadeGrade } from "./routes-market.mjs";
 import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
 import { marketCoin } from "../../app/lib/marketRead.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
@@ -1186,6 +1186,12 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
       });
       if (marketRes) return marketRes;
+    }
+    {
+      const marketsRes = await handleMarkets(parts, request, env, {
+        dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
+      });
+      if (marketsRes) return marketsRes;
     }
     {
       const fadeRes = await handleFadeGrade(parts, request, {

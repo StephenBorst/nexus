@@ -662,6 +662,19 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   baseline; tap opens `/lab?tab=intel&market=ETH`. **Speed:** `sharedJson` (`app/lib/sharedJson.mjs`) shares one
   request per URL for 30 s; the FADE line reads `GET /intel/fade-grade` (not the 200 KB scoreboard). Lens reads to
   grade exactly: `docs/research/lens-reads-prereg.md` (A `smart_consensus_2x` signed 2026-11-14, counts from 2026-11-15; B unsigned).
+  **Drawer → call** (`app/lib/marketCallDraft.mjs`): "Post a call" asks Long / Short IN the drawer (it never picks one),
+  hands off via `nexus_thesis_draft` with `sideChosen` (the WATCH gate keeps the trader's pick) + `build` (the Thesis
+  Engine builds at the 1.2× ATR stop on arrival, `pendingDraft`), levels of the last coin cleared, no machine note.
+  **Watching** (`app/lib/watchlist.mjs`, store `watchStore.ts` key `nx_watchlist_v1`, panel `WatchlistPanel.tsx` under
+  Calls on Lab home): ☆ Watch in the drawer (this device, no wallet/push, ≤10); one request `GET /intel/markets?coins=`
+  (routes-market.mjs `handleMarkets`: mispriced + smart + forecasts read once, `marketSnapshot` per coin, 60 s cache);
+  each row = price, 24h, the move since the last look + the alerts' changes (`marketTransitions`); first look = baseline;
+  tapping a row opens the drawer and marks it seen.
+- **Quick Call (Thesis Engine, 2026-11-14, `app/lib/quickCall.mjs`):** a call posts on its levels alone (`callReady` =
+  coin + committed side + `callInvalidReason` clean, the reason shown in plain words); account size only sizes a LIVE
+  order (`liveOrderReady`); an unsized call saves size 0. Order: coin → side → levels (2×2 on a phone) → stop/target
+  knobs → the Read as one foldable line (`LiveRead foldable`, `nx_read_open`; folded on a phone, still reads for the
+  WATCH gate) → optional size → Post. The Sim folds to one line.
 - **Position → call (Trade, 2026-11-05):** `PositionCallButton.tsx` sits at the right end of the Trade strip, only when the
   wallet holds a position in the market on screen; one tap opens the Thesis Engine with a draft (`app/lib/positionCall.mjs`):
   side from the position, ENTRY = the mark at the tap (never the average open price: a call starts when posted), stop/target

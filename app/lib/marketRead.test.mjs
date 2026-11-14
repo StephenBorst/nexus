@@ -53,6 +53,11 @@ test("a forecast's end date is the day the market names (New York close), not th
   assert.match(m.lenses.find((l) => l.id === "forecast").line, /by Dec 31\./);
 });
 
+test("a move that rounds to zero reads flat, never −0.0%", () => {
+  const m = composeMarket({ coin: "ETH", mispriced: { markets: [{ coin: "ETH", change24hPct: -6.2, fundingAnnualPct: 5 }] }, signals: { signals: [{ symbol: "PERP_ETH_USDC", oi_change_pct: -0.04, delta_fresh: true }] } });
+  assert.equal(m.lenses.find((l) => l.id === "tape").line, "Price −6.2% in 24h, open interest flat since the last check.");
+});
+
 test("missing boards read as unread or absent, never invented", () => {
   const m = composeMarket({ coin: "SOL" });
   assert.deepEqual(m.lenses.map((l) => l.id), ["funding", "smart"]);

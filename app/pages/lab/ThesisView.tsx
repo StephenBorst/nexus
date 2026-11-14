@@ -1065,7 +1065,15 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
         // A drafted direction is a SUGGESTION, not the trader's pick — let the WATCH
         // gate re-evaluate it against the base rate (the [form.symbol] effect re-arms;
         // this covers a re-draft of the same symbol, where that effect wouldn't fire).
-        userChoseDir.current = false;
+        // Except a side the trader tapped themselves (the market drawer, marketCallDraft.mjs): that is their
+        // pick, and the levels build from live price on arrival so Post is the next tap.
+        if (d.sideChosen) {
+          pendingDraft.current = { sym: String(d.symbol || "").trim().toUpperCase(), build: !!d.build };
+          userChoseDir.current = true; setDirArmed(true);
+        } else {
+          pendingDraft.current = null;
+          userChoseDir.current = false;
+        }
         window.localStorage.removeItem(THESIS_DRAFT_KEY);
       } catch { /* ignore malformed draft */ }
     };
@@ -1092,6 +1100,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   const [dirArmed, setDirArmed] = useState(true);
   const [weakSetup, setWeakSetup] = useState<{ histPct: number | null } | null>(null);
   const userChoseDir = useRef(false);
+  // A draft whose side the trader chose (market drawer): kept through the symbol change, built once on arrival.
+  const pendingDraft = useRef<{ sym: string; build: boolean } | null>(null);
   // ONE veto clock (Grok): LiveRead feeds the SAME reversion/last-N-fades signal the GAPS
   // ticket vetoes on — so a coin can never read WATCH on the ticket and armed here (or the
   // reverse). No /intel/baserate here, no averaging of two series.
@@ -1108,7 +1118,10 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   const baseRateRef = useRef<{ revertedPct: number; samples: number; tier: string } | null>(null);
   const handleBaseRate = useCallback((br: { revertedPct: number; samples: number; tier: string } | null) => { baseRateRef.current = br; }, []);
   // New market → forget the prior pick and re-arm until this coin's base rate is read.
-  useEffect(() => { userChoseDir.current = false; setDirArmed(true); setWeakSetup(null); baseRateRef.current = null; }, [form.symbol]);
+  useEffect(() => {
+    userChoseDir.current = pendingDraft.current?.sym === form.symbol.trim().toUpperCase();
+    setDirArmed(true); setWeakSetup(null); baseRateRef.current = null;
+  }, [form.symbol]);
 
   const calc = useMemo(() => calcThesis(form), [form]);
   // calc = the optional sizing (account × risk ÷ stop distance); null without an account size. Whether a call
@@ -1143,6 +1156,16 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   }, [symbolUpper, symbolListed]);
   // 1.2× ATR as a stop % (Grok's structure), rounded to the knob's 0.1% granularity.
   const atrStopPct = atrPct != null ? Math.round(1.2 * atrPct * 10) / 10 : null;
+  // Build a drawer draft once its coin is set: at the 1.2× ATR stop when the ATR is read, else after 3 s at the
+  // knob's stop (an unreadable ATR never strands the draft). Uses this render's quickSetup (the current form).
+  useEffect(() => {
+    const pd = pendingDraft.current;
+    if (!pd?.build || pd.sym !== symbolUpper || !symbolListed) return;
+    if (atrStopPct != null) { pd.build = false; setQuickStopPct(atrStopPct); quickSetup(atrStopPct, quickTpR); return; }
+    const t = setTimeout(() => { if (pendingDraft.current === pd && pd.build) { pd.build = false; quickSetup(quickStopPct, quickTpR); } }, 3000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbolUpper, symbolListed, atrStopPct, form.direction]);
 
   // Plan geometry sanity — calcThesis uses Math.abs, so a stop on the WRONG side of
   // entry (or a target on the wrong side) still produces a "valid" size. Catch the
