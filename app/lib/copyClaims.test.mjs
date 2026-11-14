@@ -39,3 +39,13 @@ test("the Lab's funding board section doesn't promise that fades paid", () => {
   assert.doesNotMatch(line, /PAID|paid vs trap|Funding edges|edge/i);
 });
 
+
+test("the Thesis Engine leads with Quick Call, and a call names a read, not an edge", () => {
+  const src = read("../pages/lab/ThesisView.tsx");
+  const quick = src.indexOf("⚡ QUICK CALL");
+  assert.ok(quick > 0 && quick < src.indexOf("Pick a play on the board.") && quick < src.indexOf("A good call is a Signal"));
+  const recipe = visible(src.slice(src.indexOf("A good call is a Signal"), src.indexOf("A good call is a Signal") + 600));
+  assert.doesNotMatch(recipe, /\bedge\b/i);
+  assert.match(recipe, /read/);
+  assert.doesNotMatch(visible(src), /fill in entry, stop, tp1/);
+});
