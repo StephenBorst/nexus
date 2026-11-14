@@ -727,6 +727,11 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   cap `Client.create` throws "…already registered N/M installations…"; `useXMTP` catches it (`app/lib/xmtpLimit.mjs`) and
   the Messages page offers REMOVE OLD DEVICES: one signature, `Client.revokeInstallations` without a client, keeps the 3
   newest, then enables here.
+- **Wallet move alerts** (2026-11-14, `workers/nexus-lab-api/walletWatch.mjs`, */5 cron): a starred Smart Money wallet
+  (`sm:wl:{caller}`, index `sm:wl:index` kept by the watchlist POST) opening/closing an Orderly position (`sm:ord:events`,
+  the board's hourly diff) → a `wallet_move` note to each watcher with the wallet's X-Ray tier (`recordWords`); bell
+  always, phone under push topic `wallets` (OFF by default), ≤5 a run each; cursor `sm:follow:cursor:v1`, first run =
+  baseline. Hyperliquid wallets: board only.
 - The nav bell is `SignalsNavButton.tsx`. Before adding UI to a component, grep that something mounts it.
   **The bell, graded (v2, borst 2026-11-14, rules `app/lib/signals.mjs`, route `GET /intel/bell` routes-bell.mjs, 60 s
   cache):** every row carries `graded`: READ rows (a registered read with a paper wallet opened a paper trade, or closed
