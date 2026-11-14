@@ -87,3 +87,29 @@ test("Lab home reads the slim grade, not the whole scoreboard", () => {
   assert.match(hook, /\/intel\/fade-grade/);
   assert.doesNotMatch(hook, /axis-backtest"/);
 });
+
+test("/intel/markets: the watchlist in one request, three boards read once, cached 60 s", async () => {
+  const { handleMarkets, MARKETS_SOURCES } = await import("./routes-market.mjs");
+  const env = { LAB_STORE: kv() };
+  const asked = [];
+  const boards = {
+    "/intel/mispriced": { markets: [{ coin: "ETH", markPrice: 1852.3, change24hPct: -5.5, stretched: true, fundingAnnualPct: 21 }] },
+    "/smart/consensus": { consensus: { ETH: { long: 2, short: 9 } } },
+    "/intel/forecasts": { markets: [{ id: "m1", coin: "ETH", forecastProbPct: 58, question: "q", volumeUsd: 5 }] },
+  };
+  const dispatch = async (p) => { asked.push(p); return ok(boards[p]); };
+  const r = await handleMarkets(["intel", "markets"], req("/intel/markets?coins=eth,BTC,eth"), env, { dispatch, now: 10 });
+  const body = await r.json();
+  assert.deepEqual(asked.sort(), Object.values(MARKETS_SOURCES).sort());
+  assert.deepEqual(body.coins.map((c) => c.coin), ["ETH", "BTC"]);
+  assert.equal(body.coins[0].price, 1852.3);
+  assert.equal(body.coins[0].snap.stretched, true);
+  assert.equal(body.coins[0].snap.smartSide, "SHORT");
+  assert.equal(body.coins[1].price, null, "a coin the boards don't carry reads null, never invented");
+  asked.length = 0;
+  await handleMarkets(["intel", "markets"], req("/intel/markets?coins=BTC,ETH"), env, { dispatch, now: 50_000 });
+  assert.equal(asked.length, 0, "same coin set, either order, served from cache");
+  const bad = await handleMarkets(["intel", "markets"], req("/intel/markets"), env, { dispatch });
+  assert.equal(bad.status, 400);
+  assert.equal(await handleMarkets(["intel", "market", "ETH"], req("/intel/market/ETH"), env, { dispatch }), null);
+});

@@ -7,6 +7,7 @@
 import { composeMarket, marketCoin } from "../../app/lib/marketRead.mjs";
 import { json } from "./shared.mjs";
 import { fadeFamilyGrade } from "../../app/lib/fadeGrade.mjs";
+import { marketSnapshot, normCoins } from "../../app/lib/marketAlerts.mjs";
 
 export const MARKET_CACHE_PREFIX = "intel:market:v1:";
 export const MARKET_TTL_MS = 60_000;
@@ -83,4 +84,30 @@ export async function handleFadeGrade(parts, request, { dispatch }) {
   const res = json({ grade }, request);
   if (grade) res.headers.set("Cache-Control", "public, max-age=300");
   return res;
+}
+
+// ── GET /intel/markets?coins=ETH,BTC — the watchlist panel (app/lib/watchlist.mjs) in ONE request: each coin's
+// price, 24h move and the alert snapshot (marketAlerts.mjs marketSnapshot), from three boards read once through
+// the worker's own handler. ≤ 10 coins, 60 s cache per coin set. A failing board leaves its fields null (unread).
+export const MARKETS_SOURCES = Object.freeze({ mispriced: "/intel/mispriced", smart: "/smart/consensus", forecasts: "/intel/forecasts" });
+export async function handleMarkets(parts, request, env, { dispatch, now = Date.now(), timeoutMs = SOURCE_TIMEOUT_MS }) {
+  if (!(parts[0] === "intel" && parts[1] === "markets" && !parts[2] && request.method === "GET")) return null;
+  const coins = normCoins(String(new URL(request.url).searchParams.get("coins") || "").split(","));
+  if (!coins.length) return json({ error: "coins required — GET /intel/markets?coins=BTC,ETH" }, request, 400);
+  const key = `intel:markets:v1:${[...coins].sort().join(",")}`;
+  try {
+    const hit = await env.LAB_STORE.get(key);
+    if (hit) { const c = JSON.parse(hit); if (c && now - c.builtAt < MARKET_TTL_MS) return json(c, request); }
+  } catch { /* best-effort */ }
+  const names = Object.keys(MARKETS_SOURCES);
+  const boards = await Promise.all(names.map((n) => readBoard(dispatch, MARKETS_SOURCES[n], timeoutMs)));
+  const b = Object.fromEntries(names.map((n, i) => [n, boards[i]]));
+  const rows = coins.map((coin) => {
+    const mp = (b.mispriced?.markets ?? []).find((m) => marketCoin(m?.coin ?? m?.symbol) === coin) ?? null;
+    const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    return { coin, price: num(mp?.markPrice), change24hPct: num(mp?.change24hPct), snap: marketSnapshot(coin, b) };
+  });
+  const out = { coins: rows, builtAt: now, unread: names.filter((n, i) => !boards[i]) };
+  try { await env.LAB_STORE.put(key, JSON.stringify(out), { expirationTtl: 120 }); } catch { /* best-effort */ }
+  return json(out, request);
 }

@@ -36,6 +36,7 @@ import { CreatorEarnings } from "./CreatorEarnings";
 import { NexusBriefing } from "./NexusBriefing";
 import { DecisionBoard } from "./DecisionBoard";
 import { LabCallsPanel } from "./LabCallsPanel";
+import { WatchlistPanel } from "./WatchlistPanel";
 import { LabTitleBar, LabStats, LabTabs, type LabTab } from "./LabHeader";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
 import { C } from "@/config/theme";
@@ -362,7 +363,8 @@ export default function TheLabPage() {
           // — lands straight on the Briefing → Board → lenses read. No wallet needed to
           // scan the whole book; only COPY / PUBLISH / ARM LIVE ask for a connect.
           const showSplash = !connected && !guestPreview;
-          return <>{showSplash && <LabWelcome />}{calls}{briefing}{board}{lenses}</>;
+          // WATCHING (2026-11-14): the coins this device watches, what changed since the last look. Under Calls.
+          return <>{showSplash && <LabWelcome />}{calls}<WatchlistPanel />{briefing}{board}{lenses}</>;
         })()}
         {activeTab === "smart" && (
           // Smart Money is now the DEEP WALLET DRILL-DOWN the Intel funnel's Positioning lens

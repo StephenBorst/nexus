@@ -11,6 +11,9 @@ import { MARKET_READ_FOOTER, marketCoin } from "@/lib/marketRead.mjs";
 import { useAccount } from "@orderly.network/hooks";
 import { useLabWallet } from "@/hooks/useLabAuth";
 import { savedCoins, watchCoin, pushSupported } from "@/lib/pushAlerts";
+import { marketCallDraft } from "@/lib/marketCallDraft.mjs";
+import { readWatch, toggleWatchCoin } from "@/lib/watchStore";
+import { WATCH_EVENT, WATCH_MAX } from "@/lib/watchlist.mjs";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 type Lens = { id: string; label: string; line: string; detail?: string; graded?: string; tone: "plain" | "faint" | "watch" };
@@ -40,6 +43,13 @@ export default function MarketDrawer() {
   const [watching, setWatching] = useState<string[]>(() => savedCoins());
   const [alertNote, setAlertNote] = useState("");
   const [alertBusy, setAlertBusy] = useState(false);
+  const [watchList, setWatchList] = useState<string[]>(() => readWatch().coins); // ☆ Watch: this device, no wallet
+  useEffect(() => {
+    const on = () => setWatchList(readWatch().coins);
+    window.addEventListener(WATCH_EVENT, on);
+    return () => window.removeEventListener(WATCH_EVENT, on);
+  }, []);
+  const [pickSide, setPickSide] = useState(false); // "Post a call" asks the side here; the drawer never picks one
 
   const close = useCallback(() => { setCoin(""); setData(null); }, []);
   useEscapeKey(close, !!coin);
@@ -63,7 +73,7 @@ export default function MarketDrawer() {
   useEffect(() => {
     if (!coin) return;
     let alive = true;
-    setState("loading"); setData(null); setAlertNote("");
+    setState("loading"); setData(null); setAlertNote(""); setPickSide(false);
     fetch(`${AGENT_API}/intel/market/${encodeURIComponent(coin)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d: Market) => { if (alive) { setData(d); setState("idle"); } })
@@ -73,9 +83,17 @@ export default function MarketDrawer() {
 
   if (!coin) return null;
 
-  const draftCall = () => {
-    try { localStorage.setItem(THESIS_DRAFT_KEY, JSON.stringify({ symbol: coin, entryPrice: data?.price ?? undefined, notes: `From the ${coin} market drawer.` })); } catch { /* private mode */ }
+  // Lens → call: the trader picks the side here (the drawer never does), the Thesis Engine builds the levels
+  // from live price and Post is the next tap (marketCallDraft.mjs). The events cover a Thesis tab already open.
+  const draftCall = (side: "LONG" | "SHORT") => {
+    const d = marketCallDraft(coin, side);
+    if (!d) return;
+    try { localStorage.setItem(THESIS_DRAFT_KEY, JSON.stringify(d)); } catch { /* private mode */ }
     close(); navigate("/lab?tab=thesis");
+    try {
+      window.dispatchEvent(new CustomEvent("nexus:lab-tab", { detail: { tab: "thesis" } }));
+      window.dispatchEvent(new CustomEvent("nexus:thesis-draft"));
+    } catch { /* non-browser */ }
   };
   const ask = () => {
     window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: `Read ${coin} for me: funding, smart money, forecasts, catalysts and open calls. What would change your mind, and what's the cleanest way to put it as a graded call?` } }));
@@ -106,7 +124,17 @@ export default function MarketDrawer() {
           <span style={{ fontFamily: UI, fontSize: 22, fontWeight: 700, color: C.text.bright }}>{coin}</span>
           {data?.price != null && <span style={{ fontFamily: MONO, fontSize: 14, color: C.text.fog }}>{fmtPrice(data.price)}</span>}
           {ch != null && <span style={{ fontFamily: MONO, fontSize: 13, color: ch >= 0 ? C.pos : C.neg }}>{ch >= 0 ? "+" : "−"}{Math.abs(ch).toFixed(2)}%</span>}
-          <button type="button" onClick={close} aria-label="Close" style={{ marginLeft: "auto", background: "none", border: "none", color: C.text.muted, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+          {(() => {
+            const on = watchList.includes(coin);
+            return (
+              <button type="button" aria-pressed={on} title={on ? `Stop watching ${coin}` : `Watch ${coin} on Lab home`}
+                onClick={() => { const r = toggleWatchCoin(coin); if (r.full) setAlertNote(`You watch ${WATCH_MAX} coins already. Unwatch one first.`); }}
+                style={{ marginLeft: "auto", fontFamily: UI, fontSize: 12.5, fontWeight: 600, padding: "5px 10px", borderRadius: RADIUS.md, cursor: "pointer", background: "transparent", color: on ? C.text.bright : C.text.fog, border: `1px solid ${on ? C.accent : C.borderStrong}`, whiteSpace: "nowrap" }}>
+                {on ? "★ Watching" : "☆ Watch"}
+              </button>
+            );
+          })()}
+          <button type="button" onClick={close} aria-label="Close" style={{ marginLeft: 8, background: "none", border: "none", color: C.text.muted, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
         </div>
         <div style={{ overflowY: "auto", padding: "6px 18px 10px", flex: 1 }}>
           {state === "loading" && <div style={{ fontFamily: MONO, fontSize: 12, color: C.text.muted, padding: "18px 0" }}>Reading every board on {coin}…</div>}
@@ -134,9 +162,18 @@ export default function MarketDrawer() {
             </div>
           )}
         </div>
-        <div style={{ display: "flex", gap: 8, padding: "12px 18px calc(12px + env(safe-area-inset-bottom))", borderTop: `1px solid ${C.border}` }}>
+        {pickSide && (
+          <div className="nx-fade-in" style={{ padding: "12px 18px 0", borderTop: `1px solid ${C.border}` }}>
+            <div style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, marginBottom: 8 }}>Your call on {coin}. Which way? Levels build from live price; you post it.</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" style={{ ...btn, borderColor: C.pos, color: C.pos }} onClick={() => draftCall("LONG")}>↑ Long {coin}</button>
+              <button type="button" style={{ ...btn, borderColor: C.neg, color: C.neg }} onClick={() => draftCall("SHORT")}>↓ Short {coin}</button>
+            </div>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, padding: "12px 18px calc(12px + env(safe-area-inset-bottom))", borderTop: pickSide ? "none" : `1px solid ${C.border}` }}>
           <button type="button" style={{ ...btn, background: C.accent, color: C.canvas, borderColor: C.accent }} onClick={() => { close(); navigate(`/perp/PERP_${coin}_USDC`); }}>Trade {coin}</button>
-          <button type="button" style={btn} onClick={draftCall}>Draft a call</button>
+          <button type="button" style={{ ...btn, color: pickSide ? C.text.muted : C.text.bright }} aria-expanded={pickSide} onClick={() => setPickSide((v) => !v)}>Post a call</button>
           <button type="button" style={btn} onClick={ask}>Ask Nexus</button>
         </div>
       </section>
