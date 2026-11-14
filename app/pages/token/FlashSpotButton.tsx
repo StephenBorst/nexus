@@ -10,7 +10,7 @@
 // spend, pins the recipient to this wallet and sets the deadline. A limit/stop PRICE is held
 // and enforced by Definitive's engine, not by the signature — the ticket says so.
 import { tickerLabel } from "@/lib/tickerLabel.mjs";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { parseTransaction } from "viem";
 import { EVM_USDC, ensureChain } from "./swapExec";
 import {
@@ -21,7 +21,7 @@ import { FLASH, FLASH_CHANGED, fetchOpenOrders, fetchOrder, erc20Balance, human,
 import { useEscapeKey } from "@/utils/a11y";
 
 // DexScreener chain id == Flash targetChain for these EVM chains. Contra (USDC) comes from EVM_USDC.
-const FLASH_EVM = new Set(["base", "ethereum", "arbitrum", "optimism", "polygon", "bsc", "avalanche"]);
+export const FLASH_EVM = new Set(["base", "ethereum", "arbitrum", "optimism", "polygon", "bsc", "avalanche"]);
 
 const MONO = "var(--nx-font-mono)", UI = "var(--nx-font-ui, sans-serif)";
 const BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUT = "#71717a", FAINT = "#52525b", BORD = "#232327", CARD = "#0f0f11", BG = "#08080a", POS = "#3ecf8e", NEG = "#f7525f";
@@ -78,13 +78,16 @@ const fmtUsd = (n: number) => "$" + n.toLocaleString("en-US", { maximumFractionD
 
 type Done = { id: string; kind: FlashType; state: "watching" | "filled" | "failed" | "slow" | "resting"; got?: string; tx?: string | null; reason?: string };
 
-export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAmount, defaultSl, defaultTp, priceUsd, walletAddress, provider }: {
+export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAmount, defaultSl, defaultTp, priceUsd, walletAddress, provider, openNonce }: {
   chainId: string; tokenAddress: string; symbol: string; side: "buy" | "sell"; defaultAmount?: string;
   // A LONG thesis "Express on Spot" carries its FROZEN R-dollar stop/TP1 in via the URL → these
   // seed the STOP $ / TP $ fields (buy only; a bracket still attaches only when the quote echoes it).
   defaultSl?: string; defaultTp?: string;
   priceUsd?: number | null; // the page's live price: a reference line + trigger-side sanity check
   walletAddress?: string | null; provider?: Eip1193 | null;
+  // Bump to open the ticket straight on a MARKET order at the ticket size: the Spot terminal's main
+  // BUY does this when Flash nets more than spanDEX (spotBest routeFor). 0/undefined = never.
+  openNonce?: number;
 }) {
   const okSl = (v?: string) => side === "buy" && !!v && parseFloat(v) > 0;
   const usdc = EVM_USDC[chainId]?.usdc;
@@ -104,6 +107,18 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
   const previewSeq = useRef(0); // only the newest preview request may land (tab flips race)
   // Escape = the backdrop click: never while a signature is pending.
   useEscapeKey(() => { if (!busy) setOpen(false); }, open);
+
+  // The parent's "open on market" request (see openNonce). Hooks stay above the early return; the
+  // ref reaches openModal, defined below. Skips the mount value so nothing opens on its own; each
+  // later bump opens once.
+  const openRef = useRef<(t?: OType) => void>(() => {});
+  const lastNonce = useRef(openNonce ?? 0);
+  useEffect(() => {
+    const n = openNonce ?? 0;
+    if (n === lastNonce.current) return;
+    lastNonce.current = n;
+    if (n > 0 && !busy) openRef.current("market");
+  }, [openNonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!FLASH_EVM.has(chainId) || !usdc) return null; // EVM + known USDC only
 
@@ -378,7 +393,9 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
   // Re-seed SIZE from the live ticket every open (the component stays mounted, so the useState
   // initializer alone would miss an amount typed after mount, and a side flip). Buy empty → "25"
   // starter; sell empty → "" (never an invented default). Mirrors the initializer.
-  const openModal = () => {
+  const openModal = (forceType?: OType) => {
+    const t = forceType ?? otype;
+    if (forceType && forceType !== otype) setOtype(forceType);
     const seed = defaultAmount && parseFloat(defaultAmount) > 0 ? defaultAmount : (side === "buy" ? "25" : "");
     setSize(seed);
     // Re-apply the thesis stop/TP ONLY when the Express link carried them — never clobber a stop the
@@ -386,8 +403,9 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
     if (okSl(defaultSl)) setSl(defaultSl as string);
     if (okSl(defaultTp)) setTp(defaultTp as string);
     setOpen(true); setDone(null); setErr(null); setShareCopied(false);
-    if (otype === "market") fetchPreview(seed); else setPreview(null);
+    if (t === "market") fetchPreview(seed, { otype: "market" }); else setPreview(null);
   };
+  openRef.current = openModal;
   const pickType = (t: OType) => {
     if (busy) return;
     setOtype(t); setPreview(null); setErr(null); setDone(null); setFlashPx(null);
@@ -406,7 +424,7 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
 
   return (
     <>
-      <button onClick={openModal}
+      <button onClick={() => openModal()}
         style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 13, fontWeight: 600, color: BRIGHT, background: "none", border: "1px solid #33333a", borderRadius: 10, padding: "10px 0", cursor: "pointer" }}>
         ◇ {side === "sell" ? "Sell" : "Buy"} {tickerLabel(symbol)} via Flash <span style={{ color: MUT, fontWeight: 400 }}>· limit · TWAP · stop</span>
       </button>

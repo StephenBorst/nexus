@@ -24,7 +24,7 @@ import {
 import { SocialBar } from "@/components/SocialBar";
 import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, makeHolding, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
 import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, EVM_SIGNABLE_ROUTERS, type SwapPlan, type Eip1193 } from "./swapExec";
-import { FlashSpotButton } from "./FlashSpotButton";
+import { FlashSpotButton, FLASH_EVM } from "./FlashSpotButton";
 import { SwapNotice } from "./SwapNotice";
 import { tickerLabel } from "@/lib/tickerLabel.mjs";
 import { FlashOrders } from "./FlashOrders";
@@ -35,7 +35,7 @@ import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS
   callStrip, openChipLine, labRowLine, readLabOpen, writeLabOpen, EMPTY_STRIP_LINE } from "@/lib/spotDiscovery.mjs";
 import { swapOutcome } from "@/lib/solSwapGuards.mjs";
 import { reportSpotFill } from "@/lib/spotReport";
-import { bestLine, bestGasNote } from "@/lib/spotBest.mjs";
+import { bestLine, bestGasNote, routeFor } from "@/lib/spotBest.mjs";
 import { planSolBuy, planSolSell, executeSolBuy, executeSolSell, getSolWalletContext, fmtSolTokenAmount, solSlippagePct, solscanTx, SOL_INPUT, USDC_INPUT, type SolInput, type SolBuyPlan, type SolProvider } from "./solSwapExec";
 import { getRuntimeConfigBoolean } from "@/utils/runtime-config";
 // The app is Privy-based; a connected Solana wallet is NOT on useWalletConnector().wallet (that's the
@@ -858,7 +858,10 @@ export default function TokenTerminal() {
 
   // spanDEX vs Flash on an EVM USDC buy at the ticket's size (GET /spot/best, routes-spotbest.mjs):
   // each router's own "you receive" estimate. Read-only; debounced like the quote probe.
-  const [best, setBest] = useState<{ best: "spandex" | "flash" | "same" | null; spandex: number | null; flash: number | null; edgePct: number | null; gasIncluded?: boolean; gasUsd?: number | null } | null>(null);
+  const [best, setBest] = useState<{ best: "spandex" | "flash" | "same" | null; spandex: number | null; flash: number | null; edgePct: number | null; gasIncluded?: boolean; gasUsd?: number | null; key?: string } | null>(null);
+  // The exact inputs a comparison was made for. The main BUY routes on it only while they still
+  // match the ticket, so a result from the previous amount (mid-debounce) never picks the router.
+  const bestKey = (chain: string | undefined, token: string | undefined, amt: string) => `${chain}|${(token || "").toLowerCase()}|${amt}`;
   useEffect(() => {
     const evm = pair ? EVM_USDC[pair.chainId] : undefined;
     const a = parseFloat(amount);
@@ -868,7 +871,7 @@ export default function TokenTerminal() {
     const t = setTimeout(() => {
       fetch(`https://og.nexustradinglabs.com/spot/best?chain=${evm.chainId}&tokenOut=${encodeURIComponent(token)}&amount=${Math.round(Math.min(a, 100000) * 1e6)}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((j) => { if (alive) setBest(j && j.ok ? j : null); })
+        .then((j) => { if (alive) setBest(j && j.ok ? { ...j, key: bestKey(pair?.chainId, token, amount) } : null); })
         .catch(() => { if (alive) setBest(null); });
     }, 600);
     return () => { alive = false; clearTimeout(t); };
@@ -979,6 +982,12 @@ export default function TokenTerminal() {
   const showSpot = !isPerp || venue === "spot";
   const fabricEvm = swapState.kind === "quote" && EVM_SIGNABLE_ROUTERS.has(quote?.router ?? "") && !!wallet && !!provider;
   const canInAppBuy = showSpot && side === "buy" && fabricEvm;
+  // Best price → which router the main BUY opens (spotBest routeFor): Flash when it clearly nets more
+  // on THIS ticket's comparison, else spanDEX. Flash opens its own ticket on a market order, which
+  // quotes again and waits for the user's confirm; the pick itself signs nothing.
+  const bestNow = best && best.key === bestKey(pair?.chainId, pair?.baseAddress, amount) ? best : null;
+  const buyRoute = canInAppBuy && !!pair && FLASH_EVM.has(pair.chainId) ? routeFor(bestNow) : "spandex";
+  const [flashNonce, setFlashNonce] = useState(0);
   const isSolToken = pair?.chainId === "solana";
   // The wallet's on-chain holding of THIS token — a SELL needs it to mount + size. Resolved from ALL
   // sources so the ticket sees last night's fills regardless of chain: (1) the curated/recents sweep
@@ -1988,14 +1997,21 @@ export default function TokenTerminal() {
                   <>
                     {side === "buy" && swapState.kind === "quote" && canInAppBuy && (
                       <>
-                        <button onClick={openSwap} disabled={planning}
+                        {/* Best price routes the main BUY: spanDEX by default, Flash when it nets clearly more
+                            after gas on this exact ticket (routeFor). Either way a confirm screen quotes again. */}
+                        <button onClick={buyRoute === "flash" ? () => setFlashNonce((n) => n + 1) : openSwap} disabled={planning}
                           style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#0a0a0b", background: POS, border: "none", borderRadius: 9, padding: "13px 0", cursor: planning ? "wait" : "pointer", opacity: planning ? 0.7 : 1 }}>
-                          {planning ? "Building route…" : `Buy ${pair.baseSymbol} in-app →`}
+                          {planning ? "Building route…" : buyRoute === "flash" ? `Buy ${pair.baseSymbol} · best price via Flash →` : `Buy ${pair.baseSymbol} in-app →`}
                         </button>
-                        <a href={swapState.href} target="_blank" rel="noopener noreferrer"
-                          style={{ display: "block", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 12.5, color: MUT, textDecoration: "none" }}>
-                          or complete on {swapState.completeVenue} ↗
-                        </a>
+                        <div style={{ textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 12.5, color: MUT }}>
+                          {buyRoute === "flash" && (<>
+                            <button onClick={openSwap} disabled={planning} style={{ background: "none", border: "none", padding: 0, fontFamily: UI, fontSize: 12.5, color: MUT, textDecoration: "underline", cursor: planning ? "wait" : "pointer" }}>or buy via spanDEX</button>
+                            <span style={{ color: FAINT }}> · </span>
+                          </>)}
+                          <a href={swapState.href} target="_blank" rel="noopener noreferrer" style={{ color: MUT, textDecoration: "none" }}>
+                            or complete on {swapState.completeVenue} ↗
+                          </a>
+                        </div>
                       </>
                     )}
                     {side === "sell" && swapState.kind === "quote" && canInAppSell && (
@@ -2126,16 +2142,16 @@ export default function TokenTerminal() {
                         amount; SELL size = the ticket TOKEN quantity (reuse sellTokens, which already
                         resolves MAX→balance and the USD toggle via $/mark) — never the USD label, and
                         empty ticket → empty (no invented default). */}
-                    {side === "buy" && bestLine(best, pair.baseSymbol) && (
-                      <div title={best?.gasIncluded
+                    {side === "buy" && bestLine(bestNow, pair.baseSymbol) && (
+                      <div title={bestNow?.gasIncluded
                         ? "Each router’s own estimate after its fees, both after network gas: Flash prices its gas in; for spanDEX an estimate from the live gas price is taken off. The approval isn’t counted (both need one)."
                         : "Each router’s own estimate after its fees. Flash’s includes network gas; with spanDEX your wallet pays gas separately."}
                         style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, marginTop: 10, textAlign: "center" }}>
-                        {bestLine(best, pair.baseSymbol)}
-                        <span style={{ color: FAINT }}> · {bestGasNote(best)}</span>
+                        {bestLine(bestNow, pair.baseSymbol)}
+                        <span style={{ color: FAINT }}> · {bestGasNote(bestNow)}</span>
                       </div>
                     )}
-                    <FlashSpotButton chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : (sellTokens > 0 ? sellTokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : "")} defaultSl={spotSl} defaultTp={spotTp} priceUsd={pair.priceUsd ?? null} walletAddress={wallet} provider={provider} />
+                    <FlashSpotButton openNonce={flashNonce} chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} side={side} defaultAmount={side === "buy" ? amount : (sellTokens > 0 ? sellTokens.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 18 }) : "")} defaultSl={spotSl} defaultTp={spotTp} priceUsd={pair.priceUsd ?? null} walletAddress={wallet} provider={provider} />
                     {/* The wallet's Flash orders: open first, cancel (gasless signature), and the
                         standing approvals to Flash with a one-tap revoke. Hidden when there's nothing. */}
                     <FlashOrders chainId={pair.chainId} tokenAddress={pair.baseAddress} symbol={pair.baseSymbol} walletAddress={wallet} provider={provider} />

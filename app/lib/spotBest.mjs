@@ -37,6 +37,20 @@ export function pickBest({ spandexRaw, flashHuman, decimals, gasToken = null }) 
   return { ...base, best: sx > flash ? "spandex" : "flash", edgePct: Math.round(edgeBps) / 100 };
 }
 
+/**
+ * Which router the ticket's main BUY button opens. Flash only when the comparison is real (both
+ * routers quoted this size) and Flash nets clearly more: a lead of at least SAME_BPS, or spanDEX's gas
+ * eating its whole output. Everything else (a tie, spanDEX ahead, one side missing, no comparison yet)
+ * stays on spanDEX, the default in-app buy. The pick only chooses which confirm screen opens: each
+ * router quotes again there and nothing is signed until the user confirms it. Our fee is 10 bps on
+ * both, so the pick never weighs our revenue.
+ * @returns {"flash" | "spandex"}
+ */
+export function routeFor(r) {
+  if (!r || r.best !== "flash" || r.spandex == null || r.flash == null) return "spandex";
+  return "flash";
+}
+
 /** The ticket's one line, or null when there's nothing to compare. */
 export function bestLine(r, symbol) {
   if (!r || r.best == null || r.spandex == null || r.flash == null) return null;
