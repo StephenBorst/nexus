@@ -20,6 +20,7 @@ export const MARKET_SOURCES = (coin) => ({
   forecasts: `/intel/forecasts/${coin}`,
   catalysts: "/intel/catalysts-board",
   pulse: "/calls/pulse",
+  scorecard: "/intel/axis-backtest", // each lens's nearest graded relative (stored copy, built on the minute cron)
 });
 
 /** One board through the worker's own handler, JSON or null (timeout, non-2xx, bad JSON). */

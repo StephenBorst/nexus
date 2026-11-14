@@ -40,3 +40,17 @@ test("no scorecard, no axis or an unknown verdict → null, and the line says no
   assert.equal(fadeFamilyLine(null), null);
   assert.equal(fadeFamilyLine(undefined), null);
 });
+
+test("every drawer lens gets its nearest graded relative, named exactly, or 'not graded'", async () => {
+  const { lensGradeLine, axisGrade } = await import("./fadeGrade.mjs");
+  const board = { axes: [
+    { name: "funding_fade", verdict: "NOISE", r: { samples: 3918 }, random: { pooled: { verdict: "BELOW_RANDOM" } } },
+    { name: "smart_follow", verdict: "PROMISING", r: { samples: 12032 }, random: { pooled: { verdict: "BEATS_RANDOM" } } },
+  ] };
+  assert.deepEqual(axisGrade(board, "smart_follow"), { tier: "PROMISING", vsRandom: "beats random entries", samples: 12032 });
+  assert.equal(lensGradeLine("funding", board), "Nearest graded rule: the plain funding fade grades NOISE, worse than random entries (3,918 samples). The stretch rule shown here isn't graded on its own.");
+  assert.equal(lensGradeLine("smart", board), "Nearest graded rule: following the recorded smart-money lean (any margin) grades PROMISING, beats random entries (12,032 samples). The 2× agreement shown here isn't graded on its own.");
+  assert.equal(lensGradeLine("forecast", board), "Not graded: no read on this lens is registered yet.");
+  assert.equal(lensGradeLine("smart", null), null, "unread board: say nothing rather than guess");
+  assert.equal(lensGradeLine("tape", board), null);
+});

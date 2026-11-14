@@ -15,6 +15,7 @@ const BOARDS = {
   "/intel/forecasts/ETH": { markets: [] },
   "/intel/catalysts-board": { catalysts: [] },
   "/calls/pulse": { openCalls: [], engines: { openCalls: [] } },
+  "/intel/axis-backtest": { axes: [{ name: "smart_follow", verdict: "PROMISING", r: { samples: 12032 }, random: { pooled: { verdict: "BEATS_RANDOM" } } }] },
 };
 
 test("not our route → null; a bad coin → 400", async () => {
@@ -35,6 +36,7 @@ test("composes every board in one response, reads each through dispatch, then se
   assert.deepEqual(asked.sort(), Object.values(MARKET_SOURCES("ETH")).sort());
   assert.equal(body.lenses.find((l) => l.id === "smart").line, "10 short · 7 long among tracked traders: split, no clear agreement.");
   assert.deepEqual(body.unread, []);
+  assert.match(body.lenses.find((l) => l.id === "smart").graded, /^Nearest graded rule: following the recorded smart-money lean \(any margin\) grades PROMISING/);
   assert.ok(env.LAB_STORE.m.has(MARKET_CACHE_PREFIX + "ETH"));
 
   asked.length = 0;

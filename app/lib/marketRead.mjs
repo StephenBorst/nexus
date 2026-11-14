@@ -8,6 +8,7 @@
 import { fundingWords } from "./boardWords.mjs";
 import { forecastRead } from "./forecastRead.mjs";
 import { CONSENSUS_RATIO } from "./smartConsensus.mjs";
+import { lensGradeLine } from "./fadeGrade.mjs";
 
 export const MARKET_READ_V = 1;
 
@@ -29,7 +30,7 @@ const ends = (iso) => {
  * Compose the drawer from the boards' own payloads (any may be null: that lens is "unread", never invented).
  * @returns {{ coin, v, lenses: {id, label, line, detail?, tone}[], price: number|null, change24hPct: number|null }}
  */
-export function composeMarket({ coin, mispriced, signals, smart, callers, forecasts, catalysts, pulse } = {}) {
+export function composeMarket({ coin, mispriced, signals, smart, callers, forecasts, catalysts, pulse, scorecard } = {}) {
   const c = marketCoin(coin);
   const lenses = [];
   const add = (id, label, line, extra = {}) => lenses.push({ id, label, line, tone: "plain", ...extra });
@@ -103,6 +104,11 @@ export function composeMarket({ coin, mispriced, signals, smart, callers, foreca
       : "No open call on it. Post one and it grades itself from public price.", { tone: ppl || eng ? "plain" : "faint" });
   }
 
+  // Each lens's nearest graded relative from the scoreboard as served (fadeGrade.mjs lensGradeLine), or "not graded".
+  for (const l of lenses) {
+    const g = lensGradeLine(l.id, scorecard);
+    if (g) l.graded = g;
+  }
   return { coin: c, v: MARKET_READ_V, price: num(mp?.markPrice) ?? num(sig?.mark_price), change24hPct: ch, lenses };
 }
 
