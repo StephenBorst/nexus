@@ -72,3 +72,10 @@ test("the Feed states 'graded from public price' once, not on every card; prices
   assert.equal((src.match(/The tape marks it, not the trader\./g) || []).length, 1);
   assert.match(src, /toLocaleString\("en-US", \{ minimumFractionDigits: dp, maximumFractionDigits: dp \}\)/);
 });
+
+test("Smart Money consensus is context, not 'the strongest read'; both sides are counted", () => {
+  const src = visible(read("../pages/lab/SmartMoneyView.tsx"));
+  assert.doesNotMatch(src, /the strongest read|Stronger than any single whale/);
+  assert.match(src, /context, not a graded read/);
+  assert.match(src, /c\.against/);
+});
