@@ -1,9 +1,11 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 import { ProjectionBand } from "@/components/ProjectionBand";
 import { SectionHeader } from "./components";
+import { useIsMobile } from "./useIsMobile";
+import { forecastRead } from "@/lib/forecastRead.mjs";
 
 // ── Forecast Divergence card (the prediction-market lens) ────────────────────
 // Quotient-informed sibling of the Mispriced Board: reads the FORECASTING crowd
@@ -242,6 +244,9 @@ function DivergentCard({ m, onDraft }: { m: ForecastMarket; onDraft: (m: Forecas
   const hist = useProbHistory(m.clobTokenId);
   const chg = probChange(hist);
   const yes = hist && hist.length >= 4 ? Math.round(hist[hist.length - 1].p * 100) : m.forecastProbPct;
+  const isMobile = useIsMobile();
+  const read = forecastRead({ coin: m.coin, yesPct: yes, target: m.target, targetDirection: m.targetDirection, distancePct: m.distancePct,
+    forecastLean: m.forecastLean, fundingLean: m.fundingLean, divergence: m.divergence, ends: m.endDate ? fmtEnds(m.endDate) : null });
   return (
     <div style={{ border: `1px solid ${WARN}33`, background: SURFACE, borderRadius: 2, padding: "10px 12px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
@@ -253,12 +258,23 @@ function DivergentCard({ m, onDraft }: { m: ForecastMarket; onDraft: (m: Forecas
         {m.endDate ? <span style={{ color: FAINT, fontSize: 10, fontFamily: "var(--nx-font-mono)", marginLeft: "auto" }}>ends {fmtEnds(m.endDate)}</span> : null}
       </div>
       <div style={{ color: FOG, fontSize: 12, lineHeight: 1.45, marginBottom: 8 }}>{m.question}</div>
-      <ForecastChart coin={m.coin} markPrice={m.markPrice} target={m.target} forecastLean={m.forecastLean} />
-      <ForecastProbLine hist={hist} lean={m.forecastLean} question={m.question} />
-      {/* PROJECTION — the expected-move cone, a third independent forward lens next to the
-          prediction-market forecast + the crypto tape. */}
-      <div style={{ margin: "8px 0" }}>
-        <ProjectionBand symbol={m.coin} height={196} />
+      {/* The read, in one sentence, and its catch (app/lib/forecastRead.mjs). */}
+      <div style={{ background: C.inset, border: `1px solid ${BORDER}`, borderRadius: 2, padding: "9px 11px", marginBottom: 10 }}>
+        <div style={{ color: BONE, fontFamily: "var(--nx-font-ui)", fontSize: 13.5, lineHeight: 1.5 }}>{read.read}</div>
+        {read.caveat && <div style={{ color: SIGNAL.watch, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, lineHeight: 1.5, marginTop: 4 }}>{read.caveat}</div>}
+      </div>
+      {/* Phone: stacked. Desktop: two columns, so the charts render at half width (full-bleed at 1440px blew their
+          text up and filled the screen with one chart). */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) minmax(0,1fr)", gap: isMobile ? 0 : 16, alignItems: "start" }}>
+        <div style={{ minWidth: 0 }}>
+          <ForecastChart coin={m.coin} markPrice={m.markPrice} target={m.target} forecastLean={m.forecastLean} />
+          <ForecastProbLine hist={hist} lean={m.forecastLean} question={m.question} />
+        </div>
+        {/* PROJECTION — the expected-move cone, a third independent forward lens next to the
+            prediction-market forecast + the crypto tape. */}
+        <div style={{ minWidth: 0, margin: isMobile ? "8px 0" : 0 }}>
+          <ProjectionBand symbol={m.coin} height={196} />
+        </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontFamily: "var(--nx-font-mono)", fontSize: 10 }}>
         <span style={{ color: DIM }}>forecast lean <b style={{ color: leanColor(m.forecastLean) }}>{m.forecastLean}</b></span>
