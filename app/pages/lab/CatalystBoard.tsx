@@ -4,6 +4,7 @@
 // NAS, risk-on/off → BTC/SPX. The crowd probability shows how PRICED it already is. A
 // setup to stake a graded thesis + execute here — not a fair-value oracle, not advice.
 import { useEffect, useState } from "react";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 import { SectionHeader } from "./components";
 import { C } from "@/config/theme";
 import { AGENT_API } from "./agentTypes";
@@ -132,7 +133,7 @@ export function CatalystBoard() {
     fetch(`${AGENT_API}/intel/catalysts-board`).then((r) => r.json())
       .then((d) => { if (!off) setBoard(d && Array.isArray(d.catalysts) ? d : { count: 0, catalysts: [] }); })
       .catch(() => { if (!off) setErr(true); });
-    fetch(`${AGENT_API}/signals`).then((r) => r.json())
+    sharedJson(`${AGENT_API}/signals`)
       .then((d) => {
         if (off) return;
         const m: Record<string, Verdict> = {};

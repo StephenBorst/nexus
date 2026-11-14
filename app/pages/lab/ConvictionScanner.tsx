@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 import { useNavigate } from "react-router-dom";
 import { C, SIGNAL } from "@/config/theme";
 import { rankConviction, convictionLevel } from "@/lib/conviction.mjs";
@@ -26,9 +27,9 @@ export function ConvictionScanner() {
     let off = false;
     const load = () => {
       Promise.all([
-        fetch(`${AGENT_API}/intel/mispriced`).then((r) => r.json()).catch(() => null),
-        fetch(`${AGENT_API}/smart/consensus`).then((r) => r.json()).catch(() => null),
-        fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json()).catch(() => null),
+        sharedJson(`${AGENT_API}/intel/mispriced`).catch(() => null),
+        sharedJson(`${AGENT_API}/smart/consensus`).catch(() => null),
+        sharedJson(`${AGENT_API}/theses/consensus`).catch(() => null),
       ]).then(([mp, sm, cons]) => {
         if (off) return;
         // Shared ranker (same logic the copilot's get_conviction uses — one source of truth).

@@ -6,6 +6,7 @@
 
 import { composeMarket, marketCoin } from "../../app/lib/marketRead.mjs";
 import { json } from "./shared.mjs";
+import { fadeFamilyGrade } from "../../app/lib/fadeGrade.mjs";
 
 export const MARKET_CACHE_PREFIX = "intel:market:v1:";
 export const MARKET_TTL_MS = 60_000;
@@ -66,4 +67,19 @@ export async function handleMarket(parts, request, env, { dispatch, now = Date.n
   const out = { ...composeMarket({ coin, ...input }), builtAt: now, unread: names.filter((n, i) => !boards[i]) };
   try { await env.LAB_STORE.put(key, JSON.stringify(out), { expirationTtl: 120 }); } catch { /* best-effort */ }
   return json(out, request);
+}
+
+// ── GET /intel/fade-grade — the plain funding fade's grade only (the Board's and Briefing's FADE line). The Lab used
+// to download the whole scoreboard (~200 KB) on first paint for this one line; same rule (app/lib/fadeGrade.mjs),
+// read from the stored scoreboard through the worker's own handler. { grade: null } when the board is unread.
+export async function handleFadeGrade(parts, request, { dispatch }) {
+  if (!(parts[0] === "intel" && parts[1] === "fade-grade" && request.method === "GET")) return null;
+  let grade = null;
+  try {
+    const r = await dispatch("/intel/axis-backtest");
+    if (r && r.ok) grade = fadeFamilyGrade(await r.json());
+  } catch { grade = null; }
+  const res = json({ grade }, request);
+  if (grade) res.headers.set("Cache-Control", "public, max-age=300");
+  return res;
 }

@@ -18,6 +18,7 @@
 // Two independent fail-soft fetches: /intel/mispriced (fast, KV-cached market data)
 // and /theses/consensus (the caller lean), merged by coin here on the client.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { orderlyPerpSet } from "@/pages/token/data";
@@ -538,7 +539,7 @@ export function MispricedBoard() {
           quickRetry = false; setBoard(d); setErr(false);
         })
         .catch(() => { if (live) failed(); });
-      fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json())
+      sharedJson(`${AGENT_API}/theses/consensus`)
         .then((d: ConsensusResp) => { if (live) setLean(d?.consensus || {}); })
         .catch(() => { /* fail-soft. Board still renders */ });
     };

@@ -105,7 +105,7 @@ import { handleSlippage } from "./routes-slippage.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
-import { handleMarket } from "./routes-market.mjs";
+import { handleMarket, handleFadeGrade } from "./routes-market.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
 import { parityEvents } from "./parityEvents.mjs";
 import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
@@ -1172,6 +1172,12 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
       });
       if (marketRes) return marketRes;
+    }
+    {
+      const fadeRes = await handleFadeGrade(parts, request, {
+        dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
+      });
+      if (fadeRes) return fadeRes;
     }
     // ── /calls/pulse → open calls + graded this week, for the Trade/Spot chip and the landing (routes-pulse.mjs) ─
     {

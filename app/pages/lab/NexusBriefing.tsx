@@ -8,6 +8,7 @@
 // Deterministic (no LLM, no key, instant), with a one-tap hand-off to Nexus to
 // go deeper. Renders nothing when there's genuinely nothing to say (cold-start safe).
 import { useEffect, useMemo, useState } from "react";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 import { Collapsible } from "./Collapsible";
 import type { TabId, ProcessedTrade } from "./types";
 import { buildBriefing, buildMarketRead, buildFusion, computeTape, type BriefingTrade, type Insight, type MarketSignal } from "./briefing";
@@ -97,11 +98,11 @@ export function NexusBriefing({
   useEffect(() => {
     let alive = true;
     fetch(PROXY).then((r) => r.json()).then((j) => { if (alive) setRows(j?.data?.rows ?? []); }).catch(() => { /* no tape/movers */ });
-    fetch(`${AGENT_API}/signals`).then((r) => r.json()).then((j) => { if (alive) setSignals(Array.isArray(j?.signals) ? j.signals : []); }).catch(() => { /* no setups */ });
+    sharedJson(`${AGENT_API}/signals`).then((j) => { if (alive) setSignals(Array.isArray(j?.signals) ? j.signals : []); }).catch(() => { /* no setups */ });
     // /agents/live returns { count, positions:[...] } — count is authoritative.
-    fetch(`${AGENT_API}/agents/live`).then((r) => r.json()).then((j) => { if (alive) setLiveAgents(typeof j?.count === "number" ? j.count : (Array.isArray(j?.positions) ? j.positions.length : 0)); }).catch(() => { /* no live count */ });
+    sharedJson(`${AGENT_API}/agents/live`).then((j) => { if (alive) setLiveAgents(typeof j?.count === "number" ? j.count : (Array.isArray(j?.positions) ? j.positions.length : 0)); }).catch(() => { /* no live count */ });
     // The merit-weighted caller lean per symbol — the graded crowd, for the fusion.
-    fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json()).then((j) => { if (alive) setConsensus(j?.consensus ?? null); }).catch(() => { /* no crowd lean */ });
+    sharedJson(`${AGENT_API}/theses/consensus`).then((j) => { if (alive) setConsensus(j?.consensus ?? null); }).catch(() => { /* no crowd lean */ });
     return () => { alive = false; };
   }, []);
 
