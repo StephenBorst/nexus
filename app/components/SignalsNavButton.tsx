@@ -1,25 +1,26 @@
-// ◆ SIGNALS — the global "come back to the Lab" bell. Merges the public market +
-// graded-crowd + tracked-wallet feeds (buildSignals) into a ranked list, badges only
-// genuinely NEW signals (stable ids marked "seen" in localStorage), and drops the user
-// straight into the relevant Lab tab. This is the retention layer: a live reason to
-// return, not a stale dashboard. All sources are public + fail-soft; no wallet, no key.
+// ◆ SIGNALS — the global bell on top of every DEX page. One request, GET /intel/bell (lab-api routes-bell.mjs, rules
+// app/lib/signals.mjs v2): registered reads that just acted on their paper wallets lead, then stretched funding,
+// trend and tracked-wallet tier moves; EVERY row carries its grade line (the exact rule's grade, its nearest graded
+// relative named as such, or "Not graded"). Badges only genuinely NEW rows (stable ids marked "seen" in
+// localStorage). Public + fail-soft; no wallet, no key.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
-import { buildSignals, countUnseen } from "@/lib/signals.mjs";
+import { countUnseen } from "@/lib/signals.mjs";
+import { C, SIGNAL } from "@/config/theme";
 import PushAlertsPanel from "@/components/PushAlertsPanel";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const SEEN_KEY = "nexus_signals_seen";
 const PRUNE_MS = 14 * 86400 * 1000;
 
-interface Signal { id: string; kind: string; priority: number; ts: number; tab: string; title: string; detail: string; }
+interface Signal { id: string; kind: string; priority: number; ts: number; tab: string; title: string; detail: string; graded?: string; path?: string; }
 
 const loadSeen = (): Record<string, number> => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || "{}"); } catch { return {}; } };
 const saveSeen = (m: Record<string, number>) => { try { localStorage.setItem(SEEN_KEY, JSON.stringify(m)); } catch { /* private mode */ } };
 
-const KIND_GLYPH: Record<string, string> = { FADE_ALIGN: "◆", DIVERGENCE: "⚔", MOMENTUM: "↗", FUNDING: "≈", TIER: "✦" };
+const KIND_GLYPH: Record<string, string> = { READ: "◆", FADE_ALIGN: "≈", DIVERGENCE: "⚔", MOMENTUM: "↗", FUNDING: "≈", TIER: "✦" };
 
 export default function SignalsNavButton() {
   const [list, setList] = useState<Signal[]>([]);
@@ -34,16 +35,9 @@ export default function SignalsNavButton() {
   const refresh = useCallback(async () => {
     if (typeof document !== "undefined" && document.hidden) return;
     try {
-      const [sg, cs, ev] = await Promise.all([
-        sharedJson(`${AGENT_API}/signals`).catch(() => null),
-        sharedJson(`${AGENT_API}/theses/consensus`).catch(() => null),
-        sharedJson(`${AGENT_API}/smart/xray/events`).catch(() => null),
-      ]);
-      const built = buildSignals({
-        signals: Array.isArray(sg?.signals) ? sg.signals : [],
-        consensus: cs?.consensus ?? null,
-        xrayEvents: Array.isArray(ev?.events) ? ev.events : [],
-      }) as Signal[];
+      const bell = await sharedJson(`${AGENT_API}/intel/bell`).catch(() => null);
+      if (!bell || !Array.isArray(bell.list)) return; // keep the last list
+      const built = bell.list as Signal[];
       setList(built);
       setUnseen(countUnseen(built, loadSeen()));
     } catch { /* fail-soft — keep the last list */ }
@@ -79,6 +73,7 @@ export default function SignalsNavButton() {
 
   const go = (s: Signal) => {
     setOpen(false);
+    if (s.path) { navigate(s.path); return; }
     try { window.dispatchEvent(new CustomEvent("nexus:lab-tab", { detail: { tab: s.tab } })); } catch { /* ignore */ }
     navigate(`/lab?tab=${s.tab}`);
   };
@@ -96,7 +91,7 @@ export default function SignalsNavButton() {
           <path d="M13.7 21a2 2 0 0 1-3.4 0" />
         </svg>
         {unseen > 0 && (
-          <span style={{ position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, padding: "0 4px", borderRadius: 8, background: "#3ecf8e", boxShadow: "0 0 6px rgba(62,207,142,0.7)", color: "#0f0f11", fontFamily: "var(--nx-font-mono)", fontSize: 9, fontWeight: "bold", lineHeight: "15px", textAlign: "center", boxSizing: "border-box" }}>
+          <span style={{ position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, padding: "0 4px", borderRadius: 8, background: C.accent, color: C.canvas, fontFamily: "var(--nx-font-mono)", fontSize: 9, fontWeight: "bold", lineHeight: "15px", textAlign: "center", boxSizing: "border-box" }}>
             {unseen > 9 ? "9+" : unseen}
           </span>
         )}
@@ -108,24 +103,25 @@ export default function SignalsNavButton() {
         <div className="nx-fade-in" style={{ position: "fixed", top: 54, right: 8, zIndex: 9500, width: "min(360px, calc(100vw - 16px))", maxHeight: "72vh", overflowY: "auto", background: "#0f0f11", border: "1px solid #33333a", borderRadius: 10, boxShadow: "0 16px 50px rgba(0,0,0,0.6)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderBottom: "1px solid #232327", position: "sticky", top: 0, background: "#0f0f11" }}>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: "#ededf0" }}>◆ SIGNALS</span>
-            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.05em" }}>live · public · graded</span>
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", letterSpacing: "0.05em" }}>live · public · each with its grade</span>
           </div>
           {list.length === 0 ? (
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a", padding: "18px 14px", textAlign: "center", lineHeight: 1.6 }}>
-              Quiet tape. No stretched setups or tier moves right now — signals fire as the market and the graded crowd move.
+              Quiet tape. No registered read acted, no stretched funding and no tier moves right now.
             </div>
           ) : (
             list.map((s) => (
               <button key={s.id} onClick={() => go(s)} style={{ appearance: "none", WebkitAppearance: "none", display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderBottom: "1px solid #1a1a1e", cursor: "pointer", padding: "11px 14px" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: s.kind === "DIVERGENCE" ? "#fbbf24" : "#3ecf8e", flexShrink: 0 }}>{KIND_GLYPH[s.kind] ?? "◆"}</span>
+                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: s.kind === "READ" ? C.accent : s.kind === "DIVERGENCE" ? SIGNAL.watch : "#71717a", flexShrink: 0 }}>{KIND_GLYPH[s.kind] ?? "◆"}</span>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#f4f4f5", fontWeight: 600, lineHeight: 1.35 }}>{s.title}</span>
                 </div>
                 <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 11.5, color: "#a1a1aa", lineHeight: 1.5, marginTop: 3, paddingLeft: 19 }}>{s.detail}</div>
+                {s.graded && <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 11, color: s.kind === "READ" ? "#d4d4d8" : "#71717a", lineHeight: 1.5, marginTop: 3, paddingLeft: 19 }}>{s.graded}</div>}
               </button>
             ))
           )}
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", padding: "9px 14px", textAlign: "center" }}>synthesized from funding, the graded caller crowd, and tracked wallets</div>
+          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", padding: "9px 14px", textAlign: "center" }}>Registered reads first. The rest are inputs, each with its grade. Grades live on Proof.</div>
           <PushAlertsPanel wallet={walletAddress} />
         </div>
       )}

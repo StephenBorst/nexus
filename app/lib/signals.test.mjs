@@ -1,74 +1,102 @@
-// Signal-synthesis tests. Run: node --test app/lib/signals.test.mjs
+// The Signals bell, v2: every row with its grade. Run: node --test app/lib/signals.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSignals, countUnseen } from "./signals.mjs";
+import { readFileSync } from "node:fs";
+import { buildSignals, countUnseen, readRows, readStageLine, NOT_GRADED } from "./signals.mjs";
 
 const sig = (symbol, f) => ({ symbol, funding_rate_8h: f });
+const NOW = Date.UTC(2026, 10, 14, 21, 0, 0);
+const scorecard = {
+  axes: [
+    { name: "funding_fade", verdict: "NOISE", r: { samples: 3933 }, random: { pooled: { verdict: "BELOW_RANDOM" } } },
+    { name: "oi_div_reversal_4h", label: "Extreme 4h move on falling OI, faded", verdict: "PREDICTIVE" },
+    { name: "level_reclaim", label: "Prior-day high/low swept and reclaimed", verdict: "PREDICTIVE" },
+  ],
+  pipeline: { reads: [
+    { axis: "oi_div_reversal_4h", stage: "PAPER", paperWallet: "0xd4", numbers: { events: 85, meanR: 0.31, beatsRandomPct: 99.2 } },
+    { axis: "level_reclaim", stage: "REGISTERED", paperWallet: "0x95", numbers: { events: 96, meanR: 0.12, beatsRandomPct: 99 } },
+    { axis: "session_momentum", stage: "RETIRED", paperWallet: "0x00", numbers: {} },
+  ] },
+};
+const FADE_LINE = /^Nearest graded rule: the plain funding fade grades NOISE, worse than random entries \(3,933 samples\)\./;
 
-test("buildSignals: funding + crowd agree → high-priority FADE_ALIGN", () => {
-  const out = buildSignals({ signals: [sig("BTC", 0.0006)], consensus: { BTC: { side: "SHORT" } } });
-  assert.equal(out[0].kind, "FADE_ALIGN");
-  assert.equal(out[0].id, "fade-align-BTC-SHORT");
-  assert.match(out[0].title, /fade short/);
+test("every row carries a grade line; nothing claims an edge, a proof or an entry", () => {
+  const out = buildSignals({
+    signals: [sig("BTC", 0.0006), sig("SOL", -0.0005), { symbol: "ETH", funding_rate_8h: 0.0001, trend: "TREND_DOWN", trend_move_pct: -9.9, trend_oi_pct: 1.4, mark_price: 1800, ema8_4h: 1850 }],
+    consensus: { BTC: { side: "SHORT" } },
+    xrayEvents: [{ wallet: "0xAbC0000000000000000000000000000000000000", kind: "TIER_UP", toTier: "CONSISTENT", ts: NOW }],
+    scorecard, now: NOW,
+  });
+  assert.ok(out.length >= 4);
+  for (const r of out) {
+    assert.ok(r.graded, `${r.kind} has a grade line`);
+    assert.doesNotMatch(`${r.title} ${r.detail}`, /edge|proven|room to run|lower-risk|entries set up|where the information is|buy now|sell now/i, r.id);
+  }
 });
 
-test("buildSignals: funding vs callers disagree → DIVERGENCE", () => {
-  const out = buildSignals({ signals: [sig("BTC", 0.0006)], consensus: { BTC: { side: "LONG" } } });
-  assert.equal(out[0].kind, "DIVERGENCE");
+test("funding rows: inputs side by side, labelled with the plain fade's live grade", () => {
+  const align = buildSignals({ signals: [sig("BTC", 0.0006)], consensus: { BTC: { side: "SHORT" } }, scorecard })[0];
+  assert.equal(align.kind, "FADE_ALIGN");
+  assert.equal(align.id, "fade-align-BTC-SHORT");
+  assert.equal(align.title, "BTC: funding stretched, graded callers lean short");
+  assert.match(align.detail, /Two inputs, not a verdict\./);
+  assert.match(align.graded, FADE_LINE);
+  const div = buildSignals({ signals: [sig("BTC", 0.0006)], consensus: { BTC: { side: "LONG" } }, scorecard })[0];
+  assert.equal(div.kind, "DIVERGENCE");
+  const plain = buildSignals({ signals: [sig("SOL", -0.0005)], consensus: null, scorecard })[0];
+  assert.equal(plain.kind, "FUNDING");
+  assert.match(plain.detail, /^Shorts pay 0\.050%\/8h: the crowd is heavily short\. The fade \(long\) is a mechanical rule\.$/);
+  // scoreboard unread: say so, never invent a grade
+  assert.match(buildSignals({ signals: [sig("SOL", -0.0005)] })[0].graded, /unread/);
 });
 
-test("buildSignals: no crowd data → plain FUNDING signal", () => {
-  const out = buildSignals({ signals: [sig("SOL", -0.0005)], consensus: null });
-  assert.equal(out[0].kind, "FUNDING");
-  // neg funding → crowd is short → the fade is LONG.
-  assert.match(out[0].detail, /crowd is heavily short/);
-  assert.match(out[0].detail, /short is where a long fade/);
+test("momentum: facts only, not graded", () => {
+  const m = buildSignals({ signals: [{ symbol: "ETH", trend: "TREND_UP", trend_move_pct: 6.2, trend_oi_pct: 2, mark_price: 1900, ema8_4h: 1880, funding_rate_8h: 0.0005 }] })[0];
+  assert.equal(m.kind, "MOMENTUM");
+  assert.equal(m.title, "ETH is trending up, open interest rising");
+  assert.equal(m.detail, "+6.2% over the trend window, open interest +2%/hr. Price is 1.1% above its 4H EMA8 ($1,880). Funding already leans long (0.050%/8h).");
+  assert.equal(m.graded, NOT_GRADED);
 });
 
-test("buildSignals: ignores funding below the stretch threshold", () => {
+test("a registered read's paper trade leads the bell with its served stage and out-of-sample numbers", () => {
+  const runs = {
+    oi_div_reversal_4h: { ok: true, count: 3, target: 30, open: { coin: "ETH", side: "SHORT", openedAt: new Date(NOW - 2 * 3600e3).toISOString() }, trades: [] },
+    level_reclaim: { ok: true, count: 8, target: 30, open: null, trades: [{ n: 8, coin: "BTC", side: "LONG", closedAt: new Date(NOW - 6 * 3600e3).toISOString(), outcome: "LOSS", r: -1.02 }] },
+    session_momentum: { ok: true, count: 1, open: { coin: "X", side: "LONG", openedAt: new Date(NOW).toISOString() } },
+  };
+  const out = buildSignals({ signals: [sig("BTC", 0.0006)], scorecard, paperRuns: runs, now: NOW });
+  assert.deepEqual(out.slice(0, 2).map((r) => r.kind), ["READ", "READ"], "graded reads outrank every ungraded row");
+  assert.equal(out[0].title, "ETH: a registered read opened a paper short");
+  assert.equal(out[0].detail, "Extreme 4h move on falling OI, faded. Opened 2h ago on its paper wallet; it closes on its own stop, target or clock.");
+  assert.equal(out[0].graded, "Stage PAPER · 3 of 30 paper trades · out-of-sample 85 events, mean +0.31R, beats random 99%.");
+  assert.equal(out[0].path, "/proof/paper/oi_div_reversal_4h");
+  assert.equal(out[1].title, "BTC: a registered read closed a paper long (loss, −1.02R)");
+  assert.ok(!out.some((r) => /session_momentum|X:/.test(r.id + r.title)), "a retired read never shows");
+});
+
+test("a paper trade closed more than a day ago is no longer news", () => {
+  const runs = { level_reclaim: { ok: true, count: 8, open: null, trades: [{ n: 8, coin: "BTC", side: "LONG", closedAt: new Date(NOW - 30 * 3600e3).toISOString(), outcome: "LOSS", r: -1 }] } };
+  assert.deepEqual(readRows(scorecard, runs, NOW), []);
+  assert.equal(readStageLine({ stage: "REGISTERED", numbers: { events: 0 } }, null), "Stage REGISTERED · out-of-sample 0 events.");
+});
+
+test("ignores funding below the stretch threshold; tier ids are stable per day", () => {
   assert.deepEqual(buildSignals({ signals: [sig("BTC", 0.0001)] }), []);
-});
-
-test("buildSignals: tier events get stable per-day ids and sort under fades", () => {
   const ts = 1_700_000_000_000;
-  const out = buildSignals({ signals: [sig("BTC", 0.0006)], consensus: { BTC: { side: "SHORT" } }, xrayEvents: [{ wallet: "0xAbC0000000000000000000000000000000000000", kind: "TIER_UP", toTier: "CONSISTENT", ts }] });
-  const tier = out.find((s) => s.kind === "TIER");
-  assert.ok(tier);
+  const tier = buildSignals({ xrayEvents: [{ wallet: "0xAbC0000000000000000000000000000000000000", kind: "TIER_UP", toTier: "CONSISTENT", ts }] })[0];
   assert.equal(tier.id, `tier-0xabc0000000000000000000000000000000000000-CONSISTENT-${Math.floor(ts / 86400000)}`);
-  assert.ok(out[0].kind === "FADE_ALIGN"); // fade outranks the tier event
+  assert.match(tier.graded, /X-Ray/);
 });
 
-test("countUnseen: counts only ids not in the seen set", () => {
-  const list = [{ id: "a" }, { id: "b" }, { id: "c" }];
-  assert.equal(countUnseen(list, new Set(["a"])), 2);
-  assert.equal(countUnseen(list, { a: 1, b: 1, c: 1 }), 0);
-  assert.equal(countUnseen(list, {}), 3);
+test("countUnseen counts ids not yet seen", () => {
+  assert.equal(countUnseen([{ id: "a" }, { id: "b" }], { a: 1 }), 1);
+  assert.equal(countUnseen([{ id: "a" }], new Set(["a"])), 0);
 });
 
-test("buildSignals: a strong OI-confirmed trend surfaces a MOMENTUM signal (ride it)", () => {
-  const out = buildSignals({ signals: [{ symbol: "BTC", funding_rate_8h: 0.0001, trend: "TREND_UP", trend_move_pct: 6.2, trend_oi_pct: 3.4 }] });
-  const mom = out.find((s) => s.kind === "MOMENTUM");
-  assert.ok(mom, "expected a MOMENTUM signal");
-  assert.equal(mom.id, "mom-BTC-LONG");
-  assert.match(mom.title, /long momentum/);
-  assert.match(mom.detail, /open interest rising/);
-});
-
-test("buildSignals: a trend on FLAT/falling OI is NOT momentum (squeeze, not conviction)", () => {
-  const out = buildSignals({ signals: [{ symbol: "BTC", funding_rate_8h: 0.0001, trend: "TREND_UP", trend_move_pct: 6.2, trend_oi_pct: 0.2 }] });
-  assert.equal(out.find((s) => s.kind === "MOMENTUM"), undefined);
-});
-
-test("buildSignals: CHOP / no trend → no momentum signal", () => {
-  const out = buildSignals({ signals: [{ symbol: "BTC", funding_rate_8h: 0.0001, trend: "CHOP", trend_move_pct: 0.2, trend_oi_pct: 5 }] });
-  assert.equal(out.find((s) => s.kind === "MOMENTUM"), undefined);
-});
-
-test("buildSignals: momentum funding cross-check — crowded funding flags a LATE ride", () => {
-  const clean = buildSignals({ signals: [{ symbol: "BTC", funding_rate_8h: 0.0001, trend: "TREND_UP", trend_move_pct: 6, trend_oi_pct: 3 }] }).find((s) => s.kind === "MOMENTUM");
-  assert.match(clean.detail, /room to run/);
-  assert.ok(!/late/i.test(clean.title));
-  const late = buildSignals({ signals: [{ symbol: "BTC", funding_rate_8h: 0.0009, trend: "TREND_UP", trend_move_pct: 6, trend_oi_pct: 3 }] }).find((s) => s.kind === "MOMENTUM");
-  assert.match(late.title, /\(late\)/);
-  assert.match(late.detail, /crowded long/);
+test("the bell reads /intel/bell, says each row's grade, and keeps green/red for money", () => {
+  const src = readFileSync(new URL("../components/SignalsNavButton.tsx", import.meta.url), "utf8");
+  assert.match(src, /\/intel\/bell/);
+  assert.match(src, /s\.graded/);
+  assert.doesNotMatch(src, /live · public · graded/);
+  assert.doesNotMatch(src, /#3ecf8e/, "no money green on a signal");
 });

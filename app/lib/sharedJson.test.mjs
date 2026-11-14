@@ -42,7 +42,7 @@ test("Lab home's duplicate reads go through it", () => {
   const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
   for (const [f, url] of [
     ["../pages/lab/NexusBriefing.tsx", "/theses/consensus"], ["../pages/lab/NexusBriefing.tsx", "/signals"], ["../pages/lab/NexusBriefing.tsx", "/agents/live"],
-    ["../pages/lab/DecisionBoard.tsx", "/theses/consensus"], ["../components/SignalsNavButton.tsx", "/signals"], ["../components/SignalsNavButton.tsx", "/theses/consensus"],
+    ["../pages/lab/DecisionBoard.tsx", "/theses/consensus"], ["../components/SignalsNavButton.tsx", "/intel/bell"],
     ["../components/LiveAlerts.tsx", "/agents/live"],
   ]) assert.match(read(f), new RegExp(`sharedJson\\(\`\\$\\{[A-Z_]+\\}${url.replace(/\//g, "\\/")}\``), `${f} ${url}`);
 });
