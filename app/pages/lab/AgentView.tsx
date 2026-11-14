@@ -36,6 +36,7 @@ import { TelegramLinkPanel } from "./TelegramLink";
 import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSig, formatAgentTime } from "./agentKeys";
 import { bareTicker } from "@/utils/utils";
 import { quietLine, quietAgeText } from "@/lib/quietLine.mjs";
+import { agentStory } from "@/lib/agentStory.mjs";
 import { pressKey } from "@/utils/a11y";
 import { C, SIGNAL } from "@/config/theme";
 
@@ -679,16 +680,16 @@ export function AgentView() {
               <span style={{ fontFamily: "var(--nx-font-serif)", fontSize: 22, fontWeight: 700, color: "#f4f4f5", lineHeight: 1, letterSpacing: "-0.01em" }}>Autonomous Trading Agent</span>
               <span className={isActive ? "nx-pulse" : undefined} style={{
                 fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "3px 10px", borderRadius: 3,
-                background: isActive ? "#3ecf8e15" : "#f7525f15",
-                border: `1px solid ${isActive ? "#3ecf8e40" : "#f7525f40"}`,
-                color: isActive ? "#3ecf8e" : "#f7525f",
+                background: isActive ? "#ededf012" : "transparent",
+                border: `1px solid ${isActive ? "#ededf066" : "#33333a"}`,
+                color: isActive ? "#ededf0" : "#71717a",
                 textTransform: "uppercase", letterSpacing: "0.1em", whiteSpace: "nowrap",
               }}>
                 {isActive ? (hasPosition ? "● TRADING" : "● WATCHING") : "○ INACTIVE"}
               </span>
             </span>
             <span style={{ display: "block", fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", marginTop: 6, lineHeight: 1.5, maxWidth: 520 }}>
-              Runs <strong style={{ color: "#a1a1aa" }}>your</strong> strategy autonomously — every trade it makes is graded on-chain, no self-reporting. The strategy is yours; the accountability is built in.
+              Runs <strong style={{ color: "#a1a1aa" }}>your</strong> strategy inside your caps. Live trades are booked from the exchange’s own fills and anchored on Arbitrum; paper trades are checked against the public tape. No self-reporting.
             </span>
           </span>
         </div>
@@ -725,6 +726,27 @@ export function AgentView() {
           <span role="button" tabIndex={0} aria-label="Dismiss" onClick={() => setPrefillNotice(null)} onKeyDown={pressKey(() => setPrefillNotice(null))} title="Dismiss" style={{ cursor: "pointer", color: "#fbbf24", flexShrink: 0 }}>✕</span>
         </div>
       )}
+
+      {/* ── WHAT YOUR AGENT IS DOING (2026-11-14): on/off + mode, what it holds or why it sits out (the brain's last
+          check), its last action, today vs its caps. Plain words, rules app/lib/agentStory.mjs. ── */}
+      {(() => {
+        const story = agentStory({ config, state: agentState, trades });
+        const toneColor = (t?: string) => (t === "pos" ? C.pos : t === "neg" ? C.neg : t === "watch" ? SIGNAL.watch : C.text.bright);
+        return (
+          <section aria-label="What your agent is doing" style={{ ...agentCardStyle, marginBottom: 12, borderColor: isActive ? "#33333a" : "#232327" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+              <span style={{ ...agentLabelStyle, marginBottom: 0 }}>WHAT YOUR AGENT IS DOING</span>
+              <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: isActive ? "#ededf0" : "#71717a", letterSpacing: "0.1em" }}>{story.status}{isActive ? ` · ${config.mode}` : ""}</span>
+            </div>
+            {story.lines.map((l) => (
+              <div key={l.k} style={{ display: "flex", gap: 10, padding: "6px 0", borderTop: l.k === "status" ? "none" : "1px solid #1a1a1e", alignItems: "baseline" }}>
+                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.12em", color: "#71717a", textTransform: "uppercase", width: isMobile ? 58 : 72, flexShrink: 0 }}>{l.k}</span>
+                <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, lineHeight: 1.5, color: l.k === "status" || l.k === "watching" ? (l.tone === "watch" ? SIGNAL.watch : C.text.fog) : toneColor(l.tone), minWidth: 0 }}>{l.text}</span>
+              </div>
+            ))}
+          </section>
+        );
+      })()}
 
       {/* ── Telegram trade alerts — passive updates without opening the app ── */}
       {walletAddress && (
@@ -1255,7 +1277,7 @@ export function AgentView() {
               <div style={agentCardStyle}>
                 <div style={agentLabelStyle}>REGIME CONDITIONING <span style={{ color: "#52525b", fontSize: 8 }}>· experimental, opt-in</span></div>
                 <div style={{ ...agentLabelStyle, fontSize: 9, marginTop: 6, color: "#71717a", letterSpacing: 0 }}>
-                  Only enter where a signal actually works. Backtest finding: inverted-confluence hits ~<b style={{ color: "#3ecf8e" }}>60%</b> in high volatility and bleeds in the Asia session. <b style={{ color: "#ededf0" }}>Prove it on Test / Sweep first.</b>
+                  Limit entries to certain sessions or volatility. These filters are not graded: <b style={{ color: "#ededf0" }}>test the exact setup on Test / Sweep first</b>, and read the replay as a backtest, not a grade.
                 </div>
 
                 <div style={{ marginTop: 12 }}>

@@ -7,6 +7,10 @@
  */
 
 import { useState, useEffect, useMemo } from "react";
+import { feedRecords, recordLine, watchedFeed } from "@/lib/feedRecord.mjs";
+import { readWatch } from "@/lib/watchStore";
+import { WATCH_EVENT } from "@/lib/watchlist.mjs";
+import { CoinLink } from "@/components/CoinLink";
 import { useAccount, useCollateral } from "@orderly.network/hooks";
 import { useNavigate } from "react-router-dom";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
@@ -484,7 +488,9 @@ function FeedCard({
   following,
   onFollowToggle,
   social,
+  record,
 }: {
+  record?: { graded: number; wins: number; netR: number };
   thesis: FeedThesis;
   markPrice?: number | null;
   walletAddress: string | null;
@@ -542,7 +548,7 @@ function FeedCard({
         aria-label={`${ticker} ${thesis.direction} by ${who}, ${pill.label}. Show the call`}
         className="nx-card-interactive"
         style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: isMobile ? "11px 12px" : "12px 20px", cursor: "pointer" }}>
-        <span style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: C.text.bright, flexShrink: 0 }}>{ticker}</span>
+        <span style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: C.text.bright, flexShrink: 0 }}><CoinLink coin={ticker}>{ticker}</CoinLink></span>
         <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", color: C.text.fog, border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "1px 6px", flexShrink: 0 }}>{thesis.direction === "LONG" ? "↑" : "↓"}{isMobile ? "" : thesis.direction === "LONG" ? " LONG" : " SHORT"}</span>
         <span style={{ fontFamily: UI, fontSize: 13, color: C.text.muted, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: "1 1 0" }}>{who} · {timeAgo}</span>
         <span style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, padding: "0 10px", height: 26, display: "inline-flex", alignItems: "center", borderRadius: 13, border: `1px solid ${pill.border}`, color: pill.color, flexShrink: 0 }}>{pill.label}</span>
@@ -589,6 +595,11 @@ function FeedCard({
               )
             )}
           </div>
+          {!thesis.agent && (
+            <div title="Every graded call of this caller in the feed, losses included. Graded from public price." style={{ marginTop: 3, fontFamily: UI, fontSize: 12, color: C.text.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              Record here: {recordLine(record)}
+            </div>
+          )}
         </div>
         {/* The status pill is the ONE open control: it carries the grade and opens the call's page. */}
         <a
@@ -619,7 +630,7 @@ function FeedCard({
 
       {/* Market + side. The side is a monochrome chip: it's a position, not P&L. */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        <span style={{ fontFamily: UI, fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", color: C.text.bright, lineHeight: 1 }}>{ticker}</span>
+        <span style={{ fontFamily: UI, fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em", color: C.text.bright, lineHeight: 1 }}><CoinLink coin={ticker}>{ticker}</CoinLink></span>
         <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: C.text.bright, border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "2px 7px" }}>
           {thesis.direction === "LONG" ? "↑" : "↓"} {thesis.direction}
         </span>
@@ -1364,7 +1375,14 @@ export default function FeedPage() {
   // obvious while hidden.
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [copyTarget, setCopyTarget] = useState<FeedThesis | null>(null);
-  const [view, setView] = useState<"feed" | "ranks" | "following">("feed");
+  const [view, setView] = useState<"feed" | "ranks" | "following" | "coins">("feed");
+  // Your coins (2026-11-14): the coins this device watches (☆ in any coin's drawer), kept in step with the drawer.
+  const [watchCoins, setWatchCoins] = useState<string[]>(() => readWatch().coins);
+  useEffect(() => {
+    const on = () => setWatchCoins(readWatch().coins);
+    window.addEventListener(WATCH_EVENT, on);
+    return () => window.removeEventListener(WATCH_EVENT, on);
+  }, []);
   const [sortMode, setSortMode] = useState<"latest" | "trending">("latest");
   // The feed renders FEED_PAGE calls at a time. All of them at once (300+ cards) made the page about
   // 115 phone screens tall and slow to open and scroll. A new view, filter, search or sort starts over.
@@ -1474,7 +1492,9 @@ export default function FeedPage() {
   // Ph24: following feed is the full feed filtered to followed wallets
   const followingFeed = feed.filter((t) => following.has(t.wallet.toLowerCase()));
 
-  const baseForFilter = view === "following" ? followingFeed : feed;
+  const baseForFilter = view === "following" ? followingFeed : view === "coins" ? (watchedFeed(feed, watchCoins) as FeedThesis[]) : feed;
+  // Each caller's whole graded record in the feed (losses included), shown on every card.
+  const records = useMemo(() => feedRecords(feed), [feed]);
   const filtered = baseForFilter.filter((t) => {
     if (filter !== "ALL" && t.status !== filter) return false;
     if (dirFilter !== "ALL" && t.direction !== dirFilter) return false; // Ph23
@@ -1537,6 +1557,7 @@ export default function FeedPage() {
     feed:      { eyebrow: "THE FEED", title: "Every call. Graded by the tape." },
     ranks:     { eyebrow: "THE FEED", title: "Verified callers, ranked" },
     following: { eyebrow: "THE FEED", title: "Traders you follow" },
+    coins:     { eyebrow: "THE FEED", title: `Calls on your coins: ${watchCoins.join(", ")}` },
   }[view];
 
   // Editorial sub-nav — the same treatment as the Lab tabs (Manrope, underline-active,
@@ -1584,6 +1605,9 @@ export default function FeedPage() {
         <div role="tablist" aria-label="Feed views" className="nx-noscrollbar" style={{ display: "flex", gap: isMobile ? 6 : 24, overflowX: "auto", scrollbarWidth: "none", width: isMobile ? "100%" : undefined, alignItems: "flex-end" }}>
           <button role="tab" aria-selected={view === "feed"} onClick={() => setView("feed")} style={feedTab(view === "feed")}>Feed</button>
           <button role="tab" aria-selected={view === "ranks"} onClick={() => setView("ranks")} style={feedTab(view === "ranks")}>Ranks</button>
+          {watchCoins.length > 0 && (
+            <button role="tab" aria-selected={view === "coins"} onClick={() => setView("coins")} style={feedTab(view === "coins")}>Your coins · {watchCoins.length}</button>
+          )}
           {walletAddress && (
             <button role="tab" aria-selected={view === "following"} onClick={() => setView("following")} style={feedTab(view === "following")}>Following{following.size > 0 ? ` · ${following.size}` : ""}</button>
           )}
@@ -1643,6 +1667,7 @@ export default function FeedPage() {
                     following={following}
                     onFollowToggle={handleFollowToggle}
                     social={socialData[t.id]}
+                    record={records.get(t.wallet.toLowerCase())}
                   />
                 ))}
                 {showMore}
@@ -1704,8 +1729,8 @@ export default function FeedPage() {
           </>
         )}
 
-        {/* ── FEED VIEW ── */}
-        {view === "feed" && (
+        {/* ── FEED VIEW (also "Your coins": the same list, narrowed to the watched coins) ── */}
+        {(view === "feed" || view === "coins") && (
           <>
             {/* AgentTrackRecord hidden: paper-strat backtest shows the live agent's
                 edge is net-negative/breakeven — don't surface it as social proof
@@ -1826,6 +1851,7 @@ export default function FeedPage() {
                     following={following}
                     onFollowToggle={handleFollowToggle}
                     social={socialData[t.id]}
+                    record={records.get(t.wallet.toLowerCase())}
                   />
                 ))}
                 {showMore}
@@ -1844,7 +1870,7 @@ export default function FeedPage() {
 
       {/* Token chrome ($NEXUS buy + treasury) follows the RANKS/FOLLOWING views only —
           the FEED stays pure (the top ticker already carries the live $NEXUS price). */}
-      {view !== "feed" && flywheel}
+      {view !== "feed" && view !== "coins" && flywheel}
     </div>
   );
 }
