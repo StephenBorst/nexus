@@ -162,8 +162,8 @@ product is what sits on top:
   by `ops:halt:log`; public `GET /ops/halt`). exec reads it once per tick (`app/lib/liveHalt.mjs`; unreadable = halted)
   and skips every non-PAPER entry right before `enterPosition`. Exits, kill, DCA ladders, PAPER and parity untouched;
   closes nothing. No auto thresholds: a breaker rule is a read, graded first.
-- **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open (no stop/TP:
-  the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
+- **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open with no TP or
+  trail and only what rests on Orderly (the backstop stop, or the owner's own; none on DCA/paper): the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.
 - **Kill order** (`nexus-agent-exec/killSwitch.mjs`, lab-api `routes-kill.mjs`, fixed 2026-11-06): the route only sets
   `agent:kill:{addr}` (and puts the wallet back on `agent:users`); it never deletes the key or the list entry. Exec closes

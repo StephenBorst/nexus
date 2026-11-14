@@ -2539,3 +2539,19 @@ Thesis + Agent tabs: nothing pushed the page sideways. Found and fixed:
   reads every message the signers can throw so a new one can't go unsorted).
 Not a bug: the Solana ticket's "◎ Solana signer · live check" readout is DEV-only (`import.meta.env.DEV`). Wallet-only
 screens (confirm modals, agent controls) were checked from the code: no fixed-pixel grid without a phone layout.
+
+## 2026-11-14 · Copy that claimed more than the code measured
+
+A sweep of user-visible claim lines against what the code computes (`app/lib/copyClaims.test.mjs` pins the fixes):
+- Mispriced board: the reversion chip said "◆ Fade has paid here" in the bone accent. `edgeQuality` measures how often a
+  funding stretch REVERTED (a coin-flip test), not a fade's P&L after fees, and the bone ◆ is the scoreboard's
+  PREDICTIVE mark. Now "Reverted N% of past stretches · beats a coin flip" in fog. Its explainer said "the edge is to bet
+  the other way"; now "the fade bets the other way. It's a mechanical rule, not graded yet." Labels "Funding edge" →
+  "Funding stretch"; the Lab section "Funding edges … which fades PAID vs TRAP" → "Funding stretches … reverted vs kept
+  stretching".
+- Briefing: "You have a proven record" (fired at 10 trades, 50% win), "Your edge is on the long side" / "in the
+  Asia session" (a win-rate split) → "A positive record…", "You've done better on/in…", plus "A win rate isn't an edge:
+  check net R before leaning on it."
+- CLAUDE.md said DEACTIVATE leaves "no stop/TP"; a live single-entry position keeps its exchange backstop.
+Left as is: a trader's own "YOUR EDGE" analytics (their graded record, not a claim about our reads). /proof copy is the
+engine lane's.

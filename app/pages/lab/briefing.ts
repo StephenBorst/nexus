@@ -617,8 +617,8 @@ export function buildBriefing(input: BriefingInput): Insight[] {
         id: "edge-directional",
         priority: 70,
         tone: "info",
-        title: `Your edge is on the ${strong} side`,
-        detail: `${strongWr}% win rate ${strong} vs ${weakWr}% ${weak}. Trade more ${strong}s; be far more selective on ${weak}s.`,
+        title: `You’ve done better on the ${strong} side`,
+        detail: `${strongWr}% win rate ${strong} vs ${weakWr}% ${weak} in your trades so far. A win rate isn’t an edge: check net R before leaning on it.`,
         action: { label: "Full breakdown", tab: "analytics" },
       });
     }
@@ -703,20 +703,20 @@ export function buildBriefing(input: BriefingInput): Insight[] {
       id: "session-edge",
       priority: 58,
       tone: "info",
-      title: `Your edge is in the ${bName} session`,
+      title: `You’ve done better in the ${bName} session`,
       detail: `${bName} hours ${money(bV.net)} over ${bV.n} trades (${Math.round((bV.wins / bV.n) * 100)}% win). ${wName} hours ${money(wV.net)} over ${wV.n} (${Math.round((wV.wins / wV.n) * 100)}%). Trade when you're sharp; sit out the ${wName} session or size down.`,
       action: { label: "By-time stats", tab: "analytics" },
     });
   }
 
-  // 6 — Proven record, no agent running → automate the edge.
+  // 6 — A positive record, no agent running → try a rules version of it on paper.
   if (agent && !agent.active && n >= 10 && winRate >= 50 && totalPnl > 0) {
     out.push({
       id: "agent-idle",
       priority: 50,
       tone: "info",
-      title: "You have a proven record and no agent running",
-      detail: `${winRate.toFixed(0)}% win rate, ${money(totalPnl)} net. Hand a rules version of your edge to the agent and let it work while you don't.`,
+      title: "A positive record, and no agent running",
+      detail: `${winRate.toFixed(0)}% win rate, ${money(totalPnl)} net over ${n} trades. Try a rules version of it on the agent: it starts on paper and is graded the same way.`,
       action: { label: "Set up the agent", tab: "agent" },
     });
   }
