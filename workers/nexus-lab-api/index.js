@@ -106,6 +106,7 @@ import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
 import { handleMarket, handleMarkets, handleFadeGrade } from "./routes-market.mjs";
+import { handleBell, composeBell } from "./routes-bell.mjs";
 import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
 import { marketCoin } from "../../app/lib/marketRead.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
@@ -901,7 +902,11 @@ const worker = {
     // Hourly: push the single highest-conviction signal to opted-in Telegram subscribers
     // (throttled + deduped inside). Signals reach traders when the app is closed.
     ctx.waitUntil((async () => {
-      try { const r = await deliverSignals(env); if (r.sent) console.log(`[signals] pushed ${r.id} to ${r.sent} chats`); }
+      try {
+        const bell = () => composeBell((path) => worker.fetch(new Request(`https://og.nexustradinglabs.com${path}`), env, ctx));
+        const r = await deliverSignals(env, { bell });
+        if (r.sent) console.log(`[signals] pushed ${r.id} to ${r.sent} chats`);
+      }
       catch (e) { console.error("[signals] delivery failed:", String(e)); }
     })());
     // Hourly: generate the systematic HOUSE CALL that seeds the caller board — DARK by
@@ -1192,6 +1197,13 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
       });
       if (marketsRes) return marketsRes;
+    }
+    // ── /intel/bell → the Signals bell, each row with its grade (routes-bell.mjs, app/lib/signals.mjs). 60 s cache.
+    {
+      const bellRes = await handleBell(parts, request, env, {
+        dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
+      });
+      if (bellRes) return bellRes;
     }
     {
       const fadeRes = await handleFadeGrade(parts, request, {
@@ -5948,7 +5960,8 @@ document.getElementById("btn").addEventListener("click",go);
 
     if (parts[0] === "signals" && parts[1] === "deliver-now" && request.method === "GET") {
       const send = url.searchParams.get("send") === "1";
-      const result = await deliverSignals(env, { dryRun: !send });
+      const bell = () => composeBell((path) => worker.fetch(new Request(`https://og.nexustradinglabs.com${path}`), env, ctx));
+      const result = await deliverSignals(env, { dryRun: !send, bell });
       return json({ mode: send ? "live" : "dry-run", ...result }, request);
     }
     // ── GET /signals/x402 — the graded edge, SOLD as data (x402, USDC on Base) ──────

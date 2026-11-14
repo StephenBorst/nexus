@@ -143,6 +143,18 @@ export async function computeSignalRows(env) {
 // Cron: build signals, pick the single highest-conviction push-worthy one (a fade where
 // signal+crowd agree, or a real signal-vs-callers divergence), and DM opted-in chats —
 // only when it's genuinely NEW and outside the throttle. Best-effort + fail-soft.
+// What the hourly Telegram push may send (2026-11-14, borst: "grade our in-house signals"): only a REGISTERED read
+// acting on its paper wallet (signals.mjs kind READ), with its served stage line. It used to push the top funding
+// fade / momentum row as "Nexus signal": rules nothing grades (the plain fade grades NOISE, worse than random).
+// Same rule as the house caller: back on only for a read that clears. Pure.
+export function pushPick(list) {
+  return (list || []).find((s) => s && s.kind === "READ") || null;
+}
+export function pushText(top) {
+  const link = top.path ? `https://trade.nexustradinglabs.com${top.path}` : `https://trade.nexustradinglabs.com/lab?tab=${top.tab}`;
+  return `◆ <b>Nexus · a registered read acted</b>\n${top.title}\n${top.detail}\n${top.graded ? `<i>${top.graded}</i>\n` : ""}\n<a href="${link}">See the run →</a>\n<i>Paper trades, graded in public. Not advice. Send /signals off to stop.</i>`;
+}
+
 export async function deliverSignals(env, opts = {}) {
   const dryRun = !!opts.dryRun;
   const KV = env.NEXUS_AGENT || env.LAB_STORE;
@@ -154,20 +166,23 @@ export async function deliverSignals(env, opts = {}) {
     (async () => { try { const { entries } = await gatherStanceEntries(env); return consensusBySymbol(entries); } catch { return null; } })(),
     KV.get("xray:events"),
   ]);
-  const built = buildSignals({ signals, consensus, xrayEvents: evRaw ? JSON.parse(evRaw) : [] });
-  const top = built.find((s) => s.kind === "FADE_ALIGN" || s.kind === "DIVERGENCE" || s.kind === "MOMENTUM");
+  // The bell's own composition (graded reads + their paper runs) when the worker hands it in; else no read rows.
+  let built = null;
+  if (typeof opts.bell === "function") { try { built = (await opts.bell())?.list ?? null; } catch { built = null; } }
+  if (!built) built = buildSignals({ signals, consensus, xrayEvents: evRaw ? JSON.parse(evRaw) : [] });
+  const top = pushPick(built);
   const subs = await KV.list({ prefix: "signals:sub:" });
   // Ops-visible diagnostic so `/signals/deliver-now` shows WHY it did or didn't fire.
   const diag = { hasToken, built: built.length, top: top ? { id: top.id, kind: top.kind, title: top.title } : null, subscribers: subs.keys.length, last, throttleMs: MIN_BROADCAST_MS };
 
   if (!hasToken) return { sent: 0, reason: "no_token", ...diag };
-  if (!top) return { sent: 0, reason: "no_high_conviction_signal", ...diag };
+  if (!top) return { sent: 0, reason: "no_registered_read_acted", ...diag };
   if (top.id === last.id) return { sent: 0, reason: "unchanged", ...diag };
   if (Date.now() - (last.ts || 0) < MIN_BROADCAST_MS) return { sent: 0, reason: "throttled", wouldSend: top.id, ...diag };
   if (!subs.keys.length) { if (!dryRun) await KV.put(BROADCAST_KEY, JSON.stringify({ id: top.id, ts: Date.now() })); return { sent: 0, reason: "no_subscribers", wouldSend: top.id, ...diag }; }
   if (dryRun) return { sent: 0, reason: "dry_run", wouldSend: top.id, ...diag };
 
-  const text = `◆ <b>Nexus signal</b>\n${top.title}\n${top.detail}\n\n<a href="https://trade.nexustradinglabs.com/lab?tab=${top.tab}">Open the Lab →</a>\n<i>Send /signals off to stop.</i>`;
+  const text = pushText(top);
   let sent = 0;
   for (const k of subs.keys) {
     const chatId = k.name.slice("signals:sub:".length);

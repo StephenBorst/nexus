@@ -710,6 +710,13 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   the Messages page offers REMOVE OLD DEVICES: one signature, `Client.revokeInstallations` without a client, keeps the 3
   newest, then enables here.
 - The nav bell is `SignalsNavButton.tsx`. Before adding UI to a component, grep that something mounts it.
+  **The bell, graded (v2, borst 2026-11-14, rules `app/lib/signals.mjs`, route `GET /intel/bell` routes-bell.mjs, 60 s
+  cache):** every row carries `graded`: READ rows (a registered read with a paper wallet opened a paper trade, or closed
+  one in the last 24h; served stage, n of 30, out-of-sample events / mean R / beats-random %) lead; funding rows carry the
+  plain fade's live grade as the nearest relative; MOMENTUM = facts + "Not graded"; TIER = from the wallet's X-Ray record.
+  No advice copy ("room to run", "lower-risk entry"), no tally, no money-green. **The hourly Telegram push sends ONLY a
+  READ row** (`pushPick` / `pushText`, signal-delivery.mjs; reason `no_registered_read_acted` otherwise), never an
+  ungraded fade or momentum row.
 
 ## Spot, swap, cross-chain
 - **Orderly SDK has no spot.** In-app spot = routers + the user's signature.

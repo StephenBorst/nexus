@@ -103,3 +103,18 @@ test("regime OI: a stale snapshot is not current OI", async () => {
   assert.equal(reg.oi, null, "no OI read from a 2-hour-old snapshot");
   assert.equal(reg.oiChangePct, null);
 });
+
+// ── The Telegram push sends only a registered read acting on its paper wallet (2026-11-14) ─────────────
+test("push: only a READ row goes out, with its stage line; ungraded funding / momentum rows never do", async () => {
+  const { pushPick, pushText } = await import("./signal-delivery.mjs");
+  const fade = { kind: "FADE_ALIGN", title: "BTC: funding stretched", detail: "d", graded: "Nearest graded rule: NOISE" };
+  const mom = { kind: "MOMENTUM", title: "ETH trending", detail: "d", graded: "Not graded" };
+  assert.equal(pushPick([fade, mom]), null);
+  const read = { kind: "READ", title: "ETH: a registered read opened a paper short", detail: "Extreme 4h move on falling OI, faded.", graded: "Stage PAPER · 3 of 30 paper trades.", path: "/proof/paper/oi_div_reversal_4h", tab: "intel" };
+  assert.equal(pushPick([fade, read, mom]), read);
+  const t = pushText(read);
+  assert.match(t, /Stage PAPER · 3 of 30 paper trades\./);
+  assert.match(t, /https:\/\/trade\.nexustradinglabs\.com\/proof\/paper\/oi_div_reversal_4h/);
+  assert.match(t, /Not advice\./);
+  assert.doesNotMatch(t, /edge|proven|high-conviction/i);
+});
