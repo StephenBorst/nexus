@@ -391,7 +391,9 @@ product is what sits on top:
   30-day median → SHORT, mirror → LONG; 9 main coins, ARB/WLD have no basis) from 2026-11-08; lens read A
   (`docs/research/lens-reads-prereg.md`, signed by borst in session 2026-11-14): `smart_consensus_2x` (sm:hist row, lead
   ≥ 2, > the other, ≥ `CONSENSUS_RATIO` 2× it → follow; 24h) from 2026-11-15, the drawer's smart lens at its exact rule
-  (the drawer prints its own oos count, `fadeGrade.mjs exactLine`); B forecast_divergence waits for a recorder. Registered
+  (the drawer prints its own oos count, `fadeGrade.mjs exactLine`); B forecast_divergence waits for 14 days of
+  `forecast:hist:{COIN}` (`forecastHist.mjs`, hourly from 2026-11-14, recording only, the deepest 6 price-target markets
+  a coin; read-only `GET /intel/forecast-history/:coin`; axisbt/explorerReads must not read it, test-pinned). Registered
   bodies live in `explorerReads.mjs`; unregistered drafts in `explorerDraftsB.mjs` (batch 2, `explorer-drafts-b.md`; tests
   fail if a draft is graded or axisbt imports it) and `explorerDrafts4.mjs` (batch 4, `explorer-drafts-4.md`: settled, A + D
   registered, B funding_settle_snap + C level_reclaim_weekly DROPPED; generators get axisbt's `ctx.btcCandles`;

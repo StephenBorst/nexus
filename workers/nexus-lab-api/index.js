@@ -106,6 +106,8 @@ import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
 import { handleMarket, handleFadeGrade } from "./routes-market.mjs";
+import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
+import { marketCoin } from "../../app/lib/marketRead.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
 import { parityEvents } from "./parityEvents.mjs";
 import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
@@ -876,6 +878,18 @@ const worker = {
         const n = await snapshotFlow(env, [...FLOW_COINS]);
         console.log(`[flow] snapshotted ${n} coins' basis/cvd`);
       } catch (e) { console.error("[flow] snapshot failed:", String(e)); }
+    })());
+    // Hourly: record the forecast board per coin into forecast:hist:{COIN} (forecastHist.mjs) — the input lens read B
+    // (forecast_divergence, docs/research/lens-reads-prereg.md) needs 14 days of before it can be registered.
+    // RECORDING ONLY: nothing grades, trades or shows it. Reads /intel/forecasts through the worker's own handler.
+    ctx.waitUntil((async () => {
+      try {
+        const r = await snapshotForecasts(env.NEXUS_AGENT || env.LAB_STORE, async () => {
+          const res = await worker.fetch(new Request("https://og.nexustradinglabs.com/intel/forecasts"), env, ctx);
+          return res.ok ? res.json() : null;
+        });
+        console.log(`[forecast:hist] recorded ${r.rows} rows on ${r.coins} coins`);
+      } catch (e) { console.error("[forecast:hist] snapshot failed:", String(e)); }
     })());
     // Hourly: classify each core symbol's trend regime (the momentum signal source),
     // cached for the /signals hot path + the fusion. Runs BEFORE delivery so the push
@@ -2723,6 +2737,15 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         coin, symbol, points, reversion, edgeQuality: eq, source,
         note: "Funding story-line from recorded hourly history (core symbols) or Orderly public funding-rate history (all markets). Reversion = how price moved AGAINST the crowd over the next ~3 days the last times funding was this extreme — the SAME series the mispriced board / card cite (one clock).",
       }), { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300", ...cors(request) } });
+    }
+
+    // ── GET /intel/forecast-history/:coin — read-only forecast:hist (forecastHist.mjs), for B's count-only power check.
+    if (parts[0] === "intel" && parts[1] === "forecast-history" && request.method === "GET") {
+      const coin = marketCoin(parts[2]);
+      if (!coin) return json({ error: "coin required — GET /intel/forecast-history/BTC" }, request, 400);
+      let rows = [];
+      try { const raw = await (env.NEXUS_AGENT || env.LAB_STORE).get(FORECAST_HIST_PREFIX + coin); rows = raw ? JSON.parse(raw) : []; } catch { rows = []; }
+      return json({ coin, rows, count: rows.length, from: rows[0]?.t ?? null, note: "Recording only (lens read B, not registered). Nothing grades or trades it." }, request);
     }
 
     // ── /intel/forecasts[/:coin] — the prediction-market lens (Forecast Divergence) ──
