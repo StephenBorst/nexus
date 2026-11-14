@@ -367,15 +367,15 @@ function shareRead(m: Market, isFade: boolean, draftAnyway: boolean) {
   );
 }
 
-// Edge quality — pairs the raw funding signal with its TRACK RECORD (has fading this
-// historically paid?). The honest intelligence: most tools stop at the number; this
-// says when the fade has edge (PROVEN) and — crucially — when it's a TRAP (funding
-// stretched but fading it has LOST). Monochrome/amber per the design law.
+// Edge quality — pairs the raw funding signal with its history here: how often a stretch like this
+// REVERTED (lab-api logic.mjs edgeQuality: reverted % + a coin-flip test). That's funding reverting, not
+// a fade's P&L after fees: never "paid" or "proven", and no bone ◆ (that mark is the scoreboard's
+// PREDICTIVE). The FADE stays "a mechanical rule, not graded yet". Monochrome/amber per the design law.
 function EdgeQualityChip({ q }: { q?: EdgeQuality }) {
   if (!q) return null;
   const map: Record<string, { color: string; text: string }> = {
-    PROVEN:   { color: C.accent,     text: `◆ Fade has paid here. Reverted ${q.revertedPct}%` },
-    TRAP:     { color: C.warn,       text: `⚠ Trap. Fading this has FAILED (reverted only ${q.revertedPct}%)` },
+    PROVEN:   { color: C.text.fog,   text: `Reverted ${q.revertedPct}% of past stretches · beats a coin flip` },
+    TRAP:     { color: C.warn,       text: `⚠ Kept stretching here. Reverted only ${q.revertedPct}%` },
     MIXED:    { color: C.text.fog,   text: `Coin-flip so far. Reverted ${q.revertedPct}%` },
     UNPROVEN: { color: C.text.faint, text: `Unproven. Not enough funding history yet` },
   };
@@ -709,7 +709,7 @@ export function MispricedBoard() {
             {/* two-pole positioning read */}
             <div style={{ margin: "18px 0 4px" }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontFamily: MONO, fontSize: 10, marginBottom: 8 }}>
-                <span style={{ color: C.text.muted, textTransform: "uppercase", letterSpacing: "0.14em", fontSize: 8.5 }}>Funding edge</span>
+                <span style={{ color: C.text.muted, textTransform: "uppercase", letterSpacing: "0.14em", fontSize: 8.5 }}>Funding stretch</span>
                 <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 22, fontWeight: 600, color: C.text.bright }}>
                   <span title="The raw rate paid each 8h funding period." style={{ fontSize: 11, fontWeight: 400, color: C.text.muted, marginRight: 8 }}>{fmt8h(m.funding8hPct)} →</span>
                   {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}%<span title="Annualized. Per-8h rate × 1095 (three periods a day). What it adds up to over a year if today's rate held." style={{ fontSize: 11, color: C.text.faint, marginLeft: 3 }}>/yr</span>
@@ -816,7 +816,7 @@ export function MispricedBoard() {
             ) : (
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: C.text.muted }}>
-                  <span style={{ color: C.text.fog }}>◆ Nexus · Funding edge</span>
+                  <span style={{ color: C.text.fog }}>◆ Nexus · Funding stretch</span>
                   <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: verdictColor }}>{verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? `⚠ WATCH · FADE ${m.edgeQuality?.revertedPct}% HIST` : "◆ WATCHING"}</span>
                 </div>
                 <div style={{ fontFamily: UI, fontSize: 14, color: C.text.fog, marginTop: 18 }}>{m.coin} perpetual</div>
@@ -900,7 +900,7 @@ export function MispricedBoard() {
         <span style={{ fontFamily: MONO, fontSize: 12, color: C.text.muted, flexShrink: 0 }}>?</span>
         <span style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, color: C.text.fog }}>
           <b style={{ color: C.text.bright }}>How to read this:</b> a big number means one side of the crowd is paying a lot to stay in the trade.
-          That crowding usually unwinds, so the <b style={{ color: C.text.bright }}>edge is to bet the other way</b>. Green/red is just today’s price move.
+          That crowding often unwinds, so the <b style={{ color: C.text.bright }}>fade bets the other way</b>. It’s a mechanical rule, not graded yet. Green/red is just today’s price move.
         </span>
       </div>
 
@@ -940,7 +940,7 @@ export function MispricedBoard() {
                       </div>
                       <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
                         <div>
-                          <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: C.text.muted, marginBottom: 3 }}>Funding edge</div>
+                          <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", color: C.text.muted, marginBottom: 3 }}>Funding stretch</div>
                           <div style={{ fontFamily: MONO, fontSize: 31, fontWeight: 600, color: C.text.bright, lineHeight: 0.9, letterSpacing: "-0.02em" }}>
                             {m.fundingAnnualPct >= 0 ? "+" : ""}{m.fundingAnnualPct}<span title="Annualized. Per-8h rate × 1095 (three periods a day). What it adds up to over a year if today's rate held." style={{ fontSize: 13, color: C.text.faint, marginLeft: 4 }}>%/yr</span>
                           </div>

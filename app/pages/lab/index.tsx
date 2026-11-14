@@ -364,7 +364,7 @@ export default function TheLabPage() {
             </div>
           );
           const funding = (
-            <Collapsible title="Funding edges · all markets" subtitle="every mispriced perp + which fades PAID vs which were a TRAP" shortTitle="Funding edges" shortSub="every mispriced perp · paid vs trap" storageKey="nx_funding_board_open">
+            <Collapsible title="Funding stretches · all markets" subtitle="every stretched perp + where funding reverted vs kept stretching" shortTitle="Funding stretches" shortSub="every stretched perp · reverted vs kept stretching" storageKey="nx_funding_board_open">
               <MispricedBoard />
             </Collapsible>
           );
