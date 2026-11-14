@@ -26,6 +26,7 @@ import { MispricedBoard } from "./MispricedBoard";
 import { CatalystBoard } from "./CatalystBoard";
 import { ForecastDivergence } from "./ForecastDivergence";
 import { QSignals } from "./QSignals";
+import { IntelLenses } from "./IntelLenses";
 import { PositioningBoard } from "./PositioningBoard";
 import { Collapsible } from "./Collapsible";
 import { LabWelcome, OnboardingChecklist } from "./Onboarding";
@@ -340,72 +341,28 @@ export default function TheLabPage() {
           );
           // ◆ CALLS leads Lab home: the "graded from public price" line + open and graded calls, above every fold.
           const calls = <LabCallsPanel onSelectTab={setActiveTab} />;
-          // Lead with the synthesis (Briefing narrative → the Board's one-line-per-market
-          // read); the deep Market Intel (news, movers, OI, long/short) collapses so the
-          // tab opens as a read, not a wall of rows.
-          const deep = (
-            <Collapsible title="Market intel · deep detail" subtitle="news, movers, OI, long/short, per-market" shortTitle="Market intel" shortSub="news · movers · OI · long/short" storageKey="nx_intel_deep_open">
-              <MarketIntelView />
-            </Collapsible>
+          // THE LENSES · the deep "why" behind The Board, as ONE card: a chip per lens, only the chosen one
+          // mounted (2026-11-14; it was five folds + the deep market intel, six rows of chevrons on a phone).
+          // Funding + Positioning are the deep boards behind the Board's Confluence strip; Catalysts + Forecasts
+          // are the event layer; Q Signals is the PRO paid lens (each pull paid by the user's wallet, no auto-poll);
+          // Tape is the raw market intel (news, movers, OI, long/short). Rules + order: app/lib/intelLenses.mjs.
+          const lenses = (
+            <IntelLenses render={(id) => {
+              if (id === "funding") return <MispricedBoard />;
+              if (id === "positioning") return <PositioningBoard trades={connected ? processedTrades : undefined} />;
+              if (id === "catalysts") return <CatalystBoard />;
+              if (id === "forecast") return <ForecastDivergence />;
+              if (id === "qsignals") return <QSignals address={rootWalletAddress} />;
+              return <MarketIntelView />;
+            }} />
           );
-          // CATALYSTS — the event layer: world events mapped to the markets you can trade
-          // here (geopolitics → CL, rates → NAS, risk → BTC/SPX). Between the Board and the
-          // deep detail; on-moat because every event resolves to a tradeable, gradeable call.
-          // ── THE LENSES · the deep "why" behind The Board ──────────────────────────
-          // The one-spine fold: the intelligence layer is now a single linear funnel —
-          // READ (Briefing) → BOARD (the fused scan) → LENSES (the deep boards The Board
-          // summarizes) → TAPE (raw Market Intel). The Funding + Positioning boards moved
-          // OFF the Smart Money tab (which is now purely the wallet drill-down) to live here
-          // as the deep read behind the Board's Confluence strip — no more two competing
-          // "synthesis" tabs. Each lens is a public read that The Board folds into one line.
-          const lensesHeader = (
-            <div style={{ marginTop: 36, marginBottom: 8, fontFamily: "var(--nx-font-ui)", fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em", color: C.text.bright, lineHeight: 1.2 }}>
-              What the Board is reading
-            </div>
-          );
-          const funding = (
-            <Collapsible title="Funding stretches · all markets" subtitle="every stretched perp + where funding reverted vs kept stretching" shortTitle="Funding stretches" shortSub="every stretched perp · reverted vs kept stretching" storageKey="nx_funding_board_open">
-              <MispricedBoard />
-            </Collapsible>
-          );
-          const positioning = (
-            <Collapsible title="Positioning · crowd vs smart money" subtitle="where the leveraged crowd and the sharp wallets disagree — on your edge" shortTitle="Positioning" shortSub="crowd vs smart money" storageKey="nx_positioning_open">
-              <PositioningBoard trades={connected ? processedTrades : undefined} />
-            </Collapsible>
-          );
-          const catalysts = (
-            <Collapsible title="Catalysts · world events" subtitle="liquid prediction-market events mapped to the markets they move on Nexus" shortTitle="Catalysts" shortSub="world events on Nexus markets" storageKey="nx_catalysts_open">
-              <CatalystBoard />
-            </Collapsible>
-          );
-          // FORECAST DIVERGENCE — the prediction-market lens, restored but scoped to markets
-          // you can trade here (our-markets-only until the Quotient feed lands). A tradeable,
-          // gradeable call on a Nexus market. Fail-soft (renders a quiet line if sparse).
-          // Collapsed by default so its charts are OFF the Intel first paint (expand to read) —
-          // the first screen after the briefing is the ACTIONABLE board, not a wall of charts.
-          const forecast = (
-            <Collapsible title="Forecast divergence" subtitle="where prediction markets disagree with price — our markets only" shortTitle="Forecast divergence" shortSub="preds vs price" storageKey="nx_forecast_open">
-              <ForecastDivergence />
-            </Collapsible>
-          );
-          // Q SIGNALS — Quotient's PAID fair-value read on liquid prediction markets, the
-          // forecasting DESK's number beside Forecast Divergence's free crowd lens: fair
-          // value vs the venue price, conviction-ranked. Collapsed + lazy-mounted (Collapsible
-          // renders children only when open). Q Signals is a PRO lens: non-PRO wallets see a
-          // locked card, and each pull is paid by the USER'S wallet via x402 (no auto-poll).
-          const qsignals = (
-            <Collapsible title="Q Signals · Quotient" subtitle="the forecasting desk's fair value vs the market — conviction-ranked" shortTitle="Q Signals" shortSub="fair value vs the market" storageKey="nx_qsignals_open">
-              <QSignals address={rootWalletAddress} />
-            </Collapsible>
-          );
-          const lenses = <>{lensesHeader}{funding}{positioning}{catalysts}{forecast}{qsignals}</>;
           // The splash only greets a brand-new DISCONNECTED visitor who hasn't cleared
           // onboarding yet (in practice the full-screen modal covers this — it's a
           // defensive fallback). Everyone else — connected, or a guest/onboarded preview
           // — lands straight on the Briefing → Board → lenses read. No wallet needed to
           // scan the whole book; only COPY / PUBLISH / ARM LIVE ask for a connect.
           const showSplash = !connected && !guestPreview;
-          return <>{showSplash && <LabWelcome />}{calls}{briefing}{board}{lenses}{deep}</>;
+          return <>{showSplash && <LabWelcome />}{calls}{briefing}{board}{lenses}</>;
         })()}
         {activeTab === "smart" && (
           // Smart Money is now the DEEP WALLET DRILL-DOWN the Intel funnel's Positioning lens

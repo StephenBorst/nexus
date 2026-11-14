@@ -37,7 +37,7 @@ async function draftCatalyst(im: Impact, c: Catalyst, v: Verdict): Promise<boole
   const { entryPrice: entry, stopLoss, takeProfit1, riskReward: RR, holdDays } = lv;
   // The funding verdict comes straight from /signals — the floor now lives in readVerdict there
   // (one path owns it), so no client clamp: a below-floor pierce already arrives as WATCH.
-  const fundLens = v.verdict === "FADE" ? `FADE ${v.fadeDir}` : v.verdict === "WATCH" ? "WATCH — funding not stretched" : "no funding edge";
+  const fundLens = v.verdict === "FADE" ? `FADE ${v.fadeDir}` : v.verdict === "WATCH" ? "WATCH — funding not stretched" : "funding balanced";
   const fundNote = v.verdict === "FADE"
     ? (v.fadeDir === im.direction ? " (funding agrees)" : " (funding fades the other way — this is an event-driven directional call, not a funding fade)")
     : "";

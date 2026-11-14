@@ -754,7 +754,7 @@ export function MispricedBoard() {
             {[
               ["The price, big", "Where the market is now, and today's move. No decoding."],
               ["The stance", "Which way the crowd is piled. “Over-long” means too many are betting up. The setup to fade."],
-              ["The edge + poles", "How far the crowd is from balanced, and which way to fade it. Bigger = more stretched."],
+              ["The stretch + poles", "How far the crowd is from balanced, and which way to fade it. Bigger = more stretched."],
               ["The second opinion", "Where the graded, credible callers lean. When they disagree with the fade, that tension is flagged."],
               ["The move", "One tap turns it into a trade plan you review and grade. Nothing fires on its own."],
             ].map(([t, d], i) => (
@@ -839,7 +839,7 @@ export function MispricedBoard() {
             {/* Desktop keeps the footer action row. On a phone the SAME verdict-gated buttons are
                 already in the head, and a second copy at the bottom is the essay this pass cuts. */}
             {!isMobile && <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint }}>{isFade ? "Live read · funding + smart money" : draftAnyway ? "Stretched, but the fade is historically unproven here" : "Watching · no fade edge right now"}</span>
+              <span style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint }}>{isFade ? "Live read · funding + smart money" : draftAnyway ? "Stretched, but the fade is historically unproven here" : "Watching · funding not stretched right now"}</span>
               {/* Share the READ as a branded, verifiable card (verdict only — no fake R/stops).
                   A WATCH card shares as WATCH, a FADE as FADE; unfurls on X, links back. */}
               <button onClick={() => shareRead(m, isFade, draftAnyway)} title="Share this read as a card on X" className="nx-press" style={{
@@ -848,7 +848,7 @@ export function MispricedBoard() {
               }}>↗ Share</button>
               {/* One primary action, and it answers the page's one question: is there a fade NOW?
                   FADE → greenlight Draft. WATCH/NONE → Draft disabled (Simulate stays below). */}
-              <button onClick={() => canDraft && draftFade(m)} disabled={!canDraft} title={isFade ? "Draft this fade into the Thesis Engine" : draftAnyway ? "Funding is stretched but fading it has historically underperformed. Draft it anyway on your own read, not the base rate" : "No fade edge right now. Funding isn't stretched vs its range"} className="nx-card-interactive" style={{
+              <button onClick={() => canDraft && draftFade(m)} disabled={!canDraft} title={isFade ? "Draft this fade into the Thesis Engine" : draftAnyway ? "Funding is stretched but fading it has historically underperformed. Draft it anyway on your own read, not the base rate" : "Funding isn't stretched vs its range right now"} className="nx-card-interactive" style={{
                 fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600,
                 color: isFade ? C.accent : draftAnyway ? C.warn : C.text.faint, background: "none",
                 border: `1px solid ${isFade ? C.borderStrong : draftAnyway ? `${C.warn}88` : C.border}`, borderRadius: RADIUS.md, padding: "9px 15px",
@@ -886,12 +886,12 @@ export function MispricedBoard() {
       <SectionHeader
         eyebrow="MISPRICED BOARD"
         title="Where the crowd is overpaying"
-        note={scanned > 0 ? <span><span style={{ color: C.text.bright }}>{scanned}</span> scanned · <span style={{ color: C.accent }}>{mispricedCount}</span> mispriced{board?.stale && board.asOf ? <span style={{ color: C.text.faint }}> · delayed, as of {new Date(board.asOf).toISOString().slice(11, 16)} UTC</span> : null}</span> : "FUNDING-EDGE LENS"}
+        note={scanned > 0 ? <span><span style={{ color: C.text.bright }}>{scanned}</span> scanned · <span style={{ color: C.accent }}>{mispricedCount}</span> mispriced{board?.stale && board.asOf ? <span style={{ color: C.text.faint }}> · delayed, as of {new Date(board.asOf).toISOString().slice(11, 16)} UTC</span> : null}</span> : "FUNDING LENS"}
       />
 
       <p style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, lineHeight: 1.6, maxWidth: 680, margin: "0 0 14px" }}>
         Funding is the crowd’s mispricing made explicit. When one side pays to hold, the book is lopsided —
-        and the mean-revert edge is to <b style={{ color: C.text.bright }}>fade it</b>. Annualized and ranked, so the top is where
+        and the mean-revert play is to <b style={{ color: C.text.bright }}>fade it</b>: a mechanical rule, not graded yet. Annualized and ranked, so the top is where
         positioning is most stretched right now. Open a market to understand it; tap to draft the fade.
       </p>
 
@@ -991,7 +991,7 @@ export function MispricedBoard() {
             <>
               <div style={{ display: "flex", alignItems: "baseline", gap: 10, margin: "26px 0 12px" }}>
                 <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", color: C.text.muted }}>PRICED FAIR</span>
-                <span style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint }}>{fair.length} · sorted by edge</span>
+                <span style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint }}>{fair.length} · sorted by stretch</span>
                 <span style={{ flex: 1, height: 1, background: C.border }} />
               </div>
               <div style={{ border: `1px solid ${C.border}`, borderRadius: RADIUS.md, overflow: "hidden", background: C.surfaceAlt }}>
@@ -1015,7 +1015,7 @@ export function MispricedBoard() {
       )}
 
       <p style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.faint, lineHeight: 1.6, marginTop: 18, letterSpacing: "0.02em" }}>
-        Funding shown per 8h → annualized (× 1095, not clamped). |edge| ≥ 12%/yr on a market with ≥ $50k open interest ⇒ Mispriced · Watching; else priced fair. Under $250k open interest is marked thin · low confidence.
+        Funding shown per 8h → annualized (× 1095, not clamped). |annualized funding| ≥ 12%/yr on a market with ≥ $50k open interest ⇒ Mispriced · Watching; else priced fair. Under $250k open interest is marked thin · low confidence.
         Caller lean is merit-weighted from open positions + active public calls. A read on positioning, not advice. A stretched market can stay stretched.
       </p>
     </div>
