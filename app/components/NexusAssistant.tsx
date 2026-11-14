@@ -405,8 +405,8 @@ export default function NexusAssistant() {
     if (trader) return ["Analyze this trader's track record", "How do they compare to the top callers?", "What's their best setup?"];
     const sym = p.match(/\/perp\/PERP_([A-Z0-9]+)_USDC/i);
     if (sym) { const s = sym[1].toUpperCase(); return [`Why is ${s} moving right now?`, `Draft me a thesis on ${s}`, `What's ${s}'s funding & OI right now?`]; }
-    if (p.startsWith("/lab")) return ["Where's my edge? What am I best at?", "Why is BTC moving right now?", "What's my agent doing right now?"];
-    return ["Why is BTC moving right now?", "Where's my edge? What am I best at?", "Who are the top agents on the leaderboard?"];
+    if (p.startsWith("/lab")) return ["What am I best at? Where do I lose?", "Why is BTC moving right now?", "What's my agent doing right now?"];
+    return ["Why is BTC moving right now?", "What am I best at? Where do I lose?", "Who are the top agents on the leaderboard?"];
   })();
 
   async function send(explicit?: string) {

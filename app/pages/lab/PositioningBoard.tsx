@@ -125,7 +125,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
 
       {recordByCoin.size > 0 && (
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-          {([["all", "ALL"], ["mine", `◆ MY EDGE${mineCount ? ` · ${mineCount}` : ""}`]] as const).map(([id, label]) => {
+          {([["all", "ALL"], ["mine", `◆ MY MARKETS${mineCount ? ` · ${mineCount}` : ""}`]] as const).map(([id, label]) => {
             const on = (id === "mine") === mineOnly;
             return (
               <button key={id} type="button" onClick={() => setMineOnly(id === "mine")} style={{
@@ -134,7 +134,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
               }}>{label}</button>
             );
           })}
-          {mineOnly && <span style={{ fontFamily: UI, fontSize: 10.5, color: FAINT, alignSelf: "center" }}>markets you’re proven on, whichever way the read leans</span>}
+          {mineOnly && <span style={{ fontFamily: UI, fontSize: 10.5, color: FAINT, alignSelf: "center" }}>markets where your own record is positive, whichever way the read leans</span>}
         </div>
       )}
 
@@ -143,7 +143,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
       ) : shown.length === 0 ? (
         <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, lineHeight: 1.6, background: INSET, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "12px 14px" }}>
           {mineOnly
-            ? "No positioning reads on your proven markets right now. Switch to ALL or open the deep boards below."
+            ? "No positioning reads on your markets right now. Switch to ALL or open the deep boards below."
             : "No clear positioning reads right now. No market is both crowd-stretched and clustered by sharp wallets. Sparse by design; raw reads are in the deep boards below."}
         </div>
       ) : (

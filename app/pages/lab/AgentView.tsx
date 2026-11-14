@@ -688,7 +688,7 @@ export function AgentView() {
               </span>
             </span>
             <span style={{ display: "block", fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", marginTop: 6, lineHeight: 1.5, maxWidth: 520 }}>
-              Runs <strong style={{ color: "#a1a1aa" }}>your</strong> strategy autonomously — every trade it makes is graded on-chain, no self-reporting. The edge is yours; the accountability is built in.
+              Runs <strong style={{ color: "#a1a1aa" }}>your</strong> strategy autonomously — every trade it makes is graded on-chain, no self-reporting. The strategy is yours; the accountability is built in.
             </span>
           </span>
         </div>
@@ -1047,7 +1047,7 @@ export function AgentView() {
           <div style={{ ...agentCardStyle, borderColor: tradingKey ? "#232327" : "#4a3a00" }}>
             <div style={agentLabelStyle}>HOW THE AGENT WORKS</div>
             <p style={{ margin: "8px 0 0", color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 11, lineHeight: 1.6 }}>
-              The agent is a disciplined operator of <strong style={{ color: "#d4d4d8" }}>your</strong> edge — you choose the strategy and risk limits, it runs them tirelessly and <strong style={{ color: "#d4d4d8" }}>every call is graded objectively on-chain</strong>. It doesn’t promise alpha; it proves what actually worked.
+              The agent is a disciplined operator of <strong style={{ color: "#d4d4d8" }}>your</strong> strategy — you choose the strategy and risk limits, it runs them tirelessly and <strong style={{ color: "#d4d4d8" }}>every call is graded objectively on-chain</strong>. It doesn’t promise alpha; it proves what actually worked.
             </p>
             <ol style={{ margin: "8px 0 0", paddingLeft: 18, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 11, lineHeight: 1.7 }}>
               <li>Place one manual trade on Nexus. That generates your Orderly trading key. Order-only. It <strong style={{ color: "#d4d4d8" }}>cannot withdraw funds</strong>.</li>
@@ -1207,11 +1207,11 @@ export function AgentView() {
           <Collapsible title="Filters & conditioning" subtitle="experimental · validate on Test / Sweep first"
             defaultOpen={!!(config.invertSignal || config.respectRegime || config.respectSmartMoney || config.volScaledStops || config.exitContract || (config.tradeSessions && config.tradeSessions.length) || config.minVolAtrPct || config.maxVolAtrPct)}
             storageKey="nx_agent_filters">
-          {/* Opt-in INVERT — the "fade your own signal" lever. If a config is
-              systematically wrong, the edge is the opposite trade. */}
+          {/* Opt-in INVERT — the "fade your own signal" lever. An inverted rule is a NEW rule: it is tested
+              before it is trusted (CLAUDE.md: BELOW_RANDOM is never a licence to invert). */}
           <AgentToggleCard
-            label="INVERT SIGNAL — fade the edge"
-            description={<>Flip every entry. Short when the signal says long, and the reverse. If a config is reliably wrong, the edge is the fade. <b style={{ color: "#ededf0" }}>Prove it first:</b> run Test / Sweep with this on and compare the net R against it off. Off by default.</>}
+            label="INVERT SIGNAL — trade the opposite side"
+            description={<>Flip every entry. Short when the signal says long, and the reverse. A config that loses is not a fade that wins: the inverted rule is a new rule. <b style={{ color: "#ededf0" }}>Test it first:</b> run Test / Sweep with this on and compare the net R against it off. Off by default.</>}
             on={!!config.invertSignal}
             onToggle={() => setConfig({ ...config, invertSignal: !config.invertSignal })}
           />

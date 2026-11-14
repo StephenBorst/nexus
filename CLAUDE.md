@@ -908,10 +908,11 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
   component (a missing call white-screens the tab). Calendar cells use a fixed height.
 - **Commits** end with the attribution lines the harness reminder supplies (name the model that did the work; never
   hard-code one here). No model ids in commits, PRs or code.
-- **Merge your own green PR** on `StephenBorst/nexus` once CI is green on the head and it's mergeable. Hold and tell
-  borst on: red/pending CI, a conflict, an unanswered review, a failing Claude Approvals check, a PR that isn't yours or
-  is on another repo (BankrBot/skills, nexus-landing), a `Pipeline watch:` PR you did not open as the watcher, or anything that arms live money. After
-  a merge, check the deploy run started.
+- **Merge your own green PR** on `StephenBorst/nexus` and `StephenBorst/nexus-landing` (borst 2026-11-14) once CI is
+  green on the head and it's mergeable. Hold and tell borst on: red/pending CI, a conflict, an unanswered review, a
+  failing Claude Approvals check, a PR that isn't yours or is on another repo (BankrBot/skills), a `Pipeline watch:` PR
+  you did not open as the watcher, or anything that arms live money. After a merge, check the deploy run started (the
+  landing ships on push to main via its own deploy.yml).
 - **Bankr skill:** published at `BankrBot/skills` → `nexus-trading-labs/`; our fork `StephenBorst/skills`. Change it in
   BankrBot first (PR from the fork), then copy the folder back here byte for byte; never copy this folder over theirs
   without diffing. "Signer rejected it" = Bankr's wallet, not our code (test with a trivial sign).

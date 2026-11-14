@@ -185,7 +185,7 @@ export function NexusBriefing({
       tone: c.taken === 0 ? "caution" : "info",
       title: `You acted on ${c.taken} of your last ${c.flags} flagged setups`,
       detail: c.taken === 0
-        ? `The Briefing flagged ${c.flags} setups on your side and you took none — the edge only pays if you pull the trigger on it.`
+        ? `The Briefing flagged ${c.flags} setups on your side and you took none. A flagged setup only counts in your record if you take it.`
         : `${c.rate}% follow-through${c.takenPnl !== 0 ? `, netting ${money(c.takenPnl)} on the ones you took` : ""}.${c.skipped > 0 ? ` ${c.skipped} you let go by.` : " Discipline on your own signal."}`,
       action: { label: "Your log", tab: "tradelog" },
     };

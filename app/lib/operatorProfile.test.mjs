@@ -208,7 +208,7 @@ test("narrative: publicOnly drops every private read (the shareable version)", (
   const pub = profileNarrative(p, { publicOnly: true });
   assert.ok(!/1,240/.test(pub), "private dollar leak must not appear in the public narrative");
   assert.ok(!/DOGE/.test(pub), "private per-symbol record must not appear either");
-  assert.match(pub, /edge is real in uptrends/); // graded reads survive
+  assert.match(pub, /done best in uptrends/); // graded reads survive
 });
 
 // ── public rendering (the trader page) ──────────────────────────────
@@ -218,7 +218,7 @@ test("PUBLIC: third-person voice re-points every pronoun, including objects", ()
   const pub = profileNarrative(p, { publicOnly: true, voice: "third" });
   assert.ok(!/\byou\b/i.test(pub), `leaked 2nd person: ${pub}`);
   assert.ok(!/\byour\b/i.test(pub), `leaked "your": ${pub}`);
-  assert.match(pub, /their edge/i);
+  assert.match(pub, /They have done best in uptrends/); // "You have" re-pointed, sentence start kept
   // "the wins carry you" must become "carry them", not "carry they"
   assert.ok(!/carry they/i.test(pub), `object pronoun mangled: ${pub}`);
   // ...and the owner's own view is unchanged

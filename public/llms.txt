@@ -18,8 +18,9 @@
   open-interest and price deltas, and funding/OI confluence classification for major perps.
   This read is graded on the Signal Scoreboard (funding_fade) and is not a proven edge.
 - [Mispriced board (JSON)](https://og.nexustradinglabs.com/intel/mispriced): every liquid
-  perp priced by its funding rate as a mispricing signal — annualized "fade edge" %/yr, the
-  fade direction, and MISPRICED vs PRICED-FAIR status, ranked by how stretched positioning is.
+  perp priced by its funding rate as a mispricing signal — annualized funding stretch %/yr
+  (field `edge`; the fade is a mechanical rule, not graded), the fade direction, and MISPRICED vs
+  PRICED-FAIR status, ranked by how stretched positioning is.
 - [Caller consensus (JSON)](https://og.nexustradinglabs.com/theses/consensus): merit-weighted
   per-symbol lean of graded human callers — the companion read beside the mispriced board.
 - [Caller board (JSON)](https://og.nexustradinglabs.com/theses/leaderboard): human callers

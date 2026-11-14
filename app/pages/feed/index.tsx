@@ -48,7 +48,7 @@ const API_BASE = "https://og.nexustradinglabs.com";
 const px = (n: unknown) => {
   const v = Math.abs(Number(n) || 0);
   const dp = v >= 1 ? 2 : v >= 0.01 ? 4 : v >= 0.0001 ? 6 : 8;
-  return (Number(n) || 0).toFixed(dp);
+  return (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
 };
 
 // Regime buckets → the trader's own words. Server keys are stable; labels aren't.
@@ -556,16 +556,16 @@ function FeedCard({
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, fontFamily: MONO, fontSize: 11, color: C.text.faint, whiteSpace: "nowrap", minWidth: 0 }}>
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{thesis.agent ? "autonomous agent" : thesis.displayName ? shortAddr : "wallet"}</span>
+            <span style={{ flexShrink: 0 }}>{thesis.agent ? "autonomous agent" : thesis.displayName ? shortAddr : "wallet"}</span>
             <span aria-hidden>·</span>
             <span>{timeAgo}</span>
             {thesis.onChainId !== undefined && (
               thesis.onChainTxHash ? (
                 <a href={`https://arbiscan.io/tx/${thesis.onChainTxHash}`} target="_blank" rel="noopener noreferrer"
                   title={`Registered on Arbitrum · call #${thesis.onChainId}`} onClick={(e) => e.stopPropagation()}
-                  style={{ color: C.text.muted, textDecoration: "none" }}>· ⛓ onchain</a>
+                  style={{ color: C.text.muted, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>· ⛓{isMobile ? "" : " onchain"}</a>
               ) : (
-                <span title={`Registered on Arbitrum · call #${thesis.onChainId}`}>· ⛓ onchain</span>
+                <span title={`Registered on Arbitrum · call #${thesis.onChainId}`}>· ⛓{isMobile ? "" : " onchain"}</span>
               )
             )}
           </div>
@@ -671,11 +671,6 @@ function FeedCard({
       {/* Outcome is the TRUSTLESS grade only — no self-reported P&L. When the tape
           has resolved the call, we say so; the dollar figure a trader could type is
           gone (the status badge above already reflects the objective grade). */}
-      {(thesis.gradedOutcome === "WIN" || thesis.gradedOutcome === "LOSS") && (
-        <div style={{ fontFamily: MONO, fontSize: 11.5, color: C.text.muted, marginBottom: 10 }}>
-          Graded {thesis.gradedOutcome} · first touch vs public price. The tape marked it, not the trader.
-        </div>
-      )}
 
       {/* Charts — user-supplied, so ALWAYS through chartImageList (fails closed per item). */}
       {(() => {
@@ -1157,7 +1152,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                       </div>
                       <div style={{ display: "flex", gap: 16 }}>
                         {[
-                          { label: "ENTRY", val: `$${t.entryPrice.toFixed(2)}`, color: "#a1a1aa" },
+                          { label: "ENTRY", val: `$${px(t.entryPrice)}`, color: "#a1a1aa" },
                           { label: "R:R",   val: fmtRR(callRR(t)), color: C.text.bright },
                         ].map(({ label, val, color }) => (
                           <div key={label}>
@@ -1555,6 +1550,11 @@ export default function FeedPage() {
       {/* Editorial header — leads the page; tabs below act as sub-nav. */}
       <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "18px 16px 2px" : "26px 16px 4px" }}>
         <SectionHeader eyebrow={feedHead.eyebrow} title={feedHead.title} />
+        {view === "feed" && (
+          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.muted, margin: "-8px 0 14px", lineHeight: 1.5 }}>
+            Every call is graded from public price, first touch of target or stop. The tape marks it, not the trader.
+          </div>
+        )}
       </div>
 
       {/* Tab bar / header — full-bleed divider, but the controls align to the same
