@@ -9,6 +9,7 @@
 // What the signature does and doesn't bind (Flash's own docs, and our guards): it caps the
 // spend, pins the recipient to this wallet and sets the deadline. A limit/stop PRICE is held
 // and enforced by Definitive's engine, not by the signature — the ticket says so.
+import { tickerLabel } from "@/lib/tickerLabel.mjs";
 import { useId, useRef, useState } from "react";
 import { parseTransaction } from "viem";
 import { EVM_USDC, ensureChain } from "./swapExec";
@@ -407,7 +408,7 @@ export function FlashSpotButton({ chainId, tokenAddress, symbol, side, defaultAm
     <>
       <button onClick={openModal}
         style={{ display: "block", width: "100%", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 13, fontWeight: 600, color: BRIGHT, background: "none", border: "1px solid #33333a", borderRadius: 10, padding: "10px 0", cursor: "pointer" }}>
-        ◇ {side === "sell" ? "Sell" : "Buy"} {symbol} via Flash <span style={{ color: MUT, fontWeight: 400 }}>· limit · TWAP · stop</span>
+        ◇ {side === "sell" ? "Sell" : "Buy"} {tickerLabel(symbol)} via Flash <span style={{ color: MUT, fontWeight: 400 }}>· limit · TWAP · stop</span>
       </button>
       {open && (
         <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) !busy && setOpen(false); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>

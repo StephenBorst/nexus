@@ -25,6 +25,8 @@ import { SocialBar } from "@/components/SocialBar";
 import { fetchHoldings, addRecent, getRecents, optimisticHolding, probeHeldToken, makeHolding, getCostBasis, addCostLot, type Holding, type CostLot } from "./holdings";
 import { planBuy, planSell, executeSwap, readWalletTokenBalance, explorerTx, fmtTokenAmount, slippagePct, EVM_USDC, EVM_SIGNABLE_ROUTERS, type SwapPlan, type Eip1193 } from "./swapExec";
 import { FlashSpotButton } from "./FlashSpotButton";
+import { SwapNotice } from "./SwapNotice";
+import { tickerLabel } from "@/lib/tickerLabel.mjs";
 import { FlashOrders } from "./FlashOrders";
 import { CrossChainCard, hasTransferInFlight } from "./CrossChainCard";
 import { Collapsible } from "@/pages/lab/Collapsible";
@@ -1000,6 +1002,11 @@ export default function TokenTerminal() {
   // Solana in-app BUY availability: flag on · Solana token · spot BUY · a Jupiter quote · a reachable
   // Solana signer + pubkey. Everything else (EVM, no signer, flag off) keeps the "Swap via Jupiter" deep-link.
   const canSolBuy = SOL_INAPP_BUY && isSolToken && showSpot && side === "buy" && swapState.kind === "quote" && quote?.router === "Jupiter" && (solSigner.hasSign || solSigner.hasSend) && !!solSigner.address;
+  // The venue link (Uniswap / Jupiter / …) + its button text, for the swap notices (SwapNotice): the way
+  // on when an in-app swap is refused or has no route. Computed here, outside the side/kind-narrowed JSX.
+  const venueHref = swapState.kind === "quote" || swapState.kind === "deeplink" ? swapState.href : null;
+  const venueName = swapState.kind === "quote" ? swapState.completeVenue : swapState.kind === "deeplink" ? swapState.venue : null;
+  const venueLabel = pair && venueName ? `${side === "sell" ? "Sell" : "Buy"} ${tickerLabel(pair.baseSymbol)} on ${venueName} →` : undefined;
   // Solana in-app SELL (token → USDC): same gates as the buy + a detected on-chain token balance (a
   // sell needs something to sell). holdsToken here resolves from the Solana balance via `held` above.
   const canInAppSolSell = SOL_INAPP_BUY && isSolToken && showSpot && side === "sell" && swapState.kind === "quote" && quote?.router === "Jupiter" && (solSigner.hasSign || solSigner.hasSend) && !!solSigner.address && holdsToken;
@@ -1558,7 +1565,7 @@ export default function TokenTerminal() {
             and even a genuine miss offers the CA-paste path + a DexScreener lookup, not "no token". ── */}
         {query && notFound && !loading && (
           <div style={{ padding: "40px 0", display: "flex", flexDirection: "column", gap: 10, maxWidth: 480 }}>
-            <div style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: BRIGHT }}>No verified market for “{query}”.</div>
+            <div style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: BRIGHT, overflowWrap: "anywhere" }}>No verified market for “{query}”.</div>
             <div style={{ fontFamily: UI, fontSize: 12, color: MUT, lineHeight: 1.6 }}>
               Paste the exact <b style={{ color: FOG }}>contract address</b> (0x… on EVM, or the mint on Solana) in the search above to trade it directly — or look it up on DexScreener and copy the address.
             </div>
@@ -2012,7 +2019,7 @@ export default function TokenTerminal() {
                         {solPlanning ? "Building route…" : `Sell ${pair.baseSymbol} → USDC in-app →`}
                       </button>
                     )}
-                    {side === "sell" && canInAppSolSell && solErr && !solModalOpen && <div style={{ fontFamily: MONO, fontSize: 10, color: NEG, marginTop: 7, textAlign: "center" }}>{solErr}</div>}
+                    {side === "sell" && canInAppSolSell && !solModalOpen && <SwapNotice msg={solErr} href={venueHref} label={venueLabel} />}
                     {/* ◎ Solana in-app BUY (Jupiter) — additive; the deep-link below stays. Mounts on
                         signer + Jupiter quote (NOT on amount). Pay with native SOL OR USDC (same pubkey).
                         SOL ticket keeps the SOL/USD unit toggle; USDC ticket types USDC directly. */}
@@ -2089,7 +2096,7 @@ export default function TokenTerminal() {
                         })()}
                         {solInputHuman > 0 && (solPayWith === "usdc" ? (usdcBal == null && !solUsdcErr) || solBalance == null : !solBalanceKnown) && <div style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT, marginTop: 6, textAlign: "center" }}>reading balance…</div>}
                         {solPayWith === "usdc" && usdcBal == null && solUsdcErr && <div style={{ fontFamily: MONO, fontSize: 9.5, color: NEG, marginTop: 6, textAlign: "center", wordBreak: "break-word" }}>USDC read failed: {solUsdcErr}</div>}
-                        {solErr && !solModalOpen && <div style={{ fontFamily: MONO, fontSize: 10, color: NEG, marginTop: 7, textAlign: "center" }}>{solErr}</div>}
+                        {!solModalOpen && <SwapNotice msg={solErr} href={venueHref} label={venueLabel} />}
                       </div>
                     )}
                     {/* quote route but no in-app fill (no wallet, non-Fabric, or — for a sell — no
@@ -2097,13 +2104,13 @@ export default function TokenTerminal() {
                     {swapState.kind === "quote" && !(side === "buy" ? canInAppBuy : canInAppSell) && (
                       <a href={swapState.href} target="_blank" rel="noopener noreferrer"
                         style={{ display: "block", textAlign: "center", marginTop: 8, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#0a0a0b", background: BRIGHT, borderRadius: 9, padding: "13px 0", textDecoration: "none" }}>
-                        {side === "sell" ? "Sell" : "Buy"} {pair.baseSymbol} on {swapState.completeVenue} →
+                        {side === "sell" ? "Sell" : "Buy"} {tickerLabel(pair.baseSymbol)} on {swapState.completeVenue} →
                       </a>
                     )}
                     {swapState.kind === "deeplink" && (
                       <a href={swapState.href} target="_blank" rel="noopener noreferrer"
                         style={{ display: "block", textAlign: "center", marginTop: 12, fontFamily: UI, fontSize: 14, fontWeight: 600, color: "#0a0a0b", background: BRIGHT, borderRadius: 9, padding: "13px 0", textDecoration: "none" }}>
-                        {side === "sell" ? "Sell" : "Swap"} {pair.baseSymbol} on {swapState.venue} →
+                        {side === "sell" ? "Sell" : "Swap"} {tickerLabel(pair.baseSymbol)} on {swapState.venue} →
                       </a>
                     )}
                     {swapState.kind === "noroute" && (
@@ -2111,7 +2118,7 @@ export default function TokenTerminal() {
                         No route
                       </div>
                     )}
-                    {swapErr && !modalOpen && <div style={{ fontFamily: MONO, fontSize: 10.5, color: NEG, marginTop: 8, textAlign: "center" }}>{swapErr}</div>}
+                    {!modalOpen && <SwapNotice msg={swapErr} href={venueHref} label={venueLabel} />}
                     {/* Flash — a third EVM router next to Fabric (self-hides off-EVM). Market, limit, TWAP
                         and stop orders, confirm-modal, non-custodial. Fabric stays first, Uniswap stays
                         the no-route link. */}
@@ -2299,9 +2306,9 @@ export default function TokenTerminal() {
         <div style={{ position: "fixed", left: 12, right: 12, bottom: STICKY_BAR_BOTTOM, zIndex: 90, display: "flex", gap: 8, padding: 6, background: "rgba(15,15,17,0.94)", border: `1px solid ${C.borderStrong}`, borderRadius: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.45)" }}>
           {(["buy", "sell"] as const).map((s) => (
             <button key={s} type="button" onClick={() => jumpToTicket(s)} className="nx-press"
-              style={{ flex: 1, height: 42, fontFamily: UI, fontSize: 14, fontWeight: 600, borderRadius: 10, cursor: "pointer",
+              style={{ flex: 1, minWidth: 0, height: 42, padding: "0 8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: UI, fontSize: 14, fontWeight: 600, borderRadius: 10, cursor: "pointer",
                 color: s === "buy" ? "#0a0a0b" : NEG, background: s === "buy" ? POS : "none", border: s === "buy" ? "none" : `1px solid ${NEG}88` }}>
-              {showPerp ? (s === "buy" ? "Long" : "Short") : (s === "buy" ? "Buy" : "Sell")} {pair.baseSymbol}
+              {showPerp ? (s === "buy" ? "Long" : "Short") : (s === "buy" ? "Buy" : "Sell")} {tickerLabel(pair.baseSymbol)}
             </button>
           ))}
         </div>
@@ -2329,8 +2336,8 @@ export default function TokenTerminal() {
 
       {/* ── swap confirm modal (in-app EVM/Fabric buy) — nothing signs until "Confirm swap" ── */}
       {modalOpen && plan && pair && (
-        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) closeSwap(); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div role="dialog" aria-modal="true" aria-label="Confirm swap" style={{ width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) closeSwap(); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", padding: 16, overflowY: "auto" }}>
+          <div role="dialog" aria-modal="true" aria-label="Confirm swap" style={{ margin: "auto", width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <span style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT }}>Confirm swap</span>
               <button onClick={closeSwap} disabled={swapBusy} style={{ background: "none", border: "none", color: swapBusy ? FAINT : MUT, fontSize: 16, cursor: swapBusy ? "default" : "pointer", lineHeight: 1 }}>✕</button>
@@ -2364,7 +2371,7 @@ export default function TokenTerminal() {
                 </div>
 
                 {swapBusy && <div style={{ fontFamily: MONO, fontSize: 11, color: POS, marginBottom: 10, textAlign: "center" }}>{swapStep || "working…"}</div>}
-                {swapErr && <div style={{ fontFamily: MONO, fontSize: 11, color: NEG, marginBottom: 10, textAlign: "center" }}>{swapErr}</div>}
+                <SwapNotice compact msg={swapErr} href={venueHref} label={venueLabel} />
 
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={closeSwap} disabled={swapBusy} style={{ flex: 1, fontFamily: UI, fontSize: 13, fontWeight: 600, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 8, padding: "11px 0", cursor: swapBusy ? "default" : "pointer" }}>Cancel</button>
@@ -2400,8 +2407,8 @@ export default function TokenTerminal() {
       {/* ── Solana in-app BUY confirm modal (Jupiter · wSOL→token) — nothing signs until "Confirm swap".
           The plan is re-fetched + re-guarded + simulated on fresh bytes at confirm time. ── */}
       {solModalOpen && solPlan && pair && (
-        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) closeSolModal(); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div role="dialog" aria-modal="true" aria-label="Confirm Solana swap" style={{ width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) closeSolModal(); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", padding: 16, overflowY: "auto" }}>
+          <div role="dialog" aria-modal="true" aria-label="Confirm Solana swap" style={{ margin: "auto", width: "100%", maxWidth: 384, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 18 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <span style={{ fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT }}>Confirm {solPlanDir === "sell" ? "sell" : "swap"} · Solana</span>
               <button onClick={closeSolModal} disabled={solBusy} style={{ background: "none", border: "none", color: solBusy ? FAINT : MUT, fontSize: 16, cursor: solBusy ? "default" : "pointer", lineHeight: 1 }}>✕</button>
@@ -2428,7 +2435,7 @@ export default function TokenTerminal() {
                     You sign in your own Solana wallet. The route is <b style={{ color: MUT }}>simulated</b> and its programs allow-listed before signing; the minimum-received floor is enforced on-chain. Non-custodial.
                   </div>
                   {solBusy && <div style={{ fontFamily: MONO, fontSize: 11, color: POS, marginBottom: 10, textAlign: "center" }}>{solStep || "working…"}</div>}
-                  {solErr && <div style={{ fontFamily: MONO, fontSize: 11, color: NEG, marginBottom: 10, textAlign: "center" }}>{solErr}</div>}
+                  <SwapNotice compact msg={solErr} href={venueHref} label={venueLabel} />
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={closeSolModal} disabled={solBusy} style={{ flex: 1, fontFamily: UI, fontSize: 13, fontWeight: 600, color: MUT, background: "none", border: `1px solid ${BORD}`, borderRadius: 8, padding: "11px 0", cursor: solBusy ? "default" : "pointer" }}>Cancel</button>
                     <button onClick={isSolSell ? confirmSolSell : confirmSolBuy} disabled={solBusy || !solModalAffordable} style={{ flex: 2, fontFamily: UI, fontSize: 13, fontWeight: 600, color: solBusy || solModalAffordable ? "#0a0a0b" : FAINT, background: solBusy || solModalAffordable ? (isSolSell ? NEG : POS) : BORD, border: "none", borderRadius: 8, padding: "11px 0", cursor: solBusy ? "wait" : solModalAffordable ? "pointer" : "not-allowed", opacity: solBusy ? 0.7 : 1 }}>{solBusy ? "Confirming…" : !solBalanceKnown ? "SOL balance unavailable" : !solModalAffordable ? "Need SOL for fees" : isSolSell ? "Confirm sell" : "Confirm swap"}</button>

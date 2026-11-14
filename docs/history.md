@@ -2520,3 +2520,22 @@ shows what exec recorded, never a key-signed read of the owner's account from a 
 "see it on Orderly". The lift is a FAIL only for a live graded-exit config (it would refuse every entry); the $10 test
 doesn't need it. Same PR: live fills (`state.live_slip`) now go through the public 1-minute tape check, kept apart
 from paper.
+
+## 2026-11-14 · Phone pass on the money screens
+
+Playwright at 360 and 412 px against the dev server (DexScreener answered from fixtures, og relayed with the app's
+origin, Orderly answered empty; the cloud container reaches neither). The Spot page, its ticket (amount typed, live
+spanDEX preview), Sell tab, Flash ticket, the Solana ticket, a 19-letter ticker, the Cross-chain card and the Lab's
+Thesis + Agent tabs: nothing pushed the page sideways. Found and fixed:
+- Long tickers overflowed the pinned Buy/Sell bar and the venue/Flash buttons ("Sell SUPERLONGTICKERNAM"). Now
+  `tickerLabel` caps them at 10 characters, the sticky buttons ellipsize.
+- The two swap confirm dialogs and the Cross-chain review were centred on a non-scrolling backdrop: taller than a
+  short phone (or with the keyboard up), their Confirm button could be unreachable. Now the backdrop scrolls.
+- The ◆ orb hid on scroll-down but sat on the field being typed in (the keyboard lifts fixed elements). It now steps
+  aside while a text field has focus.
+- A pasted contract address in "No verified market for …" ran off the screen; it wraps.
+- Swap refusals were raw 10 px red mono ("… — refused. Use the deep-link."). They now read as protection with the venue
+  link as a button (`swapNotice` sorts every signer message: guard / unavailable / reverted / cancelled / input; a test
+  reads every message the signers can throw so a new one can't go unsorted).
+Not a bug: the Solana ticket's "◎ Solana signer · live check" readout is DEV-only (`import.meta.env.DEV`). Wallet-only
+screens (confirm modals, agent controls) were checked from the code: no fixed-pixel grid without a phone layout.

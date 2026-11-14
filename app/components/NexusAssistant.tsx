@@ -17,6 +17,7 @@ import { tiltRead, sessionEdge, overtradingRead, sizingRead } from "@/lib/behavi
 import { bareTicker } from "@/utils/utils";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { useHideOnScrollDown } from "@/hooks/useHideOnScrollDown";
+import { useTypingFocus } from "@/hooks/useTypingFocus";
 import { useSubscription } from "@/hooks/useSubscription";
 import {
   PROVIDERS, LS_PROVIDER, LS_MODEL, LS_KEY, LS_HOSTED_MODEL, SYSTEM_PROMPT,
@@ -179,7 +180,9 @@ export default function NexusAssistant() {
   const [open, setOpen] = useState(false);
   // Phones: the idle orb steps aside while the reader scrolls down (it sat on row buttons and
   // order-book numbers) and comes back on any scroll up or near the top.
-  const orbHidden = useHideOnScrollDown(isMobile && !open);
+  // …and while a text field has focus: the phone keyboard lifts the orb onto the field being typed in.
+  const typing = useTypingFocus(isMobile && !open);
+  const orbHidden = useHideOnScrollDown(isMobile && !open) || typing;
   const reduceMotion = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const [view, setView] = useState<"chat" | "settings">("chat");
   // First-run discovery: pulse + one-time tooltip until the panel is first opened.
