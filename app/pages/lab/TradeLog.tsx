@@ -193,11 +193,37 @@ export function TradeLogAllView({
       </div>
 
       {/* ── Day rows ── */}
-      {/* Dense fixed-width rows — scroll horizontally on mobile instead of clipping */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, overflowX: isMobile ? "auto" : "visible" }}>
+      {/* Desktop: one dense row. Phone: two lines, nothing off-screen (2026-11-14; the 620px row scrolled
+          sideways, so the P&L and win rate sat past the right edge). */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {filtered.map(([key, g]) => {
           const winRate = g.trades ? Math.round((g.wins / g.trades) * 100) : 0;
           const [, , d] = key.split("-").map(Number);
+          const syms = [...new Set(g.tradeList.map(t => bareTicker(t.symbol)))];
+          if (isMobile) return (
+            <div role="button" tabIndex={0}
+              key={key}
+              onClick={() => onDaySelect(key, d)} onKeyDown={pressKey(() => onDaySelect(key, d))}
+              style={{ ...cardStyle, cursor: "pointer", padding: "12px 14px", borderColor: g.pnl >= 0 ? "#232327" : "#4a1e22" }}
+            >
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+                <span style={{ fontSize: 13, color: "#fff", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>
+                  {formatKey(key)}{notes[key] && <span style={{ fontSize: 9, color: "#71717a", fontWeight: 400, fontStyle: "italic", marginLeft: 8 }}>≡ note</span>}
+                </span>
+                <span style={{ fontSize: 15, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: g.pnl >= 0 ? "#3ecf8e" : "#f7525f", flexShrink: 0 }}>{g.pnl >= 0 ? "+" : "-"}${Math.abs(g.pnl).toFixed(2)}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                <span style={{ display: "flex", gap: 4, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+                  {syms.slice(0, 4).map(s => (
+                    <span key={s} style={{ fontSize: 9, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", background: "#141416", border: "1px solid #232327", borderRadius: 3, padding: "2px 6px" }}>{s}</span>
+                  ))}
+                  {syms.length > 4 && <span style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", padding: "2px 0" }}>+{syms.length - 4}</span>}
+                </span>
+                <span style={{ fontSize: 11, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", flexShrink: 0 }}>{g.trades} {g.trades === 1 ? "trade" : "trades"} · {winRate}% won</span>
+                <span style={{ fontSize: 14, color: "#71717a", fontFamily: "var(--nx-font-mono)", flexShrink: 0 }}>›</span>
+              </div>
+            </div>
+          );
           return (
             <div role="button" tabIndex={0}
               key={key}
@@ -205,7 +231,6 @@ export function TradeLogAllView({
               style={{
                 ...cardStyle, cursor: "pointer", display: "grid",
                 gridTemplateColumns: "180px 1fr repeat(4, 90px) 28px",
-                minWidth: isMobile ? 620 : undefined,
                 alignItems: "center", gap: 12,
                 borderColor: g.pnl >= 0 ? "#232327" : "#4a1e22",
                 transition: "background 0.15s",
@@ -220,7 +245,7 @@ export function TradeLogAllView({
               </div>
               {/* symbols */}
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {[...new Set(g.tradeList.map(t => bareTicker(t.symbol)))].map(s => (
+                {syms.map(s => (
                   <span key={s} style={{ fontSize: 9, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", background: "#141416", border: "1px solid #232327", borderRadius: 3, padding: "2px 6px" }}>{s}</span>
                 ))}
               </div>
@@ -235,7 +260,7 @@ export function TradeLogAllView({
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>WIN RATE</div>
-                <div style={{ fontSize: 14, fontFamily: "var(--nx-font-mono)", color: winRate >= 50 ? "#3ecf8e" : "#f7525f" }}>{winRate}%</div>
+                <div style={{ fontSize: 14, fontFamily: "var(--nx-font-mono)", color: "#a1a1aa" }}>{winRate}%</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ height: 40, width: 4, background: "#232327", borderRadius: 2, display: "inline-block", position: "relative", verticalAlign: "middle" }}>
