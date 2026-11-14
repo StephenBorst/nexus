@@ -79,3 +79,10 @@ test("Smart Money consensus is context, not 'the strongest read'; both sides are
   assert.match(src, /context, not a graded read/);
   assert.match(src, /c\.against/);
 });
+
+test("the Feed shows a finished call as one line until tapped", () => {
+  const src = read("../pages/feed/index.tsx");
+  assert.match(src, /const finished = eff === "HIT_TP" \|\| eff === "STOPPED_OUT"/);
+  assert.match(src, /if \(finished && !expanded\)/);
+  assert.match(src, /Show the call/);
+});
