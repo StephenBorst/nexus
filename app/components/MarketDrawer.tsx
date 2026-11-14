@@ -13,7 +13,7 @@ import { useLabWallet } from "@/hooks/useLabAuth";
 import { savedCoins, watchCoin, pushSupported } from "@/lib/pushAlerts";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
-type Lens = { id: string; label: string; line: string; detail?: string; tone: "plain" | "faint" | "watch" };
+type Lens = { id: string; label: string; line: string; detail?: string; graded?: string; tone: "plain" | "faint" | "watch" };
 type Market = { coin: string; price: number | null; change24hPct: number | null; lenses: Lens[]; unread?: string[] };
 
 function useNarrow() {
@@ -116,6 +116,7 @@ export default function MarketDrawer() {
               <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: C.text.muted, marginBottom: 4 }}>{l.label}</div>
               <div style={{ fontFamily: UI, fontSize: 14, lineHeight: 1.5, color: l.tone === "faint" ? C.text.muted : C.text.bright }}>{l.line}</div>
               {l.detail && <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: SIGNAL.watch, marginTop: 3 }}>{l.detail}</div>}
+              {l.graded && <div style={{ fontFamily: UI, fontSize: 12, lineHeight: 1.5, color: C.text.muted, marginTop: 4 }}>{l.graded}</div>}
             </div>
           ))}
           {data && pushSupported() && (

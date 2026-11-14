@@ -644,6 +644,19 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   `og.nexustradinglabs.com/share/record?v=<day-hash>` (`recordShareLink`), which unfurls into the 1200×630 card
   `/og/record.png` (`routes-recordshare.mjs`, `recordCard`; counts only, no green/red; an unreadable pulse = an honest
   "counts unavailable" card that claims nothing about the signals) and forwards people to /proof.
+- **Market drawer (borst 2026-11-14):** every lens on one coin in one panel. `openMarket("ETH")`
+  (`app/lib/marketDrawerEvent.mjs`) from anywhere; `CoinLink` turns a coin name into that tap (Board, Smart Money,
+  Forecasts); `MarketDrawer.tsx` is mounted once in App. One request: `GET /intel/market/:coin` (`routes-market.mjs`)
+  composes /intel/mispriced, /signals, /smart/consensus, /theses/consensus, /intel/forecasts/:coin,
+  /intel/catalysts-board, /calls/pulse and /intel/axis-backtest through the worker's OWN handler in-process (the default
+  export is the named `worker` object), 60 s cache, a failing board = that lens unread. Rules `app/lib/marketRead.mjs`:
+  inputs only, no tally; each lens prints its nearest graded relative's live grade or "not graded"
+  (`fadeGrade.mjs lensGradeLine`). **Market alerts** (`app/lib/marketAlerts.mjs`, runner lab-api `marketWatch.mjs` on
+  the */5 cron): "Alert me on ETH" in the drawer; push switch `markets` (OFF by default) + ≤10 coins on the device
+  record; fires only on a CHANGE (funding stretched, 2× consensus formed/flipped, forecast ±15 pts), first look =
+  baseline; tap opens `/lab?tab=intel&market=ETH`. **Speed:** `sharedJson` (`app/lib/sharedJson.mjs`) shares one
+  request per URL for 30 s; the FADE line reads `GET /intel/fade-grade` (not the 200 KB scoreboard). Lens reads to
+  grade exactly: `docs/research/lens-reads-prereg-DRAFT.md` (unsigned; nothing counts until signed).
 - **Position → call (Trade, 2026-11-05):** `PositionCallButton.tsx` sits at the right end of the Trade strip, only when the
   wallet holds a position in the market on screen; one tap opens the Thesis Engine with a draft (`app/lib/positionCall.mjs`):
   side from the position, ENTRY = the mark at the tap (never the average open price: a call starts when posted), stop/target

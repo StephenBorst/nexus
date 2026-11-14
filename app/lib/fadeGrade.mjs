@@ -50,3 +50,42 @@ export function fadeFamilyLine(g) {
   const n = g.samples ? ` (${g.samples.toLocaleString("en-US")} samples)` : "";
   return `The plain funding fade grades ${g.tier}${vs}${n}.`;
 }
+
+// ── Every lens, labelled with its nearest graded relative (the market drawer, 2026-11-14) ─────
+// Same honesty as the FADE label: the drawer's lenses are not graded rules themselves. Where the scoreboard grades a
+// close relative, the drawer prints that relative's LIVE grade under the lens, naming exactly what was graded, and
+// says plainly what wasn't. A lens with no graded relative says "not graded". Display only.
+
+/** The grade of any axis on a scorecard as served, or null when it isn't there. */
+export function axisGrade(scorecard, name) {
+  const axes = Array.isArray(scorecard?.axes) ? scorecard.axes : [];
+  const axis = axes.find((a) => a && a.name === name);
+  const tier = axis ? TIER[/** @type {keyof typeof TIER} */ (axis.verdict)] : undefined;
+  if (!axis || !tier) return null;
+  const n = Number(axis.r?.samples);
+  return {
+    tier,
+    vsRandom: VS_RANDOM[/** @type {keyof typeof VS_RANDOM} */ (axis.random?.pooled?.verdict)] || null,
+    samples: Number.isFinite(n) && n > 0 ? Math.round(n) : null,
+  };
+}
+
+const gradeText = (g) => `${g.tier}${g.vsRandom ? `, ${g.vsRandom}` : ""}${g.samples ? ` (${g.samples.toLocaleString("en-US")} samples)` : ""}`;
+
+/** lens id → { axis, what it graded, what the lens adds that isn't graded }. */
+export const LENS_RELATIVES = Object.freeze({
+  funding: { axis: FADE_FAMILY_AXIS, graded: "The plain funding fade", gap: "The stretch rule shown here isn't graded on its own." },
+  smart: { axis: "smart_follow", graded: "Following the recorded smart-money lean (any margin)", gap: "The 2× agreement shown here isn't graded on its own." },
+});
+export const UNGRADED_LENSES = Object.freeze(["forecast", "catalysts"]);
+
+/** The line under a lens: its relative's live grade, "not graded", or null (nothing to say / grade unread). */
+export function lensGradeLine(lensId, scorecard) {
+  const rel = LENS_RELATIVES[lensId];
+  if (rel) {
+    const g = axisGrade(scorecard, rel.axis);
+    return g ? `Nearest graded rule: ${rel.graded.charAt(0).toLowerCase()}${rel.graded.slice(1)} grades ${gradeText(g)}. ${rel.gap}` : null;
+  }
+  if (UNGRADED_LENSES.includes(lensId)) return "Not graded: no read on this lens is registered yet.";
+  return null;
+}
