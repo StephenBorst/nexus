@@ -18,6 +18,7 @@ import { ConvictionScanner } from "./ConvictionScanner";
 import { bareTicker } from "@/utils/utils";
 import { pressKey, useEscapeKey } from "@/utils/a11y";
 import { feedRows, FEED_MIN_USD } from "@/lib/smartFeed.mjs";
+import { consensusFromBoard, CONSENSUS_RATIO } from "@/lib/smartConsensus.mjs";
 
 interface SmConsensus { sym: string; side: "LONG" | "SHORT"; count: number; netUsd: number; refPrice: number; against: number; tracked: number; }
 
@@ -262,45 +263,10 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
   // Smart-money CONSENSUS — coins where ≥2 tracked traders hold the same side.
   // The highest-conviction signal: not one whale, but agreement. Derived free
   // from the board data we already have.
-  const consensus = useMemo<SmConsensus[]>(() => {
-    if (!board) return [];
-    type Entry = { sym: string; side: "LONG" | "SHORT"; traders: Set<string>; netUsd: number; refPrice: number; maxSz: number };
-    const map = new Map<string, Entry>();
-    for (const t of board) {
-      for (const p of t.positions) {
-        if (!p.tradeable || !p.sym) continue;
-        const key = `${p.sym}|${p.side}`;
-        const e = map.get(key) || { sym: p.sym, side: p.side, traders: new Set<string>(), netUsd: 0, refPrice: 0, maxSz: 0 };
-        e.traders.add(t.address); e.netUsd += p.szUsd;
-        if (p.szUsd > e.maxSz && p.entry > 0) { e.maxSz = p.szUsd; e.refPrice = p.entry; } // ref = biggest holder's entry
-        map.set(key, e);
-      }
-    }
-    // Collapse to ONE side per coin — the DOMINANT agreement. A coin with tracked
-    // traders on BOTH sides (e.g. 5 long + 5 short BTC) is a SPLIT, not consensus, so
-    // showing both entries under "coins traders agree on" is contradictory. Keep the
-    // side that clearly leads (more traders); drop the coin entirely on a tie.
-    const bySym = new Map<string, { LONG?: Entry; SHORT?: Entry }>();
-    for (const e of map.values()) {
-      if (e.traders.size < 2) continue;
-      const g = bySym.get(e.sym) || {};
-      g[e.side] = e; bySym.set(e.sym, g);
-    }
-    const dominant: { e: Entry; against: number }[] = [];
-    // The minority side counts every tracked trader on it (even one), so "11 short · 1 long" is honest.
-    const sideCount = (sym: string, side: "LONG" | "SHORT") => map.get(`${sym}|${side}`)?.traders.size ?? 0;
-    for (const g of bySym.values()) {
-      const sides = [g.LONG, g.SHORT].filter(Boolean) as Entry[];
-      if (sides.length === 1) { const e = sides[0]; dominant.push({ e, against: sideCount(e.sym, e.side === "LONG" ? "SHORT" : "LONG") }); continue; }
-      sides.sort((a, b) => b.traders.size - a.traders.size);
-      if (sides[0].traders.size > sides[1].traders.size) dominant.push({ e: sides[0], against: sides[1].traders.size }); // clear lead wins; even split dropped
-    }
-    const tracked = board.length;
-    return dominant
-      .map(({ e, against }) => ({ sym: e.sym, side: e.side, count: e.traders.size, netUsd: e.netUsd, refPrice: e.refPrice, against, tracked }))
-      .sort((a, b) => b.count - a.count || b.netUsd - a.netUsd)
-      .slice(0, 6);
-  }, [board]);
+  // Coins where tracked traders actually agree: the leading side needs CONSENSUS_RATIO × the other side's traders
+  // (app/lib/smartConsensus.mjs, tested). Near splits ("10 short · 8 long") come back apart, named in one line.
+  const consensusRead = useMemo(() => consensusFromBoard(board ?? []), [board]);
+  const consensus: SmConsensus[] = consensusRead.rows;
 
   // Net smart-money bias per coin (all board positions, both sources) → the side
   // with more $ behind it. Powers "You vs Smart Money".
@@ -544,9 +510,12 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
       )}
 
       {/* ── SMART MONEY CONSENSUS — the HERO: the highest-conviction signal ── */}
-      {consensus.length > 0 && (
+      {(consensus.length > 0 || consensusRead.splits.length > 0) && (
         <div style={{ ...agentCardStyle, marginBottom: 12, borderColor: "#33333a", borderLeft: "2px solid #ededf0" }}>
           <div style={{ ...agentLabelStyle, fontSize: 12, letterSpacing: "0.14em" }}>◆ SMART MONEY CONSENSUS <span style={{ color: "#71717a", letterSpacing: "0.06em" }}>— coins where several tracked traders hold the same side</span></div>
+          {consensus.length === 0 && (
+            <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#a1a1aa", marginTop: 10 }}>No coin has clear agreement right now.</div>
+          )}
           <div className="nx-stagger" style={{ marginTop: 10, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
             {consensus.map((c) => (
               <div key={`${c.sym}${c.side}`} style={{ display: "flex", alignItems: "center", gap: 10, rowGap: 6, flexWrap: "wrap", padding: "8px 10px", border: "1px solid #1a1a1e", borderRadius: 6, background: "#0f0f11" }}>
@@ -572,8 +541,15 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
               </div>
             ))}
           </div>
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 8 }}>
-            Agreement across independent traders: context, not a graded read. ⚡ opens the copy at market (set your own levels).
+          {consensusRead.splits.length > 0 && (
+            <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", marginTop: 10, lineHeight: 1.5 }}>
+              <span style={{ color: "#71717a" }}>Split, not listed: </span>
+              {consensusRead.splits.slice(0, 4).map((x) => `${x.sym} ${x.short} short · ${x.long} long`).join(", ")}
+              {consensusRead.splits.length > 4 ? ` +${consensusRead.splits.length - 4} more` : ""}
+            </div>
+          )}
+          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", marginTop: 8 }}>
+            Listed when one side has {CONSENSUS_RATIO}× the other side’s traders. Agreement across independent traders: context, not a graded read. ⚡ opens the copy at market (set your own levels).
           </div>
         </div>
       )}

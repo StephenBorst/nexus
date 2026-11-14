@@ -500,6 +500,9 @@ function FeedCard({
   const isOwnThesis = walletAddress?.toLowerCase() === thesis.wallet.toLowerCase();
   const isFollowing = following.has(thesis.wallet.toLowerCase());
   const navigate = useNavigate();
+  // A finished call is a one-line row until tapped (2026-11-14): graded cards were full-height, so a page of
+  // closed calls buried the open ones.
+  const [expanded, setExpanded] = useState(false);
   const timeAgo = (() => {
     const diff = Date.now() - thesis.createdAt;
     const h = Math.floor(diff / 3600000);
@@ -530,6 +533,23 @@ function FeedCard({
     ...(runnerRR(thesis) != null ? [{ label: "RUNNER", val: fmtRR(runnerRR(thesis)).replace(":", " : ") }] : []),
   ];
   const size = (Number(thesis.positionSize) || 0) > 0 ? `$${thesis.positionSize.toFixed(0)}` : null;
+
+  const finished = eff === "HIT_TP" || eff === "STOPPED_OUT" || !!timeExit || runnerStopped;
+  if (finished && !expanded) {
+    const who = thesis.agent ? "Nexus Agent" : (thesis.displayName ?? shortAddr);
+    return (
+      <div role="button" tabIndex={0} onClick={() => setExpanded(true)} onKeyDown={pressKey(() => setExpanded(true))}
+        aria-label={`${ticker} ${thesis.direction} by ${who}, ${pill.label}. Show the call`}
+        className="nx-card-interactive"
+        style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: isMobile ? "11px 12px" : "12px 20px", cursor: "pointer" }}>
+        <span style={{ fontFamily: UI, fontSize: 16, fontWeight: 600, color: C.text.bright, flexShrink: 0 }}>{ticker}</span>
+        <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", color: C.text.fog, border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "1px 6px", flexShrink: 0 }}>{thesis.direction === "LONG" ? "↑" : "↓"}{isMobile ? "" : thesis.direction === "LONG" ? " LONG" : " SHORT"}</span>
+        <span style={{ fontFamily: UI, fontSize: 13, color: C.text.muted, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: "1 1 0" }}>{who} · {timeAgo}</span>
+        <span style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, padding: "0 10px", height: 26, display: "inline-flex", alignItems: "center", borderRadius: 13, border: `1px solid ${pill.border}`, color: pill.color, flexShrink: 0 }}>{pill.label}</span>
+        <span aria-hidden style={{ color: C.text.faint, fontSize: 14, flexShrink: 0 }}>›</span>
+      </div>
+    );
+  }
 
   return (
     <div style={{
