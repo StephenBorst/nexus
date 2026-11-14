@@ -27,11 +27,15 @@ test("the Mispriced board calls the funding fade a rule, not an edge", () => {
   const m = visible(read("../pages/lab/MispricedBoard.tsx"));
   assert.doesNotMatch(m, /edge is to bet|Funding edge/);
   assert.match(m, /a mechanical rule, not graded yet/);
+  // 2026-11-14: the board's intro, lens label and watch lines called the ungraded fade an "edge".
+  assert.doesNotMatch(m, /mean-revert edge|FUNDING-EDGE|fade edge|sorted by edge|\|edge\|/);
 });
 
 test("the Lab's funding board section doesn't promise that fades paid", () => {
-  const lab = read("../pages/lab/index.tsx");
-  const line = lab.slice(lab.indexOf('storageKey="nx_funding_board_open"') - 400, lab.indexOf('storageKey="nx_funding_board_open"'));
-  assert.doesNotMatch(line, /PAID|paid vs trap|Funding edges/);
+  // The funding board is a chip on Lab home's lens card since 2026-11-14 (app/lib/intelLenses.mjs).
+  const lenses = read("./intelLenses.mjs");
+  const line = lenses.slice(lenses.indexOf('id: "funding"'), lenses.indexOf('id: "positioning"'));
+  assert.ok(line.length > 0);
+  assert.doesNotMatch(line, /PAID|paid vs trap|Funding edges|edge/i);
 });
 
