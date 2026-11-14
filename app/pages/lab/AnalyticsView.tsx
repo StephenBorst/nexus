@@ -1,4 +1,4 @@
-// Analytics tab + its charts/sections (RadarChart, TradingScore, breakdowns,
+// Analytics tab + its charts/sections (your record, where the money goes, breakdowns,
 // top assets, performance). Extracted from index.tsx (god-file split).
 import { useMemo } from "react";
 import type { ProcessedTrade, ThesisTrade } from "./types";
@@ -8,141 +8,11 @@ import { OperatorProfileCard } from "./OperatorProfile";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
 import { formatPnl, formatPnlCompact, formatUsdCompact } from "./helpers";
 import { PnlChart, PnlBars, EmptyState, CountUp, SectionHeader } from "./components";
+import { YourRecordCard, MoneyGoesCard } from "./StatsCards";
 import { Collapsible } from "./Collapsible";
 import { useIsMobile } from "./useIsMobile";
 import { computeEdge } from "@/config/edge";
 import { bareTicker } from "@/utils/utils";
-
-// ─── Radar Chart ─────────────────────────────────────────
-function RadarChart({ scores }: { scores: { label: string; value: number }[] }) {
-  const cx = 160; const cy = 160; const r = 120;
-  const n = scores.length;
-  const angleStep = (2 * Math.PI) / n;
-  const getPoint = (i: number, radius: number) => {
-    const angle = i * angleStep - Math.PI / 2;
-    return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
-  };
-  const gridLevels = [0.25, 0.5, 0.75, 1];
-  const dataPoints = scores.map((s, i) => getPoint(i, (s.value / 100) * r));
-  const dataPath = dataPoints.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ") + "Z";
-  return (
-    <svg viewBox="0 0 320 320" style={{ width: "100%", maxWidth: 280 }}>
-      {gridLevels.map((level) => {
-        const pts = scores.map((_, i) => getPoint(i, level * r));
-        const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ") + "Z";
-        return <path key={level} d={path} fill="none" stroke="#232327" strokeWidth="1" />;
-      })}
-      {scores.map((_, i) => {
-        const p = getPoint(i, r);
-        return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="#232327" strokeWidth="1" />;
-      })}
-      <path d={dataPath} fill="#ededf0" fillOpacity="0.15" stroke="#ededf0" strokeWidth="2" />
-      {dataPoints.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="4" fill="#ededf0" />)}
-      {scores.map((s, i) => {
-        const p = getPoint(i, r + 20);
-        return <text key={i} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 10, fill: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{s.label}</text>;
-      })}
-      {scores.map((s, i) => {
-        const p = getPoint(i, r - 16);
-        return <text key={i} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 9, fill: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{s.value}</text>;
-      })}
-    </svg>
-  );
-}
-
-// ─── Trading Score ────────────────────────────────────────
-function TradingScoreSection({ orders, winRate }: { orders: ProcessedTrade[]; winRate: number }) {
-  const isMobile = useIsMobile();
-  const metrics = useMemo(() => {
-    if (!orders.length) return null;
-    const wins = orders.filter((o) => o.pnl > 0);
-    const losses = orders.filter((o) => o.pnl < 0);
-    const avgWin = wins.length ? wins.reduce((s, o) => s + o.pnl, 0) / wins.length : 0;
-    const avgLoss = losses.length ? Math.abs(losses.reduce((s, o) => s + o.pnl, 0) / losses.length) : 0.01;
-    const profitFactor = avgLoss > 0 ? (avgWin * wins.length) / (avgLoss * (losses.length || 1)) : 99;
-    const totalPnl = orders.reduce((s, o) => s + o.pnl, 0);
-    let running = 0; let peak = 0; let maxDD = 0;
-    orders.forEach((o) => { running += o.pnl; if (running > peak) peak = running; const dd = peak > 0 ? ((peak - running) / peak) * 100 : 0; if (dd > maxDD) maxDD = dd; });
-    const pnlValues = orders.map((o) => o.pnl);
-    const mean = pnlValues.reduce((s, v) => s + v, 0) / pnlValues.length;
-    const variance = pnlValues.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / pnlValues.length;
-    const stdDev = Math.sqrt(variance);
-    const consistency = stdDev > 0 ? Math.max(0, 100 - (stdDev / Math.abs(mean || 1)) * 10) : 100;
-    const recovery = totalPnl > 0 ? Math.min(100, (totalPnl / (maxDD || 1)) * 10) : 50;
-    const winScore = Math.min(100, winRate);
-    const pfScore = Math.min(100, profitFactor * 5);
-    const wlScore = Math.min(100, (avgWin / (avgLoss || 1)) * 10);
-    const ddScore = Math.max(0, 100 - maxDD * 5);
-    const recScore = Math.min(100, recovery);
-    const conScore = Math.min(100, consistency);
-    const composite = winScore * 0.15 + pfScore * 0.25 + wlScore * 0.20 + ddScore * 0.20 + recScore * 0.10 + conScore * 0.10;
-    const levsWithData = orders.filter((o) => o.leverage && o.leverage > 0);
-    const avgLev = levsWithData.length ? levsWithData.reduce((s, o) => s + (o.leverage ?? 0), 0) / levsWithData.length : 0;
-    const traderType = avgLev > 20 ? "DEGEN" : avgLev > 10 ? "SCALPER" : avgLev > 5 ? "SWING" : "POSITION";
-    return {
-      scores: [
-        { label: "Win Rate", value: Math.round(winScore) },
-        { label: "Profit Factor", value: Math.round(pfScore) },
-        { label: "Win/Loss", value: Math.round(wlScore) },
-        { label: "Recovery", value: Math.round(recScore) },
-        { label: "Drawdown", value: Math.round(ddScore) },
-        { label: "Consistency", value: Math.round(conScore) },
-      ],
-      composite: Math.round(composite),
-      traderType,
-      avgLev: avgLev.toFixed(1),
-      details: [
-        { label: "WIN %", weight: "15%", score: Math.round(winScore), raw: `${winRate.toFixed(1)}%` },
-        { label: "PROFIT FACTOR", weight: "25%", score: Math.round(pfScore), raw: profitFactor.toFixed(2) },
-        { label: "AVG W/L", weight: "20%", score: Math.round(wlScore), raw: (avgWin / (avgLoss || 1)).toFixed(2) },
-        { label: "MAX DD", weight: "20%", score: Math.round(ddScore), raw: `${maxDD.toFixed(1)}%` },
-        { label: "RECOVERY", weight: "10%", score: Math.round(recScore), raw: recovery.toFixed(2) },
-        { label: "CONSISTENCY", weight: "10%", score: Math.round(conScore), raw: stdDev.toFixed(3) },
-      ],
-    };
-  }, [orders, winRate]);
-
-  if (!metrics) return <EmptyState message="no trading score yet" unlock="Your score is computed from closed trades. Connect your wallet and it fills in from your real history." />;
-
-  return (
-    <div style={{ ...cardStyle, marginTop: 12 }}>
-      <div style={{ fontSize: 10, color: "#71717a", letterSpacing: "0.1em", marginBottom: 16, fontFamily: "var(--nx-font-mono)", display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ color: "#52525b" }}>&#9632;</span> TRADING SCORE
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "280px 1fr", gap: isMobile ? 16 : 24, alignItems: "center", justifyItems: isMobile ? "center" : "stretch" }}>
-        <RadarChart scores={metrics.scores} />
-        <div style={{ width: isMobile ? "100%" : undefined }}>
-          <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.1em", marginBottom: 4 }}>COMPOSITE SCORE</div>
-          <div style={{ fontSize: 64, fontWeight: "bold", color: "#ededf0", fontFamily: "var(--nx-font-mono)", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}><CountUp value={metrics.composite} format={(v) => `${Math.round(v)}`} /></div>
-          <div style={{ height: 4, background: "#232327", borderRadius: 2, margin: "10px 0 16px" }}>
-            <div style={{ height: 4, background: "#ededf0", borderRadius: 2, width: `${metrics.composite}%`, transition: "width 700ms var(--nx-ease)" }} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-            {metrics.details.map((d) => (
-              <div key={d.label} style={{ background: "#0a0a0b", border: "1px solid #232327", borderRadius: 6, padding: "8px 10px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.16em", textTransform: "uppercase" }}>{d.label}</span>
-                  <span style={{ fontSize: 8, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>{d.weight}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span style={{ fontSize: 16, color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{d.score}</span>
-                  <span style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>/100 {d.raw}</span>
-                </div>
-                <div style={{ height: 3, background: "#232327", borderRadius: 2, marginTop: 6 }}>
-                  <div style={{ height: 3, background: d.score > 80 ? "#3ecf8e" : d.score > 50 ? "#fbbf24" : "#f7525f", borderRadius: 2, width: `${d.score}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3, padding: "5px 12px", fontSize: 11, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{metrics.traderType}</div>
-            <div style={{ background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3, padding: "5px 12px", fontSize: 11, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{metrics.avgLev}X AVG LEV</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Breakdown Row ────────────────────────────────────────
 function BreakdownRow({ orders }: { orders: ProcessedTrade[] }) {
@@ -555,7 +425,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
   return (
     <div className="nx-fade-in nx-spotlight" style={{ ...cardStyle, marginBottom: 8 }}>
       <div style={labelStyle}>&#9670; YOUR EDGE</div>
-      <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", marginTop: -2, marginBottom: 10 }}>where you actually make money. From your own graded record</div>
+      <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", marginTop: -2, marginBottom: 10 }}>where you actually make money. From your own closed trades</div>
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 8, marginBottom: 8 }}>
         {symTile("STRONGEST SYMBOL", best_symbol, "pos")}
         {symTile("WEAKEST SYMBOL", worst_symbol, "neg")}
@@ -635,6 +505,9 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       </div>
 
       <YourEdgeCard orders={orders} />
+      {/* Measured, not scored: the record in dollars + the slices costing and paying you (app/lib/tradeStats.mjs). */}
+      <YourRecordCard orders={orders} />
+      <MoneyGoesCard orders={orders} />
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 240px", gap: 8, marginBottom: 8 }}>
         <div style={cardStyle}>
@@ -680,8 +553,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       {/* Core analytics (operator read, key stats, equity curve) stay up top; the deeper
           drill-downs collapse so the tab reads as a synthesis, not an instrument dump. */}
       {orders.length > 0 && (
-        <Collapsible title="Deeper breakdowns" subtitle="score, timing, per-symbol & per-regime, top assets, process coaching" storageKey="nx_analytics_deep_open">
-          <TradingScoreSection orders={orders} winRate={winRate} />
+        <Collapsible title="Deeper breakdowns" subtitle="hold time, leverage, timing, streaks, top assets, process coaching" storageKey="nx_analytics_deep_open">
           <BreakdownRow orders={orders} />
           <TimingAndRisk orders={orders} />
           <PerformanceAnalysis orders={orders} />
