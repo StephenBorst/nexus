@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { fusePositioning } from "@/lib/positioning.mjs";
 import { fetchDeribitTerm } from "@/lib/deribit.mjs";
 import { Simulate } from "./Simulate";
+import { useIsMobile } from "./useIsMobile";
 import type { ProcessedTrade } from "./types";
 import { C, SIGNAL } from "@/config/theme";
 
@@ -92,8 +93,21 @@ function magnetPull(m: Magnets | null, direction: "LONG" | "SHORT"): { side: "LO
 const TREND_WORD: Record<string, string> = { TREND_UP: "uptrend", TREND_DOWN: "downtrend", CHOP: "chop" };
 const VOL_WORD: Record<string, string> = { CALM: "calm", NORMAL: "normal vol", VOLATILE: "volatile" };
 
-export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge, onBaseRate }: { symbol: string; direction: "LONG" | "SHORT"; trades?: ProcessedTrade[]; levels?: Levels; wallet?: string | null; onWeakEdge?: (w: { weak: boolean; histPct: number | null }) => void; onBaseRate?: (br: { revertedPct: number; samples: number; tier: string } | null) => void }) {
+// `foldable` (the Thesis Engine's Quick Call, 2026-11-14): the header is a one-line toggle and the body opens on
+// tap, remembered per device (READ_OPEN_KEY). Still mounted and still reading while folded, so the WATCH gate
+// (onWeakEdge / onBaseRate) works the same either way. Default: open on desktop, folded on a phone.
+export const READ_OPEN_KEY = "nx_read_open";
+export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge, onBaseRate, foldable = false }: { symbol: string; direction: "LONG" | "SHORT"; trades?: ProcessedTrade[]; levels?: Levels; wallet?: string | null; onWeakEdge?: (w: { weak: boolean; histPct: number | null }) => void; onBaseRate?: (br: { revertedPct: number; samples: number; tier: string } | null) => void; foldable?: boolean }) {
   const coin = bare(symbol);
+  const isMobile = useIsMobile();
+  const [openPref, setOpenPref] = useState<boolean | null>(() => {
+    try { const v = window.localStorage.getItem(READ_OPEN_KEY); return v == null ? null : v === "1"; } catch { return null; }
+  });
+  const open = !foldable || (openPref ?? !isMobile);
+  const toggleOpen = () => {
+    const n = !open; setOpenPref(n);
+    try { window.localStorage.setItem(READ_OPEN_KEY, n ? "1" : "0"); } catch { /* private mode */ }
+  };
   const [fused, setFused] = useState<Fused | null | undefined>(undefined); // undefined=loading, null=no read
   const [callers, setCallers] = useState<{ side: "LONG" | "SHORT"; participants: number } | null>(null);
   const [breadth, setBreadth] = useState<Breadth | null>(null);
@@ -293,14 +307,25 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
   ].filter(Boolean).join(" ");
 
   return (
-    <div style={{ border: `1px solid ${BORDER}`, borderLeft: `2px solid ${FAINT}`, background: C.surfaceAlt, borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: FAINT }} />
-        <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>THE READ · {coin}</span>
-        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, color: FAINT }}>live · inputs, not a verdict</span>
-      </div>
+    <div style={{ border: `1px solid ${BORDER}`, borderLeft: `2px solid ${FAINT}`, background: C.surfaceAlt, borderRadius: 8, padding: foldable && !open ? "8px 12px" : "12px 14px", marginBottom: foldable ? 0 : 14 }}>
+      {foldable ? (
+        <button type="button" onClick={toggleOpen} aria-expanded={open} className="nx-press"
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, marginBottom: open ? 10 : 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", minHeight: 28 }}>
+          <span aria-hidden style={{ fontFamily: MONO, fontSize: 10, color: FOG, width: 10 }}>{open ? "▾" : "▸"}</span>
+          <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>THE READ · {coin}</span>
+          <span style={{ marginLeft: "auto", fontFamily: UI, fontSize: 11, color: MUTED, whiteSpace: "nowrap" }}>
+            {open ? "inputs, not a verdict" : loading ? "reading…" : nothing ? "nothing on it now" : `${reads.length} ${reads.length === 1 ? "input" : "inputs"} · open before you post`}
+          </span>
+        </button>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: FAINT }} />
+          <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: BONE }}>THE READ · {coin}</span>
+          <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, color: FAINT }}>live · inputs, not a verdict</span>
+        </div>
+      )}
 
-      {loading ? (
+      {!open ? null : loading ? (
         <div style={{ fontFamily: MONO, fontSize: 10.5, color: FAINT }}>Reading {coin}…</div>
       ) : nothing ? (
         <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTED, lineHeight: 1.5 }}>No inputs on {coin} right now. No funding stretch, no smart-money position, no record here yet.</div>
@@ -313,7 +338,7 @@ export function LiveRead({ symbol, direction, trades, levels, wallet, onWeakEdge
               <div style={{ fontFamily: UI, fontSize: 12, color: FOG, lineHeight: 1.5, marginBottom: 8 }}>
                 Drafting {direction}. {reads.length} {reads.length === 1 ? "input" : "inputs"}. → is the side an input points to.
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 6, marginBottom: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(150px, 1fr))", gap: 6, marginBottom: 10 }}>
                 {reads.map((r) => (
                   <div key={r.label} style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0, border: `1px solid ${BORDER}`, borderRadius: 5, padding: "6px 9px", background: INSET }}>
                     <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.1em", color: MUTED, textTransform: "uppercase" }}>{r.label}</span>

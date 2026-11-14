@@ -14,6 +14,7 @@ import { LiveRead } from "./LiveRead";
 import { SimComposer } from "./SimComposer";
 import { cardStyle, labelStyle, navBtnStyle, inputStyle, fieldLabelStyle, STATUS_CONFIG, CLOSED_STATUSES } from "./styles";
 import { splitRunnerStopped, callRR, fmtRR, timeExitLabel } from "@/lib/callMath.mjs";
+import { callReady, liveOrderReady } from "@/lib/quickCall.mjs";
 import { callShareLinks } from "@/lib/callShare.mjs";
 import { deployToAgent, thesisToAgentConfig, thesisAgentNotice, deployDirectiveFromThesis } from "@/utils/agentPrefill";
 import { formatPnl, chartImageSrc, chartImageList, effectiveStatus, resolveSuggestion, CHART_HOST_HINT, MAX_CHARTS } from "./helpers";
@@ -1003,6 +1004,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   const [quickBusy, setQuickBusy] = useState(false);
   const [quickStopPct, setQuickStopPct] = useState(2);
   const [quickTpR, setQuickTpR] = useState(2);
+  const [sizeOpen, setSizeOpen] = useState(false); // Quick Call: the optional account-size field
   const [atrPct, setAtrPct] = useState<number | null>(null); // live H4 ATR% for the current symbol
 
   // Full listed-markets set → validate the symbol (a typo makes an ungradeable call)
@@ -1109,19 +1111,14 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   useEffect(() => { userChoseDir.current = false; setDirArmed(true); setWeakSetup(null); baseRateRef.current = null; }, [form.symbol]);
 
   const calc = useMemo(() => calcThesis(form), [form]);
-  // A thesis is only valid to save if it produces a real, finite, positive size
-  // (catches missing fields, entry===stop, 0 risk → $0 / Infinity positions) AND a
-  // direction has been committed (the WATCH gate: a weak base rate must be overridden
-  // on purpose, never by a pre-checked default).
-  // A declared split needs TP2 beyond TP1 (else the grader calls it INVALID).
+  // calc = the optional sizing (account × risk ÷ stop distance); null without an account size. Whether a call
+  // can be posted is `ready` below (levels + a committed side, the WATCH gate). A declared split needs TP2
+  // beyond TP1 (else the grader calls it INVALID).
   const splitBad = form.splitExit && (() => {
     const e = parseFloat(form.entryPrice), t1 = parseFloat(form.takeProfit1), t2 = parseFloat(form.takeProfit2);
     if (!(t2 > 0)) return false;
     return form.direction === "LONG" ? !(t2 > t1 && t1 > e) : !(t2 < t1 && t1 < e);
   })();
-  const formValid = !!form.symbol && dirArmed && !!calc && !splitBad
-    && Number.isFinite(calc.positionSize) && calc.positionSize > 0
-    && Number.isFinite(calc.riskReward) && calc.riskReward > 0;
   // string | string[] — chartUrls is a list; every other field is a plain string.
   const set = (field: string, value: string | string[]) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -1129,6 +1126,11 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   // false "not listed" while it's still fetching.
   const symbolUpper = form.symbol.trim().toUpperCase();
   const symbolListed = !marketTickers || !symbolUpper || marketTickers.includes(symbolUpper);
+  // A call posts on its levels alone (quickCall.mjs: the grader's own validity rule). Account size only
+  // sizes a LIVE order, so it gates that and nothing else (2026-11-14: it used to block every post).
+  const ready = callReady(form, { dirArmed, listed: symbolListed });
+  const formValid = ready.ok && !splitBad;
+  const liveValid = liveOrderReady(ready, calc?.positionSize ?? NaN) && !splitBad;
 
   // Live H4 ATR for the current market — the fade's stop breathes with real volatility, not a
   // flat 2%. Refetched per symbol; fail-soft (null → the flat-% default stands).
@@ -1262,7 +1264,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
     // Declared split, graded half at TP1 + half at TP2 (lab-api gradeCall). Locked once published.
     exitPlan: form.splitExit && parseFloat(form.takeProfit2) > 0 ? "SPLIT_50" : undefined,
     riskPercent: parseFloat(form.riskPercent),
-    accountSize: parseFloat(form.accountSize),
+    accountSize: parseFloat(form.accountSize) || 0,
     fundingRate: parseFloat(form.fundingRate),
     notes: form.notes,
     catalyst: form.catalyst.trim() || undefined,
@@ -1271,12 +1273,13 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
     baseRateAtEntry: baseRateRef.current ?? undefined,
     chartUrls: (() => { const v = form.chartUrls.map((u) => u.trim()).filter(Boolean); return v.length ? v : undefined; })(),
     createdAt: Date.now(),
-    positionSize: calc!.positionSize,
-    leverage: calc!.leverage,
-    riskReward: calc!.riskReward,
-    fundingCost8h: calc!.fundingCost8h,
-    fundingCost24h: calc!.fundingCost24h,
-    fundingCost72h: calc!.fundingCost72h,
+    // Size is optional (a call is graded from its levels); 0 = not sized, as on-chain calls store it.
+    positionSize: calc?.positionSize ?? 0,
+    leverage: calc?.leverage ?? 0,
+    riskReward: calc?.riskReward ?? ready.rr ?? 0,
+    fundingCost8h: calc?.fundingCost8h ?? 0,
+    fundingCost24h: calc?.fundingCost24h ?? 0,
+    fundingCost72h: calc?.fundingCost72h ?? 0,
     status: "ACTIVE",
     actualPnl: null,
   });
@@ -1334,7 +1337,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   };
 
   const deployLive = async () => {
-    if (!formValid) return;
+    if (!liveValid || !calc) return;
     setLiveConfirm(false);
     setLiveStatus("submitting");
     setLiveError(null);
@@ -1595,7 +1598,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
             const stopPctShown = entryN > 0 ? Math.abs((entryN - stopN) / entryN) * 100 : 0;
             const px = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: n < 10 ? 4 : 2 })}`;
             const knob = (on: boolean, accent: string): React.CSSProperties => ({
-              fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 10px", borderRadius: 3, cursor: "pointer",
+              fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, padding: "7px 11px", minHeight: 34, borderRadius: 4, cursor: "pointer",
               border: `1px solid ${on ? accent : "#232327"}`, background: on ? `${accent}1e` : "#0a0a0b", color: on ? accent : "#71717a",
             });
             const canBuild = !!form.symbol && symbolListed;
@@ -1645,105 +1648,121 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                   </div>
                 )}
 
-                {/* THE READ — the pre-trade fusion: positioning + funding + callers + your
-                    own record on this market, synthesized against the direction you're
-                    drafting. Intelligence AT the decision, not scattered across tabs. */}
-                {form.symbol && symbolListed && (
-                  <div style={{ marginTop: 12 }}>
-                    <LiveRead symbol={form.symbol} direction={form.direction} trades={realizedTrades}
-                      levels={built ? { entryPrice: entryN, stopLoss: stopN, takeProfit1: tpN } : undefined} wallet={wallet} onWeakEdge={handleWeakEdge} onBaseRate={handleBaseRate} />
-                  </div>
-                )}
-
-                {!built ? (
-                  // The stop is built from real H4 ATR when we have it (1.2× ATR), not a flat 2%
-                  // proxy — the fade breathes with the market's actual volatility (Grok item 3).
-                  <button onClick={() => { const sp = atrStopPct ?? quickStopPct; setQuickStopPct(sp); quickSetup(sp, quickTpR); }} disabled={!canBuild || quickBusy || !dirArmed}
-                    style={{ marginTop: 12, width: "100%", padding: "11px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, cursor: canBuild && dirArmed && !quickBusy ? "pointer" : "not-allowed", borderRadius: 4,
-                      border: `1px solid ${canBuild && dirArmed ? "#33333a" : "#232327"}`, background: canBuild && dirArmed ? "#1a1a1e" : "#0a0a0b", color: canBuild && dirArmed ? "#ededf0" : "#52525b" }}>
-                    {quickBusy ? "Building…" : !dirArmed ? "⚠ Pick a side to build" : atrStopPct != null ? `⚡ BUILD IT · stop 1.2× H4 ATR (${atrStopPct}%)` : "⚡ BUILD IT · fill from live price"}
-                  </button>
-                ) : (
-                  <>
-                    <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(70px, 1fr))", gap: 8, padding: "10px 12px", border: "1px solid #232327", borderRadius: 6, background: "#0a0a0b" }}>
-                      {[
-                        { l: "ENTRY", v: entryN > 0 ? px(entryN) : "—", c: "#a1a1aa" },
-                        { l: `STOP ${long ? "−" : "+"}${stopPctShown.toFixed(1)}%`, v: stopN > 0 ? px(stopN) : "—", c: "#f7525f" },
-                        { l: `TP ${quickTpR}R`, v: tpN > 0 ? px(tpN) : "—", c: "#ededf0" },
-                        { l: "SIZE", v: calc ? `$${calc.positionSize.toFixed(0)}` : "set acct ↓", c: calc ? "#d4d4d8" : "#52525b" },
-                        // R:R is fixed by the target knob (TP built at exactly tpR·risk), so show it
-                        // always — it doesn't need the account size the way position SIZE does.
-                        { l: "R:R", v: `1:${quickTpR.toFixed(2)}`, c: quickTpR >= 2 ? "#3ecf8e" : "#fbbf24" },
-                      ].map(({ l, v, c }) => (
-                        <div key={l}>
-                          <div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>{l}</div>
-                          <div style={{ fontSize: 13, color: c, fontFamily: "var(--nx-font-mono)", fontWeight: 700 }}>{v}</div>
-                        </div>
-                      ))}
+                {/* THE READ — the pre-trade fusion (positioning, funding, callers, your record) against the side you
+                    drafted. One foldable line (2026-11-14, borst: "cramped on mobile"): it sat between the side and the
+                    BUILD button and pushed both off a phone screen. Now it sits at the decision, right above Post,
+                    open on desktop and folded on a phone until tapped. Still reads while folded (the WATCH gate). */}
+                {(() => {
+                  const readEl = form.symbol && symbolListed ? (
+                    <div style={{ marginTop: 12 }}>
+                      <LiveRead symbol={form.symbol} direction={form.direction} trades={realizedTrades} foldable
+                        levels={built ? { entryPrice: entryN, stopLoss: stopN, takeProfit1: tpN } : undefined} wallet={wallet} onWeakEdge={handleWeakEdge} onBaseRate={handleBaseRate} />
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-                      <span style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>STOP</span>
-                      {/* The real-ATR stop leads (1.2× live H4 ATR); the flat %s are overrides. */}
-                      {atrStopPct != null && (
-                        <button onClick={() => { setQuickStopPct(atrStopPct); rebuildLevels(atrStopPct, quickTpR); }} title={`Stop at 1.2× the live H4 ATR. ATR is ${atrPct}%, so the stop is ${atrStopPct}%. Real volatility, not a flat %.`} style={knob(Math.abs(quickStopPct - atrStopPct) < 0.05, "#f7525f")}>1.2×ATR {atrStopPct}%</button>
+                  ) : null;
+                  const label: React.CSSProperties = { fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.06em" };
+                  if (!built) return (
+                    <>
+                      <button onClick={() => { const sp = atrStopPct ?? quickStopPct; setQuickStopPct(sp); quickSetup(sp, quickTpR); }} disabled={!canBuild || quickBusy || !dirArmed}
+                        style={{ marginTop: 12, width: "100%", padding: "12px 0", minHeight: 44, fontFamily: "var(--nx-font-ui)", fontSize: 13, fontWeight: 600, cursor: canBuild && dirArmed && !quickBusy ? "pointer" : "not-allowed", borderRadius: 4,
+                          border: `1px solid ${canBuild && dirArmed ? "#33333a" : "#232327"}`, background: canBuild && dirArmed ? "#1a1a1e" : "#0a0a0b", color: canBuild && dirArmed ? "#ededf0" : "#52525b" }}>
+                        {quickBusy ? "Building…" : !form.symbol ? "Pick a coin to build" : !dirArmed ? "⚠ Pick a side to build" : atrStopPct != null ? `⚡ Build it · stop 1.2× H4 ATR (${atrStopPct}%)` : "⚡ Build it from live price"}
+                      </button>
+                      {readEl}
+                    </>
+                  );
+                  const cells = [
+                    { l: "ENTRY", v: entryN > 0 ? px(entryN) : "—", c: "#d4d4d8" },
+                    { l: `STOP ${long ? "−" : "+"}${stopPctShown.toFixed(1)}%`, v: stopN > 0 ? px(stopN) : "—", c: "#f7525f" },
+                    { l: `TARGET ${quickTpR}R`, v: tpN > 0 ? px(tpN) : "—", c: "#ededf0" },
+                    // R:R is fixed by the target knob (TP built at exactly tpR·risk). Bone, amber under 2: not money.
+                    { l: "R:R", v: `1:${quickTpR.toFixed(2)}`, c: quickTpR >= 2 ? "#ededf0" : "#fbbf24" },
+                    ...(calc ? [{ l: "SIZE", v: `$${Math.round(calc.positionSize).toLocaleString()}`, c: "#d4d4d8" }] : []),
+                  ];
+                  return (
+                    <>
+                      <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(90px, 1fr))", gap: isMobile ? "10px 12px" : 8, padding: "10px 12px", border: "1px solid #232327", borderRadius: 6, background: "#0a0a0b" }}>
+                        {cells.map(({ l, v, c }) => (
+                          <div key={l} style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 8.5, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>{l}</div>
+                            <div style={{ fontSize: 14, color: c, fontFamily: "var(--nx-font-mono)", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Stop and target: one labelled row each, so a phone never wraps a knob onto the wrong row. */}
+                      <div style={{ display: "grid", gridTemplateColumns: "54px minmax(0, 1fr)", alignItems: "center", rowGap: 8, columnGap: 8, marginTop: 10 }}>
+                        <span style={label}>STOP</span>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {/* The real-ATR stop leads (1.2× live H4 ATR); the flat %s are overrides. */}
+                          {atrStopPct != null && (
+                            <button onClick={() => { setQuickStopPct(atrStopPct); rebuildLevels(atrStopPct, quickTpR); }} title={`Stop at 1.2× the live H4 ATR. ATR is ${atrPct}%, so the stop is ${atrStopPct}%. Real volatility, not a flat %.`} style={knob(Math.abs(quickStopPct - atrStopPct) < 0.05, "#f7525f")}>ATR {atrStopPct}%</button>
+                          )}
+                          {[1, 2, 3].map((p) => (
+                            <button key={p} onClick={() => { setQuickStopPct(p); rebuildLevels(p, quickTpR); }} style={knob(Math.abs(quickStopPct - p) < 0.01, "#f7525f")}>{p}%</button>
+                          ))}
+                        </div>
+                        <span style={label}>TARGET</span>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                          {[1.5, 2, 3].map((r) => (
+                            <button key={r} onClick={() => { setQuickTpR(r); rebuildLevels(quickStopPct, r); }} style={knob(Math.abs(quickTpR - r) < 0.01, "#ededf0")}>{r}R</button>
+                          ))}
+                          <button onClick={() => quickSetup(quickStopPct, quickTpR)} title="Re-anchor entry to the current mark" style={{ ...knob(false, "#33333a"), marginLeft: "auto", color: "#a1a1aa" }}>{quickBusy ? "…" : "⟳ Re-price"}</button>
+                        </div>
+                      </div>
+                      {readEl}
+                      {/* Size is optional: a call is graded from its levels. It only sizes a live order. */}
+                      {parseFloat(form.accountSize) > 0 ? (
+                        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", marginTop: 10 }}>Sized off a ${Math.round(parseFloat(form.accountSize)).toLocaleString()} account at {form.riskPercent}% risk. Change it in Fine-tune.</div>
+                      ) : sizeOpen ? (
+                        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: 10 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={fieldLabelStyle}>ACCOUNT SIZE (USDC) · optional</span>
+                            <input style={inputStyle} type="number" inputMode="decimal" placeholder="10000" value={form.accountSize} onChange={(e) => set("accountSize", e.target.value)} />
+                          </div>
+                          {Number(availableBalance) > 0 && (
+                            <button onClick={() => set("accountSize", String(Math.floor(Number(availableBalance))))} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "9px 10px", borderRadius: 3, border: "1px solid #33333a", background: "#0a0a0b", color: "#d4d4d8", cursor: "pointer", whiteSpace: "nowrap" }}>= My collateral</button>
+                          )}
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => setSizeOpen(true)} className="nx-text-action"
+                          style={{ marginTop: 8, fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#a1a1aa", background: "none", border: "none", padding: "6px 0", cursor: "pointer" }}>
+                          + Size it <span style={{ color: "#71717a" }}>· optional, not needed to post</span>
+                        </button>
                       )}
-                      {[1, 2, 3].map((p) => (
-                        <button key={p} onClick={() => { setQuickStopPct(p); rebuildLevels(p, quickTpR); }} style={knob(Math.abs(quickStopPct - p) < 0.01, "#f7525f")}>−{p}%</button>
-                      ))}
-                      <span style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginLeft: 6 }}>TARGET</span>
-                      {[1.5, 2, 3].map((r) => (
-                        <button key={r} onClick={() => { setQuickTpR(r); rebuildLevels(quickStopPct, r); }} style={knob(Math.abs(quickTpR - r) < 0.01, "#ededf0")}>{r}R</button>
-                      ))}
-                      <button onClick={() => quickSetup(quickStopPct, quickTpR)} title="Re-anchor entry to the current mark" style={{ ...knob(false, "#33333a"), marginLeft: "auto", color: "#71717a" }}>{quickBusy ? "…" : "⟳ re-price"}</button>
-                    </div>
-                    {!(parseFloat(form.accountSize) > 0) ? (
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: 10 }}>
-                        <div style={{ flex: 1 }}>
-                          <span style={fieldLabelStyle}>ACCOUNT SIZE (USDC) · sizes your call</span>
-                          <input style={inputStyle} type="number" placeholder="10000" value={form.accountSize} onChange={(e) => set("accountSize", e.target.value)} />
+                      {formValid && (
+                        <div style={{ marginTop: 10 }}>
+                          <ThesisAdvisor symbol={form.symbol} direction={form.direction} entryPrice={form.entryPrice} stopLoss={form.stopLoss} takeProfit1={form.takeProfit1} riskReward={calc?.riskReward ?? ready.rr ?? undefined} wallet={walletAddress} compact />
                         </div>
-                        {Number(availableBalance) > 0 && (
-                          <button onClick={() => set("accountSize", String(Math.floor(Number(availableBalance))))} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "9px 10px", borderRadius: 3, border: "1px solid #33333a", background: "#0a0a0b", color: "#d4d4d8", cursor: "pointer", whiteSpace: "nowrap" }}>= My collateral</button>
-                        )}
+                      )}
+                      {planWarnings.length > 0 && (
+                        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 3 }}>
+                          {planWarnings.map((msg, i) => <div key={i} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#fbbf24", lineHeight: 1.4 }}>⚠ {msg}</div>)}
+                        </div>
+                      )}
+                      <button onClick={publishAsCall} disabled={!formValid || publishing}
+                        style={{ marginTop: 12, width: "100%", padding: "13px 0", minHeight: 46, fontFamily: "var(--nx-font-ui)", fontSize: 14, fontWeight: 600, cursor: formValid && !publishing ? "pointer" : "not-allowed", borderRadius: 4,
+                          border: `1px solid ${formValid || published ? "#ededf0" : "#232327"}`,
+                          background: published ? "#1a1a1e" : formValid ? "#ededf0" : C.canvas,
+                          color: published ? "#ededf0" : formValid ? "#0a0a0b" : "#52525b" }}>
+                        {published ? "◆ Published · now graded" : publishing ? "Publishing…" : formValid ? `◆ Post ${form.symbol.toUpperCase()} ${long ? "long" : "short"}` : "◆ Post call"}
+                      </button>
+                      <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: formValid ? "#71717a" : SIGNAL.watch, textAlign: "center", marginTop: 6, lineHeight: 1.5 }}>
+                        {formValid || !ready.reason ? "One wallet signature, no funds moved. Graded from public price: first touch of target vs stop." : ready.reason}
                       </div>
-                    ) : (
-                      <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 8 }}>sized off ${Math.round(parseFloat(form.accountSize)).toLocaleString()} account · {form.riskPercent}% risk · change in fine-tune ↓</div>
-                    )}
-                    {formValid && (
-                      <div style={{ marginTop: 10 }}>
-                        <ThesisAdvisor symbol={form.symbol} direction={form.direction} entryPrice={form.entryPrice} stopLoss={form.stopLoss} takeProfit1={form.takeProfit1} riskReward={calc?.riskReward} wallet={walletAddress} compact />
-                      </div>
-                    )}
-                    {planWarnings.length > 0 && (
-                      <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 3 }}>
-                        {planWarnings.map((msg, i) => <div key={i} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9.5, color: "#fbbf24", lineHeight: 1.4 }}>⚠ {msg}</div>)}
-                      </div>
-                    )}
-                    <button onClick={publishAsCall} disabled={!formValid || publishing}
-                      style={{ marginTop: 12, width: "100%", padding: "13px 0", fontFamily: "var(--nx-font-ui)", fontSize: 13, fontWeight: 600, cursor: formValid && !publishing ? "pointer" : "not-allowed", borderRadius: 4,
-                        border: `1px solid ${formValid || published ? "#3ecf8e" : "#232327"}`,
-                        background: published || formValid ? SIGNAL.posBg : C.canvas,
-                        color: formValid || published ? "#3ecf8e" : "#52525b" }}>
-                      {published ? "◆ Published · now graded" : publishing ? "Publishing…" : "◆ Post call"}
-                    </button>
-                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8.5, color: "#52525b", textAlign: "center", marginTop: 6, lineHeight: 1.5 }}>
-                      Posts on-chain + public. Nexus grades it from public price — first-touch TP vs stop. You never mark it yourself.
-                    </div>
-                  </>
-                )}
-                {/* SIM sits BELOW the read + BUILD IT + Draft/Share (Grok): a thinking tool,
-                    never a signal. You can draft the frozen thesis without scrolling past it. */}
+                    </>
+                  );
+                })()}
+                {/* SIM — a thinking tool, never a signal. Folded to one line under the call (premium, long form). */}
                 {form.symbol && (
-                  <div style={{ marginTop: 12 }}>
+                  <Collapsible title="Sim" subtitle="pressure-test it with a crowd of AI agents" storageKey="nx_quick_sim">
                     <SimComposer wallet={wallet ?? null} seed={{
                       coin: form.symbol, direction: form.direction,
                       entry: built && entryN > 0 ? String(entryN) : form.entryPrice || undefined,
                       target: built && tpN > 0 ? String(tpN) : form.takeProfit1 || undefined,
                     }} />
-                  </div>
+                  </Collapsible>
                 )}
                 <div style={{ borderTop: "1px solid #1a1a1e", marginTop: 12, paddingTop: 8, textAlign: "center" }}>
-                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>want a catalyst, charts, TP2, or a live order? fine-tune below ↓</span>
+                  <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a" }}>Catalyst, charts, a second target or a live order: Fine-tune below.</span>
                 </div>
               </div>
             );
@@ -2269,8 +2288,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 {!liveConfirm && liveStatus !== "submitting" && (
                   <>
                     {form.symbol && !formValid && (
-                      <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#fbbf24", marginBottom: 6, lineHeight: 1.4 }}>
-                        Enter valid entry, stop &amp; targets — size must be &gt; $0 (check entry ≠ stop and risk % &gt; 0).
+                      <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: SIGNAL.watch, marginBottom: 6, lineHeight: 1.4 }}>
+                        {ready.reason ?? "TP2 must sit beyond TP1 for a split."}
                       </div>
                     )}
                     {/* PRIMARY action — this is the one that builds a track record. */}
@@ -2300,11 +2319,11 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                       {deployed ? "■ Saved (private)" : "■ Save private · not graded"}
                     </button>
                     <button
-                      onClick={() => { if (formValid) setLiveConfirm(true); }}
-                      disabled={!formValid || !isWalletReady}
+                      onClick={() => { if (liveValid) setLiveConfirm(true); }}
+                      disabled={!liveValid || !isWalletReady}
                       style={{
                         width: "100%", padding: "9px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
-                        cursor: formValid && isWalletReady ? "pointer" : "not-allowed", borderRadius: 3,
+                        cursor: liveValid && isWalletReady ? "pointer" : "not-allowed", borderRadius: 3,
                         border: `1px solid ${!form.symbol || !isWalletReady ? "#52525b" : "#fbbf24"}`,
                         background: "#0a0a0b",
                         color: !form.symbol || !isWalletReady ? "#52525b" : "#fbbf24",
@@ -2313,6 +2332,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     </button>
                     {!form.symbol && <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", textAlign: "center", marginTop: 6 }}>enter symbol to deploy</div>}
                     {form.symbol && !isWalletReady && <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", textAlign: "center", marginTop: 6 }}>connect wallet to deploy live</div>}
+                    {formValid && isWalletReady && !liveValid && <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", textAlign: "center", marginTop: 6 }}>a live order needs a size: set account + risk % above</div>}
                   </>
                 )}
               </>
