@@ -65,3 +65,10 @@ test("nothing ungraded is called an edge: your own splits, inverted configs, NOI
   ];
   for (const [file, re] of banned) assert.doesNotMatch(visible(read(file)), re, file);
 });
+
+test("the Feed states 'graded from public price' once, not on every card; prices carry separators", () => {
+  const src = visible(read("../pages/feed/index.tsx"));
+  assert.doesNotMatch(src, /Graded \{thesis\.gradedOutcome\} · first touch/);
+  assert.equal((src.match(/The tape marks it, not the trader\./g) || []).length, 1);
+  assert.match(src, /toLocaleString\("en-US", \{ minimumFractionDigits: dp, maximumFractionDigits: dp \}\)/);
+});
