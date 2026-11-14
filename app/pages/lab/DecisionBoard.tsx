@@ -540,7 +540,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
         {!isMobile && (
           <div style={{ fontSize: 12, color: C.text.faint, marginTop: 4 }}>
             <span style={{ color: C.accent }}>◆</span> separate reads agree with the play
-            {hasLens && <> · <span style={{ color: C.pos }}>◆</span> on your graded edge · <span style={{ color: C.warn }}>△</span> off it</>}
+            {hasLens && <> · <span style={{ color: C.pos }}>◆</span> on your side · <span style={{ color: C.warn }}>△</span> off it</>}
             {hasLoop && <> · ● your live call · ▸ your open position</>}
           </div>
         )}

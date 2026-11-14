@@ -106,7 +106,7 @@ export function RegimeEdgeCard({ wallet, data, state }: { wallet: string | null;
   return (
     <div style={{ ...cardStyle, marginBottom: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <div style={labelStyle}>&#9632; REGIME EDGE</div>
+        <div style={labelStyle}>&#9632; REGIME SPLIT</div>
         <div style={{ ...hint, letterSpacing: "0.08em" }}>graded calls, split by the market they were posted into</div>
       </div>
 
@@ -125,10 +125,10 @@ export function RegimeEdgeCard({ wallet, data, state }: { wallet: string | null;
           {edge ? (
             <div style={{ margin: "10px 0 14px", padding: "10px 12px", background: C.inset, border: `1px solid ${C.borderStrong}`, borderRadius: RADIUS.sm }}>
               <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.bright, lineHeight: 1.5 }}>
-                Your edge lives in <strong style={{ color: C.pos }}>{bucketLabel(edge.best.bucket).toLowerCase()}</strong> ({edge.best.avgR > 0 ? "+" : ""}{edge.best.avgR}R over {edge.best.calls} calls).
-                {" "}It disappears in <strong style={{ color: C.neg }}>{bucketLabel(edge.worst.bucket).toLowerCase()}</strong> ({edge.worst.avgR > 0 ? "+" : ""}{edge.worst.avgR}R over {edge.worst.calls}).
+                You do best in <strong style={{ color: C.pos }}>{bucketLabel(edge.best.bucket).toLowerCase()}</strong> ({edge.best.avgR > 0 ? "+" : ""}{edge.best.avgR}R over {edge.best.calls} calls).
+                {" "}You do worst in <strong style={{ color: C.neg }}>{bucketLabel(edge.worst.bucket).toLowerCase()}</strong> ({edge.worst.avgR > 0 ? "+" : ""}{edge.worst.avgR}R over {edge.worst.calls}).
               </div>
-              <div style={{ ...hint, marginTop: 6 }}>a {edge.gapR}R spread between the two. The single highest-leverage filter available to you</div>
+              <div style={{ ...hint, marginTop: 6 }}>a {edge.gapR}R spread between the two. Past calls, not a forecast: a filter worth testing</div>
             </div>
           ) : (
             <div style={{ ...hint, margin: "10px 0 14px", padding: "10px 12px", background: C.inset, border: `1px solid ${C.border}`, borderRadius: RADIUS.sm }}>
@@ -384,7 +384,7 @@ export function LeakProfileCard({ theses }: { theses: ThesisTrade[] }) {
 }
 
 // ── section wrapper ──────────────────────────────────────────────────
-export function ProcessSection({ wallet, theses, orders }: { wallet: string | null; theses: ThesisTrade[]; orders: ProcessedTrade[] }) {
+export function ProcessSection({ wallet, theses }: { wallet: string | null; theses: ThesisTrade[] }) {
   // ONE fetch for both public cards — they read different slices of the same payload.
   const [data, setData] = useState<ProcessData | null>(null);
   const [state, setState] = useState<FetchState>("idle");
@@ -405,7 +405,6 @@ export function ProcessSection({ wallet, theses, orders }: { wallet: string | nu
       {state === "idle" && <ExpectancyCard data={data} />}
       <RegimeEdgeCard wallet={wallet} data={data} state={state} />
       {state === "idle" && <PlanQualityCard discipline={data?.discipline ?? null} />}
-      <PlanAdherenceCard theses={theses} orders={orders} />
       <LeakProfileCard theses={theses} />
     </div>
   );

@@ -164,3 +164,12 @@ test("the self-scored Trading Score is gone from the Stats tab", () => {
   const src = readFileSync(new URL("../pages/lab/AnalyticsView.tsx", import.meta.url), "utf8");
   assert.ok(!/TradingScore|COMPOSITE SCORE|RadarChart/.test(src));
 });
+
+test("Plan Adherence (calls vs trades) shows on the Stats tab itself, once, not inside the deep fold", () => {
+  const src = readFileSync(new URL("../pages/lab/AnalyticsView.tsx", import.meta.url), "utf8");
+  const card = src.indexOf("<PlanAdherenceCard");
+  assert.ok(card > 0 && card < src.indexOf('title="Deeper breakdowns"'));
+  const proc = readFileSync(new URL("../pages/lab/ProcessView.tsx", import.meta.url), "utf8");
+  const section = proc.slice(proc.indexOf("export function ProcessSection"));
+  assert.ok(!section.includes("<PlanAdherenceCard"), "not rendered twice");
+});
