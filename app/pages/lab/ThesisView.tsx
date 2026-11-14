@@ -1582,35 +1582,6 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
         )}
       </div>
 
-      {/* Empty-state DOOR — with no coin picked, offer the way in instead of blank inputs. */}
-      {!form.symbol && (
-        <div style={{ ...cardStyle, marginBottom: 14, display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 14, color: "#f4f4f5", fontWeight: 600 }}>Pick a play on the board.</div>
-            <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 11.5, color: "#71717a", marginTop: 4, lineHeight: 1.5 }}>
-              A call starts from a read. The board&apos;s fade lands here already filled — entry at mark, a 1.2× H4 ATR stop, 1.5R and a 7-day clock — then it grades itself from public price.
-            </div>
-          </div>
-          <button
-            onClick={topFade ? draftTopFade : openBoard}
-            disabled={doorBusy}
-            style={{ ...navBtnStyle, flexShrink: 0, color: "#ededf0", borderColor: "#33333a", background: "#1a1a1e", padding: "10px 16px", fontSize: 11, cursor: doorBusy ? "default" : "pointer", opacity: doorBusy ? 0.6 : 1, whiteSpace: "nowrap" }}
-          >
-            {doorBusy ? "drafting…" : topFade ? `DRAFT ${topFade.sym} FADE ${topFade.dir} →` : "OPEN MARKET INTEL →"}
-          </button>
-        </div>
-      )}
-
-      {/* What makes a Signal — the plain recipe (congruent with the Mispriced Board). */}
-      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 14, padding: "11px 13px", border: "1px solid #232327", borderLeft: "2px solid #71717a", borderRadius: 6, background: "#0f0f11" }}>
-        <span style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 12, flexShrink: 0 }}>?</span>
-        <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12.5, lineHeight: 1.55, color: "#a1a1aa" }}>
-          <b style={{ color: "#f4f4f5" }}>A good call is a Signal, not a guess</b>. It names three things: an <b style={{ color: "#f4f4f5" }}>edge</b> (why
-          the market is wrong — your levels + the funding read), a <b style={{ color: "#f4f4f5" }}>catalyst</b> (why it moves now), and a{" "}
-          <b style={{ color: "#f4f4f5" }}>defined exit</b> (target, stop, and when you’ll know). Fill those in and it grades itself against real price.
-        </span>
-      </div>
-
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 320px", gap: 12, alignItems: "start" }}>
         {/* Form */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1777,6 +1748,36 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
               </div>
             );
           })()}
+
+          {/* Quick Call leads (2026-11-14: an active trader came to post; it sat third under a door and a
+              recipe). The door (no coin picked) and the recipe follow it. */}
+          {/* Empty-state DOOR — with no coin picked, offer the way in instead of blank inputs. */}
+          {!form.symbol && (
+            <div style={{ ...cardStyle, display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 14, color: "#f4f4f5", fontWeight: 600 }}>Pick a play on the board.</div>
+                <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 11.5, color: "#71717a", marginTop: 4, lineHeight: 1.5 }}>
+                  A call starts from a read. The board&apos;s fade lands here already filled — entry at mark, a 1.2× H4 ATR stop, 1.5R and a 7-day clock — then it grades itself from public price.
+                </div>
+              </div>
+              <button
+                onClick={topFade ? draftTopFade : openBoard}
+                disabled={doorBusy}
+                style={{ ...navBtnStyle, flexShrink: 0, color: "#ededf0", borderColor: "#33333a", background: "#1a1a1e", padding: "10px 16px", fontSize: 11, cursor: doorBusy ? "default" : "pointer", opacity: doorBusy ? 0.6 : 1, whiteSpace: "nowrap" }}
+              >
+                {doorBusy ? "drafting…" : topFade ? `DRAFT ${topFade.sym} FADE ${topFade.dir} →` : "OPEN MARKET INTEL →"}
+              </button>
+            </div>
+          )}
+          {/* What makes a Signal — the plain recipe (congruent with the Mispriced Board). */}
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "11px 13px", border: "1px solid #232327", borderLeft: "2px solid #71717a", borderRadius: 6, background: "#0f0f11" }}>
+            <span style={{ color: "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 12, flexShrink: 0 }}>?</span>
+            <span style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: 12.5, lineHeight: 1.55, color: "#a1a1aa" }}>
+              <b style={{ color: "#f4f4f5" }}>A good call is a Signal, not a guess</b>. It names three things: a <b style={{ color: "#f4f4f5" }}>read</b> (why
+              you think price goes your way — your levels + the funding read), a <b style={{ color: "#f4f4f5" }}>catalyst</b> (why it moves now), and a{" "}
+              <b style={{ color: "#f4f4f5" }}>defined exit</b> (target, stop, and when you’ll know). Fill those in and it grades itself against real price.
+            </span>
+          </div>
 
           {/* Paste-to-fill: import a TradingView analysis (or any thesis text) */}
           <div style={cardStyle}>
@@ -2088,13 +2089,12 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
 
         {/* Output Panel */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, position: isMobile ? "static" : "sticky", top: 16 }}>
-          <div style={{ ...cardStyle, border: "1px solid #232327" }}>
-            <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.1em", marginBottom: 16 }}>&#9632; CALCULATED OUTPUT</div>
+          <div style={calc ? { ...cardStyle, border: "1px solid #232327" } : undefined}>
+            {calc && <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.1em", marginBottom: 16 }}>&#9632; CALCULATED OUTPUT</div>}
             {!calc ? (
               <>
-                <div style={{ fontSize: 11, color: "#71717a", fontFamily: "var(--nx-font-mono)", textAlign: "center", padding: "20px 0" }}>
-                  fill in entry, stop, tp1,<br />account size + risk %
-                </div>
+                {/* No placeholder card before there are levels (it took half a phone screen to say
+                    "fill in entry, stop, tp1"); the output appears once they're in. */}
                 {/* Shown BEFORE the form is valid on purpose — the "I need capital to
                     post a call" belief stops people before they type anything, so the
                     correction has to land in the empty state, not just at deploy time. */}
