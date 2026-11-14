@@ -13,6 +13,7 @@
 // Sits between the Briefing (the narrative read) and Market Intel (the deep detail):
 // Briefing = "what matters now", Board = "scan the whole book", Intel = "go deep".
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fundingWords, agreeWords, trendWords } from "@/lib/boardWords.mjs";
 import { Link, useSearchParams } from "react-router-dom";
 import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
 import { SectionHeader } from "./components";
@@ -611,9 +612,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
               ? (tapeRead.label === "RISK-OFF" && r.play.dir === "LONG" ? "risk-off"
                 : tapeRead.label === "RISK-ON" && r.play.dir === "SHORT" ? "risk-on" : null)
               : null;
-            const trendEl = r.trend === "TREND_UP" ? <span style={{ color: C.pos }}>↑ up{r.trendMove != null ? ` ${r.trendMove.toFixed(1)}%` : ""}</span>
-              : r.trend === "TREND_DOWN" ? <span style={{ color: C.neg }}>↓ dn{r.trendMove != null ? ` ${Math.abs(r.trendMove).toFixed(1)}%` : ""}</span>
-              : <span style={{ color: C.text.faint }}>chop</span>;
+            // Plain words on a phone (app/lib/boardWords.mjs): who pays the funding, how many reads agree, the
+            // trend's window. The desktop table keeps the compact columns.
+            const tw = trendWords(r.trend, r.trendMove);
+            const trendEl = <span style={{ color: tw.tone === "pos" ? C.pos : tw.tone === "neg" ? C.neg : C.text.faint }}>{tw.text}</span>;
             const dot = <span style={{ color: C.text.faint }}>·</span>;
             return (
               <div key={r.sym} ref={(el: HTMLDivElement | null) => { rowRefs.current[r.sym] = el; }}
@@ -627,7 +629,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
                       {inPosBy[r.sym] && <span title={`You're ${inPosBy[r.sym].toLowerCase()} here`} style={{ fontSize: 9, color: dirColor(inPosBy[r.sym]) }}>▸</span>}
                     </span>
                     {dot}
-                    <span style={{ fontSize: 11, color: fundHot ? C.warn : C.text.muted, whiteSpace: "nowrap" }}>{fundLabel(r.fundingAnnual, "%/yr")}</span>
+                    <span style={{ fontSize: 11, color: fundHot ? C.warn : C.text.muted, whiteSpace: "nowrap" }}>{fundingWords(r.fundingAnnual)}</span>
                     {dot}
                     {r.play.klass === "FADE"
                       ? <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text.bright, letterSpacing: "0.03em", whiteSpace: "nowrap" }}>{r.play.label}</span>
@@ -645,7 +647,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
                 </div>
                 {/* Line 2 — the why: confluence · trend · tape (· your edge, when connected). */}
                 <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontFamily: MONO, fontSize: 11 }}>
-                  <span title="Independent reads confirming THE PLAY" style={{ fontWeight: 700, color: r.play.dir ? (r.agree >= 3 ? C.accent : r.agree >= 2 ? C.text.bright : C.text.muted) : C.text.faint }}>{r.play.dir ? `${r.agree}/4` : "—"}</span>
+                  <span title="Graded callers, smart money, catalysts and forecasts: how many back THE PLAY" style={{ fontWeight: 700, color: r.play.dir ? (r.agree >= 3 ? C.accent : r.agree >= 2 ? C.text.bright : C.text.muted) : C.text.faint }}>{agreeWords(r.agree, !!r.play.dir)}</span>
                   {dot}{trendEl}
                   {tapeTag && <>{dot}<span style={{ color: C.accent }}>{tapeTag}</span></>}
                   {r.mine && <>{dot}<span style={{ color: r.mine.tone === "pos" ? C.pos : C.warn, fontSize: 10 }}>{r.mine.tone === "pos" ? "◆" : "△"} {r.mine.text}</span></>}

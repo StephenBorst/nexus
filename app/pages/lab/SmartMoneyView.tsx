@@ -19,7 +19,7 @@ import { bareTicker } from "@/utils/utils";
 import { pressKey, useEscapeKey } from "@/utils/a11y";
 import { feedRows, FEED_MIN_USD } from "@/lib/smartFeed.mjs";
 
-interface SmConsensus { sym: string; side: "LONG" | "SHORT"; count: number; netUsd: number; refPrice: number; }
+interface SmConsensus { sym: string; side: "LONG" | "SHORT"; count: number; netUsd: number; refPrice: number; against: number; tracked: number; }
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 
@@ -286,15 +286,18 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
       const g = bySym.get(e.sym) || {};
       g[e.side] = e; bySym.set(e.sym, g);
     }
-    const dominant: Entry[] = [];
+    const dominant: { e: Entry; against: number }[] = [];
+    // The minority side counts every tracked trader on it (even one), so "11 short · 1 long" is honest.
+    const sideCount = (sym: string, side: "LONG" | "SHORT") => map.get(`${sym}|${side}`)?.traders.size ?? 0;
     for (const g of bySym.values()) {
       const sides = [g.LONG, g.SHORT].filter(Boolean) as Entry[];
-      if (sides.length === 1) { dominant.push(sides[0]); continue; }
+      if (sides.length === 1) { const e = sides[0]; dominant.push({ e, against: sideCount(e.sym, e.side === "LONG" ? "SHORT" : "LONG") }); continue; }
       sides.sort((a, b) => b.traders.size - a.traders.size);
-      if (sides[0].traders.size > sides[1].traders.size) dominant.push(sides[0]); // clear lead wins; even split dropped
+      if (sides[0].traders.size > sides[1].traders.size) dominant.push({ e: sides[0], against: sides[1].traders.size }); // clear lead wins; even split dropped
     }
+    const tracked = board.length;
     return dominant
-      .map((e) => ({ sym: e.sym, side: e.side, count: e.traders.size, netUsd: e.netUsd, refPrice: e.refPrice }))
+      .map(({ e, against }) => ({ sym: e.sym, side: e.side, count: e.traders.size, netUsd: e.netUsd, refPrice: e.refPrice, against, tracked }))
       .sort((a, b) => b.count - a.count || b.netUsd - a.netUsd)
       .slice(0, 6);
   }, [board]);
@@ -543,14 +546,16 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
       {/* ── SMART MONEY CONSENSUS — the HERO: the highest-conviction signal ── */}
       {consensus.length > 0 && (
         <div style={{ ...agentCardStyle, marginBottom: 12, borderColor: "#33333a", borderLeft: "2px solid #ededf0" }}>
-          <div style={{ ...agentLabelStyle, fontSize: 12, letterSpacing: "0.14em" }}>◆ SMART MONEY CONSENSUS <span style={{ color: "#52525b", letterSpacing: "0.06em" }}>— the strongest read: coins several top traders agree on</span></div>
+          <div style={{ ...agentLabelStyle, fontSize: 12, letterSpacing: "0.14em" }}>◆ SMART MONEY CONSENSUS <span style={{ color: "#71717a", letterSpacing: "0.06em" }}>— coins where several tracked traders hold the same side</span></div>
           <div className="nx-stagger" style={{ marginTop: 10, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
             {consensus.map((c) => (
               <div key={`${c.sym}${c.side}`} style={{ display: "flex", alignItems: "center", gap: 10, rowGap: 6, flexWrap: "wrap", padding: "8px 10px", border: "1px solid #1a1a1e", borderRadius: 6, background: "#0f0f11" }}>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#ededf0", flexShrink: 0 }}>{c.sym}</span>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700, color: c.side === "LONG" ? "#3ecf8e" : "#f7525f", flexShrink: 0 }}>{c.side === "LONG" ? "↑ LONG" : "↓ SHORT"}</span>
-                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", flexShrink: 0 }}>{c.count} traders</span>
-                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", flexShrink: 0 }}>{usd(c.netUsd)}</span>
+                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", flexShrink: 0 }} title={`${c.count} of the ${c.tracked} tracked traders hold ${c.side}; ${c.against} hold the other side`}>
+                  {c.count} {c.side === "LONG" ? "long" : "short"} · {c.against} {c.side === "LONG" ? "short" : "long"}
+                </span>
+                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", flexShrink: 0 }}>{usd(c.netUsd)} held</span>
                 <span style={{ marginLeft: "auto", display: "flex", gap: 6, flexShrink: 0 }}>
                   <button
                     type="button"
@@ -568,7 +573,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
             ))}
           </div>
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 8 }}>
-            Agreement across independent top traders. Stronger than any single whale. ⚡ opens the copy at market (set your own levels).
+            Agreement across independent traders: context, not a graded read. ⚡ opens the copy at market (set your own levels).
           </div>
         </div>
       )}
