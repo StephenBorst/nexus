@@ -62,6 +62,11 @@
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
       "events": 30
+    },
+    "smart_consensus_2x": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
     }
   },
   "gradedExit": {

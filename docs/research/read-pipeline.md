@@ -66,6 +66,7 @@ the same block. The full-history row next to it is in-sample.
 | spot_absorb | 2026-11-20T00:00:00Z | `docs/research/spot-absorb-prereg.md` |
 | btc_lead_lag | 2026-11-08T00:00:00Z | `docs/research/btc-lead-lag-prereg.md` |
 | funding_basis_split | 2026-11-08T00:00:00Z | `docs/research/funding-basis-split-prereg.md` |
+| smart_consensus_2x | 2026-11-15T00:00:00Z | `docs/research/lens-reads-prereg.md` |
 
 The four explorers are two-sided, so each is judged on the pooled random result. vol_breakout was dropped for v1 at
 the power check. Definitions and counts are in `docs/research/explorer-drafts.md`.

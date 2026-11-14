@@ -52,5 +52,9 @@ test("every drawer lens gets its nearest graded relative, named exactly, or 'not
   assert.equal(lensGradeLine("smart", board), "Nearest graded rule: following the recorded smart-money lean (any margin) grades PROMISING, beats random entries (12,032 samples). The 2× agreement shown here isn't graded on its own.");
   assert.equal(lensGradeLine("forecast", board), "Not graded: no read on this lens is registered yet.");
   assert.equal(lensGradeLine("smart", null), null, "unread board: say nothing rather than guess");
+  // once the exact 2× rule is served as a registered read, the line names its own out-of-sample count instead
+  const withExact = { ...board, axes: [...board.axes, { name: "smart_consensus_2x", verdict: "PREDICTIVE", r: { samples: 477 }, oos: { since: "2026-11-15T00:00:00.000Z", r: { samples: 4 } } }] };
+  assert.equal(lensGradeLine("smart", withExact), "Nearest graded rule: following the recorded smart-money lean (any margin) grades PROMISING, beats random entries (12,032 samples). The 2× rule itself is registered from Nov 15: 4 of 30 out-of-sample events, not graded yet.");
+  assert.doesNotMatch(lensGradeLine("smart", withExact), /PREDICTIVE/, "the in-sample row of the exact rule is never quoted");
   assert.equal(lensGradeLine("tape", board), null);
 });

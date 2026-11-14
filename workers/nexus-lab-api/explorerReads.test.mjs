@@ -8,6 +8,7 @@ import {
   oiDivReversal4hEvents, oiCoilBreakEvents, EXPLORER_GENS, OI_DIV, OI_DIV_4H, OI_COIL, CONFLUENCE,
   sessionFadeEvents, levelReclaimTightEvents, spotAbsorbEvents, LEVEL_TIGHT, SPOT_ABSORB, SESSION,
   btcLeadLagEvents, LEAD_LAG, fundingBasisSplitEvents, SPLIT, h4AtrAtHour, denseHours,
+  smartConsensus2xEvents, CONSENSUS_2X,
 } from "./explorerReads.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { hourBucket } from "../../app/lib/basisStack.mjs";
@@ -24,7 +25,7 @@ test("an explorer is on the scoreboard only once registered, and every registrat
   const registered = new Set(REGISTERED_READS.map((r) => r.axis));
   for (const n of Object.keys(EXPLORER_GENS)) assert.ok(!graded.has(n) || registered.has(n), `${n} is graded but not registered`);
   for (const n of registered) assert.ok(graded.has(n), `${n} is registered but not on the scoreboard`);
-  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "level_reclaim_tight", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_fade", "session_momentum", "spot_absorb"].concat("btc_lead_lag", "funding_basis_split").sort());
+  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "level_reclaim_tight", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_fade", "session_momentum", "spot_absorb"].concat("btc_lead_lag", "funding_basis_split", "smart_consensus_2x").sort());
   assert.ok(!("vol_breakout" in EXPLORER_GENS), "dropped for v1");
 });
 
@@ -143,7 +144,15 @@ function tape(n, seed = 7) {
   const basisHist = [];
   let bx = 0;
   for (let i = 0; i < n; i++) { bx += (grnd() - 0.5) * 0.02; basisHist.push({ t: T0 + i * H + 300000, basisPct: bx }); }
-  return { oiHist, candleHist, cvdHist, spotCvdHist, basisHist };
+  // smart-money rows on their own generator too (smart_consensus_2x), so the older reads' tape is unchanged
+  let q = (seed * 15485863) >>> 0;
+  const qrnd = () => { q = (q * 214013 + 2531011) >>> 0; return q / 2 ** 32; };
+  const smHist = [];
+  for (let i = 0; i < n; i++) {
+    const long = Math.floor(qrnd() * 8), short = Math.floor(qrnd() * 8);
+    if (Math.max(long, short) >= 2) smHist.push({ t: T0 + i * H + 600000, side: long >= short ? "LONG" : "SHORT", long, short });
+  }
+  return { oiHist, candleHist, cvdHist, spotCvdHist, basisHist, smHist };
 }
 
 test("no lookahead: for every read, the future never changes past events", () => {
@@ -166,6 +175,7 @@ test("no lookahead: for every read, the future never changes past events", () =>
         cvdHist: full.cvdHist.map((r) => (r.t > cut ? { ...r, buy: r.sell * 9, sell: r.buy } : r)),
         spotCvdHist: full.spotCvdHist.map((r) => (r.t > cut ? { ...r, buy: r.sell, sell: r.buy * 9 } : r)),
         basisHist: full.basisHist.map((r) => (r.t > cut ? { ...r, basisPct: -r.basisPct * 9 } : r)),
+        smHist: full.smHist.map((r) => (r.t > cut ? { ...r, long: r.short * 5 + 2, short: r.long, side: "LONG" } : r)),
       };
       const before = (evs) => evs.filter((e) => e.t <= cut).map((e) => `${e.t}|${e.side}`);
       const pctx = ctxOf(btcTape.candleHist.map((c) => (c.t + H > cut ? { ...c, o: c.o * 3, h: c.h * 3, l: c.l * 0.2, c: c.c * 0.3 } : c)));
@@ -585,4 +595,57 @@ test("the faster level_reclaim_tight fires exactly the registered body's events;
   assert.ok(fired > 20, `the tapes fire (${fired}): an all-empty comparison would prove nothing`);
   assert.ok(nonNull > 1000 && nonNull < hoursChecked, "both a value and null (too few bars) are compared");
   assert.equal(h4AtrAtHour(denseHours(new Map()), 500000), null, "no candles = null, as h4Atr14Frac");
+});
+
+const LENS_READS_PAGE_SHA256 = "93571252efdd2e0fe15218a824992514ff00990b89608348153876286fcb6cbe";
+
+// ── smart_consensus_2x (registered 2026-11-14, lens-reads-prereg.md A) ────────────────────────────────
+test("smart_consensus_2x: registered at the drawer's rule (lead ≥ 2, > the other, ≥ 2× it; 24h), from 2026-11-15", async () => {
+  const { CONSENSUS_RATIO } = await import("../../app/lib/smartConsensus.mjs");
+  assert.deepEqual({ ...CONSENSUS_2X }, { minLead: 2, ratio: 2, cooldownH: 24 });
+  assert.equal(CONSENSUS_2X.ratio, CONSENSUS_RATIO, "one constant with the drawer + the Smart Money card");
+  const reg = REGISTERED_READS.find((r) => r.axis === "smart_consensus_2x");
+  assert.equal(reg.registeredAt, "2026-11-15T00:00:00Z");
+  assert.equal(reg.doc, "docs/research/lens-reads-prereg.md");
+  assert.ok(reg.holdout && reg.gradedExit && !reg.paperWallet && reg.side === "BOTH");
+});
+
+test("smart_consensus_2x: fires only on a clear 2× agreement, follows it, one per 24h", () => {
+  const row = (i, long, short) => ({ t: T0 + i * H + 600000, side: long >= short ? "LONG" : "SHORT", long, short });
+  const smHist = [
+    row(0, 3, 2), // 3 vs 2: split
+    row(1, 2, 2), // tie
+    row(2, 6, 3), // exactly 2×: fires LONG
+    row(5, 9, 0), // inside the cooldown
+    row(26, 0, 4), // 4 vs 0: fires SHORT
+    row(60, 1, 0), // lead below 2
+    { t: T0 + 70 * H, side: "LONG" }, // no counts: can't fire
+    row(80, 5, 3), // 5 vs 3: under 2×
+  ];
+  const ev = smartConsensus2xEvents({ smHist });
+  assert.deepEqual(ev.map((e) => [(e.t - T0 - 600000) / H, e.side]), [[2, "LONG"], [26, "SHORT"]]);
+  assert.deepEqual(smartConsensus2xEvents({ smHist: [] }), []);
+  assert.deepEqual(smartConsensus2xEvents({}), []);
+});
+
+test("smart_consensus_2x is a filtered read of smart_follow: checked for overlap, one bet", async () => {
+  const { OVERLAP_PAIRS } = await import("./axisbt.mjs");
+  assert.ok(OVERLAP_PAIRS.some((p) => p.includes("smart_follow") && p.includes("smart_consensus_2x")));
+});
+
+test("smart_consensus_2x: a 90-day hourly series runs in a few ms (O(n))", () => {
+  const smHist = Array.from({ length: 2200 }, (_, i) => ({ t: T0 + i * H, side: "LONG", long: (i % 7) + 1, short: i % 3 }));
+  const t0 = performance.now();
+  for (let k = 0; k < 20; k++) smartConsensus2xEvents({ smHist });
+  assert.ok((performance.now() - t0) / 20 < 20, "per pass under 20 ms");
+});
+
+test("the lens-reads page is fixed above Results (sha256), and A's sign-off is recorded", async () => {
+  const { createHash } = await import("node:crypto");
+  const { readFileSync } = await import("node:fs");
+  const doc = readFileSync(new URL("../../docs/research/lens-reads-prereg.md", import.meta.url), "utf8");
+  const above = doc.slice(0, doc.indexOf("## Results"));
+  assert.equal(createHash("sha256").update(above).digest("hex"), LENS_READS_PAGE_SHA256);
+  assert.match(above, /signed by borst, 2026-11-14/);
+  assert.match(above, /Out-of-sample events for A start at 2026-11-15T00:00:00Z/);
 });

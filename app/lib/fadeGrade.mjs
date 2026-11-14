@@ -75,8 +75,24 @@ const gradeText = (g) => `${g.tier}${g.vsRandom ? `, ${g.vsRandom}` : ""}${g.sam
 /** lens id → { axis, what it graded, what the lens adds that isn't graded }. */
 export const LENS_RELATIVES = Object.freeze({
   funding: { axis: FADE_FAMILY_AXIS, graded: "The plain funding fade", gap: "The stretch rule shown here isn't graded on its own." },
-  smart: { axis: "smart_follow", graded: "Following the recorded smart-money lean (any margin)", gap: "The 2× agreement shown here isn't graded on its own." },
+  smart: { axis: "smart_follow", graded: "Following the recorded smart-money lean (any margin)", gap: "The 2× agreement shown here isn't graded on its own.", exact: "smart_consensus_2x" },
 });
+
+// A lens whose exact rule is a registered pipeline read (docs/research/lens-reads-prereg.md): say where its own
+// out-of-sample count stands. Only events after the registration count; the in-sample row decides nothing.
+function exactLine(axisName, scorecard) {
+  const axes = Array.isArray(scorecard?.axes) ? scorecard.axes : [];
+  const axis = axes.find((a) => a && a.name === axisName);
+  if (!axis?.oos?.since) return null;
+  const n = Number(axis.oos.r?.samples);
+  const since = new Date(axis.oos.since);
+  if (Number.isNaN(since.getTime())) return null;
+  const day = since.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const k = Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+  return k >= 30
+    ? `The 2× rule itself is registered from ${day}: ${k} out-of-sample events, its stage is on /proof.`
+    : `The 2× rule itself is registered from ${day}: ${k} of 30 out-of-sample events, not graded yet.`;
+}
 export const UNGRADED_LENSES = Object.freeze(["forecast", "catalysts"]);
 
 /** The line under a lens: its relative's live grade, "not graded", or null (nothing to say / grade unread). */
@@ -84,7 +100,9 @@ export function lensGradeLine(lensId, scorecard) {
   const rel = LENS_RELATIVES[lensId];
   if (rel) {
     const g = axisGrade(scorecard, rel.axis);
-    return g ? `Nearest graded rule: ${rel.graded.charAt(0).toLowerCase()}${rel.graded.slice(1)} grades ${gradeText(g)}. ${rel.gap}` : null;
+    if (!g) return null;
+    const exact = rel.exact ? exactLine(rel.exact, scorecard) : null;
+    return `Nearest graded rule: ${rel.graded.charAt(0).toLowerCase()}${rel.graded.slice(1)} grades ${gradeText(g)}. ${exact ?? rel.gap}`;
   }
   if (UNGRADED_LENSES.includes(lensId)) return "Not graded: no read on this lens is registered yet.";
   return null;

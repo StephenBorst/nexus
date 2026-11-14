@@ -388,7 +388,12 @@ product is what sits on top:
   `btc_lead_lag` (BTC 1h move ≥ its own 30-day p90, an alt that moved < 0.75 of it follows BTC) from 2026-11-08, the
   first read on another coin's tape: the holdout line gets the main card's BTC set as CONTEXT only (`ctxSets` in
   axisbt `buildEvents`, never graded) and `funding_basis_split` (funding ≥ its 30-day p80 while the basis sits ≤ its
-  30-day median → SHORT, mirror → LONG; 9 main coins, ARB/WLD have no basis) from 2026-11-08. Registered
+  30-day median → SHORT, mirror → LONG; 9 main coins, ARB/WLD have no basis) from 2026-11-08; lens read A
+  (`docs/research/lens-reads-prereg.md`, signed by borst in session 2026-11-14): `smart_consensus_2x` (sm:hist row, lead
+  ≥ 2, > the other, ≥ `CONSENSUS_RATIO` 2× it → follow; 24h) from 2026-11-15, the drawer's smart lens at its exact rule
+  (the drawer prints its own oos count, `fadeGrade.mjs exactLine`); B forecast_divergence waits for 14 days of
+  `forecast:hist:{COIN}` (`forecastHist.mjs`, hourly from 2026-11-14, recording only, the deepest 6 price-target markets
+  a coin; read-only `GET /intel/forecast-history/:coin`; axisbt/explorerReads must not read it, test-pinned). Registered
   bodies live in `explorerReads.mjs`; unregistered drafts in `explorerDraftsB.mjs` (batch 2, `explorer-drafts-b.md`; tests
   fail if a draft is graded or axisbt imports it) and `explorerDrafts4.mjs` (batch 4, `explorer-drafts-4.md`: settled, A + D
   registered, B funding_settle_snap + C level_reclaim_weekly DROPPED; generators get axisbt's `ctx.btcCandles`;
@@ -441,7 +446,7 @@ product is what sits on top:
   Lab: the "FIXED RISK / TRADE" field shows under the graded-exit toggle; whole-strategy loads clear it.
 - **Overlap pairs** (`OVERLAP_PAIRS`, axisbt.mjs → the scoreboard's `overlap` block): basis_x_cvd×rsi_reset_deep,
   level_reclaim×{level_reclaim_tight, session_fade, spot_absorb}, session_fade×oi_div_reversal_4h,
-  confluence_follow×funding_basis_split, oi_div_reversal×oi_div_reversal_4h (one rule, two windows). A filtered read and its
+  confluence_follow×funding_basis_split, smart_follow×smart_consensus_2x, oi_div_reversal×oi_div_reversal_4h (one rule, two windows). A filtered read and its
   parent are one bet, never stacked as two.
 - `/intel/evidence?axis=&hold=` replays a preset across every mature market (pooled ≠ independent; say so).
 - basis:hist had holes from our own OKX burst until the paced `snapshotFlow` fix: read older windows with that in mind.
@@ -656,7 +661,7 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   record; fires only on a CHANGE (funding stretched, 2× consensus formed/flipped, forecast ±15 pts), first look =
   baseline; tap opens `/lab?tab=intel&market=ETH`. **Speed:** `sharedJson` (`app/lib/sharedJson.mjs`) shares one
   request per URL for 30 s; the FADE line reads `GET /intel/fade-grade` (not the 200 KB scoreboard). Lens reads to
-  grade exactly: `docs/research/lens-reads-prereg-DRAFT.md` (unsigned; nothing counts until signed).
+  grade exactly: `docs/research/lens-reads-prereg.md` (A `smart_consensus_2x` signed 2026-11-14, counts from 2026-11-15; B unsigned).
 - **Position → call (Trade, 2026-11-05):** `PositionCallButton.tsx` sits at the right end of the Trade strip, only when the
   wallet holds a position in the market on screen; one tap opens the Thesis Engine with a draft (`app/lib/positionCall.mjs`):
   side from the position, ENTRY = the mark at the tap (never the average open price: a call starts when posted), stop/target

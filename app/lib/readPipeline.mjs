@@ -149,6 +149,17 @@ const CODED_READS = Object.freeze([
     gradedExit: true,
     paperWallet: null,
   }),
+  // Lens read A, signed by borst 2026-11-14 in session ("sign it for me"): the market drawer's smart-money lens at
+  // its exact rule (lead ≥ 2, > the other side, ≥ 2× it), followed. A filtered read of smart_follow: one bet.
+  Object.freeze({
+    axis: "smart_consensus_2x",
+    side: "BOTH",
+    registeredAt: "2026-11-15T00:00:00Z",
+    doc: "docs/research/lens-reads-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
 ]);
 
 // A paper wallet the owner registered with a signature (paperClaim.mjs), written into git by the watcher

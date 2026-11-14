@@ -106,6 +106,8 @@ import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
 import { handleMarket, handleFadeGrade } from "./routes-market.mjs";
+import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
+import { marketCoin } from "../../app/lib/marketRead.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
 import { parityEvents } from "./parityEvents.mjs";
 import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
@@ -157,7 +159,7 @@ import { advanceIndex, onchainResponse, ONCHAIN_INDEX_KEY, DEFAULT_LOGS_RPC } fr
 
 // The scoreboard's cache key, one place: GET /intel/axis-backtest writes it and /calls/pulse reads the
 // headline from it. Bump the version here when the scoreboard payload changes (see that route's notes).
-const axisbtCacheKey = (min) => `axisbt:v26:min${min}`;
+const axisbtCacheKey = (min) => `axisbt:v27:min${min}`;
 
 // Orderly sits behind Cloudflare bot-management, which intermittently serves an HTML
 // 403 challenge to header-light Worker fetches — which would break the mini-app money
@@ -876,6 +878,18 @@ const worker = {
         const n = await snapshotFlow(env, [...FLOW_COINS]);
         console.log(`[flow] snapshotted ${n} coins' basis/cvd`);
       } catch (e) { console.error("[flow] snapshot failed:", String(e)); }
+    })());
+    // Hourly: record the forecast board per coin into forecast:hist:{COIN} (forecastHist.mjs) — the input lens read B
+    // (forecast_divergence, docs/research/lens-reads-prereg.md) needs 14 days of before it can be registered.
+    // RECORDING ONLY: nothing grades, trades or shows it. Reads /intel/forecasts through the worker's own handler.
+    ctx.waitUntil((async () => {
+      try {
+        const r = await snapshotForecasts(env.NEXUS_AGENT || env.LAB_STORE, async () => {
+          const res = await worker.fetch(new Request("https://og.nexustradinglabs.com/intel/forecasts"), env, ctx);
+          return res.ok ? res.json() : null;
+        });
+        console.log(`[forecast:hist] recorded ${r.rows} rows on ${r.coins} coins`);
+      } catch (e) { console.error("[forecast:hist] snapshot failed:", String(e)); }
     })());
     // Hourly: classify each core symbol's trend regime (the momentum signal source),
     // cached for the /signals hot path + the fusion. Runs BEFORE delivery so the push
@@ -2723,6 +2737,15 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         coin, symbol, points, reversion, edgeQuality: eq, source,
         note: "Funding story-line from recorded hourly history (core symbols) or Orderly public funding-rate history (all markets). Reversion = how price moved AGAINST the crowd over the next ~3 days the last times funding was this extreme — the SAME series the mispriced board / card cite (one clock).",
       }), { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300", ...cors(request) } });
+    }
+
+    // ── GET /intel/forecast-history/:coin — read-only forecast:hist (forecastHist.mjs), for B's count-only power check.
+    if (parts[0] === "intel" && parts[1] === "forecast-history" && request.method === "GET") {
+      const coin = marketCoin(parts[2]);
+      if (!coin) return json({ error: "coin required — GET /intel/forecast-history/BTC" }, request, 400);
+      let rows = [];
+      try { const raw = await (env.NEXUS_AGENT || env.LAB_STORE).get(FORECAST_HIST_PREFIX + coin); rows = raw ? JSON.parse(raw) : []; } catch { rows = []; }
+      return json({ coin, rows, count: rows.length, from: rows[0]?.t ?? null, note: "Recording only (lens read B, not registered). Nothing grades or trades it." }, request);
     }
 
     // ── /intel/forecasts[/:coin] — the prediction-market lens (Forecast Divergence) ──
@@ -4834,7 +4857,7 @@ document.getElementById("btn").addEventListener("click",go);
     if (parts[0] === "intel" && parts[1] === "axis-backtest" && request.method === "GET") {
       const url2 = new URL(request.url);
       const min = Math.max(8, Math.min(200, parseInt(url2.searchParams.get("min") || "20", 10) || 20));
-      const CACHE = axisbtCacheKey(min); // v26 = + funding_basis_split (registered 2026-11-07, funding-basis-split-prereg.md) + its overlap pair with confluence_follow · v25 = overlap pair oi_div_reversal × oi_div_reversal_4h (#271) · v24 = + btc_lead_lag (registered 2026-11-07, btc-lead-lag-prereg.md); the holdout line gets BTC as context only · v23 = overlap block covers batch 3 (OVERLAP_PAIRS) · v22 = + batch 3 (session_fade, level_reclaim_tight, spot_absorb; registered 2026-11-06) and spotcvd:hist in each coin set · v21 = + `stressStudy` (the registered stress-hour study, judged live by stressGrading.mjs, docs/research/stress-hours-prereg.md) · v20 = exits fill at their level, not the hour's extreme (stepExit, docs/research/level-reclaim-exit-gap.md) · v19 = price spine: first oi:hist row in an hour wins (docs/research/price-spine-drift-2026-10-29.md) · v18 = + oi_coil_break (registered 2026-10-27, docs/research/oi-coil-break-prereg.md) · v17 = + oi_div_reversal_4h (registered 2026-10-27, docs/research/oi-div-reversal-4h-prereg.md) · v16 = + `regimeWindow` on basis_x_cvd (main + holdout) and the BTC regime day counts (docs/research/graded-exit-regime-prereg.md) · v15 = funding block carries `feesNetBps` (fee-net on the same covered trades) · v14 = + `exitGraded.funding` (the graded exit also net of the funding paid while open, an estimate; informational) · v13 = + the four registered explorer reads (level_reclaim, oi_div_reversal, session_momentum, confluence_follow) · v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
+      const CACHE = axisbtCacheKey(min); // v27 = + smart_consensus_2x (registered 2026-11-14, lens-reads-prereg.md A) + its overlap pair with smart_follow · v26 = + funding_basis_split (registered 2026-11-07, funding-basis-split-prereg.md) + its overlap pair with confluence_follow · v25 = overlap pair oi_div_reversal × oi_div_reversal_4h (#271) · v24 = + btc_lead_lag (registered 2026-11-07, btc-lead-lag-prereg.md); the holdout line gets BTC as context only · v23 = overlap block covers batch 3 (OVERLAP_PAIRS) · v22 = + batch 3 (session_fade, level_reclaim_tight, spot_absorb; registered 2026-11-06) and spotcvd:hist in each coin set · v21 = + `stressStudy` (the registered stress-hour study, judged live by stressGrading.mjs, docs/research/stress-hours-prereg.md) · v20 = exits fill at their level, not the hour's extreme (stepExit, docs/research/level-reclaim-exit-gap.md) · v19 = price spine: first oi:hist row in an hour wins (docs/research/price-spine-drift-2026-10-29.md) · v18 = + oi_coil_break (registered 2026-10-27, docs/research/oi-coil-break-prereg.md) · v17 = + oi_div_reversal_4h (registered 2026-10-27, docs/research/oi-div-reversal-4h-prereg.md) · v16 = + `regimeWindow` on basis_x_cvd (main + holdout) and the BTC regime day counts (docs/research/graded-exit-regime-prereg.md) · v15 = funding block carries `feesNetBps` (fee-net on the same covered trades) · v14 = + `exitGraded.funding` (the graded exit also net of the funding paid while open, an estimate; informational) · v13 = + the four registered explorer reads (level_reclaim, oi_div_reversal, session_momentum, confluence_follow) · v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       // Built on the minute cron (SCOREBOARD_REBUILD_MINUTE), served from KV; a request builds only when no copy
       // exists, and a failed build serves the last good copy marked stale (scoreboardCache.mjs).
       try { return json(await serveScoreboard(env.LAB_STORE, CACHE, () => buildAxisScorecard(env, min)), request); }

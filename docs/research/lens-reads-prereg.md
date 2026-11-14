@@ -1,10 +1,11 @@
-# Lens reads · DRAFT registration (unsigned: nothing counts)
+# Lens reads · registered into the read pipeline (A signed; B waits for its recorder)
 
-Drafted 2026-11-14 (borst: "grade our own lenses"). **DRAFT.** No out-of-sample clock runs and no stage is served
-until borst signs this page; then the out-of-sample start is the next 00:00 UTC after signing, written here, and the
-read is added to `pipeline-stages.json` in its own PR. Stages and bars are as in `docs/research/read-pipeline.md`.
+Drafted 2026-11-14 (borst: "grade our own lenses"). **A (`smart_consensus_2x`) signed by borst 2026-11-14** ("sign it
+for me", given in a Claude session). **Out-of-sample events for A start at 2026-11-15T00:00:00Z**, the next 00:00 UTC
+after signing. B (`forecast_divergence`) is NOT registered: it needs its recorder and 14 days of rows first, then its
+own dated sign-off on a new page. Stages and bars are as in `docs/research/read-pipeline.md`.
 
-Everything above "Results" is fixed once signed. A changed rule is a new registration under a new name.
+Everything above "Results" is fixed. A changed rule is a new registration under a new name.
 
 ## Why
 
@@ -44,7 +45,8 @@ that carry both counts; a row with a side but no counts can't fire.
 registration it joins `OVERLAP_PAIRS` as `smart_follow × smart_consensus_2x`.
 
 **Count-only power check · 2026-11-14.** Counted from `/smart/consensus/history?coin=` (the series behind `sm:hist`;
-confirm in code at registration). Counts only: no return, hit rate or R was computed.
+confirmed in code at registration: `sm:hist:{COIN}` in `NEXUS_AGENT`, appended hourly by `storeConsensus`,
+`routes-smart.mjs`, only for coins where one side has ≥ 2 traders). Counts only: no return, hit rate or R was computed.
 
 | Line | Events (24h cooldown) | Series from |
 |---|---|---|
@@ -75,7 +77,11 @@ Register once it has 14 days and a count-only power check like A's.
 
 ## Sign-off
 
-_Unsigned._ Sign here (owner wallet or in person) to start A's clock. B waits for its recorder and 14 days of rows.
+- **A · `smart_consensus_2x`: signed by borst, 2026-11-14** ("sign it for me", in a Claude session). Registered in
+  `app/lib/readPipeline.mjs` from 2026-11-15T00:00:00Z, main card + holdout lines + the graded exit; body
+  `smartConsensus2xEvents` in `workers/nexus-lab-api/explorerReads.mjs`; overlap pair `smart_follow × smart_consensus_2x`.
+  Nothing trades it: no brain mode, preset, wallet or money change.
+- **B · `forecast_divergence`: not signed.** Waits for its recorder and 14 days of rows.
 
 ## Results
 
