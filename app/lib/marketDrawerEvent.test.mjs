@@ -42,3 +42,13 @@ test("the drawer is mounted app-wide and coin names open it from the Board, Smar
   assert.match(drawer, /MARKET_READ_FOOTER/);
   assert.match(drawer, /useEscapeKey\(close/);
 });
+
+test("the drawer opens from an alert link (?market=), on load and on an in-app tap, and offers the coin alert", () => {
+  const drawer = readFileSync(new URL("../components/MarketDrawer.tsx", import.meta.url), "utf8");
+  assert.match(drawer, /new URLSearchParams\(window\.location\.search\)\.get\("market"\)/);
+  assert.match(drawer, /addEventListener\("popstate", onNav\)/);
+  assert.match(drawer, /watchCoin\(wallet, labWallet, coin, !watched\)/);
+  const push = readFileSync(new URL("./pushAlerts.ts", import.meta.url), "utf8");
+  assert.match(push, /markets: false \}/);
+  assert.match(push, /topics: \{ \.\.\.topics, coins: savedCoins\(\) \}/);
+});

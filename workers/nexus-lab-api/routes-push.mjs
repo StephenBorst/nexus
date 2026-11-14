@@ -39,8 +39,10 @@ export async function handlePush(parts, request, env) {
     if (!validSubscription(b.subscription)) return json({ error: "bad_subscription" }, request, 400);
     const auth = checkLabAuth(wallet, b.labAuth);
     if (!auth.ok) return json({ error: "sign_to_enable", reason: auth.reason }, request, 401);
-    const r = await saveSubscription(env, wallet, b.subscription, normTopics(b.topics));
-    return json({ ok: true, topics: r.topics }, request);
+    // coins (the market alerts' watch list) ride on topics; absent = keep the device's current list.
+    const coins = Array.isArray(b.topics?.coins) ? b.topics.coins : undefined;
+    const r = await saveSubscription(env, wallet, b.subscription, normTopics(b.topics), coins);
+    return json({ ok: true, topics: r.topics, coins: r.coins }, request);
   }
 
   const endpoint = String(b.endpoint || "");

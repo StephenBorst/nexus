@@ -13,9 +13,18 @@ export { PUSH_SW_SCOPE, pushSupported };
 export const PUSH_API = "https://og.nexustradinglabs.com";
 export const PUSH_SW_URL = "/push-sw.js";
 
-export type PushTopics = { calls: boolean; agent: boolean; social: boolean; following: boolean };
-export const DEFAULT_PUSH_TOPICS: PushTopics = { calls: true, agent: true, social: false, following: false };
+export type PushTopics = { calls: boolean; agent: boolean; social: boolean; following: boolean; markets: boolean };
+export const DEFAULT_PUSH_TOPICS: PushTopics = { calls: true, agent: true, social: false, following: false, markets: false };
 const TOPICS_KEY = "nx_push_topics";
+// Coins this device watches for market alerts (picked in the market drawer). The server keeps its own copy on the
+// device record (push.mjs); this one is what the drawer shows.
+const COINS_KEY = "nx_push_coins";
+export function savedCoins(): string[] {
+  try { const v = JSON.parse(localStorage.getItem(COINS_KEY) || "[]"); return Array.isArray(v) ? v.filter((c) => typeof c === "string") : []; } catch { return []; }
+}
+function saveCoins(c: string[]) {
+  try { localStorage.setItem(COINS_KEY, JSON.stringify(c)); } catch { /* private mode */ }
+}
 
 export type PushStatus =
   | "unsupported"  // this browser can't do push (iOS outside an installed app, old browsers)
@@ -122,7 +131,7 @@ async function registerDevice(wallet: string, labAuth: unknown, topics: PushTopi
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Couldn’t register this device." };
   }
-  const r = await post("/push/subscribe", { wallet: wallet.toLowerCase(), subscription: sub.toJSON(), topics, labAuth });
+  const r = await post("/push/subscribe", { wallet: wallet.toLowerCase(), subscription: sub.toJSON(), topics: { ...topics, coins: savedCoins() }, labAuth });
   if (!r.ok) {
     try { await sub.unsubscribe(); } catch { /* ignore */ }
     return { ok: false, error: r.status === 401 ? "The signature didn’t check out. Try again." : `Couldn’t save this device (${r.data.error || r.status}).` };
@@ -169,8 +178,22 @@ export async function updatePushTopics(wallet: string, labWallet: LabWallet, top
   if (!sub) return { ok: false as const, error: "Alerts are off on this device." };
   const labAuth = await getLabAuth(wallet, labWallet, "explicit", { fallbackSigner: wallet });
   if (!labAuth) return { ok: false as const, error: "Sign the Nexus message to change alerts." };
-  const r = await post("/push/topics", { wallet: wallet.toLowerCase(), subscription: sub.toJSON(), topics, labAuth });
+  const r = await post("/push/topics", { wallet: wallet.toLowerCase(), subscription: sub.toJSON(), topics: { ...topics, coins: savedCoins() }, labAuth });
   return r.ok ? { ok: true as const } : { ok: false as const, error: `Couldn’t save (${r.data.error || r.status}).` };
+}
+
+/**
+ * Watch (or stop watching) one coin for market alerts on this device. Turns the markets switch on with the first
+ * coin and off with the last; switches alerts on for the device if they're off (asks permission + the signature).
+ */
+export async function watchCoin(wallet: string, labWallet: LabWallet, coin: string, on: boolean) {
+  const prev = savedCoins();
+  const next = on ? [...prev.filter((c) => c !== coin), coin].slice(-10) : prev.filter((c) => c !== coin);
+  saveCoins(next);
+  const topics = { ...savedTopics(), markets: next.length > 0 };
+  const r = (await pushStatus()) === "on" ? await updatePushTopics(wallet, labWallet, topics) : await enablePush(wallet, labWallet, topics);
+  if (!r.ok) saveCoins(prev);
+  return r;
 }
 
 export async function disablePush() {
