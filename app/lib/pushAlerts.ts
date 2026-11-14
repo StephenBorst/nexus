@@ -13,8 +13,8 @@ export { PUSH_SW_SCOPE, pushSupported };
 export const PUSH_API = "https://og.nexustradinglabs.com";
 export const PUSH_SW_URL = "/push-sw.js";
 
-export type PushTopics = { calls: boolean; agent: boolean; social: boolean; following: boolean; markets: boolean };
-export const DEFAULT_PUSH_TOPICS: PushTopics = { calls: true, agent: true, social: false, following: false, markets: false };
+export type PushTopics = { calls: boolean; agent: boolean; social: boolean; following: boolean; markets: boolean; wallets: boolean };
+export const DEFAULT_PUSH_TOPICS: PushTopics = { calls: true, agent: true, social: false, following: false, markets: false, wallets: false };
 const TOPICS_KEY = "nx_push_topics";
 // Coins this device watches for market alerts (picked in the market drawer). The server keeps its own copy on the
 // device record (push.mjs); this one is what the drawer shows.

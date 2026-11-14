@@ -46,7 +46,8 @@ export function validSubscription(s) {
 }
 
 // markets: alerts on the coins a device watches (marketWatch.mjs, rules app/lib/marketAlerts.mjs). OFF by default.
-export const DEFAULT_TOPICS = Object.freeze({ calls: true, agent: true, social: false, following: false, markets: false });
+// wallets: moves of tracked wallets you starred on Smart Money (walletWatch.mjs). OFF by default.
+export const DEFAULT_TOPICS = Object.freeze({ calls: true, agent: true, social: false, following: false, markets: false, wallets: false });
 
 export function normTopics(t) {
   const o = t && typeof t === "object" ? t : {};
@@ -56,6 +57,7 @@ export function normTopics(t) {
     social: typeof o.social === "boolean" ? o.social : DEFAULT_TOPICS.social,
     following: typeof o.following === "boolean" ? o.following : DEFAULT_TOPICS.following,
     markets: typeof o.markets === "boolean" ? o.markets : DEFAULT_TOPICS.markets,
+    wallets: typeof o.wallets === "boolean" ? o.wallets : DEFAULT_TOPICS.wallets,
   };
 }
 
@@ -66,6 +68,7 @@ export function topicForType(type) {
   if (["comment", "reaction", "follow", "copy", "challenge"].includes(type)) return "social";
   if (type === "followed_call") return "following"; // a caller you follow posted a call (followAlerts.mjs)
   if (type === "market_alert") return "markets"; // a watched coin changed (marketWatch.mjs)
+  if (type === "wallet_move") return "wallets"; // a starred tracked wallet opened/closed (walletWatch.mjs)
   return null;
 }
 
@@ -80,6 +83,7 @@ const TITLES = {
   follow: "New follower",
   followed_call: "New call",
   market_alert: "Market",
+  wallet_move: "Wallet you watch",
   copy: "Call copied",
   challenge: "Call challenged",
 };

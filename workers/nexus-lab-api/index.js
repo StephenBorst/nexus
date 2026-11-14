@@ -81,7 +81,7 @@ import { runStressStudy, STRESS_DOC } from "./stressStudy.mjs";
 import { twapSchedule, twapProgress } from "../nexus-agent-exec/logic.mjs";
 // Route families lifted out of the 74-route fetch handler (see shared.mjs for the
 // migration rules — one family per commit, read-only families first).
-import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus } from "./routes-smart.mjs";
+import { handleSmart, refreshSmartSeed, sweepTrackedXray, snapshotSmartConsensus, readXrayHist } from "./routes-smart.mjs";
 import { handleHlTape, sweepHlTapes } from "./routes-hltape.mjs";
 import { handleXrayShare } from "./routes-xrayshare.mjs";
 import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
@@ -106,6 +106,7 @@ import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
 import { handleMarket, handleMarkets, handleFadeGrade } from "./routes-market.mjs";
+import { runWalletWatch } from "./walletWatch.mjs";
 import { handleBell, composeBell } from "./routes-bell.mjs";
 import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
 import { marketCoin } from "../../app/lib/marketRead.mjs";
@@ -803,6 +804,13 @@ const worker = {
             const r = await runMarketWatch(env, (w, n) => appendNotification(env, w, n), dispatch);
             if (r.events) console.log(`[push] market watch: ${r.events} change(s) on ${r.coins} coins, ${r.sent} sent`);
           } catch (e) { console.error("[push] market watch failed:", String(e)); }
+        })());
+        // Moves of tracked wallets people starred on Smart Money (walletWatch.mjs): bell + phone (wallets switch) + Telegram.
+        ctx.waitUntil((async () => {
+          try {
+            const r = await runWalletWatch(env, (w, n) => appendNotification(env, w, n), { readHist: (a) => readXrayHist(env, a) });
+            if (r.events) console.log(`[push] wallet watch: ${r.events} move(s), ${r.sent} sent`);
+          } catch (e) { console.error("[push] wallet watch failed:", String(e)); }
         })());
       }
       return;

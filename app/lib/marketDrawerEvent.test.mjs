@@ -49,6 +49,6 @@ test("the drawer opens from an alert link (?market=), on load and on an in-app t
   assert.match(drawer, /addEventListener\("popstate", onNav\)/);
   assert.match(drawer, /watchCoin\(wallet, labWallet, coin, !watched\)/);
   const push = readFileSync(new URL("./pushAlerts.ts", import.meta.url), "utf8");
-  assert.match(push, /markets: false \}/);
+  assert.match(push, /markets: false, wallets: false \}/);
   assert.match(push, /topics: \{ \.\.\.topics, coins: savedCoins\(\) \}/);
 });

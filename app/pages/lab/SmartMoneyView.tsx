@@ -667,6 +667,9 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
               ★ Watchlist{watch.length > 0 ? ` (${watch.length})` : ""}
             </button>
           </div>
+          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", marginTop: 6, lineHeight: 1.5 }}>
+            Star ★ a trader to get a note when their Orderly positions open or close, with their tracked record in it (bell; phone under Wallets in alerts). Hyperliquid wallets: board only for now.
+          </div>
           {watchOnly && shown.length === 0 && (
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a", padding: "16px 0", textAlign: "center" }}>No watched traders in the current board. Star ★ any trader to track them.</div>
           )}
@@ -677,7 +680,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
               <div key={t.address} style={{ border: "1px solid #1a1a1e", borderRadius: 6, padding: "10px 12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#52525b", width: 24, flexShrink: 0 }}>#{i + 1}</span>
-                  <button onClick={() => toggleWatch(t.address)} title={starred ? "Unwatch" : "Add to watchlist"}
+                  <button onClick={() => toggleWatch(t.address)} title={starred ? "Unwatch: no more move notes" : "Watch: a note when their Orderly positions open or close"}
                     style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13, color: starred ? TRACKED : "#52525b", flexShrink: 0, lineHeight: 1 }}>
                     {starred ? "★" : "☆"}
                   </button>

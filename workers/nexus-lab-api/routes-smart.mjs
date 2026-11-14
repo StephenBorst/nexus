@@ -15,6 +15,7 @@
 // remaining routes in index.js get their turn. Never throws for "not mine".
 import { json, normalizeAddress, recoverEthAddress } from "./shared.mjs";
 import { orderlyAccountId, xrayTrack, dedupeDaily } from "./logic.mjs";
+import { nextIndex, WL_INDEX_KEY } from "./walletWatch.mjs";
 
 // ── Smart Money (Phase 1) ─────────────────────────────────────────────────────
 // Curated seed of top Hyperliquid traders (snapshotted from the public HL
@@ -690,6 +691,11 @@ export async function handleSmart(parts, request, env, ctx) {
       ? [...new Set(body.watch.filter((x) => typeof x === "string" && /^0x[a-f0-9]{40}$/i.test(x)).map((x) => x.toLowerCase()))].slice(0, 100)
       : [];
     await env.LAB_STORE.put(`sm:wl:${caller}`, JSON.stringify(clean), { expirationTtl: 365 * 86400 });
+    // The index the move alerts read (walletWatch.mjs): who has starred anyone. Best-effort.
+    try {
+      const idxRaw = await env.LAB_STORE.get(WL_INDEX_KEY);
+      await env.LAB_STORE.put(WL_INDEX_KEY, JSON.stringify(nextIndex(idxRaw ? JSON.parse(idxRaw) : [], caller, clean.length > 0)));
+    } catch { /* the next save re-adds it */ }
     return json({ ok: true, watch: clean }, request);
   }
 
