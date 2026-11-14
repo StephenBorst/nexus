@@ -23,7 +23,9 @@ const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const pct = (v, dp = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(dp)}%`;
 const ends = (iso) => {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  // Polymarket closes its markets at midnight New York time ("by December 31" ends 2027-01-01T04:59Z): name the day
+  // the market itself names, not the UTC date.
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
 };
 
 /**

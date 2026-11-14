@@ -48,6 +48,11 @@ test("a stretched market names the fade as an ungraded rule", () => {
   assert.equal(f.tone, "watch");
 });
 
+test("a forecast's end date is the day the market names (New York close), not the UTC date", () => {
+  const m = composeMarket({ coin: "BTC", forecasts: { markets: [{ coin: "BTC", forecastProbPct: 71, target: 65000, targetDirection: "DOWN", distancePct: -3, forecastLean: "DOWN", fundingLean: "UP", divergence: true, endDate: "2027-01-01T04:59:00Z", volumeUsd: 1 }] } });
+  assert.match(m.lenses.find((l) => l.id === "forecast").line, /by Dec 31\./);
+});
+
 test("missing boards read as unread or absent, never invented", () => {
   const m = composeMarket({ coin: "SOL" });
   assert.deepEqual(m.lenses.map((l) => l.id), ["funding", "smart"]);
