@@ -115,6 +115,26 @@ test("readRevenue: a source that can't be read says so (null amounts, unread cou
   assert.deepEqual(await readSafeOwners(fakeNet({ failEvm: true })), []);
 });
 
+test("readRevenue: a holding the burst lost gets one more try on its own; still failing = unread", async () => {
+  const inner = fakeNet({ balances: { [`${NEXUS}:base:${SUBS}`]: 10n ** 18n * 7n } });
+  let nexusCalls = 0;
+  // The parallel pass asks for $NEXUS 4 times (subs, x402, borst.eth, Safe) on 3 Base RPCs = 12 calls: all fail
+  // (a rate-limited burst). Calls after those (the one-at-a-time retries) go through.
+  const f = async (url, init = {}) => {
+    const b = init.body ? JSON.parse(init.body) : null;
+    if (b?.method === "eth_call" && b.params[0].to.toLowerCase() === NEXUS && ++nexusCalls <= 12) throw new Error("429");
+    return inner(url, init);
+  };
+  const rev = await readRevenue({ fetchImpl: f, now: T0 });
+  const row = rev.groups.find((g) => g.id === "subs").rows.find((r) => r.key === "subs:nexusBase");
+  assert.equal(row.amount, 7);
+  assert.equal(row.retried, true);
+  assert.ok(rev.groups.every((g) => g.unread === 0), "every holding read on the retry");
+  assert.equal(nexusCalls, 16, "12 in the burst, then one retry each for the 4 that failed");
+  const dead = await readRevenue({ fetchImpl: fakeNet({ failEvm: true }), now: T0 });
+  assert.ok(dead.groups.filter((g) => g.id !== "near").every((g) => g.unread === g.rows.length), "a dead source stays unread after its retry");
+});
+
 test("changes: vs the newest snapshot at or before 7 / 30 days ago; a row with no past value says nothing", () => {
   const days = ["2026-08-01", "2026-09-01", "2026-09-10", "2026-10-03"];
   const at = Date.parse("2026-10-11T12:00:00Z");
