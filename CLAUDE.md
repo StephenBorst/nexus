@@ -776,7 +776,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   an initialized token account of the right mint (RPC, cached 10 min) or that fee is off. `GET /swap/jup/fee-status`.
   Price reads pass `nofee=1`. Client refuses a quote with `platformFee.feeBps` > 100 and shows a "Nexus fee" row.
   Fee wallet `6uB2ugTM4m7P1BpEG6pLAc2B327nb75JUqVE6svoMRWT` (borst), USDC account `Fqqax7…wagKr` (never close it). wSOL
-  account skipped for now (SOL buys carry no fee). **LIVE since 2026-10-29** (`JUP_FEE_LIVE="true"`, borst, after a passing dry run).
+  account = the wallet's ATA `5vG1TD…FK38` (set 2026-11-14 for SOL buys; ON once it exists on-chain, see
+  fee-status `on.solBuys`; collect by transfer, closing it turns the SOL-buy fee off). **LIVE since 2026-10-29** (`JUP_FEE_LIVE="true"`, borst, after a passing dry run).
   Set it to anything else = STAGED: only quotes tagged `feetest=1` carry the fee (use that for dry runs of a change).
 - **Jupiter Swap API V2 `/build` (since 2026-10-31; v1 "Metis" is unmaintained).** `GET /swap/jup/build` (proxy,
   `jupBuildParams`: whitelisted params, our `platformFeeBps` + `feeAccount` set server-side, payer/destination/tip/
@@ -797,13 +798,17 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   minimum on-chain at the recipient (DELIVERED or CONFIRMING; the card reports once the check shows it); WooFi = widget OPENS
   (the widget reports no fills). Each id once (`spot:fill:{route}:{id}`), day totals `spot:day:{YYYY-MM-DD}` under a
   NexusLock lease. No wallet address is stored.
-- **Best price (EVM USDC buys, read-only):** `GET /spot/best?chain=&tokenOut=&amount=` (`routes-spotbest.mjs`, rule
+- **Best price (EVM USDC buys):** `GET /spot/best?chain=&tokenOut=&amount=` (`routes-spotbest.mjs`, rule
   `app/lib/spotBest.mjs`) quotes spanDEX (preview, our fee on) and a Flash market quote (our key + fee, no funder) and
   compares each router's own "you receive". Flash prices its gas in; for spanDEX the worker takes off an estimate
   (live `eth_gasPrice` × `SWAP_GAS_UNITS` 200k + the OP-stack L1 fee upper bound on Base/Optimism, in ETH at Orderly's
   ETH mark, converted at the quote's own rate), so both are "after gas". Approval gas isn't counted (both need one).
   Any unreadable part (or Polygon, POL unpriced) = no estimate and the line says "Flash incl. gas". Under 5 bps =
-  "about the same". The /token ticket shows one line; it routes nothing and signs nothing. Cached 20 s, origin-gated.
+  "about the same". Cached 20 s, origin-gated. **Routing (2026-11-14):** the line also picks the router the main BUY
+  opens (`routeFor`, same file, tested): Flash only when both quoted THIS ticket (result keyed to chain+token+amount)
+  and Flash nets ≥ SAME_BPS more after gas (or spanDEX gas eats its output); a tie or anything missing stays spanDEX.
+  Flash opens its own ticket on a market order (`FlashSpotButton openNonce`), which quotes again; "or buy via spanDEX"
+  stays one tap. The pick signs nothing. Both routers carry our 10 bps, so it never weighs our revenue.
 - **Phone layout of the money screens** (2026-11-14, pinned by `app/lib/mobileMoney.test.mjs`): swap errors render through
   `SwapNotice.tsx` (rules `app/lib/swapNotice.mjs`): a guard refusal reads "Stopped before your wallet signed. Nothing
   moved." + the precise reason + the venue link as a button; no route → the venue link; reverted / cancelled / input

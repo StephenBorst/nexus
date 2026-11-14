@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pickBest, bestLine, bestGasNote, SAME_BPS } from "./spotBest.mjs";
+import { pickBest, bestLine, bestGasNote, routeFor, SAME_BPS } from "./spotBest.mjs";
 
 test("compares spanDEX base units against Flash token units", () => {
   // spanDEX 8.4723 WETH-milli in 18 decimals vs Flash 0.0084... same scale
@@ -56,4 +56,26 @@ test("the note says what was counted", () => {
   assert.equal(bestGasNote({ gasIncluded: true, gasUsd: 0.0234 }), "both after gas · spanDEX gas ≈ $0.02");
   assert.equal(bestGasNote({ gasIncluded: true, gasUsd: 0.0031 }), "both after gas · spanDEX gas ≈ $0.0031");
   assert.equal(bestGasNote({ gasIncluded: true, gasUsd: null }), "both after gas");
+});
+
+test("routeFor: the main BUY opens Flash only when Flash clearly nets more on a real comparison", () => {
+  // Flash 2% ahead → Flash.
+  assert.equal(routeFor(pickBest({ spandexRaw: "1000000", flashHuman: "1.02", decimals: 6 })), "flash");
+  // spanDEX ahead → spanDEX.
+  assert.equal(routeFor(pickBest({ spandexRaw: "1020000", flashHuman: "1", decimals: 6 })), "spandex");
+  // Under SAME_BPS is a tie → stays on spanDEX (the default), never flips on noise.
+  assert.equal(routeFor(pickBest({ spandexRaw: "1000000", flashHuman: "1.0001", decimals: 6 })), "spandex");
+  // Gas eats spanDEX's whole output → Flash.
+  assert.equal(routeFor(pickBest({ spandexRaw: "1000000", flashHuman: "0.5", decimals: 6, gasToken: 2 })), "flash");
+  // Gas flips a small spanDEX lead into a Flash win → Flash.
+  assert.equal(routeFor(pickBest({ spandexRaw: "1001800", flashHuman: "1.0000", decimals: 6, gasToken: 0.01 })), "flash");
+});
+
+test("routeFor: no real comparison → spanDEX", () => {
+  assert.equal(routeFor(null), "spandex");
+  assert.equal(routeFor(undefined), "spandex");
+  // Only Flash quoted (pickBest says flash, but there was nothing to beat) → no reroute.
+  assert.equal(routeFor(pickBest({ spandexRaw: null, flashHuman: "1", decimals: 6 })), "spandex");
+  assert.equal(routeFor(pickBest({ spandexRaw: "1000000", flashHuman: null, decimals: 6 })), "spandex");
+  assert.equal(routeFor({ best: "flash", spandex: null, flash: 1 }), "spandex");
 });

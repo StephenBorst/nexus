@@ -93,7 +93,12 @@ JUP_FEE_BPS = "10"
 JUP_FEE_ACCOUNT_USDC = "Fqqax7ErDytQbsWRWoRuCodZ8oDx2NgWtzYz6AUwagKr"   # USDC buys + all sells
 # LIVE since 2026-10-29 (borst, after the dry run passed). "false" = staged: only feetest=1 quotes carry the fee.
 JUP_FEE_LIVE = "true"
-# JUP_FEE_ACCOUNT_WSOL = ""   # wrapped-SOL token account owned by the same wallet (SOL buys)
+# Its wSOL account = the wallet's associated token account for wrapped SOL (derived, same method that
+# reproduces the USDC account above). Set 2026-11-14 so SOL buys carry the fee too. The worker checks it
+# over RPC: until the account is CREATED on-chain (one tx from the fee wallet, ~0.002 SOL rent) the SOL-buy
+# fee stays OFF and swaps are unchanged; once it exists the fee turns on within 10 min (cache), no deploy.
+# Collect by transferring wSOL out; CLOSING the account to unwrap turns the SOL-buy fee off until re-created.
+JUP_FEE_ACCOUNT_WSOL = "5vG1TDMyJLY3NZboX1biHtvuFgMxJ3onm6jkb87DFK38"   # SOL buys
 # Our Base builder code (ERC-8021, registered at base.dev by borst 2026-09-30). Order-only; unset =
 # omitted. A valid but unregistered code never fails an order (it just goes unattributed); a malformed
 # one is dropped.
