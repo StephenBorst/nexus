@@ -15,6 +15,7 @@
 //   push:agentseen:{addr} the last agent position the watcher saw
 
 import { parseVapidJwk, sendWebPush } from "./webpush.mjs";
+import { normCoins } from "../../app/lib/marketAlerts.mjs";
 
 export const MAX_DEVICES = 10;
 export const AGENT_WATCH_MAX = 200;
@@ -44,7 +45,8 @@ export function validSubscription(s) {
     && typeof auth === "string" && /^[A-Za-z0-9_-]{16,32}$/.test(auth);
 }
 
-export const DEFAULT_TOPICS = Object.freeze({ calls: true, agent: true, social: false, following: false });
+// markets: alerts on the coins a device watches (marketWatch.mjs, rules app/lib/marketAlerts.mjs). OFF by default.
+export const DEFAULT_TOPICS = Object.freeze({ calls: true, agent: true, social: false, following: false, markets: false });
 
 export function normTopics(t) {
   const o = t && typeof t === "object" ? t : {};
@@ -53,6 +55,7 @@ export function normTopics(t) {
     agent: typeof o.agent === "boolean" ? o.agent : DEFAULT_TOPICS.agent,
     social: typeof o.social === "boolean" ? o.social : DEFAULT_TOPICS.social,
     following: typeof o.following === "boolean" ? o.following : DEFAULT_TOPICS.following,
+    markets: typeof o.markets === "boolean" ? o.markets : DEFAULT_TOPICS.markets,
   };
 }
 
@@ -62,6 +65,7 @@ export function topicForType(type) {
   if (type === "agent_trade") return "agent";
   if (["comment", "reaction", "follow", "copy", "challenge"].includes(type)) return "social";
   if (type === "followed_call") return "following"; // a caller you follow posted a call (followAlerts.mjs)
+  if (type === "market_alert") return "markets"; // a watched coin changed (marketWatch.mjs)
   return null;
 }
 
@@ -75,6 +79,7 @@ const TITLES = {
   reaction: "New reaction",
   follow: "New follower",
   followed_call: "New call",
+  market_alert: "Market",
   copy: "Call copied",
   challenge: "Call challenged",
 };
@@ -111,6 +116,23 @@ async function syncAgentWatch(kv, wallet, wants) {
   if (!wants && has) await kv.put("push:agentwatch", JSON.stringify(list.filter((x) => x !== wallet)));
 }
 
+// Wallets with at least one device whose markets switch is on AND that watches a coin (marketWatch.mjs reads this).
+export const MARKET_WATCH_WALLETS_MAX = 500;
+async function syncMarketWatch(kv, wallet, wants) {
+  const list = await readJson(kv, "push:marketwatch", []);
+  const has = list.includes(wallet);
+  if (wants && !has) await kv.put("push:marketwatch", JSON.stringify([...list, wallet].slice(-MARKET_WATCH_WALLETS_MAX)));
+  if (!wants && has) await kv.put("push:marketwatch", JSON.stringify(list.filter((x) => x !== wallet)));
+}
+
+async function walletWantsMarkets(kv, wallet, ids) {
+  for (const id of ids) {
+    const s = await readJson(kv, `push:sub:${id}`, null);
+    if (s && normTopics(s.topics).markets && normCoins(s.coins).length) return true;
+  }
+  return false;
+}
+
 async function walletWantsAgent(kv, wallet, ids) {
   for (const id of ids) {
     const s = await readJson(kv, `push:sub:${id}`, null);
@@ -120,14 +142,14 @@ async function walletWantsAgent(kv, wallet, ids) {
 }
 
 /** Store (or update) one device for one wallet. Caller has already checked the wallet's signature. */
-export async function saveSubscription(env, wallet, sub, topics) {
+export async function saveSubscription(env, wallet, sub, topics, coins) {
   const kv = env.LAB_STORE;
   const w = String(wallet).toLowerCase();
   const id = await subId(sub.endpoint);
   // A device moves to the wallet that signed last (one phone, one wallet's alerts).
   const prev = await readJson(kv, `push:sub:${id}`, null);
   if (prev && prev.wallet && prev.wallet !== w) await removeFromWallet(kv, prev.wallet, id);
-  const rec = { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, wallet: w, topics: normTopics(topics), createdAt: prev?.createdAt || Date.now(), updatedAt: Date.now() };
+  const rec = { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, wallet: w, topics: normTopics(topics), coins: normCoins(coins ?? prev?.coins ?? []), createdAt: prev?.createdAt || Date.now(), updatedAt: Date.now() };
   await kv.put(`push:sub:${id}`, JSON.stringify(rec));
   let ids = (await readJson(kv, `push:wallet:${w}`, [])).filter((x) => x !== id);
   ids.push(id);
@@ -136,7 +158,8 @@ export async function saveSubscription(env, wallet, sub, topics) {
   for (const d of dropped) await kv.delete(`push:sub:${d}`);
   await kv.put(`push:wallet:${w}`, JSON.stringify(ids));
   await syncAgentWatch(kv, w, await walletWantsAgent(kv, w, ids));
-  return { id, topics: rec.topics };
+  await syncMarketWatch(kv, w, await walletWantsMarkets(kv, w, ids));
+  return { id, topics: rec.topics, coins: rec.coins };
 }
 
 async function removeFromWallet(kv, wallet, id) {
@@ -144,6 +167,7 @@ async function removeFromWallet(kv, wallet, id) {
   if (ids.length) await kv.put(`push:wallet:${wallet}`, JSON.stringify(ids));
   else await kv.delete(`push:wallet:${wallet}`);
   await syncAgentWatch(kv, wallet, ids.length ? await walletWantsAgent(kv, wallet, ids) : false);
+  await syncMarketWatch(kv, wallet, ids.length ? await walletWantsMarkets(kv, wallet, ids) : false);
 }
 
 /** Forget one device. Knowing the endpoint is the proof: only that browser holds it. */

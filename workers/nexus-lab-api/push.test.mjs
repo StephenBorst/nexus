@@ -41,8 +41,8 @@ test("endpoints: only real push services, https, no tricks", () => {
 });
 
 test("topics: calls + agent on, social + following off, by default", () => {
-  assert.deepEqual(normTopics(undefined), { calls: true, agent: true, social: false, following: false });
-  assert.deepEqual(normTopics({ agent: false, social: true, junk: 1 }), { calls: true, agent: false, social: true, following: false });
+  assert.deepEqual(normTopics(undefined), { calls: true, agent: true, social: false, following: false, markets: false });
+  assert.deepEqual(normTopics({ agent: false, social: true, junk: 1 }), { calls: true, agent: false, social: true, following: false, markets: false });
   assert.equal(topicForType("call_resolved"), "calls");
   assert.equal(topicForType("agent_trade"), "agent");
   assert.equal(topicForType("comment"), "social");

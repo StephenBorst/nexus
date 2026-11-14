@@ -7,7 +7,10 @@ import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
 import { useEscapeKey } from "@/utils/a11y";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { MARKET_EVENT, takePendingMarket, clearPendingMarket } from "@/lib/marketDrawerEvent.mjs";
-import { MARKET_READ_FOOTER } from "@/lib/marketRead.mjs";
+import { MARKET_READ_FOOTER, marketCoin } from "@/lib/marketRead.mjs";
+import { useAccount } from "@orderly.network/hooks";
+import { useLabWallet } from "@/hooks/useLabAuth";
+import { savedCoins, watchCoin, pushSupported } from "@/lib/pushAlerts";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 type Lens = { id: string; label: string; line: string; detail?: string; tone: "plain" | "faint" | "watch" };
@@ -31,12 +34,19 @@ export default function MarketDrawer() {
   const [coin, setCoin] = useState<string>("");
   const [data, setData] = useState<Market | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+  const { state: acct } = useAccount();
+  const wallet = (acct as { address?: string })?.address ?? null;
+  const labWallet = useLabWallet();
+  const [watching, setWatching] = useState<string[]>(() => savedCoins());
+  const [alertNote, setAlertNote] = useState("");
+  const [alertBusy, setAlertBusy] = useState(false);
 
   const close = useCallback(() => { setCoin(""); setData(null); }, []);
   useEscapeKey(close, !!coin);
 
   useEffect(() => {
-    const pending = takePendingMarket();
+    const fromLink = marketCoin(new URLSearchParams(window.location.search).get("market"));
+    const pending = takePendingMarket() || fromLink;
     if (pending) setCoin(pending);
     const on = (e: Event) => {
       const c = (e as CustomEvent).detail?.coin;
@@ -44,13 +54,16 @@ export default function MarketDrawer() {
       if (typeof c === "string" && c) setCoin(c);
     };
     window.addEventListener(MARKET_EVENT, on);
-    return () => window.removeEventListener(MARKET_EVENT, on);
+    // An alert tapped while the app is open arrives as an in-page navigation (pushTaps.ts) to ?market=ETH.
+    const onNav = () => { const c = marketCoin(new URLSearchParams(window.location.search).get("market")); if (c) setCoin(c); };
+    window.addEventListener("popstate", onNav);
+    return () => { window.removeEventListener(MARKET_EVENT, on); window.removeEventListener("popstate", onNav); };
   }, []);
 
   useEffect(() => {
     if (!coin) return;
     let alive = true;
-    setState("loading"); setData(null);
+    setState("loading"); setData(null); setAlertNote("");
     fetch(`${AGENT_API}/intel/market/${encodeURIComponent(coin)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d: Market) => { if (alive) { setData(d); setState("idle"); } })
@@ -69,6 +82,15 @@ export default function MarketDrawer() {
     close();
   };
   const ch = data?.change24hPct;
+  const watched = watching.includes(coin);
+  const toggleAlert = async () => {
+    if (!wallet) { setAlertNote("Connect a wallet to get alerts on this coin."); return; }
+    setAlertBusy(true); setAlertNote("");
+    const r = await watchCoin(wallet, labWallet, coin, !watched);
+    setAlertBusy(false);
+    if (r.ok) { setWatching(savedCoins()); setAlertNote(watched ? `No more alerts on ${coin}.` : `You’ll get a ping when ${coin}’s funding breaks its range, consensus forms or flips, or a forecast swings 15+ pts.`); }
+    else setAlertNote(r.error);
+  };
 
   const panel: React.CSSProperties = narrow
     ? { position: "fixed", left: 0, right: 0, bottom: 0, maxHeight: "86dvh", borderTopLeftRadius: 14, borderTopRightRadius: 14, borderTop: `1px solid ${C.borderStrong}` }
@@ -96,6 +118,15 @@ export default function MarketDrawer() {
               {l.detail && <div style={{ fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: SIGNAL.watch, marginTop: 3 }}>{l.detail}</div>}
             </div>
           ))}
+          {data && pushSupported() && (
+            <div style={{ padding: "12px 0 0" }}>
+              <button type="button" disabled={alertBusy} onClick={toggleAlert}
+                style={{ fontFamily: UI, fontSize: 13, fontWeight: 600, padding: "8px 12px", borderRadius: RADIUS.md, cursor: alertBusy ? "default" : "pointer", background: "transparent", color: watched ? C.text.bright : C.text.fog, border: `1px solid ${watched ? C.accent : C.borderStrong}` }}>
+                {alertBusy ? "…" : watched ? `Alerts on · ${coin}` : `Alert me on ${coin}`}
+              </button>
+              {alertNote && <div style={{ fontFamily: UI, fontSize: 12.5, color: C.text.fog, marginTop: 6, lineHeight: 1.5 }}>{alertNote}</div>}
+            </div>
+          )}
           {data && (
             <div style={{ fontFamily: UI, fontSize: 12, color: C.text.muted, padding: "12px 0 4px", lineHeight: 1.5 }}>
               {MARKET_READ_FOOTER}{data.unread && data.unread.length ? ` Unread just now: ${data.unread.join(", ")}.` : ""}

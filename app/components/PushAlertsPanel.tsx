@@ -16,6 +16,7 @@ const TOPIC_ROWS: { key: keyof PushTopics; label: string }[] = [
   { key: "agent", label: "Your agent opens or closes a trade" },
   { key: "following", label: "New calls from callers you follow" },
   { key: "social", label: "Comments, follows, copies" },
+  { key: "markets", label: "Coins you watch change (pick them in a coin’s panel)" },
 ];
 
 const label: React.CSSProperties = { fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.12em", color: C.text.faint };

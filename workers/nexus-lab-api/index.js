@@ -111,6 +111,7 @@ import { parityEvents } from "./parityEvents.mjs";
 import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
 import { handleRecordShare } from "./routes-recordshare.mjs";
 import { runAgentWatch } from "./push.mjs";
+import { runMarketWatch } from "./marketWatch.mjs";
 import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg, buildArenaAgentSvg } from "./ogCards.mjs";
 import { loadIdentity, identityCardVersion } from "./identity.mjs";
 import { identityShareText } from "../../app/lib/identityCard.mjs";
@@ -791,6 +792,14 @@ const worker = {
             const r = await runAgentWatch(env, (w, n) => appendNotification(env, w, n, { telegram: false }));
             if (r.events) console.log(`[push] agent watch: ${r.events} alert(s) across ${r.watched} wallets`);
           } catch (e) { console.error("[push] agent watch failed:", String(e)); }
+        })());
+        // Market alerts on change for coins a device watches (marketWatch.mjs): bell + phone + Telegram.
+        ctx.waitUntil((async () => {
+          try {
+            const dispatch = (path) => worker.fetch(new Request(new URL(path, "https://og.nexustradinglabs.com")), env, ctx);
+            const r = await runMarketWatch(env, (w, n) => appendNotification(env, w, n), dispatch);
+            if (r.events) console.log(`[push] market watch: ${r.events} change(s) on ${r.coins} coins, ${r.sent} sent`);
+          } catch (e) { console.error("[push] market watch failed:", String(e)); }
         })());
       }
       return;
