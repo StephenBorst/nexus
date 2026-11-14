@@ -10,6 +10,7 @@
 //   - oi:hist reads stamp it at the row's own time.
 // Inputs: cs.oiHist [{t, price, oi, funding}] (hourly, brain) · cs.candleHist [{t,o,h,l,c,v}] (hourly).
 import { hourBucket } from "../../app/lib/basisStack.mjs";
+import { CONSENSUS_RATIO } from "../../app/lib/smartConsensus.mjs";
 import { levelReclaimEvents } from "../../app/lib/levelReclaim.mjs";
 
 const H = 3600000;
@@ -391,6 +392,28 @@ export function fundingBasisSplitEvents(cs, _pmap, _ctx, p = SPLIT) {
   return ev;
 }
 
+// ── 13 · smart_consensus_2x — registered 2026-11-14, counts from 2026-11-15T00:00Z ──────────────────
+// docs/research/lens-reads-prereg.md (A; borst signed in session 2026-11-14). The market drawer's smart-money
+// lens at its exact rule. At a recorded sm:hist row {t, side, long, short} (hour h): the leading side has at
+// least 2 traders, more than the other side, and at least CONSENSUS_RATIO (2×) the other → follow that side,
+// stamped at the row. Rows without both counts can't fire. Cooldown 24h per coin. Last row in an hour wins.
+export const CONSENSUS_2X = Object.freeze({ minLead: 2, ratio: CONSENSUS_RATIO, cooldownH: 24 });
+export function smartConsensus2xEvents(cs, _pmap, _ctx, p = CONSENSUS_2X) {
+  const m = byHour(cs.smHist, (r) => Number.isFinite(Number(r.long)) && Number.isFinite(Number(r.short)) && r.long !== null && r.short !== null);
+  const ev = [];
+  let last = -Infinity;
+  for (const h of [...m.keys()].sort((a, b) => a - b)) {
+    if (h - last < p.cooldownH) continue;
+    const r = m.get(h);
+    const L = Number(r.long), S = Number(r.short);
+    const lead = Math.max(L, S), other = Math.min(L, S);
+    if (!(lead >= p.minLead && lead > other && lead >= p.ratio * other)) continue;
+    ev.push({ t: r.t, side: L > S ? "LONG" : "SHORT" });
+    last = h;
+  }
+  return ev;
+}
+
 // The four registered 2026-10-16 (docs/research/explorers-prereg.md), batch 2 (2026-10-27), batch 3
 // (2026-11-06) and batch 4 (2026-11-07). Labels are the scoreboard's.
 export const EXPLORER_READS = Object.freeze([
@@ -410,5 +433,7 @@ export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "btc_lead_lag", label: "BTC impulse, lagging alt follows", gen: btcLeadLagEvents }),
   // batch 4, registered 2026-11-07 (funding-basis-split-prereg.md)
   Object.freeze({ name: "funding_basis_split", label: "Funding and basis disagree: follow the basis", gen: fundingBasisSplitEvents }),
+  // lens reads, registered 2026-11-14 (lens-reads-prereg.md A)
+  Object.freeze({ name: "smart_consensus_2x", label: "Tracked traders agree 2 to 1: follow them", gen: smartConsensus2xEvents }),
 ]);
 export const EXPLORER_GENS = Object.freeze(Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.gen])));
