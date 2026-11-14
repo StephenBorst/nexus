@@ -4,6 +4,7 @@ import { useOrderlyConfig } from "@/utils/config";
 import { useNav } from "@/hooks/useNav";
 import LabPulseChip from "@/components/LabPulseChip";
 import PositionCallButton from "@/components/PositionCallButton";
+import MarketStripBar from "@/components/MarketStripBar";
 
 export default function PerpLayout() {
   const config = useOrderlyConfig();
@@ -20,6 +21,8 @@ export default function PerpLayout() {
       bottomNavProps={config.scaffold.bottomNavProps}
     >
       <LabPulseChip trailing={<PositionCallButton />} />
+      {/* The read on the market on screen, one line; tap → the drawer with every lens and its grade. */}
+      <MarketStripBar />
       <Outlet />
     </Scaffold>
   );

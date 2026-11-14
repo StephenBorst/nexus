@@ -684,6 +684,10 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   (routes-market.mjs `handleMarkets`: mispriced + smart + forecasts read once, `marketSnapshot` per coin, 60 s cache);
   each row = price, 24h, the move since the last look + the alerts' changes (`marketTransitions`); first look = baseline;
   tapping a row opens the drawer and marks it seen.
+- **Trade page read (2026-11-14, `MarketStripBar.tsx` under the LAB strip in `pages/perp/Layout.tsx`, rules
+  `app/lib/marketStrip.mjs`):** the coin on screen in one line (funding, smart money, tape) from the drawer's answer
+  (`/intel/market/:coin` now carries `facts`, numbers for the same inputs; cache key `intel:market:v2:`); ☆ watches it,
+  "Read ETH →" opens the drawer where the grades are. Inputs only, never a side or a grade on the strip.
 - **Quick Call (Thesis Engine, 2026-11-14, `app/lib/quickCall.mjs`):** a call posts on its levels alone (`callReady` =
   coin + committed side + `callInvalidReason` clean, the reason shown in plain words); account size only sizes a LIVE
   order (`liveOrderReady`); an unsized call saves size 0. Order: coin → side → levels (2×2 on a phone) → stop/target
