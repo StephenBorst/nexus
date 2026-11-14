@@ -17,6 +17,7 @@ import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { ConvictionScanner } from "./ConvictionScanner";
 import { bareTicker } from "@/utils/utils";
 import { pressKey, useEscapeKey } from "@/utils/a11y";
+import { feedRows, FEED_MIN_USD } from "@/lib/smartFeed.mjs";
 
 interface SmConsensus { sym: string; side: "LONG" | "SHORT"; count: number; netUsd: number; refPrice: number; }
 
@@ -191,6 +192,8 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
   // Progressive disclosure — lead with the signal (consensus + a short feed/board),
   // expand for the full depth. Kills the "long scroll of raw data" without hiding it.
   const [feedAll, setFeedAll] = useState(false);
+  // Moves under FEED_MIN_USD ($15 closes, $23 opens) fold behind a toggle (app/lib/smartFeed.mjs).
+  const [feedSmall, setFeedSmall] = useState(false);
   const [boardAll, setBoardAll] = useState(false);
   const [trackMap, setTrackMap] = useState<Record<string, TrackChip>>({});
   const [trackedSignals, setTrackedSignals] = useState<XrayEvent[]>([]);
@@ -248,6 +251,8 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
   }, []);
 
   // THE SHOVEL LINE — the excerpt's sentence, from data we already hold (see sharpCluster).
+  const feed = useMemo(() => feedRows(events, { showSmall: feedSmall, all: feedAll }), [events, feedSmall, feedAll]);
+  const usdMin = `$${FEED_MIN_USD.toLocaleString()}`;
   const shovel = useMemo(() => {
     const pnlBy: Record<string, number> = {};
     for (const t of board || []) pnlBy[String(t.address || "").toLowerCase()] = Number(t.pnl) || 0;
@@ -576,7 +581,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
             <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, letterSpacing: 0, textTransform: "none", color: "#52525b" }}>opens and closes · ⚡ copies</span>
           </div>
           <div style={{ marginTop: 10, display: "flex", flexDirection: "column" }}>
-            {events.slice(0, feedAll ? 30 : 8).map((e, i) => {
+            {feed.rows.map((e, i) => {
               const watched = watch.includes(e.addr);
               const isOpen = e.type === "OPEN";
               const long = e.side === "LONG";
@@ -604,9 +609,17 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                     <span style={{ color: "#3f3f46" }}>·</span>
                     <span>{ago(e.ts)} ago</span>
                   </div>
+                  {/* actions — only a fresh OPEN is copyable. On a phone they sit under the text so the sentence
+                      keeps the full width (beside it, an open stacked into five lines). */}
+                  {isOpen && isMobile && (
+                    <span style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    {shareBtn({ kind: "smart", symbol: e.sym, direction: e.side, szUsd: e.szUsd, trader: short(e.addr), source: e.source })}
+                    {thesisBtn(() => openThesis(e.sym, e.side, e.price, `${short(e.addr)} (smart money) opened ${e.side} ${e.sym}.`))}
+                    {tradeBtn(() => copy(e.sym, e.side, e.price, null, e.addr))}
+                    </span>
+                  )}
                 </div>
-                {/* actions — only a fresh OPEN is copyable */}
-                {isOpen && (
+                {isOpen && !isMobile && (
                   <span style={{ display: "flex", gap: 6, flexShrink: 0, marginTop: 1 }}>
                     {shareBtn({ kind: "smart", symbol: e.sym, direction: e.side, szUsd: e.szUsd, trader: short(e.addr), source: e.source })}
                     {thesisBtn(() => openThesis(e.sym, e.side, e.price, `${short(e.addr)} (smart money) opened ${e.side} ${e.sym}.`))}
@@ -617,10 +630,19 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
               );
             })}
           </div>
-          {events.length > 8 && (
+          {feed.rows.length === 0 && (
+            <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#71717a", padding: "8px 6px" }}>No move of {usdMin}+ in the feed right now.</div>
+          )}
+          {(feed.more > 0 || feedAll) && (
             <button onClick={() => setFeedAll((v) => !v)}
               style={{ marginTop: 8, width: "100%", background: "none", border: "1px solid #232327", borderRadius: 4, color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 0", cursor: "pointer" }}>
-              {feedAll ? "▲ show less" : `▼ show ${Math.min(30, events.length) - 8} more`}
+              {feedAll ? "▲ show less" : `▼ show ${feed.more} more`}
+            </button>
+          )}
+          {(feed.small > 0 || feedSmall) && (
+            <button onClick={() => setFeedSmall((v) => !v)}
+              style={{ marginTop: 6, width: "100%", background: "none", border: "none", color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "4px 0", cursor: "pointer" }}>
+              {feedSmall ? `hide moves under ${usdMin}` : `${feed.small} ${feed.small === 1 ? "move" : "moves"} under ${usdMin} hidden · show`}
             </button>
           )}
         </div>
@@ -702,6 +724,23 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                 {t.positions.length > 0 && (
                   <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
                     {t.positions.slice(0, 5).map((p, j) => (
+                      isMobile ? (
+                      // Phone: two lines, nothing off-screen. Coin · side · size · uPnL, then the entry + Trade.
+                      <div key={j} style={{ padding: "7px 0", borderTop: j ? "1px solid #1a1a1e" : "none" }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#f4f4f5", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.coin}</span>
+                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.side === "LONG" ? "#3ecf8e" : "#f7525f", flexShrink: 0 }}>{p.side === "LONG" ? "↑ LONG" : "↓ SHORT"}{p.lev ? ` ${p.lev}x` : ""}</span>
+                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#a1a1aa", flexShrink: 0 }}>{usd(p.szUsd)}</span>
+                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.uPnl >= 0 ? "#3ecf8e" : "#f7525f", flexShrink: 0, minWidth: 56, textAlign: "right" }}>{p.uPnl >= 0 ? "+" : ""}{usd(p.uPnl)}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 4 }}>
+                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>{p.entry > 0 ? `entry $${p.entry.toLocaleString(undefined, { maximumFractionDigits: p.entry < 10 ? 4 : 2 })}` : ""}</span>
+                          {p.tradeable && p.sym
+                            ? tradeBtn(() => copy(p.sym as string, p.side, p.entry, p.lev, t.address))
+                            : <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", whiteSpace: "nowrap" }}>HL-only</span>}
+                        </div>
+                      </div>
+                      ) :
                       <div key={j} style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 0", flexWrap: "nowrap", overflowX: "auto" }}>
                         <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#f4f4f5", flex: "1 1 72px", minWidth: 72 }}>{p.coin}</span>
                         <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.side === "LONG" ? "#3ecf8e" : "#f7525f", width: 78, flexShrink: 0 }}>{p.side === "LONG" ? "↑ LONG" : "↓ SHORT"}{p.lev ? ` ${p.lev}x` : ""}</span>

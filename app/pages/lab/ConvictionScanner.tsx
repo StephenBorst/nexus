@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { C, LINE, SIGNAL } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 import { rankConviction, convictionLevel } from "@/lib/conviction.mjs";
 
 // ── CONVICTION SCANNER — the engine, market-wide ─────────────────────────────
@@ -67,7 +67,7 @@ export function ConvictionScanner() {
     <div style={{ marginBottom: 22 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
         <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: C.text.bright }}>◆ CONVICTION SCANNER</span>
-        <span style={{ fontFamily: MONO, fontSize: 8.5, color: C.text.faint, letterSpacing: "0.05em" }}>the engine, market-wide · funding × smart money × graded callers</span>
+        <span style={{ fontFamily: MONO, fontSize: 8.5, color: C.text.faint, letterSpacing: "0.05em" }}>market-wide · funding × smart money × graded callers</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         {rows.map((r) => {
@@ -93,7 +93,7 @@ export function ConvictionScanner() {
                 : <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: conv.color, minWidth: 92 }}>◆ {conv.word}</span>}
               <span style={{ display: "flex", gap: 4, flexWrap: "wrap", flex: 1 }}>
                 {r.reads.map((rd) => (
-                  <span key={rd.label} title={!rd.ok && rd.side ? `${rd.label} lean ${rd.side} — opposes this ${r.direction} fade` : undefined} style={{ fontFamily: MONO, fontSize: 8.5, color: rd.ok ? C.pos : C.neg, border: `1px solid ${rd.ok ? LINE.pos : LINE.neg}`, borderRadius: 3, padding: "1px 5px" }}>{rd.ok ? "✓" : "✗"} {rd.label}{!rd.ok && rd.side ? ` ${rd.side}` : ""}</span>
+                  <span key={rd.label} title={!rd.ok && rd.side ? `${rd.label} lean ${rd.side} — opposes this ${r.direction} fade` : undefined} style={{ fontFamily: MONO, fontSize: 8.5, color: rd.ok ? C.text.fog : SIGNAL.watch, border: `1px solid ${rd.ok ? C.borderStrong : SIGNAL.watch}`, borderRadius: 3, padding: "1px 5px", whiteSpace: "nowrap" }}>{rd.ok ? "✓" : "✗"} {rd.label}{!rd.ok && rd.side ? ` ${rd.side}` : ""}</span>
                 ))}
               </span>
               <span style={{ fontFamily: MONO, fontSize: 9.5, color: C.text.fog }}>{r.fundingAnnualPct >= 0 ? "+" : ""}{r.fundingAnnualPct}%/yr</span>
