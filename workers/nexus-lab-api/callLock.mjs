@@ -23,6 +23,7 @@ import { appendUpdate, MAX_UPDATES } from "../../app/lib/lifecycle.mjs";
 import { registryEvents } from "../../app/lib/registryEvent.mjs";
 import { splitPlan } from "./logic.mjs";
 import { callInvalidReason } from "../../app/lib/callMath.mjs";
+import { isLens } from "./publishLens.mjs";
 
 export const REGISTRY_KEY = (address) => `callreg:${address}`;
 export const MAX_PUBLISHED = 2000;          // per wallet; a publish past this stays private
@@ -35,6 +36,7 @@ export const SERVER_FIELDS = [
   "copyCount", "publishedAt", "publishLegacy",
   "duplicateOf",   // callDedupe.mjs: this record's copy of a call another wallet can be proven to have made
   "publishMark",   // publishMark.mjs: the market price the server read when the call was first published
+  "publishLens",   // publishLens.mjs: what the smart-money and funding lenses showed at the first publish
   "fillState", "filledAt", // grading.mjs applyFillStamp: has the entry traded yet (WORKING / OPEN)
   "tp1HitAt",      // grading.mjs applyFillStamp: a declared split's TP1 half closed, runner still open
   "planV",         // grading.mjs PLAN_V: the plan-quality rules that wrote planScore/planFlags
@@ -127,6 +129,7 @@ function publishedView(entry, stored, incoming, now) {
   };
   if (entry.legacy) view.publishLegacy = true; else delete view.publishLegacy;
   if (isMark(entry.publishMark)) view.publishMark = { ...entry.publishMark }; else delete view.publishMark;
+  if (isLens(entry.publishLens)) view.publishLens = { ...entry.publishLens }; else delete view.publishLens;
   const updates = mergeUpdates(stored?.updates, incoming ? incoming.updates : undefined, now);
   if (updates.length) view.updates = updates;
   const lr = ownerLossReason(stored?.lossReason, incoming ? incoming.lossReason : undefined);
@@ -151,7 +154,7 @@ function publishedView(entry, stored, incoming, now) {
  * @returns {{ theses: object[], registry: object, registryChanged: boolean, bootstrapped: string[],
  *             newlyPublished: object[], refused: {id:string, reason:string}[], restored: string[] }}
  */
-export function sealTheses({ prev, incoming, registry, now, ownedElsewhere = new Set(), publishMarks = {} }) {
+export function sealTheses({ prev, incoming, registry, now, ownedElsewhere = new Set(), publishMarks = {}, publishLenses = {} }) {
   const prevList = Array.isArray(prev) ? prev.filter(isObj) : [];
   let reg = readRegistry(registry);
   let registryChanged = false, bootstrapped = [];
@@ -199,6 +202,10 @@ export function sealTheses({ prev, incoming, registry, now, ownedElsewhere = new
       const pm = isObj(publishMarks) ? publishMarks[id] : null;
       if (isMark(pm) && Math.abs(Number(pm.at) - now) <= MARK_MAX_AGE_MS) {
         reg.calls[id].publishMark = { px: Number(pm.px), at: Number(pm.at), ...(typeof pm.src === "string" ? { src: pm.src } : {}) };
+      }
+      const pl = isObj(publishLenses) ? publishLenses[id] : null;
+      if (isLens(pl) && Math.abs(Number(pl.at) - now) <= MARK_MAX_AGE_MS) {
+        reg.calls[id].publishLens = { smartSide: pl.smartSide, smartL: pl.smartL ?? null, smartS: pl.smartS ?? null, stretched: pl.stretched, fundAnnual: pl.fundAnnual ?? null, at: Number(pl.at) };
       }
       reg.order.push(id);
       registryChanged = true;

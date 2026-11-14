@@ -58,6 +58,8 @@ export interface ThesisTrade {
   fillState?: "WORKING" | "OPEN";
   filledAt?: number;
   publishMark?: { px: number; at: number; src?: string };
+  // lab-api publishLens.mjs: what the smart-money 2× rule + the funding stretch showed at the first publish.
+  publishLens?: { smartSide: "LONG" | "SHORT" | "NONE" | null; smartL?: number | null; smartS?: number | null; stretched: boolean | null; fundAnnual?: number | null; at: number };
   actualPnl: number | null;
   // Append-only lifecycle timeline (add/trim/move stop/flip/close/note). See
   // app/lib/lifecycle.mjs. ⚠️ ADDITIVE ONLY — grading and the anchored call ledger

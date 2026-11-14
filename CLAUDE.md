@@ -486,6 +486,12 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   re-runs it on the archive (`orderly_1m_regrade`). Never grade on the websocket mark: the cards' "· CONFIRMING" hint
   (`provisionalTouch`) is display only. Hourly suites that build calls from `Date.now()` pin
   `_pinMinuteGradeFrom(Infinity)` (tests only; a test fails if app/ or workers/ code calls it).
+- **What the lenses showed at the post (2026-11-14, `workers/nexus-lab-api/publishLens.mjs`):** like `publishMark`, a
+  call's FIRST publish pins `publishLens` on its registry entry (a `SERVER_FIELDS` member): the smart-money 2× rule
+  (`sm:consensus`) and the funding stretch (`intel:mispriced:v1`, else its last-good copy), via `marketSnapshot`; KV
+  reads only inside `prepareSeal`, never blocks a publish; a snapshot older than 2 min is refused. Stats' **YOUR CALLS
+  VS THE LENSES** (`LensRecordCard`, rules `app/lib/lensRecord.mjs`) splits graded calls with / against each lens;
+  averages only at `LENS_MIN` 5 a side. The trader's own record, not a grade of the lens.
 - **The entry must trade:** filled at the post only if the entry is within 0.3% (`ENTRY_AT_MARK_PCT`, in
   `app/lib/entryAtMark.mjs`) of the server's `publishMark`, else inside the posting hour's range (calls without a mark);
   otherwise a resting order graded from its fill hour; never filled = PENDING. Stamps: `fillState` WORKING/OPEN,

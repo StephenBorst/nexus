@@ -8,7 +8,7 @@ import { OperatorProfileCard } from "./OperatorProfile";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
 import { formatPnl, formatPnlCompact, formatUsdCompact } from "./helpers";
 import { PnlChart, PnlBars, EmptyState, CountUp, SectionHeader } from "./components";
-import { YourRecordCard, MoneyGoesCard } from "./StatsCards";
+import { YourRecordCard, MoneyGoesCard, LensRecordCard } from "./StatsCards";
 import { Collapsible } from "./Collapsible";
 import { useIsMobile } from "./useIsMobile";
 import { computeEdge } from "@/config/edge";
@@ -511,6 +511,8 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       {/* Calls vs trades: did you trade the plan you wrote? Lifted out of the deep fold 2026-11-14 (it was the
           most useful read on this tab for an active trader). Renders nothing until you have both. */}
       <PlanAdherenceCard theses={theses} orders={orders} />
+      {/* Your calls split by what the smart-money + funding lenses showed at the post (publishLens, from 2026-11-15). */}
+      <LensRecordCard theses={theses} />
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 240px", gap: 8, marginBottom: 8 }}>
         <div style={cardStyle}>

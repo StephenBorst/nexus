@@ -5,6 +5,7 @@
 // copy counter only touch server fields on existing calls and write their own way.
 import { sealTheses, publishCandidates, REGISTRY_KEY, OWNER_KEY } from "./callLock.mjs";
 import { marksForPublishes } from "./publishMark.mjs";
+import { readLensBoards, lensesForPublishes } from "./publishLens.mjs";
 import { indexPublishedCalls } from "./minuteIndex.mjs";
 
 export const MAX_NEW_PUBLISHES_PER_SAVE = 25;
@@ -35,8 +36,12 @@ export async function prepareSeal(env, address, prevTheses, incomingTheses, nowM
   if (candidates.length > MAX_NEW_PUBLISHES_PER_SAVE) return { error: "too_many_new_publishes" };
   const owners = await Promise.all(candidates.map((id) => kv.get(OWNER_KEY(id))));
   const ownedElsewhere = new Set(candidates.filter((id, i) => owners[i] && owners[i] !== address));
-  const publishMarks = await marksForPublishes(incomingTheses, candidates.filter((id) => !ownedElsewhere.has(id)), readMark);
-  const sealed = sealTheses({ prev: prevTheses, incoming: incomingTheses, registry: regRaw, now: nowMs, ownedElsewhere, publishMarks });
+  const fresh = candidates.filter((id) => !ownedElsewhere.has(id));
+  const publishMarks = await marksForPublishes(incomingTheses, fresh, readMark);
+  // What the smart-money + funding lenses showed at this publish (publishLens.mjs): KV only, best-effort.
+  let publishLenses = {};
+  if (fresh.length) { try { publishLenses = lensesForPublishes(incomingTheses, fresh, await readLensBoards(env), nowMs); } catch { publishLenses = {}; } }
+  const sealed = sealTheses({ prev: prevTheses, incoming: incomingTheses, registry: regRaw, now: nowMs, ownedElsewhere, publishMarks, publishLenses });
 
   async function commit(record) {
     if (sealed.registryChanged) await kv.put(REGISTRY_KEY(address), JSON.stringify(sealed.registry));

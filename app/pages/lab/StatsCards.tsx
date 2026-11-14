@@ -6,6 +6,8 @@ import { cardStyle, labelStyle } from "./styles";
 import { useIsMobile } from "./useIsMobile";
 import { C, MONO, UI, RADIUS } from "@/config/theme";
 import { tradeRecord, moneyLeaks, sliceLine, signedUsd, RECORD_MIN_TRADES } from "@/lib/tradeStats.mjs";
+import { lensRecord, LENS_MIN } from "@/lib/lensRecord.mjs";
+import type { ThesisTrade } from "./types";
 
 const hint: React.CSSProperties = { fontSize: 10, color: C.text.faint, fontFamily: MONO, lineHeight: 1.6 };
 const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -131,6 +133,65 @@ export function MoneyGoesCard({ orders }: { orders: ProcessedTrade[] }) {
       <div style={{ ...hint, marginTop: 10 }}>
         Hindsight. A slice that lost can win next, and small samples lie. Use it to ask why, not to flip sides. Sessions in UTC.
       </div>
+    </div>
+  );
+}
+
+// YOUR CALLS VS THE LENSES (2026-11-14): your graded calls split by what the smart-money 2× rule and the funding
+// stretch showed when you posted (pinned by the server at publish, lab-api publishLens.mjs). Rules app/lib/lensRecord.mjs.
+type G = { n: number; wins: number; netR: number; avgR: number | null };
+const rText = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}R`;
+
+function LensRow({ label, g }: { label: string; g: G }) {
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "7px 0", borderTop: `1px solid ${C.border}`, fontFamily: UI, fontSize: 13 }}>
+      <span style={{ flex: 1, minWidth: 0, color: C.text.fog }}>{label}</span>
+      <span style={{ fontFamily: MONO, fontSize: 12, color: C.text.muted, whiteSpace: "nowrap" }}>{g.n ? `${g.wins}/${g.n} won` : "none yet"}</span>
+      <span style={{ fontFamily: MONO, fontSize: 12.5, minWidth: 64, textAlign: "right", whiteSpace: "nowrap", color: g.n ? (g.netR > 0 ? C.pos : g.netR < 0 ? C.neg : C.text.fog) : C.text.faint }}>
+        {g.n ? `${rText(g.netR)} net` : "—"}
+      </span>
+    </div>
+  );
+}
+
+export function LensRecordCard({ theses }: { theses: ThesisTrade[] }) {
+  const rec = useMemo(() => lensRecord(theses), [theses]);
+  const isMobile = useIsMobile();
+  const published = (theses || []).some((t) => t.isPublic);
+  if (!rec && !published) return null;
+  return (
+    <div style={{ ...cardStyle, marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+        <div style={labelStyle}>&#9632; YOUR CALLS VS THE LENSES</div>
+        <div style={{ ...hint, letterSpacing: "0.08em" }}>graded from public price</div>
+      </div>
+      {!rec ? (
+        <div style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, lineHeight: 1.55, marginTop: 8 }}>
+          From Nov 15, every call you publish records what the smart-money and funding lenses showed at that moment. Once
+          those calls are graded, this splits your record by them: did you do better with the tracked traders or against them?
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 12 : 24, marginTop: 8 }}>
+            <div>
+              <div style={{ ...hint, textTransform: "uppercase", letterSpacing: "0.12em", color: C.text.muted, marginBottom: 2 }}>Tracked traders (2× agreement)</div>
+              <LensRow label="With them" g={rec.smart.with} />
+              <LensRow label="Against them" g={rec.smart.against} />
+              <LensRow label="No clear agreement" g={rec.smart.none} />
+            </div>
+            <div>
+              <div style={{ ...hint, textTransform: "uppercase", letterSpacing: "0.12em", color: C.text.muted, marginBottom: 2 }}>Funding</div>
+              <LensRow label="With the fade" g={rec.funding.withFade} />
+              <LensRow label="Against the fade" g={rec.funding.againstFade} />
+              <LensRow label="Funding not stretched" g={rec.funding.calm} />
+            </div>
+          </div>
+          {rec.lines.map((l) => <div key={l} style={{ fontFamily: UI, fontSize: 13, color: C.text.bright, marginTop: 8, lineHeight: 1.5 }}>{l}</div>)}
+          <div style={{ ...hint, marginTop: 8 }}>
+            {rec.tracked} graded {rec.tracked === 1 ? "call carries" : "calls carry"} a snapshot. Averages show at {LENS_MIN} calls a side; under that one call swings them. Your record, not a grade of the lens.
+          </div>
+        </>
+      )}
     </div>
   );
 }
