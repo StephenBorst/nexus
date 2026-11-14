@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { CoinLink } from "@/components/CoinLink";
 import { useNavigate } from "react-router-dom";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { C, SIGNAL } from "@/config/theme";
@@ -251,7 +252,7 @@ function DivergentCard({ m, onDraft }: { m: ForecastMarket; onDraft: (m: Forecas
     <div style={{ border: `1px solid ${WARN}33`, background: SURFACE, borderRadius: 2, padding: "10px 12px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
         <span style={chip(WARN, `${WARN}55`)}>◆ DIVERGENT</span>
-        <span style={{ color: BONE, fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700 }}>{m.coin}</span>
+        <span style={{ color: BONE, fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700 }}><CoinLink coin={m.coin} /></span>
         <span style={{ color: FAINT, fontSize: 10, fontFamily: "var(--nx-font-mono)" }}>{fmtPrice(m.markPrice)}</span>
         <span style={chip(BONE, BORDER_STRONG)}>YES {yes}%</span>
         {chg != null ? <span style={chip(chg >= 0 ? POS : NEG, BORDER_STRONG)}>{chg >= 0 ? "+" : ""}{chg}pt · 30d</span> : null}
@@ -294,7 +295,7 @@ function DivergentRow({ m, onDraft }: { m: ForecastMarket; onDraft: (m: Forecast
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--nx-font-mono)", fontSize: 10, lineHeight: 1.4, padding: "6px 0", borderTop: `1px solid ${BORDER}` }}>
       <span style={{ color: WARN, fontSize: 9 }}>◆</span>
-      <span style={{ color: BONE, fontWeight: 700, minWidth: 34 }}>{m.coin}</span>
+      <span style={{ color: BONE, fontWeight: 700, minWidth: 34 }}><CoinLink coin={m.coin} /></span>
       <span style={{ color: BONE, minWidth: 40 }}>{m.forecastProbPct}%</span>
       <span style={{ color: FOG, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.question}</span>
       <span style={{ color: DIM, whiteSpace: "nowrap" }}>lean <b style={{ color: leanColor(m.forecastLean) }}>{m.forecastLean}</b> · tape <b style={{ color: leanColor(m.fundingLean) }}>{m.fundingLean}</b></span>
@@ -395,7 +396,7 @@ export function ForecastDivergence() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {[...nearOther, ...context].slice(0, 6).map((m) => (
                     <div key={m.id ?? m.question} style={{ display: "flex", alignItems: "baseline", gap: 8, fontFamily: "var(--nx-font-mono)", fontSize: 10, lineHeight: 1.4 }}>
-                      <span style={{ color: BONE, fontWeight: 700, minWidth: 34 }}>{m.coin}</span>
+                      <span style={{ color: BONE, fontWeight: 700, minWidth: 34 }}><CoinLink coin={m.coin} /></span>
                       <span style={{ color: BONE, minWidth: 40 }}>{m.forecastProbPct}%</span>
                       <span style={{ color: FOG, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.question}</span>
                       {m.alignment === "ALIGNED" ? <span style={{ color: POS, fontSize: 9 }}>aligned</span> : null}

@@ -1,0 +1,69 @@
+// GET /intel/market/:coin — every lens on one coin, composed server-side in ONE request (the market drawer,
+// 2026-11-14). It reads the existing boards through the worker's own handler, in-process (no network hop), so each
+// keeps its own cache and logic: /intel/mispriced, /signals, /smart/consensus, /theses/consensus,
+// /intel/forecasts/:coin, /intel/catalysts-board, /calls/pulse. Rules: app/lib/marketRead.mjs (tested).
+// Read-only. A board that fails or is slow drops its lens ("unread"), never the drawer. Cached 60 s per coin.
+
+import { composeMarket, marketCoin } from "../../app/lib/marketRead.mjs";
+import { json } from "./shared.mjs";
+
+export const MARKET_CACHE_PREFIX = "intel:market:v1:";
+export const MARKET_TTL_MS = 60_000;
+const SOURCE_TIMEOUT_MS = 8_000;
+
+export const MARKET_SOURCES = (coin) => ({
+  mispriced: "/intel/mispriced",
+  signals: "/signals",
+  smart: "/smart/consensus",
+  callers: "/theses/consensus",
+  forecasts: `/intel/forecasts/${coin}`,
+  catalysts: "/intel/catalysts-board",
+  pulse: "/calls/pulse",
+});
+
+/** One board through the worker's own handler, JSON or null (timeout, non-2xx, bad JSON). */
+async function readBoard(dispatch, path, timeoutMs) {
+  let timer;
+  try {
+    const res = await Promise.race([
+      dispatch(path),
+      new Promise((resolve) => { timer = setTimeout(() => resolve(null), timeoutMs); }),
+    ]);
+    if (!res || !res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * @param {string[]} parts  URL path parts
+ * @param {Request} request
+ * @param {object} env
+ * @param {{ dispatch: (path: string) => Promise<Response>, now?: number, timeoutMs?: number }} deps
+ * @returns {Promise<Response|null>} null when the route isn't ours
+ */
+export async function handleMarket(parts, request, env, { dispatch, now = Date.now(), timeoutMs = SOURCE_TIMEOUT_MS }) {
+  if (!(parts[0] === "intel" && parts[1] === "market" && request.method === "GET")) return null;
+  const coin = marketCoin(parts[2]);
+  if (!coin) return json({ error: "coin required — GET /intel/market/BTC" }, request, 400);
+
+  const key = MARKET_CACHE_PREFIX + coin;
+  try {
+    const hit = await env.LAB_STORE.get(key);
+    if (hit) {
+      const c = JSON.parse(hit);
+      if (c && now - c.builtAt < MARKET_TTL_MS) return json(c, request);
+    }
+  } catch { /* cache is best-effort */ }
+
+  const sources = MARKET_SOURCES(coin);
+  const names = Object.keys(sources);
+  const boards = await Promise.all(names.map((n) => readBoard(dispatch, sources[n], timeoutMs)));
+  const input = Object.fromEntries(names.map((n, i) => [n, boards[i]]));
+  const out = { ...composeMarket({ coin, ...input }), builtAt: now, unread: names.filter((n, i) => !boards[i]) };
+  try { await env.LAB_STORE.put(key, JSON.stringify(out), { expirationTtl: 120 }); } catch { /* best-effort */ }
+  return json(out, request);
+}

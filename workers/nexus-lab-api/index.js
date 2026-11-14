@@ -105,6 +105,7 @@ import { handleSlippage } from "./routes-slippage.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
+import { handleMarket } from "./routes-market.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
 import { parityEvents } from "./parityEvents.mjs";
 import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
@@ -733,7 +734,8 @@ async function buildAxisScorecard(env, min) {
   return out;
 }
 
-export default {
+// Named so a route can call the worker's own handler in-process (routes-market.mjs composes the boards that way).
+const worker = {
   // Cron (wrangler.toml [triggers]) — best-effort refresh of the Smart Money
   // tracked set from the live HL leaderboard. Fails safe: on error the routes
   // fall back to the static SMART_SEED, so a heavy/failed parse never breaks the tab.
@@ -1154,6 +1156,14 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
       if (accountRes) return accountRes;
     }
 
+    // ── /intel/market/:coin → every lens on one coin in one request, read through this worker's own boards
+    //    in-process (routes-market.mjs, rules app/lib/marketRead.mjs). Read-only, 60 s cache.
+    {
+      const marketRes = await handleMarket(parts, request, env, {
+        dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
+      });
+      if (marketRes) return marketRes;
+    }
     // ── /calls/pulse → open calls + graded this week, for the Trade/Spot chip and the landing (routes-pulse.mjs) ─
     {
       const pulseRes = await handlePulse(parts, request, env, { scorecardKey: axisbtCacheKey(20) });
@@ -6259,3 +6269,5 @@ document.getElementById("btn").addEventListener("click",go);
     }
   },
 };
+
+export default worker;

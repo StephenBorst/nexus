@@ -4,6 +4,7 @@
 // (server-side HL indexing, KV-cached). Discovery + context — NOT "front-run the
 // whale": copy is directional (their symbol + side), executed on Nexus/Orderly.
 import { C } from "@/config/theme";
+import { CoinLink } from "@/components/CoinLink";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
@@ -519,7 +520,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
           <div className="nx-stagger" style={{ marginTop: 10, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
             {consensus.map((c) => (
               <div key={`${c.sym}${c.side}`} style={{ display: "flex", alignItems: "center", gap: 10, rowGap: 6, flexWrap: "wrap", padding: "8px 10px", border: "1px solid #1a1a1e", borderRadius: 6, background: "#0f0f11" }}>
-                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#ededf0", flexShrink: 0 }}>{c.sym}</span>
+                <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#ededf0", flexShrink: 0 }}><CoinLink coin={c.sym} /></span>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 700, color: c.side === "LONG" ? "#3ecf8e" : "#f7525f", flexShrink: 0 }}>{c.side === "LONG" ? "↑ LONG" : "↓ SHORT"}</span>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", flexShrink: 0 }} title={`${c.count} of the ${c.tracked} tracked traders hold ${c.side}; ${c.against} hold the other side`}>
                   {c.count} {c.side === "LONG" ? "long" : "short"} · {c.against} {c.side === "LONG" ? "short" : "long"}

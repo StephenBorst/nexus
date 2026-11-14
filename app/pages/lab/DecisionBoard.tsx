@@ -13,6 +13,7 @@
 // Sits between the Briefing (the narrative read) and Market Intel (the deep detail):
 // Briefing = "what matters now", Board = "scan the whole book", Intel = "go deep".
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CoinLink } from "@/components/CoinLink";
 import { fundingWords, agreeWords, trendWords } from "@/lib/boardWords.mjs";
 import { Link, useSearchParams } from "react-router-dom";
 import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
@@ -624,7 +625,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontFamily: MONO }}>
                     <span style={{ fontSize: 14, fontWeight: 700, color: C.text.bright, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      {r.sym}
+                      <CoinLink coin={r.sym} />
                       {liveCallBy[r.sym] && <span title={`Your live call: ${liveCallBy[r.sym].toLowerCase()}`} style={{ fontSize: 8, color: dirColor(liveCallBy[r.sym]) }}>●</span>}
                       {inPosBy[r.sym] && <span title={`You're ${inPosBy[r.sym].toLowerCase()} here`} style={{ fontSize: 9, color: dirColor(inPosBy[r.sym]) }}>▸</span>}
                     </span>
@@ -689,7 +690,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
                   style={{ display: "grid", gridTemplateColumns: cols, gap: gridGap, padding: rowPad, borderBottom: `1px solid ${C.surfaceAlt}`, alignItems: "center", borderLeft: deepHit || confluent ? `3px solid ${pc}` : "3px solid transparent", background: deepHit ? `${pc}1c` : confluent ? `${pc}0c` : undefined }}>
                   {/* Market + YOUR loop state: ● live call (plan) · ◆ in position (execute) */}
                   <div style={{ ...cell, fontSize: 13, fontWeight: 700, color: C.text.bright, gap: 5 }}>
-                    <span>{r.sym}</span>
+                    <span><CoinLink coin={r.sym} /></span>
                     {liveCallBy[r.sym] && <span title={`Your live call here: ${liveCallBy[r.sym].toLowerCase()}. A plan already staked`} style={{ fontSize: 8, color: dirColor(liveCallBy[r.sym]), lineHeight: 1 }}>●</span>}
                     {inPosBy[r.sym] && <span title={`You're in a ${inPosBy[r.sym].toLowerCase()} position here. Executing`} style={{ fontSize: 9, color: dirColor(inPosBy[r.sym]), lineHeight: 1 }}>▸</span>}
                   </div>

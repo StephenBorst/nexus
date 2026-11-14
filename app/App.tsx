@@ -51,6 +51,8 @@ if (guestParam || isPublicRoute) {
 // until the page is idle, so it never competes with the route that's rendering.
 const OnboardingModal = lazy(() => import("@/components/OnboardingModal"));
 const NexusAssistant = lazy(() => import("@/components/NexusAssistant"));
+// One drawer for every coin, opened from any page with openMarket() (app/lib/marketDrawerEvent.mjs).
+const MarketDrawer = lazy(() => import("@/components/MarketDrawer"));
 
 function useIdle(timeoutMs = 2500): boolean {
   const [idle, setIdle] = useState(false);
@@ -122,6 +124,7 @@ export default function App() {
       <OrderlyProvider>
         <Outlet />
         {idle && <Suspense fallback={null}><NexusAssistant /></Suspense>}
+        {idle && <Suspense fallback={null}><MarketDrawer /></Suspense>}
         <LiveAlerts />
       </OrderlyProvider>
     </>
