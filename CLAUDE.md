@@ -803,6 +803,13 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   ETH mark, converted at the quote's own rate), so both are "after gas". Approval gas isn't counted (both need one).
   Any unreadable part (or Polygon, POL unpriced) = no estimate and the line says "Flash incl. gas". Under 5 bps =
   "about the same". The /token ticket shows one line; it routes nothing and signs nothing. Cached 20 s, origin-gated.
+- **Phone layout of the money screens** (2026-11-14, pinned by `app/lib/mobileMoney.test.mjs`): swap errors render through
+  `SwapNotice.tsx` (rules `app/lib/swapNotice.mjs`): a guard refusal reads "Stopped before your wallet signed. Nothing
+  moved." + the precise reason + the venue link as a button; no route → the venue link; reverted / cancelled / input
+  keep their own line. Tickers in money buttons go through `tickerLabel` (> 10 chars = 9 + "…"). Confirm dialogs
+  (EVM + Solana swap, Cross-chain review) scroll: backdrop `overflowY:auto`, dialog `margin:auto`, never a centred
+  clip. The ◆ orb steps aside while a text field has focus (`useTypingFocus`, `app/lib/typingTarget.mjs`). Phone pass
+  harness: Playwright at 360/412 px against `vite`, DexScreener fixtures, og relayed with the app's origin.
 - **Key proxies** (`keyProxy.mjs`): `/flash/*`, `/swap/jup/*`, `/xc/quote` accept only our origins + per-IP budgets.
 - **Discovery** rules in `app/lib/spotDiscovery.mjs` (recent views, address search, real-market floors incl. padded/thin
   pools, safe logo hosts, read brief, callers line). No long/short split on callers until the board has a net-positive caller.

@@ -587,8 +587,8 @@ export function CrossChainCard({ walletAddress: connected, provider, initialTo, 
       </div>
 
       {review && (
-        <div role="dialog" aria-modal="true" aria-labelledby="xc-review-title" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ width: "100%", maxWidth: 420, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div role="dialog" aria-modal="true" aria-labelledby="xc-review-title" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", display: "flex", padding: 16, overflowY: "auto" }}>
+          <div style={{ margin: "auto", width: "100%", maxWidth: 420, background: CARD, border: `1px solid ${BORD}`, borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
             <h3 id="xc-review-title" style={{ margin: 0, fontFamily: UI, fontSize: 16, fontWeight: 600, color: BRIGHT }}>Review transfer</h3>
             {[
               ["You send", `${fromUnits(review.amount.toString(), XC_ASSETS[from].decimals)} ${XC_ASSETS[from].sym} on ${fromName}`],
