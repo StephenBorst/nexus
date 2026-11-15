@@ -21,7 +21,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
+import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, HOSTED_BODY_MAX_BYTES, questionId, takeHostedSlot, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 import { serveScoreboard, rebuildScoreboard, SCOREBOARD_REBUILD_MINUTE } from "./scoreboardCache.mjs";
 
@@ -1700,8 +1700,12 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // The client keeps orchestrating its tool loop — this is a thin authed forwarder.
     if (parts[0] === "ai" && parts[1] === "chat" && request.method === "POST") {
       try {
-        const body = await request.json().catch(() => null);
-        if (!body) return json({ error: "bad request" }, request, 400);
+        // Size first: the proxy spends our key, and output is capped but input is not.
+        const raw = await request.text().catch(() => "");
+        if (raw.length > HOSTED_BODY_MAX_BYTES) return json({ error: "too_long", hint: "This conversation is too long for hosted AI. Start a new chat (the ⟲ button) and ask again." }, request, 413);
+        let body = null;
+        try { body = JSON.parse(raw); } catch { body = null; }
+        if (!body || typeof body !== "object") return json({ error: "bad request" }, request, 400);
 
         // Auth (in body to avoid CORS preflight on custom headers).
         const addr = String(body._addr || "").toLowerCase();
@@ -1726,16 +1730,22 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         if (!upstreamCfg) return json({ error: "hosted inference not configured", hint: "set ANTHROPIC_API_KEY (or AI_GATEWAY=bankr + BANKR_LLM_KEY) on nexus-lab-api" }, request, 503);
 
         const usageKey = `ai:usage:${addr}:${hostedModel}:${new Date().toISOString().slice(0, 10)}`;
+        // One slot per QUESTION: the client names each question (`_q`) and its tool rounds ride on
+        // the first request's slot, up to the copilot's round limit (takeHostedSlot, logic.mjs).
+        const qid = questionId(body._q);
+        const qKey = qid ? `ai:q:${addr}:${qid}` : null;
         // Read + count under the counter's lease, so two calls at once can't both take the last slot.
         let slot;
         try {
-          slot = await takeCapSlot(env.LAB_STORE, usageKey, CAP, 60 * 60 * 48, lockFor(env, { ttlMs: 10_000, waitMs: 3_000 }), LOCK_KEYS.aiUsage(usageKey));
+          const lock = lockFor(env, { ttlMs: 10_000, waitMs: 3_000 });
+          slot = await lock(LOCK_KEYS.aiUsage(usageKey), () => takeHostedSlot(env.LAB_STORE, { usageKey, qKey, cap: CAP, dayTtl: 60 * 60 * 48 }));
         } catch (e) {
           if (e instanceof LockBusy) return json({ error: "busy", hint: "Another NEXUS AI call from this wallet is starting. Try again in a moment." }, request, 409);
           if (e instanceof LockError) return json({ error: "couldn't check the daily cap — nothing was sent. Try again in a minute." }, request, 503);
           throw e;
         }
-        if (!slot.ok) return json({ error: "daily_limit", model: hostedModel, cap: CAP, hint: `Hosted ${hostedModel} cap is ${CAP}/day (resets 00:00 UTC). Switch to a lighter model in ⚙ for a higher cap, or use your own API key.` }, request, 429);
+        if (!slot.ok && slot.reason === "question_rounds") return json({ error: "question_rounds", hint: "That question used every tool round it gets. Ask a narrower one." }, request, 429);
+        if (!slot.ok) return json({ error: "daily_limit", model: hostedModel, cap: CAP, hint: `Hosted ${hostedModel} allows ${CAP} questions a day (resets 00:00 UTC). Switch to a lighter model in ⚙ for more, or use your own API key.` }, request, 429);
 
         // Forward the resolved (whitelisted) model with a server-set token ceiling; thinking tiers
         // also get effort "low" and lose fields they'd 400 on (shapeHostedBody, logic.mjs).

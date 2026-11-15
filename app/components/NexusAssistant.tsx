@@ -754,7 +754,7 @@ function SettingsView({
         {/* Model tier — stronger model = lower daily cap, cheaper = higher cap. */}
         {useHosted && isPro && (
           <div style={{ marginTop: 12, borderTop: "1px solid #232327", paddingTop: 10 }}>
-            <div style={{ fontFamily: mono, fontSize: 8, color: "#a1a1aa", letterSpacing: "0.12em", marginBottom: 6 }}>MODEL TIER · DAILY CAP</div>
+            <div style={{ fontFamily: mono, fontSize: 8, color: "#a1a1aa", letterSpacing: "0.12em", marginBottom: 6 }}>MODEL TIER · QUESTIONS A DAY</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {HOSTED_TIERS.map((t) => {
                 const on = hostedModel === t.id;

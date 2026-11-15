@@ -215,55 +215,59 @@ test("nexusMinUnits: higher price → fewer tokens required", () => {
 // ── resolveHostedModel (per-model hosted AI caps) ────────────
 import { resolveHostedModel, HOSTED_DEFAULT_MODEL } from "./logic.mjs";
 
-test("resolveHostedModel: default (no request) → Sonnet @ 40/day", () => {
+test("resolveHostedModel: default (no request) → Sonnet 5.5 @ 40 questions/day", () => {
   const r = resolveHostedModel(undefined, {});
-  assert.equal(r.model, "claude-sonnet-4-6");
+  assert.equal(r.model, "claude-sonnet-5-5");
   assert.equal(r.model, HOSTED_DEFAULT_MODEL);
   assert.equal(r.cap, 40);
 });
 
-test("resolveHostedModel: each whitelisted tier maps to its own cap", () => {
-  assert.deepEqual(resolveHostedModel("claude-haiku-4-5", {}), { model: "claude-haiku-4-5", cap: 100 });
-  assert.deepEqual(resolveHostedModel("claude-sonnet-4-6", {}), { model: "claude-sonnet-4-6", cap: 40 });
-  assert.deepEqual(resolveHostedModel("claude-opus-4-8", {}), { model: "claude-opus-4-8", cap: 20 });
+test("resolveHostedModel: the current lineup, each tier with its own cap", () => {
+  assert.deepEqual(resolveHostedModel("claude-haiku-5-5", {}), { model: "claude-haiku-5-5", cap: 100 });
+  assert.deepEqual(resolveHostedModel("claude-sonnet-5-5", {}), { model: "claude-sonnet-5-5", cap: 40 });
+  assert.deepEqual(resolveHostedModel("claude-opus-5-5", {}), { model: "claude-opus-5-5", cap: 12 });
+  assert.deepEqual(resolveHostedModel("claude-fable-5-2", {}), { model: "claude-fable-5-2", cap: 5 });
 });
 
-test("resolveHostedModel: unknown/injected id falls back to default tier", () => {
-  for (const bad of ["claude-opus-4-7", "gpt-5.5", "claude-3-opus-20240229", "", "../etc"]) {
+test("resolveHostedModel: retired tiers, unknown and injected ids fall back to the default tier", () => {
+  for (const bad of ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-8", "claude-fable-5-1",
+    "claude-opus-4-7", "gpt-5.5", "claude-3-opus-20240229", "", "../etc"]) {
     const r = resolveHostedModel(bad, {});
-    assert.equal(r.model, "claude-sonnet-4-6", `expected fallback for ${JSON.stringify(bad)}`);
+    assert.equal(r.model, "claude-sonnet-5-5", `expected fallback for ${JSON.stringify(bad)}`);
     assert.equal(r.cap, 40);
   }
 });
 
-test("resolveHostedModel: env overrides caps + default tier", () => {
-  const env = { HOSTED_CAP_OPUS: "5", HOSTED_CAP_HAIKU: "250", HOSTED_AI_DEFAULT_MODEL: "claude-haiku-4-5" };
-  assert.equal(resolveHostedModel("claude-opus-4-8", env).cap, 5);
-  assert.equal(resolveHostedModel("claude-haiku-4-5", env).cap, 250);
-  // unknown → env default tier (Haiku), with its overridden cap
-  assert.deepEqual(resolveHostedModel("nope", env), { model: "claude-haiku-4-5", cap: 250 });
+test("resolveHostedModel: env overrides caps (per family) + default tier", () => {
+  const env = { HOSTED_CAP_OPUS: "5", HOSTED_CAP_HAIKU: "250", HOSTED_CAP_FABLE: "8", HOSTED_AI_DEFAULT_MODEL: "claude-haiku-5-5" };
+  assert.equal(resolveHostedModel("claude-opus-5-5", env).cap, 5);
+  assert.equal(resolveHostedModel("claude-haiku-5-5", env).cap, 250);
+  assert.equal(resolveHostedModel("claude-fable-5-2", env).cap, 8);
+  assert.deepEqual(resolveHostedModel("nope", env), { model: "claude-haiku-5-5", cap: 250 });
+  // a default env naming a retired tier falls through to the code default
+  assert.equal(resolveHostedModel("nope", { HOSTED_AI_DEFAULT_MODEL: "claude-sonnet-4-6" }).model, "claude-sonnet-5-5");
 });
 
 test("resolveHostedModel: legacy HOSTED_AI_MODEL honored as default source", () => {
-  const r = resolveHostedModel("nope", { HOSTED_AI_MODEL: "claude-opus-4-8" });
-  assert.equal(r.model, "claude-opus-4-8");
-  assert.equal(r.cap, 20);
+  const r = resolveHostedModel("nope", { HOSTED_AI_MODEL: "claude-opus-5-5" });
+  assert.equal(r.model, "claude-opus-5-5");
+  assert.equal(r.cap, 12);
 });
 
 // ── Hosted-AI upstream selection (Anthropic direct vs Bankr LLM Gateway) ──────
 test("upstream defaults to Anthropic direct when only ANTHROPIC_API_KEY set", () => {
-  const u = resolveAiUpstream("claude-sonnet-4-6", { ANTHROPIC_API_KEY: "sk-x" });
+  const u = resolveAiUpstream("claude-sonnet-5-5", { ANTHROPIC_API_KEY: "sk-x" });
   assert.equal(u.provider, "anthropic");
   assert.equal(u.url, "https://api.anthropic.com/v1/messages");
-  assert.equal(u.model, "claude-sonnet-4-6"); // unchanged hyphen id
+  assert.equal(u.model, "claude-sonnet-5-5"); // unchanged hyphen id
   assert.equal(u.apiKey, "sk-x");
 });
 
 test("upstream routes to Bankr gateway when AI_GATEWAY=bankr + key, mapping the model id", () => {
-  const u = resolveAiUpstream("claude-opus-4-8", { AI_GATEWAY: "bankr", BANKR_LLM_KEY: "bk-x", ANTHROPIC_API_KEY: "sk-x" });
+  const u = resolveAiUpstream("claude-opus-5-5", { AI_GATEWAY: "bankr", BANKR_LLM_KEY: "bk-x", ANTHROPIC_API_KEY: "sk-x" });
   assert.equal(u.provider, "bankr");
   assert.equal(u.url, "https://llm.bankr.bot/v1/messages");
-  assert.equal(u.model, "claude-opus-4.8"); // dot-notation for the gateway
+  assert.equal(u.model, "claude-opus-5.5"); // dot-notation for the gateway
   assert.equal(u.apiKey, "bk-x");
 });
 
@@ -278,11 +282,13 @@ test("no provider configured → null (caller returns 503)", () => {
   assert.equal(resolveAiUpstream("claude-sonnet-4-6", { AI_GATEWAY: "bankr" }), null);
 });
 
-test("bankrGatewayModel maps tiers, is env-overridable, passes unknown ids through", () => {
-  assert.equal(bankrGatewayModel("claude-haiku-4-5"), "claude-haiku-4.5");
-  assert.equal(bankrGatewayModel("claude-sonnet-4-6"), "claude-sonnet-4.6");
-  assert.equal(bankrGatewayModel("claude-opus-4-8"), "claude-opus-4.8");
-  assert.equal(bankrGatewayModel("claude-opus-4-8", { BANKR_MODEL_OPUS: "claude-opus-4.8-vertex" }), "claude-opus-4.8-vertex");
+test("bankrGatewayModel maps the lineup, is env-overridable, passes unknown ids through", () => {
+  assert.equal(bankrGatewayModel("claude-haiku-5-5"), "claude-haiku-5.5");
+  assert.equal(bankrGatewayModel("claude-sonnet-5-5"), "claude-sonnet-5.5");
+  assert.equal(bankrGatewayModel("claude-opus-5-5"), "claude-opus-5.5");
+  assert.equal(bankrGatewayModel("claude-fable-5-2"), "claude-fable-5.2");
+  assert.equal(bankrGatewayModel("claude-fable-5-2", { BANKR_MODEL_FABLE: "claude-fable-5-2-x" }), "claude-fable-5-2-x");
+  assert.equal(bankrGatewayModel("claude-opus-5-5", { BANKR_MODEL_OPUS55: "x" }), "x", "the older env name still works");
   assert.equal(bankrGatewayModel("something-else"), "something-else");
 });
 
@@ -2402,48 +2408,90 @@ test("entryVsMarket: the advisor's off-market entry check reads the latest hour"
 // ── Newer hosted tiers (Sonnet 5.5 / Opus 5.5 / Fable 5.1, 2026-09-30) ──────────
 import { shapeHostedBody, HOSTED_THINKING_MAX_TOKENS, HOSTED_MAX_TOKENS } from "./logic.mjs";
 
-test("resolveHostedModel: new tiers at the half caps borst set (30 / 12 / 5), env-overridable", () => {
-  assert.deepEqual(resolveHostedModel("claude-sonnet-5-5", {}), { model: "claude-sonnet-5-5", cap: 30 });
-  assert.deepEqual(resolveHostedModel("claude-opus-5-5", {}), { model: "claude-opus-5-5", cap: 12 });
-  assert.deepEqual(resolveHostedModel("claude-fable-5-1", {}), { model: "claude-fable-5-1", cap: 5 });
-  assert.equal(resolveHostedModel("claude-fable-5-1", { HOSTED_CAP_FABLE: "8" }).cap, 8);
-  // the default tier doesn't move
-  assert.equal(resolveHostedModel(undefined, {}).model, "claude-sonnet-4-6");
-});
-
-test("bankrGatewayModel: new tiers map to the gateway's confirmed ids", () => {
-  assert.equal(bankrGatewayModel("claude-sonnet-5-5"), "claude-sonnet-5.5");
-  assert.equal(bankrGatewayModel("claude-opus-5-5"), "claude-opus-5.5");
-  assert.equal(bankrGatewayModel("claude-fable-5-1"), "claude-fable-5.1");
-  assert.equal(bankrGatewayModel("claude-opus-5-5", { BANKR_MODEL_OPUS55: "x" }), "x");
-});
-
-test("shapeHostedBody: older tiers keep the 1024 ceiling and pass the body through", () => {
-  const out = shapeHostedBody({ _addr: "0xa", _ts: 1, _sig: "s", max_tokens: 9999, model: "evil", system: "S", temperature: 0.2 },
-    "claude-sonnet-4-6", "claude-sonnet-4.6");
-  assert.equal(out.model, "claude-sonnet-4.6");
-  assert.equal(out.max_tokens, HOSTED_MAX_TOKENS);
-  assert.equal(out.temperature, 0.2);          // allowed on 4.x
-  assert.equal(out.output_config, undefined);  // no effort forced on 4.x
-  for (const k of ["_addr", "_ts", "_sig"]) assert.equal(k in out, false);
-});
-
-test("shapeHostedBody: thinking tiers get effort low, a 4096 ceiling, and lose fields they'd 400 on", () => {
-  for (const m of ["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"]) {
+test("shapeHostedBody: every hosted tier thinks: effort low, a 4096 ceiling, nothing it would 400 on", () => {
+  for (const m of ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-2"]) {
     const out = shapeHostedBody({
-      _sig: "s", max_tokens: 64000, thinking: { type: "disabled" }, temperature: 0.5, top_p: 0.9, top_k: 5,
-      tool_choice: { type: "any" }, output_config: { effort: "max" }, messages: [{ role: "user", content: "hi" }],
-    }, m, "gw-id");
-    assert.equal(out.model, "gw-id");
+      _addr: "0xa", _ts: 1, _sig: "s", _q: "q1234567", model: "evil", max_tokens: 64000, system: "S",
+      thinking: { type: "enabled", budget_tokens: 9000 }, temperature: 0.2, top_p: 0.9, top_k: 5,
+      tool_choice: { type: "any" }, output_config: { effort: "max", format: { type: "json_schema" } },
+      messages: [{ role: "user", content: "hi" }],
+    }, m, "gw");
+    assert.equal(out.model, "gw");
     assert.equal(out.max_tokens, HOSTED_THINKING_MAX_TOKENS);
-    assert.deepEqual(out.output_config, { effort: "low" });   // the client can't buy a higher effort
-    for (const k of ["thinking", "temperature", "top_p", "top_k", "tool_choice", "_sig"]) assert.equal(k in out, false, k);
-    assert.equal(out.messages.length, 1);
+    assert.deepEqual(out.output_config, { effort: "low" });
+    for (const k of ["thinking", "temperature", "top_p", "top_k", "tool_choice", "_addr", "_ts", "_sig", "_q"]) assert.ok(!(k in out), `${m}: ${k}`);
   }
-  // a small client max_tokens is kept; auto tool_choice survives
-  const small = shapeHostedBody({ max_tokens: 900, tool_choice: { type: "auto" } }, "claude-opus-5-5", "g");
-  assert.equal(small.max_tokens, 900);
-  assert.deepEqual(small.tool_choice, { type: "auto" });
+  assert.equal(shapeHostedBody({ max_tokens: 900 }, "claude-opus-5-5", "g").max_tokens, 900, "a smaller ask is kept");
+  assert.equal(shapeHostedBody({ max_tokens: 9000 }, "not-a-tier", "g").max_tokens, HOSTED_MAX_TOKENS);
+});
+
+test("shapeHostedBody forwards only what the copilot sends: billable extras never reach our key", () => {
+  const out = shapeHostedBody({
+    model: "x", max_tokens: 100, system: [{ type: "text", text: "S" }], stream: true,
+    messages: [{ role: "user", content: "hi" }],
+    tools: [
+      { name: "get_market_read", description: "d", input_schema: { type: "object" } },
+      { type: "web_search_20260209", name: "web_search", max_uses: 50 },
+      { type: "code_execution_20260521", name: "code_execution" },
+      { type: "web_fetch_20260209", name: "web_fetch", input_schema: { type: "object" } }, // a schema doesn't make it ours
+      { type: "custom", name: "ok_tool", input_schema: { type: "object" }, cache_control: { type: "ephemeral" }, eager_input_streaming: true },
+      { name: "bad name!", input_schema: {} },
+      { name: "no_schema" },
+    ],
+    tool_choice: { type: "auto", disable_parallel_tool_use: true },
+    speed: "fast", fallbacks: "default", mcp_servers: [{ type: "url", url: "https://x" }], container: { skills: [] },
+    context_management: { edits: [] }, service_tier: "priority", inference_geo: "us", metadata: { user_id: "x" },
+  }, "claude-sonnet-5-5", "gw");
+  assert.deepEqual(Object.keys(out).sort(), ["max_tokens", "messages", "model", "output_config", "stream", "system", "tool_choice", "tools"]);
+  assert.deepEqual(out.tools.map((t) => t.name), ["get_market_read", "ok_tool"], "server tools and malformed tools dropped");
+  assert.deepEqual(Object.keys(out.tools[1]).sort(), ["input_schema", "name"], "only name / description / input_schema");
+  assert.deepEqual(out.tool_choice, { type: "auto" });
+  // no tools, no tool_choice; a non-array messages becomes []
+  const bare = shapeHostedBody({ tool_choice: { type: "auto" }, messages: "x", stream: "yes" }, "claude-haiku-5-5", "g");
+  assert.ok(!("tool_choice" in bare) && !("tools" in bare) && !("stream" in bare));
+  assert.deepEqual(bare.messages, []);
+});
+
+test("hosted body cap: the route checks the size before parsing, and the cap leaves room for a copilot turn", async () => {
+  const { HOSTED_BODY_MAX_BYTES } = await import("./logic.mjs");
+  assert.equal(HOSTED_BODY_MAX_BYTES, 200_000);
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const route = src.slice(src.indexOf('parts[0] === "ai" && parts[1] === "chat"'), src.indexOf("// Feed / comments / reactions family"));
+  assert.ok(route.indexOf("raw.length > HOSTED_BODY_MAX_BYTES") > 0 && route.indexOf("raw.length > HOSTED_BODY_MAX_BYTES") < route.indexOf("JSON.parse(raw)"));
+  assert.match(route, /takeHostedSlot\(env\.LAB_STORE, \{ usageKey, qKey, cap: CAP/);
+  assert.doesNotMatch(route, /takeCapSlot\(/);
+});
+
+test("one cap slot per question: rounds ride on the first, a new question takes a new slot", async () => {
+  const { takeHostedSlot, questionId, HOSTED_QUESTION_ROUNDS } = await import("./logic.mjs");
+  const kv = new Map();
+  const store = { get: async (k) => kv.get(k) ?? null, put: async (k, v) => { kv.set(k, v); } };
+  const usageKey = "ai:usage:0xa:claude-sonnet-5-5:2026-11-15";
+  const ask = (q) => takeHostedSlot(store, { usageKey, qKey: q ? `ai:q:0xa:${q}` : null, cap: 2, dayTtl: 1 });
+  // question A: 5 requests, one slot
+  for (let i = 1; i <= HOSTED_QUESTION_ROUNDS; i++) {
+    const r = await ask("qqqqAAAA");
+    assert.equal(r.ok, true); assert.equal(r.rounds, i); assert.equal(Number(kv.get(usageKey)), 1);
+  }
+  const sixth = await ask("qqqqAAAA");
+  assert.deepEqual([sixth.ok, sixth.reason], [false, "question_rounds"]);
+  // question B takes the second slot; a third question is over the cap
+  assert.equal((await ask("qqqqBBBB")).ok, true);
+  assert.equal(Number(kv.get(usageKey)), 2);
+  const c = await ask("qqqqCCCC");
+  assert.deepEqual([c.ok, c.reason], [false, "daily_limit"]);
+  // ...but question B's later rounds still ride on its slot
+  assert.equal((await ask("qqqqBBBB")).ok, true);
+  // no question id: every request is its own slot (the old rule)
+  kv.clear();
+  assert.equal((await ask(null)).ok, true);
+  assert.equal((await ask(null)).ok, true);
+  assert.equal((await ask(null)).reason, "daily_limit");
+  assert.equal(questionId("short"), null);
+  assert.equal(questionId("ok_ID-12345678"), "ok_ID-12345678");
+  assert.equal(questionId("bad id with spaces"), null);
+  assert.equal(questionId({}), null);
 });
 
 test("HOSTED_TIERS in app/config/assistant.ts mirror hostedCaps (ids + caps), so the UI never advertises a cap the server doesn't enforce", async () => {

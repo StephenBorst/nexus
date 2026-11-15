@@ -14,9 +14,9 @@
 export const MAX_TOKENS = 1024;
 export const THINKING_MAX_TOKENS = 4096;
 
-/** Models whose thinking can't be turned off (the 5.x line, Fable, Mythos). */
+/** Models that think by default (the 5.x line incl. Haiku 5.5, Fable, Mythos): thinking counts toward max_tokens. */
 export function isThinkingModel(id) {
-  return /^claude-(opus|sonnet|fable|mythos)-5/.test(String(id || ""));
+  return /^claude-(opus|sonnet|haiku|fable|mythos)-5/.test(String(id || ""));
 }
 
 /** Token ceiling + effort for a request. The hosted proxy re-applies its own copy server-side. */

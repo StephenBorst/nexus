@@ -1174,54 +1174,111 @@ export function nexusMinUnits(priceUsd, discountUsd, tolerance, decimals = 18) {
 // ── Hosted NEXUS AI model tiers ─────────────────────────────────────────────
 // PRO users pick which model the hosted proxy runs; each model carries its OWN
 // daily cap so our LLM spend scales with model cost. Stronger model → lower cap;
-// cheaper model → higher cap (the user trades model strength for volume). Rates
-// per MTok (in/out): Haiku $1/$5 · Sonnet $3/$15 · Opus $5/$25 (4.x tiers). Default is Sonnet 4.6
-// (the everyday tier) — Opus is the scarce "big gun". Caps are env-overridable
-// (HOSTED_CAP_HAIKU/SONNET/OPUS) for tuning without a code change, and the default
-// tier via HOSTED_AI_DEFAULT_MODEL (legacy HOSTED_AI_MODEL still honored as the
-// default source). Mirrored on the client in app/config/assistant.ts (HOSTED_TIERS).
-export const HOSTED_DEFAULT_MODEL = "claude-sonnet-4-6";
+// cheaper model → higher cap. Mirrored on the client in app/config/assistant.ts (HOSTED_TIERS).
+//
+// Lineup (borst, 2026-11-15: "current lineup"): the current model of each family, all cheaper
+// than the tier they replace. Price per MTok in/out: Haiku 5.5 $0.10/$0.50 (was Haiku 4.5
+// $1/$5) · Sonnet 5.5 $2/$10 (was Sonnet 4.6 $3/$15, the old default) · Opus 5.5 $4/$20 (was
+// Opus 4.8 $5/$25) · Fable 5.2 $8/$40 (was Fable 5.1 $10/$50). Haiku 4.5, Sonnet 4.6, Opus 4.8
+// and Fable 5.1 are retired: a stored old id falls back to the default tier. A cap counts
+// QUESTIONS (one per question, its tool rounds inside it, hostedQuestion below), env-overridable
+// per family: HOSTED_CAP_HAIKU / _SONNET / _OPUS / _FABLE; default tier HOSTED_AI_DEFAULT_MODEL
+// (legacy HOSTED_AI_MODEL still read).
+export const HOSTED_DEFAULT_MODEL = "claude-sonnet-5-5";
 
-// Newer tiers (added 2026-09-30, borst: half caps to start, raise once real spend is in).
-// Price per MTok in/out: Sonnet 5.5 $2/$10 · Opus 5.5 $4/$20 · Fable 5.1 $10/$50. Price-matched
-// caps would be 60 / 25 / 10; these models always think and thinking bills as output, so they
-// start at half. Env: HOSTED_CAP_SONNET55 / HOSTED_CAP_OPUS55 / HOSTED_CAP_FABLE.
 export function hostedCaps(env = {}) {
   return {
-    "claude-haiku-4-5": parseInt(env.HOSTED_CAP_HAIKU || "100", 10),
-    "claude-sonnet-4-6": parseInt(env.HOSTED_CAP_SONNET || "40", 10),
-    "claude-opus-4-8": parseInt(env.HOSTED_CAP_OPUS || "20", 10),
-    "claude-sonnet-5-5": parseInt(env.HOSTED_CAP_SONNET55 || "30", 10),
-    "claude-opus-5-5": parseInt(env.HOSTED_CAP_OPUS55 || "12", 10),
-    "claude-fable-5-1": parseInt(env.HOSTED_CAP_FABLE || "5", 10),
+    "claude-haiku-5-5": parseInt(env.HOSTED_CAP_HAIKU || "100", 10),
+    "claude-sonnet-5-5": parseInt(env.HOSTED_CAP_SONNET || "40", 10),
+    "claude-opus-5-5": parseInt(env.HOSTED_CAP_OPUS || "12", 10),
+    "claude-fable-5-2": parseInt(env.HOSTED_CAP_FABLE || "5", 10),
   };
 }
 
-// Tiers whose thinking can't be turned off: thinking counts toward max_tokens, `temperature`
-// and forced tool_choice are 400s, and thinking blocks must be passed back unchanged.
-export const HOSTED_THINKING_MODELS = new Set(["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"]);
-export const HOSTED_MAX_TOKENS = 1024;            // older tiers: the reply only
+// Every hosted tier thinks (thinking can't be turned off): thinking counts toward max_tokens,
+// sampling fields and forced tool_choice are 400s, and thinking blocks go back unchanged.
+export const HOSTED_THINKING_MODELS = new Set(["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-2"]);
+export const HOSTED_MAX_TOKENS = 1024;            // a non-thinking tier: the reply only
 export const HOSTED_THINKING_MAX_TOKENS = 4096;   // thinking tiers: short thinking + the reply
 
-// The upstream body for a hosted call, built from the client's body. The server owns what costs
-// money: the model (already whitelisted), the token ceiling, and on thinking tiers the effort
-// (always "low": short thinking, the cheapest setting that still answers well in chat). Fields a
-// thinking tier rejects are dropped instead of forwarded into a 400. Auth fields never go upstream.
-export function shapeHostedBody(body, hostedModel, upstreamModel) {
-  const out = { ...(body || {}) };
-  delete out._addr; delete out._ts; delete out._sig;
-  out.model = upstreamModel;
-  if (HOSTED_THINKING_MODELS.has(hostedModel)) {
-    out.max_tokens = Math.min(Number(out.max_tokens) || HOSTED_THINKING_MAX_TOKENS, HOSTED_THINKING_MAX_TOKENS);
-    delete out.thinking; delete out.temperature; delete out.top_p; delete out.top_k;
-    const tc = out.tool_choice && out.tool_choice.type;
-    if (tc === "any" || tc === "tool") delete out.tool_choice;
-    const oc = out.output_config && typeof out.output_config === "object" ? out.output_config : {};
-    out.output_config = { ...oc, effort: "low" };
-  } else {
-    out.max_tokens = Math.min(Number(out.max_tokens) || HOSTED_MAX_TOKENS, HOSTED_MAX_TOKENS);
+// What a hosted request may carry, at most. The proxy spends OUR key, so it forwards only the
+// fields the copilot sends and fixes the ones that cost money (2026-11-15: it used to forward
+// the client's body whole, so a caller could add server tools such as web search or code
+// execution, fast mode at 2x price, or any other billable field to our account).
+export const HOSTED_BODY_MAX_BYTES = 200_000;     // ~50K tokens of input, the copilot's longest turn is far below
+const TOOL_NAME = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/** The client's tools, kept only if they are plain custom tools (name / description / input_schema). */
+export function hostedTools(tools) {
+  if (!Array.isArray(tools)) return undefined;
+  const out = [];
+  for (const t of tools.slice(0, 32)) {
+    if (!t || typeof t !== "object") continue;
+    if (t.type != null && t.type !== "custom") continue; // server tools (web search, code execution, …) bill us
+    if (typeof t.name !== "string" || !TOOL_NAME.test(t.name)) continue;
+    if (!t.input_schema || typeof t.input_schema !== "object") continue;
+    out.push({ name: t.name, ...(typeof t.description === "string" ? { description: t.description } : {}), input_schema: t.input_schema });
   }
+  return out.length ? out : undefined;
+}
+
+// The upstream body for a hosted call. Only these fields go up: model (whitelisted), max_tokens
+// (server ceiling), system, messages, custom tools, tool_choice auto/none, stream, and on thinking
+// tiers effort "low" (short thinking, the cheapest setting that still answers well in chat).
+export function shapeHostedBody(body, hostedModel, upstreamModel) {
+  const b = body && typeof body === "object" ? body : {};
+  const thinking = HOSTED_THINKING_MODELS.has(hostedModel);
+  const ceiling = thinking ? HOSTED_THINKING_MAX_TOKENS : HOSTED_MAX_TOKENS;
+  const out = {
+    model: upstreamModel,
+    max_tokens: Math.min(Number(b.max_tokens) || ceiling, ceiling),
+  };
+  if (typeof b.system === "string" || Array.isArray(b.system)) out.system = b.system;
+  out.messages = Array.isArray(b.messages) ? b.messages : [];
+  const tools = hostedTools(b.tools);
+  if (tools) out.tools = tools;
+  const tc = b.tool_choice && b.tool_choice.type;
+  if (tools && (tc === "auto" || tc === "none")) out.tool_choice = { type: tc };
+  if (b.stream === true) out.stream = true;
+  if (thinking) out.output_config = { effort: "low" };
   return out;
+}
+
+// ── One cap slot per QUESTION (borst, 2026-11-15) ─────────────────────────────────────────────
+// A copilot question is up to MAX_TOOL_ROUNDS requests (the model asks for tools, gets results,
+// answers). Each request used to take a slot, so "40/day" meant ~10 questions. The client now
+// names each question (`_q`, random); its first request takes the slot, the rest ride on it,
+// at most HOSTED_QUESTION_ROUNDS requests within HOSTED_QUESTION_TTL_S. A request without a
+// (well-formed) `_q` still takes a slot of its own, as before.
+export const HOSTED_QUESTION_ROUNDS = 5;           // the copilot's own MAX_TOOL_ROUNDS
+export const HOSTED_QUESTION_TTL_S = 15 * 60;
+const QUESTION_ID = /^[A-Za-z0-9_-]{8,64}$/;
+
+export function questionId(raw) {
+  const q = typeof raw === "string" ? raw : "";
+  return QUESTION_ID.test(q) ? q : null;
+}
+
+/**
+ * Decide one hosted request against the day's counter and its question record, under the
+ * caller's lease. store = { get, put }. Returns { ok, reason?, used, rounds }.
+ * reason: "daily_limit" (a new question with the day's cap spent) | "question_rounds" (a
+ * question past its round limit).
+ */
+export async function takeHostedSlot(store, { usageKey, qKey, cap, dayTtl }) {
+  if (qKey) {
+    const rounds = Number(await store.get(qKey)) || 0;
+    if (rounds > 0) {
+      if (rounds >= HOSTED_QUESTION_ROUNDS) return { ok: false, reason: "question_rounds", rounds };
+      await store.put(qKey, String(rounds + 1), { expirationTtl: HOSTED_QUESTION_TTL_S });
+      return { ok: true, rounds: rounds + 1, used: Number(await store.get(usageKey)) || 0 };
+    }
+  }
+  const used = Number(await store.get(usageKey)) || 0;
+  if (used >= cap) return { ok: false, reason: "daily_limit", used };
+  await store.put(usageKey, String(used + 1), { expirationTtl: dayTtl });
+  if (qKey) await store.put(qKey, "1", { expirationTtl: HOSTED_QUESTION_TTL_S });
+  return { ok: true, used: used + 1, rounds: 1 };
 }
 
 // Resolve a client-requested hosted model → an allowed model + its daily cap.
@@ -1250,13 +1307,13 @@ export const BANKR_GATEWAY_URL = "https://llm.bankr.bot/v1/messages";
 // code change. Unknown ids pass through untouched.
 export function bankrGatewayModel(anthropicId, env = {}) {
   const map = {
-    "claude-haiku-4-5":  env.BANKR_MODEL_HAIKU  || "claude-haiku-4.5",
-    "claude-sonnet-4-6": env.BANKR_MODEL_SONNET || "claude-sonnet-4.6",
-    "claude-opus-4-8":   env.BANKR_MODEL_OPUS   || "claude-opus-4.8",
-    // Confirmed on the gateway's /v1/models by borst, 2026-09-30.
-    "claude-sonnet-5-5": env.BANKR_MODEL_SONNET55 || "claude-sonnet-5.5",
-    "claude-opus-5-5":   env.BANKR_MODEL_OPUS55   || "claude-opus-5.5",
-    "claude-fable-5-1":  env.BANKR_MODEL_FABLE    || "claude-fable-5.1",
+    // sonnet-5.5 / opus-5.5 confirmed on the gateway's /v1/models by borst, 2026-09-30.
+    // haiku-5.5 / fable-5.2 follow the same naming (2026-11-15); NOT yet read from /v1/models:
+    // if the gateway names them differently, set BANKR_MODEL_HAIKU / BANKR_MODEL_FABLE.
+    "claude-haiku-5-5":  env.BANKR_MODEL_HAIKU  || "claude-haiku-5.5",
+    "claude-sonnet-5-5": env.BANKR_MODEL_SONNET || env.BANKR_MODEL_SONNET55 || "claude-sonnet-5.5",
+    "claude-opus-5-5":   env.BANKR_MODEL_OPUS   || env.BANKR_MODEL_OPUS55   || "claude-opus-5.5",
+    "claude-fable-5-2":  env.BANKR_MODEL_FABLE  || "claude-fable-5.2",
   };
   return map[anthropicId] || anthropicId;
 }
