@@ -7,6 +7,7 @@ import { C } from "@/config/theme";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
+import { marketFlag, flaggedMarkets, flagLine, flagLabel, lsWords, fundingBreadth, positionUpnl, fundingSide, LS_HEAVY_LONG, LS_HEAVY_SHORT } from "@/lib/intelTape.mjs";
 
 // ─── Constants ────────────────────────────────────────────────
 // Palette is DERIVED from the shared design tokens, never re-typed as hex — that's
@@ -32,6 +33,8 @@ interface FearGreedData  { value: number; label: string }
 interface GlobalData     { btcDom: number; ethDom: number; mcapChange24h: number; totalMcap: number }
 interface Mover          { symbol: string; change24h: number; spark: number[] }
 
+// One Orderly market's public numbers. What stands out is derived from these by
+// app/lib/intelTape.mjs (a stated threshold), never stored as a "signal" or a "confidence".
 interface HLAsset {
   name: string;      // symbol shorthand e.g. "BTC"
   symbol: string;    // full e.g. "PERP_BTC_USDC"
@@ -39,8 +42,6 @@ interface HLAsset {
   oi: number;        // USD
   volume: number;    // 24 h USD
   markPx: number;
-  signal: string;
-  confidence: number;
 }
 
 interface DerivAsset { funding: number; oi: number } // 8-hour %, USD
@@ -89,92 +90,28 @@ async function fetchMovers(): Promise<{ gainers: Mover[]; losers: Mover[] }> {
   };
 }
 
-async function fetchHyperliquid(): Promise<HLAsset[]> {
-  // Uses Orderly Network public futures API — our own liquidity stack
+async function fetchOrderlyFutures(): Promise<HLAsset[]> {
+  // Orderly Network public futures API (our own venue)
   const r = await fetch("https://api-evm.orderly.org/v1/public/futures");
   const d = await r.json();
   if (!d.success || !d.data?.rows) return [];
-
-  // Pass 1 — raw USD metrics per symbol.
-  // 24h_amount is USD notional; 24h_volume is BASE units. The old code divided USD OI
-  // by BASE volume → ratio ~markPx too big → EVERY symbol tripped HIGH CONCENTRATION.
-  const raw = (d.data.rows as Record<string, string | undefined>[]).map((row) => {
-    const sym     = row.symbol as string;
-    const name    = bareTicker(sym);
-    const markPx  = parseFloat(row.mark_price  || row.index_price || "0");
-    const oi      = parseFloat(row.open_interest || "0") * markPx;
-    const volBase = parseFloat(row["24h_volume"] || "0");
-    const vol24h  = parseFloat(row["24h_amount"] || "0") || volBase * markPx; // USD
-    const funding = parseFloat(row.last_funding_rate || row.estimated_funding_rate || "0") * 100;
-    const oiVol   = vol24h > 0 ? oi / vol24h : 0; // OI as a multiple of daily USD turnover
-    return { name, symbol: sym, funding, oi, volume: vol24h, markPx, oiVol };
-  });
-
-  // A concentration signal is only meaningful on a LIVE market — thin/dead symbols
-  // (near-zero volume) produce absurd oiVol (100×–900×) that would dominate as junk.
-  const MIN_SIGNAL_VOL = 100_000;
-  // Confidence = PERCENTILE of oiVol within its signal band, so it spreads across the
-  // range instead of every top symbol pinning a single cap value (a flat linear map
-  // saturated → looked like a fixed % on every symbol).
-  const concVols = raw.filter((a) => a.oiVol > 1.5 && a.volume > MIN_SIGNAL_VOL).map((a) => a.oiVol).sort((x, y) => x - y);
-  const elevVols = raw.filter((a) => a.oiVol > 0.9 && a.oiVol <= 1.5 && a.volume > MIN_SIGNAL_VOL).map((a) => a.oiVol).sort((x, y) => x - y);
-  const pctRank = (arr: number[], v: number) => arr.length < 2 ? 0.5 : arr.filter((x) => x < v).length / (arr.length - 1);
-
-  return raw
-    .map((a) => {
-      let signal = "NEUTRAL", confidence = 50;
-      if (a.funding > 0.08) {
-        signal = "CROWDED LONGS";
-        confidence = Math.min(95, 72 + Math.floor(a.funding * 40));
-      } else if (a.funding < -0.03) {
-        signal = "CROWDED SHORTS";
-        confidence = Math.min(95, 72 + Math.floor(Math.abs(a.funding) * 80));
-      } else if (a.oiVol > 1.5 && a.volume > MIN_SIGNAL_VOL) {
-        signal = "HIGH CONCENTRATION";
-        confidence = 64 + Math.round(pctRank(concVols, a.oiVol) * 28); // 64–92, spread
-      } else if (a.oiVol > 0.9 && a.volume > MIN_SIGNAL_VOL) {
-        signal = "ELEVATED OI";
-        confidence = 54 + Math.round(pctRank(elevVols, a.oiVol) * 18); // 54–72, spread
-      }
-      return { name: a.name, symbol: a.symbol, funding: a.funding, oi: a.oi, volume: a.volume, markPx: a.markPx, signal, confidence };
+  // 24h_amount is USD notional; 24h_volume is BASE units (OI in USD ÷ base volume made every
+  // market look concentrated once).
+  return (d.data.rows as Record<string, string | undefined>[])
+    .map((row) => {
+      const sym     = row.symbol as string;
+      const markPx  = parseFloat(row.mark_price  || row.index_price || "0");
+      const volBase = parseFloat(row["24h_volume"] || "0");
+      return {
+        name: bareTicker(sym), symbol: sym, markPx,
+        oi: parseFloat(row.open_interest || "0") * markPx,
+        volume: parseFloat(row["24h_amount"] || "0") || volBase * markPx,
+        funding: parseFloat(row.last_funding_rate || row.estimated_funding_rate || "0") * 100,
+      };
     })
-    .filter((a: HLAsset) => a.oi > 10_000)  // Orderly OI is smaller than HL — lower threshold
-    .sort((a: HLAsset, b: HLAsset) => b.oi - a.oi)
+    .filter((a) => a.oi > 10_000)
+    .sort((a, b) => b.oi - a.oi)
     .slice(0, 30);
-}
-
-// ─── Regime score ─────────────────────────────────────────────
-function computeRegime(
-  fg: FearGreedData | null,
-  gd: GlobalData | null,
-  hl: HLAsset[] | null
-): { score: number; label: string; color: string; description: string } {
-  const scores: number[] = [], weights: number[] = [];
-
-  if (fg) { scores.push(fg.value);                                                            weights.push(0.35); }
-  if (gd) {
-    const domScore = gd.btcDom < 45 ? 72 : gd.btcDom < 55 ? 50 : gd.btcDom < 65 ? 35 : 20;
-    scores.push(domScore);                                                                     weights.push(0.25);
-    const mcScore = Math.min(90, Math.max(10, 50 + gd.mcapChange24h * 3));
-    scores.push(mcScore);                                                                      weights.push(0.15);
-  }
-  if (hl && hl.length > 0) {
-    const top = hl.slice(0, 10);
-    const avg = top.reduce((s, a) => s + a.funding, 0) / top.length;
-    const fScore = avg > 0.08 ? 82 : avg > 0.02 ? 63 : avg > 0 ? 50 : avg > -0.02 ? 36 : 20;
-    scores.push(fScore);                                                                       weights.push(0.25);
-  }
-
-  if (!scores.length) return { score: 50, label: "LOADING", color: DIM, description: "Fetching live market data…" };
-
-  const tw    = weights.reduce((a, b) => a + b, 0);
-  const score = Math.round(scores.reduce((s, v, i) => s + v * weights[i], 0) / tw);
-
-  if (score >= 68) return { score, label: "BULLISH",          color: GREEN,  description: "Risk-on. Momentum favors longs; be careful near extremes." };
-  if (score >= 54) return { score, label: "SLIGHTLY BULLISH", color: TEAL,   description: "Slight bullish lean. Upside bias, limited conviction." };
-  if (score >= 46) return { score, label: "NEUTRAL",          color: MUTED,  description: "Mixed signals. No clear edge; size down and wait." };
-  if (score >= 32) return { score, label: "SLIGHTLY BEARISH", color: TEAL,   description: "Slight bearish lean. Defensive positioning." };
-  return              { score, label: "BEARISH",           color: RED,    description: "Risk-off. Longs crowded or sentiment falling fast." };
 }
 
 // ─── Formatters ───────────────────────────────────────────────
@@ -182,54 +119,9 @@ const fmtFunding = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(4)}%`;
 const fmtOI      = (v: number) => v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v/1e6).toFixed(0)}M` : `$${v.toFixed(0)}`;
 const fmtPct     = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
 
-const lsLabel = (ls: number | null) =>
-  ls === null ? "—" : ls > 1.35 ? "LONGS DOM" : ls < 0.75 ? "SHORTS DOM" : "BALANCED";
-// Crowding/dominance are DESCRIPTIVE readings, not warnings — the number and the
-// label already say what they say. Amber here just made the whole panel shout, so
-// these render bone-white (emphasis by TONE) and amber is left for real caution.
+// Crowding/dominance are DESCRIPTIVE readings: bone (emphasis by tone), never amber or green/red.
 const lsColor = (ls: number | null) =>
-  ls === null ? DIM : (ls > 1.35 || ls < 0.75) ? TEAL : MUTED;
-
-const signalColor = (sig: string) =>
-  sig.includes("LONGS") || sig.includes("SHORTS") || sig.includes("CONCENTRATION") || sig.includes("ELEVATED") ? TEAL : MUTED;
-
-function assetDescription(a: HLAsset): string {
-  const ratio = a.volume > 0 ? (a.oi / a.volume).toFixed(1) : "N/A";
-  if (a.signal === "CROWDED LONGS")      return `Extreme long crowding. Squeeze risk if price reverses.`;
-  if (a.signal === "CROWDED SHORTS")     return `Heavy short bias. Watch for a squeeze on any rally.`;
-  if (a.signal === "HIGH CONCENTRATION") return `${ratio}x OI/vol ratio. Thin liquidity vs positions.`;
-  if (a.signal === "ELEVATED OI")        return `${ratio}x OI/vol ratio. Positions building vs volume.`;
-  return `Neutral positioning at ${fmtOI(a.oi)} OI`;
-}
-
-// ─── Alert Signal-Card helpers (the deeper pass) ──────────────
-// Turn each crowding/OI signal into a graspable card: a severity, a hero metric, and
-// a plain-English "what it means + what to do" — congruent with the Mispriced Board.
-function alertKind(signal: string): string {
-  return signal === "CROWDED LONGS" ? "Crowded longs"
-    : signal === "CROWDED SHORTS" ? "Crowded shorts"
-    : signal === "HIGH CONCENTRATION" ? "High OI concentration"
-    : signal === "ELEVATED OI" ? "Elevated OI vs volume" : "Signal";
-}
-function alertSeverity(signal: string): { text: string; hot: boolean } {
-  if (signal === "CROWDED LONGS" || signal === "CROWDED SHORTS") return { text: "SQUEEZE RISK", hot: true };
-  if (signal === "HIGH CONCENTRATION") return { text: "THIN LIQUIDITY", hot: true };
-  if (signal === "ELEVATED OI") return { text: "BUILDING", hot: false };
-  return { text: "WATCH", hot: false };
-}
-function alertMetric(a: HLAsset): { n: string; label: string } {
-  const ratio = a.volume > 0 ? `${(a.oi / a.volume).toFixed(1)}×` : "—";
-  if (a.signal === "CROWDED LONGS" || a.signal === "CROWDED SHORTS") return { n: fmtFunding(a.funding), label: "Funding 8h" };
-  return { n: ratio, label: "OI ÷ 24h volume" };
-}
-function alertRead(a: HLAsset): string {
-  const ratio = a.volume > 0 ? (a.oi / a.volume).toFixed(1) : "—";
-  if (a.signal === "CROWDED LONGS")      return `Almost everyone is long ${a.name}. If price turns, those longs get forced out fast. Trail stops if you're long, or watch for the flush.`;
-  if (a.signal === "CROWDED SHORTS")     return `The crowd is short ${a.name}. Any rally can force those shorts to buy back. Careful pressing shorts here.`;
-  if (a.signal === "HIGH CONCENTRATION") return `Big positions, little trading (${ratio}× open interest vs 24h volume). Moves here can gap. Size down.`;
-  if (a.signal === "ELEVATED OI")        return `Positions are building faster than volume (${ratio}× OI vs 24h volume). Watch for a resolution.`;
-  return assetDescription(a);
-}
+  ls === null ? DIM : (ls > LS_HEAVY_LONG || ls < LS_HEAVY_SHORT) ? TEAL : MUTED;
 
 // ─── Sub-components ───────────────────────────────────────────
 function BarBlock({ value, total = 100, color = TEAL, len = 18 }: { value: number; total?: number; color?: string; len?: number }) {
@@ -351,7 +243,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
         fetchFearGreed(),
         fetchGlobal(),
         fetchMovers(),
-        fetchHyperliquid(),
+        fetchOrderlyFutures(),
       ]);
       if (fg.status === "fulfilled") setFearGreed(fg.value);
       if (gd.status === "fulfilled") setGlobalData(gd.value);
@@ -389,8 +281,6 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
   }, []);
 
   // ── Derived data ────────────────────────────────────────────
-  const regime = computeRegime(fearGreed, globalData, hlAssets);
-
   const getDerivData = (sym: string): DerivAsset | null => {
     const a = hlAssets?.find(h => h.name === sym);
     return a ? { funding: a.funding, oi: a.oi } : null;
@@ -398,20 +288,16 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
 
   const btcD = getDerivData("BTC"), ethD = getDerivData("ETH"), solD = getDerivData("SOL");
 
-  const signals = (hlAssets ?? [])
-    .filter(a => a.signal !== "NEUTRAL")
-    .sort((a, b) => b.confidence - a.confidence)
-    .slice(0, 8);
+  // Markets past a stated line (intelTape.mjs), furthest past first. No confidence score.
+  const signals = flaggedMarkets(hlAssets ?? [], 8) as HLAsset[];
 
   const topPositions = (hlAssets ?? []).slice(0, 12);
 
-  const longBiased = (hlAssets ?? []).filter(a => a.funding > 0);
-  const netLongPct = hlAssets?.length
-    ? Math.round((longBiased.length / hlAssets.length) * 100)
-    : null;
+  const breadth = fundingBreadth(hlAssets ?? []);
 
-  const avgFunding10 = hlAssets?.length
-    ? hlAssets.slice(0, 10).reduce((s, a) => s + a.funding, 0) / 10
+  const top10 = (hlAssets ?? []).slice(0, 10);
+  const avgFunding10 = top10.length
+    ? top10.reduce((s, a) => s + a.funding, 0) / top10.length
     : null;
 
   const alsoActive = (hlAssets ?? [])
@@ -439,14 +325,12 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
 
   // ── Render helpers ───────────────────────────────────────────
   const renderDeriv = (sym: string, data: DerivAsset | null, ls: number | null) => {
-    const fc = !data ? DIM : data.funding > 0.02 ? GREEN : data.funding < 0 ? RED : MUTED;
-    const sig = !data ? "—" : data.funding > 0.06 ? "[LONGS]" : data.funding < -0.02 ? "[SHORTS]" : "[NEUTRAL]";
-    const sigC = !data ? DIM : data.funding > 0.06 ? GREEN : data.funding < -0.02 ? RED : MUTED;
+    const fc = !data ? DIM : BRIGHT;
     return (
       <div key={sym} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
           <span style={{ color: BRIGHT, fontWeight: 700, width: "40px" }}>{sym}</span>
-          <span style={{ color: sigC, fontSize: "11px" }}>{sig}</span>
+          {data && <span style={{ color: DIM, fontSize: "11px" }}>{flagLabel(marketFlag(hlAssets?.find((h) => h.name === sym)).kind)}</span>}
           <button onClick={() => deployToAgent({ symbols: [`PERP_${sym}_USDC`] }, `the ${sym} funding read`, undefined, navigate)}
             title={`Set the agent to watch ${sym}. It trades your rules.`}
             style={{ marginLeft: "auto", background: "none", border: "1px solid #33333a", color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 8px", borderRadius: "3px", cursor: "pointer" }}>
@@ -461,7 +345,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
           </div>
           <div><span style={{ color: DIM }}>OI  </span><span style={{ color: MUTED }}>{data ? fmtOI(data.oi) : "—"}</span></div>
           <div><span style={{ color: DIM }}>L/S  </span><span style={{ color: lsColor(ls) }}>{ls !== null ? ls.toFixed(2) : "—"}</span></div>
-          <div><span style={{ color: lsColor(ls), fontSize: "11px" }}>{lsLabel(ls)}</span></div>
+          <div><span style={{ color: lsColor(ls), fontSize: "11px" }}>{lsWords(ls)}</span></div>
         </div>
       </div>
     );
@@ -492,89 +376,44 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
       <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", marginBottom: "10px", padding: "10px 12px", border: "1px solid rgba(255,255,255,0.06)", borderLeft: `2px solid ${MUTED}`, borderRadius: "6px", background: "rgba(255,255,255,0.02)" }}>
         <span style={{ color: MUTED, fontSize: "12px", flexShrink: 0 }}>?</span>
         <span style={{ color: DIM, fontSize: "12px", lineHeight: 1.5, fontFamily: "var(--nx-font-ui, sans-serif)" }}>
-          <b style={{ color: BRIGHT }}>How to read this:</b> the read up top says whether the whole market is leaning risk-on or
-          risk-off, and why. Below it, the alerts worth acting on — where the crowd is stretched or positions are concentrated.
-          Green/red is direction, not a buy/sell.
+          <b style={{ color: BRIGHT }}>How to read this:</b> public numbers, each with its source. Up top, the whole
+          market’s inputs side by side. Below, markets past a stated line: funding stretched, or open interest high
+          against volume. None of it is graded here, and nothing adds them up into a call.
         </span>
       </div>
 
-      {/* ── The Market Read (regime) ─────────────────────────── */}
+      {/* ── The tape: each input on its own (it used to be weighted into one BULLISH/BEARISH score) ── */}
       <Card style={{ marginBottom: "10px" }}>
-        <SectionTitle>THE MARKET READ</SectionTitle>
-
-        <div style={{ marginBottom: "6px" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginBottom: "4px", flexWrap: "wrap" }}>
-            <span style={{ color: DIM, fontSize: "12px" }}>← BEARISH</span>
-            <span style={{ color: regime.color, fontWeight: 700, fontSize: "22px", letterSpacing: "0.04em" }}>
-              {regime.label}
-            </span>
-            <span style={{ color: DIM, fontSize: "11px" }}>[{regime.score}]</span>
-            <span style={{ color: DIM, fontSize: "12px" }}>BULLISH →</span>
+        <SectionTitle>THE TAPE · INPUTS, NOT A VERDICT</SectionTitle>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: "14px" }}>
+          <div>
+            <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>FEAR / GREED</div>
+            <div style={{ color: BRIGHT, fontWeight: 600, fontSize: "15px" }}>{fearGreed ? fearGreed.value : "—"}</div>
+            <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>{fearGreed ? `“${fearGreed.label}” · alternative.me` : "unread"}</div>
+            {fearGreed && <div style={{ marginTop: "3px" }}><BarBlock value={fearGreed.value} total={100} color={MUTED} len={12} /></div>}
           </div>
-          <div style={{ marginBottom: "6px" }}>
-            <BarBlock value={regime.score} total={100} color={regime.color} len={28} />
+          <div>
+            <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>BTC DOMINANCE</div>
+            <div style={{ color: BRIGHT, fontWeight: 600, fontSize: "15px" }}>{globalData ? `${globalData.btcDom.toFixed(1)}%` : "—"}</div>
+            <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>{globalData ? `ETH ${globalData.ethDom.toFixed(1)}% · CoinGecko` : "unread"}</div>
           </div>
-          {/* Plain translation — what the tape means for the trade you're about to take. */}
-          <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: "13px", lineHeight: 1.55, color: DIM, padding: "9px 11px", background: "rgba(237,237,240,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px" }}>
-            <b style={{ color: BRIGHT }}>{regime.score >= 54 ? "Risk-on tape. The wind is behind longs." : regime.score <= 46 ? "Risk-off tape. Longs swim upstream." : "Mixed tape. No clear edge either way."}</b>{" "}
-            {regime.description}
+          <div>
+            <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>TOTAL MCAP 24H</div>
+            <div style={{ color: globalData ? globalData.mcapChange24h > 0 ? GREEN : globalData.mcapChange24h < 0 ? RED : MUTED : DIM, fontWeight: 600, fontSize: "15px" }}>
+              {globalData ? fmtPct(globalData.mcapChange24h) : "—"}
+            </div>
+            <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>{globalData ? `$${(globalData.totalMcap / 1e12).toFixed(2)}T · CoinGecko` : "unread"}</div>
+          </div>
+          <div>
+            <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>FUNDING · ORDERLY</div>
+            <div style={{ color: BRIGHT, fontWeight: 600, fontSize: "15px" }}>{breadth.total ? `${breadth.positive} of ${breadth.total}` : "—"}</div>
+            <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>
+              {breadth.total ? `markets where longs pay${avgFunding10 !== null ? ` · top 10 avg ${fmtFunding(avgFunding10)}/8h` : ""}` : "unread"}
+            </div>
           </div>
         </div>
-
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "10px" }}>
-          <div style={{ color: DIM, fontSize: "10px", letterSpacing: "0.1em", marginBottom: "8px" }}>FACTOR BREAKDOWN</div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: "12px" }}>
-
-            {/* Fear / Greed */}
-            <div>
-              <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>FEAR / GREED</div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ color: fearGreed ? fearGreed.value > 60 ? GREEN : fearGreed.value < 40 ? RED : MUTED : DIM, fontWeight: 600, fontSize: "13px" }}>
-                  {fearGreed ? fearGreed.label.toUpperCase() : "—"}
-                </span>
-                {fearGreed && <span style={{ color: DIM, fontSize: "11px" }}>[{fearGreed.value}]</span>}
-              </div>
-              {fearGreed && (
-                <div style={{ marginTop: "3px" }}>
-                  <BarBlock value={fearGreed.value} total={100} color={fearGreed.value > 60 ? GREEN : fearGreed.value < 40 ? RED : MUTED} len={14} />
-                </div>
-              )}
-            </div>
-
-            {/* BTC Dom */}
-            <div>
-              <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>BTC DOM</div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ color: BRIGHT, fontWeight: 600, fontSize: "13px" }}>
-                  {globalData ? `${globalData.btcDom.toFixed(1)}%` : "—"}
-                </span>
-                {globalData && (
-                  <span style={{ color: globalData.btcDom > 60 ? RED : globalData.btcDom < 50 ? GREEN : MUTED, fontSize: "10px" }}>
-                    {globalData.btcDom > 60 ? "↑ MAJOR DOM" : globalData.btcDom < 50 ? "↓ ALTSEASON" : "MODERATE"}
-                  </span>
-                )}
-              </div>
-              {globalData && (
-                <div style={{ marginTop: "3px" }}>
-                  <BarBlock value={globalData.btcDom} total={100} color={TEAL} len={14} />
-                </div>
-              )}
-            </div>
-
-            {/* Market Cap */}
-            <div>
-              <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>TOTAL MCAP 24H</div>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ color: globalData ? globalData.mcapChange24h > 0 ? GREEN : globalData.mcapChange24h < 0 ? RED : MUTED : DIM, fontWeight: 600, fontSize: "13px" }}>
-                  {globalData ? fmtPct(globalData.mcapChange24h) : "—"}
-                </span>
-              </div>
-              <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>
-                {globalData ? `$${(globalData.totalMcap / 1e12).toFixed(2)}T total` : "—"}
-              </div>
-            </div>
-
-          </div>
+        <div style={{ color: DIM, fontSize: "11px", marginTop: "12px", lineHeight: 1.5, fontFamily: "var(--nx-font-ui, sans-serif)" }}>
+          Four public numbers, not added up. None is a graded read: the graded ones are on /proof.
         </div>
       </Card>
 
@@ -582,35 +421,37 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
       {signals.length > 0 && (
         <div style={{ marginBottom: "10px" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "2px 0 10px" }}>
-            <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontSize: "12px", fontWeight: 700, letterSpacing: "0.12em" }}>◆ ALERTS · WORTH A LOOK</span>
+            <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontSize: "12px", fontWeight: 700, letterSpacing: "0.12em" }}>PAST A STATED LINE</span>
             <span style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px" }}>{signals.length}</span>
             <span style={{ flex: 1, height: 1, background: C.border }} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: "12px" }}>
             {signals.map(a => {
-              const sev = alertMetric(a), sv = alertSeverity(a.signal);
+              const fl = marketFlag(a);
+              const funding = fl.kind === "CROWDED_LONGS" || fl.kind === "CROWDED_SHORTS";
+              const metric = funding ? { n: fmtFunding(a.funding), label: "Funding 8h" } : { n: `${fl.ratio.toFixed(1)}×`, label: "OI ÷ 24h volume" };
               return (
                 <div role="link" tabIndex={0} key={a.name} className="nx-card-interactive" onClick={() => navigate(`/perp/${a.symbol}`)} onKeyDown={pressKey(() => navigate(`/perp/${a.symbol}`))} title={`Open ${a.name}`}
-                  style={{ position: "relative", border: `1px solid ${C.border}`, borderLeft: `2px solid ${sv.hot ? YELLOW : C.borderStrong}`, borderRadius: "8px", padding: "14px", background: `linear-gradient(180deg, ${C.surface}, ${C.surfaceAlt})`, cursor: "pointer" }}>
+                  style={{ position: "relative", border: `1px solid ${C.border}`, borderLeft: `2px solid ${C.borderStrong}`, borderRadius: "8px", padding: "14px", background: `linear-gradient(180deg, ${C.surface}, ${C.surfaceAlt})`, cursor: "pointer" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
                     <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontWeight: 700, fontSize: "14px" }}>{a.name}</span>
-                    <span style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "8.5px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{alertKind(a.signal)}</span>
-                    <span style={{ marginLeft: "auto", color: sv.hot ? YELLOW : DIM, fontFamily: "var(--nx-font-mono)", fontSize: "8.5px", fontWeight: 700, letterSpacing: "0.08em" }}>{sv.text}</span>
+                    <span style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{flagLabel(fl.kind)}</span>
+                    <span style={{ marginLeft: "auto", color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px", letterSpacing: "0.08em" }}>NOT GRADED</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
                     <div>
-                      <div style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "8.5px", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: "3px" }}>{sev.label}</div>
-                      <div style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontSize: "26px", fontWeight: 600, lineHeight: 0.9 }}>{sev.n}</div>
+                      <div style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: "3px" }}>{metric.label}</div>
+                      <div style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontSize: "26px", fontWeight: 600, lineHeight: 0.9 }}>{metric.n}</div>
                     </div>
                     <span style={{ marginLeft: "auto", color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px" }}>OI {fmtOI(a.oi)}</span>
                   </div>
                   <p style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: "12.5px", lineHeight: 1.5, color: MUTED, margin: "12px 0 0", padding: "9px 11px", background: "rgba(237,237,240,0.03)", border: `1px solid ${C.border}`, borderRadius: "6px" }}>
-                    {alertRead(a)}
+                    {flagLine(a.name, a)}
                   </p>
                   <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
                     <button onClick={(e) => { e.stopPropagation(); navigate(`/perp/${a.symbol}`); }}
                       style={{ flex: 1, background: "none", border: `1px solid ${C.borderStrong}`, color: C.accent, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, padding: "8px", borderRadius: "6px", cursor: "pointer" }}>→ Open {a.name}</button>
-                    <button onClick={(e) => { e.stopPropagation(); deployToAgent({ symbols: [a.symbol] }, `the ${a.name} ${alertKind(a.signal).toLowerCase()} alert`, undefined, navigate); }}
+                    <button onClick={(e) => { e.stopPropagation(); deployToAgent({ symbols: [a.symbol] }, `${a.name} (${flagLabel(fl.kind).toLowerCase()})`, undefined, navigate); }}
                       title={`Set the agent to watch ${a.name}`}
                       style={{ background: "none", border: `1px solid ${C.border}`, color: MUTED, fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "8px 10px", borderRadius: "6px", cursor: "pointer" }}>⚡ Agent</button>
                   </div>
@@ -661,98 +502,52 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
         );
       })()}
 
-      {/* ── Portfolio Context ──────────────────────────────────── */}
+      {/* ── Your positions: unrealised P&L computed from the row (Orderly's unsettled_pnl is
+          realised-but-unsettled, not this) and the funding each one pays or receives. ── */}
       {portfolioLongPct !== null && (() => {
-        const netLong   = portfolioLongPct;
-        const netShort  = 100 - netLong;
-        const regScore  = regime.score;
-        // Tension: regime direction vs your net exposure
-        const regimeBullish = regScore >= 54;
-        const regimeBearish = regScore <= 46;
-        const youLong  = netLong >= 60;
-        const youShort = netLong <= 40;
-        const crowdedLong  = signals.some(s => s.signal === "CROWDED LONGS");
-        const crowdedShort = signals.some(s => s.signal === "CROWDED SHORTS");
-
-        let tensionColor = YELLOW;
-        let tensionLabel = "ALIGNED";
-        let tensionMsg   = "Your exposure aligns with the current regime.";
-
-        if (regimeBearish && youLong) {
-          tensionColor = RED;
-          tensionLabel = "RISK · TAPE BEARISH, YOU ARE LONG";
-          tensionMsg   = `Regime score ${regScore} signals bearish conditions. Your portfolio is ${netLong}% long. Tighten stops or reduce exposure.`;
-        } else if (regimeBullish && youShort) {
-          tensionColor = RED;
-          tensionLabel = "RISK · TAPE BULLISH, YOU ARE SHORT";
-          tensionMsg   = `Regime score ${regScore} signals bullish conditions. Your portfolio is ${netShort}% short. Watch for forced unwind.`;
-        } else if (crowdedLong && youLong && netLong >= 65) {
-          tensionColor = YELLOW;
-          tensionLabel = "CAUTION — CROWDED SIDE";
-          tensionMsg   = `You are ${netLong}% long and the market signal shows crowded longs. Squeeze risk if price reverses.`;
-        } else if (crowdedShort && youShort && netLong <= 35) {
-          tensionColor = YELLOW;
-          tensionLabel = "CAUTION — CROWDED SIDE";
-          tensionMsg   = `You are ${netShort}% short and the market signal shows crowded shorts. Unwind risk if price rips.`;
-        } else if (regimeBullish && youLong) {
-          tensionColor = GREEN;
-          tensionLabel = "ALIGNED · TAPE CONFIRMS LONG BIAS";
-          tensionMsg   = `Regime score ${regScore} supports bullish positioning. Your ${netLong}% long exposure is with the trend.`;
-        } else if (regimeBearish && youShort) {
-          tensionColor = GREEN;
-          tensionLabel = "ALIGNED · TAPE CONFIRMS SHORT BIAS";
-          tensionMsg   = `Regime score ${regScore} supports bearish positioning. Your ${netShort}% short exposure is with the trend.`;
-        }
-
-        const longBarPct = Math.round(netLong);
+        const netLong  = portfolioLongPct;
+        const netShort = 100 - netLong;
         return (
-          <Card style={{ marginBottom: "10px", border: `1px solid ${tensionColor === RED ? "rgba(247,82,95,0.25)" : tensionColor === GREEN ? "rgba(62,207,142,0.18)" : "rgba(251,191,36,0.15)"}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-              <SectionTitle style={{ marginBottom: 0 }}>YOUR POSITION CONTEXT</SectionTitle>
-              <span style={{ color: tensionColor, fontSize: "10px", letterSpacing: "0.07em", fontWeight: 700 }}>{tensionLabel}</span>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "16px", marginBottom: "12px" }}>
-              {/* Net exposure bar */}
-              <div>
-                <div style={{ color: DIM, fontSize: "10px", marginBottom: "4px", letterSpacing: "0.06em" }}>NET EXPOSURE</div>
-                <div style={{ display: "flex", height: "8px", borderRadius: "2px", overflow: "hidden", gap: "1px", marginBottom: "4px" }}>
-                  <div style={{ flex: longBarPct, background: GREEN, opacity: 0.8 }} />
-                  <div style={{ flex: 100 - longBarPct, background: RED, opacity: 0.8 }} />
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
-                  <span style={{ color: GREEN }}>LONG {netLong}%</span>
-                  <span style={{ color: RED }}>SHORT {netShort}%</span>
-                </div>
+          <Card style={{ marginBottom: "10px" }}>
+            <SectionTitle style={{ marginBottom: "10px" }}>YOUR POSITIONS</SectionTitle>
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ color: DIM, fontSize: "10px", marginBottom: "4px", letterSpacing: "0.06em" }}>NET EXPOSURE (NOTIONAL)</div>
+              <div style={{ display: "flex", height: "8px", borderRadius: "2px", overflow: "hidden", gap: "1px", marginBottom: "4px" }}>
+                <div style={{ flex: netLong, background: "#d4d4d8", opacity: 0.75 }} />
+                <div style={{ flex: netShort, background: "#52525b", opacity: 0.9 }} />
               </div>
-
-              {/* Position summary */}
-              <div>
-                <div style={{ color: DIM, fontSize: "10px", marginBottom: "4px", letterSpacing: "0.06em" }}>OPEN POSITIONS ({openPositions.length})</div>
-                <div style={{ fontSize: "12px", color: MUTED, lineHeight: 1.6 }}>
-                  {openPositions.length === 0
-                    ? <span style={{ color: DIM }}>No open positions</span>
-                    : openPositions.slice(0, 4).map((p) => {
-                        const sym  = bareTicker(p.symbol);
-                        const dir  = p.position_qty > 0 ? "LONG" : "SHORT";
-                        const pnl  = p.unsettled_pnl ?? 0;
-                        const pnlC = pnl >= 0 ? GREEN : RED;
-                        return (
-                          <div key={p.symbol} style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
-                            <span style={{ color: BRIGHT }}>{sym}</span>
-                            <span style={{ color: dir === "LONG" ? GREEN : RED, fontSize: "10px" }}>{dir}</span>
-                            <span style={{ color: pnlC, marginLeft: "auto" }}>{pnl >= 0 ? "+" : ""}{pnl.toFixed(2)} USDC</span>
-                          </div>
-                        );
-                      })
-                  }
-                </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                <span style={{ color: MUTED }}>LONG {netLong}%</span>
+                <span style={{ color: MUTED }}>SHORT {netShort}%</span>
               </div>
             </div>
-
-            {/* Tension message */}
-            <div style={{ padding: "8px 10px", background: "rgba(255,255,255,0.02)", borderLeft: `2px solid ${tensionColor}`, fontSize: "12px", color: MUTED, lineHeight: 1.5 }}>
-              {tensionMsg}
+            <div style={{ fontSize: "12px", color: MUTED, lineHeight: 1.6 }}>
+              {openPositions.filter((p) => p.position_qty !== 0).slice(0, 6).map((p) => {
+                const sym  = bareTicker(p.symbol);
+                const dir  = p.position_qty > 0 ? "LONG" : "SHORT";
+                const upnl = positionUpnl(p);
+                const mkt  = hlAssets?.find((h) => h.symbol === p.symbol);
+                const side = mkt ? fundingSide(p.position_qty, mkt.funding) : null;
+                return (
+                  <div key={p.symbol} style={{ padding: "4px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "baseline" }}>
+                      <span style={{ color: BRIGHT }}>{sym}</span>
+                      <span style={{ color: DIM, fontSize: "10px" }}>{dir}</span>
+                      <span style={{ marginLeft: "auto", color: upnl == null ? DIM : upnl >= 0 ? GREEN : RED }}>
+                        {upnl == null ? "—" : `${upnl >= 0 ? "+" : "−"}${Math.abs(upnl).toFixed(2)} USDC`}
+                      </span>
+                    </div>
+                    {mkt && side && (
+                      <div style={{ color: DIM, fontSize: "11px" }}>
+                        {side === "pays" ? "pays" : "receives"} {fmtFunding(Math.abs(mkt.funding))}/8h funding{marketFlag(mkt).kind !== "NONE" ? ` · ${flagLabel(marketFlag(mkt).kind).toLowerCase()}` : ""}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ color: DIM, fontSize: "10px", marginTop: "8px" }}>
+              {"// "}UNREALISED = SIZE × (MARK − AVG OPEN). FUNDING FROM ORDERLY’S LAST RATE.
             </div>
           </Card>
         );
@@ -771,7 +566,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
 
           {alsoActive.length > 0 && (
             <div style={{ marginTop: "6px" }}>
-              <div style={{ color: DIM, fontSize: "10px", letterSpacing: "0.1em", marginBottom: "6px" }}>ALSO ACTIVE (HL)</div>
+              <div style={{ color: DIM, fontSize: "10px", letterSpacing: "0.1em", marginBottom: "6px" }}>ALSO ACTIVE · FUNDING 8H</div>
               {alsoActive.map(a => (
                 <div key={a.name} style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px", fontSize: "12px" }}>
                   <span style={{ color: MUTED }}>{a.name}</span>
@@ -843,64 +638,6 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
 
       </div>
 
-      {/* ── Liquidations 24H ─────────────────────── */}
-      <Card style={{ marginBottom: "10px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-          <SectionTitle style={{ marginBottom: 0 }}>LIQUIDATIONS 24H</SectionTitle>
-          <span style={{ color: DIM, fontSize: "10px" }}>VIA OKX + ORDERLY OI</span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "10px" }}>
-          {(["BTC", "ETH", "SOL"] as const).map(sym => {
-            const ls = lsRatios[sym] ?? null;
-            const status = ls === null ? "—" : ls > 1.35 ? "LONG FLUSH" : ls < 0.75 ? "SHORT SQUEEZE" : "BALANCED";
-            const sc = lsColor(ls); // shared helper — was an inline copy that drifted
-            const d = getDerivData(sym);
-            const oi = d?.oi ?? 0;
-            // Estimate liq exposure from OI × typical daily liq rate
-            const longPct  = ls !== null ? Math.min(0.9, ls / (ls + 1)) : 0.5;
-            const shortPct = 1 - longPct;
-            const liqRate  = status === "LONG FLUSH" ? 0.018 : status === "SHORT SQUEEZE" ? 0.016 : 0.006;
-            const totalLiq = oi * liqRate;
-            const longLiq  = totalLiq * (status === "LONG FLUSH" ? 0.75 : status === "SHORT SQUEEZE" ? 0.25 : 0.5);
-            const shortLiq = totalLiq - longLiq;
-            const fmtLiq   = (v: number) => v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v/1e6).toFixed(0)}M` : `$${v.toFixed(0)}`;
-            return (
-              <div key={sym} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                  <span style={{ color: BRIGHT, fontWeight: 700, fontSize: "13px" }}>{sym}</span>
-                  <span style={{ color: sc, fontSize: "10px", letterSpacing: "0.06em" }}>{status}</span>
-                </div>
-                <div style={{ marginBottom: "5px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", marginBottom: "2px" }}>
-                    <span style={{ color: DIM }}>LONGS</span>
-                    <span style={{ color: BRIGHT }}>{oi > 0 ? fmtLiq(longLiq) : "—"}</span>
-                  </div>
-                  <div style={{ height: "3px", background: "rgba(255,255,255,0.06)", borderRadius: "1px", overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${Math.round(longPct * 100)}%`, background: MUTED, opacity: 0.8 }} />
-                  </div>
-                </div>
-                <div style={{ marginBottom: "6px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", marginBottom: "2px" }}>
-                    <span style={{ color: DIM }}>SHORTS</span>
-                    <span style={{ color: BRIGHT }}>{oi > 0 ? fmtLiq(shortLiq) : "—"}</span>
-                  </div>
-                  <div style={{ height: "3px", background: "rgba(255,255,255,0.06)", borderRadius: "1px", overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${Math.round(shortPct * 100)}%`, background: MUTED, opacity: 0.8 }} />
-                  </div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: DIM, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "5px" }}>
-                  <span>L/S {ls !== null ? ls.toFixed(2) : "—"}</span>
-                  <span style={{ color: MUTED }}>EST. {oi > 0 ? fmtLiq(totalLiq) : "—"} LIQ</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ color: DIM, fontSize: "10px", marginTop: "8px", letterSpacing: "0.05em" }}>
-          {"// "}EST. = ESTIMATED FROM OI × TYPICAL DAILY LIQ RATE · L/S FROM OKX ACCOUNT RATIO
-        </div>
-      </Card>
-
             {/* ── Long/Short Positioning ──────────────────────────────── */}
       <Card style={{ marginBottom: "10px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
@@ -910,16 +647,14 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "10px" }}>
           {(["BTC", "ETH", "SOL"] as const).map(sym => {
             const ls = lsRatios[sym] ?? null;
-            const status = ls === null ? "LOADING" : ls > 1.35 ? "LONG FLUSH" : ls < 0.75 ? "SHORT SQUEEZE" : "BALANCED";
-            const sc = lsColor(ls); // shared helper — was an inline copy that drifted
+            const status = ls === null ? "UNREAD" : lsWords(ls);
+            const sc = lsColor(ls);
             const longPct  = ls !== null ? Math.min(0.92, ls / (ls + 1)) : 0.5;
             const shortPct = 1 - longPct;
-            const desc =
-              status === "LONG FLUSH"    ? "Longs dominant. Squeeze risk on reversal." :
-              status === "SHORT SQUEEZE" ? "Shorts dominant. Watch for an upside unwind."  :
-              status === "BALANCED"      ? "Positioning balanced. No crowding signal."    : "Fetching ratio…";
+            const desc = ls === null ? "OKX’s ratio didn’t load."
+              : `${Math.round(longPct * 100)}% of OKX accounts with a position are long. A count of accounts, not of size.`;
             return (
-              <div key={sym} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", border: `1px solid ${ls === null ? "rgba(255,255,255,0.05)" : (ls > 1.35 || ls < 0.75) ? "rgba(251,191,36,0.18)" : "rgba(255,255,255,0.06)"}` }}>
+              <div key={sym} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", border: `1px solid ${ls === null ? "rgba(255,255,255,0.05)" : (ls > LS_HEAVY_LONG || ls < LS_HEAVY_SHORT) ? "rgba(237,237,240,0.18)" : "rgba(255,255,255,0.06)"}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                   <span style={{ color: BRIGHT, fontWeight: 700, fontSize: "14px" }}>{sym}</span>
                   <span style={{ color: sc, fontSize: "10px", letterSpacing: "0.07em", fontWeight: 700 }}>{status}</span>
@@ -932,8 +667,8 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
                     <div style={{ flex: shortPct, background: "#52525b", opacity: ls !== null ? 0.9 : 0.2 }} />
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: "3px", fontSize: "10px" }}>
-                    <span style={{ color: "#d4d4d8" }}>L {Math.round(longPct * 100)}%</span>
-                    <span style={{ color: "#71717a" }}>S {Math.round(shortPct * 100)}%</span>
+                    <span style={{ color: "#d4d4d8" }}>L {ls !== null ? `${Math.round(longPct * 100)}%` : "—"}</span>
+                    <span style={{ color: "#71717a" }}>S {ls !== null ? `${Math.round(shortPct * 100)}%` : "—"}</span>
                   </div>
                 </div>
 
@@ -946,131 +681,58 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
           })}
         </div>
         <div style={{ color: DIM, fontSize: "10px", marginTop: "8px" }}>
-          {"// "}LONG FLUSH = longs crowded, squeeze risk. SHORT SQUEEZE = shorts crowded, unwind risk. BALANCED = no dominant bias.
+          {"// "}MORE ACCOUNTS LONG = ratio above {LS_HEAVY_LONG}; MORE ACCOUNTS SHORT = below {LS_HEAVY_SHORT}. A count of accounts on OKX, not graded.
         </div>
       </Card>
 
             {/* ── Position Intelligence ───────────────────────────── */}
       <Card style={{ marginBottom: "10px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", flexWrap: "wrap", gap: "4px" }}>
-          <SectionTitle style={{ marginBottom: 0 }}>POSITION INTELLIGENCE</SectionTitle>
+          <SectionTitle style={{ marginBottom: 0 }}>TOP MARKETS BY OPEN INTEREST</SectionTitle>
           <span style={{ color: DIM, fontSize: "10px" }}>ORDERLY NETWORK · {timestamp || "—"}</span>
         </div>
-
-        {/* Summary bar */}
-        {netLongPct !== null && (
-          <div style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "24px",
-            marginBottom: "12px",
-            padding: "8px 12px",
-            background: "rgba(255,255,255,0.02)",
-            border: "1px solid rgba(255,255,255,0.06)",
-          }}>
-            <div>
-              <div style={{ color: DIM, fontSize: "10px", marginBottom: "2px" }}>MARKET</div>
-              <div style={{ color: DIM, fontSize: "10px", marginBottom: "2px" }}>NET POSITIONING</div>
-              <div style={{ color: netLongPct > 60 ? GREEN : netLongPct < 40 ? RED : MUTED, fontWeight: 700, fontSize: "18px" }}>
-                {netLongPct}% LONG
-              </div>
-              <div style={{ color: DIM, fontSize: "11px" }}>
-                {netLongPct > 60 ? "Market net long" : netLongPct < 40 ? "Market net short" : "Market balanced"} with {netLongPct}% of OI in long-biased assets
-              </div>
-            </div>
-            <div>
-              <div style={{ color: DIM, fontSize: "10px", marginBottom: "2px" }}>CONFIDENCE</div>
-              <div style={{ color: MUTED, fontWeight: 700, fontSize: "18px" }}>
-                {Math.abs(netLongPct - 50) > 20 ? "HIGH" : Math.abs(netLongPct - 50) > 10 ? "MODERATE" : "LOW"}
-              </div>
-              <BarBlock value={Math.abs(netLongPct - 50)} total={50} color={netLongPct > 60 ? GREEN : netLongPct < 40 ? RED : MUTED} len={14} />
-            </div>
-            {avgFunding10 !== null && (
-              <div>
-                <div style={{ color: DIM, fontSize: "10px", marginBottom: "2px" }}>AVG FUNDING (TOP 10)</div>
-                <div style={{
-                  color: avgFunding10 > 0.05 ? GREEN : avgFunding10 < 0 ? RED : MUTED,
-                  fontWeight: 700,
-                  fontSize: "18px",
-                }}>
-                  {fmtFunding(avgFunding10)} <span style={{ fontSize: "11px", fontWeight: 400, color: DIM }}>8H</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Asset table header */}
         {!isMobile && (
-          <div style={{ display: "grid", gridTemplateColumns: "70px 130px 80px 70px 1fr 60px", gap: "4px", marginBottom: "4px" }}>
-            {["MARKET","SIGNAL","FUNDING","OI","DESCRIPTION","CONF"].map(h => (
+          <div style={{ display: "grid", gridTemplateColumns: "70px 90px 80px 80px 1fr", gap: "4px", marginBottom: "4px" }}>
+            {["MARKET", "FUNDING 8H", "OI", "OI ÷ VOL", "PAST A LINE"].map(h => (
               <div key={h} style={{ color: DIM, fontSize: "10px", letterSpacing: "0.08em", paddingBottom: "4px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                 {h}
               </div>
             ))}
           </div>
         )}
-
         {topPositions.map(asset => {
-          const sc = signalColor(asset.signal);
-          const filled = Math.round((asset.confidence / 100) * 8);
-          return (
-            <div
-              key={asset.name}
-              style={isMobile ? {
-                padding: "8px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.04)",
-                fontSize: "12px",
-              } : {
-                display: "grid",
-                gridTemplateColumns: "70px 130px 80px 70px 1fr 60px",
-                gap: "4px",
-                padding: "5px 0",
-                borderBottom: "1px solid rgba(255,255,255,0.04)",
-                fontSize: "12px",
-                alignItems: "center",
-              }}
-            >
-              {isMobile ? (
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
-                    <span style={{ color: BRIGHT, fontWeight: 700 }}>{asset.name}</span>
-                    <span style={{ color: sc, fontSize: "10px" }}>{asset.signal}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: "12px", color: DIM, fontSize: "11px" }}>
-                    <span>FUND: <span style={{ color: asset.funding >= 0 ? GREEN : RED }}>{fmtFunding(asset.funding)}</span></span>
-                    <span>OI: <span style={{ color: MUTED }}>{fmtOI(asset.oi)}</span></span>
-                    <span>CONF: <span style={{ color: MUTED }}>{asset.confidence}%</span></span>
-                  </div>
-                  <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>{assetDescription(asset)}</div>
-                </div>
-              ) : (
-                <>
-                  <div style={{ color: BRIGHT, fontWeight: 700 }}>{asset.name}</div>
-                  <div style={{ color: sc, fontSize: "10px" }}>{asset.signal}</div>
-                  <div style={{ color: asset.funding >= 0 ? (asset.funding > 0.02 ? GREEN : MUTED) : RED }}>
-                    {fmtFunding(asset.funding)}
-                  </div>
-                  <div style={{ color: MUTED }}>{fmtOI(asset.oi)}</div>
-                  <div style={{ color: DIM, fontSize: "11px" }}>{assetDescription(asset)}</div>
-                  <div>
-                    <div>
-                      <span style={{ color: TEAL }}>{"▓".repeat(filled)}</span>
-                      <span style={{ color: "rgba(255,255,255,0.10)" }}>{"░".repeat(8 - filled)}</span>
-                    </div>
-                    <div style={{ color: DIM, fontSize: "10px" }}>{asset.confidence}%</div>
-                  </div>
-                </>
-              )}
+          const fl = marketFlag(asset);
+          const flag = fl.kind === "NONE" ? "—" : flagLabel(fl.kind);
+          return isMobile ? (
+            <div key={asset.name} style={{ padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "2px" }}>
+                <span style={{ color: BRIGHT, fontWeight: 700 }}>{asset.name}</span>
+                <span style={{ color: fl.kind === "NONE" ? DIM : TEAL, fontSize: "11px", textAlign: "right" }}>{flag}</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", color: DIM, fontSize: "11px" }}>
+                <span>FUND <span style={{ color: MUTED }}>{fmtFunding(asset.funding)}</span></span>
+                <span>OI <span style={{ color: MUTED }}>{fmtOI(asset.oi)}</span></span>
+                <span>OI÷VOL <span style={{ color: MUTED }}>{fl.ratio.toFixed(1)}×</span></span>
+              </div>
+            </div>
+          ) : (
+            <div key={asset.name} style={{ display: "grid", gridTemplateColumns: "70px 90px 80px 80px 1fr", gap: "4px", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: "12px", alignItems: "center" }}>
+              <div style={{ color: BRIGHT, fontWeight: 700 }}>{asset.name}</div>
+              <div style={{ color: MUTED }}>{fmtFunding(asset.funding)}</div>
+              <div style={{ color: MUTED }}>{fmtOI(asset.oi)}</div>
+              <div style={{ color: MUTED }}>{fl.ratio.toFixed(1)}×</div>
+              <div style={{ color: fl.kind === "NONE" ? DIM : TEAL, fontSize: "11px" }}>{flag}</div>
             </div>
           );
         })}
-
         {topPositions.length === 0 && (
           <div style={{ color: DIM, padding: "20px 0", textAlign: "center", fontSize: "12px" }}>
-            {loading ? "INITIALIZING POSITION DATA…" : "No position data available"}
+            {loading ? "Loading Orderly’s markets…" : "Orderly’s market list didn’t load."}
           </div>
         )}
+        <div style={{ color: DIM, fontSize: "10px", marginTop: "8px" }}>
+          {"// "}LINES: FUNDING ABOVE +0.08% OR BELOW −0.03% PER 8H · OI ABOVE 1.5× (0.9×) 24H VOLUME ON MARKETS TRADING OVER $100K.
+        </div>
       </Card>
 
       {/* ── Footer ──────────────────────────────────────────────────── */}

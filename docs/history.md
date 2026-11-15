@@ -2576,3 +2576,14 @@ those rows while the share card and the rank read the grader's record. A "BEST R
 planned target as if it were a result, and the live agent card was titled "graded record" with "$-12.5" style dollars.
 `/agents/standing/:addr` put the raw path segment into a Supabase `ilike` filter: "%" matched every wallet and summed
 their trades into one record. The identity row clipped the name to ~14 px on a 360 px phone.
+
+## 2026-11-15 · Intel page: a tallied score, made-up liquidations and confidence numbers
+
+/intel (also the Lab's Market Intel tab, untouched since 2026-09-30) weighted Fear & Greed, BTC dominance, market-cap
+change and top-10 funding into one score → BULLISH / BEARISH with "the wind is behind longs"; printed "CONF 72%" per
+market (72 + funding × 40); showed "LIQUIDATIONS 24H" dollar figures made up from OI × an invented daily liquidation rate
+split 75/25 by a label; called an OKX account ratio above 1.35 a "LONG FLUSH"; described the share of markets with
+positive funding as "% of OI"; and showed Orderly's `unsettled_pnl` as a position's P&L under "tighten stops" advice
+driven by the score. The Lab's tape strip on Thesis/Agent did the same tally (RISK-ON score + "momentum presets
+favored"). Rewritten to inputs with sources and stated thresholds; the made-up card deleted. /intel and /arena were not
+on the public-route list, so a shared or searched link met the connect-wallet wall.
