@@ -25,6 +25,8 @@ import { bareTicker } from "@/utils/utils";
 import { SIGNAL } from "@/config/theme";
 import { TEXT_ACTION, TEXT_ACTION_BAR, TEXT_ACTION_CLASS } from "@/components/ui";
 import { identityShareText, normRecord } from "@/lib/identityCard.mjs";
+import { profileCalls, recordTiles, signedUsd } from "@/lib/profileRecord.mjs";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 import { pressKey } from "@/utils/a11y";
 import { useEscapeKey } from "@/utils/a11y";
 import type { SavedStrategy } from "@/pages/lab/agentTypes";
@@ -115,9 +117,9 @@ function StatBox({ label, value, sub, color }: { label: string; value: string; s
       padding: "12px 16px",
       textAlign: "center",
     }}>
-      <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#52525b", letterSpacing: "0.08em", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", letterSpacing: "0.08em", marginBottom: 4 }}>{label}</div>
       <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 17, fontWeight: "bold", color: color ?? "#a1a1aa", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</div>
-      {sub && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, color: "#71717a", marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -540,13 +542,14 @@ export default function TraderPage() {
           leverage: num(t.leverage),
           actualPnl: t.actualPnl == null ? null : num(t.actualPnl),
         }));
-        // /feed also carries RESOLUTION rows ("BTC SHORT stopped out, −1R"): announcements with no
-        // levels. They used to land here as calls with $0.00 entry/stop/TP and "Checking fill".
-        setTheses(all.filter((t) => !(t as { resolution?: boolean }).resolution && t.wallet.toLowerCase() === wallet.toLowerCase()));
+        // /feed also carries RESOLUTION rows ("BTC SHORT stopped out, −1R": no levels, they used to
+        // land here as $0.00 calls) and this wallet's AGENT trades (named "Nexus Agent", so the
+        // profile could take that name). Only the wallet's own published calls count here.
+        setTheses(profileCalls(all, wallet) as FeedThesis[]);
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-    fetch(`${API_BASE}/theses/process/${wallet.toLowerCase()}`).then((r) => r.ok ? r.json() : null)
+    sharedJson(`${API_BASE}/theses/process/${wallet.toLowerCase()}`)
       .then((d) => {
         setMerit(d?.meritRank?.title ? { glyph: String(d.meritRank.glyph ?? ""), title: String(d.meritRank.title) } : null);
         if (d && typeof d.calls === "number") setRecord(normRecord(d));
@@ -590,10 +593,11 @@ export default function TraderPage() {
     // From each call's own levels (TP1), the R the grader pays; calls whose levels don't make a call are left out.
     const rrs = theses.map((t) => callRR(t)).filter((r): r is number => r != null);
     const avgRR = rrs.length > 0 ? rrs.reduce((a, b) => a + b, 0) / rrs.length : 0;
-    const bestTrade = theses.reduce<FeedThesis | null>((best, t) =>
-      callRR(t) != null && (!best || (callRR(t) ?? 0) > (callRR(best) ?? 0)) ? t : best, null);
-    return { wins, losses, active, invalidated, closed, winRate, avgR, avgRR, bestTrade };
+    return { wins, losses, active, invalidated, closed, winRate, avgR, avgRR };
   }, [theses]);
+  // The win-rate / R tiles read the grader's record (the share card + rank read the same one);
+  // until it answers, the calls on screen, labelled as such.
+  const tiles = useMemo(() => recordTiles(record, { wins: stats.wins, losses: stats.losses, avgR: stats.avgR ?? NaN }), [record, stats.wins, stats.losses, stats.avgR]);
 
   // Pull each identity field from the first thesis that actually has it — a wallet's
   // theses can carry different snapshots, so keying both off theses[0] left us showing
@@ -619,8 +623,8 @@ export default function TraderPage() {
     const name = displayName ?? shortAddr;
     const title = `${name} on Nexus`;
     // The graded record in parts: a win rate never goes out without its R.
-    const description = stats.closed > 0 && stats.winRate !== null && stats.avgR !== null
-      ? `${stats.closed} graded call${stats.closed === 1 ? "" : "s"} · ${stats.winRate.toFixed(0)}% · ${stats.avgR >= 0 ? "+" : "−"}${Math.abs(stats.avgR).toFixed(2)}R avg. Graded from public price.`
+    const description = tiles.calls > 0 && tiles.winRate !== null && tiles.avgR !== null
+      ? `${tiles.calls} graded call${tiles.calls === 1 ? "" : "s"} · ${tiles.winRate.toFixed(0)}% · ${tiles.avgR >= 0 ? "+" : "−"}${Math.abs(tiles.avgR).toFixed(2)}R avg. Graded from public price.`
       : "No graded calls yet. Every public call is graded from public price.";
 
     const setMeta = (property: string, content: string) => {
@@ -656,7 +660,7 @@ export default function TraderPage() {
       setMeta("twitter:image", "https://trade.nexustradinglabs.com/embed-mini.png");
       document.title = "Nexus Trading Labs";
     };
-  }, [wallet, loading, displayName, shortAddr, stats.closed, stats.avgR, stats.winRate]);
+  }, [wallet, loading, displayName, shortAddr, tiles.calls, tiles.avgR, tiles.winRate]);
 
   if (!wallet) return null;
 
@@ -724,9 +728,10 @@ export default function TraderPage() {
         {!loading && !error && (
           <>
             {/* Trader identity */}
-            <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24, padding: "16px 20px", background: "#141416", border: "1px solid #232327", borderRadius: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px 16px", marginBottom: 24, padding: "16px 20px", background: "#141416", border: "1px solid #232327", borderRadius: 6 }}>
               <Avatar pfp={pfp} displayName={displayName} size={56} />
-              <div style={{ flex: 1, minWidth: 0 }}>
+              {/* the name keeps ≥ 150px; the X-ray link and the rank wrap under it on a phone */}
+              <div style={{ flex: "1 1 150px", minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 18, fontWeight: "bold", color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
                     {displayName ?? shortAddr}
@@ -796,15 +801,15 @@ export default function TraderPage() {
                   {/* A rate is monochrome; the graded R beside it carries the money colour. */}
                   <StatBox
                     label="WIN RATE"
-                    value={stats.winRate !== null ? `${stats.winRate.toFixed(0)}%` : "—"}
-                    sub={stats.closed > 0 ? `${stats.wins}W / ${stats.losses}L graded` : "no graded calls yet"}
-                    color={stats.winRate === null ? "#52525b" : "#ededf0"}
+                    value={tiles.winRate !== null ? `${tiles.winRate.toFixed(0)}%` : "—"}
+                    sub={tiles.sub}
+                    color={tiles.winRate === null ? "#71717a" : "#ededf0"}
                   />
                   <StatBox
                     label="AVG GRADED R"
-                    value={stats.avgR !== null ? `${stats.avgR >= 0 ? "+" : "−"}${Math.abs(stats.avgR).toFixed(2)}R` : "—"}
-                    sub={stats.avgR !== null ? `over ${stats.closed} resolved` : "none resolved yet"}
-                    color={stats.avgR === null ? "#52525b" : stats.avgR >= 0 ? "#3ecf8e" : "#f7525f"}
+                    value={tiles.avgR !== null ? `${tiles.avgR >= 0 ? "+" : "−"}${Math.abs(tiles.avgR).toFixed(2)}R` : "—"}
+                    sub={tiles.avgR !== null ? (tiles.source === "grader" ? "the grader’s record" : `over ${tiles.calls} shown`) : "none resolved yet"}
+                    color={tiles.avgR === null ? "#71717a" : tiles.avgR >= 0 ? "#3ecf8e" : "#f7525f"}
                   />
                   <StatBox
                     label="PLANNED R:R"
@@ -824,26 +829,18 @@ export default function TraderPage() {
                     sub={`${stats.invalidated} invalidated`}
                     color="#a1a1aa"
                   />
-                  {stats.bestTrade && (
-                    <StatBox
-                      label="BEST R:R"
-                      value={fmtRR(callRR(stats.bestTrade))}
-                      sub={bareTicker(stats.bestTrade.symbol)}
-                      color="#ededf0"
-                    />
-                  )}
                 </div>
 
                 {/* Hub: this trader's graded autonomous-agent record */}
                 {agentRec && (
                   <div style={{ marginBottom: 16, border: "1px solid #232327", borderRadius: 6, padding: 14, background: "#0a0a0b" }}>
-                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>AUTONOMOUS AGENT · GRADED RECORD</div>
+                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", letterSpacing: "0.08em", marginBottom: 10 }}>AUTONOMOUS AGENT · LIVE TRADES, BOOKED AT THE EXCHANGE’S FILL</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(80px,1fr))", gap: 12 }}>
                       {[
-                        { l: "NET P&L", v: `${agentRec.netPnl >= 0 ? "+" : ""}$${agentRec.netPnl}`, c: agentRec.netPnl >= 0 ? "#3ecf8e" : "#f7525f" },
+                        { l: "NET P&L", v: signedUsd(agentRec.netPnl), c: agentRec.netPnl >= 0 ? "#3ecf8e" : "#f7525f" },
                         { l: "WIN RATE", v: `${agentRec.winRate}%`, c: "#d4d4d8" },
                         { l: "TRADES", v: String(agentRec.trades), c: "#d4d4d8" },
-                        { l: "SCORE", v: `${agentRec.score}`, c: "#d4d4d8" },
+                        { l: "BOARD SCORE", v: `${agentRec.score}`, c: "#d4d4d8" },
                       ].map((x) => (
                         <div key={x.l}>
                           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", letterSpacing: "0.1em", marginBottom: 3 }}>{x.l}</div>
