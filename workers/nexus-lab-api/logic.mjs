@@ -1244,6 +1244,35 @@ export function shapeHostedBody(body, hostedModel, upstreamModel) {
   return out;
 }
 
+// Prompt-cache breakpoints for a hosted call (2026-11-15 cost pass). The proxy places them, not the client: any
+// cache_control the client sent on system or message blocks is dropped first (at most 4 are allowed upstream).
+//   1. the FIRST system block: the client sends the stable copilot prompt as block 0 and the page's live context
+//      after it (anthropicTurn.mjs systemBlocks), so tools + the prompt stay cached across questions and pages;
+//   2. the last block of the LAST message: each tool round of a question re-sends every earlier round, which
+//      then reads from cache (~0.1x) instead of billing in full.
+// No system: the last tool carries it (as before). Mutates and returns `out`.
+export function hostedCacheBreakpoints(out) {
+  const mark = { type: "ephemeral" };
+  const strip = (b) => { if (b && typeof b === "object") delete b.cache_control; };
+  if (typeof out.system === "string" && out.system.length) out.system = [{ type: "text", text: out.system }];
+  if (Array.isArray(out.system)) out.system.forEach(strip);
+  for (const m of Array.isArray(out.messages) ? out.messages : []) if (Array.isArray(m?.content)) m.content.forEach(strip);
+  if (Array.isArray(out.tools)) out.tools.forEach(strip);
+
+  const sys0 = Array.isArray(out.system) ? out.system[0] : null;
+  if (sys0 && typeof sys0 === "object" && sys0.type === "text") sys0.cache_control = mark;
+  else if (Array.isArray(out.tools) && out.tools.length) out.tools[out.tools.length - 1].cache_control = mark;
+
+  const last = Array.isArray(out.messages) ? out.messages[out.messages.length - 1] : null;
+  if (last && typeof last.content === "string" && last.content.length) last.content = [{ type: "text", text: last.content, cache_control: mark }];
+  else if (last && Array.isArray(last.content)) {
+    const b = last.content[last.content.length - 1];
+    // thinking blocks can't carry a breakpoint; the last message is the user's turn (text / tool_result) anyway
+    if (b && typeof b === "object" && (b.type === "text" || b.type === "tool_result")) b.cache_control = mark;
+  }
+  return out;
+}
+
 // ── One cap slot per QUESTION (borst, 2026-11-15) ─────────────────────────────────────────────
 // A copilot question is up to MAX_TOOL_ROUNDS requests (the model asks for tools, gets results,
 // answers). Each request used to take a slot, so "40/day" meant ~10 questions. The client now

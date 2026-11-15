@@ -25,3 +25,16 @@ test("the system prompt states the grade rule", () => {
   assert.match(prompt, /Never add ungraded inputs up into a conviction, score or verdict/);
   assert.doesNotMatch(prompt, /conviction verdict/);
 });
+
+test("the mispriced board carries the fade's grade and never calls the fade an edge (2026-11-15)", () => {
+  const mp = tools.slice(tools.indexOf('name: "get_mispriced"'), tools.indexOf('name: "get_trader"'));
+  assert.match(mp, /\/intel\/fade-grade/);
+  assert.match(mp, /fade_grade:/);
+  assert.match(mp, /ALWAYS relay fade_grade/);
+  assert.doesNotMatch(mp, /mean-revert(?:\s*\(fade\))? edge/);
+  assert.doesNotMatch(mp, /PROVEN means it's paid/);
+  assert.doesNotMatch(mp, /edge_annual_pct|edge_quality/);
+  const sb = tools.slice(tools.indexOf('name: "get_signal_scoreboard"'), tools.indexOf('input_schema', tools.indexOf('name: "get_signal_scoreboard"')));
+  assert.doesNotMatch(sb, /NOT an edge until it's PREDICTIVE/, "PREDICTIVE is not an edge");
+  assert.match(sb, /PREDICTIVE alone is NOT enough/);
+});

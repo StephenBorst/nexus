@@ -43,7 +43,9 @@ product is what sits on top:
   each still-unread one ("Unread: Bankr wallet $NEXUS on Base"). Flash + Orderly broker fees aren't on-chain readable.
 
 ## Hosted AI (`POST /ai/chat`, PRO)
-- Wallet-signed, PRO-gated proxy with our key, prompt caching and a **per-MODEL daily cap of QUESTIONS**
+- Wallet-signed, PRO-gated proxy with our key, prompt caching (`hostedCacheBreakpoints`: the proxy drops the client's
+  marks and sets two, the stable prompt block + the question's last turn; the client sends the system as [prompt, live
+  context], `systemBlocks` in anthropicTurn.mjs) and a **per-MODEL daily cap of QUESTIONS**
   (`ai:usage:{addr}:{model}:{date}`). Tiers (borst 2026-11-15, the current model of each family): Haiku 5.5 100 ·
   Sonnet 5.5 40 (default) · Opus 5.5 12 · Fable 5.2 5; the 4.x tiers and Fable 5.1 are retired (a stored old id falls
   back to the default). `resolveHostedModel`/`hostedCaps` (lab-api `logic.mjs`) whitelist the id; client mirror
