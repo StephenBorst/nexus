@@ -59,10 +59,10 @@ test("no direction, no call, no grade in the words", () => {
   assert.doesNotMatch(all, /\b(long|short|buy|sell|bullish|bearish|edge|graded|proven)\b/i);
 });
 
-test("wired: a Calendar lens on Lab home reading /intel/events", async () => {
+test("wired: a Calendar lens on Lab home reading /intel/calendar", async () => {
   const { readFileSync } = await import("node:fs");
   const { lensFromQuery } = await import("./intelLenses.mjs");
   assert.equal(lensFromQuery("calendar"), "calendar");
   assert.match(readFileSync(new URL("../pages/lab/index.tsx", import.meta.url), "utf8"), /if \(id === "calendar"\) return <EventsCalendar \/>;/);
-  assert.match(readFileSync(new URL("../pages/lab/EventsCalendar.tsx", import.meta.url), "utf8"), /\/intel\/events/);
+  assert.match(readFileSync(new URL("../pages/lab/EventsCalendar.tsx", import.meta.url), "utf8"), /\/intel\/calendar`/);
 });

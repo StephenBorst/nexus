@@ -1,7 +1,8 @@
-// GET /intel/events — the events calendar (rules app/lib/eventsCalendar.mjs, 2026-11-15). US macro releases from
+// GET /intel/calendar — the events calendar (rules app/lib/eventsCalendar.mjs, 2026-11-15). US macro releases from
 // ForexFactory's public weekly JSON (this week + next week; the feed asks for light use, so it is read at most once an
 // hour, with a 24h last-good copy), and the dated world-event markets on the Catalysts board (read in-process). A source
 // that fails is named in `unread`, never shown as an empty week. Read-only; no key, no wallet.
+// (Not /intel/events: that path is the older Polymarket events corner, index.js, and stays as it is.)
 
 import { macroEvents, marketEvents, calendar, CALENDAR_SOURCES } from "../../app/lib/eventsCalendar.mjs";
 import { json } from "./shared.mjs";
@@ -58,7 +59,7 @@ export async function composeEvents(env, { dispatch, fetchImpl = globalThis.fetc
 }
 
 export async function handleEvents(parts, request, env, deps = {}) {
-  if (!(parts[0] === "intel" && parts[1] === "events" && !parts[2] && request.method === "GET")) return null;
+  if (!(parts[0] === "intel" && parts[1] === "calendar" && !parts[2] && request.method === "GET")) return null;
   const now = deps.now ?? Date.now();
   try {
     const hit = JSON.parse((await env.LAB_STORE.get(EVENTS_CACHE_KEY)) || "null");

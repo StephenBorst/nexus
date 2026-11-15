@@ -1221,7 +1221,7 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
       });
       if (venuesRes) return venuesRes;
-      // ── GET /intel/events — macro releases + dated world-event markets (routes-events.mjs) ──
+      // ── GET /intel/calendar — macro releases + dated world-event markets (routes-events.mjs) ──
       const eventsRes = await handleEvents(parts, request, env, {
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
       });
