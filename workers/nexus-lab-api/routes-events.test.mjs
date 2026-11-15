@@ -35,6 +35,9 @@ test("the feed is read at most once an hour; a refusal serves the last good copy
   assert.equal(stale.events[0].title, "CPI m/m");
   const gone = await composeEvents(env, { dispatch, fetchImpl: refused, now: NOW + 25 * 3.6e6 });
   assert.deepEqual(gone.unread, ["macro"], "never an empty week passed off as quiet");
+  assert.equal(gone.macroError, "not json", "the reply names why the feed failed");
+  const denied = await composeEvents({ LAB_STORE: kv() }, { dispatch, fetchImpl: async () => new Response("x", { status: 403 }), now: NOW });
+  assert.equal(denied.macroError, "http 403");
   const noNext = await composeEvents({ LAB_STORE: kv() }, { dispatch, fetchImpl: ff(() => ok(THIS), () => new Response("x", { status: 404 })), now: NOW });
   assert.deepEqual(noNext.unread, [], "next week's file missing (it posts late in the week) is not a failure");
 });
