@@ -2566,3 +2566,13 @@ nothing and said nothing (the typed box already offered an invite). The nav badg
 of up to 20 threads on every incoming message. Now: application messages only, newest-first previews, threads by last
 activity, the link checked like the box (invite or a plain line), one `syncAll` for the badge, 16px compose field,
 readable sizes, and the header's back steps out of an open thread on a phone.
+
+## 2026-11-15 · Trader profile: agent rows counted as calls, tiles from a different record
+
+The profile read the whole /feed and kept the rows for its wallet. /feed also carries a wallet's AGENT trades
+(`agent:feed:{addr}`, named "Nexus Agent"), so a wallet whose agent had traded counted them as public calls (0xa77c…a9a7:
+12 agent rows beside 15 calls) and could take "Nexus Agent" as its name. The WIN RATE / AVG R tiles were computed from
+those rows while the share card and the rank read the grader's record. A "BEST R:R" tile showed the most ambitious
+planned target as if it were a result, and the live agent card was titled "graded record" with "$-12.5" style dollars.
+`/agents/standing/:addr` put the raw path segment into a Supabase `ilike` filter: "%" matched every wallet and summed
+their trades into one record. The identity row clipped the name to ~14 px on a 360 px phone.

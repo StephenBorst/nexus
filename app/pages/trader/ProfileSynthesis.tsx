@@ -20,6 +20,7 @@ import { callLifecycle, showsLivePnl, workingLine } from "@/lib/callLifecycle.mj
 import { fmtPx } from "@/components/AwaitingFill";
 import { openIdentityShare } from "@/utils/shareIdentity";
 import { bareTicker } from "@/utils/utils";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -45,8 +46,8 @@ export function PublicOperatorProfile({ wallet, isOwn = false }: { wallet: strin
   useEffect(() => {
     if (!wallet) return;
     let cancel = false;
-    fetch(`${API_BASE}/theses/process/${wallet}`)
-      .then((r) => r.json())
+    // One request with the profile page's own read of the same record (sharedJson).
+    sharedJson(`${API_BASE}/theses/process/${wallet.toLowerCase()}`)
       .then((d) => { if (!cancel) { setProcess(d); setLoaded(true); } })
       .catch(() => { if (!cancel) setLoaded(true); });
     return () => { cancel = true; };

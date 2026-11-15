@@ -209,6 +209,9 @@ export async function handleAgents(parts, request, env, ctx) {
   if (parts[0] === "agents" && parts[1] === "standing" && parts[2]) {
     if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
     const addr = String(parts[2]).toLowerCase();
+    // The address goes into a Supabase `ilike` filter: anything but a plain 0x address could
+    // carry a wildcard ("%" summed every wallet's trades into one record).
+    if (!/^0x[a-f0-9]{40}$/.test(addr)) return json({ error: "valid 0x address required" }, request, 400);
     if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
       return json({ eligible: false, criteria: [], stats: null, criteriaConfig: AGENT_BOARD }, request);
     }

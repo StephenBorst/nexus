@@ -534,6 +534,11 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
 - **Reads:** `GET /theses/leaderboard` (≥5 graded, net-positive R; an empty board is correct when nobody qualifies:
   check `/theses/process/:wallet` before debugging), `/theses/status/:wallet`, `/verify/:wallet/:id` (the grader
   re-run), `/theses/ledger` (+ chain, anchored). Fill/TP1 alerts go out from the pass that stamps them (hourly, or the minute grader).
+- **Trader profile** (`/feed/trader/:wallet`, rules `app/lib/profileRecord.mjs`, 2026-11-15): calls = the wallet's own
+  published rows from /feed (`profileCalls`: no agent rows, which carry "Nexus Agent", no resolution rows); the WIN RATE /
+  AVG R tiles read the grader's record (`/theses/process`, one shared request) like the share card and rank
+  (`recordTiles`); no "BEST R:R"; the agent card = LIVE trades booked at the fill, not a graded record.
+  `/agents/standing/:addr` takes a 0x address only (it feeds a Supabase `ilike`; "%" summed every wallet).
 - **Ranks:** only graded callers, in the grader's order, then emerging unranked. No self-scored REP anywhere; Rep Score
   code is deleted. Merit ranks (`rankCaller`): Signal / Sharp / Apex. Identity card = `app/lib/identityCard.mjs` on
   `loadIdentity`; no badge unless the grader gave one.
