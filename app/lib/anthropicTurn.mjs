@@ -51,9 +51,17 @@ export function emptyTurnText(stopReason) {
 export function createStreamAssembler(onText) {
   const blocks = new Map();
   let stopReason = null;
+  let error = null;
   return {
     push(ev) {
       const type = ev && ev.type;
+      // A stream can fail after it started (overloaded, a provider error): the API sends an
+      // `error` event and stops. It used to be ignored and the turn read "(empty response)".
+      if (type === "error") {
+        const e = (ev && ev.error) || {};
+        error = { type: String(e.type || "error"), message: String(e.message || "The model stopped with an error.") };
+        return;
+      }
       if (type === "content_block_start") {
         const cb = ev.content_block || { type: "text", text: "" };
         if (cb.type === "tool_use") blocks.set(ev.index, { type: "tool_use", id: cb.id, name: cb.name, json: "" });
@@ -80,6 +88,7 @@ export function createStreamAssembler(onText) {
       }
     },
     get stopReason() { return stopReason; },
+    get error() { return error; },
     content() {
       return [...blocks.keys()].sort((a, b) => a - b).map((k) => {
         const b = blocks.get(k);
@@ -91,3 +100,22 @@ export function createStreamAssembler(onText) {
     },
   };
 }
+
+/** The line shown for a stream that failed mid-reply (an `error` event). */
+export function streamErrorText(err) {
+  if (!err) return null;
+  if (err.type === "overloaded_error") return "The model is overloaded right now. Try again in a minute, or pick another model in ⚙.";
+  return `The model stopped with an error: ${err.message}`;
+}
+
+// Chat history sent with each question: the most recent turns only. The whole chat used to go
+// up every time, so a long session grew the bill (and the hosted body cap) turn by turn.
+export const HISTORY_MAX_MESSAGES = 20;
+
+/** The last `max` messages, starting on a user message (the API needs that). */
+export function trimHistory(history, max = HISTORY_MAX_MESSAGES) {
+  const h = Array.isArray(history) ? history.slice(-max) : [];
+  const first = h.findIndex((m) => m && m.role === "user");
+  return first < 0 ? [] : h.slice(first);
+}
+

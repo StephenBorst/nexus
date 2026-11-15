@@ -90,3 +90,43 @@ test("createStreamAssembler: a refusal with no text reports the refusal", () => 
   assert.deepEqual(a.content(), []);
   assert.match(emptyTurnText(a.stopReason), /declined/);
 });
+
+test("a stream that fails mid-reply surfaces its error instead of an empty turn", async () => {
+  const { createStreamAssembler, streamErrorText } = await import("./anthropicTurn.mjs");
+  const t = createStreamAssembler(() => {});
+  t.push({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+  t.push({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Partial" } });
+  t.push({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } });
+  assert.deepEqual(t.error, { type: "overloaded_error", message: "Overloaded" });
+  assert.match(streamErrorText(t.error), /overloaded right now/);
+  assert.match(streamErrorText({ type: "api_error", message: "boom" }), /stopped with an error: boom/);
+  assert.equal(streamErrorText(null), null);
+  const ok = createStreamAssembler(() => {});
+  ok.push({ type: "message_delta", delta: { stop_reason: "end_turn" } });
+  assert.equal(ok.error, null);
+});
+
+test("trimHistory: the last 20 messages, starting on a user turn", async () => {
+  const { trimHistory, HISTORY_MAX_MESSAGES } = await import("./anthropicTurn.mjs");
+  const h = Array.from({ length: 31 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: String(i) }));
+  const t = trimHistory(h);
+  assert.ok(t.length <= HISTORY_MAX_MESSAGES);
+  assert.equal(t[0].role, "user");
+  assert.equal(t[t.length - 1].content, "30", "the newest message is kept");
+  assert.deepEqual(trimHistory([{ role: "assistant", content: "x" }]), []);
+  assert.deepEqual(trimHistory(null), []);
+  assert.equal(trimHistory(h.slice(0, 3)).length, 3);
+});
+
+test("the copilot wires them: every run path trims, the stream path throws the error, BYOK caches", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../config/assistant.ts", import.meta.url), "utf8");
+  assert.equal((src.match(/trimHistory\(history\)/g) || []).length, 4, "runAnthropic, runAnthropicStream, runOpenAI, runOpenAIStream");
+  assert.doesNotMatch(src, /history\.map\(/);
+  assert.match(src, /const failed = streamErrorText\(turn\.error\);\n\s*if \(failed\) throw new Error\(failed\);/);
+  assert.match(src, /cacheBody: \{ cache_control: \{ type: "ephemeral" \} \}/);
+  assert.doesNotMatch(src, /export async function sendChat\(/);
+  assert.match(src, /export async function getHostedAccess\(address: string, provider\?: unknown\)/);
+  const ui = readFileSync(new URL("../components/NexusAssistant.tsx", import.meta.url), "utf8");
+  assert.match(ui, /getHostedAccess\(walletAddress, labWallet\?\.provider\)/);
+});

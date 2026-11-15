@@ -2606,3 +2606,12 @@ from model, max_tokens and (on 5.x) effort, so a PRO caller could add server too
 mode or any other billable field to our key, and input size had no ceiling. Each tool round took a cap slot, so a
 question with three tool rounds used four ("40/day" ≈ 10 questions); borst: count questions. Hosted refusals reached
 the copilot as raw JSON.
+
+## 2026-11-15 · Copilot client: wallet sign-in, history, caching, stream errors
+
+Hosted sign-in read `window.ethereum` only, so the Android app (a TWA) and WalletConnect users saw "No wallet found"
+with a wallet connected; it now signs with the connected wallet's provider. Every question resent the whole chat, so a
+long session grew the bill turn by turn (and would hit the new 200 KB hosted cap); now the last 20 messages. BYOK
+requests had no prompt caching, so each tool round re-billed the tools + system at full price on the user's key. A
+stream that failed after it started (an `error` event, e.g. overloaded) read "(empty response)". `sendChat`, a fourth
+request path nothing called, was deleted. Bankr's model list confirmed the haiku-5.5 / fable-5.2 ids (borst).
