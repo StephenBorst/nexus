@@ -2587,3 +2587,11 @@ positive funding as "% of OI"; and showed Orderly's `unsettled_pnl` as a positio
 driven by the score. The Lab's tape strip on Thesis/Agent did the same tally (RISK-ON score + "momentum presets
 favored"). Rewritten to inputs with sources and stated thresholds; the made-up card deleted. /intel and /arena were not
 on the public-route list, so a shared or searched link met the connect-wallet wall.
+
+## 2026-11-15 · Crash screen and Quick Trade's leverage step
+
+The routes' error screen was the template's developer dump ("Unexpected Application Error!", the stack, a
+"Developer Information" box, the full URL unbroken: it scrolled sideways at 360 px). Rewritten for a person: what
+happened, that a screen error moves no money, Reload / Go home / Copy error details, details folded. The Lab's Quick
+Trade swallowed a failed leverage change ("keep going at current lev"), so a ticket set to 2× could fill on a 20×
+account while its liquidation estimate showed 2×; it now stops and says nothing was placed.

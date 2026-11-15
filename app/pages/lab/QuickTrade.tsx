@@ -212,8 +212,16 @@ export function QuickTrade() {
     setBusy(side);
     setMsg(null);
     try {
+      // The leverage you picked must be the account's before the order goes: a failed change
+      // used to "keep going at current lev", so a 2× ticket could fill on a 20× account with
+      // the liquidation estimate above showing 2×. Now it stops and says so; nothing is placed.
       if (levClamped && levClamped !== curLeverage) {
-        try { await updateLeverage({ leverage: levClamped }); } catch { /* keep going at current lev */ }
+        try {
+          await updateLeverage({ leverage: levClamped });
+        } catch (e) {
+          setMsg({ ok: false, text: `Leverage didn’t change to ${levClamped}× (still ${curLeverage ?? "?"}×): ${(e as Error)?.message || "refused"}. Nothing was placed.` });
+          return;
+        }
       }
       setValues({ order_type: OrderType.MARKET, side: side === "BUY" ? OrderSide.BUY : OrderSide.SELL, order_quantity: String(qty) });
       await submit();
