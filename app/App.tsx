@@ -31,7 +31,9 @@ const guestParam = (() => {
 // Buy / Copy / Publish / ARM LIVE gate on a wallet in their own components, untouched.
 // /proof too: it's the page people link to prove the grades — on a phone the modal covered it whole.
 // /analyze too: every X-Ray share link (og.…/share/xray/:a) forwards to /analyze?address=.
-const PUBLIC_ROUTES = ["/token", "/feed", "/proof", "/analyze"];
+// Read-only pages people share or find by search open without the connect-wallet wall
+// (/intel and /arena are indexed in routeMeta.mjs and shared like the rest).
+const PUBLIC_ROUTES = ["/token", "/feed", "/proof", "/analyze", "/intel", "/arena"];
 const isPublicRoute = (() => {
   try { return PUBLIC_ROUTES.some((r) => window.location.pathname.startsWith(r)); }
   catch { return false; }

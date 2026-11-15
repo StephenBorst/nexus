@@ -461,6 +461,13 @@ product is what sits on top:
 - **Smart Money's STRETCHED FUNDING scan** (`ConvictionScanner.tsx`, rules `app/lib/conviction.mjs`, 2026-11-15): ordered by
   how stretched funding is (never by how many inputs agree), each input's lean in words (`leanWord`), the market's own
   past fades as a fact, the plain fade's grade on top; a tap opens the drawer. No conviction word (`convictionLevel` deleted).
+- **Intel page + tape strip (2026-11-15, rules `app/lib/intelTape.mjs`, `app/lib/marketTape.mjs`, tested):** /intel (also the
+  Lab's Market Intel tab) shows each input with its source: Fear & Greed, BTC dominance, total mcap 24h, funding breadth;
+  markets past a STATED line (funding > +0.08% / < −0.03% per 8h, OI > 1.5× / 0.9× 24h volume on > $100k) ordered by how
+  far past; positions with computed uPnL (never `unsettled_pnl`) + funding paid/received. No regime score, no "CONF %", no
+  liquidation estimates, no LONG FLUSH labels on an account ratio, no advice. The Thesis/Agent tape strip (`MarketTape`)
+  = up 24h · BTC · longs pay, no RISK-ON score or preset advice. /intel and /arena skip the connect-wallet wall
+  (`PUBLIC_ROUTES`, App.tsx).
 - **The Read / Briefing / FADE:** show inputs, never a tally or crown of ungraded reads; the Board's FADE is "a
   mechanical rule, not graded yet" with the nearest graded relative's live grade (`app/lib/fadeGrade.mjs`). Never call
   a read "proven" or "graded" unless the scoreboard grades that exact rule.

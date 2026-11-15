@@ -66,7 +66,7 @@ function ConvergenceBar({ qPct, mktPct }: { qPct: number; mktPct: number }) {
   return (
     <div style={{ margin: "8px 0 6px" }}>
       <div style={{ position: "relative", height: 6, background: INSET, border: `1px solid ${BORDER}`, borderRadius: 3 }}>
-        {/* the gap = the edge Q is trading */}
+        {/* the gap = where Q’s model and the venue disagree */}
         <div style={{ position: "absolute", top: 0, bottom: 0, left: `${lo}%`, width: `${hi - lo}%`, background: ACCENT, opacity: 0.14 }} />
         {/* live market price (secondary tone) */}
         <div style={{ position: "absolute", top: -2, bottom: -2, left: `calc(${clamp(mktPct)}% - 1px)`, width: 2, background: FOG }} />
@@ -209,7 +209,7 @@ export function QSignals({ address }: { address?: string | null }) {
     const draft = {
       symbol: s.perp.coin,
       direction: s.perp.direction,
-      catalyst: `Quotient fair value ${s.qProbPct}% vs venue ${s.marketProbPct}% (${s.spreadPp}pp edge)`,
+      catalyst: `Quotient fair value ${s.qProbPct}% vs venue ${s.marketProbPct}% (${s.spreadPp}pp gap)`,
       targetWindow: s.windowDays ? `${s.windowDays}d` : "7d",
       notes: `Quotient's model prices "${s.question}" at ${s.qProbPct}% vs the venue's ${s.marketProbPct}%. A ${s.spreadPp}pp gap.${s.thesis ? ` ${s.thesis}` : ""} Trading the convergence as a directional ${s.perp.coin} view (${s.perp.direction})${s.perp.targetUsd ? `, price ~$${s.perp.targetUsd.toLocaleString()}` : ""}. Q's read. Your call: add entry/stop/targets. Graded from public price.`,
     };
