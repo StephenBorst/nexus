@@ -950,7 +950,9 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   never build a worker relay. x402 v2 wire: challenge in the `payment-required` header, EIP-3009 typed data, retry with
   `PAYMENT-SIGNATURE` (not `X-PAYMENT`), UTF-8-safe base64. Guards pinned to Base USDC + Quotient's payTo, cap $0.05.
   PRO-gated, explicit load, 15-min cache. Shaper `qshape.ts` mirrors lab-api `quotientSignals`.
-- **MiroShark sims (server pays, `payGuards.mjs`):** our hot wallet signs ONLY Base USDC "exact" to MiroShark's pinned
+  Every failed pull says whether money moved (`app/lib/qpayNote.mjs`): before the signature or a 402 = nothing paid;
+  signed then lost = may still settle.
+- **MiroShark sims (server pays, `payGuards.mjs`; the card names the credit's fate, `app/lib/simOutcome.mjs`):** our hot wallet signs ONLY Base USDC "exact" to MiroShark's pinned
   receiver for ≤ the credit price; anything else fails closed and refunds. One payment tx buys one product. Credit + cap
   are taken under the lock before paying. Don't delete the pin to "fix" a run.
 

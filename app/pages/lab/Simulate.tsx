@@ -12,6 +12,7 @@ import { C } from "@/config/theme";
 import { simRunKey, loadSimRun, saveSimRun } from "@/lib/simRuns.mjs";
 import { AGENT_API } from "./agentTypes";
 import { getAgentSig } from "./agentKeys";
+import { notQueuedText, noReplyText, runFailedText } from "@/lib/simOutcome.mjs";
 
 const MF = "var(--nx-font-mono)";
 const SIM_RECEIVER = "0x06cD9c281E6ab09906B46a10e059F2770EfdE49A"; // subs/AI/sim revenue receiver
@@ -56,16 +57,16 @@ export function Simulate({ body, label = "◆ Simulate", wallet: walletProp }: {
     if (!wallet) { setNeedBuy(false); setDone({ error: "connect a wallet to run a simulation" }); setState("done"); return; }
     setState("running"); setProg(null); setDone(null); setNeedBuy(false);
     let walletSig = "";
-    try { walletSig = await getAgentSig(wallet); } catch { setDone({ error: "signature needed to run" }); setState("done"); return; }
+    try { walletSig = await getAgentSig(wallet); } catch { setDone({ error: notQueuedText("A signature is needed to run") }); setState("done"); return; }
     fetch(`${AGENT_API}/wargame`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, run: true, walletSig }) })
       .then(async (r) => ({ status: r.status, d: (await r.json()) as SimResult & { credits?: number } }))
       .then(({ status, d }) => {
         const su = d?.job?.status_url || d?.job?.data?.status_url;
         if (d?.ran === "queued" && su) { const run = { statusUrl: su, startedAt: Date.now() }; saveRun(key, run); setSaved(run); setStatusUrl(su); return; } // → polling effect
         if (status === 402) { setCredits(0); setNeedBuy(true); setState("preview"); return; } // out of credits → buy
-        setDone({ error: d?.error || "simulation didn't queue. Try again" }); setState("done");
+        setDone({ error: notQueuedText(d?.error) }); setState("done");
       })
-      .catch(() => { setDone({ error: "simulation failed. Try again" }); setState("done"); });
+      .catch(() => { setDone({ error: noReplyText() }); setState("done"); refreshCredits(); });
   };
 
   const verifyBuy = () => {
@@ -102,7 +103,7 @@ export function Simulate({ body, label = "◆ Simulate", wallet: walletProp }: {
         setProg({ stage: x.current_stage, progress: x.progress, message: x.message });
         const finish = (d: Done) => { const run = { statusUrl, startedAt: saved?.startedAt ?? Date.now(), done: d }; saveRun(key, run); setSaved(run); setDone(d); setState("done"); };
         if (x.status === "completed" || x.completed_at) { finish({ shareUrl: x.share_url, message: x.message }); refreshCredits(); return; }
-        if (x.status === "failed" || x.error) { finish({ error: x.error || "simulation failed" }); return; }
+        if (x.status === "failed" || x.error) { finish({ error: runFailedText(x.error) }); return; }
       } catch { /* transient. Keep polling */ }
       // Not an error: the run is still going and stays saved. Reopening the card picks it up.
       if (++tries > 90) { setDone({ note: "Still running. Reopen this card later to pick it back up." }); setState("done"); return; }
