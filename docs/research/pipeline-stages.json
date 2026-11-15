@@ -77,6 +77,22 @@
       "netBps": -62.1
     }
   },
+  "locks": {
+    "level_reclaim": {
+      "lostStage": "PAPER",
+      "demotedAt": "2026-11-15T13:53:54.714Z",
+      "eventsAtDemotion": 99,
+      "cleanPasses": 0,
+      "lastPassAt": null
+    },
+    "oi_div_reversal_4h": {
+      "lostStage": "PAPER",
+      "demotedAt": "2026-11-15T13:53:54.714Z",
+      "eventsAtDemotion": 89,
+      "cleanPasses": 0,
+      "lastPassAt": null
+    }
+  },
   "tests": {
     "basis_x_cvd:regime_window": {
       "status": "COUNTING",

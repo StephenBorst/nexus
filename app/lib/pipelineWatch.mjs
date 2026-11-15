@@ -17,6 +17,7 @@
 // as an issue ("the served stage stands and the disagreement is a bug to fix in its own PR").
 
 import { REGIME_WINDOW, REGIME_OUTCOMES, judgeRegimeWindow, regimeFromMs } from "./regimeWindow.mjs";
+import { isDemotion, lockAtDemotion, stepLock, lockProgress, STAGE_RANK } from "./promotionLock.mjs";
 //
 // 3. The stress-hour study (docs/research/stress-hours-prereg.md), as served in `stressStudy`: a read's
 //    verdict turning FINAL is the change (one PR records it under the page's Results). Counts and the
@@ -70,6 +71,28 @@ export const STAGE_TRIGGERS = Object.freeze({
   RETIRED: {
     section: "**Retired**",
     does: ["/proof moves the row to \"Retired\" with its name, numbers and the date. It stays visible. Never re-tuned."],
+  },
+});
+
+// Backwards moves (pipeline-if-then.md § "Backwards moves", borst 2026-11-15; rules app/lib/promotionLock.mjs). A demoted
+// read keeps its paper wallet running and is promotion-LOCKED; the lock is part of the recorded snapshot (`locks`).
+export const LOCK_TRIGGERS = Object.freeze({
+  LOCKED: {
+    section: "**Backwards moves**",
+    does: [
+      "Record the snapshot and the lock. The paper wallet keeps running for data. Promotion is locked: nothing a higher stage licenses is applied, and live-plan signing is refused in code (promotion_locked).",
+      "It re-qualifies after 2 clean daily watcher reads at its lost stage, at least 7 days apart, plus 15 new out-of-sample events since the demotion. A failing read resets the count.",
+    ],
+  },
+  PASS: { section: "**Backwards moves**", does: ["Record the pass in the snapshot. Nothing else changes: the read is still locked."] },
+  RESET: { section: "**Backwards moves**", does: ["A read below the lost stage resets the count to 0. Record it. Nothing else changes."] },
+  UNLOCKED: {
+    section: "**Backwards moves**",
+    does: ["Remove the lock from the snapshot. From here the served stage's own section applies again, as a new PR per trigger."],
+  },
+  HELD: {
+    section: "**Backwards moves**",
+    does: ["The served stage moved up while the read is locked: record the stage only. Nothing in that stage's section is applied until the lock clears."],
   },
 });
 
@@ -220,19 +243,46 @@ export function diffPipeline(prev, cur) {
   const next = { asOf: cur.asOf, reads: {}, gradedExit: {} };
   const before = prev?.reads || {};
 
+  const prevLocks = prev?.locks || {};
+  next.locks = {};
   for (const [axis, now] of Object.entries(cur.reads)) {
     const was = before[axis]?.stage ?? null;
     if (was === "RETIRED" && now.stage !== "RETIRED") {
       issues.push(`${axis}: recorded RETIRED, served ${now.stage}. Retired is final; the served value is a bug to fix in its own PR.`);
       next.reads[axis] = { ...before[axis] };
+      if (prevLocks[axis]) next.locks[axis] = { ...prevLocks[axis] };
       continue;
     }
     next.reads[axis] = { stage: now.stage, next: now.next, events: now.events };
+    // The promotion lock: set on a demotion, stepped on every other read while it holds.
+    let lock = prevLocks[axis] || null;
+    let lockEvent = null;
+    if (isDemotion(was, now.stage)) {
+      lock = lockAtDemotion(lock, { from: was, events: now.events, asOf: cur.asOf });
+      lockEvent = "LOCKED";
+    } else if (lock) {
+      const st = stepLock(lock, now, cur.asOf);
+      lock = st.lock;
+      lockEvent = st.event ? st.event.toUpperCase() : null;
+    }
+    if (lock) next.locks[axis] = lock;
     if (was !== now.stage) {
+      const up = was != null && STAGE_RANK[now.stage] != null && STAGE_RANK[was] != null && STAGE_RANK[now.stage] > STAGE_RANK[was];
+      const held = up && lock;
       changes.push({
         key: `read:${axis}`, kind: was == null ? "new_read" : "stage", from: was, to: now.stage,
-        reason: now.next ? `next: ${now.next}` : "", page: IF_THEN_PAGE,
-        trigger: STAGE_TRIGGERS[now.stage] || { section: "?", does: [`Unknown stage "${now.stage}": not on the page. Ask borst.`] },
+        reason: [now.next ? `next: ${now.next}` : "", lock ? lockProgress(lock, now.events) : ""].filter(Boolean).join(" · "),
+        page: IF_THEN_PAGE,
+        trigger: lockEvent === "LOCKED" ? LOCK_TRIGGERS.LOCKED : held ? LOCK_TRIGGERS.HELD
+          : STAGE_TRIGGERS[now.stage] || { section: "?", does: [`Unknown stage "${now.stage}": not on the page. Ask borst.`] },
+      });
+    }
+    if (lockEvent && lockEvent !== "LOCKED") {
+      changes.push({
+        key: `lock:${axis}`, name: `${axis} promotion lock`, kind: "lock", from: lockEvent === "UNLOCKED" ? "locked" : `${prevLocks[axis]?.cleanPasses ?? 0} passes`,
+        to: lockEvent === "UNLOCKED" ? "unlocked" : `${lock.cleanPasses} passes`,
+        reason: lock ? lockProgress(lock, now.events) : `re-qualified: ${prevLocks[axis].lostStage} on 2 daily reads 7+ days apart, 15+ new events`,
+        page: IF_THEN_PAGE, trigger: LOCK_TRIGGERS[lockEvent],
       });
     }
   }
@@ -240,6 +290,7 @@ export function diffPipeline(prev, cur) {
     if (!(axis in cur.reads)) {
       issues.push(`${axis}: recorded but not served. Kept as recorded; check the scoreboard.`);
       next.reads[axis] = { ...before[axis] };
+      if (prevLocks[axis]) next.locks[axis] = { ...prevLocks[axis] };
     }
   }
 
@@ -345,4 +396,14 @@ export function changeReport(changes, issues = [], asOf = null) {
   if (issues.length) { lines.push("### Issues", ...issues.map((i) => `- ${i}`), ""); }
   lines.push("Opened by the daily pipeline watcher. It merges only when checks are green and nothing is borst's to arm. Steps marked \"borst's go\" are borst's.");
   return { title: title.length > 120 ? `${title.slice(0, 117)}…` : title, body: lines.join("\n") };
+}
+
+// The recorded locks as a module the worker can import (live-plan signing refuses a locked read in code). Written by
+// `tools/pipeline/watch.mjs --write` with the snapshot; pipelineWatch.test.mjs fails if the two disagree.
+export const LOCKS_MODULE_PATH = "app/lib/promotionLocks.mjs";
+export function promotionLocksModule(locks = {}) {
+  const sorted = Object.fromEntries(Object.keys(locks || {}).sort().map((k) => [k, locks[k]]));
+  return "// GENERATED by tools/pipeline/watch.mjs --write from docs/research/pipeline-stages.json (`locks`). Never edit by hand.\n"
+    + "// Rules: app/lib/promotionLock.mjs; page: docs/research/pipeline-if-then.md § \"Backwards moves\".\n"
+    + `export const PROMOTION_LOCKS = Object.freeze(${JSON.stringify(sorted, null, 2)});\n`;
 }

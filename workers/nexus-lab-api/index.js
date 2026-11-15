@@ -1006,7 +1006,7 @@ const worker = {
       if (claimRes) return claimRes;
       const judgeSignRes = await handleJudgeSign(parts, request, env);
       if (judgeSignRes) return judgeSignRes;
-      const planSignRes = await handlePlanSign(parts, request, env);
+      const planSignRes = await handlePlanSign(parts, request, env, { scorecardKey: axisbtCacheKey(20) });
       if (planSignRes) return planSignRes;
       const haltRes = await handleHalt(parts, request, env);
       if (haltRes) return haltRes;

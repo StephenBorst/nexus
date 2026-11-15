@@ -104,6 +104,30 @@ test("after a PASS: the steps in order, what's done marked, the first open one i
   assert.match(noPlan.steps[0].text, /Have Claude draft oi_div_reversal_4h's live plan: none exists yet/);
 });
 
+// pipeline-if-then.md § "Backwards moves" (borst 2026-11-15): the digest never lists "sign the plan" as next while the
+// read is demoted or promotion-locked; it says why, and every other step waits behind it.
+test("after a PASS on a demoted or locked read: one 'wait' step with the reason, nothing else is next", () => {
+  const plan = { doc: "docs/research/live-plan-level-reclaim.md", signed: false };
+  const lock = { lostStage: "PAPER", demotedAt: "2026-11-15T13:53:54.714Z", eventsAtDemotion: 99, cleanPasses: 0, lastPassAt: null };
+  const demoted = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan, stage: "REGISTERED" });
+  assert.match(demoted.head, /PASSED its 30-trade judgment, but nothing can be signed yet/);
+  assert.deepEqual(demoted.steps.map((s) => s.state), ["next", "later", "later", "later", "later", "later"]);
+  assert.match(demoted.steps[0].text, /^Wait: the read is served REGISTERED; a live plan needs TRADEABLE or PAPER\. The paper wallet keeps running/);
+  const locked = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan, stage: "PAPER", lock });
+  assert.match(locked.steps[0].text, /promotion locked since 2026-11-15 \(lost PAPER\): 0 of 2 clean daily reads/);
+  assert.match(verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan, stage: null }).steps[0].text, /scoreboard is unread/);
+  const clear = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan, stage: "PAPER", lock: null });
+  assert.equal(clear.steps[0].state, "next");
+  assert.match(clear.steps[0].text, /sign it on/);
+  const t = digestText({ asOf: Date.parse("2026-12-20T15:49:00Z"), stages: { level_reclaim: "REGISTERED" }, pending: [], paper: [
+    { axis: "level_reclaim", count: 30, target: 30, parity: "CLEAN", verdict: "PASS", plan, stage: "REGISTERED", lock,
+      lockLine: "promotion locked since 2026-11-15 (lost PAPER): 0 of 2 clean daily reads at PAPER, 15 more new events (15 since the demotion)", closed24h: [] },
+  ] });
+  assert.match(t, /nothing can be signed yet/);
+  assert.match(t, /\n {2}promotion locked since 2026-11-15/);
+  assert.doesNotMatch(t, /\[next\] Refresh the live plan/);
+});
+
 test("after a FAIL or RESET: nothing goes live, one next step; no verdict = no steps", () => {
   const f = verdictSteps({ axis: "level_reclaim", verdict: "FAIL" });
   assert.match(f.head, /FAILED.*Nothing goes live\./);
@@ -232,6 +256,18 @@ test("the runner hands a PASS its plan (signed or not) and the armed wallet for 
   assert.equal(lr.liftWallet, W);
   const other = (await gatherFacts(e, { scorecardKey: KEY, nowMs: NOW, eventsFor: noEvents })).paper.find((p) => p.axis === "oi_div_reversal_4h");
   assert.equal(other.plan, undefined, "no verdict = no after-verdict facts");
+});
+
+test("the runner hands each paper run its served stage and recorded promotion lock, and the lock's progress line", async () => {
+  const e = env();
+  const lock = { lostStage: "PAPER", demotedAt: "2026-11-15T13:53:54.714Z", eventsAtDemotion: 99, cleanPasses: 0, lastPassAt: null };
+  const f = await gatherFacts(e, { scorecardKey: KEY, nowMs: NOW, eventsFor: noEvents, locks: { level_reclaim: lock } });
+  const lr = f.paper.find((p) => p.axis === "level_reclaim");
+  assert.equal(lr.stage, f.stages?.level_reclaim ?? null);
+  assert.deepEqual(lr.lock, lock);
+  assert.match(lr.lockLine, /^promotion locked since 2026-11-15 \(lost PAPER\): 0 of 2 clean daily reads at PAPER/);
+  const other = f.paper.find((p) => p.axis === "oi_div_reversal_4h");
+  if (other && !other.unread) { assert.equal(other.lock, null); assert.equal(other.lockLine, null); }
 });
 
 test("a failed send keeps the old state, so the alert goes out next run (never lost, never doubled)", async () => {
