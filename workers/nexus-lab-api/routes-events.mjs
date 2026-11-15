@@ -17,33 +17,37 @@ export const FF_URLS = Object.freeze([
   "https://nfs.faireconomy.media/ff_calendar_nextweek.json",
 ]);
 
+// { data, err }: err says why a read failed ("http 403", "not json", "fetch: …"), so the reply can name it.
 async function readJson(fetchImpl, url) {
   try {
     const r = await fetchImpl(url, { headers: { accept: "application/json", "user-agent": "Mozilla/5.0 (compatible; calendar-reader)" } });
-    if (!r.ok) return null;
-    return JSON.parse(await r.text());
-  } catch { return null; }
+    if (!r.ok) return { data: null, err: `http ${r.status}` };
+    const text = await r.text();
+    try { return { data: JSON.parse(text), err: null }; } catch { return { data: null, err: "not json" }; }
+  } catch (e) { return { data: null, err: `fetch: ${String(e?.message ?? e).slice(0, 80)}` }; }
 }
 
 /** The raw macro rows (all USD high/medium in the feeds), cached an hour; the last good copy for 24h. */
 async function macroRaw(env, fetchImpl, now) {
   let cached = null;
   try { cached = JSON.parse((await env.LAB_STORE.get(MACRO_CACHE_KEY)) || "null"); } catch { cached = null; }
-  if (cached && now - cached.at < MACRO_TTL_MS) return { rows: cached.rows, stale: false };
-  const [thisWeek, nextWeek] = await Promise.all(FF_URLS.map((u) => readJson(fetchImpl, u)));
+  if (cached && now - cached.at < MACRO_TTL_MS) return { rows: cached.rows, stale: false, err: null };
+  const [a, b] = await Promise.all(FF_URLS.map((u) => readJson(fetchImpl, u)));
+  const thisWeek = a.data, nextWeek = b.data;
   if (Array.isArray(thisWeek)) {
     const rows = [...thisWeek, ...(Array.isArray(nextWeek) ? nextWeek : [])];
     try { await env.LAB_STORE.put(MACRO_CACHE_KEY, JSON.stringify({ at: now, rows }), { expirationTtl: 2 * 86400 }); } catch { /* best-effort */ }
-    return { rows, stale: false };
+    return { rows, stale: false, err: null };
   }
-  if (cached && now - cached.at < MACRO_LASTGOOD_MS) return { rows: cached.rows, stale: true };
-  return { rows: null, stale: false };
+  const err = a.err ?? "not a list";
+  if (cached && now - cached.at < MACRO_LASTGOOD_MS) return { rows: cached.rows, stale: true, err };
+  return { rows: null, stale: false, err };
 }
 
 /** deps: dispatch (the worker's own handler), fetchImpl. */
 export async function composeEvents(env, { dispatch, fetchImpl = globalThis.fetch, now = Date.now() } = {}) {
   const unread = [];
-  const { rows, stale } = await macroRaw(env, fetchImpl, now);
+  const { rows, stale, err: macroError } = await macroRaw(env, fetchImpl, now);
   const macro = macroEvents(rows, { now });
   if (macro == null) unread.push("macro");
 
@@ -54,7 +58,7 @@ export async function composeEvents(env, { dispatch, fetchImpl = globalThis.fetc
 
   return {
     v: 1, builtAt: now, events: calendar({ macro: macro ?? [], markets: markets ?? [] }),
-    unread, macroStale: stale, sources: CALENDAR_SOURCES,
+    unread, macroStale: stale, macroError, sources: CALENDAR_SOURCES,
   };
 }
 
