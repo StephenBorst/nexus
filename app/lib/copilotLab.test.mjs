@@ -1,0 +1,80 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { venuesForCopilot, calendarForCopilot, riskForCopilot } from "./copilotLab.mjs";
+import { venueRows, venueLine } from "./crossFunding.mjs";
+import { riskDesk, riskLine } from "./riskDesk.mjs";
+
+// The copilot reads the Lab's venues / calendar / risk panels through the panels' own rules (2026-11-15).
+
+test("venues: the board's widest gaps, the panel's line, unread venues named", () => {
+  const rows = venueRows({ orderly: { ETH: 11, BTC: 9, ZZZ: 4 }, hyperliquid: { ETH: 8.8, BTC: 9.1 }, okx: { ETH: 9.6 } });
+  const out = venuesForCopilot({ rows, unread: ["okx"] });
+  assert.deepEqual(out.widest_gaps.map((r) => r.coin), ["ETH", "BTC"], "sorted by gap; a coin no other venue lists has no gap");
+  assert.equal(out.widest_gaps[0].line, venueLine(rows[0]));
+  assert.deepEqual(out.unread, ["okx"]);
+  assert.match(out.note, /not a free trade/);
+  assert.equal(out.coins_listed, 3);
+});
+
+test("venues: one coin, from the coin route's row or the board", () => {
+  const rows = venueRows({ orderly: { ETH: 11 }, hyperliquid: { ETH: 8.8 } });
+  assert.equal(venuesForCopilot({ row: rows[0], unread: [] }, { coin: "ETH" }).gap_pts_yr, rows[0].gap);
+  assert.equal(venuesForCopilot({ rows }, { coin: "perp_eth_usdc" }).coin, "ETH");
+  assert.equal(venuesForCopilot({ row: null, unread: [] }, { coin: "XYZ" }).listed, false);
+  assert.ok(venuesForCopilot(null).error, "a failed read says unavailable, never an empty board");
+  assert.ok(venuesForCopilot({ rows: [], unread: ["orderly"] }).error);
+});
+
+test("calendar: inside the window, coin filter keeps macro, UTC times, unread named", () => {
+  const now = Date.parse("2026-11-15T12:00:00Z"), H = 3_600_000;
+  const events = [
+    { kind: "MACRO", at: now + 2 * H, title: "CPI m/m", impact: "High", forecast: "0.3%", previous: "0.2%" },
+    { kind: "MARKET", at: now + 3 * 24 * H, title: "ETH ETF staking?", yesPct: 40, coins: ["ETH"] },
+    { kind: "MARKET", at: now + 4 * 24 * H, title: "SOL thing", yesPct: 10, coins: ["SOL"] },
+    { kind: "MACRO", at: now + 10 * 24 * H, title: "FOMC", impact: "High" },
+  ];
+  const out = calendarForCopilot({ events, unread: ["markets"] }, { now, days: 7, coin: "ETH" });
+  assert.deepEqual(out.events.map((e) => e.title), ["CPI m/m", "ETH ETF staking?"]);
+  assert.equal(out.events[0].at_utc, "2026-11-15T14:00:00Z");
+  assert.equal(out.events[0].when, "in 2h");
+  assert.match(out.events[0].detail, /High impact · forecast 0\.3%/);
+  assert.deepEqual(out.unread, ["markets"]);
+  assert.match(out.note, /^Times in UTC\./);
+  assert.equal(calendarForCopilot({ events }, { now, days: 30 }).events.length, 4);
+  assert.ok(calendarForCopilot({ unread: ["macro", "markets"] }).error, "no events array = unavailable, never 'nothing scheduled'");
+});
+
+test("risk: the risk desk's own numbers and flags", () => {
+  const rows = [
+    { symbol: "PERP_ETH_USDC", position_qty: 2, mark_price: 3000, est_liq_price: 2880, full_tp_sl: { sl_trigger_price: 2850 } },
+    { symbol: "PERP_BTC_USDC", position_qty: 0.1, mark_price: 90000, est_liq_price: 70000 },
+  ];
+  const desk = riskDesk(rows, { equity: 5000, funding: { PERP_ETH_USDC: 0.0001 }, periods: { PERP_ETH_USDC: 8 } });
+  const out = riskForCopilot(desk);
+  const eth = out.positions.find((p) => p.coin === "ETH");
+  assert.equal(eth.stop, "past liquidation (never fires)");
+  assert.equal(eth.liquidation_pct_away, 4);
+  assert.equal(eth.line, riskLine(desk.positions.find((p) => p.coin === "ETH")));
+  assert.equal(out.positions.find((p) => p.coin === "BTC").stop, "none");
+  assert.deepEqual(out.book.unstopped, desk.unstopped);
+  assert.ok(out.flags.some((f) => f.startsWith("WARN: Your ETH stop sits past liquidation")));
+  assert.equal(riskForCopilot(riskDesk([], {})).open_positions, 0);
+  assert.ok(riskForCopilot(null).error, "an unread account is not 'no positions'");
+});
+
+test("wiring: the copilot reads these through the shared rules, and the risk desk from the browser", () => {
+  const tools = readFileSync(new URL("../config/assistantTools.ts", import.meta.url), "utf8");
+  assert.match(tools, /from "@\/lib\/copilotLab\.mjs"/);
+  for (const n of ["get_funding_venues", "get_calendar"]) assert.ok(tools.includes(`name: "${n}"`), n);
+  assert.match(tools, /\/intel\/funding-venues/);
+  assert.match(tools, /\/intel\/calendar`/, "the calendar route, not the older /intel/events");
+  const book = tools.slice(tools.indexOf('name: "get_book_risk"'), tools.indexOf('name: "get_call_advice"'));
+  assert.match(book, /riskForCopilot\(ctx\.riskDesk\)/);
+  assert.doesNotMatch(book, /fetch\(/, "the book never leaves the browser");
+  const panel = readFileSync(new URL("../components/NexusAssistant.tsx", import.meta.url), "utf8");
+  assert.match(panel, /const \{ desk: riskDeskRead \} = useRiskDesk\(\);/);
+  assert.match(panel, /riskDesk: riskDeskRead,/);
+  const prompt = readFileSync(new URL("../config/assistant.ts", import.meta.url), "utf8");
+  for (const n of ["get_funding_venues", "get_calendar", "get_book_risk"]) assert.ok(prompt.includes(n), `prompt names ${n}`);
+});

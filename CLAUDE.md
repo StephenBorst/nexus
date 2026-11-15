@@ -69,6 +69,9 @@ product is what sits on top:
   EVM only). Each question sends the last `HISTORY_MAX_MESSAGES` 20 (`trimHistory`); BYOK requests carry top-level
   `cache_control` (prompt caching on the user's key); a stream `error` event surfaces as a line (`streamErrorText`),
   never "(empty response)". Rules in `app/lib/anthropicTurn.mjs`.
+  **Lab panels in chat (2026-11-15, `app/lib/copilotLab.mjs`):** `get_funding_venues` (/intel/funding-venues), `get_calendar`
+  (/intel/calendar, UTC) and `get_book_risk`'s `desk` (the risk desk's `riskDesk()` from `useRiskDesk`, in the browser) are shaped
+  by the panels' own rules; unread sources stay named.
   Bounded tool loop (max 5), models listed live from the key, thesis drafts via localStorage `nexus_thesis_draft` →
   `/lab?tab=thesis` (bare ticker, not `PERP_`). Its prompt must not call PREDICTIVE an edge or suggest inverting a read.
   **Grades (2026-11-14, pinned by `app/lib/assistantGrades.test.mjs`):** `get_market_read` = the drawer's
