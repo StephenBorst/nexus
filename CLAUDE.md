@@ -693,6 +693,12 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   universe only), each annualized from its own period; gap = Orderly − the others' average. A dead venue = named in
   `unread`, its column null, never 0. Lab home lens "Venues" (`FundingVenues.tsx`) + the drawer's "Funding elsewhere"
   lens (MARKET_SOURCES `venues`). An input, "Not graded" (`UNGRADED_LENSES`); copy never says arbitrage/free/edge.
+- **Risk desk (2026-11-15, rules `app/lib/riskDesk.mjs`, read `app/hooks/useRiskDesk.ts`):** the connected account's
+  open positions from the SDK (position stream, collateral, est. funding, each market's `funding_period`), in the
+  browser only (test-pinned: no fetch). Per position: liquidation % away (≤5 = warn, ≤10 = watch), what the resting
+  full stop loses (a stop past liquidation never fires = warn, and counts as uncapped), funding $/day. The book: exposure
+  ×, net, at your stops % of account, same-side bunching. Lab home "YOUR OPEN RISK" (`RiskDeskPanel.tsx`, pure
+  `RiskDeskView`) + the Trade line under the market read (`PositionRiskLine.tsx`). Facts, never advice or a grade.
 - **Trade page read (2026-11-14, `MarketStripBar.tsx` under the LAB strip in `pages/perp/Layout.tsx`, rules
   `app/lib/marketStrip.mjs`):** the coin on screen in one line (funding, smart money, tape) from the drawer's answer
   (`/intel/market/:coin` now carries `facts`, numbers for the same inputs; cache key `intel:market:v2:`); ☆ watches it,
