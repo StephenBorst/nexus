@@ -714,7 +714,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
 - **Events calendar (2026-11-15, rules `app/lib/eventsCalendar.mjs`, route `GET /intel/calendar` `routes-events.mjs`; NOT
   `/intel/events`, the older Polymarket corner):**
   US macro releases (ForexFactory's public weekly JSON, this + next week, USD High/Medium; read at most hourly
-  `intel:events:macro:v1`, a 24h last-good copy served `macroStale`) + the Catalysts board's dated Polymarket markets
+  `intel:events:macro:v1`; it answers 429 to busy Cloudflare egress, so a refusal backs off an hour
+  (`intel:events:macro:fail:v1`) and a 7-day last-good copy serves with `macroStale` + `macroAt`; `macroError` names the cause) + the Catalysts board's dated Polymarket markets
   (≤45 days, "market closes then", odds, coins). A failed source = `unread`, never an empty week. Lab home lens
   "Calendar" (`EventsCalendar.tsx`), 24h times in the viewer's zone. Scheduled facts, no direction. Nothing typed by hand.
 - **Trade page read (2026-11-14, `MarketStripBar.tsx` under the LAB strip in `pages/perp/Layout.tsx`, rules
