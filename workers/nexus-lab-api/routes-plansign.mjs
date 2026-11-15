@@ -4,7 +4,8 @@
 //   GET  /pipeline/live-plan/:axis      → { axis, doc, text, sha256, verdict, licensed, signed: record|null } (public)
 //   POST /pipeline/live-plan/:axis/sign { address, ts, sig, sha256 } → a treasury Safe owner or an OPS_WALLETS address
 //        signing livePlanSignMessage within 5 minutes, over the page as committed, only once the read's 30-trade
-//        verdict is RECORDED as PASS. Once per page. Stored in LAB_STORE; the watcher appends it under Sign-off.
+//        verdict is RECORDED as PASS and while the read is SERVED TRADEABLE / PAPER with no promotion lock
+//        (pipeline-if-then.md § "Backwards moves"; the lock is the watcher's record, app/lib/promotionLocks.mjs). Once per page. Stored in LAB_STORE; the watcher appends it under Sign-off.
 //        ARMS NOTHING: GRADED_EXIT_LIVE_LIFT stays empty until borst's own arming PR.
 import { json, recoverEthAddress } from "./shared.mjs";
 import { isRevenueViewer } from "./revenue.mjs";
@@ -14,6 +15,9 @@ import { readRecordedJudgment } from "./paperJudge.mjs";
 import { CLAIM_SIG_MAX_AGE_MS, CLAIM_SIG_SKEW_MS } from "../../app/lib/paperClaim.mjs";
 import { LIVE_PLAN_SIGS_KEY, livePlanSignMessage, planSignRefusal } from "../../app/lib/livePlanSign.mjs";
 import { LIVE_PLAN_TEXT } from "../../app/lib/livePlanText.mjs";
+import { PROMOTION_LOCKS } from "../../app/lib/promotionLocks.mjs";
+import { stageSignRefusal } from "../../app/lib/promotionLock.mjs";
+import { servedStages } from "./routes-paperclaim.mjs";
 
 const isEvm = (a) => typeof a === "string" && /^0x[0-9a-fA-F]{40}$/.test(a);
 
@@ -24,20 +28,28 @@ export async function readPlanSigs(env) {
   } catch { return {}; }
 }
 
-export async function handlePlanSign(parts, request, env, { now = Date.now, fetchImpl = globalThis.fetch, lock = withLock, plans = LIVE_PLAN_TEXT } = {}) {
+export async function handlePlanSign(parts, request, env, { now = Date.now, fetchImpl = globalThis.fetch, lock = withLock, plans = LIVE_PLAN_TEXT, scorecardKey = null, locks = PROMOTION_LOCKS } = {}) {
   if (!(parts[0] === "pipeline" && parts[1] === "live-plan" && parts[2])) return null;
   const axis = String(parts[2]).slice(0, 64);
   const isSign = parts[3] === "sign" && parts.length === 4;
   if (!isSign && parts.length !== 3) return null;
   if (!env.LAB_STORE) return json({ error: "store_unbound" }, request, 503);
   const plan = plans[axis] || null;
+  // The read's served stage (stored scoreboard; unread = null, which refuses) and its recorded promotion lock.
+  const stageOf = async () => (scorecardKey ? (await servedStages(env, scorecardKey))[axis] ?? null : null);
+  const lockOf = locks?.[axis] || null;
 
   if (!isSign) {
     if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "method not allowed" }, request, 405);
     if (!plan) return json({ error: "no_plan", axis }, request, 404);
     const verdict = (await readRecordedJudgment(env, axis).catch(() => null))?.verdict || null;
     const signed = (await readPlanSigs(env))[axis]?.[plan.sha256] || null;
-    return json({ axis, doc: plan.doc, text: plan.text, sha256: plan.sha256, verdict, licensed: verdict === "PASS", signed }, request);
+    const stage = await stageOf();
+    const blocked = stageSignRefusal({ stage, lock: lockOf });
+    return json({
+      axis, doc: plan.doc, text: plan.text, sha256: plan.sha256, verdict, stage, locked: !!lockOf,
+      licensed: verdict === "PASS" && !blocked, ...(blocked ? { blocked: blocked.error, blockedDetail: blocked.detail } : {}), signed,
+    }, request);
   }
 
   if (request.method !== "POST") return json({ error: "method not allowed" }, request, 405);
@@ -55,7 +67,7 @@ export async function handlePlanSign(parts, request, env, { now = Date.now, fetc
     return await lock(env, LOCK_KEYS.planSigs(), async () => {
       const verdict = (await readRecordedJudgment(env, axis).catch(() => null))?.verdict || null;
       const sigs = await readPlanSigs(env);
-      const no = planSignRefusal({ axis, verdict, planSha: plan?.sha256 || null, sha, signed: plan ? sigs[axis]?.[plan.sha256] : null });
+      const no = planSignRefusal({ axis, verdict, planSha: plan?.sha256 || null, sha, signed: plan ? sigs[axis]?.[plan.sha256] : null, stage: await stageOf(), lock: lockOf });
       if (no) return json(no, request, no.status);
       let signer = null;
       try { signer = recoverEthAddress(livePlanSignMessage(address, axis, sha, ts), body.sig); } catch { signer = null; }

@@ -181,7 +181,7 @@ function JudgmentSign({ axis, address, wallet }: { axis: string; address: string
   );
 }
 
-type PlanState = { axis: string; doc: string; text: string; sha256: string; verdict: string | null; licensed: boolean; signed: { by: string; at: string } | null };
+type PlanState = { axis: string; doc: string; text: string; sha256: string; verdict: string | null; licensed: boolean; stage?: string | null; blocked?: string; blockedDetail?: string; signed: { by: string; at: string } | null };
 
 // Live plans (app/lib/livePlanSign.mjs): read the page, sign its sha256 once the 30-trade verdict is PASS. Arms nothing.
 function LivePlansBox({ address, wallet, box, label }: { address: string; wallet: ReturnType<typeof useLabWallet>; box: React.CSSProperties; label: React.CSSProperties }) {
@@ -219,7 +219,7 @@ function LivePlansBox({ address, wallet, box, label }: { address: string; wallet
         <div key={p.axis} style={{ borderTop: `1px solid ${C.border}`, marginTop: S.md, paddingTop: S.md }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: S.sm, alignItems: "baseline" }}>
             <span style={{ fontFamily: MONO, fontSize: 13, color: C.text.bright }}>{p.axis}</span>
-            <span style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted }}>{p.verdict ? `verdict ${p.verdict}` : "no 30-trade verdict yet"}</span>
+            <span style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted }}>{p.verdict ? `verdict ${p.verdict}` : "no 30-trade verdict yet"}{p.stage ? ` · served ${p.stage}` : ""}</span>
           </div>
           <details style={{ marginTop: S.xs }}>
             <summary style={{ fontSize: 12, color: C.text.bright, cursor: "pointer" }}>Read the plan</summary>
@@ -233,9 +233,12 @@ function LivePlansBox({ address, wallet, box, label }: { address: string; wallet
             <div style={{ display: "flex", flexWrap: "wrap", gap: S.sm, marginTop: S.xs, alignItems: "center" }}>
               <span style={{ fontSize: 11, color: C.text.muted, fontFamily: MONO }}>sha256 {p.sha256.slice(0, 12)}…</span>
               <Button variant="secondary" disabled={!p.licensed || busy === p.axis} onClick={() => sign(p)}>
-                {busy === p.axis ? "Signing…" : p.licensed ? "Sign this plan" : "Locked until a PASS"}
+                {busy === p.axis ? "Signing…" : p.licensed ? "Sign this plan" : p.verdict === "PASS" && p.blocked ? "Locked: see below" : "Locked until a PASS"}
               </Button>
             </div>
+          )}
+          {!p.signed && p.verdict === "PASS" && p.blockedDetail && (
+            <div style={{ marginTop: S.xs, fontSize: 12, color: C.text.fog }}>Not signable: {p.blockedDetail}.</div>
           )}
           {msg[p.axis] && <div style={{ marginTop: S.xs, fontSize: 12, color: C.warn }}>{msg[p.axis]}</div>}
         </div>

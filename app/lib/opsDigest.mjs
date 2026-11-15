@@ -16,6 +16,8 @@ export const DIGEST_STATE_KEY = "ops:digest:state:v1"; // LAB_STORE: what the la
 export const DIGEST_DAY_KEY = (day) => `ops:digest:sent:${day}`;
 export const SWEEP_NUDGE_USDC = 100;
 
+import { stageSignRefusal } from "./promotionLock.mjs";
+
 const BLOCKING_PARITY = new Set(["DRIFT", "UNVERIFIABLE"]);
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const fmtR = (r) => (r == null ? "R unread" : `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(2)}R`);
@@ -46,10 +48,12 @@ const REPO = "https://github.com/StephenBorst/nexus/blob/main";
 
 /**
  * @param {object} p   a paper run row: { axis, verdict, wallet }
- * @param {{ plan?: { doc: string, signed: boolean } | null, liftWallet?: string | null }} [ctx]
+ * @param {{ plan?: { doc: string, signed: boolean } | null, liftWallet?: string | null,
+ *           stage?: string|null, lock?: object|null }} [ctx]  stage = the served stage (null = board unread; left out =
+ *           not checked); lock = the recorded promotion lock (pipeline-if-then.md § "Backwards moves")
  * @returns {null | { head: string, steps: Array<{ state: "done"|"next"|"later", text: string }> }}
  */
-export function verdictSteps(p, { plan = null, liftWallet = null } = {}) {
+export function verdictSteps(p, { plan = null, liftWallet = null, stage, lock = null } = {}) {
   if (!p?.verdict) return null;
   if (p.verdict === "FAIL") {
     return { head: `${p.axis} FAILED its 30-trade judgment. Nothing goes live.`, steps: [
@@ -71,6 +75,14 @@ export function verdictSteps(p, { plan = null, liftWallet = null } = {}) {
     { state: "todo", text: `The $10 mechanics test before the first real trade (house rules): the backstop shows on Orderly and KILL clears it. Line by line: ${APP}/ops/preflight?wallet=${liftWallet || "<the new wallet>"}` },
     { state: "todo", text: "After 10 live trades: the written compare against the paper wallet (slippage, fees, parity) before trade 11." },
   ];
+  // A PASS on a read the board has demoted (or that is still promotion-locked) licenses nothing yet: signing is refused
+  // in code (livePlanSign.mjs), so the digest says why and every step waits behind it.
+  const blocked = stage === undefined && !lock ? null : stageSignRefusal({ stage: stage === undefined ? "PAPER" : stage, lock });
+  if (blocked) {
+    for (const s of steps) if (s.state === "todo") s.state = "later";
+    steps.unshift({ state: "next", text: `Wait: ${blocked.detail}. The paper wallet keeps running; the live plan can't be signed until this clears.` });
+    return { head: `${p.axis} PASSED its 30-trade judgment, but nothing can be signed yet (${APP}/proof/paper/${p.axis}):`, steps };
+  }
   let marked = false;
   for (const s of steps) if (s.state === "todo") { s.state = marked ? "later" : "next"; marked = true; }
   return { head: `${p.axis} PASSED its 30-trade judgment (${APP}/proof/paper/${p.axis}). Next, in order:`, steps };
@@ -148,7 +160,7 @@ export function digestText(facts) {
   if (facts.pending?.length) for (const x of facts.pending) L.push(`· ${esc(x.text)}`);
   const drift = (facts.paper || []).filter((p) => BLOCKING_PARITY.has(p.parity));
   for (const p of drift) L.push(`· ${esc(p.axis)} parity reads ${esc(p.parity)}: explain it before anything else moves.`);
-  const after = (facts.paper || []).map((p) => verdictSteps(p, { plan: p.plan || null, liftWallet: p.liftWallet || null })).filter(Boolean);
+  const after = (facts.paper || []).map((p) => verdictSteps(p, { plan: p.plan || null, liftWallet: p.liftWallet || null, ...("stage" in p ? { stage: p.stage } : {}), lock: p.lock || null })).filter(Boolean);
   for (const v of after) {
     L.push(`· ${esc(v.head)}`);
     v.steps.forEach((s, i) => L.push(`  ${i + 1}. ${s.state === "done" ? "[done]" : s.state === "next" ? "[next]" : "[ ]"} ${esc(s.text)}`));
@@ -160,6 +172,7 @@ export function digestText(facts) {
     for (const p of facts.paper) {
       if (p.unread) { L.push(`${esc(p.axis)} · record unread right now`); continue; }
       L.push(`${esc(p.axis)} · ${p.count} of ${p.target} · parity ${esc(p.parity || "unread")}${p.verdict ? ` · verdict ${esc(p.verdict)}` : ""}`);
+      if (p.lockLine) L.push(`  ${esc(p.lockLine)}`);
       for (const t of p.closed24h || []) {
         const tape = t.tape ? ` · tape ${TAPE[t.tape.entry] || "?"}/${TAPE[t.tape.exit] || "?"}` : "";
         L.push(`  #${t.n} ${esc(t.coin)} ${esc(t.side)} · ${esc(EXIT[t.reason] || t.reason || "closed")} · ${fmtR(t.r)}${t.rBasis === "contract" ? " (by the contract)" : ""}${tape}`);

@@ -82,6 +82,23 @@ exit): 6 trades, 2 wins and 4 losses, −$12.54, parity CLEAN.
 - No early retirement. session_momentum reads failing today (31 events, −0.76R, worse than all 300 random replays), but
   it is retired only when it reaches 100 events. Until then /proof shows "31 events · failing" with the reason.
 
+**Backwards moves** (added 2026-11-15, borst; the day level_reclaim and oi_div_reversal_4h fell from Paper to
+Registered, halves disagree, and this page had no rule for it)
+- A backwards move is a served stage below the one recorded (Registered < Lead < Edge < Tradeable < Paper; Retired
+  is final and isn't one). The watcher records the new stage and a promotion lock in `pipeline-stages.json` (`locks`:
+  the stage lost, the date, the out-of-sample event count at that moment).
+- The paper wallet keeps running. Its 30-trade judgment runs under its own signed page. Paper carries no capital, and
+  its forward trades are the data that tell regime variance from decay.
+- Promotion is locked. Nothing a higher stage licenses is applied: no live-plan signature (refused in code, also
+  whenever the read isn't served Tradeable or Paper), no x402 or house-caller switch, no new wallet. A 30-trade PASS
+  on a locked read waits. /proof follows the served stage as before.
+- The lock clears only after two clean daily watcher reads that serve the lost stage or higher, at least 7 days apart,
+  and at least 15 new out-of-sample events since the demotion. A daily read below the lost stage in between resets the
+  count to 0. Hourly rebuilds don't count: two of them are the same data plus an hour. A second demotion while locked
+  restarts the lock.
+- When it clears, the watcher removes the lock and the served stage's own section applies again, one PR per trigger.
+- Each lock change (set, a pass, a reset, cleared) is its own watcher PR, record only.
+
 ## Stacks
 
 Two reads may be combined only once both are Leads, and only if the scoreboard's `overlap` block shows they aren't

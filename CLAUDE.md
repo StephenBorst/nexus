@@ -151,7 +151,8 @@ product is what sits on top:
   until the read's `pjudge:{axis}` verdict is PASS (`not_licensed`), on another hash (`page_changed`) or twice; Safe
   owner / `OPS_WALLETS`, 5 min, NexusLock `planSigs`, LAB_STORE `pipeline:plansigs:v1`. The watcher's step 5
   (`nextPlanRecords`) appends the signed line under Sign-off once, after re-checking hash + signer. A plan is listed in
-  `LIVE_PLANS`. **Signing ARMS NOTHING:** `GRADED_EXIT_LIVE_LIFT` stays empty (test-pinned); arming is borst's own PR.
+  `LIVE_PLANS`. Also refused unless the read is SERVED TRADEABLE / PAPER (`read_demoted`; unread board = 503) with no
+  promotion lock (`promotion_locked`, Backwards moves under the watcher). **Signing ARMS NOTHING:** `GRADED_EXIT_LIVE_LIFT` stays empty (test-pinned); arming is borst's own PR.
 - KV: brain/exec/lab-api agent routes share `NEXUS_AGENT` = `c3c0582ec71c4d049d0795872f39f033`; lab data = `LAB_STORE`.
   Agent keys: `agent:users|config|key|state|signal|pending|kill:{addr}`.
 - Observability logs on in every wrangler.toml. "Agents down" is usually idle by design (`direction:NONE`): check the
@@ -450,6 +451,12 @@ product is what sits on top:
   dated line under the stress page's Results; WORSE's pause PR stays borst's), a recorded final verdict is terminal.
   **The watcher merges its own `Pipeline watch:` PR** (borst's go, 2026-11-02) only when checks are green, it is mergeable, the change is display/record only, no parity DRIFT and nothing arms live money; any other session leaves watcher PRs alone. A scheduled task stores its own copy of the
   prompt: after editing the doc, update the task (`update_trigger`).
+  **Backwards moves** (borst 2026-11-15, pipeline-if-then.md, rules `app/lib/promotionLock.mjs`): a served stage below the
+  recorded one = the watcher records a promotion lock in the snapshot (`locks`) + the generated `app/lib/promotionLocks.mjs`
+  (never edit by hand; a test diffs it). Paper keeps running; plan signing + the digest's after-PASS steps refuse while
+  locked. Clears after 2 clean DAILY watcher reads at the lost stage or higher, ≥ 7 days apart, + ≥ 15 new oos events since
+  the demotion; a failing read resets, a second demotion restarts. Each lock change is its own record-only watcher PR.
+  level_reclaim + oi_div_reversal_4h locked 2026-11-15 (PAPER → REGISTERED, halves disagree).
 - **Live money** = `docs/research/live-money-review.md` (the checklist) + `docs/research/live-plan-level-reclaim.md` (the
   first concrete plan, DRAFT, unsigned, arms nothing; written 2026-11-07 before the paper gate): $1,000 dedicated wallet,
   fixed $10 risk a trade (1R) sized from the graded stop, 3×, $30/day, kill at −10R, 10-trade first tranche vs the paper

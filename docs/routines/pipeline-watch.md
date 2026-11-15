@@ -28,7 +28,7 @@ no wallet and writes only the files `tools/pipeline/records.mjs` names.
    a. List open PRs on StephenBorst/nexus whose title starts with "Pipeline watch:". If one already reports the same
       change (same read, same from → to), stop: finish with one line naming that PR.
    b. Branch `pipeline-watch/<YYYY-MM-DD>` from main. Run `node tools/pipeline/watch.mjs --from /tmp/sc.json --write`
-      (updates `docs/research/pipeline-stages.json`).
+      (updates `docs/research/pipeline-stages.json` and the generated `app/lib/promotionLocks.mjs`).
    c. Read `docs/research/pipeline-if-then.md`; for a graded-exit change also `docs/research/graded-exit-prereg.md`; for
       a regime-window change or note also `docs/research/graded-exit-regime-prereg.md`; for a stress-study verdict
       (`stress_hours <read>`) also `docs/research/stress-hours-prereg.md`.
@@ -40,7 +40,12 @@ no wallet and writes only the files `tools/pipeline/records.mjs` names.
       borst's (a paper wallet, x402, the house caller, a live plan, arming) is NOT done: list it in the PR body under
       "borst's to do". If the trigger names a parity check, run it with curl and put the verdict in the PR body; a
       DRIFT means the result waits (say so).
-   d. A stage the page doesn't cover, or a stage that went backwards, changes nothing but the snapshot: say so in the PR.
+   d. A stage the page doesn't cover changes nothing but the snapshot: say so in the PR. A stage that went backwards
+      follows the page's "Backwards moves" section (borst 2026-11-15): the command records a promotion lock with the
+      snapshot; the paper wallet keeps running; nothing else changes. A `lock` change (a clean pass, a reset, unlocked)
+      is record only, the same way. While a read is locked, a stage moving back up is recorded only (its trigger says
+      HELD): nothing in that stage's section is applied until the command reports the lock cleared. Name the lock's
+      progress (the change's `reason`) in the PR body.
    e. Run `node tools/run-tests.mjs` (install deps first: yarn 4 at the root, `npm ci` in workers/nexus-lab-api,
       nexus-agent-exec, nexus-carry-engine) and `npx tsc --noEmit`. Both clean, or no PR.
       Install Yarn through the npm registry: cloud sessions can't reach repo.yarnpkg.com, where corepack fetches Yarn

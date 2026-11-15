@@ -14,6 +14,7 @@ import { livePlanModule } from "../../tools/pipeline/livePlans.mjs";
 import { nextPlanRecords } from "../../app/lib/pipelineRecordsWrite.mjs";
 import { handlePlanSign } from "./routes-plansign.mjs";
 import { PJUDGE_KEY } from "./paperJudge.mjs";
+import { PROMOTION_LOCKS } from "../../app/lib/promotionLocks.mjs";
 
 const ROOT = new URL("../../", import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), "utf8");
@@ -51,7 +52,7 @@ test("the message names the read and the hash, and says it arms nothing", () => 
 });
 
 test("refused before a PASS, over another page, twice, or for a read with no plan", () => {
-  const base = { axis: "level_reclaim", verdict: "PASS", planSha: "aa", sha: "aa", signed: null };
+  const base = { axis: "level_reclaim", verdict: "PASS", planSha: "aa", sha: "aa", signed: null, stage: "PAPER", lock: null };
   assert.equal(planSignRefusal(base), null);
   assert.equal(planSignRefusal({ ...base, verdict: null }).error, "not_licensed");
   assert.match(planSignRefusal({ ...base, verdict: "FAIL" }).detail, /verdict is FAIL/);
@@ -61,17 +62,40 @@ test("refused before a PASS, over another page, twice, or for a read with no pla
   assert.equal(planSignRefusal({ ...base, axis: "oi_div_reversal_4h", planSha: null }).error, "no_plan");
 });
 
+// pipeline-if-then.md § "Backwards moves" (borst 2026-11-15): a PASS on a read the board has demoted signs nothing.
+const LOCK = { lostStage: "PAPER", demotedAt: "2026-11-15T13:53:54.714Z", eventsAtDemotion: 99, cleanPasses: 1, lastPassAt: "2026-11-20T13:00:00Z" };
+test("a PASS signs only while the read is served TRADEABLE or PAPER with no promotion lock", () => {
+  const base = { axis: "level_reclaim", verdict: "PASS", planSha: "aa", sha: "aa", signed: null, stage: "PAPER", lock: null };
+  assert.equal(planSignRefusal({ ...base, stage: "TRADEABLE" }), null);
+  for (const stage of ["REGISTERED", "LEAD", "EDGE", "RETIRED"]) {
+    const no = planSignRefusal({ ...base, stage });
+    assert.equal(no.error, "read_demoted", stage);
+    assert.equal(no.status, 409);
+  }
+  assert.equal(planSignRefusal({ ...base, stage: null }).error, "stage_unread", "an unread board refuses: never a signature on a guess");
+  assert.equal(planSignRefusal({ ...base, stage: undefined }).status, 503);
+  const locked = planSignRefusal({ ...base, lock: LOCK });
+  assert.equal(locked.error, "promotion_locked", "served PAPER again is not enough while the lock holds");
+  assert.match(locked.detail, /1 of 2 clean daily reads at PAPER/);
+  assert.equal(planSignRefusal({ ...base, verdict: null, stage: "REGISTERED" }).error, "not_licensed", "no PASS stays the first reason");
+  assert.equal(planSignRefusal({ ...base, stage: "REGISTERED", signed: {} }).error, "read_demoted");
+});
+
 // ── The route on KV fixtures ─────────────────────────────────────────────────────────────────────
 function kv(init = {}) {
   const m = new Map(Object.entries(init).map(([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)]));
   return { m, async get(k) { return m.has(k) ? m.get(k) : null; }, async put(k, v) { m.set(k, v); } };
 }
-const env = (verdict) => ({ LAB_STORE: kv({ "ops:safe:owners": [O], ...(verdict ? { [PJUDGE_KEY("level_reclaim")]: { verdict } } : {}) }) });
-const deps = { lock: async (_e, _k, fn) => fn(), fetchImpl: async () => { throw new Error("network"); }, now: () => T0 };
-const get = (e, axis = "level_reclaim") => handlePlanSign(["pipeline", "live-plan", axis], new Request("https://og.test/x"), e, deps);
-const post = (e, body) => handlePlanSign(["pipeline", "live-plan", "level_reclaim", "sign"], new Request("https://og.test/x", {
+const SK = "axisbt:test:20";
+const board = (stage) => ({ pipeline: { reads: [{ axis: "level_reclaim", stage }] } });
+const env = (verdict, stage = "PAPER") => ({ LAB_STORE: kv({
+  "ops:safe:owners": [O], ...(verdict ? { [PJUDGE_KEY("level_reclaim")]: { verdict } } : {}), ...(stage ? { [SK]: board(stage) } : {}),
+}) });
+const deps = { lock: async (_e, _k, fn) => fn(), fetchImpl: async () => { throw new Error("network"); }, now: () => T0, scorecardKey: SK, locks: {} };
+const get = (e, axis = "level_reclaim", d = deps) => handlePlanSign(["pipeline", "live-plan", axis], new Request("https://og.test/x"), e, d);
+const post = (e, body, d = deps) => handlePlanSign(["pipeline", "live-plan", "level_reclaim", "sign"], new Request("https://og.test/x", {
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-}), e, deps);
+}), e, d);
 const signed = async (account, h, ts = T0) => ({ address: account.address, ts, sha256: h, sig: await account.signMessage({ message: livePlanSignMessage(account.address, "level_reclaim", h, ts) }) });
 const H = LIVE_PLAN_TEXT.level_reclaim.sha256;
 
@@ -102,6 +126,27 @@ test("the owner signs after a PASS, once; before a PASS, a forged or foreign sig
   assert.equal(rec.sha256, H);
   assert.equal((await (await post(e, await signed(owner, H, T0 + 1000))).json()).error, "already_signed");
   assert.equal((await (await get(e)).json()).signed.by, O);
+});
+
+test("the route refuses a PASS on a demoted, locked or unread read, and stores nothing", async () => {
+  const demoted = env("PASS", "REGISTERED");
+  const g = await (await get(demoted)).json();
+  assert.equal(g.licensed, false);
+  assert.equal(g.stage, "REGISTERED");
+  assert.equal(g.blocked, "read_demoted");
+  assert.equal((await (await post(demoted, await signed(owner, H))).json()).error, "read_demoted");
+  const unread = env("PASS", null);
+  assert.equal((await post(unread, await signed(owner, H))).status, 503);
+  const locked = env("PASS", "PAPER");
+  const withLock = { ...deps, locks: { level_reclaim: LOCK } };
+  assert.equal((await (await get(locked, "level_reclaim", withLock)).json()).blocked, "promotion_locked");
+  assert.equal((await (await post(locked, await signed(owner, H), withLock)).json()).error, "promotion_locked");
+  for (const e of [demoted, unread, locked]) assert.equal(e.LAB_STORE.m.has(LIVE_PLAN_SIGS_KEY), false);
+  // The deployed default reads the watcher's record (app/lib/promotionLocks.mjs), whatever it holds today.
+  const real = { ...deps }; delete real.locks;
+  const r = await post(env("PASS", "PAPER"), await signed(owner, H), real);
+  if (PROMOTION_LOCKS.level_reclaim) assert.equal((await r.json()).error, "promotion_locked");
+  else assert.equal(r.status, 200);
 });
 
 test("signing arms nothing: the live lift stays empty in every worker", () => {

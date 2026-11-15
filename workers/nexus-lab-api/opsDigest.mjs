@@ -24,16 +24,19 @@ import { readTape } from "./paperTape.mjs";
 import { parityEvents } from "./parityEvents.mjs";
 import { readRecordedJudgment } from "./paperJudge.mjs";
 import { readRevenue } from "./revenue.mjs";
+import { PROMOTION_LOCKS } from "../../app/lib/promotionLocks.mjs";
+import { lockProgress } from "../../app/lib/promotionLock.mjs";
 
 const DAY_MS = 86_400_000;
 const readJson = async (kv, key) => { try { const r = await kv.get(key); return r ? JSON.parse(r) : null; } catch { return null; } };
 
 /** Everything the digest and the alerts read, from KV. `stages: null` = the board was unreadable. */
-export async function gatherFacts(env, { scorecardKey, nowMs = Date.now(), eventsFor = parityEvents, withReceivers = false, revenue = readRevenue } = {}) {
+export async function gatherFacts(env, { scorecardKey, nowMs = Date.now(), eventsFor = parityEvents, withReceivers = false, revenue = readRevenue, locks = PROMOTION_LOCKS } = {}) {
   const agentKv = env.NEXUS_AGENT || env.LAB_STORE;
   let board = null;
   for (const key of [scorecardKey, `${scorecardKey}:lastgood`]) { board = await readJson(env.LAB_STORE, key); if (board?.pipeline?.reads) break; board = null; }
   const stages = board ? Object.fromEntries(board.pipeline.reads.filter((r) => r?.axis && r.stage).map((r) => [r.axis, r.stage])) : null;
+  const eventsOf = (axis) => { const n = board?.pipeline?.reads?.find((x) => x?.axis === axis)?.numbers?.events; return Number.isFinite(n) ? n : null; };
   const claims = await readPaperClaims(env);
   const sigs = await readJudgmentSigs(env);
   const planSigs = await readPlanSigs(env);
@@ -81,6 +84,10 @@ export async function gatherFacts(env, { scorecardKey, nowMs = Date.now(), event
       closed24h: (run?.trades || []).filter((t) => nowMs - Date.parse(t.closedAt) <= DAY_MS),
       open: run?.open || null, quiet: state.current_position ? null : quietLine(signal, nowMs),
       parity, parityNote, verdict: recorded?.verdict || null,
+      // The served stage + the recorded promotion lock (pipeline-if-then.md § "Backwards moves"): a PASS on a demoted
+      // or locked read can't be signed, and the digest says so.
+      stage: r.stage, lock: locks?.[r.axis] || null,
+      lockLine: locks?.[r.axis] ? lockProgress(locks[r.axis], eventsOf(r.axis)) : null,
       ...(recorded?.verdict ? afterVerdict(r.axis) : {}),
     });
   }

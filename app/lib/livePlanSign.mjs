@@ -4,6 +4,8 @@
 // Until now "signed" meant borst typing it under the page's Sign-off. Now the owner signs the sha256 of the page's text
 // above "## Sign-off" with the owner wallet on /ops/revenue, the same flow as the judgment rules (paperJudgePage.mjs):
 //   • licensed only once the read's 30-trade verdict is RECORDED as PASS (pjudge:{axis}); before that = refused;
+//   • and only while the read is SERVED TRADEABLE or PAPER and not promotion-locked (borst 2026-11-15, pipeline-if-then.md
+//     § "Backwards moves"): a PASS on a read the board has demoted signs nothing (read_demoted / promotion_locked);
 //   • the signature covers the exact text as committed (livePlanText.mjs, generated from the page, test-pinned);
 //   • once per page (a changed number is a new dated page, plan §6); stored in LAB_STORE, then appended under Sign-off
 //     by the daily watcher (pipelineRecordsWrite.mjs), where anyone can recover the signer.
@@ -11,6 +13,7 @@
 // Pure: no fetch, no KV.
 
 import { ownerSign } from "./paperClaim.mjs";
+import { stageSignRefusal } from "./promotionLock.mjs";
 
 export const LIVE_PLAN_SIGS_KEY = "pipeline:plansigs:v1"; // LAB_STORE: { [axis]: { [sha256]: signature record } }
 export const SIGN_OFF = "\n## Sign-off";
@@ -36,12 +39,16 @@ export function livePlanSignMessage(address, axis, sha256, ts) {
 
 /**
  * Why the owner can't sign this plan now (null = may sign).
- * @param {{ axis, verdict: string|null, planSha: string|null, sha: string, signed: object|null }} p
+ * @param {{ axis, verdict: string|null, planSha: string|null, sha: string, signed: object|null,
+ *           stage: string|null, lock: object|null }} p   stage = the SERVED stage (null = board unread); lock = the
+ *           recorded promotion lock (app/lib/promotionLocks.mjs), null = none
  */
-export function planSignRefusal({ axis, verdict, planSha, sha, signed }) {
+export function planSignRefusal({ axis, verdict, planSha, sha, signed, stage, lock }) {
   if (!LIVE_PLANS[axis] || !planSha) return { status: 404, error: "no_plan" };
   if (String(sha || "").toLowerCase() !== planSha) return { status: 409, error: "page_changed", sha256: planSha };
   if (verdict !== "PASS") return { status: 409, error: "not_licensed", detail: verdict ? `the 30-trade verdict is ${verdict}` : "no 30-trade verdict recorded yet" };
+  const onStage = stageSignRefusal({ stage, lock: lock || null });
+  if (onStage) return onStage;
   if (signed) return { status: 409, error: "already_signed" };
   return null;
 }

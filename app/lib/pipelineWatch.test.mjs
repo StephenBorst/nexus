@@ -240,3 +240,90 @@ test("the committed snapshot records the stress study for each of its seven read
   assert.deepEqual(Object.keys(snap.stress || {}).sort(), [...STRESS_STUDY.reads].sort());
   for (const [n, r] of Object.entries(snap.stress)) assert.ok(typeof r.status === "string" && "final" in r, n);
 });
+
+// ── Backwards moves: the promotion lock (pipeline-if-then.md, borst 2026-11-15) ─────────────────────────
+import { LOCK_TRIGGERS, promotionLocksModule, LOCKS_MODULE_PATH } from "./pipelineWatch.mjs";
+const scAt = (asOf, stages, events = 10) => ({
+  asOf, axes: [axis()],
+  pipeline: { reads: Object.entries(stages).map(([a, s]) => ({ axis: a, stage: s, next: "x", numbers: { events: typeof events === "number" ? events : events[a] } })) },
+});
+const D = (n) => new Date(Date.parse("2026-11-15T13:53:54.714Z") + n * 86_400_000).toISOString();
+
+test("a demotion records a promotion lock and carries the Backwards moves trigger; paper keeps running", () => {
+  const prev = stateFromScorecard(scAt(D(-1), { r1: "PAPER", r2: "LEAD" }, 99));
+  const { changes, next } = diffPipeline(prev, stateFromScorecard(scAt(D(0), { r1: "REGISTERED", r2: "LEAD" }, 99)));
+  assert.equal(changes.length, 1);
+  assert.equal(changes[0].trigger, LOCK_TRIGGERS.LOCKED);
+  assert.match(changes[0].reason, /promotion locked since 2026-11-15 \(lost PAPER\): 0 of 2/);
+  assert.deepEqual(next.locks, { r1: { lostStage: "PAPER", demotedAt: D(0), eventsAtDemotion: 99, cleanPasses: 0, lastPassAt: null } });
+  assert.match(LOCK_TRIGGERS.LOCKED.does[0], /paper wallet keeps running/);
+  assert.match(LOCK_TRIGGERS.LOCKED.does[0], /live-plan signing is refused in code/);
+});
+
+test("the lock's whole path: quiet while failing, a pass, a held re-promotion, a reset, two spaced passes + events = unlocked", () => {
+  let snap = stateFromScorecard(scAt(D(-1), { r1: "PAPER" }, 99));
+  const run = (n, stage, events) => { const r = diffPipeline(snap, stateFromScorecard(scAt(D(n), { r1: stage }, events))); snap = r.next; return r.changes; };
+  run(0, "REGISTERED", 99);
+  assert.deepEqual(run(1, "REGISTERED", 101), [], "still demoted, no pass yet: nothing to record");
+  let c = run(2, "PAPER", 103);
+  assert.deepEqual(c.map((x) => x.key), ["read:r1", "lock:r1"]);
+  assert.equal(c[0].trigger, LOCK_TRIGGERS.HELD, "a stage back up while locked applies nothing of PAPER's section");
+  assert.equal(c[1].trigger, LOCK_TRIGGERS.PASS);
+  assert.equal(snap.locks.r1.cleanPasses, 1);
+  assert.deepEqual(run(5, "PAPER", 108), [], "passing again inside 7 days: not counted, not news");
+  c = run(6, "REGISTERED", 110);
+  assert.deepEqual(c.map((x) => x.key), ["read:r1"], "dropping back below the lost stage is a second demotion: the lock restarts, count 0");
+  assert.equal(c[0].trigger, LOCK_TRIGGERS.LOCKED);
+  assert.deepEqual(snap.locks.r1, { lostStage: "PAPER", demotedAt: D(6), eventsAtDemotion: 110, cleanPasses: 0, lastPassAt: null });
+  run(7, "PAPER", 112);
+  assert.equal(snap.locks.r1.cleanPasses, 1);
+  c = run(14, "PAPER", 120);
+  assert.equal(snap.locks.r1.cleanPasses, 2, "two passes, 7 days apart");
+  assert.match(c[0].reason, /5 more new events/);
+  c = run(15, "PAPER", 125);
+  assert.deepEqual(c.map((x) => [x.key, x.to]), [["lock:r1", "unlocked"]]);
+  assert.equal(c[0].trigger, LOCK_TRIGGERS.UNLOCKED);
+  assert.deepEqual(snap.locks, {});
+  assert.deepEqual(run(16, "PAPER", 126), [], "unlocked: back to the plain rules");
+});
+
+test("a failing daily read that is not a new demotion resets a counted pass to 0", () => {
+  // Lost PAPER, back at PAPER once (a pass), then served TRADEABLE: below the lost stage, so the count resets.
+  let snap = stateFromScorecard(scAt(D(-1), { r1: "PAPER" }));
+  snap = diffPipeline(snap, stateFromScorecard(scAt(D(0), { r1: "REGISTERED" }))).next;
+  snap = diffPipeline(snap, stateFromScorecard(scAt(D(1), { r1: "PAPER" }))).next;
+  assert.equal(snap.locks.r1.cleanPasses, 1);
+  // PAPER → TRADEABLE is itself a demotion (restart); a flat fail at the same stage needs a lock already below it:
+  const flat = { ...snap, reads: { r1: { stage: "TRADEABLE", next: "x", events: 10 } }, locks: { r1: { ...snap.locks.r1 } } };
+  const r = diffPipeline(flat, stateFromScorecard(scAt(D(3), { r1: "TRADEABLE" })));
+  assert.deepEqual(r.changes.map((x) => [x.key, x.trigger]), [["lock:r1", LOCK_TRIGGERS.RESET]]);
+  assert.equal(r.next.locks.r1.cleanPasses, 0);
+});
+
+test("a reset only matters once a pass was counted; a read missing from the board keeps its lock", () => {
+  let snap = stateFromScorecard(scAt(D(-1), { r1: "TRADEABLE" }));
+  snap = diffPipeline(snap, stateFromScorecard(scAt(D(0), { r1: "LEAD" }))).next;
+  const gone = diffPipeline(snap, stateFromScorecard(scAt(D(1), { r2: "REGISTERED" })));
+  assert.deepEqual(gone.next.locks.r1, snap.locks.r1);
+  assert.equal(diffPipeline(snap, stateFromScorecard(scAt(D(1), { r1: "EDGE" }))).changes.find((c) => c.key === "lock:r1"), undefined);
+});
+
+test("every lock trigger points at the page's Backwards moves section, and none arms anything", () => {
+  const page = read(IF_THEN_PAGE);
+  for (const [k, t] of Object.entries(LOCK_TRIGGERS)) {
+    assert.ok(page.includes(t.section), `${k}: section ${t.section} is on the page`);
+    for (const d of t.does) assert.doesNotMatch(d, /\barm (it|the)|GRADED_EXIT_LIVE_LIFT/i, k);
+  }
+});
+
+test("the generated locks module is the snapshot's locks (run the watcher with --write)", async () => {
+  const snap = JSON.parse(read(SNAPSHOT_PATH));
+  assert.equal(read(LOCKS_MODULE_PATH), promotionLocksModule(snap.locks || {}));
+  const { PROMOTION_LOCKS } = await import("./promotionLocks.mjs");
+  assert.deepEqual(JSON.parse(JSON.stringify(PROMOTION_LOCKS)), Object.fromEntries(Object.keys(snap.locks || {}).sort().map((k) => [k, snap.locks[k]])));
+  for (const [a, l] of Object.entries(snap.locks || {})) {
+    assert.ok(snap.reads[a], `${a}: a lock on a recorded read`);
+    assert.ok(["LEAD", "EDGE", "TRADEABLE", "PAPER"].includes(l.lostStage), a);
+    assert.ok(Number.isFinite(l.eventsAtDemotion) && l.cleanPasses >= 0 && l.cleanPasses <= 2, a);
+  }
+});
