@@ -109,6 +109,7 @@ import { handleMarket, handleMarkets, handleFadeGrade } from "./routes-market.mj
 import { runWalletWatch } from "./walletWatch.mjs";
 import { handleBell, composeBell } from "./routes-bell.mjs";
 import { handleVenues } from "./routes-venues.mjs";
+import { handleEvents } from "./routes-events.mjs";
 import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
 import { marketCoin } from "../../app/lib/marketRead.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
@@ -1220,6 +1221,11 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
       });
       if (venuesRes) return venuesRes;
+      // ── GET /intel/events — macro releases + dated world-event markets (routes-events.mjs) ──
+      const eventsRes = await handleEvents(parts, request, env, {
+        dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
+      });
+      if (eventsRes) return eventsRes;
     }
     {
       const fadeRes = await handleFadeGrade(parts, request, {
