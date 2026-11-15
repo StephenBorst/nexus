@@ -1,3 +1,5 @@
+import { qpayFailure } from "@/lib/qpayNote.mjs";
+
 // ── x402 client-pays (Base USDC) — the ONE place Q Signals asks the wallet to pay ────
 // Quotient's /signals is an x402 (v2) endpoint: no payment → HTTP 402 + a payment challenge
 // in the base64 `payment-required` RESPONSE HEADER; pay → the data. We make the USER'S wallet
@@ -181,9 +183,25 @@ export interface Settlement { tx: string | null; network: string | null; }
 const asTxHash = (v: unknown): string | null =>
   typeof v === "string" && /^0x[0-9a-fA-F]{64}$/.test(v) ? v : null;
 
+// Every failure says whether money moved (qpayFailure, app/lib/qpayNote.mjs).
+class QPullError extends Error { declined = false; }
+
 export async function loadQuotientDirect(
   provider: Eip1193,
   minConviction = 3,
+): Promise<{ signals: unknown[]; usd: number; settlement: Settlement }> {
+  const stage = { signed: false };
+  try { return await pullQuotient(provider, minConviction, stage); }
+  catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(qpayFailure(msg, { signed: stage.signed, declined: e instanceof QPullError && e.declined }));
+  }
+}
+
+async function pullQuotient(
+  provider: Eip1193,
+  minConviction: number,
+  stage: { signed: boolean },
 ): Promise<{ signals: unknown[]; usd: number; settlement: Settlement }> {
   const mc = Number.isFinite(minConviction) && minConviction >= 1 && minConviction <= 5 ? minConviction : 3;
   const url = `${QUOTIENT_SIGNALS_URL}?min_conviction=${mc}`;
@@ -219,11 +237,12 @@ export async function loadQuotientDirect(
   const g = selectAndGuard(accepts, resource, extensions);   // pins network/asset/recipient + caps amount
   // 2) sign the EIP-3009 authorization for exactly that amount (echo the challenge's x402 version).
   const { header } = await signXPayment(provider, g, x402Version);
+  stage.signed = true;
   // 3) retry WITH the payment. Quotient's v2 reads it from the PAYMENT-SIGNATURE header, NOT
   //    X-PAYMENT (both are in its allow-headers; X-PAYMENT is silently ignored → "Payment required").
   let r2: Response;
   try { r2 = await fetch(url, { headers: { Accept: "application/json", "PAYMENT-SIGNATURE": header } }); }
-  catch { throw new Error("Payment sent but the data request was blocked — try again shortly."); }
+  catch { throw new Error("You signed the payment, but Quotient's reply never arrived"); }
   if (r2.ok) {
     // Paid + served. The payment-response header proves the on-chain settlement (Base tx hash).
     const receipt = decodeX402Header(r2.headers.get("payment-response") || r2.headers.get("PAYMENT-RESPONSE"));
@@ -235,6 +254,6 @@ export async function loadQuotientDirect(
   const why = decodeX402Header(r2.headers.get("payment-response") || r2.headers.get("payment-required"));
   const body = (await r2.json().catch(() => null)) as { error?: string; message?: string } | null;
   const reason = why?.error || why?.message || body?.error || body?.message || `HTTP ${r2.status}`;
-  if (r2.status === 402) throw new Error(`Quotient declined the payment: ${reason}`);
+  if (r2.status === 402) { const d = new QPullError(`Quotient declined the payment: ${reason}`); d.declined = true; throw d; }
   throw new Error(`Quotient error (${r2.status}): ${reason}`);
 }
