@@ -9,6 +9,7 @@ export const INTEL_LENSES = [
   { id: "venues", label: "Venues", sub: "the same coin’s funding on Orderly, Hyperliquid and OKX, side by side", legacyKey: "nx_venues_open" },
   { id: "positioning", label: "Positioning", sub: "where the leveraged crowd and the sharp wallets disagree", legacyKey: "nx_positioning_open" },
   { id: "catalysts", label: "Catalysts", sub: "liquid prediction-market events mapped to the markets they move here", legacyKey: "nx_catalysts_open" },
+  { id: "calendar", label: "Calendar", sub: "US macro releases and dated world events, by day, in your time zone", legacyKey: "nx_calendar_open" },
   { id: "forecast", label: "Forecasts", sub: "where prediction markets disagree with price, our markets only", legacyKey: "nx_forecast_open" },
   { id: "qsignals", label: "Q Signals", sub: "Quotient’s fair value vs the market · PRO, each pull paid by your wallet", legacyKey: "nx_qsignals_open" },
   { id: "tape", label: "Tape", sub: "news, movers, open interest and long/short, per market", legacyKey: "nx_intel_deep_open" },

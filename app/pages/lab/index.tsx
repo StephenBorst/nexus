@@ -39,6 +39,7 @@ import { LabCallsPanel } from "./LabCallsPanel";
 import { WatchlistPanel } from "./WatchlistPanel";
 import { RiskDeskPanel } from "./RiskDeskPanel";
 import { FundingVenues } from "./FundingVenues";
+import { EventsCalendar } from "./EventsCalendar";
 import { LabTitleBar, LabStats, LabTabs, type LabTab } from "./LabHeader";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
 import { C } from "@/config/theme";
@@ -353,6 +354,7 @@ export default function TheLabPage() {
             <IntelLenses render={(id) => {
               if (id === "funding") return <MispricedBoard />;
               if (id === "venues") return <FundingVenues />;
+              if (id === "calendar") return <EventsCalendar />;
               if (id === "positioning") return <PositioningBoard trades={connected ? processedTrades : undefined} />;
               if (id === "catalysts") return <CatalystBoard />;
               if (id === "forecast") return <ForecastDivergence />;
