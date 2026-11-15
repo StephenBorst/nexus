@@ -1,7 +1,7 @@
 {
   "note": "Last recorded stage of each registered read (served pipeline.reads[].stage) and the Basis x CVD graded-exit status (graded-exit-prereg.md bar). Written only by tools/pipeline/watch.mjs --write, inside a pipeline-watch PR. Seeded 2026-10-26: reads as served that day; the graded exit as pipeline-if-then.md recorded it on 2026-10-23 (Not yet), so any change since the signed page is reported.",
-  "recordedAt": "2026-11-14T14:47:06.503Z",
-  "asOf": "2026-11-14T12:53:40.842Z",
+  "recordedAt": "2026-11-15T14:46:22.491Z",
+  "asOf": "2026-11-15T13:53:54.714Z",
   "reads": {
     "rsi_reset_deep": {
       "stage": "REGISTERED",
@@ -9,39 +9,39 @@
       "events": 32
     },
     "level_reclaim": {
-      "stage": "PAPER",
-      "next": "its own paper record + parity CLEAN; live money is a separate review",
-      "events": 96
+      "stage": "REGISTERED",
+      "next": "mean R > 0 with both halves agreeing",
+      "events": 99
     },
     "oi_div_reversal": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 53
+      "events": 59
     },
     "session_momentum": {
       "stage": "RETIRED",
       "next": null,
-      "events": 119
+      "events": 130
     },
     "confluence_follow": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 85
+      "events": 91
     },
     "oi_div_reversal_4h": {
-      "stage": "PAPER",
-      "next": "its own paper record + parity CLEAN; live money is a separate review",
-      "events": 79
+      "stage": "REGISTERED",
+      "next": "mean R > 0 with both halves agreeing",
+      "events": 89
     },
     "oi_coil_break": {
       "stage": "LEAD",
-      "next": "beat 95% of random entries (now 10%) · 2 more holdout events",
-      "events": 40
+      "next": "beat 95% of random entries (now 15.3%) · holdout mean R > 0 and ≥ 80% vs random (now 0.42R, 36.2%)",
+      "events": 41
     },
     "session_fade": {
       "stage": "REGISTERED",
-      "next": "5 more out-of-sample events",
-      "events": 25
+      "next": "mean R > 0 with both halves agreeing",
+      "events": 36
     },
     "level_reclaim_tight": {
       "stage": "REGISTERED",
@@ -56,36 +56,36 @@
     "btc_lead_lag": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 42
+      "events": 55
     },
     "funding_basis_split": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 30
+      "events": 37
     },
     "smart_consensus_2x": {
       "stage": "REGISTERED",
-      "next": "30 more out-of-sample events",
-      "events": 0
+      "next": "24 more out-of-sample events",
+      "events": 6
     }
   },
   "gradedExit": {
     "basis_x_cvd": {
       "status": "FAILS",
       "reason": "the read is NOISE, below PREDICTIVE",
-      "trades": 41,
-      "netBps": -57
+      "trades": 42,
+      "netBps": -62.1
     }
   },
   "tests": {
     "basis_x_cvd:regime_window": {
       "status": "COUNTING",
-      "reason": "needs 10 more counted trades and the regime condition (one regime only: DOWN 5 days, FLAT 13 days), or the six-month limit (2027-04-27T00:00:00Z)",
-      "trades": 20,
-      "netBps": -80.1,
+      "reason": "needs 9 more counted trades and the regime condition (one regime only: DOWN 6 days, FLAT 13 days), or the six-month limit (2027-04-27T00:00:00Z)",
+      "trades": 21,
+      "netBps": -89.2,
       "regime": {
         "UP": 0,
-        "DOWN": 5,
+        "DOWN": 6,
         "FLAT": 13
       },
       "belowPredictive": true,
@@ -108,7 +108,7 @@
       "verdict": null,
       "final": false,
       "stress": 7,
-      "calm": 31,
+      "calm": 37,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -118,7 +118,7 @@
       "verdict": null,
       "final": false,
       "stress": 6,
-      "calm": 21,
+      "calm": 27,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -128,7 +128,7 @@
       "verdict": null,
       "final": false,
       "stress": 17,
-      "calm": 43,
+      "calm": 55,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -138,7 +138,7 @@
       "verdict": null,
       "final": false,
       "stress": 9,
-      "calm": 40,
+      "calm": 45,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -148,7 +148,7 @@
       "verdict": null,
       "final": false,
       "stress": 12,
-      "calm": 43,
+      "calm": 51,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -158,7 +158,7 @@
       "verdict": null,
       "final": false,
       "stress": 2,
-      "calm": 26,
+      "calm": 28,
       "d": null,
       "p": null,
       "judgedAt": null
