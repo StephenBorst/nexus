@@ -486,7 +486,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_conviction",
     description:
-      "Get the market-wide scan of funding-stretched coins: for each, which inputs (smart money, the graded caller crowd) point the same way as the funding fade and which don't. Use for 'where do the inputs line up', 'what should I be watching', or to triage the board before get_market_read on one coin. ALWAYS relay fade_grade: the plain funding fade's live scoreboard grade (it has graded NOISE, worse than random entries). Inputs lining up is NOT a grade: never call a row high-conviction, strong or an edge. Not advice.",
+      "Get the market-wide scan of funding-stretched coins, ordered by how stretched funding is: for each, which inputs (smart money, the graded caller crowd) point the same way as the funding fade and which don't. Use for 'where do the inputs line up', 'what should I be watching', or to triage the board before get_market_read on one coin. ALWAYS relay fade_grade: the plain funding fade's live scoreboard grade (it has graded NOISE, worse than random entries). Inputs lining up is NOT a grade: never call a row high-conviction, strong or an edge. Not advice.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
       const [mp, sm, cons, fg] = await Promise.all([
@@ -506,7 +506,7 @@ export const TOOLS: ToolDef[] = [
           funding_annual_pct: r.fundingAnnualPct,
         })),
         fade_grade: fg?.grade ? `The plain funding fade grades ${fg.grade.tier}${fg.grade.vsRandom ? `, ${fg.grade.vsRandom}` : ""}${fg.grade.samples ? ` (${fg.grade.samples} samples)` : ""}.` : "unread right now",
-        note: "Inputs lined up against the fade, ranked by how many point its way. Counting ungraded inputs is not a grade, and the fade itself is graded above. Triage only, not advice; get_market_read gives one coin with its grades.",
+        note: "Stretched markets ordered by how stretched funding is, with the other inputs beside each (counts, not a grade). The fade itself is graded above. Triage only, not advice; get_market_read gives one coin with its grades.",
       });
     },
   },

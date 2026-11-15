@@ -484,7 +484,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 8 }}>
         <div style={cardStyle}>
           <div style={labelStyle}>TOTAL PNL</div>
-          <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: totalPnl >= 0 ? "#3ecf8e" : "#f7525f", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{orders.length ? <CountUp value={totalPnl} format={formatPnlCompact} /> : "—"}</div>
+          <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: !orders.length ? "#71717a" : totalPnl >= 0 ? "#3ecf8e" : "#f7525f", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{orders.length ? <CountUp value={totalPnl} format={formatPnlCompact} /> : "—"}</div>
           <div style={{ fontSize: 10, color: "#52525b", marginTop: 4, fontFamily: "var(--nx-font-mono)" }}>realized</div>
         </div>
         <div style={cardStyle}>
@@ -532,7 +532,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
           ].map((r) => (
             <div key={r.label} style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 9, color: "#52525b", letterSpacing: "0.08em", fontFamily: "var(--nx-font-mono)" }}>{r.label}</div>
-              <div style={{ fontSize: 18, color: r.tone === "pos" ? "#3ecf8e" : r.tone === "neg" ? "#f7525f" : "#f4f4f5", fontFamily: "var(--nx-font-mono)" }}>{r.value}</div>
+              <div style={{ fontSize: 18, color: r.value === "—" ? "#71717a" : r.tone === "pos" ? "#3ecf8e" : r.tone === "neg" ? "#f7525f" : "#f4f4f5", fontFamily: "var(--nx-font-mono)" }}>{r.value}</div>
             </div>
           ))}
         </div>

@@ -629,7 +629,7 @@ export function AgentView() {
           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 8 }}>Automate</div>
           <div style={{ fontFamily: "var(--nx-font-serif)", fontSize: 26, fontWeight: 700, color: "#f4f4f5", lineHeight: 1.1, letterSpacing: "-0.01em" }}>Autonomous Trading Agent</div>
           <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#a1a1aa", lineHeight: 1.6, maxWidth: 560, margin: "12px auto 0" }}>
-            Runs <strong style={{ color: "#d4d4d8" }}>your</strong> strategy 24/7 inside hard limits. Every trade graded from public price. Order-only keys. It can <strong style={{ color: "#d4d4d8" }}>never withdraw</strong>. Kill it anytime. Start in PAPER.
+            Runs <strong style={{ color: "#d4d4d8" }}>your</strong> strategy 24/7 inside hard limits. Live trades booked from the exchange’s fills, paper fills checked against the public tape. Order-only keys. It can <strong style={{ color: "#d4d4d8" }}>never withdraw</strong>. Kill it anytime. Start in PAPER.
           </div>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 16, fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", border: "1px solid #33333a", background: "#1a1a1e", borderRadius: 4, padding: "9px 16px", letterSpacing: "0.04em" }}>
             <span className="nx-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: "#ededf0", boxShadow: "0 0 8px #ededf0" }} />
@@ -643,7 +643,7 @@ export function AgentView() {
           {feature("HARD GUARDRAILS", "Daily-loss cap. Max trades per day. Take-profit, stop-loss, max hold. One-tap KILL. Order-only keys can't withdraw.")}
           {feature("ADVANCED EXITS", "Scale-out, trailing stop, breakeven. The agent manages the exit. Each slice is graded.")}
           {feature("BACKTEST + VALIDATE", "Replay a config on recorded history. Walk-forward across markets. Tested against random entries.", "◆ PRO")}
-          {feature("TRUSTLESS RECORD", "Every trade settles on Orderly with an order ID. Graded from public price. Ranked on TOP AGENTS.")}
+          {feature("TRUSTLESS RECORD", "Every live trade settles on Orderly with an order ID and is booked at the exchange’s fill, anchored on Arbitrum. Ranked on TOP AGENTS.")}
         </div>
       </div>
     );

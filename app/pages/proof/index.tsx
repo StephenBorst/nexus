@@ -197,7 +197,7 @@ export default function ProofPage() {
             </div>
             {cards.length > 6 && (
               <button type="button" onClick={() => setAllCalls((v) => !v)}
-                style={{ marginTop: 10, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: UI, fontSize: 12, color: MUTED }}>
+                style={{ marginTop: 6, background: "none", border: "none", padding: "10px 0", minHeight: 40, cursor: "pointer", fontFamily: UI, fontSize: 13, color: MUTED }}>
                 {allCalls ? "Show fewer ↑" : `Show ${Math.min(cards.length, 12) - 6} more ↓`}
               </button>
             )}

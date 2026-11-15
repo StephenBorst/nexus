@@ -89,7 +89,7 @@ export function LabCallsPanel({ onSelectTab }: { onSelectTab?: (tab: TabId) => v
     <section aria-label="Calls" style={{ border: `1px solid ${C.border}`, borderRadius: 8, background: C.surfaceAlt, padding: isMobile ? "14px 14px 8px" : "16px 18px 10px", marginBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
         <span style={label}>Calls</span>
-        <Link to="/proof" style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: C.text.fog, textDecoration: "none", whiteSpace: "nowrap" }}>See the record →</Link>
+        <Link to="/proof" style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: C.text.fog, textDecoration: "none", whiteSpace: "nowrap", padding: "8px 0", margin: "-8px 0" }}>See the record →</Link>
       </div>
       {/* The method line: always rendered, never behind a fold or a fetch. */}
       <div style={{ fontFamily: UI, fontSize: isMobile ? 15 : 16, fontWeight: 600, color: C.text.bright, letterSpacing: "-0.01em", lineHeight: 1.35, marginTop: 6 }}>

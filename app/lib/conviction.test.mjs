@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { rankConviction, convictionLevel, FADE_FUNDING_FLOOR_PCT_YR } from "./conviction.mjs";
+import { readFileSync } from "node:fs";
+import { rankConviction, leanWord, FADE_FUNDING_FLOOR_PCT_YR } from "./conviction.mjs";
 
 test("rankConviction drops sub-floor funding — a trivial band is not a fade candidate", () => {
   const markets = [
@@ -8,39 +9,34 @@ test("rankConviction drops sub-floor funding — a trivial band is not a fade ca
     { coin: "ZEC", direction: "LONG", fundingAnnualPct: -0.66 }, // trivial → filtered
     { coin: "SOL", direction: "LONG", fundingAnnualPct: -4.86 }, // under 10% → filtered
   ];
-  const ranked = rankConviction(markets, {}, {});
-  const coins = ranked.map((r) => r.coin);
+  const coins = rankConviction(markets, {}, {}).map((r) => r.coin);
   assert.ok(coins.includes("HYPE"));
   assert.ok(!coins.includes("ZEC"));
   assert.ok(!coins.includes("SOL"));
   assert.equal(FADE_FUNDING_FLOOR_PCT_YR, 10);
 });
 
-test("rankConviction tallies agreement and ranks by net confirmation", () => {
+test("ordered by how stretched funding is, never by how many inputs agree; each input keeps its own side", () => {
   const markets = [
     { coin: "PERP_BTC_USDC", direction: "SHORT", fundingAnnualPct: 40 },
-    { coin: "ETH", direction: "SHORT", fundingAnnualPct: 80 },   // funding-only, bigger edge
-    { coin: "SOL", direction: "LONG", fundingAnnualPct: 30 },
+    { coin: "ETH", direction: "SHORT", fundingAnnualPct: 80 },
+    { coin: "SOL", direction: "LONG", fundingAnnualPct: -30, edgeQuality: { revertedPct: 38, samples: 13, tier: "TRAP" } },
   ];
-  const sm = { BTC: { side: "SHORT" }, SOL: { side: "SHORT" } };       // BTC confirms, SOL opposes
-  const callers = { BTC: { side: "SHORT" } };                          // BTC also confirms
+  const sm = { BTC: { side: "SHORT" }, SOL: { side: "SHORT" } };
+  const callers = { BTC: { side: "SHORT" } };
   const ranked = rankConviction(markets, sm, callers);
-  assert.equal(ranked[0].coin, "BTC");      // 2 confirmations → ranks first
-  assert.equal(ranked[0].extra, 2);
-  assert.equal(ranked[0].against, 0);
+  assert.deepEqual(ranked.map((r) => r.coin), ["ETH", "BTC", "SOL"], "funding first, BTC's two agreeing inputs don't lift it");
+  assert.equal(ranked[1].extra, 2);
   const sol = ranked.find((r) => r.coin === "SOL");
-  assert.equal(sol.against, 1);             // smart opposes the SOL long
+  assert.equal(sol.against, 1);
+  assert.equal(sol.revertedPct, 38);
+  assert.equal(sol.samples, 13);
+  assert.equal(leanWord(sol.reads[1]), "Smart money short");
 });
 
-test("convictionLevel maps net confirmations to a label", () => {
-  // HIGH requires BOTH ≥2 net confirmations AND a PROVEN hist clock (Grok: n=0 → never HIGH).
-  assert.equal(convictionLevel({ extra: 2, against: 0, histTier: "PROVEN" }), "HIGH");
-  assert.equal(convictionLevel({ extra: 2, against: 0, histTier: "UNPROVEN" }), "MODERATE"); // unproven clock caps at MODERATE
-  assert.equal(convictionLevel({ extra: 2, against: 0 }), "MODERATE");                        // no tier = unproven
-  assert.equal(convictionLevel({ extra: 1, against: 0 }), "MODERATE");
-  assert.equal(convictionLevel({ extra: 0, against: 1 }), "CONFLICTED");
-  assert.equal(convictionLevel({ extra: 0, against: 0 }), "FUNDING_ONLY");
-  // A weak reversion clock docks conviction — aligned lenses over a losing hist can't read HIGH.
-  assert.equal(convictionLevel({ extra: 2, against: 0, histWeak: true, histTier: "TRAP" }), "FUNDING_ONLY");
-  assert.equal(convictionLevel({ extra: 0, against: 2, histWeak: true, histTier: "TRAP" }), "CONFLICTED");
+test("the scanner shows inputs and the fade's own grade, no conviction word, no tally", () => {
+  const src = readFileSync(new URL("../pages/lab/ConvictionScanner.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /convictionLevel|HIGH|MODERATE|CONFLICTED|UNPROVEN|✓|✗|Ranked by how many/);
+  assert.match(src, /useFadeFamilyGrade/);
+  assert.match(src, /openMarket\(r\.coin\)/);
 });
