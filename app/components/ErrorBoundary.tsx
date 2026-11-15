@@ -87,155 +87,54 @@ export function ErrorBoundary() {
     );
   }
 
+  // What a person sees when a page throws: what happened in plain words, that nothing moved, and
+  // two ways out. The message + stack stay one tap away for a bug report, and every line wraps
+  // (the old developer screen printed the whole URL unbroken and scrolled sideways on a phone).
+  const report = [
+    `Error: ${errorMessage}`,
+    `Page: ${window.location.pathname}${window.location.search}`,
+    `Time: ${new Date().toISOString()}`,
+    errorStack ? `\n${errorStack}` : '',
+  ].join('\n');
+  const copyReport = () => { try { void navigator.clipboard?.writeText(report); } catch { /* clipboard blocked */ } };
+  const btn: React.CSSProperties = {
+    minHeight: 40, padding: '0 16px', borderRadius: 8, cursor: 'pointer',
+    fontFamily: 'var(--nx-font-ui, sans-serif)', fontSize: 13.5, fontWeight: 600,
+  };
+
   return (
     <div style={{
-      minHeight: '100vh',
-      background: '#0f0f11',
-      color: '#fff',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '2rem',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
+      minHeight: '100vh', background: '#0a0a0b', color: '#ededf0', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', padding: '24px 16px', boxSizing: 'border-box',
+      fontFamily: 'var(--nx-font-ui, sans-serif)',
     }}>
-      <div style={{
-        maxWidth: '800px',
-        width: '100%',
-        background: '#1a1a1e',
-        border: '1px solid #333',
-        borderRadius: '8px',
-        padding: '2rem',
-      }}>
-        <h1 style={{ 
-          fontSize: '1.5rem', 
-          fontWeight: 'bold', 
-          marginBottom: '1rem',
-          color: '#f7525f',
-        }}>
-          Unexpected Application Error!
-        </h1>
-        
-        <div style={{
-          background: '#0a0a0b',
-          padding: '1rem',
-          borderRadius: '4px',
-          marginBottom: '1rem',
-          fontSize: '0.9rem',
-          fontFamily: "var(--nx-font-mono)",
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}>
-          <div style={{ color: '#f7525f', marginBottom: '0.5rem' }}>
-            {errorMessage}
-          </div>
-          
-          {errorStack && (
-            <details style={{ marginTop: '1rem' }}>
-              <summary style={{ 
-                cursor: 'pointer', 
-                color: '#888',
-                marginBottom: '0.5rem',
-              }}>
-                Stack Trace (click to expand)
-              </summary>
-              <pre style={{
-                margin: '0.5rem 0',
-                padding: '0.5rem',
-                background: '#000',
-                borderRadius: '4px',
-                overflow: 'auto',
-                maxHeight: '300px',
-                fontSize: '0.8rem',
-                color: '#ccc',
-              }}>
-                {errorStack}
-              </pre>
-            </details>
-          )}
-          
-          {isModuleImportError && (
-            <div style={{
-              marginTop: '1rem',
-              padding: '0.75rem',
-              background: '#2a1a00',
-              borderLeft: '3px solid #fbbf24',
-              borderRadius: '4px',
-            }}>
-              <strong style={{ color: '#fbbf24' }}>Module Import Error Detected</strong>
-              <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#ccc' }}>
-                A dynamic module import failed and an automatic refresh didn&apos;t clear it. This usually means a new build shipped mid-session. Do a hard refresh (Ctrl/Cmd+Shift+R) to pull the latest version.
-              </div>
-            </div>
-          )}
+      <div style={{ maxWidth: 520, width: '100%', boxSizing: 'border-box', background: '#141416', border: '1px solid #232327', borderRadius: 10, padding: '24px 20px', overflowWrap: 'anywhere' }}>
+        <div aria-hidden style={{ fontSize: 20, color: '#a1a1aa', marginBottom: 10 }}>◆</div>
+        <h1 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 8px', color: '#ededf0' }}>This page hit an error.</h1>
+        <p style={{ margin: '0 0 6px', fontSize: 14, lineHeight: 1.55, color: '#a1a1aa' }}>
+          A screen error moves no money. Your balance and positions live on Orderly, untouched.
+        </p>
+        <p style={{ margin: '0 0 18px', fontSize: 14, lineHeight: 1.55, color: '#a1a1aa' }}>
+          {isModuleImportError
+            ? 'A new version shipped while this tab was open. Reload to get it; if that fails, do a hard refresh (Ctrl/Cmd+Shift+R).'
+            : 'Reload usually clears it. If it keeps happening, copy the details and send them to us.'}
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button type="button" onClick={() => window.location.reload()} style={{ ...btn, background: '#ededf0', color: '#0a0a0b', border: 'none' }}>Reload</button>
+          <button type="button" onClick={() => window.location.assign('/')} style={{ ...btn, background: 'none', color: '#ededf0', border: '1px solid #33333a' }}>Go home</button>
+          <button type="button" onClick={copyReport} style={{ ...btn, background: 'none', color: '#a1a1aa', border: '1px solid #232327' }}>Copy error details</button>
         </div>
-        
-        {errorDetails && Object.keys(errorDetails).length > 0 && (
-          <details style={{ marginTop: '1rem' }}>
-            <summary style={{ 
-              cursor: 'pointer', 
-              color: '#888',
-              marginBottom: '0.5rem',
-            }}>
-              Additional Error Details
-            </summary>
-            <pre style={{
-              margin: '0.5rem 0',
-              padding: '0.5rem',
-              background: '#0a0a0b',
-              borderRadius: '4px',
-              overflow: 'auto',
-              fontSize: '0.8rem',
-              color: '#ccc',
-            }}>
-              {JSON.stringify(errorDetails, null, 2)}
-            </pre>
-          </details>
-        )}
-        
-        <div style={{
-          marginTop: '1.5rem',
-          padding: '1rem',
-          background: '#232327',
-          borderLeft: '3px solid #33333a',
-          borderRadius: '4px',
-        }}>
-          <strong style={{ color: '#ededf0' }}>Developer Information</strong>
-          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#aaa' }}>
-            Full error details including stack trace have been logged to the browser console. 
-            Check the console for complete debugging information.
-          </div>
-          <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#aaa' }}>
-            URL: {window.location.href}
-          </div>
-          <div style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: '#aaa' }}>
-            Time: {new Date().toISOString()}
-          </div>
-        </div>
-        
-        <div style={{ marginTop: '1.5rem' }}>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: '#ededf0',
-              color: '#141416',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              fontWeight: 'bold',
-            }}
-            onMouseOver={(e) => e.currentTarget.style.background = '#fff'}
-            onMouseOut={(e) => e.currentTarget.style.background = '#ededf0'}
-            onFocus={(e) => e.currentTarget.style.background = '#fff'}
-            onBlur={(e) => e.currentTarget.style.background = '#ededf0'}
-          >
-            Reload Page
-          </button>
-        </div>
+        <details style={{ marginTop: 18 }}>
+          <summary style={{ cursor: 'pointer', color: '#71717a', fontSize: 12.5 }}>Error details</summary>
+          <pre style={{
+            margin: '8px 0 0', padding: 10, background: '#0a0a0b', borderRadius: 6, maxHeight: 280, overflow: 'auto',
+            fontFamily: 'var(--nx-font-mono)', fontSize: 11, lineHeight: 1.5, color: '#a1a1aa',
+            whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
+          }}>
+            {report}{errorDetails && Object.keys(errorDetails).length > 0 ? `\n\n${JSON.stringify(errorDetails, null, 2)}` : ''}
+          </pre>
+        </details>
       </div>
     </div>
   );
 }
-

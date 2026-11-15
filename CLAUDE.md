@@ -986,6 +986,11 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
   (`XRAY_TITLE` etc., one copy with the page) + for `?address=0x…` that wallet and an "Analyzing…" block over empty
   placeholders. It claims nothing about the wallet (no grade, no money); only a well-formed 0x address is echoed.
 - `git add` new files and check `git status` before trusting a local build (CI builds a clean checkout).
+- **Crash screen** (`app/components/ErrorBoundary.tsx`, the routes' `errorElement`, pinned by `app/lib/errorScreen.test.mjs`):
+  "This page hit an error." + "A screen error moves no money", Reload / Go home / Copy error details, the stack folded,
+  every line wrapping; the stale-chunk self-heal ("Updating Nexus…") is unchanged.
+- **Lab Quick Trade** sets the account leverage before its market order; a failed change stops the order and says so
+  (`quickTradeGuard.test.mjs`; it used to "keep going at current lev").
 
 ## Build + mobile load
 - Minified build; `vendorChunk()` puts the entry's static node_modules graph in one `vendor` chunk (never a catch-all

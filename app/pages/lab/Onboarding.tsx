@@ -14,7 +14,7 @@ export function LabWelcome() {
     { icon: "◈", title: "The Nexus Thesis Engine", desc: "Size. R:R. Funding cost. Live P&L. Publish it and the call is timestamped on-chain." },
     { icon: "⬢", title: "Autonomous Trading Agent", desc: "Runs your strategy. Grades every close. Scale-outs, trailing exits, DCA, TradingView signals. Hard caps. Kill switch. Order-only keys." },
     { icon: "◇", title: "Strategy Workbench", desc: "Build by trading style. Backtest on recorded history. Publish it. Every result graded." },
-    { icon: "▣", title: "Analytics & Journal", desc: "Trading score. Win rate and hold time. Leverage. A journal with a calendar heatmap." },
+    { icon: "▣", title: "Analytics & Journal", desc: "Your record, measured: calls vs trades, win rate beside R, hold time, leverage. A journal with a calendar heatmap." },
   ];
   return (
     <div style={{ padding: "32px 8px" }}>
@@ -87,7 +87,7 @@ export function OnboardingChecklist({
     // The flagship, and the lowest-friction "wow": PAPER needs no funds and no key, so a
     // brand-new user can watch the agent hunt funding edges hands-free on their first visit.
     { key: "agent",   label: "Run an agent in paper", hint: "No funds. No key. Your rules, on simulated fills.", done: hasAgent, action: onGoAgent, cta: "OPEN AGENT" },
-    { key: "grade",   label: "Grade your performance", hint: "Trading score, breakdowns and journal.", done: hasTrade, action: onGoAnalytics, cta: "VIEW ANALYTICS" },
+    { key: "grade",   label: "Grade your performance", hint: "Your record in parts, and a journal.", done: hasTrade, action: onGoAnalytics, cta: "VIEW ANALYTICS" },
   ];
   const doneCount = steps.filter((s) => s.done).length;
   const allDone = doneCount === steps.length;
