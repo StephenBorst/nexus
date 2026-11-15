@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAccount, usePrivateQuery, usePositionStream } from "@orderly.network/hooks";
+import { useRiskDesk } from "@/hooks/useRiskDesk";
 import { useLabStorage } from "@/hooks/useLabStorage";
 import { computeEdge } from "@/config/edge";
 import { tiltRead, sessionEdge, overtradingRead, sizingRead } from "@/lib/behavioral.mjs";
@@ -126,6 +127,7 @@ export default function NexusAssistant() {
   // (blanks Total value / buying power, stalls Enable Trading). Join the SDK's shared
   // position stream instead so we read the same managed data without conflict.
   const [posStream] = usePositionStream();
+  const { desk: riskDeskRead } = useRiskDesk();
   const { data: histData } = usePrivateQuery("/v1/position_history?limit=500", { revalidateOnFocus: false });
   const location = useLocation();
 
@@ -467,6 +469,7 @@ export default function NexusAssistant() {
             .filter((p) => Math.abs(p.qty) > 0),
           performance,
           behavioral,
+          riskDesk: riskDeskRead,
         },
         onDelta: (chunk) => appendToLast((last) => ({ ...last, content: last.content + chunk })),
       });

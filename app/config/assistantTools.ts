@@ -20,6 +20,9 @@ import { rankConviction } from "@/lib/conviction.mjs";
 import { fetchDeribitTerm } from "@/lib/deribit.mjs";
 import { fetchHLTape, fetchHLPortfolio } from "@/utils/hyperliquid";
 import { xraySummary, fmtPf } from "@/lib/xrayGrade.mjs";
+// The Lab's venues / calendar / risk panels, shaped by their own rules (one answer on screen and in chat).
+import { venuesForCopilot, calendarForCopilot, riskForCopilot } from "@/lib/copilotLab.mjs";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
 const AGENT_API = "https://og.nexustradinglabs.com";
@@ -40,6 +43,9 @@ export interface ToolCtx {
   // assistant component (which holds the trade history) so get_operator_profile can compose
   // the SAME full read the Lab shows, keeping the AI congruent with the intelligence layer.
   behavioral?: { tilt: unknown; session: unknown; overtrading: unknown; sizing: unknown } | null;
+  // The Lab's risk desk (useRiskDesk → riskDesk(), app/lib/riskDesk.mjs): liquidation distance, what each stop loses,
+  // funding a day, the book vs the account. Read in the browser; nothing leaves it.
+  riskDesk?: unknown;
 }
 
 export const THESIS_DRAFT_KEY = "nexus_thesis_draft";
@@ -274,14 +280,17 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_book_risk",
     description:
-      "Read the RISK in the user's OPEN book right now — is what they're holding secretly ONE bet? Detects hidden concentration: a book that looks diversified (several tickers) but is really one directional or one-SECTOR bet at multiplied size (e.g. long BTC + ETH + SOL is not three positions, it's one L1-beta bet at 3× — a single L1 selloff hits all of it). Weighted by position notional. Use for 'how's my book', 'am I too exposed', 'is my portfolio risky', or proactively when the user is about to add a position that stacks the same way. Returns null-safe: if the book is small or genuinely hedged/mixed, say it's balanced rather than inventing a risk. Analysis only — never a 'close this' instruction; surface the concentration and let them decide.",
+      "Read the RISK in the user's OPEN book right now: `desk` = the Lab's YOUR OPEN RISK panel (each position's liquidation distance %, what its resting stop loses or that it sits past liquidation and never fires, funding $/day, the book's exposure vs the account, unstopped coins, WARN/WATCH flags) — report these numbers as they are, never estimate a liquidation yourself. Also: is what they're holding secretly ONE bet? Detects hidden concentration: a book that looks diversified (several tickers) but is really one directional or one-SECTOR bet at multiplied size (e.g. long BTC + ETH + SOL is not three positions, it's one L1-beta bet at 3× — a single L1 selloff hits all of it). Weighted by position notional. Use for 'how's my book', 'am I too exposed', 'is my portfolio risky', or proactively when the user is about to add a position that stacks the same way. Returns null-safe: if the book is small or genuinely hedged/mixed, say it's balanced rather than inventing a risk. Analysis only — never a 'close this' instruction; surface the concentration and let them decide.",
     input_schema: { type: "object", properties: {} },
     run: async (_args, ctx) => {
       const pos = (ctx.openPositions || []).map((p) => ({ symbol: p.symbol, side: p.qty >= 0 ? 1 : -1, notional: Math.abs(p.qty) * (p.mark || 0) }));
       if (pos.length === 0) return JSON.stringify({ open_positions: 0, note: "No open positions to assess." });
+      // The same numbers as the Lab's YOUR OPEN RISK panel (liquidation, stops, funding a day, the book vs the account).
+      const desk = riskForCopilot(ctx.riskDesk);
       const risk = bookConcentration(pos);
-      if (!risk) return JSON.stringify({ open_positions: pos.length, concentrated: false, note: "The open book is balanced — no single sector or direction dominates it." });
+      if (!risk) return JSON.stringify({ open_positions: pos.length, concentrated: false, note: "The open book is balanced — no single sector or direction dominates it.", desk });
       return JSON.stringify({
+        desk,
         open_positions: risk.positions,
         concentrated: true,
         kind: risk.kind,
@@ -390,6 +399,37 @@ export const TOOLS: ToolDef[] = [
       } catch { /* skip */ }
       if (!Object.keys(out).length) return JSON.stringify({ error: "regime data unavailable" });
       return JSON.stringify(out);
+    },
+  },
+  {
+    name: "get_funding_venues",
+    description:
+      "Funding for the same coin on Orderly, Hyperliquid and OKX, each annualized from its own period (%/yr; positive = longs pay), and the gap = Orderly minus the others' average. With a coin: that coin's row. Without: the widest gaps. Use for 'is funding high here vs elsewhere', 'where is funding cheaper'. An input, not graded. Never call a gap arbitrage, free money or an edge: fees on two venues, funding resets every period and the price legs move (the note says so; pass it on). A venue in `unread` was not read: say so, never treat it as 0.",
+    input_schema: { type: "object", properties: { coin: { type: "string", description: "Optional ticker, e.g. ETH" } } },
+    run: async (args) => {
+      const coin = args.coin ? shortTicker(String(args.coin)) : "";
+      try {
+        const reply = await sharedJson(`${AGENT_API}/intel/funding-venues${coin ? `/${coin}` : ""}`);
+        return JSON.stringify(venuesForCopilot(reply, { coin: coin || null }));
+      } catch { return JSON.stringify({ error: "funding across venues unavailable" }); }
+    },
+  },
+  {
+    name: "get_calendar",
+    description:
+      "What is SCHEDULED to move the tape: US macro releases (CPI, jobs, FOMC, GDP; ForexFactory, high/medium impact, with forecast + previous) and dated world-event markets (Polymarket via the Catalysts board, with the crowd's yes % and the coins they touch; the date is when the market closes). Times in UTC plus 'in 2h'. Use for 'what's coming up', 'anything this week', 'should I worry about CPI', or before the user holds a position through a date. With a coin: macro rows plus the events that touch it. Scheduled facts, never a predicted direction. A source in `unread` was not read: say the calendar is incomplete, never 'nothing scheduled'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        days: { type: "number", description: "How far ahead, 1-45 (default 7)" },
+        coin: { type: "string", description: "Optional ticker, e.g. BTC" },
+      },
+    },
+    run: async (args) => {
+      try {
+        const reply = await sharedJson(`${AGENT_API}/intel/calendar`);
+        return JSON.stringify(calendarForCopilot(reply, { days: Number(args.days) || 7, coin: args.coin ? String(args.coin) : null }));
+      } catch { return JSON.stringify({ error: "events calendar unavailable" }); }
     },
   },
   {
