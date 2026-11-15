@@ -37,6 +37,7 @@ import { NexusBriefing } from "./NexusBriefing";
 import { DecisionBoard } from "./DecisionBoard";
 import { LabCallsPanel } from "./LabCallsPanel";
 import { WatchlistPanel } from "./WatchlistPanel";
+import { RiskDeskPanel } from "./RiskDeskPanel";
 import { FundingVenues } from "./FundingVenues";
 import { LabTitleBar, LabStats, LabTabs, type LabTab } from "./LabHeader";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
@@ -366,7 +367,7 @@ export default function TheLabPage() {
           // scan the whole book; only COPY / PUBLISH / ARM LIVE ask for a connect.
           const showSplash = !connected && !guestPreview;
           // WATCHING (2026-11-14): the coins this device watches, what changed since the last look. Under Calls.
-          return <>{showSplash && <LabWelcome />}{calls}<WatchlistPanel />{briefing}{board}{lenses}</>;
+          return <>{showSplash && <LabWelcome />}{calls}<RiskDeskPanel /><WatchlistPanel />{briefing}{board}{lenses}</>;
         })()}
         {activeTab === "smart" && (
           // Smart Money is now the DEEP WALLET DRILL-DOWN the Intel funnel's Positioning lens

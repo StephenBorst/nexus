@@ -5,6 +5,7 @@ import { useNav } from "@/hooks/useNav";
 import LabPulseChip from "@/components/LabPulseChip";
 import PositionCallButton from "@/components/PositionCallButton";
 import MarketStripBar from "@/components/MarketStripBar";
+import PositionRiskLine from "@/components/PositionRiskLine";
 
 export default function PerpLayout() {
   const config = useOrderlyConfig();
@@ -23,6 +24,8 @@ export default function PerpLayout() {
       <LabPulseChip trailing={<PositionCallButton />} />
       {/* The read on the market on screen, one line; tap → the drawer with every lens and its grade. */}
       <MarketStripBar />
+      {/* Your risk on this market, only while you hold it: liquidation, stop, funding a day. */}
+      <PositionRiskLine />
       <Outlet />
     </Scaffold>
   );
