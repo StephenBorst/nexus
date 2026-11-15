@@ -71,7 +71,7 @@ export function loadHostedModel(): string {
 }
 
 import { anthropicTools, openaiTools, TOOL_BY_NAME, type ToolCtx } from "@/config/assistantTools";
-import { requestLimits, textOf, emptyTurnText, createStreamAssembler } from "@/lib/anthropicTurn.mjs";
+import { requestLimits, textOf, emptyTurnText, createStreamAssembler, streamErrorText, trimHistory } from "@/lib/anthropicTurn.mjs";
 import { createWalletClient, custom } from "viem";
 import { bareTicker } from "@/utils/utils";
 
@@ -82,15 +82,19 @@ const HOSTED_BASE = "https://og.nexustradinglabs.com";
 const aiAccessMessage = (address: string, ts: number) =>
   `Nexus AI Access\nAddress: ${address.toLowerCase()}\nTimestamp: ${ts}`;
 
-// Sign-once (cached ~25 min) wallet challenge proving PRO wallet ownership.
-export async function getHostedAccess(address: string): Promise<HostedAuth> {
+// Sign-once (cached ~25 min) wallet challenge proving PRO wallet ownership. `provider` = the
+// wallet the app is connected through (useLabWallet: WalletConnect, the Android app, an
+// extension). It used to read window.ethereum only, so a phone / WalletConnect user got "No
+// wallet found" with a wallet connected.
+export async function getHostedAccess(address: string, provider?: unknown): Promise<HostedAuth> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) throw new Error("Hosted AI signs in with an EVM wallet. Connect one, or use your own API key in ⚙.");
   const key = `nexus_ai_access_${address.toLowerCase()}`;
   try {
     const c = JSON.parse(sessionStorage.getItem(key) || "null");
     if (c && Date.now() - c.ts < 25 * 60 * 1000) return c;
   } catch { /* ignore */ }
-  const eth = (window as unknown as { ethereum?: unknown }).ethereum;
-  if (!eth) throw new Error("No wallet found — connect your wallet to use hosted AI.");
+  const eth = provider ?? (window as unknown as { ethereum?: unknown }).ethereum;
+  if (!eth) throw new Error("No wallet found. Connect your wallet to use hosted AI.");
   const client = createWalletClient({ transport: custom(eth as Parameters<typeof custom>[0]) });
   const ts = Date.now();
   const sig = await client.signMessage({ account: address as `0x${string}`, message: aiAccessMessage(address, ts) });
@@ -111,9 +115,13 @@ function anthropicTarget(apiKey: string, hosted?: HostedAuth) {
     endpoint: `${HOSTED_BASE}/ai/chat`,
     headers: { "content-type": "application/json" } as Record<string, string>,
     authBody: { _addr: hosted.addr, _ts: hosted.ts, _sig: hosted.sig, _q: newQuestionId() } as Record<string, unknown>,
+    cacheBody: {} as Record<string, unknown>,
   };
   return {
     endpoint: PROVIDERS.anthropic.endpoint,
+    // Your own key: cache the repeated prefix (tools + system + earlier turns), so each tool
+    // round and follow-up bills that part at ~0.1x. The hosted proxy places its own breakpoints.
+    cacheBody: { cache_control: { type: "ephemeral" } } as Record<string, unknown>,
     headers: {
       "content-type": "application/json", "x-api-key": apiKey,
       "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true",
@@ -196,54 +204,6 @@ export function buildContextBlock(ctx: {
 }
 
 /**
- * Send a chat turn to the selected provider directly from the browser.
- * Returns the assistant's reply text. Throws on auth/network errors.
- */
-export async function sendChat(opts: {
-  provider: ProviderId;
-  model: string;
-  apiKey: string;
-  system: string;
-  history: ChatMsg[];
-}): Promise<string> {
-  const { provider, model, apiKey, system, history } = opts;
-
-  if (provider === "anthropic") {
-    const res = await fetch(PROVIDERS.anthropic.endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
-      body: JSON.stringify({
-        model,
-        ...requestLimits(model),
-        system,
-        messages: history.map((m) => ({ role: m.role, content: m.content })),
-      }),
-    });
-    if (!res.ok) throw new Error(await errText(res));
-    const data = await res.json();
-    return textOf(data?.content) || emptyTurnText(data?.stop_reason);
-  }
-
-  // openai
-  const res = await fetch(PROVIDERS.openai.endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "system", content: system }, ...history.map((m) => ({ role: m.role, content: m.content }))],
-    }),
-  });
-  if (!res.ok) throw new Error(await errText(res));
-  const data = await res.json();
-  return data?.choices?.[0]?.message?.content ?? "(empty response)";
-}
-
-/**
  * Agentic chat: runs a bounded tool-use loop so the model can pull live Nexus
  * data (market, agent status, leaderboards) before answering. Same BYOK,
  * client-side, both providers. Returns the final text + which tools were used.
@@ -265,7 +225,7 @@ async function runAnthropic(opts: {
   model: string; apiKey: string; system: string; history: ChatMsg[]; ctx: ToolCtx; signal?: AbortSignal; hosted?: HostedAuth;
 }): Promise<RunResult> {
   const { model, apiKey, system, history, ctx, signal, hosted } = opts;
-  const messages: { role: string; content: unknown }[] = history.map((m) => ({ role: m.role, content: m.content }));
+  const messages: { role: string; content: unknown }[] = trimHistory(history).map((m: ChatMsg) => ({ role: m.role, content: m.content }));
   const toolsUsed: string[] = [];
   const t = anthropicTarget(apiKey, hosted);
 
@@ -273,7 +233,7 @@ async function runAnthropic(opts: {
     const res = await fetch(t.endpoint, {
       method: "POST",
       headers: t.headers,
-      body: JSON.stringify({ model, ...requestLimits(model), system, tools: anthropicTools(), messages, ...t.authBody }),
+      body: JSON.stringify({ model, ...requestLimits(model), system, tools: anthropicTools(), messages, ...t.cacheBody, ...t.authBody }),
       signal,
     });
     if (!res.ok) throw new Error(await errText(res));
@@ -305,7 +265,7 @@ async function runOpenAI(opts: {
   const { model, apiKey, system, history, ctx, signal } = opts;
   const messages: Record<string, unknown>[] = [
     { role: "system", content: system },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
+    ...trimHistory(history).map((m: ChatMsg) => ({ role: m.role, content: m.content })),
   ];
   const toolsUsed: string[] = [];
 
@@ -377,7 +337,7 @@ async function runAnthropicStream(opts: {
   onDelta: (c: string) => void; hosted?: HostedAuth;
 }): Promise<RunResult> {
   const { model, apiKey, system, history, ctx, signal, onDelta, hosted } = opts;
-  const messages: { role: string; content: unknown }[] = history.map((m) => ({ role: m.role, content: m.content }));
+  const messages: { role: string; content: unknown }[] = trimHistory(history).map((m: ChatMsg) => ({ role: m.role, content: m.content }));
   const toolsUsed: string[] = [];
   let fullText = "";
   const t = anthropicTarget(apiKey, hosted);
@@ -386,7 +346,7 @@ async function runAnthropicStream(opts: {
     const res = await fetch(t.endpoint, {
       method: "POST",
       headers: t.headers,
-      body: JSON.stringify({ model, ...requestLimits(model), system, tools: anthropicTools(), messages, stream: true, ...t.authBody }),
+      body: JSON.stringify({ model, ...requestLimits(model), system, tools: anthropicTools(), messages, stream: true, ...t.cacheBody, ...t.authBody }),
       signal,
     });
     if (!res.ok) throw new Error(await errText(res));
@@ -395,6 +355,8 @@ async function runAnthropicStream(opts: {
     // it back unchanged (app/lib/anthropicTurn.mjs).
     const turn = createStreamAssembler((chunk: string) => { fullText += chunk; onDelta(chunk); });
     await readSSE(res, (ev) => turn.push(ev));
+    const failed = streamErrorText(turn.error);
+    if (failed) throw new Error(failed);
     const stopReason = turn.stopReason as string | null;
     const content = turn.content() as { type: string; id?: string; name?: string; input?: Record<string, unknown> }[];
 
@@ -422,7 +384,7 @@ async function runOpenAIStream(opts: {
   const { model, apiKey, system, history, ctx, signal, onDelta } = opts;
   const messages: Record<string, unknown>[] = [
     { role: "system", content: system },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
+    ...trimHistory(history).map((m: ChatMsg) => ({ role: m.role, content: m.content })),
   ];
   const toolsUsed: string[] = [];
   let fullText = "";

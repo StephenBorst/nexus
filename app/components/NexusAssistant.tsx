@@ -19,6 +19,7 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { useHideOnScrollDown } from "@/hooks/useHideOnScrollDown";
 import { useTypingFocus } from "@/hooks/useTypingFocus";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useLabWallet } from "@/hooks/useLabAuth";
 import {
   PROVIDERS, LS_PROVIDER, LS_MODEL, LS_KEY, LS_HOSTED_MODEL, SYSTEM_PROMPT,
   HOSTED_TIERS, loadHostedModel,
@@ -113,6 +114,7 @@ export default function NexusAssistant() {
   const { state: acct } = useAccount();
   const walletAddress = (acct as { address?: string })?.address ?? null;
   const { isPro } = useSubscription(walletAddress);
+  const labWallet = useLabWallet(); // the connected wallet's provider (WalletConnect / the app / an extension)
   const [useHosted, setUseHosted] = useState(() => typeof window !== "undefined" && window.localStorage.getItem("nexus_ai_hosted") === "1");
   const setHosted = (v: boolean) => { setUseHosted(v); try { window.localStorage.setItem("nexus_ai_hosted", v ? "1" : "0"); } catch { /* ignore */ } };
   // Hosted (PRO) model tier — which model our proxy runs (each has its own daily cap).
@@ -442,7 +444,7 @@ export default function NexusAssistant() {
     try {
       // Hosted (PRO): sign a short-lived access challenge once, then route through
       // our proxy (no user key). Falls back to BYOK otherwise.
-      const hosted = hostedActive && walletAddress ? await getHostedAccess(walletAddress) : undefined;
+      const hosted = hostedActive && walletAddress ? await getHostedAccess(walletAddress, labWallet?.provider) : undefined;
       const { toolsUsed } = await runChatStream({
         provider: hosted ? "anthropic" : provider,
         model: hosted ? hostedModel : model,

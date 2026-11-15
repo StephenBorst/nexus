@@ -60,11 +60,15 @@ product is what sits on top:
 - The counter is read + bumped under a NexusLock lease (`LOCK_KEYS.aiUsage`): busy → 409, lock down → 503, nothing sent.
 - **Spend path = Bankr LLM Gateway** (`AI_GATEWAY=bankr` in wrangler.toml + secret `BANKR_LLM_KEY`) →
   `https://llm.bankr.bot/v1/messages`, dot-notation ids mapped by `bankrGatewayModel` (`BANKR_MODEL_HAIKU|SONNET|OPUS|FABLE`;
-  haiku-5.5 / fable-5.2 follow the naming but were NOT read from the gateway's /v1/models: check there). Falls back to
+  all four ids confirmed on Bankr's model list by borst, haiku-5.5 + fable-5.2 on 2026-11-15). Falls back to
   direct Anthropic (`ANTHROPIC_API_KEY`) if the key is absent. Revert = remove `AI_GATEWAY`. Credits at bankr.bot/llm.
 - **Thinking tiers (all four):** `shapeHostedBody` sets effort `low` + a 4096 ceiling (`isThinkingModel` includes Haiku 5.5); the client reads text by block TYPE and sends thinking blocks back unchanged with their
   signature (`app/lib/anthropicTurn.mjs`, `createStreamAssembler`). BYOK users get the same handling.
 - **Copilot** (`NexusAssistant.tsx`, `config/assistant.ts`, `config/assistantTools.ts`): BYOK keys stay in the browser.
+  Hosted sign-in signs with the connected wallet's provider (`useLabWallet`, so WalletConnect / the Android app work;
+  EVM only). Each question sends the last `HISTORY_MAX_MESSAGES` 20 (`trimHistory`); BYOK requests carry top-level
+  `cache_control` (prompt caching on the user's key); a stream `error` event surfaces as a line (`streamErrorText`),
+  never "(empty response)". Rules in `app/lib/anthropicTurn.mjs`.
   Bounded tool loop (max 5), models listed live from the key, thesis drafts via localStorage `nexus_thesis_draft` →
   `/lab?tab=thesis` (bare ticker, not `PERP_`). Its prompt must not call PREDICTIVE an edge or suggest inverting a read.
   **Grades (2026-11-14, pinned by `app/lib/assistantGrades.test.mjs`):** `get_market_read` = the drawer's

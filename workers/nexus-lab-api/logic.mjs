@@ -1307,9 +1307,8 @@ export const BANKR_GATEWAY_URL = "https://llm.bankr.bot/v1/messages";
 // code change. Unknown ids pass through untouched.
 export function bankrGatewayModel(anthropicId, env = {}) {
   const map = {
-    // sonnet-5.5 / opus-5.5 confirmed on the gateway's /v1/models by borst, 2026-09-30.
-    // haiku-5.5 / fable-5.2 follow the same naming (2026-11-15); NOT yet read from /v1/models:
-    // if the gateway names them differently, set BANKR_MODEL_HAIKU / BANKR_MODEL_FABLE.
+    // All four confirmed on the gateway's own model list by borst: sonnet-5.5 / opus-5.5 on
+    // 2026-09-30, haiku-5.5 ("Latest Haiku") / fable-5.2 ("Most powerful Claude") on 2026-11-15.
     "claude-haiku-5-5":  env.BANKR_MODEL_HAIKU  || "claude-haiku-5.5",
     "claude-sonnet-5-5": env.BANKR_MODEL_SONNET || env.BANKR_MODEL_SONNET55 || "claude-sonnet-5.5",
     "claude-opus-5-5":   env.BANKR_MODEL_OPUS   || env.BANKR_MODEL_OPUS55   || "claude-opus-5.5",
