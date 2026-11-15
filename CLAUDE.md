@@ -723,6 +723,11 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   cap `Client.create` throws "…already registered N/M installations…"; `useXMTP` catches it (`app/lib/xmtpLimit.mjs`) and
   the Messages page offers REMOVE OLD DEVICES: one signature, `Client.revokeInstallations` without a client, keeps the 3
   newest, then enables here.
+- **Messages read chat only** (2026-11-15, rules `app/lib/xmtpMessages.mjs`, tested): the hook lists application
+  messages (`kind` Application), threads by last activity, previews = the NEWEST message (`lastMessage`, descending);
+  the page renders text / a reply's text / the sender's fallback and skips the rest (no "[unsupported content]"). A
+  `?dm=` link goes through `dmTarget` + `canMessage` (bad address / your own / not on XMTP = a line or the invite,
+  never silent); `re=` via `draftFromLink`. The nav badge = one `syncAll` + each thread's newest inbound message.
 - The nav bell is `SignalsNavButton.tsx`. Before adding UI to a component, grep that something mounts it.
   **The bell, graded (v2, borst 2026-11-14, rules `app/lib/signals.mjs`, route `GET /intel/bell` routes-bell.mjs, 60 s
   cache):** every row carries `graded`: READ rows (a registered read with a paper wallet opened a paper trade, or closed

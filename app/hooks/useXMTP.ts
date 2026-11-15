@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useAccount } from "@orderly.network/hooks";
 import type { Client, Conversation, DecodedMessage } from "@xmtp/browser-sdk";
 import { installationLimit, revokePlan, limitMessage } from "@/lib/xmtpLimit.mjs";
+import { XMTP_SORT_ASC, XMTP_SORT_DESC, XMTP_KIND_APPLICATION, XMTP_ORDER_LAST_ACTIVITY } from "@/lib/xmtpMessages.mjs";
 
 // The XMTP SDK (and its wasm) loads on first use, not with every page: this hook is
 // mounted by the global Messages nav button, so a static import put the SDK in the
@@ -209,12 +210,27 @@ export function useXMTP() {
     });
   }, [getClient]);
 
-  const getConversations = useCallback(async (): Promise<Conversation[]> => {
+  // Newest activity first. `syncMessages` also pulls every conversation's messages in one
+  // call (the unread badge), instead of syncing each thread on its own.
+  const getConversations = useCallback(async (opts?: { syncMessages?: boolean }): Promise<Conversation[]> => {
     const client = getClient();
     if (!client) return [];
-    await client.conversations.sync();
-    return client.conversations.list() as Promise<Conversation[]>;
+    try {
+      if (opts?.syncMessages) await client.conversations.syncAll();
+      else await client.conversations.sync();
+    } catch { /* offline / transient: list what is stored locally */ }
+    return client.conversations.list({ orderBy: XMTP_ORDER_LAST_ACTIVITY }) as Promise<Conversation[]>;
   }, [getClient]);
+
+  // The newest chat message in a thread (setup messages left out), for the inbox preview.
+  // `notFrom` = an inbox id to skip (the badge wants the newest INBOUND one). Local read.
+  const lastMessage = useCallback(async (convo: Conversation, notFrom?: string | null): Promise<DecodedMessage | null> => {
+    const msgs = await convo.messages({
+      limit: 1n, direction: XMTP_SORT_DESC, kind: XMTP_KIND_APPLICATION,
+      ...(notFrom ? { excludeSenderInboxIds: [notFrom] } : {}),
+    });
+    return msgs[0] ?? null;
+  }, []);
 
   // Real-time message stream for a single conversation. Returns a closer to
   // stop the stream. New messages arrive via onMessage with no polling delay.
@@ -251,7 +267,7 @@ export function useXMTP() {
     } catch {
       /* offline / transient — fall through to local messages */
     }
-    return convo.messages();
+    return convo.messages({ direction: XMTP_SORT_ASC, kind: XMTP_KIND_APPLICATION });
   }, []);
 
   const canMessage = useCallback(async (accountAddress: string): Promise<boolean> => {
@@ -271,7 +287,7 @@ export function useXMTP() {
 
   return {
     ready, initializing, error, deviceLimit, revoking,
-    init, revokeOldDevices, sendDM, openDM, getConversations, getMessages, streamMessages, streamAllMessages, canMessage,
+    init, revokeOldDevices, sendDM, openDM, getConversations, lastMessage, getMessages, streamMessages, streamAllMessages, canMessage,
     getClient, myAddress: xmtpAddress ?? walletAddress, myInboxId,
   };
 }
