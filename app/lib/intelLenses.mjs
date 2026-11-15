@@ -6,6 +6,7 @@
 /** Order = the funnel: the boards the Board summarizes first, the event/forecast layer, then the raw tape. */
 export const INTEL_LENSES = [
   { id: "funding", label: "Funding", sub: "every stretched perp, and where funding reverted vs kept stretching", legacyKey: "nx_funding_board_open" },
+  { id: "venues", label: "Venues", sub: "the same coin’s funding on Orderly, Hyperliquid and OKX, side by side", legacyKey: "nx_venues_open" },
   { id: "positioning", label: "Positioning", sub: "where the leveraged crowd and the sharp wallets disagree", legacyKey: "nx_positioning_open" },
   { id: "catalysts", label: "Catalysts", sub: "liquid prediction-market events mapped to the markets they move here", legacyKey: "nx_catalysts_open" },
   { id: "forecast", label: "Forecasts", sub: "where prediction markets disagree with price, our markets only", legacyKey: "nx_forecast_open" },

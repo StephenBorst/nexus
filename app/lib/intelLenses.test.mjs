@@ -7,9 +7,9 @@ import { INTEL_LENSES, LENS_KEY, LENS_NONE, initialLens, lensFromQuery, nextLens
 
 const store = (obj) => (k) => (k in obj ? obj[k] : null);
 
-test("six lenses, unique ids, the funnel order", () => {
-  assert.deepEqual(INTEL_LENSES.map((l) => l.id), ["funding", "positioning", "catalysts", "forecast", "qsignals", "tape"]);
-  assert.equal(new Set(INTEL_LENSES.map((l) => l.legacyKey)).size, 6);
+test("seven lenses, unique ids, the funnel order", () => {
+  assert.deepEqual(INTEL_LENSES.map((l) => l.id), ["funding", "venues", "positioning", "catalysts", "forecast", "qsignals", "tape"]);
+  assert.equal(new Set(INTEL_LENSES.map((l) => l.legacyKey)).size, 7);
 });
 
 test("the query wins, then the stored choice, then an old open fold, else closed", () => {

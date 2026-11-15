@@ -22,6 +22,7 @@ export const MARKET_SOURCES = (coin) => ({
   catalysts: "/intel/catalysts-board",
   pulse: "/calls/pulse",
   scorecard: "/intel/axis-backtest", // each lens's nearest graded relative (stored copy, built on the minute cron)
+  venues: `/intel/funding-venues/${coin}`, // the same coin's funding on Hyperliquid + OKX (routes-venues.mjs)
 });
 
 /** One board through the worker's own handler, JSON or null (timeout, non-2xx, bad JSON). */

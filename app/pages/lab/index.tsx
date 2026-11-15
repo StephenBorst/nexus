@@ -37,6 +37,7 @@ import { NexusBriefing } from "./NexusBriefing";
 import { DecisionBoard } from "./DecisionBoard";
 import { LabCallsPanel } from "./LabCallsPanel";
 import { WatchlistPanel } from "./WatchlistPanel";
+import { FundingVenues } from "./FundingVenues";
 import { LabTitleBar, LabStats, LabTabs, type LabTab } from "./LabHeader";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
 import { C } from "@/config/theme";
@@ -350,6 +351,7 @@ export default function TheLabPage() {
           const lenses = (
             <IntelLenses render={(id) => {
               if (id === "funding") return <MispricedBoard />;
+              if (id === "venues") return <FundingVenues />;
               if (id === "positioning") return <PositioningBoard trades={connected ? processedTrades : undefined} />;
               if (id === "catalysts") return <CatalystBoard />;
               if (id === "forecast") return <ForecastDivergence />;

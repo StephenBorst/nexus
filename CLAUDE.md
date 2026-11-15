@@ -687,6 +687,12 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   (routes-market.mjs `handleMarkets`: mispriced + smart + forecasts read once, `marketSnapshot` per coin, 60 s cache);
   each row = price, 24h, the move since the last look + the alerts' changes (`marketTransitions`); first look = baseline;
   tapping a row opens the drawer and marks it seen.
+- **Funding across venues (2026-11-15, rules `app/lib/crossFunding.mjs`, route `GET /intel/funding-venues[/:coin]`
+  `routes-venues.mjs`, 5-min cache `intel:venues:v1`):** the same coin's funding on Orderly (from /intel/mispriced,
+  in-process), Hyperliquid (one `metaAndAssetCtxs` POST, hourly rate) and OKX (`funding-rate` per coin, paced, recorded
+  universe only), each annualized from its own period; gap = Orderly − the others' average. A dead venue = named in
+  `unread`, its column null, never 0. Lab home lens "Venues" (`FundingVenues.tsx`) + the drawer's "Funding elsewhere"
+  lens (MARKET_SOURCES `venues`). An input, "Not graded" (`UNGRADED_LENSES`); copy never says arbitrage/free/edge.
 - **Trade page read (2026-11-14, `MarketStripBar.tsx` under the LAB strip in `pages/perp/Layout.tsx`, rules
   `app/lib/marketStrip.mjs`):** the coin on screen in one line (funding, smart money, tape) from the drawer's answer
   (`/intel/market/:coin` now carries `facts`, numbers for the same inputs; cache key `intel:market:v2:`); ☆ watches it,

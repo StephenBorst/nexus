@@ -108,6 +108,7 @@ import { handlePulse } from "./routes-pulse.mjs";
 import { handleMarket, handleMarkets, handleFadeGrade } from "./routes-market.mjs";
 import { runWalletWatch } from "./walletWatch.mjs";
 import { handleBell, composeBell } from "./routes-bell.mjs";
+import { handleVenues } from "./routes-venues.mjs";
 import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
 import { marketCoin } from "../../app/lib/marketRead.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
@@ -1212,6 +1213,13 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
       });
       if (bellRes) return bellRes;
+    }
+    // ── /intel/funding-venues[/:coin] → funding on Orderly, Hyperliquid and OKX side by side (routes-venues.mjs). 5 min cache.
+    {
+      const venuesRes = await handleVenues(parts, request, env, {
+        dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
+      });
+      if (venuesRes) return venuesRes;
     }
     {
       const fadeRes = await handleFadeGrade(parts, request, {
