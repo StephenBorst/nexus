@@ -2682,3 +2682,45 @@ test("validateOperatorConfig: callbackUrl must be https + carry a ≥16-char sec
   assert.equal(validateOperatorConfig({ callbackUrl: "https://ops.example.com" }).error, "bad_webhookSecret");
   assert.equal(validateOperatorConfig({ callbackUrl: "https://ops.example.com", webhookSecret: "short" }).error, "bad_webhookSecret");
 });
+
+// ── Hosted prompt-cache breakpoints (2026-11-15 cost pass) ──────────────────────────────────────
+import { hostedCacheBreakpoints } from "./logic.mjs";
+const countMarks = (b) => JSON.stringify(b).split('"cache_control"').length - 1;
+
+test("hostedCacheBreakpoints: stable prompt + the question's last turn, client marks dropped, never over 4", () => {
+  const eph = { type: "ephemeral" };
+  const body = {
+    tools: [{ name: "a", input_schema: {}, cache_control: eph }, { name: "b", input_schema: {} }],
+    system: [{ type: "text", text: "PROMPT", cache_control: eph }, { type: "text", text: "--- LIVE SESSION CONTEXT ---", cache_control: eph }],
+    messages: [
+      { role: "user", content: [{ type: "text", text: "q", cache_control: eph }, { type: "text", text: "x", cache_control: eph }] },
+      { role: "assistant", content: [{ type: "thinking", thinking: "t", signature: "s" }, { type: "tool_use", id: "1", name: "a", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "1", content: "r" }] },
+    ],
+  };
+  hostedCacheBreakpoints(body);
+  assert.equal(countMarks(body), 2);
+  assert.deepEqual(body.system[0].cache_control, eph, "the stable prompt block");
+  assert.equal(body.system[1].cache_control, undefined, "the page context is not a breakpoint");
+  assert.deepEqual(body.messages[2].content[0].cache_control, eph, "the last tool_result: earlier rounds read from cache");
+  assert.equal(body.tools[0].cache_control, undefined);
+});
+
+test("hostedCacheBreakpoints: a string system / string turn are wrapped; no system = the last tool", () => {
+  const a = hostedCacheBreakpoints({ system: "P", messages: [{ role: "user", content: "hi" }] });
+  assert.deepEqual(a.system, [{ type: "text", text: "P", cache_control: { type: "ephemeral" } }]);
+  assert.deepEqual(a.messages[0].content, [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }]);
+  const b = hostedCacheBreakpoints({ tools: [{ name: "x", input_schema: {} }], messages: [] });
+  assert.deepEqual(b.tools[0].cache_control, { type: "ephemeral" });
+  assert.equal(countMarks(b), 1);
+});
+
+test("the proxy places the breakpoints right after shaping the body", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const i = src.indexOf("const upstreamBody = shapeHostedBody(body, hostedModel, upstreamCfg.model);");
+  const j = src.indexOf("hostedCacheBreakpoints(upstreamBody);", i);
+  const k = src.indexOf("body: JSON.stringify(upstreamBody)", i);
+  assert.ok(i > 0 && j > i && k > j);
+  assert.doesNotMatch(src.slice(i, k), /lastTool\.cache_control/, "the old inline breakpoints are gone");
+});

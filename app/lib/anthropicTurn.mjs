@@ -119,3 +119,20 @@ export function trimHistory(history, max = HISTORY_MAX_MESSAGES) {
   return first < 0 ? [] : h.slice(first);
 }
 
+
+// The system prompt as two blocks (2026-11-15 cost pass): the stable copilot prompt first, marked for caching, then
+// the page's live context (buildContextBlock), which changes from page to page. As one string, any context change
+// re-billed the whole ~2k-token prompt in full; split, the prompt (and the tools before it) stay cached across
+// questions. The hosted proxy re-places its own breakpoints (hostedCacheBreakpoints, lab-api logic.mjs).
+export const CONTEXT_MARKER = "--- LIVE SESSION CONTEXT ---";
+
+/** @param {string} system @returns {Array<{type:"text", text:string, cache_control?: {type:"ephemeral"}}>} */
+export function systemBlocks(system) {
+  const s = typeof system === "string" ? system : "";
+  const i = s.indexOf(CONTEXT_MARKER);
+  const head = (i < 0 ? s : s.slice(0, i)).trimEnd();
+  const tail = i < 0 ? "" : s.slice(i);
+  const out = head ? [{ type: "text", text: head, cache_control: { type: "ephemeral" } }] : [];
+  if (tail) out.push({ type: "text", text: tail });
+  return out;
+}

@@ -553,7 +553,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_signal_scoreboard",
     description:
-      "Get the SIGNAL SCOREBOARD — how our OWN reads perform when graded by the same trustless standard we grade traders: forward returns, no lookahead, pooled across the core markets, with a walk-forward stability check (first half vs second half must agree). Each axis gets a verdict graded against ZERO: PREDICTIVE (positive and stable), PROMISING (positive but unconfirmed), NOISE (no edge), or INSUFFICIENT/ACCRUING (not enough self-logged history yet). Each axis ALSO carries vs_random per side: the same events re-entered at random hours in the same window, same market, same side, same contract. That is the test of whether the read picks good moments or the window did the work — in a window that rose, any long grades positive. A read is only an edge if it BEATS_RANDOM on its side; PREDICTIVE alone is NOT enough, and `tide` shows what a random long/short earned. BELOW_RANDOM means the read's timing on that side is reliably WORSE than random entries — say so plainly, and never suggest inverting it: the inverse is a different rule that hasn't been graded. Never call a read an edge, proven or validated unless vs_random says BEATS_RANDOM. Use for 'do your signals actually work', 'which reads have an edge', 'is the funding fade profitable', 'how's the backtest looking'. IMPORTANT framing: most axes read ACCRUING right now — until the self-logged history matures and the sample clears the bar. Be honest that a read is NOT an edge until it's PREDICTIVE here — publishing the misses is the whole point (radical transparency). Not advice.",
+      "Get the SIGNAL SCOREBOARD: our OWN reads graded like traders (forward returns, no lookahead, pooled across the core markets, first half vs second half must agree). Verdict vs zero: PREDICTIVE (positive and stable), PROMISING (positive, unconfirmed), NOISE, INSUFFICIENT/ACCRUING (not enough history). vs_random per side = the same events re-entered at random hours (same window, market, side, contract): whether the read picks good moments or the window did the work. A read is only an edge if it BEATS_RANDOM on its side; PREDICTIVE alone is NOT enough, and `tide` shows what a random long/short earned. BELOW_RANDOM means the read's timing on that side is reliably WORSE than random entries — say so plainly, and never suggest inverting it: the inverse is a different rule that hasn't been graded. Never call a read an edge, proven or validated unless vs_random says BEATS_RANDOM. Use for 'do your signals actually work', 'which reads have an edge', 'is the funding fade profitable'. Many axes are still ACCRUING; say so, and report the misses as plainly as the hits. Not advice.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
       const sc = await fetch(`${AGENT_API}/intel/axis-backtest`).then((r) => r.json()).catch(() => null);
@@ -646,15 +646,16 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_mispriced",
     description:
-      "Get the MISPRICED BOARD — every liquid perp priced by its funding rate as a mispricing signal. Persistently positive funding means the book is lopsided LONG, so the mean-revert (fade) edge is SHORT — and vice-versa; rates are annualized so |edge| is comparable across markets. Returns the most stretched markets (fade direction + annualized edge %/yr + raw 8h funding + 24h move), the scan counts, and — where the graded, credible CALLERS have a stance — their merit-weighted lean beside each, flagging DIVERGENCE (funding fade vs. the sharp callers disagree). Use for 'what's mispriced', 'where is funding extreme', 'what should I fade', 'where is the crowd offside'. Pass a symbol to read one market even if it's priced fair. This is a POSITIONING lens, NOT advice — the fade is a mean-reversion tendency, not a guarantee, and a market can stay stretched for a long time; say so. Offer to draft a thesis on a standout (draft_thesis).",
+      "Get the MISPRICED BOARD: every liquid perp by its funding, annualized (%/yr, comparable across markets). Stretched positive funding = longs crowded, the fade side is SHORT (and vice versa). Returns the most stretched markets (fade side, funding %/yr, raw 8h funding, 24h move), each market's own past fades (`past_fades`, an in-sample count, not a grade), the graded callers' lean beside each (`divergence` = they lean the other way), and `fade_grade`: the plain funding fade's live scoreboard grade (it has graded NOISE, worse than random entries). ALWAYS relay fade_grade; never call the fade or a stretched market an edge. Pass a symbol to read one market. Use for 'what's mispriced', 'where is funding extreme', 'where is the crowd offside'. A positioning input, not advice.",
     input_schema: {
       type: "object",
       properties: { symbol: { type: "string", description: "Optional ticker (BTC, ETH…) to focus on one market." } },
     },
     run: async (args) => {
-      const [board, cons] = await Promise.all([
+      const [board, cons, fg] = await Promise.all([
         fetch(`${AGENT_API}/intel/mispriced`).then((r) => r.json()).catch(() => null),
         fetch(`${AGENT_API}/theses/consensus`).then((r) => r.json()).catch(() => null),
+        sharedJson(`${AGENT_API}/intel/fade-grade`),
       ]);
       type M = { coin: string; direction: string; fundingAnnualPct: number; funding8hPct: number; change24hPct: number | null; status: string; edgeQuality?: { tier: string; revertedPct: number | null; samples: number } };
       const markets: M[] = board?.markets ?? [];
@@ -667,10 +668,10 @@ export const TOOLS: ToolDef[] = [
         const diverges = !!l && l.side !== "SPLIT" && m.direction !== "NONE" && l.side !== m.direction;
         const q = m.edgeQuality;
         return {
-          coin: m.coin, fade: m.direction, edge_annual_pct: m.fundingAnnualPct,
+          coin: m.coin, fade: m.direction, funding_annual_pct: m.fundingAnnualPct,
           funding_8h_pct: m.funding8hPct, change_24h_pct: m.change24hPct, status: m.status,
-          // Has fading this HISTORICALLY paid? PROVEN/TRAP/MIXED/UNPROVEN — the honest half.
-          edge_quality: q ? { tier: q.tier, reverted_pct: q.revertedPct, samples: q.samples } : undefined,
+          // This market's own past fades (in-sample count, the scan's "past fades" fact), not a grade.
+          past_fades: q ? { tier: q.tier, reverted_pct: q.revertedPct, samples: q.samples } : undefined,
           sharp_callers: l ? { lean: l.side, n: l.participants } : null,
           divergence: diverges || undefined,
         };
@@ -679,7 +680,8 @@ export const TOOLS: ToolDef[] = [
         scanned: board?.scanned ?? null,
         mispriced_count: board?.mispricedCount ?? null,
         markets: rows,
-        note: "Funding annualized = the crowd's mispricing; fade = the mean-revert edge. edge_quality is the honest half — whether fading THIS market has historically reverted: TRAP means funding is stretched but the fade has LOST (do NOT blindly fade it), PROVEN means it's paid, UNPROVEN means not enough recorded history. Always surface a TRAP. Positioning lens, not advice. 'divergence' = the sharp callers lean the other way.",
+        fade_grade: fg?.grade ? `The plain funding fade grades ${fg.grade.tier}${fg.grade.vsRandom ? `, ${fg.grade.vsRandom}` : ""}${fg.grade.samples ? ` (${fg.grade.samples} samples)` : ""}.` : "unread right now",
+        note: "fade = the side that bets funding reverts; not a graded edge (fade_grade is its live grade: relay it). past_fades = how this market's own past fades went, counted in-sample: TRAP = stretched before and the fade lost (always surface it), PROVEN / MIXED / UNPROVEN are that count's labels, NOT a scoreboard grade, so never repeat 'proven' as a verdict. 'divergence' = the graded callers lean the other way. Positioning input, not advice.",
       });
     },
   },

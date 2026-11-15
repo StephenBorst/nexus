@@ -21,7 +21,7 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, resolveAiUpstream, HOSTED_BODY_MAX_BYTES, questionId, takeHostedSlot, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
+import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, hostedCacheBreakpoints, resolveAiUpstream, HOSTED_BODY_MAX_BYTES, questionId, takeHostedSlot, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
 import { serveScoreboard, rebuildScoreboard, SCOREBOARD_REBUILD_MINUTE } from "./scoreboardCache.mjs";
 
@@ -1752,21 +1752,9 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
         // upstreamCfg.model is the provider-correct id (the gateway uses dot-notation).
         const upstreamBody = shapeHostedBody(body, hostedModel, upstreamCfg.model);
 
-        // Prompt caching — the system prompt + 12 tool schemas are identical every
-        // call, so cache that stable prefix → repeat calls bill at ~0.1x instead of
-        // 1x (the dominant input cost). Breakpoints: the last tool (caches the tool
-        // defs) + the system block (render order tools→system→messages, so a system
-        // breakpoint caches tools+system together). 5-min TTL covers a tool loop.
-        if (Array.isArray(upstreamBody.tools) && upstreamBody.tools.length) {
-          const lastTool = upstreamBody.tools[upstreamBody.tools.length - 1];
-          if (lastTool && typeof lastTool === "object") lastTool.cache_control = { type: "ephemeral" };
-        }
-        if (typeof upstreamBody.system === "string" && upstreamBody.system.length) {
-          upstreamBody.system = [{ type: "text", text: upstreamBody.system, cache_control: { type: "ephemeral" } }];
-        } else if (Array.isArray(upstreamBody.system) && upstreamBody.system.length) {
-          const lastSys = upstreamBody.system[upstreamBody.system.length - 1];
-          if (lastSys && typeof lastSys === "object") lastSys.cache_control = { type: "ephemeral" };
-        }
+        // Prompt caching (hostedCacheBreakpoints, logic.mjs): the stable prompt (+ tools before it) and the
+        // question's earlier tool rounds bill at ~0.1x on repeat. 5-min TTL.
+        hostedCacheBreakpoints(upstreamBody);
 
         const upstream = await fetch(upstreamCfg.url, {
           method: "POST",

@@ -34,3 +34,15 @@ test("hosted refusals reach the user as the server's sentence, not raw JSON", ()
   assert.match(err, /typeof j\.hint === "string" && j\.hint\) return j\.hint;/);
   assert.match(err, /overloaded_error/);
 });
+
+test("system prompt goes up as [stable prompt (cached), live context]", async () => {
+  const { systemBlocks, CONTEXT_MARKER } = await import("./anthropicTurn.mjs");
+  const out = systemBlocks(`PROMPT\n\n${CONTEXT_MARKER}\nCurrent page: /lab`);
+  assert.deepEqual(out, [
+    { type: "text", text: "PROMPT", cache_control: { type: "ephemeral" } },
+    { type: "text", text: `${CONTEXT_MARKER}\nCurrent page: /lab` },
+  ]);
+  assert.deepEqual(systemBlocks("ONLY"), [{ type: "text", text: "ONLY", cache_control: { type: "ephemeral" } }]);
+  assert.match(src, /const lines: string\[\] = \[CONTEXT_MARKER\];/, "the context block starts with the marker");
+  assert.equal(src.split("system: systemBlocks(system),").length - 1, 2, "both Anthropic paths send blocks");
+});
