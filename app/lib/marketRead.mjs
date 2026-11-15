@@ -9,6 +9,7 @@ import { fundingWords } from "./boardWords.mjs";
 import { forecastRead } from "./forecastRead.mjs";
 import { CONSENSUS_RATIO } from "./smartConsensus.mjs";
 import { lensGradeLine } from "./fadeGrade.mjs";
+import { venueLine } from "./crossFunding.mjs";
 
 export const MARKET_READ_V = 2; // v2 = + facts (2026-11-14)
 
@@ -33,7 +34,7 @@ const ends = (iso) => {
  * Compose the drawer from the boards' own payloads (any may be null: that lens is "unread", never invented).
  * @returns {{ coin, v, lenses: {id, label, line, detail?, tone}[], price: number|null, change24hPct: number|null }}
  */
-export function composeMarket({ coin, mispriced, signals, smart, callers, forecasts, catalysts, pulse, scorecard } = {}) {
+export function composeMarket({ coin, mispriced, signals, smart, callers, forecasts, catalysts, pulse, scorecard, venues } = {}) {
   const c = marketCoin(coin);
   const lenses = [];
   const add = (id, label, line, extra = {}) => lenses.push({ id, label, line, tone: "plain", ...extra });
@@ -51,6 +52,10 @@ export function composeMarket({ coin, mispriced, signals, smart, callers, foreca
       : `${cap(fundingWords(fundAnnual))}, within its own range.`,
     { tone: stretched ? "watch" : "plain" });
   }
+
+  // The same coin's funding on other venues (crossFunding.mjs): only when another venue lists it.
+  const vr = venues?.row;
+  if (vr && (num(vr.hyperliquid) != null || num(vr.okx) != null)) add("venues", "Funding elsewhere", venueLine(vr), { tone: "plain" });
 
   // Price + open interest (OI only from a fresh snapshot: delta_fresh).
   const ch = num(mp?.change24hPct);

@@ -93,7 +93,7 @@ function exactLine(axisName, scorecard) {
     ? `The 2× rule itself is registered from ${day}: ${k} out-of-sample events, its stage is on /proof.`
     : `The 2× rule itself is registered from ${day}: ${k} of 30 out-of-sample events, not graded yet.`;
 }
-export const UNGRADED_LENSES = Object.freeze(["forecast", "catalysts"]);
+export const UNGRADED_LENSES = Object.freeze(["forecast", "catalysts", "venues"]);
 
 /** The line under a lens: its relative's live grade, "not graded", or null (nothing to say / grade unread). */
 export function lensGradeLine(lensId, scorecard) {

@@ -15,6 +15,7 @@ const BOARDS = {
   "/intel/forecasts/ETH": { markets: [] },
   "/intel/catalysts-board": { catalysts: [] },
   "/calls/pulse": { openCalls: [], engines: { openCalls: [] } },
+  "/intel/funding-venues/ETH": { row: { coin: "ETH", orderly: 10.97, hyperliquid: 9.2, okx: 10.1, gap: 1.32 }, unread: [] },
   "/intel/axis-backtest": { axes: [{ name: "smart_follow", verdict: "PROMISING", r: { samples: 12032 }, random: { pooled: { verdict: "BEATS_RANDOM" } } }] },
 };
 
