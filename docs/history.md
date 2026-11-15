@@ -2555,3 +2555,14 @@ A sweep of user-visible claim lines against what the code computes (`app/lib/cop
 - CLAUDE.md said DEACTIVATE leaves "no stop/TP"; a live single-entry position keeps its exchange backstop.
 Left as is: a trader's own "YOUR EDGE" analytics (their graded record, not a claim about our reads). /proof copy is the
 engine lane's.
+
+## 2026-11-15 · Messages: setup messages as bubbles, the oldest message as the preview
+
+The thread listed every XMTP message, including the DM's own setup ("group updated") and read receipts, as bubbles
+reading "[unsupported content]", and dropped replies the same way. The inbox preview asked for one message in the SDK's
+default ascending order, so it showed the oldest (usually that setup message). A `/messages?dm=` link opened `openDM`
+on whatever the URL held and swallowed any failure: a bad address, your own wallet or a wallet not on XMTP opened
+nothing and said nothing (the typed box already offered an invite). The nav badge re-synced and read the full history
+of up to 20 threads on every incoming message. Now: application messages only, newest-first previews, threads by last
+activity, the link checked like the box (invite or a plain line), one `syncAll` for the badge, 16px compose field,
+readable sizes, and the header's back steps out of an open thread on a phone.

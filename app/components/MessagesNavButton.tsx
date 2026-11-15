@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useXMTP } from "@/hooks/useXMTP";
 import { getLastRead, nsToMs, UNREAD_EVENT } from "@/utils/xmtpUnread";
@@ -8,42 +8,44 @@ import { getLastRead, nsToMs, UNREAD_EVENT } from "@/utils/xmtpUnread";
  *
  * Only computes unread when the XMTP client is already cached/ready — it never
  * triggers a wallet signature prompt just to render a badge. When ready, it
- * polls conversations every 45s (and on visibility/return) and counts threads
+ * re-counts on every inbound message (live stream), every 2 min and on return, counting threads
  * whose latest inbound message is newer than the stored "last read" time.
  */
 export default function MessagesNavButton() {
-  const { ready, getConversations, getMessages, streamAllMessages, myInboxId } = useXMTP();
+  const { ready, getConversations, lastMessage, streamAllMessages, myInboxId } = useXMTP();
   const [unread, setUnread] = useState(0);
+  // One count at a time: a burst of messages / read marks runs at most one more after it.
+  const running = useRef(false);
+  const again = useRef(false);
 
-  const compute = useCallback(async () => {
+  const compute = useCallback(async (): Promise<void> => {
     if (!ready || (typeof document !== "undefined" && document.hidden)) return;
+    if (running.current) { again.current = true; return; }
+    running.current = true;
     try {
-      const convos = await getConversations();
+      // One sync for every thread, then local reads: the newest INBOUND chat message per
+      // thread (setup messages left out). It used to re-sync and read each thread's whole
+      // history, up to 20 network syncs on every incoming message.
+      const convos = await getConversations({ syncMessages: true });
       let count = 0;
-      // Cap to keep the poll cheap on accounts with many threads
       for (const c of convos.slice(0, 20)) {
-        let msgs;
+        let last;
         try {
-          msgs = await getMessages(c);
+          last = await lastMessage(c, myInboxId);
         } catch {
           continue;
         }
-        // Find the most recent inbound (not-mine) message
-        let lastInboundNs: bigint | null = null;
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          if (msgs[i].senderInboxId !== myInboxId) {
-            lastInboundNs = msgs[i].sentAtNs;
-            break;
-          }
-        }
-        if (lastInboundNs == null) continue;
-        if (nsToMs(lastInboundNs) > getLastRead(c.id)) count++;
+        if (!last) continue;
+        if (nsToMs(last.sentAtNs) > getLastRead(c.id)) count++;
       }
       setUnread(count);
     } catch {
       /* ignore — transient sync errors */
+    } finally {
+      running.current = false;
     }
-  }, [ready, getConversations, getMessages, myInboxId]);
+    if (again.current) { again.current = false; await compute(); }
+  }, [ready, getConversations, lastMessage, myInboxId]);
 
   useEffect(() => {
     if (!ready) {

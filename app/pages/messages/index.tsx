@@ -12,6 +12,8 @@ import { useXMTP } from "@/hooks/useXMTP";
 import type { Conversation, DecodedMessage } from "@/hooks/useXMTP";
 import { markConvoRead } from "@/utils/xmtpUnread";
 import { pressKey } from "@/utils/a11y";
+import { errText } from "@/pages/lab/helpers";
+import { visibleMessages, mergeStreamed, previewText, messageText, dmTarget, draftFromLink, relativeAge } from "@/lib/xmtpMessages.mjs";
 
 // ─── Responsive hook ───────────────────────────────────────────────────────────
 function useIsMobile(breakpoint = 768) {
@@ -33,24 +35,6 @@ function shortAddr(addr: string): string {
     return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
   }
   return `${addr.slice(0, 8)}…`;
-}
-
-function relativeTime(sentAtNs: bigint | null | undefined): string {
-  if (sentAtNs == null) return "";
-  const ms = Number(sentAtNs / 1_000_000n);
-  const diff = Date.now() - ms;
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
-function msgText(msg: DecodedMessage): string {
-  if (typeof msg.content === "string") return msg.content;
-  return "[unsupported content]";
 }
 
 // Resolve peer wallet address from conversation members
@@ -133,7 +117,7 @@ const S = {
   }),
   convoName: {
     fontFamily: "var(--nx-font-mono)",
-    fontSize: 11,
+    fontSize: 12,
     color: "#a1a1aa",
     marginBottom: 2,
     overflow: "hidden",
@@ -141,9 +125,9 @@ const S = {
     whiteSpace: "nowrap" as const,
   },
   convoPreview: {
-    fontFamily: "var(--nx-font-mono)",
-    fontSize: 9,
-    color: "#52525b",
+    fontFamily: "var(--nx-font-ui, sans-serif)",
+    fontSize: 11.5,
+    color: "#71717a",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap" as const,
@@ -182,15 +166,16 @@ const S = {
     padding: "8px 12px",
   }),
   bubbleText: (isMine: boolean): React.CSSProperties => ({
-    fontFamily: "var(--nx-font-mono)",
-    fontSize: 11,
-    color: isMine ? "#ededf0" : "#a1a1aa",
+    fontFamily: "var(--nx-font-ui, sans-serif)",
+    fontSize: 13.5,
+    color: isMine ? "#ededf0" : "#d4d4d8",
     lineHeight: 1.5,
-    wordBreak: "break-word" as const,
+    overflowWrap: "anywhere" as const,
+    whiteSpace: "pre-wrap" as const,
   }),
   bubbleTime: {
     fontFamily: "var(--nx-font-mono)",
-    fontSize: 8,
+    fontSize: 9.5,
     color: "#71717a",
     marginTop: 4,
     textAlign: "right" as const,
@@ -209,8 +194,8 @@ const S = {
     border: "1px solid #232327",
     borderRadius: 4,
     color: "#ededf0",
-    fontFamily: "var(--nx-font-mono)",
-    fontSize: 11,
+    fontFamily: "var(--nx-font-ui, sans-serif)",
+    fontSize: 16, // 16px: no zoom-on-focus on a phone, readable while typing
     padding: "8px 10px",
     outline: "none",
     resize: "none" as const,
@@ -223,9 +208,10 @@ const S = {
     borderRadius: 4,
     color: disabled ? "#33333a" : "#ededf0",
     fontFamily: "var(--nx-font-mono)",
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: "0.08em",
     padding: "8px 14px",
+    minHeight: 40,
     cursor: disabled ? "default" : "pointer",
     flexShrink: 0,
     alignSelf: "flex-end",
@@ -241,8 +227,8 @@ const S = {
   },
   centerLabel: {
     fontFamily: "var(--nx-font-mono)",
-    fontSize: 11,
-    color: "#52525b",
+    fontSize: 12,
+    color: "#71717a",
     textAlign: "center" as const,
     lineHeight: 1.6,
     maxWidth: 320,
@@ -260,7 +246,7 @@ const S = {
   },
   errText: {
     fontFamily: "var(--nx-font-mono)",
-    fontSize: 9,
+    fontSize: 11,
     color: "#f7525f",
     textAlign: "center" as const,
     maxWidth: 320,
@@ -273,35 +259,35 @@ function ConvoItem({
   convo,
   active,
   myInboxId,
+  lastMessage,
   onClick,
 }: {
   convo: Conversation;
   active: boolean;
   myInboxId: string | null;
+  lastMessage: (c: Conversation) => Promise<DecodedMessage | null>;
   onClick: () => void;
 }) {
   const [lastMsg, setLastMsg] = useState<DecodedMessage | null>(null);
-  const [peerDisplay, setPeerDisplay] = useState<string>(shortAddr(convo.id));
+  const [peerDisplay, setPeerDisplay] = useState<string>("…");
 
   useEffect(() => {
-    // Last message preview
-    convo.messages({ limit: 1n }).then((msgs) => {
-      if (msgs.length > 0) setLastMsg(msgs[msgs.length - 1]);
-    }).catch(() => {});
+    // The NEWEST chat message (the SDK's default order + limit 1 gave the oldest: a setup message)
+    lastMessage(convo).then(setLastMsg).catch(() => {});
     // Resolve peer wallet address from conversation members
     resolvePeer(convo, myInboxId).then((addr) => {
       if (addr) setPeerDisplay(shortAddr(addr));
     });
-  }, [convo, myInboxId]);
+  }, [convo, myInboxId, lastMessage]);
 
+  const preview = previewText(lastMsg);
   return (
     <div role="button" tabIndex={0} style={S.convoItem(active)} onClick={onClick} onKeyDown={pressKey(onClick)}>
-      <div style={S.convoName}>{peerDisplay}</div>
-      {lastMsg && (
-        <div style={S.convoPreview}>
-          {msgText(lastMsg).slice(0, 48)}{msgText(lastMsg).length > 48 ? "…" : ""}
-        </div>
-      )}
+      <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+        <div style={{ ...S.convoName, flex: 1, minWidth: 0 }}>{peerDisplay}</div>
+        {lastMsg && <span style={{ ...S.convoPreview, flexShrink: 0 }}>{relativeAge(lastMsg.sentAtNs)}</span>}
+      </div>
+      <div style={S.convoPreview}>{preview ?? "no messages yet"}</div>
     </div>
   );
 }
@@ -332,7 +318,7 @@ function ThreadView({
   const [peerDisplay, setPeerDisplay] = useState<string>(
     peerAddressHint ? shortAddr(peerAddressHint) : shortAddr(convo.id)
   );
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -346,7 +332,13 @@ function ThreadView({
   const loadMessages = useCallback(async () => {
     try {
       const msgs = await getMessages(convo);
-      setMessages(msgs);
+      // keep a just-sent placeholder until its real copy is in the list
+      setMessages((prev) => {
+        const shown = visibleMessages(msgs) as DecodedMessage[];
+        const pending = prev.filter((m) => String((m as { id?: string }).id ?? "").startsWith("optimistic_")
+          && !shown.some((x) => x.senderInboxId === m.senderInboxId && messageText(x) === messageText(m)));
+        return [...shown, ...pending];
+      });
     } catch {
       // silent — stale state is fine
     }
@@ -367,13 +359,8 @@ function ThreadView({
     let cancelled = false;
     let closer: (() => void) | null = null;
     streamMessages(convo, (msg) => {
-      setMessages((prev) => {
-        const mid = (msg as { id?: string }).id;
-        // Drop optimistic placeholders and skip if we already have this id
-        const base = prev.filter((m) => !String((m as { id?: string }).id ?? "").startsWith("optimistic_"));
-        if (mid && base.some((m) => (m as { id?: string }).id === mid)) return base;
-        return [...base, msg];
-      });
+      // drops our placeholders, skips duplicates and anything with no text (read receipts, setup)
+      setMessages((prev) => mergeStreamed(prev, msg) as DecodedMessage[]);
     })
       .then((c) => { if (cancelled) c(); else closer = c; })
       .catch(() => { /* stream unavailable — safety-net poll covers it */ });
@@ -385,8 +372,11 @@ function ThreadView({
     markConvoRead(convo.id);
   }, [convo.id, messages.length]);
 
+  // Scroll the thread itself to the newest message. scrollIntoView moved the whole page on
+  // a phone (the compose bar and header with it).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
   async function send() {
@@ -412,7 +402,7 @@ function ThreadView({
       // Roll back the optimistic bubble and let the user retry
       setMessages((prev) => prev.filter((m) => (m as { id?: string }).id !== optimistic.id));
       setText(trimmed);
-      setSendError(e instanceof Error ? e.message : "Message failed to send. Try again.");
+      setSendError(`Didn’t send: ${errText(e)}. Your text is back in the box.`);
     } finally {
       setSending(false);
     }
@@ -430,12 +420,12 @@ function ThreadView({
       <div style={S.threadHeader}>
         <span style={{ color: "#ededf0", fontSize: 10 }}>⬡</span>
         {peerDisplay}
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#71717a", marginLeft: "auto" }}>
+        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, whiteSpace: "nowrap", color: "#71717a", marginLeft: "auto" }}>
           end-to-end encrypted · XMTP
         </span>
       </div>
 
-      <div style={S.messages}>
+      <div ref={listRef} style={S.messages}>
         {messages.length === 0 && (
           <div style={{ ...S.centerLabel, alignSelf: "center", marginTop: 40 }}>
             no messages yet — say something
@@ -443,18 +433,18 @@ function ThreadView({
         )}
         {messages.map((msg, i) => {
           const isMine = msg.senderInboxId === myInboxId;
+          const pending = String((msg as { id?: string }).id ?? "").startsWith("optimistic_");
           return (
-            <div key={i} style={S.bubble(isMine)}>
-              <div style={S.bubbleText(isMine)}>{msgText(msg)}</div>
-              <div style={S.bubbleTime}>{relativeTime(msg.sentAtNs)}</div>
+            <div key={(msg as { id?: string }).id ?? i} style={S.bubble(isMine)}>
+              <div style={S.bubbleText(isMine)}>{messageText(msg)}</div>
+              <div style={S.bubbleTime}>{pending ? "sending…" : relativeAge(msg.sentAtNs)}</div>
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
 
       {sendError && (
-        <div style={{ padding: "5px 12px", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#f7525f" }}>
+        <div style={{ padding: "5px 12px", fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#f7525f" }}>
           {sendError}
         </div>
       )}
@@ -486,16 +476,11 @@ export default function MessagesPage() {
   const walletAddress = (accountState as { address?: string })?.address ?? null;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  // Reliable back: step out of an open thread first; else history; else home feed.
-  const goBack = useCallback(() => {
-    if (typeof window !== "undefined" && window.history.length > 1) navigate(-1);
-    else navigate("/feed");
-  }, [navigate]);
   const dmParam = searchParams.get("dm");
   const reParam = searchParams.get("re"); // "Re: your ZEC LONG call — " context seed
 
   const xmtp = useXMTP();
-  const { ready, initializing, error, init, getConversations, getMessages, streamMessages, myInboxId, deviceLimit, revoking, revokeOldDevices } = xmtp;
+  const { ready, initializing, error, init, getConversations, lastMessage, getMessages, streamMessages, myInboxId, deviceLimit, revoking, revokeOldDevices } = xmtp;
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
@@ -507,42 +492,48 @@ export default function MessagesPage() {
   const [dmError, setDmError] = useState<string | null>(null);
   const [inviteAddr, setInviteAddr] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
+  // Back: on a phone, step out of an open thread first; else history; else the feed.
+  const goBack = useCallback(() => {
+    if (isMobile && activeConvo) { setActiveConvo(null); return; }
+    if (typeof window !== "undefined" && window.history.length > 1) navigate(-1);
+    else navigate("/feed");
+  }, [navigate, isMobile, activeConvo]);
 
-  // Load conversations once XMTP is ready
+  // Load conversations once XMTP is ready; a ?dm= link opens (or offers an invite to) that wallet
   useEffect(() => {
     if (!ready) return;
+    let cancelled = false;
     setLoadingConvos(true);
-    getConversations()
-      .then(async (convos) => {
+    (async () => {
+      let convos: Conversation[] = [];
+      try {
+        convos = await getConversations();
+        if (cancelled) return;
         setConversations(convos);
-        // Auto-open ?dm= conversation
-        if (dmParam) {
-          // Check if a convo with this peer already exists
-          let found: Conversation | null = null;
-          for (const c of convos) {
-            const peer = await resolvePeer(c, myInboxId);
-            if (peer?.toLowerCase() === dmParam.toLowerCase()) {
-              found = c;
-              break;
-            }
-          }
-          if (found) {
-            setActiveConvo(found);
-            setActivePeerHint(dmParam);
-          } else {
-            // Create a new DM
-            xmtp.openDM(dmParam)
-              .then((convo) => {
-                setActiveConvo(convo);
-                setActivePeerHint(dmParam);
-                setConversations((prev) => [convo, ...prev]);
-              })
-              .catch(() => {});
-          }
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoadingConvos(false));
+      } catch { /* the list stays empty; the DM box still works */ }
+      finally { if (!cancelled) setLoadingConvos(false); }
+      if (!dmParam) return;
+      // The link used to call openDM with whatever it held and swallow any failure, so a bad
+      // address, your own, or a wallet not on XMTP yet opened nothing and said nothing.
+      const t = dmTarget(dmParam, xmtp.myAddress, { fromLink: true });
+      if (!t.addr) { if (t.error) setDmError(t.error); return; }
+      for (const c of convos) {
+        const peer = await resolvePeer(c, myInboxId);
+        if (cancelled) return;
+        if (peer?.toLowerCase() === t.addr) { setActiveConvo(c); setActivePeerHint(t.addr); return; }
+      }
+      try {
+        if (!(await xmtp.canMessage(t.addr))) { if (!cancelled) setInviteAddr(t.addr); return; }
+        const convo = await xmtp.openDM(t.addr);
+        if (cancelled) return;
+        setActiveConvo(convo);
+        setActivePeerHint(t.addr);
+        setConversations((prev) => (prev.some((c) => c.id === convo.id) ? prev : [convo, ...prev]));
+      } catch (e) {
+        if (!cancelled) setDmError(`Couldn’t open that conversation: ${errText(e)}`);
+      }
+    })();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
@@ -552,13 +543,10 @@ export default function MessagesPage() {
     setDmError(null);
     setInviteAddr(null);
 
-    // Validate address shape before hitting the network
-    if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
-      setDmError("Enter a valid 0x wallet address (42 chars).");
-      return;
-    }
-    if (addr.toLowerCase() === (xmtp.myAddress ?? "").toLowerCase()) {
-      setDmError("That's your own address — pick a different wallet.");
+    // Validate address shape before hitting the network (one rule with the ?dm= link)
+    const t = dmTarget(addr, xmtp.myAddress);
+    if (!t.addr) {
+      setDmError(t.error ?? null);
       return;
     }
 
@@ -580,7 +568,7 @@ export default function MessagesPage() {
       });
       setDmAddress("");
     } catch (e) {
-      setDmError(e instanceof Error ? e.message : "Couldn't start that conversation. Try again.");
+      setDmError(`Couldn’t start that conversation: ${errText(e)}`);
     } finally {
       setOpeningDM(false);
     }
@@ -612,7 +600,7 @@ export default function MessagesPage() {
           <div style={S.centerLabel}>
             wallet-to-wallet encrypted DMs powered by XMTP
             <br />
-            <span style={{ color: "#71717a", fontSize: 9 }}>
+            <span style={{ color: "#71717a", fontSize: 10.5 }}>
               you’ll sign twice — once for the encryption key, once to register
             </span>
           </div>
@@ -626,7 +614,7 @@ export default function MessagesPage() {
               >
                 {revoking ? "removing..." : initializing ? "enabling..." : "REMOVE OLD DEVICES"}
               </button>
-              <div style={{ color: "#71717a", fontSize: 9, fontFamily: "var(--nx-font-mono)", maxWidth: 320, lineHeight: 1.6, textAlign: "center" }}>
+              <div style={{ color: "#71717a", fontSize: 10.5, fontFamily: "var(--nx-font-mono)", maxWidth: 320, lineHeight: 1.6, textAlign: "center" }}>
                 Keeps your 3 newest devices. One signature. Removed devices stop getting messages until you turn messaging on there again.
               </div>
             </>
@@ -648,7 +636,7 @@ export default function MessagesPage() {
       <div style={S.header}>
         <button onClick={goBack} style={S.backBtn} aria-label="Back" title="Back">‹</button>
         <span style={S.headerLabel}>■ MESSAGES</span>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#71717a", marginLeft: "auto" }}>
+        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, whiteSpace: "nowrap", color: "#71717a", marginLeft: "auto" }}>
           ⬡ XMTP · end-to-end encrypted
         </span>
       </div>
@@ -663,7 +651,7 @@ export default function MessagesPage() {
             <input
               style={{
                 flex: 1, background: "#141416", border: "1px solid #232327", borderRadius: 3,
-                color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 9, padding: "5px 7px", outline: "none",
+                minWidth: 0, color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontSize: 16, padding: "6px 8px", outline: "none",
               }}
               placeholder="0x… new DM"
               value={dmAddress}
@@ -673,17 +661,18 @@ export default function MessagesPage() {
             <button
               onClick={startDM}
               disabled={!dmAddress.trim() || openingDM}
+              aria-label="Start a DM"
               style={{
-                background: "none", border: "1px solid #232327", borderRadius: 3,
-                color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12,
-                padding: "4px 8px", cursor: "pointer",
+                background: "none", border: "1px solid #33333a", borderRadius: 3,
+                color: "#d4d4d8", fontFamily: "var(--nx-font-ui)", fontSize: 16,
+                minWidth: 40, padding: "4px 8px", cursor: "pointer", flexShrink: 0,
               }}
             >
               {openingDM ? "…" : "+"}
             </button>
           </div>
           {dmError && (
-            <div style={{ padding: "6px 10px", borderBottom: "1px solid #232327", fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#f7525f", lineHeight: 1.5 }}>
+            <div style={{ padding: "6px 10px", borderBottom: "1px solid #232327", fontFamily: "var(--nx-font-ui)", fontSize: 11.5, color: "#f7525f", lineHeight: 1.5 }}>
               {dmError}
             </div>
           )}
@@ -698,7 +687,7 @@ export default function MessagesPage() {
             };
             return (
               <div style={{ padding: "8px 10px", borderBottom: "1px solid #232327", background: "#1a1a1e" }}>
-                <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#d4d4d8", lineHeight: 1.5, marginBottom: 6 }}>
+                <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11.5, color: "#d4d4d8", lineHeight: 1.5, marginBottom: 6 }}>
                   {shortAddr(inviteAddr)} isn’t on XMTP yet. Send them this link — it opens Messages and pre-fills a DM back to you:
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -706,7 +695,7 @@ export default function MessagesPage() {
                     readOnly
                     value={inviteLink}
                     onFocus={(e) => e.currentTarget.select()}
-                    style={{ flex: 1, background: "#141416", border: "1px solid #33333a", borderRadius: 3, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 8, padding: "5px 7px", outline: "none" }}
+                    style={{ flex: 1, minWidth: 0, background: "#141416", border: "1px solid #33333a", borderRadius: 3, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 10, padding: "5px 7px", outline: "none" }}
                   />
                   <button
                     onClick={copy}
@@ -727,12 +716,12 @@ export default function MessagesPage() {
 
           <div style={S.convoList}>
             {loadingConvos && (
-              <div style={{ padding: 14, fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>
+              <div style={{ padding: 14, fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>
                 loading...
               </div>
             )}
             {!loadingConvos && conversations.length === 0 && (
-              <div style={{ padding: 14, fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#71717a", lineHeight: 1.6 }}>
+              <div style={{ padding: 14, fontFamily: "var(--nx-font-ui)", fontSize: 11.5, color: "#71717a", lineHeight: 1.6 }}>
                 no conversations yet
                 <br />paste a wallet address above
               </div>
@@ -743,6 +732,7 @@ export default function MessagesPage() {
                 convo={convo}
                 active={activeConvo?.id === convo.id}
                 myInboxId={myInboxId}
+                lastMessage={lastMessage}
                 onClick={() => {
                   setActiveConvo(convo);
                   setActivePeerHint(undefined);
@@ -773,7 +763,7 @@ export default function MessagesPage() {
                 peerAddressHint={activePeerHint}
                 // Only seed the draft on the thread we auto-opened from a call link,
                 // never when the user hand-picks another conversation.
-                initialDraft={activePeerHint && dmParam && activePeerHint.toLowerCase() === dmParam.toLowerCase() ? (reParam ?? undefined) : undefined}
+                initialDraft={activePeerHint && dmParam && activePeerHint.toLowerCase() === dmParam.toLowerCase() ? draftFromLink(reParam) : undefined}
               />
             </>
           ) : (
