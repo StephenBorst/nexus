@@ -2595,3 +2595,14 @@ The routes' error screen was the template's developer dump ("Unexpected Applicat
 happened, that a screen error moves no money, Reload / Go home / Copy error details, details folded. The Lab's Quick
 Trade swallowed a failed leverage change ("keep going at current lev"), so a ticket set to 2× could fill on a 20×
 account while its liquidation estimate showed 2×; it now stops and says nothing was placed.
+
+## 2026-11-15 · Hosted copilot: the current lineup, a spend lock, one slot per question
+
+Tiers were Haiku 4.5 100 · Sonnet 4.6 40 (default) · Opus 4.8 20 · Sonnet 5.5 30 · Opus 5.5 12 · Fable 5.1 5, each
+older one dearer than its current replacement (Haiku 4.5 $1/$5 vs Haiku 5.5 $0.10/$0.50; Sonnet 4.6 $3/$15 vs Sonnet 5.5
+$2/$10; Opus 4.8 $5/$25 vs Opus 5.5 $4/$20; Fable 5.1 $10/$50 vs Fable 5.2 $8/$40). borst chose the current lineup:
+Haiku 5.5 100 · Sonnet 5.5 40 (default) · Opus 5.5 12 · Fable 5.2 5. The proxy forwarded the client's body whole apart
+from model, max_tokens and (on 5.x) effort, so a PRO caller could add server tools (web search, code execution), fast
+mode or any other billable field to our key, and input size had no ceiling. Each tool round took a cap slot, so a
+question with three tool rounds used four ("40/day" ≈ 10 questions); borst: count questions. Hosted refusals reached
+the copilot as raw JSON.

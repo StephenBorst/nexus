@@ -5,8 +5,8 @@ import {
   MAX_TOKENS, THINKING_MAX_TOKENS,
 } from "./anthropicTurn.mjs";
 
-test("isThinkingModel: the 5.x line, Fable and Mythos think; 4.x and Haiku don't", () => {
-  for (const m of ["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1", "claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-mythos-5-1"])
+test("isThinkingModel: the 5.x line (Haiku 5.5 too), Fable and Mythos think; 4.x doesn't", () => {
+  for (const m of ["claude-haiku-5-5", "claude-fable-5-2", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1", "claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-mythos-5-1"])
     assert.equal(isThinkingModel(m), true, m);
   for (const m of ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-8", "gpt-5.5", "", undefined])
     assert.equal(isThinkingModel(m), false, String(m));

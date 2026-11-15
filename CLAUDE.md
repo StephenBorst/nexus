@@ -43,17 +43,26 @@ product is what sits on top:
   each still-unread one ("Unread: Bankr wallet $NEXUS on Base"). Flash + Orderly broker fees aren't on-chain readable.
 
 ## Hosted AI (`POST /ai/chat`, PRO)
-- Wallet-signed, PRO-gated proxy with our key, prompt caching and a **per-MODEL daily cap**
-  (`ai:usage:{addr}:{model}:{date}`). Tiers: Haiku 4.5 100 · Sonnet 4.6 40 (default) · Opus 4.8 20 · Sonnet 5.5 30 ·
-  Opus 5.5 12 · Fable 5.1 5. `resolveHostedModel`/`hostedCaps` (lab-api `logic.mjs`) whitelist the id (unknown →
-  default tier); client mirror `HOSTED_TIERS` in `config/assistant.ts` (`logic.test.mjs` fails if they disagree).
-  Env: `HOSTED_CAP_*`, `HOSTED_AI_DEFAULT_MODEL`.
+- Wallet-signed, PRO-gated proxy with our key, prompt caching and a **per-MODEL daily cap of QUESTIONS**
+  (`ai:usage:{addr}:{model}:{date}`). Tiers (borst 2026-11-15, the current model of each family): Haiku 5.5 100 ·
+  Sonnet 5.5 40 (default) · Opus 5.5 12 · Fable 5.2 5; the 4.x tiers and Fable 5.1 are retired (a stored old id falls
+  back to the default). `resolveHostedModel`/`hostedCaps` (lab-api `logic.mjs`) whitelist the id; client mirror
+  `HOSTED_TIERS` in `config/assistant.ts` (`logic.test.mjs` + `app/lib/hostedCopilot.test.mjs` fail if they disagree).
+  Env per family: `HOSTED_CAP_HAIKU|SONNET|OPUS|FABLE`, `HOSTED_AI_DEFAULT_MODEL`.
+- **One slot per question** (`takeHostedSlot`): the client sends `_q` (random, one per question); its first request takes
+  the slot, its tool rounds ride on it (≤ `HOSTED_QUESTION_ROUNDS` 5 within 15 min, `ai:q:{addr}:{q}`, else 429
+  `question_rounds`). No `_q` = one slot per request (the old rule).
+- **What reaches our key** (`shapeHostedBody`, 2026-11-15): only model (whitelisted), max_tokens (server ceiling),
+  system, messages, CUSTOM tools (name / description / input_schema; server tools such as web search / code execution
+  dropped), tool_choice auto/none, stream, effort "low". Everything else (speed, fallbacks, mcp_servers, container, …)
+  is dropped. Bodies over `HOSTED_BODY_MAX_BYTES` (200 KB) → 413 `too_long` before parsing. The copilot shows the
+  proxy's `hint` (`errText`).
 - The counter is read + bumped under a NexusLock lease (`LOCK_KEYS.aiUsage`): busy → 409, lock down → 503, nothing sent.
 - **Spend path = Bankr LLM Gateway** (`AI_GATEWAY=bankr` in wrangler.toml + secret `BANKR_LLM_KEY`) →
-  `https://llm.bankr.bot/v1/messages`, dot-notation ids mapped by `bankrGatewayModel` (`BANKR_MODEL_*`). Falls back to
+  `https://llm.bankr.bot/v1/messages`, dot-notation ids mapped by `bankrGatewayModel` (`BANKR_MODEL_HAIKU|SONNET|OPUS|FABLE`;
+  haiku-5.5 / fable-5.2 follow the naming but were NOT read from the gateway's /v1/models: check there). Falls back to
   direct Anthropic (`ANTHROPIC_API_KEY`) if the key is absent. Revert = remove `AI_GATEWAY`. Credits at bankr.bot/llm.
-- **Thinking (5.x) tiers:** `shapeHostedBody` sets effort `low` + a 4096 ceiling and drops `thinking`/`temperature`/
-  forced `tool_choice`; the client reads text by block TYPE and sends thinking blocks back unchanged with their
+- **Thinking tiers (all four):** `shapeHostedBody` sets effort `low` + a 4096 ceiling (`isThinkingModel` includes Haiku 5.5); the client reads text by block TYPE and sends thinking blocks back unchanged with their
   signature (`app/lib/anthropicTurn.mjs`, `createStreamAssembler`). BYOK users get the same handling.
 - **Copilot** (`NexusAssistant.tsx`, `config/assistant.ts`, `config/assistantTools.ts`): BYOK keys stay in the browser.
   Bounded tool loop (max 5), models listed live from the key, thesis drafts via localStorage `nexus_thesis_draft` →

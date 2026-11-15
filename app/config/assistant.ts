@@ -49,21 +49,19 @@ export const LS_KEY = (p: ProviderId) => `nexus_ai_key_${p}`;     // per-provide
 export const LS_HOSTED_MODEL = "nexus_ai_hosted_model";           // PRO hosted-tier choice
 
 // ── Hosted (PRO) model tiers ────────────────────────────────────────────────
-// PRO users pick which model our proxy runs; each tier has its own daily cap so
-// our LLM spend scales with model cost — stronger model = lower cap, cheaper
-// model = higher cap. ⚠️ MUST mirror the worker's hostedCaps()/resolveHostedModel
-// in workers/nexus-lab-api/logic.mjs (ids + cap numbers) or the UI will advertise
-// a cap the server doesn't enforce. Sonnet is the default everyday tier.
+// PRO users pick which model our proxy runs; each tier has its own daily cap of QUESTIONS (a
+// question's tool rounds ride on one slot) so our spend scales with model cost — stronger model
+// = lower cap. ⚠️ MUST mirror the worker's hostedCaps()/resolveHostedModel in
+// workers/nexus-lab-api/logic.mjs (ids + cap numbers) or the UI will advertise a cap the server
+// doesn't enforce. The current model of each family (2026-11-15); Sonnet is the everyday default.
 export interface HostedTier { id: string; label: string; cap: number; note: string; }
 export const HOSTED_TIERS: HostedTier[] = [
-  { id: "claude-haiku-4-5",  label: "Haiku 4.5",  cap: 100, note: "fastest · highest cap" },
-  { id: "claude-sonnet-4-6", label: "Sonnet 4.6", cap: 40,  note: "balanced · default" },
-  { id: "claude-opus-4-8",   label: "Opus 4.8",   cap: 20,  note: "strong · lower cap" },
-  { id: "claude-sonnet-5-5", label: "Sonnet 5.5", cap: 30,  note: "newer · thinks first" },
-  { id: "claude-opus-5-5",   label: "Opus 5.5",   cap: 12,  note: "newer · thinks first" },
-  { id: "claude-fable-5-1",  label: "Fable 5.1",  cap: 5,   note: "most capable · lowest cap" },
+  { id: "claude-haiku-5-5",  label: "Haiku 5.5",  cap: 100, note: "fastest · highest cap" },
+  { id: "claude-sonnet-5-5", label: "Sonnet 5.5", cap: 40,  note: "balanced · default" },
+  { id: "claude-opus-5-5",   label: "Opus 5.5",   cap: 12,  note: "strong · lower cap" },
+  { id: "claude-fable-5-2",  label: "Fable 5.2",  cap: 5,   note: "most capable · lowest cap" },
 ];
-export const HOSTED_DEFAULT_MODEL = "claude-sonnet-4-6";
+export const HOSTED_DEFAULT_MODEL = "claude-sonnet-5-5";
 
 // Load the stored hosted tier, validated against the current tier list (a stale
 // id — e.g. a previously-default Opus — snaps back to the default).
@@ -101,12 +99,18 @@ export async function getHostedAccess(address: string): Promise<HostedAuth> {
   return access;
 }
 
-// Anthropic-format request target: direct provider (BYOK) or our PRO proxy (hosted).
+/** A random id naming one question, so its tool rounds share one hosted cap slot (server: takeHostedSlot). */
+function newQuestionId(): string {
+  try { return crypto.randomUUID().replace(/-/g, ""); } catch { return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`; }
+}
+
+// Anthropic-format request target: direct provider (BYOK) or our PRO proxy (hosted). One target
+// per question: its `_q` stays the same across that question's tool rounds.
 function anthropicTarget(apiKey: string, hosted?: HostedAuth) {
   if (hosted) return {
     endpoint: `${HOSTED_BASE}/ai/chat`,
     headers: { "content-type": "application/json" } as Record<string, string>,
-    authBody: { _addr: hosted.addr, _ts: hosted.ts, _sig: hosted.sig } as Record<string, unknown>,
+    authBody: { _addr: hosted.addr, _ts: hosted.ts, _sig: hosted.sig, _q: newQuestionId() } as Record<string, unknown>,
   };
   return {
     endpoint: PROVIDERS.anthropic.endpoint,
@@ -513,15 +517,19 @@ export async function listModels(provider: ProviderId, apiKey: string): Promise<
   }
 }
 
+// A failed request in plain words. Our hosted proxy answers { error, hint } (daily_limit,
+// question_rounds, too_long, pro_required, busy): the hint is the sentence to show. A provider
+// answers { error: { type, message } }.
 async function errText(res: Response): Promise<string> {
-  let detail = "";
-  try {
-    const j = await res.json();
-    detail = j?.error?.message || JSON.stringify(j).slice(0, 200);
-  } catch {
-    detail = await res.text().catch(() => "");
-  }
+  let j: { error?: unknown; hint?: unknown } | null = null;
+  let raw = "";
+  try { raw = await res.text(); j = JSON.parse(raw); } catch { j = null; }
+  if (j && typeof j.hint === "string" && j.hint) return j.hint;
+  const err = j?.error as { type?: string; message?: string } | string | undefined;
+  const msg = typeof err === "string" ? err : err?.message || "";
+  const type = typeof err === "object" ? err?.type : undefined;
   if (res.status === 401) return "Invalid API key (401). Check your key in settings.";
-  if (res.status === 429) return "Rate limited / quota exceeded (429).";
-  return `Request failed (${res.status}). ${detail}`.trim();
+  if (res.status === 529 || type === "overloaded_error") return "The model is overloaded right now (529). Try again in a minute, or pick another model in ⚙.";
+  if (res.status === 429) return msg ? `Rate limited (429): ${msg}` : "Rate limited (429). Wait a moment and try again.";
+  return `Request failed (${res.status}). ${msg || raw.slice(0, 200)}`.trim();
 }
