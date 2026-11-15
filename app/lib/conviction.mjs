@@ -1,11 +1,8 @@
-// ── Conviction ranking — shared by the Scanner UI and the copilot get_conviction tool ──
-// Pure: given the funding-fade board (mispriced markets), the smart-money consensus map,
-// and the graded-caller consensus map, tally how many INDEPENDENT reads confirm each fade
-// and rank by net agreement. Kept pure + side-effect-free so the UI and the AI tool share
-// ONE source of truth (they can't drift) and it's node:test-able.
-//
-// A read "confirms" when its lean matches the fade direction; "against" when it opposes.
-// Funding is the base (the fade setup itself). Net = confirmations beyond funding − against.
+// ── Stretched-funding scan — shared by the Smart Money scanner and the copilot get_conviction tool ──
+// Pure: the funding-fade board (mispriced markets) with the other inputs beside each market (smart money's lean, the
+// graded callers' lean, the market's own reversion history). 2026-11-15 (house rule: inputs, never a tally or crown):
+// rows are ordered by how stretched funding is, NOT by how many inputs agree; there is no conviction label. `extra` /
+// `against` stay as plain counts for the copilot to describe. The plain fade's own grade comes from the scoreboard.
 
 const bare = (s) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
 
@@ -23,39 +20,26 @@ export function rankConviction(markets, smMap = {}, callerMap = {}, limit = 8) {
       const dir = m.direction;
       const reads = [{ label: "funding", ok: true }];
       const s = smMap[coin];
-      // Carry each read's OWN side, not just whether it agrees — so a surface can show WHICH
-      // way a disagreeing read leans ("✗ callers LONG"), reconciling "SHORT here / LONG there"
-      // in place instead of leaving two Nexus surfaces silently contradicting each other (Grok).
+      // Each read's OWN side, so a surface says which way it leans instead of a ✓/✗.
       if (s && (s.side === "LONG" || s.side === "SHORT")) reads.push({ label: "smart", ok: s.side === dir, side: s.side });
       const c = callerMap[coin];
       if (c && (c.side === "LONG" || c.side === "SHORT")) reads.push({ label: "callers", ok: c.side === dir, side: c.side });
       const extra = reads.filter((r) => r.label !== "funding" && r.ok).length;
       const against = reads.filter((r) => !r.ok).length;
-      // Carry the reversion hist (edgeQuality — the ONE clock; same object the card/ticket/
-      // Quick Call cite) so the scanner DOCKS conviction the same way: a weak clock (TRAP /
-      // reverted ≤42%) can't read HIGH, and an UNPROVEN clock (n=0) can't either — HIGH/♦
-      // requires a PROVEN base rate (Grok: "n=0 → unproven, never HIGH").
+      // This market's own reversion history (edgeQuality, the one clock the ticket/card cite): a fact, not a grade.
       const eq = m.edgeQuality;
       const revertedPct = eq && Number.isFinite(eq.revertedPct) ? eq.revertedPct : null;
+      const samples = eq && Number.isFinite(eq.samples) ? eq.samples : null;
       const histTier = eq && eq.tier ? eq.tier : "UNPROVEN";
       const histWeak = !!eq && (eq.tier === "TRAP" || (revertedPct != null && revertedPct <= 42));
-      return { coin, direction: dir, fundingAnnualPct: Number(m.fundingAnnualPct) || 0, extra, against, reads, revertedPct, histTier, histWeak };
+      return { coin, direction: dir, fundingAnnualPct: Number(m.fundingAnnualPct) || 0, extra, against, reads, revertedPct, samples, histTier, histWeak };
     });
-  rows.sort((a, b) => (b.extra - b.against) - (a.extra - a.against) || Math.abs(b.fundingAnnualPct) - Math.abs(a.fundingAnnualPct));
+  rows.sort((a, b) => Math.abs(b.fundingAnnualPct) - Math.abs(a.fundingAnnualPct));
   return rows.slice(0, limit);
 }
 
-// The conviction label for a ranked row (net confirmations).
-export function convictionLevel(row) {
-  // A weak reversion clock DOCKS conviction — aligned lenses over a losing hist can't read
-  // HIGH/MODERATE (Grok: "if hist hit <40% or E[R] <0, it cannot say HIGH").
-  if (row && row.histWeak) return (row.against || 0) > (row.extra || 0) ? "CONFLICTED" : "FUNDING_ONLY";
-  const net = (row.extra || 0) - (row.against || 0);
-  // HIGH requires a PROVEN clock too — a fade whose base rate is UNPROVEN (n=0) or merely MIXED
-  // is never HIGH, however many lenses align (Grok: "n=0 → unproven, never HIGH; HYPE at 20%
-  // over 5 is a fade with a dead clock, not a proven setup"). Unproven aligned reads cap at MODERATE.
-  if (net >= 2) return row && row.histTier === "PROVEN" ? "HIGH" : "MODERATE";
-  if (net === 1) return "MODERATE";
-  if ((row.against || 0) > (row.extra || 0)) return "CONFLICTED";
-  return "FUNDING_ONLY";
+/** "Smart money short" / "Graded callers long": an input's lean in words. */
+export function leanWord(read) {
+  const who = read.label === "smart" ? "Smart money" : read.label === "callers" ? "Graded callers" : read.label;
+  return `${who} ${String(read.side || "").toLowerCase()}`;
 }

@@ -458,6 +458,9 @@ product is what sits on top:
   parent are one bet, never stacked as two.
 - `/intel/evidence?axis=&hold=` replays a preset across every mature market (pooled ≠ independent; say so).
 - basis:hist had holes from our own OKX burst until the paced `snapshotFlow` fix: read older windows with that in mind.
+- **Smart Money's STRETCHED FUNDING scan** (`ConvictionScanner.tsx`, rules `app/lib/conviction.mjs`, 2026-11-15): ordered by
+  how stretched funding is (never by how many inputs agree), each input's lean in words (`leanWord`), the market's own
+  past fades as a fact, the plain fade's grade on top; a tap opens the drawer. No conviction word (`convictionLevel` deleted).
 - **The Read / Briefing / FADE:** show inputs, never a tally or crown of ungraded reads; the Board's FADE is "a
   mechanical rule, not graded yet" with the nearest graded relative's live grade (`app/lib/fadeGrade.mjs`). Never call
   a read "proven" or "graded" unless the scoreboard grades that exact rule.
