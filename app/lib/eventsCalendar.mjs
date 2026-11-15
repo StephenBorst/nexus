@@ -3,7 +3,7 @@
 // and medium impact) and the dated world-event markets on the Catalysts board (Polymarket, with the crowd's odds and
 // when the market closes). Every row is a dated fact from a named source; nothing is typed in by hand, and an unread
 // source is named, never shown as an empty week. No direction, no call, no grade. Pure, tested; the worker reads the
-// sources (lab-api routes-events.mjs).
+// sources (lab-api routes-events.mjs, GET /intel/calendar).
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 export const MACRO_IMPACTS = Object.freeze(["High", "Medium"]);

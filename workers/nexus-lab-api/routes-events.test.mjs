@@ -1,4 +1,4 @@
-// GET /intel/events (routes-events.mjs). Run: node --test workers/nexus-lab-api/routes-events.test.mjs
+// GET /intel/calendar (routes-events.mjs). Run: node --test workers/nexus-lab-api/routes-events.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -41,14 +41,16 @@ test("the feed is read at most once an hour; a refusal serves the last good copy
 
 test("route: cached 5 min; nothing cached when both sources fail; other paths pass", async () => {
   const env = { LAB_STORE: kv() };
-  const r = await handleEvents(["intel", "events"], req("/intel/events"), env, { dispatch, fetchImpl: ff(() => ok(THIS), () => ok(NEXT)), now: NOW });
+  const r = await handleEvents(["intel", "calendar"], req("/intel/calendar"), env, { dispatch, fetchImpl: ff(() => ok(THIS), () => ok(NEXT)), now: NOW });
   assert.equal((await r.json()).events.length, 3);
   assert.ok(env.LAB_STORE.m.has(EVENTS_CACHE_KEY));
   const dead = { LAB_STORE: kv() };
-  const d = await handleEvents(["intel", "events"], req("/intel/events"), dead, { dispatch: async () => new Response("x", { status: 500 }), fetchImpl: async () => new Response("x", { status: 500 }), now: NOW });
+  const d = await handleEvents(["intel", "calendar"], req("/intel/calendar"), dead, { dispatch: async () => new Response("x", { status: 500 }), fetchImpl: async () => new Response("x", { status: 500 }), now: NOW });
   assert.deepEqual((await d.json()).unread, ["macro", "markets"]);
   assert.ok(!dead.LAB_STORE.m.has(EVENTS_CACHE_KEY));
   assert.equal(await handleEvents(["intel", "market"], req("/intel/market"), env, {}), null);
+  assert.equal(await handleEvents(["intel", "events"], req("/intel/events"), env, {}), null, "the older Polymarket events corner keeps its path");
+  assert.equal(await handleEvents(["intel", "events", "history"], req("/intel/events/history"), env, {}), null);
 });
 
 test("index.js routes it through the worker's own handler", () => {

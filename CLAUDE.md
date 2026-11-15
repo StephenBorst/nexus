@@ -699,7 +699,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   full stop loses (a stop past liquidation never fires = warn, and counts as uncapped), funding $/day. The book: exposure
   ×, net, at your stops % of account, same-side bunching. Lab home "YOUR OPEN RISK" (`RiskDeskPanel.tsx`, pure
   `RiskDeskView`) + the Trade line under the market read (`PositionRiskLine.tsx`). Facts, never advice or a grade.
-- **Events calendar (2026-11-15, rules `app/lib/eventsCalendar.mjs`, route `GET /intel/events` `routes-events.mjs`):**
+- **Events calendar (2026-11-15, rules `app/lib/eventsCalendar.mjs`, route `GET /intel/calendar` `routes-events.mjs`; NOT
+  `/intel/events`, the older Polymarket corner):**
   US macro releases (ForexFactory's public weekly JSON, this + next week, USD High/Medium; read at most hourly
   `intel:events:macro:v1`, a 24h last-good copy served `macroStale`) + the Catalysts board's dated Polymarket markets
   (≤45 days, "market closes then", odds, coins). A failed source = `unread`, never an empty week. Lab home lens

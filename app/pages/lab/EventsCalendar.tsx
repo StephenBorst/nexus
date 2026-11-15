@@ -1,6 +1,6 @@
 // CALENDAR (Lab home lens, 2026-11-15): what is scheduled to move the tape, by day, in the viewer's time zone. US macro
 // releases (ForexFactory's public calendar) and dated world-event markets (Polymarket, via the Catalysts board) from
-// GET /intel/events (5-min cache); rules app/lib/eventsCalendar.mjs (tested). Scheduled facts, never a direction.
+// GET /intel/calendar (5-min cache); rules app/lib/eventsCalendar.mjs (tested). Scheduled facts, never a direction.
 import { useEffect, useState } from "react";
 import { C, MONO, UI, SIGNAL } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
@@ -20,7 +20,7 @@ export function EventsCalendar() {
 
   useEffect(() => {
     let alive = true;
-    sharedJson(`${AGENT_API}/intel/events`)
+    sharedJson(`${AGENT_API}/intel/calendar`)
       .then((j) => { if (alive) { if (Array.isArray(j?.events)) setBoard(j as Board); else setFailed(true); } })
       .catch(() => { if (alive) setFailed(true); });
     const iv = setInterval(() => setNow(Date.now()), 60_000);
