@@ -21,7 +21,8 @@ import { fetchDeribitTerm } from "@/lib/deribit.mjs";
 import { fetchHLTape, fetchHLPortfolio } from "@/utils/hyperliquid";
 import { xraySummary, fmtPf } from "@/lib/xrayGrade.mjs";
 // The Lab's venues / calendar / risk panels, shaped by their own rules (one answer on screen and in chat).
-import { venuesForCopilot, calendarForCopilot, riskForCopilot } from "@/lib/copilotLab.mjs";
+import { venuesForCopilot, calendarForCopilot, riskForCopilot, watchlistForCopilot } from "@/lib/copilotLab.mjs";
+import { readWatch } from "@/lib/watchStore";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
@@ -412,6 +413,18 @@ export const TOOLS: ToolDef[] = [
         const reply = await sharedJson(`${AGENT_API}/intel/funding-venues${coin ? `/${coin}` : ""}`);
         return JSON.stringify(venuesForCopilot(reply, { coin: coin || null }));
       } catch { return JSON.stringify({ error: "funding across venues unavailable" }); }
+    },
+  },
+  {
+    name: "get_watchlist",
+    description:
+      "The user's WATCHING list (the coins they starred, kept on this device): each coin's price, 24h move, the move since they last looked, and what changed since then (funding stretched, smart-money 2× consensus formed or flipped, forecast moved ±15 pts). Use for 'what moved on my watchlist', 'anything change on my coins', 'catch me up'. Inputs, not a grade; empty = tell them how to star a coin.",
+    input_schema: { type: "object", properties: {} },
+    run: async () => {
+      const watch = readWatch();
+      if (!watch.coins.length) return JSON.stringify(watchlistForCopilot(watch, null));
+      const reply = await sharedJson(`${AGENT_API}/intel/markets?coins=${encodeURIComponent(watch.coins.join(","))}`);
+      return JSON.stringify(watchlistForCopilot(watch, reply));
     },
   },
   {
