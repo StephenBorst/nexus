@@ -21,7 +21,7 @@ import { fetchDeribitTerm } from "@/lib/deribit.mjs";
 import { fetchHLTape, fetchHLPortfolio } from "@/utils/hyperliquid";
 import { xraySummary, fmtPf } from "@/lib/xrayGrade.mjs";
 // The Lab's venues / calendar / risk panels, shaped by their own rules (one answer on screen and in chat).
-import { venuesForCopilot, calendarForCopilot, riskForCopilot, watchlistForCopilot, callsForCopilot } from "@/lib/copilotLab.mjs";
+import { venuesForCopilot, calendarForCopilot, riskForCopilot, watchlistForCopilot, callsForCopilot, scoreboardForCopilot } from "@/lib/copilotLab.mjs";
 import { readWatch } from "@/lib/watchStore";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 
@@ -580,28 +580,11 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_signal_scoreboard",
     description:
-      "Get the SIGNAL SCOREBOARD: our OWN reads graded like traders (forward returns, no lookahead, pooled across the core markets, first half vs second half must agree). Verdict vs zero: PREDICTIVE (positive and stable), PROMISING (positive, unconfirmed), NOISE, INSUFFICIENT/ACCRUING (not enough history). vs_random per side = the same events re-entered at random hours (same window, market, side, contract): whether the read picks good moments or the window did the work. A read is only an edge if it BEATS_RANDOM on its side; PREDICTIVE alone is NOT enough, and `tide` shows what a random long/short earned. BELOW_RANDOM means the read's timing on that side is reliably WORSE than random entries — say so plainly, and never suggest inverting it: the inverse is a different rule that hasn't been graded. Never call a read an edge, proven or validated unless vs_random says BEATS_RANDOM. Use for 'do your signals actually work', 'which reads have an edge', 'is the funding fade profitable'. Many axes are still ACCRUING; say so, and report the misses as plainly as the hits. Not advice.",
+      "Get the SIGNAL SCOREBOARD: our OWN reads graded like traders (forward returns, no lookahead, pooled across the core markets, first half vs second half must agree). Verdict vs zero: PREDICTIVE (positive and stable), PROMISING (positive, unconfirmed), NOISE, INSUFFICIENT/ACCRUING (not enough history). vs_random per side = the same events re-entered at random hours (same window, market, side, contract): whether the read picks good moments or the window did the work. A read is only an edge if it BEATS_RANDOM on its side; PREDICTIVE alone is NOT enough, and `tide` shows what a random long/short earned. BELOW_RANDOM means the read's timing on that side is reliably WORSE than random entries — say so plainly, and never suggest inverting it: the inverse is a different rule that hasn't been graded. Never call a read an edge, proven or validated unless vs_random says BEATS_RANDOM. `registered_reads` = the reads under test on NEW data: stage, what each still needs, and each side against a random entry on that side. Judge a side against its random entry, not zero: a side that made money while a random entry on that side made more rode the market. Use for 'do your signals actually work', 'which reads have an edge', 'is the funding fade profitable', 'why did the paper wallet lose'. Many axes are still ACCRUING; say so, and report the misses as plainly as the hits. Not advice.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
       const sc = await fetch(`${AGENT_API}/intel/axis-backtest`).then((r) => r.json()).catch(() => null);
-      if (!sc?.axes?.length) return JSON.stringify({ error: "scorecard warming up — check back" });
-      type RSide = { verdict: string; n: number; pctBeaten?: number; realMeanR?: number; randomMedianR?: number };
-      type Ax = { name: string; label: string; verdict: string; best: { h: number; hitRate: number; meanBps: number; samples: number; stable: boolean } | null; random?: { bySide?: Record<"LONG" | "SHORT", RSide> } | null };
-      // Per side: the read's mean R, a random entry's mean R in the same window, and the verdict.
-      const vsRandom = (r?: RSide) => !r ? null : r.verdict === "TOO_FEW" ? { verdict: "TOO_FEW", events: r.n }
-        : { verdict: r.verdict, beat_pct_of_random: r.pctBeaten, read_mean_r: r.realMeanR, random_entry_mean_r: r.randomMedianR, events: r.n };
-      return JSON.stringify({
-        as_of: sc.asOf, pooled_markets: sc.config?.coins?.length ?? null, min_samples_to_rate: sc.config?.minSamples ?? null,
-        axes: (sc.axes as Ax[]).map((a) => ({
-          signal: a.label, verdict: a.verdict,
-          best: a.best && a.verdict !== "INSUFFICIENT"
-            ? { horizon_h: a.best.h, hit_rate_pct: a.best.hitRate, mean_forward_bps: a.best.meanBps, observations: a.best.samples, walk_forward_stable: a.best.stable }
-            : "accruing — not yet rated",
-          vs_random: a.random?.bySide ? { long: vsRandom(a.random.bySide.LONG), short: vsRandom(a.random.bySide.SHORT) } : null,
-        })),
-        tide: sc.tide ? { random_long_mean_r: sc.tide.LONG?.meanR, random_short_mean_r: sc.tide.SHORT?.meanR, from: sc.tide.from, to: sc.tide.to } : null,
-        note: "Forward-return event study, no lookahead. PREDICTIVE is graded against zero; vs_random is graded against the same side entered at random in the same window. A read is not an edge until it BEATS_RANDOM on its side. We publish the misses too — that's the standard.",
-      });
+      return JSON.stringify(scoreboardForCopilot(sc));
     },
   },
   {

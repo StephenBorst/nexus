@@ -128,3 +128,31 @@ test("calls: the grader's state in words, live distance in R, never a grade from
   assert.match(tool, /\/theses\/status\/\$\{w\}/);
   assert.match(tool, /callsForCopilot\(/);
 });
+
+test("scoreboard: the tide, each registered read's sides against random on new data, old data kept apart", async () => {
+  const { scoreboardForCopilot } = await import("./copilotLab.mjs");
+  const sc = {
+    asOf: "2026-11-16T18:53:49Z", config: { coins: ["BTC", "ETH"], minSamples: 20 },
+    tide: { from: "2026-08-07T16:00:00Z", to: "2026-11-16T07:00:00Z", LONG: { n: 1, meanR: -0.18 }, SHORT: { n: 1, meanR: 0.2 } },
+    axes: [{ name: "oi_div_reversal_4h", label: "Extreme 4h move on falling OI, faded", verdict: "PREDICTIVE", best: null,
+      random: { bySide: { LONG: { verdict: "BEATS_RANDOM", n: 107, pctBeaten: 98.3, realMeanR: 0.04, randomMedianR: -0.2 } } },
+      oos: { sides: { LONG: { events: 48, r: { meanR: -0.04 } }, SHORT: { events: 42, r: { meanR: 0.52 } } },
+        random: { bySide: { LONG: { verdict: "BEATS_RANDOM", n: 48, pctBeaten: 100, randomMedianR: -0.51 }, SHORT: { verdict: "NOT_DISTINGUISHABLE", n: 42, pctBeaten: 23.7, randomMedianR: 0.68 } } } } }],
+    pipeline: { reads: [{ axis: "oi_div_reversal_4h", side: "BOTH", stage: "REGISTERED", next: "mean R > 0 with both halves agreeing", registeredAt: "2026-10-28T00:00:00Z", numbers: { events: 90, meanR: 0.22 } }] },
+  };
+  const out = scoreboardForCopilot(sc);
+  assert.deepEqual(out.tide, { random_long_mean_r: -0.18, random_short_mean_r: 0.2, from: sc.tide.from, to: sc.tide.to });
+  const r = out.registered_reads[0];
+  assert.equal(r.stage, "REGISTERED");
+  assert.deepEqual(r.short, { events: 42, read_mean_r: 0.52, random_entry_mean_r: 0.68, beat_pct_of_random: 23.7, verdict: "NOT_DISTINGUISHABLE" });
+  assert.equal(r.long.random_entry_mean_r, -0.51);
+  assert.equal(out.axes[0].vs_random.long.read_mean_r, 0.04, "old data stays in axes, labelled in the note");
+  assert.match(out.note, /never against zero/);
+  assert.ok(scoreboardForCopilot(null).error);
+  assert.equal(scoreboardForCopilot({ ...sc, tide: { LONG: { meanR: null }, SHORT: { meanR: 0.2 } } }).tide, null, "an unread tide is null, never 0");
+  const tools = readFileSync(new URL("../config/assistantTools.ts", import.meta.url), "utf8");
+  const tool = tools.slice(tools.indexOf('name: "get_signal_scoreboard"'), tools.indexOf('name: "open_conviction"'));
+  assert.match(tool, /scoreboardForCopilot\(sc\)/);
+  const prompt = readFileSync(new URL("../config/assistant.ts", import.meta.url), "utf8");
+  assert.match(prompt, /THE TIDE: judge every side against a random entry on that side/);
+});

@@ -96,6 +96,7 @@ export function takeaway(a) {
 
 // One side's bar: width = share of random replays the read beat (0–100), sign = its mean R.
 // A side that never fired says so; a side too thin to test says that instead of a bar.
+/** @returns {{ events: number, state: string, label?: string, meanR?: number | null, pct?: number, verdict?: string, randomR?: number }} */
 export function sideBar(a, side) {
   const s = a?.sides?.[side];
   const rb = a?.random?.bySide?.[side];
@@ -103,7 +104,23 @@ export function sideBar(a, side) {
   if (!events) return { events: 0, state: "never", label: "never fires" };
   const meanR = s?.r?.samples ? s.r.meanR : null;
   if (!rb || rb.verdict === "TOO_FEW" || rb.pctBeaten == null) return { events, state: "thin", meanR, label: "too few to test" };
-  return { events, state: "tested", meanR, pct: Math.max(0, Math.min(100, rb.pctBeaten)), verdict: rb.verdict };
+  const out = { events, state: "tested", meanR, pct: Math.max(0, Math.min(100, rb.pctBeaten)), verdict: rb.verdict };
+  // What a random entry on the same side, coins and hours earned (median of the replays): the number this side has to
+  // beat. Shown beside the read's own R so a side that rides the market reads as such (2026-11-16 engine review).
+  if (Number.isFinite(rb.randomMedianR)) out.randomR = rb.randomMedianR;
+  return out;
+}
+
+// The tide over the board (the scoreboard's `tide`): what a random long and a random short earned on the same R contract
+// across every recorded market-hour. A plain fact above the list, so "its shorts made money" is read against the market.
+// Null when unread: nothing is said rather than a guess.
+export function tideLine(tide) {
+  const L = tide?.LONG?.meanR, S = tide?.SHORT?.meanR;
+  if (typeof L !== "number" || typeof S !== "number" || !Number.isFinite(L) || !Number.isFinite(S) || !tide?.from) return null;
+  const from = new Date(tide.from);
+  if (Number.isNaN(from.getTime())) return null;
+  const since = from.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return { since, long: L, short: S, rule: "Each side has to beat its own random entry, not zero." };
 }
 
 // ── The board ordered by STAGE (borst, 2026-10-18) ──────────────────────────────────────────

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { splitLabel, rankAxes, takeaway, sideBar, isCompact, AXIS_BLURB, stageGroups, randomBar } from "./signalCard.mjs";
+import { splitLabel, rankAxes, takeaway, sideBar, isCompact, AXIS_BLURB, stageGroups, randomBar, tideLine } from "./signalCard.mjs";
 
 const axis = (o = {}) => ({
   name: "x", label: "X", verdict: "PREDICTIVE",
@@ -115,4 +115,18 @@ test("randomBar: thin baselines aren't drawn as bars", () => {
   assert.deepEqual(randomBar(axis({ random: { pooled: { verdict: "TOO_FEW", n: 3 } } })), { state: "thin", label: "too few to test" });
   assert.deepEqual(randomBar(axis({ random: { pooled: { verdict: "BELOW_RANDOM", pctBeaten: -2 } } })), { state: "tested", pct: 0, verdict: "BELOW_RANDOM" });
   assert.equal(randomBar({}).state, "thin");
+});
+
+test("sideBar carries the random entry's R beside the read's, so a side riding the market reads as such", () => {
+  // level_reclaim's out-of-sample shorts on 2026-11-16: +0.15R, a random short +0.44R, beat 13.2%.
+  const a = { sides: { SHORT: { events: 26, r: { samples: 26, meanR: 0.15 } } }, random: { bySide: { SHORT: { verdict: "NOT_DISTINGUISHABLE", n: 26, pctBeaten: 13.2, randomMedianR: 0.44 } } } };
+  assert.deepEqual(sideBar(a, "SHORT"), { events: 26, state: "tested", meanR: 0.15, pct: 13.2, verdict: "NOT_DISTINGUISHABLE", randomR: 0.44 });
+});
+
+test("tideLine: the board's tide in plain words, nothing when unread", () => {
+  const t = tideLine({ from: "2026-08-07T16:00:00.000Z", to: "2026-11-16T07:00:00.000Z", markets: 12, LONG: { n: 18390, meanR: -0.18 }, SHORT: { n: 18390, meanR: 0.2 } });
+  assert.deepEqual(t, { since: "Aug 7", long: -0.18, short: 0.2, rule: "Each side has to beat its own random entry, not zero." });
+  assert.equal(tideLine(null), null);
+  assert.equal(tideLine({ from: "2026-08-07T16:00:00Z", LONG: { meanR: null }, SHORT: { meanR: 0.2 } }), null, "a missing side is unread, never 0");
+  assert.doesNotMatch(t.rule, /edge|proven/i);
 });
