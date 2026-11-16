@@ -44,6 +44,7 @@ export const SERVER_FIELDS = [
   "exitReason",    // grading.mjs: "TIME" when a declared time stop closed the call (callMath timeStopPlan); "TRAIL" / "BE" for a breakeven runner
   "expiredAt", "expiredReason", // grading.mjs: a declared fill window closed with no fill (fillState EXPIRED; callMath fillWindowPlan)
   "halfRAt",       // grading.mjs: when an open call first traded +0.5R (callMath halfRLevel), display + one alert
+  "maeR", "mfeR",  // grading.mjs callExcursion: how far it went against / for it while open, in R (excursion.mjs), display only
   "trailStop",     // grading.mjs: a breakeven runner's trailing stop while it's open (callMath beRunnerPlan)
 ];
 /** The only fields the owner may still change on a published call. */

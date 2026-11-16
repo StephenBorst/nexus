@@ -1,7 +1,7 @@
 // ── GET /signals/paper-run/:axis — a cleared read's paper run, trade by trade, in R ─────────────────
 // Read by /proof/paper/:axis and its link card (functions/proof/paper/[axis].js). Rule: app/lib/paperRun.mjs.
-// Three KV reads: the paper wallet's state (exec's record), its tape checks and, while flat, the brain's last check
-// (`quiet`, app/lib/quietLine.mjs). No dollars, no totals, nothing written.
+// KV reads: the paper wallet's state (exec's record), its tape checks, while flat the brain's last check
+// (`quiet`, app/lib/quietLine.mjs), and each traded coin's hourly tape for MAE / MFE (excursion.mjs). No dollars, no totals, nothing written.
 // Public, read-only, any origin. 404 = the read has no paper wallet; an unreadable state = `unread: true`.
 import { paperRun } from "../../app/lib/paperRun.mjs";
 import { readTape } from "./paperTape.mjs";
@@ -39,5 +39,13 @@ export async function handlePaperRun(parts, request, env) {
   if (state && !state.current_position) {
     try { quiet = quietLine(JSON.parse((await (env.NEXUS_AGENT || env.LAB_STORE).get(`agent:signal:${probe.wallet.toLowerCase()}`)) || "null")); } catch { quiet = null; }
   }
-  return reply({ ok: true, asOf: new Date().toISOString(), ...paperRun(axis, state, tape, { wallet: claimed }), quiet });
+  // Each closed trade's MAE / MFE in R from the recorded hourly tape (excursion.mjs). One read per coin traded.
+  let candles = null;
+  if (state && Array.isArray(state.paper_trades) && state.paper_trades.length) {
+    candles = {};
+    for (const coin of new Set(state.paper_trades.map((t) => String(t?.symbol || "").replace(/^PERP_/, "").replace(/_USDC$/, "")).filter(Boolean))) {
+      try { candles[coin] = JSON.parse((await (env.NEXUS_AGENT || env.LAB_STORE).get(`candle:hist:PERP_${coin}_USDC`)) || "null"); } catch { candles[coin] = null; }
+    }
+  }
+  return reply({ ok: true, asOf: new Date().toISOString(), ...paperRun(axis, state, tape, { wallet: claimed, candles }), quiet });
 }

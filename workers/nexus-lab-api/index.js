@@ -114,6 +114,7 @@ import { handleBell, composeBell } from "./routes-bell.mjs";
 import { handleVenues } from "./routes-venues.mjs";
 import { handleEvents } from "./routes-events.mjs";
 import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
+import { snapshotStable, STABLE_HIST_KEY } from "./stableHist.mjs";
 import { marketCoin } from "../../app/lib/marketRead.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
 import { parityEvents } from "./parityEvents.mjs";
@@ -913,6 +914,14 @@ const worker = {
         });
         console.log(`[forecast:hist] recorded ${r.rows} rows on ${r.coins} coins`);
       } catch (e) { console.error("[forecast:hist] snapshot failed:", String(e)); }
+    })());
+    // Every 6h at most: total USD stablecoin supply from DefiLlama into stable:hist (stableHist.mjs), the "liquidity
+    // pulse" series (borst 2026-11-16). RECORDING ONLY: nothing grades, trades or gates on it.
+    ctx.waitUntil((async () => {
+      try {
+        const r = await snapshotStable(env.NEXUS_AGENT || env.LAB_STORE);
+        console.log(`[stable:hist] ${r.stored ? "stored" : "kept"} ${r.rows} days${r.reason ? ` (${r.reason})` : ""}`);
+      } catch (e) { console.error("[stable:hist] read failed:", String(e)); }
     })());
     // Hourly: classify each core symbol's trend regime (the momentum signal source),
     // cached for the /signals hot path + the fusion. Runs BEFORE delivery so the push
@@ -2801,6 +2810,15 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
       let rows = [];
       try { const raw = await (env.NEXUS_AGENT || env.LAB_STORE).get(FORECAST_HIST_PREFIX + coin); rows = raw ? JSON.parse(raw) : []; } catch { rows = []; }
       return json({ coin, rows, count: rows.length, from: rows[0]?.t ?? null, note: "Recording only (lens read B, not registered). Nothing grades or trades it." }, request);
+    }
+
+    // ── GET /intel/stablecoin-history — read-only stable:hist (stableHist.mjs): total USD stablecoin supply, daily.
+    if (parts[0] === "intel" && parts[1] === "stablecoin-history" && parts.length === 2 && request.method === "GET") {
+      let s = null;
+      try { s = JSON.parse((await (env.NEXUS_AGENT || env.LAB_STORE).get(STABLE_HIST_KEY)) || "null"); } catch { s = null; }
+      const rows = Array.isArray(s?.rows) ? s.rows : [];
+      return json({ rows, count: rows.length, from: rows[0]?.t ?? null, last: rows.at(-1)?.t ?? null, readAt: s?.readAt ?? null, source: s?.source ?? null,
+        note: "Recording only (DefiLlama, USD-pegged total). Nothing grades, trades or gates on it." }, request);
     }
 
     // ── /intel/forecasts[/:coin] — the prediction-market lens (Forecast Divergence) ──
