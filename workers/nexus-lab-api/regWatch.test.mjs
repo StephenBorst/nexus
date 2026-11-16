@@ -199,3 +199,33 @@ test("ranges: 10k blocks a call, halving on a range refusal; partial progress is
   assert.equal(JSON.parse(env.LAB_STORE.m.get(REGWATCH_KEY)).scanFails, 0);
   assert.deepEqual(sent, [], "no blind alert; it was only 5 runs, so no 'reads again' either");
 });
+
+// ── The digest's watchdog line (2026-11-16) ──────────────────────────────────────────────────────────────────
+import { watchdogLine, LATE_WINDOW_MS } from "./regWatch.mjs";
+import { digestText } from "../../app/lib/opsDigest.mjs";
+
+test("the watchdog records when it last read and each call it indexed late; the digest says it in one line", async () => {
+  const env = { LAB_STORE: kv() };
+  const { rpc } = chain({ logs: [log(1, 999_990)] });
+  let t = 1_000_000_000_000;
+  const deps = { logsRpc: rpc, now: () => t, index: async () => ({ status: 200, body: { ok: true, symbol: "PERP_ETH_USDC", direction: "LONG" } }), send: async () => true };
+  await runRegWatch(env, deps); t += GRACE_MS; await runRegWatch(env, deps);
+  const st = JSON.parse(env.LAB_STORE.m.get(REGWATCH_KEY));
+  assert.equal(st.lastReadAt, t);
+  assert.deepEqual(st.late, [t]);
+  assert.equal(watchdogLine(st, t + 2 * 60_000), "Reading, last read 2 min ago. 1 call indexed late in 7 days (the publisher skipped /theses/index).");
+  assert.equal(watchdogLine({ ...st, late: [t - LATE_WINDOW_MS - 1] }, t), "Reading, last read 0 min ago. No call needed indexing this week.");
+  assert.match(watchdogLine({ ...st, scanFails: 7, lastReadAt: t - 3 * 3_600_000 }, t), /^Can't read Arbitrum logs \(7 runs in a row, last read 3h ago\)\. Set ARBITRUM_RPC_URL/);
+  assert.equal(watchdogLine(null), "No run recorded yet.");
+  const text = digestText({ asOf: t, stages: null, paper: [], pending: [], watchdog: watchdogLine(st, t) });
+  assert.match(text, /<b>On-chain → Lab watchdog<\/b>\nReading, last read 0 min ago\. 1 call indexed late/);
+});
+
+test("the digest reads the watchdog's state; /wallets/onchain uses the same multi-endpoint reader", () => {
+  const dig = readFileSync(new URL("./opsDigest.mjs", import.meta.url), "utf8");
+  assert.match(dig, /watchdogLine\(await readJson\(env\.LAB_STORE, REGWATCH_KEY\), nowMs\)/);
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const fn = src.slice(src.indexOf("function arbLogsRpc(env) {"), src.indexOf("async function getOnChainWallets("));
+  assert.match(fn, /return makeLogsRpc\(logsRpcUrls\(env\), \{ waits: \[300\] \}\);/);
+  assert.doesNotMatch(fn, /fetch\(url/, "no single-endpoint fetch left");
+});

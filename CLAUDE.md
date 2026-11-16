@@ -575,7 +575,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   Logs are read from secret `ARBITRUM_RPC_URL` or `ARB_LOGS_RPC` (either; /wallets/onchain reads both) first, then the public
   endpoints (`PUBLIC_LOGS_RPCS`); a 429 backs off 0.5/1.5/4 s then tries the next endpoint (`makeLogsRpc`, 2026-11-16: the
   public RPC 429'd 6 runs in a row from the shared Worker IP). 10k blocks a call, halving on a range refusal; a run that
-  made progress isn't counted blind.
+  made progress isn't counted blind. `/wallets/onchain` reads through the same `makeLogsRpc` (one 300 ms wait, it runs in a
+  request). The daily digest prints the watchdog's line (`watchdogLine`: reading / blind + last read, calls indexed late in 7 days).
 - **Reads:** `GET /theses/leaderboard` (≥5 graded, net-positive R; an empty board is correct when nobody qualifies:
   check `/theses/process/:wallet` before debugging), `/theses/status/:wallet`, `/verify/:wallet/:id` (the grader
   re-run), `/theses/ledger` (+ chain, anchored). Fill/TP1 alerts go out from the pass that stamps them (hourly, or the minute grader).
