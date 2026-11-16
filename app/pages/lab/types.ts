@@ -1,5 +1,5 @@
 import { presetById } from "@/config/strategyPresets";
-export type ThesisStatus = "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED";
+export type ThesisStatus = "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "EXPIRED";
 
 /** One append-only entry on a thesis's lifecycle timeline (app/lib/lifecycle.mjs). */
 export interface ThesisUpdate {
@@ -20,8 +20,9 @@ export interface ThesisTrade {
   takeProfit2: number;
   // Declared at publish, frozen with the call: graded half at TP1 + half at TP2 (lab-api gradeCall).
   // Absent = graded at TP1 only, whatever TP2 holds.
-  exitPlan?: "SPLIT_50";
-  timeStopH?: number;     // declared time stop in hours (callMath timeStopPlan); a copy keeps it
+  exitPlan?: "SPLIT_50" | "SPLIT_50_BE";
+  timeStopH?: number;
+  fillWithinH?: number;    // declared order expiry in hours (callMath fillWindowPlan); a copy keeps it     // declared time stop in hours (callMath timeStopPlan); a copy keeps it
   exitReason?: "TIME";    // server: a declared time stop closed the graded call
   riskPercent: number;
   accountSize: number;
@@ -55,7 +56,7 @@ export interface ThesisTrade {
   gradedAt?: number;
   // Server fields on PUBLISHED calls only (grading.mjs applyFillStamp / publishMark.mjs): has the entry
   // traded yet, and the market price read at the first publish. Private calls never carry them.
-  fillState?: "WORKING" | "OPEN";
+  fillState?: "WORKING" | "OPEN" | "EXPIRED"; expiredReason?: string; trailStop?: number;
   filledAt?: number;
   publishMark?: { px: number; at: number; src?: string };
   // lab-api publishLens.mjs: what the smart-money 2× rule + the funding stretch showed at the first publish.

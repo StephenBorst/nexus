@@ -42,3 +42,19 @@ test("the Thesis Engine posts on callReady and sizes only the live order", () =>
   assert.match(src, /const deployLive = async \(\) => \{\s*if \(!liveValid \|\| !calc\) return;/);
   assert.doesNotMatch(src, /calc!\./, "a call without a size must still save");
 });
+
+test("exit plan + order expiry from the form (2026-11-16)", async () => {
+  const { exitPlanFromForm, fillWindowFromForm, exitPlanLine } = await import("./quickCall.mjs");
+  assert.equal(exitPlanFromForm({ ...form, exitMode: "BE" }), "SPLIT_50_BE", "a runner needs no TP2");
+  assert.equal(exitPlanFromForm({ ...form, exitMode: "SPLIT" }), undefined, "a split needs a TP2");
+  assert.equal(exitPlanFromForm({ ...form, exitMode: "SPLIT", takeProfit2: "3300" }), "SPLIT_50");
+  assert.equal(exitPlanFromForm({ ...form, exitMode: "SINGLE", splitExit: true, takeProfit2: "3300" }), undefined, "the picker wins over the old flag");
+  assert.equal(fillWindowFromForm({ fillWithinH: "12" }), 12);
+  assert.equal(fillWindowFromForm({ fillWithinH: "" }), undefined);
+  const c = callFromForm({ ...form, exitMode: "BE", fillWithinH: "12" });
+  assert.deepEqual([c.exitPlan, c.fillWithinH], ["SPLIT_50_BE", 12]);
+  assert.match(callReady({ ...form, exitMode: "BE", takeProfit2: "3200" }).reason, /TP2 must sit beyond TP1/);
+  assert.equal(callReady({ ...form, exitMode: "BE", fillWithinH: "12" }).ok, true);
+  assert.match(exitPlanLine({ ...form, exitMode: "BE" }), /trails 1R behind the best 1-minute close\. After TP1 it can't close as a loss\.$/);
+  assert.doesNotMatch([exitPlanLine({ exitMode: "BE" }), exitPlanLine({ exitMode: "SPLIT" }), exitPlanLine({})].join(" "), /edge|proven|guarantee|profit/i);
+});

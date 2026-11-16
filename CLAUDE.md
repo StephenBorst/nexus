@@ -556,6 +556,18 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   bar; window in TIME; settles only once a later bar exists. Read only on calls published from `TIME_STOP_FROM_MS`
   (2026-11-06); refused with a split; on-chain as `#TIMESTOP_<N>H`; copies keep it (`copiedTimeStop`). Engine B's
   main track declares 4h; Track M declares none. No `GRADE_V` bump.
+- **Declared plans v2** (borst 2026-11-16, `callMath.mjs` `PLANS_V2_FROM_MS`, forward-only, no `GRADE_V` bump; tests
+  `workers/nexus-lab-api/gradePlansV2.test.mjs`): `exitPlan:"SPLIT_50_BE"` = half at TP1, then the runner's stop moves to
+  the entry and trails `TRAIL_R` 1R behind the best 1-minute close since TP1 (closes before the bar; never loosens; trail
+  checked before TP2; fills at the trail), closing at the trail or an optional TP2: WIN 0.5·R1 + 0.5·runner R ≥ 0,
+  `exitReason` TRAIL / BE (logic.mjs `beRunner`); the open runner stamps `trailStop`. `fillWithinH: N` (1–168) = an
+  entry not traded by post + N h is EXPIRED, and a BREAKOUT entry (publishMark between stop and entry) whose stop trades
+  first is EXPIRED `STOP_FIRST` (`entryFill`); a limit is never voided that way. EXPIRED = `fillState`/`status` "EXPIRED"
+  + `expiredAt`/`expiredReason`, NOT a grade (no `gradedOutcome`, counted in no record), `isSettled` (grading.mjs) drops
+  it from the minute index, the owner gets one `call_expired` note. Minute trigger: a due window (`meta.fw`) and an open
+  runner (`meta.be` + `meta.h`, any new bar). On-chain tags `#SPLIT_50_BE` / `#FILL_<N>H`, matched EXACTLY (a substring
+  match would read `#SPLIT_50_BE` as `#SPLIT_50`). BE refuses a time stop. Thesis Engine: EXIT PLAN + ORDER EXPIRES
+  pickers in Fine-tune (`quickCall.mjs` `EXIT_MODES`, `FILL_WINDOWS` 4/12/24); copies keep both (`copiedFillWindow`).
 - **Cards** re-read an open call every 30 s on its own page (`callPollMs`, stops once graded). They read R:R from the levels (`callRR`), show a position only once the entry trades (`callLifecycle.mjs`,
   `AwaitingFill.tsx`), and show NOT GRADED for INVALID. `/feed` carries resolution rows: filter them before treating rows as calls.
 - **One call, one wallet:** the Lab device cache is per wallet (`app/lib/labCache.mjs`); copies held by other wallets

@@ -41,7 +41,9 @@ export const SERVER_FIELDS = [
   "tp1HitAt",      // grading.mjs applyFillStamp: a declared split's TP1 half closed, runner still open
   "planV",         // grading.mjs PLAN_V: the plan-quality rules that wrote planScore/planFlags
   "exitedAt",      // grading.mjs: the hour a graded call closed (ms), for hold time; null = not derivable
-  "exitReason",    // grading.mjs: "TIME" when a declared time stop closed the call (callMath timeStopPlan)
+  "exitReason",    // grading.mjs: "TIME" when a declared time stop closed the call (callMath timeStopPlan); "TRAIL" / "BE" for a breakeven runner
+  "expiredAt", "expiredReason", // grading.mjs: a declared fill window closed with no fill (fillState EXPIRED; callMath fillWindowPlan)
+  "trailStop",     // grading.mjs: a breakeven runner's trailing stop while it's open (callMath beRunnerPlan)
 ];
 /** The only fields the owner may still change on a published call. */
 export const OWNER_FIELDS = ["updates", "lossReason"];
@@ -111,6 +113,8 @@ const MARK_MAX_AGE_MS = 120_000;
 const isMark = (m) => isObj(m) && Number(m.px) > 0 && Number.isFinite(Number(m.px)) && Number(m.at) > 0;
 
 const statusFromGrade = (o) => (o === "WIN" ? "HIT_TP" : o === "LOSS" ? "STOPPED_OUT" : "ACTIVE");
+// A call whose declared fill window closed unfilled (grading.mjs) is EXPIRED: not a grade, not live.
+const statusOf = (v) => (v.fillState === "EXPIRED" ? "EXPIRED" : statusFromGrade(v.gradedOutcome));
 
 function serverFieldsOf(t) {
   const out = {};
@@ -134,7 +138,7 @@ function publishedView(entry, stored, incoming, now) {
   if (updates.length) view.updates = updates;
   const lr = ownerLossReason(stored?.lossReason, incoming ? incoming.lossReason : undefined);
   if (lr !== undefined) view.lossReason = lr;
-  view.status = statusFromGrade(view.gradedOutcome);
+  view.status = statusOf(view);
   return view;
 }
 

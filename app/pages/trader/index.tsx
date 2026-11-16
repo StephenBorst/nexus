@@ -10,7 +10,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, copiedExitPlan, copiedTimeStop, timeExitLabel } from "@/lib/callMath.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, copiedExitPlan, copiedTimeStop, copiedFillWindow, timeExitLabel, expiredLabel, runnerExitLabel } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useLabWallet, appendToLab, sendSigned } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -41,8 +41,9 @@ type FeedThesis = {
   stopLoss: number;
   takeProfit1: number;
   takeProfit2: number;
-  exitPlan?: "SPLIT_50";  // declared split exit (lab-api gradeCall); a copy keeps it
-  timeStopH?: number;     // declared time stop in hours (callMath timeStopPlan); a copy keeps it
+  exitPlan?: "SPLIT_50" | "SPLIT_50_BE";  // declared split exit (lab-api gradeCall); a copy keeps it
+  timeStopH?: number;
+  fillWithinH?: number;    // declared order expiry in hours (callMath fillWindowPlan); a copy keeps it     // declared time stop in hours (callMath timeStopPlan); a copy keeps it
   exitReason?: "TIME";    // server: a declared time stop closed the graded call
   riskReward: number;
   positionSize: number;
@@ -50,7 +51,7 @@ type FeedThesis = {
   status: "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "CLOSED";
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped); absent = not yet graded
   gradedR?: number;                // the R the grader paid (present once resolved)
-  fillState?: "WORKING" | "OPEN";  // server: has the entry traded yet (grading.mjs applyFillStamp)
+  fillState?: "WORKING" | "OPEN" | "EXPIRED"; expiredReason?: string; trailStop?: number;  // server: has the entry traded yet (grading.mjs applyFillStamp)
   filledAt?: number;
   publishMark?: { px: number; at: number };
   actualPnl: number | null;
@@ -67,6 +68,7 @@ type FeedThesis = {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   ACTIVE:      { label: "ACTIVE",      color: "#d4d4d8", bg: "#1a1a1e", border: "#33333a" },
+  EXPIRED:     { label: "EXPIRED",     color: "#a1a1aa", bg: "#1a1a1e", border: "#33333a" },
   HIT_TP:      { label: "HIT TP",      color: "#ededf0", bg: "#1a1a1e", border: "#33333a" },
   STOPPED_OUT: { label: "STOPPED OUT", color: "#f7525f", bg: "#241012", border: "#4a1e22" },
   INVALIDATED: { label: "INVALIDATED", color: "#fbbf24", bg: "#2a1a00", border: "#4a3a00" },
@@ -211,7 +213,7 @@ function ThesisRow({
             fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.08em",
             padding: "2px 7px", borderRadius: 3,
             background: cfg.bg, border: `1px ${pendingLabel ? "dashed" : "solid"} ${cfg.border}`, color: pendingLabel ? "#a1a1aa" : cfg.color,
-          }}>{pendingLabel ? pendingLabel.toUpperCase() : timeExitLabel(thesis) ?? (splitRunnerStopped(thesis) ? "TP1 HIT · RUNNER STOPPED" : cfg.label)}</span>
+          }}>{pendingLabel ? pendingLabel.toUpperCase() : expiredLabel(thesis) ?? runnerExitLabel(thesis) ?? timeExitLabel(thesis) ?? (splitRunnerStopped(thesis) ? "TP1 HIT · RUNNER STOPPED" : cfg.label)}</span>
           <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", whiteSpace: "nowrap" }}>{timeAgo}</span>
 
           {walletAddress && !isOwn && onCopy && (
@@ -362,6 +364,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
         // Keep the source's split: TP2 without exitPlan grades as a TP1-only call (callMath copiedExitPlan).
         exitPlan: copiedExitPlan(thesis),
         timeStopH: copiedTimeStop(thesis), // and its time stop: without it the copy grades a different trade
+        fillWithinH: copiedFillWindow(thesis), // and its order expiry
         riskPercent: parseFloat(riskPct), accountSize: parseFloat(accountSize),
         fundingRate: parseFloat(fundingRate), positionSize: calc.positionSize,
         leverage: calc.leverage, riskReward: calc.riskReward,

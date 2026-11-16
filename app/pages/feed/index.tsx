@@ -15,7 +15,7 @@ import { useAccount, useCollateral } from "@orderly.network/hooks";
 import { useNavigate } from "react-router-dom";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { showsLivePnl } from "@/lib/callLifecycle.mjs";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, copiedExitPlan, copiedTimeStop, timeExitLabel } from "@/lib/callMath.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, copiedExitPlan, copiedTimeStop, copiedFillWindow, timeExitLabel, runnerExitLabel } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useLabWallet, appendToLab, sendSigned } from "@/hooks/useLabAuth";
 import { NexusTierBadge } from "@/components/NexusTierBadge";
@@ -76,15 +76,16 @@ type FeedThesis = {
   stopLoss: number;
   takeProfit1: number;
   takeProfit2: number;
-  exitPlan?: "SPLIT_50";  // declared split exit (lab-api gradeCall); a copy keeps it
-  timeStopH?: number;     // declared time stop in hours (callMath timeStopPlan); a copy keeps it
+  exitPlan?: "SPLIT_50" | "SPLIT_50_BE";  // declared split exit (lab-api gradeCall); a copy keeps it
+  timeStopH?: number;
+  fillWithinH?: number;    // declared order expiry in hours (callMath fillWindowPlan); a copy keeps it     // declared time stop in hours (callMath timeStopPlan); a copy keeps it
   exitReason?: "TIME";    // server: a declared time stop closed the graded call
   riskReward: number;
   positionSize: number;
   leverage: number;
   status: "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "CLOSED";
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped); absent = not yet graded
-  fillState?: "WORKING" | "OPEN";  // server: has the entry traded yet (grading.mjs applyFillStamp)
+  fillState?: "WORKING" | "OPEN" | "EXPIRED"; expiredReason?: string; trailStop?: number;  // server: has the entry traded yet (grading.mjs applyFillStamp)
   filledAt?: number;
   publishMark?: { px: number; at: number };
   gradedR?: number;               // graded R-multiple result (present once resolved)
@@ -242,6 +243,7 @@ function CopyModal({
         // Keep the source's split: TP2 without exitPlan grades as a TP1-only call (callMath copiedExitPlan).
         exitPlan: copiedExitPlan(thesis),
         timeStopH: copiedTimeStop(thesis), // and its time stop: without it the copy grades a different trade
+        fillWithinH: copiedFillWindow(thesis), // and its order expiry
         riskPercent: parseFloat(riskPct),
         accountSize: parseFloat(accountSize),
         fundingRate: parseFloat(fundingRate),
@@ -523,8 +525,10 @@ function FeedCard({
   const rTxt = typeof thesis.gradedR === "number" ? ` ${thesis.gradedR >= 0 ? "+" : ""}${thesis.gradedR.toFixed(2)}R` : "";
   const runnerStopped = splitRunnerStopped(thesis);
   const timeExit = timeExitLabel(thesis);
+  const runnerExit = runnerExitLabel(thesis);   // a breakeven runner's close, in words (callMath)
   const pill = timeExit ? { label: `${timeExit.charAt(0)}${timeExit.slice(1).toLowerCase()}${rTxt}`, color: (thesis.gradedR ?? 0) > 0 ? C.pos : C.neg, border: (thesis.gradedR ?? 0) > 0 ? LINE.pos : LINE.neg }
     : runnerStopped ? { label: `TP1 hit, runner stopped${rTxt}`, color: (thesis.gradedR ?? 0) >= 0 ? C.pos : C.neg, border: (thesis.gradedR ?? 0) >= 0 ? LINE.pos : LINE.neg }
+    : runnerExit ? { label: `${runnerExit.charAt(0)}${runnerExit.slice(1).toLowerCase().replace("tp1", "TP1").replace("tp2", "TP2")}${rTxt}`, color: C.pos, border: LINE.pos }
     : eff === "HIT_TP" ? { label: `Won${rTxt}`, color: C.pos, border: LINE.pos }
     : eff === "STOPPED_OUT" ? { label: `Stopped out${rTxt}`, color: C.neg, border: LINE.neg }
     : eff === "INVALIDATED" ? { label: "Invalidated", color: C.text.faint, border: C.border }
