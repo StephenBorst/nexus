@@ -52,9 +52,12 @@ export function createStreamAssembler(onText) {
   const blocks = new Map();
   let stopReason = null;
   let error = null;
+  let usage = null;
   return {
     push(ev) {
       const type = ev && ev.type;
+      // Token counts: message_start carries input + cache reads/writes, message_delta the running output count.
+      if (type === "message_start") { usage = normUsage(ev.message && ev.message.usage); return; }
       // A stream can fail after it started (overloaded, a provider error): the API sends an
       // `error` event and stops. It used to be ignored and the turn read "(empty response)".
       if (type === "error") {
@@ -85,10 +88,16 @@ export function createStreamAssembler(onText) {
       } else if (type === "message_delta") {
         const sr = ev.delta && ev.delta.stop_reason;
         if (sr) stopReason = sr;
+        // message_delta repeats only what it updates (the running output count); a field it leaves at 0 keeps start's value.
+        if (ev.usage) {
+          const d = normUsage(ev.usage), p = usage || normUsage(null);
+          usage = { input: d.input || p.input, cacheRead: d.cacheRead || p.cacheRead, cacheWrite: d.cacheWrite || p.cacheWrite, output: d.output || p.output };
+        }
       }
     },
     get stopReason() { return stopReason; },
     get error() { return error; },
+    get usage() { return usage; },
     content() {
       return [...blocks.keys()].sort((a, b) => a - b).map((k) => {
         const b = blocks.get(k);
@@ -135,4 +144,31 @@ export function systemBlocks(system) {
   const out = head ? [{ type: "text", text: head, cache_control: { type: "ephemeral" } }] : [];
   if (tail) out.push({ type: "text", text: tail });
   return out;
+}
+
+// ── What a question cost, in tokens (2026-11-16, borst: verify the caching yourself) ───────────────────────────────
+// The API reports per request: input_tokens (billed in full), cache_read_input_tokens (~0.1x), cache_creation_input_tokens
+// (written to cache, ~1.25x) and output_tokens. A question sums its tool rounds. Display only.
+
+/** @param {any} u @returns {{input:number, cacheRead:number, cacheWrite:number, output:number}} */
+export function normUsage(u) {
+  const n = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
+  return { input: n(u?.input_tokens), cacheRead: n(u?.cache_read_input_tokens), cacheWrite: n(u?.cache_creation_input_tokens), output: n(u?.output_tokens) };
+}
+/** Sum two usages (either may be null). */
+export function addUsage(a, b) {
+  if (!a && !b) return null;
+  const x = a || normUsage(null), y = b || normUsage(null);
+  return { input: x.input + y.input, cacheRead: x.cacheRead + y.cacheRead, cacheWrite: x.cacheWrite + y.cacheWrite, output: x.output + y.output };
+}
+
+const k = (v) => (v >= 10_000 ? `${Math.round(v / 1000)}k` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
+
+/** "9.6k in (84% from cache) · 180 out", or null when nothing was reported. */
+export function usageLine(u) {
+  if (!u) return null;
+  const totalIn = u.input + u.cacheRead + u.cacheWrite;
+  if (!totalIn && !u.output) return null;
+  const pct = totalIn ? Math.round((u.cacheRead / totalIn) * 100) : 0;
+  return `${k(totalIn)} in (${pct}% from cache) · ${k(u.output)} out`;
 }

@@ -46,3 +46,20 @@ test("system prompt goes up as [stable prompt (cached), live context]", async ()
   assert.match(src, /const lines: string\[\] = \[CONTEXT_MARKER\];/, "the context block starts with the marker");
   assert.equal(src.split("system: systemBlocks(system),").length - 1, 2, "both Anthropic paths send blocks");
 });
+
+test("token readout: a streamed turn's usage, summed across rounds, as one line", async () => {
+  const { createStreamAssembler, addUsage, normUsage, usageLine } = await import("./anthropicTurn.mjs");
+  const turn = createStreamAssembler();
+  turn.push({ type: "message_start", message: { usage: { input_tokens: 400, cache_read_input_tokens: 8000, cache_creation_input_tokens: 0, output_tokens: 1 } } });
+  turn.push({ type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 180 } });
+  assert.deepEqual(turn.usage, { input: 400, cacheRead: 8000, cacheWrite: 0, output: 180 });
+  const total = addUsage(turn.usage, normUsage({ input_tokens: 200, cache_read_input_tokens: 9000, output_tokens: 60 }));
+  assert.equal(usageLine(total), "18k in (97% from cache) · 240 out");
+  assert.equal(usageLine(normUsage({ input_tokens: 9500, cache_creation_input_tokens: 0, output_tokens: 90 })), "9.5k in (0% from cache) · 90 out");
+  assert.equal(usageLine(null), null);
+  assert.equal(usageLine(normUsage({})), null, "nothing reported = no line, never '0 in'");
+  // both Anthropic paths return it, and the chat shows it under the answer
+  assert.equal(src.split("usage = addUsage(usage,").length - 1, 2);
+  const panel = readFileSync(new URL("../components/NexusAssistant.tsx", import.meta.url), "utf8");
+  assert.match(panel, /usage: usageLine\(usage\)/);
+});

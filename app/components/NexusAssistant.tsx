@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAccount, usePrivateQuery, usePositionStream } from "@orderly.network/hooks";
 import { useRiskDesk } from "@/hooks/useRiskDesk";
+import { usageLine } from "@/lib/anthropicTurn.mjs";
 import { useLabStorage } from "@/hooks/useLabStorage";
 import { computeEdge } from "@/config/edge";
 import { tiltRead, sessionEdge, overtradingRead, sizingRead } from "@/lib/behavioral.mjs";
@@ -37,7 +38,7 @@ const AGENT_API = "https://og.nexustradinglabs.com";
 const mono = "var(--nx-font-mono)";
 const GREEN = "#ededf0";
 
-type DisplayMsg = ChatMsg & { tools?: string[] };
+type DisplayMsg = ChatMsg & { tools?: string[]; usage?: string | null };
 
 // Load the stored model for a provider. Reject dead "-latest" aliases (404) and
 // cross-provider ids (e.g. a Claude model stored under OpenAI) → default.
@@ -447,7 +448,7 @@ export default function NexusAssistant() {
       // Hosted (PRO): sign a short-lived access challenge once, then route through
       // our proxy (no user key). Falls back to BYOK otherwise.
       const hosted = hostedActive && walletAddress ? await getHostedAccess(walletAddress, labWallet?.provider) : undefined;
-      const { toolsUsed } = await runChatStream({
+      const { toolsUsed, usage } = await runChatStream({
         provider: hosted ? "anthropic" : provider,
         model: hosted ? hostedModel : model,
         apiKey: hosted ? "" : apiKey.trim(),
@@ -473,7 +474,7 @@ export default function NexusAssistant() {
         },
         onDelta: (chunk) => appendToLast((last) => ({ ...last, content: last.content + chunk })),
       });
-      appendToLast((last) => ({ ...last, tools: toolsUsed }));
+      appendToLast((last) => ({ ...last, tools: toolsUsed, usage: usageLine(usage) }));
     } catch (e) {
       // User-initiated stop keeps whatever streamed so far.
       if (!(e instanceof DOMException && e.name === "AbortError")) {
@@ -640,6 +641,12 @@ export default function NexusAssistant() {
                 {m.tools && m.tools.length > 0 && (
                   <div style={{ fontFamily: mono, fontSize: 8, color: "#71717a", letterSpacing: "0.04em" }}>
                     ⚡ {[...new Set(m.tools)].join(" · ")}
+                  </div>
+                )}
+                {m.role === "assistant" && m.usage && (
+                  // What this answer cost in tokens, cached share included (anthropicTurn.mjs usageLine). Display only.
+                  <div style={{ fontFamily: mono, fontSize: 8, color: "#71717a", letterSpacing: "0.04em" }} title="Tokens across this answer's rounds. Cached tokens bill at about a tenth.">
+                    {m.usage}
                   </div>
                 )}
                 <div style={{

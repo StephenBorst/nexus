@@ -71,7 +71,7 @@ export function loadHostedModel(): string {
 }
 
 import { anthropicTools, openaiTools, TOOL_BY_NAME, type ToolCtx } from "@/config/assistantTools";
-import { requestLimits, textOf, emptyTurnText, createStreamAssembler, streamErrorText, trimHistory, systemBlocks, CONTEXT_MARKER } from "@/lib/anthropicTurn.mjs";
+import { requestLimits, textOf, emptyTurnText, createStreamAssembler, streamErrorText, trimHistory, systemBlocks, CONTEXT_MARKER, normUsage, addUsage } from "@/lib/anthropicTurn.mjs";
 import { createWalletClient, custom } from "viem";
 import { bareTicker } from "@/utils/utils";
 
@@ -138,6 +138,8 @@ export interface ChatMsg {
 export interface RunResult {
   text: string;
   toolsUsed: string[];
+  // Tokens across the question's rounds (Anthropic paths; anthropicTurn.mjs usageLine). Display only.
+  usage?: ReturnType<typeof addUsage>;
 }
 
 const MAX_TOOL_ROUNDS = 5; // bound the agentic loop
@@ -169,7 +171,7 @@ You have TOOLS:
   · "what's setting up" → get_mispriced, get_smart_money, get_conviction, get_arena; who to trust → get_verified_callers, get_contested, get_contrarians.
   · any wallet address in play → xray_wallet. Their book → get_open_positions, get_book_risk (liquidation, stops, funding a day, concentration).
   · funding vs other venues → get_funding_venues (an input, never "arbitrage"); what's coming up → get_calendar.
-- Take actions (navigation + planning only, NEVER order execution): open_symbol (open a coin's trade page), open_trader, open_xray (open the wallet x-ray), open_leaderboard, open_mispriced (funding-edge board, now in Smart Money), open_conviction (the market-wide Conviction Scanner), open_autocopy (set up copy-trading a leader), draft_thesis (pre-fill the Thesis Engine with a trade plan), draft_directive (pre-fill the autonomous agent's DIRECTIVE panel with an EXACT directional trade for it to run), and get_agent_directive (read the agent's current directive). When you draft a thesis or directive, base the levels on real data (fetch the market first if needed) and make the risk/reward sane; tell the user you've drafted it and that they must review + confirm before it does anything — you never place or arm the order yourself. If a directive draft returns an edge_note (the user's own record on that symbol/direction), relay it and coach position size toward their proven strengths — as analysis, never a hard sizing instruction.
+- Take actions (navigation + planning only, NEVER order execution): open_symbol (open a coin's trade page), open_trader, open_xray (open the wallet x-ray), open_leaderboard, open_mispriced (the stretched-funding board, in Smart Money), open_conviction (the market-wide stretched-funding scan), open_autocopy (set up copy-trading a leader), draft_thesis (pre-fill the Thesis Engine with a trade plan), draft_directive (pre-fill the autonomous agent's DIRECTIVE panel with an EXACT directional trade for it to run), and get_agent_directive (read the agent's current directive). When you draft a thesis or directive, base the levels on real data (fetch the market first if needed) and make the risk/reward sane; tell the user you've drafted it and that they must review + confirm before it does anything — you never place or arm the order yourself. If a directive draft returns an edge_note (the user's own record on that symbol/direction), relay it as their own record on that setup, with its sample size — analysis, never a sizing instruction.
 
 CAPABILITIES you can guide the user to (all in The Lab, /lab):
 - Directional agent mode: from a thesis or a chat, the user can hand the agent their EXACT trade — it enters THEIR direction and manages the exit (scale-out, trailing stop, breakeven, timeout), one-shot. MARKET (fill now) or a resting LIMIT at their price. Defaults to PAPER. Different from the signal bot, which picks its own direction from funding/OI. Use draft_directive to tee it up.
@@ -233,6 +235,7 @@ async function runAnthropic(opts: {
   const { model, apiKey, system, history, ctx, signal, hosted } = opts;
   const messages: { role: string; content: unknown }[] = trimHistory(history).map((m: ChatMsg) => ({ role: m.role, content: m.content }));
   const toolsUsed: string[] = [];
+  let usage: ReturnType<typeof addUsage> = null;
   const t = anthropicTarget(apiKey, hosted);
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -245,6 +248,7 @@ async function runAnthropic(opts: {
     if (!res.ok) throw new Error(await errText(res));
     const data = await res.json();
     const content: { type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }[] = data?.content ?? [];
+    usage = addUsage(usage, normUsage(data?.usage));
 
     if (data?.stop_reason === "tool_use") {
       messages.push({ role: "assistant", content });
@@ -260,9 +264,9 @@ async function runAnthropic(opts: {
     }
 
     // The assistant turn above goes back verbatim (thinking blocks included), as these models require.
-    return { text: textOf(content) || emptyTurnText(data?.stop_reason), toolsUsed };
+    return { text: textOf(content) || emptyTurnText(data?.stop_reason), toolsUsed, usage };
   }
-  return { text: "Stopped after too many tool calls — try narrowing the question.", toolsUsed };
+  return { text: "Stopped after too many tool calls — try narrowing the question.", toolsUsed, usage };
 }
 
 async function runOpenAI(opts: {
@@ -345,6 +349,7 @@ async function runAnthropicStream(opts: {
   const { model, apiKey, system, history, ctx, signal, onDelta, hosted } = opts;
   const messages: { role: string; content: unknown }[] = trimHistory(history).map((m: ChatMsg) => ({ role: m.role, content: m.content }));
   const toolsUsed: string[] = [];
+  let usage: ReturnType<typeof addUsage> = null;
   let fullText = "";
   const t = anthropicTarget(apiKey, hosted);
 
@@ -361,6 +366,7 @@ async function runAnthropicStream(opts: {
     // it back unchanged (app/lib/anthropicTurn.mjs).
     const turn = createStreamAssembler((chunk: string) => { fullText += chunk; onDelta(chunk); });
     await readSSE(res, (ev) => turn.push(ev));
+    usage = addUsage(usage, turn.usage);
     const failed = streamErrorText(turn.error);
     if (failed) throw new Error(failed);
     const stopReason = turn.stopReason as string | null;
@@ -378,9 +384,9 @@ async function runAnthropicStream(opts: {
       messages.push({ role: "user", content: results });
       continue;
     }
-    return { text: fullText.trim() || emptyTurnText(stopReason), toolsUsed };
+    return { text: fullText.trim() || emptyTurnText(stopReason), toolsUsed, usage };
   }
-  return { text: fullText.trim() || "Stopped after too many tool calls.", toolsUsed };
+  return { text: fullText.trim() || "Stopped after too many tool calls.", toolsUsed, usage };
 }
 
 async function runOpenAIStream(opts: {
