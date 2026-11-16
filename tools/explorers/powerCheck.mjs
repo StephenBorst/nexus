@@ -4,9 +4,10 @@
 // scoreboard can grade (an oi:hist price at that hour — the grader's price spine). It never reads a
 // price AFTER an event and never computes a return, a hit rate or an R.
 //
-// Usage: node tools/explorers/powerCheck.mjs <dir> [days=60] [--batch=b|--batch=4]
+// Usage: node tools/explorers/powerCheck.mjs <dir> [days=60] [--batch=b|--batch=4|--batch=5]
 //   --batch=b counts the UNREGISTERED batch-2 drafts (explorerDraftsB.mjs) instead of the registered reads.
 //   --batch=4 counts the UNREGISTERED batch-4 drafts (explorerDrafts4.mjs).
+//   --batch=5 counts the UNREGISTERED batch-5 drafts (explorerDrafts5.mjs, the Bankr scanners).
 //   <dir> holds oi_<COIN>.json ({points}) and c_<COIN>.json ({candles}) from the public routes
 //   /agent/oi-history/PERP_<COIN>_USDC and /agent/candle-history/PERP_<COIN>_USDC, and optionally
 //   b_<COIN>.json ({points}) from /agent/basis-history/<COIN> (read only by funding_basis_split).
@@ -16,6 +17,7 @@ import { join } from "node:path";
 import { EXPLORER_GENS } from "../../workers/nexus-lab-api/explorerReads.mjs";
 import { DRAFT_GENS_B } from "../../workers/nexus-lab-api/explorerDraftsB.mjs";
 import { DRAFT_GENS_4 } from "../../workers/nexus-lab-api/explorerDrafts4.mjs";
+import { DRAFT_GENS_5 } from "../../workers/nexus-lab-api/explorerDrafts5.mjs";
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 import { RECORDED_COINS, HOLDOUT_COINS } from "../../app/lib/recordedUniverse.mjs";
 
@@ -58,13 +60,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const batchB = process.argv.includes("--batch=b");
   const batch4 = process.argv.includes("--batch=4");
+  const batch5 = process.argv.includes("--batch=5");
   const dir = args[0];
   const days = Number(args[1] || 60);
   const load = (f, k) => (existsSync(join(dir, f)) ? JSON.parse(readFileSync(join(dir, f), "utf8"))[k] || [] : []);
   const coins = [...new Set([...MAIN, ...RECORDED_COINS, ...HOLDOUT_COINS])];
   const sets = coins.map((coin) => ({ coin, oiHist: load(`oi_${coin}.json`, "points"), candleHist: load(`c_${coin}.json`, "candles"), basisHist: load(`b_${coin}.json`, "points") }));
   const now = Math.max(...sets.flatMap((s) => s.candleHist.map((c) => Number(c.t) + 3600000)));
-  const res = powerCheck(sets, { days, now, reads: batch4 ? DRAFT_GENS_4 : batchB ? DRAFT_GENS_B : READS });
+  const res = powerCheck(sets, { days, now, reads: batch5 ? DRAFT_GENS_5 : batch4 ? DRAFT_GENS_4 : batchB ? DRAFT_GENS_B : READS });
   const group = (names) => names.filter((c) => !HOLDOUT_COINS.includes(c)); // SUI is holdout-only now
   for (const [name, per] of Object.entries(res)) {
     const sum = (cs, k) => cs.reduce((s, c) => s + (per[c]?.[k] || 0), 0);
