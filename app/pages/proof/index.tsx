@@ -18,6 +18,7 @@ import Fold from "./Fold";
 import HowWeGrade from "./HowWeGrade";
 import { callsRecordLine, callersLine, PLAIN_WORDS, engineNote } from "@/lib/proofCopy.mjs";
 import { ruleCheckFor, ruleCheckLine } from "@/lib/ruleCheck.mjs";
+import { engineBeat, ENGINE_QUIET_H } from "@/lib/engineBeat.mjs";
 import SignalBoard, { type Scorecard } from "./SignalBoard";
 import { pressKey } from "@/utils/a11y";
 
@@ -273,6 +274,8 @@ export default function ProofPage() {
                         {/* Freshness: a quiet engine reads as quiet, not alive (lastAt = its newest graded call). */}
                         {e.lastAt ? <span style={{ whiteSpace: "nowrap" }}> · last graded {agoShort(e.lastAt, Date.now())} ago</span> : null}
                         {e.lastPostedAt ? <span style={{ whiteSpace: "nowrap" }}> · last call {agoShort(e.lastPostedAt, Date.now())} ago</span> : null}
+                        {/* Heartbeat (engineBeat.mjs): a stopped engine reads as stopped. */}
+                        {engineBeat(e, Date.now()).state === "QUIET" ? <span style={{ whiteSpace: "nowrap", color: BONE }}> · quiet: no call in {ENGINE_QUIET_H}h+</span> : null}
                       </span>
                       {/* What it trades, in plain words (ENGINE_NOTES, proofCopy.mjs). */}
                       {note && <span style={{ order: 20, flexBasis: "100%", fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.45, whiteSpace: "normal" }}>{note}</span>}

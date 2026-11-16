@@ -17,6 +17,7 @@ export const DIGEST_DAY_KEY = (day) => `ops:digest:sent:${day}`;
 export const SWEEP_NUDGE_USDC = 100;
 
 import { stageSignRefusal } from "./promotionLock.mjs";
+import { engineAlerts, enginesLines, quietWallets } from "./engineBeat.mjs";
 
 const BLOCKING_PARITY = new Set(["DRIFT", "UNVERIFIABLE"]);
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -96,6 +97,8 @@ export function digestState(facts) {
     parity: Object.fromEntries((facts.paper || []).map((p) => [p.axis, p.parity || null])),
     verdicts: Object.fromEntries((facts.paper || []).map((p) => [p.axis, p.verdict || null])),
     pending: (facts.pending || []).map((x) => x.key),
+    // Engines quiet on this run (engineBeat.mjs). Unread = null: the next run then alerts nothing about engines.
+    quietEngines: facts.engines ? quietWallets(facts.engines) : null,
   };
 }
 
@@ -130,6 +133,7 @@ export function alertsFor(prev, facts) {
   if (p) {
     const had = new Set(p.pending || []);
     for (const x of facts.pending || []) if (!had.has(x.key)) out.push({ key: `pending:${x.key}`, text: x.text });
+    out.push(...engineAlerts(p.quietEngines, facts.engines));
   }
   return out;
 }
@@ -198,6 +202,10 @@ export function digestText(facts) {
     // Name what couldn't be read (a failed read is never a zero), so a broken source shows which one it is.
     if (r.unread) L.push(`Unread: ${esc(unreadList(r))}.`);
     if (r.usdc >= SWEEP_NUDGE_USDC) L.push("Worth a sweep to the treasury Safe when you're ready. Nothing moves on its own.");
+  }
+  if ("engines" in facts) {
+    L.push("", "<b>Engine callers</b>", ...enginesLines(facts.engines).map(esc));
+    for (const r of facts.ruleChecks || []) L.push(esc(`${r.caller}: ${r.line}`));
   }
   if (facts.watchdog) L.push("", "<b>On-chain → Lab watchdog</b>", esc(facts.watchdog));
   if (facts.jobs) L.push("", "<b>Background jobs</b>", esc(facts.jobs));
