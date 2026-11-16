@@ -21,7 +21,7 @@ import { fetchDeribitTerm } from "@/lib/deribit.mjs";
 import { fetchHLTape, fetchHLPortfolio } from "@/utils/hyperliquid";
 import { xraySummary, fmtPf } from "@/lib/xrayGrade.mjs";
 // The Lab's venues / calendar / risk panels, shaped by their own rules (one answer on screen and in chat).
-import { venuesForCopilot, calendarForCopilot, riskForCopilot, watchlistForCopilot } from "@/lib/copilotLab.mjs";
+import { venuesForCopilot, calendarForCopilot, riskForCopilot, watchlistForCopilot, callsForCopilot } from "@/lib/copilotLab.mjs";
 import { readWatch } from "@/lib/watchStore";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 
@@ -413,6 +413,20 @@ export const TOOLS: ToolDef[] = [
         const reply = await sharedJson(`${AGENT_API}/intel/funding-venues${coin ? `/${coin}` : ""}`);
         return JSON.stringify(venuesForCopilot(reply, { coin: coin || null }));
       } catch { return JSON.stringify({ error: "funding across venues unavailable" }); }
+    },
+  },
+  {
+    name: "get_my_calls",
+    description:
+      "The user's PUBLISHED calls (the graded theses), live: each open call's state from the grader (waiting for the entry, live, split runner, not checked yet, can't be graded), its levels and planned R, and the mark's distance to the stop and target in R; plus the last few graded results. Use for 'did my BTC call fill', 'how are my calls doing', 'how close is my stop'. Pass a wallet to read anyone's public calls. Distances are not a grade: a fill or a result counts only once the grader stamps it. Not trades on the exchange (get_open_positions has those).",
+    input_schema: { type: "object", properties: { wallet: { type: "string", description: "Optional 0x… wallet; defaults to the connected user." } } },
+    run: async (args, ctx) => {
+      const w = String(args.wallet || ctx.wallet || "").trim().toLowerCase();
+      if (!/^0x[0-9a-f]{40}$/.test(w)) return JSON.stringify({ error: "no wallet: connect one, or name a 0x address" });
+      try {
+        const r = await fetch(`${AGENT_API}/theses/status/${w}`);
+        return JSON.stringify(callsForCopilot(r.ok ? await r.json() : null));
+      } catch { return JSON.stringify({ error: "calls unavailable right now" }); }
     },
   },
   {

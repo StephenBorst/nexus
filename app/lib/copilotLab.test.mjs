@@ -107,3 +107,24 @@ test("watchlist: the panel's rows (watchRow), since the last look, read only", a
   assert.doesNotMatch(tool, /writeWatch|markSeen/);
   assert.match(tool, /\/intel\/markets\?coins=/);
 });
+
+test("calls: the grader's state in words, live distance in R, never a grade from a mark", async () => {
+  const { callsForCopilot, CALL_STATE_WORDS } = await import("./copilotLab.mjs");
+  const { callStatusRow } = await import("../../workers/nexus-lab-api/callStatus.mjs");
+  const live = callStatusRow({ id: "a", symbol: "PERP_BTC_USDC", direction: "LONG", entryPrice: 100, stopLoss: 90, takeProfit1: 120, createdAt: Date.parse("2026-11-16T10:00:00Z"), fillState: "OPEN", filledAt: Date.parse("2026-11-16T10:00:00Z"), isPublic: true }, 105);
+  const waiting = callStatusRow({ id: "b", symbol: "PERP_ETH_USDC", direction: "SHORT", entryPrice: 3000, stopLoss: 3100, takeProfit1: 2800, createdAt: 1, fillState: "WORKING", publishMark: { px: 2950 }, isPublic: true }, 2990);
+  const out = callsForCopilot({ calls: [live, waiting], recent: [], counts: { open: 1, working: 1 }, marksAvailable: true });
+  const btc = out.open_calls[0], eth = out.open_calls[1];
+  assert.equal(btc.coin, "BTC");
+  if (live.state === "OPEN") { assert.equal(btc.state, CALL_STATE_WORDS.OPEN); assert.equal(btc.move_r, 0.5); }
+  assert.equal(btc.stop_away_r, live.live.levels.stop.r);
+  assert.equal(eth.coin, "ETH");
+  assert.equal(eth.state, CALL_STATE_WORDS[waiting.state] || waiting.state);
+  assert.match(out.note, /not a grade/);
+  assert.equal(callsForCopilot({ calls: [], marksAvailable: false }).marks, "unread right now: no live distances");
+  assert.ok(callsForCopilot(null).error);
+  const tools = readFileSync(new URL("../config/assistantTools.ts", import.meta.url), "utf8");
+  const tool = tools.slice(tools.indexOf('name: "get_my_calls"'), tools.indexOf('name: "get_watchlist"'));
+  assert.match(tool, /\/theses\/status\/\$\{w\}/);
+  assert.match(tool, /callsForCopilot\(/);
+});

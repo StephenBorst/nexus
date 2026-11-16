@@ -109,3 +109,48 @@ export function watchlistForCopilot(watch, reply) {
     note: "The Watching panel on Lab home, read as is. 'changed_since' = the same changes the market alerts fire on (funding stretched, 2× smart-money consensus formed or flipped, forecast ±15 pts). Inputs, not a grade.",
   };
 }
+
+// ── The user's (or any wallet's) published calls, as GET /theses/status/:wallet reads them (2026-11-16) ─────────────
+// Public calls only, the same set /feed shows. The state is the grader's stamp; a live mark is distance, never a grade:
+// a mark through the entry is a fill only once the grader says so (the route's own note).
+export const CALL_STATE_WORDS = Object.freeze({
+  WORKING: "waiting for the entry to trade",
+  OPEN: "live (the entry traded)",
+  RUNNER: "split call, first target hit, second half running",
+  UNCHECKED: "posted, not checked by the grader yet",
+  INVALID: "can never be graded (levels on the wrong side); stays published, counts nowhere",
+});
+
+// How a graded call closed, when it wasn't a plain TP / stop (declared time stop; plans v2's breakeven runner).
+const EXIT_WORDS = Object.freeze({ TIME: "time stop", TRAIL: "runner closed on its trailing stop after the first target", BE: "runner stopped out at the entry after the first target" });
+
+/** @param {any} reply GET /theses/status/:wallet  @param {{ max?: number }} [opts] */
+export function callsForCopilot(reply, { max = 8 } = {}) {
+  if (!reply || typeof reply !== "object" || !Array.isArray(reply.calls)) return { error: "calls unavailable right now" };
+  const iso = (ms) => (Number(ms) > 0 ? new Date(Number(ms)).toISOString().replace(/\.\d{3}/, "") : null);
+  const coin = (s) => String(s || "").replace(/^PERP_/, "").replace(/_USDC$/, "");
+  const open = reply.calls.slice(0, max).map((c) => ({
+    coin: coin(c.symbol), side: c.direction, state: CALL_STATE_WORDS[c.state] || c.state,
+    entry: c.entryPrice, stop: c.stopLoss, target: c.takeProfit1, target2: c.takeProfit2 ?? undefined,
+    planned_r: c.plannedR?.tp1 ?? null, time_stop_h: c.timeStopH ?? undefined,
+    posted_utc: iso(c.postedAt), filled_utc: iso(c.filledAt) ?? undefined,
+    ...(c.invalidReason ? { invalid_reason: c.invalidReason } : {}),
+    ...(c.live ? {
+      mark: c.live.mark,
+      ...(c.live.moveR != null ? { move_r: c.live.moveR } : {}),
+      stop_away_r: c.live.levels?.stop?.r ?? null, target_away_r: c.live.levels?.tp1?.r ?? null,
+      ...(c.live.crossedEntrySincePost != null ? { price_crossed_entry_since_post: c.live.crossedEntrySincePost } : {}),
+    } : {}),
+  }));
+  const recent = (Array.isArray(reply.recent) ? reply.recent : []).slice(0, 5).map((c) => ({
+    coin: coin(c.symbol), side: c.direction, outcome: c.graded?.outcome ?? c.state, r: c.graded?.r ?? null,
+    exit: EXIT_WORDS[c.exitReason] ?? undefined, graded_utc: iso(c.graded?.at),
+  }));
+  return {
+    counts: reply.counts ?? null,
+    open_calls: open, more_open: Math.max(0, reply.calls.length - max),
+    recent_graded: recent,
+    ...(reply.marksAvailable === false ? { marks: "unread right now: no live distances" } : reply.marksStale ? { marks: `stale (${reply.markAgeSec}s old)` } : {}),
+    note: "state = the grader's stamp. mark / move_r / *_away_r are live distances in units of the call's risk, not a grade: a mark through the entry is a fill only once the grader stamps it. Public calls only.",
+  };
+}
