@@ -26,6 +26,9 @@ A wallet's job comes later: checking that the agent trades what was graded.
    replicates on the holdout coins** (`app/lib/recordedUniverse.mjs`): at least 30 holdout events, mean R above 0, and
    beating at least 80% of random entries on the same side. This replication is the guard against testing many
    reads at once. A read found on the main coins has to work again on coins nobody looked at.
+   **Each side on its own** (borst, 2026-11-16): a read that trades both sides also needs each side with at least
+   20 out-of-sample events on the main card to beat at least 50% of its own random replays. One strong side can't
+   carry a side that trails the tide (`docs/research/pipeline-if-then.md`).
 4. **Tradeable.** An Edge whose graded exit, traded the way the agent would trade it (fees in, closed at the market
    after 168h, one position per market), nets above 0 over at least 30 trades out of sample.
 5. **Paper.** A Tradeable read gets a paper wallet: its own record, and parity must read CLEAN. **Live money is always
@@ -67,6 +70,8 @@ the same block. The full-history row next to it is in-sample.
 | btc_lead_lag | 2026-11-08T00:00:00Z | `docs/research/btc-lead-lag-prereg.md` |
 | funding_basis_split | 2026-11-08T00:00:00Z | `docs/research/funding-basis-split-prereg.md` |
 | smart_consensus_2x | 2026-11-15T00:00:00Z | `docs/research/lens-reads-prereg.md` |
+| shelf_breakdown_short · bb_rsi_momentum | 2026-11-17T00:00:00Z | `docs/research/scanner-reads-prereg.md` |
+| session_fade_short · oi_div_reversal_4h_long | 2026-11-17T00:00:00Z | `docs/research/one-sided-reads-prereg.md` |
 
 The four explorers are two-sided, so each is judged on the pooled random result. vol_breakout was dropped for v1 at
 the power check. Definitions and counts are in `docs/research/explorer-drafts.md`.

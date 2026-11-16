@@ -556,17 +556,56 @@ export function bbRsiMomentumEvents(cs, _pmap, _ctx, p = BBM) {
   return ev;
 }
 
+// ── 16 · session_fade_short + oi_div_reversal_4h_long — registered 2026-11-16, count from 2026-11-17T00:00Z ──────
+// docs/research/one-sided-reads-prereg.md. Each is its parent's exact event, on ONE side only: session_fade's SHORT
+// events (a NY-open rally, faded) and oi_div_reversal_4h's LONG events (a sharp 4h drop on falling OI, bought). Same
+// event, same cooldown as the parent (the cooldown runs on the parent's events of both sides); the other side is
+// dropped, nothing else changes. Found by reading the parents' per-side splits on 2026-11-16 (closed data), so they
+// count only from their own date.
+export function sessionFadeShortEvents(cs, pmap, ctx) {
+  return sessionFadeEvents(cs, pmap, ctx).filter((e) => e.side === "SHORT");
+}
+export function oiDivReversal4hLongEvents(cs, pmap, ctx) {
+  return oiDivReversal4hEvents(cs, pmap, ctx).filter((e) => e.side === "LONG");
+}
+
+// One run per input series for a parent and its one-sided read (2026-11-16, scoreboard CPU budget). Keyed by the
+// input array itself (session reads use only cs.candleHist, the OI fades only cs.oiHist), so a new or cut series is a
+// new run and the answer is always the generator's own. Callers get a copy; the stored events are never handed out.
+function sharedRun(gen, key) {
+  const seen = new WeakMap();
+  return (cs, pmap, ctx) => {
+    const src = cs?.[key];
+    if (!src || typeof src !== "object") return gen(cs, pmap, ctx);
+    let ev = seen.get(src);
+    if (!ev) { ev = gen(cs, pmap, ctx) || []; seen.set(src, ev); }
+    return ev.slice();
+  };
+}
+const sessionRun = sharedRun(sessionMomentumEvents, "candleHist");
+const oi4hRun = sharedRun(oiDivReversal4hEvents, "oiHist");
+const flip = (e) => ({ t: e.t, side: e.side === "LONG" ? "SHORT" : "LONG" });
+// Registry bodies: the same events as the exported functions above (explorerReads.test.mjs checks it hour by hour).
+const sessionMomentumShared = (cs, pmap, ctx) => sessionRun(cs, pmap, ctx);
+const sessionFadeShared = (cs, pmap, ctx) => sessionRun(cs, pmap, ctx).map(flip);
+const sessionFadeShortShared = (cs, pmap, ctx) => sessionRun(cs, pmap, ctx).map(flip).filter((e) => e.side === "SHORT");
+const oiDiv4hShared = (cs, pmap, ctx) => oi4hRun(cs, pmap, ctx);
+const oiDiv4hLongShared = (cs, pmap, ctx) => oi4hRun(cs, pmap, ctx).filter((e) => e.side === "LONG");
+// Each shared body names the exported rule it runs (`source`), so a test can check the grader still calls the shared
+// rule itself (moved, not copied), e.g. oiDivReversal.test.mjs for the brain's live gate.
+for (const [g, src] of [[sessionMomentumShared, sessionMomentumEvents], [sessionFadeShared, sessionFadeEvents], [sessionFadeShortShared, sessionFadeShortEvents], [oiDiv4hShared, oiDivReversal4hEvents], [oiDiv4hLongShared, oiDivReversal4hLongEvents]]) Object.defineProperty(g, "source", { value: src });
+
 export const EXPLORER_READS = Object.freeze([
   Object.freeze({ name: "level_reclaim", label: "Prior-day high/low swept and reclaimed", gen: levelReclaimEvents }),
   Object.freeze({ name: "oi_div_reversal", label: "Extreme 24h move on falling OI, faded", gen: oiDivReversalEvents }),
-  Object.freeze({ name: "session_momentum", label: "NY open drive (13–15 UTC), followed", gen: sessionMomentumEvents }),
+  Object.freeze({ name: "session_momentum", label: "NY open drive (13–15 UTC), followed", gen: sessionMomentumShared }),
   Object.freeze({ name: "confluence_follow", label: "Funding × OI confluence, traded with the crowd", gen: confluenceFollowEvents }),
   // batch 2, registered 2026-10-27 (docs/research/oi-div-reversal-4h-prereg.md)
-  Object.freeze({ name: "oi_div_reversal_4h", label: "Extreme 4h move on falling OI, faded", gen: oiDivReversal4hEvents }),
+  Object.freeze({ name: "oi_div_reversal_4h", label: "Extreme 4h move on falling OI, faded", gen: oiDiv4hShared }),
   // batch 2, registered 2026-10-27 (docs/research/oi-coil-break-prereg.md)
   Object.freeze({ name: "oi_coil_break", label: "OI builds into a flat tape, range break followed", gen: oiCoilBreakEvents }),
   // batch 3, registered 2026-11-06 (session-fade-prereg.md, level-reclaim-tight-prereg.md, spot-absorb-prereg.md)
-  Object.freeze({ name: "session_fade", label: "NY open drive (13–15 UTC), faded", gen: sessionFadeEvents }),
+  Object.freeze({ name: "session_fade", label: "NY open drive (13–15 UTC), faded", gen: sessionFadeShared }),
   Object.freeze({ name: "level_reclaim_tight", label: "Level reclaim, only when the coin is quiet for itself", gen: levelReclaimTightEvents }),
   Object.freeze({ name: "spot_absorb", label: "Perp-led move, spot on the other side, OI flat: follow spot", gen: spotAbsorbEvents }),
   // batch 4, registered 2026-11-07 (btc-lead-lag-prereg.md)
@@ -578,5 +617,8 @@ export const EXPLORER_READS = Object.freeze([
   // scanner reads, registered 2026-11-16 (scanner-reads-prereg.md, the two Bankr scanners)
   Object.freeze({ name: "shelf_breakdown_short", label: "Breakdown under a 24h shelf in a 4h downtrend, on volume: short", gen: shelfBreakdownShortEvents }),
   Object.freeze({ name: "bb_rsi_momentum", label: "Close outside the 20/2 band, RSI past 60/40, with the 4h trend: follow", gen: bbRsiMomentumEvents }),
+  // one-sided reads, registered 2026-11-16 (one-sided-reads-prereg.md): a parent's exact event on one side
+  Object.freeze({ name: "session_fade_short", label: "NY open rally (13–15 UTC), faded: short only", gen: sessionFadeShortShared }),
+  Object.freeze({ name: "oi_div_reversal_4h_long", label: "Sharp 4h drop on falling OI, bought: long only", gen: oiDiv4hLongShared }),
 ]);
 export const EXPLORER_GENS = Object.freeze(Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.gen])));
