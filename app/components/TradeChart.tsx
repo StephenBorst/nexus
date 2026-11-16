@@ -168,7 +168,9 @@ export function TradeChart({ symbol, height = 240, positionEntry, tfIndex, onTf,
   // instead of printing underneath (was TOP=8 → toolbar + labels + legend stacked on the
   // candles). Taller when the MA legend row is showing.
   const RPAD = 52, LPAD = 6, TIMEH = 16, VOLH = 30, GAP = 6;
-  const TOP = showMA ? 44 : 28;
+  // Header lane: the toolbar row (22px from top 6) + the MA legend row below it (2026-11-17: the legend used to sit
+  // at 26px and print over the buttons' bottom edge on a phone).
+  const TOP = showMA ? 50 : 32;
   const priceBottom = chartH - TIMEH - VOLH - GAP;
   const volTop = priceBottom + GAP, volBottom = chartH - TIMEH;
   const plotW = Math.max(60, width - LPAD - RPAD);
@@ -300,32 +302,37 @@ export function TradeChart({ symbol, height = 240, positionEntry, tfIndex, onTf,
     setVp({ lo: newLo, hi: newLo + newCount - 1 });
   };
 
-  const btn: React.CSSProperties = { width: 20, height: 18, display: "flex", alignItems: "center", justifyContent: "center", background: "#0f0f11cc", border: `1px solid ${BORDER}`, borderRadius: 3, cursor: "pointer", color: MUTED, fontFamily: MONO, fontSize: 12, lineHeight: 1 };
+  const compact = width < 420; // a phone-width card: tighter buttons, same controls
+  const btn: React.CSSProperties = { width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", background: "#0f0f11cc", border: `1px solid ${BORDER}`, borderRadius: 3, cursor: "pointer", color: MUTED, fontFamily: MONO, fontSize: 12, lineHeight: 1 };
 
   return (
     <div ref={measureRef} style={box}>
+      {/* ONE toolbar row (2026-11-17): the timeframes take the room that's left and scroll sideways on a narrow
+          card; the controls never shrink. They used to be two absolute groups that ran into each other on a phone. */}
+      <div style={{ position: "absolute", top: 6, left: 8, right: 8, zIndex: 3, display: "flex", alignItems: "center", gap: 6 }}>
       {/* timeframe toggle */}
-      <div style={{ position: "absolute", top: 7, left: 8, zIndex: 3, display: "flex", gap: 4 }}>
+      <div className="nx-noscrollbar" style={{ flex: "1 1 auto", minWidth: 0, overflowX: "auto", display: "flex", gap: compact ? 3 : 4, scrollbarWidth: "none" }}>
         {TFS.map((t, i) => (
           <button key={t.k} onClick={() => setTf(i)} style={{
-            background: tf === i ? "#ededf015" : "transparent", border: `1px solid ${tf === i ? "#ededf055" : BORDER}`, borderRadius: 3,
-            padding: "2px 7px", cursor: "pointer", color: tf === i ? "#ededf0" : MUTED, fontFamily: "var(--nx-font-ui)", fontSize: 12,
+            flexShrink: 0, height: 20, background: tf === i ? "#ededf015" : "transparent", border: `1px solid ${tf === i ? "#ededf055" : BORDER}`, borderRadius: 3,
+            padding: compact ? "0 5px" : "0 7px", cursor: "pointer", color: tf === i ? "#ededf0" : MUTED, fontFamily: "var(--nx-font-ui)", fontSize: compact ? 11 : 12, lineHeight: 1,
           }}>{t.k}</button>
         ))}
       </div>
 
       {/* zoom controls */}
-      <div style={{ position: "absolute", top: 7, right: 8, zIndex: 3, display: "flex", gap: 4 }}>
+      <div style={{ flexShrink: 0, display: "flex", gap: compact ? 3 : 4 }}>
         <button title="Toggle moving averages (20 / 50 / 150)" onClick={() => setShowMA((s) => !s)} style={{ ...btn, width: "auto", padding: "0 6px", fontSize: 9, color: showMA ? BONE : MUTED, borderColor: showMA ? "#ededf055" : BORDER }}>MA</button>
         <button title="Toggle estimated liquidation clusters" onClick={() => setShowLiq((s) => !s)} style={{ ...btn, width: "auto", padding: "0 6px", color: showLiq ? "#e0a458" : MUTED, borderColor: showLiq ? "#3a3320" : BORDER }}>⚡</button>
         <button title="Zoom in" onClick={() => applyZoom(0.7)} style={btn}>+</button>
         <button title="Zoom out" onClick={() => applyZoom(1.4)} style={btn}>−</button>
         <button title="Reset" onClick={() => setVp(null)} style={{ ...btn, fontSize: 10, opacity: vp ? 1 : 0.5 }}>⤢</button>
       </div>
+      </div>
 
       {/* MA legend — current values (top-left, below the timeframe row). */}
       {maLines.length > 0 && (
-        <div style={{ position: "absolute", top: 26, left: 8, zIndex: 3, display: "flex", gap: 10, fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.02em", pointerEvents: "none" }}>
+        <div style={{ position: "absolute", top: 32, left: 8, right: RPAD, zIndex: 3, display: "flex", gap: compact ? 8 : 10, overflow: "hidden", whiteSpace: "nowrap", fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.02em", pointerEvents: "none" }}>
           {maLines.map((m) => (
             <span key={m.p} style={{ color: m.c }}>MA{m.p} {m.last != null ? fmtPx(m.last) : "—"}</span>
           ))}
