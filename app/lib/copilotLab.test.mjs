@@ -78,3 +78,32 @@ test("wiring: the copilot reads these through the shared rules, and the risk des
   const prompt = readFileSync(new URL("../config/assistant.ts", import.meta.url), "utf8");
   for (const n of ["get_funding_venues", "get_calendar", "get_book_risk"]) assert.ok(prompt.includes(n), `prompt names ${n}`);
 });
+
+test("watchlist: the panel's rows (watchRow), since the last look, read only", async () => {
+  const { watchlistForCopilot } = await import("./copilotLab.mjs");
+  const { watchRow } = await import("./watchlist.mjs");
+  assert.match(watchlistForCopilot({ coins: [], seen: {} }, null).note, /☆ Watch/);
+  const watch = {
+    coins: ["ETH", "SOL", "XYZ"],
+    seen: { ETH: { snap: { stretched: false, smartSide: "NONE" }, price: 3000, at: Date.parse("2026-11-15T10:00:00Z") } },
+  };
+  const reply = { coins: [
+    { coin: "ETH", price: 3150, change24hPct: 2.1, snap: { stretched: true, fundAnnual: 40, smartSide: "LONG", smartL: 6, smartS: 2 } },
+    { coin: "SOL", price: 150, change24hPct: -1, snap: {} },
+  ] };
+  const out = watchlistForCopilot(watch, reply);
+  const eth = out.rows[0];
+  assert.equal(eth.since_last_look_pct, 5);
+  assert.equal(eth.last_look, "2026-11-15T10:00:00Z");
+  assert.deepEqual(eth.changed_since, watchRow("ETH", reply.coins[0], watch.seen.ETH).changes);
+  assert.ok(eth.changed_since.length >= 2, "funding stretched + consensus formed");
+  assert.equal(out.rows[1].changed_since, "first look: watching from now");
+  assert.deepEqual(out.rows[2], { coin: "XYZ", unread: true });
+  assert.ok(watchlistForCopilot(watch, null).error, "unread prices are said, never shown as flat");
+  assert.deepEqual(watch.seen.SOL, undefined, "reading in chat never marks a coin seen");
+  const tools = readFileSync(new URL("../config/assistantTools.ts", import.meta.url), "utf8");
+  const tool = tools.slice(tools.indexOf('name: "get_watchlist"'), tools.indexOf('name: "get_calendar"'));
+  assert.match(tool, /readWatch\(\)/);
+  assert.doesNotMatch(tool, /writeWatch|markSeen/);
+  assert.match(tool, /\/intel\/markets\?coins=/);
+});

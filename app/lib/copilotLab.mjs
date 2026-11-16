@@ -7,6 +7,7 @@
 import { venueLine, VENUE_NOTE } from "./crossFunding.mjs";
 import { untilWords, eventDetail, CALENDAR_NOTE } from "./eventsCalendar.mjs";
 import { riskLine, usd, RISK_NOTE } from "./riskDesk.mjs";
+import { watchRow } from "./watchlist.mjs";
 
 const DAY = 86_400_000;
 const bare = (c) => String(c ?? "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "").replace(/[^A-Z0-9]/g, "");
@@ -79,5 +80,32 @@ export function riskForCopilot(desk) {
     },
     flags: (desk.flags ?? []).map((f) => `${f.level === "warn" ? "WARN" : "WATCH"}: ${f.text}`),
     note: `${RISK_NOTE} funding_per_day: negative = this book pays, positive = it earns.`,
+  };
+}
+
+/**
+ * The trader's Watching list (this device, nx_watchlist_v1) + GET /intel/markets?coins= → the panel's rows, by its own
+ * rule (watchRow). Read only: asking in chat never moves the "since your last look" baseline (the panel does that).
+ * @param {{ coins?: string[], seen?: Record<string, any> }} watch
+ * @param {any} reply
+ */
+export function watchlistForCopilot(watch, reply) {
+  const coins = Array.isArray(watch?.coins) ? watch.coins : [];
+  if (!coins.length) return { watching: 0, note: "Nothing on the Watching list. Open a coin (tap its name anywhere) and press ☆ Watch; up to 10, kept on this device." };
+  if (!reply || !Array.isArray(reply.coins)) return { watching: coins.length, coins, error: "live prices unread right now" };
+  const live = Object.fromEntries(reply.coins.map((c) => [c.coin, c]));
+  const pct = (v) => (v == null ? null : Math.round(v * 100) / 100);
+  return {
+    watching: coins.length,
+    rows: coins.map((c) => {
+      const r = watchRow(c, live[c] ?? null, watch.seen?.[c]);
+      if (r.unread) return { coin: r.coin, unread: true };
+      return {
+        coin: r.coin, price: r.price, change_24h_pct: pct(r.change24hPct),
+        since_last_look_pct: pct(r.sincePct), last_look: r.sinceAt ? new Date(r.sinceAt).toISOString().replace(/\.\d{3}/, "") : null,
+        changed_since: r.first ? "first look: watching from now" : r.changes,
+      };
+    }),
+    note: "The Watching panel on Lab home, read as is. 'changed_since' = the same changes the market alerts fire on (funding stretched, 2× smart-money consensus formed or flipped, forecast ±15 pts). Inputs, not a grade.",
   };
 }
