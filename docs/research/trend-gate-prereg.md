@@ -1,12 +1,14 @@
-# trend_gate · a conditioner study (DRAFT, unsigned)
+# trend_gate · a registered conditioner study (signed)
 
 Drafted 2026-11-16 from borst's macro/micro note: "macro grants permission, micro times the trigger … when btc is under
 its 4h 20 ema, macro hard-blocks longs." Before that gate gets power over a single entry, it is graded the way the
 stress-hour study grades its conditioner (`stress-hours-prereg.md`).
 
-**Unsigned. Nothing counts until borst signs.** Once signed, out-of-sample events count from the next 00:00 UTC, and the
-limit is 6 months after that. Everything above "Results" is then pinned by sha256; a changed rule is a new registration
-under a new name.
+**Signed by borst 2026-11-16 ("sign the trend gate", in a Claude session), as drafted. Out-of-sample from
+2026-11-17T00:00:00Z. Limit 2027-05-17T00:00:00Z.**
+
+Everything above "Results" is fixed (sha256-pinned in `workers/nexus-lab-api/trendGate.test.mjs`, which also checks that
+the numbers here are `TREND_GATE_STUDY` in the code). A changed rule is a new registration under a new name.
 
 ## What it is, and what it is not
 
@@ -40,7 +42,10 @@ under a new name.
 
 ## The population
 
-- **Reads registered when this is signed, except four:**
+- **The thirteen reads registered when this was signed** (`TREND_GATE_STUDY.reads`): `rsi_reset_deep`, `level_reclaim`,
+  `oi_div_reversal`, `session_momentum`, `confluence_follow`, `oi_div_reversal_4h`, `oi_coil_break`, `session_fade`,
+  `level_reclaim_tight`, `spot_absorb`, `btc_lead_lag`, `funding_basis_split`, `smart_consensus_2x`. A read registered
+  later is not in this study. Four registered reads are left out:
   - `bb_rsi_momentum` and `shelf_breakdown_short` already require their own coin's 4h trend in the rule, so their split
     is mostly mechanical;
   - `session_fade_short` and `oi_div_reversal_4h_long` are one side of a parent already in the study, so they would be
@@ -105,8 +110,8 @@ about 82k to about 64k in this window, so most hours were a BTC 4h downtrend.
 
 ## Sign-off
 
-- [ ] borst: the BTC-only label, the population (with its four exclusions), the 30/30 bar, the 6-month limit and the
-  verdicts as written.
+- [x] **Signed by borst 2026-11-16** ("sign the trend gate", in a Claude session): the BTC-only label, the population (with
+  its four exclusions), the 30/30 bar, the 6-month limit and the verdicts as written.
 
 ## Results
 

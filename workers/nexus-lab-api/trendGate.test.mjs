@@ -1,8 +1,12 @@
-// trendGate.mjs (DRAFT conditioner, docs/research/trend-gate-prereg.md). Run: node --test workers/nexus-lab-api/trendGate.test.mjs
+// trendGate.mjs (registered conditioner, docs/research/trend-gate-prereg.md, signed 2026-11-16). Run: node --test workers/nexus-lab-api/trendGate.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { btcTrendByHour, trendLabel, labelCounts } from "./trendGate.mjs";
+import { createHash } from "node:crypto";
+import { btcTrendByHour, trendLabel, labelCounts, TREND_GATE_STUDY } from "./trendGate.mjs";
+import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
+
+const TREND_GATE_PAGE_SHA256 = "47201e23806e2c78f29d90b0e24a21143e7d88802903d8b842bb755f3ac52206";
 
 const H = 3600000;
 // 30 days of BTC: 15 days up, then 15 days down (hourly closes).
@@ -31,7 +35,27 @@ test("no lookahead: poisoning everything after the event never changes its label
   }
 });
 
-test("a draft conditioner: nothing that trades or grades imports it, and the page stays unsigned until borst signs", () => {
+test("signed 2026-11-16: the page is pinned above Results, and its numbers are the code's", () => {
+  const doc = readFileSync(new URL("../../docs/research/trend-gate-prereg.md", import.meta.url), "utf8");
+  const above = doc.slice(0, doc.indexOf("## Results"));
+  assert.equal(createHash("sha256").update(above).digest("hex"), TREND_GATE_PAGE_SHA256);
+  assert.match(above, /Signed by borst 2026-11-16/);
+  assert.match(above, /Out-of-sample from\n2026-11-17T00:00:00Z\. Limit 2027-05-17T00:00:00Z\./);
+  assert.deepEqual({ ...TREND_GATE_STUDY, reads: [...TREND_GATE_STUDY.reads], excluded: [...TREND_GATE_STUDY.excluded] }, {
+    from: "2026-11-17T00:00:00Z", limit: "2027-05-17T00:00:00Z",
+    reads: ["rsi_reset_deep", "level_reclaim", "oi_div_reversal", "session_momentum", "confluence_follow", "oi_div_reversal_4h",
+      "oi_coil_break", "session_fade", "level_reclaim_tight", "spot_absorb", "btc_lead_lag", "funding_basis_split", "smart_consensus_2x"],
+    excluded: ["bb_rsi_momentum", "shelf_breakdown_short", "session_fade_short", "oi_div_reversal_4h_long"],
+    minEach: 30, minSmallAtLimit: 20, shifts: 1000, minShiftDays: 7, alpha: 0.05,
+  });
+  for (const r of TREND_GATE_STUDY.reads) assert.match(above, new RegExp("`" + r + "`"), `${r} named on the page`);
+  // Every read named is a registered read, in or out, never both. (Reads registered after signing are in neither list.)
+  const registered = new Set(REGISTERED_READS.map((r) => r.axis));
+  for (const r of [...TREND_GATE_STUDY.reads, ...TREND_GATE_STUDY.excluded]) assert.ok(registered.has(r), `${r} is registered`);
+  assert.equal(TREND_GATE_STUDY.reads.filter((r) => TREND_GATE_STUDY.excluded.includes(r)).length, 0);
+});
+
+test("a conditioner: nothing that trades or grades imports it until its judge is built", () => {
   const root = new URL("../../", import.meta.url);
   const scan = (dir) => (existsSync(new URL(dir, root)) ? readdirSync(new URL(dir, root), { recursive: true }) : [])
     .filter((f) => /\.(mjs|js|ts|tsx)$/.test(f) && !String(f).includes("node_modules") && !/\.test\.mjs$/.test(f))
@@ -39,7 +63,4 @@ test("a draft conditioner: nothing that trades or grades imports it, and the pag
   const users = [...scan("workers/nexus-agent-brain"), ...scan("workers/nexus-agent-exec"), ...scan("workers/nexus-lab-api"), ...scan("app")]
     .filter(([f, src]) => !f.endsWith("trendGate.mjs") && /trendGate\.mjs/.test(src));
   assert.deepEqual(users.map(([f]) => f), [], "only the count tool may read the draft until it is signed and its judge is built");
-  const page = readFileSync(new URL("docs/research/trend-gate-prereg.md", root), "utf8");
-  assert.match(page, /DRAFT, unsigned/);
-  assert.match(page, /- \[ \] borst:/, "the sign-off box is still open");
 });
