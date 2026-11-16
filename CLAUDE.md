@@ -438,8 +438,8 @@ product is what sits on top:
   07–21 UTC Mon–Fri, 4h trend DOWN, short-only; ~6 main-card events a month) and `bb_rsi_momentum` (1h close outside
   BB 20/2, RSI-14 > 60 / < 40, with the 4h trend vs EMA-20, no 3h-range burst > 2× the prior 24h; ~4 a day);
   `powerCheck.mjs --batch=5`; +57 ms a scoreboard pass on 19 coins, so watch `[scoreboard] rebuilt in N ms`; the breakout
-  read never fires on the shared lookahead tape, so it has its own no-lookahead test; their calls post from a dedicated
-  engine wallet, address pending from borst).
+  read never fires on the shared lookahead tape, so it has its own no-lookahead test; their calls post from the dedicated
+  engine wallet `0xbce4…f432`, in `ENGINE_CALLER_ADDRESSES` since 2026-11-16; its key is held outside this repo).
   `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.
 - **Regime window** (`docs/research/graded-exit-regime-prereg.md`, signed 2026-10-26; counts from 2026-10-27T00:00Z,
@@ -722,7 +722,7 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
 - **Lab pulse** (`GET /calls/pulse`, `routes-pulse.mjs`, rule `app/lib/callPulse.mjs`, 5-min KV cache, CORS `*`):
   open calls (entry traded) + graded in 7 days + the last grade + the /proof headline read from the scoreboard's
   own cache (`axisbtCacheKey`). **People and our engine callers counted APART, never blended** (borst 2026-11-05):
-  top-level = people, `engines` = the wallets in worker var `ENGINE_CALLER_ADDRESSES` ("Ember", "Ember M"); both house callers (`HOUSE_CALLER_ADDRESS`, `HOUSE_CATALYST_ADDRESS`) left out; no copies. Rows carry the
+  top-level = people, `engines` = the wallets in worker var `ENGINE_CALLER_ADDRESSES` ("Ember", "Ember M", the Bankr scanners' `0xbce4…f432`); both house callers (`HOUSE_CALLER_ADDRESS`, `HOUSE_CATALYST_ADDRESS`) left out; no copies. Rows carry the
   caller's display name (`caller`) + `engine`; `engineRecords` = each engine's all-time graded record (graded, wins, net R)
   → /proof's "Our engine callers" fold (losses included, "not a signal service"). Each engine row carries a plain
   line of what it trades (`ENGINE_NOTES` in proofCopy.mjs, keys pinned to `ENGINE_CALLER_ADDRESSES`). Public names (borst

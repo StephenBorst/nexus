@@ -156,5 +156,6 @@ export const PLAIN_WORDS = Object.freeze([
 export const ENGINE_NOTES = Object.freeze({
   "0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4": "Breaks of the prior 24h high or low on the 1h close. One target at 1.5R.",
   "0x493dc0ce72b8b761844cb25bc17b6aff9a28c086": "Ember’s breakout track, filtered by volume and open interest. Half off at 1.5R, the rest at 3R.",
+  "0xbce4b16be2088696d11d271ad29149f2dd97f432": "Two scanners: shorts under a broken 24h shelf in a 4h downtrend, and band + RSI momentum with the 4h trend. Half off at 1.5R, the rest trails 1R behind.",
 });
 export const engineNote = (wallet) => ENGINE_NOTES[String(wallet || "").toLowerCase()] || null;
