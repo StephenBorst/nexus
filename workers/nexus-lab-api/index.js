@@ -108,6 +108,7 @@ import { handlePulse } from "./routes-pulse.mjs";
 import { handleMarket, handleMarkets, handleFadeGrade } from "./routes-market.mjs";
 import { runWalletWatch } from "./walletWatch.mjs";
 import { runRegWatch, makeLogsRpc, logsRpcUrls } from "./regWatch.mjs";
+import { stampJob } from "./jobBeats.mjs";
 import { handleBell, composeBell } from "./routes-bell.mjs";
 import { handleVenues } from "./routes-venues.mjs";
 import { handleEvents } from "./routes-events.mjs";
@@ -750,6 +751,8 @@ const worker = {
         try {
           const r = await runMinuteGrades(env);
           if (r.triggered || r.graded || r.fills || r.skipped) console.log(`[m1] ${JSON.stringify(r)}`);
+          // jobBeats.mjs: every 5th minute is enough for the monitor (a 15-min limit), and 1/5 the KV writes.
+          if (new Date(event.scheduledTime || Date.now()).getUTCMinutes() % 5 === 0) await stampJob(env, "m1");
         } catch (e) { console.error("[m1] minute grader failed:", String(e?.message || e)); }
       })());
       const minute = new Date(event.scheduledTime || Date.now()).getUTCMinutes();
@@ -757,7 +760,7 @@ const worker = {
       // 1-minute tape (paperTape.mjs; reads agent state, writes only its own ptape:* keys).
       if (minute === 41) {
         ctx.waitUntil((async () => {
-          try { const r = await runPaperTape(env); console.log(`[tape] ${JSON.stringify(r)}`); }
+          try { const r = await runPaperTape(env); console.log(`[tape] ${JSON.stringify(r)}`); await stampJob(env, "tape"); }
           catch (e) { console.error("[tape] run failed:", String(e?.message || e)); }
         })());
       }
@@ -765,7 +768,7 @@ const worker = {
       // docs/research/paper-judgment-level-reclaim.md). Reads only; writes a FINAL verdict once to pjudge:*.
       if (minute === 47) {
         ctx.waitUntil((async () => {
-          try { const r = await runPaperJudge(env); console.log(`[judge] ${JSON.stringify(r)}`); }
+          try { const r = await runPaperJudge(env); console.log(`[judge] ${JSON.stringify(r)}`); await stampJob(env, "judge"); }
           catch (e) { console.error("[judge] run failed:", String(e?.message || e)); }
         })());
       }
@@ -782,7 +785,7 @@ const worker = {
       if (minute === SCOREBOARD_REBUILD_MINUTE) {
         ctx.waitUntil((async () => {
           const t0 = Date.now();
-          try { await rebuildScoreboard(env.LAB_STORE, axisbtCacheKey(20), () => buildAxisScorecard(env, 20)); console.log(`[scoreboard] rebuilt in ${Date.now() - t0} ms`); }
+          try { await rebuildScoreboard(env.LAB_STORE, axisbtCacheKey(20), () => buildAxisScorecard(env, 20)); console.log(`[scoreboard] rebuilt in ${Date.now() - t0} ms`); await stampJob(env, "scoreboard"); }
           catch (e) { console.error("[scoreboard] rebuild failed:", whyFailed(e)); }
         })());
       }
@@ -812,6 +815,7 @@ const worker = {
               send: (text) => sendOwner(env, text),
             });
             if (r.found || r.attempted || r.scanError || r.held) console.log(`[regwatch] ${JSON.stringify(r)}`);
+            await stampJob(env, "regwatch");
           } catch (e) { console.error("[regwatch] failed:", String(e)); }
         })());
         // Moves of tracked wallets people starred on Smart Money (walletWatch.mjs): bell + phone (wallets switch) + Telegram.

@@ -200,6 +200,7 @@ export function digestText(facts) {
     if (r.usdc >= SWEEP_NUDGE_USDC) L.push("Worth a sweep to the treasury Safe when you're ready. Nothing moves on its own.");
   }
   if (facts.watchdog) L.push("", "<b>On-chain → Lab watchdog</b>", esc(facts.watchdog));
+  if (facts.jobs) L.push("", "<b>Background jobs</b>", esc(facts.jobs));
   if (facts.boardAsOf) L.push("", `Scoreboard as of ${esc(String(facts.boardAsOf).slice(11, 16))} UTC.`);
   return L.join("\n");
 }
