@@ -1,9 +1,9 @@
-# Scanner reads · the two Bankr scanners, registered into the read pipeline (UNSIGNED)
+# Scanner reads · the two Bankr scanners, registered into the read pipeline (A and B signed)
 
-Drafted 2026-11-16 (borst: "A, defaults OK, write the pages"). **Not signed yet.** Out-of-sample events start at the
-first 00:00 UTC after borst signs. Until then nothing grades these rules: the code is a draft
-(`workers/nexus-lab-api/explorerDrafts5.mjs`, test-guarded so the scoreboard can't import it). Stages and bars are as in
-`docs/research/read-pipeline.md`.
+Drafted 2026-11-16 (borst: "A, defaults OK, write the pages"). **A and B signed by borst 2026-11-16** ("sign both", in a
+Claude session). **Out-of-sample events for both start at 2026-11-17T00:00:00Z**, the next 00:00 UTC after signing.
+The rules are in `workers/nexus-lab-api/explorerReads.mjs`, moved unchanged from the draft (`explorerDrafts5.mjs`).
+Stages and bars are as in `docs/research/read-pipeline.md`.
 
 Everything above "Results" is fixed once signed. A changed rule is a new registration under a new name.
 
@@ -97,11 +97,13 @@ Timing (local node, 19 coins, one pass): 24 ms and 33 ms. Inside the scoreboard'
 
 ## Sign-off
 
-- **A · `shelf_breakdown_short`: not signed.**
-- **B · `bb_rsi_momentum`: not signed.**
+- **A · `shelf_breakdown_short`: signed by borst, 2026-11-16** ("sign both", in a Claude session). Registered in
+  `readPipeline.mjs` from 2026-11-17T00:00:00Z, side SHORT.
+- **B · `bb_rsi_momentum`: signed by borst, 2026-11-16** ("sign both", in a Claude session). Registered in
+  `readPipeline.mjs` from 2026-11-17T00:00:00Z, both sides.
 
-On signing, one PR: each signed body moves unchanged into `explorerReads.mjs`, joins axisbt `AXES`, `readPipeline.mjs`
-(registered at the next 00:00 UTC) and `pipeline-stages.json`, and the text above "Results" is pinned by sha256.
+The signed bodies moved unchanged into `explorerReads.mjs` and joined axisbt `AXES` and `pipeline-stages.json`; the text
+above "Results" is pinned by sha256 (`explorerReads.test.mjs`).
 
 ## Results
 

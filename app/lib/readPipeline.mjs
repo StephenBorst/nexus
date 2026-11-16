@@ -160,6 +160,26 @@ const CODED_READS = Object.freeze([
     gradedExit: true,
     paperWallet: null,
   }),
+  // Scanner reads, signed by borst 2026-11-16 in session ("sign both"): the two Bankr scanners' entry rules, so the
+  // scoreboard runs them itself from public price. Their calls are graded apart, from a dedicated engine wallet.
+  Object.freeze({
+    axis: "shelf_breakdown_short",
+    side: "SHORT",
+    registeredAt: "2026-11-17T00:00:00Z",
+    doc: "docs/research/scanner-reads-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
+  Object.freeze({
+    axis: "bb_rsi_momentum",
+    side: "BOTH",
+    registeredAt: "2026-11-17T00:00:00Z",
+    doc: "docs/research/scanner-reads-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
 ]);
 
 // A paper wallet the owner registered with a signature (paperClaim.mjs), written into git by the watcher

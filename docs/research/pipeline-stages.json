@@ -67,6 +67,16 @@
       "stage": "REGISTERED",
       "next": "24 more out-of-sample events",
       "events": 6
+    },
+    "shelf_breakdown_short": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
+    },
+    "bb_rsi_momentum": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
     }
   },
   "gradedExit": {
