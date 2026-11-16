@@ -1033,6 +1033,10 @@ export const OVERLAP_PAIRS = Object.freeze([
   // The same rule on two windows (oi_div_reversal_4h runs oiDivReversalEvents with a 4h window): a 24h
   // fade usually contains a 4h one on the same coin and side, so stacked they are one bet.
   ["oi_div_reversal", "oi_div_reversal_4h"],
+  // A parent and its one-sided read (2026-11-16, one-sided-reads-prereg.md): every event of the side read is the
+  // parent's, so stacked they are one bet.
+  ["session_fade", "session_fade_short"],
+  ["oi_div_reversal_4h", "oi_div_reversal_4h_long"],
 ]);
 
 // ── OVERLAP: are two reads one bet? ────────────────────────────────────────────────────────

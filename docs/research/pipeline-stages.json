@@ -77,6 +77,16 @@
       "stage": "REGISTERED",
       "next": "30 more out-of-sample events",
       "events": 0
+    },
+    "session_fade_short": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
+    },
+    "oi_div_reversal_4h_long": {
+      "stage": "REGISTERED",
+      "next": "30 more out-of-sample events",
+      "events": 0
     }
   },
   "gradedExit": {

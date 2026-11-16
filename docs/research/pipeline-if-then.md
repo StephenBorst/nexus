@@ -99,6 +99,17 @@ Registered, halves disagree, and this page had no rule for it)
 - When it clears, the watcher removes the lock and the served stage's own section applies again, one PR per trigger.
 - Each lock change (set, a pass, a reset, cleared) is its own watcher PR, record only.
 
+**Each side on its own** (added 2026-11-16, borst; after the 2026-11-16 engine review found level_reclaim and
+oi_div_reversal_4h had reached Paper on one side while the other side trailed its own random entry)
+- A two-sided read reaches Edge only if, on the main card, each side with 20 or more out-of-sample events also beats
+  at least 50% of that side's own random replays. The pooled 95% bar stays as it was. One-sided reads already meet it.
+- Why: in a trending market, a read that fires mostly on one side can beat a pooled random entry on that side alone
+  while its other side does worse than a coin flip on the tide. Both reads above passed that way (shorts beat 13% and
+  24% of random shorts).
+- The rule lives in `PIPELINE_RULES` (`sideMinEvents`, `sidePct`) and `pipelineStage`; `read-pipeline.md` says it in
+  words. No read was served Edge or higher when it was added, so no served stage moved.
+- A Lead held back by it reads, under "next", which side trails and by how much.
+
 ## Stacks
 
 Two reads may be combined only once both are Leads, and only if the scoreboard's `overlap` block shows they aren't

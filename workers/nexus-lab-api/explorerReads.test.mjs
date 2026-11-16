@@ -10,6 +10,7 @@ import {
   btcLeadLagEvents, LEAD_LAG, fundingBasisSplitEvents, SPLIT, h4AtrAtHour, denseHours,
   smartConsensus2xEvents, CONSENSUS_2X,
   shelfBreakdownShortEvents, bbRsiMomentumEvents, trend4hByHour, rsiByHour, SHELF, BBM,
+  sessionFadeShortEvents, oiDivReversal4hLongEvents,
 } from "./explorerReads.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { hourBucket } from "../../app/lib/basisStack.mjs";
@@ -26,7 +27,7 @@ test("an explorer is on the scoreboard only once registered, and every registrat
   const registered = new Set(REGISTERED_READS.map((r) => r.axis));
   for (const n of Object.keys(EXPLORER_GENS)) assert.ok(!graded.has(n) || registered.has(n), `${n} is graded but not registered`);
   for (const n of registered) assert.ok(graded.has(n), `${n} is registered but not on the scoreboard`);
-  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "level_reclaim_tight", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_fade", "session_momentum", "spot_absorb"].concat("btc_lead_lag", "funding_basis_split", "smart_consensus_2x", "shelf_breakdown_short", "bb_rsi_momentum").sort());
+  assert.deepEqual(Object.keys(EXPLORER_GENS).sort(), ["confluence_follow", "level_reclaim", "level_reclaim_tight", "oi_coil_break", "oi_div_reversal", "oi_div_reversal_4h", "session_fade", "session_momentum", "spot_absorb"].concat("btc_lead_lag", "funding_basis_split", "smart_consensus_2x", "shelf_breakdown_short", "bb_rsi_momentum", "session_fade_short", "oi_div_reversal_4h_long").sort());
   assert.ok(!("vol_breakout" in EXPLORER_GENS), "dropped for v1");
 });
 
@@ -767,4 +768,65 @@ test("no lookahead: events on a cut tape are the full tape's events up to the cu
       assert.deepEqual(part, full.filter((e) => e.t <= T0 + (cut + 1) * H));
     }
   }
+});
+
+// ── session_fade_short + oi_div_reversal_4h_long (registered 2026-11-16, one-sided-reads-prereg.md) ─────────────────
+const ONE_SIDED_PAGE_SHA256 = "ad13b2c857e07dc3d058dbb284147c2a3b5f90715ddd2edd9fda640619b52600";
+
+test("one-sided reads: registered from 2026-11-17 on one side, one bet with the parent, the page pinned above Results", async () => {
+  const { createHash } = await import("node:crypto");
+  const { readFileSync } = await import("node:fs");
+  const { OVERLAP_PAIRS } = await import("./axisbt.mjs");
+  for (const [axis, side, parent] of [["session_fade_short", "SHORT", "session_fade"], ["oi_div_reversal_4h_long", "LONG", "oi_div_reversal_4h"]]) {
+    const reg = REGISTERED_READS.find((r) => r.axis === axis);
+    assert.equal(reg.registeredAt, "2026-11-17T00:00:00Z");
+    assert.equal(reg.doc, "docs/research/one-sided-reads-prereg.md");
+    assert.ok(reg.holdout && reg.gradedExit && !reg.paperWallet && reg.side === side);
+    assert.ok(OVERLAP_PAIRS.some((p) => p[0] === parent && p[1] === axis), `${parent} × ${axis} is one bet`);
+  }
+  const doc = readFileSync(new URL("../../docs/research/one-sided-reads-prereg.md", import.meta.url), "utf8");
+  const above = doc.slice(0, doc.indexOf("## Results"));
+  assert.equal(createHash("sha256").update(above).digest("hex"), ONE_SIDED_PAGE_SHA256);
+  assert.match(above, /Both signed by borst 2026-11-16/);
+  assert.match(above, /Out-of-sample events for both start at 2026-11-17T00:00:00Z/);
+  assert.match(above, /These were found by reading outcomes/);
+});
+
+// A tape with NY-open drives both ways and sharp 4h moves on falling OI both ways.
+function bothWaysTape(n = 24 * 90) {
+  let s = 7 >>> 0;
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32; };
+  let p = 100, oi = 1e6;
+  const candleHist = [], oiHist = [];
+  for (let i = 0; i < n; i++) {
+    const o = p; p *= 1 + (rnd() - 0.5) * (rnd() < 0.08 ? 0.09 : 0.012);
+    oi *= 1 + (rnd() - 0.55) * 0.03;
+    candleHist.push({ t: T0 + i * H, o, h: Math.max(o, p) * 1.002, l: Math.min(o, p) * 0.998, c: p, v: 100 });
+    oiHist.push({ t: T0 + i * H, price: p, oi, funding: 0.0001 });
+  }
+  return { coin: "ETH", candleHist, oiHist };
+}
+
+test("one-sided reads: exactly the parent's events on that side, from the exported bodies and the scoreboard's", () => {
+  const cs = bothWaysTape();
+  const key = (e) => `${e.t}|${e.side}`;
+  const fade = sessionFadeEvents(cs), oi4 = oiDivReversal4hEvents(cs);
+  assert.ok(fade.some((e) => e.side === "LONG") && fade.some((e) => e.side === "SHORT"), "the tape fires session_fade both ways");
+  assert.ok(oi4.some((e) => e.side === "LONG") && oi4.some((e) => e.side === "SHORT"), "the tape fires oi_div_reversal_4h both ways");
+  assert.deepEqual(sessionFadeShortEvents(cs).map(key), fade.filter((e) => e.side === "SHORT").map(key));
+  assert.deepEqual(oiDivReversal4hLongEvents(cs).map(key), oi4.filter((e) => e.side === "LONG").map(key));
+  // The registry runs each parent once per series and shares it: same events as the exported bodies, in any order.
+  for (const order of [["session_fade_short", "session_fade", "session_momentum"], ["session_momentum", "session_fade_short", "session_fade"]]) {
+    const fresh = { ...cs, candleHist: [...cs.candleHist], oiHist: [...cs.oiHist] };
+    for (const n of order) assert.deepEqual(EXPLORER_GENS[n](fresh).map(key), { session_fade_short: sessionFadeShortEvents, session_fade: sessionFadeEvents, session_momentum: sessionMomentumEvents }[n](cs).map(key), n);
+  }
+  const fresh = { ...cs, oiHist: [...cs.oiHist] };
+  assert.deepEqual(EXPLORER_GENS.oi_div_reversal_4h_long(fresh).map(key), oiDivReversal4hLongEvents(cs).map(key));
+  assert.deepEqual(EXPLORER_GENS.oi_div_reversal_4h(fresh).map(key), oi4.map(key));
+  // A caller can't change what the next caller gets.
+  EXPLORER_GENS.oi_div_reversal_4h(fresh).length = 0;
+  assert.deepEqual(EXPLORER_GENS.oi_div_reversal_4h(fresh).map(key), oi4.map(key));
+  // A cut series is a new run, never the cached full one (no lookahead through the cache).
+  const cut = { ...fresh, oiHist: fresh.oiHist.slice(0, 24 * 45) };
+  assert.deepEqual(EXPLORER_GENS.oi_div_reversal_4h_long(cut).map(key), oiDivReversal4hLongEvents(cut).map(key));
 });
