@@ -74,6 +74,9 @@ product is what sits on top:
   **Lab panels in chat (2026-11-15, `app/lib/copilotLab.mjs`):** `get_funding_venues` (/intel/funding-venues), `get_calendar`
   (/intel/calendar, UTC) and `get_book_risk`'s `desk` (the risk desk's `riskDesk()` from `useRiskDesk`, in the browser) are shaped
   by the panels' own rules; unread sources stay named.
+  **Words (2026-11-16, `app/lib/copilotWords.test.mjs`):** every model-facing string is checked sentence by sentence: no
+  "proven"/"provably"/"+EV"/"funding-edge"/"guaranteed", and "edge" only beside a denial, the grade, or the user's own record.
+  **Token readout:** each answer shows "N in (X% from cache) · M out" (`usageLine`, anthropicTurn.mjs; Anthropic paths only).
   Bounded tool loop (max 5), models listed live from the key, thesis drafts via localStorage `nexus_thesis_draft` →
   `/lab?tab=thesis` (bare ticker, not `PERP_`). Its prompt must not call PREDICTIVE an edge or suggest inverting a read.
   **Grades (2026-11-14, pinned by `app/lib/assistantGrades.test.mjs`):** `get_market_read` = the drawer's

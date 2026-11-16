@@ -343,7 +343,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_carry_sleeve",
     description:
-      "Get the HOUSE CARRY SLEEVE: Nexus's OWN market-neutral funding-carry strategy, run transparently in PAPER with a live equity curve on /proof. It longs the most-negative-funding perp and shorts the most-positive WITHIN each sector, so market moves cancel and funding income survives — the one +EV edge the team found after backtesting its own strategies in public (directional prediction was a dead end; we showed the receipts). Use for 'what is the carry sleeve', 'how is the house strategy doing', 'is the funding-carry edge real', or to tell the transparency story. Key field: carry share % = how much of the P&L is funding vs price — high means it's real carry, not price luck.",
+      "Get the HOUSE CARRY SLEEVE: Nexus's OWN market-neutral funding-carry strategy, run transparently in PAPER with a live equity curve on /proof. It longs the most-negative-funding perp and shorts the most-positive WITHIN each sector, so market moves cancel and funding income is what's left. It is the strategy the team kept after backtesting its own in public (directional prediction backtested as a dead end; the receipts are on /proof), and it is still a PAPER record, not a graded edge: say so. Use for 'what is the carry sleeve', 'how is the house strategy doing', 'is funding carry working', or to tell the transparency story. Key field: carry share % = how much of the P&L is funding vs price — high means it's real carry, not price luck.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
       const res = await fetch(`${CARRY_API}/carry/status`);
@@ -765,7 +765,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "get_contrarians",
     description:
-      "Get the CONTRARIANS board: callers who are provably RIGHT when they FADE the crowd — ranked by their record on calls made AGAINST the merit-weighted consensus lean that preceded them (graded from persisted stance snapshots, first-touch vs public price). The purest 'right when everyone's wrong' signal. Use for 'who's the best contrarian', 'who's right fading the crowd', or to find non-consensus edge. Sparse until stance history accrues.",
+      "Get the CONTRARIANS board: callers ranked by their graded record on calls made AGAINST the merit-weighted consensus lean that preceded them (graded from persisted stance snapshots, first-touch vs public price). Report each record with its sample size; a short record is not a skill. Use for 'who's the best contrarian', 'who's right fading the crowd'. Sparse until stance history accrues.",
     input_schema: { type: "object", properties: {} },
     run: async () => {
       const res = await fetch(`${AGENT_API}/theses/contrarians`);
@@ -1056,7 +1056,7 @@ TOOLS.push(
   {
     name: "open_autocopy",
     description:
-      "Open the autonomous-agent leaderboard (TOP AGENTS) in the Lab, where the user can ⚡ Autocopy a proven agent — their OWN agent then mirrors the leader's trades at their own size, mode and guardrails, graded on-chain (trustless copy-trading). Use when the user wants to copy/follow a top-performing agent, or asks 'who should I copy' after get_top_agents.",
+      "Open the autonomous-agent leaderboard (TOP AGENTS) in the Lab, where the user can ⚡ Autocopy an agent from the board (each row carries its record; say how many trades it rests on) — their OWN agent then mirrors the leader's trades at their own size, mode and guardrails, graded on-chain (trustless copy-trading). Use when the user wants to copy/follow an agent from the board, or asks 'who should I copy' after get_top_agents (relay the records, never a recommendation).",
     input_schema: { type: "object", properties: {} },
     run: async (_args, ctx) => {
       ctx.navigate?.(`/lab?tab=agent`);
@@ -1067,12 +1067,12 @@ TOOLS.push(
   {
     name: "open_mispriced",
     description:
-      "Open the MISPRICED / funding-edge board — markets ranked by how stretched positioning is, with the sharp-callers' merit-weighted lean beside each (it now lives in the SMART MONEY tab: fade the crowd + follow the sharp, one place). Use when the user wants to browse what's mispriced / where funding is extreme. Read-only; places no order.",
+      "Open the MISPRICED board (funding stretch, not a graded edge: the plain fade grades NOISE) — markets ranked by how stretched funding is, with the sharp-callers' merit-weighted lean beside each (it now lives in the SMART MONEY tab). Use when the user wants to browse what's mispriced / where funding is extreme. Read-only; places no order.",
     input_schema: { type: "object", properties: {} },
     run: async (_args, ctx) => {
       ctx.navigate?.(`/lab?tab=smart`);
       try { window.dispatchEvent(new CustomEvent("nexus:lab-tab", { detail: { tab: "smart" } })); } catch { /* deep-link handles it */ }
-      return JSON.stringify({ navigated: "/lab?tab=smart", note: "Opened Smart Money — smart-wallet follow up top, the funding-edge fade board below. Rows can be drafted into a thesis." });
+      return JSON.stringify({ navigated: "/lab?tab=smart", note: "Opened Smart Money — smart-wallet follow up top, the stretched-funding board below (an input, not a graded edge). Rows can be drafted into a thesis." });
     },
   },
   {
