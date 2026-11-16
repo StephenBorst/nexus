@@ -77,7 +77,7 @@ test("registrations: future-dated when written, one per axis, each with a doc th
 test("the pipeline doc states the same numbers as the code", () => {
   const doc = readFileSync(join(ROOT, "docs/research/read-pipeline.md"), "utf8");
   const R = PIPELINE_RULES;
-  for (const s of [`${R.minEvents} out-of-sample events`, `${R.edgePct}%`, `${R.holdoutMinEvents} holdout events`, `${R.holdoutPct}%`, `${R.exitMinTrades} trades`, `${R.killEvents} out-of-sample events`]) {
+  for (const s of [`${R.sideMinEvents} out-of-sample events on the main card to beat at least ${R.sidePct}% of its own random replays`, `${R.minEvents} out-of-sample events`, `${R.edgePct}%`, `${R.holdoutMinEvents} holdout events`, `${R.holdoutPct}%`, `${R.exitMinTrades} trades`, `${R.killEvents} out-of-sample events`]) {
     assert.ok(doc.includes(s), `read-pipeline.md must say "${s}"`);
   }
 });
@@ -94,4 +94,31 @@ test("a two-sided read is judged on the pooled random result, not one side", () 
   assert.match(pipelineStage(both, { ...main, random: pooled(94) }, hold).next, /random entries/);
   const dead = pipelineStage(both, { r: { samples: 120, meanR: 0.1, stable: true }, random: pooled(2, "BELOW_RANDOM") }, null);
   assert.equal(dead.stage, "RETIRED");
+});
+
+// borst 2026-11-16 (pipeline-if-then.md "Each side on its own"): a two-sided read reaches EDGE only if each side with
+// ≥ 20 out-of-sample events beats ≥ 50% of its own random replays, on top of the pooled 95%.
+test("a two-sided read can't reach EDGE on one side while the other trails its own random", () => {
+  const both = { ...REG, side: "BOTH" };
+  const rand = (pooled, L, S) => ({ pooled: { pctBeaten: pooled, verdict: "BEATS_RANDOM" }, bySide: { LONG: L, SHORT: S } });
+  const hold = { r: { samples: 40, meanR: 0.2, stable: true }, random: { pooled: { pctBeaten: 85 } } };
+  const main = (random) => ({ r: { samples: 99, meanR: 0.12, stable: true }, random, exitGraded: null });
+  // level_reclaim on 2026-11-16: pooled 98.3%, longs 100% (73), shorts 13.2% (26) → held at LEAD, the next line says why.
+  const lr = pipelineStage(both, main(rand(98.3, { n: 73, pctBeaten: 100 }, { n: 26, pctBeaten: 13.2 })), hold);
+  assert.equal(lr.stage, "LEAD");
+  assert.match(lr.next, /shorts beat ≥ 50% of random shorts \(now 13\.2%\)/);
+  assert.doesNotMatch(lr.next, /beat 95% of random entries/, "the pooled bar is met; only the trailing side is named");
+  // A thin trailing side (< 20 events) doesn't block; both sides at ≥ 50% don't block.
+  assert.equal(pipelineStage(both, main(rand(97, { n: 80, pctBeaten: 99 }, { n: 19, pctBeaten: 5 })), hold).stage, "EDGE");
+  assert.equal(pipelineStage(both, main(rand(97, { n: 60, pctBeaten: 99 }, { n: 39, pctBeaten: 50 })), hold).stage, "EDGE");
+  // Both failing: the pooled line and the side are both named.
+  const two = pipelineStage(both, main(rand(90, { n: 60, pctBeaten: 99 }, { n: 39, pctBeaten: 30 })), hold);
+  assert.match(two.next, /beat 95% of random entries \(now 90%\) · shorts beat ≥ 50%/);
+  // A one-sided read is judged on its side only; the per-side rule adds nothing.
+  const one = { ...REG, side: "LONG" };
+  assert.equal(pipelineStage(one, main({ bySide: { LONG: { n: 99, pctBeaten: 96 }, SHORT: { n: 50, pctBeaten: 1 } } }), { ...hold, random: { bySide: { LONG: { pctBeaten: 85 } } } }).stage, "EDGE");
+  assert.deepEqual([PIPELINE_RULES.sideMinEvents, PIPELINE_RULES.sidePct], [20, 50]);
+  const page = readFileSync(join(ROOT, "docs/research/pipeline-if-then.md"), "utf8");
+  assert.match(page, /\*\*Each side on its own\*\* \(added 2026-11-16, borst/);
+  assert.match(page, /each side with 20 or more out-of-sample events also beats\n  at least 50% of that side's own random replays/);
 });

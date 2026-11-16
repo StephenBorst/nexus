@@ -445,7 +445,15 @@ product is what sits on top:
   engine wallets + registered reads), the scoreboard's own generators on its coins' `candle:hist` vs its public calls:
   POSTED (same coin + side, bar open → close + 2h, one call per setup) / SKIPPED / PENDING / OFF-RULE; unread tape =
   named, never a skip. Measurement only; /proof prints the line on the engine row. Never loosen the match to close a gap.
+  **One-sided reads** (`one-sided-reads-prereg.md`, SIGNED by borst 2026-11-16, from 2026-11-17T00:00Z): `session_fade_short`
+  and `oi_div_reversal_4h_long` = the parent's exact event on one side (found by reading outcomes, so counted forward only;
+  overlap pairs with their parents). The registry runs each parent once per input series and shares it (`sharedRun`,
+  explorerReads.mjs; session_momentum + session_fade too); each shared body names its rule in `.source`.
   `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
+- **Each side on its own** (borst 2026-11-16, pipeline-if-then.md, `PIPELINE_RULES.sideMinEvents` 20 / `sidePct` 50): a
+  two-sided read reaches EDGE only if each side with ≥ 20 oos main-card events also beats ≥ 50% of its own random replays;
+  `next` names the trailing side. Added after the engine review found level_reclaim / oi_div_reversal_4h reached PAPER on
+  their longs while their shorts trailed random shorts (13% / 24%). No served stage moved.
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.
 - **Regime window** (`docs/research/graded-exit-regime-prereg.md`, signed 2026-10-26; counts from 2026-10-27T00:00Z,
   limit 2027-04-27): the same read + graded exit, judged once by the watcher via `judgeRegimeWindow`

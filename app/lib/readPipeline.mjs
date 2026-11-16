@@ -11,7 +11,9 @@
 //               counts toward a stage.
 //   LEAD        ≥ minEvents R-graded events, mean R > 0, first half and second half agree in sign.
 //   EDGE        LEAD + beats ≥ edgePct of random entries on its own side (main card; a two-sided read,
-//               side "BOTH", on the pooled result)
+//               side "BOTH", on the pooled result, AND each of its sides with ≥ sideMinEvents events beats
+//               ≥ sidePct of that side's own random replays: borst 2026-11-16, pipeline-if-then.md
+//               "Each side on its own", so one strong side can't carry a side that trails the tide)
 //               + REPLICATES on the holdout coins: ≥ holdoutMinEvents, mean R > 0, beats ≥
 //               holdoutPct of random entries on the same side. Replication is the multiple-testing
 //               guard (borst's pick): a read that only works on the coins it was found on stops here.
@@ -31,6 +33,9 @@ export const PIPELINE_RULES = Object.freeze({
   holdoutPct: 80,
   exitMinTrades: 30,
   killEvents: 100,
+  // borst 2026-11-16: a two-sided read reaches EDGE only if neither side trails its own random entry.
+  sideMinEvents: 20,
+  sidePct: 50,
 });
 
 export const STAGES = Object.freeze(["REGISTERED", "LEAD", "EDGE", "TRADEABLE", "PAPER", "RETIRED"]);
@@ -180,6 +185,27 @@ const CODED_READS = Object.freeze([
     gradedExit: true,
     paperWallet: null,
   }),
+  // One-sided reads, signed by borst 2026-11-16 in session ("yes do 1 and 2, write the rules pages and sign"): a
+  // parent's exact event on one side. Found by reading the parents' per-side splits (closed data), so they count only
+  // from their own date. One bet with their parents (OVERLAP_PAIRS), never stacked.
+  Object.freeze({
+    axis: "session_fade_short",
+    side: "SHORT",
+    registeredAt: "2026-11-17T00:00:00Z",
+    doc: "docs/research/one-sided-reads-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
+  Object.freeze({
+    axis: "oi_div_reversal_4h_long",
+    side: "LONG",
+    registeredAt: "2026-11-17T00:00:00Z",
+    doc: "docs/research/one-sided-reads-prereg.md",
+    holdout: true,
+    gradedExit: true,
+    paperWallet: null,
+  }),
 ]);
 
 // A paper wallet the owner registered with a signature (paperClaim.mjs), written into git by the watcher
@@ -226,11 +252,17 @@ export function pipelineStage(reg, oos, holdout, rules = PIPELINE_RULES) {
   if (!(r.meanR > 0 && r.stable)) return { stage: "REGISTERED", reasons: [`mean R ${r.meanR}${r.stable ? "" : ", halves disagree"}`], next: "mean R > 0 with both halves agreeing", numbers };
 
   // LEAD reached. EDGE needs both the main-card random test and the holdout replication.
-  const mainOk = pct(rnd) != null && pct(rnd) >= rules.edgePct;
+  // A two-sided read: each side with enough events must also beat at least sidePct of its own random replays.
+  const trailing = side !== "BOTH" ? [] : ["LONG", "SHORT"].filter((sd) => {
+    const b = oos?.random?.bySide?.[sd];
+    return b && Number(b.n) >= rules.sideMinEvents && !(pct(b) != null && pct(b) >= rules.sidePct);
+  });
+  const mainOk = pct(rnd) != null && pct(rnd) >= rules.edgePct && !trailing.length;
   const holdOk = reg.holdout && hr.samples >= rules.holdoutMinEvents && hr.meanR > 0 && pct(hRnd) != null && pct(hRnd) >= rules.holdoutPct;
   if (!mainOk || !holdOk) {
     const need = [];
-    if (!mainOk) need.push(`beat ${rules.edgePct}% of random ${sideWord(side)} (now ${pct(rnd) ?? "—"}%)`);
+    if (!(pct(rnd) != null && pct(rnd) >= rules.edgePct)) need.push(`beat ${rules.edgePct}% of random ${sideWord(side)} (now ${pct(rnd) ?? "—"}%)`);
+    for (const sd of trailing) need.push(`${sd.toLowerCase()}s beat ≥ ${rules.sidePct}% of random ${sd.toLowerCase()}s (now ${pct(oos.random.bySide[sd]) ?? "—"}%)`);
     if (!reg.holdout) need.push("a holdout line");
     else if (hr.samples < rules.holdoutMinEvents) need.push(`${rules.holdoutMinEvents - hr.samples} more holdout events`);
     else if (!holdOk) need.push(`holdout mean R > 0 and ≥ ${rules.holdoutPct}% vs random (now ${hr.meanR}R, ${pct(hRnd) ?? "—"}%)`);

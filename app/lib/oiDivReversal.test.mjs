@@ -40,7 +40,9 @@ function tape(seed, hours = 2000) {
 test("the grader imports the shared rule (moved, not copied)", () => {
   assert.equal(grader.oiDivReversal4hEvents, oiDivReversal4hEvents);
   assert.equal(grader.oiDivReversalEvents, oiDivReversalEvents);
-  assert.equal(grader.EXPLORER_GENS.oi_div_reversal_4h, oiDivReversal4hEvents);
+  // The scoreboard runs it once per series and shares the run with oi_div_reversal_4h_long (2026-11-16): the registry
+  // body names the shared rule it runs, and returns its events unchanged (explorerReads.test.mjs, one-sided reads).
+  assert.equal(grader.EXPLORER_GENS.oi_div_reversal_4h.source, oiDivReversal4hEvents);
   assert.equal(grader.EXPLORER_GENS.oi_div_reversal, oiDivReversalEvents);
   assert.equal(grader.OI_DIV_4H, OI_DIV_4H);
   // the signed settings (oi-div-reversal-4h-prereg.md): 4h window, OI −2%, 12h cooldown, else the 24h rule's
