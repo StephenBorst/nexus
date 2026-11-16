@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   runRegWatch, registrationsFromLogs, judgeIndex, REGWATCH_KEY, GRACE_MS, MAX_TRIES, LOOKBACK_BLOCKS, SCAN_FAILS_ALERT,
+  makeLogsRpc, logsRpcUrls, scanForward, PUBLIC_LOGS_RPCS, CHUNK, MAX_CHUNKS, RETRY_WAITS_MS,
 } from "./regWatch.mjs";
 import { THESIS_REGISTRY } from "../../app/lib/registryEvent.mjs";
 
@@ -101,7 +102,7 @@ test("unconfirmed keeps trying, then is reported; a failed send is kept for the 
 test("first run looks back past the 6h window; later runs continue from the cursor", async () => {
   const env = { LAB_STORE: kv() };
   const c = chain({ latest: 1_000_000 });
-  const deps = { logsRpc: c.rpc, now: () => 0, index: async () => ({}), send: async () => true };
+  const deps = { logsRpc: c.rpc, now: () => 0, index: async () => ({}), send: async () => true, scanOpts: { sleep: async () => {} } };
   await runRegWatch(env, deps);
   const first = c.calls.find(([m]) => m === "eth_getLogs")[1][0];
   assert.equal(parseInt(first.fromBlock, 16), 1_000_000 - LOOKBACK_BLOCKS + 1);
@@ -129,5 +130,72 @@ test("wired on the */5 cron through the /theses/index path and the owner chat", 
   assert.match(five, /runRegWatch\(env, \{/);
   assert.match(five, /index: \(txHash, wallet\) => indexRegistration\(env, \{ txHash, wallet, rpc: indexRpc, readMark: readPublishMark \}\)/);
   assert.match(five, /send: \(text\) => sendOwner\(env, text\)/);
-  assert.match(five, /logsRpc: makeRpc\(\[DEFAULT_LOGS_RPC\]\)/, "getLogs on the public RPC (Alchemy's free tier allows 10 blocks)");
+  assert.match(five, /logsRpc: makeLogsRpc\(logsRpcUrls\(env\)\)/, "getLogs on ARBITRUM_RPC_URL / ARB_LOGS_RPC, then public endpoints");
+});
+
+// ── 2026-11-16: the public RPC answered 429 for 6 runs; own endpoint first, backoff, fallback, smaller ranges ──────
+const reply = (status, body) => ({ status, text: async () => (typeof body === "string" ? body : JSON.stringify(body)) });
+
+test("endpoints: the configured one first (either name, https only), then the public ones", () => {
+  assert.deepEqual(logsRpcUrls({}), [...PUBLIC_LOGS_RPCS]);
+  assert.deepEqual(logsRpcUrls({ ARBITRUM_RPC_URL: " https://arb.example/key123 " })[0], "https://arb.example/key123");
+  assert.deepEqual(logsRpcUrls({ ARB_LOGS_RPC: "https://logs.example/k" })[0], "https://logs.example/k");
+  assert.deepEqual(logsRpcUrls({ ARBITRUM_RPC_URL: "http://plain.example" }), [...PUBLIC_LOGS_RPCS], "no plain http");
+  assert.ok(PUBLIC_LOGS_RPCS.length >= 3);
+});
+
+test("a 429 waits and retries with growing waits, then moves to the next endpoint", async () => {
+  const hits = [], waits = [];
+  const fetchImpl = async (url) => {
+    hits.push(new URL(url).host);
+    if (url.includes("one")) return reply(429, "Too Many Requests");
+    return reply(200, { jsonrpc: "2.0", id: 1, result: "0x10" });
+  };
+  const rpc = makeLogsRpc(["https://one.example", "https://two.example"], { fetchImpl, sleep: async (ms) => { waits.push(ms); } });
+  assert.equal(await rpc("eth_blockNumber", []), "0x10");
+  assert.deepEqual(waits, [...RETRY_WAITS_MS], "backoff grows");
+  assert.deepEqual(hits, ["one.example", "one.example", "one.example", "one.example", "two.example"]);
+  hits.length = 0;
+  await rpc("eth_blockNumber", []);
+  assert.deepEqual(hits, ["two.example"], "the endpoint that answered is tried first next time");
+});
+
+test("a JSON-RPC rate-limit error body counts as a 429; a range refusal is thrown for the scanner", async () => {
+  let n = 0;
+  const fetchImpl = async () => (++n === 1 ? reply(200, { error: { code: -32005, message: "rate limit exceeded" } }) : reply(200, { error: { code: -32602, message: "query exceeds max block range 2000" } }));
+  const rpc = makeLogsRpc(["https://a.example"], { fetchImpl, sleep: async () => {} });
+  await assert.rejects(rpc("eth_getLogs", [{}]), /max block range/);
+  assert.equal(n, 2, "retried once after the rate limit, then got the range answer");
+});
+
+test("every endpoint limited = one error naming the host, never the key", async () => {
+  const rpc = makeLogsRpc(["https://arb.example/SECRETKEY"], { fetchImpl: async () => reply(429, "Too Many Requests"), sleep: async () => {} });
+  await assert.rejects(rpc("eth_blockNumber", []), (e) => /arb\.example: Too Many Requests/.test(e.message) && !/SECRETKEY/.test(e.message));
+});
+
+test("ranges: 10k blocks a call, halving on a range refusal; partial progress isn't blindness", async () => {
+  assert.equal(CHUNK, 10_000);
+  assert.ok(CHUNK * (MAX_CHUNKS - 3) >= LOOKBACK_BLOCKS, "the first run covers the lookback with room to halve");
+  const spans = [];
+  let calls = 0;
+  const rpc = async (m, p) => {
+    if (m === "eth_blockNumber") return "0x" + (100_000).toString(16);
+    const span = parseInt(p[0].toBlock, 16) - parseInt(p[0].fromBlock, 16) + 1;
+    spans.push(span);
+    if (span > 2_500) throw new Error("query exceeds max block range 2500");
+    if (++calls === 3) throw new Error("Too Many Requests");
+    return [];
+  };
+  const r = await scanForward(rpc, { scannedTo: 90_000 }, { sleep: async () => {} });
+  assert.deepEqual(spans.slice(0, 3), [10_000, 5_000, 2_500]);
+  assert.equal(r.progressed, true);
+  assert.match(r.error, /Too Many/);
+  // runRegWatch: progress + a late error = not a blind run
+  const env = { LAB_STORE: kv() };
+  await env.LAB_STORE.put(REGWATCH_KEY, JSON.stringify({ scannedTo: 90_000, scanFails: 5 }));
+  calls = 0; spans.length = 0;
+  const sent = [];
+  await runRegWatch(env, { logsRpc: rpc, now: () => 0, index: async () => ({}), send: async (m) => { sent.push(m); return true; }, scanOpts: { sleep: async () => {} } });
+  assert.equal(JSON.parse(env.LAB_STORE.m.get(REGWATCH_KEY)).scanFails, 0);
+  assert.deepEqual(sent, [], "no blind alert; it was only 5 runs, so no 'reads again' either");
 });

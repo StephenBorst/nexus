@@ -107,7 +107,7 @@ import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
 import { handleMarket, handleMarkets, handleFadeGrade } from "./routes-market.mjs";
 import { runWalletWatch } from "./walletWatch.mjs";
-import { runRegWatch } from "./regWatch.mjs";
+import { runRegWatch, makeLogsRpc, logsRpcUrls } from "./regWatch.mjs";
 import { handleBell, composeBell } from "./routes-bell.mjs";
 import { handleVenues } from "./routes-venues.mjs";
 import { handleEvents } from "./routes-events.mjs";
@@ -406,7 +406,7 @@ async function getNexusPriceUsd() {
 const ONCHAIN_TTL_MS = 5 * 60 * 1000;
 
 function arbLogsRpc(env) {
-  const url = env.ARB_LOGS_RPC || DEFAULT_LOGS_RPC;
+  const url = env.ARB_LOGS_RPC || env.ARBITRUM_RPC_URL || DEFAULT_LOGS_RPC;   // either name; regWatch reads both
   let id = 0;
   return async (method, params) => {
     const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params }) });
@@ -814,7 +814,7 @@ const worker = {
           try {
             const indexRpc = makeRpc([getArbRpc(env), "https://arb1.arbitrum.io/rpc"].filter((u, i, a) => a.indexOf(u) === i));
             const r = await runRegWatch(env, {
-              logsRpc: makeRpc([DEFAULT_LOGS_RPC]),
+              logsRpc: makeLogsRpc(logsRpcUrls(env)),   // ARBITRUM_RPC_URL first, then public endpoints, backoff on 429
               index: (txHash, wallet) => indexRegistration(env, { txHash, wallet, rpc: indexRpc, readMark: readPublishMark }),
               send: (text) => sendOwner(env, text),
             });
