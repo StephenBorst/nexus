@@ -138,7 +138,10 @@ product is what sits on top:
   it used to let everyone in, 2026-11-09). `carryBasket.mjs` is shared with `tools/backtest/relvalue4.mjs`. Read `README.md` before touching it.
   Its tests are split by concern; glob the dir.
 - **nexus-ledger-anchor**: hourly anchor + `runMonitor` (Telegram ops alerts: signer gas, ledger drift >6h, brain down
-  >15 min via `ops:brain:heartbeat`, exec down >10 min). `GET /monitor-now`.
+  >15 min via `ops:brain:heartbeat`, exec down >10 min, lab-api scheduler down >15 min via `ops:labapi:beat:m1`). `GET /monitor-now`.
+- **lab-api job heartbeats** (2026-11-16, `workers/nexus-lab-api/jobBeats.mjs`): the minute grader (every 5th minute), on-chain
+  watchdog, paper tape check, paper judge and scoreboard rebuild each stamp `ops:labapi:beat:{job}` (NEXUS_AGENT, one key per
+  job) after a run that finished; the daily digest's "Background jobs" line names any late one (`jobsLine`, own limits).
 - **nexus-lab-alerts**: alerts worker. Other legit CF apps: nexus-landing, orderly-proxy.
 - **Owner digest + alerts (lab-api, borst 2026-11-14, rules `app/lib/opsDigest.mjs`, runner `opsDigest.mjs`):** hourly at :49
   on the minute cron (after the :47 judge). READS the stored scoreboard, each paper wallet's state/config/signal, tape,

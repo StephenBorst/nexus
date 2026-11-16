@@ -167,6 +167,16 @@ async function runMonitor(env) {
     }
   } catch (e) { console.error("[monitor] exec:", e.message); }
 
+  // 3b2) lab-api's scheduler — its minute grader stamps ops:labapi:beat:m1 every 5 min (lab-api jobBeats.mjs). A stale
+  // stamp means calls stop being graded and lab-api's own digest/alerts stop too, so this monitor is the one that says so.
+  try {
+    const hb = await env.NEXUS_AGENT.get("ops:labapi:beat:m1");
+    if (hb) {
+      const ageMin = (Date.now() - Number(hb)) / 60000;
+      if (ageMin > 15) issues.push({ key: "labapi", msg: `🕒 lab-api scheduler down: the minute grader last finished <b>${ageMin.toFixed(0)} min</b> ago (every minute). Calls aren't being graded and the owner digest is silent.` });
+    }
+  } catch (e) { console.error("[monitor] labapi:", e.message); }
+
   // 3c) Carry engine liveness — the sleeve's hourly PAPER cron drives the funding-carry
   // record; a stall means it paused. If armed live, also surface a tripped kill switch or
   // rejected maker orders. HTTP-based (the carry KV is a separate namespace).
