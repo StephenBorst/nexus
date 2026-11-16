@@ -12,6 +12,7 @@
 // ⚠️ Pure move — logic byte-identical to what shipped.
 import { notifyResolution, notifyFillEvent } from "./resolutions.mjs";
 import { recordRisk } from "../../app/lib/recordRisk.mjs";
+import { halfRLevel } from "../../app/lib/callMath.mjs";
 import { fillEvents } from "./callStatus.mjs";
 import {
   gradeCall, entryFill, classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets,
@@ -120,7 +121,7 @@ export const statusOfCall = (t) => (t?.fillState === "EXPIRED" ? "EXPIRED" : gra
 //   GRADE_FIELDS — the grade and the fill: the hourly pass on an hourly call, the minute grader
 //                  (minuteGrader.mjs) on a minute-graded one.
 //   PLAN_FIELDS  — plan quality + regime, read from the hourly bars before the post: the hourly pass.
-export const GRADE_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "exitReason", "fillState", "filledAt", "tp1HitAt", "trailStop", "expiredAt", "expiredReason", "status"];
+export const GRADE_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "exitReason", "fillState", "filledAt", "tp1HitAt", "trailStop", "halfRAt", "expiredAt", "expiredReason", "status"];
 export const PLAN_FIELDS = ["planScore", "planFlags", "planV", "regimeTrend", "regimeVol", "regimeAlign"];
 export const PASS_FIELDS = [...GRADE_FIELDS, ...PLAN_FIELDS];
 
@@ -160,7 +161,7 @@ export function applyGrade(t, g, cd, nowMs = Date.now()) {
     delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.gradeV; delete t.exitedAt; delete t.exitReason;
     changed = true; regraded = true;
   }
-  const before = { fillState: t.fillState, tp1HitAt: t.tp1HitAt };
+  const before = { fillState: t.fillState, tp1HitAt: t.tp1HitAt, halfRAt: t.halfRAt };
   const fills = [];
   if (applyFillStamp(t, g, cd)) { changed = true; fills.push(...fillEvents(before, t)); }
   const status = statusOfCall(t);
@@ -195,8 +196,19 @@ export async function writePassFields(env, key, data, fieldsFor) {
 // A declared split whose TP1 half has closed also carries `tp1HitAt` (ms, the start of that hour)
 // while its runner is open. A graded or invalid call carries none of these: it's closed, or it's not
 // a call. Display only: nothing ranks on it. Returns true when the call changed.
+/** The start (sec) of the first bar after the fill that traded +0.5R, or null (callMath halfRLevel). */
+export function halfRReachedAt(t, cd, f) {
+  const lvl = halfRLevel(t);
+  if (lvl == null || !cd || !Array.isArray(cd.t)) return null;
+  const long = String(t.direction).toUpperCase() === "LONG";
+  for (let k = f.fillIdx >= 0 ? f.fillIdx + 1 : f.next; k < cd.t.length; k++) {
+    if (long ? cd.h[k] >= lvl : cd.l[k] <= lvl) return cd.t[k];
+  }
+  return null;
+}
+
 export function applyFillStamp(t, g, cd) {
-  const before = `${t.fillState}|${t.filledAt}|${t.tp1HitAt}`;
+  const before = `${t.fillState}|${t.filledAt}|${t.tp1HitAt}|${t.halfRAt}`;
   const trailBefore = t.trailStop;
   if (g && g.outcome === "PENDING") {
     const f = entryFill(t, cd);
@@ -205,10 +217,12 @@ export function applyFillStamp(t, g, cd) {
     if (g.tp1At) t.tp1HitAt = g.tp1At * 1000; else delete t.tp1HitAt;
     // A breakeven runner's trail while it's open (callMath beRunnerPlan): display + the minute trigger.
     if (Number(g.trail) > 0) t.trailStop = g.trail; else delete t.trailStop;
+    // +0.5R reached while open (callMath halfRLevel): the first bar after the fill that traded it. Kept once set.
+    if (f.filled && !t.halfRAt) { const at = halfRReachedAt(t, cd, f); if (at) t.halfRAt = at * 1000; }
   } else {
-    delete t.fillState; delete t.filledAt; delete t.tp1HitAt; delete t.trailStop;
+    delete t.fillState; delete t.filledAt; delete t.tp1HitAt; delete t.trailStop; delete t.halfRAt;
   }
-  return `${t.fillState}|${t.filledAt}|${t.tp1HitAt}` !== before || t.trailStop !== trailBefore;
+  return `${t.fillState}|${t.filledAt}|${t.tp1HitAt}|${t.halfRAt}` !== before || t.trailStop !== trailBefore;
 }
 
 // The hour a graded call closed (ms), from a re-grade on the same candles. Only when the re-grade

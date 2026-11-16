@@ -10,6 +10,8 @@
 // tp1HitAt, gradedOutcome), the DISTANCES from a live mark. A live mark through the entry is not a
 // fill until the grader says so (an hour's high/low decides that, not one mark read).
 // Pure; display and alerts only. Nothing here changes a grade.
+import { halfRLevel } from "../../app/lib/callMath.mjs";
+const round6 = (v) => Number(v.toPrecision(6));
 import { callLifecycle } from "../../app/lib/callLifecycle.mjs";
 import { callR, splitPlan } from "./logic.mjs";
 import { callInvalidReason } from "../../app/lib/callMath.mjs";
@@ -78,12 +80,13 @@ export function callStatusRow(t, mark) {
  * What the pass changed that the owner should hear about. `before` = the call's fillState and
  * tp1HitAt before the pass. A call filled AT the post isn't news (it was live from the start): FILL
  * is only a resting order that traded later (filledAt after the post).
- * @returns {("FILL"|"TP1")[]}
+ * @returns {("FILL"|"TP1"|"HALF_R")[]}
  */
 export function fillEvents(before, t) {
   const out = [];
   if (t.fillState === "OPEN" && before?.fillState !== "OPEN" && Number(t.filledAt) > Number(t.createdAt)) out.push("FILL");
   if (t.tp1HitAt && !before?.tp1HitAt) out.push("TP1");
+  if (t.halfRAt && !before?.halfRAt && !t.tp1HitAt) out.push("HALF_R");
   return out;
 }
 
@@ -98,6 +101,10 @@ export function fillEventMessage(t, kind) {
       return { type: "call_tp1", message: `${sym} ${dir} reached TP1 ${t.takeProfit1}${banked} · runner open${to}, its stop moved to the entry ${t.entryPrice} and trails 1R behind the best close` };
     }
     return { type: "call_tp1", message: `${sym} ${dir} reached TP1 ${t.takeProfit1}${banked} · runner open to ${t.takeProfit2}, stop ${t.stopLoss}` };
+  }
+  if (kind === "HALF_R") {
+    const lvl = halfRLevel(t);
+    return { type: "call_halfr", message: `${sym} ${dir} is +0.5R${lvl ? ` (${round6(lvl)})` : ""} · still open: graded at TP1 ${t.takeProfit1} or the stop ${t.stopLoss}` };
   }
   if (kind === "EXPIRED") {
     const why = t?.expiredReason === "STOP_FIRST" ? `the stop ${t.stopLoss} traded before the entry` : `the entry ${t.entryPrice} didn't trade within ${t.fillWithinH}h`;

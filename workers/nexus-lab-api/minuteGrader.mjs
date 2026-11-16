@@ -48,7 +48,7 @@ export function needsRegrade(meta, { range, nowMs, full = false }) {
   if (!range) return false;
   // A breakeven runner past TP1: its trail moves with every close, so any new bar can settle it.
   if (meta.be && meta.h) return true;
-  return [meta.e, meta.sl, meta.t1, meta.t2].some((px) => Number(px) > 0 && range.lo <= px && px <= range.hi);
+  return [meta.e, meta.sl, meta.t1, meta.t2, meta.hr].some((px) => Number(px) > 0 && range.lo <= px && px <= range.hi);
 }
 
 /**

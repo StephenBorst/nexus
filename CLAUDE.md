@@ -571,6 +571,10 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   runner (`meta.be` + `meta.h`, any new bar). On-chain tags `#SPLIT_50_BE` / `#FILL_<N>H`, matched EXACTLY (a substring
   match would read `#SPLIT_50_BE` as `#SPLIT_50`). BE refuses a time stop. Thesis Engine: EXIT PLAN + ORDER EXPIRES
   pickers in Fine-tune (`quickCall.mjs` `EXIT_MODES`, `FILL_WINDOWS` 4/12/24); copies keep both (`copiedFillWindow`).
+- **+0.5R reached** (2026-11-16, `callMath halfRLevel`, `HALF_R_FROM_MS` 06:00Z that day, forward-only): an OPEN call whose
+  bar after the fill trades entry ± 0.5 × its own risk gets `halfRAt` (server field, kept once set) and ONE `call_halfr`
+  note ("ETH LONG is +0.5R (105) · still open: graded at TP1 … or the stop …"), push topic `calls`. Never for TP1 ≤ +0.5R,
+  never after TP1. Display + alert only: no stop or grade moves. The minute index carries `hr` until it's reached.
 - **Cards** re-read an open call every 30 s on its own page (`callPollMs`, stops once graded). They read R:R from the levels (`callRR`), show a position only once the entry trades (`callLifecycle.mjs`,
   `AwaitingFill.tsx`), and show NOT GRADED for INVALID. `/feed` carries resolution rows: filter them before treating rows as calls.
 - **One call, one wallet:** the Lab device cache is per wallet (`app/lib/labCache.mjs`); copies held by other wallets

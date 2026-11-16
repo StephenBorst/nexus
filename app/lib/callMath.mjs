@@ -104,6 +104,19 @@ export function fillWindowPlan(t) {
   return { hours: h };
 }
 
+// ── +0.5R reached (2026-11-16): a heads-up while a call is open, never a grade ───────────────────
+// The price at +0.5R (half the call's own risk past the entry, its way) and whether a bar reached it. Display +
+// one alert only: nothing moves the stop or the grade. Not for calls whose TP1 is at or under +0.5R (TP1 comes
+// first there), and only for calls published from HALF_R_FROM_MS, so an open call already past it isn't
+// announced late.
+export const HALF_R_FROM_MS = Date.UTC(2026, 10, 16, 6);   // 2026-11-16T06:00Z
+export function halfRLevel(t) {
+  if (!(Number(t?.createdAt) >= HALF_R_FROM_MS)) return null;
+  const e = num(t?.entryPrice), s = num(t?.stopLoss), r1 = callRR(t);
+  if (!(e > 0 && s > 0) || r1 == null || !(r1 > 0.5)) return null;
+  return isLong(t) ? e + 0.5 * (e - s) : e - 0.5 * (s - e);
+}
+
 /** Why a call never filled, as stored by the grader (`expiredReason`). */
 export const EXPIRED = "EXPIRED";
 export const EXPIRE_TIME = "TIME";
