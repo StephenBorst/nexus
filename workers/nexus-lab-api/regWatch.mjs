@@ -17,7 +17,7 @@ export const REGWATCH_KEY = "onchain:regwatch:v1";
 export const GRACE_MS = 5 * 60_000;        // the publisher's own index gets this long first
 export const LOOKBACK_BLOCKS = 110_000;    // first run: ~7.5h of Arbitrum (~0.25 s blocks), past the 6h index window
 export const CHUNK = 10_000;                // blocks per eth_getLogs (~40 min of Arbitrum); halves on a range refusal
-export const MIN_CHUNK = 500;
+export const MIN_CHUNK = 500;              // halving stops here; an endpoint capped below PROVIDER_MIN_SPAN is skipped first
 export const MAX_CHUNKS = 14;              // first run covers LOOKBACK_BLOCKS in ≤ 11 calls; a normal run needs 1
 export const CALL_GAP_MS = 250;            // between getLogs calls: shared public endpoints rate-limit bursts
 export const MAX_INDEX_PER_RUN = 5;        // subrequest budget: each index is ~4 RPC reads + KV
@@ -47,6 +47,21 @@ export function logsRpcUrls(env = {}) {
     .filter((u) => /^https:\/\/\S+$/.test(u));
   return [...new Set([...own, ...PUBLIC_LOGS_RPCS])];
 }
+
+// An endpoint that won't serve this request at all (2026-11-16: publicnode without its free Allnodes token answers
+// "Archive requests require a personal token" to any eth_getLogs past ~10 blocks; others want a key or a paid plan).
+// That isn't the chain's answer, so the next endpoint is tried instead of the watchdog going blind.
+export function isProviderRefusal(msg, status) {
+  return status === 401 || status === 403
+    || /archive|personal token|api.?key|unauthori[sz]ed|forbidden|not (supported|allowed|available)|method not found|upgrade|paid plan|requires? (a )?(token|key|plan|subscription)/i.test(String(msg || ""));
+}
+// A provider whose eth_getLogs cap is below this many blocks can't keep up (a normal 5-min run needs ~1,200).
+export const PROVIDER_MIN_SPAN = 2_000;
+const logSpan = (method, params) => {
+  if (method !== "eth_getLogs") return null;
+  const f = parseInt(params?.[0]?.fromBlock, 16), t = parseInt(params?.[0]?.toBlock, 16);
+  return Number.isFinite(f) && Number.isFinite(t) ? t - f + 1 : null;
+};
 
 export function isRateLimited(msg, status) {
   return status === 429 || /rate.?limit|too many requests|\b429\b|exceeded.*(capacity|quota)/i.test(String(msg || ""));
@@ -79,7 +94,13 @@ export function makeLogsRpc(urls, { fetchImpl = globalThis.fetch, sleep = (ms) =
           if (attempt < waits.length) { await sleep(waits[attempt]); continue; }
           break;                                          // still limited: next endpoint
         }
-        if (body && body.error) { const e = new Error(msg); e.rpcError = body.error; throw e; } // an answer (e.g. range)
+        if (isProviderRefusal(msg, status)) break;       // this endpoint won't serve it: next endpoint
+        if (body && body.error && isRangeError(msg)) {
+          const span = logSpan(method, params);
+          if (span != null && span <= PROVIDER_MIN_SPAN) break; // capped too small to keep up: next endpoint
+          const e = new Error(msg); e.rpcError = body.error; throw e;                  // the scanner halves the range
+        }
+        if (body && body.error) { const e = new Error(msg); e.rpcError = body.error; throw e; } // the chain's answer
         break;                                            // network / http error: next endpoint
       }
     }
