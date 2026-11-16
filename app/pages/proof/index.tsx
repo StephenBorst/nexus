@@ -20,6 +20,7 @@ import { callsRecordLine, callersLine, PLAIN_WORDS, engineNote } from "@/lib/pro
 import { ruleCheckFor, ruleCheckLine } from "@/lib/ruleCheck.mjs";
 import { engineBeat, ENGINE_QUIET_H } from "@/lib/engineBeat.mjs";
 import SignalBoard, { type Scorecard } from "./SignalBoard";
+import WeeklyScorecard from "./WeeklyScorecard";
 import { pressKey } from "@/utils/a11y";
 
 const API = "https://og.nexustradinglabs.com";
@@ -192,6 +193,8 @@ export default function ProofPage() {
 
       {/* 2 · THE SIGNALS — the ones being tested, then the rest folded. The misses stay on it. */}
       <SignalBoard scorecard={scorecard} />
+      {/* The week, frozen: one snapshot per week with its sha256 (weeklyScorecard.mjs, pipeline-if-then.md). */}
+      <div style={{ marginTop: 18 }}><WeeklyScorecard /></div>
 
       {/* 3 · GRADED CALLS + VERIFIED CALLERS — the human record, traced call by call. */}
       <section style={{ marginTop: 44 }}>

@@ -110,6 +110,20 @@ oi_div_reversal_4h had reached Paper on one side while the other side trailed it
   words. No read was served Edge or higher when it was added, so no served stage moved.
 - A Lead held back by it reads, under "next", which side trails and by how much.
 
+**Weekly scorecard** (added 2026-11-16, borst; "a weekly scorecard for everyone on /proof", signed in session)
+- Once a week, after Monday 00:00 UTC, lab-api writes one snapshot of the week that just closed and publishes its sha256.
+  A written week is never rewritten. Anyone can hash `GET /proof/weekly/<week>` and match the published hash.
+- It may show, for each registered read: events since registration and new this week, mean R, and each side against a
+  random entry on that side, all on new data only and labelled "not a grade". It also shows stage moves. This is an
+  exception to "What we say" for that one panel only. The read's row on the board stays as above.
+- Paper runs appear as counts only: trades closed this week, targets, stops and time stops, n of 30, and the recorded
+  verdict. No average or sum of R before the 30-trade judgment, as the judgment pages say.
+- Graded calls appear with people and our engines apart: count, wins, net R, and the median of how far calls went
+  against and for them (MAE / MFE in R), only from calls the grader stamped with a path. Never for paper runs.
+- No split by regime until the trend-gate study's judge is built and has judged.
+- It claims nothing beyond the numbers: no "edge", no "proven", no headline. If the board can't be read, no week is
+  written and the panel says so.
+
 ## Stacks
 
 Two reads may be combined only once both are Leads, and only if the scoreboard's `overlap` block shows they aren't
