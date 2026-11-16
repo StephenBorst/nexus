@@ -420,7 +420,7 @@ export function smartConsensus2xEvents(cs, _pmap, _ctx, p = CONSENSUS_2X) {
 // docs/research/scanner-reads-prereg.md (borst: "sign both"). The two Bankr scanners' entry rules, moved UNCHANGED
 // from the batch-5 drafts file. Input: cs.candleHist only; every window walks a fixed number of bars per hour.
 /** The coin's hourly bars as a hour-index map (last row per hour wins), finite OHLC, close > 0. */
-function hourMap(candleHist) {
+export function hourMap(candleHist) {
   const m = new Map();
   for (const c of [...(candleHist || [])].sort((a, b) => Number(a.t) - Number(b.t))) {
     if (!c || ![c.o, c.h, c.l, c.c].every((x) => Number.isFinite(Number(x))) || !(Number(c.c) > 0)) continue;

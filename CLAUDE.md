@@ -454,6 +454,15 @@ product is what sits on top:
   overlap pairs with their parents). The registry runs each parent once per input series and shares it (`sharedRun`,
   explorerReads.mjs; session_momentum + session_fade too); each shared body names its rule in `.source`.
   `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
+- **Trend gate (DRAFT, unsigned, `docs/research/trend-gate-prereg.md`, label `workers/nexus-lab-api/trendGate.mjs`, count
+  `tools/explorers/trendGateCount.mjs`):** borst's "BTC under its 4h EMA-20 blocks longs", graded first like the stress
+  study: each registered read's events labelled WITH / AGAINST BTC's 4h trend, time-shift null, Holm, 30/30, 6-month
+  limit; only AGAINST_WORSE licenses one reviewed block PR. Nothing imports it but the count tool (test-pinned) until it
+  is signed and its judge is built. Count at drafting: level_reclaim 115 of 121 events AGAINST in 60 days.
+- **Stablecoin supply (`stable:hist`, `workers/nexus-lab-api/stableHist.mjs`, borst 2026-11-16):** DefiLlama's USD-pegged
+  total, one row a day from 2021, read at most every 6h on the hourly cron; a broken or shorter reply is never stored.
+  RECORDING ONLY (test-pinned: only index.js reads it); read-only `GET /intel/stablecoin-history`. Cloud sessions can't
+  reach stablecoins.llama.fi; check the first live read through that route.
 - **Each side on its own** (borst 2026-11-16, pipeline-if-then.md, `PIPELINE_RULES.sideMinEvents` 20 / `sidePct` 50): a
   two-sided read reaches EDGE only if each side with ≥ 20 oos main-card events also beats ≥ 50% of its own random replays;
   `next` names the trailing side. Added after the engine review found level_reclaim / oi_div_reversal_4h reached PAPER on
