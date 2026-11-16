@@ -105,6 +105,7 @@ import { handleSlippage } from "./routes-slippage.mjs";
 import { handleOgThesis } from "./routes-ogthesis.mjs";
 import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
+import { handleRuleCheck } from "./routes-rulecheck.mjs";
 import { handleMarket, handleMarkets, handleFadeGrade } from "./routes-market.mjs";
 import { runWalletWatch } from "./walletWatch.mjs";
 import { runRegWatch, makeLogsRpc, logsRpcUrls } from "./regWatch.mjs";
@@ -1248,6 +1249,11 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
     {
       const pulseRes = await handlePulse(parts, request, env, { scorecardKey: axisbtCacheKey(20) });
       if (pulseRes) return pulseRes;
+    }
+    // ── /engines/rule-check/:wallet → an engine's posted calls vs its own registered rules (routes-rulecheck.mjs) ─
+    {
+      const ruleRes = await handleRuleCheck(parts, request, env);
+      if (ruleRes) return ruleRes;
     }
     // ── /signals/paper-run/:axis → a cleared read's paper run, trade by trade, in R (routes-paperrun.mjs) ─
     {

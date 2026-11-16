@@ -108,6 +108,15 @@ test("engineRecords: each engine's all-time graded record from the grader's own 
   ], NOW, { engines: ["0xember", "0xvariant"] });
   assert.deepEqual(p.engineRecords.map((x) => [x.wallet, x.graded, x.wins, x.netR]), [["0xEmber", 3, 1, -0.5], ["0xVariant", 1, 0, -1]]);
   assert.equal(p.engineRecords[0].lastAt, NOW - H);
+  assert.equal(p.engineRecords[0].posted, 4, "every public call, graded or open");
+});
+
+test("engineRecords: an engine with posted calls but no grade yet still gets its row, with its last post", () => {
+  const p = callPulse([
+    { wallet: "0xScanner", theses: [{ ...base, id: "w", publishedAt: NOW - 3 * H }, { ...base, id: "x", publishedAt: NOW - H }, { ...base, id: "y", publishedAt: NOW, isPublic: false }] },
+    { wallet: "0xQuiet", theses: [] },
+  ], NOW, { engines: ["0xscanner", "0xquiet"] });
+  assert.deepEqual(p.engineRecords.map((x) => [x.wallet, x.graded, x.posted, x.lastPostedAt]), [["0xScanner", 0, 2, NOW - H], ["0xQuiet", 0, 0, null]]);
 });
 
 test("personFrom: an ex-engine wallet counts as a person only for calls published on/after its date; older calls count nowhere", () => {

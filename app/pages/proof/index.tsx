@@ -17,6 +17,7 @@ import { agoShort } from "@/lib/callPulse.mjs";
 import Fold from "./Fold";
 import HowWeGrade from "./HowWeGrade";
 import { callsRecordLine, callersLine, PLAIN_WORDS, engineNote } from "@/lib/proofCopy.mjs";
+import { ruleCheckFor, ruleCheckLine } from "@/lib/ruleCheck.mjs";
 import SignalBoard, { type Scorecard } from "./SignalBoard";
 import { pressKey } from "@/utils/a11y";
 
@@ -32,7 +33,22 @@ const usd = (n: number) => `${n < 0 ? "-" : "+"}$${Math.abs(n) >= 1000 ? `${(Mat
 
 // ── data types (only the fields we render) ──
 // Our engine callers' all-time graded record (GET /calls/pulse `engineRecords`, app/lib/callPulse.mjs).
-type EngineRecord = { wallet: string; caller?: string; graded: number; wins: number; netR: number; lastAt: number | null };
+type EngineRecord = { wallet: string; caller?: string; graded: number; wins: number; netR: number; lastAt: number | null; posted?: number; lastPostedAt?: number | null };
+
+// An engine's posted calls vs the setups its own registered rules find (GET /engines/rule-check/:wallet,
+// app/lib/ruleCheck.mjs). Only for a wallet with a rule check; no line until it reads.
+function EngineRuleCheck({ wallet }: { wallet: string }) {
+  const [line, setLine] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ruleCheckFor(wallet)) return;
+    let alive = true;
+    fetch(`${API}/engines/rule-check/${wallet.toLowerCase()}`).then((r) => r.json())
+      .then((d) => { if (alive) setLine(d?.ok ? ruleCheckLine(d, Date.now()) : null); }).catch(() => { /* no line */ });
+    return () => { alive = false; };
+  }, [wallet]);
+  if (!line) return null;
+  return <span style={{ order: 21, flexBasis: "100%", fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.45, whiteSpace: "normal" }}>{line} {ruleCheckFor(wallet)?.gaps || ""}</span>;
+}
 type Caller = { wallet: string; displayName?: string; pfp?: string; hitRate: number; avgR: number; calls: number; score: number; meritRank?: { glyph: string; title: string } | null; risk?: Parameters<typeof riskBrief>[0] };
 type Agent = { rank: number; wallet: string; displayName?: string; pfp?: string; trades: number; winRate: number; netPnl: number; profitFactor: number; score: number };
 type ArenaAgent = { wallet: string; name: string; builder?: string; currentPosition?: { symbol: string; direction: string } | null; paper?: { trades: number; winRate: number; netPnl: number } | null; live?: { trades: number; winRate: number; netPnl: number } | null };
@@ -235,7 +251,7 @@ export default function ProofPage() {
             everyone, counted apart from people (callPulse.mjs). Losses stay on it: it's an experiment in the
             open, not a signal service. */}
         <Fold title="Our engine callers" count={engineRecs?.length}>
-          {engineRecs === null ? empty("loading…") : engineRecs.length === 0 ? empty("No engine call graded yet.") : (
+          {engineRecs === null ? empty("loading…") : engineRecs.length === 0 ? empty("No engine call posted yet.") : (
             <>
               <div style={{ marginTop: -2, marginBottom: 10, fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.5 }}>
                 Our own bots post calls from their own wallets. Same grader, same public price, counted apart from people. An experiment in the open, losses included. Not a signal service.
@@ -251,12 +267,16 @@ export default function ProofPage() {
                         <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", color: FOG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: "0 4px", flexShrink: 0 }}>ENGINE</span>
                       </span>
                       <span style={{ ...statCell, ...statM }}>
-                        {e.graded} graded · {winPct}% wins · <span style={{ color: e.netR >= 0 ? POS : NEG, whiteSpace: "nowrap" }}>{e.netR >= 0 ? "+" : "−"}{Math.abs(e.netR).toFixed(1)}R net</span>
+                        {e.graded > 0 ? (
+                          <>{e.graded} graded · {winPct}% wins · <span style={{ color: e.netR >= 0 ? POS : NEG, whiteSpace: "nowrap" }}>{e.netR >= 0 ? "+" : "−"}{Math.abs(e.netR).toFixed(1)}R net</span></>
+                        ) : <>No graded call yet{Number.isFinite(e.posted) ? ` · ${e.posted} posted` : ""}</>}
                         {/* Freshness: a quiet engine reads as quiet, not alive (lastAt = its newest graded call). */}
                         {e.lastAt ? <span style={{ whiteSpace: "nowrap" }}> · last graded {agoShort(e.lastAt, Date.now())} ago</span> : null}
+                        {e.lastPostedAt ? <span style={{ whiteSpace: "nowrap" }}> · last call {agoShort(e.lastPostedAt, Date.now())} ago</span> : null}
                       </span>
                       {/* What it trades, in plain words (ENGINE_NOTES, proofCopy.mjs). */}
                       {note && <span style={{ order: 20, flexBasis: "100%", fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.45, whiteSpace: "normal" }}>{note}</span>}
+                      <EngineRuleCheck wallet={e.wallet} />
                     </div>
                   );
                 })}
