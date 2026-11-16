@@ -7,6 +7,7 @@
 // Written at publish (labWrite.mjs commit), re-built every hour by the hourly pass from the records
 // themselves (gradePublicTheses → reconcileMinuteIndex: a missed write costs at most an hour), and
 // removed by the minute grader once the call is graded (or isn't a public minute-graded call).
+import { halfRLevel } from "../../app/lib/callMath.mjs";
 import { isMinuteGraded } from "../../app/lib/minuteGrade.mjs";
 
 export const OPEN1M_PREFIX = "open1m:";
@@ -30,6 +31,7 @@ export function indexMeta(t) {
   if (Number.isInteger(Number(t.fillWithinH)) && t.fillWithinH != null) m.fw = Number(t.fillWithinH);   // a declared fill window
   if (t.exitPlan === "SPLIT_50_BE") m.be = 1;                                                            // a breakeven runner
   if (num(t.tp1HitAt)) m.h = 1;                                                                          // its TP1 half has closed
+  { const hr = halfRLevel(t); if (hr != null && !num(t.halfRAt)) m.hr = hr; }                            // +0.5R, until it's reached
   if (t.fillState) m.g = 1;   // stamped by a grader at least once (WORKING or OPEN)
   return m;
 }
