@@ -91,6 +91,7 @@ test("engines counted apart and named; both house wallets left out; the wrangler
   assert.ok(m, "ENGINE_CALLER_ADDRESSES is set in wrangler.toml");
   assert.deepEqual(m[1].split(",").map((a) => a.toLowerCase()).sort(), [
     "0x3b2cd0961aec641fb9c821661d173eedf1bcfbe4", "0x493dc0ce72b8b761844cb25bc17b6aff9a28c086",
+    "0xbce4b16be2088696d11d271ad29149f2dd97f432",
   ]);
   // Engine A's wallet is a person from 2026-11-08 (Apex Tape), never an engine and never both
   const pf = /^PERSON_FROM_ADDRESSES = "([^"]+)"/m.exec(toml);
