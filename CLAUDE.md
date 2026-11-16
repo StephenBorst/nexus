@@ -550,6 +550,10 @@ product is what sits on top:
   Aug 7: a random long earned −0.18R a trade, a random short +0.20R. Each side has to beat its own random entry, not zero.",
   `tideLine`, signalCard.mjs; unread = no line) and each side in a tapped card shows its random entry's R (`sideBar.randomR`).
   Registered/Lead rows themselves stay as pipeline-if-then.md "What we say" fixes them.
+- **Weekly engine review** (borst 2026-11-16, `tools/review/engineReview.mjs`, tested): reads the public API only and writes
+  one page (the tide, each registered read's sides vs a random entry on that side, paper wallets, engine callers); every
+  sentence follows a stated rule (`sideWords`), plus an optional plain-text "This week" note. The scheduled task "Weekly
+  engine review" (Mondays 10:37 Denver) runs it, writes the note and republishes borst's private review page in place.
 - **House caller is OFF** (`HOUSE_SIGNALS_ENABLED` deleted; gates the Catalyst caller too). Check "off" by reading
   `enabled` on `/signals/house` and `/signals/catalyst-house`, never by a quiet run. `POST /signals/house` with
   `HOUSE_SIGNALS_ADMIN` still posts by hand regardless. Keep `HOUSE_CALLER_ADDRESS` set (the dedupe reads it). On again
