@@ -75,6 +75,8 @@ product is what sits on top:
   (/intel/calendar, UTC) and `get_book_risk`'s `desk` (the risk desk's `riskDesk()` from `useRiskDesk`, in the browser) are shaped
   by the panels' own rules; unread sources stay named. `get_watchlist` (2026-11-16) reads the Watching list (`readWatch`) +
   /intel/markets through `watchRow`, read only: chat never moves the "since your last look" baseline.
+  `get_my_calls` (2026-11-16) reads `/theses/status/:wallet` through `callsForCopilot`: the grader's state in words, levels,
+  live distance in R ("not a grade"), recent results with TIME / TRAIL / BE exits named.
   **Words (2026-11-16, `app/lib/copilotWords.test.mjs`):** every model-facing string is checked sentence by sentence: no
   "proven"/"provably"/"+EV"/"funding-edge"/"guaranteed", and "edge" only beside a denial, the grade, or the user's own record.
   **Token readout:** each answer shows "N in (X% from cache) · M out" (`usageLine`, anthropicTurn.mjs; Anthropic paths only).
