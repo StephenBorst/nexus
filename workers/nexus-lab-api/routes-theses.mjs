@@ -60,6 +60,7 @@ export async function handleTheses(parts, request, env) {
         totalR: Math.round(a.rSum * 100) / 100,
         score,
         expectancy: a.expectancy,   // { expectancy, profitFactor, tailRatio, avgWinR, avgLossR }
+        risk: a.risk || null,       // recordRisk.mjs: { profitFactor, maxDrawdownR, worstStreak, low, high, ready }
         calibration: a.calibration, // { calibrated, inverted, gap, ... } or null
         meritRank: rankCaller(a), // earned identity rank (SIGNAL/SHARP/APEX) or null
         rSeries: a.rSeries || [],  // cumulative-R equity curve (chronological)
@@ -191,6 +192,8 @@ export async function handleTheses(parts, request, env) {
       // Expectancy view: what an average call is WORTH + whether the wins carry
       // the losses + how concentrated the record is in a few fat tails.
       expectancy: a.expectancy,
+      // Risk in R (recordRisk.mjs): profit factor, max drawdown, worst losing run, expectancy range.
+      risk: a.risk || null,
       // Conviction calibration: when they bet bigger, were they more right?
       calibration: a.calibration,
       // Their own record fading the crowd (contrarian vs with-crowd), or null.

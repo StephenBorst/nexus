@@ -600,6 +600,12 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   AVG R tiles read the grader's record (`/theses/process`, one shared request) like the share card and rank
   (`recordTiles`); no "BEST R:R"; the agent card = LIVE trades booked at the fill, not a graded record.
   `/agents/standing/:addr` takes a 0x address only (it feeds a Supabase `ilike`; "%" summed every wallet).
+- **Risk in R** (borst 2026-11-16, rules `app/lib/recordRisk.mjs`, tested): from the grader's record (`computeCallerStats`
+  `a.resolved`, ordered by CLOSE time `closeAt`): profit factor (null = no loss yet, never infinite), max drawdown of the
+  running R total, worst losing run, expectancy + 95% range (mean ± 1.96·sd/√n). Shown only from `RISK_MIN_CALLS` 20
+  graded calls (else "N so far, M to go"); a range that includes zero says "not yet distinguishable from break-even". No
+  Sharpe (calls aren't evenly spaced returns). Served as `risk` on `/theses/process/:w` and `/theses/leaderboard` rows;
+  `RiskRecordCard.tsx` on trader profiles + Lab Analytics (`WalletRiskCard`), `riskBrief` on /proof caller rows.
 - **Ranks:** only graded callers, in the grader's order, then emerging unranked. No self-scored REP anywhere; Rep Score
   code is deleted. Merit ranks (`rankCaller`): Signal / Sharp / Apex. Identity card = `app/lib/identityCard.mjs` on
   `loadIdentity`; no badge unless the grader gave one.
