@@ -572,6 +572,10 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   first seen is indexed through `indexRegistration` (the /theses/index path, same proof + seal) and the owner is Telegrammed
   (`sendOwner`); refused / too old / unconfirmed after 12 runs = one alert; blind for 6 runs = one alert. Failed sends are
   kept and retried. State LAB_STORE `onchain:regwatch:v1`. A call left out past `INDEX_MAX_AGE_MS` (6h) can never be indexed.
+  Logs are read from secret `ARBITRUM_RPC_URL` or `ARB_LOGS_RPC` (either; /wallets/onchain reads both) first, then the public
+  endpoints (`PUBLIC_LOGS_RPCS`); a 429 backs off 0.5/1.5/4 s then tries the next endpoint (`makeLogsRpc`, 2026-11-16: the
+  public RPC 429'd 6 runs in a row from the shared Worker IP). 10k blocks a call, halving on a range refusal; a run that
+  made progress isn't counted blind.
 - **Reads:** `GET /theses/leaderboard` (≥5 graded, net-positive R; an empty board is correct when nobody qualifies:
   check `/theses/process/:wallet` before debugging), `/theses/status/:wallet`, `/verify/:wallet/:id` (the grader
   re-run), `/theses/ledger` (+ chain, anchored). Fill/TP1 alerts go out from the pass that stamps them (hourly, or the minute grader).

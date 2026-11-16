@@ -16,14 +16,75 @@ import { isRangeError } from "./onchainWallets.mjs";
 export const REGWATCH_KEY = "onchain:regwatch:v1";
 export const GRACE_MS = 5 * 60_000;        // the publisher's own index gets this long first
 export const LOOKBACK_BLOCKS = 110_000;    // first run: ~7.5h of Arbitrum (~0.25 s blocks), past the 6h index window
-export const CHUNK = 50_000;
-export const MIN_CHUNK = 1_000;
-export const MAX_CHUNKS = 6;
+export const CHUNK = 10_000;                // blocks per eth_getLogs (~40 min of Arbitrum); halves on a range refusal
+export const MIN_CHUNK = 500;
+export const MAX_CHUNKS = 14;              // first run covers LOOKBACK_BLOCKS in ≤ 11 calls; a normal run needs 1
+export const CALL_GAP_MS = 250;            // between getLogs calls: shared public endpoints rate-limit bursts
 export const MAX_INDEX_PER_RUN = 5;        // subrequest budget: each index is ~4 RPC reads + KV
 export const MAX_TRIES = 12;               // a registration still unconfirmed after ~1h of runs is reported
 export const DONE_KEEP = 300;
 export const ALERTS_KEEP = 30;
 export const SCAN_FAILS_ALERT = 6;         // ~30 min blind = the owner hears once (and again when it reads again)
+
+// ── Where the logs are read (2026-11-16: the public endpoint answered 429 "Too Many Requests" for 6 runs in a row; the
+// Worker shares its egress IP with every other Cloudflare app hitting the same free RPC) ─────────────────────────────
+// ARBITRUM_RPC_URL or ARB_LOGS_RPC (a secret: provider URLs carry the key) goes first when set; the public endpoints follow. A 429 waits
+// and retries the same endpoint (RETRY_WAITS_MS), then moves to the next one; the endpoint that last answered is tried
+// first on the next call. Whatever a provider's eth_getLogs range limit is, scanForward halves the chunk until it fits.
+export const PUBLIC_LOGS_RPCS = Object.freeze([
+  "https://arb1.arbitrum.io/rpc",
+  "https://arbitrum-one-rpc.publicnode.com",
+  "https://arbitrum.drpc.org",
+]);
+export const RETRY_WAITS_MS = Object.freeze([500, 1_500, 4_000]);
+
+/** The endpoints to read logs from, in order: the configured one (https only), then the public ones. */
+export function logsRpcUrls(env = {}) {
+  // ARBITRUM_RPC_URL, or ARB_LOGS_RPC (the name /wallets/onchain already reads): either one, set once, serves both.
+  const own = [env.ARBITRUM_RPC_URL, env.ARB_LOGS_RPC]
+    .map((u) => (typeof u === "string" ? u.trim() : ""))
+    .filter((u) => /^https:\/\/\S+$/.test(u));
+  return [...new Set([...own, ...PUBLIC_LOGS_RPCS])];
+}
+
+export function isRateLimited(msg, status) {
+  return status === 429 || /rate.?limit|too many requests|\b429\b|exceeded.*(capacity|quota)/i.test(String(msg || ""));
+}
+
+/**
+ * JSON-RPC over several endpoints with backoff. rpc(method, params) → result; a JSON-RPC error that isn't a rate limit
+ * (e.g. a range refusal) is thrown as is so the caller can shrink the range. Errors name the endpoint by host only.
+ */
+export function makeLogsRpc(urls, { fetchImpl = globalThis.fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), waits = RETRY_WAITS_MS } = {}) {
+  let prefer = 0;
+  const host = (u) => { try { return new URL(u).host; } catch { return "rpc"; } };
+  return async function rpc(method, params) {
+    let last = "no rpc configured";
+    for (let k = 0; k < urls.length; k++) {
+      const i = (prefer + k) % urls.length, url = urls[i];
+      for (let attempt = 0; attempt <= waits.length; attempt++) {
+        let status = 0, body = null, msg = "";
+        try {
+          const r = await fetchImpl(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+          status = r.status;
+          const text = await r.text();
+          try { body = JSON.parse(text); } catch { body = null; msg = text.slice(0, 120); }
+        } catch (e) { msg = String(e?.message || e); }
+        if (body && "result" in body && !body.error) { prefer = i; return body.result; }
+        if (body && body.error) msg = String(body.error.message || "rpc error");
+        else if (!msg) msg = `http ${status}`;
+        last = `${host(url)}: ${msg}`;
+        if (isRateLimited(msg, status)) {
+          if (attempt < waits.length) { await sleep(waits[attempt]); continue; }
+          break;                                          // still limited: next endpoint
+        }
+        if (body && body.error) { const e = new Error(msg); e.rpcError = body.error; throw e; } // an answer (e.g. range)
+        break;                                            // network / http error: next endpoint
+      }
+    }
+    throw new Error(last);
+  };
+}
 
 const hex = (n) => "0x" + Math.max(0, Math.floor(n)).toString(16);
 const short = (a) => `${String(a).slice(0, 6)}…${String(a).slice(-4)}`;
@@ -65,16 +126,17 @@ export function alertLine(kind, { wallet, txHash, body = {}, minutesSeen = null 
 function b(v) { return typeof v === "string" ? v.replace(/^PERP_/, "").replace(/_USDC$/, "") : null; }
 
 /** Scan forward from the stored cursor. Returns the new registrations and the cursor reached. */
-export async function scanForward(rpc, state, { registry = THESIS_REGISTRY } = {}) {
+export async function scanForward(rpc, state, { registry = THESIS_REGISTRY, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
   const latest = parseInt(await rpc("eth_blockNumber", []), 16);
   if (!Number.isFinite(latest)) throw new Error("latest block unreadable");
   let scannedTo = Number.isFinite(state?.scannedTo) ? state.scannedTo : Math.max(0, latest - LOOKBACK_BLOCKS);
   let chunk = Number.isFinite(state?.chunk) && state.chunk >= MIN_CHUNK ? state.chunk : CHUNK;
   const found = [];
   let calls = 0, error = null;
+  const start = scannedTo;
   while (calls < MAX_CHUNKS && scannedTo < latest) {
     const from = scannedTo + 1, to = Math.min(latest, from + chunk - 1);
-    calls++;
+    if (calls++) await sleep(CALL_GAP_MS);
     let logs;
     try { logs = await rpc("eth_getLogs", [{ address: registry, fromBlock: hex(from), toBlock: hex(to) }]); }
     catch (e) {
@@ -86,14 +148,14 @@ export async function scanForward(rpc, state, { registry = THESIS_REGISTRY } = {
     found.push(...registrationsFromLogs(logs, registry));
     scannedTo = to;
   }
-  return { found, scannedTo, chunk, latest, error };
+  return { found, scannedTo, chunk, latest, error, progressed: scannedTo > start };
 }
 
 /**
  * One run. deps: logsRpc (public RPC for getLogs), index(txHash, wallet) → indexRegistration's { status, body },
  * send(text) → boolean, now().
  */
-export async function runRegWatch(env, { logsRpc, index, send, now = Date.now }) {
+export async function runRegWatch(env, { logsRpc, index, send, now = Date.now, scanOpts = {} }) {
   let state;
   try { state = JSON.parse((await env.LAB_STORE.get(REGWATCH_KEY)) || "null"); } catch { state = null; }
   const s = {
@@ -107,8 +169,10 @@ export async function runRegWatch(env, { logsRpc, index, send, now = Date.now })
   const doneSet = new Set(s.done);
   let scanError = null, foundN = 0;
   try {
-    const r = await scanForward(logsRpc, s);
-    s.scannedTo = r.scannedTo; s.chunk = r.chunk; scanError = r.error;
+    const r = await scanForward(logsRpc, s, scanOpts);
+    s.scannedTo = r.scannedTo; s.chunk = r.chunk;
+    // Catching up counts as reading: an error after some chunks landed isn't blindness, the next run continues.
+    scanError = r.progressed ? null : r.error;
     for (const f of r.found) {
       if (doneSet.has(f.txHash) || s.open[f.txHash]) continue;
       s.open[f.txHash] = { wallet: f.wallet, block: f.block, seenAt: t, tries: 0 };
