@@ -160,7 +160,7 @@ import { parseLiveLift, liveLifted, liveLiftNote, LIVE_LIFT_VAR } from "../../ap
 // wrangler bundles the cross-dir import (same as backtest.mjs).
 import { directiveLevels } from "../nexus-agent-exec/logic.mjs";
 import { handleBasisSignals } from "./basisSignals.mjs";
-import { advanceIndex, onchainResponse, ONCHAIN_INDEX_KEY, DEFAULT_LOGS_RPC } from "./onchainWallets.mjs";
+import { advanceIndex, onchainResponse, ONCHAIN_INDEX_KEY } from "./onchainWallets.mjs";
 
 // The scoreboard's cache key, one place: GET /intel/axis-backtest writes it and /calls/pulse reads the
 // headline from it. Bump the version here when the scoreboard payload changes (see that route's notes).
@@ -405,18 +405,11 @@ async function getNexusPriceUsd() {
 // request advances it; after that it refreshes at most every 5 min.
 const ONCHAIN_TTL_MS = 5 * 60 * 1000;
 
+// The watchdog's reader (regWatch.mjs makeLogsRpc): ARBITRUM_RPC_URL / ARB_LOGS_RPC first, then the public endpoints,
+// moving on when one rate-limits (2026-11-16: a single public endpoint answered 429 from the shared Worker IP). This runs
+// inside a request, so one short wait before the next endpoint instead of the cron's longer backoff.
 function arbLogsRpc(env) {
-  const url = env.ARB_LOGS_RPC || env.ARBITRUM_RPC_URL || DEFAULT_LOGS_RPC;   // either name; regWatch reads both
-  let id = 0;
-  return async (method, params) => {
-    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params }) });
-    const text = await r.text();
-    let d;
-    try { d = JSON.parse(text); } catch { throw new Error(`${method}: HTTP ${r.status} non-JSON`); }
-    if (d && d.error) throw new Error(`${method}: ${d.error.message || JSON.stringify(d.error)}`);
-    if (!r.ok) throw new Error(`${method}: HTTP ${r.status}`);
-    return d ? d.result : null;
-  };
+  return makeLogsRpc(logsRpcUrls(env), { waits: [300] });
 }
 
 async function getOnChainWallets(env) {

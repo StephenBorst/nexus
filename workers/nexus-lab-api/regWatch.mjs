@@ -24,7 +24,8 @@ export const MAX_INDEX_PER_RUN = 5;        // subrequest budget: each index is ~
 export const MAX_TRIES = 12;               // a registration still unconfirmed after ~1h of runs is reported
 export const DONE_KEEP = 300;
 export const ALERTS_KEEP = 30;
-export const SCAN_FAILS_ALERT = 6;         // ~30 min blind = the owner hears once (and again when it reads again)
+export const SCAN_FAILS_ALERT = 6;
+export const LATE_WINDOW_MS = 7 * 86_400_000;   // the digest counts calls indexed late over the last 7 days         // ~30 min blind = the owner hears once (and again when it reads again)
 
 // ── Where the logs are read (2026-11-16: the public endpoint answered 429 "Too Many Requests" for 6 runs in a row; the
 // Worker shares its egress IP with every other Cloudflare app hitting the same free RPC) ─────────────────────────────
@@ -164,6 +165,8 @@ export async function runRegWatch(env, { logsRpc, index, send, now = Date.now, s
     done: Array.isArray(state?.done) ? [...state.done] : [],
     alerts: Array.isArray(state?.alerts) ? [...state.alerts] : [],
     scanFails: Number(state?.scanFails) || 0,
+    lastReadAt: Number(state?.lastReadAt) || null,
+    late: Array.isArray(state?.late) ? state.late.filter(Number.isFinite) : [],   // when a call had to be indexed here
   };
   const t = now();
   const doneSet = new Set(s.done);
@@ -187,6 +190,7 @@ export async function runRegWatch(env, { logsRpc, index, send, now = Date.now, s
   } else {
     if (s.scanFails >= SCAN_FAILS_ALERT) s.alerts.push("On-chain → Lab watchdog reads Arbitrum again.");
     s.scanFails = 0;
+    s.lastReadAt = t;
   }
 
   let indexed = 0, attempted = 0;
@@ -200,7 +204,7 @@ export async function runRegWatch(env, { logsRpc, index, send, now = Date.now, s
     const j = judgeIndex(res);
     if (j.done) {
       finish(tx);
-      if (j.alert === "indexed") { indexed++; s.alerts.push(alertLine("indexed", { wallet: o.wallet, txHash: tx, body: res.body, minutesSeen: Math.round((t - o.seenAt) / 60_000) })); }
+      if (j.alert === "indexed") { indexed++; s.late.push(t); s.alerts.push(alertLine("indexed", { wallet: o.wallet, txHash: tx, body: res.body, minutesSeen: Math.round((t - o.seenAt) / 60_000) })); }
       if (j.alert === "failed") s.alerts.push(alertLine("failed", { wallet: o.wallet, txHash: tx, body: res.body }));
     } else if (++o.tries >= MAX_TRIES) {
       finish(tx);
@@ -215,6 +219,24 @@ export async function runRegWatch(env, { logsRpc, index, send, now = Date.now, s
     else s.alerts = s.alerts.slice(-ALERTS_KEEP);   // kept: the next run tries again
   }
   s.done = s.done.slice(-DONE_KEEP);
+  s.late = s.late.filter((x) => t - x <= LATE_WINDOW_MS);
   await env.LAB_STORE.put(REGWATCH_KEY, JSON.stringify(s));
   return { found: foundN, open: Object.keys(s.open).length, attempted, indexed, sent, held: s.alerts.length, scanError };
+}
+
+/**
+ * The daily digest's line for the watchdog (opsDigest gatherFacts → digestText). Plain text; null state = never ran.
+ * Blind = the last run couldn't read the chain; otherwise when it last read, and how many calls the publisher's path
+ * skipped this week (each one the watchdog had to index itself).
+ */
+export function watchdogLine(state, now = Date.now()) {
+  if (!state || typeof state !== "object") return "No run recorded yet.";
+  const ago = (ms) => { const m = Math.max(0, Math.round((now - ms) / 60_000)); return m < 90 ? `${m} min ago` : `${Math.round(m / 60)}h ago`; };
+  const late = (Array.isArray(state.late) ? state.late : []).filter((x) => now - x <= LATE_WINDOW_MS).length;
+  const waiting = state.open && typeof state.open === "object" ? Object.keys(state.open).length : 0;
+  const lateText = late ? `${late} call${late === 1 ? "" : "s"} indexed late in 7 days (the publisher skipped /theses/index)` : "no call needed indexing this week";
+  if (Number(state.scanFails) > 0) {
+    return `Can't read Arbitrum logs (${state.scanFails} run${state.scanFails === 1 ? "" : "s"} in a row${state.lastReadAt ? `, last read ${ago(state.lastReadAt)}` : ""}). Set ARBITRUM_RPC_URL if it keeps happening. ${lateText}.`;
+  }
+  return `Reading${state.lastReadAt ? `, last read ${ago(state.lastReadAt)}` : ""}. ${lateText[0].toUpperCase()}${lateText.slice(1)}.${waiting ? ` ${waiting} waiting for their grace period or a retry.` : ""}`;
 }

@@ -26,6 +26,7 @@ import { readRecordedJudgment } from "./paperJudge.mjs";
 import { readRevenue } from "./revenue.mjs";
 import { PROMOTION_LOCKS } from "../../app/lib/promotionLocks.mjs";
 import { lockProgress } from "../../app/lib/promotionLock.mjs";
+import { watchdogLine, REGWATCH_KEY } from "./regWatch.mjs";
 
 const DAY_MS = 86_400_000;
 const readJson = async (kv, key) => { try { const r = await kv.get(key); return r ? JSON.parse(r) : null; } catch { return null; } };
@@ -94,7 +95,9 @@ export async function gatherFacts(env, { scorecardKey, nowMs = Date.now(), event
 
   let receivers = null;
   if (withReceivers) { try { receivers = receiversFrom(await revenue({})); } catch { receivers = null; } }
-  return { asOf: nowMs, boardAsOf: board?.asOf || null, stages, reads, paper, pending: stages ? pendingItems(reads) : [], receivers };
+  // The on-chain → Lab watchdog's health (regWatch.mjs), so a blind spell shows in the digest too.
+  const watchdog = watchdogLine(await readJson(env.LAB_STORE, REGWATCH_KEY), nowMs);
+  return { asOf: nowMs, boardAsOf: board?.asOf || null, stages, reads, paper, pending: stages ? pendingItems(reads) : [], receivers, watchdog };
 }
 
 /** Send one message to the owner's chat. Returns true only on Telegram's ok. */
