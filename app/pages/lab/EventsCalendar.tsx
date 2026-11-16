@@ -9,7 +9,7 @@ import { untilWords, eventDetail, dayLabel, CALENDAR_NOTE } from "@/lib/eventsCa
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 type Ev = { kind: "MACRO" | "MARKET"; at: number; title: string; impact?: string; forecast?: string | null; previous?: string | null; yesPct?: number | null; coins?: string[] };
-type Board = { events: Ev[]; unread: string[]; macroStale?: boolean };
+type Board = { events: Ev[]; unread: string[]; macroStale?: boolean; macroAt?: number | null };
 const UNREAD_WORDS: Record<string, string> = { macro: "US macro releases", markets: "world-event markets" };
 
 export function EventsCalendar() {
@@ -43,7 +43,7 @@ export function EventsCalendar() {
     <div>
       {(unread.length > 0 || board.macroStale) && (
         <div style={{ fontFamily: UI, fontSize: 12.5, color: SIGNAL.watch, marginBottom: 8, lineHeight: 1.5 }}>
-          {unread.length ? `Unread right now: ${unread.join(", ")}. ` : ""}{board.macroStale ? "Macro times are from the last good read (under a day old)." : ""}
+          {unread.length ? `Unread right now: ${unread.join(", ")}. ` : ""}{board.macroStale ? `Macro times are from the last good read, ${board.macroAt ? untilWords(board.macroAt, now).replace(/^out /, "") : "earlier"}. The feed is busy; we retry hourly.` : ""}
         </div>
       )}
       {days.length === 0 && <div style={{ fontFamily: UI, fontSize: 13, color: C.text.muted, padding: "8px 0" }}>Nothing scheduled in the sources read.</div>}

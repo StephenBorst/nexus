@@ -22,18 +22,27 @@ test("both weeks of macro + the Catalysts markets, in time order", async () => {
   assert.ok(env.LAB_STORE.m.has(MACRO_CACHE_KEY));
 });
 
-test("the feed is read at most once an hour; a refusal serves the last good copy marked stale, then unread after 24h", async () => {
+test("the feed is read at most once an hour; a refusal backs off an hour and serves the last good copy (7 days)", async () => {
   const env = { LAB_STORE: kv() };
   let calls = 0;
   const counting = ff(() => { calls++; return ok(THIS); }, () => ok([]));
   await composeEvents(env, { dispatch, fetchImpl: counting, now: NOW });
   await composeEvents(env, { dispatch, fetchImpl: counting, now: NOW + 30 * 60e3 });
   assert.equal(calls, 1, "served from the hour cache");
-  const refused = ff(() => ok("<html>Request Denied</html>"), () => ok("<html>"));
+  let refusedCalls = 0;
+  const refused = ff(() => { refusedCalls++; return new Response("slow down", { status: 429 }); }, () => new Response("x", { status: 429 }));
   const stale = await composeEvents(env, { dispatch, fetchImpl: refused, now: NOW + 2 * 3.6e6 });
   assert.equal(stale.macroStale, true);
+  assert.equal(stale.macroAt, NOW, "the reply says how old the copy is");
   assert.equal(stale.events[0].title, "CPI m/m");
-  const gone = await composeEvents(env, { dispatch, fetchImpl: refused, now: NOW + 25 * 3.6e6 });
+  assert.equal(stale.macroError, "http 429");
+  await composeEvents(env, { dispatch, fetchImpl: refused, now: NOW + 2.5 * 3.6e6 });
+  assert.equal(refusedCalls, 1, "no retry within the hour after a refusal");
+  await composeEvents(env, { dispatch, fetchImpl: refused, now: NOW + 3.1 * 3.6e6 });
+  assert.equal(refusedCalls, 2, "retried once the hour is up");
+  const late = await composeEvents(env, { dispatch, fetchImpl: refused, now: NOW + 3 * 86.4e6 });
+  assert.equal(late.macroStale, true, "a 3-day-old good copy still serves");
+  const gone = await composeEvents(env, { dispatch, fetchImpl: ff(() => ok("<html>"), () => ok("<html>")), now: NOW + 8 * 86.4e6 });
   assert.deepEqual(gone.unread, ["macro"], "never an empty week passed off as quiet");
   assert.equal(gone.macroError, "not json", "the reply names why the feed failed");
   const denied = await composeEvents({ LAB_STORE: kv() }, { dispatch, fetchImpl: async () => new Response("x", { status: 403 }), now: NOW });
