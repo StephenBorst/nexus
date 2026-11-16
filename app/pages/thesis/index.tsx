@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { excursionLine } from "@/lib/excursion.mjs";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
@@ -43,6 +44,7 @@ type FeedThesis = {
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped)
   gradedR?: number;               // graded R-multiple result
   fillState?: "WORKING" | "OPEN" | "EXPIRED"; expiredReason?: string; trailStop?: number; // server: has the entry traded yet (grading.mjs applyFillStamp)
+  maeR?: number; mfeR?: number;    // server: how far it went against / for it while open, in R (grading.mjs callExcursion)
   filledAt?: number;
   publishMark?: { px: number; at: number; src?: string }; // server-read market price at first publish
   actualPnl: number | null;
@@ -441,6 +443,13 @@ export default function ThesisPage() {
               </div>
             ))}
           </div>
+
+          {/* MAE / MFE while open (app/lib/excursion.mjs): a measurement of the path, not a grade. */}
+          {excursionLine(thesis) && (
+            <div style={{ marginTop: -8, marginBottom: 16, padding: "0 14px", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", lineHeight: 1.6 }}>
+              <span style={{ color: "#71717a" }}>PATH </span>{excursionLine(thesis)}<span style={{ color: "#71717a" }}> · from the public bars after the fill</span>
+            </div>
+          )}
 
           {/* The market price the server locked when the call was published: the grade's reference. */}
           {(() => {

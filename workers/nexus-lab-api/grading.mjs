@@ -12,6 +12,7 @@
 // ⚠️ Pure move — logic byte-identical to what shipped.
 import { notifyResolution, notifyFillEvent } from "./resolutions.mjs";
 import { recordRisk } from "../../app/lib/recordRisk.mjs";
+import { excursionR } from "../../app/lib/excursion.mjs";
 import { halfRLevel } from "../../app/lib/callMath.mjs";
 import { fillEvents } from "./callStatus.mjs";
 import {
@@ -121,7 +122,7 @@ export const statusOfCall = (t) => (t?.fillState === "EXPIRED" ? "EXPIRED" : gra
 //   GRADE_FIELDS — the grade and the fill: the hourly pass on an hourly call, the minute grader
 //                  (minuteGrader.mjs) on a minute-graded one.
 //   PLAN_FIELDS  — plan quality + regime, read from the hourly bars before the post: the hourly pass.
-export const GRADE_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "exitReason", "fillState", "filledAt", "tp1HitAt", "trailStop", "halfRAt", "expiredAt", "expiredReason", "status"];
+export const GRADE_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "exitReason", "fillState", "filledAt", "tp1HitAt", "trailStop", "halfRAt", "expiredAt", "expiredReason", "status", "maeR", "mfeR"];
 export const PLAN_FIELDS = ["planScore", "planFlags", "planV", "regimeTrend", "regimeVol", "regimeAlign"];
 export const PASS_FIELDS = [...GRADE_FIELDS, ...PLAN_FIELDS];
 
@@ -164,6 +165,7 @@ export function applyGrade(t, g, cd, nowMs = Date.now()) {
   const before = { fillState: t.fillState, tp1HitAt: t.tp1HitAt, halfRAt: t.halfRAt };
   const fills = [];
   if (applyFillStamp(t, g, cd)) { changed = true; fills.push(...fillEvents(before, t)); }
+  if (stampExcursion(t, g, cd)) changed = true;
   const status = statusOfCall(t);
   if (t.status !== status) { t.status = status; changed = true; }
   return { changed, resolved, regraded, fills };
@@ -205,6 +207,42 @@ export function halfRReachedAt(t, cd, f) {
     if (long ? cd.h[k] >= lvl : cd.l[k] <= lvl) return cd.t[k];
   }
   return null;
+}
+
+/**
+ * MAE / MFE in R while the call was open (app/lib/excursion.mjs): from the bars after the fill bar to the exit bar
+ * (or the latest bar while open), the exit bar only up to the call's own levels. Display only. null = not filled /
+ * not readable. Returns { maeR, mfeR } | null.
+ */
+export function callExcursion(t, g, cd) {
+  if (!cd || !Array.isArray(cd.t) || !g || !(g.outcome === "WIN" || g.outcome === "LOSS" || g.outcome === "PENDING")) return null;
+  const f = entryFill(t, cd);
+  if (!f.filled) return null;
+  const entry = Number(t.entryPrice), risk = Math.abs(entry - Number(t.stopLoss));
+  if (!(entry > 0) || !(risk > 0)) return null;
+  const start = f.fillIdx >= 0 ? f.fillIdx + 1 : f.next;
+  if (!(start < cd.t.length)) return null;
+  const closed = g.outcome === "WIN" || g.outcome === "LOSS";
+  const exitAbs = closed && g.exitAt ? cd.t.indexOf(g.exitAt) : -1;
+  if (closed && exitAbs < start) return null;          // the exit bar isn't in these bars: nothing honest to say
+  const long = String(t.direction).toUpperCase() === "LONG";
+  // At a target the trade closed there (TP1, or TP2 for a runner that reached it); any other exit caps at its own R.
+  const atTarget = g.outcome === "WIN" && !g.exitReason;
+  const tp2 = Number(t.takeProfit2), tpR = (px) => Math.abs(px - entry) / risk;
+  const maxFavor = atTarget ? (g.legs?.runner === "TP2" && tp2 > 0 ? tpR(tp2) : tpR(Number(t.takeProfit1))) : Math.max(Number(g.r) || 0, 0);
+  const end = closed ? exitAbs : cd.t.length - 1;
+  return excursionR({
+    long, entry, risk, highs: cd.h.slice(start, end + 1), lows: cd.l.slice(start, end + 1),
+    exitBar: closed ? exitAbs - start : null, maxAdverse: 1, maxFavor,
+  });
+}
+
+/** Stamp `maeR` / `mfeR` (GRADE_FIELDS). Returns true when they changed. */
+export function stampExcursion(t, g, cd) {
+  const x = callExcursion(t, g, cd);
+  const before = `${t.maeR}|${t.mfeR}`;
+  if (x) { t.maeR = x.maeR; t.mfeR = x.mfeR; } else { delete t.maeR; delete t.mfeR; }
+  return `${t.maeR}|${t.mfeR}` !== before;
 }
 
 export function applyFillStamp(t, g, cd) {

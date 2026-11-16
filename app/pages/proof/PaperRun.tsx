@@ -23,6 +23,7 @@ type Trade = {
   n: number; coin: string; side: "LONG" | "SHORT"; openedAt: string | null; closedAt: string; holdH: number | null;
   entry: number | null; exit: number | null; reason: string | null; outcome: string; movePct: number | null;
   r: number | null; rBasis: "fill" | "contract" | null;
+  maeR?: number; mfeR?: number;
   tape?: { entry: string; exit: string; trigger?: string };
 };
 type TapeSummary = { fills: number; judged: number; onTape: number; near: number; off: number; noTrades: number; noData: number; averaged: number; pending: number; triggers?: number; markOnly?: number; line: string | null };
@@ -180,7 +181,7 @@ export default function PaperRunPage() {
                 <table style={{ minWidth: 700, width: "100%", borderCollapse: "collapse", fontFamily: MONO, fontSize: 12.5 }}>
                   <thead>
                     <tr style={{ color: FOG, textAlign: "left" }}>
-                      {["#", "Market", "Side", "Opened", "Held", "Entry → exit", "Tape", "Exit", "R"].map((h) => (
+                      {["#", "Market", "Side", "Opened", "Held", "Entry → exit", "Tape", "Exit", "Against / for", "R"].map((h) => (
                         <th key={h} style={{ padding: "8px 10px 8px 0", fontWeight: 500, borderBottom: `1px solid ${MUTED}`, textAlign: h === "R" ? "right" : "left" }}>{h}</th>
                       ))}
                     </tr>
@@ -206,6 +207,7 @@ export default function PaperRunPage() {
                           ) : <span style={{ color: FOG }}>—</span>}
                         </td>
                         <td style={{ padding: "9px 10px 9px 0", color: FOG }}>Open</td>
+                        <td style={{ padding: "9px 10px 9px 0", color: FOG }}>—</td>
                         <td style={{ padding: "9px 0", textAlign: "right", color: FOG }} title="R is read when the trade closes.">—</td>
                       </tr>
                     )}
@@ -229,6 +231,11 @@ export default function PaperRunPage() {
                           ) : <span style={{ color: FOG }}>—</span>}
                         </td>
                         <td style={{ padding: "9px 10px 9px 0" }}>{EXIT_WORD[t.reason || ""] || t.reason || "—"}</td>
+                        {/* MAE / MFE in R while open, from the hourly tape (app/lib/excursion.mjs). Per trade, never summed. */}
+                        <td style={{ padding: "9px 10px 9px 0", color: FOG, whiteSpace: "nowrap" }}
+                            title={t.maeR != null ? `Went ${t.maeR.toFixed(2)}R against it and ${(t.mfeR ?? 0).toFixed(2)}R for it while open (hourly bars).` : "No hourly bars to read for this trade."}>
+                          {t.maeR != null && t.mfeR != null ? `−${t.maeR.toFixed(2)} / +${t.mfeR.toFixed(2)}` : "—"}
+                        </td>
                         <td style={{ padding: "9px 0", textAlign: "right" }}>
                           {fmtR(t.r)}{t.rBasis === "contract" ? <span style={{ color: FOG }}> *</span> : null}
                         </td>
@@ -241,6 +248,11 @@ export default function PaperRunPage() {
             {run.trades.some((t) => t.rBasis === "contract") && (
               <p style={{ margin: "10px 0 0", color: FOG, fontSize: 12.5, lineHeight: 1.6, maxWidth: 680 }}>
                 * Read by the contract (target = +1.50R, stop = −1.00R): these trades closed before each paper row recorded its own stop (from Nov 12). Every later trade shows its R from the fill.
+              </p>
+            )}
+            {run.trades.some((t) => t.maeR != null) && (
+              <p style={{ margin: "10px 0 0", color: FOG, fontSize: 12.5, lineHeight: 1.6, maxWidth: 680 }}>
+                <span style={{ color: BRIGHT }}>Against / for.</span> How far each trade went against it and for it while open, in R, read from the hourly bars after its entry hour. A measurement only: no rule tightens on it.
               </p>
             )}
             {run.windowed && <p style={{ margin: "8px 0 0", color: FOG, fontSize: 12.5 }}>Showing the last 50 trades of {run.count}.</p>}

@@ -23,6 +23,7 @@ import { registrationFor, PAPER_MIN_TRADES } from "./readPipeline.mjs";
 import { R_CONTRACT } from "./rContract.mjs";
 import { entryKey, exitKeyOf, walletLegs, tapeSummary, tapeLine } from "./paperTape.mjs";
 import { BRAND } from "./brand.mjs";
+import { paperExcursion } from "./excursion.mjs";
 
 const OUTCOME = Object.freeze({ TP: "WIN", SL: "LOSS", TIMEOUT: "TIME" });
 const coinOf = (symbol) => String(symbol || "").replace(/^PERP_/, "").replace(/_USDC$/, "");
@@ -46,11 +47,13 @@ export function tradeR(row) {
  * @param {object|null} state the paper wallet's agent state (null = unread)
  * @param {object|null} [tape] the wallet's tape checks (lab-api paperTape.mjs `ptape:{wallet}`): each trade then
  *   carries `tape: { entry, exit }` verdicts and the run a `tape` summary + line (paperTape.mjs). Omitted = none.
- * @param {{ wallet?: string|null }} [opts] `wallet` = a signed claim (paperClaim.mjs) not yet written into the code;
- *   the code registration wins when it names one.
+ * @param {{ wallet?: string|null, candles?: Record<string, object[]>|null }} [opts] `wallet` = a signed claim
+ *   (paperClaim.mjs) not yet written into the code; the code registration wins when it names one. `candles` = each
+ *   coin's recorded hourly tape (candle:hist, by bare coin): each closed trade then carries `maeR` / `mfeR`
+ *   (excursion.mjs), per trade only, never summed or averaged.
  * @returns {null | object} null when the read has no paper wallet
  */
-export function paperRun(axis, state, tape = null, { wallet: claimed = null } = {}) {
+export function paperRun(axis, state, tape = null, { wallet: claimed = null, candles = null } = {}) {
   const reg = registrationFor(axis);
   const wallet = reg?.paperWallet || (reg ? claimed : null) || null;
   if (!wallet) return null;
@@ -75,6 +78,7 @@ export function paperRun(axis, state, tape = null, { wallet: claimed = null } = 
       holdH: opened != null ? r2((closed - opened) / 3600000) : null,
       entry: Number(t.entry_price) || null, exit: Number(t.exit_price) || null,
       reason: t.reason || null, outcome, ...tradeR(t),
+      ...(candles ? (() => { const x = paperExcursion(t, candles[coinOf(t.symbol)]); return x ? { maeR: x.maeR, mfeR: x.mfeR } : {}; })() : {}),
       ...(tape ? { tape: {
         entry: t.entry_avg ? "AVERAGED" : tape.checks?.[entryKey(t.symbol, opened)]?.verdict || "PENDING",
         exit: tape.checks?.[exitKeyOf(t)]?.verdict || "PENDING",
