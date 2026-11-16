@@ -563,6 +563,11 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
 - **Registration:** `/proxy/thesis-register` checks levels/split/notes and simulates before Bankr, dedupes via
   `thesisreg:pending:*` + the NexusLock lease (409 `in_flight`, 503 `lock_unavailable`). `POST /theses/index {txHash,
   walletAddress}` (keyless) builds the call from calldata (`#SPLIT_50` declared on-chain in notes).
+- **On-chain → Lab watchdog** (borst 2026-11-16, `workers/nexus-lab-api/regWatch.mjs`, lab-api */5 cron): reads new
+  ThesisRegistry logs on the public Arbitrum RPC; a registration still missing from its wallet's Lab record 5 min after it's
+  first seen is indexed through `indexRegistration` (the /theses/index path, same proof + seal) and the owner is Telegrammed
+  (`sendOwner`); refused / too old / unconfirmed after 12 runs = one alert; blind for 6 runs = one alert. Failed sends are
+  kept and retried. State LAB_STORE `onchain:regwatch:v1`. A call left out past `INDEX_MAX_AGE_MS` (6h) can never be indexed.
 - **Reads:** `GET /theses/leaderboard` (≥5 graded, net-positive R; an empty board is correct when nobody qualifies:
   check `/theses/process/:wallet` before debugging), `/theses/status/:wallet`, `/verify/:wallet/:id` (the grader
   re-run), `/theses/ledger` (+ chain, anchored). Fill/TP1 alerts go out from the pass that stamps them (hourly, or the minute grader).

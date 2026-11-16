@@ -89,12 +89,12 @@ import { handleHalt } from "./routes-halt.mjs";
 import { handlePaperClaim, readPaperClaims } from "./routes-paperclaim.mjs";
 import { handleJudgeSign } from "./routes-judgesign.mjs";
 import { handlePlanSign } from "./routes-plansign.mjs";
-import { runOpsDigest } from "./opsDigest.mjs";
+import { runOpsDigest, sendOwner } from "./opsDigest.mjs";
 import { DIGEST_RUN_MINUTE } from "../../app/lib/opsDigest.mjs";
 import { readsWithClaims } from "../../app/lib/paperClaim.mjs";
 import { LIVE_HALT_KEY, parseLiveHalt, publicHalt } from "../../app/lib/liveHalt.mjs";
 import { handlePush } from "./routes-push.mjs";
-import { handleThesisRegistration } from "./routes-thesisreg.mjs";
+import { handleThesisRegistration, indexRegistration, makeRpc } from "./routes-thesisreg.mjs";
 import { handleCallStatus } from "./routes-callstatus.mjs";
 import { handleVerify, isPublicCall } from "./routes-verify.mjs";
 import { runMinuteGrades } from "./minuteGrader.mjs";
@@ -107,6 +107,7 @@ import { handleCallMeta } from "./routes-callmeta.mjs";
 import { handlePulse } from "./routes-pulse.mjs";
 import { handleMarket, handleMarkets, handleFadeGrade } from "./routes-market.mjs";
 import { runWalletWatch } from "./walletWatch.mjs";
+import { runRegWatch } from "./regWatch.mjs";
 import { handleBell, composeBell } from "./routes-bell.mjs";
 import { handleVenues } from "./routes-venues.mjs";
 import { handleEvents } from "./routes-events.mjs";
@@ -806,6 +807,19 @@ const worker = {
             const r = await runMarketWatch(env, (w, n) => appendNotification(env, w, n), dispatch);
             if (r.events) console.log(`[push] market watch: ${r.events} change(s) on ${r.coins} coins, ${r.sent} sent`);
           } catch (e) { console.error("[push] market watch failed:", String(e)); }
+        })());
+        // On-chain → Lab watchdog (regWatch.mjs): a registration missing from the Lab 5 min after it's seen is indexed
+        // here (indexRegistration, the /theses/index path) and the owner is told; one that can't be is reported.
+        ctx.waitUntil((async () => {
+          try {
+            const indexRpc = makeRpc([getArbRpc(env), "https://arb1.arbitrum.io/rpc"].filter((u, i, a) => a.indexOf(u) === i));
+            const r = await runRegWatch(env, {
+              logsRpc: makeRpc([DEFAULT_LOGS_RPC]),
+              index: (txHash, wallet) => indexRegistration(env, { txHash, wallet, rpc: indexRpc, readMark: readPublishMark }),
+              send: (text) => sendOwner(env, text),
+            });
+            if (r.found || r.attempted || r.scanError || r.held) console.log(`[regwatch] ${JSON.stringify(r)}`);
+          } catch (e) { console.error("[regwatch] failed:", String(e)); }
         })());
         // Moves of tracked wallets people starred on Smart Money (walletWatch.mjs): bell + phone (wallets switch) + Telegram.
         ctx.waitUntil((async () => {
