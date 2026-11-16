@@ -1,5 +1,5 @@
-// TREND GATE · a DRAFT conditioner study (docs/research/trend-gate-prereg.md, unsigned). It labels events; it fires
-// nothing, gates nothing and no worker that trades imports it (test-pinned). borst 2026-11-16: "macro grants permission,
+// TREND GATE · a registered conditioner study (docs/research/trend-gate-prereg.md, signed by borst 2026-11-16; counts from
+// 2026-11-17T00:00Z). It labels events; it fires nothing, gates nothing and no worker that trades imports it (test-pinned). borst 2026-11-16: "macro grants permission,
 // micro times the trigger" — before the BTC 4h trend gets any power over entries, it is graded like the stress study.
 //
 // The label: BTC's 4h trend as the event could see it. The last COMPLETE UTC 4h BTC bar closed at or before the
@@ -9,6 +9,19 @@
 import { hourMap, trend4hByHour } from "./explorerReads.mjs";
 
 const H = 3600000;
+
+/** The signed study's numbers (pinned to the page by trendGate.test.mjs). The judge, its own PR, reads these. */
+export const TREND_GATE_STUDY = Object.freeze({
+  from: "2026-11-17T00:00:00Z",
+  limit: "2027-05-17T00:00:00Z",
+  reads: Object.freeze([
+    "rsi_reset_deep", "level_reclaim", "oi_div_reversal", "session_momentum", "confluence_follow", "oi_div_reversal_4h",
+    "oi_coil_break", "session_fade", "level_reclaim_tight", "spot_absorb", "btc_lead_lag", "funding_basis_split",
+    "smart_consensus_2x",
+  ]),
+  excluded: Object.freeze(["bb_rsi_momentum", "shelf_breakdown_short", "session_fade_short", "oi_div_reversal_4h_long"]),
+  minEach: 30, minSmallAtLimit: 20, shifts: 1000, minShiftDays: 7, alpha: 0.05,
+});
 
 /** hour → "UP" | "DOWN" | null from BTC's recorded hourly tape (candle:hist, t in ms). */
 export function btcTrendByHour(btcCandles) {
