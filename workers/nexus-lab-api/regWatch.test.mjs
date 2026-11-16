@@ -229,3 +229,53 @@ test("the digest reads the watchdog's state; /wallets/onchain uses the same mult
   assert.match(fn, /return makeLogsRpc\(logsRpcUrls\(env\), \{ waits: \[300\] \}\);/);
   assert.doesNotMatch(fn, /fetch\(url/, "no single-endpoint fetch left");
 });
+
+// ── 2026-11-16 live read: ARBITRUM_RPC_URL = publicnode without its token answers "Archive requests require a personal
+//    token" past ~10 blocks; drpc errored; arb1 served a 500-block read. The configured endpoint must not blind it. ──
+import { isProviderRefusal, PROVIDER_MIN_SPAN } from "./regWatch.mjs";
+
+test("an endpoint that refuses (token / archive / key) is skipped, never the watchdog's answer", async () => {
+  assert.ok(isProviderRefusal("Archive requests require a personal token"));
+  assert.ok(isProviderRefusal("", 403));
+  assert.ok(isProviderRefusal("this method is not supported on the free plan"));
+  assert.ok(!isProviderRefusal("query exceeds max block range 10000"));
+  const hits = [];
+  const fetchImpl = async (url, init) => {
+    const host = new URL(url).host; hits.push(host);
+    const { method } = JSON.parse(init.body);
+    if (host === "arbitrum-one-rpc.publicnode.com" && method === "eth_getLogs") return reply(200, { jsonrpc: "2.0", id: 1, error: { code: -32000, message: "Archive requests require a personal token" } });
+    if (host === "arbitrum.drpc.org") return reply(500, "internal error");
+    return reply(200, { jsonrpc: "2.0", id: 1, result: method === "eth_getLogs" ? [] : "0x10" });
+  };
+  const urls = logsRpcUrls({ ARBITRUM_RPC_URL: "https://arbitrum-one-rpc.publicnode.com" });
+  assert.equal(urls[0], "https://arbitrum-one-rpc.publicnode.com");
+  const rpc = makeLogsRpc(urls, { fetchImpl, sleep: async () => {} });
+  assert.deepEqual(await rpc("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x2711" }]), []);
+  assert.deepEqual(hits, ["arbitrum-one-rpc.publicnode.com", "arb1.arbitrum.io"]);
+});
+
+test("a provider capped below 2,000 blocks is skipped once the scanner has halved down to it", async () => {
+  const hits = [];
+  const fetchImpl = async (url, init) => {
+    const host = new URL(url).host; hits.push(host);
+    void init;
+    if (host === "tiny.example") return reply(200, { error: { code: -32602, message: "block range too large, max 10 blocks" } });
+    return reply(200, { result: [] });
+  };
+  const rpc = makeLogsRpc(["https://tiny.example", "https://arb1.arbitrum.io/rpc"], { fetchImpl, sleep: async () => {} });
+  await assert.rejects(rpc("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x2710" }]), /block range too large/, "10k: the scanner halves first");
+  hits.length = 0;
+  assert.deepEqual(await rpc("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x" + PROVIDER_MIN_SPAN.toString(16) }]), []);
+  assert.deepEqual(hits, ["tiny.example", "arb1.arbitrum.io"], "at ≤ 2,000 blocks it moves on");
+  // end to end: the watchdog reads through it and is never blind
+  const env = { LAB_STORE: kv() };
+  const r = await runRegWatch(env, { logsRpc: makeLogsRpc(["https://tiny.example", "https://arb1.arbitrum.io/rpc"], {
+    fetchImpl: async (url, init) => {
+      const { method } = JSON.parse(init.body);
+      if (method === "eth_blockNumber") return reply(200, { result: "0x" + (200_000).toString(16) });
+      if (new URL(url).host === "tiny.example") return reply(200, { error: { message: "block range too large, max 10 blocks" } });
+      return reply(200, { result: [] });
+    }, sleep: async () => {} }), now: () => 0, index: async () => ({}), send: async () => true, scanOpts: { sleep: async () => {} } });
+  assert.equal(r.scanError, null);
+  assert.ok(JSON.parse(env.LAB_STORE.m.get(REGWATCH_KEY)).scannedTo > 200_000 - LOOKBACK_BLOCKS);
+});

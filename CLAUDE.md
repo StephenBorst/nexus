@@ -593,7 +593,10 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   kept and retried. State LAB_STORE `onchain:regwatch:v1`. A call left out past `INDEX_MAX_AGE_MS` (6h) can never be indexed.
   Logs are read from secret `ARBITRUM_RPC_URL` or `ARB_LOGS_RPC` (either; /wallets/onchain reads both) first, then the public
   endpoints (`PUBLIC_LOGS_RPCS`); a 429 backs off 0.5/1.5/4 s then tries the next endpoint (`makeLogsRpc`, 2026-11-16: the
-  public RPC 429'd 6 runs in a row from the shared Worker IP). 10k blocks a call, halving on a range refusal; a run that
+  public RPC 429'd 6 runs in a row from the shared Worker IP). An endpoint that refuses (token / archive / key, 401/403:
+  publicnode without its free Allnodes token refuses getLogs past ~10 blocks) or caps getLogs ≤ 2,000 blocks is skipped for
+  the next (`isProviderRefusal`, `PROVIDER_MIN_SPAN`). nexus-ledger-anchor also reads `ARBITRUM_RPC_URL` (anchor txs + gas
+  balance: latest state only, no archive). 10k blocks a call, halving on a range refusal; a run that
   made progress isn't counted blind. `/wallets/onchain` reads through the same `makeLogsRpc` (one 300 ms wait, it runs in a
   request). The daily digest prints the watchdog's line (`watchdogLine`: reading / blind + last read, calls indexed late in 7 days).
 - **Reads:** `GET /theses/leaderboard` (≥5 graded, net-positive R; an empty board is correct when nobody qualifies:
