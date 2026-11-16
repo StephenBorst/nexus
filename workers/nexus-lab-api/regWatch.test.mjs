@@ -233,6 +233,7 @@ test("the digest reads the watchdog's state; /wallets/onchain uses the same mult
 // ── 2026-11-16 live read: ARBITRUM_RPC_URL = publicnode without its token answers "Archive requests require a personal
 //    token" past ~10 blocks; drpc errored; arb1 served a 500-block read. The configured endpoint must not blind it. ──
 import { isProviderRefusal, PROVIDER_MIN_SPAN } from "./regWatch.mjs";
+import { isRangeError } from "./onchainWallets.mjs";
 
 test("an endpoint that refuses (token / archive / key) is skipped, never the watchdog's answer", async () => {
   assert.ok(isProviderRefusal("Archive requests require a personal token"));
@@ -278,4 +279,43 @@ test("a provider capped below 2,000 blocks is skipped once the scanner has halve
     }, sleep: async () => {} }), now: () => 0, index: async () => ({}), send: async () => true, scanOpts: { sleep: async () => {} } });
   assert.equal(r.scanError, null);
   assert.ok(JSON.parse(env.LAB_STORE.m.get(REGWATCH_KEY)).scannedTo > 200_000 - LOOKBACK_BLOCKS);
+});
+
+// ── 2026-11-17 overnight: blind for 6 runs at 02:15 UTC with drpc's "ranges over 10000 blocks are not supported on free
+//    plan". That is a range cap, not a refusal: the scanner must halve to 5,000 and read, not skip drpc. ──
+test("drpc's free-plan range cap halves the chunk instead of skipping the endpoint", async () => {
+  const DRPC = "ranges over 10000 blocks are not supported on free plan";
+  assert.ok(isRangeError(DRPC));
+  const fetchImpl = async (url, init) => {
+    const host = new URL(url).host;
+    const { method, params } = JSON.parse(init.body);
+    if (method === "eth_blockNumber") return reply(200, { jsonrpc: "2.0", id: 1, result: "0x" + (300_000).toString(16) });
+    if (host === "arb1.arbitrum.io") return reply(429, "Too Many Requests");
+    if (host === "arbitrum-one-rpc.publicnode.com") return reply(200, { jsonrpc: "2.0", id: 1, error: { code: -32000, message: "Archive requests require a personal token" } });
+    const span = parseInt(params[0].toBlock, 16) - parseInt(params[0].fromBlock, 16) + 1;
+    if (span >= 10_000) return reply(200, { jsonrpc: "2.0", id: 1, error: { code: 35, message: DRPC } });
+    return reply(200, { jsonrpc: "2.0", id: 1, result: [] });
+  };
+  const env = { LAB_STORE: kv() };
+  const logsRpc = makeLogsRpc(logsRpcUrls({ ARBITRUM_RPC_URL: "https://arbitrum-one-rpc.publicnode.com" }), { fetchImpl, sleep: async () => {} });
+  const r = await runRegWatch(env, { logsRpc, now: () => 0, index: async () => ({}), send: async () => true, scanOpts: { sleep: async () => {} } });
+  assert.equal(r.scanError, null, "not blind");
+  const st = JSON.parse(env.LAB_STORE.m.get(REGWATCH_KEY));
+  assert.equal(st.chunk, 5_000, "remembers the size drpc serves");
+  assert.ok(st.scannedTo > 300_000 - LOOKBACK_BLOCKS);
+  // The rotation starts at the endpoint that answered last, so drpc isn't always tried last. When another endpoint's
+  // refusal came after drpc's cap, the cap was lost and the scanner never halved: blind.
+  const env2 = { LAB_STORE: kv() };
+  const rotated = makeLogsRpc(["https://arbitrum.drpc.org", "https://arbitrum-one-rpc.publicnode.com", "https://arb1.arbitrum.io/rpc"], { fetchImpl, sleep: async () => {} });
+  const r2 = await runRegWatch(env2, { logsRpc: rotated, now: () => 0, index: async () => ({}), send: async () => true, scanOpts: { sleep: async () => {} } });
+  assert.equal(r2.scanError, null, "drpc first in the rotation: still halves and reads");
+  assert.equal(JSON.parse(env2.LAB_STORE.m.get(REGWATCH_KEY)).chunk, 5_000);
+  // A 401 / 403 is still no access, whatever the message says.
+  const hits = [];
+  const rpc = makeLogsRpc(["https://a.example", "https://b.example"], { sleep: async () => {}, fetchImpl: async (url) => {
+    hits.push(new URL(url).host);
+    return new URL(url).host === "a.example" ? reply(403, { error: { message: "block range limit" } }) : reply(200, { result: [] });
+  } });
+  assert.deepEqual(await rpc("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x2710" }]), []);
+  assert.deepEqual(hits, ["a.example", "b.example"]);
 });

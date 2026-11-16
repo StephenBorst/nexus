@@ -94,12 +94,16 @@ export function makeLogsRpc(urls, { fetchImpl = globalThis.fetch, sleep = (ms) =
           if (attempt < waits.length) { await sleep(waits[attempt]); continue; }
           break;                                          // still limited: next endpoint
         }
-        if (isProviderRefusal(msg, status)) break;       // this endpoint won't serve it: next endpoint
+        if (status === 401 || status === 403) break;     // no access at all: next endpoint
+        // A range cap is checked before the refusal words: drpc's free plan answers "ranges over 10000 blocks are not
+        // supported on free plan" (2026-11-17), which "not supported" read as a refusal, so the endpoint was skipped
+        // instead of the scanner halving to a range it serves, and the watchdog went blind for 6 runs.
         if (body && body.error && isRangeError(msg)) {
           const span = logSpan(method, params);
           if (span != null && span <= PROVIDER_MIN_SPAN) break; // capped too small to keep up: next endpoint
           const e = new Error(msg); e.rpcError = body.error; throw e;                  // the scanner halves the range
         }
+        if (isProviderRefusal(msg, status)) break;       // this endpoint won't serve it: next endpoint
         if (body && body.error) { const e = new Error(msg); e.rpcError = body.error; throw e; } // the chain's answer
         break;                                            // network / http error: next endpoint
       }
