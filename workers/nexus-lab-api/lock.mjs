@@ -38,6 +38,8 @@ export const LOCK_KEYS = {
   judgeSigs: () => "pipeline:judgsigs",
   // Live plan signatures (routes-planSign.mjs): one KV value, each page signed once.
   planSigs: () => "pipeline:plansigs",
+  // The weekly scorecard (weeklyScorecard.mjs): one week is written once; two cron runs at once mustn't both write it.
+  proofWeekly: (week) => `proofweekly:${week}`,
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;

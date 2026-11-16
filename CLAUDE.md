@@ -554,6 +554,13 @@ product is what sits on top:
   one page (the tide, each registered read's sides vs a random entry on that side, paper wallets, engine callers); every
   sentence follows a stated rule (`sideWords`), plus an optional plain-text "This week" note. The scheduled task "Weekly
   engine review" (Mondays 10:37 Denver) runs it, writes the note and republishes borst's private review page in place.
+- **Weekly scorecard on /proof** (borst 2026-11-16, signed section in pipeline-if-then.md; rules `app/lib/weeklyScorecard.mjs`,
+  job + route `workers/nexus-lab-api/weeklyScorecard.mjs`, panel `WeeklyScorecard.tsx` under the board): hourly at :29 the
+  worker builds the last complete week (Mon 00:00 UTC →) once from what it stores, under NexusLock `proofWeekly`, into
+  LAB_STORE `proof:weekly:{week}` + `proof:weekly:index` (sha256 each); never rewritten. `GET /proof/weekly` (index +
+  latest), `GET /proof/weekly/:week` = the stored bytes (`X-Content-SHA256`). New-data per-side vs random per registered
+  read, stage moves, paper as COUNTS only, calls people/engines apart with MAE/MFE medians (calls only); no regime split
+  until the trend-gate judge. No scheduled task or key writes it.
 - **House caller is OFF** (`HOUSE_SIGNALS_ENABLED` deleted; gates the Catalyst caller too). Check "off" by reading
   `enabled` on `/signals/house` and `/signals/catalyst-house`, never by a quiet run. `POST /signals/house` with
   `HOUSE_SIGNALS_ADMIN` still posts by hand regardless. Keep `HOUSE_CALLER_ADDRESS` set (the dedupe reads it). On again

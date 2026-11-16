@@ -119,6 +119,7 @@ import { marketCoin } from "../../app/lib/marketRead.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
 import { parityEvents } from "./parityEvents.mjs";
 import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
+import { runWeekly, handleWeekly, WEEKLY_RUN_MINUTE } from "./weeklyScorecard.mjs";
 import { handleRecordShare } from "./routes-recordshare.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { runMarketWatch } from "./marketWatch.mjs";
@@ -774,6 +775,14 @@ const worker = {
           catch (e) { console.error("[judge] run failed:", String(e?.message || e)); }
         })());
       }
+      // Once an hour: the weekly scorecard for /proof (weeklyScorecard.mjs). Builds the last complete week once, if it
+      // isn't stored yet; a written week is never rewritten. Reads only, writes proof:weekly:* in LAB_STORE.
+      if (minute === WEEKLY_RUN_MINUTE) {
+        ctx.waitUntil((async () => {
+          try { const r = await runWeekly(env, { scorecardKey: axisbtCacheKey(20) }); if (r.written || r.skipped !== "done") console.log(`[weekly] ${JSON.stringify(r)}`); }
+          catch (e) { console.error("[weekly] run failed:", String(e?.message || e)); }
+        })());
+      }
       // Once an hour, after the judge: the owner's Telegram alerts (what changed and needs attention) and, once a
       // day, the digest (opsDigest.mjs; rules app/lib/opsDigest.mjs). Reads only; sends to OPS_TELEGRAM_CHAT_ID.
       if (minute === DIGEST_RUN_MINUTE) {
@@ -1253,6 +1262,11 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
       });
       if (fadeRes) return fadeRes;
+    }
+    // ── /proof/weekly[/:week] → the frozen weekly scorecards and their sha256 (weeklyScorecard.mjs) ─────────────
+    {
+      const weeklyRes = await handleWeekly(parts, request, env);
+      if (weeklyRes) return weeklyRes;
     }
     // ── /calls/pulse → open calls + graded this week, for the Trade/Spot chip and the landing (routes-pulse.mjs) ─
     {
