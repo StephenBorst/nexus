@@ -433,7 +433,14 @@ product is what sits on top:
   bodies live in `explorerReads.mjs`; unregistered drafts in `explorerDraftsB.mjs` (batch 2, `explorer-drafts-b.md`; tests
   fail if a draft is graded or axisbt imports it) and `explorerDrafts4.mjs` (batch 4, `explorer-drafts-4.md`: settled, A + D
   registered, B funding_settle_snap + C level_reclaim_weekly DROPPED; generators get axisbt's `ctx.btcCandles`;
-  `powerCheck.mjs --batch=4`). `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
+  `powerCheck.mjs --batch=4`) and batch 5 = the two Bankr scanners, `scanner-reads-prereg.md`, **SIGNED by borst 2026-11-16 ("sign both"),
+  registered from 2026-11-17T00:00Z**, bodies in `explorerReads.mjs` (`explorerDrafts5.mjs` now empty): `shelf_breakdown_short` (24h shelf untouched 12h, 1h close under it, 1h vol ≥ 1.5× 20-bar avg,
+  07–21 UTC Mon–Fri, 4h trend DOWN, short-only; ~6 main-card events a month) and `bb_rsi_momentum` (1h close outside
+  BB 20/2, RSI-14 > 60 / < 40, with the 4h trend vs EMA-20, no 3h-range burst > 2× the prior 24h; ~4 a day);
+  `powerCheck.mjs --batch=5`; +57 ms a scoreboard pass on 19 coins, so watch `[scoreboard] rebuilt in N ms`; the breakout
+  read never fires on the shared lookahead tape, so it has its own no-lookahead test; their calls post from a dedicated
+  engine wallet, address pending from borst).
+  `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.
 - **Regime window** (`docs/research/graded-exit-regime-prereg.md`, signed 2026-10-26; counts from 2026-10-27T00:00Z,
   limit 2027-04-27): the same read + graded exit, judged once by the watcher via `judgeRegimeWindow`
