@@ -152,6 +152,10 @@ product is what sits on top:
   chat) via `TELEGRAM_TOKEN`: an ALERT when something changed that needs the owner (stage move, parity DRIFT /
   UNVERIFIABLE or clean again, verdict recorded, a new register / wire / sign item); the DIGEST once a day from 15:00 UTC
   (needs you · paper runs in R with tape, open trade or quiet reason, parity · stages · receivers not swept, tokens only).
+  **Engine heartbeat** (borst 2026-11-16, rules `app/lib/engineBeat.mjs`): each engine row's last call from the pulse
+  (`lastPostedAt`); no call in `ENGINE_QUIET_H` 48h = QUIET (never-posted = not started, never quiet). The digest's "Engine
+  callers" section lists each + the rule-checked wallets' line (once a day); an ALERT the run one goes quiet and when it
+  posts again (`engineAlerts`, state `quietEngines`; no burst on the first run); /proof prints "quiet: no call in 48h+".
   The first run sends "digest is on". Writes only `ops:digest:state:v1` + `ops:digest:sent:{day}`; a failed send keeps
   the old state so the alert retries next run. Moves, signs and trades nothing.
   **After a verdict** (`verdictSteps`): a PASS lists the ordered path under "Needs you", marked done / next: sign the live
