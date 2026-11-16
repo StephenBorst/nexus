@@ -67,7 +67,9 @@ const finish = (b) => {
  *   engines   our engine callers' wallets, counted in `engines`, never in the people's numbers
  *   isCurrent the grader's "stamp is current" check (grading.mjs isCurrentStamp); a stale stamp counts nowhere
  * @returns {PulseBlock & { engines: PulseBlock, engineRecords: EngineRecord[] }}
- * @typedef {{ wallet:string, graded:number, wins:number, netR:number, lastAt:number|null }} EngineRecord
+ * @typedef {{ wallet:string, graded:number, wins:number, netR:number, lastAt:number|null, posted:number, lastPostedAt:number|null }} EngineRecord
+ *   every engine wallet with a Lab record gets a row, graded or not: `posted` = its public calls, `lastPostedAt` = the
+ *   newest one's server publish time (so a new engine shows before its first grade, and a stopped one reads as stopped)
  * @typedef {{ open:number, gradedWeek:number, last: PulseGraded|null, openCalls: PulseOpen[], recentGraded: PulseGraded[] }} PulseBlock
  * @typedef {{ symbol:string, direction:string, at:number, path:string, wallet:string, engine:boolean }} PulseOpen
  * @typedef {PulseOpen & { outcome:"WIN"|"LOSS", r:number|null }} PulseGraded
@@ -86,9 +88,20 @@ export function callPulse(records, now, opts = {}) {
     const from = personFrom.get(w);
     const engine = from === undefined && engineSet.has(w);
     const b = engine ? engines : people;
+    const erow = () => {
+      const k = w;
+      if (!engineMap.has(k)) engineMap.set(k, { wallet, graded: 0, wins: 0, netR: 0, lastAt: null, posted: 0, lastPostedAt: null });
+      return engineMap.get(k);
+    };
+    if (engine) erow();
     for (const t of rec.theses || []) {
       if (!isPublic(t)) continue;
       if (from !== undefined && !(Number(t.publishedAt) >= from)) continue;
+      if (engine) {
+        const row = erow(), pub = Number(t.publishedAt) || Number(t.createdAt) || 0;
+        row.posted += 1;
+        if (pub > 0 && pub <= now + 10 * 60000 && (!row.lastPostedAt || pub > row.lastPostedAt)) row.lastPostedAt = pub;
+      }
       const head = { symbol: bare(t.symbol), direction: String(t.direction || "").toUpperCase(), path: `/feed/thesis/${wallet}/${encodeURIComponent(String(t.id))}`, wallet, engine };
       if (isGraded(t)) {
         if (!isCurrent(t)) continue;
@@ -98,12 +111,11 @@ export function callPulse(records, now, opts = {}) {
         const r = Number(t.gradedR);
         b.graded.push({ ...head, outcome: t.gradedOutcome, r: Number.isFinite(r) ? Math.round(r * 100) / 100 : null, at });
         if (engine) {
-          const rec = engineMap.get(wallet) || { wallet, graded: 0, wins: 0, netR: 0, lastAt: null };
+          const rec = erow();
           rec.graded += 1;
           if (t.gradedOutcome === "WIN") rec.wins += 1;
           if (Number.isFinite(r)) rec.netR += r;
           if (!rec.lastAt || at > rec.lastAt) rec.lastAt = at;
-          engineMap.set(wallet, rec);
         }
         continue;
       }
@@ -115,7 +127,7 @@ export function callPulse(records, now, opts = {}) {
   }
   const engineRecords = [...engineMap.values()]
     .map((x) => ({ ...x, netR: Math.round(x.netR * 100) / 100 }))
-    .sort((a, b) => b.graded - a.graded || (b.lastAt || 0) - (a.lastAt || 0));
+    .sort((a, b) => b.graded - a.graded || (b.lastAt || 0) - (a.lastAt || 0) || (b.lastPostedAt || 0) - (a.lastPostedAt || 0));
   return { ...finish(people), engines: finish(engines), engineRecords };
 }
 

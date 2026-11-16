@@ -16,7 +16,7 @@ import { proofHeadline, HEADLINE_MAX_AGE_MS } from "../../app/lib/proofCopy.mjs"
 import { signalProgress, paperWalletsFor } from "../../app/lib/signalProgress.mjs";
 import { isCurrentStamp } from "./grading.mjs";
 
-export const PULSE_CACHE_KEY = "calls:pulse:v5"; // v5 = + signals (cleared reads + paper progress), last-good board · v4 = + engineRecords (per-engine all-time record, /proof) · v3 = people vs engines split + caller names · v2 = + openCalls / recentGraded
+export const PULSE_CACHE_KEY = "calls:pulse:v6"; // v6 = engineRecords: every engine wallet, + posted / lastPostedAt · v5 = + signals (cleared reads + paper progress), last-good board · v4 = + engineRecords (per-engine all-time record, /proof) · v3 = people vs engines split + caller names · v2 = + openCalls / recentGraded
 const PULSE_TTL_S = 300;
 export const PULSE_BOARD_KEY = "calls:pulse:board:v1";
 

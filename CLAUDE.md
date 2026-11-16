@@ -440,6 +440,11 @@ product is what sits on top:
   `powerCheck.mjs --batch=5`; +57 ms a scoreboard pass on 19 coins, so watch `[scoreboard] rebuilt in N ms`; the breakout
   read never fires on the shared lookahead tape, so it has its own no-lookahead test; their calls post from the dedicated
   engine wallet `0xbce4…f432`, in `ENGINE_CALLER_ADDRESSES` since 2026-11-16; its key is held outside this repo).
+  **Rule check** (borst 2026-11-16, `docs/research/scanner-rule-check.md`, rules `app/lib/ruleCheck.mjs`, route
+  `GET /engines/rule-check/:wallet` routes-rulecheck.mjs, 10-min cache): for a wallet in `RULE_CHECKS` (test-pinned to
+  engine wallets + registered reads), the scoreboard's own generators on its coins' `candle:hist` vs its public calls:
+  POSTED (same coin + side, bar open → close + 2h, one call per setup) / SKIPPED / PENDING / OFF-RULE; unread tape =
+  named, never a skip. Measurement only; /proof prints the line on the engine row. Never loosen the match to close a gap.
   `GET /agent/basis-history/:coin` = read-only basis:hist. A new registration also adds its read to `pipeline-stages.json`.
 - **Retired:** the Basis × CVD graded exit (2026-10-26, `RETIRED_GRADED_EXITS` in proofCopy.mjs), final.
 - **Regime window** (`docs/research/graded-exit-regime-prereg.md`, signed 2026-10-26; counts from 2026-10-27T00:00Z,
@@ -723,7 +728,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   open calls (entry traded) + graded in 7 days + the last grade + the /proof headline read from the scoreboard's
   own cache (`axisbtCacheKey`). **People and our engine callers counted APART, never blended** (borst 2026-11-05):
   top-level = people, `engines` = the wallets in worker var `ENGINE_CALLER_ADDRESSES` ("Ember", "Ember M", the Bankr scanners' `0xbce4…f432`); both house callers (`HOUSE_CALLER_ADDRESS`, `HOUSE_CATALYST_ADDRESS`) left out; no copies. Rows carry the
-  caller's display name (`caller`) + `engine`; `engineRecords` = each engine's all-time graded record (graded, wins, net R)
+  caller's display name (`caller`) + `engine`; `engineRecords` = each engine's all-time graded record (graded, wins, net R; since 2026-11-16 EVERY engine wallet with
+  a Lab record gets a row, + `posted` and `lastPostedAt`, pulse v6)
   → /proof's "Our engine callers" fold (losses included, "not a signal service"). Each engine row carries a plain
   line of what it trades (`ENGINE_NOTES` in proofCopy.mjs, keys pinned to `ENGINE_CALLER_ADDRESSES`). Public names (borst
   2026-11-06): `0x3b2c…bfe4` = "Ember", `0x493d…c086` = "Ember M" (Ember's breakout track). `0xd9f7…b449` was "Engine A"
