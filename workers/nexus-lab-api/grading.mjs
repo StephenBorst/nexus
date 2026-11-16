@@ -11,6 +11,7 @@
 //
 // ⚠️ Pure move — logic byte-identical to what shipped.
 import { notifyResolution, notifyFillEvent } from "./resolutions.mjs";
+import { recordRisk } from "../../app/lib/recordRisk.mjs";
 import { fillEvents } from "./callStatus.mjs";
 import {
   gradeCall, entryFill, classifyRegime, callAlignment, regimeBucketsOf, regimeBuckets,
@@ -412,7 +413,8 @@ export async function computeCallerStats(env, _unusedHorizonS = 30 * 86400, opts
     a.calls += 1; if (g.outcome === "WIN") a.wins += 1; a.rSum += g.r;
     // Track (time, R) so the leaderboard can emit a cumulative-R equity curve —
     // the same trustless grade, just as a series instead of an aggregate.
-    a.resolved.push({ at: t.createdAt || 0, r: g.r });
+    // closeAt = when it closed (the minute stamp, else this read's exit bar), for the risk read's order.
+    a.resolved.push({ at: t.createdAt || 0, closeAt: minute ? Number(t.exitedAt) || 0 : (g.exitAt ? g.exitAt * 1000 : 0), r: g.r });
     // Expectancy + conviction-calibration input. conviction = the trader's own size
     // proxy: how much of the account they put at risk (riskPercent), falling back to
     // the planned asymmetry (riskReward). Lets us ask "did the bigger bets win?".
@@ -457,6 +459,8 @@ export async function computeCallerStats(env, _unusedHorizonS = 30 * 86400, opts
     // Expectancy-forward ranking + the conviction-calibration read.
     a.expectancy = expectancyStats(a.expRows);
     a.calibration = convictionCalibration(a.expRows);
+    // Profit factor, max drawdown in R, worst losing run, expectancy range (app/lib/recordRisk.mjs).
+    a.risk = recordRisk(a.resolved);
     // Aggregate the macro record (null when the wallet has posted no event-driven calls).
     a.macro = a._macro.length ? {
       calls: a._macro.length,

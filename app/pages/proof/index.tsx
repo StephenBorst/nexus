@@ -6,6 +6,7 @@
 // → the signals being tested (name · events · needs 30), the rest folded → graded calls, led by the
 // full record → verified callers → the other records, folded → the ledger line → "How we grade".
 // Every board is fail-soft: sparse at cold-start by design, never broken.
+import { riskBrief, RISK_MIN_CALLS } from "@/lib/recordRisk.mjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
@@ -32,7 +33,7 @@ const usd = (n: number) => `${n < 0 ? "-" : "+"}$${Math.abs(n) >= 1000 ? `${(Mat
 // ── data types (only the fields we render) ──
 // Our engine callers' all-time graded record (GET /calls/pulse `engineRecords`, app/lib/callPulse.mjs).
 type EngineRecord = { wallet: string; caller?: string; graded: number; wins: number; netR: number; lastAt: number | null };
-type Caller = { wallet: string; displayName?: string; pfp?: string; hitRate: number; avgR: number; calls: number; score: number; meritRank?: { glyph: string; title: string } | null };
+type Caller = { wallet: string; displayName?: string; pfp?: string; hitRate: number; avgR: number; calls: number; score: number; meritRank?: { glyph: string; title: string } | null; risk?: Parameters<typeof riskBrief>[0] };
 type Agent = { rank: number; wallet: string; displayName?: string; pfp?: string; trades: number; winRate: number; netPnl: number; profitFactor: number; score: number };
 type ArenaAgent = { wallet: string; name: string; builder?: string; currentPosition?: { symbol: string; direction: string } | null; paper?: { trades: number; winRate: number; netPnl: number } | null; live?: { trades: number; winRate: number; netPnl: number } | null };
 type Desk = { id: string; name: string; rank: number; members: number; calls: number; hitRate: number; totalR: number; score: number };
@@ -217,7 +218,7 @@ export default function ProofPage() {
                       <Pfp src={c.pfp} />
                       <span style={nameCell}>{c.displayName || short(c.wallet)}</span>
                       {c.meritRank?.glyph && <span title={c.meritRank.title} style={{ fontFamily: MONO, fontSize: 10, color: BONE, flexShrink: 0 }}>{c.meritRank.glyph}</span>}
-                      <span style={{ ...statCell, ...statM }}>{c.calls} calls · {c.hitRate}% · {c.avgR >= 0 ? "+" : ""}{c.avgR}R</span>
+                      <span style={{ ...statCell, ...statM }} title={riskBrief(c.risk) ?? `Risk in R shows from ${RISK_MIN_CALLS} graded calls`}>{c.calls} calls · {c.hitRate}% · {c.avgR >= 0 ? "+" : ""}{c.avgR}R{riskBrief(c.risk) ? ` · ${riskBrief(c.risk)}` : ""}</span>
                       <span style={{ ...scoreCell, color: c.score > 0 ? BONE : FAINT }}>{c.score || "—"}</span>
                     </div>
                   ))}

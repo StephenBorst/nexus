@@ -26,6 +26,7 @@ import { SIGNAL } from "@/config/theme";
 import { TEXT_ACTION, TEXT_ACTION_BAR, TEXT_ACTION_CLASS } from "@/components/ui";
 import { identityShareText, normRecord } from "@/lib/identityCard.mjs";
 import { profileCalls, recordTiles, signedUsd } from "@/lib/profileRecord.mjs";
+import { RiskRecordCard, type RecordRisk } from "@/components/RiskRecordCard";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { pressKey } from "@/utils/a11y";
 import { useEscapeKey } from "@/utils/a11y";
@@ -556,6 +557,7 @@ export default function TraderPage() {
       .then((d) => {
         setMerit(d?.meritRank?.title ? { glyph: String(d.meritRank.glyph ?? ""), title: String(d.meritRank.title) } : null);
         if (d && typeof d.calls === "number") setRecord(normRecord(d));
+        setRisk(d?.risk && typeof d.risk.calls === "number" ? d.risk as RecordRisk : null);
       })
       .catch(() => {});
     // Hub: this trader's graded AGENT record + their published strategies.
@@ -600,6 +602,7 @@ export default function TraderPage() {
   }, [theses]);
   // The win-rate / R tiles read the grader's record (the share card + rank read the same one);
   // until it answers, the calls on screen, labelled as such.
+  const [risk, setRisk] = useState<RecordRisk | null>(null);
   const tiles = useMemo(() => recordTiles(record, { wins: stats.wins, losses: stats.losses, avgR: stats.avgR ?? NaN }), [record, stats.wins, stats.losses, stats.avgR]);
 
   // Pull each identity field from the first thesis that actually has it — a wallet's
@@ -833,6 +836,7 @@ export default function TraderPage() {
                     color="#a1a1aa"
                   />
                 </div>
+                <RiskRecordCard risk={risk} />
 
                 {/* Hub: this trader's graded autonomous-agent record */}
                 {agentRec && (

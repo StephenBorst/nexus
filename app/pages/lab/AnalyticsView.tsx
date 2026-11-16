@@ -5,6 +5,7 @@ import type { ProcessedTrade, ThesisTrade } from "./types";
 import { cardStyle, labelStyle } from "./styles";
 import { ProcessSection, PlanAdherenceCard } from "./ProcessView";
 import { OperatorProfileCard } from "./OperatorProfile";
+import { WalletRiskCard } from "@/components/RiskRecordCard";
 import { TrackedRecordCard } from "@/components/TrackedRecordCard";
 import { formatPnl, formatPnlCompact, formatUsdCompact } from "./helpers";
 import { PnlChart, PnlBars, EmptyState, CountUp, SectionHeader } from "./components";
@@ -475,6 +476,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       {/* SYNTHESIS FIRST — one point of view, before the instrument panel. Everything
           below is the evidence for it. */}
       <OperatorProfileCard wallet={wallet} theses={theses} orders={orders} />
+      <WalletRiskCard wallet={wallet} />
 
       {/* Your OWN on-chain Tracked Record — graded by the exact same methodology the
           Smart Money x-ray applies to any wallet (realized-PnL consistency over time).
