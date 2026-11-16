@@ -16,7 +16,7 @@
 import { C } from "@/config/theme";
 import { callLifecycle, workingLine, provisionalTouch } from "@/lib/callLifecycle.mjs";
 import { graderCadence, gradeBar, isMinuteGraded } from "@/lib/minuteGrade.mjs";
-import { callInvalidReason } from "@/lib/callMath.mjs";
+import { callInvalidReason, expiredLabel } from "@/lib/callMath.mjs";
 
 const MONO = "var(--nx-font-mono)";
 
@@ -29,11 +29,14 @@ export const fmtPx = (n: unknown) => {
 
 type Call = {
   status?: string; gradedOutcome?: string; fillState?: string; publishMark?: { px?: number }; createdAt?: number; tp1HitAt?: number;
+  expiredReason?: string; fillWithinH?: number; trailStop?: number;
   direction?: string; entryPrice: number; stopLoss?: number; takeProfit1?: number; takeProfit2?: number; exitPlan?: string;
 };
 
 /** The status pill's text for a call with no position, or null when the card's own label applies. */
 export function awaitingLabel(t: Call): string | null {
+  const exp = expiredLabel(t);
+  if (exp) return `${exp.charAt(0)}${exp.slice(1).toLowerCase()}`;   // "Expired · not filled in 12h"
   const s = callLifecycle(t);
   if (s === "WORKING") return `Awaiting fill · $${fmtPx(t.entryPrice)}`;
   if (s === "UNCHECKED") return "Checking fill";

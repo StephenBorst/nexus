@@ -61,9 +61,11 @@ export const STATUS_CONFIG: Record<ThesisStatus, { label: string; color: string;
   HIT_TP:      { label: "HIT TP",      color: "#ededf0", bg: "#1a1a1e", border: "#33333a" },
   STOPPED_OUT: { label: "STOPPED OUT", color: "#f7525f", bg: "#241012", border: "#4a1e22" },
   INVALIDATED: { label: "INVALIDATED", color: "#fbbf24", bg: "#2a1a00", border: "#4a3a00" },
+  // A declared order expiry closed it unfilled (callMath fillWindowPlan): not a win, not a loss.
+  EXPIRED:     { label: "EXPIRED",     color: "#a1a1aa", bg: "#1a1a1e", border: "#33333a" },
 };
 
-export const CLOSED_STATUSES: ThesisStatus[] = ["HIT_TP", "STOPPED_OUT", "INVALIDATED"];
+export const CLOSED_STATUSES: ThesisStatus[] = ["HIT_TP", "STOPPED_OUT", "INVALIDATED", "EXPIRED"];
 
 // ─── Agent (Trading Agent tab) styles — built from the design tokens ─────────
 export const agentCardStyle: CSSProperties = {

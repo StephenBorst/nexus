@@ -63,10 +63,24 @@ export function entryFill(t, cd) {
   const mark = Number(t?.publishMark?.px);
   const atPost = mark > 0 ? atMark(entry, mark) : ref < n && traded(ref);
   if (atPost) return { filled: true, atPost: true, fillSec: startSec, fillIdx: -1, next: i };
+  // A declared fill window (callMath fillWindowPlan, 2026-11-16): the order is only good until
+  // post + N hours, and a BREAKOUT entry (the market at the post between the stop and the entry) is
+  // void once its stop trades first. A bar that trades the entry AND the stop is a fill (the stop in
+  // the fill bar then counts: a LOSS, conservative).
+  const fw = fillWindowPlan(t);
+  const expiry = fw ? startSec + fw.hours * 3600 : Infinity;
+  const stop = Number(t?.stopLoss), long = String(t?.direction).toUpperCase() === "LONG";
+  const breakout = !!fw && mark > 0 && stop > 0 && (long ? stop < mark && mark < entry : entry < mark && mark < stop);
+  const stopTraded = (k) => (long ? cd.l[k] <= stop : cd.h[k] >= stop);
   let f = i;
-  while (f < n && !traded(f)) f++;
-  if (f >= n) return { filled: false };
-  return { filled: true, atPost: false, fillSec: cd.t[f], fillIdx: f, next: f + 1 };  // a target in the fill hour doesn't count
+  while (f < n && cd.t[f] < expiry) {
+    if (traded(f)) return { filled: true, atPost: false, fillSec: cd.t[f], fillIdx: f, next: f + 1 };  // a target in the fill hour doesn't count
+    if (breakout && stopTraded(f)) return { filled: false, expired: { reason: EXPIRE_STOP_FIRST, atSec: cd.t[f] } };
+    f++;
+  }
+  // A bar at or past the expiry exists: the window has closed with no fill.
+  if (fw && f < n) return { filled: false, expired: { reason: EXPIRE_TIME, atSec: expiry } };
+  return { filled: false };
 }
 
 /**
@@ -124,7 +138,13 @@ export function entryFill(t, cd) {
  *   printed before that, only once a later bar exists (the store's last bar may be a partial hour).
  *   TP and stop are checked first in every bar, bar N included; a missing close = PENDING.
  *
- * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, takeProfit2?, exitPlan?, createdAt, publishMark? }
+ * - DECLARED PLANS (2026-11-16, callMath PLANS_V2_FROM_MS). `exitPlan: "SPLIT_50_BE"`: TP1 banks half;
+ *   the runner's stop moves to the entry and trails 1R behind the best close since TP1 (beRunner below),
+ *   closing at the trail or an optional TP2; WIN = 0.5·R1 + 0.5·(runner R ≥ 0), exitReason TRAIL / BE.
+ *   `fillWithinH: N`: an entry not traded by post + N hours = EXPIRED (outcome "EXPIRED", not a grade),
+ *   and a breakout entry whose stop trades first = EXPIRED with reason STOP_FIRST (entryFill).
+ *
+ * @param {object} t  thesis { direction, entryPrice, stopLoss, takeProfit1, takeProfit2?, exitPlan?, timeStopH?, fillWithinH?, createdAt, publishMark? }
  * @param {object} cd candles { t:number[] (sec), h:number[], l:number[] } ascending by t
  * @returns {{ outcome:"WIN"|"LOSS"|"PENDING"|"INVALID", r:number, awaitingEntry?:true, exitAt?:number,
  *   legs?:{ tp1:"HIT"|"STOP"|"OPEN", runner:"TP2"|"STOP"|"OPEN" }, tp1At?:number, bankedR?:number }}
@@ -139,8 +159,15 @@ export function gradeCall(t, cd) {
   const stop = timeStopPlan(t);
   if (stop && stop.invalid) return { outcome: "INVALID", r: 0 };
   const long = String(t.direction).toUpperCase() === "LONG";
+  const be = beRunnerPlan(t);
+  if (be && be.invalid) return { outcome: "INVALID", r: 0 };
+  if (fillWindowPlan(t)?.invalid) return { outcome: "INVALID", r: 0 };
   const fill = entryFill(t, cd);
-  if (!fill.filled) return { outcome: "PENDING", r: 0, awaitingEntry: true };
+  if (!fill.filled) {
+    return fill.expired
+      ? { outcome: EXPIRED, r: 0, expiredReason: fill.expired.reason, expiredAt: fill.expired.atSec }
+      : { outcome: "PENDING", r: 0, awaitingEntry: true };
+  }
   let i = fill.next;
   const f = fill.fillIdx;
   // The time stop's window end (sec): bar 1 starts at the first hour graded (the hour after a resting
@@ -166,6 +193,7 @@ export function gradeCall(t, cd) {
     const tp = reached(i, takeProfit1), sl = stopHit(i);
     if (sl) return stopped(i);           // a same-candle target + stop is a LOSS (conservative)
     if (!tp) continue;
+    if (be) return beRunner(t, cd, i, R, be, long);
     if (!split) return { outcome: "WIN", r: R, exitAt: cd.t[i] };
     // TP1 banked on half. The runner keeps the original stop.
     const tp1At = cd.t[i], banked = R / 2;
@@ -180,10 +208,49 @@ export function gradeCall(t, cd) {
   return { outcome: "PENDING", r: 0 };
 }
 
+/**
+ * The runner of a declared breakeven split (callMath beRunnerPlan), from the bar TP1 traded in (`i`).
+ * Half is banked at TP1 (R/2). The runner's stop starts at the ENTRY and trails TRAIL_R × risk behind
+ * the best close since TP1 (that bar's close included), only ever tightening; each bar is checked
+ * against the trail set by the closes before it, the trail before TP2, a trail exit filling at the trail.
+ * PENDING while the runner is open, carrying `trail` (the level now) for the card.
+ */
+function beRunner(t, cd, i, R, be, long) {
+  const entry = Number(t.entryPrice), risk = Math.abs(entry - Number(t.stopLoss));
+  const tp2 = be.r2 != null ? Number(t.takeProfit2) : null;
+  const tp1At = cd.t[i], banked = R / 2;
+  const reached = (k, px) => (long ? cd.h[k] >= px : cd.l[k] <= px);
+  const done = (runner, runnerR, k, exitReason) => ({
+    outcome: "WIN", r: round(banked + runnerR / 2, 2), legs: { tp1: "HIT", runner }, tp1At, bankedR: round(banked, 2),
+    exitAt: cd.t[k], ...(exitReason ? { exitReason } : {}),
+  });
+  if (tp2 != null && reached(i, tp2)) return done("TP2", be.r2, i);   // the TP1 bar reached TP2 too: both halves
+  let trail = entry;
+  const ratchet = (k) => {
+    const c = Number(cd.c?.[k]);
+    if (!(c > 0)) return;                       // no close read: the trail holds (never loosens)
+    const cand = long ? c - TRAIL_R * risk : c + TRAIL_R * risk;
+    if (long ? cand > trail : cand < trail) trail = cand;
+  };
+  ratchet(i);
+  for (let k = i + 1; k < cd.t.length; k++) {
+    if (long ? cd.l[k] <= trail : cd.h[k] >= trail) {
+      const rr = (long ? trail - entry : entry - trail) / risk;
+      return rr > 1e-9 ? done("TRAIL", rr, k, "TRAIL") : done("BE", 0, k, "BE");
+    }
+    if (tp2 != null && reached(k, tp2)) return done("TP2", be.r2, k);
+    ratchet(k);
+  }
+  return { outcome: "PENDING", r: 0, legs: { tp1: "HIT", runner: "OPEN" }, tp1At, bankedR: round(banked, 2), trail };
+}
+
 // The declared split exit (see gradeCall) and the rule that reads it live ONCE in app/lib/callMath.mjs,
 // shared with the publish lock, /theses/status and the cards. A TP2 equal to TP1 = a single target.
-import { SPLIT_EXIT, splitPlan, timeStopPlan, TIME_EXIT } from "../../app/lib/callMath.mjs";
-export { SPLIT_EXIT, splitPlan, timeStopPlan, TIME_EXIT };
+import {
+  SPLIT_EXIT, splitPlan, timeStopPlan, TIME_EXIT,
+  SPLIT_BE_EXIT, beRunnerPlan, TRAIL_R, fillWindowPlan, EXPIRED, EXPIRE_TIME, EXPIRE_STOP_FIRST,
+} from "../../app/lib/callMath.mjs";
+export { SPLIT_EXIT, splitPlan, timeStopPlan, TIME_EXIT, SPLIT_BE_EXIT, beRunnerPlan, fillWindowPlan, EXPIRED, EXPIRE_TIME, EXPIRE_STOP_FIRST };
 
 /**
  * Where a draft's entry sits against the market right now (the latest hour's range), for the

@@ -93,7 +93,15 @@ export function fillEventMessage(t, kind) {
   if (kind === "TP1") {
     const r = callR(t);
     const banked = r == null ? "" : ` · half closed +${r2(r / 2)}R`;
+    if (t?.exitPlan === "SPLIT_50_BE") {
+      const to = Number(t.takeProfit2) > 0 ? ` to ${t.takeProfit2}` : "";
+      return { type: "call_tp1", message: `${sym} ${dir} reached TP1 ${t.takeProfit1}${banked} · runner open${to}, its stop moved to the entry ${t.entryPrice} and trails 1R behind the best close` };
+    }
     return { type: "call_tp1", message: `${sym} ${dir} reached TP1 ${t.takeProfit1}${banked} · runner open to ${t.takeProfit2}, stop ${t.stopLoss}` };
+  }
+  if (kind === "EXPIRED") {
+    const why = t?.expiredReason === "STOP_FIRST" ? `the stop ${t.stopLoss} traded before the entry` : `the entry ${t.entryPrice} didn't trade within ${t.fillWithinH}h`;
+    return { type: "call_expired", message: `${sym} ${dir} order expired: ${why} · not a win, not a loss` };
   }
   return { type: "call_fill", message: `${sym} ${dir} filled at ${t.entryPrice} · the call is live and graded from here · stop ${t.stopLoss}, TP1 ${t.takeProfit1}` };
 }

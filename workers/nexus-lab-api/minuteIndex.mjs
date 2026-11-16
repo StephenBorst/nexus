@@ -27,6 +27,9 @@ export function indexMeta(t) {
   if (num(t.takeProfit2)) m.t2 = num(t.takeProfit2);
   if (Number.isInteger(Number(t.timeStopH)) && t.timeStopH != null) m.ts = Number(t.timeStopH);
   if (t.fillState === "OPEN" && num(t.filledAt)) m.f = num(t.filledAt);
+  if (Number.isInteger(Number(t.fillWithinH)) && t.fillWithinH != null) m.fw = Number(t.fillWithinH);   // a declared fill window
+  if (t.exitPlan === "SPLIT_50_BE") m.be = 1;                                                            // a breakeven runner
+  if (num(t.tp1HitAt)) m.h = 1;                                                                          // its TP1 half has closed
   if (t.fillState) m.g = 1;   // stamped by a grader at least once (WORKING or OPEN)
   return m;
 }

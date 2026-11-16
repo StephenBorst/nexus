@@ -81,7 +81,7 @@ export async function snapshotStances(env) {
 // is obvious: a WIN is first-touch of TP, a LOSS is first-touch of SL (or same-candle,
 // conservatively). PENDING means neither level has been touched yet → still ACTIVE.
 export function gradedStatusOf(outcome) {
-  return outcome === "WIN" ? "HIT_TP" : outcome === "LOSS" ? "STOPPED_OUT" : "ACTIVE";
+  return outcome === "WIN" ? "HIT_TP" : outcome === "LOSS" ? "STOPPED_OUT" : outcome === "EXPIRED" ? "EXPIRED" : "ACTIVE";
 }
 
 // The grader that wrote a stamp. Bumped when the rules or the candle window change, so every
@@ -106,6 +106,11 @@ export const GRADE_V = 3;
 //       under the market used to lose 30 points for being a resting order.
 export const PLAN_V = 2;
 export const isCurrentStamp = (t) => (t?.gradedOutcome === "WIN" || t?.gradedOutcome === "LOSS") && t?.gradeV === GRADE_V;
+// Done for good: graded, or its declared fill window closed with no fill (EXPIRED, 2026-11-16). An
+// expired call is NOT a grade (it counts in no record), but no grader needs to look at it again.
+export const isSettled = (t) => isCurrentStamp(t) || (t?.fillState === "EXPIRED" && t?.gradeV === GRADE_V);
+/** The card status a call's stamps say. */
+export const statusOfCall = (t) => (t?.fillState === "EXPIRED" ? "EXPIRED" : gradedStatusOf(t?.gradedOutcome));
 
 // The fields a grading pass writes on a public call. When it writes back, it copies ONLY these onto
 // a fresh read of the record, so a save that landed during the pass isn't overwritten.
@@ -114,7 +119,7 @@ export const isCurrentStamp = (t) => (t?.gradedOutcome === "WIN" || t?.gradedOut
 //   GRADE_FIELDS — the grade and the fill: the hourly pass on an hourly call, the minute grader
 //                  (minuteGrader.mjs) on a minute-graded one.
 //   PLAN_FIELDS  — plan quality + regime, read from the hourly bars before the post: the hourly pass.
-export const GRADE_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "exitReason", "fillState", "filledAt", "tp1HitAt", "status"];
+export const GRADE_FIELDS = ["gradedOutcome", "gradedR", "gradedAt", "gradeV", "exitedAt", "exitReason", "fillState", "filledAt", "tp1HitAt", "trailStop", "expiredAt", "expiredReason", "status"];
 export const PLAN_FIELDS = ["planScore", "planFlags", "planV", "regimeTrend", "regimeVol", "regimeAlign"];
 export const PASS_FIELDS = [...GRADE_FIELDS, ...PLAN_FIELDS];
 
@@ -126,6 +131,19 @@ export const PASS_FIELDS = [...GRADE_FIELDS, ...PLAN_FIELDS];
 export function applyGrade(t, g, cd, nowMs = Date.now()) {
   let changed = false, resolved = null, regraded = false;
   const had = t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS";
+  if (g && g.outcome === "EXPIRED") {
+    // The declared fill window closed with no fill (callMath fillWindowPlan). Not a grade: no
+    // gradedOutcome, nothing announced as a win or a loss; the fill event "EXPIRED" tells the owner.
+    const before = `${t.fillState}|${t.expiredAt}|${t.expiredReason}|${t.gradeV}`;
+    if (had) { delete t.gradedOutcome; delete t.gradedR; delete t.gradedAt; delete t.exitedAt; delete t.exitReason; regraded = true; }
+    const wasExpired = t.fillState === "EXPIRED";
+    t.fillState = "EXPIRED"; t.expiredAt = g.expiredAt * 1000; t.expiredReason = g.expiredReason; t.gradeV = GRADE_V;
+    delete t.filledAt; delete t.tp1HitAt; delete t.trailStop;
+    if (t.status !== "EXPIRED") t.status = "EXPIRED";
+    changed = had || before !== `${t.fillState}|${t.expiredAt}|${t.expiredReason}|${t.gradeV}`;
+    return { changed, resolved: null, regraded, fills: wasExpired ? [] : ["EXPIRED"] };
+  }
+  if (t.fillState === "EXPIRED") { delete t.expiredAt; delete t.expiredReason; changed = true; }
   if (g.outcome === "WIN" || g.outcome === "LOSS") {
     if (!had || t.gradedOutcome !== g.outcome) t.gradedAt = nowMs;
     t.gradedOutcome = g.outcome;
@@ -144,7 +162,7 @@ export function applyGrade(t, g, cd, nowMs = Date.now()) {
   const before = { fillState: t.fillState, tp1HitAt: t.tp1HitAt };
   const fills = [];
   if (applyFillStamp(t, g, cd)) { changed = true; fills.push(...fillEvents(before, t)); }
-  const status = gradedStatusOf(t.gradedOutcome);
+  const status = statusOfCall(t);
   if (t.status !== status) { t.status = status; changed = true; }
   return { changed, resolved, regraded, fills };
 }
@@ -178,15 +196,18 @@ export async function writePassFields(env, key, data, fieldsFor) {
 // a call. Display only: nothing ranks on it. Returns true when the call changed.
 export function applyFillStamp(t, g, cd) {
   const before = `${t.fillState}|${t.filledAt}|${t.tp1HitAt}`;
+  const trailBefore = t.trailStop;
   if (g && g.outcome === "PENDING") {
     const f = entryFill(t, cd);
     if (f.filled) { t.fillState = "OPEN"; t.filledAt = f.fillSec * 1000; }
     else { t.fillState = "WORKING"; delete t.filledAt; }
     if (g.tp1At) t.tp1HitAt = g.tp1At * 1000; else delete t.tp1HitAt;
+    // A breakeven runner's trail while it's open (callMath beRunnerPlan): display + the minute trigger.
+    if (Number(g.trail) > 0) t.trailStop = g.trail; else delete t.trailStop;
   } else {
-    delete t.fillState; delete t.filledAt; delete t.tp1HitAt;
+    delete t.fillState; delete t.filledAt; delete t.tp1HitAt; delete t.trailStop;
   }
-  return `${t.fillState}|${t.filledAt}|${t.tp1HitAt}` !== before;
+  return `${t.fillState}|${t.filledAt}|${t.tp1HitAt}` !== before || t.trailStop !== trailBefore;
 }
 
 // The hour a graded call closed (ms), from a re-grade on the same candles. Only when the re-grade
@@ -260,9 +281,9 @@ export async function gradePublicTheses(env) {
       const minute = isMinuteGraded(t);
       // A published call's status is the server's grade, never a self-mark (callLock.mjs): a legacy
       // "HIT_TP" or "INVALIDATED" the owner typed reads as live until the grade lands.
-      const derived = gradedStatusOf(t.gradedOutcome);
+      const derived = statusOfCall(t);
       if (!minute && t.status !== derived) { t.status = derived; changed = true; }
-      const resolved = isCurrentStamp(t); // a stamp from this grader is final
+      const resolved = isSettled(t); // a stamp from this grader is final (graded, or expired unfilled)
       if (minute && !resolved) openMinute.push({ wallet: key.name.replace("lab:", ""), t });
       // Plan quality + regime are properties of the MOMENT THE CALL WAS POSTED, so
       // they're stamped once and never revisited — including on already-resolved

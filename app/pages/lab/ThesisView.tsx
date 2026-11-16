@@ -13,8 +13,9 @@ import type { ThesisTrade, ThesisStatus, ProcessedTrade } from "./types";
 import { LiveRead } from "./LiveRead";
 import { SimComposer } from "./SimComposer";
 import { cardStyle, labelStyle, navBtnStyle, inputStyle, fieldLabelStyle, STATUS_CONFIG, CLOSED_STATUSES } from "./styles";
-import { splitRunnerStopped, callRR, fmtRR, timeExitLabel } from "@/lib/callMath.mjs";
-import { callReady, liveOrderReady } from "@/lib/quickCall.mjs";
+import { Pill } from "@/components/ui/Pill";
+import { splitRunnerStopped, callRR, fmtRR, timeExitLabel, runnerExitLabel } from "@/lib/callMath.mjs";
+import { callReady, liveOrderReady, EXIT_MODES, FILL_WINDOWS, exitPlanFromForm, fillWindowFromForm, exitPlanLine } from "@/lib/quickCall.mjs";
 import { callShareLinks } from "@/lib/callShare.mjs";
 import { deployToAgent, thesisToAgentConfig, thesisAgentNotice, deployDirectiveFromThesis } from "@/utils/agentPrefill";
 import { formatPnl, chartImageSrc, chartImageList, effectiveStatus, resolveSuggestion, CHART_HOST_HINT, MAX_CHARTS } from "./helpers";
@@ -619,7 +620,7 @@ function ThesisAnalyticsSection({ trades }: { trades: ThesisTrade[] }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 9, color: STATUS_CONFIG[effectiveStatus(bestThesis)].color, fontFamily: "var(--nx-font-mono)", letterSpacing: "0.06em" }}>
-                  {timeExitLabel(bestThesis) ?? (splitRunnerStopped(bestThesis) ? "TP1 HIT · RUNNER STOPPED" : STATUS_CONFIG[effectiveStatus(bestThesis)].label)}
+                  {runnerExitLabel(bestThesis) ?? timeExitLabel(bestThesis) ?? (splitRunnerStopped(bestThesis) ? "TP1 HIT · RUNNER STOPPED" : STATUS_CONFIG[effectiveStatus(bestThesis)].label)}
                 </div>
               </>
             ) : (
@@ -645,7 +646,7 @@ function ThesisAnalyticsSection({ trades }: { trades: ThesisTrade[] }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 9, color: STATUS_CONFIG[effectiveStatus(worstThesis)].color, fontFamily: "var(--nx-font-mono)", letterSpacing: "0.06em" }}>
-                  {timeExitLabel(worstThesis) ?? (splitRunnerStopped(worstThesis) ? "TP1 HIT · RUNNER STOPPED" : STATUS_CONFIG[effectiveStatus(worstThesis)].label)}
+                  {runnerExitLabel(worstThesis) ?? timeExitLabel(worstThesis) ?? (splitRunnerStopped(worstThesis) ? "TP1 HIT · RUNNER STOPPED" : STATUS_CONFIG[effectiveStatus(worstThesis)].label)}
                 </div>
               </>
             ) : (
@@ -954,7 +955,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
     catalyst: "",
     targetWindow: "",
     chartUrls: [""] as string[],
-    splitExit: false,
+    exitMode: "SINGLE",
+    fillWithinH: "",
   });
 
   // Done-for-you: seed account size from the connected collateral so position sizing
@@ -1127,7 +1129,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   // calc = the optional sizing (account × risk ÷ stop distance); null without an account size. Whether a call
   // can be posted is `ready` below (levels + a committed side, the WATCH gate). A declared split needs TP2
   // beyond TP1 (else the grader calls it INVALID).
-  const splitBad = form.splitExit && (() => {
+  const splitBad = (form.exitMode === "SPLIT" || form.exitMode === "BE") && (() => {
     const e = parseFloat(form.entryPrice), t1 = parseFloat(form.takeProfit1), t2 = parseFloat(form.takeProfit2);
     if (!(t2 > 0)) return false;
     return form.direction === "LONG" ? !(t2 > t1 && t1 > e) : !(t2 < t1 && t1 < e);
@@ -1284,8 +1286,9 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
     stopLoss: parseFloat(form.stopLoss),
     takeProfit1: parseFloat(form.takeProfit1),
     takeProfit2: parseFloat(form.takeProfit2) || 0,
-    // Declared split, graded half at TP1 + half at TP2 (lab-api gradeCall). Locked once published.
-    exitPlan: form.splitExit && parseFloat(form.takeProfit2) > 0 ? "SPLIT_50" : undefined,
+    // Declared exit plan + fill window (lab-api gradeCall, callMath). Locked once published.
+    exitPlan: exitPlanFromForm(form),
+    fillWithinH: fillWindowFromForm(form),
     riskPercent: parseFloat(form.riskPercent),
     accountSize: parseFloat(form.accountSize) || 0,
     fundingRate: parseFloat(form.fundingRate),
@@ -1308,7 +1311,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   });
 
   const resetForm = () =>
-    setForm((f) => ({ ...f, symbol: "", entryPrice: "", stopLoss: "", takeProfit1: "", takeProfit2: "", splitExit: false, notes: "", catalyst: "", targetWindow: "", chartUrls: [""] }));
+    setForm((f) => ({ ...f, symbol: "", entryPrice: "", stopLoss: "", takeProfit1: "", takeProfit2: "", exitMode: "SINGLE", fillWithinH: "", notes: "", catalyst: "", targetWindow: "", chartUrls: [""] }));
 
   // Saves the thesis PRIVATELY. Places no order of any kind — it was called
   // "deployPaper" and labelled "DEPLOY (PAPER)", which read as paper *trading* and
@@ -1920,13 +1923,30 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 </div>
               ))}
             </div>
-            {parseFloat(form.takeProfit2) > 0 && (
-              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 10, fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", cursor: "pointer" }}>
-                <input type="checkbox" checked={form.splitExit} onChange={(e) => setForm((f) => ({ ...f, splitExit: e.target.checked }))} style={{ marginTop: 1 }} />
-                <span>SPLIT EXIT · graded as half at TP1, half at TP2, both on this stop. Off = graded at TP1 only. Locked once published.
-                  {splitBad && <span style={{ display: "block", color: "#fbbf24", marginTop: 4 }}>TP2 must sit beyond TP1 for a split.</span>}</span>
-              </label>
-            )}
+            {/* Exit plan + order expiry (2026-11-16): declared here, frozen at publish, graded by the server. */}
+            <div style={{ marginTop: 12 }}>
+              <span style={fieldLabelStyle}>EXIT PLAN</span>
+              <div role="group" aria-label="Exit plan" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {EXIT_MODES.map((m) => (
+                  <Pill key={m.id} active={form.exitMode === m.id} onClick={() => set("exitMode", m.id)}>{m.label}</Pill>
+                ))}
+              </div>
+              <span style={{ display: "block", fontFamily: "var(--nx-font-sans)", fontSize: 12, color: "#a1a1aa", marginTop: 6, lineHeight: 1.5 }}>
+                {exitPlanLine(form)}
+                {splitBad && <span style={{ display: "block", color: "#fbbf24", marginTop: 4 }}>TP2 must sit beyond TP1 for this plan.</span>}
+              </span>
+              <span style={{ ...fieldLabelStyle, marginTop: 12 }}>ORDER EXPIRES</span>
+              <div role="group" aria-label="Order expires" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {[{ h: "", label: "Never" }, ...FILL_WINDOWS.map((h) => ({ h: String(h), label: `${h}h` }))].map(({ h, label }) => (
+                  <Pill key={label} active={String(form.fillWithinH ?? "") === h} onClick={() => set("fillWithinH", h)}>{label}</Pill>
+                ))}
+              </div>
+              <span style={{ display: "block", fontFamily: "var(--nx-font-sans)", fontSize: 12, color: "#71717a", marginTop: 6, lineHeight: 1.5 }}>
+                {fillWindowFromForm(form)
+                  ? `An entry away from the market that hasn’t traded ${fillWindowFromForm(form)}h after you post expires: not a win, not a loss. A breakout entry whose stop trades first is void.`
+                  : "Only matters for an entry away from the market. Never = the order waits until price trades it."}
+              </span>
+            </div>
             {/* Guided quick-fill: anchor entry to the live mark, then snap stop/target */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 10 }}>
               {(() => {

@@ -29,6 +29,7 @@ const isClosedStatus = (s) => typeof s === "string" && s !== "" && s !== "ACTIVE
 export function callLifecycle(t) {
   if (!t) return "UNCHECKED";
   if (t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS") return "CLOSED";
+  if (t.fillState === "EXPIRED") return "CLOSED";   // a declared order expiry closed it unfilled (no position ever)
   if (callInvalidReason(t)) return "INVALID";
   if (isClosedStatus(t.status)) return "CLOSED";
   if (t.fillState === "WORKING") return "WORKING";
@@ -86,8 +87,10 @@ export function provisionalTouch(t, mark) {
     return Math.abs(m - e) / e <= 0.0005 ? "ENTRY" : null;
   }
   if (s === "OPEN") {
-    const sl = Number(t.stopLoss);
-    const tgt = t.tp1HitAt && Number(t.takeProfit2) > 0 ? Number(t.takeProfit2) : Number(t.takeProfit1);
+    // After TP1, a breakeven runner's stop is its trail (stamped by the grader) and its only target is TP2.
+    const be = t.exitPlan === "SPLIT_50_BE" && t.tp1HitAt;
+    const sl = be && Number(t.trailStop) > 0 ? Number(t.trailStop) : Number(t.stopLoss);
+    const tgt = t.tp1HitAt && Number(t.takeProfit2) > 0 ? Number(t.takeProfit2) : be ? NaN : Number(t.takeProfit1);
     if (sl > 0 && (long ? m <= sl : m >= sl)) return "STOP";
     if (tgt > 0 && (long ? m >= tgt : m <= tgt)) return "TARGET";
   }

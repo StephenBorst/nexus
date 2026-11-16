@@ -19,7 +19,7 @@
 // a registration first choose how it is graded.
 //
 // Pure: the routes in index.js do the network and KV calls.
-import { callR, splitPlan, SPLIT_EXIT, timeStopPlan } from "./logic.mjs";
+import { callR, splitPlan, SPLIT_EXIT, timeStopPlan, SPLIT_BE_EXIT, beRunnerPlan, fillWindowPlan } from "./logic.mjs";
 import { registryEvents, THESIS_REGISTRY } from "../../app/lib/registryEvent.mjs";
 
 export { THESIS_REGISTRY };
@@ -29,9 +29,19 @@ export const REGISTER_SELECTOR = "ce4d0f18";
 export const PRICE_SCALE = 1_000_000;   // the contract stores prices with 6 decimals
 export const RR_SCALE = 10_000;
 export const SPLIT_TAG = "#SPLIT_50";
+// A breakeven runner (callMath beRunnerPlan, 2026-11-16) = `#SPLIT_50_BE`. Matched EXACTLY, never by
+// substring: "#SPLIT_50_BE" contains "#SPLIT_50", and reading it as the plain split grades another trade.
+export const SPLIT_BE_TAG = "#SPLIT_50_BE";
+const SPLIT_RE = /#SPLIT_50(?![_A-Z0-9])/;
+const SPLIT_BE_RE = /#SPLIT_50_BE(?![_A-Z0-9])/;
 // A declared time stop (callMath timeStopPlan) rides in the notes the same way: `#TIMESTOP_4H`.
 export const timeStopTag = (h) => `#TIMESTOP_${h}H`;
 const TIME_TAG_RE = /#TIMESTOP_(\d{1,3})H/;
+// A declared fill window (callMath fillWindowPlan, 2026-11-16): `#FILL_12H`.
+export const fillTag = (h) => `#FILL_${h}H`;
+const FILL_TAG_RE = /#FILL_(\d{1,3})H/;
+const planTagFor = (exitPlan) => (exitPlan === SPLIT_BE_EXIT ? SPLIT_BE_TAG : exitPlan === SPLIT_EXIT ? SPLIT_TAG : null);
+const stripTags = (notes) => String(notes || "").replace(SPLIT_BE_RE, "").replace(SPLIT_RE, "").replace(TIME_TAG_RE, "").replace(FILL_TAG_RE, "").replace(/\s+/g, " ").trim();
 export const MAX_NOTES_BYTES = 1000;
 export const MAX_SYMBOL_BYTES = 40;
 // A price the 6-decimal scale moves by more than this is refused: the registered level would not
@@ -57,10 +67,10 @@ export function perpSymbol(s) {
 const scaled = (v) => BigInt(Math.round(Number(v) * PRICE_SCALE));
 const unscaled = (b) => Number(b) / PRICE_SCALE;
 
-/** Notes as registered: the caller's text, plus SPLIT_TAG / the time-stop tag when the call declares one. */
-export function registeredNotes(notes, exitPlan, timeStopH) {
-  const base = String(notes || "").replace(SPLIT_TAG, "").replace(TIME_TAG_RE, "").replace(/\s+/g, " ").trim();
-  const tags = [exitPlan === SPLIT_EXIT ? SPLIT_TAG : null, timeStopH != null ? timeStopTag(timeStopH) : null].filter(Boolean);
+/** Notes as registered: the caller's text, plus the plan / time-stop / fill-window tags the call declares. */
+export function registeredNotes(notes, exitPlan, timeStopH, fillWithinH) {
+  const base = stripTags(notes);
+  const tags = [planTagFor(exitPlan), timeStopH != null ? timeStopTag(timeStopH) : null, fillWithinH != null ? fillTag(fillWithinH) : null].filter(Boolean);
   return [base, ...tags].filter(Boolean).join(" ");
 }
 
@@ -88,8 +98,17 @@ export function checkRegistration(p) {
   }
   const call = { direction: dir, entryPrice: Number(lv.entryPrice), stopLoss: Number(lv.stopLoss), takeProfit1: Number(lv.takeProfit1), takeProfit2: Number(lv.takeProfit2) || 0 };
   if (callR(call) == null) return bad("bad_levels", "The stop must be on the losing side of entry and TP1 on the winning side.");
-  if (p.exitPlan != null && p.exitPlan !== SPLIT_EXIT) {
-    return bad("bad_exit_plan", `exitPlan takes one value, "${SPLIT_EXIT}" (half at TP1, half at TP2). Leave it out for a single target.`);
+  if (p.exitPlan != null && p.exitPlan !== SPLIT_EXIT && p.exitPlan !== SPLIT_BE_EXIT) {
+    return bad("bad_exit_plan", `exitPlan is "${SPLIT_EXIT}" (half at TP1, half at TP2, both on the original stop) or "${SPLIT_BE_EXIT}" (half at TP1, then the runner's stop moves to the entry and trails 1R behind the best close; TP2 optional). Leave it out for a single target.`);
+  }
+  const now = Date.now();
+  if (p.exitPlan === SPLIT_BE_EXIT) {
+    const be = beRunnerPlan({ ...call, exitPlan: SPLIT_BE_EXIT, createdAt: now });
+    if (be?.invalid) return bad("bad_split", `${be.reason}.`);
+  }
+  if (p.fillWithinH != null) {
+    const fw = fillWindowPlan({ ...call, fillWithinH: p.fillWithinH, createdAt: now });
+    if (fw?.invalid) return bad("bad_fill_window", `${fw.reason}.`);
   }
   if (p.exitPlan === SPLIT_EXIT && splitPlan({ ...call, exitPlan: SPLIT_EXIT }).invalid) {
     return bad("bad_split", "A split exit needs takeProfit2 beyond takeProfit1, on the target side of entry.");
@@ -98,7 +117,7 @@ export function checkRegistration(p) {
     const ts = timeStopPlan({ ...call, exitPlan: p.exitPlan, timeStopH: p.timeStopH, createdAt: Date.now() });
     if (ts?.invalid) return bad("bad_time_stop", `${ts.reason}.`);
   }
-  if (enc.encode(registeredNotes(p.notes, p.exitPlan, p.timeStopH)).length > MAX_NOTES_BYTES) {
+  if (enc.encode(registeredNotes(p.notes, p.exitPlan, p.timeStopH, p.fillWithinH)).length > MAX_NOTES_BYTES) {
     return bad("notes_too_long", `notes are stored on-chain; keep them under ${MAX_NOTES_BYTES} bytes.`);
   }
   return null;
@@ -114,7 +133,7 @@ export function encodeRegisterThesis(p) {
   const entry = Number(p.entryPrice), stop = Number(p.stopLoss), tp1 = Number(p.takeProfit1);
   const rr = Math.abs(tp1 - entry) / Math.abs(entry - stop);
   const symB = enc.encode(perpSymbol(p.symbol));
-  const notesB = enc.encode(registeredNotes(p.notes, p.exitPlan, p.timeStopH));
+  const notesB = enc.encode(registeredNotes(p.notes, p.exitPlan, p.timeStopH, p.fillWithinH));
   const symData = padHex(bytesHex(symB)) || "0".repeat(64);   // an empty string still takes one word here
   const head = 9 * 32;
   const offSym = head, offNotes = head + 32 + symData.length / 2;
@@ -194,16 +213,19 @@ export function provenRegistration({ receipt, input, wallet, registry = THESIS_R
  * (sealTheses replaces it with the server's clock at publish and keeps this as clientCreatedAt).
  */
 export function thesisFromRegistration({ call, onChainId }, { txHash, blockTimeMs, id }) {
-  const split = String(call.notes).includes(SPLIT_TAG);
-  const timeTag = String(call.notes).match(TIME_TAG_RE);
+  const notesStr = String(call.notes);
+  const plan = SPLIT_BE_RE.test(notesStr) ? SPLIT_BE_EXIT : SPLIT_RE.test(notesStr) ? SPLIT_EXIT : null;
+  const timeTag = notesStr.match(TIME_TAG_RE);
+  const fillT = notesStr.match(FILL_TAG_RE);
   const t = {
     id: id || `reg-${String(txHash).toLowerCase().slice(2, 18)}`,
     symbol: call.symbol, direction: call.direction,
     entryPrice: call.entryPrice, stopLoss: call.stopLoss, takeProfit1: call.takeProfit1, takeProfit2: call.takeProfit2,
-    ...(split ? { exitPlan: SPLIT_EXIT } : {}),
+    ...(plan ? { exitPlan: plan } : {}),
     ...(timeTag ? { timeStopH: Number(timeTag[1]) } : {}),
+    ...(fillT ? { fillWithinH: Number(fillT[1]) } : {}),
     riskPercent: 0, accountSize: 0, fundingRate: 0,
-    notes: String(call.notes).replace(SPLIT_TAG, "").replace(TIME_TAG_RE, "").replace(/\s+/g, " ").trim(),
+    notes: stripTags(call.notes),
     createdAt: blockTimeMs,
     positionSize: 0, leverage: 0,
     riskReward: callR(call) ?? 0,

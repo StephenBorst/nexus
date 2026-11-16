@@ -14,7 +14,7 @@ import { useAccount } from "@orderly.network/hooks";
 import { useLivePrices, calcUnrealizedPnl, distancePct } from "@/hooks/useLivePrices";
 import { showsLivePnl, callPollMs } from "@/lib/callLifecycle.mjs";
 import { isMinuteGraded } from "@/lib/minuteGrade.mjs";
-import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, timeExitLabel } from "@/lib/callMath.mjs";
+import { callRR, runnerRR, fmtRR, liveMove, fmtLiveMove, splitRunnerStopped, timeExitLabel, expiredLabel, runnerExitLabel } from "@/lib/callMath.mjs";
 import { AwaitingFill, awaitingLabel } from "@/components/AwaitingFill";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { chartImageList, effectiveStatus } from "@/pages/lab/helpers";
@@ -42,7 +42,7 @@ type FeedThesis = {
   status: "ACTIVE" | "HIT_TP" | "STOPPED_OUT" | "INVALIDATED" | "CLOSED";
   gradedOutcome?: "WIN" | "LOSS"; // trustless price-grade (cron-stamped)
   gradedR?: number;               // graded R-multiple result
-  fillState?: "WORKING" | "OPEN"; // server: has the entry traded yet (grading.mjs applyFillStamp)
+  fillState?: "WORKING" | "OPEN" | "EXPIRED"; expiredReason?: string; trailStop?: number; // server: has the entry traded yet (grading.mjs applyFillStamp)
   filledAt?: number;
   publishMark?: { px: number; at: number; src?: string }; // server-read market price at first publish
   actualPnl: number | null;
@@ -89,6 +89,7 @@ function gradeText(g?: { outcome: string; r: number } | null): string {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   ACTIVE:      { label: "ACTIVE",      color: "#d4d4d8", bg: "#1a1a1e", border: "#33333a" },
+  EXPIRED:     { label: "EXPIRED",     color: "#a1a1aa", bg: "#1a1a1e", border: "#33333a" },
   HIT_TP:      { label: "HIT TP",      color: "#ededf0", bg: "#1a1a1e", border: "#33333a" },
   STOPPED_OUT: { label: "STOPPED OUT", color: "#f7525f", bg: "#241012", border: "#4a1e22" },
   INVALIDATED: { label: "INVALIDATED", color: "#fbbf24", bg: "#2a1a00", border: "#4a3a00" },
@@ -400,7 +401,7 @@ export default function ThesisPage() {
               ) : null}
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>{timeAgo}</div>
               <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 3, background: cfg.bg, border: `1px ${pendingLabel ? "dashed" : "solid"} ${cfg.border}`, color: pendingLabel ? "#a1a1aa" : cfg.color }}>
-                {pendingLabel ? pendingLabel.toUpperCase() : timeExitLabel(thesis) ?? (splitRunnerStopped(thesis) ? "TP1 HIT · RUNNER STOPPED" : cfg.label)}
+                {pendingLabel ? pendingLabel.toUpperCase() : expiredLabel(thesis) ?? runnerExitLabel(thesis) ?? timeExitLabel(thesis) ?? (splitRunnerStopped(thesis) ? "TP1 HIT · RUNNER STOPPED" : cfg.label)}
               </div>
             </div>
           </div>

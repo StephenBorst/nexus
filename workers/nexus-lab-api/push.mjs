@@ -63,7 +63,7 @@ export function normTopics(t) {
 
 /** Which switch an in-app notification type sits behind. null = never pushed. */
 export function topicForType(type) {
-  if (type === "call_resolved" || type === "thesis_closed" || type === "call_fill" || type === "call_tp1") return "calls";
+  if (type === "call_resolved" || type === "thesis_closed" || type === "call_fill" || type === "call_tp1" || type === "call_expired") return "calls";
   if (type === "agent_trade") return "agent";
   if (["comment", "reaction", "follow", "copy", "challenge"].includes(type)) return "social";
   if (type === "followed_call") return "following"; // a caller you follow posted a call (followAlerts.mjs)
@@ -77,6 +77,7 @@ const TITLES = {
   thesis_closed: "Call closed",
   call_fill: "Call filled",
   call_tp1: "TP1 reached",
+  call_expired: "Order expired",
   agent_trade: "Agent",
   comment: "New comment",
   reaction: "New reaction",

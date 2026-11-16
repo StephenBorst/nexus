@@ -18,7 +18,7 @@
 // landed or was lost (a run that died mid-write, an owner's save from a stale read). One run at a time
 // (a NexusLock lease); a busy lock = skip. Each fill / grade is announced once (claimOnce).
 import { gradeCall } from "./logic.mjs";
-import { applyGrade, writePassFields, GRADE_FIELDS, isCurrentStamp } from "./grading.mjs";
+import { applyGrade, writePassFields, GRADE_FIELDS, isSettled } from "./grading.mjs";
 import { notifyResolution, notifyFillEvent } from "./resolutions.mjs";
 import { makeMinuteCandles, minuteNeededFrom } from "./minuteCandles.mjs";
 import { listMinuteIndex, indexKey, indexMeta, putIndex, ownsCall } from "./minuteIndex.mjs";
@@ -43,7 +43,11 @@ export function needsRegrade(meta, { range, nowMs, full = false }) {
   if (!meta.g) return true;                                                // never stamped: its first stamp (WORKING / OPEN at the post)
   // A declared time stop: due once N hours have run from the fill's hour (its window ends within the hour after).
   if (Number(meta.ts) > 0 && Number(meta.f) > 0 && nowMs >= Math.floor(meta.f / 3600000) * 3600000 + meta.ts * 3600000) return true;
+  // A declared fill window (2026-11-16): an unfilled order is due once post + N hours has passed.
+  if (Number(meta.fw) > 0 && !(Number(meta.f) > 0) && nowMs >= Number(meta.c) + meta.fw * 3600000) return true;
   if (!range) return false;
+  // A breakeven runner past TP1: its trail moves with every close, so any new bar can settle it.
+  if (meta.be && meta.h) return true;
   return [meta.e, meta.sl, meta.t1, meta.t2].some((px) => Number(px) > 0 && range.lo <= px && px <= range.hi);
 }
 
@@ -104,7 +108,7 @@ async function minutePass(env, { full, fetchJson, nowMs = () => Date.now(), noti
     for (const e of list) {
       const t = theses.find((x) => x && x.id === e.id);
       // Not a public minute-graded call any more (or already graded): nothing for this grader to do.
-      if (!ownsCall(t) || isCurrentStamp(t)) { drop.push(e); continue; }
+      if (!ownsCall(t) || isSettled(t)) { drop.push(e); continue; }
       const cd = await mc.window(t.symbol, minuteNeededFrom(t.createdAt));
       if (!cd) continue;   // the archive doesn't cover the call yet: next run
       const g = gradeCall(t, cd);
@@ -113,7 +117,7 @@ async function minutePass(env, { full, fetchJson, nowMs = () => Date.now(), noti
       if (r.changed) touched.add(t.id);
       if (r.resolved) justResolved.push({ t, ...r.resolved });
       for (const kind of r.fills) justFilled.push({ t, kind });
-      if (t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS") drop.push(e);
+      if (isSettled(t)) drop.push(e);
       else if (JSON.stringify(indexMeta(t)) !== JSON.stringify(e.meta)) reindex.push(t);
     }
     if (touched.size) {
