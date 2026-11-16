@@ -154,3 +154,49 @@ export function callsForCopilot(reply, { max = 8 } = {}) {
     note: "state = the grader's stamp. mark / move_r / *_away_r are live distances in units of the call's risk, not a grade: a mark through the entry is a fill only once the grader stamps it. Public calls only.",
   };
 }
+
+// ── The signal scoreboard in chat, with the tide (2026-11-16, borst: "copilot knows the tide") ──────────────────────
+// GET /intel/axis-backtest → the copilot's answer. Every axis on recorded history (in-sample) as before, plus each
+// REGISTERED read's served stage and its OUT-OF-SAMPLE split per side against a random entry on that side, so the model
+// can say "its shorts made +0.5R but a random short made +0.7R" instead of praising a side that rode the market.
+const sideVsRandom = (sides, random, side) => {
+  const s = sides?.[side], rb = random?.bySide?.[side];
+  const events = s?.events ?? 0;
+  if (!events) return null;
+  if (!rb || rb.verdict === "TOO_FEW" || rb.pctBeaten == null) return { events, read_mean_r: s?.r?.meanR ?? null, vs_random: "too few to test" };
+  return { events, read_mean_r: s?.r?.meanR ?? rb.realMeanR ?? null, random_entry_mean_r: rb.randomMedianR ?? null, beat_pct_of_random: rb.pctBeaten, verdict: rb.verdict };
+};
+
+/** @param {any} sc the scoreboard reply  @returns {object} */
+export function scoreboardForCopilot(sc) {
+  if (!sc || !Array.isArray(sc.axes) || !sc.axes.length) return { error: "scorecard warming up — check back" };
+  const byName = new Map(sc.axes.map((a) => [a.name, a]));
+  const vsRandom = (r) => !r ? null : r.verdict === "TOO_FEW" ? { verdict: "TOO_FEW", events: r.n }
+    : { verdict: r.verdict, beat_pct_of_random: r.pctBeaten, read_mean_r: r.realMeanR, random_entry_mean_r: r.randomMedianR, events: r.n };
+  const reads = Array.isArray(sc.pipeline?.reads) ? sc.pipeline.reads : [];
+  return {
+    as_of: sc.asOf, pooled_markets: sc.config?.coins?.length ?? null, min_samples_to_rate: sc.config?.minSamples ?? null,
+    tide: sc.tide && typeof sc.tide.LONG?.meanR === "number" && typeof sc.tide.SHORT?.meanR === "number"
+      ? { random_long_mean_r: sc.tide.LONG.meanR, random_short_mean_r: sc.tide.SHORT.meanR, from: sc.tide.from, to: sc.tide.to }
+      : null,
+    registered_reads: reads.map((r) => {
+      const o = byName.get(r.axis)?.oos;
+      return {
+        read: r.axis, label: byName.get(r.axis)?.label ?? null, trades: r.side ?? "BOTH", stage: r.stage, next: r.next ?? null,
+        new_data_since: r.registeredAt ?? null, events: r.numbers?.events ?? 0, mean_r: r.numbers?.events ? r.numbers.meanR : null,
+        long: o ? sideVsRandom(o.sides, o.random, "LONG") : null,
+        short: o ? sideVsRandom(o.sides, o.random, "SHORT") : null,
+      };
+    }),
+    axes: sc.axes.map((a) => ({
+      signal: a.label, verdict: a.verdict,
+      best: a.best && a.verdict !== "INSUFFICIENT"
+        ? { horizon_h: a.best.h, hit_rate_pct: a.best.hitRate, mean_forward_bps: a.best.meanBps, observations: a.best.samples, walk_forward_stable: a.best.stable }
+        : "accruing — not yet rated",
+      vs_random: a.random?.bySide ? { long: vsRandom(a.random.bySide.LONG), short: vsRandom(a.random.bySide.SHORT) } : null,
+    })),
+    note: "registered_reads = the reads under test, graded on NEW data only (events since new_data_since); stage is the served one. axes = every read on all recorded history (old data, in-sample). " +
+      "Judge each side against its random entry, never against zero: a side that made money while trailing its random entry rode the market; a side that lost less than its random entry still lost. " +
+      "PREDICTIVE is graded against zero. A read is not an edge until it BEATS_RANDOM on its side. We publish the misses too.",
+  };
+}

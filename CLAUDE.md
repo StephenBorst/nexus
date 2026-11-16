@@ -77,6 +77,9 @@ product is what sits on top:
   /intel/markets through `watchRow`, read only: chat never moves the "since your last look" baseline.
   `get_my_calls` (2026-11-16) reads `/theses/status/:wallet` through `callsForCopilot`: the grader's state in words, levels,
   live distance in R ("not a grade"), recent results with TIME / TRAIL / BE exits named.
+  `get_signal_scoreboard` (2026-11-16, `scoreboardForCopilot`) adds the `tide` and each REGISTERED read's served stage + its
+  new-data split per side vs a random entry on that side; the prompt's THE TIDE rule: judge a side against its random
+  entry, never zero, and say both numbers.
   **Words (2026-11-16, `app/lib/copilotWords.test.mjs`):** every model-facing string is checked sentence by sentence: no
   "proven"/"provably"/"+EV"/"funding-edge"/"guaranteed", and "edge" only beside a denial, the grade, or the user's own record.
   **Token readout:** each answer shows "N in (X% from cache) · M out" (`usageLine`, anthropicTurn.mjs; Anthropic paths only).
@@ -543,7 +546,10 @@ product is what sits on top:
   2026-11-05: "Nothing has proven itself yet" until a read is served TRADEABLE/PAPER with positive exit net, then the read,
   trades and date; unread/stale board = no claim, never "proven") → board by stage
   (`stageGroups`, never ranked by in-sample R) → calls + callers → agents/arena/desks/carry → ledger.
-  Plain-words copy in `app/lib/proofCopy.mjs`; method in `HowWeGrade.tsx`.
+  Plain-words copy in `app/lib/proofCopy.mjs`; method in `HowWeGrade.tsx`. The board opens with the tide ("The market since
+  Aug 7: a random long earned −0.18R a trade, a random short +0.20R. Each side has to beat its own random entry, not zero.",
+  `tideLine`, signalCard.mjs; unread = no line) and each side in a tapped card shows its random entry's R (`sideBar.randomR`).
+  Registered/Lead rows themselves stay as pipeline-if-then.md "What we say" fixes them.
 - **House caller is OFF** (`HOUSE_SIGNALS_ENABLED` deleted; gates the Catalyst caller too). Check "off" by reading
   `enabled` on `/signals/house` and `/signals/catalyst-house`, never by a quiet run. `POST /signals/house` with
   `HOUSE_SIGNALS_ADMIN` still posts by hand regardless. Keep `HOUSE_CALLER_ADDRESS` set (the dedupe reads it). On again

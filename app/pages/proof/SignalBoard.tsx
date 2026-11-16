@@ -12,7 +12,7 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { C } from "@/config/theme";
-import { AXIS_BLURB, splitLabel, takeaway, sideBar, stageGroups, randomBar } from "@/lib/signalCard.mjs";
+import { AXIS_BLURB, splitLabel, takeaway, sideBar, stageGroups, randomBar, tideLine } from "@/lib/signalCard.mjs";
 import { pipelineLine, countingSince, retiredGradedExit, retiredLine, RETIRED_READS, retiredRead, retiredReadLine } from "@/lib/proofCopy.mjs";
 import Fold from "./Fold";
 
@@ -130,17 +130,21 @@ function HorizonStrip({ hz, sel, onSelect, isMobile }: { hz: Horizon[]; sel: num
 }
 
 function SideRow({ a, side }: { a: AxisRow; side: "LONG" | "SHORT" }) {
+  const isMobile = useIsMobile();
   const b = sideBar(a, side);
   const name = side === "LONG" ? "Longs" : "Shorts";
+  const vsRandom = b.state === "tested" && b.randomR != null
+    ? <span style={{ color: MUTED }} title="What a random entry on the same side, coins and hours earned (median of 300 replays). This side has to beat it, not zero."> vs random <span style={{ color: moneyTone(b.randomR) }}>{sign(b.randomR, 2)}R</span></span>
+    : null;
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "84px minmax(0, 1fr) auto", alignItems: "center", gap: 12, fontFamily: MONO, fontSize: 10.5 }}>
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "68px minmax(0, 1fr)" : "84px minmax(0, 1fr) auto", alignItems: "center", gap: isMobile ? "4px 10px" : 12, fontFamily: MONO, fontSize: 10.5 }}>
       <span style={{ color: BRIGHT, whiteSpace: "nowrap" }}>{name} <span style={{ color: MUTED }}>{b.events.toLocaleString()}</span></span>
       <span style={{ height: 4, borderRadius: 2, background: b.state === "tested" ? C.border : "transparent", border: b.state === "tested" ? "none" : `1px dashed ${C.border}`, position: "relative", overflow: "hidden" }}>
         {b.state === "tested" && <span style={{ position: "absolute", inset: 0, width: `${b.pct}%`, background: moneyTone(b.meanR ?? 0), borderRadius: 2 }} />}
       </span>
-      <span style={{ color: FOG, whiteSpace: "nowrap", textAlign: "right" }}>
+      <span style={{ color: FOG, whiteSpace: "nowrap", textAlign: isMobile ? "left" : "right", gridColumn: isMobile ? "1 / -1" : undefined }}>
         {b.state === "tested" ? (
-          <><span style={{ color: moneyTone(b.meanR ?? 0) }}>{sign(b.meanR ?? 0, 2)}R</span> · beat {b.pct}%</>
+          <><span style={{ color: moneyTone(b.meanR ?? 0) }}>{sign(b.meanR ?? 0, 2)}R</span>{vsRandom} · beat {b.pct}%</>
         ) : b.state === "thin" && b.meanR != null ? (
           <><span style={{ color: moneyTone(b.meanR) }}>{sign(b.meanR, 2)}R</span> · <span style={{ color: FAINT }}>{b.label}</span></>
         ) : <span style={{ color: FAINT }}>{b.label}</span>}
@@ -477,6 +481,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
   const minEvents = scorecard?.pipeline?.rules?.minEvents ?? 30;
   const since = countingSince(reads);
   const testing = groups.find((g) => g.key === "pipeline");
+  const tide = tideLine(scorecard?.tide);
 
   const status = (t: string, color: string = FAINT) => <div style={{ fontFamily: UI, fontSize: 13, color, padding: "18px 4px" }}>{t}</div>;
 
@@ -486,6 +491,13 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
       <p style={{ margin: "6px 0 10px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: MUTED }}>
         {since ? `Counting since ${since}. ` : ""}Tap a signal for its grade on old data.
       </p>
+      {tide && (
+        <p style={{ margin: "0 0 12px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: MUTED }}>
+          The market since {tide.since}: a random long earned{" "}
+          <span style={{ fontFamily: MONO, color: moneyTone(tide.long) }}>{sign(tide.long, 2)}R</span> a trade, a random short{" "}
+          <span style={{ fontFamily: MONO, color: moneyTone(tide.short) }}>{sign(tide.short, 2)}R</span>. {tide.rule}
+        </p>
+      )}
 
       {scorecard === null ? status("Loading…") : scorecard.failed ? (
         // A failed read is never shown as an empty board.
