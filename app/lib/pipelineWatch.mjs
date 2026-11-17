@@ -23,6 +23,9 @@ import { isDemotion, lockAtDemotion, stepLock, lockProgress, STAGE_RANK } from "
 //    verdict turning FINAL is the change (one PR records it under the page's Results). Counts and the
 //    in-between statuses (ACCRUING, RIPENING, PENDING_HOLM, …) are recorded but never news. A recorded
 //    final verdict is terminal, like a retired read.
+// 4. The trend gate (docs/research/trend-gate-prereg.md, signed 2026-11-16), as served in `trendGate`: watched exactly
+//    like the stress study (2026-11-17, one helper for both, `diffStudy`). Only AGAINST_WORSE licenses anything, and
+//    that is borst's reviewed block PR, never the watcher's.
 
 export const IF_THEN_PAGE = "docs/research/pipeline-if-then.md";
 export const GRADED_EXIT_PAGE = "docs/research/graded-exit-prereg.md";
@@ -151,6 +154,29 @@ export const STRESS_TRIGGERS = Object.freeze({
   },
   NOT_ENOUGH_STRESS: { section: "**NOT_ENOUGH_STRESS:**", does: [STRESS_RECORD, "No verdict: fewer than 20 STRESS events at the limit. Nothing changes."] },
 });
+// The trend gate: the verdicts on its page (§ Verdicts + borst's dated ruling under Results, 2026-11-17).
+export const TREND_PAGE = "docs/research/trend-gate-prereg.md";
+const TREND_RECORD = "Append one dated line under Results on docs/research/trend-gate-prereg.md: the read, the verdict, d (WITH − AGAINST mean R), p, the Holm threshold, the WITH / AGAINST counts and the judging time. Never an edit above Results.";
+export const TREND_TRIGGERS = Object.freeze({
+  AGAINST_WORSE: {
+    section: "**AGAINST_WORSE:**",
+    does: [TREND_RECORD, "borst's go: it licenses ONE reviewed PR proposing to block that read's live entries against BTC's 4h trend. The watcher doesn't open it. Nothing switches on by itself."],
+  },
+  LOWER_STILL_POSITIVE: { section: "**LOWER_STILL_POSITIVE:**", does: [TREND_RECORD, "It licenses nothing. Nothing else changes."] },
+  NO_DIFFERENCE: { section: "**NO_DIFFERENCE:**", does: [TREND_RECORD, "No gate for that read. Nothing else changes."] },
+  WITH_WORSE: {
+    section: "**WITH_WORSE:**",
+    does: [TREND_RECORD, "Nothing changes. Never a licence to trade only against the trend: that would be a new read, registered and graded first."],
+  },
+  NOT_ENOUGH: { section: "**NOT_ENOUGH:**", does: [TREND_RECORD, "No verdict: fewer than 20 events on a side at the limit. Nothing changes."] },
+});
+function trendReason(r) {
+  const c = r.counts || {};
+  if (r.verdict === "NOT_ENOUGH") return `${c.WITH ?? 0} WITH / ${c.AGAINST ?? 0} AGAINST at the limit (needs 20 on each side)`;
+  const fmt = (v) => (Number.isFinite(v) ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}R` : "—");
+  return `${r.label || r.verdict}: WITH ${fmt(r.meanWith)} vs AGAINST ${fmt(r.meanAgainst)} (d ${fmt(r.d)}), p ${r.p ?? "—"}, Holm threshold ${r.holm?.threshold ?? "—"}, ${c.WITH ?? 0} WITH / ${c.AGAINST ?? 0} AGAINST, judged at ${r.judgedAt || "the limit"}`;
+}
+
 const r4 = (v) => (Number.isFinite(v) ? Math.round(v * 10000) / 10000 : null);
 function stressReason(r) {
   const c = r.counts || {};
@@ -230,7 +256,59 @@ export function stateFromScorecard(sc, now = Date.now()) {
   } else {
     out.stressError = ss?.error || "stressStudy not served";
   }
+  // The trend gate, read the same way. Unserved or errored ⇒ `trendError`.
+  const tg = sc.trendGate;
+  if (tg && tg.reads && typeof tg.reads === "object" && !tg.error) {
+    out.trend = {};
+    for (const [name, r] of Object.entries(tg.reads)) {
+      if (!r || typeof r.status !== "string") continue;
+      out.trend[name] = {
+        status: r.status, verdict: r.verdict ?? null, final: r.final === true,
+        with: num(r.counts?.WITH) ?? 0, against: num(r.counts?.AGAINST) ?? 0,
+        d: r4(r.d), p: r4(r.p), judgedAt: r.judgedAt ?? null,
+        ...(r.final === true && r.verdict ? { reason: trendReason(r) } : {}),
+      };
+    }
+  } else {
+    out.trendError = tg?.error || "trendGate not served";
+  }
   return out;
+}
+
+/**
+ * A conditioner study's per-read verdicts (the stress study, the trend gate): a verdict turning FINAL is the change;
+ * a recorded final verdict is terminal; counts and in-between statuses are recorded quietly. Mutates `changes` /
+ * `issues` and returns the study's next snapshot map.
+ */
+function diffStudy({ prevMap = {}, curMap, curError, label, slug, page, triggers, kind }, changes, issues) {
+  const next = {};
+  if (curMap) {
+    for (const [name, now] of Object.entries(curMap)) {
+      const was = prevMap[name] || null;
+      if (was?.final && was.verdict) {
+        if (!(now.final && now.verdict === was.verdict)) issues.push(`${label} ${name}: recorded ${was.verdict}, which is final; served ${now.final ? now.verdict : `${now.status} (not final)`}. Kept as recorded.`);
+        next[name] = { ...was };
+        continue;
+      }
+      next[name] = { ...now };
+      if (now.final && now.verdict) {
+        changes.push({
+          key: `${slug}:${name}`, name: `${label} ${name}`, kind, from: was?.status ?? null, to: now.verdict,
+          reason: now.reason || "", page,
+          trigger: triggers[now.verdict] || { section: "?", does: [`Unknown verdict "${now.verdict}": not on the page. Ask borst.`] },
+        });
+      }
+    }
+  } else if (curError && Object.keys(prevMap).length) {
+    issues.push(`${label}: not served (${curError}). Recorded entries kept.`);
+  }
+  for (const name of Object.keys(prevMap)) {
+    if (!(name in next)) {
+      if (curMap) issues.push(`${label} ${name}: recorded but not served. Kept as recorded.`);
+      next[name] = { ...prevMap[name] };
+    }
+  }
+  return next;
 }
 
 /**
@@ -349,35 +427,11 @@ export function diffPipeline(prev, cur) {
     }
   }
 
-  // The stress-hour study: a verdict turning final is the change; a recorded final verdict is terminal.
-  const prevS = prev?.stress || {};
-  next.stress = {};
-  if (cur.stress) {
-    for (const [name, now] of Object.entries(cur.stress)) {
-      const was = prevS[name] || null;
-      if (was?.final && was.verdict) {
-        if (!(now.final && now.verdict === was.verdict)) issues.push(`stress_hours ${name}: recorded ${was.verdict}, which is final; served ${now.final ? now.verdict : `${now.status} (not final)`}. Kept as recorded.`);
-        next.stress[name] = { ...was };
-        continue;
-      }
-      next.stress[name] = { ...now };
-      if (now.final && now.verdict) {
-        changes.push({
-          key: `stress:${name}`, name: `stress_hours ${name}`, kind: "stress_verdict", from: was?.status ?? null, to: now.verdict,
-          reason: now.reason || "", page: STRESS_PAGE,
-          trigger: STRESS_TRIGGERS[now.verdict] || { section: "?", does: [`Unknown verdict "${now.verdict}": not on the page. Ask borst.`] },
-        });
-      }
-    }
-  } else if (cur.stressError && Object.keys(prevS).length) {
-    issues.push(`stress_hours: not served (${cur.stressError}). Recorded entries kept.`);
-  }
-  for (const name of Object.keys(prevS)) {
-    if (!(name in next.stress)) {
-      if (cur.stress) issues.push(`stress_hours ${name}: recorded but not served. Kept as recorded.`);
-      next.stress[name] = { ...prevS[name] };
-    }
-  }
+  // The two conditioner studies: a verdict turning final is the change; a recorded final verdict is terminal.
+  next.stress = diffStudy({ prevMap: prev?.stress, curMap: cur.stress, curError: cur.stressError, label: "stress_hours", slug: "stress",
+    page: STRESS_PAGE, triggers: STRESS_TRIGGERS, kind: "stress_verdict" }, changes, issues);
+  next.trend = diffStudy({ prevMap: prev?.trend, curMap: cur.trend, curError: cur.trendError, label: "trend_gate", slug: "trend",
+    page: TREND_PAGE, triggers: TREND_TRIGGERS, kind: "trend_verdict" }, changes, issues);
   return { changes, issues, next };
 }
 

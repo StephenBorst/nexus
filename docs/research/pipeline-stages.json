@@ -199,5 +199,137 @@
       "p": null,
       "judgedAt": null
     }
+  },
+  "trend": {
+    "rsi_reset_deep": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "level_reclaim": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "oi_div_reversal": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "session_momentum": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "confluence_follow": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "oi_div_reversal_4h": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "oi_coil_break": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "session_fade": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "level_reclaim_tight": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "spot_absorb": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "btc_lead_lag": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "funding_basis_split": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    },
+    "smart_consensus_2x": {
+      "status": "ACCRUING",
+      "verdict": null,
+      "final": false,
+      "with": 0,
+      "against": 0,
+      "d": null,
+      "p": null,
+      "judgedAt": null
+    }
   }
 }
