@@ -111,7 +111,7 @@ import { handlePulse } from "./routes-pulse.mjs";
 import { handleRuleCheck } from "./routes-rulecheck.mjs";
 import { handleMarket, handleMarkets, handleFadeGrade } from "./routes-market.mjs";
 import { runWalletWatch } from "./walletWatch.mjs";
-import { runRegWatch, makeLogsRpc, logsRpcUrls } from "./regWatch.mjs";
+import { runRegWatch, envLogsRpc, ownRpcNote } from "./regWatch.mjs";
 import { stampJob } from "./jobBeats.mjs";
 import { handleBell, composeBell } from "./routes-bell.mjs";
 import { handleVenues } from "./routes-venues.mjs";
@@ -416,7 +416,7 @@ const ONCHAIN_TTL_MS = 5 * 60 * 1000;
 // moving on when one rate-limits (2026-11-16: a single public endpoint answered 429 from the shared Worker IP). This runs
 // inside a request, so one short wait before the next endpoint instead of the cron's longer backoff.
 function arbLogsRpc(env) {
-  return makeLogsRpc(logsRpcUrls(env), { waits: [300] });
+  return envLogsRpc(env, { waits: [300] });
 }
 
 async function getOnChainWallets(env) {
@@ -845,7 +845,7 @@ const worker = {
           try {
             const indexRpc = makeRpc([getArbRpc(env), "https://arb1.arbitrum.io/rpc"].filter((u, i, a) => a.indexOf(u) === i));
             const r = await runRegWatch(env, {
-              logsRpc: makeLogsRpc(logsRpcUrls(env)),   // ARBITRUM_RPC_URL first, then public endpoints, backoff on 429
+              logsRpc: envLogsRpc(env),   // ARBITRUM_RPC_URL first, then public endpoints, backoff on 429
               index: (txHash, wallet) => indexRegistration(env, { txHash, wallet, rpc: indexRpc, readMark: readPublishMark }),
               send: (text) => sendOwner(env, text),
             });
@@ -1236,7 +1236,8 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
     if (parts[0] === "wallets" && parts[1] === "onchain") {
       if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
       const result = await getOnChainWallets(env);
-      return json(result, request);
+      // Whether the configured endpoint (ARBITRUM_RPC_URL / ARB_LOGS_RPC) reached this worker: a yes/no, never the value.
+      return json({ ...result, ownRpc: ownRpcNote(env) ? "not in use" : "in use" }, request);
     }
 
     // Account setup, the retired /account-snapshot (410) and seed-scrub progress (routes-account.mjs).

@@ -42,10 +42,28 @@ export const RETRY_WAITS_MS = Object.freeze([500, 1_500, 4_000]);
 /** The endpoints to read logs from, in order: the configured one (https only), then the public ones. */
 export function logsRpcUrls(env = {}) {
   // ARBITRUM_RPC_URL, or ARB_LOGS_RPC (the name /wallets/onchain already reads): either one, set once, serves both.
-  const own = [env.ARBITRUM_RPC_URL, env.ARB_LOGS_RPC]
-    .map((u) => (typeof u === "string" ? u.trim() : ""))
-    .filter((u) => /^https:\/\/\S+$/.test(u));
+  const own = [env.ARBITRUM_RPC_URL, env.ARB_LOGS_RPC].map(cleanRpcUrl).filter((u) => /^https:\/\/\S+$/.test(u));
   return [...new Set([...own, ...PUBLIC_LOGS_RPCS])];
+}
+// A pasted value often keeps its quotes ("https://…"): those are cut, nothing else is changed.
+const cleanRpcUrl = (u) => (typeof u === "string" ? u.trim().replace(/^(["'])(.*)\1$/, "$2").trim() : "");
+
+/**
+ * Why the configured endpoint is missing from a failure (2026-11-17: the token URL was set, yet the error listed only
+ * the three public endpoints, so the worker never saw it). Null when one is in use; otherwise one line naming the
+ * variables, never their value: "not set on this worker" (unset, or set as a dashboard text variable that the next
+ * deploy wiped: only a Secret survives a deploy) or "set but ignored" (not an https:// URL).
+ */
+export function ownRpcNote(env = {}) {
+  const vals = [env.ARBITRUM_RPC_URL, env.ARB_LOGS_RPC].map(cleanRpcUrl);
+  if (vals.some((u) => /^https:\/\/\S+$/.test(u))) return null;
+  if (vals.some((u) => u)) return "ARBITRUM_RPC_URL: set but ignored (not an https:// URL with no spaces)";
+  return "ARBITRUM_RPC_URL: not set on this worker (add it as a Secret: a text variable is wiped by the next deploy)";
+}
+
+/** The reader both callers use: the configured endpoint first, the public ones after, and the note when it is missing. */
+export function envLogsRpc(env = {}, opts = {}) {
+  return makeLogsRpc(logsRpcUrls(env), { ...opts, note: ownRpcNote(env) });
 }
 
 // An endpoint that won't serve this request at all (2026-11-16: publicnode without its free Allnodes token answers
@@ -71,7 +89,7 @@ export function isRateLimited(msg, status) {
  * JSON-RPC over several endpoints with backoff. rpc(method, params) → result; a JSON-RPC error that isn't a rate limit
  * (e.g. a range refusal) is thrown as is so the caller can shrink the range. Errors name the endpoint by host only.
  */
-export function makeLogsRpc(urls, { fetchImpl = globalThis.fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), waits = RETRY_WAITS_MS } = {}) {
+export function makeLogsRpc(urls, { fetchImpl = globalThis.fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), waits = RETRY_WAITS_MS, note = null } = {}) {
   let prefer = 0;
   const host = (u) => { try { return new URL(u).host; } catch { return "rpc"; } };
   // A provider URL can carry its key in the path or query (the Allnodes token does). Error text from a provider may
@@ -118,7 +136,7 @@ export function makeLogsRpc(urls, { fetchImpl = globalThis.fetch, sleep = (ms) =
       }
       if (line) tried.push(line);
     }
-    const all = tried.join(" · ") || "no rpc configured";
+    const all = [note, ...tried].filter(Boolean).join(" · ") || "no rpc configured";
     if (rangeErr) {
       const e = new Error(rangeErr.line);
       e.rpcError = rangeErr.rpcError; e.range = true; e.tried = all;
