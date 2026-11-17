@@ -48,7 +48,7 @@ function PositionCallButtonInner() {
   if (!d) return null;
   const side = order ? `limit ${d.direction === "LONG" ? "buy" : "sell"}` : d.direction === "LONG" ? "long" : "short";
   return (
-    <button type="button" onClick={post} className="nx-press"
+    <button type="button" onClick={post} className="nx-press" aria-label={`Post your ${d.symbol} ${side} as a call`}
       title={order
         ? `Open the Thesis Engine with your ${d.symbol} ${side} at ${d.entryPrice} as a call. It counts once price trades there. Published calls are permanent; you review and publish.`
         : `Open the Thesis Engine with your ${d.symbol} ${side} as a call: entry at today's mark, your TP/SL as levels. You review and publish; it's graded from public price.`}
@@ -57,7 +57,7 @@ function PositionCallButtonInner() {
         borderLeft: `1px solid ${C.border}`, color: C.text.bright, fontFamily: UI, fontSize: 12, fontWeight: 600,
         padding: isMobile ? "0 10px" : "0 16px", cursor: "pointer", whiteSpace: "nowrap",
       }}>
-      {isMobile ? `Post ${d.symbol} ${side} as a call →` : `Post your ${d.symbol} ${side} as a call →`}
+      {isMobile ? "Post as a call →" : `Post your ${d.symbol} ${side} as a call →`}
     </button>
   );
 }
