@@ -241,6 +241,79 @@ test("the committed snapshot records the stress study for each of its seven read
   for (const [n, r] of Object.entries(snap.stress)) assert.ok(typeof r.status === "string" && "final" in r, n);
 });
 
+// ── The trend gate (trend-gate-prereg.md, signed 2026-11-16), watched like the stress study (2026-11-17) ──────────
+import { TREND_TRIGGERS, TREND_PAGE } from "./pipelineWatch.mjs";
+import { TREND_VERDICT_LABELS } from "../../workers/nexus-lab-api/trendGrading.mjs";
+
+const trendRow = ({ status = "ACCRUING", verdict = null, final = false, W = 3, A = 10, extra = {} } = {}) => ({
+  status, verdict, final, counts: { WITH: W, AGAINST: A, UNLABELLED: 0, pending: 0 }, label: verdict ? TREND_VERDICT_LABELS[verdict] : undefined,
+  d: verdict ? 1.2 : null, p: verdict ? 0.002 : null, meanWith: verdict ? 0.6 : null, meanAgainst: verdict ? -0.6 : null,
+  holm: verdict ? { threshold: 0.0038 } : undefined, judgedAt: verdict ? "2027-02-01T00:00:00.000Z" : null, ...extra,
+});
+const tgSc = (reads) => ({ asOf: "x", pipeline: { reads: [] }, axes: [], trendGate: { reads } });
+const tg = (d) => ({ ...d, changes: d.changes.filter((c) => c.key.startsWith("trend:")), issues: d.issues.filter((x) => x.startsWith("trend_gate")) });
+
+test("trend gate: counts and in-between statuses are quiet; a FINAL verdict is the change, recorded once, then terminal", () => {
+  const seeded = { reads: {}, gradedExit: {}, tests: {}, trend: { level_reclaim: { status: "ACCRUING", verdict: null, final: false } } };
+  for (const status of ["ACCRUING", "RIPENING", "WAITING_ON_PENDING"]) {
+    assert.deepEqual(tg(diffPipeline(seeded, stateFromScorecard(tgSc({ level_reclaim: trendRow({ status, W: 31, A: 40 }) })))).changes, [], status);
+  }
+  const pending = trendRow({ status: "JUDGED", W: 30, A: 30, extra: { pending: "PENDING_HOLM" } });
+  assert.deepEqual(tg(diffPipeline(seeded, stateFromScorecard(tgSc({ level_reclaim: pending })))).changes, [], "PENDING_HOLM is not final");
+  const worse = stateFromScorecard(tgSc({ level_reclaim: trendRow({ status: "JUDGED", verdict: "AGAINST_WORSE", final: true, W: 30, A: 41 }) }));
+  const d = tg(diffPipeline(seeded, worse));
+  assert.equal(d.changes.length, 1);
+  assert.deepEqual([d.changes[0].from, d.changes[0].to, d.changes[0].page, d.changes[0].kind], ["ACCRUING", "AGAINST_WORSE", TREND_PAGE, "trend_verdict"]);
+  assert.equal(d.changes[0].trigger, TREND_TRIGGERS.AGAINST_WORSE);
+  assert.match(d.changes[0].reason, /worse against BTC's trend: WITH \+0\.60R vs AGAINST -0\.60R \(d \+1\.20R\), p 0\.002, Holm threshold 0\.0038, 30 WITH \/ 41 AGAINST/);
+  assert.equal(changeReport(d.changes).title, "Pipeline watch: trend_gate level_reclaim ACCRUING → AGAINST_WORSE");
+  assert.match(changeReport(d.changes).body, /trend-gate-prereg\.md/);
+  assert.deepEqual(tg(diffPipeline(d.next, worse)).changes, []);
+  const flip = tg(diffPipeline(d.next, stateFromScorecard(tgSc({ level_reclaim: trendRow({ status: "JUDGED", verdict: "NO_DIFFERENCE", final: true }) }))));
+  assert.deepEqual(flip.changes, []);
+  assert.match(flip.issues[0], /recorded AGAINST_WORSE, which is final; served NO_DIFFERENCE/);
+  assert.equal(flip.next.trend.level_reclaim.verdict, "AGAINST_WORSE");
+});
+
+test("trend gate: NOT_ENOUGH is final with its counts; unserved or errored is an issue, never a change; stress and trend never mix", () => {
+  const seeded = { reads: {}, gradedExit: {}, tests: {}, trend: { btc_lead_lag: { status: "ACCRUING", verdict: null, final: false } } };
+  const ne = tg(diffPipeline(seeded, stateFromScorecard(tgSc({ btc_lead_lag: trendRow({ status: "NOT_ENOUGH", verdict: "NOT_ENOUGH", final: true, W: 12, A: 80 }) }))));
+  assert.equal(ne.changes[0].to, "NOT_ENOUGH");
+  assert.match(ne.changes[0].reason, /12 WITH \/ 80 AGAINST at the limit \(needs 20 on each side\)/);
+  const err = tg(diffPipeline(seeded, stateFromScorecard({ asOf: "x", pipeline: { reads: [] }, axes: [], trendGate: { error: "boom" } })));
+  assert.deepEqual(err.changes, []);
+  assert.match(err.issues[0], /trend_gate: not served \(boom\)/);
+  assert.equal(err.next.trend.btc_lead_lag.status, "ACCRUING", "kept as recorded");
+  const both = diffPipeline({ reads: {}, gradedExit: {}, tests: {}, stress: {}, trend: {} },
+    stateFromScorecard({ asOf: "x", pipeline: { reads: [] }, axes: [], stressStudy: { reads: { level_reclaim: stressRow({ status: "JUDGED", verdict: "NO_DIFFERENCE", final: true }) } }, trendGate: { reads: { level_reclaim: trendRow({ status: "JUDGED", verdict: "WITH_WORSE", final: true }) } } }));
+  assert.deepEqual(both.changes.map((c) => c.key).sort(), ["stress:level_reclaim", "trend:level_reclaim"]);
+  assert.equal(both.next.stress.level_reclaim.verdict, "NO_DIFFERENCE");
+  assert.equal(both.next.trend.level_reclaim.verdict, "WITH_WORSE");
+});
+
+test("every trend verdict has a trigger on the signed page, and none arms anything", () => {
+  const p = read(TREND_PAGE);
+  for (const [k, t] of Object.entries(TREND_TRIGGERS)) assert.ok(p.includes(t.section), `${k}: ${t.section}`);
+  assert.deepEqual(Object.keys(TREND_TRIGGERS).sort(), Object.keys(TREND_VERDICT_LABELS).sort(), "one trigger per verdict the judge can give");
+  const all = Object.values(TREND_TRIGGERS).flatMap((t) => t.does).join("\n");
+  assert.doesNotMatch(all, /\b(arm it|turn on|set CARRY_LIVE|go live)\b/i);
+  assert.match(TREND_TRIGGERS.AGAINST_WORSE.does.join(" "), /The watcher doesn't open it/);
+  assert.match(TREND_TRIGGERS.WITH_WORSE.does.join(" "), /Never a licence to trade only against the trend/);
+});
+
+test("the committed snapshot records the trend gate for each of its thirteen reads", async () => {
+  const snap = JSON.parse(read(SNAPSHOT_PATH));
+  const { TREND_GATE_STUDY } = await import("../../workers/nexus-lab-api/trendGate.mjs");
+  assert.deepEqual(Object.keys(snap.trend || {}).sort(), [...TREND_GATE_STUDY.reads].sort());
+  for (const [n, r] of Object.entries(snap.trend)) assert.ok(typeof r.status === "string" && "final" in r, n);
+});
+
+test("the routine names the trend page next to the stress page", () => {
+  const r = read("docs/routines/pipeline-watch.md");
+  assert.match(r, /trend_gate <read>/);
+  assert.match(r, /trend-gate-prereg\.md/);
+});
+
 // ── Backwards moves: the promotion lock (pipeline-if-then.md, borst 2026-11-15) ─────────────────────────
 import { LOCK_TRIGGERS, promotionLocksModule, LOCKS_MODULE_PATH } from "./pipelineWatch.mjs";
 const scAt = (asOf, stages, events = 10) => ({

@@ -470,8 +470,8 @@ product is what sits on top:
   `trendGate` on `/intel/axis-backtest`** (2026-11-17, `trendStudy.mjs`, cache key v30): the stress study and this one
   share ONE build of their reads' events (`studyEventsFor`, the union of both lists; holdout with BTC as context only,
   checked identical for the 7 stress reads), timed at ~+100 ms a rebuild on the public series (judge ~3 ms). Only the
-  judge, its wiring and index.js import the label (test-pinned); brain/exec import none. The watcher does not watch it
-  yet. Count at drafting: level_reclaim 115 of 121 events AGAINST in 60 days.
+  judge, its wiring and index.js import the label (test-pinned); brain/exec import none. The daily watcher watches it
+  like the stress study (2026-11-17, `TREND_TRIGGERS`, snapshot `trend`). Count at drafting: level_reclaim 115 of 121 events AGAINST in 60 days.
 - **Stablecoin supply (`stable:hist`, `workers/nexus-lab-api/stableHist.mjs`, borst 2026-11-16):** DefiLlama's USD-pegged
   total, one row a day from 2021, read at most every 6h on the hourly cron; a broken or shorter reply is never stored.
   RECORDING ONLY (test-pinned: only index.js reads it); read-only `GET /intel/stablecoin-history`. Cloud sessions can't
@@ -507,8 +507,9 @@ product is what sits on top:
   weighting: narrow stops +0.50R/+63 bps, wide −0.06R/−60 bps. Recommendation on the page: keep the bps money bar.
 - **Daily pipeline watcher** (prompt `docs/routines/pipeline-watch.md`, `tools/pipeline/watch.mjs`,
   `app/lib/pipelineWatch.mjs`): compares served stages with `docs/research/pipeline-stages.json`; a change opens a PR on
-  `pipeline-watch/<date>`. It also watches `stressStudy`: a read's verdict turning FINAL is the change (`STRESS_TRIGGERS`; record a
-  dated line under the stress page's Results; WORSE's pause PR stays borst's), a recorded final verdict is terminal.
+  `pipeline-watch/<date>`. It also watches `stressStudy` and `trendGate` (one helper, `diffStudy`): a read's verdict turning FINAL is the change
+  (`STRESS_TRIGGERS` / `TREND_TRIGGERS`; record a dated line under that page's Results; WORSE's pause PR and
+  AGAINST_WORSE's block PR stay borst's), a recorded final verdict is terminal.
   **The watcher merges its own `Pipeline watch:` PR** (borst's go, 2026-11-02) only when checks are green, it is mergeable, the change is display/record only, no parity DRIFT and nothing arms live money; any other session leaves watcher PRs alone. A scheduled task stores its own copy of the
   prompt: after editing the doc, update the task (`update_trigger`).
   **Backwards moves** (borst 2026-11-15, pipeline-if-then.md, rules `app/lib/promotionLock.mjs`): a served stage below the
