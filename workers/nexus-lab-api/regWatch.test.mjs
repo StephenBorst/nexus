@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   runRegWatch, registrationsFromLogs, judgeIndex, REGWATCH_KEY, GRACE_MS, MAX_TRIES, LOOKBACK_BLOCKS, SCAN_FAILS_ALERT,
-  makeLogsRpc, logsRpcUrls, scanForward, PUBLIC_LOGS_RPCS, CHUNK, MAX_CHUNKS, RETRY_WAITS_MS,
+  makeLogsRpc, logsRpcUrls, ownRpcNote, envLogsRpc, scanForward, PUBLIC_LOGS_RPCS, CHUNK, MAX_CHUNKS, RETRY_WAITS_MS,
 } from "./regWatch.mjs";
 import { THESIS_REGISTRY } from "../../app/lib/registryEvent.mjs";
 
@@ -130,7 +130,7 @@ test("wired on the */5 cron through the /theses/index path and the owner chat", 
   assert.match(five, /runRegWatch\(env, \{/);
   assert.match(five, /index: \(txHash, wallet\) => indexRegistration\(env, \{ txHash, wallet, rpc: indexRpc, readMark: readPublishMark \}\)/);
   assert.match(five, /send: \(text\) => sendOwner\(env, text\)/);
-  assert.match(five, /logsRpc: makeLogsRpc\(logsRpcUrls\(env\)\)/, "getLogs on ARBITRUM_RPC_URL / ARB_LOGS_RPC, then public endpoints");
+  assert.match(five, /logsRpc: envLogsRpc\(env\)/, "getLogs on ARBITRUM_RPC_URL / ARB_LOGS_RPC, then public endpoints");
 });
 
 // ── 2026-11-16: the public RPC answered 429 for 6 runs; own endpoint first, backoff, fallback, smaller ranges ──────
@@ -226,7 +226,7 @@ test("the digest reads the watchdog's state; /wallets/onchain uses the same mult
   assert.match(dig, /watchdogLine\(await readJson\(env\.LAB_STORE, REGWATCH_KEY\), nowMs\)/);
   const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
   const fn = src.slice(src.indexOf("function arbLogsRpc(env) {"), src.indexOf("async function getOnChainWallets("));
-  assert.match(fn, /return makeLogsRpc\(logsRpcUrls\(env\), \{ waits: \[300\] \}\);/);
+  assert.match(fn, /return envLogsRpc\(env, \{ waits: \[300\] \}\);/);
   assert.doesNotMatch(fn, /fetch\(url/, "no single-endpoint fetch left");
 });
 
@@ -351,4 +351,35 @@ test("every endpoint's reply is reported (token scrubbed), and a cap up front do
   // A cap at the front (the token endpoint) no longer stops arb1 from serving the same range.
   const capped = async (url) => (url === TOKEN_URL ? reply(200, { error: { message: "block range limit exceeded (max 5000)" } }) : reply(200, { result: [] }));
   assert.deepEqual(await makeLogsRpc(urls, { fetchImpl: capped, sleep: async () => {} })("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x2710" }]), []);
+});
+
+// 2026-11-17: the token URL was set, yet every failure listed only the public endpoints. The failure now says why the
+// configured endpoint is missing (never its value), and a pasted value's quotes no longer make it vanish.
+test("a missing or ignored ARBITRUM_RPC_URL is named in the failure, never its value", async () => {
+  assert.equal(ownRpcNote({ ARBITRUM_RPC_URL: "https://arb.example/tok" }), null);
+  assert.equal(ownRpcNote({ ARB_LOGS_RPC: "https://arb.example/tok" }), null);
+  assert.match(ownRpcNote({}), /not set on this worker/);
+  assert.match(ownRpcNote({ ARBITRUM_RPC_URL: "wss://arb.example/tok" }), /set but ignored/);
+  assert.match(ownRpcNote({ ARBITRUM_RPC_URL: "arb.example/tok" }), /set but ignored/);
+  assert.ok(!/tok/.test(ownRpcNote({ ARBITRUM_RPC_URL: "wss://arb.example/tok" })), "the value is never echoed");
+  // quotes around a pasted URL are cut
+  assert.equal(logsRpcUrls({ ARBITRUM_RPC_URL: '"https://arb.example/tok"' })[0], "https://arb.example/tok");
+  assert.equal(logsRpcUrls({ ARBITRUM_RPC_URL: " 'https://arb.example/tok' " })[0], "https://arb.example/tok");
+  assert.equal(ownRpcNote({ ARBITRUM_RPC_URL: '"https://arb.example/tok"' }), null);
+
+  const refuse = async () => ({ status: 200, text: async () => JSON.stringify({ jsonrpc: "2.0", id: 1, error: { code: -32000, message: "Archive requests require a personal token" } }) });
+  const unset = envLogsRpc({}, { fetchImpl: refuse, sleep: async () => {} });
+  const e1 = await unset("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x10" }]).catch((e) => e);
+  assert.match(e1.message, /^ARBITRUM_RPC_URL: not set on this worker/);
+  assert.match(e1.tried, /arb1\.arbitrum\.io/);
+  const set = envLogsRpc({ ARBITRUM_RPC_URL: "https://arb.example/secrettok" }, { fetchImpl: refuse, sleep: async () => {} });
+  const e2 = await set("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x10" }]).catch((e) => e);
+  assert.ok(!/ARBITRUM_RPC_URL/.test(e2.message), "no note when the URL is in use");
+  assert.match(e2.message, /^arb\.example: /);
+  assert.ok(!/secrettok/.test(e2.message));
+});
+
+test("/wallets/onchain says whether the configured endpoint is in use, as a yes/no", () => {
+  const src = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  assert.match(src, /ownRpc: ownRpcNote\(env\) \? "not in use" : "in use"/);
 });

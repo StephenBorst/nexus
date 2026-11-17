@@ -676,7 +676,9 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   endpoint's error and the scanner never halved); only 401/403 skips first. Since 2026-11-17 (evening, blind again after the
   token URL went in): a range cap no longer stops the others, every endpoint is tried at that size before the scanner halves
   (`e.range`); any other odd reply moves on to the next endpoint; and a final failure names EVERY endpoint's reply (`e.tried`,
-  the token's path/query scrubbed), not just the last one (drpc always took the blame). The alert keeps 480 chars of it. nexus-ledger-anchor also reads `ARBITRUM_RPC_URL` (anchor txs + gas
+  the token's path/query scrubbed), not just the last one (drpc always took the blame). The alert keeps 480 chars of it. When neither variable reaches the worker (unset, a dashboard TEXT variable a deploy wiped, or not an https:// URL),
+  the failure starts with that line (`ownRpcNote`, never the value; quotes around a pasted URL are cut) and
+  `/wallets/onchain` carries `ownRpc: "in use" | "not in use"` (2026-11-17: the token URL was set yet never used). nexus-ledger-anchor also reads `ARBITRUM_RPC_URL` (anchor txs + gas
   balance: latest state only, no archive). 10k blocks a call, halving on a range refusal; a run that
   made progress isn't counted blind. `/wallets/onchain` reads through the same `makeLogsRpc` (one 300 ms wait, it runs in a
   request). The daily digest prints the watchdog's line (`watchdogLine`: reading / blind + last read, calls indexed late in 7 days).
