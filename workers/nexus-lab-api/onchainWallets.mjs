@@ -85,7 +85,7 @@ export async function advanceIndex({ rpc, state, registry = THESIS_REGISTRY, fro
         logs = await rpc("eth_getLogs", [{ address: registry, fromBlock: hex(from), toBlock: hex(to) }]);
       } catch (e) {
         const msg = String(e?.message || e);
-        if (isRangeError(msg) && s.chunk > MIN_CHUNK) { s.chunk = Math.max(MIN_CHUNK, Math.floor(s.chunk / 2)); scanned++; continue; }
+        if ((e?.range || (!e?.tried && isRangeError(msg))) && s.chunk > MIN_CHUNK) { s.chunk = Math.max(MIN_CHUNK, Math.floor(s.chunk / 2)); scanned++; continue; }
         throw e;
       }
       if (!Array.isArray(logs)) throw new Error("eth_getLogs returned no list");
@@ -96,7 +96,8 @@ export async function advanceIndex({ rpc, state, registry = THESIS_REGISTRY, fro
       scanned++;
     }
   } catch (e) {
-    error = String(e?.message || e);
+    const msg = String(e?.message || e);
+    error = e?.tried && e.tried !== msg ? `${msg} [tried: ${e.tried}]` : msg;
   }
   const backfilled = latestBlock != null && s.scannedTo != null && s.scannedTo >= latestBlock;
   return { state: s, latestBlock, backfilled, scanned, error };

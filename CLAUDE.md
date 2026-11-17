@@ -663,7 +663,10 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   publicnode without its free Allnodes token refuses getLogs past ~10 blocks) or caps getLogs ≤ 2,000 blocks is skipped for
   the next (`isProviderRefusal`, `PROVIDER_MIN_SPAN`). A range cap is read BEFORE the refusal words (2026-11-17: drpc's
   "ranges over 10000 blocks are not supported on free plan" read as a refusal, so the cap could be lost behind another
-  endpoint's error and the scanner never halved); only 401/403 skips first. nexus-ledger-anchor also reads `ARBITRUM_RPC_URL` (anchor txs + gas
+  endpoint's error and the scanner never halved); only 401/403 skips first. Since 2026-11-17 (evening, blind again after the
+  token URL went in): a range cap no longer stops the others, every endpoint is tried at that size before the scanner halves
+  (`e.range`); any other odd reply moves on to the next endpoint; and a final failure names EVERY endpoint's reply (`e.tried`,
+  the token's path/query scrubbed), not just the last one (drpc always took the blame). The alert keeps 480 chars of it. nexus-ledger-anchor also reads `ARBITRUM_RPC_URL` (anchor txs + gas
   balance: latest state only, no archive). 10k blocks a call, halving on a range refusal; a run that
   made progress isn't counted blind. `/wallets/onchain` reads through the same `makeLogsRpc` (one 300 ms wait, it runs in a
   request). The daily digest prints the watchdog's line (`watchdogLine`: reading / blind + last read, calls indexed late in 7 days).

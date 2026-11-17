@@ -264,10 +264,12 @@ test("a provider capped below 2,000 blocks is skipped once the scanner has halve
     return reply(200, { result: [] });
   };
   const rpc = makeLogsRpc(["https://tiny.example", "https://arb1.arbitrum.io/rpc"], { fetchImpl, sleep: async () => {} });
-  await assert.rejects(rpc("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x2710" }]), /block range too large/, "10k: the scanner halves first");
+  // 10k: tiny caps it, so the next endpoint is tried at the same size before anyone halves (2026-11-17).
+  assert.deepEqual(await rpc("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x2710" }]), []);
+  assert.deepEqual(hits, ["tiny.example", "arb1.arbitrum.io"]);
   hits.length = 0;
   assert.deepEqual(await rpc("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x" + PROVIDER_MIN_SPAN.toString(16) }]), []);
-  assert.deepEqual(hits, ["tiny.example", "arb1.arbitrum.io"], "at ≤ 2,000 blocks it moves on");
+  assert.deepEqual(hits, ["arb1.arbitrum.io"], "the endpoint that answered goes first; tiny's cap no longer blocks the read");
   // end to end: the watchdog reads through it and is never blind
   const env = { LAB_STORE: kv() };
   const r = await runRegWatch(env, { logsRpc: makeLogsRpc(["https://tiny.example", "https://arb1.arbitrum.io/rpc"], {
@@ -318,4 +320,35 @@ test("drpc's free-plan range cap halves the chunk instead of skipping the endpoi
   } });
   assert.deepEqual(await rpc("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x2710" }]), []);
   assert.deepEqual(hits, ["a.example", "b.example"]);
+});
+
+// ── 2026-11-17 evening: blind again after the token URL went in. The error only ever named the LAST endpoint (drpc), so the
+//    configured endpoint's own reply was never seen; and a range cap from the front of the line stopped the others. ──
+test("every endpoint's reply is reported (token scrubbed), and a cap up front doesn't stop the others", async () => {
+  const TOKEN_URL = "https://arbitrum-one-rpc.publicnode.com/abcd1234SECRETTOKEN";
+  const urls = logsRpcUrls({ ARBITRUM_RPC_URL: TOKEN_URL });
+  assert.deepEqual(urls, [TOKEN_URL, "https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com", "https://arbitrum.drpc.org"]);
+  // Everyone fails: the error names all four, never the token, and the scanner still halves on the range flag even
+  // though arb1's "Too Many Requests" is in the combined text.
+  const failing = async (url) => {
+    if (url === TOKEN_URL) return reply(200, { jsonrpc: "2.0", id: 1, error: { code: -32600, message: `invalid request for ${TOKEN_URL}` } });
+    const host = new URL(url).host;
+    if (host === "arb1.arbitrum.io") return reply(429, "Too Many Requests");
+    if (host === "arbitrum-one-rpc.publicnode.com") return reply(200, { jsonrpc: "2.0", id: 1, error: { message: "Archive requests require a personal token" } });
+    return reply(200, { jsonrpc: "2.0", id: 1, error: { code: 35, message: "ranges over 10000 blocks are not supported on free plan" } });
+  };
+  const rpc = makeLogsRpc(urls, { fetchImpl: failing, sleep: async () => {} });
+  const err = await rpc("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x2710" }]).catch((e) => e);
+  assert.equal(err.range, true, "drpc's cap is a range answer: the scanner halves");
+  for (const h of ["arbitrum-one-rpc.publicnode.com: invalid request", "arb1.arbitrum.io: Too Many Requests", "Archive requests require a personal token", "arbitrum.drpc.org: ranges over 10000"]) assert.match(err.tried, new RegExp(h));
+  assert.doesNotMatch(err.tried + err.message, /SECRETTOKEN/);
+  // The watchdog's stored error carries every endpoint's reply.
+  const env = { LAB_STORE: kv() };
+  const blockN = async (url, init) => (JSON.parse(init.body).method === "eth_blockNumber" ? reply(200, { result: "0x" + (300_000).toString(16) }) : failing(url));
+  const r = await runRegWatch(env, { logsRpc: makeLogsRpc(urls, { fetchImpl: blockN, sleep: async () => {} }), now: () => 0, index: async () => ({}), send: async () => true, scanOpts: { sleep: async () => {} } });
+  assert.match(r.scanError, /invalid request.*Too Many Requests.*personal token.*ranges over 10000/, "the stored error names every endpoint");
+  assert.doesNotMatch(r.scanError, /SECRETTOKEN/);
+  // A cap at the front (the token endpoint) no longer stops arb1 from serving the same range.
+  const capped = async (url) => (url === TOKEN_URL ? reply(200, { error: { message: "block range limit exceeded (max 5000)" } }) : reply(200, { result: [] }));
+  assert.deepEqual(await makeLogsRpc(urls, { fetchImpl: capped, sleep: async () => {} })("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x2710" }]), []);
 });
