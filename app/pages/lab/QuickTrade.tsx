@@ -348,13 +348,13 @@ export function QuickTrade() {
           </div>
         </div>
         <div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
             <div style={label}>LEVERAGE</div>
             <input type="number" min={1} max={cap} value={lev}
               onChange={(e) => { const v = parseInt(e.target.value, 10); setLev(Number.isFinite(v) ? Math.min(Math.max(1, v), cap) : 1); }}
               style={{ width: 52, background: "#0a0a0b", border: "1px solid #232327", borderRadius: 3, color: "#f4f4f5", fontFamily: "var(--nx-font-mono)", fontSize: 12, padding: "2px 6px", textAlign: "center" }} />
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#f4f4f5", fontWeight: 700 }}>{levClamped}x</span>
-            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", marginLeft: "auto" }}>max {cap}x</span>
+            <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", marginLeft: "auto", whiteSpace: "nowrap" }}>max {cap}x</span>
           </div>
           <input style={{ marginTop: 10, width: "100%" }} type="range" min={1} max={cap} step={1} value={levClamped}
             onChange={(e) => setLev(parseInt(e.target.value, 10))} />

@@ -49,13 +49,14 @@ export default function MarketStripBar() {
   }, [coin]);
 
   if (!coin) return null;
-  const shown = isMobile ? segs.slice(0, 2) : segs;
+  const shown = segs;
   return (
     <div title={STRIP_TITLE} style={{ display: "flex", alignItems: "center", gap: 10, height: isMobile ? 30 : 30, padding: isMobile ? "0 12px" : "0 16px", background: C.canvas, borderBottom: `1px solid ${C.border}`, fontFamily: UI, fontSize: 12, color: C.text.fog, whiteSpace: "nowrap", overflow: "hidden" }}>
       <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", color: C.text.bright, flexShrink: 0 }}>{coin}</span>
-      <span style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0, flex: 1, overflow: "hidden" }}>
+      {/* On a phone the facts scroll sideways whole (2026-11-17: two of them were cut to "longs pay 4.2…" and "7 sho…"). */}
+      <span className={isMobile ? "nx-noscrollbar" : undefined} style={{ display: "flex", alignItems: "baseline", gap: isMobile ? 14 : 10, minWidth: 0, flex: 1, overflowX: isMobile ? "auto" : "hidden", overflowY: "hidden", scrollbarWidth: "none" }}>
         {shown.length ? shown.map((s) => (
-          <span key={s.label} style={{ display: "inline-flex", alignItems: "baseline", gap: 5, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span key={s.label} style={{ display: "inline-flex", alignItems: "baseline", gap: 5, minWidth: isMobile ? "max-content" : 0, flexShrink: isMobile ? 0 : 1, overflow: "hidden", textOverflow: "ellipsis" }}>
             <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", color: C.text.muted, textTransform: "uppercase", flexShrink: 0 }}>{isMobile && s.label === "Smart money" ? "Smart" : s.label}</span>
             <span style={{ color: s.tone === "watch" ? SIGNAL.watch : C.text.fog, overflow: "hidden", textOverflow: "ellipsis" }}>{s.text}</span>
           </span>

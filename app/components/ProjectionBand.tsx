@@ -212,7 +212,7 @@ export function ProjectionBand({ symbol, height = 216, horizonHours, fill }: { s
                     direction only; the expected RANGE below is the number. */}
                 <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: MUTED, flexShrink: 0 }}>LEAN</span>
                 {dir
-                  ? <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}><b style={{ color: tgtColor }}>{dir === "SHORT" ? "▼ fade short" : "▲ fade long"}</b></span>
+                  ? <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}><b style={{ color: FOG }}>{dir === "SHORT" ? "funding fade: short" : "funding fade: long"}</b><span style={{ color: MUTED }}> · not graded</span></span>
                   : <span style={{ color: MUTED }}>no funding lean</span>}
               </div>
               <div style={{ fontFamily: MONO, fontSize: 9.5, color: FOG, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><span style={{ fontSize: 8.5, letterSpacing: "0.1em", color: MUTED }}>{hLabel} EXPECTED RANGE </span><b>{fmtPx(wide.lo)}–{fmtPx(wide.hi)}</b></div>

@@ -379,7 +379,7 @@ export function TradeChart({ symbol, height = 240, positionEntry, tfIndex, onTf,
         {timeLabels.map((t, i) => (
           <g key={i}>
             <line x1={t.x} x2={t.x} y1={TOP} y2={priceBottom} stroke={GRID} strokeWidth={1} />
-            <text x={t.x} y={chartH - 4} fontFamily={MONO} fontSize={9} fill={FAINT} textAnchor="middle">{t.lab}</text>
+            <text x={t.x} y={chartH - 4} fontFamily={MONO} fontSize={9} fill={FAINT} textAnchor={i === 0 ? "start" : i === timeLabels.length - 1 ? "end" : "middle"}>{t.lab}</text>
           </g>
         ))}
 
