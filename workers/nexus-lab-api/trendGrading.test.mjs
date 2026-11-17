@@ -124,7 +124,7 @@ test("out-of-sample: events before the study start or the read's own registratio
   assert.equal(missing.error, "no_registration");
 });
 
-test("at the limit: < 20 on a side = NOT_ENOUGH; 20+ small and 30+ other = judged as it stands; both 20–29 = NEEDS_RULING", () => {
+test("at the limit: < 20 on a side = NOT_ENOUGH; 20+ on both sides = judged as it stands (borst's ruling 2026-11-17)", () => {
   const pick = (label, n) => events((l) => (l === "WITH" ? 0.5 : -0.5), { every: 7, days: 170 })
     .filter((e) => trueLabel(e.t, e.side) === label).slice(0, n);
   const mix = (w, a) => [...pick("WITH", w), ...pick("AGAINST", a)].sort((x, y) => x.t - y.t);
@@ -134,10 +134,9 @@ test("at the limit: < 20 on a side = NOT_ENOUGH; 20+ small and 30+ other = judge
   const asIs = judge(mix(45, 22), { at });
   assert.equal(asIs.status, "JUDGED");
   assert.equal(asIs.judgedAt, LIMIT);
-  const gap = judge(mix(25, 24), { at });
-  assert.equal(gap.status, "NEEDS_RULING");
-  assert.equal(gap.verdict, null);
-  assert.equal(gap.final, false);
+  const both = judge(mix(25, 24), { at });
+  assert.equal(both.status, "JUDGED", "both sides 20–29: judged as it stands");
+  assert.equal(both.judgedAt, LIMIT);
   assert.equal(judge(mix(25, 24), { at: LIMIT - D }).status, "ACCRUING", "before the limit it just accrues");
 });
 
@@ -168,6 +167,15 @@ test("population: UNLABELLED events are counted but never in either side", () =>
   const p = trendPopulation(evs, { trendByHour: TREND, startMs: START, endMs: LIMIT });
   assert.equal(p.counts.UNLABELLED, 1);
   assert.equal(p.all.length, 1);
+});
+
+test("the ruling is recorded under the page's Results, and the code carries it", () => {
+  const doc = readFileSync(new URL("../../docs/research/trend-gate-prereg.md", import.meta.url), "utf8");
+  const results = doc.slice(doc.indexOf("## Results"));
+  assert.match(results, /### 2026-11-17 · ruling on a case the page doesn't name/);
+  assert.match(results, /20 or more events on BOTH sides is judged as it stands/);
+  const src = readFileSync(new URL("./trendGrading.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /NEEDS_RULING/);
 });
 
 test("measurement only: brain and exec never import the judge or the label", () => {

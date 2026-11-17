@@ -465,10 +465,13 @@ product is what sits on top:
   (`trendGrading.mjs`, pure, modelled on `stressGrading.mjs`: own seed `TREND_GATE_SEED` 20261116 golden-pinned; a shift moves
   BTC's whole trend series round the study circle, side + R fixed; judging time = 30/30 cutoff + 168h or the limit; interim
   Holm p ≤ α/13 in, > α out, else PENDING_HOLM; OOS = after the study start AND the read's own `registeredAt`; holdout d/p
-  display only). Gap the page leaves open: both sides 20–29 at the limit = `NEEDS_RULING` (borst's call, not the code's).
-  Run read-only: `node tools/explorers/trendGateJudge.mjs <dir> [at]`. Only the judge imports the label (test-pinned);
-  brain/exec import neither. NOT served on the scoreboard yet (its hourly rebuild sits near the CPU limit): wiring it in
-  is its own PR, timed first. Count at drafting: level_reclaim 115 of 121 events AGAINST in 60 days.
+  display only). borst's ruling 2026-11-17 (under the page's Results): at the limit, ≥ 20 on BOTH sides = judged as it
+  stands (as stress R2). Run read-only: `node tools/explorers/trendGateJudge.mjs <dir> [at]`. **Served live as
+  `trendGate` on `/intel/axis-backtest`** (2026-11-17, `trendStudy.mjs`, cache key v30): the stress study and this one
+  share ONE build of their reads' events (`studyEventsFor`, the union of both lists; holdout with BTC as context only,
+  checked identical for the 7 stress reads), timed at ~+100 ms a rebuild on the public series (judge ~3 ms). Only the
+  judge, its wiring and index.js import the label (test-pinned); brain/exec import none. The watcher does not watch it
+  yet. Count at drafting: level_reclaim 115 of 121 events AGAINST in 60 days.
 - **Stablecoin supply (`stable:hist`, `workers/nexus-lab-api/stableHist.mjs`, borst 2026-11-16):** DefiLlama's USD-pegged
   total, one row a day from 2021, read at most every 6h on the hourly cron; a broken or shorter reply is never stored.
   RECORDING ONLY (test-pinned: only index.js reads it); read-only `GET /intel/stablecoin-history`. Cloud sessions can't

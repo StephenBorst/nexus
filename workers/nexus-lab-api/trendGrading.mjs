@@ -27,10 +27,10 @@
 //   9. Out-of-sample = after BOTH the study start and the read's own registeredAt (readPipeline.mjs).
 //  10. The holdout line is labelled with the same BTC trend and gets d and p, display only: never in the Holm family,
 //      never a verdict.
-// One case the page does not name, left to borst rather than picked here:
-//   G1. At the limit, both sides at 20–29 (the smaller side ≥ 20, the other under 30): the page judges "20 or more on
-//       its smaller side and 30 on the other" and calls "fewer than 20 on either side" NOT_ENOUGH. Between the two,
-//       this judge says NEEDS_RULING and gives no verdict. The stress study's ruling R2 is the nearest precedent.
+// One case the page does not name, ruled by borst on 2026-11-17 (dated under the page's Results) before any read had
+// an out-of-sample event:
+//   G1. At the limit, 20 or more events on BOTH sides = judged as it stands, whether or not the larger side reached 30
+//       (as the stress study's ruling R2). Fewer than 20 on either side stays NOT_ENOUGH.
 import { TREND_GATE_STUDY } from "./trendGate.mjs";
 import { mulberry32, holm, R_HOLD_H } from "./stressGrading.mjs";
 
@@ -167,12 +167,11 @@ export function judgeTrendGate({ trendByHour, events, registeredAt, at, study = 
       else judgedPop = pop.prefix;
     } else if (at >= limitMs) {
       judgeEnd = limitMs;
-      const small = Math.min(pop.counts.WITH, pop.counts.AGAINST), big = Math.max(pop.counts.WITH, pop.counts.AGAINST);
+      const small = Math.min(pop.counts.WITH, pop.counts.AGAINST);
       if (pop.reached && !pop.pendingBeforeCutoff) judgedPop = pop.prefix;          // reached 30/30 in the last week
       else if (pop.anyPending) row.status = "WAITING_ON_PENDING";
       else if (small < study.minSmallAtLimit) Object.assign(row, { status: "NOT_ENOUGH", verdict: "NOT_ENOUGH", label: TREND_VERDICT_LABELS.NOT_ENOUGH, licensesBlock: false, final: true });
-      else if (big < study.minEach) row.status = "NEEDS_RULING";                       // G1: both sides 20–29
-      else judgedPop = pop.all;                                                        // ≥20 small, ≥30 other: as it stands
+      else judgedPop = pop.all;                                                        // ≥ 20 on both sides: as it stands (G1)
     } else if (pop.reached) row.status = "RIPENING";
     if (judgedPop) {
       const spanH = Math.floor((judgeEnd - studyStart) / H);

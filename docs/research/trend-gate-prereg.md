@@ -116,3 +116,15 @@ about 82k to about 64k in this window, so most hours were a BTC 4h downtrend.
 ## Results
 
 (Append below once signed. Never edit above this line after signing.)
+
+### 2026-11-17 · ruling on a case the page doesn't name (borst, before any read reached it)
+
+Not a result. The judge (`workers/nexus-lab-api/trendGrading.mjs`, built 2026-11-17) found one case the page leaves
+open: at the limit, both sides with 20 to 29 events (the smaller side has 20 or more, the other fewer than 30). borst
+ruled on 2026-11-17, the study's first day, when no read had a single out-of-sample event:
+
+- **At the limit, a read with 20 or more events on BOTH sides is judged as it stands**, whether or not the larger
+  side reached 30. The same as the stress study's ruling R2 of 2026-11-04. Fewer than 20 on either side stays
+  NOT_ENOUGH.
+
+Everything above Results is unchanged.
