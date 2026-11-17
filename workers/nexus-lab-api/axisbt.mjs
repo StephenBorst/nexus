@@ -826,10 +826,10 @@ function buildEvents(coinSets, signalGen, ctxSets = null) {
  * event the scoreboard can't grade at all (no candles / ATR / entry) is left out, as it is there.
  * @returns {{ t:number, coin:string, side:string, r:number|null }[]}
  */
-export function eventsWithR(coinSets, signalGen) {
+export function eventsWithR(coinSets, signalGen, ctxSets = null) {
   const lastH = new Map(); // per candle map: the newest recorded hour
   const out = [];
-  for (const e of buildEvents(coinSets, signalGen)) {
+  for (const e of buildEvents(coinSets, signalGen, ctxSets)) {
     const h = hourBucket(e.t);
     const r = gradeEventR(e.cbh, h, e.side, e.pmap.get(h));
     if (r == null) continue;

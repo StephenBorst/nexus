@@ -75,6 +75,9 @@ import { FLOW_COINS, HOLDOUT_AXES, HOLDOUT_SIGNED_OFF, isHoldoutCoin } from "../
 import { REGISTERED_READS, PIPELINE_RULES, pipelineStage, registeredMs } from "../../app/lib/readPipeline.mjs";
 import { REGIME_WINDOW, regimeFromMs, btcDailyRegimes, regimeConditionMet, regimeLabel } from "../../app/lib/regimeWindow.mjs";
 import { runStressStudy, STRESS_DOC } from "./stressStudy.mjs";
+import { runTrendStudy, studyEventsFor, TREND_DOC } from "./trendStudy.mjs";
+import { STRESS_STUDY } from "./stressHours.mjs";
+import { TREND_GATE_STUDY } from "./trendGate.mjs";
 // TWAP planner/status — reuse the exec worker's tested logic (wrangler bundles the
 // cross-dir import, same as backtest.mjs). ONE planner, so start-validation and the
 // cron fire from identical rules.
@@ -168,7 +171,7 @@ import { advanceIndex, onchainResponse, ONCHAIN_INDEX_KEY } from "./onchainWalle
 
 // The scoreboard's cache key, one place: GET /intel/axis-backtest writes it and /calls/pulse reads the
 // headline from it. Bump the version here when the scoreboard payload changes (see that route's notes).
-const axisbtCacheKey = (min) => `axisbt:v29:min${min}`;
+const axisbtCacheKey = (min) => `axisbt:v30:min${min}`; // v30 = + `trendGate` (the signed trend gate study, judged live by trendGrading.mjs)
 
 // Orderly sits behind Cloudflare bot-management, which intermittently serves an HTML
 // 403 challenge to header-light Worker fetches — which would break the mini-app money
@@ -697,14 +700,34 @@ async function buildAxisScorecard(env, min) {
   // events + R from this scorecard's own generators on the main card (holdout coins out, as `oos`)
   // and on the holdout line, judged by stressGrading.mjs. Measurement only; a failure is reported,
   // never a blank study.
+  // The two conditioner studies share one build of their reads' events (the union of both lists, main card + holdout
+  // with BTC as context only): the trend gate adds ~100 ms a rebuild over the stress study alone (trendStudy.mjs).
+  const studyMain = coinSets.filter((c) => !isHoldoutCoin(c.coin));
+  let studyEv = null, studyEvError = null;
+  try {
+    studyEv = studyEventsFor([...new Set([...STRESS_STUDY.reads, ...TREND_GATE_STUDY.reads])],
+      { mainSets: studyMain, holdoutSets, ctxSets: coinSets.filter((c) => c.coin === "BTC") });
+  } catch (e) { studyEvError = whyFailed(e); }
   let stressStudy;
   try {
+    if (studyEvError) throw new Error(studyEvError);
     stressStudy = runStressStudy({
       panelSets: coinSets.filter((c) => RECORDED_COINS.includes(c.coin)),
-      mainSets: coinSets.filter((c) => !isHoldoutCoin(c.coin)),
+      mainSets: studyMain,
       holdoutSets,
+      events: studyEv,
     });
   } catch (e) { stressStudy = { name: "stress_hours", doc: STRESS_DOC, error: whyFailed(e) }; }
+  // The trend gate (signed 2026-11-16): BTC's 4h trend from the main card's BTC tape, judged by trendGrading.mjs.
+  let trendGate;
+  try {
+    if (studyEvError) throw new Error(studyEvError);
+    trendGate = runTrendStudy({
+      btcCandles: coinSets.find((c) => c.coin === "BTC")?.candleHist,
+      events: studyEv,
+      registeredAt: Object.fromEntries(REGISTERED_READS.map((r) => [r.axis, r.registeredAt])),
+    });
+  } catch (e) { trendGate = { name: "trend_gate", doc: TREND_DOC, error: whyFailed(e) }; }
   // The regime window's BTC day counts, from Orderly daily candles (one read). A failed read is
   // reported as an error, never as zero days.
   let regime;
@@ -724,6 +747,7 @@ async function buildAxisScorecard(env, min) {
     ...scorecard,
     holdout,
     stressStudy,
+    trendGate,
     pipeline: {
       rules: PIPELINE_RULES,
       // A signed paper-wallet claim (routes-paperclaim.mjs) fills `paperWallet` until the watcher writes it into the code.

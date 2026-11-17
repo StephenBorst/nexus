@@ -55,12 +55,13 @@ test("signed 2026-11-16: the page is pinned above Results, and its numbers are t
   assert.equal(TREND_GATE_STUDY.reads.filter((r) => TREND_GATE_STUDY.excluded.includes(r)).length, 0);
 });
 
-test("a conditioner: only its judge (trendGrading.mjs, measurement only) imports it; nothing that trades does", () => {
+test("a conditioner: only its judge, the judge's scoreboard wiring and index.js import it; nothing that trades does", () => {
   const root = new URL("../../", import.meta.url);
   const scan = (dir) => (existsSync(new URL(dir, root)) ? readdirSync(new URL(dir, root), { recursive: true }) : [])
     .filter((f) => /\.(mjs|js|ts|tsx)$/.test(f) && !String(f).includes("node_modules") && !/\.test\.mjs$/.test(f))
     .map((f) => [`${dir}/${f}`, readFileSync(new URL(`${dir}/${f}`, root), "utf8")]);
   const users = [...scan("workers/nexus-agent-brain"), ...scan("workers/nexus-agent-exec"), ...scan("workers/nexus-lab-api"), ...scan("app")]
     .filter(([f, src]) => !f.endsWith("trendGate.mjs") && /trendGate\.mjs/.test(src));
-  assert.deepEqual(users.map(([f]) => f), ["workers/nexus-lab-api/trendGrading.mjs"], "the judge reads the label unchanged; nothing else does");
+  assert.deepEqual(users.map(([f]) => f).sort(), ["workers/nexus-lab-api/index.js", "workers/nexus-lab-api/trendGrading.mjs", "workers/nexus-lab-api/trendStudy.mjs"],
+    "the judge, its scoreboard wiring and the route that serves it read the label; nothing that trades does");
 });

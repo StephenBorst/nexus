@@ -36,12 +36,18 @@ export function studyEvents(sets) {
  * @param {object[]} a.mainSets the main card without holdout coins (the `oos` population)
  * @param {object[]} a.holdoutSets the holdout line's sets
  */
-export function runStressStudy({ panelSets, mainSets, holdoutSets, now = Date.now() }) {
+export function runStressStudy({ panelSets, mainSets, holdoutSets, now = Date.now(), events: shared = null }) {
   const hoursMs = stressHours(panelSets).filter((t) => t <= now);
   const judged = judgedHourSet(panelSets);
-  const main = studyEvents(mainSets);
-  const hold = studyEvents(holdoutSets);
-  const events = Object.fromEntries(STRESS_STUDY.reads.map((n) => [n, { main: main[n], holdout: hold[n] }]));
+  // `shared` = the events built once for this study and the trend gate (trendStudy.studyEventsFor); else built here.
+  const main = shared ? null : studyEvents(mainSets);
+  const hold = shared ? null : studyEvents(holdoutSets);
+  const pick = (n, side) => {
+    if (!shared) return (side === "main" ? main : hold)[n];
+    if (!shared[n]) throw new Error(`events missing for ${n}`);
+    return shared[n][side].map(({ t, r }) => ({ t, r }));
+  };
+  const events = Object.fromEntries(STRESS_STUDY.reads.map((n) => [n, { main: pick(n, "main"), holdout: pick(n, "holdout") }]));
   const j = judgeStressStudy({ hoursMs, judged, events, at: now });
   const startMs = Date.parse(STRESS_STUDY.registeredAt);
   const inStudy = hoursMs.filter((t) => t >= startMs);
