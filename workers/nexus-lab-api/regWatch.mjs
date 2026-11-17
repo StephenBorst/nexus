@@ -74,10 +74,18 @@ export function isRateLimited(msg, status) {
 export function makeLogsRpc(urls, { fetchImpl = globalThis.fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), waits = RETRY_WAITS_MS } = {}) {
   let prefer = 0;
   const host = (u) => { try { return new URL(u).host; } catch { return "rpc"; } };
+  // A provider URL can carry its key in the path or query (the Allnodes token does). Error text from a provider may
+  // echo the URL, so the secret part is cut out of every message before it is logged, stored or Telegrammed.
+  const secrets = urls.map((u) => { try { const x = new URL(u); return `${x.pathname}${x.search}`.replace(/^\/$/, ""); } catch { return ""; } })
+    .filter((t) => t.length > 3);
+  const scrub = (m) => secrets.reduce((acc, t) => acc.split(t).join("/…"), String(m));
   return async function rpc(method, params) {
-    let last = "no rpc configured";
+    const tried = [];          // one line per endpoint: what it answered (2026-11-17: only the LAST one used to be kept,
+                               // so the configured endpoint's own reply was never seen and drpc always took the blame)
+    let rangeErr = null;       // the first range cap seen; thrown only if no endpoint served this range
     for (let k = 0; k < urls.length; k++) {
       const i = (prefer + k) % urls.length, url = urls[i];
+      let line = null;
       for (let attempt = 0; attempt <= waits.length; attempt++) {
         let status = 0, body = null, msg = "";
         try {
@@ -89,26 +97,36 @@ export function makeLogsRpc(urls, { fetchImpl = globalThis.fetch, sleep = (ms) =
         if (body && "result" in body && !body.error) { prefer = i; return body.result; }
         if (body && body.error) msg = String(body.error.message || "rpc error");
         else if (!msg) msg = `http ${status}`;
-        last = `${host(url)}: ${msg}`;
+        msg = scrub(msg).slice(0, 160);
+        line = `${host(url)}: ${msg}`;
         if (isRateLimited(msg, status)) {
           if (attempt < waits.length) { await sleep(waits[attempt]); continue; }
           break;                                          // still limited: next endpoint
         }
         if (status === 401 || status === 403) break;     // no access at all: next endpoint
-        // A range cap is checked before the refusal words: drpc's free plan answers "ranges over 10000 blocks are not
-        // supported on free plan" (2026-11-17), which "not supported" read as a refusal, so the endpoint was skipped
-        // instead of the scanner halving to a range it serves, and the watchdog went blind for 6 runs.
+        // A range cap is read before the refusal words (drpc's free plan: "ranges over 10000 blocks are not supported on
+        // free plan"). Remember it and try the others at this size first; only if none serves it is the cap thrown, so
+        // the scanner halves (2026-11-17: the first cap used to be thrown at once, so a capped endpoint at the front of
+        // the line stopped every other endpoint from being tried).
         if (body && body.error && isRangeError(msg)) {
           const span = logSpan(method, params);
-          if (span != null && span <= PROVIDER_MIN_SPAN) break; // capped too small to keep up: next endpoint
-          const e = new Error(msg); e.rpcError = body.error; throw e;                  // the scanner halves the range
+          if (!(span != null && span <= PROVIDER_MIN_SPAN) && !rangeErr) rangeErr = { line, rpcError: body.error };
+          break;
         }
         if (isProviderRefusal(msg, status)) break;       // this endpoint won't serve it: next endpoint
-        if (body && body.error) { const e = new Error(msg); e.rpcError = body.error; throw e; } // the chain's answer
-        break;                                            // network / http error: next endpoint
+        break;                                            // anything else (an odd provider reply, network, http): next endpoint
       }
+      if (line) tried.push(line);
     }
-    throw new Error(last);
+    const all = tried.join(" · ") || "no rpc configured";
+    if (rangeErr) {
+      const e = new Error(rangeErr.line);
+      e.rpcError = rangeErr.rpcError; e.range = true; e.tried = all;
+      throw e;
+    }
+    const e = new Error(all);
+    e.tried = all;
+    throw e;
   };
 }
 
@@ -167,8 +185,8 @@ export async function scanForward(rpc, state, { registry = THESIS_REGISTRY, slee
     try { logs = await rpc("eth_getLogs", [{ address: registry, fromBlock: hex(from), toBlock: hex(to) }]); }
     catch (e) {
       const msg = String(e?.message || e);
-      if (isRangeError(msg) && chunk > MIN_CHUNK) { chunk = Math.max(MIN_CHUNK, Math.floor(chunk / 2)); continue; }
-      error = msg; break;
+      if ((e?.range || (!e?.tried && isRangeError(msg))) && chunk > MIN_CHUNK) { chunk = Math.max(MIN_CHUNK, Math.floor(chunk / 2)); continue; }
+      error = e?.tried && e.tried !== msg ? `${msg} [tried: ${e.tried}]` : msg; break;
     }
     if (!Array.isArray(logs)) { error = "eth_getLogs returned no list"; break; }
     found.push(...registrationsFromLogs(logs, registry));
@@ -211,7 +229,7 @@ export async function runRegWatch(env, { logsRpc, index, send, now = Date.now, s
   // A watchdog that can't read the chain is blind: say so once after ~30 min, and once when it reads again.
   if (scanError) {
     s.scanFails++;
-    if (s.scanFails === SCAN_FAILS_ALERT) s.alerts.push(`On-chain → Lab watchdog can't read Arbitrum logs (${SCAN_FAILS_ALERT} runs in a row): ${esc(scanError.slice(0, 160))}. Calls registered meanwhile are checked once it reads again, if still inside the 6h window.`);
+    if (s.scanFails === SCAN_FAILS_ALERT) s.alerts.push(`On-chain → Lab watchdog can't read Arbitrum logs (${SCAN_FAILS_ALERT} runs in a row): ${esc(scanError.slice(0, 480))}. Calls registered meanwhile are checked once it reads again, if still inside the 6h window.`);
   } else {
     if (s.scanFails >= SCAN_FAILS_ALERT) s.alerts.push("On-chain → Lab watchdog reads Arbitrum again.");
     s.scanFails = 0;
