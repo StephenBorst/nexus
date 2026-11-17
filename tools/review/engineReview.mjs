@@ -6,6 +6,7 @@
 // Usage: NODE_USE_ENV_PROXY=1 node tools/review/engineReview.mjs --out review.html [--this-week note.txt] [--from dir]
 //   --from dir reads board.json, pulse.json, pw.json, run_<axis>.json, judge_<axis>.json saved by curl instead of fetching.
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { sideWords } from "../../app/lib/engineOverview.mjs";
 
 export const API = "https://og.nexustradinglabs.com";
 const CSS = readFileSync(new URL("./engineReview.css", import.meta.url), "utf8");
@@ -38,17 +39,8 @@ const sideOf = (o, side) => {
   return { n, meanR: num(s?.r?.meanR), randomR: num(rb?.randomMedianR), pct: num(rb?.pctBeaten), verdict: rb?.verdict ?? null };
 };
 
-// One plain sentence per side, by rule: what the numbers say, never a grade the board doesn't give.
-export function sideWords(side, s) {
-  if (!s) return null;
-  const S = side === "LONG" ? "Longs" : "Shorts", w = lower(side);
-  if (s.n < 10 || s.pct == null) return `${S}: ${s.n} event${s.n === 1 ? "" : "s"}, too few to compare.`;
-  if (s.pct >= 95) return `${S} beat random ${w}s (${pctTxt(s.pct)} of replays)${s.meanR != null && s.meanR < 0 ? ", and still lost money" : ""}.`;
-  if (s.meanR != null && s.meanR > 0 && s.pct < 50) return `${S} made money but trailed random ${w}s (${pctTxt(s.pct)}): the market did the work.`;
-  if (s.meanR != null && s.meanR < 0 && s.pct >= 50) return `${S} lost less than random ${w}s (${pctTxt(s.pct)}), but lost.`;
-  if (s.pct <= 5) return `${S} did worse than random ${w}s (${pctTxt(s.pct)}).`;
-  return `${S} look like random ${w}s (${pctTxt(s.pct)}).`;
-}
+// One plain sentence per side: the same rule /proof uses (app/lib/engineOverview.mjs), one copy.
+export { sideWords };
 
 /** Everything the page shows, computed from the API replies. Pure. */
 export function reviewModel({ board, pulse, paper = {} }) {
