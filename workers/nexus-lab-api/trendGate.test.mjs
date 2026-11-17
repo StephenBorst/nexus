@@ -55,12 +55,12 @@ test("signed 2026-11-16: the page is pinned above Results, and its numbers are t
   assert.equal(TREND_GATE_STUDY.reads.filter((r) => TREND_GATE_STUDY.excluded.includes(r)).length, 0);
 });
 
-test("a conditioner: nothing that trades or grades imports it until its judge is built", () => {
+test("a conditioner: only its judge (trendGrading.mjs, measurement only) imports it; nothing that trades does", () => {
   const root = new URL("../../", import.meta.url);
   const scan = (dir) => (existsSync(new URL(dir, root)) ? readdirSync(new URL(dir, root), { recursive: true }) : [])
     .filter((f) => /\.(mjs|js|ts|tsx)$/.test(f) && !String(f).includes("node_modules") && !/\.test\.mjs$/.test(f))
     .map((f) => [`${dir}/${f}`, readFileSync(new URL(`${dir}/${f}`, root), "utf8")]);
   const users = [...scan("workers/nexus-agent-brain"), ...scan("workers/nexus-agent-exec"), ...scan("workers/nexus-lab-api"), ...scan("app")]
     .filter(([f, src]) => !f.endsWith("trendGate.mjs") && /trendGate\.mjs/.test(src));
-  assert.deepEqual(users.map(([f]) => f), [], "only the count tool may read the draft until it is signed and its judge is built");
+  assert.deepEqual(users.map(([f]) => f), ["workers/nexus-lab-api/trendGrading.mjs"], "the judge reads the label unchanged; nothing else does");
 });

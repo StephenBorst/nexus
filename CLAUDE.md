@@ -461,8 +461,14 @@ product is what sits on top:
   pinned above Results; label + `TREND_GATE_STUDY` in `workers/nexus-lab-api/trendGate.mjs`; count
   `tools/explorers/trendGateCount.mjs`):** borst's "BTC under its 4h EMA-20 blocks longs", graded first like the stress
   study: the 13 reads registered at signing (4 named exclusions), each event labelled WITH / AGAINST BTC's 4h trend,
-  time-shift null, Holm, 30/30; only AGAINST_WORSE licenses one reviewed block PR. Nothing imports it but the count tool
-  (test-pinned) until its judge (own PR, like `stressGrading.mjs`) is built. Count at drafting: level_reclaim 115 of 121 events AGAINST in 60 days.
+  time-shift null, Holm, 30/30; only AGAINST_WORSE licenses one reviewed block PR. **Judge built 2026-11-17**
+  (`trendGrading.mjs`, pure, modelled on `stressGrading.mjs`: own seed `TREND_GATE_SEED` 20261116 golden-pinned; a shift moves
+  BTC's whole trend series round the study circle, side + R fixed; judging time = 30/30 cutoff + 168h or the limit; interim
+  Holm p ≤ α/13 in, > α out, else PENDING_HOLM; OOS = after the study start AND the read's own `registeredAt`; holdout d/p
+  display only). Gap the page leaves open: both sides 20–29 at the limit = `NEEDS_RULING` (borst's call, not the code's).
+  Run read-only: `node tools/explorers/trendGateJudge.mjs <dir> [at]`. Only the judge imports the label (test-pinned);
+  brain/exec import neither. NOT served on the scoreboard yet (its hourly rebuild sits near the CPU limit): wiring it in
+  is its own PR, timed first. Count at drafting: level_reclaim 115 of 121 events AGAINST in 60 days.
 - **Stablecoin supply (`stable:hist`, `workers/nexus-lab-api/stableHist.mjs`, borst 2026-11-16):** DefiLlama's USD-pegged
   total, one row a day from 2021, read at most every 6h on the hourly cron; a broken or shorter reply is never stored.
   RECORDING ONLY (test-pinned: only index.js reads it); read-only `GET /intel/stablecoin-history`. Cloud sessions can't
