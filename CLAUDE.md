@@ -571,6 +571,12 @@ product is what sits on top:
   latest), `GET /proof/weekly/:week` = the stored bytes (`X-Content-SHA256`). New-data per-side vs random per registered
   read, stage moves, paper as COUNTS only, calls people/engines apart with MAE/MFE medians (calls only); no regime split
   until the trend-gate judge. No scheduled task or key writes it.
+- **Engine overview on /proof** (borst 2026-11-17, signed section in pipeline-if-then.md "Engine overview"; rules
+  `app/lib/engineOverview.mjs`, panel `EngineOverview.tsx` above the board): live from the scoreboard /proof already loads
+  + the public paper routes. The market (random long/short R, BTC 30-day return, regime day counts), a side-by-side chart
+  per side (each read's new-data mean R vs a random entry, % of replays beaten; main coins or the holdout, tap a row for
+  its line), the read-by-read table (cards on a phone; one sentence per read by `sideWords`), paper wallets as cards
+  (n of 30, each trade's outcome, tape line; no R sums, no dollars). The weekly review imports the same `sideWords`.
 - **House caller is OFF** (`HOUSE_SIGNALS_ENABLED` deleted; gates the Catalyst caller too). Check "off" by reading
   `enabled` on `/signals/house` and `/signals/catalyst-house`, never by a quiet run. `POST /signals/house` with
   `HOUSE_SIGNALS_ADMIN` still posts by hand regardless. Keep `HOUSE_CALLER_ADDRESS` set (the dedupe reads it). On again

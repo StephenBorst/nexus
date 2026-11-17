@@ -124,6 +124,17 @@ oi_div_reversal_4h had reached Paper on one side while the other side trailed it
 - It claims nothing beyond the numbers: no "edge", no "proven", no headline. If the board can't be read, no week is
   written and the panel says so.
 
+**Engine overview** (added 2026-11-17, borst; "bring the Engine Review presentation onto /proof", signed in session)
+- /proof may carry one live "Engine overview" panel, refreshed with the scoreboard: the market the reads ran in (what a
+  random long and short earned, BTC's 30-day return, the regime window's day counts); for each registered read its
+  new-data events and mean R, and each side against a random entry on that side, as a chart and a table, on the main
+  coins or the holdout; each read's line in words by a fixed rule; and the paper wallets as cards.
+- This extends the weekly scorecard's exception to that one panel. The board's rows stay as "What we say" fixes them.
+  Every number is labelled new data, not a grade: the stage is.
+- Paper cards show the count of 30, each closed trade's outcome (coin, side, how it closed), the open trade, the tape
+  line and the judgment status. No sum or average of R and no dollar figure before the 30-trade judgment.
+- It names a side that beats its own random entry on both coin sets as exactly that: one side, new data, not yet a stage.
+
 ## Stacks
 
 Two reads may be combined only once both are Leads, and only if the scoreboard's `overlap` block shows they aren't

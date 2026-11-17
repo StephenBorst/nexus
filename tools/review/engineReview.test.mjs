@@ -24,7 +24,7 @@ const board = {
 };
 
 test("each side is judged against its random entry, never against zero", () => {
-  assert.equal(sideWords("SHORT", { n: 42, meanR: 0.52, pct: 23.7 }), "Shorts made money but trailed random shorts (23.7%): the market did the work.");
+  assert.equal(sideWords("SHORT", { n: 42, meanR: 0.52, pct: 23.7 }), "Shorts made money but trailed random shorts (24%): the market did the work.");
   assert.equal(sideWords("LONG", { n: 48, meanR: -0.04, pct: 100 }), "Longs beat random longs (100% of replays), and still lost money.");
   assert.equal(sideWords("LONG", { n: 68, meanR: -0.33, pct: 56 }), "Longs lost less than random longs (56%), but lost.");
   assert.match(sideWords("SHORT", { n: 3, meanR: 1.5, pct: null }), /too few to compare/);

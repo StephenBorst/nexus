@@ -21,6 +21,7 @@ import { ruleCheckFor, ruleCheckLine } from "@/lib/ruleCheck.mjs";
 import { engineBeat, ENGINE_QUIET_H } from "@/lib/engineBeat.mjs";
 import SignalBoard, { type Scorecard } from "./SignalBoard";
 import WeeklyScorecard from "./WeeklyScorecard";
+import EngineOverview from "./EngineOverview";
 import { pressKey } from "@/utils/a11y";
 
 const API = "https://og.nexustradinglabs.com";
@@ -192,6 +193,9 @@ export default function ProofPage() {
       <PlainWords isMobile={isMobile} />
 
       {/* 2 · THE SIGNALS — the ones being tested, then the rest folded. The misses stay on it. */}
+      {/* The engine overview: the market, each read vs a random entry per side, read by read, the paper wallets. */}
+      <EngineOverview scorecard={scorecard} />
+
       <SignalBoard scorecard={scorecard} />
       {/* The week, frozen: one snapshot per week with its sha256 (weeklyScorecard.mjs, pipeline-if-then.md). */}
       <div style={{ marginTop: 18 }}><WeeklyScorecard /></div>
