@@ -15,6 +15,7 @@ import { deployToAgent } from "@/utils/agentPrefill";
 import { C } from "@/config/theme";
 import { AXIS_BLURB, splitLabel, takeaway, sideBar, boardGroups, randomBar, tideLine } from "@/lib/signalCard.mjs";
 import { PROMOTION_LOCKS } from "@/lib/promotionLocks.mjs";
+import { usePaperJudgments } from "@/hooks/usePaperJudgments";
 import { pipelineLine, countingSince, retiredGradedExit, retiredLine, RETIRED_READS, retiredRead, retiredReadLine } from "@/lib/proofCopy.mjs";
 import Fold from "./Fold";
 
@@ -40,7 +41,6 @@ export type Tide = { metric: string; from: string; to: string; markets: number; 
 export type OosGrade = { since: string; verdict: string; r?: { samples: number; meanR: number } | null };
 export type AxisRow = { name: string; label: string; verdict: string; r?: { samples: number; meanR: number; hitRate?: number } | null; best: (Horizon & { bySide?: Record<"LONG" | "SHORT", SideStat> }) | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null; exitGraded?: ExitGrade | null; sides?: AxisSides; random?: RandomBaseline | null; oos?: OosGrade | null };
 export type PipelineRead = { axis: string; side?: string; stage: string; registeredAt?: string; next?: string; paperWallet?: string | null; numbers?: { events: number; meanR: number; beatsRandomPct?: number | null; exitTrades?: number; exitNetBps?: number | null } };
-type Judgment = { recorded?: boolean; verdict?: string };
 export type Scorecard = { failed?: boolean; axes: AxisRow[]; tide?: Tide | null; pipeline?: { rules?: { minEvents?: number }; reads?: PipelineRead[] } | null; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; asOf?: string };
 type Evidence = { ok: boolean; hold: number; markets: number; marketsGreen: number; trades: number; netUsd: number; caveat?: string; baseline?: { verdict: string; pctBeaten?: number; moreTradesNeeded?: number | null } };
 
@@ -496,15 +496,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
   const isMobile = useIsMobile();
   const reads = scorecard?.pipeline?.reads;
   // The recorded 30-trade paper verdict, read only for reads that could clear (served Tradeable or Paper with a paper wallet).
-  const [judgments, setJudgments] = useState<Record<string, Judgment>>({});
-  const candidates = (reads || []).filter((r) => (r.stage === "PAPER" || r.stage === "TRADEABLE") && r.paperWallet).map((r) => r.axis).sort().join(",");
-  useEffect(() => {
-    if (!candidates) return;
-    let live = true;
-    Promise.all(candidates.split(",").map((ax) => fetch(`${API}/signals/paper-judge/${ax}`).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((j) => [ax, j] as const)))
-      .then((pairs) => { if (live) setJudgments(Object.fromEntries(pairs.filter(([, j]) => j).map(([ax, j]) => [ax, { recorded: j.recorded === true, verdict: j.verdict }]))); });
-    return () => { live = false; };
-  }, [candidates]);
+  const judgments = usePaperJudgments(reads);
   const groups = boardGroups(scorecard?.axes, reads, Object.keys(RETIRED_READS), { judgments, locks: PROMOTION_LOCKS });
   const minEvents = scorecard?.pipeline?.rules?.minEvents ?? 30;
   const since = countingSince(reads);

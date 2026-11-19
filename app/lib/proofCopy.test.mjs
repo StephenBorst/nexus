@@ -84,7 +84,7 @@ test("pipelineLine: an Edge read states the Edge line from pipeline-if-then.md",
   assert.ok(/Next: 1 more graded-exit trades\./.test(e.sub));
 });
 
-test("proofHeadline: no claim until a read is SERVED tradeable, net positive after fees, on a fresh board", async () => {
+test("proofHeadline: no claim until a read is CLEARED (served Tradeable/Paper, net positive, no lock, recorded paper PASS) on a fresh board", async () => {
   const { proofHeadline, HEADLINE_DEFAULT, HEADLINE_MAX_AGE_MS } = await import("./proofCopy.mjs");
   const now = Date.parse("2026-11-05T03:00:00Z");
   const asOf = "2026-11-05T02:53:15.484Z";
@@ -95,23 +95,31 @@ test("proofHeadline: no claim until a read is SERVED tradeable, net positive aft
   for (const sc of [null, undefined, { failed: true, axes: [] }, { axes: [] }, board(read("EDGE", 31, -0.8)), board(read("LEAD", 0, 0))]) {
     assert.deepEqual(proofHeadline(sc, now), HEADLINE_DEFAULT);
   }
-  // Served TRADEABLE → the read, the number of trades, the date (pipeline-if-then.md, Tradeable).
-  const h = proofHeadline(board(read("TRADEABLE", 37, 18.6), read("LEAD", 4, 216.7, "oi_div_reversal_4h")), now);
+  // Since 2026-11-17 (pipeline-if-then.md § "Board layout and the CLEARED badge"): served Tradeable with a positive
+  // exit net is NOT a claim on its own. It needs the full ladder: no promotion lock and a RECORDED paper PASS.
+  const PASS = { recorded: true, verdict: "PASS" };
+  const tradeable = board(read("TRADEABLE", 37, 18.6), read("LEAD", 4, 216.7, "oi_div_reversal_4h"));
+  assert.deepEqual(proofHeadline(tradeable, now), HEADLINE_DEFAULT, "Tradeable, still on paper: no claim");
+  assert.deepEqual(proofHeadline(tradeable, now, { judgments: { level_reclaim: { recorded: false, verdict: "ACCRUING" } } }), HEADLINE_DEFAULT);
+  assert.deepEqual(proofHeadline(tradeable, now, { judgments: { level_reclaim: { recorded: true, verdict: "FAIL" } } }), HEADLINE_DEFAULT);
+  assert.deepEqual(proofHeadline(tradeable, now, { judgments: { level_reclaim: PASS }, locks: { level_reclaim: { lostStage: "PAPER" } } }), HEADLINE_DEFAULT, "a promotion lock holds the claim back");
+  const h = proofHeadline(tradeable, now, { judgments: { level_reclaim: PASS } });
   assert.equal(h.cleared, true);
   assert.equal(h.title, "level_reclaim cleared the bar.");
-  assert.equal(h.sub, "37 trades, net positive after fees. As of Nov 5.");
-  assert.ok(!/proven/i.test(h.title + h.sub), "a cleared read is not called proven: it hasn't traded on paper yet");
-  // It falls back the moment the grade does, and a stale or future-dated board makes no claim.
-  assert.deepEqual(proofHeadline(board(read("EDGE", 38, -3.1)), now), HEADLINE_DEFAULT);
-  assert.deepEqual(proofHeadline(board(read("TRADEABLE", 37, 18.6)), now + HEADLINE_MAX_AGE_MS + 60000), HEADLINE_DEFAULT);
-  assert.deepEqual(proofHeadline({ ...board(read("TRADEABLE", 37, 18.6)), asOf: "2026-11-06T00:00:00Z" }, now), HEADLINE_DEFAULT);
-  assert.deepEqual(proofHeadline({ ...board(read("TRADEABLE", 37, 18.6)), asOf: undefined }, now), HEADLINE_DEFAULT);
+  assert.equal(h.sub, "37 trades on new data, net positive after fees, then 30 paper trades passed after fees. As of Nov 5.");
+  assert.ok(!/proven/i.test(h.title + h.sub), "a cleared read is never called proven");
+  // It falls back the moment the grade does, and a stale or future-dated board makes no claim, even with a PASS.
+  const j = { judgments: { level_reclaim: PASS, x_read: PASS } };
+  assert.deepEqual(proofHeadline(board(read("EDGE", 38, -3.1)), now, j), HEADLINE_DEFAULT, "a paper PASS without the scoreboard ladder is no claim");
+  assert.deepEqual(proofHeadline(board(read("TRADEABLE", 37, 18.6)), now + HEADLINE_MAX_AGE_MS + 60000, j), HEADLINE_DEFAULT);
+  assert.deepEqual(proofHeadline({ ...board(read("TRADEABLE", 37, 18.6)), asOf: "2026-11-06T00:00:00Z" }, now, j), HEADLINE_DEFAULT);
+  assert.deepEqual(proofHeadline({ ...board(read("TRADEABLE", 37, 18.6)), asOf: undefined }, now, j), HEADLINE_DEFAULT);
   // A stage label alone isn't enough: the served money line must be positive too.
-  assert.deepEqual(proofHeadline(board(read("TRADEABLE", 37, -1)), now), HEADLINE_DEFAULT);
-  // PAPER is past Tradeable, so it still counts; two cleared reads are both named.
-  const two = proofHeadline(board(read("PAPER", 40, 12), read("TRADEABLE", 31, 5, "x_read")), now);
+  assert.deepEqual(proofHeadline(board(read("TRADEABLE", 37, -1)), now, j), HEADLINE_DEFAULT);
+  // Two cleared reads are both named.
+  const two = proofHeadline(board(read("PAPER", 40, 12), read("TRADEABLE", 31, 5, "x_read")), now, j);
   assert.equal(two.title, "2 signals cleared the bar.");
-  assert.equal(two.sub, "level_reclaim (40 trades), x_read (31 trades), each net positive after fees. As of Nov 5.");
+  assert.equal(two.sub, "level_reclaim (40 trades), x_read (31 trades), each net positive after fees on new data, then 30 paper trades passed after fees. As of Nov 5.");
 });
 
 test("the /proof headline is computed, not typed: FeaturedLead renders proofHeadline", async () => {
