@@ -1,3 +1,4 @@
+import { isCleared } from "./signalCard.mjs";
 // ── /proof copy: the plain lines the page prints about the record ────────────────────────────
 // Display only. Every number comes from an endpoint as served (/intel/axis-backtest,
 // /theses/proof-of-edge, /theses/leaderboard); nothing here grades. Pure + tested
@@ -101,12 +102,13 @@ export const retiredReadLine = (r) => {
   return `Retired ${d}: ${r.events} out-of-sample events, mean ${mean}, ${r.why}. Never re-tuned.`;
 };
 
-// ── The /proof headline: a claim, computed from the grade (borst, 2026-11-05) ────────────────────
+// ── The /proof headline: a claim, computed from the grade (borst, 2026-11-05; CLEARED only since 2026-11-17) ──────
 // pipeline-if-then.md: until a read clears, the headline stays "Nothing has proven itself yet. Here's the public
-// record."; at Tradeable it names "the read, the number of trades, the date". It reads the SERVED stage, so if a
-// read falls back under the bar the claim goes with it: a hand-written headline would stay up after the grade
-// moved. Anything unread, failed or stale makes no claim. Never says "proven" of a cleared read: Tradeable has
-// not traded on paper yet.
+// record."; a cleared read is named with its trades and the date. Since 2026-11-17 (§ "Board layout and the CLEARED
+// badge": only a CLEARED read may be marketed or promoted) "cleared" means the FULL ladder, the same test as the
+// board's badge (signalCard.mjs isCleared): served Tradeable or Paper, no promotion lock, AND a recorded 30-trade
+// paper PASS. A Tradeable read still on paper is no claim. It reads the SERVED stage, so a read that falls back
+// loses the claim with it. Anything unread, failed or stale makes no claim. Never says "proven" of a cleared read.
 export const HEADLINE_DEFAULT = Object.freeze({ cleared: false, title: "Nothing has proven itself yet.", sub: "Here’s the public record." });
 // The bar in one sentence, and a cleared read's next gate: one copy for /proof's header (FeaturedLead) and the
 // HTML snapshot its Function writes before the app boots (proofSnapshot.mjs).
@@ -116,23 +118,31 @@ export const HEADLINE_MAX_AGE_MS = 6 * 3600000; // the scoreboard is cached 1h; 
 const CLEARED_STAGES = new Set(["TRADEABLE", "PAPER"]);
 const asOfDay = (ms) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
-export function proofHeadline(scorecard, now = Date.now()) {
+/**
+ * @param {object|null} scorecard the served /intel/axis-backtest payload
+ * @param {number} now
+ * @param {{ judgments?: Record<string, {recorded?: boolean, verdict?: string}>, locks?: Record<string, object> }} opts
+ *   the recorded paper verdicts (GET /signals/paper-judge/:axis, or LAB_STORE pjudge:{axis}) and the promotion locks
+ *   (promotionLocks.mjs). None given = nothing can clear.
+ */
+export function proofHeadline(scorecard, now = Date.now(), { judgments = {}, locks = {} } = {}) {
   if (!scorecard || scorecard.failed || !Array.isArray(scorecard?.pipeline?.reads)) return HEADLINE_DEFAULT;
   const asOf = Date.parse(scorecard.asOf);
   if (!Number.isFinite(asOf) || now - asOf > HEADLINE_MAX_AGE_MS || asOf - now > 10 * 60000) return HEADLINE_DEFAULT;
   const cleared = scorecard.pipeline.reads.filter((r) =>
-    r && typeof r.axis === "string" && CLEARED_STAGES.has(r.stage) && Number(r.numbers?.exitTrades) > 0 && Number(r.numbers?.exitNetBps) > 0);
+    r && typeof r.axis === "string" && CLEARED_STAGES.has(r.stage) && Number(r.numbers?.exitTrades) > 0 && Number(r.numbers?.exitNetBps) > 0
+    && isCleared(r, judgments?.[r.axis], locks));
   if (!cleared.length) return HEADLINE_DEFAULT;
   const trades = (r) => `${r.numbers.exitTrades} ${r.numbers.exitTrades === 1 ? "trade" : "trades"}`;
   const day = asOfDay(asOf);
   if (cleared.length === 1) {
     const r = cleared[0];
-    return { cleared: true, axes: [r.axis], title: `${r.axis} cleared the bar.`, sub: `${trades(r)}, net positive after fees. As of ${day}.` };
+    return { cleared: true, axes: [r.axis], title: `${r.axis} cleared the bar.`, sub: `${trades(r)} on new data, net positive after fees, then 30 paper trades passed after fees. As of ${day}.` };
   }
   return {
     cleared: true, axes: cleared.map((r) => r.axis),
     title: `${cleared.length} signals cleared the bar.`,
-    sub: `${cleared.map((r) => `${r.axis} (${trades(r)})`).join(", ")}, each net positive after fees. As of ${day}.`,
+    sub: `${cleared.map((r) => `${r.axis} (${trades(r)})`).join(", ")}, each net positive after fees on new data, then 30 paper trades passed after fees. As of ${day}.`,
   };
 }
 

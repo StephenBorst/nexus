@@ -8,6 +8,8 @@
 // when one is, it names the read, its trades and the date (pipeline-if-then.md, Tradeable), and it falls back
 // on its own if the read drops under the bar. Loading, failed or stale scoreboard = the default, no claim.
 
+import { usePaperJudgments } from "@/hooks/usePaperJudgments";
+import { PROMOTION_LOCKS } from "@/lib/promotionLocks.mjs";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { C } from "@/config/theme";
@@ -45,7 +47,10 @@ function usePaperCounts(wallets: string[]) {
 }
 
 export default function FeaturedLead({ isMobile, onHowWeGrade, scorecard, shareHref }: { isMobile?: boolean; onHowWeGrade: () => void; scorecard?: Scorecard | null; shareHref?: string | null }) {
-  const head = proofHeadline(scorecard);
+  // Only a CLEARED read is named (pipeline-if-then.md § "Board layout and the CLEARED badge"): the recorded paper verdict
+  // and the promotion locks go into the same test as the board's badge.
+  const judgments = usePaperJudgments(scorecard?.pipeline?.reads);
+  const head = proofHeadline(scorecard ?? null, Date.now(), { judgments, locks: PROMOTION_LOCKS });
   const counts = usePaperCounts(head.cleared ? (paperWalletsFor(scorecard ?? null) as string[]) : []);
   const progress = head.cleared ? signalProgress(scorecard ?? null, counts) : [];
   return (

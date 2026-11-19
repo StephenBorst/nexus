@@ -6,7 +6,8 @@
 // No money, nothing written but its own 5-minute cache. Public, read-only, any origin (the landing).
 //
 // `headline` = proofHeadline() on the scoreboard's OWN cache, never a fresh scorecard run (that's the
-// heavy route). `signals` = the reads that cleared the bar + their paper progress (signalProgress.mjs; the paper
+// heavy route), with the recorded paper verdicts + promotion locks: only a CLEARED read is ever named (2026-11-17).
+// `signals` = the reads that cleared the bar + their paper progress (signalProgress.mjs; the paper
 // count is the wallet's lifetime `paper_agg.trades` from NEXUS_AGENT, unread = null).
 // The scoreboard's cache lives 1h and only /proof fills it, so the last good {headline, signals} is kept in
 // PULSE_BOARD_KEY and reused while its scoreboard is ≤ HEADLINE_MAX_AGE_MS old (the headline's own freshness rule);
@@ -15,6 +16,21 @@ import { callPulse, PULSE_WINDOW_MS } from "../../app/lib/callPulse.mjs";
 import { proofHeadline, HEADLINE_MAX_AGE_MS } from "../../app/lib/proofCopy.mjs";
 import { signalProgress, paperWalletsFor } from "../../app/lib/signalProgress.mjs";
 import { isCurrentStamp } from "./grading.mjs";
+import { PJUDGE_KEY } from "./paperJudge.mjs";
+import { PROMOTION_LOCKS } from "../../app/lib/promotionLocks.mjs";
+
+/**
+ * The recorded 30-trade paper verdicts the headline's CLEARED test needs (pipeline-if-then.md § "Board layout and the
+ * CLEARED badge"), read only for reads that could clear (served Tradeable or Paper). Unread = absent = no claim.
+ */
+async function recordedJudgments(env, sc) {
+  const out = {};
+  for (const r of Array.isArray(sc?.pipeline?.reads) ? sc.pipeline.reads : []) {
+    if (!r || typeof r.axis !== "string" || (r.stage !== "TRADEABLE" && r.stage !== "PAPER")) continue;
+    try { const raw = await env.LAB_STORE.get(PJUDGE_KEY(r.axis)); const j = raw ? JSON.parse(raw) : null; if (j?.verdict) out[r.axis] = { recorded: true, verdict: j.verdict }; } catch { /* unread: no claim */ }
+  }
+  return out;
+}
 
 export const PULSE_CACHE_KEY = "calls:pulse:v6"; // v6 = engineRecords: every engine wallet, + posted / lastPostedAt · v5 = + signals (cleared reads + paper progress), last-good board · v4 = + engineRecords (per-engine all-time record, /proof) · v3 = people vs engines split + caller names · v2 = + openCalls / recentGraded
 const PULSE_TTL_S = 300;
@@ -36,12 +52,12 @@ async function paperCounts(env, wallets) {
 }
 
 /** {headline, signals} from the scoreboard cache, else the last good copy while it's fresh enough. */
-async function boardView(env, scorecardKey, now) {
+async function boardView(env, scorecardKey, now, locks = PROMOTION_LOCKS) {
   let sc = null;
   if (scorecardKey) { try { const raw = await env.LAB_STORE.get(scorecardKey); sc = raw ? JSON.parse(raw) : null; } catch { sc = null; } }
   if (sc) {
     const signals = signalProgress(sc, await paperCounts(env, paperWalletsFor(sc)));
-    const view = { headline: proofHeadline(sc, now), signals, boardAsOf: sc.asOf || null };
+    const view = { headline: proofHeadline(sc, now, { judgments: await recordedJudgments(env, sc), locks }), signals, boardAsOf: sc.asOf || null };
     try { await env.LAB_STORE.put(PULSE_BOARD_KEY, JSON.stringify(view), { expirationTtl: Math.ceil(HEADLINE_MAX_AGE_MS / 1000) }); } catch { /* serve without saving */ }
     return view;
   }
@@ -96,7 +112,7 @@ async function nameCallers(env, counts) {
 }
 
 /** Builds the pulse from KV. Exported for the test (fake KV, fixed clock). */
-export async function buildPulse(env, { now = Date.now(), scorecardKey } = {}) {
+export async function buildPulse(env, { now = Date.now(), scorecardKey, locks = PROMOTION_LOCKS } = {}) {
   const records = [];
   for (const name of await listAll(env.LAB_STORE, "lab:")) {
     const raw = await env.LAB_STORE.get(name);
@@ -110,7 +126,7 @@ export async function buildPulse(env, { now = Date.now(), scorecardKey } = {}) {
     isCurrent: isCurrentStamp,
   });
   await nameCallers(env, counts);
-  const board = await boardView(env, scorecardKey, now);
+  const board = await boardView(env, scorecardKey, now, locks);
   return { ok: true, asOf: new Date(now).toISOString(), windowDays: PULSE_WINDOW_MS / 86400000, ...counts, ...board };
 }
 

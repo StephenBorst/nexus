@@ -108,7 +108,13 @@ test("signals: the cleared read with its paper count; last good board reused ≤
   const LAB_STORE = fakeKv({ "axisbt:v21:min20": JSON.stringify(board) });
   const NEXUS_AGENT = fakeKv({ [`agent:state:${wallet}`]: JSON.stringify({ paper_agg: { trades: 3, net: 999 } }) });
   const env = { LAB_STORE, NEXUS_AGENT };
-  const p = await buildPulse(env, { now: T0 + 60000, scorecardKey: "axisbt:v21:min20" });
+  // Since 2026-11-17 a claim needs the recorded paper PASS too (and no promotion lock: none given here).
+  const unjudged = await buildPulse(env, { now: T0 + 60000, scorecardKey: "axisbt:v21:min20", locks: {} });
+  assert.equal(unjudged.headline.cleared, false, "served Paper with a positive exit net, no recorded PASS: no claim");
+  await LAB_STORE.put("pjudge:level_reclaim", JSON.stringify({ verdict: "PASS", count: 30 }));
+  const locked = await buildPulse(env, { now: T0 + 60000, scorecardKey: "axisbt:v21:min20" });
+  assert.equal(locked.headline.cleared, false, "the real promotion locks hold level_reclaim back (locked 2026-11-15)");
+  const p = await buildPulse(env, { now: T0 + 60000, scorecardKey: "axisbt:v21:min20", locks: {} });
   assert.equal(p.headline.cleared, true);
   assert.deepEqual(p.signals.map((x) => [x.axis, x.stage, x.trades, x.paper.trades, x.paper.target]), [["level_reclaim", "PAPER", 42, 3, 30]]);
   assert.equal(JSON.stringify(p.signals).includes("999"), false, "no paper P&L leaves the record");
@@ -116,10 +122,10 @@ test("signals: the cleared read with its paper count; last good board reused ≤
   // the scoreboard cache expires: the last good board still serves (paper count re-read), within 6h of its asOf
   await LAB_STORE.put("axisbt:v21:min20", undefined); LAB_STORE.get = ((orig) => async (k) => (k === "axisbt:v21:min20" ? null : orig(k)))(LAB_STORE.get);
   await NEXUS_AGENT.put(`agent:state:${wallet}`, JSON.stringify({ paper_agg: { trades: 4 } }));
-  const later = await buildPulse(env, { now: T0 + 5 * 3600e3, scorecardKey: "axisbt:v21:min20" });
+  const later = await buildPulse(env, { now: T0 + 5 * 3600e3, scorecardKey: "axisbt:v21:min20", locks: {} });
   assert.equal(later.headline.cleared, true);
   assert.equal(later.signals[0].paper.trades, 4);
-  const stale = await buildPulse(env, { now: T0 + 7 * 3600e3, scorecardKey: "axisbt:v21:min20" });
+  const stale = await buildPulse(env, { now: T0 + 7 * 3600e3, scorecardKey: "axisbt:v21:min20", locks: {} });
   assert.deepEqual([stale.headline, stale.signals], [null, []]);
 });
 
