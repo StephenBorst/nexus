@@ -232,7 +232,15 @@ product is what sits on top:
   computed by the brain on `oi:hist` behind `OI_DIV_4H_LIVE = "true"`, PAPER only (`oiDiv4hRefusal`, no live lift);
   fires in the hour after its row, `sourceT` = the row time. Hidden link `/lab?tab=agent&deploy=oi-div-4h-paper`
   (`OI_DIV_4H_PAPER_CONFIG`, a FRESH wallet); its paper wallet is recorded on the registration (`paperWallet`, readPipeline.mjs),
-  which moves the served stage → PAPER. Parity: `oiDivReversal.test.mjs`. **Paper-wallet registration (borst 2026-11-14, `app/lib/paperClaim.mjs`,
+  which moves the served stage → PAPER. Parity: `oiDivReversal.test.mjs`. **REGISTERED_READ = ON for PAPER only** (house paper runs step 2, borst
+  2026-11-17; brain var `REGISTERED_READ_PAPER = "true"` since 2026-11-19): `signalMode:"REGISTERED_READ"` + `config.read` =
+  any registered read with a shared body (`BRAIN_READS` = explorerReads `EXPLORER_GENS`, 16 of 17; rsi_reset_deep lives in
+  axisbt only, moving it is its own PR). `workers/nexus-lab-api/registeredReadLive.mjs` runs the scoreboard's OWN
+  generator, called as axisbt `buildEvents` calls it (OI price spine, `priceByHour(oiHist)`, BTC's candles as context), on
+  the series the brain loads once a tick (all seven `READ_SERIES`, watched coins + BTC), each read once; fires in the hour
+  after an event, `sourceT` = the event time. `registeredReadRefusal`: PAPER only, no invert, no unknown read; NO live lift.
+  Parity read by read, hour by hour: `registeredReadLive.test.mjs`. ~0.35–0.5 s brain CPU a tick with all 16 in use (19 Nov,
+  public series). Nothing uses it until a house paper wallet is set up (step 2, next PR). **Paper-wallet registration (borst 2026-11-14, `app/lib/paperClaim.mjs`,
   `routes-paperclaim.mjs`):** no more hand-made PR per wallet. On `/ops/revenue` (Paper wallets box) the owner pastes a
   fresh wallet and signs `paperClaimMessage` (5 min; Safe owner / `OPS_WALLETS`). `POST /pipeline/paper-wallet` binds it
   only if the read is SERVED TRADEABLE (stored scoreboard, unread = 503), has a `PAPER_SETUPS` entry (brain mode + preset;

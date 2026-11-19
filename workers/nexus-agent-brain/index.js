@@ -22,6 +22,7 @@ import { basisCvdConfirm, basisSmartConfirm, basisLiqConfirm } from "../../app/l
 import { HOLDOUT_PERPS } from "../../app/lib/recordedUniverse.mjs";
 import { levelReclaimLive, levelReclaimRefusal } from "../../app/lib/levelReclaim.mjs";
 import { oiDiv4hLive, oiDiv4hRefusal } from "../../app/lib/oiDivReversal.mjs";
+import { registeredReadLive, registeredReadRefusal, READ_SERIES, REGISTERED_READ_MODE } from "../nexus-lab-api/registeredReadLive.mjs";
 import { parseLiveLift, liveLifted, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
 
 // The markets we ALWAYS record oi:hist for. ⚠️ Keep this in step with
@@ -144,6 +145,46 @@ export default {
         } catch (e) {
           console.error(`[brain] ${symbol} eval error:`, e.message);
         }
+      }
+
+      // ── Any registered read, on paper (house paper runs, borst 2026-11-17) ─────────────────────────
+      // Computed ONLY when worker var REGISTERED_READ_PAPER = "true" AND a PAPER config names the read
+      // (registeredReadRefusal). Each read runs ONCE a tick on the series this tick already appended, for every
+      // watched coin + BTC (its context), through the scoreboard's own generator. Off ⇒ no raw.registeredReads
+      // ⇒ those configs sit out and say so.
+      const readsInUse = env.REGISTERED_READ_PAPER === "true"
+        ? [...new Set(Object.values(userConfigs).filter(({ config }) => config.signalMode === REGISTERED_READ_MODE && !registeredReadRefusal(config)).map(({ config }) => config.read))]
+        : [];
+      if (readsInUse.length) {
+        const t0 = Date.now();
+        const bareOf = (sym) => String(sym).replace(/^PERP_/, "").replace(/_USDC$/, "");
+        const coins = [...new Set([...[...symbolSet].map(bareOf), "BTC"])];
+        const sets = [];
+        for (const coin of coins) {
+          const cs = { coin };
+          for (const [k, keyOf] of Object.entries(READ_SERIES)) {
+            try { const raw = await env.NEXUS_AGENT.get(keyOf(coin)); cs[k] = raw ? JSON.parse(raw) : []; }
+            catch (e) { console.error(`[brain] ${coin} ${k} read failed:`, e.message); cs[k] = null; }
+          }
+          sets.push(cs);
+        }
+        // a coin whose series couldn't be read sits out with the reason (never run on a partial set)
+        const unreadCoins = new Set(sets.filter((cs) => Object.keys(READ_SERIES).some((k) => cs[k] === null)).map((cs) => cs.coin));
+        const readable = sets.filter((cs) => !unreadCoins.has(cs.coin));
+        for (const read of readsInUse) {
+          let byCoin = {};
+          try { byCoin = registeredReadLive(read, readable); }
+          catch (e) { console.error(`[brain] ${read} failed:`, e.message); }
+          for (const symbol of symbolSet) {
+            if (!rawBySymbol[symbol]) continue;
+            const coin = bareOf(symbol);
+            const v = unreadCoins.has(coin) || (coin !== "BTC" && unreadCoins.has("BTC") && read === "btc_lead_lag")
+              ? { side: null, t: null, reason: "history read failed" }
+              : byCoin[coin] || { side: null, t: null, reason: `${read} not computed` };
+            rawBySymbol[symbol].registeredReads = { ...(rawBySymbol[symbol].registeredReads || {}), [read]: v };
+          }
+        }
+        console.log(`[brain] registered reads ${readsInUse.join(",")} on ${readable.length} coins in ${Date.now() - t0} ms`);
       }
 
       // Market-wide regime — computed once per tick, only if someone opted in.

@@ -27,6 +27,10 @@ LEVEL_RECLAIM_LIVE = "true"
 # that day, #299). Only its hidden setup link loads that mode. Non-PAPER configs are refused either way
 # (app/lib/oiDivReversal.mjs oiDiv4hRefusal; the graded exit is paper-only too).
 OI_DIV_4H_LIVE = "true"
+# ON since 2026-11-19: any registered read for PAPER configs with signalMode = "REGISTERED_READ" and config.read = the
+# read (house paper runs, borst 2026-11-17). The scoreboard's own generator (nexus-lab-api/registeredReadLive.mjs).
+# Non-PAPER configs are refused either way (registeredReadRefusal); there is no live lift for this mode.
+REGISTERED_READ_PAPER = "true"
 
 # STAGED (off): the two-sided basis read for configs with basisAnchor = "MEAN"
 # (scoreboard axes basis_dev / basis_dev_x_cvd). Uncomment ONLY after it grades PREDICTIVE
