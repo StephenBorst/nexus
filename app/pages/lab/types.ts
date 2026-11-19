@@ -125,7 +125,9 @@ export interface AgentConfig {
   // BASIS_FADE is the scoreboard's PREDICTIVE spot-perp read, traded. EXPERIMENTAL/paper.
   // LEVEL_RECLAIM: the registered level_reclaim read, PAPER only, loaded only by its hidden setup link (no mode button).
   // OI_DIV_4H: the registered oi_div_reversal_4h read, PAPER only, loaded only by its hidden setup link (no mode button).
-  signalMode: "CONFLUENCE" | "FUNDING_ONLY" | "OI_ONLY" | "MOMENTUM" | "MEAN_REVERSION" | "BASIS_FADE" | "LEVEL_RECLAIM" | "OI_DIV_4H";
+  // REGISTERED_READ: any registered read, named by `read` (the scoreboard axis), PAPER only; house paper runs, no mode button.
+  signalMode: "CONFLUENCE" | "FUNDING_ONLY" | "OI_ONLY" | "MOMENTUM" | "MEAN_REVERSION" | "BASIS_FADE" | "LEVEL_RECLAIM" | "OI_DIV_4H" | "REGISTERED_READ";
+  read?: string; // REGISTERED_READ only: the registered read it trades (e.g. "session_fade")
   oiChangeThreshold: number; // % min OI move for the OI-divergence rule to count (0 = any)
   priceChangeThreshold: number; // % price move on the tick that triggers MOMENTUM / MEAN_REVERSION
   respectRegime?: boolean; // opt-in: brain skips NEW entries that fight a strong market regime

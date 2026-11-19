@@ -13,6 +13,8 @@
 //                                     and OFF: only behind worker var LEVEL_RECLAIM_LIVE, PAPER configs only.
 //   OI_DIV_4H                       — the registered oi_div_reversal_4h read (app/lib/oiDivReversal.mjs):
 //                                     only behind worker var OI_DIV_4H_LIVE, PAPER configs only.
+//   REGISTERED_READ                 — any registered read named by config.read, the scoreboard's own generator
+//                                     (nexus-lab-api/registeredReadLive.mjs): behind REGISTERED_READ_PAPER, PAPER only.
 //   MOMENTUM                        — trade WITH a tick price move > priceChangeThreshold (trend-follow).
 //   MEAN_REVERSION                  — FADE a tick price move > priceChangeThreshold (buy dip / sell rip).
 // Thresholds (per user): fundingThreshold (%), oiChangeThreshold (% min OI move to count).
@@ -22,6 +24,7 @@
 import { hourBucket } from "../../app/lib/basisStack.mjs";
 import { levelReclaimRefusal } from "../../app/lib/levelReclaim.mjs";
 import { oiDiv4hRefusal } from "../../app/lib/oiDivReversal.mjs";
+import { registeredReadRefusal } from "../nexus-lab-api/registeredReadLive.mjs";
 
 // Market-wide regime from a full futures snapshot (all symbols). Pure + testable.
 // Mirrors the frontend MarketRegime: breadth (50%) + BTC trend (40%) + funding
@@ -208,6 +211,20 @@ export function deriveSignal(raw, config = {}, regime = null, smartConsensus = n
       }
       break;
     }
+    case "REGISTERED_READ": {
+      // Any registered read, traded on paper (house paper runs, borst 2026-11-17). The verdict is the scoreboard's own
+      // generator for config.read (registeredReadLive.mjs), computed by the brain only behind REGISTERED_READ_PAPER;
+      // nothing is re-derived here. No raw.registeredReads entry ⇒ it sits out and says so. PAPER only, no live lift.
+      const refused = registeredReadRefusal(config);
+      if (refused) { why = `${refused} — sat out`; break; }
+      const r = raw.registeredReads?.[config.read];
+      if (r && (r.side === "LONG" || r.side === "SHORT")) {
+        direction = r.side; confidence = 70; why = r.reason;
+      } else {
+        why = r && typeof r.reason === "string" && r.reason ? `${r.reason} — sat out` : `${config.read} is not computed — sat out`;
+      }
+      break;
+    }
     case "EXTERNAL":
       // Arena / bring-your-own-brain — the house brain stays silent for this agent;
       // entries come ONLY from its own webhook intents. Explicit case so it can
@@ -316,7 +333,7 @@ export function oiSnapshotDue(hist, now = Date.now()) {
 // (2026-10-30). Basis reads carry their basis row's time: the brain re-sends the same row's
 // signal every tick until the next row lands, and the grader counts that row once. A
 // level_reclaim signal carries its event's time (the reclaim bar's close) for the same reason, and an
-// oi_div_reversal_4h signal its event's oi:hist row time.
+// oi_div_reversal_4h signal its event's oi:hist row time, and a REGISTERED_READ signal its read's event time.
 // Other modes have no stable source row → null (exec keeps its plain cooldown for them).
 export function signalSourceT(raw, config) {
   if (!raw) return null;
@@ -324,6 +341,7 @@ export function signalSourceT(raw, config) {
   if (config?.signalMode === "BASIS_FADE") t = config.basisAnchor === "MEAN" ? raw.basisDevT : raw.basisT;
   else if (config?.signalMode === "LEVEL_RECLAIM") t = raw.levelReclaimT;
   else if (config?.signalMode === "OI_DIV_4H") t = raw.oiDiv4hT;
+  else if (config?.signalMode === "REGISTERED_READ") t = raw.registeredReads?.[config.read]?.t;
   return t != null && Number.isFinite(Number(t)) && Number(t) > 0 ? Number(t) : null;
 }
 
