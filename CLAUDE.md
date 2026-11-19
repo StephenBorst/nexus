@@ -554,8 +554,16 @@ product is what sits on top:
   a read "proven" or "graded" unless the scoreboard grades that exact rule.
 - **/proof layout:** verdict (the headline is a claim COMPUTED from the served stage, `proofHeadline` in proofCopy.mjs, since
   2026-11-05: "Nothing has proven itself yet" until a read is served TRADEABLE/PAPER with positive exit net, then the read,
-  trades and date; unread/stale board = no claim, never "proven") → board by stage
-  (`stageGroups`, never ranked by in-sample R) → calls + callers → agents/arena/desks/carry → ledger.
+  trades and date; unread/stale board = no claim, never "proven") → the board → calls + callers → agents/arena/desks/carry → ledger.
+  **The board** (borst 2026-11-17, pipeline-if-then.md § "Board layout and the CLEARED badge"; `boardGroups` +
+  `isCleared` in signalCard.mjs): "Every read, best first" = **Cleared** (served TRADEABLE/PAPER + no promotion lock +
+  a RECORDED 30-trade paper PASS, read from `/signals/paper-judge/:axis`; empty = "Nothing has cleared yet.") → **Leads**
+  (LEAD/EDGE/TRADEABLE/PAPER, not cleared) → **Still testing** (REGISTERED) → folds "Looked good on old data", "Worse
+  than random" → **Retired** last. Inside the first three: furthest stage, then `numbers.beatsRandomPct` (NEW data, main
+  coins; shown on the row as "beat N% of random"), then events; never in-sample. The badge word is CLEARED, never
+  "proven"; only a CLEARED read may be marketed or promoted. A user's tweak is a new read, CLEARED only via its own signed
+  registration. Follow-up owed: `proofHeadline` still says "cleared the bar" at TRADEABLE + positive exit net; it must
+  claim only a CLEARED read (the pulse needs the recorded paper verdict).
   Plain-words copy in `app/lib/proofCopy.mjs`; method in `HowWeGrade.tsx`. The board opens with the tide ("The market since
   Aug 7: a random long earned −0.18R a trade, a random short +0.20R. Each side has to beat its own random entry, not zero.",
   `tideLine`, signalCard.mjs; unread = no line) and each side in a tapped card shows its random entry's R (`sideBar.randomR`).
