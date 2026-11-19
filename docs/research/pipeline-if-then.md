@@ -135,6 +135,25 @@ oi_div_reversal_4h had reached Paper on one side while the other side trailed it
   line and the judgment status. No sum or average of R and no dollar figure before the 30-trade judgment.
 - It names a side that beats its own random entry on both coin sets as exactly that: one side, new data, not yet a stage.
 
+**Board layout and the CLEARED badge** (added 2026-11-17, borst; "open paper mode to every read … the gate moves off
+access and onto claims", with three decisions in session: the badge is CLEARED, it needs the full ladder, a tweak earns
+it only by a signed registration)
+- The /proof board reads top to bottom in four groups, best first: **Cleared**, **Leads**, **Still testing**, then the
+  folded archive (reads graded on old data only, reads worse than random), **Retired** last.
+- **CLEARED** = the full ladder: served Tradeable or Paper (each side beats random on new data, the halves agree, it
+  repeats on the holdout coins, the graded exit nets above 0 after fees), no promotion lock, AND its 30-trade paper
+  judgment recorded PASS (after fees, parity clean, fills on the public tape). A paper pass alone is never enough: a
+  read with no edge clears "mean > 0 at 30 trades" about 4 times in 10. With nothing cleared the group says "Nothing
+  has cleared yet." The word is CLEARED, never "proven".
+- Only a CLEARED read may be marketed or promoted: the headline, the landing, share cards, posts, the paid feed and the
+  house caller. Everything else shows its live record under its group's plain label.
+- Leads = served Lead, Edge, Tradeable or Paper and not cleared. Still testing = still Registered.
+- Inside Cleared, Leads and Still testing: the furthest stage first, then the share of random entries the read beat on
+  new data (main coins), then events. Never an in-sample number. Each row shows that share beside its events, with
+  "not a grade" in its tooltip. The stage lines under "What we say" stay as written.
+- A user's tweak of a read is a new read: frozen when saved and counted only forward from then. It may earn CLEARED only
+  after it is registered on its own signed page, counting from that date.
+
 ## Stacks
 
 Two reads may be combined only once both are Leads, and only if the scoreboard's `overlap` block shows they aren't

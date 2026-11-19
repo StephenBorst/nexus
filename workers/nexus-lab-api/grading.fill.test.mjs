@@ -172,11 +172,16 @@ test("a resting order that fills on a later pass alerts its owner once; one fill
   const dip = (t) => (t >= POSTED + D && t < POSTED + D + 2 * H ? { h: 2420, l: 2395, c: 2410 } : flat());
   const env2 = { LAB_STORE: kv({ [`lab:${W}`]: env1.LAB_STORE.m.get(`lab:${W}`) }) };
   await withOrderly(dip, () => gradePublicTheses(env2));
+  // Only the fill alert is this test's subject. Since HALF_R_FROM_MS (2026-11-16) a call posted "now" that then trades
+  // +0.5R also gets its own one-time call_halfr note (callMath halfRLevel, tested on its own): left out here, so the
+  // test doesn't change verdict with the calendar (it went red on 2026-11-16, when Date.now() crossed that date).
   const notifs = JSON.parse(env2.LAB_STORE.m.get(`notif:${W}`) || "[]");
-  assert.deepEqual(notifs.map((n) => [n.type, n.thesisId]), [["call_fill", "limit"]]);
-  assert.match(notifs[0].message, /^ETH LONG filled at 2400/);
+  const fills = notifs.filter((n) => n.type === "call_fill");
+  assert.deepEqual(fills.map((n) => [n.type, n.thesisId]), [["call_fill", "limit"]]);
+  assert.match(fills[0].message, /^ETH LONG filled at 2400/);
+  assert.deepEqual(notifs.filter((n) => n.type !== "call_fill" && n.type !== "call_halfr"), [], "no other alert");
   await withOrderly(dip, () => gradePublicTheses(env2));
-  assert.equal(JSON.parse(env2.LAB_STORE.m.get(`notif:${W}`)).length, 1, "no repeat on the next pass");
+  assert.equal(JSON.parse(env2.LAB_STORE.m.get(`notif:${W}`)).length, notifs.length, "no repeat on the next pass");
 });
 
 // ── Exit time (2026-10-22) ────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { splitLabel, rankAxes, takeaway, sideBar, isCompact, AXIS_BLURB, stageGroups, randomBar, tideLine } from "./signalCard.mjs";
+import { splitLabel, rankAxes, takeaway, sideBar, isCompact, AXIS_BLURB, boardGroups, isCleared, BOARD_GROUP_ORDER, randomBar, tideLine } from "./signalCard.mjs";
 
 const axis = (o = {}) => ({
   name: "x", label: "X", verdict: "PREDICTIVE",
@@ -66,49 +66,78 @@ test("every blurb is a plain description, never a grade", () => {
   }
 });
 
-test("stageGroups: registered reads first by stage, then history, then reads worse than random", () => {
+test("boardGroups: Cleared, Leads, Still testing, then the archive, Retired last; best first by NEW data, never in-sample", () => {
   const list = [
     axis({ name: "top-insample", random: { pooled: { verdict: "BEATS_RANDOM", pctBeaten: 100 } } }),
-    axis({ name: "reg-lead", verdict: "PROMISING" }),
-    axis({ name: "reg-registered" }),
-    axis({ name: "reg-below", verdict: "NOISE", random: { pooled: { verdict: "BELOW_RANDOM", pctBeaten: 0 } } }),
+    axis({ name: "reg-lead-low", verdict: "PROMISING" }),
+    axis({ name: "reg-lead-high", verdict: "NOISE" }),
+    axis({ name: "reg-edge" }),
+    axis({ name: "reg-test-a" }),
+    axis({ name: "reg-test-b" }),
+    axis({ name: "reg-test-unread" }),
     axis({ name: "worse", verdict: "NOISE", random: { pooled: { verdict: "BELOW_RANDOM", pctBeaten: 1 } } }),
     axis({ name: "noise", verdict: "NOISE", random: { pooled: { verdict: "NOT_DISTINGUISHABLE", pctBeaten: 60 } } }),
     axis({ name: "retired" }),
   ];
+  const n = (pct, events = 40) => ({ beatsRandomPct: pct, events });
   const reads = [
-    { axis: "reg-registered", stage: "REGISTERED" },
-    { axis: "reg-lead", stage: "LEAD" },
-    { axis: "reg-below", stage: "REGISTERED" },
+    { axis: "reg-lead-low", stage: "LEAD", numbers: n(40) },
+    { axis: "reg-lead-high", stage: "LEAD", numbers: n(90) },
+    { axis: "reg-edge", stage: "EDGE", numbers: n(10) },
+    { axis: "reg-test-a", stage: "REGISTERED", numbers: n(55, 12) },
+    { axis: "reg-test-b", stage: "REGISTERED", numbers: n(80, 9) },
+    { axis: "reg-test-unread", stage: "REGISTERED", numbers: n(null, 0) },
     { axis: "retired", stage: "RETIRED" },
     { axis: "not-on-board", stage: "EDGE" },
   ];
-  const g = stageGroups(list, reads);
-  assert.deepEqual(g.map((x) => x.key), ["pipeline", "history", "below", "retired"]);
-  // The best in-sample read is NOT on top: a further stage beats a better in-sample number.
-  assert.deepEqual(g[0].rows.map((r) => r.a.name), ["reg-lead", "reg-registered", "reg-below"]);
-  assert.equal(g[0].rows[0].reg.stage, "LEAD");
-  assert.deepEqual(g[1].rows.map((r) => r.a.name), ["top-insample", "noise"]);
-  // Worse-than-random reads stay on the board; a retired read moves to its own "Retired" group, last.
-  assert.deepEqual(g[2].rows.map((r) => r.a.name), ["worse"]);
-  assert.deepEqual(g[3].rows.map((r) => r.a.name), ["retired"]);
-  // Every read on the board appears exactly once.
-  assert.equal(g.reduce((n, x) => n + x.rows.length, 0), list.length);
+  const g = boardGroups(list, reads);
+  assert.deepEqual(g.map((x) => x.key), ["cleared", "lead", "testing", "history", "below", "retired"]);
+  assert.deepEqual(g[0].rows, [], "nothing cleared: the group is still there, empty, so the page can say so");
+  // The furthest stage first, then the share of random entries beaten on NEW data. The in-sample verdict plays no part:
+  // the NOISE-graded lead with 90% on new data sits above the PROMISING one with 40%.
+  assert.deepEqual(g[1].rows.map((r) => r.a.name), ["reg-edge", "reg-lead-high", "reg-lead-low"]);
+  assert.deepEqual(g[2].rows.map((r) => r.a.name), ["reg-test-b", "reg-test-a", "reg-test-unread"], "unread new-data share goes last");
+  assert.deepEqual(g[3].rows.map((r) => r.a.name), ["top-insample", "noise"], "the best in-sample number never tops the board");
+  assert.deepEqual(g[4].rows.map((r) => r.a.name), ["worse"]);
+  assert.deepEqual(g[5].rows.map((r) => r.a.name), ["retired"]);
+  assert.equal(g.reduce((k, x) => k + x.rows.length, 0), list.length, "every read on the board appears exactly once");
+  assert.deepEqual(BOARD_GROUP_ORDER, ["cleared", "lead", "testing", "history", "below", "retired"]);
+  // A recorded retirement is final even if the served stage says otherwise.
+  assert.deepEqual(boardGroups(list, reads, ["reg-edge"]).find((x) => x.key === "retired").rows.map((r) => r.a.name), ["reg-edge", "retired"]);
 });
 
-test("stageGroups: a recorded retirement is final, whatever stage is served later", () => {
+test("CLEARED needs the full ladder: Tradeable or Paper, no promotion lock, and a recorded 30-trade paper PASS", () => {
+  const reg = (stage, axis = "r") => ({ axis, stage, numbers: { beatsRandomPct: 97, events: 60 } });
+  const pass = { recorded: true, verdict: "PASS" };
+  assert.equal(isCleared(reg("PAPER"), pass), true);
+  assert.equal(isCleared(reg("TRADEABLE"), pass), true);
+  assert.equal(isCleared(reg("EDGE"), pass), false, "a paper PASS without the scoreboard ladder is not a clear");
+  assert.equal(isCleared(reg("LEAD"), pass), false);
+  assert.equal(isCleared(reg("REGISTERED"), pass), false, "a read that fell back keeps its paper verdict but loses the badge");
+  assert.equal(isCleared(reg("PAPER"), { recorded: false, verdict: "ACCRUING" }), false);
+  assert.equal(isCleared(reg("PAPER"), { recorded: true, verdict: "FAIL" }), false);
+  assert.equal(isCleared(reg("PAPER"), { recorded: false, verdict: "PASS" }), false, "only a RECORDED verdict counts");
+  assert.equal(isCleared(reg("PAPER"), pass, { r: { lostStage: "PAPER" } }), false, "a promotion lock holds the badge back");
+  assert.equal(isCleared(reg("PAPER"), null), false);
+  const list = [axis({ name: "r" }), axis({ name: "s" })];
+  const g = boardGroups(list, [reg("PAPER", "r"), reg("PAPER", "s")], [], { judgments: { r: pass, s: { recorded: false, verdict: "ACCRUING" } } });
+  assert.deepEqual(g.find((x) => x.key === "cleared").rows.map((x) => x.a.name), ["r"]);
+  assert.deepEqual(g.find((x) => x.key === "lead").rows.map((x) => x.a.name), ["s"], "on paper but not judged yet = a lead");
+});
+
+test("boardGroups: a recorded retirement is final, whatever stage is served later", () => {
   const list = [axis({ name: "gone" }), axis({ name: "live" })];
   const reads = [{ axis: "gone", stage: "REGISTERED" }, { axis: "live", stage: "REGISTERED" }];
-  const g = stageGroups(list, reads, ["gone"]);
-  assert.deepEqual(g.map((x) => x.key), ["pipeline", "retired"]);
-  assert.deepEqual(g[0].rows.map((r) => r.a.name), ["live"]);
-  assert.deepEqual(g[1].rows.map((r) => r.a.name), ["gone"]);
+  const g = boardGroups(list, reads, ["gone"]);
+  assert.deepEqual(g.map((x) => x.key), ["cleared", "testing", "retired"]);
+  assert.deepEqual(g[1].rows.map((r) => r.a.name), ["live"]);
+  assert.deepEqual(g[2].rows.map((r) => r.a.name), ["gone"]);
 });
 
-test("stageGroups: no pipeline served → history and below only; empty groups dropped", () => {
-  const g = stageGroups([axis({ name: "a" })], undefined);
-  assert.deepEqual(g.map((x) => x.key), ["history"]);
-  assert.deepEqual(stageGroups(null, null), []);
+test("boardGroups: no pipeline served → the archive only, plus the (empty) Cleared group; nothing read = just that", () => {
+  const g = boardGroups([axis({ name: "a" })], undefined);
+  assert.deepEqual(g.map((x) => x.key), ["cleared", "history"]);
+  assert.deepEqual(boardGroups(null, null).map((x) => x.key), ["cleared"]);
 });
 
 test("randomBar: thin baselines aren't drawn as bars", () => {
@@ -129,4 +158,18 @@ test("tideLine: the board's tide in plain words, nothing when unread", () => {
   assert.equal(tideLine(null), null);
   assert.equal(tideLine({ from: "2026-08-07T16:00:00Z", LONG: { meanR: null }, SHORT: { meanR: 0.2 } }), null, "a missing side is unread, never 0");
   assert.doesNotMatch(t.rule, /edge|proven/i);
+});
+
+test("the board layout is the signed rule's (pipeline-if-then.md, borst 2026-11-17): CLEARED, the full ladder, never 'proven'", async () => {
+  const { readFileSync } = await import("node:fs");
+  const page = readFileSync(new URL("../../docs/research/pipeline-if-then.md", import.meta.url), "utf8");
+  const sec = page.slice(page.indexOf("**Board layout and the CLEARED badge**"), page.indexOf("## Stacks")).replace(/\s+/g, " ");
+  assert.ok(sec.length > 200, "the section is on the page, above Stacks");
+  for (const w of ["**Cleared**", "**Leads**", "**Still testing**", "**Retired** last", "full ladder", "no promotion lock",
+    "recorded PASS", "Nothing has cleared yet.", "never \"proven\"", "Only a CLEARED read may be marketed or promoted",
+    "Never an in-sample number", "signed page"]) assert.ok(sec.includes(w), w);
+  const board = readFileSync(new URL("../pages/proof/SignalBoard.tsx", import.meta.url), "utf8");
+  assert.match(board, /const NOTHING_CLEARED = "Nothing has cleared yet\.";/);
+  assert.match(board, /boardGroups\(scorecard\?\.axes, reads, Object\.keys\(RETIRED_READS\), \{ judgments, locks: PROMOTION_LOCKS \}\)/);
+  assert.doesNotMatch(board, /\bproven\b/i);
 });

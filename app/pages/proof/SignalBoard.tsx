@@ -1,10 +1,11 @@
 // ── The signal scoreboard, as an evidence board ───────────────────────────────────────
 // Our own reads, graded the way we grade traders (/intel/axis-backtest). Display only: every
 // number is served by the grader; the one-line verdicts come from app/lib/signalCard.mjs.
-// Layout (borst, 2026-10-23): the registered reads first, as plain rows (name · events so far ·
-// "needs 30", or "failing" with the grader's `next`); their grade on old data opens on tap. Then the
-// folds, "Looked good on old data", "Worse than random" and "Retired" (pipeline-if-then.md: name, numbers, date), each with its one-line explanation;
-// inside, the detailed rows (grade, mean R, events, vs random), a tap opens the full card.
+// Layout (borst, 2026-11-17; pipeline-if-then.md § "Board layout and the CLEARED badge"): four groups, best first as you
+// scroll. CLEARED (the full ladder + a recorded 30-trade paper PASS; empty = said out loud), Leads, Still testing, then the
+// folds "Looked good on old data" and "Worse than random", Retired last. Inside the first three: the furthest stage, then
+// the share of random entries beaten on NEW data (signalCard.mjs boardGroups). Rows: name · events so far · its stage line,
+// and the new-data share it is ordered by; its grade on old data opens on tap, labelled as such.
 // The tide and the method moved to "How we grade" (HowWeGrade.tsx).
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -12,7 +13,8 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { C } from "@/config/theme";
-import { AXIS_BLURB, splitLabel, takeaway, sideBar, stageGroups, randomBar, tideLine } from "@/lib/signalCard.mjs";
+import { AXIS_BLURB, splitLabel, takeaway, sideBar, boardGroups, randomBar, tideLine } from "@/lib/signalCard.mjs";
+import { PROMOTION_LOCKS } from "@/lib/promotionLocks.mjs";
 import { pipelineLine, countingSince, retiredGradedExit, retiredLine, RETIRED_READS, retiredRead, retiredReadLine } from "@/lib/proofCopy.mjs";
 import Fold from "./Fold";
 
@@ -37,7 +39,8 @@ export type Tide = { metric: string; from: string; to: string; markets: number; 
 // A read registered in the read pipeline: the same grade on events after its registration only.
 export type OosGrade = { since: string; verdict: string; r?: { samples: number; meanR: number } | null };
 export type AxisRow = { name: string; label: string; verdict: string; r?: { samples: number; meanR: number; hitRate?: number } | null; best: (Horizon & { bySide?: Record<"LONG" | "SHORT", SideStat> }) | null; horizons?: Horizon[]; exit?: ExitGrade | null; exit24h?: ExitGrade | null; exitGraded?: ExitGrade | null; sides?: AxisSides; random?: RandomBaseline | null; oos?: OosGrade | null };
-export type PipelineRead = { axis: string; side?: string; stage: string; registeredAt?: string; next?: string; numbers?: { events: number; meanR: number; exitTrades?: number; exitNetBps?: number | null } };
+export type PipelineRead = { axis: string; side?: string; stage: string; registeredAt?: string; next?: string; paperWallet?: string | null; numbers?: { events: number; meanR: number; beatsRandomPct?: number | null; exitTrades?: number; exitNetBps?: number | null } };
+type Judgment = { recorded?: boolean; verdict?: string };
 export type Scorecard = { failed?: boolean; axes: AxisRow[]; tide?: Tide | null; pipeline?: { rules?: { minEvents?: number }; reads?: PipelineRead[] } | null; config?: { minSamples: number; coins: string[]; horizonsHours: number[] }; asOf?: string };
 type Evidence = { ok: boolean; hold: number; markets: number; marketsGreen: number; trades: number; netUsd: number; caveat?: string; baseline?: { verdict: string; pctBeaten?: number; moreTradesNeeded?: number | null } };
 
@@ -337,7 +340,7 @@ function SignalCard({ a }: { a: AxisRow }) {
 }
 
 // ── One read, one row: what it is · its grade · how it fares vs random. Tap for the evidence. ──
-type Reg = { stage: string; registeredAt?: string; next?: string; numbers?: { events: number; meanR: number } } | null;
+type Reg = { stage: string; registeredAt?: string; next?: string; numbers?: { events: number; meanR: number; beatsRandomPct?: number | null } } | null;
 
 function RandomBar({ a }: { a: AxisRow }) {
   const b = randomBar(a);
@@ -416,7 +419,15 @@ function StageRow({ a, reg, minEvents }: { a: AxisRow; reg: Reg; minEvents: numb
   );
 }
 
-// The two groups that sit folded under the tested reads. One plain line each, visible while folded.
+// The three groups at the top, in order, best first (pipeline-if-then.md § "Board layout and the CLEARED badge").
+const SECTIONS: Record<string, { title: string; note: string }> = {
+  cleared: { title: "Cleared", note: "Beat random on new data on each side, repeated on coins it was never picked on, netted above 0 after fees, then passed 30 paper trades after fees with parity clean." },
+  lead: { title: "Leads", note: "Positive on new data. Not cleared: each still has a bar to pass, named on its row." },
+  testing: { title: "Still testing", note: "Counting new events since each read was registered. None has passed its first bar on new data yet." },
+};
+const NOTHING_CLEARED = "Nothing has cleared yet.";
+
+// The groups that sit folded under them. One plain line each, visible while folded.
 const FOLDS: Record<string, { title: string; note: string }> = {
   history: { title: "Looked good on old data", note: "Graded on history we already had. Counts for nothing until it repeats on new data." },
   below: { title: "Worse than random", note: "Lost to random entries on the same markets. Kept here: we publish the misses." },
@@ -425,23 +436,30 @@ const FOLDS: Record<string, { title: string; note: string }> = {
 
 // One registered read on the "Being tested now" list: its name and how far along it is, nothing
 // else. Its grade on old data stays behind the tap (the full card, labelled as such).
-function TestRow({ a, reg, minEvents, since }: { a: AxisRow; reg: Reg; minEvents: number; since: string }) {
+function TestRow({ a, reg, minEvents, since, cleared = false }: { a: AxisRow; reg: Reg; minEvents: number; since: string; cleared?: boolean }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const { main, aside } = splitLabel(a.label);
   const line = pipelineLine(reg, minEvents);
+  // The number the row is ordered by: the share of random entries this read beat on new data (main coins). Not a grade.
+  const pct = reg?.numbers?.beatsRandomPct;
+  const share = typeof pct === "number" && Number.isFinite(pct) ? `beat ${Math.round(pct)}% of random` : null;
   return (
     <div style={{ borderTop: `1px solid ${C.border}` }}>
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
         style={{ width: "100%", background: open ? C.surface : "transparent", border: "none", cursor: "pointer", textAlign: "left", color: BRIGHT,
           padding: isMobile ? "13px 4px" : "13px 10px", minHeight: 44, display: "flex", alignItems: "flex-start", gap: 12, flexWrap: isMobile ? "wrap" : "nowrap" }}>
         <span style={{ minWidth: 0, flex: "1 1 220px" }}>
+          {cleared && (
+            <span title="Cleared the full ladder and 30 paper trades after fees" style={{ display: "inline-block", marginRight: 8, fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.12em", color: MARK, background: "#1a1a1e", borderRadius: 5, padding: "3px 7px", verticalAlign: "2px" }}>CLEARED</span>
+          )}
           <span style={{ fontFamily: UI, fontSize: 14.5, fontWeight: 600, letterSpacing: "-0.01em", color: BRIGHT }}>{main}</span>
           {aside && <span style={{ fontFamily: UI, fontSize: 13.5, color: MUTED }}> {aside}</span>}
           {line.sub && <span style={{ display: "block", marginTop: 3, fontFamily: UI, fontSize: 12.5, color: MUTED }}>{line.sub}</span>}
         </span>
-        <span style={{ display: "flex", alignItems: "baseline", gap: 12, flexShrink: 0, marginLeft: isMobile ? 0 : "auto" }}>
+        <span style={{ display: "flex", alignItems: "baseline", gap: 12, flexShrink: 0, flexWrap: "wrap", marginLeft: isMobile ? 0 : "auto" }}>
           <span style={{ fontFamily: MONO, fontSize: 12, color: line.state === "counting" ? FOG : BRIGHT, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{line.text}</span>
+          {share && <span title={`On new data since registration: the share of random entries on the same coins and hours this read beat. ${reg?.numbers?.events ?? 0} events. Not a grade.`} style={{ fontFamily: MONO, fontSize: 11.5, color: MUTED, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", cursor: "help" }}>{share}</span>}
           <span aria-hidden style={{ fontFamily: MONO, fontSize: 12, color: MUTED }}>{open ? "−" : "+"}</span>
         </span>
       </button>
@@ -477,19 +495,30 @@ function DetailRows({ rows, minEvents }: { rows: { a: AxisRow; reg: Reg }[]; min
 export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null }) {
   const isMobile = useIsMobile();
   const reads = scorecard?.pipeline?.reads;
-  const groups = stageGroups(scorecard?.axes, reads, Object.keys(RETIRED_READS));
+  // The recorded 30-trade paper verdict, read only for reads that could clear (served Tradeable or Paper with a paper wallet).
+  const [judgments, setJudgments] = useState<Record<string, Judgment>>({});
+  const candidates = (reads || []).filter((r) => (r.stage === "PAPER" || r.stage === "TRADEABLE") && r.paperWallet).map((r) => r.axis).sort().join(",");
+  useEffect(() => {
+    if (!candidates) return;
+    let live = true;
+    Promise.all(candidates.split(",").map((ax) => fetch(`${API}/signals/paper-judge/${ax}`).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((j) => [ax, j] as const)))
+      .then((pairs) => { if (live) setJudgments(Object.fromEntries(pairs.filter(([, j]) => j).map(([ax, j]) => [ax, { recorded: j.recorded === true, verdict: j.verdict }]))); });
+    return () => { live = false; };
+  }, [candidates]);
+  const groups = boardGroups(scorecard?.axes, reads, Object.keys(RETIRED_READS), { judgments, locks: PROMOTION_LOCKS });
   const minEvents = scorecard?.pipeline?.rules?.minEvents ?? 30;
   const since = countingSince(reads);
-  const testing = groups.find((g) => g.key === "pipeline");
   const tide = tideLine(scorecard?.tide);
+  const top = groups.filter((g) => g.key in SECTIONS);
+  const folded = groups.filter((g) => !(g.key in SECTIONS));
 
   const status = (t: string, color: string = FAINT) => <div style={{ fontFamily: UI, fontSize: 13, color, padding: "18px 4px" }}>{t}</div>;
 
   return (
     <section style={{ marginTop: 40 }}>
-      <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 22 : 26, fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.15, color: BRIGHT }}>Being tested now</h2>
+      <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 22 : 26, fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.15, color: BRIGHT }}>Every read, best first</h2>
       <p style={{ margin: "6px 0 10px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: MUTED }}>
-        {since ? `Counting since ${since}. ` : ""}Tap a signal for its grade on old data.
+        Cleared first, then leads, then reads still testing. Retired last. Inside each group: the furthest along, then the share of random entries beaten on new data{since ? ` (counting since ${since})` : ""}. Tap a read for its grade on old data.
       </p>
       {tide && (
         <p style={{ margin: "0 0 12px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: MUTED }}>
@@ -504,11 +533,20 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
         status("Couldn’t load the signals. Refresh to try again.", FOG)
       ) : (
         <>
-          {testing
-            ? <div style={{ borderBottom: `1px solid ${C.border}` }}>{testing.rows.map(({ a, reg }) => <TestRow key={a.name} a={a} reg={reg} minEvents={minEvents} since={since} />)}</div>
-            : status("Nothing is being tested right now.")}
+          {top.map((g) => (
+            <div key={g.key} style={{ marginTop: 18 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "0 4px" }}>
+                <span style={{ ...label, fontSize: 10, color: g.key === "cleared" ? BRIGHT : FOG }}>{SECTIONS[g.key].title}</span>
+                <span style={{ fontFamily: MONO, fontSize: 11, color: MUTED }}>{g.rows.length}</span>
+              </div>
+              <div style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, color: MUTED, padding: "4px 4px 8px" }}>{SECTIONS[g.key].note}</div>
+              {g.rows.length
+                ? <div style={{ borderBottom: `1px solid ${C.border}` }}>{g.rows.map(({ a, reg }) => <TestRow key={a.name} a={a} reg={reg} minEvents={minEvents} since={since} cleared={g.key === "cleared"} />)}</div>
+                : <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, padding: "4px 4px 6px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, paddingTop: 12, paddingBottom: 12 }}>{NOTHING_CLEARED}</div>}
+            </div>
+          ))}
           <div style={{ marginTop: 18 }}>
-            {groups.filter((g) => g.key !== "pipeline").map((g) => (
+            {folded.map((g) => (
               <Fold key={g.key} title={FOLDS[g.key].title} count={g.rows.length} note={FOLDS[g.key].note}>
                 <DetailRows rows={g.rows} minEvents={minEvents} />
               </Fold>

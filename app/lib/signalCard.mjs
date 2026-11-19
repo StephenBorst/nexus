@@ -123,40 +123,71 @@ export function tideLine(tide) {
   return { since, long: L, short: S, rule: "Each side has to beat its own random entry, not zero." };
 }
 
-// ── The board ordered by STAGE (borst, 2026-10-18) ──────────────────────────────────────────
-// A ranked list reads as "the top row is the winner". With nothing past the bar, the top of the
-// board must be the reads that are actually being TESTED, not the best in-sample number. So:
-//   1. "pipeline"  registered reads (app/lib/readPipeline.mjs), furthest stage first. Their grade
-//                  on the board is in-sample; only events after registration move the stage.
-//   2. "history"   every other read, graded on recorded history (in-sample), by rankAxes.
-//   3. "below"     reads that lose to random entries (pooled BELOW_RANDOM) or were retired.
-//                  Kept on the board: the misses are published, never dropped.
-// Display only: stages and verdicts come from /intel/axis-backtest as served.
+// ── The board in four groups, best first (borst, 2026-11-17; pipeline-if-then.md § "Board layout and the CLEARED badge") ──
+// Top to bottom: CLEARED, Leads, Still testing, then the folded archive (old-data-only reads, reads worse than random),
+// Retired last. Was (2026-10-18): one "pipeline" list by stage. Two rules carry over: the top of the board is never the best
+// IN-SAMPLE number, and every read stays visible.
+//   cleared  a registered read that cleared the FULL ladder: served TRADEABLE or PAPER, no promotion lock, AND its
+//            30-trade paper judgment recorded PASS (paperJudge.mjs). The only rows that may be promoted.
+//   lead     registered reads served LEAD, EDGE, TRADEABLE or PAPER that haven't cleared.
+//   testing  registered reads still REGISTERED (counting new events, or failing short of retirement).
+//   history  every other read, graded on recorded history only (in-sample), by rankAxes.
+//   below    unregistered reads that lose to random entries (pooled BELOW_RANDOM).
+//   retired  retired reads (served RETIRED, or recorded in proofCopy RETIRED_READS: retired is final).
+// Inside cleared / lead / testing: the furthest stage first, then the share of random entries the read beat on NEW data
+// (the main card, `numbers.beatsRandomPct`; unread = last), then events. Never an in-sample number.
+// Display only: stages, numbers and verdicts come from /intel/axis-backtest and /signals/paper-judge as served.
 export const STAGE_LADDER = ["PAPER", "TRADEABLE", "EDGE", "LEAD", "REGISTERED"];
+export const BOARD_GROUP_ORDER = Object.freeze(["cleared", "lead", "testing", "history", "below", "retired"]);
+const CLEARABLE = new Set(["PAPER", "TRADEABLE"]);
 
-// `retired` = reads with a recorded retirement (proofCopy RETIRED_READS): they stay under "Retired" even if
-// the served stage later changes (pipeline-if-then.md: retired is final). A read served RETIRED goes there too.
-export function stageGroups(axes, reads, retired = []) {
+/**
+ * The CLEARED badge: the full ladder (borst, 2026-11-17). Served TRADEABLE or PAPER (each side beats random, the halves
+ * agree, the holdout repeats, the graded exit nets above 0 after fees: readPipeline.mjs), no promotion lock (a read that
+ * fell back hasn't re-qualified yet), and a RECORDED 30-trade paper PASS (after fees, parity clean, fills on the tape).
+ * A paper PASS alone is never enough: a read with no edge clears "mean > 0 at 30 trades" about 4 times in 10.
+ */
+export function isCleared(reg, judgment, locks = {}) {
+  if (!reg || !CLEARABLE.has(reg.stage)) return false;
+  if (locks && Object.prototype.hasOwnProperty.call(locks, reg.axis)) return false;
+  return judgment?.recorded === true && judgment?.verdict === "PASS";
+}
+
+const newDataPct = (reg) => (Number.isFinite(reg?.numbers?.beatsRandomPct) ? reg.numbers.beatsRandomPct : -1);
+const bestFirst = (x, y) => {
+  const st = STAGE_LADDER.indexOf(x.reg.stage) - STAGE_LADDER.indexOf(y.reg.stage);
+  if (st) return st;
+  const p = newDataPct(y.reg) - newDataPct(x.reg);
+  if (p) return p;
+  const e = (Number(y.reg?.numbers?.events) || 0) - (Number(x.reg?.numbers?.events) || 0);
+  if (e) return e;
+  return String(x.a?.name).localeCompare(String(y.a?.name));
+};
+
+/**
+ * @param {any[] | null | undefined} axes scoreboard axes
+ * @param {any[] | null | undefined} reads scoreboard pipeline.reads
+ * @param {string[]} retired recorded retirements (proofCopy RETIRED_READS keys)
+ * @param {{ judgments?: Record<string, {recorded?: boolean, verdict?: string}>, locks?: Record<string, object> }} opts
+ * @returns {{ key: string, rows: { a: any, reg: any }[] }[]} non-empty groups in BOARD_GROUP_ORDER, plus
+ *          "cleared" always (empty = "nothing has cleared yet", said out loud on the page)
+ */
+export function boardGroups(axes, reads, retired = [], { judgments = {}, locks = {} } = {}) {
   const regBy = new Map((Array.isArray(reads) ? reads : []).filter((r) => r && r.axis).map((r) => [r.axis, r]));
   const done = new Set(Array.isArray(retired) ? retired : []);
-  const ranked = rankAxes(axes);
-  const pipeline = [], history = [], below = [], gone = [];
-  for (const a of ranked) {
+  const g = Object.fromEntries(BOARD_GROUP_ORDER.map((k) => [k, []]));
+  for (const a of rankAxes(axes)) {
     const reg = regBy.get(a.name) || null;
     const step = reg ? STAGE_LADDER.indexOf(reg.stage) : -1;
-    if (done.has(a.name) || (reg && reg.stage === "RETIRED")) gone.push({ a, reg });
-    else if (step >= 0) pipeline.push({ a, reg, step });
-    else if (a?.random?.pooled?.verdict === "BELOW_RANDOM") below.push({ a, reg });
-    else history.push({ a, reg: null });
+    if (done.has(a.name) || (reg && reg.stage === "RETIRED")) g.retired.push({ a, reg });
+    else if (step >= 0 && isCleared(reg, judgments?.[a.name], locks)) g.cleared.push({ a, reg });
+    else if (step >= 0 && reg.stage !== "REGISTERED") g.lead.push({ a, reg });
+    else if (step >= 0) g.testing.push({ a, reg });
+    else if (a?.random?.pooled?.verdict === "BELOW_RANDOM") g.below.push({ a, reg: null });
+    else g.history.push({ a, reg: null });
   }
-  // Sort is stable, so equal stages keep rankAxes order.
-  pipeline.sort((x, y) => x.step - y.step);
-  return [
-    { key: "pipeline", rows: pipeline.map(({ a, reg }) => ({ a, reg })) },
-    { key: "history", rows: history },
-    { key: "below", rows: below },
-    { key: "retired", rows: gone },
-  ].filter((g) => g.rows.length);
+  for (const k of ["cleared", "lead", "testing"]) g[k].sort(bestFirst);
+  return BOARD_GROUP_ORDER.map((key) => ({ key, rows: g[key] })).filter((x) => x.key === "cleared" || x.rows.length);
 }
 
 // The vs-random bar on a board row: the pooled share of random replays the read beat.
