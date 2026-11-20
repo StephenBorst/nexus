@@ -23,6 +23,7 @@ import { MarketIntelView } from "./MarketIntel";
 import { NewsWire } from "./NewsWire";
 import { TheWire } from "./TheWire";
 import { MarketTable } from "./MarketTable";
+import { MarketDock } from "./MarketDock";
 import { MarketTape } from "./MarketTape";
 import { SmartMoneyView } from "./SmartMoneyView";
 import { MispricedBoard } from "./MispricedBoard";
@@ -172,6 +173,7 @@ export default function TheLabPage() {
   const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); } else setViewMonth((m) => m + 1); };
 
   const isMobile = useIsMobile();
+  const wide = !useIsMobile(1280); // the side-by-side terminal (Wire · table · one coin)
 
   // ── Open positions (for briefing header) ─────────────────
   const { data: posData } = usePrivateQuery("/v1/positions", { revalidateOnFocus: false });
@@ -374,7 +376,17 @@ export default function TheLabPage() {
           const showSplash = !connected && !guestPreview;
           // WATCHING (2026-11-14): the coins this device watches, what changed since the last look. Under Calls.
           // borst 2026-11-20: Wire → table → positions. The Wire (what changed), every market as one table, then YOUR OPEN RISK.
-          return <>{showSplash && <LabWelcome />}<TheWire onOpenBoard={openBoard} /><MarketTable onOpenBoard={openBoard} />{deepBoard && <DeepBoard id={deepBoard} onClose={() => setDeepBoard(null)} render={renderBoard} />}<RiskDeskPanel />{calls}<WatchlistPanel />{briefing}{board}</>;
+          const deep = deepBoard && <DeepBoard id={deepBoard} onClose={() => setDeepBoard(null)} render={renderBoard} />;
+          // Wide screens (≥ 1280 px, 2026-11-20): the Wire, the table and one coin side by side; the coin stays on screen
+          // (MarketDock takes every coin tap). Narrower: the same pieces stacked, coins open the drawer.
+          const terminal = wide ? (
+            <div style={{ display: "grid", gridTemplateColumns: "300px minmax(0, 1fr) 380px", gap: 24, alignItems: "start", marginBottom: 8 }}>
+              <div style={{ position: "sticky", top: 72, maxHeight: "calc(100vh - 88px)", overflowY: "auto", paddingRight: 4 }}><TheWire onOpenBoard={openBoard} /></div>
+              <div style={{ minWidth: 0 }}><MarketTable onOpenBoard={openBoard} />{deep}</div>
+              <MarketDock />
+            </div>
+          ) : <><TheWire onOpenBoard={openBoard} /><MarketTable onOpenBoard={openBoard} />{deep}</>;
+          return <>{showSplash && <LabWelcome />}{terminal}<RiskDeskPanel />{calls}<WatchlistPanel />{briefing}{board}</>;
         })()}
         {activeTab === "smart" && (
           // Smart Money is now the DEEP WALLET DRILL-DOWN the Intel funnel's Positioning lens

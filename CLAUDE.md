@@ -953,6 +953,13 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   ☆ or the ☆ on a row, ≤ `WATCH_MAX`) stay on top under "YOUR COINS" whatever the sort, sorted among themselves by the same
   column; the rest sort underneath. A watched market under the OI floor still pins from `others` (marked "thin"); one
   Orderly doesn't list is named, never invented. No new data. The footer names the sources + the build's age.
+- **Desktop terminal (borst 2026-11-20, "Wire, table, and coin panel side by side so one coin stays on screen"):** on a
+  Lab home ≥ 1280 px wide (`wide = !useIsMobile(1280)`), the Wire (sticky, left 300 px) · the market table + its deep board
+  (centre) · `MarketDock.tsx` (sticky, right 380 px). The dock IS the drawer's body (`MarketPanel`, exported from
+  `MarketDrawer.tsx`, `modal` = the overlay; docked = no close button); it opens on the first watched coin, else BTC, and
+  while it is mounted `setMarketDock` (app/lib/marketDrawerEvent.mjs, tested) routes every `openMarket()` tap into it
+  instead of the overlay. Narrower screens = the same pieces stacked; coins open the drawer. The panel prints the read's
+  age ("Read 40s ago", `builtAt`).
 - **No lens strip (borst 2026-11-20, "fold the old lens strip into the table and the coin drawer"):** Lab home's chip
   strip is gone. `app/lib/intelLenses.mjs` is now the BOARD registry (ids kept so `/lab?lens=<id>` still opens one): each
   board has a `home` (`wire` = All headlines, The week ahead, World events; `table` = Funding / Venues / Positioning /

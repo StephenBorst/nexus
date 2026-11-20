@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { openMarket, takePendingMarket, clearPendingMarket, MARKET_EVENT } from "./marketDrawerEvent.mjs";
+import { openMarket, takePendingMarket, clearPendingMarket, setMarketDock, MARKET_EVENT } from "./marketDrawerEvent.mjs";
 
 const fakeWindow = () => {
   const t = new EventTarget();
@@ -51,4 +51,20 @@ test("the drawer opens from an alert link (?market=), on load and on an in-app t
   const push = readFileSync(new URL("./pushAlerts.ts", import.meta.url), "utf8");
   assert.match(push, /markets: false, wallets: false \}/);
   assert.match(push, /topics: \{ \.\.\.topics, coins: savedCoins\(\) \}/);
+});
+
+test("a docked panel (wide Lab home) takes the tap: no overlay event, nothing parked; unset = the drawer again", () => {
+  const w = fakeWindow();
+  const events = [], docked = [];
+  w.addEventListener(MARKET_EVENT, (e) => events.push(e.detail.coin));
+  setMarketDock((c) => docked.push(c), w);
+  assert.equal(openMarket("sol", w), "SOL");
+  assert.deepEqual(docked, ["SOL"]);
+  assert.deepEqual(events, []);
+  assert.equal(takePendingMarket(w), "", "a docked tap never reopens the drawer later");
+  assert.equal(openMarket("??", w), "", "a refused coin reaches neither");
+  setMarketDock(null, w);
+  openMarket("ETH", w);
+  assert.deepEqual(events, ["ETH"]);
+  assert.deepEqual(docked, ["SOL"]);
 });
