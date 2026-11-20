@@ -38,6 +38,10 @@ OPS_TELEGRAM_CHAT_ID = "6927717434"
 # "0xWALLET@LEVEL_RECLAIM". EMPTY = DISARMED: every non-PAPER graded-exit / fixed-risk / level_reclaim config is refused.
 # Kept identical in lab-api, exec and brain (liveLift.test.mjs). Arming = borst in person, in a PR that records it.
 GRADED_EXIT_LIVE_LIFT = ""
+# ON since 2026-11-20 (borst: house paper runs, step 2): one keyless paper record per registered read (app/lib/housePaper.mjs,
+# housePaperSetup.mjs, hourly). Paper only by construction: its id is a hash, so no one can sign for it; the agent routes
+# refuse every change to it (house_paper_readonly). Moves no stage; judged by nothing until a signed page covers it.
+HOUSE_PAPER_RUNS = "true"
 # Wallets whose trading signature (personal_sign "nexus-trading-key-v1") was exposed. Every request
 # presenting it is refused for trading and agent control; withdrawals to the wallet stay open
 # (revokedTrading.mjs). Comma-separated addresses, never the signature itself. Remove a wallet only

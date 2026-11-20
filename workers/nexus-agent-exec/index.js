@@ -25,6 +25,7 @@ import { slipRecord, pushSlip } from "../../app/lib/slippage.mjs";
 import { usesGradedExit, gradedExitRefusal, gradedExitLevelsFromHourly, GRADED_EXIT_LOOKBACK_H } from "../../app/lib/gradedExit.mjs";
 import { usesRiskSizing, riskSizingRefusal, riskSizedMargin, riskTaken } from "../../app/lib/riskSizing.mjs";
 import { parseLiveLift, liveLifted, liveLiftNote, liftedSignalRefusal, LIVE_LIFT_VAR } from "../../app/lib/liveLift.mjs";
+import { isHousePaper } from "../../app/lib/housePaper.mjs";
 import { snapQty, shouldResetDaily, dailyCapBlocked, computePnl, agentThesisLevels, agentCloseStatus, volScaledLevels, evaluateExit, normTakeProfits, dcaUnitMargin, nextSafetyOrder, blendAvg, breakevenArmed, resolveExitPrice, directiveExpired, directiveShouldFill, directiveLevels, volScaledCapital, realizedVolPct, selectCopySignal, AUTOCOPY_MAX_LEADERS, twapDueSlices, twapProgress, twapSliceFailed, brainSignalKey, alreadyTradedSignal, portfolioDeltaCheck, buildCallbackPayload, exchangePositionQty, exchangePositionRows, fillPriceFrom } from "./logic.mjs";
 
 const ORDERLY_API = "https://api-evm.orderly.org";
@@ -905,6 +906,8 @@ async function enterPosition(address, state, config, signal, env, cache) {
   // TP/SL/timeout management, daily limits) runs identically so results are
   // realistic — they're just recorded to a separate paper ledger in state.
   const paper = config.mode === "PAPER";
+  // A house paper run (app/lib/housePaper.mjs) trades on paper only, whatever its config says. Refused before anything.
+  if (isHousePaper(address) && !paper) { console.error(`[exec] ${address.slice(0, 10)} house paper run refused a non-PAPER entry`); return; }
   // A directive is the user's exact directional trade — it overrides sizing/levels
   // for THIS entry (the user supplies the edge). null for normal signal entries.
   const directive = signal.directive || null;
