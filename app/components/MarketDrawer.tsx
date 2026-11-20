@@ -2,6 +2,7 @@
 // (app/lib/marketDrawerEvent.mjs). One request to GET /intel/market/:coin (lab-api routes-market.mjs composes the
 // boards server-side). Phone: a bottom sheet. Desktop: a right-hand panel. Inputs, not a verdict (house rule).
 import { useCallback, useEffect, useState } from "react";
+import { NewsWire } from "@/pages/lab/NewsWire";
 import { useNavigate } from "react-router-dom";
 import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
 import { useEscapeKey } from "@/utils/a11y";
@@ -147,6 +148,13 @@ export default function MarketDrawer() {
               {l.graded && <div style={{ fontFamily: UI, fontSize: 12, lineHeight: 1.5, color: C.text.muted, marginTop: 4 }}>{l.graded}</div>}
             </div>
           ))}
+          {/* The coin's own headlines (the news wire, 2026-11-20): inputs on the same screen, never part of a verdict. */}
+          {data && (
+            <div style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: C.text.muted, marginBottom: 2 }}>News on {coin}</div>
+              <NewsWire coin={coin} limit={5} compact />
+            </div>
+          )}
           {data && pushSupported() && (
             <div style={{ padding: "12px 0 0" }}>
               <button type="button" disabled={alertBusy} onClick={toggleAlert}

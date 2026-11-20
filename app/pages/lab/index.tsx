@@ -21,6 +21,7 @@ import { AgentView } from "./AgentView";
 import { CopiesView } from "./CopiesView";
 import { MarketIntelView } from "./MarketIntel";
 import { NewsWire } from "./NewsWire";
+import { TheWire } from "./TheWire";
 import { MarketTape } from "./MarketTape";
 import { SmartMoneyView } from "./SmartMoneyView";
 import { MispricedBoard } from "./MispricedBoard";
@@ -371,7 +372,8 @@ export default function TheLabPage() {
           // scan the whole book; only COPY / PUBLISH / ARM LIVE ask for a connect.
           const showSplash = !connected && !guestPreview;
           // WATCHING (2026-11-14): the coins this device watches, what changed since the last look. Under Calls.
-          return <>{showSplash && <LabWelcome />}{calls}<RiskDeskPanel /><WatchlistPanel />{briefing}{board}{lenses}</>;
+          // THE WIRE (2026-11-20): what changed across every board, on one clock, first on Lab home.
+          return <>{showSplash && <LabWelcome />}<TheWire />{calls}<RiskDeskPanel /><WatchlistPanel />{briefing}{board}{lenses}</>;
         })()}
         {activeTab === "smart" && (
           // Smart Money is now the DEEP WALLET DRILL-DOWN the Intel funnel's Positioning lens
