@@ -13,6 +13,8 @@ import { PAPER_JUDGMENTS, FINAL_VERDICTS, judgePaperRun, judgeWindow, judgmentLi
 import { paperParity } from "../../app/lib/paperParity.mjs";
 import { readTape } from "./paperTape.mjs";
 import { parityEvents } from "./parityEvents.mjs";
+import { randomEntryCheck } from "./badgeReplays.mjs";
+import { badgeLine } from "../../app/lib/badgeBar.mjs";
 
 export const PJUDGE_KEY = (axis) => `pjudge:${axis}`;
 
@@ -53,6 +55,19 @@ export async function liveJudgment(env, axis, { nowMs = Date.now(), eventsFor = 
   return parity ? { ...j, parityReport: { verdict: parity.verdict, window: parity.window, counts: parity.counts, unmatchedTrades: parity.unmatchedTrades, missedUnexplained: parity.missed?.unexplained || [] } } : j;
 }
 
+/** The v2 badge check for a PASS: the judged trades' coins' hourly tapes (candle:hist), replayed 300 times. */
+export async function badgeCheckFor(env, j) {
+  const agentKv = env.NEXUS_AGENT || env.LAB_STORE;
+  const trades = j.trades || [];
+  const candlesByCoin = {};
+  for (const coin of [...new Set(trades.map((t) => String(t.symbol || "").replace(/^PERP_/, "").replace(/_USDC$/, "")))].filter(Boolean)) {
+    candlesByCoin[coin] = (await readJson(agentKv, `candle:hist:PERP_${coin}_USDC`)) || [];
+  }
+  const since = Date.parse(j.parityWindow?.since);
+  const until = Date.parse(trades[trades.length - 1]?.closedAt);
+  return randomEntryCheck({ trades, candlesByCoin, since, until });
+}
+
 /** The hourly job: record each FINAL verdict once. */
 export async function runPaperJudge(env, { nowMs = () => Date.now(), eventsFor = parityEvents } = {}) {
   const out = {};
@@ -61,7 +76,10 @@ export async function runPaperJudge(env, { nowMs = () => Date.now(), eventsFor =
     if (recorded) { out[axis] = { verdict: recorded.verdict, recorded: true }; continue; }
     const j = await liveJudgment(env, axis, { nowMs: nowMs(), eventsFor });
     if (j && FINAL_VERDICTS.includes(j.verdict)) {
-      await env.LAB_STORE.put(PJUDGE_KEY(axis), JSON.stringify({ ...j, judgedAt: new Date(nowMs()).toISOString() }));
+      // Badge bar v2 (docs/research/badge-bar-v2.md, signed): a PASS carries its 300 matched random replays, computed
+      // here once and stored with the verdict, never redrawn. A FAIL / RESET can't clear, so it carries none.
+      const randomCheck = j.verdict === "PASS" ? await badgeCheckFor(env, j).catch((e) => ({ verdict: "UNREAD", error: String(e?.message || e).slice(0, 120), usable: 0 })) : undefined;
+      await env.LAB_STORE.put(PJUDGE_KEY(axis), JSON.stringify({ ...j, ...(randomCheck ? { randomCheck } : {}), judgedAt: new Date(nowMs()).toISOString() }));
       out[axis] = { verdict: j.verdict, recorded: true, now: true };
     } else out[axis] = { verdict: j?.verdict ?? null, count: j?.count ?? null };
   }
@@ -85,5 +103,5 @@ export async function handlePaperJudge(parts, request, env, { nowMs = Date.now()
   if (!PAPER_JUDGMENTS[axis]) return reply({ ok: false, error: "no_judgment", axis }, 404);
   const recorded = await readRecordedJudgment(env, axis);
   const j = recorded || (await liveJudgment(env, axis, { nowMs, eventsFor }));
-  return reply({ ok: true, asOf: new Date(nowMs).toISOString(), recorded: !!recorded, ...j, line: judgmentLine(j) });
+  return reply({ ok: true, asOf: new Date(nowMs).toISOString(), recorded: !!recorded, ...j, line: judgmentLine(j), badgeLine: recorded ? badgeLine(j) : null });
 }

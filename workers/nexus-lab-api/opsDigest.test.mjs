@@ -12,6 +12,9 @@ import { PJUDGE_KEY } from "./paperJudge.mjs";
 import { LIVE_PLAN_SIGS_KEY } from "../../app/lib/livePlanSign.mjs";
 import { LIVE_PLAN_TEXT } from "../../app/lib/livePlanText.mjs";
 
+// badge bar v2 (signed 2026-11-20): a PASS that beat ≥ 90% of its 300 random replays. Only this one lists live steps.
+const BEAT = { verdict: "BEAT", pctBeaten: 93, usable: 300 };
+
 const NOW = Date.parse("2026-11-14T16:49:00Z");
 const LR = "0x95e26e980e300c34360933b849457f42c6bd7622";
 
@@ -53,7 +56,7 @@ test("first run alerts nothing (no burst of 'news'); a stage move, a drift and a
   assert.deepEqual(alertsFor(digestState(drift), drift), [], "a drift alerts once, not every hour");
   assert.match(alertsFor(digestState(drift), facts())[0].text, /CLEAN again/);
   const judged = facts();
-  judged.paper[0] = { ...judged.paper[0], verdict: "PASS" };
+  judged.paper[0] = { ...judged.paper[0], verdict: "PASS", randomCheck: BEAT };
   assert.match(alertsFor(prev, judged)[0].text, /judgment is recorded: PASS\. It licenses nothing by itself\./);
 });
 
@@ -88,19 +91,19 @@ test("the digest: what needs you, each paper run in R with its tape, the board; 
 
 test("after a PASS: the steps in order, what's done marked, the first open one is next", () => {
   const plan = { doc: "docs/research/live-plan-level-reclaim.md", signed: false };
-  const fresh = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan });
+  const fresh = verdictSteps({ axis: "level_reclaim", verdict: "PASS", randomCheck: BEAT }, { plan });
   assert.match(fresh.head, /level_reclaim PASSED its 30-trade judgment \(https:\/\/trade\.nexustradinglabs\.com\/proof\/paper\/level_reclaim\)/);
   assert.deepEqual(fresh.steps.map((s) => s.state), ["next", "later", "later", "later", "later"]);
   assert.match(fresh.steps[0].text, /sign it on https:\/\/trade\.nexustradinglabs\.com\/ops\/revenue\. Signing arms nothing\..*live-plan-level-reclaim\.md/);
   assert.match(fresh.steps[2].text, /GRADED_EXIT_LIVE_LIFT, in person/);
   assert.match(fresh.steps[3].text, /\$10 mechanics test.*preflight\?wallet=<the new wallet>/);
-  const signed = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan: { ...plan, signed: true } });
+  const signed = verdictSteps({ axis: "level_reclaim", verdict: "PASS", randomCheck: BEAT }, { plan: { ...plan, signed: true } });
   assert.deepEqual(signed.steps.map((s) => s.state), ["done", "next", "later", "later", "later"]);
   const W = "0x" + "c".repeat(40);
-  const armed = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan: { ...plan, signed: true }, liftWallet: W });
+  const armed = verdictSteps({ axis: "level_reclaim", verdict: "PASS", randomCheck: BEAT }, { plan: { ...plan, signed: true }, liftWallet: W });
   assert.deepEqual(armed.steps.map((s) => s.state), ["done", "done", "done", "next", "later"]);
   assert.match(armed.steps[3].text, new RegExp(`preflight\\?wallet=${W}`));
-  const noPlan = verdictSteps({ axis: "oi_div_reversal_4h", verdict: "PASS" });
+  const noPlan = verdictSteps({ axis: "oi_div_reversal_4h", verdict: "PASS", randomCheck: BEAT });
   assert.match(noPlan.steps[0].text, /Have Claude draft oi_div_reversal_4h's live plan: none exists yet/);
 });
 
@@ -109,18 +112,18 @@ test("after a PASS: the steps in order, what's done marked, the first open one i
 test("after a PASS on a demoted or locked read: one 'wait' step with the reason, nothing else is next", () => {
   const plan = { doc: "docs/research/live-plan-level-reclaim.md", signed: false };
   const lock = { lostStage: "PAPER", demotedAt: "2026-11-15T13:53:54.714Z", eventsAtDemotion: 99, cleanPasses: 0, lastPassAt: null };
-  const demoted = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan, stage: "REGISTERED" });
+  const demoted = verdictSteps({ axis: "level_reclaim", verdict: "PASS", randomCheck: BEAT }, { plan, stage: "REGISTERED" });
   assert.match(demoted.head, /PASSED its 30-trade judgment, but nothing can be signed yet/);
   assert.deepEqual(demoted.steps.map((s) => s.state), ["next", "later", "later", "later", "later", "later"]);
   assert.match(demoted.steps[0].text, /^Wait: the read is served REGISTERED; a live plan needs TRADEABLE or PAPER\. The paper wallet keeps running/);
-  const locked = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan, stage: "PAPER", lock });
+  const locked = verdictSteps({ axis: "level_reclaim", verdict: "PASS", randomCheck: BEAT }, { plan, stage: "PAPER", lock });
   assert.match(locked.steps[0].text, /promotion locked since 2026-11-15 \(lost PAPER\): 0 of 2 clean daily reads/);
-  assert.match(verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan, stage: null }).steps[0].text, /scoreboard is unread/);
-  const clear = verdictSteps({ axis: "level_reclaim", verdict: "PASS" }, { plan, stage: "PAPER", lock: null });
+  assert.match(verdictSteps({ axis: "level_reclaim", verdict: "PASS", randomCheck: BEAT }, { plan, stage: null }).steps[0].text, /scoreboard is unread/);
+  const clear = verdictSteps({ axis: "level_reclaim", verdict: "PASS", randomCheck: BEAT }, { plan, stage: "PAPER", lock: null });
   assert.equal(clear.steps[0].state, "next");
   assert.match(clear.steps[0].text, /sign it on/);
   const t = digestText({ asOf: Date.parse("2026-12-20T15:49:00Z"), stages: { level_reclaim: "REGISTERED" }, pending: [], paper: [
-    { axis: "level_reclaim", count: 30, target: 30, parity: "CLEAN", verdict: "PASS", plan, stage: "REGISTERED", lock,
+    { axis: "level_reclaim", count: 30, target: 30, parity: "CLEAN", verdict: "PASS", randomCheck: BEAT, plan, stage: "REGISTERED", lock,
       lockLine: "promotion locked since 2026-11-15 (lost PAPER): 0 of 2 clean daily reads at PAPER, 15 more new events (15 since the demotion)", closed24h: [] },
   ] });
   assert.match(t, /nothing can be signed yet/);
@@ -140,7 +143,7 @@ test("after a FAIL or RESET: nothing goes live, one next step; no verdict = no s
 test("a PASS alert points at the next step; the digest lists every step under Needs you", () => {
   const prev = digestState(facts());
   const judged = facts();
-  judged.paper[0] = { ...judged.paper[0], verdict: "PASS", plan: { doc: "docs/research/live-plan-level-reclaim.md", signed: false }, liftWallet: null };
+  judged.paper[0] = { ...judged.paper[0], verdict: "PASS", randomCheck: BEAT, plan: { doc: "docs/research/live-plan-level-reclaim.md", signed: false }, liftWallet: null };
   assert.match(alertsFor(prev, judged)[0].text, /PASS\. It licenses nothing by itself\. Next: refresh and sign the live plan on \/ops\/revenue \(it arms nothing\)/);
   const t = digestText(judged);
   assert.doesNotMatch(t, /Nothing waiting on you/);
@@ -244,7 +247,7 @@ test("the runner reads only, sends to the owner's chat, and remembers what it sa
 
 test("the runner hands a PASS its plan (signed or not) and the armed wallet for its mode, read from the lift var", async () => {
   const e = env();
-  e.LAB_STORE.m.set(PJUDGE_KEY("level_reclaim"), JSON.stringify({ verdict: "PASS" }));
+  e.LAB_STORE.m.set(PJUDGE_KEY("level_reclaim"), JSON.stringify({ verdict: "PASS", randomCheck: BEAT }));
   let lr = (await gatherFacts(e, { scorecardKey: KEY, nowMs: NOW, eventsFor: noEvents })).paper.find((p) => p.axis === "level_reclaim");
   assert.deepEqual(lr.plan, { doc: LIVE_PLAN_TEXT.level_reclaim.doc, signed: false });
   assert.equal(lr.liftWallet, null, "the lift is empty: nothing armed");
@@ -304,4 +307,13 @@ test("no token or chat = no send, nothing remembered as sent", async () => {
   const r = await runOpsDigest(e, { scorecardKey: KEY, nowMs: () => NOW, fetchImpl: tg().fetchImpl, eventsFor: noEvents, revenue: noRevenue });
   assert.equal(r.digest, false);
   assert.equal(e.LAB_STORE.m.has(DIGEST_DAY_KEY("2026-11-14")), false);
+});
+
+test("badge bar v2: a PASS that didn't beat random (or whose check is unread / missing) lists no live steps", () => {
+  const didnt = verdictSteps({ axis: "level_reclaim", verdict: "PASS", randomCheck: { verdict: "DIDNT_BEAT", pctBeaten: 71.4, usable: 300 } }, { stage: "PAPER" });
+  assert.match(didnt.head, /didn't beat random entries on the same coins and side \(71% of 300, the bar is 90%\): not CLEARED\. Nothing goes live\./);
+  assert.equal(didnt.steps.length, 1);
+  assert.doesNotMatch(didnt.steps[0].text, /sign it|Fund a NEW|GRADED_EXIT_LIVE_LIFT/);
+  assert.match(verdictSteps({ axis: "level_reclaim", verdict: "PASS", randomCheck: { verdict: "UNREAD", usable: 210 } }).head, /unread \(210 of 300 replays usable\): the badge waits/);
+  assert.match(verdictSteps({ axis: "level_reclaim", verdict: "PASS" }).head, /no random-entry check was recorded/);
 });

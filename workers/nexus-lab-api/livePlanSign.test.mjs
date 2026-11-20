@@ -51,8 +51,23 @@ test("the message names the read and the hash, and says it arms nothing", () => 
   assert.ok(/^[\x20-\x7e\n]+$/.test(m), "ASCII only");
 });
 
-test("refused before a PASS, over another page, twice, or for a read with no plan", () => {
+// badge bar v2 (docs/research/badge-bar-v2.md, signed 2026-11-20) rule 8: a plan signs only for a CLEARED read, so the
+// PASS must carry a random-entry check that beat ≥ 90% of its 300 replays.
+const BEAT = { verdict: "BEAT", pctBeaten: 93, usable: 300 };
+
+test("badge bar v2: a PASS that didn't beat random, an unread check, or no check = not_cleared", () => {
   const base = { axis: "level_reclaim", verdict: "PASS", planSha: "aa", sha: "aa", signed: null, stage: "PAPER", lock: null };
+  assert.equal(planSignRefusal({ ...base, randomCheck: BEAT }), null);
+  const no = planSignRefusal({ ...base, randomCheck: { verdict: "DIDNT_BEAT", pctBeaten: 71.5, usable: 300 } });
+  assert.equal(no.error, "not_cleared");
+  assert.match(no.detail, /didn't beat random entries on the same coins and side \(72% of 300, the bar is 90%\)/);
+  assert.match(planSignRefusal({ ...base, randomCheck: { verdict: "UNREAD", usable: 200 } }).detail, /unread/);
+  assert.match(planSignRefusal({ ...base, randomCheck: null }).detail, /no random-entry check/);
+  assert.equal(planSignRefusal({ ...base, verdict: "FAIL", randomCheck: BEAT }).error, "not_licensed", "no PASS stays the first reason");
+});
+
+test("refused before a PASS, over another page, twice, or for a read with no plan", () => {
+  const base = { axis: "level_reclaim", verdict: "PASS", planSha: "aa", sha: "aa", signed: null, stage: "PAPER", lock: null, randomCheck: BEAT };
   assert.equal(planSignRefusal(base), null);
   assert.equal(planSignRefusal({ ...base, verdict: null }).error, "not_licensed");
   assert.match(planSignRefusal({ ...base, verdict: "FAIL" }).detail, /verdict is FAIL/);
@@ -65,7 +80,7 @@ test("refused before a PASS, over another page, twice, or for a read with no pla
 // pipeline-if-then.md § "Backwards moves" (borst 2026-11-15): a PASS on a read the board has demoted signs nothing.
 const LOCK = { lostStage: "PAPER", demotedAt: "2026-11-15T13:53:54.714Z", eventsAtDemotion: 99, cleanPasses: 1, lastPassAt: "2026-11-20T13:00:00Z" };
 test("a PASS signs only while the read is served TRADEABLE or PAPER with no promotion lock", () => {
-  const base = { axis: "level_reclaim", verdict: "PASS", planSha: "aa", sha: "aa", signed: null, stage: "PAPER", lock: null };
+  const base = { axis: "level_reclaim", verdict: "PASS", planSha: "aa", sha: "aa", signed: null, stage: "PAPER", lock: null, randomCheck: BEAT };
   assert.equal(planSignRefusal({ ...base, stage: "TRADEABLE" }), null);
   for (const stage of ["REGISTERED", "LEAD", "EDGE", "RETIRED"]) {
     const no = planSignRefusal({ ...base, stage });
@@ -89,7 +104,7 @@ function kv(init = {}) {
 const SK = "axisbt:test:20";
 const board = (stage) => ({ pipeline: { reads: [{ axis: "level_reclaim", stage }] } });
 const env = (verdict, stage = "PAPER") => ({ LAB_STORE: kv({
-  "ops:safe:owners": [O], ...(verdict ? { [PJUDGE_KEY("level_reclaim")]: { verdict } } : {}), ...(stage ? { [SK]: board(stage) } : {}),
+  "ops:safe:owners": [O], ...(verdict ? { [PJUDGE_KEY("level_reclaim")]: { verdict, ...(verdict === "PASS" ? { randomCheck: BEAT } : {}) } } : {}), ...(stage ? { [SK]: board(stage) } : {}),
 }) });
 const deps = { lock: async (_e, _k, fn) => fn(), fetchImpl: async () => { throw new Error("network"); }, now: () => T0, scorecardKey: SK, locks: {} };
 const get = (e, axis = "level_reclaim", d = deps) => handlePlanSign(["pipeline", "live-plan", axis], new Request("https://og.test/x"), e, d);

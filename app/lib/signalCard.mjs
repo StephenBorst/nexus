@@ -2,6 +2,7 @@
 // Display only. Every number comes from /intel/axis-backtest as served; nothing here grades.
 // Pure + tested (signalCard.test.mjs), so the /proof card and anything else that shows a
 // read's summary can't word the same evidence two ways.
+import { beatsRandom } from "./badgeBar.mjs";
 
 // What each read IS — a plain description of the rule, never how good it is (the grade says
 // that, and the grade moves; a sentence praising a read would go stale the day it slips).
@@ -155,7 +156,9 @@ export function isCleared(reg, judgment, locks = {}) {
   if (!reg || !CLEARABLE.has(reg.stage)) return false;
   if (Array.isArray(reg.failing) && reg.failing.length) return false;
   if (locks && Object.prototype.hasOwnProperty.call(locks, reg.axis)) return false;
-  return judgment?.recorded === true && judgment?.verdict === "PASS";
+  // badge bar v2 (docs/research/badge-bar-v2.md, signed 2026-11-20): the PASS's 30 trades must also beat ≥ 90% of 300
+  // matched random entries (stored with the verdict, app/lib/badgeBar.mjs)
+  return judgment?.recorded === true && judgment?.verdict === "PASS" && beatsRandom(judgment);
 }
 
 const newDataPct = (reg) => (Number.isFinite(reg?.numbers?.beatsRandomPct) ? reg.numbers.beatsRandomPct : -1);

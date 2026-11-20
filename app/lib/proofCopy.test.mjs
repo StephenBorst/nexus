@@ -114,8 +114,9 @@ test("proofHeadline: no claim until a read is CLEARED (served Tradeable/Paper, n
   }
   // Since 2026-11-17 (pipeline-if-then.md § "Board layout and the CLEARED badge"): served Tradeable with a positive
   // exit net is NOT a claim on its own. It needs the full ladder: no promotion lock and a RECORDED paper PASS.
-  const PASS = { recorded: true, verdict: "PASS" };
+  const PASS = { recorded: true, verdict: "PASS", randomCheck: { verdict: "BEAT", pctBeaten: 93 } }; // badge bar v2
   const tradeable = board(read("TRADEABLE", 37, 18.6), read("LEAD", 4, 216.7, "oi_div_reversal_4h"));
+  assert.deepEqual(proofHeadline(tradeable, now, { judgments: { level_reclaim: { recorded: true, verdict: "PASS", randomCheck: { verdict: "DIDNT_BEAT", pctBeaten: 60 } } } }), HEADLINE_DEFAULT, "a PASS that didn't beat random entries makes no claim");
   assert.deepEqual(proofHeadline(tradeable, now), HEADLINE_DEFAULT, "Tradeable, still on paper: no claim");
   assert.deepEqual(proofHeadline(tradeable, now, { judgments: { level_reclaim: { recorded: false, verdict: "ACCRUING" } } }), HEADLINE_DEFAULT);
   assert.deepEqual(proofHeadline(tradeable, now, { judgments: { level_reclaim: { recorded: true, verdict: "FAIL" } } }), HEADLINE_DEFAULT);

@@ -110,8 +110,13 @@ test("boardGroups: Cleared, Leads, Still testing, then the folds, Archived last;
 
 test("CLEARED needs the full ladder: Tradeable or Paper, no promotion lock, and a recorded 30-trade paper PASS", () => {
   const reg = (stage, axis = "r") => ({ axis, stage, numbers: { beatsRandomPct: 97, events: 60 } });
-  const pass = { recorded: true, verdict: "PASS" };
+  // badge bar v2 (signed 2026-11-20): the PASS must also beat ≥ 90% of 300 matched random entries
+  const pass = { recorded: true, verdict: "PASS", randomCheck: { verdict: "BEAT", pctBeaten: 94 } };
   assert.equal(isCleared(reg("PAPER"), pass), true);
+  assert.equal(isCleared(reg("PAPER"), { recorded: true, verdict: "PASS" }), false, "a PASS with no random check isn't cleared");
+  assert.equal(isCleared(reg("PAPER"), { recorded: true, verdict: "PASS", randomCheck: { verdict: "DIDNT_BEAT", pctBeaten: 71 } }), false, "a PASS that didn't beat random isn't cleared");
+  assert.equal(isCleared(reg("PAPER"), { recorded: true, verdict: "PASS", randomCheck: { verdict: "UNREAD", usable: 200 } }), false, "an unread check makes the badge wait");
+  assert.equal(isCleared(reg("PAPER"), { recorded: true, verdict: "PASS", random: "BEAT" }), true, "the /proof hook's slim shape");
   assert.equal(isCleared(reg("TRADEABLE"), pass), true);
   assert.equal(isCleared(reg("EDGE"), pass), false, "a paper PASS without the scoreboard ladder is not a clear");
   assert.equal(isCleared(reg("LEAD"), pass), false);

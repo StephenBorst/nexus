@@ -111,7 +111,7 @@ test("signals: the cleared read with its paper count; last good board reused ≤
   // Since 2026-11-17 a claim needs the recorded paper PASS too (and no promotion lock: none given here).
   const unjudged = await buildPulse(env, { now: T0 + 60000, scorecardKey: "axisbt:v21:min20", locks: {} });
   assert.equal(unjudged.headline.cleared, false, "served Paper with a positive exit net, no recorded PASS: no claim");
-  await LAB_STORE.put("pjudge:level_reclaim", JSON.stringify({ verdict: "PASS", count: 30 }));
+  await LAB_STORE.put("pjudge:level_reclaim", JSON.stringify({ verdict: "PASS", count: 30, randomCheck: { verdict: "BEAT", pctBeaten: 93, usable: 300 } }) /* badge bar v2 */);
   const locked = await buildPulse(env, { now: T0 + 60000, scorecardKey: "axisbt:v21:min20" });
   assert.equal(locked.headline.cleared, false, "the real promotion locks hold level_reclaim back (locked 2026-11-15)");
   const p = await buildPulse(env, { now: T0 + 60000, scorecardKey: "axisbt:v21:min20", locks: {} });

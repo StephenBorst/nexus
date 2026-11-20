@@ -454,9 +454,16 @@ product is what sits on top:
   and never wears CLEARED. Archive = by hand only (`ARCHIVED_READS`, empty). Registrations are frozen by fingerprint
   (`app/lib/readFingerprints.mjs`, events on seeded tapes, `workers/nexus-lab-api/readFingerprint.mjs`; test-pinned),
   not by a signature; signing stays for the badge bar. **Badge bar v2** (`docs/research/badge-bar-v2.md`, SIGNED by borst in session
-  2026-11-20 at 90%, pinned above Results by `app/lib/badgeBar.test.mjs`; NOT built yet, its own PR): a recorded paper
+  2026-11-20 at 90%, pinned above Results by `app/lib/badgeBar.test.mjs`; BUILT 2026-11-20): a recorded paper
   PASS earns CLEARED only if its 30 trades beat ≥ 90% of 300 matched random entries (same coin, side, window, graded
-  exit, fees; stored once at judgment); live-plan signing needs CLEARED under it. Only out-of-sample events (after `registeredAt`) count; back-graded history never does. A changed rule
+  exit, fees; stored once at judgment); live-plan signing needs CLEARED under it. Rules `app/lib/badgeBar.mjs` (`BADGE_BAR`
+  numbers pinned to the page by `badgeBarRules.test.mjs`, `randomVerdict`, `beatsRandom`, `badgeLine`); replays
+  `workers/nexus-lab-api/badgeReplays.mjs` (`randomEntryCheck`: mulberry32 20261120, entry hour uniform over record start →
+  30th exit, the backtest's own `exitLevelsAt`/`openPosition`/`stepExit` on `candle:hist`, 2.5 bps each side, no funding on
+  either side; judged side = `exactPriceNetBps` = move − fees; ≤ 10 redraws, < 250 usable = UNREAD; ~130 ms). The hourly
+  judge stores it as `randomCheck` inside `pjudge:{axis}` with a PASS only, once. `isCleared` (signalCard.mjs) requires
+  it; `planSignRefusal` refuses `not_cleared`; the digest lists no live steps; the paper page + board row print
+  `badgeLine` ("Didn't beat random entries on the same coins and side (N% of 300)"). Only out-of-sample events (after `registeredAt`) count; back-graded history never does. A changed rule
   = a new name + a new dated registration. Stage triggers = `docs/research/pipeline-if-then.md`, applied one PR per
   trigger from the SERVED stage. Registered reads: rsi_reset_deep, level_reclaim, oi_div_reversal, session_momentum,
   confluence_follow (from 2026-10-17); oi_div_reversal_4h and oi_coil_break (from 2026-10-28, their own prereg pages); batch 3

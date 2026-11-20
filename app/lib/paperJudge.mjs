@@ -158,6 +158,8 @@ export function judgeTrade(row, { checks = {}, fmap = null, feeBps }) {
     r: tradeR(row).r,
     moveBps: r1(moveBps), feesBps: r2(feesBps), fundingBps: funding == null ? null : r2(funding), netBps: r1(netBps),
     exactNetBps: netBps,
+    // badge bar v2 rule 2: the random-entry comparison is on price and fees alone (funding left out of both sides)
+    exactPriceNetBps: moveBps - feesBps,
   };
 }
 
