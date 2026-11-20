@@ -127,10 +127,25 @@ export async function indexRegistration(env, { txHash, wallet, rpc, readMark, no
   };
 }
 
+const REQUIRED = ["walletAddress", "bankrApiKey", "symbol", "direction", "entryPrice", "stopLoss", "takeProfit1"];
+/** The required fields this body lacks (walletAddress counts only as a 0x + 40 hex address). */
+export function missingFields(body) {
+  return REQUIRED.filter((k) => (k === "walletAddress" ? !WALLET_RE.test(lower(body?.[k])) : body?.[k] == null || body[k] === ""));
+}
+/** The top-level key names that arrived: names only, never values (a key is a secret). Capped at 20. */
+export function receivedKeys(body) {
+  return body && typeof body === "object" ? Object.keys(body).slice(0, 20).map((k) => String(k).slice(0, 40)) : [];
+}
+
 async function proxyRegister(body, request, env, deps) {
   const wallet = lower(body.walletAddress);
   if (!WALLET_RE.test(wallet) || !body.bankrApiKey) {
-    return json({ error: "missing required fields: walletAddress (0x…), bankrApiKey, symbol, direction, entryPrice, stopLoss, takeProfit1" }, request, 400);
+    // Name what is missing and which keys DID arrive (names only, never values), so a caller whose HTTP tool changed
+    // shape (2026-11-20: Engine B's call got this reply with no clue why) can see it in one try.
+    return json({
+      error: "missing required fields: walletAddress (0x…), bankrApiKey, symbol, direction, entryPrice, stopLoss, takeProfit1",
+      missing: missingFields(body), received: receivedKeys(body),
+    }, request, 400);
   }
   const bad = checkRegistration(body);
   if (bad) return json(bad, request, 400);
@@ -221,7 +236,7 @@ export async function handleThesisRegistration(parts, request, env, deps = {}) {
   const isProxy = parts[0] === "proxy" && parts[1] === "thesis-register" && parts.length === 2;
   const isIndex = parts[0] === "theses" && parts[1] === "index" && parts.length === 2;
   if (!isProxy && !isIndex) return null;
-  if (request.method !== "POST") return json({ error: "method_not_allowed" }, request, 405);
+  if (request.method !== "POST") return json({ error: "method_not_allowed", received: request.method, allowed: ["POST"] }, request, 405);
   const now = deps.now || Date.now;
   const fetchImpl = deps.fetchImpl || globalThis.fetch;
   const ip = request.headers.get("cf-connecting-ip") || "unknown";
