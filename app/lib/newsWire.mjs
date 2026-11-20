@@ -60,6 +60,12 @@ export const NEWS_COINS = Object.freeze({
   TIA: { names: ["celestia"] },
   SEI: { capNames: ["Sei"] },
   TAO: { names: ["bittensor"] },
+  // Orderly's index and commodity perps: macro headlines land on the market they move. Tickers here are never bare
+  // words (CL, XAU), so these count by name only.
+  SPX500: { names: ["s&p 500", "s&p500", "s&p"], ambiguous: true },
+  NAS100: { names: ["nasdaq", "nasdaq 100", "nasdaq-100"], ambiguous: true },
+  XAU: { names: ["gold price", "gold prices", "gold futures", "spot gold", "bullion"], capNames: ["Gold"], ambiguous: true, not: /digital gold/i },
+  CL: { names: ["crude", "oil price", "oil prices", "wti", "brent"], ambiguous: true },
 });
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -70,14 +76,14 @@ const COIN_TESTS = Object.entries(NEWS_COINS).map(([coin, c]) => {
   if (!c.ambiguous) tests.push(new RegExp(`(?<![A-Za-z0-9$])${coin}(?![A-Za-z0-9])`));
   for (const n of c.names || []) tests.push(new RegExp(`(?<![A-Za-z0-9])${esc(n)}(?![A-Za-z0-9])`, "i"));
   for (const n of c.capNames || []) tests.push(new RegExp(`(?<![A-Za-z0-9])${esc(n)}(?![A-Za-z0-9])`));
-  return [coin, tests];
+  return [coin, tests, c.not || null];
 });
 
 /** The coins a text names, in NEWS_COINS order. */
 export function newsCoins(text) {
   const t = String(text || "");
   if (!t) return [];
-  return COIN_TESTS.filter(([, tests]) => tests.some((re) => re.test(t))).map(([coin]) => coin);
+  return COIN_TESTS.filter(([, tests, not]) => tests.some((re) => re.test(not ? t.replace(new RegExp(not.source, "gi"), " ") : t))).map(([coin]) => coin);
 }
 
 /** A topic label from the words used (the old client rule, unchanged), or the feed's own kind for the Fed. */

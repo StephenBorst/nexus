@@ -55,6 +55,15 @@ test("coins: words that only look like tickers are left out", () => {
   assert.deepEqual(newsCoins("BTCUSD and XETH"), []);                      // part of a longer word
 });
 
+test("index and commodity perps: by name, never by a bare word", () => {
+  assert.deepEqual(newsCoins("Bitcoin falls as the Nasdaq drops 2% and the S&P 500 slides"), ["BTC", "SPX500", "NAS100"]);
+  assert.deepEqual(newsCoins("Gold hits a record as Brent crude jumps"), ["XAU", "CL"]);
+  assert.deepEqual(newsCoins("Bitcoin, the digital gold, slips"), ["BTC"]);
+  assert.deepEqual(newsCoins("Saylor calls it Digital Gold"), []);
+  assert.deepEqual(newsCoins("CL and XAU are tickers, not words here"), []);
+  assert.deepEqual(newsCoins("A golden age for builders"), []);
+});
+
 test("category: the old client rule; the Fed's feed is always MACRO", () => {
   assert.equal(newsCategory("Powell signals a pause", "", "crypto"), "MACRO");
   assert.equal(newsCategory("Aave launches v4", "", "crypto"), "DEFI");

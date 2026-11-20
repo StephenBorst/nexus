@@ -921,7 +921,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   Finance, the Fed's press releases; no third-party relay sees the reader) at most every 5 min, keeps a rolling 48h wire
   in LAB_STORE `intel:news:v1` (a feed that fails keeps its stories until they age out and is named in `unread`; its
   reason stays in KV), one story once (id or title), ≤15 a feed. Each story is tagged with the coins it names
-  (`newsCoins`: tickers in capitals as their own word, names any case; ambiguous tickers like LINK/NEAR/OP/DOT/HYPE only
+  (`newsCoins`: tickers in capitals as their own word, names any case; index + commodity perps SPX500 / NAS100 / XAU / CL by
+  name only ("digital gold" never counts); ambiguous tickers like LINK/NEAR/OP/DOT/HYPE only
   with "$" or by name). Re-stamped clusters (4+ at one second) and future times = undated (sink below). Only http(s)
   links are served. `NewsWire.tsx` = Lab home's FIRST lens "News" (`DEFAULT_LENS`: a reader who never chose lands on it)
   and Market Intel's NEWS tab; a coin tag opens the drawer. Headlines, never a direction or a tally. Cloud sessions
