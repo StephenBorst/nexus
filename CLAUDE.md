@@ -960,6 +960,11 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   ☆ or the ☆ on a row, ≤ `WATCH_MAX`) stay on top under "YOUR COINS" whatever the sort, sorted among themselves by the same
   column; the rest sort underneath. A watched market under the OI floor still pins from `others` (marked "thin"); one
   Orderly doesn't list is named, never invented. No new data. The footer names the sources + the build's age.
+- **Callers on the coin (borst 2026-11-20, rules `app/lib/coinCrowd.mjs`, `app/components/CoinCrowd.tsx`):** every coin
+  panel (drawer + dock) shows "Callers on X · N positioned · M open calls · K takes this week": `GET /theses/symbol/:coin`
+  (the Spot strip's route: open positions + active public calls, each caller's graded record via `callerRecordLine`, rows
+  → `/feed/trader/:w`) and `GET /takes/hot` filtered to takes whose `sym` names the coin (UNGRADED, labelled). A plain
+  count, never a crowd side (test-pinned: no lean / long-short counts); an unread source says "unread", never 0.
 - **Desktop terminal (borst 2026-11-20, "Wire, table, and coin panel side by side so one coin stays on screen"):** on a
   Lab home ≥ 1280 px wide (`wide = !useIsMobile(1280)`), the Wire (sticky, left 300 px) · the market table + its deep board
   (centre) · `MarketDock.tsx` (sticky, right 380 px). The dock IS the drawer's body (`MarketPanel`, exported from
