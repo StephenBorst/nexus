@@ -1,6 +1,8 @@
 // The market drawer: every lens on one coin, in one panel, opened from anywhere with openMarket("ETH")
 // (app/lib/marketDrawerEvent.mjs). One request to GET /intel/market/:coin (lab-api routes-market.mjs composes the
 // boards server-side). Phone: a bottom sheet. Desktop: a right-hand panel. Inputs, not a verdict (house rule).
+// The body is MarketPanel (2026-11-20, terminal desktop layout): the same coin view docks beside the market table on a
+// wide Lab home (MarketDock.tsx), where openMarket() fills the dock instead of opening this overlay.
 import { useCallback, useEffect, useState } from "react";
 import { NewsWire } from "@/pages/lab/NewsWire";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +11,7 @@ import { useEscapeKey } from "@/utils/a11y";
 import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
 import { MARKET_EVENT, takePendingMarket, clearPendingMarket } from "@/lib/marketDrawerEvent.mjs";
 import { MARKET_READ_FOOTER, marketCoin } from "@/lib/marketRead.mjs";
+import { wireWhen } from "@/lib/wire.mjs";
 import { useAccount } from "@orderly.network/hooks";
 import { useLabWallet } from "@/hooks/useLabAuth";
 import { savedCoins, watchCoin, pushSupported } from "@/lib/pushAlerts";
@@ -18,7 +21,7 @@ import { WATCH_EVENT, WATCH_MAX } from "@/lib/watchlist.mjs";
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 type Lens = { id: string; label: string; line: string; detail?: string; graded?: string; tone: "plain" | "faint" | "watch" };
-type Market = { coin: string; price: number | null; change24hPct: number | null; lenses: Lens[]; unread?: string[] };
+type Market = { coin: string; price: number | null; change24hPct: number | null; lenses: Lens[]; unread?: string[]; builtAt?: number };
 
 function useNarrow() {
   const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
@@ -34,25 +37,8 @@ const fmtPrice = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionD
 
 export default function MarketDrawer() {
   const narrow = useNarrow();
-  const navigate = useNavigate();
   const [coin, setCoin] = useState<string>("");
-  const [data, setData] = useState<Market | null>(null);
-  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
-  const { state: acct } = useAccount();
-  const wallet = (acct as { address?: string })?.address ?? null;
-  const labWallet = useLabWallet();
-  const [watching, setWatching] = useState<string[]>(() => savedCoins());
-  const [alertNote, setAlertNote] = useState("");
-  const [alertBusy, setAlertBusy] = useState(false);
-  const [watchList, setWatchList] = useState<string[]>(() => readWatch().coins); // ☆ Watch: this device, no wallet
-  useEffect(() => {
-    const on = () => setWatchList(readWatch().coins);
-    window.addEventListener(WATCH_EVENT, on);
-    return () => window.removeEventListener(WATCH_EVENT, on);
-  }, []);
-  const [pickSide, setPickSide] = useState(false); // "Post a call" asks the side here; the drawer never picks one
-
-  const close = useCallback(() => { setCoin(""); setData(null); }, []);
+  const close = useCallback(() => { setCoin(""); }, []);
   useEscapeKey(close, !!coin);
 
   useEffect(() => {
@@ -71,6 +57,42 @@ export default function MarketDrawer() {
     return () => { window.removeEventListener(MARKET_EVENT, on); window.removeEventListener("popstate", onNav); };
   }, []);
 
+  if (!coin) return null;
+  const frame: React.CSSProperties = narrow
+    ? { position: "fixed", left: 0, right: 0, bottom: 0, maxHeight: "86dvh", borderTopLeftRadius: 14, borderTopRightRadius: 14, borderTop: `1px solid ${C.borderStrong}`, zIndex: 99998 }
+    : { position: "fixed", top: 0, right: 0, bottom: 0, width: 440, borderLeft: `1px solid ${C.borderStrong}`, zIndex: 99998 };
+  return (
+    <>
+      <div role="presentation" onClick={close} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 99998 }} />
+      <MarketPanel coin={coin} onClose={close} frame={frame} modal />
+    </>
+  );
+}
+
+/**
+ * Every lens on one coin, its news, alerts and actions. `modal` = the overlay drawer (closes on its own actions);
+ * docked = beside the market table (no close button; the actions keep it on screen).
+ */
+export function MarketPanel({ coin, onClose, frame, modal = false }: { coin: string; onClose?: () => void; frame: React.CSSProperties; modal?: boolean }) {
+  const navigate = useNavigate();
+  const close = useCallback(() => { if (onClose) onClose(); }, [onClose]);
+  const [data, setData] = useState<Market | null>(null);
+  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+  const { state: acct } = useAccount();
+  const wallet = (acct as { address?: string })?.address ?? null;
+  const labWallet = useLabWallet();
+  const [watching, setWatching] = useState<string[]>(() => savedCoins());
+  const [alertNote, setAlertNote] = useState("");
+  const [alertBusy, setAlertBusy] = useState(false);
+  const [watchList, setWatchList] = useState<string[]>(() => readWatch().coins); // ☆ Watch: this device, no wallet
+  useEffect(() => {
+    const on = () => setWatchList(readWatch().coins);
+    window.addEventListener(WATCH_EVENT, on);
+    return () => window.removeEventListener(WATCH_EVENT, on);
+  }, []);
+  const [pickSide, setPickSide] = useState(false); // "Post a call" asks the side here; the drawer never picks one
+
+
   useEffect(() => {
     if (!coin) return;
     let alive = true;
@@ -81,8 +103,6 @@ export default function MarketDrawer() {
       .catch(() => { if (alive) setState("error"); });
     return () => { alive = false; };
   }, [coin]);
-
-  if (!coin) return null;
 
   // Lens → call: the trader picks the side here (the drawer never does), the Thesis Engine builds the levels
   // from live price and Post is the next tap (marketCallDraft.mjs). The events cover a Thesis tab already open.
@@ -111,16 +131,11 @@ export default function MarketDrawer() {
     else setAlertNote(r.error);
   };
 
-  const panel: React.CSSProperties = narrow
-    ? { position: "fixed", left: 0, right: 0, bottom: 0, maxHeight: "86dvh", borderTopLeftRadius: 14, borderTopRightRadius: 14, borderTop: `1px solid ${C.borderStrong}` }
-    : { position: "fixed", top: 0, right: 0, bottom: 0, width: 440, borderLeft: `1px solid ${C.borderStrong}` };
   const btn: React.CSSProperties = { flex: 1, fontFamily: UI, fontSize: 13.5, fontWeight: 600, padding: "11px 10px", borderRadius: RADIUS.md, cursor: "pointer", border: `1px solid ${C.borderStrong}`, background: "transparent", color: C.text.bright };
 
   return (
-    <>
-      <div role="presentation" onClick={close} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 99998 }} />
-      <section role="dialog" aria-modal="true" aria-label={`${coin} market`} className="nx-fade-in"
-        style={{ ...panel, zIndex: 99998, background: C.surface, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <section role={modal ? "dialog" : "region"} aria-modal={modal ? true : undefined} aria-label={`${coin} market`} className="nx-fade-in"
+        style={{ ...frame, background: C.surface, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}` }}>
           <span style={{ fontFamily: UI, fontSize: 22, fontWeight: 700, color: C.text.bright }}>{coin}</span>
           {data?.price != null && <span style={{ fontFamily: MONO, fontSize: 14, color: C.text.fog }}>{fmtPrice(data.price)}</span>}
@@ -135,7 +150,7 @@ export default function MarketDrawer() {
               </button>
             );
           })()}
-          <button type="button" onClick={close} aria-label="Close" style={{ marginLeft: 8, background: "none", border: "none", color: C.text.muted, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+          {modal && <button type="button" onClick={close} aria-label="Close" style={{ marginLeft: 8, background: "none", border: "none", color: C.text.muted, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>}
         </div>
         <div style={{ overflowY: "auto", padding: "6px 18px 10px", flex: 1 }}>
           {state === "loading" && <div style={{ fontFamily: MONO, fontSize: 12, color: C.text.muted, padding: "18px 0" }}>Reading every board on {coin}…</div>}
@@ -167,6 +182,7 @@ export default function MarketDrawer() {
           {data && (
             <div style={{ fontFamily: UI, fontSize: 12, color: C.text.muted, padding: "12px 0 4px", lineHeight: 1.5 }}>
               {MARKET_READ_FOOTER}{data.unread && data.unread.length ? ` Unread just now: ${data.unread.join(", ")}.` : ""}
+              {typeof data.builtAt === "number" && <> Read {wireWhen(data.builtAt, Date.now())}{wireWhen(data.builtAt, Date.now()) === "now" ? "" : " ago"}.</>}
             </div>
           )}
         </div>
@@ -185,6 +201,5 @@ export default function MarketDrawer() {
           <button type="button" style={btn} onClick={ask}>Ask Nexus</button>
         </div>
       </section>
-    </>
   );
 }
