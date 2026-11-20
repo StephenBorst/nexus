@@ -8,6 +8,7 @@ import { useIsMobile } from "./useIsMobile";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { pressKey } from "@/utils/a11y";
 import { openMarket } from "@/lib/marketDrawerEvent.mjs";
+import { boardsAt, boardForColumn } from "@/lib/intelLenses.mjs";
 import {
   TABLE_COLUMNS, DEFAULT_SORT, sortTable, nextSort, usdShort, fundingCell, oiVolCell, gapCell, smartCell, forecastCell,
   newsCell, readsCell,
@@ -28,7 +29,7 @@ type Table = { rows: Row[]; leftOut: number; unread: string[]; builtAt: number }
 
 const price = (p: number) => (p >= 1000 ? p.toLocaleString("en-US", { maximumFractionDigits: 0 }) : p >= 1 ? p.toFixed(2) : p.toPrecision(3));
 
-export function MarketTable() {
+export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => void }) {
   const isMobile = useIsMobile();
   const [table, setTable] = useState<Table | null>(null);
   const [failed, setFailed] = useState(false);
@@ -82,7 +83,13 @@ export function MarketTable() {
           {TABLE_COLUMNS.map((c) => (
             <div key={c.id} style={{ display: "flex", gap: 8, marginTop: 4 }}>
               <dt style={{ flexShrink: 0, width: 84, color: C.text.bright }}>{c.label}</dt>
-              <dd style={{ margin: 0 }}>{c.help}</dd>
+              <dd style={{ margin: 0 }}>
+                {c.help}
+                {onOpenBoard && boardForColumn(c.id) && (
+                  <> <button type="button" className="nx-text-action" onClick={() => onOpenBoard(boardForColumn(c.id)!.id)}
+                    style={{ fontFamily: UI, fontSize: 12, color: C.text.bright, background: "none", border: "none", padding: 0, cursor: "pointer" }}>Full board →</button></>
+                )}
+              </dd>
             </div>
           ))}
         </dl>
@@ -134,6 +141,15 @@ export function MarketTable() {
           )}
           {table.leftOut > 0 && <span>{table.leftOut} thinner markets (under $30k open interest) left out.</span>}
           {table.unread.length > 0 && <span>Unread right now: {table.unread.map((u) => UNREAD_WORDS[u] ?? u).join(", ")}.</span>}
+        </div>
+      )}
+      {onOpenBoard && (
+        <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: "6px 14px", alignItems: "baseline" }}>
+          <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.text.muted }}>FULL BOARDS</span>
+          {boardsAt("table").map((b) => (
+            <button key={b.id} type="button" className="nx-text-action" onClick={() => onOpenBoard(b.id)}
+              style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, background: "none", border: "none", padding: 0, cursor: "pointer" }}>{b.label} →</button>
+          ))}
         </div>
       )}
     </section>

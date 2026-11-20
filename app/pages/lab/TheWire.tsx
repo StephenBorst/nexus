@@ -9,6 +9,7 @@ import { useIsMobile } from "./useIsMobile";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { WIRE_FILTERS, WIRE_KINDS, filterWire, wireWhen } from "@/lib/wire.mjs";
 import { CoinLink } from "@/components/CoinLink";
+import { boardsAt } from "@/lib/intelLenses.mjs";
 
 const WIRE_URL = "https://og.nexustradinglabs.com/intel/wire";
 const REFRESH_MS = 60_000;
@@ -18,7 +19,7 @@ type Row = { id: string; kind: string; t: number; coin: string | null; title: st
 type Soon = { id: string; kind: "MACRO" | "MARKET"; t: number; title: string; impact?: string | null; detail?: string | null; coins?: string[] };
 type Wire = { rows: Row[]; upcoming: Soon[]; unread: string[]; builtAt: number };
 
-export function TheWire() {
+export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void }) {
   const isMobile = useIsMobile();
   const [wire, setWire] = useState<Wire | null>(null);
   const [failed, setFailed] = useState(false);
@@ -43,6 +44,9 @@ export function TheWire() {
     borderRadius: 999, background: on ? C.accent : "transparent", color: on ? C.canvas : C.text.fog,
     border: `1px solid ${on ? C.accent : C.borderStrong}`,
   });
+  const link: React.CSSProperties = { fontFamily: UI, fontSize: 13, color: C.text.fog, background: "none", border: "none", padding: 0, cursor: "pointer" };
+  // The full boards behind the Wire's rows: every headline, the week ahead, world-event markets (app/lib/intelLenses.mjs).
+  const WIRE_BOARD_WORDS: Record<string, string> = { news: "All headlines", calendar: "The week ahead", catalysts: "World events" };
   const titleStyle: React.CSSProperties = { display: "block", fontFamily: UI, fontSize: isMobile ? 15 : 14, fontWeight: 600, lineHeight: 1.35, color: C.text.bright, textDecoration: "none", marginTop: 3 };
 
   return (
@@ -57,7 +61,10 @@ export function TheWire() {
 
       {wire && wire.upcoming.length > 0 && (
         <div style={{ marginTop: 12, padding: "10px 12px", border: `1px solid ${C.border}`, borderRadius: 8, background: C.surfaceAlt }}>
-          <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.text.muted }}>COMING UP · NEXT 12H</div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.text.muted }}>COMING UP · NEXT 12H</span>
+            {onOpenBoard && <button type="button" className="nx-text-action" style={{ ...link, fontSize: 12 }} onClick={() => onOpenBoard("calendar")}>The week →</button>}
+          </div>
           {wire.upcoming.map((s) => (
             <div key={s.id} style={{ display: "flex", gap: 10, marginTop: 6, alignItems: "baseline" }}>
               <span style={{ flexShrink: 0, width: 56, fontFamily: MONO, fontSize: 11, color: C.text.fog }}>{wireWhen(s.t, now)}</span>
@@ -112,6 +119,14 @@ export function TheWire() {
           )}
           {wire.unread.length > 0 && (
             <div style={{ marginTop: 8, fontFamily: UI, fontSize: 12, color: C.text.muted }}>Unread right now: {wire.unread.join(", ")}.</div>
+          )}
+          {onOpenBoard && (
+            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: "6px 14px", alignItems: "baseline" }}>
+              <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.text.muted }}>FULL BOARDS</span>
+              {boardsAt("wire").map((b) => (
+                <button key={b.id} type="button" className="nx-text-action" style={link} onClick={() => onOpenBoard(b.id)}>{WIRE_BOARD_WORDS[b.id] ?? b.label} →</button>
+              ))}
+            </div>
           )}
         </div>
       )}
