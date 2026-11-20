@@ -250,3 +250,59 @@ test("a rule entry whose signature is pending records no PASS or FAIL (the guard
   const src = readFileSync(new URL("./paperJudge.mjs", import.meta.url), "utf8");
   assert.match(src, /if \(rule\.signature !== "signed"\) \{\s*return \{ \.\.\.base, verdict: "PENDING"/);
 });
+
+// ── The house paper runs: one page, the same rules, signed 2026-11-20 (docs/research/paper-judgment-house-runs.md) ─────
+import { HOUSE_PAPER_IDS, housePaperConfig } from "./housePaper.mjs";
+const DOC_HOUSE = readFileSync(new URL("../../docs/research/paper-judgment-house-runs.md", import.meta.url), "utf8");
+const PREFIX_HOUSE_SHA256 = "f1aba54cec94221ad1fb1819a785b443e2588f1004be5634f71b05025e525fdc";
+
+test("house runs: the rules above Results are exactly as signed", () => {
+  const cut = DOC_HOUSE.indexOf("\n## Results");
+  assert.ok(cut > 0, "the Results heading is missing");
+  assert.equal(createHash("sha256").update(DOC_HOUSE.slice(0, cut)).digest("hex"), PREFIX_HOUSE_SHA256);
+});
+
+test("house runs: rules 2-7 are oi_div_reversal_4h's word for word (the read as <read>, the reset cut-off as dated)", () => {
+  const items = (d) => d.slice(d.indexOf("## The rules"), d.indexOf("\n## Results")).split(/\n(?=\d\. )/).slice(1);
+  const a = items(DOC_4H), b = items(DOC_HOUSE);
+  assert.equal(b.length, 8);
+  for (let i = 1; i <= 6; i++) {
+    const want = a[i].replaceAll("oi_div_reversal_4h", "<read>").replace("2026-11-13T00:00:00Z", "2026-11-20T00:00:00Z");
+    assert.equal(b[i].trim(), want.trim(), `rule ${i + 1}`);
+  }
+});
+
+test("house runs: one code entry per run, the page's numbers, signed under Results", () => {
+  assert.match(DOC_HOUSE.slice(DOC_HOUSE.indexOf("\n## Results")), /Signed by borst on 2026-11-20 \("signed"\)/);
+  for (const [axis, wallet] of Object.entries(HOUSE_PAPER_IDS)) {
+    const rule = PAPER_JUDGMENTS[axis];
+    assert.ok(rule, `${axis} has no judgment entry`);
+    assert.equal(rule.doc, "docs/research/paper-judgment-house-runs.md");
+    assert.equal(rule.wallet, wallet);
+    assert.equal(rule.signedAt, "2026-11-20T00:00:00Z", "rule 3's reset cut-off");
+    assert.equal(rule.signature, "signed");
+    for (const k of ["trades", "feeBps", "tapeTolBps", "parityEarlyMs", "paritySettleMs", "passAboveBps"]) assert.equal(rule[k], RULE_4H[k], `${axis} ${k}`);
+    // the page's table lists this run with its id and its record start
+    assert.match(DOC_HOUSE, new RegExp(`\\| ${axis} \\| \`${wallet}\` \\| 2026-11-20T01:17:22Z \\|`));
+    assert.equal(housePaperConfig(axis).mode, "PAPER");
+  }
+  const rows = DOC_HOUSE.match(/^\| [a-z0-9_]+ \| `0x[0-9a-f]{40}` \|/gm) || [];
+  assert.equal(rows.length, Object.keys(HOUSE_PAPER_IDS).length, "the table lists exactly the house runs");
+  // the hand-made pages keep their own entries
+  assert.equal(PAPER_JUDGMENTS.level_reclaim.doc, "docs/research/paper-judgment-level-reclaim.md");
+  assert.equal(PAPER_JUDGMENTS.oi_div_reversal_4h.doc, "docs/research/paper-judgment-oi-div-reversal-4h.md");
+});
+
+test("house runs: a run is judged on its own record, by the same judge", () => {
+  const axis = "session_fade";
+  const start = Date.parse("2026-11-20T01:17:22Z");
+  const state = { started_at: start, paper_trades: Array.from({ length: 30 }, (_, i) => ({
+    symbol: "PERP_ETH_USDC", direction: "LONG", entry_price: 100, exit_price: 101,
+    opened_at: start + (i * 2 + 1) * H, closed_at: start + (i * 2 + 2) * H, pnl: 1, exit_reason: "TP",
+  })), paper_agg: { trades: 30 } };
+  const before = judgePaperRun(axis, { state: { ...state, paper_trades: state.paper_trades.slice(0, 12), paper_agg: { trades: 12 } } });
+  assert.deepEqual([before.verdict, before.count, before.remaining], ["ACCRUING", 12, 18]);
+  assert.equal(before.wallet, HOUSE_PAPER_IDS[axis]);
+  const reset = judgePaperRun(axis, { state: { ...state, paper_reset_at: Date.parse("2026-11-21T00:00:00Z") } });
+  assert.deepEqual([reset.verdict, reset.final], ["RESET", true]);
+});

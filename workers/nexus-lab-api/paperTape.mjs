@@ -15,6 +15,7 @@
 // fill that old Orderly has REFUSED on TAPE_MAX_TRIES runs (2026-11-13: Orderly appears to serve 1-minute
 // bars for about 2 days and to refuse older ranges rather than answer empty, so those fills retried every
 // hour forever). NO_DATA carries the reason; it is never a pass.
+import { HOUSE_PAPER_IDS } from "../../app/lib/housePaper.mjs";
 import { walletLegs, liveLegs, judgeFill, judgeTrigger, tapeSummary, tapeLine, liveTapeLine, TAPE_TOL_BPS } from "../../app/lib/paperTape.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 import { orderlyJson } from "./backtest.mjs";
@@ -39,6 +40,8 @@ const parse = (raw, fallback) => { try { return raw ? JSON.parse(raw) : fallback
 /** The wallets /proof shows a paper run for: the code registrations, then any signed claim (paperClaim.mjs). */
 export const proofPaperWallets = (claims = {}) => [...new Set([
   ...REGISTERED_READS.map((r) => r.paperWallet), ...Object.values(claims || {}).map((c) => c?.wallet),
+  // the house paper runs (app/lib/housePaper.mjs): judged by paper-judgment-house-runs.md, so every fill is checked
+  ...Object.values(HOUSE_PAPER_IDS),
 ].filter(Boolean).map(lower))];
 
 export async function readTape(kv, wallet) {

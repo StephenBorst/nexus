@@ -92,7 +92,7 @@ test("parity isn't read before its window has settled", async () => {
 
 test("the route: 404 for a read with no judgment, 405 for a write, null for another path", async () => {
   const { env } = setup(6);
-  assert.equal((await handlePaperJudge(["signals", "paper-judge", "rsi_reset_deep"], new Request("https://x/"), env)).status, 404);
+  assert.equal((await handlePaperJudge(["signals", "paper-judge", "session_momentum"], new Request("https://x/"), env)).status, 404);
   assert.equal((await handlePaperJudge(["signals", "paper-judge", "level_reclaim"], new Request("https://x/", { method: "POST" }), env)).status, 405);
   assert.equal(await handlePaperJudge(["signals", "paper-run", "level_reclaim"], new Request("https://x/"), env), null);
   const body = await (await handlePaperJudge(["signals", "paper-judge", "level_reclaim"], new Request("https://x/"), env)).json();

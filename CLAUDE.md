@@ -250,8 +250,13 @@ product is what sits on top:
   for field with `signalMode:"REGISTERED_READ"` + `read`. Setup job `housePaperSetup.mjs` (hourly): writes config, a fresh
   state (`started_at`) and the agent:users entry ONCE; a stored config that differs is reported, never rewritten. The
   agent routes 403 `house_paper_readonly` on every non-GET for a house id (before any owner check); exec refuses any
-  non-PAPER entry for one. House runs move NO stage (they are not a read's `paperWallet`), and nothing judges them until a
-  signed page covers them (next: one umbrella page; then "Paper: N of 30" on /proof rows, counts only). **Paper-wallet registration (borst 2026-11-14, `app/lib/paperClaim.mjs`,
+  non-PAPER entry for one. House runs move NO stage (they are not a read's `paperWallet`). **Judged** by ONE page,
+  `docs/research/paper-judgment-house-runs.md` (SIGNED by borst 2026-11-20, pinned above Results): rules 2-7 are
+  oi_div_reversal_4h's word for word, rule 8 ties a PASS to the read's own served stage (CLEARED only once also served
+  TRADEABLE/PAPER with no lock); `HOUSE_JUDGMENTS` in paperJudge.mjs (wallet = the house id, reset cut-off 2026-11-20).
+  `parityEvents` loads all `READ_SERIES` + BTC context for a REGISTERED_READ config (it used to load only the two older
+  reads' series, so house parity would have read DRIFT); the tape checker covers the house ids; `usePaperJudgments`
+  reads their verdicts for the CLEARED badge. Next: "Paper: N of 30" on /proof rows, counts only. **Paper-wallet registration (borst 2026-11-14, `app/lib/paperClaim.mjs`,
   `routes-paperclaim.mjs`):** no more hand-made PR per wallet. On `/ops/revenue` (Paper wallets box) the owner pastes a
   fresh wallet and signs `paperClaimMessage` (5 min; Safe owner / `OPS_WALLETS`). `POST /pipeline/paper-wallet` binds it
   only if the read is SERVED TRADEABLE (stored scoreboard, unread = 503), has a `PAPER_SETUPS` entry (brain mode + preset;

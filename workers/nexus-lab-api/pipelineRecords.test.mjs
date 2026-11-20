@@ -50,45 +50,45 @@ test("every recorded judgment page is the template rendered from its claim, its 
 const owner = privateKeyToAccount("0x" + "a1".repeat(32));
 const O = owner.address.toLowerCase();
 const PW = "0x" + "7".repeat(40);
-const TEST_SETUPS = { ...PAPER_SETUPS, session_fade: { config: OI_DIV_4H_PAPER_CONFIG, configName: "SESSION_FADE_PAPER_CONFIG", deploy: "t" } };
+const TEST_SETUPS = { ...PAPER_SETUPS, session_momentum: { config: OI_DIV_4H_PAPER_CONFIG, configName: "SESSION_MOMENTUM_PAPER_CONFIG", deploy: "t" } };
 const AT = "2026-11-20T10:00:00.000Z", STARTED = "2026-11-20T09:58:12.345Z", TS = Date.parse(AT) - 5000;
 
 async function fixture({ signed = false } = {}) {
-  const claim = { axis: "session_fade", wallet: PW, by: O, at: AT, startedAt: STARTED, sigTs: TS, sig: await owner.signMessage({ message: paperClaimMessage(O, "session_fade", PW, TS) }) };
-  const page = renderJudgmentPage({ axis: "session_fade", wallet: PW, at: AT, startedAt: STARTED }, TEST_SETUPS);
+  const claim = { axis: "session_momentum", wallet: PW, by: O, at: AT, startedAt: STARTED, sigTs: TS, sig: await owner.signMessage({ message: paperClaimMessage(O, "session_momentum", PW, TS) }) };
+  const page = renderJudgmentPage({ axis: "session_momentum", wallet: PW, at: AT, startedAt: STARTED }, TEST_SETUPS);
   const h = sha(pageAboveResults(page));
   const sTs = TS + 3600_000;
-  const sig = signed ? { by: O, at: new Date(sTs).toISOString(), sigTs: sTs, pageSha256: h, tradesAtSigning: 1, sig: await owner.signMessage({ message: judgmentSignMessage(O, "session_fade", h, sTs) }) } : null;
+  const sig = signed ? { by: O, at: new Date(sTs).toISOString(), sigTs: sTs, pageSha256: h, tradesAtSigning: 1, sig: await owner.signMessage({ message: judgmentSignMessage(O, "session_momentum", h, sTs) }) } : null;
   return { claim, draft: { page, sha256: h, signed: sig } };
 }
 const run = (over) => nextRecords({ recover, sha256: sha, setups: TEST_SETUPS, codedJudgments: PAPER_JUDGMENTS, ...over });
-const PATH = judgmentDocPath("session_fade");
+const PATH = judgmentDocPath("session_momentum");
 
 test("first run: the wallet is recorded and the page drafted, signature pending", async () => {
   const { claim, draft } = await fixture();
-  const out = await run({ claims: [claim], drafts: { session_fade: draft }, docs: { [PATH]: null } });
+  const out = await run({ claims: [claim], drafts: { session_momentum: draft }, docs: { [PATH]: null } });
   assert.deepEqual(out.issues, []);
-  assert.equal(out.walletRecords.session_fade.wallet, PW);
-  assert.equal(out.walletRecords.session_fade.sig, claim.sig);
-  assert.equal(out.judgmentRecords.session_fade.signature, "pending");
+  assert.equal(out.walletRecords.session_momentum.wallet, PW);
+  assert.equal(out.walletRecords.session_momentum.sig, claim.sig);
+  assert.equal(out.judgmentRecords.session_momentum.signature, "pending");
   assert.equal(out.writes[PATH], draft.page);
   assert.equal(out.changes.length, 2);
   const { title } = recordsReport(out.changes, out.issues);
-  assert.match(title, /^Pipeline watch: paper records · session_fade$/, "the watcher's own title prefix");
+  assert.match(title, /^Pipeline watch: paper records · session_momentum$/, "the watcher's own title prefix");
 });
 
 test("after the owner signs: the Results line is appended once; a rerun changes nothing", async () => {
   const first = await fixture();
-  const one = await run({ claims: [first.claim], drafts: { session_fade: first.draft }, docs: { [PATH]: null } });
+  const one = await run({ claims: [first.claim], drafts: { session_momentum: first.draft }, docs: { [PATH]: null } });
   const { claim, draft } = await fixture({ signed: true });
-  const two = await run({ walletRecords: one.walletRecords, judgmentRecords: one.judgmentRecords, claims: [claim], drafts: { session_fade: draft }, docs: { [PATH]: one.writes[PATH] } });
+  const two = await run({ walletRecords: one.walletRecords, judgmentRecords: one.judgmentRecords, claims: [claim], drafts: { session_momentum: draft }, docs: { [PATH]: one.writes[PATH] } });
   assert.deepEqual(two.issues, []);
   const doc = two.writes[PATH];
   assert.equal(pageAboveResults(doc), pageAboveResults(draft.page), "the text above Results never moves");
   assert.ok(doc.includes(draft.signed.sig) && doc.includes("with 1 closed trades"));
-  assert.equal(two.judgmentRecords.session_fade.signature, "signed");
-  assert.deepEqual(two.changes, ["session_fade: judgment signed by " + O + " at 1 trades"]);
-  const three = await run({ walletRecords: two.walletRecords, judgmentRecords: two.judgmentRecords, claims: [claim], drafts: { session_fade: draft }, docs: { [PATH]: doc } });
+  assert.equal(two.judgmentRecords.session_momentum.signature, "signed");
+  assert.deepEqual(two.changes, ["session_momentum: judgment signed by " + O + " at 1 trades"]);
+  const three = await run({ walletRecords: two.walletRecords, judgmentRecords: two.judgmentRecords, claims: [claim], drafts: { session_momentum: draft }, docs: { [PATH]: doc } });
   assert.deepEqual(three.writes, {});
   assert.deepEqual(three.changes, []);
   assert.equal(recordsModuleSource(three.walletRecords, three.judgmentRecords), recordsModuleSource(two.walletRecords, two.judgmentRecords));
@@ -96,26 +96,26 @@ test("after the owner signs: the Results line is appended once; a rerun changes 
 
 test("the written module loads and serves the same records", async () => {
   const { claim, draft } = await fixture({ signed: true });
-  const out = await run({ claims: [claim], drafts: { session_fade: draft }, docs: { [PATH]: null } });
+  const out = await run({ claims: [claim], drafts: { session_momentum: draft }, docs: { [PATH]: null } });
   const src = recordsModuleSource(out.walletRecords, out.judgmentRecords);
   const mod = await import(`data:text/javascript,${encodeURIComponent(src)}`);
   assert.deepEqual(JSON.parse(JSON.stringify(mod.PAPER_WALLET_RECORDS)), JSON.parse(JSON.stringify(out.walletRecords)));
-  assert.equal(mod.JUDGMENT_RECORDS.session_fade.signature, "signed");
-  assert.ok(Object.isFrozen(mod.PAPER_WALLET_RECORDS.session_fade));
+  assert.equal(mod.JUDGMENT_RECORDS.session_momentum.signature, "signed");
+  assert.ok(Object.isFrozen(mod.PAPER_WALLET_RECORDS.session_momentum));
 });
 
 test("nothing served is trusted: a bad signature, a changed page or a git page that differs = an issue, no write", async () => {
   const { claim, draft } = await fixture({ signed: true });
-  const forged = await run({ claims: [{ ...claim, wallet: "0x" + "9".repeat(40) }], drafts: { session_fade: draft }, docs: { [PATH]: null } });
+  const forged = await run({ claims: [{ ...claim, wallet: "0x" + "9".repeat(40) }], drafts: { session_momentum: draft }, docs: { [PATH]: null } });
   assert.equal(forged.issues.length, 1);
   assert.deepEqual(forged.writes, {});
-  assert.equal(forged.walletRecords.session_fade, undefined, "the wallet is inside the signature");
-  const edited = await run({ claims: [claim], drafts: { session_fade: { ...draft, page: draft.page.replace("Mean net above 0 bps", "Mean net above -5 bps") } }, docs: { [PATH]: null } });
+  assert.equal(forged.walletRecords.session_momentum, undefined, "the wallet is inside the signature");
+  const edited = await run({ claims: [claim], drafts: { session_momentum: { ...draft, page: draft.page.replace("Mean net above 0 bps", "Mean net above -5 bps") } }, docs: { [PATH]: null } });
   assert.match(edited.issues[0], /doesn't match the template/);
   assert.equal(edited.writes[PATH], undefined);
-  const badSig = await run({ claims: [claim], drafts: { session_fade: { ...draft, signed: { ...draft.signed, by: "0x" + "1".repeat(40) } } }, docs: { [PATH]: null } });
+  const badSig = await run({ claims: [claim], drafts: { session_momentum: { ...draft, signed: { ...draft.signed, by: "0x" + "1".repeat(40) } } }, docs: { [PATH]: null } });
   assert.match(badSig.issues[0], /judgment signature/);
-  const drifted = await run({ claims: [claim], drafts: { session_fade: draft }, docs: { [PATH]: draft.page.replace("## The rules", "## The rules (edited)") } });
+  const drifted = await run({ claims: [claim], drafts: { session_momentum: draft }, docs: { [PATH]: draft.page.replace("## The rules", "## The rules (edited)") } });
   assert.match(drifted.issues[0], /differs from the page above Results/);
   assert.equal(drifted.writes[PATH], undefined);
 });
