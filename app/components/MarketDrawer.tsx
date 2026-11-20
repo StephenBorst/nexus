@@ -5,6 +5,7 @@
 // wide Lab home (MarketDock.tsx), where openMarket() fills the dock instead of opening this overlay.
 import { useCallback, useEffect, useState } from "react";
 import { NewsWire } from "@/pages/lab/NewsWire";
+import { CoinCrowd } from "@/components/CoinCrowd";
 import { useNavigate } from "react-router-dom";
 import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
 import { useEscapeKey } from "@/utils/a11y";
@@ -163,6 +164,14 @@ export function MarketPanel({ coin, onClose, frame, modal = false }: { coin: str
               {l.graded && <div style={{ fontFamily: UI, fontSize: 12, lineHeight: 1.5, color: C.text.muted, marginTop: 4 }}>{l.graded}</div>}
             </div>
           ))}
+          {/* Who's on this coin (2026-11-20): callers with an open position or public call, each with their graded record,
+              and recent takes (ungraded). The Spot page's strip, in every coin panel. A plain count, no crowd side. */}
+          {data && (
+            <div style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: C.text.muted, marginBottom: 2 }}>Callers on {coin}</div>
+              <CoinCrowd coin={coin} />
+            </div>
+          )}
           {/* The coin's own headlines (the news wire, 2026-11-20): inputs on the same screen, never part of a verdict. */}
           {data && (
             <div style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
