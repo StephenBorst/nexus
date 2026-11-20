@@ -924,7 +924,7 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   (`newsCoins`: tickers in capitals as their own word, names any case; index + commodity perps SPX500 / NAS100 / XAU / CL by
   name only ("digital gold" never counts); ambiguous tickers like LINK/NEAR/OP/DOT/HYPE only
   with "$" or by name). Re-stamped clusters (4+ at one second) and future times = undated (sink below). Only http(s)
-  links are served. `NewsWire.tsx` = Lab home's FIRST lens "News" (`DEFAULT_LENS`: a reader who never chose lands on it)
+  links are served. `NewsWire.tsx` = the "All headlines" board (opened from the Wire)
   and Market Intel's NEWS tab; a coin tag opens the drawer. Headlines, never a direction or a tally. Cloud sessions
   can't reach the feeds: check `unread` on the live route after a change.
 - **The Wire (borst 2026-11-20, terminal step 2; rules `app/lib/wire.mjs`, route `GET /intel/wire` `routes-wire.mjs`, 60 s
@@ -946,6 +946,12 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   forecasts leaning against funding, news 24h, reads holding a paper trade, OI. Default order = OI; any header sorts
   (funding and gap by size, nulls last). A cell past the Intel tape's stated line is marked (`SIGNAL.watch`); no
   combined score (test-pinned). A failed source = its column "unread", never 0. A row opens the coin's drawer.
+- **No lens strip (borst 2026-11-20, "fold the old lens strip into the table and the coin drawer"):** Lab home's chip
+  strip is gone. `app/lib/intelLenses.mjs` is now the BOARD registry (ids kept so `/lab?lens=<id>` still opens one): each
+  board has a `home` (`wire` = All headlines, The week ahead, World events; `table` = Funding / Venues / Positioning /
+  Forecasts, each also behind its column's "Full board →", + Q Signals and the Market tape) and opens under the table
+  (`DeepBoard.tsx`, one at a time, Close). Per coin, every one is already a lens in the drawer. Test-pinned: no
+  `<IntelLenses`, every board rendered, every opener at its home.
 - **Risk desk (2026-11-15, rules `app/lib/riskDesk.mjs`, read `app/hooks/useRiskDesk.ts`):** the connected account's
   open positions from the SDK (position stream, collateral, est. funding, each market's `funding_period`), in the
   browser only (test-pinned: no fetch). Per position: liquidation % away (≤5 = warn, ≤10 = watch), what the resting

@@ -29,7 +29,8 @@ import { MispricedBoard } from "./MispricedBoard";
 import { CatalystBoard } from "./CatalystBoard";
 import { ForecastDivergence } from "./ForecastDivergence";
 import { QSignals } from "./QSignals";
-import { IntelLenses } from "./IntelLenses";
+import { DeepBoard } from "./DeepBoard";
+import { initialBoard, toggleBoard } from "@/lib/intelLenses.mjs";
 import { PositioningBoard } from "./PositioningBoard";
 import { Collapsible } from "./Collapsible";
 import { LabWelcome, OnboardingChecklist } from "./Onboarding";
@@ -59,6 +60,9 @@ const normTab = (t: string | null | undefined): TabId | null =>
 
 export default function TheLabPage() {
   const [searchParams] = useSearchParams();
+  // the deep board open under the market table (one at a time); `/lab?lens=<id>` opens one directly
+  const [deepBoard, setDeepBoard] = useState<string | null>(() => initialBoard(searchParams.get("lens")));
+  useEffect(() => { const b = initialBoard(searchParams.get("lens")); if (b) setDeepBoard(b); }, [searchParams]);
   const [activeTab, setActiveTab] = useState<TabId>(() => normTab(searchParams.get("tab")) || "intel");
   // Honor ?tab= deep-links (e.g. the AI assistant's draft_thesis → /lab?tab=thesis).
   useEffect(() => {
@@ -348,24 +352,20 @@ export default function TheLabPage() {
           );
           // ◆ CALLS leads Lab home: the "graded from public price" line + open and graded calls, above every fold.
           const calls = <LabCallsPanel onSelectTab={setActiveTab} />;
-          // THE LENSES · the deep "why" behind The Board, as ONE card: a chip per lens, only the chosen one
-          // mounted (2026-11-14; it was five folds + the deep market intel, six rows of chevrons on a phone).
-          // Funding + Positioning are the deep boards behind the Board's Confluence strip; Catalysts + Forecasts
-          // are the event layer; Q Signals is the PRO paid lens (each pull paid by the user's wallet, no auto-poll);
-          // Tape is the raw market intel (news, movers, OI, long/short). Rules + order: app/lib/intelLenses.mjs.
-          const lenses = (
-            <IntelLenses render={(id) => {
-              if (id === "news") return <NewsWire />;
-              if (id === "funding") return <MispricedBoard />;
-              if (id === "venues") return <FundingVenues />;
-              if (id === "calendar") return <EventsCalendar />;
-              if (id === "positioning") return <PositioningBoard trades={connected ? processedTrades : undefined} />;
-              if (id === "catalysts") return <CatalystBoard />;
-              if (id === "forecast") return <ForecastDivergence />;
-              if (id === "qsignals") return <QSignals address={rootWalletAddress} />;
-              return <MarketIntelView />;
-            }} />
-          );
+          // THE DEEP BOARDS (2026-11-20): no chip strip. The Wire and the table open one board at a time, under the table
+          // (DeepBoard.tsx, registry app/lib/intelLenses.mjs); per coin, every one is already a lens in the drawer.
+          const renderBoard = (id: string) => {
+            if (id === "news") return <NewsWire />;
+            if (id === "funding") return <MispricedBoard />;
+            if (id === "venues") return <FundingVenues />;
+            if (id === "calendar") return <EventsCalendar />;
+            if (id === "positioning") return <PositioningBoard trades={connected ? processedTrades : undefined} />;
+            if (id === "catalysts") return <CatalystBoard />;
+            if (id === "forecast") return <ForecastDivergence />;
+            if (id === "qsignals") return <QSignals address={rootWalletAddress} />;
+            return <MarketIntelView />;
+          };
+          const openBoard = (id: string) => setDeepBoard((cur) => toggleBoard(cur, id));
           // The splash only greets a brand-new DISCONNECTED visitor who hasn't cleared
           // onboarding yet (in practice the full-screen modal covers this — it's a
           // defensive fallback). Everyone else — connected, or a guest/onboarded preview
@@ -374,7 +374,7 @@ export default function TheLabPage() {
           const showSplash = !connected && !guestPreview;
           // WATCHING (2026-11-14): the coins this device watches, what changed since the last look. Under Calls.
           // borst 2026-11-20: Wire → table → positions. The Wire (what changed), every market as one table, then YOUR OPEN RISK.
-          return <>{showSplash && <LabWelcome />}<TheWire /><MarketTable /><RiskDeskPanel />{calls}<WatchlistPanel />{briefing}{board}{lenses}</>;
+          return <>{showSplash && <LabWelcome />}<TheWire onOpenBoard={openBoard} /><MarketTable onOpenBoard={openBoard} />{deepBoard && <DeepBoard id={deepBoard} onClose={() => setDeepBoard(null)} render={renderBoard} />}<RiskDeskPanel />{calls}<WatchlistPanel />{briefing}{board}</>;
         })()}
         {activeTab === "smart" && (
           // Smart Money is now the DEEP WALLET DRILL-DOWN the Intel funnel's Positioning lens
