@@ -1,4 +1,6 @@
-// ── GET /signals/paper-run/:axis — a cleared read's paper run, trade by trade, in R ─────────────────
+// ── GET /signals/paper-run/:axis — a read's paper run, trade by trade, in R ─────────────────────────────────────
+// (its own paper wallet, else its keyless house run, app/lib/housePaper.mjs). GET /signals/paper-counts = every read's
+// run as a COUNT only, for the /proof board rows (one request, 60 s cache).
 // Read by /proof/paper/:axis and its link card (functions/proof/paper/[axis].js). Rule: app/lib/paperRun.mjs.
 // KV reads: the paper wallet's state (exec's record), its tape checks, while flat the brain's last check
 // (`quiet`, app/lib/quietLine.mjs), and each traded coin's hourly tape for MAE / MFE (excursion.mjs). No dollars, no totals, nothing written.
@@ -7,6 +9,7 @@ import { paperRun } from "../../app/lib/paperRun.mjs";
 import { readTape } from "./paperTape.mjs";
 import { readPaperClaims } from "./routes-paperclaim.mjs";
 import { quietLine } from "../../app/lib/quietLine.mjs";
+import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 
 const reply = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -17,7 +20,35 @@ const reply = (body, status = 200) => new Response(JSON.stringify(body), {
   },
 });
 
+export const PAPER_COUNTS_KEY = "paper:counts:v1";
+
+/** Every registered read's paper run as a count: {axis: {wallet, house, count, target, open} | {wallet, house, unread}}. */
+export async function buildPaperCounts(env) {
+  let claims = {};
+  try { claims = await readPaperClaims(env); } catch { claims = {}; }
+  const kv = env.NEXUS_AGENT || env.LAB_STORE;
+  const out = {};
+  for (const r of REGISTERED_READS) {
+    const probe = paperRun(r.axis, null, null, { wallet: claims[r.axis]?.wallet || null });
+    if (!probe) continue;
+    let state = null;
+    try { const raw = await kv.get(`agent:state:${probe.wallet.toLowerCase()}`); state = raw ? JSON.parse(raw) : null; } catch { state = null; }
+    const run = paperRun(r.axis, state, null, { wallet: claims[r.axis]?.wallet || null });
+    out[r.axis] = run.unread
+      ? { wallet: run.wallet, house: run.house, unread: true }
+      : { wallet: run.wallet, house: run.house, count: run.count, target: run.target, open: !!state?.current_position };
+  }
+  return out;
+}
+
 export async function handlePaperRun(parts, request, env) {
+  if (parts[0] === "signals" && parts[1] === "paper-counts" && parts.length === 2) {
+    if (request.method !== "GET" && request.method !== "HEAD") return reply({ error: "method not allowed" }, 405);
+    try { const c = await env.LAB_STORE.get(PAPER_COUNTS_KEY); if (c) return reply(JSON.parse(c)); } catch { /* rebuild */ }
+    const body = { ok: true, asOf: new Date().toISOString(), runs: await buildPaperCounts(env) };
+    try { await env.LAB_STORE.put(PAPER_COUNTS_KEY, JSON.stringify(body), { expirationTtl: 60 }); } catch { /* serve uncached */ }
+    return reply(body);
+  }
   if (!(parts[0] === "signals" && parts[1] === "paper-run" && parts.length === 3)) return null;
   if (request.method !== "GET" && request.method !== "HEAD") return reply({ error: "method not allowed" }, 405);
   const axis = String(parts[2] || "").slice(0, 64);

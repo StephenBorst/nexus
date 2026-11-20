@@ -16,6 +16,8 @@ import { C } from "@/config/theme";
 import { AXIS_BLURB, splitLabel, takeaway, sideBar, boardGroups, randomBar, tideLine } from "@/lib/signalCard.mjs";
 import { PROMOTION_LOCKS } from "@/lib/promotionLocks.mjs";
 import { usePaperJudgments } from "@/hooks/usePaperJudgments";
+import { usePaperCounts, type PaperCount } from "@/hooks/usePaperCounts";
+import { paperCountLine } from "@/lib/paperRun.mjs";
 import { pipelineLine, countingSince, retiredGradedExit, retiredLine, RETIRED_READS, retiredRead, retiredReadLine } from "@/lib/proofCopy.mjs";
 import Fold from "./Fold";
 
@@ -436,7 +438,7 @@ const FOLDS: Record<string, { title: string; note: string }> = {
 
 // One registered read on the "Being tested now" list: its name and how far along it is, nothing
 // else. Its grade on old data stays behind the tap (the full card, labelled as such).
-function TestRow({ a, reg, minEvents, since, cleared = false }: { a: AxisRow; reg: Reg; minEvents: number; since: string; cleared?: boolean }) {
+function TestRow({ a, reg, minEvents, since, cleared = false, paper }: { a: AxisRow; reg: Reg; minEvents: number; since: string; cleared?: boolean; paper?: PaperCount }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const { main, aside } = splitLabel(a.label);
@@ -444,6 +446,7 @@ function TestRow({ a, reg, minEvents, since, cleared = false }: { a: AxisRow; re
   // The number the row is ordered by: the share of random entries this read beat on new data (main coins). Not a grade.
   const pct = reg?.numbers?.beatsRandomPct;
   const share = typeof pct === "number" && Number.isFinite(pct) ? `beat ${Math.round(pct)}% of random` : null;
+  const paperLine = paperCountLine(paper ?? null);
   return (
     <div style={{ borderTop: `1px solid ${C.border}` }}>
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
@@ -463,6 +466,13 @@ function TestRow({ a, reg, minEvents, since, cleared = false }: { a: AxisRow; re
           <span aria-hidden style={{ fontFamily: MONO, fontSize: 12, color: MUTED }}>{open ? "−" : "+"}</span>
         </span>
       </button>
+      {paperLine && (
+        // The read's paper run as a count only (no R, no sums, no dollars): the record runs from registration, the
+        // claim is earned at 30 trades after fees (paper-judgment pages). Its own line: a link can't sit in the button.
+        <a href={`/proof/paper/${a.name}`} style={{ display: "block", padding: isMobile ? "0 4px 12px" : "0 10px 12px", marginTop: -6, fontFamily: UI, fontSize: 12.5, color: MUTED, textDecoration: "none", fontVariantNumeric: "tabular-nums" }}>
+          {paperLine} →
+        </a>
+      )}
       {open && (
         <div style={{ padding: isMobile ? "4px 0 14px" : "4px 0 16px" }}>
           <div style={{ fontFamily: UI, fontSize: 12.5, color: MUTED, lineHeight: 1.5, margin: "0 4px 10px" }}>
@@ -497,6 +507,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
   const reads = scorecard?.pipeline?.reads;
   // The recorded 30-trade paper verdict, read only for reads that could clear (served Tradeable or Paper with a paper wallet).
   const judgments = usePaperJudgments(reads);
+  const paperCounts = usePaperCounts();
   const groups = boardGroups(scorecard?.axes, reads, Object.keys(RETIRED_READS), { judgments, locks: PROMOTION_LOCKS });
   const minEvents = scorecard?.pipeline?.rules?.minEvents ?? 30;
   const since = countingSince(reads);
@@ -533,7 +544,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
               </div>
               <div style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, color: MUTED, padding: "4px 4px 8px" }}>{SECTIONS[g.key].note}</div>
               {g.rows.length
-                ? <div style={{ borderBottom: `1px solid ${C.border}` }}>{g.rows.map(({ a, reg }) => <TestRow key={a.name} a={a} reg={reg} minEvents={minEvents} since={since} cleared={g.key === "cleared"} />)}</div>
+                ? <div style={{ borderBottom: `1px solid ${C.border}` }}>{g.rows.map(({ a, reg }) => <TestRow key={a.name} a={a} reg={reg} minEvents={minEvents} since={since} cleared={g.key === "cleared"} paper={paperCounts[a.name]} />)}</div>
                 : <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, padding: "4px 4px 6px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, paddingTop: 12, paddingBottom: 12 }}>{NOTHING_CLEARED}</div>}
             </div>
           ))}

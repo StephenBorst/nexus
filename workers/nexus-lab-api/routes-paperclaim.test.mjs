@@ -186,7 +186,9 @@ test("the paper run page and the pulse read a claimed wallet; the code still win
   const { paperRun } = await import("../../app/lib/paperRun.mjs");
   const { signalProgress } = await import("../../app/lib/signalProgress.mjs");
   assert.equal(paperRun("session_fade", null, null, { wallet: PW }).wallet, PW);
-  assert.equal(paperRun("session_fade", null), null, "no claim, no wallet: still a 404");
+  // no claim: the read's keyless house run (housePaper.mjs); a retired read has none, so still a 404
+  assert.equal(paperRun("session_fade", null).house, true, "no claim: the house run");
+  assert.equal(paperRun("session_momentum", null), null, "retired, no claim: still a 404");
   assert.equal(paperRun("level_reclaim", null, null, { wallet: PW }).wallet, "0x95e26E980e300C34360933b849457F42c6Bd7622");
   assert.equal(paperRun("not_a_read", null, null, { wallet: PW }), null, "a claim can't invent a read");
   const sc = { pipeline: { reads: [{ axis: "session_fade", stage: "PAPER", paperWallet: PW, numbers: { exitTrades: 40, exitNetBps: 12 } }] } };
