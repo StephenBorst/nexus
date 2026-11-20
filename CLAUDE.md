@@ -615,6 +615,14 @@ product is what sits on top:
   any call on the frozen contract (1.2× H4 ATR stop, 1.5R, 168h); live only in the app. Same bar as every read
   (`PIPELINE_RULES`), then its first 30 calls after TRADEABLE judged by the paper-judgment rules; CLEARED → the headline.
   Until then a "House signal · testing" panel tops /proof. Revealed at CLEARED or borst's date; a hash mismatch voids it.
+  **On record** (`SEALED_READS`): `house-1` ("House signal", fingerprint `b71e0dfd…0c6e`, posting wallet `0x76A2…B17B`,
+  borst holds its key; committed 2026-11-20). `sealedCountsFrom` = null until borst's X post is recorded on the entry.
+  **Fires → calls** (`POST /sealed/fire`, `routes-sealed.mjs`, rules `app/lib/sealedFire.mjs`): the private worker sends
+  `{name, coin, side, fireAt}` signed by the read's OWN wallet (`sealedFireMessage`); lab-api builds the call in public
+  (entry = Orderly mark, stop/target from `gradedExitLevels` on Orderly's last 81 hourly bars, `timeStopH` 168) and seals it
+  into that wallet's Lab record via prepareSeal → commit. Refused: not started (unless `dryRun`), off-the-hour time,
+  duplicate, same coin + side inside 24h; > 5 min late = a MISSED row, no call. NexusLock `sealedFire`. Log LAB_STORE
+  `sealed:log:{name}`, public at `GET /sealed/:name` (posted / missed / every fire).
 - **House caller is OFF** (`HOUSE_SIGNALS_ENABLED` deleted; gates the Catalyst caller too). Check "off" by reading
   `enabled` on `/signals/house` and `/signals/catalyst-house`, never by a quiet run. `POST /signals/house` with
   `HOUSE_SIGNALS_ADMIN` still posts by hand regardless. Keep `HOUSE_CALLER_ADDRESS` set (the dedupe reads it). On again

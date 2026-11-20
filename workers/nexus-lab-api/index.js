@@ -90,6 +90,7 @@ import { handleXrayShare } from "./routes-xrayshare.mjs";
 import { handleRevenue, freshRevenue } from "./routes-revenue.mjs";
 import { handleHalt } from "./routes-halt.mjs";
 import { handlePaperClaim, readPaperClaims } from "./routes-paperclaim.mjs";
+import { handleSealed } from "./routes-sealed.mjs";
 import { handleJudgeSign } from "./routes-judgesign.mjs";
 import { handlePlanSign } from "./routes-plansign.mjs";
 import { runOpsDigest, sendOwner } from "./opsDigest.mjs";
@@ -1062,6 +1063,11 @@ const worker = {
     {
       const pushRes = await handlePush(parts, request, env);
       if (pushRes) return pushRes;
+    }
+    // Sealed reads: a fire signed by the read's own wallet becomes a public call (routes-sealed.mjs).
+    {
+      const sealedRes = await handleSealed(parts, request, env);
+      if (sealedRes) return sealedRes;
     }
     {
       const revenueRes = await handleRevenue(parts, request, env, { nexusPrice: getNexusPriceUsd });
