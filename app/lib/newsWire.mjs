@@ -10,8 +10,10 @@ export const NEWS_FEEDS = Object.freeze([
   { id: "cointelegraph", name: "Cointelegraph", url: "https://cointelegraph.com/rss", kind: "crypto" },
   { id: "decrypt", name: "Decrypt", url: "https://decrypt.co/feed", kind: "crypto" },
   { id: "theblock", name: "The Block", url: "https://www.theblock.co/rss.xml", kind: "crypto" },
-  { id: "blockworks", name: "Blockworks", url: "https://blockworks.co/feed", kind: "crypto" },
-  { id: "yahoo", name: "Yahoo Finance", url: "https://finance.yahoo.com/news/rssindex", kind: "markets" },
+  // 2026-11-20 live check: Blockworks answered no stories and Yahoo's rssindex 404s from our worker, so both were swapped
+  { id: "dlnews", name: "DL News", url: "https://www.dlnews.com/arc/outboundfeeds/rss/", kind: "crypto" },
+  { id: "cnbc", name: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", kind: "markets" },
+  { id: "marketwatch", name: "MarketWatch", url: "https://feeds.content.dowjones.io/public/rss/mw_topstories", kind: "markets" },
   { id: "fed", name: "Federal Reserve", url: "https://www.federalreserve.gov/feeds/press_all.xml", kind: "macro" },
 ]);
 

@@ -6,7 +6,7 @@
 /** Order = the funnel: the news first (borst 2026-11-20: "our news section is buried"), the boards the Board summarizes,
  *  the event/forecast layer, then the raw tape. */
 export const INTEL_LENSES = [
-  { id: "news", label: "News", sub: "headlines from seven sources, read by our server, tagged by the coins they name", legacyKey: "nx_news_open" },
+  { id: "news", label: "News", sub: "headlines read by our server, tagged by the coins they name", legacyKey: "nx_news_open" },
   { id: "funding", label: "Funding", sub: "every stretched perp, and where funding reverted vs kept stretching", legacyKey: "nx_funding_board_open" },
   { id: "venues", label: "Venues", sub: "the same coin’s funding on Orderly, Hyperliquid and OKX, side by side", legacyKey: "nx_venues_open" },
   { id: "positioning", label: "Positioning", sub: "where the leveraged crowd and the sharp wallets disagree", legacyKey: "nx_positioning_open" },
