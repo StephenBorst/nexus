@@ -92,6 +92,8 @@ export const retiredLine = (r) =>
 // name and a new registration date. Display only.
 export const RETIRED_READS = Object.freeze({
   session_momentum: Object.freeze({ on: "2026-11-13", events: 112, meanR: -0.33, why: "worse than random" }),
+  level_reclaim: Object.freeze({ on: "2026-11-20", events: 118, meanR: 0, why: "mean R not above zero" }),
+  confluence_follow: Object.freeze({ on: "2026-11-20", events: 109, meanR: -0.11, why: "mean R below zero" }),
 });
 export const retiredRead = (axis) => RETIRED_READS[axis] || null;
 export const retiredReadLine = (r) => {
