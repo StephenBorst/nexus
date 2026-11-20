@@ -246,5 +246,7 @@ export async function handleLab(parts, request, env, { now = Date.now, readMark 
     return json({ ok: true }, request);
   }
 
-  return json({ error: "method not allowed" }, request, 405);
+  // Say which method arrived and what this path takes (2026-11-20: an engine's PUT arrived as another method and the
+  // bare 405 didn't say so).
+  return json({ error: "method not allowed", received: request.method, allowed: ["GET", "PUT", "POST /lab/:address/read", "DELETE /lab/:address/thesis/:id"] }, request, 405);
 }

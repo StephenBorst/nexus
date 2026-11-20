@@ -320,3 +320,12 @@ test("a failed price read still publishes, without a mark; a private save reads 
     assert.equal(stored(env, `lab:${A}`).theses.find((x) => x.id === "q").publishMark, undefined);
   } finally { markStub = async () => null; }
 });
+
+// 2026-11-20: a Lab save that arrived as POST got a bare 405. It now says which method arrived and what the path takes.
+test("a wrong method on /lab/:address names itself and the methods the path takes", async () => {
+  const res = await lab(envWith(), "POST", `/lab/${A}`, { theses: [], notes: {} });
+  assert.equal(res.status, 405);
+  const b = await res.json();
+  assert.equal(b.received, "POST");
+  assert.ok(b.allowed.includes("PUT"));
+});

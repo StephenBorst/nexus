@@ -225,3 +225,22 @@ test("/theses/index: a split registered on-chain with TP2 not beyond TP1 is refu
   assert.equal(s.theses().length, 0);
   assert.equal(s.env.LAB_STORE.m.get(REGISTRY_KEY(W)), undefined);
 });
+
+// 2026-11-20: Engine B's publish got "missing required fields" with no clue which. The reply now names the missing
+// fields and the key NAMES that arrived (never a value: bankrApiKey is a secret), and a wrong method names itself.
+test("a refused register names what is missing and which keys arrived, never a value", async () => {
+  const s = setup();
+  const noKey = call(); delete noKey.bankrApiKey;
+  const r = await s.go("/proxy/thesis-register", noKey);
+  assert.equal(r.status, 400);
+  assert.deepEqual(r.body.missing, ["bankrApiKey"]);
+  assert.ok(r.body.received.includes("walletAddress") && !r.body.received.includes("bankrApiKey"));
+  const wrapped = await s.go("/proxy/thesis-register", { body: call() });
+  assert.deepEqual(wrapped.body.received, ["body"], "a wrapped body shows as one key");
+  assert.equal(wrapped.body.missing.length, 7);
+  assert.ok(!JSON.stringify(wrapped.body).includes("bk_test"), "the key's value never comes back");
+  assert.equal(s.bk.submits, 0);
+  const put = await handleThesisRegistration(["proxy", "thesis-register"], new Request("https://og.test/proxy/thesis-register", { method: "PUT", body: "{}" }), s.env, {});
+  assert.equal(put.status, 405);
+  assert.deepEqual(await put.json(), { error: "method_not_allowed", received: "PUT", allowed: ["POST"] });
+});
