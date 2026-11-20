@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  marketTable, sortTable, sortValue, nextSort, smartLean, TABLE_COLUMNS, TABLE_MIN_OI_USD, TABLE_MAX, DEFAULT_SORT,
+  yourCoinsFirst, marketTable, sortTable, sortValue, nextSort, smartLean, TABLE_COLUMNS, TABLE_MIN_OI_USD, TABLE_MAX, DEFAULT_SORT,
   fundingCell, oiVolCell, gapCell, smartCell, forecastCell, newsCell, readsCell, usdShort,
 } from "./marketTable.mjs";
 
@@ -29,6 +29,7 @@ test("one row per perp over the OI floor, biggest first; the thin and the non-pe
   const t = marketTable({ futures: FUT, ...SOURCES, now: NOW });
   assert.deepEqual(t.rows.map((r) => r.coin), ["BTC", "RAY", "XAU"]);
   assert.equal(t.leftOut, 1);
+  assert.deepEqual(t.others.map((r) => r.coin), ["DUST"], "the thin ones are kept for pins, not shown");
   assert.deepEqual(t.unread, []);
   assert.ok(TABLE_MIN_OI_USD === 30_000 && TABLE_MAX === 40);
 });
@@ -66,7 +67,7 @@ test("a failed source = its column unread (null) and named, never 0", () => {
   for (const k of ["gap", "smart", "forecast", "news", "reads"]) assert.equal(btc[k], null, k);
   assert.equal(newsCell(btc), "unread");
   assert.equal(readsCell(btc), "unread");
-  assert.deepEqual(marketTable({ futures: null }), { rows: [], leftOut: 0, unread: ["markets"] });
+  assert.deepEqual(marketTable({ futures: null }), { rows: [], others: [], leftOut: 0, unread: ["markets"] });
 });
 
 test("the 2× smart rule", () => {
@@ -110,4 +111,32 @@ test("no combined score: no column sums others, and no copy ranks a coin", () =>
   assert.deepEqual(TABLE_COLUMNS.map((c) => c.id), ["coin", "funding", "oiVol", "gap", "smart", "forecast", "news", "reads", "oi"]);
   const src = readFileSync(new URL("./marketTable.mjs", import.meta.url), "utf8") + readFileSync(new URL("../pages/lab/MarketTable.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(src, /\bscore\s*[:=(]|conviction|top pick|signal strength|best (coin|trade)/i);
+});
+
+test("your coins first: watched coins stay on top whatever the sort; the rest sort normally underneath", () => {
+  const t = marketTable({ futures: FUT, ...SOURCES, now: NOW });
+  // by OI: BTC, RAY, XAU. Watching XAU keeps it on top.
+  let v = yourCoinsFirst(t, ["xau"]);
+  assert.deepEqual(v.pinned.map((r) => r.coin), ["XAU"]);
+  assert.deepEqual(v.rest.map((r) => r.coin), ["BTC", "RAY"]);
+  assert.equal(v.pinned[0].pinned, true);
+  // re-sorted by funding (size): RAY leads the rest, the pins still lead the table, sorted among themselves
+  v = yourCoinsFirst(t, ["BTC", "XAU"], "funding", "desc");
+  assert.deepEqual(v.pinned.map((r) => r.coin), ["XAU", "BTC"]);
+  assert.deepEqual(v.rest.map((r) => r.coin), ["RAY"]);
+  // a watched thin market still pins (marked thin); a coin Orderly doesn't list is named, not invented
+  v = yourCoinsFirst(t, ["DUST", "NOPE", "$BTC"]);
+  assert.deepEqual(v.pinned.map((r) => [r.coin, !!r.thin]), [["BTC", false], ["DUST", true]]);
+  assert.deepEqual(v.missing, ["NOPE"]);
+  // nothing watched = the table as it was
+  v = yourCoinsFirst(t, []);
+  assert.deepEqual(v.pinned, []);
+  assert.deepEqual(v.rest.map((r) => r.coin), ["BTC", "RAY", "XAU"]);
+});
+
+test("the table reads the device watchlist (no new data, no new source)", () => {
+  const ui = readFileSync(new URL("../pages/lab/MarketTable.tsx", import.meta.url), "utf8");
+  assert.match(ui, /readWatch\(\)/);
+  assert.match(ui, /WATCH_EVENT/);
+  assert.match(ui, /yourCoinsFirst\(/);
 });

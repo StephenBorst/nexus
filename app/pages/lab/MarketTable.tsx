@@ -2,6 +2,8 @@
 // column, sortable by any of them. GET /intel/table (lab-api routes-table.mjs, rules app/lib/marketTable.mjs). No
 // combined score; the default order is open interest, and a cell past a stated line is marked, never summed. Tapping a
 // row opens the coin's drawer. Phone: the coin column stays put while the rest scrolls sideways.
+// YOUR COINS FIRST (borst 2026-11-20): coins on this device's watchlist (the drawer's ☆, or the ☆ on a row) stay on top
+// whatever the table sorts by; they sort among themselves by the same column, everything else sorts underneath.
 import { useEffect, useMemo, useState } from "react";
 import { C, MONO, UI, SIGNAL } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
@@ -10,9 +12,12 @@ import { pressKey } from "@/utils/a11y";
 import { openMarket } from "@/lib/marketDrawerEvent.mjs";
 import { boardsAt, boardForColumn } from "@/lib/intelLenses.mjs";
 import {
-  TABLE_COLUMNS, DEFAULT_SORT, sortTable, nextSort, usdShort, fundingCell, oiVolCell, gapCell, smartCell, forecastCell,
-  newsCell, readsCell,
+  TABLE_COLUMNS, DEFAULT_SORT, nextSort, usdShort, fundingCell, oiVolCell, gapCell, smartCell, forecastCell,
+  newsCell, readsCell, yourCoinsFirst,
 } from "@/lib/marketTable.mjs";
+import { readWatch, toggleWatchCoin } from "@/lib/watchStore";
+import { WATCH_EVENT, WATCH_MAX } from "@/lib/watchlist.mjs";
+import { wireWhen } from "@/lib/wire.mjs";
 
 const TABLE_URL = "https://og.nexustradinglabs.com/intel/table";
 const REFRESH_MS = 60_000;
@@ -24,8 +29,9 @@ type Row = {
   funding8hPct: number | null; fundingPast: "LONGS" | "SHORTS" | null; oiVol: number | null; oiVolPast: boolean;
   gap: number | null; smart: { long: number; short: number; side: string } | null;
   forecast: { divergent: number; total: number } | null; news: number | null; reads: Array<{ axis: string; side: string }> | null;
+  pinned?: boolean; thin?: boolean;
 };
-type Table = { rows: Row[]; leftOut: number; unread: string[]; builtAt: number };
+type Table = { rows: Row[]; others?: Row[]; leftOut: number; unread: string[]; builtAt: number };
 
 const price = (p: number) => (p >= 1000 ? p.toLocaleString("en-US", { maximumFractionDigits: 0 }) : p >= 1 ? p.toFixed(2) : p.toPrecision(3));
 
@@ -36,6 +42,18 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
   const [sort, setSort] = useState<{ col: string; dir: string }>({ ...DEFAULT_SORT });
   const [all, setAll] = useState(false);
   const [help, setHelp] = useState(false);
+  const [watched, setWatched] = useState<string[]>(() => readWatch().coins);
+  const [full, setFull] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  // the device watchlist: the drawer's ☆, the Watching panel and this table stay in step (WATCH_EVENT)
+  useEffect(() => {
+    const sync = () => setWatched(readWatch().coins);
+    window.addEventListener(WATCH_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => { window.removeEventListener(WATCH_EVENT, sync); window.removeEventListener("storage", sync); };
+  }, []);
+  const star = (coin: string) => { const r = toggleWatchCoin(coin); setFull(r.full); };
 
   useEffect(() => {
     let alive = true;
@@ -43,12 +61,52 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
       .then((j) => { if (!alive) return; if (Array.isArray(j?.rows)) { setTable(j as Table); setFailed(false); } else setFailed(true); })
       .catch(() => { if (alive) setFailed(true); });
     load();
-    const iv = setInterval(load, REFRESH_MS);
+    const iv = setInterval(() => { load(); setNow(Date.now()); }, REFRESH_MS);
     return () => { alive = false; clearInterval(iv); };
   }, []);
 
-  const sorted = useMemo(() => (table ? (sortTable(table.rows, sort.col, sort.dir) as Row[]) : []), [table, sort]);
+  const view = useMemo(() => (table ? yourCoinsFirst(table, watched, sort.col, sort.dir) as { pinned: Row[]; rest: Row[]; missing: string[] } : { pinned: [], rest: [], missing: [] }), [table, watched, sort]);
+  const sorted = view.rest;
   const shown = all ? sorted : sorted.slice(0, FIRST);
+  const group = (label: string) => (
+    <tr aria-hidden="true">
+      <td colSpan={TABLE_COLUMNS.length} style={{ padding: 0, borderTop: `1px solid ${C.borderStrong}` }}>
+        <div style={{ position: "sticky", left: 0, display: "inline-block", padding: "6px 10px", fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.text.muted }}>{label}</div>
+      </td>
+    </tr>
+  );
+  const renderRow = (r: Row) => {
+    const on = watched.includes(r.coin);
+    return (
+      <tr key={r.coin} role="button" tabIndex={0} aria-label={`Open ${r.coin}`} onClick={() => openMarket(r.coin)} onKeyDown={pressKey(() => openMarket(r.coin))}
+        style={{ cursor: "pointer", borderTop: `1px solid ${C.border}` }}>
+        <td style={{ position: "sticky", left: 0, zIndex: 1, background: C.canvas, padding: "8px 10px 8px 4px", borderTop: `1px solid ${C.border}`, whiteSpace: "nowrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button type="button" aria-pressed={on} aria-label={on ? `Unpin ${r.coin}` : `Pin ${r.coin} to the top`} title={on ? "Watching: pinned to the top" : "Watch: pin to the top"}
+              onClick={(e) => { e.stopPropagation(); star(r.coin); }} onKeyDown={(e) => e.stopPropagation()}
+              style={{ fontFamily: UI, fontSize: 15, lineHeight: 1, padding: "4px", background: "none", border: "none", cursor: "pointer", color: on ? C.text.bright : C.text.faint }}>{on ? "★" : "☆"}</button>
+            <div>
+              <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: C.text.bright }}>{r.coin}</div>
+              <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted }}>
+                {price(r.price)}{" "}
+                {r.change24hPct != null && <span style={{ color: r.change24hPct > 0 ? C.pos : r.change24hPct < 0 ? C.neg : C.text.muted }}>{r.change24hPct > 0 ? "+" : r.change24hPct < 0 ? "−" : ""}{Math.abs(r.change24hPct).toFixed(1)}%</span>}
+                {r.thin && <span> · thin</span>}
+              </div>
+            </div>
+          </div>
+        </td>
+        {td(fundingCell(r), { past: !!r.fundingPast })}
+        {td(oiVolCell(r), { past: r.oiVolPast })}
+        {td(gapCell(r), { dim: r.gap == null })}
+        {td(smartCell(r), { dim: !r.smart || r.smart.side === "NONE" })}
+        {td(forecastCell(r), { dim: !r.forecast || r.forecast.divergent === 0 })}
+        {td(newsCell(r), { dim: !r.news })}
+        <td title={r.reads && r.reads.length ? r.reads.map((x) => `${x.axis} (${x.side.toLowerCase()})`).join(", ") : undefined}
+          style={{ padding: "10px", textAlign: "right", fontFamily: MONO, fontSize: 12, color: r.reads && r.reads.length ? C.text.bright : C.text.muted }}>{readsCell(r)}</td>
+        {td(usdShort(r.oiUsd), { dim: true })}
+      </tr>
+    );
+  };
 
   const th = (col: string, label: string, align: "left" | "right" = "right") => {
     const on = sort.col === col;
@@ -76,7 +134,7 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
         </button>
       </div>
       <div style={{ fontFamily: UI, fontSize: 13, color: C.text.muted, marginTop: 4, lineHeight: 1.45 }}>
-        One row per coin, each input in its own column. Tap a header to sort, a row to open the coin. A marked cell is past its stated line. Nothing here adds up into a call.
+        One row per coin, each input in its own column. Tap a header to sort, a row to open the coin, ☆ to keep a coin on top. A marked cell is past its stated line. Nothing here adds up into a call.
       </div>
       {help && (
         <dl style={{ margin: "10px 0 0", fontFamily: UI, fontSize: 12, lineHeight: 1.5, color: C.text.fog }}>
@@ -105,27 +163,10 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
               <tr>{TABLE_COLUMNS.map((c) => th(c.id, c.label, c.id === "coin" ? "left" : "right"))}</tr>
             </thead>
             <tbody>
-              {shown.map((r) => (
-                <tr key={r.coin} role="button" tabIndex={0} aria-label={`Open ${r.coin}`} onClick={() => openMarket(r.coin)} onKeyDown={pressKey(() => openMarket(r.coin))}
-                  style={{ cursor: "pointer", borderTop: `1px solid ${C.border}` }}>
-                  <td style={{ position: "sticky", left: 0, zIndex: 1, background: C.canvas, padding: "8px 10px", borderTop: `1px solid ${C.border}`, whiteSpace: "nowrap" }}>
-                    <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: C.text.bright }}>{r.coin}</div>
-                    <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted }}>
-                      {price(r.price)}{" "}
-                      {r.change24hPct != null && <span style={{ color: r.change24hPct > 0 ? C.pos : r.change24hPct < 0 ? C.neg : C.text.muted }}>{r.change24hPct > 0 ? "+" : r.change24hPct < 0 ? "−" : ""}{Math.abs(r.change24hPct).toFixed(1)}%</span>}
-                    </div>
-                  </td>
-                  {td(fundingCell(r), { past: !!r.fundingPast })}
-                  {td(oiVolCell(r), { past: r.oiVolPast })}
-                  {td(gapCell(r), { dim: r.gap == null })}
-                  {td(smartCell(r), { dim: !r.smart || r.smart.side === "NONE" })}
-                  {td(forecastCell(r), { dim: !r.forecast || r.forecast.divergent === 0 })}
-                  {td(newsCell(r), { dim: !r.news })}
-                  <td title={r.reads && r.reads.length ? r.reads.map((x) => `${x.axis} (${x.side.toLowerCase()})`).join(", ") : undefined}
-                    style={{ padding: "10px", textAlign: "right", fontFamily: MONO, fontSize: 12, color: r.reads && r.reads.length ? C.text.bright : C.text.muted }}>{readsCell(r)}</td>
-                  {td(usdShort(r.oiUsd), { dim: true })}
-                </tr>
-              ))}
+              {view.pinned.length > 0 && group("YOUR COINS")}
+              {view.pinned.map(renderRow)}
+              {view.pinned.length > 0 && group("EVERY MARKET")}
+              {shown.map(renderRow)}
             </tbody>
           </table>
         </div>
@@ -139,7 +180,10 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
               {all ? "Show fewer" : `Show all ${sorted.length}`}
             </button>
           )}
-          {table.leftOut > 0 && <span>{table.leftOut} thinner markets (under $30k open interest) left out.</span>}
+          {table.leftOut > 0 && <span>{table.leftOut} thinner markets (under $30k open interest) left out unless you watch one.</span>}
+          {view.missing.length > 0 && <span>Watching {view.missing.join(", ")}: not listed on Orderly right now.</span>}
+          {full && <span>Your watchlist holds {WATCH_MAX} coins. Unpin one first.</span>}
+          <span>Orderly markets, venues, smart money, forecasts, news and paper runs · updated {wireWhen(table.builtAt, now)}{wireWhen(table.builtAt, now) === "now" ? "" : " ago"}.</span>
           {table.unread.length > 0 && <span>Unread right now: {table.unread.map((u) => UNREAD_WORDS[u] ?? u).join(", ")}.</span>}
         </div>
       )}
