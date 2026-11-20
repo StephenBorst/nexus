@@ -28,7 +28,7 @@ type Trade = {
 };
 type TapeSummary = { fills: number; judged: number; onTape: number; near: number; off: number; noTrades: number; noData: number; averaged: number; pending: number; triggers?: number; markOnly?: number; line: string | null };
 type Run = {
-  ok?: boolean; error?: string; axis: string; wallet: string; target: number; unread?: boolean; count: number;
+  ok?: boolean; error?: string; axis: string; wallet: string; house?: boolean; target: number; unread?: boolean; count: number;
   remaining: number; complete: boolean; startedAt: string | null; windowed: boolean;
   tally: { win: number; loss: number; time: number; other: number };
   open: { n?: number; coin: string; side: string; openedAt: string | null; entry?: number | null; tape?: { entry: string } } | null; trades: Trade[];
@@ -99,13 +99,13 @@ export default function PaperRunPage() {
 
   return (
     <main style={{ maxWidth: 920, margin: "0 auto", padding: `${isMobile ? 24 : 48}px ${pad}px 64px`, fontFamily: UI, color: BRIGHT }}>
-      <PageMeta title={line ? `${axis} on paper` : "On paper"} description={line || "A cleared read’s paper run, every trade in R."} />
+      <PageMeta title={line ? `${axis} on paper` : "On paper"} description={line || "A read’s paper run, every trade in R."} />
       <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.2em", textTransform: "uppercase", color: FOG, marginBottom: 12 }}>
         <Link to="/proof" style={{ color: FOG, textDecoration: "none" }}>The proof</Link> · On paper
       </div>
 
       {state === "loading" && <p style={{ color: FOG, fontSize: 15 }}>Reading the paper record…</p>}
-      {state === "missing" && <p style={{ color: FOG, fontSize: 15 }}>No paper run for “{axis}”. Only a read that cleared its bar gets a paper wallet.</p>}
+      {state === "missing" && <p style={{ color: FOG, fontSize: 15 }}>No paper run for “{axis}”. Every registered read has one; a retired read doesn’t.</p>}
       {state === "failed" && <p style={{ color: FOG, fontSize: 15 }}>The paper record couldn’t be read right now. Nothing is shown rather than a guess.</p>}
 
       {state === "ok" && run && run.unread && (
@@ -272,7 +272,7 @@ export default function PaperRunPage() {
             <a href={`${AGENT_API}/signals/paper-run/${encodeURIComponent(axis)}`} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>The raw record (JSON)</a>
             <Link to="/proof" style={{ color: FOG }}>Back to the proof</Link>
           </div>
-          <p style={{ margin: "14px 0 0", color: MUTED, fontSize: 12 }}>Paper wallet {run.wallet}. Started {fmtDay(run.startedAt)}.</p>
+          <p style={{ margin: "14px 0 0", color: MUTED, fontSize: 12 }}>{run.house ? <>House paper run {run.wallet}: an id made from the read’s name, so no key exists for it and it trades on paper only. Judged by <a href={`https://github.com/StephenBorst/nexus/blob/main/docs/research/paper-judgment-house-runs.md`} target="_blank" rel="noopener noreferrer" style={{ color: MUTED }}>one signed page</a>.</> : <>Paper wallet {run.wallet}.</>} Started {fmtDay(run.startedAt)}.</p>
         </>
       )}
     </main>

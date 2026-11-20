@@ -20,6 +20,7 @@
 // This contract has no breakeven stop: a trade that touches neither level closes at its 168h time stop.
 
 import { registrationFor, PAPER_MIN_TRADES } from "./readPipeline.mjs";
+import { HOUSE_PAPER_IDS } from "./housePaper.mjs";
 import { R_CONTRACT } from "./rContract.mjs";
 import { entryKey, exitKeyOf, walletLegs, tapeSummary, tapeLine } from "./paperTape.mjs";
 import { BRAND } from "./brand.mjs";
@@ -55,9 +56,11 @@ export function tradeR(row) {
  */
 export function paperRun(axis, state, tape = null, { wallet: claimed = null, candles = null } = {}) {
   const reg = registrationFor(axis);
-  const wallet = reg?.paperWallet || (reg ? claimed : null) || null;
+  // the read's own paper wallet (code, then a signed claim), else its keyless house paper run (housePaper.mjs)
+  const wallet = reg?.paperWallet || (reg ? claimed : null) || (reg ? HOUSE_PAPER_IDS[axis] : null) || null;
   if (!wallet) return null;
-  const base = { axis, wallet, target: PAPER_MIN_TRADES, registeredAt: reg.registeredAt || null, doc: reg.doc || null };
+  const house = String(wallet).toLowerCase() === HOUSE_PAPER_IDS[axis];
+  const base = { axis, wallet, house, target: PAPER_MIN_TRADES, registeredAt: reg.registeredAt || null, doc: reg.doc || null };
   if (!state || typeof state !== "object") return { ...base, unread: true };
   // The record starts where exec's state does (a paper reset restarts it).
   const since = Math.max(ms(state.started_at) ?? 0, ms(state.paper_reset_at) ?? 0);
@@ -147,3 +150,13 @@ export function paperRunSnapshotHtml(run) {
 
 /** Every read with a paper wallet (for the sitemap). */
 export { REGISTERED_READS } from "./readPipeline.mjs";
+
+// ── One line per board row (/proof): the run's trade COUNT, never an R, a sum or a dollar figure ─────────────────────
+/** @param {{count?:number, target?:number, open?:boolean, unread?:boolean}|null} c one row of GET /signals/paper-counts */
+export function paperCountLine(c) {
+  if (!c) return null;
+  if (c.unread) return "Paper run: record unread right now";
+  const n = Number(c.count);
+  if (!Number.isFinite(n)) return null;
+  return `Paper run: ${n} of ${c.target ?? PAPER_MIN_TRADES} trades${c.open ? " · 1 open" : ""}`;
+}

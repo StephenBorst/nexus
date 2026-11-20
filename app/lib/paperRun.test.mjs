@@ -65,7 +65,7 @@ test("the record starts where exec's does: rows before a reset are left out; a r
 });
 
 test("no paper wallet = null; an unread state = unread, never zeros", () => {
-  assert.equal(paperRun("rsi_reset_deep", state()), null);
+  assert.equal(paperRun("session_momentum", state()), null);
   assert.equal(paperRun("nope", state()), null);
   const u = paperRun("level_reclaim", null);
   assert.equal(u.unread, true);
@@ -84,7 +84,7 @@ test("GET /signals/paper-run/:axis: public JSON, 404 without a paper wallet, unr
   const body = await ok.json();
   assert.equal(body.ok, true);
   assert.equal(body.count, 3);
-  const missing = await handlePaperRun(["signals", "paper-run", "rsi_reset_deep"], req(), { NEXUS_AGENT: kvWith(null) });
+  const missing = await handlePaperRun(["signals", "paper-run", "session_momentum"], req(), { NEXUS_AGENT: kvWith(null) });
   assert.equal(missing.status, 404);
   const bad = await (await handlePaperRun(["signals", "paper-run", "level_reclaim"], req(), { NEXUS_AGENT: kvWith("{not json") })).json();
   assert.equal(bad.unread, true);
@@ -102,7 +102,7 @@ test("the run page's head: the live count; a read with no paper wallet = a real 
   assert.match(html, /<title>level_reclaim on paper: 3 of 30 trades \| Nexus Trading Labs<\/title>/);
   assert.match(html, /<meta name="description" content="level_reclaim on paper: 3 of 30 trades\. 1 TP · 2 SL\. Every trade in R/);
   assert.match(html, /<link rel="canonical" href="https:\/\/trade\.nexustradinglabs\.com\/proof\/paper\/level_reclaim" \/>/);
-  const missing = await gatePaperRunPage({ axis: "rsi_reset_deep", loadApp, fetchImpl: api(404, { ok: false }) });
+  const missing = await gatePaperRunPage({ axis: "session_momentum", loadApp, fetchImpl: api(404, { ok: false }) });
   assert.equal(missing.status, 404);
   assert.equal(missing.headers.get("X-Robots-Tag"), "noindex");
   const down = await gatePaperRunPage({ axis: "level_reclaim", loadApp, fetchImpl: api(503, {}) });
@@ -193,4 +193,33 @@ test("the page's Function writes the snapshot and asks lab-api through the edge 
   assert.deepEqual(asked.cf, { cacheTtl: 60, cacheEverything: true });
   assert.match(html, /class="nx-paper-snapshot"/);
   assert.match(html, /<title>level_reclaim on paper: 3 of 30 trades/);
+});
+
+// ── House paper runs (app/lib/housePaper.mjs): a read with no paper wallet of its own runs its keyless house id ─────
+import { HOUSE_PAPER_IDS as HOUSE_IDS } from "./housePaper.mjs";
+import { paperCountLine } from "./paperRun.mjs";
+
+test("a read without its own paper wallet shows its house run; its own wallet always wins", async () => {
+  const { paperRun: run } = await import("./paperRun.mjs");
+  const h = run("session_fade", null);
+  assert.equal(h.wallet, HOUSE_IDS.session_fade);
+  assert.equal(h.house, true);
+  assert.equal(h.unread, true);
+  const own = run("level_reclaim", null);
+  assert.equal(own.wallet, "0x95e26E980e300C34360933b849457F42c6Bd7622");
+  assert.equal(own.house, false);
+  assert.equal(run("session_momentum", null), null, "retired: no run");
+  assert.equal(run("not_a_read", null), null);
+});
+
+test("the board line is a count only: never an R, a sum, a percent or a dollar figure", () => {
+  assert.equal(paperCountLine({ count: 3, target: 30, open: true }), "Paper run: 3 of 30 trades · 1 open");
+  assert.equal(paperCountLine({ count: 0, target: 30, open: false }), "Paper run: 0 of 30 trades");
+  assert.equal(paperCountLine({ unread: true }), "Paper run: record unread right now");
+  assert.equal(paperCountLine(null), null);
+  assert.equal(paperCountLine({ count: "x" }), null);
+  for (const line of [paperCountLine({ count: 12, target: 30, open: true }), paperCountLine({ count: 30, target: 30 })]) {
+    assert.doesNotMatch(line, /\$|\dR\b|%/);
+    assert.doesNotMatch(line, /pnl|profit|\bwin|loss|net/i);
+  }
 });

@@ -256,7 +256,11 @@ product is what sits on top:
   TRADEABLE/PAPER with no lock); `HOUSE_JUDGMENTS` in paperJudge.mjs (wallet = the house id, reset cut-off 2026-11-20).
   `parityEvents` loads all `READ_SERIES` + BTC context for a REGISTERED_READ config (it used to load only the two older
   reads' series, so house parity would have read DRIFT); the tape checker covers the house ids; `usePaperJudgments`
-  reads their verdicts for the CLEARED badge. Next: "Paper: N of 30" on /proof rows, counts only. **Paper-wallet registration (borst 2026-11-14, `app/lib/paperClaim.mjs`,
+  reads their verdicts for the CLEARED badge. **On /proof** (2026-11-20): `paperRun` falls back to the read's house
+  id (own wallet, then claim, then house; `house: true`), so `/proof/paper/:axis` + its link card work for every run;
+  `GET /signals/paper-counts` (routes-paperrun.mjs, 60 s KV cache `paper:counts:v1`) = every read's run as a COUNT
+  (wallet, house, count, target, open; unread, never 0); each board row prints `paperCountLine` ("Paper run: 3 of 30
+  trades · 1 open →", `usePaperCounts`), never an R, sum or dollar figure. **Paper-wallet registration (borst 2026-11-14, `app/lib/paperClaim.mjs`,
   `routes-paperclaim.mjs`):** no more hand-made PR per wallet. On `/ops/revenue` (Paper wallets box) the owner pastes a
   fresh wallet and signs `paperClaimMessage` (5 min; Safe owner / `OPS_WALLETS`). `POST /pipeline/paper-wallet` binds it
   only if the read is SERVED TRADEABLE (stored scoreboard, unread = 503), has a `PAPER_SETUPS` entry (brain mode + preset;
