@@ -35,7 +35,7 @@ type Run = {
   tape?: TapeSummary;
   quiet?: { text: string; ageMin: number; stale: boolean; checkedAt: number } | null;
 };
-type Judgment = { ok?: boolean; verdict: string; target: number; signedAt: string; feeBps: number; line: string | null; recorded?: boolean };
+type Judgment = { ok?: boolean; verdict: string; target: number; signedAt: string; feeBps: number; line: string | null; recorded?: boolean; badgeLine?: string | null };
 
 // Each fill against Orderly's public 1-minute tape (app/lib/paperTape.mjs). Not money: no green or red.
 const TAPE_MARK: Record<string, { mark: string; word: string }> = {
@@ -161,12 +161,15 @@ export default function PaperRunPage() {
                 The verdict at {judge.target} · rules locked {String(judge.signedAt).slice(0, 10)}
               </div>
               {judge.line && <p style={{ margin: "0 0 10px", fontSize: 15, lineHeight: 1.6, color: BRIGHT }}>{judge.line}</p>}
+              {/* badge bar v2 (signed 2026-11-20): a PASS also has to beat 90% of 300 matched random entries for the badge */}
+              {judge.badgeLine && <p style={{ margin: "0 0 10px", fontSize: 14, lineHeight: 1.6, color: FOG }}>{judge.badgeLine}</p>}
               <ul style={{ margin: 0, paddingLeft: 18, color: FOG, fontSize: 14, lineHeight: 1.7 }}>
                 <li>The first {judge.target} trades only. Each one’s net = its move − {judge.feeBps} bps taker fee on each side − the funding it paid while held.</li>
                 <li>Mean net above 0 bps = pass. At or below 0 = fail. Each trade weighs the same.</li>
                 <li>Fill prices come from the public tape. A fill outside what traded is judged at the worse of its price and the nearest traded price: it can only hurt the run. A fill with no bar to check is counted and named.</li>
                 <li>Parity must read clean: every entry paired with a graded event, every event the agent was free to take taken. Drift holds the verdict until it’s explained.</li>
                 <li>A reset after the rules were locked ends the run unjudged. The verdict is recorded once and never rewritten. It arms nothing.</li>
+                <li>The badge asks one more thing of a pass: the same 30 trades must beat at least 90% of 300 random entries on the same coins and side, inside the run’s own window, with the same exit and fees. Computed once, stored with the verdict.</li>
               </ul>
               <p style={{ margin: "10px 0 0", fontSize: 12.5 }}>
                 <a href={`${AGENT_API}/signals/paper-judge/${encodeURIComponent(axis)}`} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>The judgment, as computed (JSON)</a>

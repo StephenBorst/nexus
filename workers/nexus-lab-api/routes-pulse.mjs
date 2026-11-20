@@ -27,7 +27,7 @@ async function recordedJudgments(env, sc) {
   const out = {};
   for (const r of Array.isArray(sc?.pipeline?.reads) ? sc.pipeline.reads : []) {
     if (!r || typeof r.axis !== "string" || (r.stage !== "TRADEABLE" && r.stage !== "PAPER")) continue;
-    try { const raw = await env.LAB_STORE.get(PJUDGE_KEY(r.axis)); const j = raw ? JSON.parse(raw) : null; if (j?.verdict) out[r.axis] = { recorded: true, verdict: j.verdict }; } catch { /* unread: no claim */ }
+    try { const raw = await env.LAB_STORE.get(PJUDGE_KEY(r.axis)); const j = raw ? JSON.parse(raw) : null; if (j?.verdict) out[r.axis] = { recorded: true, verdict: j.verdict, randomCheck: j.randomCheck || null }; /* badge bar v2: the check rides with the PASS */ } catch { /* unread: no claim */ }
   }
   return out;
 }

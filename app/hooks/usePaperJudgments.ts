@@ -6,8 +6,14 @@ import { sharedJson } from "@/lib/sharedJson.mjs";
 import { HOUSE_PAPER_IDS } from "@/lib/housePaper.mjs";
 
 const API = "https://og.nexustradinglabs.com";
-export type Judgment = { recorded: boolean; verdict?: string };
+export type Judgment = { recorded: boolean; verdict?: string; random?: string; randomPct?: number | null; randomUsable?: number | null; target?: number };
 type ReadRow = { axis: string; stage: string; paperWallet?: string | null };
+
+// What the badge needs from a served judgment: recorded, verdict and the v2 random check (app/lib/badgeBar.mjs).
+const slim = (j: Record<string, unknown>): Judgment => {
+  const rc = (j.randomCheck || null) as { verdict?: string; pctBeaten?: number | null; usable?: number | null } | null;
+  return { recorded: j.recorded === true, verdict: j.verdict as string | undefined, random: rc?.verdict, randomPct: rc?.pctBeaten ?? null, randomUsable: rc?.usable ?? null, target: j.target as number | undefined };
+};
 
 export function usePaperJudgments(reads: ReadRow[] | null | undefined): Record<string, Judgment> {
   const [judgments, setJudgments] = useState<Record<string, Judgment>>({});
@@ -18,7 +24,7 @@ export function usePaperJudgments(reads: ReadRow[] | null | undefined): Record<s
     Promise.all(key.split(",").map((ax) => sharedJson(`${API}/signals/paper-judge/${encodeURIComponent(ax)}`).catch(() => null).then((j) => [ax, j] as const)))
       .then((pairs) => {
         if (!live) return;
-        setJudgments(Object.fromEntries(pairs.filter(([, j]) => j && typeof j === "object").map(([ax, j]) => [ax, { recorded: (j as { recorded?: boolean }).recorded === true, verdict: (j as { verdict?: string }).verdict }])));
+        setJudgments(Object.fromEntries(pairs.filter(([, j]) => j && typeof j === "object").map(([ax, j]) => [ax, slim(j as Record<string, unknown>)])));
       });
     return () => { live = false; };
   }, [key]);

@@ -71,6 +71,28 @@ test("at 30 with parity clean the verdict is recorded once, with its trades, and
   assert.equal(res.status, 200);
   assert.deepEqual([body.recorded, body.verdict, body.trades.length], [true, "PASS", 30]);
   assert.match(body.line, /^Passed at 30 trades: \+95 bps a trade/);
+  // badge bar v2: the PASS carries its random-entry check, run once with it. No candle:hist here = UNREAD, the badge waits.
+  assert.equal(rec.randomCheck.verdict, "UNREAD");
+  assert.equal(rec.randomCheck.seed, 20261120);
+  assert.match(body.badgeLine, /random-entry check is unread/);
+});
+
+test("badge bar v2: a PASS is stored with its 300 replays from the coins' hourly tape, once", async () => {
+  const { env, eventsFor, after } = setup(30);
+  // ETH's recorded hours across the run's window and a week past it, flat and quiet: random entries net ~ −5 bps of fees
+  const bars = [];
+  for (let t = T0 - 100 * H; t <= T0 + 520 * H; t += H) {
+    const c = 100 * (1 + 0.004 * Math.sin(t / H / 7));
+    bars.push({ t, o: c, h: c * 1.003, l: c * 0.997, c });
+  }
+  env.NEXUS_AGENT.m.set("candle:hist:PERP_ETH_USDC", JSON.stringify(bars));
+  await runPaperJudge(env, { eventsFor, nowMs: () => after });
+  const rec = JSON.parse(env.LAB_STORE.m.get(PJUDGE_KEY("level_reclaim")));
+  assert.equal(rec.randomCheck.runs, 300);
+  assert.equal(rec.randomCheck.means.length, 300);
+  assert.equal(rec.randomCheck.judgedMeanBps, 94.975, "move − fees, no funding (+100 bps move, 2.5 + 2.525 fees)");
+  assert.equal(rec.randomCheck.verdict, "BEAT");
+  assert.equal(rec.randomCheck.pctBeaten, 100);
 });
 
 test("an unmatched entry is DRIFT: HELD, nothing recorded", async () => {

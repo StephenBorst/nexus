@@ -16,6 +16,7 @@ export const DIGEST_STATE_KEY = "ops:digest:state:v1"; // LAB_STORE: what the la
 export const DIGEST_DAY_KEY = (day) => `ops:digest:sent:${day}`;
 export const SWEEP_NUDGE_USDC = 100;
 
+import { beatsRandom } from "./badgeBar.mjs";
 import { stageSignRefusal } from "./promotionLock.mjs";
 import { engineAlerts, enginesLines, quietWallets } from "./engineBeat.mjs";
 
@@ -67,6 +68,21 @@ export function verdictSteps(p, { plan = null, liftWallet = null, stage, lock = 
     ] };
   }
   if (p.verdict !== "PASS") return null;
+  // badge bar v2 (docs/research/badge-bar-v2.md, signed 2026-11-20): a PASS is CLEARED only if its 30 trades also beat
+  // ≥ 90% of 300 matched random entries. A plan can't be signed otherwise (livePlanSign.mjs), so no steps are listed.
+  if (!beatsRandom(p)) {
+    const c = p.randomCheck;
+    if (c?.verdict === "UNREAD") {
+      return { head: `${p.axis} PASSED its 30-trade judgment, but its random-entry check is unread (${c.usable ?? 0} of 300 replays usable): the badge waits.`, steps: [
+        { state: "next", text: "Nothing can be signed until the check reads. The paper wallet keeps running." },
+      ] };
+    }
+    return { head: c?.verdict === "DIDNT_BEAT"
+      ? `${p.axis} PASSED its 30 trades after fees but didn't beat random entries on the same coins and side (${Math.round(c.pctBeaten)}% of 300, the bar is 90%): not CLEARED. Nothing goes live.`
+      : `${p.axis} PASSED its 30 trades, but no random-entry check was recorded with it: not CLEARED. Nothing goes live.`, steps: [
+      { state: "next", text: "The read keeps its served stage and its paper record. No live plan can be signed under this run." },
+    ] };
+  }
   const steps = [
     plan
       ? { state: plan.signed ? "done" : "todo", text: `Refresh the live plan's numbers with Claude (they date from its draft), then sign it on ${APP}/ops/revenue. Signing arms nothing. ${REPO}/${plan.doc}` }

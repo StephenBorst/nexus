@@ -12,6 +12,7 @@
 // A signature ARMS NOTHING. Arming stays its own PR, by borst, in person: GRADED_EXIT_LIVE_LIFT stays empty until then.
 // Pure: no fetch, no KV.
 
+import { beatsRandom } from "./badgeBar.mjs";
 import { ownerSign } from "./paperClaim.mjs";
 import { stageSignRefusal } from "./promotionLock.mjs";
 
@@ -40,13 +41,21 @@ export function livePlanSignMessage(address, axis, sha256, ts) {
 /**
  * Why the owner can't sign this plan now (null = may sign).
  * @param {{ axis, verdict: string|null, planSha: string|null, sha: string, signed: object|null,
- *           stage: string|null, lock: object|null }} p   stage = the SERVED stage (null = board unread); lock = the
+ *           stage: string|null, lock: object|null, randomCheck?: object|null }} p   stage = the SERVED stage (null = board unread); lock = the
  *           recorded promotion lock (app/lib/promotionLocks.mjs), null = none
  */
-export function planSignRefusal({ axis, verdict, planSha, sha, signed, stage, lock }) {
+export function planSignRefusal({ axis, verdict, planSha, sha, signed, stage, lock, randomCheck = null }) {
   if (!LIVE_PLANS[axis] || !planSha) return { status: 404, error: "no_plan" };
   if (String(sha || "").toLowerCase() !== planSha) return { status: 409, error: "page_changed", sha256: planSha };
   if (verdict !== "PASS") return { status: 409, error: "not_licensed", detail: verdict ? `the 30-trade verdict is ${verdict}` : "no 30-trade verdict recorded yet" };
+  // badge bar v2 rule 8 (docs/research/badge-bar-v2.md, signed 2026-11-20): only a CLEARED read, so the PASS must also
+  // have beaten ≥ 90% of its 300 matched random entries (stored with the verdict)
+  if (!beatsRandom({ verdict, randomCheck })) {
+    const v = randomCheck?.verdict;
+    return { status: 409, error: "not_cleared", detail: v === "DIDNT_BEAT"
+      ? `the 30 trades didn't beat random entries on the same coins and side (${Math.round(randomCheck.pctBeaten)}% of 300, the bar is 90%)`
+      : v === "UNREAD" ? "the random-entry check is unread: the badge waits" : "no random-entry check recorded with the PASS" };
+  }
   const onStage = stageSignRefusal({ stage, lock: lock || null });
   if (onStage) return onStage;
   if (signed) return { status: 409, error: "already_signed" };

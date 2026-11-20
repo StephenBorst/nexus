@@ -89,7 +89,7 @@ export async function gatherFacts(env, { scorecardKey, nowMs = Date.now(), event
       axis: r.axis, wallet: w, count: run?.count ?? 0, target: run?.target ?? 30,
       closed24h: (run?.trades || []).filter((t) => nowMs - Date.parse(t.closedAt) <= DAY_MS),
       open: run?.open || null, quiet: state.current_position ? null : quietLine(signal, nowMs),
-      parity, parityNote, verdict: recorded?.verdict || null,
+      parity, parityNote, verdict: recorded?.verdict || null, randomCheck: recorded?.randomCheck || null,
       // The served stage + the recorded promotion lock (pipeline-if-then.md § "Backwards moves"): a PASS on a demoted
       // or locked read can't be signed, and the digest says so.
       stage: r.stage, lock: locks?.[r.axis] || null,

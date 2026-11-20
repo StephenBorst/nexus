@@ -12,6 +12,7 @@ import { isRevenueViewer } from "./revenue.mjs";
 import { ownersOf } from "./routes-revenue.mjs";
 import { withLock, LOCK_KEYS, LockBusy } from "./lock.mjs";
 import { readRecordedJudgment } from "./paperJudge.mjs";
+import { beatsRandom } from "../../app/lib/badgeBar.mjs";
 import { CLAIM_SIG_MAX_AGE_MS, CLAIM_SIG_SKEW_MS } from "../../app/lib/paperClaim.mjs";
 import { LIVE_PLAN_SIGS_KEY, livePlanSignMessage, planSignRefusal } from "../../app/lib/livePlanSign.mjs";
 import { LIVE_PLAN_TEXT } from "../../app/lib/livePlanText.mjs";
@@ -42,13 +43,16 @@ export async function handlePlanSign(parts, request, env, { now = Date.now, fetc
   if (!isSign) {
     if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "method not allowed" }, request, 405);
     if (!plan) return json({ error: "no_plan", axis }, request, 404);
-    const verdict = (await readRecordedJudgment(env, axis).catch(() => null))?.verdict || null;
+    const rec = await readRecordedJudgment(env, axis).catch(() => null);
+    const verdict = rec?.verdict || null;
     const signed = (await readPlanSigs(env))[axis]?.[plan.sha256] || null;
     const stage = await stageOf();
     const blocked = stageSignRefusal({ stage, lock: lockOf });
+    const cleared = beatsRandom(rec); // badge bar v2 rule 8
     return json({
       axis, doc: plan.doc, text: plan.text, sha256: plan.sha256, verdict, stage, locked: !!lockOf,
-      licensed: verdict === "PASS" && !blocked, ...(blocked ? { blocked: blocked.error, blockedDetail: blocked.detail } : {}), signed,
+      licensed: verdict === "PASS" && cleared && !blocked, beatsRandom: cleared, randomPct: rec?.randomCheck?.pctBeaten ?? null,
+      ...(blocked ? { blocked: blocked.error, blockedDetail: blocked.detail } : {}), signed,
     }, request);
   }
 
@@ -65,9 +69,10 @@ export async function handlePlanSign(parts, request, env, { now = Date.now, fetc
 
   try {
     return await lock(env, LOCK_KEYS.planSigs(), async () => {
-      const verdict = (await readRecordedJudgment(env, axis).catch(() => null))?.verdict || null;
+      const judged = await readRecordedJudgment(env, axis).catch(() => null);
+      const verdict = judged?.verdict || null;
       const sigs = await readPlanSigs(env);
-      const no = planSignRefusal({ axis, verdict, planSha: plan?.sha256 || null, sha, signed: plan ? sigs[axis]?.[plan.sha256] : null, stage: await stageOf(), lock: lockOf });
+      const no = planSignRefusal({ axis, verdict, planSha: plan?.sha256 || null, sha, signed: plan ? sigs[axis]?.[plan.sha256] : null, stage: await stageOf(), lock: lockOf, randomCheck: judged?.randomCheck || null });
       if (no) return json(no, request, no.status);
       let signer = null;
       try { signer = recoverEthAddress(livePlanSignMessage(address, axis, sha, ts), body.sig); } catch { signer = null; }

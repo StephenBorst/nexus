@@ -15,9 +15,10 @@ import { deployToAgent } from "@/utils/agentPrefill";
 import { C } from "@/config/theme";
 import { AXIS_BLURB, splitLabel, takeaway, sideBar, boardGroups, randomBar, tideLine } from "@/lib/signalCard.mjs";
 import { PROMOTION_LOCKS } from "@/lib/promotionLocks.mjs";
-import { usePaperJudgments } from "@/hooks/usePaperJudgments";
+import { usePaperJudgments, type Judgment } from "@/hooks/usePaperJudgments";
 import { usePaperCounts, type PaperCount } from "@/hooks/usePaperCounts";
 import { paperCountLine } from "@/lib/paperRun.mjs";
+import { badgeLine } from "@/lib/badgeBar.mjs";
 import { pipelineLine, countingSince, retiredGradedExit, retiredLine, archivedLine, NO_RETIRE_LINE, BADGE_RECHECK_LINE } from "@/lib/proofCopy.mjs";
 import { ARCHIVED_READS } from "@/lib/readPipeline.mjs";
 import Fold from "./Fold";
@@ -439,7 +440,7 @@ const FOLDS: Record<string, { title: string; note: string }> = {
 
 // One registered read on the "Being tested now" list: its name and how far along it is, nothing
 // else. Its grade on old data stays behind the tap (the full card, labelled as such).
-function TestRow({ a, reg, minEvents, since, cleared = false, paper }: { a: AxisRow; reg: Reg; minEvents: number; since: string; cleared?: boolean; paper?: PaperCount }) {
+function TestRow({ a, reg, minEvents, since, cleared = false, paper, judgment }: { a: AxisRow; reg: Reg; minEvents: number; since: string; cleared?: boolean; paper?: PaperCount; judgment?: Judgment }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const { main, aside } = splitLabel(a.label);
@@ -447,7 +448,9 @@ function TestRow({ a, reg, minEvents, since, cleared = false, paper }: { a: Axis
   // The number the row is ordered by: the share of random entries this read beat on new data (main coins). Not a grade.
   const pct = reg?.numbers?.beatsRandomPct;
   const share = typeof pct === "number" && Number.isFinite(pct) ? `beat ${Math.round(pct)}% of random` : null;
-  const paperLine = paperCountLine(paper ?? null);
+  // After a recorded PASS the badge line says whether it beat random entries too (badge bar v2); else the count.
+  const passLine = judgment?.recorded ? badgeLine(judgment) : null;
+  const paperLine = passLine ?? paperCountLine(paper ?? null);
   return (
     <div style={{ borderTop: `1px solid ${C.border}` }}>
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
@@ -546,7 +549,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
               </div>
               <div style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, color: MUTED, padding: "4px 4px 8px" }}>{SECTIONS[g.key].note}</div>
               {g.rows.length
-                ? <div style={{ borderBottom: `1px solid ${C.border}` }}>{g.rows.map(({ a, reg }) => <TestRow key={a.name} a={a} reg={reg} minEvents={minEvents} since={since} cleared={g.key === "cleared"} paper={paperCounts[a.name]} />)}</div>
+                ? <div style={{ borderBottom: `1px solid ${C.border}` }}>{g.rows.map(({ a, reg }) => <TestRow key={a.name} a={a} reg={reg} minEvents={minEvents} since={since} cleared={g.key === "cleared"} paper={paperCounts[a.name]} judgment={judgments[a.name]} />)}</div>
                 : <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, padding: "4px 4px 6px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, paddingTop: 12, paddingBottom: 12 }}>{NOTHING_CLEARED}</div>}
             </div>
           ))}
