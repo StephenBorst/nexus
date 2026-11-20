@@ -36,6 +36,8 @@ A wallet's job comes later: checking that the agent trades what was graded.
 
 **Retired.** A read is retired at 100 out-of-sample events or more, on the main card or on the holdout, if mean R is 0
 or below or if it is worse than random (BELOW_RANDOM) on its side. It is retired publicly and never re-tuned.
+_2026-11-20 (draft until signed): no longer a retirement. The same check is a label, "failing", set from each day's
+numbers; the read keeps running and is never final (`docs/research/pipeline-if-then.md` "Reads no longer retire")._
 
 ## Guardrails
 

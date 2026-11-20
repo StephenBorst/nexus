@@ -66,17 +66,32 @@ test("retired graded exits agree with the recorded snapshot, and read plainly", 
   assert.equal(retiredLine(null), "");
 });
 
-test("retired reads agree with the recorded snapshot, and read plainly", async () => {
-  const { RETIRED_READS, retiredRead, retiredReadLine } = await import("./proofCopy.mjs");
+// borst 2026-11-20 (pipeline-if-then.md "Reads no longer retire").
+test("reads no longer retire: nothing in the snapshot is RETIRED; the old retirements are said once on their rows", async () => {
+  const { RETIRED_UNDER_OLD_RULE, oldRetirementLine, failingLine, NO_RETIRE_LINE, BADGE_RECHECK_LINE } = await import("./proofCopy.mjs");
   const { readFileSync } = await import("node:fs");
   const snap = JSON.parse(readFileSync(new URL("../../docs/research/pipeline-stages.json", import.meta.url), "utf8"));
-  for (const axis of Object.keys(RETIRED_READS)) assert.equal(snap.reads[axis]?.stage, "RETIRED", axis);
-  for (const [axis, r] of Object.entries(snap.reads)) if (r.stage === "RETIRED") assert.ok(RETIRED_READS[axis], `${axis} is RETIRED in the snapshot but /proof doesn't record the date`);
-  assert.equal(retiredReadLine(retiredRead("session_momentum")), "Retired Nov 13, 2026: 112 out-of-sample events, mean \u22120.33R, worse than random. Never re-tuned.");
-  assert.equal(retiredReadLine(retiredRead("level_reclaim")), "Retired Nov 20, 2026: 118 out-of-sample events, mean 0.00R, mean R not above zero. Never re-tuned.");
-  assert.equal(retiredReadLine(retiredRead("confluence_follow")), "Retired Nov 20, 2026: 109 out-of-sample events, mean \u22120.11R, mean R below zero. Never re-tuned.");
-  assert.equal(retiredRead("nope"), null);
-  assert.equal(retiredReadLine(null), "");
+  for (const [axis, r] of Object.entries(snap.reads)) assert.notEqual(r.stage, "RETIRED", axis);
+  assert.deepEqual(Object.keys(RETIRED_UNDER_OLD_RULE).sort(), ["confluence_follow", "level_reclaim", "session_momentum"], "a closed list: nothing retires any more");
+  assert.equal(oldRetirementLine("session_momentum"), "Retired Nov 13 under the old rule (112 new events, mean \u22120.33R); that rule ended Nov 20.");
+  assert.equal(oldRetirementLine("level_reclaim"), "Retired Nov 20 under the old rule (118 new events, mean 0.00R); that rule ended Nov 20.");
+  assert.equal(oldRetirementLine("nope"), "");
+  assert.equal(failingLine({ failing: ["main card: 118 events, mean R 0"] }), "Failing the 100-event check (main card: 118 events, mean R 0). Keeps running; re-checked daily.");
+  assert.equal(failingLine({ failing: null }), "");
+  assert.equal(NO_RETIRE_LINE, "Nov 20: reads no longer retire. Every read keeps running; only CLEARED is a claim.");
+  assert.equal(BADGE_RECHECK_LINE, "Cleared reads are re-checked daily; a read that falls back loses the badge.");
+  for (const l of [NO_RETIRE_LINE, BADGE_RECHECK_LINE]) assert.doesNotMatch(l, /proven|edge/i);
+});
+
+test("pipelineLine: the failing label and an old retirement ride on the row's line", () => {
+  const l = pipelineLine({ axis: "level_reclaim", stage: "REGISTERED", next: "mean R > 0 with both halves agreeing", numbers: { events: 118 }, failing: ["main card: 118 events, mean R 0"] }, 30);
+  assert.equal(l.text, "118 events · failing");
+  assert.equal(l.state, "failing");
+  assert.equal(l.sub, "Needs mean R > 0 with both halves agreeing. Failing the 100-event check (main card: 118 events, mean R 0). Keeps running; re-checked daily. Retired Nov 20 under the old rule (118 new events, mean 0.00R); that rule ended Nov 20.");
+  const lead = pipelineLine({ stage: "LEAD", numbers: { events: 140, meanR: 0.2 }, failing: ["holdout: 100 events, mean R -0.1"] }, 30);
+  assert.equal(lead.state, "failing");
+  assert.match(lead.sub, /^A lead\. Not an edge yet\..*Failing the 100-event check \(holdout/);
+  assert.equal(pipelineLine({ stage: "LEAD", numbers: { events: 40, meanR: 0.2 } }, 30).state, "advanced", "no label, no change");
 });
 
 test("pipelineLine: an Edge read states the Edge line from pipeline-if-then.md", () => {

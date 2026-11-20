@@ -39,16 +39,19 @@ test("Paper with no preset still doesn't load; Paper with one does", () => {
   assert.deepEqual(SHELF_PRESETS, {}, "no read has an agent rule yet — a mapping is its own reviewed PR");
 });
 
-test("a failing read says so, with its retirement count date; retired sorts last", () => {
-  const rows = shelfRows(sc([reg("f", "REGISTERED", "mean R > 0 with both halves agreeing", { events: 40 }), reg("r", "RETIRED", null), reg("a", "REGISTERED", "5 more out-of-sample events")], []), NOW);
+test("a failing read says so, with the date it reaches the 100-event check; the labelled one sorts with the failing", () => {
+  const lab = { ...reg("l", "REGISTERED", "mean R > 0 with both halves agreeing", { events: 118 }), failing: ["main card: 118 events, mean R 0"] };
+  const rows = shelfRows(sc([reg("f", "REGISTERED", "mean R > 0 with both halves agreeing", { events: 40 }), lab, reg("a", "REGISTERED", "5 more out-of-sample events")], []), NOW);
   const f = rows.find((x) => x.id === "f");
   assert.equal(f.stageWord, "Failing");
-  assert.match(f.need, /Retired at 100 events unless it recovers/);
+  assert.match(f.need, /Labelled failing at 100 events unless it recovers/);
   assert.match(f.eta, /^100 events ~/);
+  const l = rows.find((x) => x.id === "l");
+  assert.equal(l.stageWord, "Failing");
+  assert.doesNotMatch(l.need, /Retired/);
   const reads = rows.filter((x) => x.kind === "read");
-  assert.equal(reads.at(-1).id, "r");
-  assert.match(reads.at(-1).reason, /never loads/);
-  assert.equal(rows.at(-1).stage, "RETIRED", "retired rows (the read + the retired graded exit) sort last");
+  assert.equal(reads[0].id, "a", "the counting read first, the failing ones after");
+  assert.equal(rows.at(-1).stage, "RETIRED", "the retired graded exit (its own bar, unchanged) sorts last");
 });
 
 test("the retired graded exit stays Retired even if the read grades PREDICTIVE again", () => {

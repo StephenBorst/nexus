@@ -245,8 +245,8 @@ product is what sits on top:
   public series). **House paper runs** (borst 2026-11-17, step 2; lab-api var `HOUSE_PAPER_RUNS = "true"` since 2026-11-20): one KEYLESS
   paper record per registered read (`app/lib/housePaper.mjs`): id = "0x" + sha256("nexus/house-paper/v1/" + read)[0:40]
   (`HOUSE_PAPER_IDS`, recomputed by test; no one holds a key, so no owner signature or trading key exists). 14 runs: every
-  registered read but `HOUSE_PAPER_SKIP` (level_reclaim + oi_div_reversal_4h have their own wallets, session_momentum is
-  RETIRED); a new registration adds its read in the same PR (test-pinned). Config = `LEVEL_RECLAIM_PAPER_CONFIG` field
+  registered read but `HOUSE_PAPER_SKIP` (level_reclaim + oi_div_reversal_4h have their own wallets, session_momentum was
+  retired Nov 13 under the old rule, a run for it is borst's call); a new registration adds its read in the same PR (test-pinned). Config = `LEVEL_RECLAIM_PAPER_CONFIG` field
   for field with `signalMode:"REGISTERED_READ"` + `read`. Setup job `housePaperSetup.mjs` (hourly): writes config, a fresh
   state (`started_at`) and the agent:users entry ONCE; a stored config that differs is reported, never rewritten. The
   agent routes 403 `house_paper_readonly` on every non-GET for a house id (before any owner check); exec refuses any
@@ -449,7 +449,11 @@ product is what sits on top:
   ONDO INJ ZRO). The holdout is graded separately, never pooled into the main card, `/intel/evidence` or
   `/signals/basis`, and no preset/default/wallet lists it. `GET /intel/universe` = read-only liquidity report.
 - **Read pipeline** (`docs/research/read-pipeline.md`, `app/lib/readPipeline.mjs`): REGISTERED → LEAD → EDGE → TRADEABLE →
-  PAPER, RETIRED. Only out-of-sample events (after `registeredAt`) count; back-graded history never does. A changed rule
+  PAPER. **Nothing retires** (borst 2026-11-20, pipeline-if-then.md "Reads no longer retire"): the 100-event check
+  (`failEvents`) is a `failing` label on the served row, set each build, never final; a failing read can't pass LEAD
+  and never wears CLEARED. Archive = by hand only (`ARCHIVED_READS`, empty). Registrations are frozen by fingerprint
+  (`app/lib/readFingerprints.mjs`, events on seeded tapes, `workers/nexus-lab-api/readFingerprint.mjs`; test-pinned),
+  not by a signature; signing stays for the badge bar (draft v2 = `docs/research/badge-bar-v2.md`). Only out-of-sample events (after `registeredAt`) count; back-graded history never does. A changed rule
   = a new name + a new dated registration. Stage triggers = `docs/research/pipeline-if-then.md`, applied one PR per
   trigger from the SERVED stage. Registered reads: rsi_reset_deep, level_reclaim, oi_div_reversal, session_momentum,
   confluence_follow (from 2026-10-17); oi_div_reversal_4h and oi_coil_break (from 2026-10-28, their own prereg pages); batch 3
@@ -587,7 +591,8 @@ product is what sits on top:
   `isCleared` in signalCard.mjs): "Every read, best first" = **Cleared** (served TRADEABLE/PAPER + no promotion lock +
   a RECORDED 30-trade paper PASS, read from `/signals/paper-judge/:axis`; empty = "Nothing has cleared yet.") → **Leads**
   (LEAD/EDGE/TRADEABLE/PAPER, not cleared) → **Still testing** (REGISTERED) → folds "Looked good on old data", "Worse
-  than random" → **Retired** last. Inside the first three: furthest stage, then `numbers.beatsRandomPct` (NEW data, main
+  than random" → **Archived** last (a failing read sits last in its own group; the board prints `NO_RETIRE_LINE` and
+  `BADGE_RECHECK_LINE`). Inside the first three: furthest stage, then `numbers.beatsRandomPct` (NEW data, main
   coins; shown on the row as "beat N% of random"), then events; never in-sample. The badge word is CLEARED, never
   "proven"; only a CLEARED read may be marketed or promoted. A user's tweak is a new read, CLEARED only via its own signed
   registration. **The headline claims only a CLEARED read** (2026-11-17): `proofHeadline(sc, now, { judgments, locks })`

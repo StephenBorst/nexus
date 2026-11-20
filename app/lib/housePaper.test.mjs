@@ -8,6 +8,7 @@ import {
   HOUSE_PAPER_IDS, HOUSE_PAPER_SKIP, HOUSE_PAPER_TAG, isHousePaper, housePaperRead, housePaperConfig, housePaperPlan,
 } from "./housePaper.mjs";
 import { REGISTERED_READS } from "./readPipeline.mjs";
+import { RETIRED_UNDER_OLD_RULE } from "./proofCopy.mjs";
 import { LEVEL_RECLAIM_MAIN_SYMBOLS, LEVEL_RECLAIM_PAPER_CONFIG } from "./levelReclaim.mjs";
 import { gradedExitRefusal } from "./gradedExit.mjs";
 import { BRAIN_READS, registeredReadRefusal } from "../../workers/nexus-lab-api/registeredReadLive.mjs";
@@ -20,13 +21,12 @@ test("each id is the hash of its read's name: no one holds a key for it", () => 
 });
 
 test("every registered read has a house run or a stated reason, never both", () => {
-  const stages = JSON.parse(readFileSync(new URL("../../docs/research/pipeline-stages.json", import.meta.url), "utf8"));
-  const stageOf = (r) => (stages.reads || stages)[r]?.stage;
   for (const r of REGISTERED_READS) {
     const has = r.axis in HOUSE_PAPER_IDS, skip = r.axis in HOUSE_PAPER_SKIP;
     assert.ok(has !== skip, `${r.axis}: a house run or a reason (exactly one)`);
     if (skip && /own paper wallet/.test(HOUSE_PAPER_SKIP[r.axis])) assert.ok(r.paperWallet, `${r.axis} has no own paper wallet`);
-    if (skip && /retired/.test(HOUSE_PAPER_SKIP[r.axis])) assert.equal(stageOf(r.axis), "RETIRED", r.axis);
+    if (skip && /old rule/.test(HOUSE_PAPER_SKIP[r.axis])) assert.ok(RETIRED_UNDER_OLD_RULE[r.axis], `${r.axis} wasn't retired under the old rule`);
+    if (skip) assert.match(HOUSE_PAPER_SKIP[r.axis], /own paper wallet|old rule/, `${r.axis}: no other reason to skip a read`);
     if (has) assert.ok(!r.paperWallet, `${r.axis} already has its own paper wallet`);
   }
   for (const k of [...Object.keys(HOUSE_PAPER_IDS), ...Object.keys(HOUSE_PAPER_SKIP)]) {

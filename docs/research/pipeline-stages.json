@@ -9,8 +9,8 @@
       "events": 39
     },
     "level_reclaim": {
-      "stage": "RETIRED",
-      "next": null,
+      "stage": "REGISTERED",
+      "next": "mean R > 0 with both halves agreeing",
       "events": 118
     },
     "oi_div_reversal": {
@@ -19,13 +19,13 @@
       "events": 63
     },
     "session_momentum": {
-      "stage": "RETIRED",
-      "next": null,
+      "stage": "REGISTERED",
+      "next": "mean R > 0 with both halves agreeing",
       "events": 165
     },
     "confluence_follow": {
-      "stage": "RETIRED",
-      "next": null,
+      "stage": "REGISTERED",
+      "next": "mean R > 0 with both halves agreeing",
       "events": 109
     },
     "oi_div_reversal_4h": {

@@ -68,9 +68,9 @@ export function overviewReads(board, { line = "main", minEvents = 30 } = {}) {
     const meanR = events ? r2(line === "holdout" ? (n.holdoutMeanR ?? o?.r?.meanR) : n.meanR) : null;
     const sides = Object.fromEntries(SIDES.map((s) => [s, sideStat(o, s)]));
     const words = [];
-    if (r.stage === "RETIRED") words.push("Retired. Kept on the board with its numbers.");
+    if (line === "main" && Array.isArray(r.failing) && r.failing.length) words.push("Failing the 100-event check. Still running.");
     else if (line === "main" && events < minEvents) words.push(`${minEvents - events} more new events before it is graded.`);
-    if (r.stage !== "RETIRED") for (const s of SIDES) { const w = sideWords(s, sides[s]); if (w && events >= 10) words.push(w); }
+    for (const s of SIDES) { const w = sideWords(s, sides[s]); if (w && events >= 10) words.push(w); }
     return { axis: r.axis, label: axes.get(r.axis)?.label ?? r.axis, stage: r.stage, side: r.side ?? "BOTH", next: r.next ?? null,
       registeredAt: r.registeredAt ?? null, events, meanR, sides, words };
   });

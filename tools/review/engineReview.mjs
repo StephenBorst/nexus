@@ -48,7 +48,7 @@ export function reviewModel({ board, pulse, paper = {} }) {
   const axes = new Map(board.axes.map((a) => [a.name, a]));
   const hold = new Map((Array.isArray(board.holdout?.axes) ? board.holdout.axes : Object.values(board.holdout?.axes || {})).map((a) => [a.name, a]));
   const rules = board.pipeline.rules || {};
-  const kill = rules.killEvents ?? 100;
+  const kill = rules.failEvents ?? rules.killEvents ?? 100;
   const tide = num(board.tide?.LONG?.meanR) != null && num(board.tide?.SHORT?.meanR) != null
     ? { since: day(board.tide.from), long: board.tide.LONG.meanR, short: board.tide.SHORT.meanR, markets: board.tide.markets ?? null } : null;
 
@@ -58,11 +58,12 @@ export function reviewModel({ board, pulse, paper = {} }) {
     const hsides = Object.fromEntries(SIDES.map((sd) => [sd, sideOf(h, sd)]));
     const n = r.numbers || {};
     const words = [];
-    if (r.stage === "RETIRED") words.push("Retired. Kept on the board with its numbers.");
+    const failing = Array.isArray(r.failing) && r.failing.length > 0;
+    if (failing) words.push("Failing the 100-event check. Still running.");
     else if ((n.events ?? 0) < (rules.minEvents ?? 30)) words.push(`${(rules.minEvents ?? 30) - (n.events ?? 0)} more events before it is graded.`);
-    if (r.stage !== "RETIRED") for (const sd of SIDES) { const w = sideWords(sd, sides[sd]); if (w && (n.events ?? 0) >= 10) words.push(w); }
+    for (const sd of SIDES) { const w = sideWords(sd, sides[sd]); if (w && (n.events ?? 0) >= 10) words.push(w); }
     const away = kill - (n.events ?? 0);
-    if (r.stage !== "RETIRED" && away > 0 && away <= 10 && num(n.meanR) != null && n.meanR <= 0) words.push(`${away} event${away === 1 ? "" : "s"} from the retirement check at mean ${fmtR(n.meanR)}.`);
+    if (!failing && away > 0 && away <= 10 && num(n.meanR) != null && n.meanR <= 0) words.push(`${away} event${away === 1 ? "" : "s"} from the 100-event check at mean ${fmtR(n.meanR)}.`);
     // A side that beats its own random on BOTH coin sets (out-of-sample, 10+ events each): the strongest thing a side can show.
     const both = SIDES.filter((sd) => sides[sd]?.n >= 10 && hsides[sd]?.n >= 10 && sides[sd].pct >= 95 && hsides[sd].pct >= 95);
     return { axis: r.axis, label: a?.label ?? r.axis, stage: r.stage, side: r.side ?? "BOTH", next: r.next ?? null, events: n.events ?? 0,
@@ -144,7 +145,7 @@ export function renderReview(m, { thisWeek = "" } = {}) {
   </div></section>
   <footer><span>Every number is read from the public API by tools/review/engineReview.mjs. A snapshot: these numbers move every hour.</span>
     <code>og.nexustradinglabs.com/intel/axis-backtest · asOf ${esc(m.asOf)}</code><code>/calls/pulse · /pipeline/paper-wallets · /signals/paper-run/:axis · /signals/paper-judge/:axis</code>
-    <span>Bar: ${esc(m.rules.minEvents ?? 30)} new events, mean R &gt; 0 with both halves agreeing; beat ${esc(m.rules.edgePct ?? 95)}% of random replays and each side with ${esc(m.rules.sideMinEvents ?? 20)}+ events at least ${esc(m.rules.sidePct ?? 50)}% of its own; holdout ≥ ${esc(m.rules.holdoutPct ?? 80)}%; exit test on ${esc(m.rules.exitMinTrades ?? 30)} trades; retirement check at ${esc(m.rules.killEvents ?? 100)} events.</span></footer>
+    <span>Bar: ${esc(m.rules.minEvents ?? 30)} new events, mean R &gt; 0 with both halves agreeing; beat ${esc(m.rules.edgePct ?? 95)}% of random replays and each side with ${esc(m.rules.sideMinEvents ?? 20)}+ events at least ${esc(m.rules.sidePct ?? 50)}% of its own; holdout ≥ ${esc(m.rules.holdoutPct ?? 80)}%; exit test on ${esc(m.rules.exitMinTrades ?? 30)} trades; failing label at ${esc(m.rules.failEvents ?? m.rules.killEvents ?? 100)} events (nothing retires).</span></footer>
 </div>`;
 }
 

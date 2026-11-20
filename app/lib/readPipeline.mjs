@@ -21,9 +21,12 @@
 //               position per market), nets > 0 over ≥ exitMinTrades out-of-sample trades.
 //   PAPER       TRADEABLE + a paper wallet set up for it (its own record + parity). Live money is a
 //               separate review, always.
-//   RETIRED     at ≥ killEvents out-of-sample events on the main card OR the holdout: mean R ≤ 0,
-//               or worse than random (BELOW_RANDOM) on its side. Shown publicly; never re-tuned.
-//               A changed rule = a NEW registration with a new date and a new name.
+//   failing     NOT a stage (borst 2026-11-20, pipeline-if-then.md "Reads no longer retire"; it was RETIRED,
+//               final, until then). At ≥ failEvents out-of-sample events on the main card OR the holdout:
+//               mean R ≤ 0, or worse than random (BELOW_RANDOM) on its side. A label the numbers set on
+//               every build: it can come and go, the read keeps running on paper, its stage is the ladder's
+//               as for any read, and a failing read never wears the CLEARED badge (signalCard isCleared).
+//               Never re-tuned: a changed rule = a NEW registration with a new date and a new name.
 
 import { PAPER_WALLET_RECORDS } from "./pipelineRecords.mjs";
 export const PIPELINE_RULES = Object.freeze({
@@ -32,13 +35,14 @@ export const PIPELINE_RULES = Object.freeze({
   holdoutMinEvents: 30,
   holdoutPct: 80,
   exitMinTrades: 30,
-  killEvents: 100,
+  failEvents: 100, // the 100-event check: a label since 2026-11-20 (was killEvents, the RETIRED stage)
   // borst 2026-11-16: a two-sided read reaches EDGE only if neither side trails its own random entry.
   sideMinEvents: 20,
   sidePct: 50,
 });
 
-export const STAGES = Object.freeze(["REGISTERED", "LEAD", "EDGE", "TRADEABLE", "PAPER", "RETIRED"]);
+// RETIRED left the ladder on 2026-11-20 (pipeline-if-then.md "Reads no longer retire"): a read is never final.
+export const STAGES = Object.freeze(["REGISTERED", "LEAD", "EDGE", "TRADEABLE", "PAPER"]);
 
 // The Paper gate (pipeline-if-then.md, signed 2026-10-23): 30+ paper trades, parity CLEAN, net positive after fees,
 // before a written live plan. /proof and the landing count toward it (signalProgress.mjs).
@@ -213,6 +217,12 @@ const CODED_READS = Object.freeze([
 export const REGISTERED_READS = Object.freeze(CODED_READS.map((r) => (r.paperWallet || !PAPER_WALLET_RECORDS[r.axis]?.wallet
   ? r : Object.freeze({ ...r, paperWallet: PAPER_WALLET_RECORDS[r.axis].wallet }))));
 
+// Reads borst archived BY HAND (pipeline-if-then.md "Reads no longer retire", 2026-11-20): never automatic, never set by a
+// worker, a job or the watcher (readPipeline.test.mjs greps for that). Shape: axis → { on: "YYYY-MM-DD", why, numbers }
+// (the served numbers that day, frozen). The board shows an archived read last with that record. Making it stop being
+// computed (scoreboard, brain, house run) is wired in the PR that archives the first read. Empty: nothing is archived.
+export const ARCHIVED_READS = Object.freeze({});
+
 export const registeredMs = (reg) => Date.parse(reg.registeredAt);
 export const registrationFor = (axis) => REGISTERED_READS.find((r) => r.axis === axis) || null;
 
@@ -226,7 +236,8 @@ const pct = (b) => (b && Number.isFinite(b.pctBeaten) ? b.pctBeaten : null);
  * @param reg      a REGISTERED_READS entry
  * @param oos      the scoreboard row for this axis graded on out-of-sample events only (main card)
  * @param holdout  the holdout line's row for this axis, out-of-sample events only (or null)
- * @returns {{ stage, reasons: string[], next: string|null, numbers }}
+ * @returns {{ stage, reasons: string[], next: string|null, numbers, failing: string[]|null }}
+ *          `failing` = the 100-event check's reasons (main card and/or holdout), or null. A label only.
  */
 export function pipelineStage(reg, oos, holdout, rules = PIPELINE_RULES) {
   const side = reg.side;
@@ -240,13 +251,17 @@ export function pipelineStage(reg, oos, holdout, rules = PIPELINE_RULES) {
     holdoutEvents: hr.samples, holdoutMeanR: hr.meanR, holdoutBeatsRandomPct: pct(hRnd),
     exitTrades: ex ? ex.samples : 0, exitNetBps: ex ? ex.netBps : null,
   };
-  const reasons = [];
+  // The 100-event check: a label set from today's numbers, never a stage and never final (2026-11-20).
+  const bad = (n, meanR, b) => n >= rules.failEvents && (meanR <= 0 || (b && b.verdict === "BELOW_RANDOM"));
+  const failing = [];
+  if (bad(r.samples, r.meanR, rnd)) failing.push(`main card: ${r.samples} events, mean R ${r.meanR}${rnd?.verdict === "BELOW_RANDOM" ? ", worse than random" : ""}`);
+  if (reg.holdout && bad(hr.samples, hr.meanR, hRnd)) failing.push(`holdout: ${hr.samples} events, mean R ${hr.meanR}${hRnd?.verdict === "BELOW_RANDOM" ? ", worse than random" : ""}`);
+  return { ...ladderStage(reg, r, rnd, hr, hRnd, ex, oos, numbers, rules), failing: failing.length ? failing : null };
+}
 
-  // RETIRED first: a dead read stays dead however the other line looks.
-  const dead = (n, meanR, b) => n >= rules.killEvents && (meanR <= 0 || (b && b.verdict === "BELOW_RANDOM"));
-  if (dead(r.samples, r.meanR, rnd)) reasons.push(`main card: ${r.samples} events, mean R ${r.meanR}${rnd?.verdict === "BELOW_RANDOM" ? ", worse than random" : ""}`);
-  if (reg.holdout && dead(hr.samples, hr.meanR, hRnd)) reasons.push(`holdout: ${hr.samples} events, mean R ${hr.meanR}${hRnd?.verdict === "BELOW_RANDOM" ? ", worse than random" : ""}`);
-  if (reasons.length) return { stage: "RETIRED", reasons, next: null, numbers };
+function ladderStage(reg, r, rnd, hr, hRnd, ex, oos, numbers, rules) {
+  const side = reg.side;
+  const reasons = [];
 
   if (r.samples < rules.minEvents) return { stage: "REGISTERED", reasons, next: `${rules.minEvents - r.samples} more out-of-sample events`, numbers };
   if (!(r.meanR > 0 && r.stable)) return { stage: "REGISTERED", reasons: [`mean R ${r.meanR}${r.stable ? "" : ", halves disagree"}`], next: "mean R > 0 with both halves agreeing", numbers };

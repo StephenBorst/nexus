@@ -11,10 +11,12 @@
 // into "19 more" is not news. Each change carries the trigger the signed page attaches to it, so the
 // PR that applies it names what to do. Nothing here writes, trades, flips a flag or opens anything.
 //
-// Two states are terminal, because the page says so: a read that is RETIRED stays retired ("never
-// re-tuned"), and a graded exit that FAILS is retired ("its wallet stays as a record"). If the served
-// value later leaves one of them, the watcher keeps the recorded state and reports the disagreement
-// as an issue ("the served stage stands and the disagreement is a bug to fix in its own PR").
+// One state is terminal, because the page says so: a graded exit that FAILS is retired ("its wallet stays
+// as a record"). If the served value later leaves it, the watcher keeps the recorded state and reports the
+// disagreement as an issue. Reads no longer retire (borst 2026-11-20, pipeline-if-then.md "Reads no longer
+// retire"): the 100-event check is a label on the served row (`failing`), set by the numbers each day and
+// never news, so a read's recorded stage is always a ladder stage. A served RETIRED (a board built before
+// that change) is reported as an issue and the recorded stage is kept.
 
 import { REGIME_WINDOW, REGIME_OUTCOMES, judgeRegimeWindow, regimeFromMs } from "./regimeWindow.mjs";
 import { isDemotion, lockAtDemotion, stepLock, lockProgress, STAGE_RANK } from "./promotionLock.mjs";
@@ -70,10 +72,6 @@ export const STAGE_TRIGGERS = Object.freeze({
       "After 30+ paper trades, parity CLEAN, net positive after fees: a written live plan (size, daily cap, kill switch, who signs) as its own dated PR. Arming stays borst's call, in person.",
       "Net ≤ 0 at 30 paper trades: stays Tradeable on the scoreboard, nothing goes live.",
     ],
-  },
-  RETIRED: {
-    section: "**Retired**",
-    does: ["/proof moves the row to \"Retired\" with its name, numbers and the date. It stays visible. Never re-tuned."],
   },
 });
 
@@ -325,9 +323,10 @@ export function diffPipeline(prev, cur) {
   next.locks = {};
   for (const [axis, now] of Object.entries(cur.reads)) {
     const was = before[axis]?.stage ?? null;
-    if (was === "RETIRED" && now.stage !== "RETIRED") {
-      issues.push(`${axis}: recorded RETIRED, served ${now.stage}. Retired is final; the served value is a bug to fix in its own PR.`);
-      next.reads[axis] = { ...before[axis] };
+    if (now.stage === "RETIRED") {
+      // Not a stage since 2026-11-20: a board built before the change. Keep what's recorded; the next build serves the ladder.
+      issues.push(`${axis}: served RETIRED, which is no longer a stage (reads no longer retire, 2026-11-20). Recorded ${was ?? "nothing"} kept; check that the scoreboard rebuilt after the deploy.`);
+      if (before[axis]) next.reads[axis] = { ...before[axis] };
       if (prevLocks[axis]) next.locks[axis] = { ...prevLocks[axis] };
       continue;
     }

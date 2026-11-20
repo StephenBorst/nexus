@@ -25,7 +25,7 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 export default function HowWeGrade({ scorecard, isMobile }: { scorecard: Scorecard | null; isMobile?: boolean }) {
   const rules = (scorecard?.pipeline?.rules || {}) as Record<string, number | undefined>;
   const n = rules.minEvents ?? 30, edge = rules.edgePct ?? 95, hN = rules.holdoutMinEvents ?? 30, hPct = rules.holdoutPct ?? 80;
-  const exitN = rules.exitMinTrades ?? 30, kill = rules.killEvents ?? 100;
+  const exitN = rules.exitMinTrades ?? 30, kill = rules.failEvents ?? rules.killEvents ?? 100;
   const tide = scorecard?.tide;
   const coins = scorecard?.config?.coins?.length;
   return (
@@ -45,7 +45,7 @@ export default function HowWeGrade({ scorecard, isMobile }: { scorecard: Scoreca
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 8 }}>After {kill} events, a signal that loses on average or does worse than random is retired, in public.</div>
+        <div style={{ marginTop: 8 }}>After {kill} events, a signal that loses on average or does worse than random is labelled failing, in public. It keeps running, and the label goes if the numbers come back. Only a cleared signal is a claim.</div>
       </Block>
 
       <Block title="How a signal is graded">

@@ -125,20 +125,22 @@ export function tideLine(tide) {
 
 // ── The board in four groups, best first (borst, 2026-11-17; pipeline-if-then.md § "Board layout and the CLEARED badge") ──
 // Top to bottom: CLEARED, Leads, Still testing, then the folded archive (old-data-only reads, reads worse than random),
-// Retired last. Was (2026-10-18): one "pipeline" list by stage. Two rules carry over: the top of the board is never the best
+// Archived last. Reads no longer retire (2026-11-20, pipeline-if-then.md "Reads no longer retire"): a read that fails the
+// 100-event check stays in its stage's group with the label on its row, ordered last there, and keeps running. Was (2026-10-18): one "pipeline" list by stage. Two rules carry over: the top of the board is never the best
 // IN-SAMPLE number, and every read stays visible.
 //   cleared  a registered read that cleared the FULL ladder: served TRADEABLE or PAPER, no promotion lock, AND its
 //            30-trade paper judgment recorded PASS (paperJudge.mjs). The only rows that may be promoted.
 //   lead     registered reads served LEAD, EDGE, TRADEABLE or PAPER that haven't cleared.
-//   testing  registered reads still REGISTERED (counting new events, or failing short of retirement).
+//   testing  registered reads still REGISTERED (counting new events, short of the first bar, or failing).
 //   history  every other read, graded on recorded history only (in-sample), by rankAxes.
 //   below    unregistered reads that lose to random entries (pooled BELOW_RANDOM).
-//   retired  retired reads (served RETIRED, or recorded in proofCopy RETIRED_READS: retired is final).
-// Inside cleared / lead / testing: the furthest stage first, then the share of random entries the read beat on NEW data
-// (the main card, `numbers.beatsRandomPct`; unread = last), then events. Never an in-sample number.
+//   archived registered reads borst archived BY HAND (readPipeline ARCHIVED_READS; never automatic).
+// Inside cleared / lead / testing: a read carrying the `failing` label last, then the furthest stage first, then the
+// share of random entries the read beat on NEW data (the main card, `numbers.beatsRandomPct`; unread = last), then
+// events. Never an in-sample number.
 // Display only: stages, numbers and verdicts come from /intel/axis-backtest and /signals/paper-judge as served.
 export const STAGE_LADDER = ["PAPER", "TRADEABLE", "EDGE", "LEAD", "REGISTERED"];
-export const BOARD_GROUP_ORDER = Object.freeze(["cleared", "lead", "testing", "history", "below", "retired"]);
+export const BOARD_GROUP_ORDER = Object.freeze(["cleared", "lead", "testing", "history", "below", "archived"]);
 const CLEARABLE = new Set(["PAPER", "TRADEABLE"]);
 
 /**
@@ -146,15 +148,21 @@ const CLEARABLE = new Set(["PAPER", "TRADEABLE"]);
  * agree, the holdout repeats, the graded exit nets above 0 after fees: readPipeline.mjs), no promotion lock (a read that
  * fell back hasn't re-qualified yet), and a RECORDED 30-trade paper PASS (after fees, parity clean, fills on the tape).
  * A paper PASS alone is never enough: a read with no edge clears "mean > 0 at 30 trades" about 4 times in 10.
+ * Re-checked on every build: a read that falls back, locks, or carries the 100-event `failing` label loses the badge
+ * (2026-11-20; a failing read can't be served above LEAD anyway, readPipeline.test.mjs pins that, so this is a backstop).
  */
 export function isCleared(reg, judgment, locks = {}) {
   if (!reg || !CLEARABLE.has(reg.stage)) return false;
+  if (Array.isArray(reg.failing) && reg.failing.length) return false;
   if (locks && Object.prototype.hasOwnProperty.call(locks, reg.axis)) return false;
   return judgment?.recorded === true && judgment?.verdict === "PASS";
 }
 
 const newDataPct = (reg) => (Number.isFinite(reg?.numbers?.beatsRandomPct) ? reg.numbers.beatsRandomPct : -1);
+const isFailing = (reg) => Array.isArray(reg?.failing) && reg.failing.length > 0;
 const bestFirst = (x, y) => {
+  const f = Number(isFailing(x.reg)) - Number(isFailing(y.reg));
+  if (f) return f;
   const st = STAGE_LADDER.indexOf(x.reg.stage) - STAGE_LADDER.indexOf(y.reg.stage);
   if (st) return st;
   const p = newDataPct(y.reg) - newDataPct(x.reg);
@@ -167,19 +175,19 @@ const bestFirst = (x, y) => {
 /**
  * @param {any[] | null | undefined} axes scoreboard axes
  * @param {any[] | null | undefined} reads scoreboard pipeline.reads
- * @param {string[]} retired recorded retirements (proofCopy RETIRED_READS keys)
+ * @param {string[]} archived reads archived by hand (readPipeline ARCHIVED_READS keys)
  * @param {{ judgments?: Record<string, {recorded?: boolean, verdict?: string}>, locks?: Record<string, object> }} opts
  * @returns {{ key: string, rows: { a: any, reg: any }[] }[]} non-empty groups in BOARD_GROUP_ORDER, plus
  *          "cleared" always (empty = "nothing has cleared yet", said out loud on the page)
  */
-export function boardGroups(axes, reads, retired = [], { judgments = {}, locks = {} } = {}) {
+export function boardGroups(axes, reads, archived = [], { judgments = {}, locks = {} } = {}) {
   const regBy = new Map((Array.isArray(reads) ? reads : []).filter((r) => r && r.axis).map((r) => [r.axis, r]));
-  const done = new Set(Array.isArray(retired) ? retired : []);
+  const done = new Set(Array.isArray(archived) ? archived : []);
   const g = Object.fromEntries(BOARD_GROUP_ORDER.map((k) => [k, []]));
   for (const a of rankAxes(axes)) {
     const reg = regBy.get(a.name) || null;
     const step = reg ? STAGE_LADDER.indexOf(reg.stage) : -1;
-    if (done.has(a.name) || (reg && reg.stage === "RETIRED")) g.retired.push({ a, reg });
+    if (done.has(a.name)) g.archived.push({ a, reg });
     else if (step >= 0 && isCleared(reg, judgments?.[a.name], locks)) g.cleared.push({ a, reg });
     else if (step >= 0 && reg.stage !== "REGISTERED") g.lead.push({ a, reg });
     else if (step >= 0) g.testing.push({ a, reg });

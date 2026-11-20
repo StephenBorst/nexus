@@ -154,6 +154,48 @@ it only by a signed registration)
 - A user's tweak of a read is a new read: frozen when saved and counted only forward from then. It may earn CLEARED only
   after it is registered on its own signed page, counting from that date.
 
+**Reads no longer retire** (added 2026-11-20, borst; DRAFT, not signed. Signed when borst writes his line under
+"Signed" below and merges the PR that carries it; the code in that PR is built to this section and deploys on merge)
+- Why: under **Retired** above, one reading at 100+ events ended a read for good. On 2026-11-20 that retired
+  level_reclaim at exactly 0.00R (118 events, longs still beating random longs) and confluence_follow (109 events,
+  −0.11R), after session_momentum on 2026-11-13. A read that sits near zero can cross that line on one rebuild and
+  back on the next, and "final" turned noise into a verdict. This section was written the day level_reclaim was
+  retired, and that is said here so nobody has to find it.
+- **Retired** above, and "Retired" under "What we say", no longer apply. Nothing retires. RETIRED is not a stage.
+- The 100-event check stays, as a label: at 100+ out-of-sample events on the main card or the holdout, mean R ≤ 0 or
+  worse than random (BELOW_RANDOM) on its side = **failing**, with the numbers. It is set from each build's numbers and
+  goes when they recover. It moves no stage, licenses nothing and stops nothing. A failing read can't be served above
+  Lead (Edge needs 95% vs random and a holdout with mean R > 0), and it never wears the CLEARED badge.
+- Every registered read keeps running: graded on the scoreboard every hour, and on paper (its own wallet or its house
+  run). /proof shows every read's numbers in its stage's group; a failing read sits last in its group with the label on
+  its row and keeps its paper count. The stages are computed as before (`PIPELINE_RULES`, unchanged).
+- **The CLEARED badge keeps the full ladder** ("Board layout and the CLEARED badge" above, unchanged), plus: not
+  failing. It is re-checked on every build, so a read that falls back, locks or starts failing loses the badge, and
+  the board says so: "Cleared reads are re-checked daily; a read that falls back loses the badge." Only a CLEARED read
+  is a claim. The headline, the landing, share cards, posts, the paid feed and the house caller already follow the
+  badge.
+- **Archive, by hand only.** borst may archive a read to stop paying for it (scoreboard CPU, the brain's tick, its
+  house run). An archive is its own PR by borst, written into `ARCHIVED_READS` (`app/lib/readPipeline.mjs`) with the
+  day, the reason and the served numbers that day. The read stays on the board, last, with that record. Nothing
+  archives automatically: no rule, job, watcher or label does it. An archive is for cost, not a verdict, and because
+  the record prints the numbers on the day, an archive that hides a loser reads as one.
+- **Registrations are frozen by fingerprint, not by a signature.** A read is registered by a PR that adds its rule on
+  its own page (written before its counting date, which is always in the future), its entry in `readPipeline.mjs` and
+  its fingerprint line in `app/lib/readFingerprints.mjs`: the sha256 of the events its generator fires on fixed seeded
+  tapes (`workers/nexus-lab-api/readFingerprint.mjs`). A test recomputes every fingerprint. A rule whose events change
+  is a new read with a new name and a new date, as before. A faster body that fires the same events keeps its
+  fingerprint. The 17 reads registered before today were fingerprinted on 2026-11-20 as they run. A user's tweak (last
+  point above) is registered the same way: its own page and fingerprint, no signed page needed.
+- **What stays signed:** the badge bar (this section, the CLEARED rule above, each 30-trade paper judgment page, and
+  a change to any of them, such as `docs/research/badge-bar-v2.md`). Unchanged and outside this section: everything
+  that moves money (live plans, arming, the house rules in `live-money-review.md`) and the studies already signed
+  (stress hours, trend gate, regime window, sealed reads). Their verdicts license only borst's reviewed PRs, as they say.
+- What we say, added: a failing read's row says "Failing the 100-event check (…). Keeps running; re-checked daily." The
+  board says once: "Nov 20: reads no longer retire. Every read keeps running; only CLEARED is a claim." Each of the
+  three reads retired under the old rule says once on its row: "Retired <day> under the old rule (…); that rule ended
+  Nov 20."
+- Signed: _(borst, date)_
+
 ## Stacks
 
 Two reads may be combined only once both are Leads, and only if the scoreboard's `overlap` block shows they aren't

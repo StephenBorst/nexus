@@ -32,7 +32,7 @@ export async function composeBell(dispatch, { now = Date.now(), timeoutMs = SOUR
     readBoard(dispatch, "/smart/xray/events", timeoutMs),
     readBoard(dispatch, "/intel/axis-backtest", timeoutMs),
   ]);
-  const withWallet = (sc?.pipeline?.reads ?? []).filter((r) => r && r.paperWallet && r.stage !== "RETIRED").slice(0, 6);
+  const withWallet = (sc?.pipeline?.reads ?? []).filter((r) => r && r.paperWallet && r.stage !== "RETIRED" && !(Array.isArray(r.failing) && r.failing.length)).slice(0, 6);
   const runs = await Promise.all(withWallet.map((r) => readBoard(dispatch, `/signals/paper-run/${encodeURIComponent(r.axis)}`, timeoutMs)));
   const paperRuns = Object.fromEntries(withWallet.map((r, i) => [r.axis, runs[i]]).filter(([, v]) => v));
   const list = buildSignals({
