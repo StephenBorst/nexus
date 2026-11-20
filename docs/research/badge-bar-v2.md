@@ -30,8 +30,8 @@ entries:
    compared on price and fees alone. (The judgment's own PASS keeps its funding, as signed.)
 3. **The measure.** Mean net bps per trade. The judged trades' mean is set against the 300 replay means.
 4. **PASS v2** = the judged mean beats at least **90%** of the replay means (and is > 0, which the PASS already says).
-   Why 90%: this is a confirmation step after the 95% bar on new data, it is the holdout's bar, and at 30 trades a 95%
-   bar would fail most reads that do have an edge. borst picked 90% before signing.
+   Why 90%: this is a confirmation step after the 95% bar on new data, stricter than the holdout's 80%, and at 30
+   trades a 95% bar would fail most reads that do have an edge. borst picked 90% before signing.
 5. **Once.** The replays are computed once, when the judgment is recorded, and stored with the verdict (the 300 means,
    the seed, the window). They are never redrawn. A re-run from the stored inputs gives the same answer.
 6. **Unread data.** A replay trade whose window isn't fully recorded is drawn again inside the replay (at most 10
