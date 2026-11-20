@@ -606,6 +606,15 @@ product is what sits on top:
   per side (each read's new-data mean R vs a random entry, % of replays beaten; main coins or the holdout, tap a row for
   its line), the read-by-read table (cards on a phone; one sentence per read by `sideWords`), paper wallets as cards
   (n of 30, each trade's outcome, tape line; no R sums, no dollars). The weekly review imports the same `sideWords`.
+- **Sealed reads** (borst 2026-11-20, `docs/research/sealed-reads.md`, SIGNED in session, pinned above Results by
+  `app/lib/sealedReads.test.mjs`): the in-house signal. Its rule lives in the PRIVATE repo `StephenBorst/nexus-house-signal`
+  (never copy rule text, code or numbers into this public repo, a PR, an issue or a public page before its reveal); only its
+  fingerprint is public (`sealFingerprint`, `app/lib/sealedReads.mjs`: sha256 over rule / code / params, each preceded by
+  `name\nbyteLength\n`), committed here + posted by borst on X; counts from the next 00:00 UTC after both. On-chain
+  anchoring stays OFF (borst "no", 2026-11-20). Each fire = a public call from the house wallet within 5 min, graded like
+  any call on the frozen contract (1.2× H4 ATR stop, 1.5R, 168h); live only in the app. Same bar as every read
+  (`PIPELINE_RULES`), then its first 30 calls after TRADEABLE judged by the paper-judgment rules; CLEARED → the headline.
+  Until then a "House signal · testing" panel tops /proof. Revealed at CLEARED or borst's date; a hash mismatch voids it.
 - **House caller is OFF** (`HOUSE_SIGNALS_ENABLED` deleted; gates the Catalyst caller too). Check "off" by reading
   `enabled` on `/signals/house` and `/signals/catalyst-house`, never by a quiet run. `POST /signals/house` with
   `HOUSE_SIGNALS_ADMIN` still posts by hand regardless. Keep `HOUSE_CALLER_ADDRESS` set (the dedupe reads it). On again
