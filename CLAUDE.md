@@ -453,7 +453,10 @@ product is what sits on top:
   (`failEvents`) is a `failing` label on the served row, set each build, never final; a failing read can't pass LEAD
   and never wears CLEARED. Archive = by hand only (`ARCHIVED_READS`, empty). Registrations are frozen by fingerprint
   (`app/lib/readFingerprints.mjs`, events on seeded tapes, `workers/nexus-lab-api/readFingerprint.mjs`; test-pinned),
-  not by a signature; signing stays for the badge bar (draft v2 = `docs/research/badge-bar-v2.md`). Only out-of-sample events (after `registeredAt`) count; back-graded history never does. A changed rule
+  not by a signature; signing stays for the badge bar. **Badge bar v2** (`docs/research/badge-bar-v2.md`, SIGNED by borst in session
+  2026-11-20 at 90%, pinned above Results by `app/lib/badgeBar.test.mjs`; NOT built yet, its own PR): a recorded paper
+  PASS earns CLEARED only if its 30 trades beat ≥ 90% of 300 matched random entries (same coin, side, window, graded
+  exit, fees; stored once at judgment); live-plan signing needs CLEARED under it. Only out-of-sample events (after `registeredAt`) count; back-graded history never does. A changed rule
   = a new name + a new dated registration. Stage triggers = `docs/research/pipeline-if-then.md`, applied one PR per
   trigger from the SERVED stage. Registered reads: rsi_reset_deep, level_reclaim, oi_div_reversal, session_momentum,
   confluence_follow (from 2026-10-17); oi_div_reversal_4h and oi_coil_break (from 2026-10-28, their own prereg pages); batch 3
