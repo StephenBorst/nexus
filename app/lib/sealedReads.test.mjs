@@ -38,3 +38,17 @@ test("any change to any file, its name or the order changes the fingerprint or r
   assert.ok(revealMatches(bundle(), fp.toUpperCase()));
   assert.ok(!revealMatches(bundle("tampered"), fp));
 });
+
+import { SEALED_READS, sealedCountsFrom } from "./sealedReads.mjs";
+
+test("house-1 is on record with its fingerprint and wallet, and counts only once the X post is recorded", () => {
+  const h = SEALED_READS.find((r) => r.name === "house-1");
+  assert.match(h.fingerprint, /^[0-9a-f]{64}$/);
+  assert.match(h.wallet, /^0x[0-9a-fA-F]{40}$/);
+  assert.equal(sealedCountsFrom({ ...h, xPost: null }), null, "no X post, no start");
+  assert.equal(sealedCountsFrom({ ...h, xPost: { url: "https://x.com/borstxbt/status/1", at: "2026-11-20T15:00:00Z" } }), "2026-11-21T00:00:00.000Z");
+  assert.equal(sealedCountsFrom({ ...h, xPost: { url: "https://x.com/borstxbt/status/1", at: "2026-11-22T23:59:00Z" } }), "2026-11-23T00:00:00.000Z", "the later of the two");
+  assert.equal(sealedCountsFrom({ ...h, xPost: { at: "2026-11-20T15:00:00Z" } }), null, "a date without a link is not a post");
+  // Nothing private on record: only these fields.
+  assert.deepEqual(Object.keys(h).sort(), ["committedAt", "fingerprint", "label", "name", "wallet", "xPost"]);
+});

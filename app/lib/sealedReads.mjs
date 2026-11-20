@@ -37,3 +37,29 @@ export function revealMatches(files, publishedFingerprint) {
   const fp = sealFingerprint(files);
   return !!fp && typeof publishedFingerprint === "string" && fp === publishedFingerprint.toLowerCase();
 }
+
+// ── The sealed reads on record (page §1.2) ─────────────────────────────────────────────────────────────────────────
+// Only public facts: the name, the fingerprint, the wallet that posts its calls, the day the fingerprint was committed
+// here, and borst's X post once it exists. The rule itself stays in the private repo until its reveal.
+export const SEALED_READS = Object.freeze([
+  Object.freeze({
+    name: "house-1",
+    label: "House signal",
+    fingerprint: "b71e0dfd42b32465f0cdc7e1c45abf13e62e75c4766e50ba333fca8f388b0c6e",
+    wallet: "0x76A22635ECD0e86c555Ccd2202D250D82f3bB17B", // borst 2026-11-20: posts calls only; he holds the key
+    committedAt: "2026-11-20",
+    xPost: null, // { url, at (ISO) } once borst has posted the fingerprint from his public X account
+  }),
+]);
+
+const DAY_MS = 24 * 3600e3;
+/**
+ * When a sealed read starts counting (page §1.2): the next 00:00 UTC after BOTH the commit here and borst's X post.
+ * Null until the X post is recorded: nothing counts before an outside party holds the date.
+ */
+export function sealedCountsFrom(read) {
+  const c = Date.parse(`${read?.committedAt}T00:00:00Z`), x = Date.parse(read?.xPost?.at || "");
+  if (!Number.isFinite(c) || !Number.isFinite(x) || typeof read?.xPost?.url !== "string") return null;
+  const later = Math.max(c, x);
+  return new Date(Math.floor(later / DAY_MS) * DAY_MS + DAY_MS).toISOString();
+}
