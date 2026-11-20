@@ -16,7 +16,7 @@ const CAT_WORDS: Record<string, string> = { ALL: "All", CRYPTO: "Crypto", MACRO:
 type Story = { id: string; title: string; summary: string; link: string; source: string; category: string; coins: string[]; publishedAt: number | null; firstSeenAt: number };
 type Wire = { at: number; items: Story[]; sources: Array<{ id: string; name: string; ok: boolean }>; unread: string[] };
 
-export function NewsWire({ coin = null, limit = 60 }: { coin?: string | null; limit?: number }) {
+export function NewsWire({ coin = null, limit = 60, compact = false }: { coin?: string | null; limit?: number; compact?: boolean }) {
   const isMobile = useIsMobile();
   const [wire, setWire] = useState<Wire | null>(null);
   const [failed, setFailed] = useState(false);
@@ -99,7 +99,7 @@ export function NewsWire({ coin = null, limit = 60 }: { coin?: string | null; li
             ) : (
               <div style={{ marginTop: 4, fontFamily: UI, fontSize: isMobile ? 15 : 14, fontWeight: 600, lineHeight: 1.35, color: C.text.bright }}>{s.title}</div>
             )}
-            {s.summary && !isMobile && (
+            {s.summary && !isMobile && !compact && (
               <div style={{ marginTop: 4, fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: C.text.fog }}>{s.summary}</div>
             )}
           </article>
@@ -111,10 +111,10 @@ export function NewsWire({ coin = null, limit = 60 }: { coin?: string | null; li
         )}
       </div>
 
-      <div style={{ marginTop: 10, fontFamily: UI, fontSize: 12, lineHeight: 1.5, color: C.text.muted }}>
+      {!compact && <div style={{ marginTop: 10, fontFamily: UI, fontSize: 12, lineHeight: 1.5, color: C.text.muted }}>
         Read by our server from {read.length ? read.join(", ") : "no source right now"}. Headlines, not a call.
         {wire.unread.length > 0 && <> Unread: {wire.unread.join(", ")}.</>}
-      </div>
+      </div>}
     </div>
   );
 }
