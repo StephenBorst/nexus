@@ -946,6 +946,10 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   forecasts leaning against funding, news 24h, reads holding a paper trade, OI. Default order = OI; any header sorts
   (funding and gap by size, nulls last). A cell past the Intel tape's stated line is marked (`SIGNAL.watch`); no
   combined score (test-pinned). A failed source = its column "unread", never 0. A row opens the coin's drawer.
+  **Your coins first** (borst 2026-11-20, `yourCoinsFirst`): coins on the device watchlist (`nx_watchlist_v1`, the drawer's
+  ☆ or the ☆ on a row, ≤ `WATCH_MAX`) stay on top under "YOUR COINS" whatever the sort, sorted among themselves by the same
+  column; the rest sort underneath. A watched market under the OI floor still pins from `others` (marked "thin"); one
+  Orderly doesn't list is named, never invented. No new data. The footer names the sources + the build's age.
 - **No lens strip (borst 2026-11-20, "fold the old lens strip into the table and the coin drawer"):** Lab home's chip
   strip is gone. `app/lib/intelLenses.mjs` is now the BOARD registry (ids kept so `/lab?lens=<id>` still opens one): each
   board has a `home` (`wire` = All headlines, The week ahead, World events; `table` = Funding / Venues / Positioning /

@@ -42,11 +42,11 @@ export function smartLean(c) {
 /**
  * @param {{ futures: object[]|null, venues?: object|null, smart?: object|null, forecasts?: object|null,
  *   news?: object|null, paperRuns?: Record<string, object>|null, now?: number }} input  any source may be null (unread)
- * @returns {{ rows: object[], leftOut: number, unread: string[] }}
+ * @returns {{ rows: object[], others: object[], leftOut: number, unread: string[] }}  others = the thin markets, kept for pins
  */
 export function marketTable({ futures, venues = null, smart = null, forecasts = null, news = null, paperRuns = null, now = Date.now() } = {}) {
   const unread = [];
-  if (!Array.isArray(futures)) return { rows: [], leftOut: 0, unread: ["markets"] };
+  if (!Array.isArray(futures)) return { rows: [], others: [], leftOut: 0, unread: ["markets"] };
   if (!venues) unread.push("venues");
   if (!smart) unread.push("smart");
   if (!forecasts) unread.push("forecasts");
@@ -100,8 +100,11 @@ export function marketTable({ futures, venues = null, smart = null, forecasts = 
       reads: paperRuns ? (readsBy.get(coin) || []) : null,
     });
   }
-  const kept = all.filter((x) => x.oiUsd >= TABLE_MIN_OI_USD).sort((a, b) => b.oiUsd - a.oiUsd);
-  return { rows: kept.slice(0, TABLE_MAX), leftOut: all.length - Math.min(kept.length, TABLE_MAX), unread };
+  const kept = all.filter((x) => x.oiUsd >= TABLE_MIN_OI_USD).sort((a, b) => b.oiUsd - a.oiUsd).slice(0, TABLE_MAX);
+  const shown = new Set(kept.map((x) => x.coin));
+  // the markets left out stay available so a coin someone WATCHES can still be pinned (your coins first, 2026-11-20)
+  const others = all.filter((x) => !shown.has(x.coin)).sort((a, b) => b.oiUsd - a.oiUsd);
+  return { rows: kept, others, leftOut: others.length, unread };
 }
 
 /** The number a column sorts by. Funding and the gap sort by size either way; null = nothing to sort on. */
@@ -154,3 +157,25 @@ export const smartCell = (r) => (!r.smart || r.smart.long + r.smart.short === 0 
 export const forecastCell = (r) => (!r.forecast ? "—" : `${r.forecast.divergent} of ${r.forecast.total}`);
 export const newsCell = (r) => (r.news == null ? "unread" : r.news ? String(r.news) : "—");
 export const readsCell = (r) => (r.reads == null ? "unread" : r.reads.length ? String(r.reads.length) : "—");
+
+// ── Your coins first (borst 2026-11-20) ─────────────────────────────────────────────────────────────────────────────
+// A coin on this device's watchlist (app/lib/watchlist.mjs, the drawer's ☆) stays on top whatever the table sorts by;
+// the pinned rows sort by the same column among themselves, and every other row sorts normally underneath. A watched
+// coin under the OI floor still pins (from `others`, marked `thin`). A watched coin Orderly doesn't list is named, not
+// invented. No new data: the same rows, in a different order.
+/**
+ * @param {{rows: object[], others?: object[]}} table @param {string[]} watched bare coins
+ * @param {string} [col] @param {string} [dir]
+ * @returns {{ pinned: object[], rest: object[], missing: string[] }}
+ */
+export function yourCoinsFirst(table, watched, col = DEFAULT_SORT.col, dir = DEFAULT_SORT.dir) {
+  const want = [...new Set((watched || []).map((c) => bare(String(c).replace(/^\$/, ""))).filter(Boolean))];
+  const byCoin = new Map([...(table?.others ?? []).map((r) => [r.coin, { ...r, thin: true }]), ...(table?.rows ?? []).map((r) => [r.coin, r])]);
+  const pinned = want.filter((c) => byCoin.has(c)).map((c) => ({ ...byCoin.get(c), pinned: true }));
+  const pinSet = new Set(pinned.map((r) => r.coin));
+  return {
+    pinned: sortTable(pinned, col, dir),
+    rest: sortTable((table?.rows ?? []).filter((r) => !pinSet.has(r.coin)), col, dir),
+    missing: want.filter((c) => !byCoin.has(c)),
+  };
+}
