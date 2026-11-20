@@ -927,6 +927,14 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   links are served. `NewsWire.tsx` = Lab home's FIRST lens "News" (`DEFAULT_LENS`: a reader who never chose lands on it)
   and Market Intel's NEWS tab; a coin tag opens the drawer. Headlines, never a direction or a tally. Cloud sessions
   can't reach the feeds: check `unread` on the live route after a change.
+- **The Wire (borst 2026-11-20, terminal step 2; rules `app/lib/wire.mjs`, route `GET /intel/wire` `routes-wire.mjs`, 60 s
+  cache `intel:wire:v1`):** FIRST on Lab home (`TheWire.tsx`): what changed in the last day, from every board, on one
+  clock. In-process reads: the news wire, the bell (`/intel/bell`), EVERY registered read's paper run (house runs
+  included, `readRows`), tracked wallets' moves ≥ $10k (`/smart/events`), graded calls (`/calls/pulse`, people and engines
+  named apart) + "Coming up" from `/intel/calendar` (next 12h). Standing conditions (funding past its line, the trend row)
+  are dated when FIRST seen (`intel:wire:seen:v1`), so they don't sit on top forever. Each row keeps its own source and
+  grade line (headline / call / wallet lines say what they are not); filter chips; no tally, no direction. A board
+  that fails is named in `unread`.
 - **Risk desk (2026-11-15, rules `app/lib/riskDesk.mjs`, read `app/hooks/useRiskDesk.ts`):** the connected account's
   open positions from the SDK (position stream, collateral, est. funding, each market's `funding_period`), in the
   browser only (test-pinned: no fetch). Per position: liquidation % away (≤5 = warn, ≤10 = watch), what the resting
