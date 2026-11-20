@@ -23,6 +23,7 @@ import { fundingByHour, heldFundingBps } from "./funding.mjs";
 import { PARITY_SETTLE_MS, PARITY_EARLY_MS } from "./paperParity.mjs";
 import { tradeR } from "./paperRun.mjs";
 import { JUDGMENT_RECORDS } from "./pipelineRecords.mjs";
+import { HOUSE_PAPER_IDS } from "./housePaper.mjs";
 
 /** Each judged run, as its page signed it. A new run = a new dated page and a new entry, never an edit. */
 const CODED_JUDGMENTS = Object.freeze({
@@ -55,6 +56,22 @@ const CODED_JUDGMENTS = Object.freeze({
   }),
 });
 
+// The house paper runs (docs/research/paper-judgment-house-runs.md, signed by borst 2026-11-20): one page, the same rules
+// as oi_div_reversal_4h's (rules 2-7 word for word), each run judged on its own. Wallet = the run's keyless house id.
+export const HOUSE_JUDGMENT_DOC = "docs/research/paper-judgment-house-runs.md";
+const HOUSE_JUDGMENTS = Object.freeze(Object.fromEntries(Object.entries(HOUSE_PAPER_IDS).map(([axis, wallet]) => [axis, Object.freeze({
+  doc: HOUSE_JUDGMENT_DOC,
+  signedAt: "2026-11-20T00:00:00Z", // the reset cut-off (rule 3)
+  wallet,
+  trades: PAPER_MIN_TRADES,
+  feeBps: 2.5,
+  tapeTolBps: TAPE_TOL_BPS,
+  parityEarlyMs: PARITY_EARLY_MS,
+  paritySettleMs: PARITY_SETTLE_MS,
+  passAboveBps: 0,
+  signature: "signed",              // borst, 2026-11-20 ("signed"), recorded under the page's Results
+})])));
+
 // Pages the pipeline drafted and the owner signed with the owner wallet (paperJudgePage.mjs), written into git by the
 // watcher (pipelineRecords.mjs): the same rules with the same constants. An entry written above always wins.
 export const PAPER_JUDGMENTS = Object.freeze({
@@ -63,6 +80,7 @@ export const PAPER_JUDGMENTS = Object.freeze({
     tapeTolBps: TAPE_TOL_BPS, parityEarlyMs: PARITY_EARLY_MS, paritySettleMs: PARITY_SETTLE_MS, passAboveBps: 0,
     signature: e.signature === "signed" ? "signed" : "pending",
   })])),
+  ...HOUSE_JUDGMENTS,
   ...CODED_JUDGMENTS,
 });
 

@@ -104,6 +104,8 @@ test("wallet order: /proof's paper wallets always, then a rotating slice of the 
   const b = walletsForRun(["0xPROOF".padEnd(42, "0").toLowerCase()], users, 4, 2);
   assert.deepEqual(b.wallets.slice(1), [users[4], users[0]], "wraps around");
   assert.ok(proofPaperWallets().includes("0x95e26e980e300c34360933b849457f42c6bd7622"), "the level_reclaim paper wallet");
+  // the house paper runs are judged (paper-judgment-house-runs.md), so every one of their fills is checked too
+  assert.ok(proofPaperWallets().includes("0xbaab05e8809ffd7706d9103647a74fe56739bdfc"), "session_fade's house run");
 });
 
 test("pruning keeps every fill the state still shows, then the newest others", () => {

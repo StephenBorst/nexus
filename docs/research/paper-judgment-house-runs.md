@@ -96,3 +96,13 @@ Not covered: level_reclaim and oi_div_reversal_4h (their own wallets and signed 
      page. The gap between graded and traded is the next question, written down before it is looked at.
 
 ## Results
+
+### 2026-11-20 · signed
+
+Signed by borst on 2026-11-20 ("signed"), after reading the rules above, at about 02:37 UTC. No run had closed a trade.
+Five held an open first trade: the three named above, plus confluence_follow long BTC and oi_coil_break short SOL,
+both opened after the draft. The other nine were flat. Their marks were not looked at. The text above Results is
+unchanged from the draft borst read (sha256 f1aba54cec94221ad1fb1819a785b443e2588f1004be5634f71b05025e525fdc, pinned by
+`paperJudge.test.mjs`). The 14 code entries in
+`app/lib/paperJudge.mjs` (`HOUSE_JUDGMENTS`) are added in the same PR with `signature: "signed"`, so a PASS or FAIL at
+each run's trade 30 is final and recorded once.

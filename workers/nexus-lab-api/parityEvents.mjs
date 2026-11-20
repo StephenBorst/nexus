@@ -1,7 +1,8 @@
 // ── The graded events a paper config's parity is checked against ────────────────────────────────────
 // One copy for GET /agent/:a/parity and the 30-trade judge (paperJudge.mjs): the same KV series the scoreboard
 // reads, the same axis generator (axisbt AXES), per coin in the config. Read-only.
-import { AXES, priceByHour } from "./axisbt.mjs";
+import { AXES, priceByHour, btcRegimeByHour, priceSeries, candlesByHour } from "./axisbt.mjs";
+import { READ_SERIES, REGISTERED_READ_MODE } from "./registeredReadLive.mjs";
 
 const coinOf = (s) => String(s).toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
 
@@ -10,6 +11,7 @@ export async function parityEvents(kv, config, axis) {
   const gen = AXES.find((a) => a.name === axis)?.gen;
   if (!gen) return [];
   const readJson = async (key) => { try { const r = await kv.get(key); return r ? JSON.parse(r) : []; } catch { return []; } };
+  if (config?.signalMode === REGISTERED_READ_MODE) return registeredReadEvents(readJson, config, gen);
   const coins = [...new Set((config?.symbols || []).map(coinOf))];
   const events = [];
   for (const coin of coins) {
@@ -23,6 +25,31 @@ export async function parityEvents(kv, config, axis) {
     ]);
     const cs = { coin, oiHist, basisHist, cvdHist, smHist, liqHist, candleHist };
     for (const e of gen(cs, priceByHour(oiHist), {}) || []) events.push({ coin, t: e.t, side: e.side });
+  }
+  return events;
+}
+
+// A REGISTERED_READ config (house paper runs, registeredReadLive.mjs) trades any registered read, so its parity events
+// come from every series the scoreboard loads (READ_SERIES, the same KV keys), called as axisbt buildEvents calls the
+// generator: a coin needs an OI price spine, and BTC's set is the context (btc_lead_lag reads it). Only the config's
+// coins are returned; BTC is read for context whether or not it is traded.
+async function registeredReadEvents(readJson, config, gen) {
+  const coins = [...new Set((config?.symbols || []).map(coinOf))];
+  const load = async (coin) => {
+    const cs = { coin };
+    for (const [k, keyOf] of Object.entries(READ_SERIES)) cs[k] = await readJson(keyOf(coin));
+    return cs;
+  };
+  const sets = [];
+  for (const coin of coins) sets.push(await load(coin));
+  const btcCs = sets.find((c) => c.coin === "BTC") || (await load("BTC"));
+  const btcSeries = priceSeries(btcCs);
+  const ctx = { btcMap: btcRegimeByHour(btcSeries), btcPrice: priceByHour(btcSeries), btcCandles: candlesByHour(btcCs.candleHist) };
+  const events = [];
+  for (const cs of sets) {
+    const pmap = priceByHour(cs.oiHist);
+    if (pmap.size < 2) continue;
+    for (const e of gen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) events.push({ coin: cs.coin, t: e.t, side: e.side });
   }
   return events;
 }
