@@ -40,6 +40,8 @@ export const LOCK_KEYS = {
   planSigs: () => "pipeline:plansigs",
   // The weekly scorecard (weeklyScorecard.mjs): one week is written once; two cron runs at once mustn't both write it.
   proofWeekly: (week) => `proofweekly:${week}`,
+  // Sealed reads (routes-sealed.mjs): one fire at a time per read, so a retry can't post the same call twice.
+  sealedFire: (name) => `sealedfire:${name}`,
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;
