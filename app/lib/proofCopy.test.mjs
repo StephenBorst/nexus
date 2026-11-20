@@ -73,6 +73,8 @@ test("retired reads agree with the recorded snapshot, and read plainly", async (
   for (const axis of Object.keys(RETIRED_READS)) assert.equal(snap.reads[axis]?.stage, "RETIRED", axis);
   for (const [axis, r] of Object.entries(snap.reads)) if (r.stage === "RETIRED") assert.ok(RETIRED_READS[axis], `${axis} is RETIRED in the snapshot but /proof doesn't record the date`);
   assert.equal(retiredReadLine(retiredRead("session_momentum")), "Retired Nov 13, 2026: 112 out-of-sample events, mean \u22120.33R, worse than random. Never re-tuned.");
+  assert.equal(retiredReadLine(retiredRead("level_reclaim")), "Retired Nov 20, 2026: 118 out-of-sample events, mean 0.00R, mean R not above zero. Never re-tuned.");
+  assert.equal(retiredReadLine(retiredRead("confluence_follow")), "Retired Nov 20, 2026: 109 out-of-sample events, mean \u22120.11R, mean R below zero. Never re-tuned.");
   assert.equal(retiredRead("nope"), null);
   assert.equal(retiredReadLine(null), "");
 });
