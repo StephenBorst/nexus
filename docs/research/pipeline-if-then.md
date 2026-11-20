@@ -154,8 +154,7 @@ it only by a signed registration)
 - A user's tweak of a read is a new read: frozen when saved and counted only forward from then. It may earn CLEARED only
   after it is registered on its own signed page, counting from that date.
 
-**Reads no longer retire** (added 2026-11-20, borst; DRAFT, not signed. Signed when borst writes his line under
-"Signed" below and merges the PR that carries it; the code in that PR is built to this section and deploys on merge)
+**Reads no longer retire** (added 2026-11-20, borst; signed Nov 20, 2026. The code in PR #402 is built to this section and deployed on merge)
 - Why: under **Retired** above, one reading at 100+ events ended a read for good. On 2026-11-20 that retired
   level_reclaim at exactly 0.00R (118 events, longs still beating random longs) and confluence_follow (109 events,
   −0.11R), after session_momentum on 2026-11-13. A read that sits near zero can cross that line on one rebuild and
@@ -194,7 +193,7 @@ it only by a signed registration)
   board says once: "Nov 20: reads no longer retire. Every read keeps running; only CLEARED is a claim." Each of the
   three reads retired under the old rule says once on its row: "Retired <day> under the old rule (…); that rule ended
   Nov 20."
-- Signed: _(borst, date)_
+- Signed: borst, Nov 20, 2026
 
 ## Stacks
 
