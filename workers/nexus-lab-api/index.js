@@ -118,6 +118,8 @@ import { handleVenues } from "./routes-venues.mjs";
 import { handleEvents } from "./routes-events.mjs";
 import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
 import { snapshotStable, STABLE_HIST_KEY } from "./stableHist.mjs";
+import { ensureHousePaper } from "./housePaperSetup.mjs";
+import { isHousePaper } from "../../app/lib/housePaper.mjs";
 import { marketCoin } from "../../app/lib/marketRead.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
 import { parityEvents } from "./parityEvents.mjs";
@@ -955,6 +957,14 @@ const worker = {
         const r = await snapshotStable(env.NEXUS_AGENT || env.LAB_STORE);
         console.log(`[stable:hist] ${r.stored ? "stored" : "kept"} ${r.rows} days${r.reason ? ` (${r.reason})` : ""}`);
       } catch (e) { console.error("[stable:hist] read failed:", String(e)); }
+    })());
+    // Hourly: the house paper runs (housePaperSetup.mjs, rules app/lib/housePaper.mjs; behind HOUSE_PAPER_RUNS): one keyless
+    // paper record per registered read, created once, never rewritten. Paper only; moves no stage.
+    ctx.waitUntil((async () => {
+      try {
+        const r = await ensureHousePaper(env);
+        if (!r.off) console.log(`[house-paper] ${r.running ?? 0} running${r.created.length ? `, created ${r.created.join(",")}` : ""}${r.issues.length ? `, issues: ${r.issues.join(" | ")}` : ""}`);
+      } catch (e) { console.error("[house-paper] setup failed:", String(e)); }
     })());
     // Hourly: classify each core symbol's trend regime (the momentum signal source),
     // cached for the /signals hot path + the fusion. Runs BEFORE delivery so the push
@@ -5308,6 +5318,11 @@ document.getElementById("btn").addEventListener("click",go);
 
     if (parts[0] === "agent" && parts[1]) {
       const address = parts[1].toLowerCase();
+      // A house paper run (app/lib/housePaper.mjs) is read only: its id is a hash no one can sign for, and nothing may
+      // change its config, mode, key or record (the setup job writes it once). Reads stay public like any agent's.
+      if (isHousePaper(address) && request.method !== "GET" && request.method !== "HEAD" && request.method !== "OPTIONS") {
+        return json({ error: "house_paper_readonly", hint: "A house paper run is set up once and never changed. It trades on paper only." }, request, 403);
+      }
       // Agent data MUST live in the same KV namespace the brain/exec Workers read
       // (binding NEXUS_AGENT). Falling back to LAB_STORE only if the binding is
       // somehow absent so the route never hard-crashes.

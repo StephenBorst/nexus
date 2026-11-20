@@ -242,7 +242,16 @@ product is what sits on top:
   the series the brain loads once a tick (all seven `READ_SERIES`, watched coins + BTC), each read once; fires in the hour
   after an event, `sourceT` = the event time. `registeredReadRefusal`: PAPER only, no invert, no unknown read; NO live lift.
   Parity read by read, hour by hour: `registeredReadLive.test.mjs`. ~0.35–0.5 s brain CPU a tick with all 16 in use (19 Nov,
-  public series). Nothing uses it until a house paper wallet is set up (step 2, next PR). **Paper-wallet registration (borst 2026-11-14, `app/lib/paperClaim.mjs`,
+  public series). **House paper runs** (borst 2026-11-17, step 2; lab-api var `HOUSE_PAPER_RUNS = "true"` since 2026-11-20): one KEYLESS
+  paper record per registered read (`app/lib/housePaper.mjs`): id = "0x" + sha256("nexus/house-paper/v1/" + read)[0:40]
+  (`HOUSE_PAPER_IDS`, recomputed by test; no one holds a key, so no owner signature or trading key exists). 14 runs: every
+  registered read but `HOUSE_PAPER_SKIP` (level_reclaim + oi_div_reversal_4h have their own wallets, session_momentum is
+  RETIRED); a new registration adds its read in the same PR (test-pinned). Config = `LEVEL_RECLAIM_PAPER_CONFIG` field
+  for field with `signalMode:"REGISTERED_READ"` + `read`. Setup job `housePaperSetup.mjs` (hourly): writes config, a fresh
+  state (`started_at`) and the agent:users entry ONCE; a stored config that differs is reported, never rewritten. The
+  agent routes 403 `house_paper_readonly` on every non-GET for a house id (before any owner check); exec refuses any
+  non-PAPER entry for one. House runs move NO stage (they are not a read's `paperWallet`), and nothing judges them until a
+  signed page covers them (next: one umbrella page; then "Paper: N of 30" on /proof rows, counts only). **Paper-wallet registration (borst 2026-11-14, `app/lib/paperClaim.mjs`,
   `routes-paperclaim.mjs`):** no more hand-made PR per wallet. On `/ops/revenue` (Paper wallets box) the owner pastes a
   fresh wallet and signs `paperClaimMessage` (5 min; Safe owner / `OPS_WALLETS`). `POST /pipeline/paper-wallet` binds it
   only if the read is SERVED TRADEABLE (stored scoreboard, unread = 503), has a `PAPER_SETUPS` entry (brain mode + preset;
