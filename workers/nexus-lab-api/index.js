@@ -119,6 +119,7 @@ import { handleVenues } from "./routes-venues.mjs";
 import { handleEvents } from "./routes-events.mjs";
 import { handleNews } from "./routes-news.mjs";
 import { handleWire } from "./routes-wire.mjs";
+import { handleTable } from "./routes-table.mjs";
 import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
 import { snapshotStable, STABLE_HIST_KEY } from "./stableHist.mjs";
 import { ensureHousePaper } from "./housePaperSetup.mjs";
@@ -1307,6 +1308,12 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
       });
       if (wireRes) return wireRes;
+      // ── GET /intel/table — one row per coin, every input its own column (routes-table.mjs, app/lib/marketTable.mjs) ──
+      const tableRes = await handleTable(parts, request, env, {
+        futures: () => fetchAllFutures(),
+        dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
+      });
+      if (tableRes) return tableRes;
     }
     {
       const fadeRes = await handleFadeGrade(parts, request, {

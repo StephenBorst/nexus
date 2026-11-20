@@ -917,8 +917,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   `unread`, its column null, never 0. Lab home lens "Venues" (`FundingVenues.tsx`) + the drawer's "Funding elsewhere"
   lens (MARKET_SOURCES `venues`). An input, "Not graded" (`UNGRADED_LENSES`); copy never says arbitrage/free/edge.
 - **News wire (borst 2026-11-20, "our news section is buried"; rules `app/lib/newsWire.mjs`, route `GET /intel/news[?coin=]`
-  `routes-news.mjs`):** lab-api reads 7 feeds itself (CoinDesk, Cointelegraph, Decrypt, The Block, Blockworks, Yahoo
-  Finance, the Fed's press releases; no third-party relay sees the reader) at most every 5 min, keeps a rolling 48h wire
+  `routes-news.mjs`):** lab-api reads 8 feeds itself (CoinDesk, Cointelegraph, Decrypt, The Block, DL News, CNBC,
+  MarketWatch, the Fed's press releases; Blockworks + Yahoo dropped 2026-11-20 after failing live; no third-party relay sees the reader) at most every 5 min, keeps a rolling 48h wire
   in LAB_STORE `intel:news:v1` (a feed that fails keeps its stories until they age out and is named in `unread`, its
   source row carries `err`, e.g. "http 403"), one story once (id or title), ≤15 a feed. Each story is tagged with the coins it names
   (`newsCoins`: tickers in capitals as their own word, names any case; index + commodity perps SPX500 / NAS100 / XAU / CL by
@@ -938,6 +938,14 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
 - **⌘K command line (2026-11-20, rules `app/lib/terminalCommand.mjs`, `CommandPalette.tsx`):** a coin ("eth", "$ETH",
   "spx500") → its drawer (every lens + "News on ETH", `NewsWire compact`) or Trade; a 0x address → its X-Ray; "news" /
   "wire". A coin the news wire knows leads; any other ticker-shaped word comes after the menu's own matches.
+- **Market table (borst 2026-11-20, terminal step 4; rules `app/lib/marketTable.mjs`, route `GET /intel/table`
+  `routes-table.mjs`, 60 s cache `intel:table:v1`, UI `MarketTable.tsx` "Every market"):** Lab home order = the Wire → the
+  table → YOUR OPEN RISK. One row per Orderly perp with ≥ $30k OI (`TABLE_MIN_OI_USD`, ≤ 40, thinner ones counted), from
+  ONE all-markets read (`fetchAllFutures`) + in-process venues / smart consensus / forecasts / news / every read's paper
+  run (`readPaperRuns`, shared with the Wire). Columns: funding 8h, OI ÷ 24h vol, venue gap, smart (the 2× rule),
+  forecasts leaning against funding, news 24h, reads holding a paper trade, OI. Default order = OI; any header sorts
+  (funding and gap by size, nulls last). A cell past the Intel tape's stated line is marked (`SIGNAL.watch`); no
+  combined score (test-pinned). A failed source = its column "unread", never 0. A row opens the coin's drawer.
 - **Risk desk (2026-11-15, rules `app/lib/riskDesk.mjs`, read `app/hooks/useRiskDesk.ts`):** the connected account's
   open positions from the SDK (position stream, collateral, est. funding, each market's `funding_period`), in the
   browser only (test-pinned: no fetch). Per position: liquidation % away (≤5 = warn, ≤10 = watch), what the resting

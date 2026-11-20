@@ -15,7 +15,7 @@ export const WIRE_SEEN_KEY = "intel:wire:seen:v1";
 export const WIRE_TTL_MS = 60_000;
 const SOURCE_TIMEOUT_MS = 8_000;
 
-async function readBoard(dispatch, path, timeoutMs) {
+export async function readBoard(dispatch, path, timeoutMs) {
   let timer;
   try {
     const res = await Promise.race([dispatch(path), new Promise((resolve) => { timer = setTimeout(() => resolve(null), timeoutMs); })]);
@@ -26,6 +26,13 @@ async function readBoard(dispatch, path, timeoutMs) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Every registered read's paper run (own wallet, claim or house run), by axis; one that fails is left out. */
+export async function readPaperRuns(dispatch, timeoutMs = SOURCE_TIMEOUT_MS) {
+  const axes = REGISTERED_READS.map((r) => r.axis);
+  const runs = await Promise.all(axes.map((a) => readBoard(dispatch, `/signals/paper-run/${encodeURIComponent(a)}`, timeoutMs)));
+  return Object.fromEntries(axes.map((a, i) => [a, runs[i]]).filter(([, v]) => v && v.ok !== false));
 }
 
 /** deps: dispatch (the worker's own handler), news (reads the news wire), now, timeoutMs. */
@@ -39,9 +46,7 @@ export async function composeWire(env, { dispatch, news = (e) => readNews(e), no
     readBoard(dispatch, "/intel/calendar", timeoutMs),
   ]);
   // every registered read's paper run (own wallet, claim or house run), so a house run opening a trade is on the wire
-  const axes = REGISTERED_READS.map((r) => r.axis);
-  const runs = await Promise.all(axes.map((a) => readBoard(dispatch, `/signals/paper-run/${encodeURIComponent(a)}`, timeoutMs)));
-  const paperRuns = Object.fromEntries(axes.map((a, i) => [a, runs[i]]).filter(([, v]) => v && v.ok !== false));
+  const paperRuns = await readPaperRuns(dispatch, timeoutMs);
   const reads = sc ? readRows(sc, paperRuns, now) : [];
 
   let seen = {};
