@@ -3,8 +3,10 @@
 // were. The choice is remembered per device; `/lab?lens=<id>` opens one directly.
 // Rules here (tested); the card is app/pages/lab/IntelLenses.tsx.
 
-/** Order = the funnel: the boards the Board summarizes first, the event/forecast layer, then the raw tape. */
+/** Order = the funnel: the news first (borst 2026-11-20: "our news section is buried"), the boards the Board summarizes,
+ *  the event/forecast layer, then the raw tape. */
 export const INTEL_LENSES = [
+  { id: "news", label: "News", sub: "headlines from seven sources, read by our server, tagged by the coins they name", legacyKey: "nx_news_open" },
   { id: "funding", label: "Funding", sub: "every stretched perp, and where funding reverted vs kept stretching", legacyKey: "nx_funding_board_open" },
   { id: "venues", label: "Venues", sub: "the same coin’s funding on Orderly, Hyperliquid and OKX, side by side", legacyKey: "nx_venues_open" },
   { id: "positioning", label: "Positioning", sub: "where the leveraged crowd and the sharp wallets disagree", legacyKey: "nx_positioning_open" },
@@ -12,10 +14,12 @@ export const INTEL_LENSES = [
   { id: "calendar", label: "Calendar", sub: "US macro releases and dated world events, by day, in your time zone", legacyKey: "nx_calendar_open" },
   { id: "forecast", label: "Forecasts", sub: "where prediction markets disagree with price, our markets only", legacyKey: "nx_forecast_open" },
   { id: "qsignals", label: "Q Signals", sub: "Quotient’s fair value vs the market · PRO, each pull paid by your wallet", legacyKey: "nx_qsignals_open" },
-  { id: "tape", label: "Tape", sub: "news, movers, open interest and long/short, per market", legacyKey: "nx_intel_deep_open" },
+  { id: "tape", label: "Tape", sub: "movers, open interest and long/short, per market", legacyKey: "nx_intel_deep_open" },
 ];
 
 /** localStorage key: a lens id, or "none" when the reader closed the card. */
+/** What a reader who never chose lands on: the news. */
+export const DEFAULT_LENS = "news";
 export const LENS_KEY = "nx_intel_lens";
 export const LENS_NONE = "none";
 
@@ -30,7 +34,7 @@ export function lensFromQuery(v) {
 /**
  * The lens to show on arrival. `get(key)` reads storage (may throw or return null).
  * Order: the query → the stored choice ("none" = closed) → the first lens the reader had opened under the old
- * fold keys (so nobody loses the board they kept open) → closed.
+ * fold keys (so nobody loses the board they kept open) → the news (DEFAULT_LENS).
  */
 export function initialLens(get, query) {
   const q = lensFromQuery(query);
@@ -40,7 +44,7 @@ export function initialLens(get, query) {
   if (stored === LENS_NONE) return null;
   if (IDS.has(stored)) return stored;
   for (const l of INTEL_LENSES) if (read(l.legacyKey) === "1") return l.id;
-  return null;
+  return DEFAULT_LENS;
 }
 
 /** Tapping the open lens closes the card; tapping another opens it. Returns [next, valueToStore]. */

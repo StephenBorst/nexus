@@ -20,6 +20,7 @@ import { ThesisView, ThesisAnalyticsView } from "./ThesisView";
 import { AgentView } from "./AgentView";
 import { CopiesView } from "./CopiesView";
 import { MarketIntelView } from "./MarketIntel";
+import { NewsWire } from "./NewsWire";
 import { MarketTape } from "./MarketTape";
 import { SmartMoneyView } from "./SmartMoneyView";
 import { MispricedBoard } from "./MispricedBoard";
@@ -352,6 +353,7 @@ export default function TheLabPage() {
           // Tape is the raw market intel (news, movers, OI, long/short). Rules + order: app/lib/intelLenses.mjs.
           const lenses = (
             <IntelLenses render={(id) => {
+              if (id === "news") return <NewsWire />;
               if (id === "funding") return <MispricedBoard />;
               if (id === "venues") return <FundingVenues />;
               if (id === "calendar") return <EventsCalendar />;

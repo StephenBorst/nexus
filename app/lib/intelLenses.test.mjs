@@ -3,27 +3,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { INTEL_LENSES, LENS_KEY, LENS_NONE, initialLens, lensFromQuery, nextLens } from "./intelLenses.mjs";
+import { INTEL_LENSES, LENS_KEY, LENS_NONE, DEFAULT_LENS, initialLens, lensFromQuery, nextLens } from "./intelLenses.mjs";
 
 const store = (obj) => (k) => (k in obj ? obj[k] : null);
 
-test("eight lenses, unique ids, the funnel order", () => {
-  assert.deepEqual(INTEL_LENSES.map((l) => l.id), ["funding", "venues", "positioning", "catalysts", "calendar", "forecast", "qsignals", "tape"]);
-  assert.equal(new Set(INTEL_LENSES.map((l) => l.legacyKey)).size, 8);
+test("nine lenses, unique ids, the funnel order: news first", () => {
+  assert.deepEqual(INTEL_LENSES.map((l) => l.id), ["news", "funding", "venues", "positioning", "catalysts", "calendar", "forecast", "qsignals", "tape"]);
+  assert.equal(new Set(INTEL_LENSES.map((l) => l.legacyKey)).size, 9);
 });
 
-test("the query wins, then the stored choice, then an old open fold, else closed", () => {
+test("the query wins, then the stored choice, then an old open fold, else the news", () => {
   assert.equal(initialLens(store({ [LENS_KEY]: "funding" }), "TAPE"), "tape");
   assert.equal(initialLens(store({ [LENS_KEY]: "catalysts" }), null), "catalysts");
   assert.equal(initialLens(store({ [LENS_KEY]: LENS_NONE, nx_forecast_open: "1" }), null), null);
   // Someone who kept Forecast divergence open under the old folds lands on it.
   assert.equal(initialLens(store({ nx_forecast_open: "1", nx_intel_deep_open: "1" }), null), "forecast");
-  assert.equal(initialLens(store({ nx_funding_board_open: "0" }), null), null);
-  assert.equal(initialLens(store({ [LENS_KEY]: "bogus" }), "bogus"), null);
+  assert.equal(initialLens(store({ nx_funding_board_open: "0" }), null), DEFAULT_LENS);
+  assert.equal(DEFAULT_LENS, "news");
+  assert.equal(initialLens(store({ [LENS_KEY]: "bogus" }), "bogus"), DEFAULT_LENS);
 });
 
-test("storage that throws (private mode) reads as closed, never a crash", () => {
-  assert.equal(initialLens(() => { throw new Error("blocked"); }, null), null);
+test("storage that throws (private mode) lands on the news, never a crash", () => {
+  assert.equal(initialLens(() => { throw new Error("blocked"); }, null), DEFAULT_LENS);
   assert.equal(initialLens(() => { throw new Error("blocked"); }, "funding"), "funding");
 });
 

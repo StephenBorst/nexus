@@ -916,6 +916,16 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   universe only), each annualized from its own period; gap = Orderly − the others' average. A dead venue = named in
   `unread`, its column null, never 0. Lab home lens "Venues" (`FundingVenues.tsx`) + the drawer's "Funding elsewhere"
   lens (MARKET_SOURCES `venues`). An input, "Not graded" (`UNGRADED_LENSES`); copy never says arbitrage/free/edge.
+- **News wire (borst 2026-11-20, "our news section is buried"; rules `app/lib/newsWire.mjs`, route `GET /intel/news[?coin=]`
+  `routes-news.mjs`):** lab-api reads 7 feeds itself (CoinDesk, Cointelegraph, Decrypt, The Block, Blockworks, Yahoo
+  Finance, the Fed's press releases; no third-party relay sees the reader) at most every 5 min, keeps a rolling 48h wire
+  in LAB_STORE `intel:news:v1` (a feed that fails keeps its stories until they age out and is named in `unread`; its
+  reason stays in KV), one story once (id or title), ≤15 a feed. Each story is tagged with the coins it names
+  (`newsCoins`: tickers in capitals as their own word, names any case; ambiguous tickers like LINK/NEAR/OP/DOT/HYPE only
+  with "$" or by name). Re-stamped clusters (4+ at one second) and future times = undated (sink below). Only http(s)
+  links are served. `NewsWire.tsx` = Lab home's FIRST lens "News" (`DEFAULT_LENS`: a reader who never chose lands on it)
+  and Market Intel's NEWS tab; a coin tag opens the drawer. Headlines, never a direction or a tally. Cloud sessions
+  can't reach the feeds: check `unread` on the live route after a change.
 - **Risk desk (2026-11-15, rules `app/lib/riskDesk.mjs`, read `app/hooks/useRiskDesk.ts`):** the connected account's
   open positions from the SDK (position stream, collateral, est. funding, each market's `funding_period`), in the
   browser only (test-pinned: no fetch). Per position: liquidation % away (≤5 = warn, ≤10 = watch), what the resting

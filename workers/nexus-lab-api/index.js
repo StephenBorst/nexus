@@ -117,6 +117,7 @@ import { stampJob } from "./jobBeats.mjs";
 import { handleBell, composeBell } from "./routes-bell.mjs";
 import { handleVenues } from "./routes-venues.mjs";
 import { handleEvents } from "./routes-events.mjs";
+import { handleNews } from "./routes-news.mjs";
 import { snapshotForecasts, FORECAST_HIST_PREFIX } from "./forecastHist.mjs";
 import { snapshotStable, STABLE_HIST_KEY } from "./stableHist.mjs";
 import { ensureHousePaper } from "./housePaperSetup.mjs";
@@ -1297,6 +1298,9 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
       });
       if (eventsRes) return eventsRes;
+      // ── GET /intel/news[?coin=] — the news wire, read by us, coin-tagged (routes-news.mjs) ──
+      const newsRes = await handleNews(parts, request, env);
+      if (newsRes) return newsRes;
     }
     {
       const fadeRes = await handleFadeGrade(parts, request, {
