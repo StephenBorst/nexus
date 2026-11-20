@@ -935,6 +935,9 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   are dated when FIRST seen (`intel:wire:seen:v1`), so they don't sit on top forever. Each row keeps its own source and
   grade line (headline / call / wallet lines say what they are not); filter chips; no tally, no direction. A board
   that fails is named in `unread`.
+- **⌘K command line (2026-11-20, rules `app/lib/terminalCommand.mjs`, `CommandPalette.tsx`):** a coin ("eth", "$ETH",
+  "spx500") → its drawer (every lens + "News on ETH", `NewsWire compact`) or Trade; a 0x address → its X-Ray; "news" /
+  "wire". A coin the news wire knows leads; any other ticker-shaped word comes after the menu's own matches.
 - **Risk desk (2026-11-15, rules `app/lib/riskDesk.mjs`, read `app/hooks/useRiskDesk.ts`):** the connected account's
   open positions from the SDK (position stream, collateral, est. funding, each market's `funding_period`), in the
   browser only (test-pinned: no fetch). Per position: liquidation % away (≤5 = warn, ≤10 = watch), what the resting

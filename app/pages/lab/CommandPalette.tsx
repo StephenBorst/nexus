@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { TabId } from "./types";
 import { pressKey } from "@/utils/a11y";
+import { terminalCommands, tradePath } from "@/lib/terminalCommand.mjs";
+import { openMarket } from "@/lib/marketDrawerEvent.mjs";
 
 export interface Command {
   id: string;
@@ -56,10 +58,22 @@ export function CommandPalette({ onSelectTab }: { onSelectTab: (t: TabId) => voi
     ];
   }, [navigate, onSelectTab]);
 
-  const results = useMemo(
-    () => commands.filter((c) => fuzzy(query, c.label) || (c.keywords ? fuzzy(query, c.keywords) : false)),
-    [commands, query]
-  );
+  // The command line (terminalCommand.mjs): a coin, an address, "news", "wire". A known coin leads; any other
+  // ticker-shaped word comes after the menu's own matches.
+  const results = useMemo(() => {
+    type Intent = { kind: string; coin?: string; address?: string };
+    const act = (i: Intent) => () => {
+      if (i.kind === "market" && i.coin) openMarket(i.coin);
+      else if (i.kind === "trade" && i.coin) navigate(tradePath(i.coin));
+      else if (i.kind === "xray" && i.address) navigate(`/analyze?address=${i.address}`);
+      else if (i.kind === "news") navigate("/lab?lens=news");
+      else if (i.kind === "wire") { onSelectTab("intel"); window.scrollTo({ top: 0 }); }
+    };
+    const { lead, tail } = terminalCommands(query) as { lead: Array<{ id: string; label: string; hint: string; intent: Intent }>; tail: Array<{ id: string; label: string; hint: string; intent: Intent }> };
+    const toCmd = (c: { id: string; label: string; hint: string; intent: Intent }): Command => ({ id: c.id, label: c.label, hint: c.hint, run: act(c.intent) });
+    const menu = commands.filter((c) => fuzzy(query, c.label) || (c.keywords ? fuzzy(query, c.keywords) : false));
+    return [...lead.map(toCmd), ...menu, ...tail.map(toCmd)];
+  }, [commands, query, navigate, onSelectTab]);
 
   // Global hotkey: Cmd/Ctrl+K toggles. Ignore when typing in an input/textarea so
   // "/" doesn't hijack the thesis editor etc.
@@ -130,7 +144,7 @@ export function CommandPalette({ onSelectTab }: { onSelectTab: (t: TabId) => voi
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onListKey}
             aria-label="Jump to"
-            placeholder="Jump to…"
+            placeholder="A coin, a wallet, or a page…"
             style={{
               flex: 1, background: "none", border: "none", outline: "none",
               color: "#f4f4f5", fontFamily: "var(--nx-font-mono)", fontSize: 14,
