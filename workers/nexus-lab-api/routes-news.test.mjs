@@ -32,8 +32,9 @@ test("reads every feed, tags coins, names the feeds that failed", async () => {
   assert.ok(b.unread.includes("Federal Reserve"));
   assert.ok(b.unread.includes("The Block"), "a reply with no stories in it is a failed read");
   assert.ok(!b.unread.includes("CoinDesk"));
-  // the reason a feed failed is kept server-side (the owner can read KV), not sent to every reader
-  assert.equal(b.sources.find((s) => s.id === "decrypt").err, undefined);
+  // a failed feed says why (a status line), a good one carries none
+  assert.equal(b.sources.find((s) => s.id === "decrypt").err, "http 403");
+  assert.equal(b.sources.find((s) => s.id === "coindesk").err, null);
   const stored = JSON.parse(env.LAB_STORE.m.get(NEWS_CACHE_KEY));
   assert.equal(stored.sources.find((s) => s.id === "decrypt").err, "http 403");
 });

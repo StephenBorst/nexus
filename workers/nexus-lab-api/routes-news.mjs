@@ -60,7 +60,8 @@ export function newsView(wire, { coin = null, limit = 60 } = {}) {
   return {
     v: 1, at: wire.at, coin: coin ? String(coin).toUpperCase() : null,
     items: items.slice(0, lim),
-    sources: wire.sources.map(({ id, name, kind, ok, n, lastOkAt }) => ({ id, name, kind, ok, n, lastOkAt })),
+    // a failed feed says why ("http 403", "no stories in the reply"): a status, never a secret, so the fix is targeted
+    sources: wire.sources.map(({ id, name, kind, ok, n, lastOkAt, err }) => ({ id, name, kind, ok, n, lastOkAt, err: ok ? null : err })),
     unread: wire.sources.filter((s) => !s.ok).map((s) => s.name),
   };
 }

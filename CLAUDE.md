@@ -919,8 +919,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
 - **News wire (borst 2026-11-20, "our news section is buried"; rules `app/lib/newsWire.mjs`, route `GET /intel/news[?coin=]`
   `routes-news.mjs`):** lab-api reads 7 feeds itself (CoinDesk, Cointelegraph, Decrypt, The Block, Blockworks, Yahoo
   Finance, the Fed's press releases; no third-party relay sees the reader) at most every 5 min, keeps a rolling 48h wire
-  in LAB_STORE `intel:news:v1` (a feed that fails keeps its stories until they age out and is named in `unread`; its
-  reason stays in KV), one story once (id or title), ≤15 a feed. Each story is tagged with the coins it names
+  in LAB_STORE `intel:news:v1` (a feed that fails keeps its stories until they age out and is named in `unread`, its
+  source row carries `err`, e.g. "http 403"), one story once (id or title), ≤15 a feed. Each story is tagged with the coins it names
   (`newsCoins`: tickers in capitals as their own word, names any case; index + commodity perps SPX500 / NAS100 / XAU / CL by
   name only ("digital gold" never counts); ambiguous tickers like LINK/NEAR/OP/DOT/HYPE only
   with "$" or by name). Re-stamped clusters (4+ at one second) and future times = undated (sink below). Only http(s)
