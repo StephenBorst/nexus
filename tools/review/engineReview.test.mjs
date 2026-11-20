@@ -31,12 +31,12 @@ test("each side is judged against its random entry, never against zero", () => {
   assert.equal(fmtR(-0.04), "−0.04R");
 });
 
-test("the model: tide, sides, the retirement countdown, a side strong on both coin sets", () => {
+test("the model: tide, sides, the 100-event countdown, a side strong on both coin sets", () => {
   const m = reviewModel({ board, pulse: { headline: { title: "Nothing has proven itself yet." }, gradedWeek: 17, open: 2, recentGraded: [], engineRecords: [{ caller: "Ember", graded: 35, wins: 15, netR: -4.04, lastAt: 1794081600000 }] } });
   assert.deepEqual(m.tide, { since: "7 Aug", long: -0.18, short: 0.2, markets: 12 });
   assert.deepEqual(m.strong, [{ axis: "oi_div_reversal_4h", side: "LONG" }]);
   const cf = m.reads.find((r) => r.axis === "confluence_follow");
-  assert.ok(cf.words.includes("6 events from the retirement check at mean −0.04R."));
+  assert.ok(cf.words.includes("6 events from the 100-event check at mean −0.04R."));
   assert.equal(cf.holdout.meanR, null, "no holdout events = no number, never 0.00R");
   assert.equal(m.advanced.length, 0);
   assert.ok(reviewModel({ board: null }).error, "an unread board is said, never an empty page");

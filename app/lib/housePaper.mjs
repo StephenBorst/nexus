@@ -8,8 +8,10 @@
 // paper by construction, and the agent routes and exec refuse anything else for it anyway (house paper = read only).
 //
 // Who: every registered read except a read that already has its own paper wallet (level_reclaim, oi_div_reversal_4h)
-// and a read recorded RETIRED when its run would start (a dead read stays dead). A new registration adds its read here
-// in the same PR (housePaper.test.mjs fails otherwise).
+// and session_momentum, retired on Nov 13 under the old rule before its run would start. Reads no longer retire
+// (2026-11-20), so "every read keeps running" would give it a run; starting one is borst's call, its own PR (it is the
+// same event session_fade trades the other way, so the two runs would be one bet taken both ways). A new registration
+// adds its read here in the same PR (housePaper.test.mjs fails otherwise).
 //
 // What: the same config the two hand-made paper wallets run (the graded exit, the 11 main-card coins, no filters, caps
 // wide enough never to bind), with signalMode REGISTERED_READ + read (the brain runs the scoreboard's own generator,
@@ -39,7 +41,7 @@ export const HOUSE_PAPER_IDS = Object.freeze({
 export const HOUSE_PAPER_SKIP = Object.freeze({
   level_reclaim: "has its own paper wallet",
   oi_div_reversal_4h: "has its own paper wallet",
-  session_momentum: "retired (a dead read stays dead)",
+  session_momentum: "retired Nov 13 under the old rule; a run for it is borst's call (2026-11-20)",
 });
 
 const HOUSE_IDS = new Set(Object.values(HOUSE_PAPER_IDS));

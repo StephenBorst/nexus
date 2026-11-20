@@ -46,16 +46,17 @@ function readRow(reg, labels, now, killEvents) {
   const n = reg.numbers || {};
   const since = Date.parse(reg.registeredAt);
   const stage = reg.stage;
-  const failing = stage === "REGISTERED" && (n.events || 0) >= 30 && !countNeeded(reg.next);
+  const labelled = Array.isArray(reg.failing) && reg.failing.length > 0; // the 100-event check (2026-11-20)
+  const failing = labelled || (stage === "REGISTERED" && (n.events || 0) >= 30 && !countNeeded(reg.next));
   let need = reg.next || "";
   let eta = null;
   const c = countNeeded(reg.next);
   if (c) {
     const at = etaAtPace(n[c.counter] || 0, c.more, since, now);
     if (at) eta = `~${fmtDay(at)} at today's pace`;
-  } else if (failing && (n.events || 0) < killEvents) {
+  } else if (failing && !labelled && (n.events || 0) < killEvents) {
     const at = etaAtPace(n.events || 0, killEvents - n.events, since, now);
-    need = `${need}. Retired at ${killEvents} events unless it recovers`;
+    need = `${need}. Labelled failing at ${killEvents} events unless it recovers`;
     if (at) eta = `${killEvents} events ~${fmtDay(at)}`;
   }
   const presetId = SHELF_PRESETS[reg.axis] || null;
@@ -144,7 +145,7 @@ export function shelfRows(sc, now = Date.now()) {
   const reads = sc?.pipeline?.reads;
   if (!Array.isArray(reads)) return [];
   const labels = Object.fromEntries((Array.isArray(sc.axes) ? sc.axes : []).map((a) => [a?.name, a?.label]));
-  const kill = Number(sc?.pipeline?.rules?.killEvents) || 100;
+  const kill = Number(sc?.pipeline?.rules?.failEvents ?? sc?.pipeline?.rules?.killEvents) || 100;
   const rows = reads.filter((r) => r && r.axis && r.stage).map((r) => readRow(r, labels, now, kill));
   const ex = exitRow(Array.isArray(sc.axes) ? sc.axes.find((a) => a?.name === GRADED_EXIT_AXIS) : null, now);
   if (ex) rows.push(ex);

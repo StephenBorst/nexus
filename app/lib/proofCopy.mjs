@@ -1,4 +1,5 @@
 import { isCleared } from "./signalCard.mjs";
+import { ARCHIVED_READS } from "./readPipeline.mjs";
 // ── /proof copy: the plain lines the page prints about the record ────────────────────────────
 // Display only. Every number comes from an endpoint as served (/intel/axis-backtest,
 // /theses/proof-of-edge, /theses/leaderboard); nothing here grades. Pure + tested
@@ -14,6 +15,13 @@ const STAGE_WORD = { LEAD: "a lead", EDGE: "an edge", TRADEABLE: "tradeable", PA
 //                     with the grader's own `next` as the reason line
 //   advanced        → "34 events · a lead", with `next` as what it needs after that
 export function pipelineLine(reg, minEvents = 30, holdoutMinEvents = 30, holdoutPct = 80) {
+  const base = ladderLine(reg, minEvents, holdoutMinEvents, holdoutPct);
+  const extra = [failingLine(reg), oldRetirementLine(reg?.axis)].filter(Boolean);
+  if (!extra.length) return base;
+  return { ...base, sub: [base.sub, ...extra].filter(Boolean).join(" "), ...(failingLine(reg) ? { state: "failing" } : {}) };
+}
+
+function ladderLine(reg, minEvents, holdoutMinEvents, holdoutPct) {
   const events = Math.max(0, Number(reg?.numbers?.events) || 0);
   const ev = `${events} ${events === 1 ? "event" : "events"}`;
   const next = typeof reg?.next === "string" && reg.next.trim() ? reg.next.trim() : "";
@@ -85,23 +93,40 @@ export const retiredGradedExit = (axis) => RETIRED_GRADED_EXITS[axis] || null;
 export const retiredLine = (r) =>
   r ? `Retired ${new Date(`${r.on}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}: ${r.why}. The paper wallet stays as a record.` : "";
 
-// Reads retired under pipeline-if-then.md "Retired" (100+ out-of-sample events with mean R ≤ 0 or worse than
-// random), with the day the watcher first saw it served and the grader's numbers that day, as recorded in
-// docs/research/pipeline-stages.json (proofCopy.test.mjs pins the two together). Retired is final: /proof keeps
-// the row under "Retired" even if a later number comes back. Never re-tuned: a variant is a new read with a new
-// name and a new registration date. Display only.
-export const RETIRED_READS = Object.freeze({
-  session_momentum: Object.freeze({ on: "2026-11-13", events: 112, meanR: -0.33, why: "worse than random" }),
-  level_reclaim: Object.freeze({ on: "2026-11-20", events: 118, meanR: 0, why: "mean R not above zero" }),
-  confluence_follow: Object.freeze({ on: "2026-11-20", events: 109, meanR: -0.11, why: "mean R below zero" }),
+// Reads no longer retire (borst 2026-11-20, pipeline-if-then.md "Reads no longer retire"). The one line /proof prints,
+// and the one that says a badge is re-checked. Display only.
+export const NO_RETIRE_LINE = "Nov 20: reads no longer retire. Every read keeps running; only CLEARED is a claim.";
+export const BADGE_RECHECK_LINE = "Cleared reads are re-checked daily; a read that falls back loses the badge.";
+
+// The three reads the old rule (pipeline-if-then.md "Retired": 100+ new events with mean R ≤ 0 or worse than random,
+// final) retired before it ended, with the day and the numbers that day, as recorded in pipeline-stages.json at the
+// time. Kept so the record says it once on each row: they were retired, then the rule ended. They run like any read now.
+export const RETIRED_UNDER_OLD_RULE = Object.freeze({
+  session_momentum: Object.freeze({ on: "2026-11-13", events: 112, meanR: -0.33 }),
+  level_reclaim: Object.freeze({ on: "2026-11-20", events: 118, meanR: 0 }),
+  confluence_follow: Object.freeze({ on: "2026-11-20", events: 109, meanR: -0.11 }),
 });
-export const retiredRead = (axis) => RETIRED_READS[axis] || null;
-export const retiredReadLine = (r) => {
+export const oldRetirementLine = (axis) => {
+  const r = RETIRED_UNDER_OLD_RULE[axis];
+  if (!r) return "";
+  const d = new Date(`${r.on}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return `Retired ${d} under the old rule (${r.events} new events, mean ${signR(Number(r.meanR)).replace("+0.00", "0.00")}); that rule ended Nov 20.`;
+};
+
+// A read borst archived by hand (readPipeline ARCHIVED_READS): the day, the reason and its numbers that day.
+export const archivedLine = (axis) => {
+  const r = ARCHIVED_READS[axis];
   if (!r) return "";
   const d = new Date(`${r.on}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-  const m = Number(r.meanR);
-  const mean = `${m > 0 ? "+" : m < 0 ? "\u2212" : ""}${Math.abs(m).toFixed(2)}R`;
-  return `Retired ${d}: ${r.events} out-of-sample events, mean ${mean}, ${r.why}. Never re-tuned.`;
+  const n = r.numbers || {};
+  const nums = Number.isFinite(n.events) ? ` (${n.events} new events${Number.isFinite(n.meanR) ? `, mean ${signR(n.meanR)}` : ""})` : "";
+  return `Archived by hand ${d}${nums}: ${r.why}. No longer computed; the record stays.`;
+};
+
+// The 100-event check as a row's label: what it found today, and that the read keeps running.
+export const failingLine = (reg) => {
+  const f = Array.isArray(reg?.failing) ? reg.failing.filter((x) => typeof x === "string" && x) : [];
+  return f.length ? `Failing the 100-event check (${f.join("; ")}). Keeps running; re-checked daily.` : "";
 };
 
 // ── The /proof headline: a claim, computed from the grade (borst, 2026-11-05; CLEARED only since 2026-11-17) ──────

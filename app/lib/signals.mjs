@@ -55,7 +55,8 @@ export function readRows(scorecard, paperRuns, now = Date.now()) {
   const out = [];
   const reads = Array.isArray(scorecard?.pipeline?.reads) ? scorecard.pipeline.reads : [];
   for (const read of reads) {
-    if (read.stage === "RETIRED") continue;
+    // A read failing the 100-event check (a label since 2026-11-20; RETIRED on older boards) makes no bell row or push.
+    if (read.stage === "RETIRED" || (Array.isArray(read.failing) && read.failing.length)) continue;
     const run = paperRuns?.[read.axis];
     if (!run || run.ok === false) continue;
     const label = (scorecard.axes || []).find((a) => a && a.name === read.axis)?.label || read.axis;

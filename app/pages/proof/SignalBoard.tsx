@@ -18,7 +18,8 @@ import { PROMOTION_LOCKS } from "@/lib/promotionLocks.mjs";
 import { usePaperJudgments } from "@/hooks/usePaperJudgments";
 import { usePaperCounts, type PaperCount } from "@/hooks/usePaperCounts";
 import { paperCountLine } from "@/lib/paperRun.mjs";
-import { pipelineLine, countingSince, retiredGradedExit, retiredLine, RETIRED_READS, retiredRead, retiredReadLine } from "@/lib/proofCopy.mjs";
+import { pipelineLine, countingSince, retiredGradedExit, retiredLine, archivedLine, NO_RETIRE_LINE, BADGE_RECHECK_LINE } from "@/lib/proofCopy.mjs";
+import { ARCHIVED_READS } from "@/lib/readPipeline.mjs";
 import Fold from "./Fold";
 
 const API = "https://og.nexustradinglabs.com";
@@ -368,7 +369,7 @@ function StageRow({ a, reg, minEvents }: { a: AxisRow; reg: Reg; minEvents: numb
   const { main, aside } = splitLabel(a.label);
   const r = a.r && a.r.samples ? a.r : null;
   const n = reg?.numbers;
-  const gone = retiredReadLine(retiredRead(a.name));
+  const gone = archivedLine(a.name);
   const sub = gone ? (
     <div style={{ marginTop: 4, fontFamily: MONO, fontSize: 9.5, color: MUTED, lineHeight: 1.5 }}>
       <span style={{ color: FOG }}>{gone}</span>
@@ -423,9 +424,9 @@ function StageRow({ a, reg, minEvents }: { a: AxisRow; reg: Reg; minEvents: numb
 
 // The three groups at the top, in order, best first (pipeline-if-then.md § "Board layout and the CLEARED badge").
 const SECTIONS: Record<string, { title: string; note: string }> = {
-  cleared: { title: "Cleared", note: "Beat random on new data on each side, repeated on coins it was never picked on, netted above 0 after fees, then passed 30 paper trades after fees with parity clean." },
+  cleared: { title: "Cleared", note: `Beat random on new data on each side, repeated on coins it was never picked on, netted above 0 after fees, then passed 30 paper trades after fees with parity clean. ${BADGE_RECHECK_LINE}` },
   lead: { title: "Leads", note: "Positive on new data. Not cleared: each still has a bar to pass, named on its row." },
-  testing: { title: "Still testing", note: "Counting new events since each read was registered. None has passed its first bar on new data yet." },
+  testing: { title: "Still testing", note: "Counting new events since each read was registered. None has passed its first bar on new data yet. A read failing the 100-event check sits last, still running." },
 };
 const NOTHING_CLEARED = "Nothing has cleared yet.";
 
@@ -433,7 +434,7 @@ const NOTHING_CLEARED = "Nothing has cleared yet.";
 const FOLDS: Record<string, { title: string; note: string }> = {
   history: { title: "Looked good on old data", note: "Graded on history we already had. Counts for nothing until it repeats on new data." },
   below: { title: "Worse than random", note: "Lost to random entries on the same markets. Kept here: we publish the misses." },
-  retired: { title: "Retired", note: "Failed its bar on new data. Kept here with its numbers and the date. Never re-tuned: a variant is a new read." },
+  archived: { title: "Archived", note: "Archived by hand, never automatically. No longer computed. Kept here with its numbers and the date." },
 };
 
 // One registered read on the "Being tested now" list: its name and how far along it is, nothing
@@ -508,7 +509,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
   // The recorded 30-trade paper verdict, read only for reads that could clear (served Tradeable or Paper with a paper wallet).
   const judgments = usePaperJudgments(reads);
   const paperCounts = usePaperCounts();
-  const groups = boardGroups(scorecard?.axes, reads, Object.keys(RETIRED_READS), { judgments, locks: PROMOTION_LOCKS });
+  const groups = boardGroups(scorecard?.axes, reads, Object.keys(ARCHIVED_READS), { judgments, locks: PROMOTION_LOCKS });
   const minEvents = scorecard?.pipeline?.rules?.minEvents ?? 30;
   const since = countingSince(reads);
   const tide = tideLine(scorecard?.tide);
@@ -521,8 +522,9 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
     <section style={{ marginTop: 40 }}>
       <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 22 : 26, fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.15, color: BRIGHT }}>Every read, best first</h2>
       <p style={{ margin: "6px 0 10px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: MUTED }}>
-        Cleared first, then leads, then reads still testing. Retired last. Inside each group: the furthest along, then the share of random entries beaten on new data{since ? ` (counting since ${since})` : ""}. Tap a read for its grade on old data.
+        Cleared first, then leads, then reads still testing. Inside each group: the furthest along, then the share of random entries beaten on new data{since ? ` (counting since ${since})` : ""}. Tap a read for its grade on old data.
       </p>
+      <p style={{ margin: "0 0 10px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: FOG }}>{NO_RETIRE_LINE}</p>
       {tide && (
         <p style={{ margin: "0 0 12px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: MUTED }}>
           The market since {tide.since}: a random long earned{" "}

@@ -65,14 +65,23 @@ test("a stage going back down is reported too (the served stage stands)", () => 
   assert.equal(changes[0].to, "REGISTERED");
 });
 
-test("RETIRED and a FAILED graded exit are final: kept, disagreement reported as an issue", () => {
-  const prev = stateFromScorecard(sc({ r1: "RETIRED" }, axis({ verdict: "PROMISING" })));
+test("a FAILED graded exit is final: kept, disagreement reported as an issue", () => {
+  const prev = stateFromScorecard(sc({ r1: "LEAD" }, axis({ verdict: "PROMISING" })));
   const cur = stateFromScorecard(sc({ r1: "LEAD" }, axis()));
   const { changes, issues, next } = diffPipeline(prev, cur);
   assert.deepEqual(changes, []);
-  assert.equal(issues.length, 2);
-  assert.equal(next.reads.r1.stage, "RETIRED");
+  assert.equal(issues.length, 1);
   assert.equal(next.gradedExit.basis_x_cvd.status, "FAILS");
+});
+
+// borst 2026-11-20 (pipeline-if-then.md "Reads no longer retire"): RETIRED isn't a stage; the 100-event check is a label.
+test("reads no longer retire: a served RETIRED is an issue and the recorded stage is kept; there's no Retired trigger", () => {
+  const prev = stateFromScorecard(sc({ r1: "REGISTERED" }));
+  const { changes, issues, next } = diffPipeline(prev, stateFromScorecard(sc({ r1: "RETIRED" })));
+  assert.deepEqual(changes, []);
+  assert.match(issues[0], /no longer a stage/);
+  assert.equal(next.reads.r1.stage, "REGISTERED");
+  assert.equal(STAGE_TRIGGERS.RETIRED, undefined);
 });
 
 test("a read missing from the board is kept and named; a new one is a change", () => {

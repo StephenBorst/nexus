@@ -66,7 +66,7 @@ test("every blurb is a plain description, never a grade", () => {
   }
 });
 
-test("boardGroups: Cleared, Leads, Still testing, then the archive, Retired last; best first by NEW data, never in-sample", () => {
+test("boardGroups: Cleared, Leads, Still testing, then the folds, Archived last; best first by NEW data, never in-sample", () => {
   const list = [
     axis({ name: "top-insample", random: { pooled: { verdict: "BEATS_RANDOM", pctBeaten: 100 } } }),
     axis({ name: "reg-lead-low", verdict: "PROMISING" }),
@@ -77,7 +77,8 @@ test("boardGroups: Cleared, Leads, Still testing, then the archive, Retired last
     axis({ name: "reg-test-unread" }),
     axis({ name: "worse", verdict: "NOISE", random: { pooled: { verdict: "BELOW_RANDOM", pctBeaten: 1 } } }),
     axis({ name: "noise", verdict: "NOISE", random: { pooled: { verdict: "NOT_DISTINGUISHABLE", pctBeaten: 60 } } }),
-    axis({ name: "retired" }),
+    axis({ name: "archived" }),
+    axis({ name: "reg-test-failing" }),
   ];
   const n = (pct, events = 40) => ({ beatsRandomPct: pct, events });
   const reads = [
@@ -87,23 +88,24 @@ test("boardGroups: Cleared, Leads, Still testing, then the archive, Retired last
     { axis: "reg-test-a", stage: "REGISTERED", numbers: n(55, 12) },
     { axis: "reg-test-b", stage: "REGISTERED", numbers: n(80, 9) },
     { axis: "reg-test-unread", stage: "REGISTERED", numbers: n(null, 0) },
-    { axis: "retired", stage: "RETIRED" },
+    { axis: "archived", stage: "REGISTERED", numbers: n(70, 120) },
+    { axis: "reg-test-failing", stage: "REGISTERED", numbers: n(99, 118), failing: ["main card: 118 events, mean R 0"] },
     { axis: "not-on-board", stage: "EDGE" },
   ];
-  const g = boardGroups(list, reads);
-  assert.deepEqual(g.map((x) => x.key), ["cleared", "lead", "testing", "history", "below", "retired"]);
+  const g = boardGroups(list, reads, ["archived"]);
+  assert.deepEqual(g.map((x) => x.key), ["cleared", "lead", "testing", "history", "below", "archived"]);
   assert.deepEqual(g[0].rows, [], "nothing cleared: the group is still there, empty, so the page can say so");
   // The furthest stage first, then the share of random entries beaten on NEW data. The in-sample verdict plays no part:
   // the NOISE-graded lead with 90% on new data sits above the PROMISING one with 40%.
   assert.deepEqual(g[1].rows.map((r) => r.a.name), ["reg-edge", "reg-lead-high", "reg-lead-low"]);
-  assert.deepEqual(g[2].rows.map((r) => r.a.name), ["reg-test-b", "reg-test-a", "reg-test-unread"], "unread new-data share goes last");
+  assert.deepEqual(g[2].rows.map((r) => r.a.name), ["reg-test-b", "reg-test-a", "reg-test-unread", "reg-test-failing"], "unread new-data share goes last; a failing read after it, whatever its share");
   assert.deepEqual(g[3].rows.map((r) => r.a.name), ["top-insample", "noise"], "the best in-sample number never tops the board");
   assert.deepEqual(g[4].rows.map((r) => r.a.name), ["worse"]);
-  assert.deepEqual(g[5].rows.map((r) => r.a.name), ["retired"]);
+  assert.deepEqual(g[5].rows.map((r) => r.a.name), ["archived"]);
   assert.equal(g.reduce((k, x) => k + x.rows.length, 0), list.length, "every read on the board appears exactly once");
-  assert.deepEqual(BOARD_GROUP_ORDER, ["cleared", "lead", "testing", "history", "below", "retired"]);
-  // A recorded retirement is final even if the served stage says otherwise.
-  assert.deepEqual(boardGroups(list, reads, ["reg-edge"]).find((x) => x.key === "retired").rows.map((r) => r.a.name), ["reg-edge", "retired"]);
+  assert.deepEqual(BOARD_GROUP_ORDER, ["cleared", "lead", "testing", "history", "below", "archived"]);
+  // A served RETIRED (a board from before 2026-11-20) is not a group: it lands nowhere special, never in Cleared.
+  assert.ok(!boardGroups(list, [{ axis: "reg-edge", stage: "RETIRED" }]).some((x) => x.key === "cleared" && x.rows.length));
 });
 
 test("CLEARED needs the full ladder: Tradeable or Paper, no promotion lock, and a recorded 30-trade paper PASS", () => {
@@ -119,17 +121,19 @@ test("CLEARED needs the full ladder: Tradeable or Paper, no promotion lock, and 
   assert.equal(isCleared(reg("PAPER"), { recorded: false, verdict: "PASS" }), false, "only a RECORDED verdict counts");
   assert.equal(isCleared(reg("PAPER"), pass, { r: { lostStage: "PAPER" } }), false, "a promotion lock holds the badge back");
   assert.equal(isCleared(reg("PAPER"), null), false);
+  assert.equal(isCleared({ ...reg("PAPER"), failing: ["holdout: 100 events, mean R -0.1"] }, pass), false, "the 100-event label holds the badge back");
+  assert.equal(isCleared({ ...reg("PAPER"), failing: null }, pass), true, "and the badge comes back with the numbers");
   const list = [axis({ name: "r" }), axis({ name: "s" })];
   const g = boardGroups(list, [reg("PAPER", "r"), reg("PAPER", "s")], [], { judgments: { r: pass, s: { recorded: false, verdict: "ACCRUING" } } });
   assert.deepEqual(g.find((x) => x.key === "cleared").rows.map((x) => x.a.name), ["r"]);
   assert.deepEqual(g.find((x) => x.key === "lead").rows.map((x) => x.a.name), ["s"], "on paper but not judged yet = a lead");
 });
 
-test("boardGroups: a recorded retirement is final, whatever stage is served later", () => {
+test("boardGroups: an archive is by hand only (the list passed in), whatever stage is served", () => {
   const list = [axis({ name: "gone" }), axis({ name: "live" })];
   const reads = [{ axis: "gone", stage: "REGISTERED" }, { axis: "live", stage: "REGISTERED" }];
   const g = boardGroups(list, reads, ["gone"]);
-  assert.deepEqual(g.map((x) => x.key), ["cleared", "testing", "retired"]);
+  assert.deepEqual(g.map((x) => x.key), ["cleared", "testing", "archived"]);
   assert.deepEqual(g[1].rows.map((r) => r.a.name), ["live"]);
   assert.deepEqual(g[2].rows.map((r) => r.a.name), ["gone"]);
 });
@@ -170,6 +174,6 @@ test("the board layout is the signed rule's (pipeline-if-then.md, borst 2026-11-
     "Never an in-sample number", "signed page"]) assert.ok(sec.includes(w), w);
   const board = readFileSync(new URL("../pages/proof/SignalBoard.tsx", import.meta.url), "utf8");
   assert.match(board, /const NOTHING_CLEARED = "Nothing has cleared yet\.";/);
-  assert.match(board, /boardGroups\(scorecard\?\.axes, reads, Object\.keys\(RETIRED_READS\), \{ judgments, locks: PROMOTION_LOCKS \}\)/);
+  assert.match(board, /boardGroups\(scorecard\?\.axes, reads, Object\.keys\(ARCHIVED_READS\), \{ judgments, locks: PROMOTION_LOCKS \}\)/);
   assert.doesNotMatch(board, /\bproven\b/i);
 });

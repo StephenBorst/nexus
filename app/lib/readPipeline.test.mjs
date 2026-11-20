@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { PIPELINE_RULES, REGISTERED_READS, pipelineStage, registrationFor, registeredMs } from "./readPipeline.mjs";
+import { PIPELINE_RULES, REGISTERED_READS, pipelineStage, registrationFor, registeredMs, STAGES } from "./readPipeline.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const REG = { axis: "x", side: "LONG", registeredAt: "2026-10-17T00:00:00Z", holdout: true, gradedExit: true, paperWallet: null };
@@ -51,13 +51,30 @@ test("EDGE → TRADEABLE needs the graded exit net > 0 over ≥30 trades; PAPER 
   assert.equal(pipelineStage({ ...REG, paperWallet: "0xabc" }, main({ samples: 40, netBps: 12 }), hold).stage, "PAPER");
 });
 
-test("RETIRED at ≥100 events: mean R ≤ 0 or worse than random, on either line — and it wins over everything", () => {
-  assert.equal(pipelineStage(REG, row({ n: 100, meanR: 0 }), null).stage, "RETIRED");
-  assert.equal(pipelineStage(REG, row({ n: 120, meanR: 0.05, pct: 3, verdict: "BELOW_RANDOM" }), null).stage, "RETIRED");
-  const s = pipelineStage(REG, row({ n: 150, meanR: 0.3, pct: 99, exit: { samples: 50, netBps: 30 } }), row({ n: 100, meanR: -0.1, pct: 20 }));
-  assert.equal(s.stage, "RETIRED");
-  assert.match(s.reasons[0], /holdout/);
-  assert.equal(pipelineStage(REG, row({ n: 99, meanR: -0.2 }), null).stage, "REGISTERED", "below the kill line it only accrues");
+// borst 2026-11-20 (pipeline-if-then.md "Reads no longer retire"): the 100-event check is a LABEL. The stage is the
+// ladder's as for any read; the label carries the reasons, comes and goes with the numbers, and is never final.
+test("the 100-event check: mean R ≤ 0 or worse than random, on either line, sets `failing`, never a stage", () => {
+  const flat = pipelineStage(REG, row({ n: 100, meanR: 0 }), null);
+  assert.equal(flat.stage, "REGISTERED");
+  assert.deepEqual(flat.failing, ["main card: 100 events, mean R 0"]);
+  const below = pipelineStage(REG, row({ n: 120, meanR: 0.05, pct: 3, verdict: "BELOW_RANDOM" }), null);
+  assert.ok(below.failing && /worse than random/.test(below.failing[0]));
+  const hold = pipelineStage(REG, row({ n: 150, meanR: 0.3, pct: 99, exit: { samples: 50, netBps: 30 } }), row({ n: 100, meanR: -0.1, pct: 20 }));
+  assert.equal(hold.stage, "LEAD", "a failing holdout stops the ladder at Lead (EDGE needs the holdout), it doesn't end the read");
+  assert.match(hold.failing[0], /holdout/);
+  assert.equal(pipelineStage(REG, row({ n: 99, meanR: -0.2 }), null).failing, null, "below 100 events: no label");
+  assert.equal(pipelineStage(REG, row({ n: 140, meanR: 0.2, pct: 70 }), null).failing, null, "the numbers came back: the label is gone");
+  assert.ok(!STAGES.includes("RETIRED"));
+});
+
+test("a failing read can never reach EDGE or above, so it can never wear the CLEARED badge", () => {
+  // EDGE needs ≥ 95% vs random and a holdout with mean R > 0; the check fires on mean R ≤ 0 or BELOW_RANDOM.
+  for (const meanR of [-0.2, 0, 0.1]) for (const [pct, verdict] of [[2, "BELOW_RANDOM"], [99, "BEATS_RANDOM"]]) {
+    for (const h of [null, row({ n: 120, meanR: -0.1, pct: 3, verdict: "BELOW_RANDOM" }), row({ n: 60, meanR: 0.4, pct: 90 })]) {
+      const s = pipelineStage({ ...REG, paperWallet: "0x1" }, row({ n: 130, meanR, pct, verdict, exit: { samples: 60, netBps: 40 } }), h);
+      if (s.failing) assert.ok(["REGISTERED", "LEAD"].includes(s.stage), `${meanR} ${pct} → ${s.stage}`);
+    }
+  }
 });
 
 test("registrations: future-dated when written, one per axis, each with a doc that names its date", () => {
@@ -77,7 +94,7 @@ test("registrations: future-dated when written, one per axis, each with a doc th
 test("the pipeline doc states the same numbers as the code", () => {
   const doc = readFileSync(join(ROOT, "docs/research/read-pipeline.md"), "utf8");
   const R = PIPELINE_RULES;
-  for (const s of [`${R.sideMinEvents} out-of-sample events on the main card to beat at least ${R.sidePct}% of its own random replays`, `${R.minEvents} out-of-sample events`, `${R.edgePct}%`, `${R.holdoutMinEvents} holdout events`, `${R.holdoutPct}%`, `${R.exitMinTrades} trades`, `${R.killEvents} out-of-sample events`]) {
+  for (const s of [`${R.sideMinEvents} out-of-sample events on the main card to beat at least ${R.sidePct}% of its own random replays`, `${R.minEvents} out-of-sample events`, `${R.edgePct}%`, `${R.holdoutMinEvents} holdout events`, `${R.holdoutPct}%`, `${R.exitMinTrades} trades`, `${R.failEvents} out-of-sample events`]) {
     assert.ok(doc.includes(s), `read-pipeline.md must say "${s}"`);
   }
 });
@@ -93,7 +110,8 @@ test("a two-sided read is judged on the pooled random result, not one side", () 
   assert.equal(pipelineStage(both, { ...main, random: pooled(94) }, hold).stage, "LEAD");
   assert.match(pipelineStage(both, { ...main, random: pooled(94) }, hold).next, /random entries/);
   const dead = pipelineStage(both, { r: { samples: 120, meanR: 0.1, stable: true }, random: pooled(2, "BELOW_RANDOM") }, null);
-  assert.equal(dead.stage, "RETIRED");
+  assert.equal(dead.stage, "LEAD");
+  assert.match(dead.failing[0], /worse than random/);
 });
 
 // borst 2026-11-16 (pipeline-if-then.md "Each side on its own"): a two-sided read reaches EDGE only if each side with
