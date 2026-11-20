@@ -1,8 +1,9 @@
 # The CLEARED bar, v2 · the paper step has to beat random too
 
-Written 2026-11-20, before any read has reached the paper judgment under it. **DRAFT, not signed.** Nothing here is
-built. It is a change to the badge bar, so it needs borst's own signature, apart from "Reads no longer retire"
-(`docs/research/pipeline-if-then.md`, the same day).
+Written 2026-11-20, before any read has reached the paper judgment under it. **Signed by borst in session 2026-11-20
+("u sign it"), at 90%.** Nothing here is built yet. It is a change to the badge bar, signed on its own, apart from
+"Reads no longer retire" (`docs/research/pipeline-if-then.md`, the same day). The text above Results is pinned
+(`app/lib/badgeBar.test.mjs`): a change is a new dated page.
 
 ## Why
 
@@ -50,7 +51,7 @@ the stored result, the badge check, the row line, plan signing) is its own PR af
 
 ## Sign-off
 
-- Signed: _(borst, date, the number picked in rule 4)_
+- Signed: borst, in session, Nov 20, 2026 ("u sign it"). Rule 4: 90%.
 
 ## Results
 
