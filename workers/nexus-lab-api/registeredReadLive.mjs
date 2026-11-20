@@ -10,17 +10,23 @@
 // with the reason: never a guess.
 //
 // PAPER ONLY, by construction: there is no live lift for this mode. Going live with a read is its own review, after
-// its paper run has been judged (live-money-review.md). rsi_reset_deep's rule still lives in axisbt only, so the brain
-// does not run it yet (it would pull the backtest engine into the brain): moving it to a shared module is its own PR.
+// its paper run has been judged (live-money-review.md).
+//
+// rsi_reset_deep (2026-11-19): its rule moved unchanged to app/lib/rsiReset.mjs; the brain runs it through
+// rsiResetDeepAtStamp, which emits each event at its own row instead of one row later (the generator's loop bound),
+// exactly the events the generator emits once the next row lands (rsiReset.test.mjs).
 import { EXPLORER_GENS, EXPLORER_READS } from "./explorerReads.mjs";
+import { rsiResetDeepAtStamp } from "../../app/lib/rsiReset.mjs";
 import { hourBucket, priceByHour } from "../../app/lib/basisStack.mjs";
 
 const H = 3600000;
 export const REGISTERED_READ_MODE = "REGISTERED_READ";
 export const READ_LIVE = Object.freeze({ maxAgeMs: H, staleMs: 3 * H });
-/** The reads this mode can run: every registered read whose generator is a shared body (explorerReads.mjs). */
-export const BRAIN_READS = Object.freeze(Object.keys(EXPLORER_GENS));
-const LABEL = Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.label]));
+/** What the brain runs for each read: the shared bodies the scoreboard grades (explorerReads.mjs), and rsi_reset_deep's. */
+export const BRAIN_GENS = Object.freeze({ ...EXPLORER_GENS, rsi_reset_deep: rsiResetDeepAtStamp });
+/** The reads this mode can run: every registered read. */
+export const BRAIN_READS = Object.freeze(Object.keys(BRAIN_GENS));
+const LABEL = { ...Object.fromEntries(EXPLORER_READS.map((r) => [r.name, r.label])), rsi_reset_deep: "RSI reset below 45 in an uptrend" };
 /** The hourly series a coin set carries, as the scoreboard loads them (lab-api buildAxisScorecard) and the KV key of each. */
 export const READ_SERIES = Object.freeze({
   oiHist: (c) => `oi:hist:PERP_${c}_USDC`,
@@ -69,7 +75,7 @@ export function seenAt(cs, now) {
  * @returns {Record<string, {side: "LONG"|"SHORT"|null, t: number|null, reason: string}>} keyed by coin
  */
 export function registeredReadLive(read, coinSets, now = Date.now(), p = READ_LIVE) {
-  const gen = EXPLORER_GENS[read];
+  const gen = BRAIN_GENS[read];
   if (typeof gen !== "function") throw new Error(`${read} is not a registered read the brain runs`);
   const sets = (coinSets || []).filter((cs) => cs && cs.coin).map((cs) => seenAt(cs, now));
   const btc = sets.find((cs) => String(cs.coin).toUpperCase() === "BTC");

@@ -6,8 +6,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  registeredReadLive, registeredReadRefusal, seenAt, BRAIN_READS, READ_LIVE, READ_SERIES, REGISTERED_READ_MODE,
+  registeredReadLive, registeredReadRefusal, seenAt, BRAIN_READS, BRAIN_GENS, READ_LIVE, READ_SERIES, REGISTERED_READ_MODE,
 } from "./registeredReadLive.mjs";
+import { rsiResetDeepEvents, rsiResetDeepAtStamp } from "../../app/lib/rsiReset.mjs";
 import { EXPLORER_GENS } from "./explorerReads.mjs";
 import { AXES, btcRegimeByHour, priceSeries, candlesByHour } from "./axisbt.mjs";
 import { priceByHour } from "../../app/lib/basisStack.mjs";
@@ -87,15 +88,19 @@ function expected(events, now) {
 }
 const verdict = (v) => (v && v.side ? { side: v.side, t: v.t } : null);
 
-test("the mode runs every registered read the scoreboard grades from a shared body, and only those", () => {
+test("the mode runs every registered read, each on the body the scoreboard grades", () => {
   const registered = new Set(REGISTERED_READS.map((r) => r.axis));
-  assert.deepEqual([...BRAIN_READS].sort(), Object.keys(EXPLORER_GENS).sort());
+  assert.deepEqual([...BRAIN_READS].sort(), [...registered].sort(), "every registered read, nothing else");
   for (const r of BRAIN_READS) {
-    assert.ok(registered.has(r), `${r} is not registered`);
+    if (r === "rsi_reset_deep") {
+      // the shared rule (app/lib/rsiReset.mjs), at each event's own row (rsiReset.test.mjs)
+      assert.equal(AXES.find((a) => a.name === r)?.gen, rsiResetDeepEvents);
+      assert.equal(BRAIN_GENS[r], rsiResetDeepAtStamp);
+      continue;
+    }
     assert.equal(AXES.find((a) => a.name === r)?.gen, EXPLORER_GENS[r], `${r}: the scoreboard grades this very body`);
+    assert.equal(BRAIN_GENS[r], EXPLORER_GENS[r]);
   }
-  // the one registered read left out lives in axisbt only (moving it is its own PR); nothing else is missing
-  assert.deepEqual([...registered].filter((r) => !BRAIN_READS.includes(r)), ["rsi_reset_deep"]);
 });
 
 test("the coin set carries every series the scoreboard loads, under the same KV keys", () => {
@@ -119,14 +124,16 @@ test("the coin set carries every series the scoreboard loads, under the same KV 
 
 test("parity, read by read: ticked hour by hour on what the brain has stored, it fires exactly the graded events", () => {
   for (const read of BRAIN_READS) {
-    const ref = graded(EXPLORER_GENS[read], SETS);
+    const ref = graded(AXES.find((a) => a.name === read).gen, SETS); // what the scoreboard grades
     const all = Object.entries(ref).flatMap(([coin, ev]) => ev.map((e) => ({ ...e, coin })));
     assert.ok(all.length > 0, `${read}: the tape must make it fire`);
     // ticks: 3 minutes after up to 40 events (spread across the tape), plus 25 hours spread across the tape
     const step = Math.max(1, Math.floor(all.length / 40));
-    // (from the third hour on: in a coin's first hour of history the brain holds one OI row, so it has no spine yet,
-    // while the scoreboard, looking back later, has the whole spine; a real coin has months of history)
-    const ticks = new Set(all.filter((_, i) => i % step === 0).map((e) => e.t + 3 * 60000).filter((now) => now >= T0 + 2 * H));
+    // (from hour 72 on: two whole-history guards decide on a coin's TOTAL row count, not the rows up to the event: the
+    // OI spine needs 2 rows (buildEvents) and rsi_reset_deep 69, so on the full tape the scoreboard can stamp an event
+    // in the first hours that the brain, holding fewer rows then, can't yet; a real coin has months of history)
+    const WARM = T0 + 72 * H;
+    const ticks = new Set(all.filter((e) => e.t + 3 * 60000 >= WARM).filter((_, i) => i % step === 0).map((e) => e.t + 3 * 60000));
     for (let k = 0; k < 25; k++) ticks.add(T0 + Math.floor(((k + 0.5) / 25) * N) * H + 5 * 60000);
     let fired = 0;
     for (const now of ticks) {
@@ -164,7 +171,6 @@ test("no OI spine, stale history and an unknown read sit out with the reason", (
   const later = T0 + N * H + 5 * H;
   assert.match(registeredReadLive("session_fade", SETS, later).ETH.reason, /^history stale \(\d+h\)$/);
   assert.throws(() => registeredReadLive("vol_breakout", SETS, now), /not a registered read/);
-  assert.throws(() => registeredReadLive("rsi_reset_deep", SETS, now), /not a registered read/);
 });
 
 test("paper only, no inverted read, no unknown read", () => {

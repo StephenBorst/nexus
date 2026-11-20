@@ -234,8 +234,10 @@ product is what sits on top:
   (`OI_DIV_4H_PAPER_CONFIG`, a FRESH wallet); its paper wallet is recorded on the registration (`paperWallet`, readPipeline.mjs),
   which moves the served stage → PAPER. Parity: `oiDivReversal.test.mjs`. **REGISTERED_READ = ON for PAPER only** (house paper runs step 2, borst
   2026-11-17; brain var `REGISTERED_READ_PAPER = "true"` since 2026-11-19): `signalMode:"REGISTERED_READ"` + `config.read` =
-  any registered read with a shared body (`BRAIN_READS` = explorerReads `EXPLORER_GENS`, 16 of 17; rsi_reset_deep lives in
-  axisbt only, moving it is its own PR). `workers/nexus-lab-api/registeredReadLive.mjs` runs the scoreboard's OWN
+  any registered read (`BRAIN_READS` = `BRAIN_GENS`: explorerReads `EXPLORER_GENS` + rsi_reset_deep, whose rule moved
+  unchanged to `app/lib/rsiReset.mjs` on 2026-11-19 and runs through `rsiResetDeepAtStamp`: its loop ends one row short,
+  so the brain probes one copy row to see each event at its own row, pinned equal to the generator's later output by
+  `rsiReset.test.mjs`). `workers/nexus-lab-api/registeredReadLive.mjs` runs the scoreboard's OWN
   generator, called as axisbt `buildEvents` calls it (OI price spine, `priceByHour(oiHist)`, BTC's candles as context), on
   the series the brain loads once a tick (all seven `READ_SERIES`, watched coins + BTC), each read once; fires in the hour
   after an event, `sourceT` = the event time. `registeredReadRefusal`: PAPER only, no invert, no unknown read; NO live lift.
