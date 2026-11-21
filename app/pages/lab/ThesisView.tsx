@@ -28,6 +28,7 @@ import { FADE_FUNDING_FLOOR_PCT_YR } from "./briefing";
 import { frozenLevelsFor } from "@/lib/frozenDraft";
 import { ThesisTimeline } from "./ThesisTimeline";
 import { ThesisAdvisor } from "./ThesisAdvisor";
+import { CallStarts, PrePostFacts } from "./CallStarts";
 import { TelegramAlertsButton } from "./TelegramLink";
 import { PnlChart, EmptyState, Coachmark } from "./components";
 import { Collapsible } from "./Collapsible";
@@ -1100,6 +1101,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   // normally. The signal is the SAME reversion/last-N-fades clock the GAPS ticket vetoes
   // on, lifted up via LiveRead's onWeakEdge — ONE veto series, so the two can never fork.
   const [dirArmed, setDirArmed] = useState(true);
+  // The mark the last Quick Call build read, per coin: the pre-post "filled at the post?" fact compares against it.
+  const [buildMark, setBuildMark] = useState<{ sym: string; mark: number } | null>(null);
   const [weakSetup, setWeakSetup] = useState<{ histPct: number | null } | null>(null);
   const userChoseDir = useRef(false);
   // A draft whose side the trader chose (market drawer): kept through the symbol change, built once on arrival.
@@ -1244,10 +1247,14 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   const quickSetup = async (stopPct: number, tpR: number, dir?: "LONG" | "SHORT") => {
     const direction = dir ?? form.direction;
     if (!form.symbol) return;
+    // The coin this build is for. If the trader switches coin while the mark is in flight, this build is dropped:
+    // it used to write the OLD coin's price onto the NEW coin's call (2026-11-21).
+    const forSym = form.symbol.trim().toUpperCase();
     setQuickBusy(true);
     try {
-      const sym = `PERP_${form.symbol.toUpperCase()}_USDC`;
-      const d = await (await fetch(`https://api-evm.orderly.org/v1/public/futures/${sym}`)).json();
+      const sym = `PERP_${forSym}_USDC`;
+      const res = await fetch(`https://api-evm.orderly.org/v1/public/futures/${sym}`);
+      const d = res.ok ? await res.json() : null;
       const mark = parseFloat(d?.data?.mark_price);
       const fr = parseFloat(d?.data?.last_funding_rate);
       if (mark > 0) {
@@ -1255,7 +1262,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
         const stop = direction === "LONG" ? entry * (1 - stopPct / 100) : entry * (1 + stopPct / 100);
         const risk = Math.abs(entry - stop);
         const tp = direction === "LONG" ? entry + tpR * risk : entry - tpR * risk;
-        setForm((f) => ({
+        setBuildMark({ sym: forSym, mark });
+        setForm((f) => f.symbol.trim().toUpperCase() !== forSym ? f : ({
           ...f, direction,
           entryPrice: String(entry),
           stopLoss: String(roundPrice(stop)),
@@ -1392,6 +1400,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
       return;
     }
 
+    let entryPlaced = false;
     try {
       // Step 1 — entry limit order
       await (doOrder as (data: unknown) => Promise<unknown>)({
@@ -1402,6 +1411,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
         order_quantity: snappedQty,
         order_tag: "nexus_thesis",
       });
+      entryPlaced = true;
 
       // Step 2 — positional TP/SL bracket
       await (doAlgoOrder as (data: unknown) => Promise<unknown>)({
@@ -1422,7 +1432,12 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
       setTimeout(() => setLiveStatus("idle"), 4000);
     } catch (err: unknown) {
       setLiveStatus("error");
-      setLiveError(err instanceof Error ? err.message : "Order failed. Try again.");
+      const why = err instanceof Error ? err.message : "Order failed.";
+      // The entry went in but the stop/target didn't: say so plainly. It used to read like nothing happened, leaving a
+      // resting entry with no stop on the account (2026-11-21).
+      setLiveError(entryPlaced
+        ? `Your ${form.symbol.toUpperCase()} entry order IS placed, but its stop and target were refused (${why}). It has no stop. Cancel it under Orders, or add a stop there.`
+        : `${why} Nothing was placed.`);
     }
   };
 
@@ -1666,6 +1681,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 {!symbolListed && form.symbol && (
                   <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9.5, color: "#fbbf24", marginTop: 6 }}>⚠ Not a listed market — pick from the list so Nexus can grade it.</div>
                 )}
+                {/* No coin yet: one-tap starting points (your coins, past a funding line, callers on it). Coin only. */}
+                {!form.symbol && <CallStarts listed={marketTickers} onPick={(c) => set("symbol", c)} />}
                 {/* WATCH gate (Grok): a weak base rate un-arms the direction so the trader
                     overrides a bad setup on purpose, not by our pre-check. Direction stays visible. */}
                 {!dirArmed && weakSetup && (
@@ -1759,6 +1776,9 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                           <ThesisAdvisor symbol={form.symbol} direction={form.direction} entryPrice={form.entryPrice} stopLoss={form.stopLoss} takeProfit1={form.takeProfit1} riskReward={calc?.riskReward ?? ready.rr ?? undefined} wallet={walletAddress} compact />
                         </div>
                       )}
+                      <PrePostFacts direction={form.direction} entry={entryN} stop={stopN} atrPct={atrPct}
+                        mark={buildMark && buildMark.sym === symbolUpper ? buildMark.mark : null}
+                        leverage={calc?.leverage ?? null} symbol={form.symbol} myCalls={trades} />
                       {planWarnings.length > 0 && (
                         <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 3 }}>
                           {planWarnings.map((msg, i) => <div key={i} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#fbbf24", lineHeight: 1.4 }}>⚠ {msg}</div>)}
