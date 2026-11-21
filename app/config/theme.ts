@@ -20,6 +20,9 @@ import type { CSSProperties } from "react";
 // ── Spacing — 4px base, compact density ──────────────────────────────────────
 export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, huge: 48 } as const;
 
+/** Room between a horizontally scrolling chip row and its scrollbar on a phone (borst 2026-11-21: the bar sat on the chips). */
+export const CHIP_SCROLL_GAP = 10;
+
 export const RADIUS = { sm: 3, md: 6, lg: 8 } as const;
 
 export const MONO = "var(--nx-font-mono)";

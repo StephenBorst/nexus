@@ -385,7 +385,10 @@ export default function ThesisPage() {
 
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-            <Avatar pfp={thesis.pfp} displayName={thesis.displayName} size={40} />
+            <button type="button" onClick={() => navigate(`/feed/trader/${thesis.wallet}`)} aria-label={`Open ${traderName}’s profile`} title="Open profile"
+              style={{ background: "none", border: "none", padding: 0, cursor: "pointer", borderRadius: "50%", flexShrink: 0 }}>
+              <Avatar pfp={thesis.pfp} displayName={thesis.displayName} size={40} />
+            </button>
             <div style={{ flex: 1, minWidth: 0 }}>
               <button
                 onClick={() => navigate(`/feed/trader/${thesis.wallet}`)}

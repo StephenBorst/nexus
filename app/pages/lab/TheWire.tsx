@@ -9,7 +9,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { useAccount } from "@orderly.network/hooks";
 import { Link } from "react-router-dom";
-import { C, MONO, UI } from "@/config/theme";
+import { C, MONO, UI, CHIP_SCROLL_GAP } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { WIRE_FILTERS, WIRE_KINDS, filterWire, wireWhen, myCallRows, withMine, wireSeenSplit, WIRE_SEEN_KEY } from "@/lib/wire.mjs";
@@ -109,7 +109,7 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
         </div>
       )}
 
-      <div role="group" aria-label="Show" style={{ display: "flex", gap: 8, marginTop: 12, overflowX: isMobile ? "auto" : "visible", flexWrap: isMobile ? "nowrap" : "wrap", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
+      <div role="group" aria-label="Show" style={{ display: "flex", gap: 8, marginTop: 12, overflowX: isMobile ? "auto" : "visible", flexWrap: isMobile ? "nowrap" : "wrap", paddingBottom: isMobile ? CHIP_SCROLL_GAP : 2, WebkitOverflowScrolling: "touch" }}>
         {WIRE_FILTERS.filter((f) => !("wallet" in f && f.wallet) || wallet).map((f) => (
           <button key={f.id} type="button" aria-pressed={filter === f.id} onClick={() => { setFilter(f.id); setAll(false); }} style={chip(filter === f.id)}>{f.label}</button>
         ))}

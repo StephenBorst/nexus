@@ -463,6 +463,21 @@ function WalletIcon() {
   );
 }
 
+// A trader's avatar or name opens their profile, the way every social app does (borst 2026-11-21). An <a> with the
+// real href (long-press / new tab work); a tap navigates in-app and never reaches the row or card underneath.
+function ProfileLink({ wallet, label, children, style }: { wallet: string; label: string; children: React.ReactNode; style?: React.CSSProperties }) {
+  const navigate = useNavigate();
+  const to = `/feed/trader/${wallet}`;
+  return (
+    <a href={to} aria-label={`Open ${label}’s profile`} title="Open profile"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(to); }}
+      onKeyDown={(e) => e.stopPropagation()}
+      style={{ color: "inherit", textDecoration: "none", cursor: "pointer", minWidth: 0, ...style }}>
+      {children}
+    </a>
+  );
+}
+
 function Avatar({ pfp, displayName, size = 32 }: { pfp: string | null; displayName: string | null; size?: number }) {
   const [err, setErr] = useState(false);
   return (
@@ -573,12 +588,18 @@ function FeedCard({
       {/* Header: who posted it and when, then the grade. Wraps on narrow screens so the pill
           and Follow drop under the identity instead of overlapping it. */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, rowGap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-        <Avatar pfp={thesis.pfp} displayName={thesis.displayName} size={34} />
+        {thesis.agent
+          ? <Avatar pfp={thesis.pfp} displayName={thesis.displayName} size={34} />
+          : <ProfileLink wallet={thesis.wallet} label={thesis.displayName ?? shortAddr} style={{ flexShrink: 0, borderRadius: "50%" }}><Avatar pfp={thesis.pfp} displayName={thesis.displayName} size={34} /></ProfileLink>}
         <div style={{ flex: 1, minWidth: 120 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: C.text.bright, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
-              {thesis.agent ? "Nexus Agent" : (thesis.displayName ?? shortAddr)}
-            </span>
+            {thesis.agent ? (
+              <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: C.text.bright, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>Nexus Agent</span>
+            ) : (
+              <ProfileLink wallet={thesis.wallet} label={thesis.displayName ?? shortAddr} style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: C.text.bright, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {thesis.displayName ?? shortAddr}
+              </ProfileLink>
+            )}
             {thesis.agent ? (
               <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: 10, letterSpacing: "0.08em", padding: "1px 6px", borderRadius: 4, border: `1px solid ${C.borderStrong}`, color: C.text.fog }}>AGENT</span>
             ) : (
@@ -1005,15 +1026,15 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
               </div>
 
               {/* Avatar */}
-              <Avatar pfp={trader.pfp} displayName={trader.displayName} size={32} />
+              <ProfileLink wallet={trader.wallet} label={trader.displayName ?? shortAddr} style={{ flexShrink: 0, borderRadius: "50%" }}><Avatar pfp={trader.pfp} displayName={trader.displayName} size={32} /></ProfileLink>
 
               {/* Identity */}
               <div style={{ flexGrow: 1, flexShrink: 0, flexBasis: isMobile ? "calc(100% - 96px)" : 150, minWidth: isMobile ? 0 : 150, maxWidth: isMobile ? "none" : 280 }}>
                 {/* Name line — name truncates with ellipsis, YOU stays put */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 14, fontWeight: 600, color: C.text.bright, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+                  <ProfileLink wallet={trader.wallet} label={trader.displayName ?? shortAddr} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 14, fontWeight: 600, color: C.text.bright, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {trader.displayName ?? shortAddr}
-                  </span>
+                  </ProfileLink>
                   {isOwn && <span style={{ fontFamily: "var(--nx-font-mono)", color: C.text.muted, fontSize: 10, letterSpacing: "0.1em", flexShrink: 0 }}>YOU</span>}
                 </div>
                 {/* Badge line — never clipped, wraps if needed */}

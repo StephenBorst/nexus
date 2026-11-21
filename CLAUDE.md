@@ -1364,6 +1364,10 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
   without diffing. "Signer rejected it" = Bankr's wallet, not our code (test with a trivial sign).
 - borst's local env is Windows PowerShell (use `;`, no `&&`).
 - Before building on a component, grep that something imports it.
+- **Tap targets** (borst 2026-11-21, `app/lib/tapTargets.test.mjs`): a trader's avatar AND name open their profile
+  (`/feed/trader/:w`) on feed cards, Ranks rows (without toggling the row) and the call page (`ProfileLink` in
+  feed/index.tsx: a real `<a>`, stopPropagation). A phone's horizontally scrolling chip row keeps `CHIP_SCROLL_GAP` (10)
+  between chips and scrollbar (theme.ts; the Wire + news rows).
 
 ## Brand + voice (read `docs/brand.md` and `marketing/VOICE.md` before any brand-facing work)
 - Tokens in `app/config/theme.ts` (`C`), mirrored by the landing `:root`; share cards read `app/lib/brand.mjs`.
