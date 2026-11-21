@@ -2658,3 +2658,12 @@ realized figure and serves only the newest 10k fills, so the record sums closed 
 fill tape from the record's first day (no back-fill: a watched record counts from when we started watching, like
 Orderly's). A tape that isn't freshly synced, or has a gap since the anchor, is never stored.
 
+## /proof in plain words + house-1 sealed (2026-11-21)
+- borst: "I honestly dont understand the leads and Every read vs a random entry sections at all ... make it like that"
+  (the paper wallet cards and the board's number tiles). The R rulers (dot vs ring), the gate tracks and the two-panel
+  side chart were replaced by word chips (the random-baseline ladder in words), number tiles and a plain checklist. Same
+  numbers, same sources; the average is still never shown without a random trade's beside it.
+- borst: "just seal the ... sealed house signal (house-1) for me now. no one cares". The X post was waived by a ruling
+  recorded under sealed-reads.md Results (the text above stays as signed); the fingerprint's GitHub merge (PR #397,
+  2026-11-20) is the outside date. house-1 counts from 2026-11-22T00:00:00Z.
+

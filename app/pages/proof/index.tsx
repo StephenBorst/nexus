@@ -217,7 +217,7 @@ export default function ProofPage() {
       {/* 3 · THE LEADS — closest to clearing, as cards. Mean R never alone: always beside a random entry. */}
       {scorecard && !scorecard.failed && <LeadCards cards={leads} isMobile={isMobile} onWords={openWords} />}
 
-      {/* Every read vs a random entry, per side (the engine overview's chart), then the paper wallets. */}
+      {/* Every read vs random trades, per side (word-chip cards), then the paper wallets. */}
       <SideChart scorecard={scorecard} />
       <PaperWallets isMobile={isMobile} />
 
