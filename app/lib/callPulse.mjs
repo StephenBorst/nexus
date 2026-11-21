@@ -1,6 +1,6 @@
 // The Lab pulse: how many public calls are live right now and how many the grader scored this week,
 // people and our engine callers counted SEPARATELY. One rule for the server (`GET /calls/pulse`, lab-api
-// routes-pulse.mjs), the app's strip (LabPulseChip.tsx) and the Lab home Calls panel (LabCallsPanel.tsx).
+// routes-pulse.mjs), the app's strip (LabPulseChip.tsx).
 // The landing page mirrors `pulseLine` by hand (nexus-landing index.html). Display only: nothing here
 // grades a call or changes a stamp.
 //

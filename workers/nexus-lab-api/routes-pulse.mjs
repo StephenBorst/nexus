@@ -1,5 +1,5 @@
 // ── GET /calls/pulse — the Lab pulse: people's calls and our engines' calls, counted apart ──
-// Read by the app's strip on Trade + Spot (LabPulseChip.tsx), the Lab home Calls panel (LabCallsPanel.tsx)
+// Read by the app's strip on Trade + Spot (LabPulseChip.tsx)
 // and the landing page's hero record. Rule: app/lib/callPulse.mjs. House callers (HOUSE_CALLER_ADDRESS,
 // HOUSE_CATALYST_ADDRESS) are left out; the engine wallets (ENGINE_CALLER_ADDRESSES, wrangler.toml) are
 // counted in their own `engines` block. Each listed call carries its caller's public display name (`caller`).

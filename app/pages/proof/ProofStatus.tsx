@@ -19,15 +19,17 @@ export default function ProofStatus({ counts, jumps, isMobile }: { counts: { cle
   );
   return (
     <nav aria-label="Where the reads stand" style={{
-      marginTop: 24, padding: isMobile ? "12px 0" : "12px 0 10px", background: C.canvas, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`,
-      ...(isMobile ? {} : { position: "sticky" as const, top: 0, zIndex: 5 }),
+      // A whole card (borst 2026-11-21): border on all four sides, rounded, its own inner padding, so the band never
+      // starts flush on the first number. Sticky, it keeps a gap above it and a soft shadow over what scrolls under.
+      marginTop: 24, padding: isMobile ? "14px 16px" : "16px 20px 14px", background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 12,
+      ...(isMobile ? {} : { position: "sticky" as const, top: 8, zIndex: 5, boxShadow: `0 8px 24px ${C.canvas}` }),
     }}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: isMobile ? "6px 18px" : "6px 28px" }}>
         {cell(counts?.cleared ?? null, "cleared", !!counts?.cleared)}
         {cell(counts?.lead ?? null, counts?.lead === 1 ? "lead" : "leads", true)}
         {cell(counts?.testing ?? null, "still testing", false)}
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
         {jumps.map((j) => (
           <button key={j.id} type="button" onClick={() => go(j)}
             style={{ fontFamily: UI, fontSize: 12, color: FOG, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 999, padding: "5px 11px", minHeight: 30, cursor: "pointer", whiteSpace: "nowrap" }}>

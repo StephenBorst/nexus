@@ -914,8 +914,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   older bot calls count nowhere (`parsePersonFrom`, callPulse.mjs). No engine row for it on /proof. A
   name lives in the wallet's own profile (PUT /profile, its Lab signature), never set by us. Each row shows "last graded Nd
   ago" (`lastAt`), so a quiet engine reads as quiet. A new engine wallet goes in that var, or it counts as a person. Feeds the Trade/Spot strip
-  (`LabPulseChip.tsx`, → /proof), Lab home's Calls panel (`LabCallsPanel.tsx`: the "graded from public price" line + the
-  newest open/graded calls, first on Market Intel) and the landing hero's record panel. A quiet week shows the last grade's age, never a fake number.
+  (`LabPulseChip.tsx`, → /proof), the Wire's call rows and the landing hero's record panel. Lab home has NO Calls panel
+  (removed borst 2026-11-21: home = Wire → table → risk → Watching → briefing → board). A quiet week shows the last grade's age, never a fake number.
   **Paper run page** (`/proof/paper/:axis`, 2026-11-12, borst: "no running dollar pnl"): `GET /signals/paper-run/:axis`
   (`routes-paperrun.mjs`, rule `app/lib/paperRun.mjs`) = the read's paper wallet as n of 30, TP/SL/time-stop counts and
   each trade's R; NEVER a dollar figure, size, or a sum/average of R until the 30-trade judgment (`paperJudge.mjs`, bps after fees).
@@ -928,8 +928,7 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   wallet's lifetime trade COUNT vs `PAPER_MIN_TRADES` 30 (`paperWallet` on the registration, `readPipeline.mjs`; no state =
   null "unread", never 0; never a paper P&L). The last good {headline, signals} sits in `calls:pulse:board:v1` ≤6h, so a cold
   scoreboard cache no longer blanks the landing. /proof's FeaturedLead prints the same line under the headline.
-  **Caller pipeline:** Lab home's Calls panel turns into "Your first call, in 30 seconds." → the Thesis Engine when no person
-  has a call open; /proof's "𝕏 Share this week's record" posts `recordShareText` (`app/lib/recordShare.mjs`: pulse counts,
+  **Caller pipeline:** /proof's "𝕏 Share this week's record" posts `recordShareText` (`app/lib/recordShare.mjs`: pulse counts,
   people and engines apart, the cleared read's paper count; unreadable pulse = no link). The post links
   `og.nexustradinglabs.com/share/record?v=<day-hash>` (`recordShareLink`), which unfurls into the 1200×630 card
   `/og/record.png` (`routes-recordshare.mjs`, `recordCard`; counts only, no green/red; an unreadable pulse = an honest
@@ -950,8 +949,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   **Drawer → call** (`app/lib/marketCallDraft.mjs`): "Post a call" asks Long / Short IN the drawer (it never picks one),
   hands off via `nexus_thesis_draft` with `sideChosen` (the WATCH gate keeps the trader's pick) + `build` (the Thesis
   Engine builds at the 1.2× ATR stop on arrival, `pendingDraft`), levels of the last coin cleared, no machine note.
-  **Watching** (`app/lib/watchlist.mjs`, store `watchStore.ts` key `nx_watchlist_v1`, panel `WatchlistPanel.tsx` under
-  Calls on Lab home): ☆ Watch in the drawer (this device, no wallet/push, ≤10); one request `GET /intel/markets?coins=`
+  **Watching** (`app/lib/watchlist.mjs`, store `watchStore.ts` key `nx_watchlist_v1`, panel `WatchlistPanel.tsx` above
+  the briefing on Lab home): ☆ Watch in the drawer (this device, no wallet/push, ≤10); one request `GET /intel/markets?coins=`
   (routes-market.mjs `handleMarkets`: mispriced + smart + forecasts read once, `marketSnapshot` per coin, 60 s cache);
   each row = price, 24h, the move since the last look + the alerts' changes (`marketTransitions`); first look = baseline;
   tapping a row opens the drawer and marks it seen.
