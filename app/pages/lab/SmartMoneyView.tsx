@@ -3,10 +3,11 @@
 // the exit and grades the result on-chain). Data comes from lab-api /smart/*
 // (server-side HL indexing, KV-cached). Discovery + context — NOT "front-run the
 // whale": copy is directional (their symbol + side), executed on Nexus/Orderly.
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 import { CoinLink } from "@/components/CoinLink";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 import { useAccount } from "@orderly.network/hooks";
 import { useIsMobile } from "./useIsMobile";
 import { agentCardStyle, agentLabelStyle, navBtnStyle } from "./styles";
@@ -20,6 +21,9 @@ import { bareTicker } from "@/utils/utils";
 import { pressKey, useEscapeKey } from "@/utils/a11y";
 import { feedRows, FEED_MIN_USD } from "@/lib/smartFeed.mjs";
 import { consensusFromBoard, CONSENSUS_RATIO } from "@/lib/smartConsensus.mjs";
+import { edgeGate } from "@/lib/xrayGrade.mjs";
+import { walletStage, scoreMark, buildingLine, recordFacts, sortWallets, stripCounts, lastMoves, walletLists, NONE_SCORED_LINE, STAGE_WORD, SCORE_LINE, STRIP_LINE, TIER_BARS } from "@/lib/smartLayout.mjs";
+import Fold from "@/pages/proof/Fold";
 
 interface SmConsensus { sym: string; side: "LONG" | "SHORT"; count: number; netUsd: number; refPrice: number; against: number; tracked: number; }
 
@@ -29,7 +33,7 @@ interface SmPosition { coin: string; sym: string | null; tradeable: boolean; sid
 interface SmTrader { source: "orderly" | "hl"; address: string; accountId?: string; pnl: number; pnlLabel: string; roi?: number | null; accountValue?: number; positions: SmPosition[]; }
 // Compact graded Tracked Record per wallet (from /smart/xray/tracked) — turns the
 // board from a raw-single-number leaderboard into a graded-consistency one.
-interface TrackChip { operatorScore: number | null; tier: { tier: string; title: string; glyph: string } | null; scored: boolean; netRealized: number; daysTracked: number; trend: "UP" | "DOWN" | "FLAT"; points: number; }
+interface TrackChip { operatorScore: number | null; tier: { tier: string; title: string; glyph: string } | null; scored: boolean; netRealized: number; daysTracked: number; trend: "UP" | "DOWN" | "FLAT"; points: number; gradedWindows?: number; winWindows?: number; maxDrawdown?: number; }
 // Graded "tracked signal" — a wallet crossing an Operator-tier boundary.
 interface XrayEvent { wallet: string; kind: "TIER_UP" | "TIER_DOWN"; fromTier: string | null; toTier: string | null; operatorScore: number | null; netRealized: number; ts: number; }
 const TIER_GLYPH: Record<string, string> = { TRACKED: "▪", POSITIVE: "◆", CONSISTENT: "✦" };
@@ -106,8 +110,8 @@ const ago = (ts: number) => {
 // days tracked, green-day rate), never its flattering lifetime PnL. A single-leader copy
 // pauses here so the trader sees exactly what track record they're about to ride. Lifetime
 // stays off the button. Fail-soft: an un-graded leader says so honestly (grading starts now).
-function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
-  leader: string; sym: string; side: "LONG" | "SHORT"; onConfirm: () => void; onCancel: () => void;
+function CopyConfirm({ leader, source, sym, side, onConfirm, onCancel }: {
+  leader: string; source?: "orderly" | "hl"; sym: string; side: "LONG" | "SHORT"; onConfirm: () => void; onCancel: () => void;
 }) {
   useEscapeKey(onCancel);
   const [track, setTrack] = useState<XrayTrack | null>(null);
@@ -133,6 +137,11 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
   }, [sym]);
   const graded = !!track && !track.building && (track.daysTracked ?? 0) > 0;
   const net = track?.netRealized ?? 0;
+  // Every COPY goes through edgeGate (app/lib/xrayGrade.mjs, the X-Ray's own rule): a watched record of 20+ graded days,
+  // net positive, or the X-Ray's 30-day trade grade. This dialog reads the watched record; a Hyperliquid wallet's 30-day
+  // trade grade lives on its X-Ray, which runs the same gate with both. Fixed 2026-11-21: this copy used to skip it.
+  type Gate = { pass: boolean; evidence: { source: string; label: string }[]; reasons: string[] };
+  const gate: Gate | null = loading ? null : (edgeGate({ watched: track && !track.building ? track : null }) as Gate);
   const sideCol = side === "LONG" ? "#3ecf8e" : "#f7525f";
   return (
     <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }} style={{ position: "fixed", inset: 0, zIndex: 9100, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -169,13 +178,66 @@ function CopyConfirm({ leader, sym, side, onConfirm, onCancel }: {
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a", lineHeight: 1.55 }}>No graded watched record yet. The agent grades this copy on-chain from here.</div>
           )}
         </div>
+        {/* The copy gate: what clears it, or why it's locked, in the X-Ray's own words. */}
+        {gate && (
+          <div style={{ border: `1px solid ${gate.pass ? "#33333a" : "#232327"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 14 }}>
+            <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.1em", color: "#52525b", textTransform: "uppercase", marginBottom: 6 }}>Copy gate</div>
+            {gate.pass
+              ? gate.evidence.map((e, i) => <div key={i} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#ededf0", lineHeight: 1.5 }}>Clears: {e.label}</div>)
+              : (
+                <>
+                  {gate.reasons.map((r, i) => <div key={i} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", lineHeight: 1.5 }}>Locked: {r}</div>)}
+                  <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", lineHeight: 1.5, marginTop: 6 }}>
+                    {source === "hl" ? "Its X-Ray grades its last 30 days of trades too, and may clear it. " : ""}
+                    <a href={`/analyze?address=${leader}`} style={{ color: "#ededf0" }}>Open its X-Ray →</a>
+                  </div>
+                </>
+              )}
+          </div>
+        )}
         <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", lineHeight: 1.5, marginBottom: 14 }}>The agent enters your direction and manages the exit (PAPER-first, graded on-chain). You set the levels next. Not financial advice.</div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onCancel} style={{ flex: 1, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#a1a1aa", background: "none", border: "1px solid #232327", borderRadius: 4, padding: "9px 0", cursor: "pointer" }}>Cancel</button>
-          <button onClick={onConfirm} style={{ flex: 2, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600, color: "#0a0a0b", background: "#ededf0", border: "none", borderRadius: 4, padding: "9px 0", cursor: "pointer" }}>⚡ Copy {side} {sym} →</button>
+          <button onClick={() => { if (gate?.pass) onConfirm(); }} disabled={!gate?.pass}
+            title={gate?.pass ? undefined : "Locked by the copy gate. See why above."}
+            style={{ flex: 2, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 600, color: "#0a0a0b", background: "#ededf0", border: "none", borderRadius: 4, padding: "9px 0", cursor: gate?.pass ? "pointer" : "not-allowed", opacity: gate?.pass ? 1 : 0.35 }}>
+            {gate ? (gate.pass ? `⚡ Copy ${side} ${sym} →` : "Copy locked") : "Reading the record…"}
+          </button>
         </div>
       </div>
     </div>
+  );
+}
+
+// Colour = stage only, on the ink ladder (visual pass 2026-11-21): bone → fog → muted → faint. No money colours.
+type Stage = "CONSISTENT" | "POSITIVE" | "TRACKED" | "UNTIERED" | "BUILDING";
+type StripCounts = { total: number; orderly: number; hl: number; byStage: Record<Stage, number> };
+const STAGE_INK: Record<Stage, { text: string; border: string; dot: string }> = {
+  CONSISTENT: { text: "#ededf0", border: "#ededf0", dot: "#ededf0" },
+  POSITIVE: { text: "#a1a1aa", border: "#33333a", dot: "#a1a1aa" },
+  TRACKED: { text: "#71717a", border: "#232327", dot: "#71717a" },
+  UNTIERED: { text: "#71717a", border: "#232327", dot: "#52525b" },
+  BUILDING: { text: "#71717a", border: "#232327", dot: "#52525b" },
+};
+
+// The top strip: how many wallets are on the board (by venue) and one mark per wallet coloured by its stage, then
+// the counts. A count, never a verdict on copying them.
+function WalletStrip({ counts, stages }: { counts: StripCounts; stages: Stage[] }) {
+  const order: Stage[] = ["CONSISTENT", "POSITIVE", "TRACKED", "UNTIERED", "BUILDING"];
+  return (
+    <section aria-label="The wallets on the board" style={{ borderTop: "1px solid #232327", borderBottom: "1px solid #232327", padding: "12px 0", marginBottom: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 22, color: "#ededf0", fontVariantNumeric: "tabular-nums" }}>{counts.total}</span>
+        <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#71717a" }}>wallets watched · Orderly {counts.orderly} · Hyperliquid {counts.hl}</span>
+      </div>
+      <span aria-hidden style={{ display: "flex", gap: 2, height: 12, alignItems: "center", maxWidth: 520 }}>
+        {stages.map((st, i) => <span key={i} title={STAGE_WORD[st]} style={{ flex: 1, height: st === "BUILDING" ? 4 : 10, borderRadius: 1, background: STAGE_INK[st].dot }} />)}
+      </span>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>
+        {order.map((st) => <span key={st} style={{ color: counts.byStage[st] ? STAGE_INK[st].text : "#52525b" }}>{STAGE_WORD[st]} {counts.byStage[st]}</span>)}
+      </div>
+      <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a" }}>{STRIP_LINE}</div>
+    </section>
   );
 }
 
@@ -188,7 +250,9 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
   const [error, setError] = useState<string | null>(null);
   const [poster, setPoster] = useState<PosterData | null>(null);
   const [detail, setDetail] = useState<{ source: "orderly" | "hl"; address: string; accountId?: string } | null>(null);
-  const [pendingCopy, setPendingCopy] = useState<{ sym: string; side: "LONG" | "SHORT"; refPrice: number; lev: number | null; leader: string } | null>(null);
+  const [pendingCopy, setPendingCopy] = useState<{ sym: string; side: "LONG" | "SHORT"; refPrice: number; lev: number | null; leader: string; source?: "orderly" | "hl" } | null>(null);
+  // Wallets still building a record (unscored) sit behind a tap, like Still testing on /proof.
+  const [showBuilding, setShowBuilding] = useState(false);
   const [watch, setWatch] = useState<string[]>(loadWatch);
   const [watchOnly, setWatchOnly] = useState(false);
   // Progressive disclosure — lead with the signal (consensus + a short feed/board),
@@ -395,8 +459,8 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
   // A single-leader copy pauses on a confirm that shows the leader's GRADED WATCHED record
   // (Grok) — you see what track record you're inheriting, never their lifetime green. A
   // consensus copy (no single wallet) has no watched record to show, so it deploys directly.
-  const copy = (sym: string, side: "LONG" | "SHORT", refPrice: number, lev?: number | null, leader?: string) => {
-    if (leader && /^0x[a-f0-9]{40}$/i.test(leader)) { setPendingCopy({ sym, side, refPrice, lev: lev ?? null, leader }); return; }
+  const copy = (sym: string, side: "LONG" | "SHORT", refPrice: number, lev?: number | null, leader?: string, source?: "orderly" | "hl") => {
+    if (leader && /^0x[a-f0-9]{40}$/i.test(leader)) { setPendingCopy({ sym, side, refPrice, lev: lev ?? null, leader, source }); return; }
     doCopy(sym, side, refPrice, lev, leader);
   };
 
@@ -425,10 +489,13 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
 
   return (
     <div>
+      {/* The overlays go to <body>: the Lab tab's fade-in wrapper keeps a transform, which pins a fixed overlay to the
+          (tall) tab instead of the screen, so the copy gate opened off-screen (found 2026-11-21). */}
+      {typeof document !== "undefined" && createPortal(<>
       {poster && <SharePoster data={poster} onClose={() => setPoster(null)} />}
       {detail && <TraderDetail source={detail.source} address={detail.address} accountId={detail.accountId} myAddress={wallet ?? undefined} onClose={() => setDetail(null)} />}
       {pendingCopy && (
-        <CopyConfirm leader={pendingCopy.leader} sym={pendingCopy.sym} side={pendingCopy.side}
+        <CopyConfirm leader={pendingCopy.leader} source={pendingCopy.source} sym={pendingCopy.sym} side={pendingCopy.side}
           onCancel={() => setPendingCopy(null)}
           onConfirm={() => { const c = pendingCopy; setPendingCopy(null); doCopy(c.sym, c.side, c.refPrice, c.lev, c.leader); }} />
       )}
@@ -437,6 +504,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
           {toast}
         </div>
       )}
+      </>, document.body)}
       {/* Header */}
       {/* Header: the title, then ONE line — what this is and how to read it. (It used to be an
           eyebrow, an intro, a "How to read this" box and a one-time LOOP coachmark: four blocks,
@@ -450,8 +518,8 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
         </div>
       </div>
 
-      {/* Multi-axis conviction scan — the highest-agreement fades across the board. */}
-      <ConvictionScanner />
+      {/* The strip (visual pass 2026-11-21): the wallets on the board, one mark each by stage. One source: the board + its records. */}
+      {board && board.length > 0 && <WalletStrip counts={stripCounts(board, trackMap) as StripCounts} stages={(sortWallets(board, trackMap) as SmTrader[]).map((t) => walletStage(trackMap[t.address.toLowerCase()]) as Stage)} />}
 
       {/* Bounded by the paint deadline above — this line can no longer stand forever. */}
       {loading && !board && !events && (
@@ -479,7 +547,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", width: 56, flexShrink: 0 }}>{a.coin}</span>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", flexShrink: 0 }}>you <span style={{ color: a.yourSide === "LONG" ? "#3ecf8e" : "#f7525f" }}>{a.yourSide}</span></span>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", flexShrink: 0 }}>smart money <span style={{ color: a.smartSide === "LONG" ? "#3ecf8e" : "#f7525f" }}>{a.smartSide}</span> <span style={{ color: "#52525b" }}>({a.traders})</span></span>
-                <span style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 10, fontWeight: 700, color: a.aligned ? "#3ecf8e" : "#fbbf24", flexShrink: 0 }}>
+                <span style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 10, fontWeight: 700, color: a.aligned ? "#ededf0" : SIGNAL.watch, flexShrink: 0 }}>
                   {a.aligned ? "✓ ALIGNED" : "⚠ FIGHTING THE CROWD"}
                 </span>
               </div>
@@ -490,6 +558,148 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
           </div>
         </div>
       )}
+
+      {/* ── THE WALLETS (visual pass 2026-11-21, rules app/lib/smartLayout.mjs): stage first, then how long each has been
+          watched; the score never alone (its facts beside it, a dot against the stated 40 / 65 bars); building records on a tap. ── */}
+      {board && board.length > 0 && (() => {
+        const sorted = sortWallets(board, trackMap) as SmTrader[];
+        const base = watchOnly ? sorted.filter((t) => watch.includes(t.address)) : sorted;
+        const stageOf = (t: SmTrader) => walletStage(trackMap[t.address.toLowerCase()]) as Stage;
+        const { shown: ready, folded: building, noneScored } = walletLists(base, trackMap) as { shown: SmTrader[]; folded: SmTrader[]; noneScored: boolean };
+        const moves = lastMoves(events) as Record<string, { type: string; side: "LONG" | "SHORT"; sym: string; ts: number }>;
+        const walletCard = (t: SmTrader) => {
+          const starred = watch.includes(t.address);
+          const tk = trackMap[t.address.toLowerCase()];
+          const stage = stageOf(t);
+          const mark = scoreMark(tk) as { pos: number; score: number; ticks: number[] } | null;
+          const facts = recordFacts(tk) as { key: string; text: string; money?: number }[];
+          const mv = moves[t.address.toLowerCase()];
+          return (
+              <div key={t.address} style={{ border: "1px solid #1a1a1e", borderRadius: 8, padding: "11px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={() => toggleWatch(t.address)} title={starred ? "Unwatch: no more move notes" : "Watch: a note when their Orderly positions open or close"}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13, color: starred ? TRACKED : "#52525b", flexShrink: 0, lineHeight: 1 }}>
+                    {starred ? "★" : "☆"}
+                  </button>
+                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.05em", color: t.source === "orderly" ? "#a1a1aa" : "#71717a", border: "1px solid #232327", borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>{t.source === "orderly" ? "◆ ORDERLY" : "HL"}</span>
+                  <span role="button" tabIndex={0} onClick={() => openDetail(t.address, t.source, t.accountId)} onKeyDown={pressKey(() => openDetail(t.address, t.source, t.accountId))} title="View trader detail" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", flexShrink: 0, cursor: "pointer", textDecoration: "underline", textDecorationColor: "#33333a" }}>{short(t.address)}</span>
+                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 3, border: `1px solid ${STAGE_INK[stage].border}`, color: STAGE_INK[stage].text, flexShrink: 0 }}>{tk?.tier?.glyph ? `${tk.tier.glyph} ` : ""}{STAGE_WORD[stage]}</span>
+                  {mv && (
+                    <span title="Its newest move in the live feed" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", border: "1px solid #232327", borderRadius: 3, padding: "1px 6px", flexShrink: 0 }}>
+                      {mv.type === "OPEN" ? "opened" : "closed"} <span style={{ color: mv.side === "LONG" ? "#3ecf8e" : "#f7525f" }}>{mv.side}</span> {mv.sym} · {ago(mv.ts)}
+                    </span>
+                  )}
+                  <a href={t.source === "hl" ? `/analyze?address=${t.address}` : `https://orderly-dashboard.orderly.network/address/${t.address}`} target="_blank" rel="noopener noreferrer"
+                    style={{ marginLeft: isMobile ? 0 : "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", textDecoration: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", flexShrink: 0 }}>
+                    {t.source === "hl" ? "x-ray ↗" : "explorer ↗"}
+                  </a>
+                </div>
+                {/* The score, never alone: a dot on its rail, the two stated bars as ticks, and what it's made of. */}
+                {mark ? (
+                  <div title={`${SCORE_LINE} Score = 0.5 × green-day share + 0.3 × how much realized flow stuck + 0.2 × drawdown control, shrunk while the record is short.`}
+                    style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 220px) minmax(0, 1fr)", gap: isMobile ? 4 : 14, alignItems: "center" }}>
+                    <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      <span style={{ position: "relative", display: "block", height: 12 }}>
+                        <span style={{ position: "absolute", left: 0, right: 0, top: 5, height: 2, borderRadius: 1, background: "#232327" }} />
+                        {mark.ticks.map((x) => <span key={x} style={{ position: "absolute", left: `${x}%`, top: 0, bottom: 0, width: 2, marginLeft: -1, background: "#71717a" }} />)}
+                        <span style={{ position: "absolute", top: "50%", left: `${mark.pos}%`, width: 9, height: 9, margin: "-4.5px 0 0 -4.5px", borderRadius: "50%", background: STAGE_INK[stage].dot, boxShadow: "0 0 0 2px #0a0a0b" }} />
+                      </span>
+                      <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>score {mark.score} · bars {TIER_BARS.POSITIVE.score} / {TIER_BARS.CONSISTENT.score}</span>
+                    </span>
+                    <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", lineHeight: 1.6 }}>
+                      {facts.map((f, i) => <span key={f.key}>{i ? " · " : ""}<span style={f.key === "net" && f.money != null ? { color: f.money >= 0 ? "#3ecf8e" : "#f7525f" } : undefined}>{f.text}</span></span>)}
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>
+                    {tk ? `Building a record · ${buildingLine(tk)}` : t.source === "hl" ? "No daily record: Hyperliquid wallets aren’t snapshotted yet" : "No daily record yet: the daily sweep starts it"}
+                  </div>
+                )}
+                {/* The venue's own board number (money), as before. */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>
+                  <span style={{ color: t.pnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{usd(t.pnl)} <span style={{ color: "#52525b" }}>{t.pnlLabel}</span></span>
+                  {t.roi != null && <span style={{ color: "#a1a1aa" }}>{(t.roi * 100).toFixed(0)}% ROI</span>}
+                  {t.accountValue != null && t.accountValue > 0 && <span style={{ fontSize: 10, color: "#71717a" }}>{usd(t.accountValue)} acct</span>}
+                </div>
+                {t.positions.length > 0 && (
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                    {t.positions.slice(0, 5).map((p, j) => (
+                      isMobile ? (
+                      // Phone: two lines, nothing off-screen. Coin · side · size · uPnL, then the entry + Trade.
+                      <div key={j} style={{ padding: "7px 0", borderTop: j ? "1px solid #1a1a1e" : "none" }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#f4f4f5", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.coin}</span>
+                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.side === "LONG" ? "#3ecf8e" : "#f7525f", flexShrink: 0 }}>{p.side === "LONG" ? "↑ LONG" : "↓ SHORT"}{p.lev ? ` ${p.lev}x` : ""}</span>
+                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#a1a1aa", flexShrink: 0 }}>{usd(p.szUsd)}</span>
+                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.uPnl >= 0 ? "#3ecf8e" : "#f7525f", flexShrink: 0, minWidth: 56, textAlign: "right" }}>{p.uPnl >= 0 ? "+" : ""}{usd(p.uPnl)}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 4 }}>
+                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>{p.entry > 0 ? `entry $${p.entry.toLocaleString(undefined, { maximumFractionDigits: p.entry < 10 ? 4 : 2 })}` : ""}</span>
+                          {p.tradeable && p.sym
+                            ? tradeBtn(() => copy(p.sym as string, p.side, p.entry, p.lev, t.address, t.source))
+                            : <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", whiteSpace: "nowrap" }}>HL-only</span>}
+                        </div>
+                      </div>
+                      ) :
+                      <div key={j} style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 0", flexWrap: "nowrap", overflowX: "auto" }}>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#f4f4f5", flex: "1 1 72px", minWidth: 72 }}>{p.coin}</span>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.side === "LONG" ? "#3ecf8e" : "#f7525f", width: 78, flexShrink: 0 }}>{p.side === "LONG" ? "↑ LONG" : "↓ SHORT"}{p.lev ? ` ${p.lev}x` : ""}</span>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#a1a1aa", flex: "1 1 88px", minWidth: 88, textAlign: "right" }}>{usd(p.szUsd)}</span>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#52525b", flex: "1 1 92px", minWidth: 92, textAlign: "right" }}>{p.entry > 0 ? `@ $${p.entry.toLocaleString(undefined, { maximumFractionDigits: p.entry < 10 ? 4 : 2 })}` : ""}</span>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.uPnl >= 0 ? "#3ecf8e" : "#f7525f", flex: "1 1 88px", minWidth: 88, textAlign: "right" }}>{p.uPnl >= 0 ? "+" : ""}{usd(p.uPnl)}</span>
+                        <span style={{ marginLeft: 10, flexShrink: 0 }}>
+                          {p.tradeable && p.sym
+                            ? tradeBtn(() => copy(p.sym as string, p.side, p.entry, p.lev, t.address, t.source))
+                            : <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#52525b", whiteSpace: "nowrap" }}>HL-only</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+          );
+        };
+        return (
+        <div style={{ ...agentCardStyle, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div style={agentLabelStyle}>THE WALLETS <span style={{ color: "#52525b" }}>— by stage, then days watched · ◆ Orderly + Hyperliquid</span></div>
+            <button onClick={() => setWatchOnly((v) => !v)} disabled={watch.length === 0}
+              title={watch.length === 0 ? "Star traders below to build a watchlist" : "Show only your watchlist"}
+              style={{ marginLeft: "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: watchOnly ? TRACKED : "#71717a", background: watchOnly ? "#1a1a1e" : "none", border: `1px solid ${watchOnly ? "#33333a" : "#232327"}`, borderRadius: 3, padding: "4px 9px", cursor: watch.length === 0 ? "default" : "pointer", opacity: watch.length === 0 ? 0.5 : 1 }}>
+              ★ Watchlist{watch.length > 0 ? ` (${watch.length})` : ""}
+            </button>
+          </div>
+          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", marginTop: 6, lineHeight: 1.5 }}>
+            {SCORE_LINE} Star ★ a wallet for a note when its Orderly positions open or close (bell; phone under Wallets in alerts).
+          </div>
+          {watchOnly && base.length === 0 && (
+            <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a", padding: "16px 0", textAlign: "center" }}>No watched traders in the current board. Star ★ any trader to track them.</div>
+          )}
+          {noneScored && <div style={{ marginTop: 10, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: "#a1a1aa", lineHeight: 1.5 }}>{NONE_SCORED_LINE}</div>}
+          <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+            {ready.slice(0, boardAll ? 999 : 6).map(walletCard)}
+          </div>
+          {ready.length > 6 && (
+            <button onClick={() => setBoardAll((v) => !v)}
+              style={{ marginTop: 8, width: "100%", background: "none", border: "1px solid #232327", borderRadius: 4, color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 0", cursor: "pointer" }}>
+              {boardAll ? "▲ show top 6" : `▼ show ${ready.length - 6} more`}
+            </button>
+          )}
+          {building.length > 0 && (
+            <>
+              <button onClick={() => setShowBuilding((v) => !v)} aria-expanded={showBuilding}
+                style={{ marginTop: 8, width: "100%", textAlign: "left", background: "none", border: "none", borderTop: "1px solid #232327", padding: "11px 2px", minHeight: 44, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, cursor: "pointer" }}>
+                {showBuilding ? `Hide the ${building.length} still building a record −` : `Show the ${building.length} still building a record +`}
+              </button>
+              {showBuilding && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{building.map(walletCard)}</div>}
+            </>
+          )}
+          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 10, lineHeight: 1.5 }}>
+            ◆ Orderly traders (public settlement indexer) copy natively; Hyperliquid traders copy directionally on Nexus. Every single-wallet copy goes through the X-Ray’s copy gate. Not financial advice.
+          </div>
+        </div>
+        );
+      })()}
 
       {/* ── THE SHOVEL LINE — who did what, in one sentence you can act on ── */}
       {shovel && (
@@ -587,7 +797,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                     {priceUsd(e.price) ? <span style={{ color: "#52525b" }}>@ {priceUsd(e.price)} {isOpen ? "entry" : "price"}</span> : null}
                     {e.closedPnl != null && <span style={{ color: e.closedPnl >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: 700 }}>{e.closedPnl >= 0 ? "+" : ""}{usd(e.closedPnl)}</span>}
                     <span style={{ color: "#3f3f46" }}>·</span>
-                    <span title={e.source === "orderly" ? "Orderly (native)" : "Hyperliquid"} style={{ color: e.source === "orderly" ? "#3ecf8e" : "#52525b" }}>{e.source === "orderly" ? "◆ Orderly" : "Hyperliquid"}</span>
+                    <span title={e.source === "orderly" ? "Orderly (native)" : "Hyperliquid"} style={{ color: e.source === "orderly" ? "#a1a1aa" : "#52525b" }}>{e.source === "orderly" ? "◆ Orderly" : "Hyperliquid"}</span>
                     <span style={{ color: "#3f3f46" }}>·</span>
                     <span>{ago(e.ts)} ago</span>
                   </div>
@@ -597,7 +807,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                     <span style={{ display: "flex", gap: 6, marginTop: 8 }}>
                     {shareBtn({ kind: "smart", symbol: e.sym, direction: e.side, szUsd: e.szUsd, trader: short(e.addr), source: e.source })}
                     {thesisBtn(() => openThesis(e.sym, e.side, e.price, `${short(e.addr)} (smart money) opened ${e.side} ${e.sym}.`))}
-                    {tradeBtn(() => copy(e.sym, e.side, e.price, null, e.addr))}
+                    {tradeBtn(() => copy(e.sym, e.side, e.price, null, e.addr, e.source))}
                     </span>
                   )}
                 </div>
@@ -605,7 +815,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                   <span style={{ display: "flex", gap: 6, flexShrink: 0, marginTop: 1 }}>
                     {shareBtn({ kind: "smart", symbol: e.sym, direction: e.side, szUsd: e.szUsd, trader: short(e.addr), source: e.source })}
                     {thesisBtn(() => openThesis(e.sym, e.side, e.price, `${short(e.addr)} (smart money) opened ${e.side} ${e.sym}.`))}
-                    {tradeBtn(() => copy(e.sym, e.side, e.price, null, e.addr))}
+                    {tradeBtn(() => copy(e.sym, e.side, e.price, null, e.addr, e.source))}
                   </span>
                 )}
               </div>
@@ -630,17 +840,23 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
         </div>
       )}
 
-      {/* ── TRACKED SIGNALS — graded tier crossings (low-noise, ~daily) ── */}
+      {/* ── More: the stretched-funding scan and the tier changes (secondary lists, one tap away) ── */}
+      <div style={{ borderBottom: "1px solid #232327", marginTop: 4 }}>
+        <Fold title="More" note="The stretched-funding scan across the board, and wallets crossing a tier bar.">
+          {/* Multi-axis conviction scan — the highest-agreement fades across the board. */}
+      <ConvictionScanner />
+
+      {/* ── Tier changes (low-noise, ~daily) ── */}
       {trackedSignals.length > 0 && (
         <div style={{ ...agentCardStyle, marginBottom: 12 }}>
-          <div style={agentLabelStyle}>TRACKED SIGNALS <span style={{ color: "#52525b" }}>— Operator-tier changes, graded from realized-PnL consistency</span></div>
+          <div style={agentLabelStyle}>TIER CHANGES <span style={{ color: "#52525b" }}>— a wallet crossing a stated bar on its realized-P&L record. Not graded against copying.</span></div>
           <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
             {trackedSignals.map((s, i) => {
               const up = s.kind === "TIER_UP";
               return (
                 <div role="button" tabIndex={0} key={i} onClick={() => openDetail(s.wallet, "orderly")} onKeyDown={pressKey(() => openDetail(s.wallet, "orderly"))} title="Open the wallet's Tracked Record"
                   style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", cursor: "pointer", padding: "5px 0", borderTop: i ? "1px solid #1a1a1e" : "none" }}>
-                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: up ? "#3ecf8e" : "#71717a", width: 16, flexShrink: 0 }}>{up ? "▲" : "▽"}</span>
+                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: up ? "#ededf0" : "#71717a", width: 16, flexShrink: 0 }}>{up ? "▲" : "▽"}</span>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", flexShrink: 0, textDecoration: "underline", textDecorationColor: "#33333a" }}>{short(s.wallet)}</span>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa" }}>
                     {up ? "earned" : "dropped to"} {s.toTier ? `${TIER_GLYPH[s.toTier] ?? ""} ${s.toTier}` : "no tier"}
@@ -654,109 +870,8 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
         </div>
       )}
 
-      {/* ── SMART MONEY BOARD ── */}
-      {board && board.length > 0 && (() => {
-        const shown = watchOnly ? board.filter((t) => watch.includes(t.address)) : board;
-        return (
-        <div style={agentCardStyle}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <div style={agentLabelStyle}>SMART MONEY BOARD <span style={{ color: "#52525b" }}>— ◆ Orderly (native) + Hyperliquid</span></div>
-            <button onClick={() => setWatchOnly((v) => !v)} disabled={watch.length === 0}
-              title={watch.length === 0 ? "Star traders below to build a watchlist" : "Show only your watchlist"}
-              style={{ marginLeft: "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: watchOnly ? TRACKED : "#71717a", background: watchOnly ? "#1a1a1e" : "none", border: `1px solid ${watchOnly ? "#33333a" : "#232327"}`, borderRadius: 3, padding: "4px 9px", cursor: watch.length === 0 ? "default" : "pointer", opacity: watch.length === 0 ? 0.5 : 1 }}>
-              ★ Watchlist{watch.length > 0 ? ` (${watch.length})` : ""}
-            </button>
-          </div>
-          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", marginTop: 6, lineHeight: 1.5 }}>
-            Star ★ a trader to get a note when their Orderly positions open or close, with their tracked record in it (bell; phone under Wallets in alerts). Hyperliquid wallets: board only for now.
-          </div>
-          {watchOnly && shown.length === 0 && (
-            <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a", padding: "16px 0", textAlign: "center" }}>No watched traders in the current board. Star ★ any trader to track them.</div>
-          )}
-          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
-            {shown.slice(0, boardAll ? 999 : 6).map((t, i) => {
-              const starred = watch.includes(t.address);
-              return (
-              <div key={t.address} style={{ border: "1px solid #1a1a1e", borderRadius: 6, padding: "10px 12px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#52525b", width: 24, flexShrink: 0 }}>#{i + 1}</span>
-                  <button onClick={() => toggleWatch(t.address)} title={starred ? "Unwatch: no more move notes" : "Watch: a note when their Orderly positions open or close"}
-                    style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13, color: starred ? TRACKED : "#52525b", flexShrink: 0, lineHeight: 1 }}>
-                    {starred ? "★" : "☆"}
-                  </button>
-                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.05em", color: t.source === "orderly" ? "#3ecf8e" : "#71717a", border: `1px solid ${t.source === "orderly" ? "#33333a" : "#232327"}`, borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>{t.source === "orderly" ? "◆ ORDERLY" : "HL"}</span>
-                  <span role="button" tabIndex={0} onClick={() => openDetail(t.address, t.source, t.accountId)} onKeyDown={pressKey(() => openDetail(t.address, t.source, t.accountId))} title="View trader detail" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", flexShrink: 0, cursor: "pointer", textDecoration: "underline", textDecorationColor: "#33333a" }}>{short(t.address)}</span>
-                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: t.pnl >= 0 ? "#3ecf8e" : "#f7525f", flexShrink: 0 }}>{usd(t.pnl)} <span style={{ color: "#52525b" }}>{t.pnlLabel}</span></span>
-                  {t.roi != null && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", flexShrink: 0 }}>{(t.roi * 100).toFixed(0)}% ROI</span>}
-                  {t.accountValue != null && t.accountValue > 0 && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", flexShrink: 0 }}>{usd(t.accountValue)} acct</span>}
-                  {(() => {
-                    const tk = trackMap[t.address.toLowerCase()];
-                    if (!tk) return null;
-                    if (tk.tier) return (
-                      <span role="button" tabIndex={0} onClick={() => openDetail(t.address, t.source, t.accountId)} onKeyDown={pressKey(() => openDetail(t.address, t.source, t.accountId))} title={`Consistency Score ${tk.operatorScore}. Graded from ${tk.daysTracked}d of realized-PnL consistency. Click for the full Tracked Record.`}
-                        style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#3ecf8e", border: "1px solid #33333a", borderRadius: 3, padding: "1px 5px", flexShrink: 0, cursor: "pointer" }}>{tk.tier.glyph} {tk.operatorScore}</span>
-                    );
-                    return (
-                      <span title={`Tracking. ${tk.points} snapshots. A graded Consistency Score unlocks after ~4 daily windows.`}
-                        style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", flexShrink: 0 }}>▪ tracking</span>
-                    );
-                  })()}
-                  <a href={t.source === "hl" ? `/analyze?address=${t.address}` : `https://orderly-dashboard.orderly.network/address/${t.address}`} target="_blank" rel="noopener noreferrer"
-                    style={{ marginLeft: isMobile ? 0 : "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", textDecoration: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", flexShrink: 0 }}>
-                    {t.source === "hl" ? "x-ray ↗" : "explorer ↗"}
-                  </a>
-                </div>
-                {t.positions.length > 0 && (
-                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-                    {t.positions.slice(0, 5).map((p, j) => (
-                      isMobile ? (
-                      // Phone: two lines, nothing off-screen. Coin · side · size · uPnL, then the entry + Trade.
-                      <div key={j} style={{ padding: "7px 0", borderTop: j ? "1px solid #1a1a1e" : "none" }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#f4f4f5", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.coin}</span>
-                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.side === "LONG" ? "#3ecf8e" : "#f7525f", flexShrink: 0 }}>{p.side === "LONG" ? "↑ LONG" : "↓ SHORT"}{p.lev ? ` ${p.lev}x` : ""}</span>
-                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#a1a1aa", flexShrink: 0 }}>{usd(p.szUsd)}</span>
-                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.uPnl >= 0 ? "#3ecf8e" : "#f7525f", flexShrink: 0, minWidth: 56, textAlign: "right" }}>{p.uPnl >= 0 ? "+" : ""}{usd(p.uPnl)}</span>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 4 }}>
-                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>{p.entry > 0 ? `entry $${p.entry.toLocaleString(undefined, { maximumFractionDigits: p.entry < 10 ? 4 : 2 })}` : ""}</span>
-                          {p.tradeable && p.sym
-                            ? tradeBtn(() => copy(p.sym as string, p.side, p.entry, p.lev, t.address))
-                            : <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", whiteSpace: "nowrap" }}>HL-only</span>}
-                        </div>
-                      </div>
-                      ) :
-                      <div key={j} style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 0", flexWrap: "nowrap", overflowX: "auto" }}>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#f4f4f5", flex: "1 1 72px", minWidth: 72 }}>{p.coin}</span>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.side === "LONG" ? "#3ecf8e" : "#f7525f", width: 78, flexShrink: 0 }}>{p.side === "LONG" ? "↑ LONG" : "↓ SHORT"}{p.lev ? ` ${p.lev}x` : ""}</span>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#a1a1aa", flex: "1 1 88px", minWidth: 88, textAlign: "right" }}>{usd(p.szUsd)}</span>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#52525b", flex: "1 1 92px", minWidth: 92, textAlign: "right" }}>{p.entry > 0 ? `@ $${p.entry.toLocaleString(undefined, { maximumFractionDigits: p.entry < 10 ? 4 : 2 })}` : ""}</span>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.uPnl >= 0 ? "#3ecf8e" : "#f7525f", flex: "1 1 88px", minWidth: 88, textAlign: "right" }}>{p.uPnl >= 0 ? "+" : ""}{usd(p.uPnl)}</span>
-                        <span style={{ marginLeft: 10, flexShrink: 0 }}>
-                          {p.tradeable && p.sym
-                            ? tradeBtn(() => copy(p.sym as string, p.side, p.entry, p.lev, t.address))
-                            : <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#52525b", whiteSpace: "nowrap" }}>HL-only</span>}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              );
-            })}
-          </div>
-          {shown.length > 6 && (
-            <button onClick={() => setBoardAll((v) => !v)}
-              style={{ marginTop: 8, width: "100%", background: "none", border: "1px solid #232327", borderRadius: 4, color: "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "6px 0", cursor: "pointer" }}>
-              {boardAll ? "▲ show top 6" : `▼ show ${shown.length - 6} more traders`}
-            </button>
-          )}
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 10, lineHeight: 1.5 }}>
-            ◆ Orderly traders (public settlement indexer) copy natively; Hyperliquid traders copy directionally on Nexus. The agent manages the exit. Not financial advice.
-          </div>
-        </div>
-        );
-      })()}
+        </Fold>
+      </div>
     </div>
   );
 }

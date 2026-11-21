@@ -2637,3 +2637,17 @@ request path nothing called, was deleted. Bankr's model list confirmed the haiku
   also active, movers and the source notes moved under "More". Same numbers and sources, nothing summed.
 - Colour = state: past a line / an extreme in `SIGNAL.watch`, everything else ink. The old page coloured funding and the
   24h movers green/red; those are inputs, not outcomes, so they went to ink. Green/red stays on the viewer's own P&L.
+
+## Smart Money visual pass + copy gate + snapshot sweep (2026-11-21)
+borst: "go" on the third visual-first pass (after /proof #416 and /intel #417).
+- Found: the ⚡ copy on Smart Money opened the agent hand-off without `edgeGate`, the gate every X-Ray copy goes
+  through. It now shows the gate in the dialog and refuses a locked copy (the first live check locked a wallet −$39K
+  over 99 days watched).
+- Found: the copy dialog (and the poster / trader detail) opened off-screen. `.nx-fade-in` on the Lab tab keeps a
+  transform, so `position: fixed` resolved against the 2,700 px tab. Moved into `document.body` with a portal.
+- Found: 0 of 40 board wallets scored live; the 21 with a record had 3 snapshots across 44.5 days, where the 12h sweep
+  should store ~1 a day. Two causes fixed: 48 indexer reads fired at once (paced to one wallet a second) and partial
+  reads stored as full ones (refused, retried once). HL wallets never snapshot (Orderly-only aggregate): open.
+- Layout: strip by stage, wallets by stage then graded days, the score as a dot between its 40 / 65 bars with its
+  facts, building records folded only while some wallet is scored. Same numbers, no new score.
+
