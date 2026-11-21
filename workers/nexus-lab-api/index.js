@@ -177,7 +177,7 @@ import { advanceIndex, onchainResponse, ONCHAIN_INDEX_KEY } from "./onchainWalle
 
 // The scoreboard's cache key, one place: GET /intel/axis-backtest writes it and /calls/pulse reads the
 // headline from it. Bump the version here when the scoreboard payload changes (see that route's notes).
-const axisbtCacheKey = (min) => `axisbt:v30:min${min}`; // v30 = + `trendGate` (the signed trend gate study, judged live by trendGrading.mjs)
+const axisbtCacheKey = (min) => `axisbt:v31:min${min}`; // v31 = + `pipeline.reads[].gates` (the `next` bars as data, readPipeline.mjs); v30 = + `trendGate`
 
 // Orderly sits behind Cloudflare bot-management, which intermittently serves an HTML
 // 403 challenge to header-light Worker fetches — which would break the mini-app money

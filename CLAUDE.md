@@ -596,7 +596,14 @@ product is what sits on top:
   a read "proven" or "graded" unless the scoreboard grades that exact rule.
 - **/proof layout:** verdict (the headline is a claim COMPUTED from the served stage, `proofHeadline` in proofCopy.mjs, since
   2026-11-05: "Nothing has proven itself yet" until a read is CLEARED (since 2026-11-17; before: served TRADEABLE/PAPER with
-  positive exit net), then the read, trades and date; unread/stale board = no claim, never "proven") → the board → calls + callers → agents/arena/desks/carry → ledger.
+  positive exit net), then the read, trades and date; unread/stale board = no claim, never "proven"; `PROOF_BAR_LINE` whole) → status strip → lead cards → every read vs random
+  (chart) → paper wallets → the board → folds (words, the market, the week) → calls + callers → agents/arena/desks/carry →
+  ledger. **Reads half, visual-first** (borst 2026-11-21, rules `app/lib/proofLayout.mjs`): the strip (Cleared · Leads ·
+  Still testing, sticky on desktop only) and the lead cards take the board's own groups (`useBoardGroups`, SignalBoard.tsx;
+  nothing else calls `boardGroups`). A card never prints mean R without the random entry's beside it (pooled + per side,
+  dot vs ring). Bars are tracks (dot = now, tick = bar) drawn from the served `pipeline.reads[].gates` (the `next` bars as
+  data, `axisbt:v31`), never filling progress bars. Paper = a count of 30 only where a run exists, else "No paper run yet".
+  One read table: the overview's left; each read's new-data sides open under its board row; Still testing is on a tap.
   **The board** (borst 2026-11-17, pipeline-if-then.md § "Board layout and the CLEARED badge"; `boardGroups` +
   `isCleared` in signalCard.mjs): "Every read, best first" = **Cleared** (served TRADEABLE/PAPER + no promotion lock +
   a RECORDED 30-trade paper PASS, read from `/signals/paper-judge/:axis`; empty = "Nothing has cleared yet.") → **Leads**
@@ -609,9 +616,9 @@ product is what sits on top:
   runs `isCleared`; /proof's header + board read the verdicts via `usePaperJudgments` (sharedJson), the pulse reads
   LAB_STORE `pjudge:{axis}` + `PROMOTION_LOCKS` (`buildPulse(..., { locks })` for tests). Every place that shows the
   pulse's `signals` (landing, share card, boot snapshot, header) already gates on `headline.cleared`.
-  Plain-words copy in `app/lib/proofCopy.mjs`; method in `HowWeGrade.tsx`. The board opens with the tide ("The market since
-  Aug 7: a random long earned −0.18R a trade, a random short +0.20R. Each side has to beat its own random entry, not zero.",
-  `tideLine`, signalCard.mjs; unread = no line) and each side in a tapped card shows its random entry's R (`sideBar.randomR`).
+  Plain-words copy in `app/lib/proofCopy.mjs`; method in `HowWeGrade.tsx`. The tide (what a random long / short earned) sits
+  in the folded "The market these reads ran in" (`MarketStats`) since 2026-11-21; `tideLine` stays in signalCard.mjs, and each
+  side in a tapped card shows its random entry's R (`sideBar.randomR`).
   Registered/Lead rows themselves stay as pipeline-if-then.md "What we say" fixes them.
 - **Weekly engine review** (borst 2026-11-16, `tools/review/engineReview.mjs`, tested): reads the public API only and writes
   one page (the tide, each registered read's sides vs a random entry on that side, paper wallets, engine callers); every

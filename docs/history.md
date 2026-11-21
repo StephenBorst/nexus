@@ -2615,3 +2615,15 @@ long session grew the bill turn by turn (and would hit the new 200 KB hosted cap
 requests had no prompt caching, so each tool round re-billed the tools + system at full price on the user's key. A
 stream that failed after it started (an `error` event, e.g. overloaded) read "(empty response)". `sendChat`, a fourth
 request path nothing called, was deleted. Bankr's model list confirmed the haiku-5.5 / fable-5.2 ids (borst).
+
+## 2026-11-21 · /proof reads half, visual-first (one board, lead cards, gates as data)
+
+- Before: the same read statuses showed three times (the engine overview's "Read by read" table, the "Every read, best
+  first" board, the paper cards), all text. After: status strip → lead cards → the per-side chart → paper wallets → one
+  board (Still testing behind a tap) → the words, the market and the week folded. Same numbers, same sources.
+- Why mean R never shows alone: btc_lead_lag was a LEAD at +0.19R that beat 0% of random (a random entry made +0.50R on
+  the same coins and hours). A coloured +0.19R on its own reads as a winner.
+- Why tracks, not progress bars: beat-% moves both ways and three of four leads had 2–4 bars left; a fill from 22% to
+  50% reads as "44% of the way to cleared". `pipelineStage` now serves `gates` (the `next` bars as data; `axisbt:v31`).
+- The overview's read-by-read table left (pipeline-if-then.md "Engine overview" says the panel MAY carry one); each
+  read's new-data sides moved under its own board row, so no number left the page. The board rows are unchanged.

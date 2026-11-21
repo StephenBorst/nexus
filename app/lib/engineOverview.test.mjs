@@ -61,7 +61,10 @@ test("the signed section is on the rules page; the panel uses the shared rules a
   assert.doesNotMatch(ui, /\bproven\b|has an edge|\+EV/i);
   assert.doesNotMatch(ui, /\.r\b|sumR|meanR\)\s*\*|toLocaleString\("en-US", \{ style: "currency"/, "no paper R math, no dollars");
   const proof = readFileSync(new URL("../pages/proof/index.tsx", import.meta.url), "utf8");
-  assert.match(proof, /<EngineOverview scorecard=\{scorecard\} \/>/);
+  // Placed in pieces since the visual pass (2026-11-21): the chart and the paper cards on the page, the market folded.
+  assert.match(proof, /<SideChart scorecard=\{scorecard\} \/>/);
+  assert.match(proof, /<PaperWallets isMobile=\{isMobile\} \/>/);
+  assert.match(proof, /<MarketStats scorecard=\{scorecard\} \/>/);
   const review = readFileSync(new URL("../../tools/review/engineReview.mjs", import.meta.url), "utf8");
   assert.match(review, /import \{ sideWords \} from "\.\.\/\.\.\/app\/lib\/engineOverview\.mjs"/, "one copy of the sentence rule");
 });

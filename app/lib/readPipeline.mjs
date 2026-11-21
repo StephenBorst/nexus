@@ -236,8 +236,10 @@ const pct = (b) => (b && Number.isFinite(b.pctBeaten) ? b.pctBeaten : null);
  * @param reg      a REGISTERED_READS entry
  * @param oos      the scoreboard row for this axis graded on out-of-sample events only (main card)
  * @param holdout  the holdout line's row for this axis, out-of-sample events only (or null)
- * @returns {{ stage, reasons: string[], next: string|null, numbers, failing: string[]|null }}
+ * @returns {{ stage, reasons: string[], next: string|null, gates: Gate[], numbers, failing: string[]|null }}
  *          `failing` = the 100-event check's reasons (main card and/or holdout), or null. A label only.
+ *          `gates` = the same bars as `next`, as data (one entry per bar still in the way, same numbers), so a
+ *          page can draw each one as a track instead of parsing the sentence. Display only: the stage decides.
  */
 export function pipelineStage(reg, oos, holdout, rules = PIPELINE_RULES) {
   const side = reg.side;
@@ -259,12 +261,25 @@ export function pipelineStage(reg, oos, holdout, rules = PIPELINE_RULES) {
   return { ...ladderStage(reg, r, rnd, hr, hRnd, ex, oos, numbers, rules), failing: failing.length ? failing : null };
 }
 
+/**
+ * @typedef {{ key: string, label: string, now: number|null, bar: number|null, unit: "events"|"R"|"%"|"bps"|null, met: boolean }} Gate
+ * One bar from `next`: where the read is now and the value it has to reach. unit null = a step with no number
+ * ("a holdout line", "a paper wallet"). `met` is true only for the half of a two-part bar that already passes.
+ */
+const gate = (key, label, now, bar, unit, met = false) => ({ key, label, now: now ?? null, bar: bar ?? null, unit, met });
+
 function ladderStage(reg, r, rnd, hr, hRnd, ex, oos, numbers, rules) {
   const side = reg.side;
   const reasons = [];
 
-  if (r.samples < rules.minEvents) return { stage: "REGISTERED", reasons, next: `${rules.minEvents - r.samples} more out-of-sample events`, numbers };
-  if (!(r.meanR > 0 && r.stable)) return { stage: "REGISTERED", reasons: [`mean R ${r.meanR}${r.stable ? "" : ", halves disagree"}`], next: "mean R > 0 with both halves agreeing", numbers };
+  if (r.samples < rules.minEvents) {
+    return { stage: "REGISTERED", reasons, next: `${rules.minEvents - r.samples} more out-of-sample events`, numbers,
+      gates: [gate("events", "out-of-sample events", r.samples, rules.minEvents, "events")] };
+  }
+  if (!(r.meanR > 0 && r.stable)) {
+    return { stage: "REGISTERED", reasons: [`mean R ${r.meanR}${r.stable ? "" : ", halves disagree"}`], next: "mean R > 0 with both halves agreeing", numbers,
+      gates: [gate("mean_r", "mean R > 0", r.meanR, 0, "R", r.meanR > 0), gate("halves", "both halves agreeing", null, null, null, !!r.stable)] };
+  }
 
   // LEAD reached. EDGE needs both the main-card random test and the holdout replication.
   // A two-sided read: each side with enough events must also beat at least sidePct of its own random replays.
@@ -276,19 +291,35 @@ function ladderStage(reg, r, rnd, hr, hRnd, ex, oos, numbers, rules) {
   const holdOk = reg.holdout && hr.samples >= rules.holdoutMinEvents && hr.meanR > 0 && pct(hRnd) != null && pct(hRnd) >= rules.holdoutPct;
   if (!mainOk || !holdOk) {
     const need = [];
-    if (!(pct(rnd) != null && pct(rnd) >= rules.edgePct)) need.push(`beat ${rules.edgePct}% of random ${sideWord(side)} (now ${pct(rnd) ?? "—"}%)`);
-    for (const sd of trailing) need.push(`${sd.toLowerCase()}s beat ≥ ${rules.sidePct}% of random ${sd.toLowerCase()}s (now ${pct(oos.random.bySide[sd]) ?? "—"}%)`);
-    if (!reg.holdout) need.push("a holdout line");
-    else if (hr.samples < rules.holdoutMinEvents) need.push(`${rules.holdoutMinEvents - hr.samples} more holdout events`);
-    else if (!holdOk) need.push(`holdout mean R > 0 and ≥ ${rules.holdoutPct}% vs random (now ${hr.meanR}R, ${pct(hRnd) ?? "—"}%)`);
-    return { stage: "LEAD", reasons, next: need.join(" · "), numbers };
+    const gates = [];
+    if (!(pct(rnd) != null && pct(rnd) >= rules.edgePct)) {
+      need.push(`beat ${rules.edgePct}% of random ${sideWord(side)} (now ${pct(rnd) ?? "—"}%)`);
+      gates.push(gate("random", `beats random ${sideWord(side)}`, pct(rnd), rules.edgePct, "%"));
+    }
+    for (const sd of trailing) {
+      need.push(`${sd.toLowerCase()}s beat ≥ ${rules.sidePct}% of random ${sd.toLowerCase()}s (now ${pct(oos.random.bySide[sd]) ?? "—"}%)`);
+      gates.push(gate(`random_${sd.toLowerCase()}`, `${sd.toLowerCase()}s vs random ${sd.toLowerCase()}s`, pct(oos.random.bySide[sd]), rules.sidePct, "%"));
+    }
+    if (!reg.holdout) { need.push("a holdout line"); gates.push(gate("holdout_line", "a holdout line", null, null, null)); }
+    else if (hr.samples < rules.holdoutMinEvents) {
+      need.push(`${rules.holdoutMinEvents - hr.samples} more holdout events`);
+      gates.push(gate("holdout_events", "holdout events", hr.samples, rules.holdoutMinEvents, "events"));
+    } else if (!holdOk) {
+      need.push(`holdout mean R > 0 and ≥ ${rules.holdoutPct}% vs random (now ${hr.meanR}R, ${pct(hRnd) ?? "—"}%)`);
+      gates.push(gate("holdout_r", "holdout mean R > 0", hr.meanR, 0, "R", hr.meanR > 0));
+      gates.push(gate("holdout_random", "holdout vs random", pct(hRnd), rules.holdoutPct, "%", pct(hRnd) != null && pct(hRnd) >= rules.holdoutPct));
+    }
+    return { stage: "LEAD", reasons, next: need.join(" · "), gates, numbers };
   }
 
   const exitOk = reg.gradedExit && ex && ex.samples >= rules.exitMinTrades && ex.netBps > 0;
   if (!exitOk) {
     const next = !reg.gradedExit ? "a graded-exit line" : !ex || ex.samples < rules.exitMinTrades ? `${rules.exitMinTrades - (ex?.samples || 0)} more graded-exit trades` : `graded exit net > 0 (now ${ex.netBps} bps)`;
-    return { stage: "EDGE", reasons, next, numbers };
+    const gates = [!reg.gradedExit ? gate("exit_line", "a graded-exit line", null, null, null)
+      : !ex || ex.samples < rules.exitMinTrades ? gate("exit_trades", "graded-exit trades", ex?.samples || 0, rules.exitMinTrades, "events")
+      : gate("exit_net", "graded exit net", ex.netBps, 0, "bps")];
+    return { stage: "EDGE", reasons, next, gates, numbers };
   }
-  if (!reg.paperWallet) return { stage: "TRADEABLE", reasons, next: "a paper wallet (borst sets it up)", numbers };
-  return { stage: "PAPER", reasons, next: "its own paper record + parity CLEAN; live money is a separate review", numbers };
+  if (!reg.paperWallet) return { stage: "TRADEABLE", reasons, next: "a paper wallet (borst sets it up)", gates: [gate("paper_wallet", "a paper wallet", null, null, null)], numbers };
+  return { stage: "PAPER", reasons, next: "its own paper record + parity CLEAN; live money is a separate review", gates: [gate("paper_record", "its own paper record + parity clean", null, null, null)], numbers };
 }

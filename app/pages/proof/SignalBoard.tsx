@@ -13,7 +13,7 @@ import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { C } from "@/config/theme";
-import { AXIS_BLURB, splitLabel, takeaway, sideBar, boardGroups, randomBar, tideLine } from "@/lib/signalCard.mjs";
+import { AXIS_BLURB, splitLabel, takeaway, sideBar, boardGroups, randomBar } from "@/lib/signalCard.mjs";
 import { PROMOTION_LOCKS } from "@/lib/promotionLocks.mjs";
 import { usePaperJudgments, type Judgment } from "@/hooks/usePaperJudgments";
 import { usePaperCounts, type PaperCount } from "@/hooks/usePaperCounts";
@@ -21,6 +21,7 @@ import { paperCountLine } from "@/lib/paperRun.mjs";
 import { badgeLine } from "@/lib/badgeBar.mjs";
 import { pipelineLine, countingSince, retiredGradedExit, retiredLine, archivedLine, NO_RETIRE_LINE, BADGE_RECHECK_LINE } from "@/lib/proofCopy.mjs";
 import { ARCHIVED_READS } from "@/lib/readPipeline.mjs";
+import { overviewReads, fmtR } from "@/lib/engineOverview.mjs";
 import Fold from "./Fold";
 
 const API = "https://og.nexustradinglabs.com";
@@ -440,7 +441,27 @@ const FOLDS: Record<string, { title: string; note: string }> = {
 
 // One registered read on the "Being tested now" list: its name and how far along it is, nothing
 // else. Its grade on old data stays behind the tap (the full card, labelled as such).
-function TestRow({ a, reg, minEvents, since, cleared = false, paper, judgment }: { a: AxisRow; reg: Reg; minEvents: number; since: string; cleared?: boolean; paper?: PaperCount; judgment?: Judgment }) {
+// A read's NEW-DATA sides against a random entry on that side (engineOverview.mjs overviewReads): what the engine
+// overview's read-by-read table showed, now under the read's own row (one table on /proof, borst 2026-11-21).
+type NewSide = { n: number; meanR: number | null; randomR: number | null; pct: number | null } | null;
+export type NewData = { events: number; meanR: number | null; sides: { LONG: NewSide; SHORT: NewSide }; words: string[] };
+function NewDataSides({ nd }: { nd: NewData }) {
+  const cell = (name: string, s: NewSide) => (
+    <span style={{ fontFamily: MONO, fontSize: 11.5, color: MUTED }}>{name}{" "}
+      {s ? <><span style={{ color: s.meanR == null || s.meanR === 0 ? FOG : moneyTone(s.meanR) }}>{fmtR(s.meanR)}</span> vs {fmtR(s.randomR)} random · {s.pct == null ? "thin" : `beat ${Math.round(s.pct)}%`} · n{s.n}</> : <span style={{ color: FAINT }}>no new events</span>}
+    </span>
+  );
+  return (
+    <div style={{ margin: "0 4px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ ...label, fontSize: 8.5 }}>New data · each side vs a random entry on that side</span>
+      {cell("Longs", nd.sides.LONG)}
+      {cell("Shorts", nd.sides.SHORT)}
+      {nd.words.length > 0 && <span style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.5 }}>{nd.words.join(" ")}</span>}
+    </div>
+  );
+}
+
+function TestRow({ a, reg, minEvents, since, cleared = false, paper, judgment, nd }: { a: AxisRow; reg: Reg; minEvents: number; since: string; cleared?: boolean; paper?: PaperCount; judgment?: Judgment; nd?: NewData }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const { main, aside } = splitLabel(a.label);
@@ -479,6 +500,7 @@ function TestRow({ a, reg, minEvents, since, cleared = false, paper, judgment }:
       )}
       {open && (
         <div style={{ padding: isMobile ? "4px 0 14px" : "4px 0 16px" }}>
+          {nd && <NewDataSides nd={nd} />}
           <div style={{ fontFamily: UI, fontSize: 12.5, color: MUTED, lineHeight: 1.5, margin: "0 4px 10px" }}>
             Its grade on all recorded history, mostly data that existed before the test began. Only events since {since || "registration"} count toward passing.
           </div>
@@ -506,35 +528,39 @@ function DetailRows({ rows, minEvents }: { rows: { a: AxisRow; reg: Reg }[]; min
   );
 }
 
-export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null }) {
-  const isMobile = useIsMobile();
+// The board's groups: the ONE call that sorts the reads into Cleared / Leads / Still testing / the folds. /proof's status
+// strip and lead cards take theirs from here too (borst 2026-11-21), so the counts can't drift from the board.
+export type BoardGroup = { key: string; rows: { a: AxisRow; reg: Reg }[] };
+export function useBoardGroups(scorecard: Scorecard | null): { groups: BoardGroup[]; judgments: Record<string, Judgment>; paperCounts: Record<string, PaperCount> } {
   const reads = scorecard?.pipeline?.reads;
   // The recorded 30-trade paper verdict, read only for reads that could clear (served Tradeable or Paper with a paper wallet).
   const judgments = usePaperJudgments(reads);
   const paperCounts = usePaperCounts();
   const groups = boardGroups(scorecard?.axes, reads, Object.keys(ARCHIVED_READS), { judgments, locks: PROMOTION_LOCKS });
+  return { groups, judgments, paperCounts };
+}
+
+export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null }) {
+  const isMobile = useIsMobile();
+  const reads = scorecard?.pipeline?.reads;
+  const { groups, judgments, paperCounts } = useBoardGroups(scorecard);
   const minEvents = scorecard?.pipeline?.rules?.minEvents ?? 30;
   const since = countingSince(reads);
-  const tide = tideLine(scorecard?.tide);
+  const newData = new Map((overviewReads(scorecard, { line: "main", minEvents }) as (NewData & { axis: string })[]).map((r) => [r.axis, r]));
+  // Leads show; Still testing opens on a tap (borst 2026-11-21). Same groups, same order, nothing dropped.
+  const [showTesting, setShowTesting] = useState(false);
   const top = groups.filter((g) => g.key in SECTIONS);
   const folded = groups.filter((g) => !(g.key in SECTIONS));
 
   const status = (t: string, color: string = FAINT) => <div style={{ fontFamily: UI, fontSize: 13, color, padding: "18px 4px" }}>{t}</div>;
 
   return (
-    <section style={{ marginTop: 40 }}>
+    <section id="proof-reads" style={{ marginTop: 40, scrollMarginTop: 120 }}>
       <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 22 : 26, fontWeight: 600, letterSpacing: "-0.02em", lineHeight: 1.15, color: BRIGHT }}>Every read, best first</h2>
       <p style={{ margin: "6px 0 10px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: MUTED }}>
         Cleared first, then leads, then reads still testing. Inside each group: the furthest along, then the share of random entries beaten on new data{since ? ` (counting since ${since})` : ""}. Tap a read for its grade on old data.
       </p>
       <p style={{ margin: "0 0 10px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: FOG }}>{NO_RETIRE_LINE}</p>
-      {tide && (
-        <p style={{ margin: "0 0 12px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: MUTED }}>
-          The market since {tide.since}: a random long earned{" "}
-          <span style={{ fontFamily: MONO, color: moneyTone(tide.long) }}>{sign(tide.long, 2)}R</span> a trade, a random short{" "}
-          <span style={{ fontFamily: MONO, color: moneyTone(tide.short) }}>{sign(tide.short, 2)}R</span>. {tide.rule}
-        </p>
-      )}
 
       {scorecard === null ? status("Loading…") : scorecard.failed ? (
         // A failed read is never shown as an empty board.
@@ -548,8 +574,14 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
                 <span style={{ fontFamily: MONO, fontSize: 11, color: MUTED }}>{g.rows.length}</span>
               </div>
               <div style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, color: MUTED, padding: "4px 4px 8px" }}>{SECTIONS[g.key].note}</div>
-              {g.rows.length
-                ? <div style={{ borderBottom: `1px solid ${C.border}` }}>{g.rows.map(({ a, reg }) => <TestRow key={a.name} a={a} reg={reg} minEvents={minEvents} since={since} cleared={g.key === "cleared"} paper={paperCounts[a.name]} judgment={judgments[a.name]} />)}</div>
+              {g.key === "testing" && (
+                <button type="button" onClick={() => setShowTesting((v) => !v)} aria-expanded={showTesting}
+                  style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderTop: `1px solid ${C.border}`, borderBottom: showTesting ? "none" : `1px solid ${C.border}`, padding: "12px 4px", minHeight: 44, cursor: "pointer", fontFamily: UI, fontSize: 13, color: FOG }}>
+                  {showTesting ? `Hide the ${g.rows.length} still testing −` : `Show the ${g.rows.length} still testing +`}
+                </button>
+              )}
+              {g.key === "testing" && !showTesting ? null : g.rows.length
+                ? <div style={{ borderBottom: `1px solid ${C.border}` }}>{g.rows.map(({ a, reg }) => <TestRow key={a.name} a={a} reg={reg} minEvents={minEvents} since={since} cleared={g.key === "cleared"} paper={paperCounts[a.name]} judgment={judgments[a.name]} nd={newData.get(a.name)} />)}</div>
                 : <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, padding: "4px 4px 6px", borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, paddingTop: 12, paddingBottom: 12 }}>{NOTHING_CLEARED}</div>}
             </div>
           ))}

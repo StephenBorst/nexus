@@ -2,7 +2,7 @@
 // The market the reads ran in, each registered read's NEW-DATA sides against a random entry on that side, the
 // read-by-read table, and the paper runs as cards. Reads the scoreboard /proof already loaded; the paper cards read the
 // public paper-run routes. Display only: not a grade (the stage is), no sums or averages of paper R, no dollars.
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { C } from "@/config/theme";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { overviewReads, chartRows, tideOf, btcRegime, strongSides, paperCard, chartPct, CHART, fmtR } from "@/lib/engineOverview.mjs";
@@ -70,59 +70,6 @@ function SidePanel({ side, rows, tideR, picked, onPick, narrow }: { side: "LONG"
   );
 }
 
-const sideCell = (s: Side) => (s ? <><span style={{ color: tone(s.meanR) }}>{fmtR(s.meanR)}</span> <span style={{ color: MUTED }}>vs {fmtR(s.randomR)} · {s.pct == null ? "thin" : `${Math.round(s.pct)}%`}</span></> : <span style={{ color: FAINT }}>—</span>);
-const stageChip = (stage: string) => (
-  <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", padding: "3px 6px", borderRadius: 3, whiteSpace: "nowrap",
-    border: `1px solid ${stage === "LEAD" || stage === "EDGE" || stage === "TRADEABLE" || stage === "PAPER" ? BONE : C.borderStrong}`,
-    color: stage === "RETIRED" ? FAINT : stage === "REGISTERED" ? FOG : BRIGHT }}>{stage}</span>
-);
-
-function ReadTable({ rows, isMobile }: { rows: Row[]; isMobile: boolean }) {
-  if (isMobile) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {rows.map((r) => (
-          <div key={r.axis} style={{ borderTop: `1px solid ${C.border}`, padding: "10px 2px", display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-              <span style={{ fontFamily: MONO, fontSize: 12.5, color: BRIGHT, overflowWrap: "anywhere" }}>{r.axis}</span>{stageChip(r.stage)}
-            </div>
-            <span style={{ fontFamily: MONO, fontSize: 11.5, color: MUTED }}>{r.events} new events{r.meanR != null ? <> · mean <span style={{ color: tone(r.meanR) }}>{fmtR(r.meanR)}</span></> : null}</span>
-            <span style={{ fontFamily: MONO, fontSize: 11.5 }}><span style={{ color: MUTED }}>Longs </span>{sideCell(r.sides.LONG)}</span>
-            <span style={{ fontFamily: MONO, fontSize: 11.5 }}><span style={{ color: MUTED }}>Shorts </span>{sideCell(r.sides.SHORT)}</span>
-            {r.words.length > 0 && <span style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.5 }}>{r.words.join(" ")}</span>}
-          </div>
-        ))}
-      </div>
-    );
-  }
-  const th = { fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.12em", color: MUTED, textAlign: "left" as const, padding: "8px 10px", borderBottom: `1px solid ${C.borderStrong}`, whiteSpace: "nowrap" as const };
-  const td = { padding: "10px", borderBottom: `1px solid ${C.border}`, verticalAlign: "top" as const, fontFamily: MONO, fontSize: 12, whiteSpace: "nowrap" as const };
-  return (
-    <div style={{ overflowX: "auto", border: `1px solid ${C.border}`, borderRadius: 6 }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
-        <thead><tr><th style={th}>READ</th><th style={th}>STAGE</th><th style={th}>NEW EVENTS</th><th style={th}>MEAN R</th><th style={th}>LONGS VS RANDOM</th><th style={th}>SHORTS VS RANDOM</th></tr></thead>
-        <tbody>
-          {rows.map((r) => (
-            <Fragment key={r.axis}>
-              <tr>
-                <td style={{ ...td, color: BRIGHT, borderBottom: r.words.length ? "none" : td.borderBottom }}>{r.axis}</td>
-                <td style={{ ...td, borderBottom: r.words.length ? "none" : td.borderBottom }}>{stageChip(r.stage)}</td>
-                <td style={{ ...td, color: BRIGHT, borderBottom: r.words.length ? "none" : td.borderBottom }}>{r.events}</td>
-                <td style={{ ...td, color: tone(r.meanR), borderBottom: r.words.length ? "none" : td.borderBottom }}>{fmtR(r.meanR)}</td>
-                <td style={{ ...td, borderBottom: r.words.length ? "none" : td.borderBottom }}>{sideCell(r.sides.LONG)}</td>
-                <td style={{ ...td, borderBottom: r.words.length ? "none" : td.borderBottom }}>{sideCell(r.sides.SHORT)}</td>
-              </tr>
-              {r.words.length > 0 && (
-                <tr><td style={{ ...td, paddingTop: 0 }} /><td colSpan={5} style={{ ...td, paddingTop: 0, fontFamily: UI, fontSize: 12.5, color: FOG, whiteSpace: "normal", lineHeight: 1.5 }}>{r.words.join(" ")}</td></tr>
-              )}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function PaperCard({ c }: { c: Card }) {
   if (c.unread) return <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 14, fontFamily: UI, fontSize: 12.5, color: MUTED }}><span style={{ fontFamily: MONO, color: BRIGHT }}>{c.axis}</span> · unread right now</div>;
   const pct = Math.min(100, ((c.count ?? 0) / (c.target || 30)) * 100);
@@ -149,68 +96,58 @@ function PaperCard({ c }: { c: Card }) {
   );
 }
 
+const stat = (big: React.ReactNode, cap: string) => (
+  <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+    <span style={{ fontFamily: MONO, fontSize: 22, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{big}</span>
+    <span style={{ fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.4 }}>{cap}</span>
+  </div>
+);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default function EngineOverview({ scorecard }: { scorecard: any }) {
+const ready = (scorecard: any) => !!scorecard && !scorecard.failed && !!scorecard.pipeline;
+
+/** The market the reads ran in: what a random long and short earned, BTC's 30 days, the regime day counts. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function MarketStats({ scorecard }: { scorecard: any }) {
   const isMobile = useIsMobile();
-  const [line, setLine] = useState<"main" | "holdout">("main");
-  const [picked, setPicked] = useState<string | null>(null);
-  const [cards, setCards] = useState<Card[] | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    fetch(`${API}/pipeline/paper-wallets`).then((r) => r.json()).then(async (d) => {
-      const reads = (Array.isArray(d?.reads) ? d.reads : []).filter((x: { axis?: string; wallet?: string }) => x?.axis && x.wallet);
-      const out = await Promise.all(reads.map(async (x: { axis: string }) => {
-        const [run, judge] = await Promise.all([
-          fetch(`${API}/signals/paper-run/${x.axis}`).then((r) => r.json()).catch(() => null),
-          fetch(`${API}/signals/paper-judge/${x.axis}`).then((r) => r.json()).catch(() => null),
-        ]);
-        return paperCard(x.axis, run, judge) as Card;
-      }));
-      if (live) setCards(out);
-    }).catch(() => { if (live) setCards([]); });
-    return () => { live = false; };
-  }, []);
-
-  const rows = useMemo(() => overviewReads(scorecard, { line, minEvents: scorecard?.pipeline?.rules?.minEvents ?? 30 }) as Row[], [scorecard, line]);
+  if (!ready(scorecard)) return null;
   const tide = tideOf(scorecard);
   const btc = btcRegime(scorecard);
   const r30: number | null = btc?.ret30 ?? null;
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+      {tide && stat(<span style={{ color: tone(tide.short) }}>{fmtR(tide.short)}</span>, `a random short, per trade, since ${day(tide.from)}`)}
+      {tide && stat(<span style={{ color: tone(tide.long) }}>{fmtR(tide.long)}</span>, `a random long, per trade, since ${day(tide.from)}`)}
+      {btc && r30 != null && stat(<span style={{ color: tone(r30) }}>{r30 > 0 ? "+" : r30 < 0 ? "−" : ""}{Math.abs(r30).toFixed(1)}%</span>, `BTC over 30 days, to ${day(btc.day)}`)}
+      {btc?.counts && stat(<span style={{ color: BRIGHT }}>{btc.counts.UP ?? 0} · {btc.counts.DOWN ?? 0} · {btc.counts.FLAT ?? 0}</span>, `up · down · flat days since ${day(btc.since)}`)}
+    </div>
+  );
+}
+
+/** Each read against a random entry, one side at a time, on the main coins or the holdout. New data only. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function SideChart({ scorecard }: { scorecard: any }) {
+  const isMobile = useIsMobile();
+  const [line, setLine] = useState<"main" | "holdout">("main");
+  const [picked, setPicked] = useState<string | null>(null);
+  const rows = useMemo(() => overviewReads(scorecard, { line, minEvents: scorecard?.pipeline?.rules?.minEvents ?? 30 }) as Row[], [scorecard, line]);
+  const tide = tideOf(scorecard);
   const strong = useMemo(() => strongSides(scorecard) as { axis: string; side: string }[], [scorecard]);
   const pickedRow = picked ? rows.find((r) => r.axis === picked.split(":")[1]) : null;
   const pickedSide = picked ? (picked.split(":")[0] as "LONG" | "SHORT") : null;
-
-  if (!scorecard || scorecard.failed || !scorecard.pipeline) return null;
-  const stat = (big: React.ReactNode, cap: string) => (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-      <span style={{ fontFamily: MONO, fontSize: 22, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{big}</span>
-      <span style={{ fontFamily: UI, fontSize: 12, color: MUTED, lineHeight: 1.4 }}>{cap}</span>
-    </div>
-  );
-
+  if (!ready(scorecard)) return null;
   return (
-    <section style={{ marginTop: 40, display: "flex", flexDirection: "column", gap: 18 }}>
+    <section style={{ marginTop: 36, display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 22 : 26, fontWeight: 600, letterSpacing: "-0.02em", color: BRIGHT }}>Engine overview</h2>
+        <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 20 : 22, fontWeight: 600, letterSpacing: "-0.02em", color: BRIGHT }}>Every read vs a random entry</h2>
         <p style={{ margin: 0, fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: MUTED, maxWidth: 680 }}>
-          Every read is judged against a random entry on the same coins, side and hours. New data only. Not a grade: the stage is.
+          Same coins, same side, same hours. New data only. Not a grade: the stage is.
         </p>
-      </div>
-
-      {/* The market the reads ran in */}
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))", gap: 10 }}>
-        {tide && stat(<span style={{ color: tone(tide.short) }}>{fmtR(tide.short)}</span>, `a random short, per trade, since ${day(tide.from)}`)}
-        {tide && stat(<span style={{ color: tone(tide.long) }}>{fmtR(tide.long)}</span>, `a random long, per trade, since ${day(tide.from)}`)}
-        {btc && r30 != null && stat(<span style={{ color: tone(r30) }}>{r30 > 0 ? "+" : r30 < 0 ? "−" : ""}{Math.abs(r30).toFixed(1)}%</span>, `BTC over 30 days, to ${day(btc.day)}`)}
-        {btc?.counts && stat(<span style={{ color: BRIGHT }}>{btc.counts.UP ?? 0} · {btc.counts.DOWN ?? 0} · {btc.counts.FLAT ?? 0}</span>, `up · down · flat days since ${day(btc.since)}`)}
       </div>
       <p style={{ margin: 0, fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: FOG, maxWidth: 680 }}>
         {strong.length
           ? <>Beats its own random entry on both coin sets: {strong.map((s, i) => <span key={i}>{i ? " and " : ""}<span style={{ fontFamily: MONO, color: BRIGHT }}>{s.axis}</span> {s.side.toLowerCase()}s</span>)}. One side, new data, not yet a stage.</>
           : "No side beats its own random entry on both coin sets yet."}
       </p>
-
-      {/* Each read against a random entry, one side at a time */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontFamily: UI, fontSize: 12.5, color: FOG }}>
           <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><span style={{ width: 9, height: 9, borderRadius: "50%", background: BRIGHT }} />the read’s mean R</span>
@@ -227,23 +164,36 @@ export default function EngineOverview({ scorecard }: { scorecard: any }) {
           <span style={{ fontFamily: MONO, color: BRIGHT }}>{pickedRow.axis}</span> {pickedSide.toLowerCase()}s: {pickedRow.sides[pickedSide]!.n} new events, mean <span style={{ color: tone(pickedRow.sides[pickedSide]!.meanR) }}>{fmtR(pickedRow.sides[pickedSide]!.meanR)}</span>; a random {pickedSide.toLowerCase()} on the same coins and hours made {fmtR(pickedRow.sides[pickedSide]!.randomR)}. Beat {pickedRow.sides[pickedSide]!.pct == null ? "—" : Math.round(pickedRow.sides[pickedSide]!.pct!)}% of 300 replays; the bar for an edge is 95%.
         </p>
       )}
+    </section>
+  );
+}
 
-      {/* Read by read */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <h3 style={{ margin: 0, fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT }}>Read by read {line === "holdout" ? "· coins it was never picked on" : ""}</h3>
-        <ReadTable rows={rows} isMobile={isMobile} />
+/** The paper wallets as cards: each trade as it closed, the open one, the count of 30. No totals, no dollars. */
+export function PaperWallets({ isMobile }: { isMobile: boolean }) {
+  const [cards, setCards] = useState<Card[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetch(`${API}/pipeline/paper-wallets`).then((r) => r.json()).then(async (d) => {
+      const reads = (Array.isArray(d?.reads) ? d.reads : []).filter((x: { axis?: string; wallet?: string }) => x?.axis && x.wallet);
+      const out = await Promise.all(reads.map(async (x: { axis: string }) => {
+        const [run, judge] = await Promise.all([
+          fetch(`${API}/signals/paper-run/${x.axis}`).then((r) => r.json()).catch(() => null),
+          fetch(`${API}/signals/paper-judge/${x.axis}`).then((r) => r.json()).catch(() => null),
+        ]);
+        return paperCard(x.axis, run, judge) as Card;
+      }));
+      if (live) setCards(out);
+    }).catch(() => { if (live) setCards([]); });
+    return () => { live = false; };
+  }, []);
+  if (!cards || !cards.length) return null;
+  return (
+    <section id="proof-paper" style={{ marginTop: 36, display: "flex", flexDirection: "column", gap: 8, scrollMarginTop: 120 }}>
+      <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 20 : 22, fontWeight: 600, letterSpacing: "-0.02em", color: BRIGHT }}>Paper wallets</h2>
+      <p style={{ margin: 0, fontFamily: UI, fontSize: 12.5, color: MUTED }}>Each trade as it closed. No totals and no dollars until the 30-trade judgment, after fees.</p>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+        {cards.map((c) => <PaperCard key={c.axis} c={c} />)}
       </div>
-
-      {/* The paper wallets */}
-      {cards && cards.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <h3 style={{ margin: 0, fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT }}>Paper wallets</h3>
-          <p style={{ margin: 0, fontFamily: UI, fontSize: 12.5, color: MUTED }}>Each trade as it closed. No totals and no dollars until the 30-trade judgment.</p>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-            {cards.map((c) => <PaperCard key={c.axis} c={c} />)}
-          </div>
-        </div>
-      )}
     </section>
   );
 }
