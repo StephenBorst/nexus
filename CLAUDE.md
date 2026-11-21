@@ -1071,6 +1071,10 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   "Before you post · facts, not advice": stop vs the live H4 ATR (< 1× = inside one ordinary 4h bar, > 4× = wide),
   filled at the post or resting (the grader's `ENTRY_AT_MARK_PCT` vs the mark the build read), the stop as % of margin
   at the sized leverage (≥ 80% flagged), and the trader's own graded record on the coin.
+  **No side until the trader picks one** (borst 2026-11-21, `app/lib/thesisSide.test.mjs`): `dirArmed` starts false; a
+  side is committed only by a tap (Quick Call or Fine-tune, both via `pickSide`) or a `sideChosen` draft. A draft that
+  only suggests a side (board fade, copilot, pasted thesis) shows it outlined (`suggestedDir`); the WATCH gate only
+  un-arms; a new coin clears the pick. The Read waits for a side.
   **Hardening (2026-11-21):** a Quick Call build is dropped if the coin changed while the mark was in flight (it used to
   write the old coin's price onto the new call); a live order whose entry went in but whose stop/target was refused
   now says the entry IS resting with no stop.

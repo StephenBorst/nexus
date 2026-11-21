@@ -980,7 +980,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
     setForm((f) => ({
       ...f,
       symbol: r.symbol ?? f.symbol,
-      direction: r.direction ?? f.direction,
+      direction: r.direction ?? f.direction,  // a pasted side is a suggestion until tapped (below)
       entryPrice: r.entryPrice ?? f.entryPrice,
       stopLoss: r.stopLoss ?? f.stopLoss,
       takeProfit1: r.takeProfit1 ?? f.takeProfit1,
@@ -989,6 +989,10 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
       notes: f.notes.trim() ? f.notes : r.notes,
     }));
     setPasteResult(r.filled);
+    if (r.direction === "LONG" || r.direction === "SHORT") {
+      userChoseDir.current = false; setDirArmed(false); setSuggestedDir(r.direction);
+      suggestedFor.current = String(r.symbol ?? form.symbol).trim().toUpperCase();
+    }
   };
 
   const [deployed, setDeployed] = useState(false);
@@ -1072,10 +1076,13 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
         // pick, and the levels build from live price on arrival so Post is the next tap.
         if (d.sideChosen) {
           pendingDraft.current = { sym: String(d.symbol || "").trim().toUpperCase(), build: !!d.build };
-          userChoseDir.current = true; setDirArmed(true);
+          userChoseDir.current = true; setDirArmed(true); setSuggestedDir(null); suggestedFor.current = null;
         } else {
           pendingDraft.current = null;
-          userChoseDir.current = false;
+          userChoseDir.current = false; setDirArmed(false);
+          // Shown outlined as the draft's suggestion; the trader taps it (or the other side) to commit.
+          const sug = d.direction === "SHORT" ? "SHORT" : d.direction === "LONG" ? "LONG" : null;
+          setSuggestedDir(sug); suggestedFor.current = sug ? String(d.symbol || "").trim().toUpperCase() : null;
         }
         window.localStorage.removeItem(THESIS_DRAFT_KEY);
       } catch { /* ignore malformed draft */ }
@@ -1100,7 +1107,12 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   // or publish — "direction is visible, not pre-checked." A good OR absent base rate arms
   // normally. The signal is the SAME reversion/last-N-fades clock the GAPS ticket vetoes
   // on, lifted up via LiveRead's onWeakEdge — ONE veto series, so the two can never fork.
-  const [dirArmed, setDirArmed] = useState(true);
+  // No side until the trader picks one (borst 2026-11-21: "start it with no side chosen"). A side is committed only
+  // by a tap here, in Fine-tune, or a draft whose side the trader already chose (drawer / table). A draft that only
+  // SUGGESTS a side (the board's fade, the copilot, a pasted thesis) shows it outlined, never committed.
+  const [dirArmed, setDirArmed] = useState(false);
+  const [suggestedDir, setSuggestedDir] = useState<"LONG" | "SHORT" | null>(null);
+  const suggestedFor = useRef<string | null>(null); // the coin the suggestion was made for
   // The mark the last Quick Call build read, per coin: the pre-post "filled at the post?" fact compares against it.
   const [buildMark, setBuildMark] = useState<{ sym: string; mark: number } | null>(null);
   const [weakSetup, setWeakSetup] = useState<{ histPct: number | null } | null>(null);
@@ -1112,7 +1124,8 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   // reverse). No /intel/baserate here, no averaging of two series.
   const handleWeakEdge = useCallback((w: { weak: boolean; histPct: number | null }) => {
     setWeakSetup(w.weak ? { histPct: w.histPct } : null);
-    if (!userChoseDir.current) setDirArmed(!w.weak);
+    // The WATCH gate only ever UN-arms a side the trader didn't pick; nothing arms one by itself.
+    if (!userChoseDir.current && w.weak) setDirArmed(false);
   }, []);
   // The /intel/baserate object for the current symbol, held live so publish can FREEZE it
   // onto the call (Grok item 2): the card records the odds it was taken against, even a weak
@@ -1122,11 +1135,15 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
   // shows — labeled "taken vs" on the card (Grok's ruling). Old cards keep their backtest number.
   const baseRateRef = useRef<{ revertedPct: number; samples: number; tier: string } | null>(null);
   const handleBaseRate = useCallback((br: { revertedPct: number; samples: number; tier: string } | null) => { baseRateRef.current = br; }, []);
-  // New market → forget the prior pick and re-arm until this coin's base rate is read.
+  // New market → forget the prior pick: no side until the trader picks one (or the draft for this coin carried theirs).
   useEffect(() => {
-    userChoseDir.current = pendingDraft.current?.sym === form.symbol.trim().toUpperCase();
-    setDirArmed(true); setWeakSetup(null); baseRateRef.current = null;
+    const sym = form.symbol.trim().toUpperCase();
+    userChoseDir.current = pendingDraft.current?.sym === sym;
+    setDirArmed(userChoseDir.current); setWeakSetup(null); baseRateRef.current = null;
+    if (suggestedFor.current !== sym) { setSuggestedDir(null); suggestedFor.current = null; }
   }, [form.symbol]);
+  // The one way a side gets committed by hand: Quick Call's buttons and Fine-tune's.
+  const pickSide = (d: "LONG" | "SHORT") => { userChoseDir.current = true; setDirArmed(true); setSuggestedDir(null); set("direction", d); };
 
   const calc = useMemo(() => calcThesis(form), [form]);
   // calc = the optional sizing (account × risk ÷ stop distance); null without an account size. Whether a call
@@ -1661,13 +1678,13 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                       list="nexus-thesis-symbols" autoCapitalize="characters" autoComplete="off" onChange={(e) => set("symbol", e.target.value)} />
                   </div>
                   <div>
-                    <span style={fieldLabelStyle}>DIRECTION{!dirArmed && <span style={{ color: "#e0a458" }}> · WATCH</span>}</span>
+                    <span style={fieldLabelStyle}>DIRECTION{!dirArmed && weakSetup && <span style={{ color: "#e0a458" }}> · WATCH</span>}{!dirArmed && !weakSetup && <span style={{ color: "#71717a" }}> · YOU PICK</span>}</span>
                     <div style={{ display: "flex", gap: 4 }}>
                       {(["LONG", "SHORT"] as const).map((d) => {
-                        const on = form.direction === d && dirArmed;          // committed side
-                        const suggested = form.direction === d && !dirArmed;  // shown, not pre-checked
+                        const on = form.direction === d && dirArmed;           // committed side
+                        const suggested = !dirArmed && suggestedDir === d;     // a draft's suggestion, not pre-checked
                         return (
-                        <button key={d} onClick={() => { userChoseDir.current = true; setDirArmed(true); set("direction", d); if (canBuild) quickSetup(quickStopPct, quickTpR, d); }} style={{
+                        <button key={d} aria-pressed={on} onClick={() => { pickSide(d); if (canBuild) quickSetup(quickStopPct, quickTpR, d); }} style={{
                           flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, cursor: "pointer", borderRadius: 3, border: "1px solid",
                           background: on ? (d === "LONG" ? "#1a1a1e" : "#241012") : "#0f0f11",
                           borderColor: on ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : suggested ? "#e0a45866" : "#232327",
@@ -1696,7 +1713,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     BUILD button and pushed both off a phone screen. Now it sits at the decision, right above Post,
                     open on desktop and folded on a phone until tapped. Still reads while folded (the WATCH gate). */}
                 {(() => {
-                  const readEl = form.symbol && symbolListed ? (
+                  const readEl = form.symbol && symbolListed && (dirArmed || suggestedDir) ? (
                     <div style={{ marginTop: 12 }}>
                       <LiveRead symbol={form.symbol} direction={form.direction} trades={realizedTrades} foldable
                         levels={built ? { entryPrice: entryN, stopLoss: stopN, takeProfit1: tpN } : undefined} wallet={wallet} onWeakEdge={handleWeakEdge} onBaseRate={handleBaseRate} />
@@ -1708,7 +1725,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                       <button onClick={() => { const sp = atrStopPct ?? quickStopPct; setQuickStopPct(sp); quickSetup(sp, quickTpR); }} disabled={!canBuild || quickBusy || !dirArmed}
                         style={{ marginTop: 12, width: "100%", padding: "12px 0", minHeight: 44, fontFamily: "var(--nx-font-ui)", fontSize: 13, fontWeight: 600, cursor: canBuild && dirArmed && !quickBusy ? "pointer" : "not-allowed", borderRadius: 4,
                           border: `1px solid ${canBuild && dirArmed ? "#33333a" : "#232327"}`, background: canBuild && dirArmed ? "#1a1a1e" : "#0a0a0b", color: canBuild && dirArmed ? "#ededf0" : "#52525b" }}>
-                        {quickBusy ? "Building…" : !form.symbol ? "Pick a coin to build" : !dirArmed ? "⚠ Pick a side to build" : atrStopPct != null ? `⚡ Build it · stop 1.2× H4 ATR (${atrStopPct}%)` : "⚡ Build it from live price"}
+                        {quickBusy ? "Building…" : !form.symbol ? "Pick a coin to build" : !dirArmed ? (weakSetup ? "⚠ Pick a side to build" : "Pick a side to build") : atrStopPct != null ? `⚡ Build it · stop 1.2× H4 ATR (${atrStopPct}%)` : "⚡ Build it from live price"}
                       </button>
                       {readEl}
                     </>
@@ -1910,12 +1927,12 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                 <span style={fieldLabelStyle}>DIRECTION</span>
                 <div style={{ display: "flex", gap: 4 }}>
                   {(["LONG", "SHORT"] as const).map((d) => (
-                    <button key={d} onClick={() => set("direction", d)} style={{
+                    <button key={d} aria-pressed={dirArmed && form.direction === d} onClick={() => pickSide(d)} style={{
                       flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
                       cursor: "pointer", borderRadius: 3, border: "1px solid",
-                      background: form.direction === d ? (d === "LONG" ? "#1a1a1e" : "#241012") : "#0f0f11",
-                      borderColor: form.direction === d ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : "#232327",
-                      color: form.direction === d ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : "#52525b",
+                      background: dirArmed && form.direction === d ? (d === "LONG" ? "#1a1a1e" : "#241012") : "#0f0f11",
+                      borderColor: dirArmed && form.direction === d ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : !dirArmed && suggestedDir === d ? "#e0a45866" : "#232327",
+                      color: dirArmed && form.direction === d ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : !dirArmed && suggestedDir === d ? "#e0a458" : "#52525b",
                     }}>{d === "LONG" ? "↑ Long" : "↓ Short"}</button>
                   ))}
                 </div>
