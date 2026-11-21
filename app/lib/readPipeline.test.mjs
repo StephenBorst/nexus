@@ -140,3 +140,31 @@ test("a two-sided read can't reach EDGE on one side while the other trails its o
   assert.match(page, /\*\*Each side on its own\*\* \(added 2026-11-16, borst/);
   assert.match(page, /each side with 20 or more out-of-sample events also beats\n  at least 50% of that side's own random replays/);
 });
+
+// borst 2026-11-21 (the /proof visual pass): `gates` = the same bars as `next`, as data, so the lead cards draw tracks
+// instead of parsing the sentence. Every "(now X)" in `next` is a gate's `now`; every bar in it is a gate's `bar`.
+test("gates: one per bar in `next`, with the same numbers, at every stage", () => {
+  const few = pipelineStage(REG, row({ n: 12, meanR: 0.4 }), null);
+  assert.deepEqual(few.gates, [{ key: "events", label: "out-of-sample events", now: 12, bar: 30, unit: "events", met: false }]);
+  const flat = pipelineStage(REG, row({ n: 40, meanR: 0.2, stable: false }), null);
+  assert.deepEqual(flat.gates.map((g) => [g.key, g.now, g.bar, g.met]), [["mean_r", 0.2, 0, true], ["halves", null, null, false]]);
+
+  // A two-sided lead with a trailing side and a failing holdout: three bars, as in `next`.
+  const BOTH = { ...REG, side: "BOTH" };
+  const main = { r: { samples: 80, meanR: 0.3, stable: true }, random: { pooled: { pctBeaten: 60.4 }, bySide: { LONG: { n: 40, pctBeaten: 70 }, SHORT: { n: 40, pctBeaten: 22.2 } } } };
+  const hold = { r: { samples: 40, meanR: 0.31, stable: true }, random: { pooled: { pctBeaten: 40.2 } } };
+  const lead = pipelineStage(BOTH, main, hold);
+  assert.equal(lead.stage, "LEAD");
+  assert.equal(lead.next, "beat 95% of random entries (now 60.4%) · shorts beat ≥ 50% of random shorts (now 22.2%) · holdout mean R > 0 and ≥ 80% vs random (now 0.31R, 40.2%)");
+  assert.deepEqual(lead.gates.map((g) => [g.key, g.now, g.bar, g.unit, g.met]), [
+    ["random", 60.4, 95, "%", false], ["random_short", 22.2, 50, "%", false],
+    ["holdout_r", 0.31, 0, "R", true], ["holdout_random", 40.2, 80, "%", false],
+  ]);
+  for (const m of lead.next.matchAll(/now ([\d.]+)%/g)) assert.ok(lead.gates.some((g) => g.now === Number(m[1])), `gate for ${m[0]}`);
+
+  const hold2 = row({ n: 35, meanR: 0.1, pct: 85 });
+  const ex = (exit) => pipelineStage(REG, row({ n: 80, meanR: 0.3, pct: 97, exit }), hold2);
+  assert.deepEqual(ex({ samples: 20, netBps: 40 }).gates.map((g) => [g.key, g.now, g.bar]), [["exit_trades", 20, 30]]);
+  assert.deepEqual(ex({ samples: 40, netBps: -5 }).gates.map((g) => [g.key, g.now, g.bar, g.unit]), [["exit_net", -5, 0, "bps"]]);
+  assert.deepEqual(ex({ samples: 40, netBps: 12 }).gates.map((g) => g.key), ["paper_wallet"]);
+});

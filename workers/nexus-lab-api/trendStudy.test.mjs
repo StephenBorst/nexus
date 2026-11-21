@@ -54,5 +54,5 @@ test("index.js builds the study events once for both studies and serves trendGat
   assert.match(src, /runStressStudy\(\{[\s\S]{0,300}events: studyEv,/);
   assert.match(src, /runTrendStudy\(\{[\s\S]{0,300}events: studyEv,/);
   assert.match(src, / {4}stressStudy,\n {4}trendGate,\n/);
-  assert.match(src, /const axisbtCacheKey = \(min\) => `axisbt:v30:min\$\{min\}`;/);
+  assert.match(src, /const axisbtCacheKey = \(min\) => `axisbt:v3[0-9]:min\$\{min\}`;/, "moved to v30 or later");
 });

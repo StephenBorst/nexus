@@ -2,12 +2,14 @@
 // One destination for every trustless record Nexus produces: our own signals, human
 // callers, autonomous agents, external AI agents (the Arena), and desks (teams). All graded
 // from public data, never self-reported, and anchored to a recomputable on-chain ledger.
-// Order (borst, 2026-10-23: "too dense for normal users"): the verdict + the bar in one sentence
-// → the signals being tested (name · events · needs 30), the rest folded → graded calls, led by the
-// full record → verified callers → the other records, folded → the ledger line → "How we grade".
+// Order (borst, 2026-10-23: "too dense for normal users"; reads half visual-first 2026-11-21): the verdict + the bar
+// → where the reads stand (Cleared · Leads · Still testing, from the board's own groups) → the leads as cards →
+// every read vs a random entry → the paper wallets → the one board (Still testing on a tap) → the words, the market
+// and the week, folded → graded calls, led by the full record → verified callers → the other records, folded → the
+// ledger line → "How we grade".
 // Every board is fail-soft: sparse at cold-start by design, never broken.
 import { riskBrief, RISK_MIN_CALLS } from "@/lib/recordRisk.mjs";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import CarrySleeve from "./CarrySleeve";
@@ -19,9 +21,12 @@ import HowWeGrade from "./HowWeGrade";
 import { callsRecordLine, callersLine, PLAIN_WORDS, engineNote } from "@/lib/proofCopy.mjs";
 import { ruleCheckFor, ruleCheckLine } from "@/lib/ruleCheck.mjs";
 import { engineBeat, ENGINE_QUIET_H } from "@/lib/engineBeat.mjs";
-import SignalBoard, { type Scorecard } from "./SignalBoard";
+import SignalBoard, { type Scorecard, useBoardGroups } from "./SignalBoard";
 import WeeklyScorecard from "./WeeklyScorecard";
-import EngineOverview from "./EngineOverview";
+import { MarketStats, SideChart, PaperWallets } from "./EngineOverview";
+import ProofStatus from "./ProofStatus";
+import LeadCards, { type LeadCard } from "./LeadCards";
+import { statusCounts, leadCards } from "@/lib/proofLayout.mjs";
 import { pressKey } from "@/utils/a11y";
 
 const API = "https://og.nexustradinglabs.com";
@@ -167,6 +172,11 @@ export default function ProofPage() {
   // "How we grade ↓" at the top opens the section at the foot and brings it into view.
   useEffect(() => { if (jumpToHow) howRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [jumpToHow]);
   const openHow = () => { setHowOpen(true); setJumpToHow((n) => n + 1); };
+  const [wordsOpen, setWordsOpen] = useState(false);
+  const wordsRef = useRef<HTMLDivElement>(null);
+  const [jumpToWords, setJumpToWords] = useState(0);
+  useEffect(() => { if (jumpToWords) wordsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [jumpToWords]);
+  const openWords = () => { setWordsOpen(true); setJumpToWords((n) => n + 1); };
 
   const load = useCallback(() => {
     fetch(`${API}/theses/leaderboard`).then((r) => r.json()).then((d) => { setCallers(Array.isArray(d?.leaderboard) ? d.leaderboard : []); if (Number(d?.criteria?.minCalls) > 0) setMinCalls(Number(d.criteria.minCalls)); }).catch(() => setCallers([]));
@@ -180,6 +190,12 @@ export default function ProofPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // The reads half: the board's own groups (SignalBoard's useBoardGroups), so the strip and the cards match it.
+  const { groups: boardRows, paperCounts } = useBoardGroups(scorecard);
+  const groups = scorecard && !scorecard.failed ? boardRows : null;
+  const counts = groups ? statusCounts(groups) : null;
+  const leads = useMemo(() => (groups ? (leadCards(groups, paperCounts) as LeadCard[]) : []), [groups, paperCounts]);
+
   const cards = proof?.cards ?? [];
   const shownCards = allCalls ? cards.slice(0, 12) : cards.slice(0, 6);
   const record = callsRecordLine(proof?.summary);
@@ -189,16 +205,40 @@ export default function ProofPage() {
       {/* 1 · THE VERDICT — computed from the served stages (proofHeadline); the bar in one sentence. */}
       <FeaturedLead isMobile={isMobile} onHowWeGrade={openHow} scorecard={scorecard} shareHref={shareHref} />
 
-      {/* The words, in plain English, right where they first appear (tooltips can't be hovered on a phone). */}
-      <PlainWords isMobile={isMobile} />
+      {/* 2 · WHERE THE READS STAND — three counts from the board's groups, and the jumps. */}
+      <ProofStatus counts={counts} isMobile={isMobile} jumps={[
+        { id: "proof-leads", label: "Leads" },
+        { id: "proof-paper", label: "Paper wallets" },
+        { id: "proof-reads", label: "Every read" },
+        { id: "proof-words", label: "What the words mean", onClick: openWords },
+        { id: "proof-how", label: "How we grade", onClick: openHow },
+      ]} />
 
-      {/* 2 · THE SIGNALS — the ones being tested, then the rest folded. The misses stay on it. */}
-      {/* The engine overview: the market, each read vs a random entry per side, read by read, the paper wallets. */}
-      <EngineOverview scorecard={scorecard} />
+      {/* 3 · THE LEADS — closest to clearing, as cards. Mean R never alone: always beside a random entry. */}
+      {scorecard && !scorecard.failed && <LeadCards cards={leads} isMobile={isMobile} onWords={openWords} />}
 
+      {/* Every read vs a random entry, per side (the engine overview's chart), then the paper wallets. */}
+      <SideChart scorecard={scorecard} />
+      <PaperWallets isMobile={isMobile} />
+
+      {/* 4 · THE ONE BOARD — every read, best first; Still testing opens on a tap. The misses stay on it. */}
       <SignalBoard scorecard={scorecard} />
-      {/* The week, frozen: one snapshot per week with its sha256 (weeklyScorecard.mjs, pipeline-if-then.md). */}
-      <div style={{ marginTop: 18 }}><WeeklyScorecard /></div>
+
+      {/* 5 · REFERENCE, folded: the words, the market the reads ran in, the frozen week (sha256). */}
+      <section style={{ marginTop: 18, borderBottom: `1px solid ${BORDER}` }}>
+        <div id="proof-words" ref={wordsRef} style={{ scrollMarginTop: 120 }}>
+          <Fold title="What the words mean" note="R, bps, the grades, random entries, the holdout." open={wordsOpen} onToggle={() => setWordsOpen((v) => !v)}>
+            <PlainWords isMobile={isMobile} />
+          </Fold>
+        </div>
+        {scorecard && !scorecard.failed && (
+          <Fold title="The market these reads ran in" note="What a random long and a random short earned, and BTC. The bar a read’s side has to beat.">
+            <MarketStats scorecard={scorecard} />
+          </Fold>
+        )}
+        {/* The week, frozen: one snapshot per week with its sha256 (weeklyScorecard.mjs, pipeline-if-then.md). */}
+        <WeeklyScorecard />
+      </section>
 
       {/* 3 · GRADED CALLS + VERIFIED CALLERS — the human record, traced call by call. */}
       <section style={{ marginTop: 44 }}>
@@ -372,7 +412,7 @@ export default function ProofPage() {
       </footer>
 
       {/* 6 · HOW WE GRADE — the method, the tide and the Oct 15 receipts, one tap away. */}
-      <div ref={howRef} style={{ marginTop: 22, borderBottom: `1px solid ${BORDER}`, scrollMarginTop: 72 }}>
+      <div id="proof-how" ref={howRef} style={{ marginTop: 22, borderBottom: `1px solid ${BORDER}`, scrollMarginTop: 120 }}>
         <Fold title="How we grade" open={howOpen} onToggle={() => setHowOpen((v) => !v)}>
           <HowWeGrade scorecard={scorecard} isMobile={isMobile} />
         </Fold>
@@ -384,8 +424,7 @@ export default function ProofPage() {
 // ── The words, in plain English (PLAIN_WORDS, app/lib/proofCopy.mjs) ──
 function PlainWords({ isMobile }: { isMobile: boolean }) {
   return (
-    <section aria-label="What the words mean" style={{ marginTop: 28, border: `1px solid ${BORDER}`, borderRadius: 10, background: SURFACE_ALT, padding: isMobile ? "12px 14px" : "14px 18px" }}>
-      <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: MUTED, marginBottom: 8 }}>What the words mean</div>
+    <section aria-label="What the words mean" style={{ border: `1px solid ${BORDER}`, borderRadius: 10, background: SURFACE_ALT, padding: isMobile ? "12px 14px" : "14px 18px" }}>
       <dl style={{ margin: 0, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: isMobile ? "6px 0" : "8px 22px" }}>
         {PLAIN_WORDS.map((w) => (
           <div key={w.term} style={{ fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.45 }}>

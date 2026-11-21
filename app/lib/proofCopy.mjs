@@ -184,6 +184,12 @@ export const PLAIN_WORDS = Object.freeze([
   Object.freeze({ term: "PROMISING", text: "positive so far, not yet steady." }),
   Object.freeze({ term: "NOISE", text: "flat or losing. It stays on the board: we publish the misses." }),
   Object.freeze({ term: "ACCRUING", text: "not enough data yet to say." }),
+  // The words on the lead cards and the board (visual pass, 2026-11-21).
+  Object.freeze({ term: "new data", text: "events after a read was registered. Only these count toward passing." }),
+  Object.freeze({ term: "random entry", text: "the same trade at a random hour, same coins and side, 300 times. A read has to beat it, not just zero." }),
+  Object.freeze({ term: "holdout", text: "8 coins a read was never picked on. It has to repeat there too." }),
+  Object.freeze({ term: "bar", text: "the number a read must reach for its next stage. The dot is where it is now, the tick is the bar. It can move either way." }),
+  Object.freeze({ term: "LEAD", text: "positive on new data, with bars still to pass. Not cleared." }),
 ]);
 
 // ── Our engine callers, one plain line each (borst, 2026-11-06) ────────────────────────────────────
