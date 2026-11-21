@@ -68,3 +68,11 @@ Signed by borst in session 2026-11-20 ("sign sealed reads"). On-chain anchoring:
 message; section 1.2 says what changes if it is turned back on.
 
 ## Results
+
+### 2026-11-21 · borst's ruling: the X post is waived for house-1
+
+borst, in session 2026-11-21: "just seal the … sealed house signal (house-1) for me now. no one cares or will say
+anything." The X post in §1.2 is waived for house-1. Its outside date is the fingerprint's merge into this public
+repository on GitHub: PR #397, merged 2026-11-20, a time GitHub records and this repository can't rewrite. house-1
+counts from **2026-11-22T00:00:00Z**, the next 00:00 UTC after this ruling; nothing fired before it counts. Everything
+else on this page stands. A later sealed read follows §1.2 as written unless borst rules again here.

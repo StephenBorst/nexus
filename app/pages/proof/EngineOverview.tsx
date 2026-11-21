@@ -5,20 +5,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { C } from "@/config/theme";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
-import { overviewReads, chartRows, tideOf, btcRegime, strongSides, paperCard, chartPct, CHART, fmtR } from "@/lib/engineOverview.mjs";
+import { overviewReads, tideOf, btcRegime, strongSides, paperCard, fmtR } from "@/lib/engineOverview.mjs";
+import { vsRandomCards, RANDOM_WORDS } from "@/lib/proofLayout.mjs";
+import { WordChip } from "./LeadCards";
 import { pressKey } from "@/utils/a11y";
 
 const API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
-const { bright: BRIGHT, fog: FOG, muted: MUTED, faint: FAINT } = C.text;
+const { bright: BRIGHT, fog: FOG, muted: MUTED } = C.text;
 const { pos: POS, neg: NEG, accent: BONE } = C;
 const tone = (v: number | null | undefined) => (v == null ? FOG : v > 0 ? POS : v < 0 ? NEG : FOG);
 const day = (iso?: string | null) => { if (!iso) return ""; const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }); };
 
 type Side = { n: number; meanR: number | null; randomR: number | null; pct: number | null } | null;
 type Row = { axis: string; label: string; stage: string; next: string | null; events: number; meanR: number | null; sides: { LONG: Side; SHORT: Side }; words: string[] };
-type ChartRow = { axis: string; n: number; meanR: number; randomR: number; pct: number | null };
+type VsSide = { n: number; pct: number | null; meanR: number | null; randomR: number | null; word: { key: string; text: string } };
+type VsCard = { axis: string; label: string; sides: { LONG: VsSide; SHORT: VsSide }; best: number | null; trades: number };
 type Card = { axis: string; unread?: boolean; count?: number; target?: number; startedAt?: string | null; trades?: { coin: string; side: string; outcome: string; reason: string }[];
   open?: { coin: string; side: string; entry: number; openedAt: string | null } | null; targets?: number; stops?: number; timeStops?: number; tape?: string | null; verdict?: string | null };
 
@@ -29,43 +32,6 @@ function Seg({ value, options, onChange, label }: { value: string; options: [str
         <span key={v} role="radio" aria-checked={value === v} tabIndex={0} onClick={() => onChange(v)} onKeyDown={pressKey(() => onChange(v))}
           style={{ padding: "6px 12px", fontFamily: UI, fontSize: 12.5, cursor: "pointer", color: value === v ? BRIGHT : MUTED, background: value === v ? C.surface : "transparent" }}>{text}</span>
       ))}
-    </div>
-  );
-}
-
-function SidePanel({ side, rows, tideR, picked, onPick, narrow }: { side: "LONG" | "SHORT"; rows: ChartRow[]; tideR: number | null; picked: string | null; onPick: (k: string) => void; narrow?: boolean }) {
-  const cols = `minmax(0, ${narrow ? 104 : 132}px) minmax(0, 1fr) 38px`;
-  const X = (v: number) => `${chartPct(v).toFixed(2)}%`;
-  return (
-    <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, borderBottom: `1px solid ${C.borderStrong}`, paddingBottom: 6, marginBottom: 4 }}>
-        <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 600, letterSpacing: "0.14em", color: BRIGHT }}>{side}</span>
-        {tideR != null && <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTED }}>random {side.toLowerCase()} {fmtR(tideR)}</span>}
-      </div>
-      {rows.length ? rows.map((r) => {
-        const key = `${side}:${r.axis}`, lo = Math.min(r.meanR, r.randomR), hi = Math.max(r.meanR, r.randomR), on = picked === key;
-        return (
-          <div key={key} role="button" tabIndex={0} aria-pressed={on} onClick={() => onPick(key)} onKeyDown={pressKey(() => onPick(key))}
-            title={`${r.axis} · ${side}: ${r.n} new events, mean ${fmtR(r.meanR)}; a random entry ${fmtR(r.randomR)}; beat ${r.pct == null ? "—" : Math.round(r.pct)}% of 300 replays`}
-            style={{ display: "grid", gridTemplateColumns: cols, alignItems: "center", gap: 8, height: 32, borderRadius: 4, cursor: "pointer", background: on ? C.surface : "transparent", padding: "0 4px" }}>
-            <span style={{ fontFamily: MONO, fontSize: 11, color: FOG, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.axis}</span>
-            <span style={{ position: "relative", height: "100%" }}>
-              {CHART.ticks.map((t: number) => <span key={t} style={{ position: "absolute", left: X(t), top: t === 0 ? 4 : 10, bottom: t === 0 ? 4 : 10, width: 1, background: t === 0 ? C.borderStrong : C.border }} />)}
-              <span style={{ position: "absolute", top: "50%", height: 2, marginTop: -1, left: X(lo), width: `calc(${X(hi)} - ${X(lo)})`, background: r.meanR > r.randomR ? FOG : FAINT }} />
-              <span style={{ position: "absolute", top: "50%", left: X(r.randomR), width: 10, height: 10, margin: "-5px 0 0 -5px", borderRadius: "50%", border: `2px solid ${MUTED}`, background: C.canvas }} />
-              <span style={{ position: "absolute", top: "50%", left: X(r.meanR), width: 10, height: 10, margin: "-5px 0 0 -5px", borderRadius: "50%", background: BRIGHT, boxShadow: `0 0 0 2px ${C.canvas}` }} />
-            </span>
-            <span style={{ fontFamily: MONO, fontSize: 11, textAlign: "right", fontVariantNumeric: "tabular-nums", color: (r.pct ?? 0) >= 95 ? BRIGHT : MUTED }}>{r.pct == null ? "—" : `${Math.round(r.pct)}%`}</span>
-          </div>
-        );
-      }) : <span style={{ fontFamily: UI, fontSize: 12.5, color: MUTED, padding: "6px 4px" }}>No read has 5+ new {side.toLowerCase()} events on these coins yet.</span>}
-      <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, height: 18, padding: "0 4px" }}>
-        <span />
-        <span style={{ position: "relative" }}>
-          {CHART.ticks.map((t: number) => <span key={t} style={{ position: "absolute", left: X(t), transform: "translateX(-50%)", fontFamily: MONO, fontSize: 10, color: FAINT, lineHeight: "18px", whiteSpace: "nowrap" }}>{t === 0 ? "0" : `${t > 0 ? "+" : "−"}${Math.abs(t)}R`}</span>)}
-        </span>
-        <span style={{ fontFamily: MONO, fontSize: 9.5, color: FAINT, textAlign: "right", lineHeight: "18px" }}>BEAT</span>
-      </div>
     </div>
   );
 }
@@ -123,46 +89,78 @@ export function MarketStats({ scorecard }: { scorecard: any }) {
   );
 }
 
-/** Each read against a random entry, one side at a time, on the main coins or the holdout. New data only. */
+/**
+ * Every read vs random trades (plain-words pass, borst 2026-11-21): one card per read, each side a word chip
+ * ("Beats random" … "Worse than random", the backtest's own cutoffs) with its trades and the share of 300 random trades
+ * it beat; a tap shows its average beside a random trade's. Main coins or the fresh ones. New data only.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function SideChart({ scorecard }: { scorecard: any }) {
   const isMobile = useIsMobile();
   const [line, setLine] = useState<"main" | "holdout">("main");
+  const [all, setAll] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const rows = useMemo(() => overviewReads(scorecard, { line, minEvents: scorecard?.pipeline?.rules?.minEvents ?? 30 }) as Row[], [scorecard, line]);
-  const tide = tideOf(scorecard);
+  const cards = useMemo(() => vsRandomCards(rows) as VsCard[], [rows]);
   const strong = useMemo(() => strongSides(scorecard) as { axis: string; side: string }[], [scorecard]);
-  const pickedRow = picked ? rows.find((r) => r.axis === picked.split(":")[1]) : null;
-  const pickedSide = picked ? (picked.split(":")[0] as "LONG" | "SHORT") : null;
   if (!ready(scorecard)) return null;
+  const FIRST = 6;
+  const shown = all ? cards : cards.slice(0, FIRST);
   return (
     <section style={{ marginTop: 36, display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 20 : 22, fontWeight: 600, letterSpacing: "-0.02em", color: BRIGHT }}>Every read vs a random entry</h2>
-        <p style={{ margin: 0, fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: MUTED, maxWidth: 680 }}>
-          Same coins, same side, same hours. New data only. Not a grade: the stage is.
+        <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 20 : 22, fontWeight: 600, letterSpacing: "-0.02em", color: BRIGHT }}>Every read vs random trades</h2>
+        <p style={{ margin: 0, fontFamily: UI, fontSize: 13.5, lineHeight: 1.55, color: MUTED, maxWidth: 680 }}>
+          For each read we take 300 random trades on the same coins, same side, same hours. If it can’t beat them, it’s luck.
+          New data only.
         </p>
       </div>
-      <p style={{ margin: 0, fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: FOG, maxWidth: 680 }}>
+      <p style={{ margin: 0, fontFamily: UI, fontSize: 13.5, lineHeight: 1.55, color: FOG, maxWidth: 680 }}>
         {strong.length
-          ? <>Beats its own random entry on both coin sets: {strong.map((s, i) => <span key={i}>{i ? " and " : ""}<span style={{ fontFamily: MONO, color: BRIGHT }}>{s.axis}</span> {s.side.toLowerCase()}s</span>)}. One side, new data, not yet a stage.</>
-          : "No side beats its own random entry on both coin sets yet."}
+          ? <>Beating random on both the main coins and fresh ones: {strong.map((s, i) => <span key={i}>{i ? " and " : ""}<span style={{ fontFamily: MONO, color: BRIGHT }}>{s.axis}</span> {s.side.toLowerCase()}s</span>)}. One side only, not a stage yet.</>
+          : "Nothing beats random on both the main coins and fresh ones yet."}
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontFamily: UI, fontSize: 12.5, color: FOG }}>
-          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><span style={{ width: 9, height: 9, borderRadius: "50%", background: BRIGHT }} />the read’s mean R</span>
-          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><span style={{ width: 9, height: 9, borderRadius: "50%", border: `2px solid ${MUTED}` }} />a random entry (median of 300)</span>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", fontFamily: UI, fontSize: 12, color: MUTED }}>
+          <WordChip word={{ key: "BEATS", text: RANDOM_WORDS.BEATS }} /> 95%+
+          <WordChip word={{ key: "LEANS", text: RANDOM_WORDS.LEANS }} /> 80%+
+          <WordChip word={{ key: "WORSE", text: RANDOM_WORDS.WORSE }} /> 5% or less
         </div>
-        <Seg label="Coins" value={line} onChange={(v) => { setLine(v as "main" | "holdout"); setPicked(null); }} options={[["main", "Main coins"], ["holdout", "Coins it was never picked on"]]} />
+        <Seg label="Coins" value={line} onChange={(v) => { setLine(v as "main" | "holdout"); setPicked(null); }} options={[["main", "Main coins"], ["holdout", "Fresh coins"]]} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: isMobile ? 18 : 28 }}>
-        <SidePanel side="LONG" rows={chartRows(rows, "LONG") as ChartRow[]} tideR={tide?.long ?? null} picked={picked} onPick={(k) => setPicked(picked === k ? null : k)} narrow={isMobile} />
-        <SidePanel side="SHORT" rows={chartRows(rows, "SHORT") as ChartRow[]} tideR={tide?.short ?? null} picked={picked} onPick={(k) => setPicked(picked === k ? null : k)} narrow={isMobile} />
+      {line === "holdout" && <p style={{ margin: 0, fontFamily: UI, fontSize: 12.5, color: MUTED }}>Fresh coins = coins none of these reads were picked on.</p>}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+        {shown.map((c) => (
+          <div key={c.axis} style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: UI, fontSize: 13.5, fontWeight: 600, color: BRIGHT, lineHeight: 1.35 }}>{c.label}</div>
+              <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTED, overflowWrap: "anywhere" }}>{c.axis}</div>
+            </div>
+            {(["LONG", "SHORT"] as const).map((sd) => {
+              const v = c.sides[sd], key = `${sd}:${c.axis}`, on = picked === key;
+              return (
+                <button key={sd} type="button" aria-expanded={on} onClick={() => setPicked(on ? null : key)}
+                  style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "stretch", textAlign: "left", background: on ? C.surface : "none", border: "none", borderTop: `1px solid ${C.border}`, padding: "8px 2px 2px", cursor: "pointer" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.12em", color: BRIGHT, minWidth: 52 }}>{sd}S</span>
+                    <WordChip word={v.word} />
+                    <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 11.5, color: MUTED, whiteSpace: "nowrap" }}>{v.n} trades{v.pct == null || v.word.key === "FEW" ? "" : ` · ${Math.round(v.pct)}%`}</span>
+                  </span>
+                  {on && (
+                    <span style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, color: FOG }}>
+                      {v.n ? <>Its {sd.toLowerCase()}s averaged <span style={{ color: tone(v.meanR) }}>{fmtR(v.meanR)}</span> a trade; a random {sd.toLowerCase()} on the same coins and hours averaged {v.randomR == null ? "—" : fmtR(v.randomR)}.{v.pct == null ? "" : ` It beat ${Math.round(v.pct)}% of 300 random tries.`}</> : `No new ${sd.toLowerCase()} trades yet.`}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
-      {pickedRow && pickedSide && pickedRow.sides[pickedSide] && (
-        <p style={{ margin: 0, fontFamily: UI, fontSize: 13, lineHeight: 1.55, color: FOG, borderLeft: `2px solid ${C.borderStrong}`, paddingLeft: 10 }}>
-          <span style={{ fontFamily: MONO, color: BRIGHT }}>{pickedRow.axis}</span> {pickedSide.toLowerCase()}s: {pickedRow.sides[pickedSide]!.n} new events, mean <span style={{ color: tone(pickedRow.sides[pickedSide]!.meanR) }}>{fmtR(pickedRow.sides[pickedSide]!.meanR)}</span>; a random {pickedSide.toLowerCase()} on the same coins and hours made {fmtR(pickedRow.sides[pickedSide]!.randomR)}. Beat {pickedRow.sides[pickedSide]!.pct == null ? "—" : Math.round(pickedRow.sides[pickedSide]!.pct!)}% of 300 replays; the bar for an edge is 95%.
-        </p>
+      {cards.length > FIRST && (
+        <button type="button" onClick={() => setAll((v) => !v)} className="nx-text-action" style={{ alignSelf: "flex-start", background: "none", border: "none", padding: "4px 0", cursor: "pointer", fontFamily: UI, fontSize: 13, color: FOG }}>
+          {all ? "Show fewer" : `Show all ${cards.length} reads`}
+        </button>
       )}
     </section>
   );

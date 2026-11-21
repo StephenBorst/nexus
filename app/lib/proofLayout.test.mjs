@@ -4,7 +4,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { statusCounts, vsRandom, sideVsRandom, vsRandomText, gateTrack, paperRun, leadCards, rPos } from "./proofLayout.mjs";
+import { statusCounts, vsRandom, sideVsRandom, vsRandomText, gateLine, paperRun, leadCards, randomWord, beatSentence, vsRandomCards, RANDOM_WORDS } from "./proofLayout.mjs";
+import { baselineVerdict } from "../../workers/nexus-lab-api/backtest.mjs";
 import { boardGroups } from "./signalCard.mjs";
 
 const page = (f) => readFileSync(new URL(`../pages/proof/${f}`, import.meta.url), "utf8");
@@ -42,18 +43,38 @@ test("statusCounts: from the board's own groups; a group the board left out coun
   assert.deepEqual(statusCounts(null), { cleared: 0, lead: 0, testing: 0 });
 });
 
-test("gates are tracks (a dot now, a tick at the bar), on each gate's own scale; steps are words", () => {
-  assert.deepEqual(gateTrack({ key: "random", label: "beats random entries", now: 22.2, bar: 95, unit: "%", met: false }),
-    { key: "random", label: "beats random entries", met: false, kind: "track", nowPos: 22.2, barPos: 95, nowText: "22.2%", barText: "95%" });
-  const ev = gateTrack({ key: "events", label: "out-of-sample events", now: 12, bar: 30, unit: "events" });
-  assert.deepEqual([ev.nowPos, ev.barPos, ev.nowText, ev.barText], [40, 100, "12", "30"]);
-  assert.equal(gateTrack({ key: "events", label: "x", now: 45, bar: 30, unit: "events" }).nowPos, 100, "capped");
-  const r = gateTrack({ key: "holdout_r", label: "holdout mean R > 0", now: 0.31, bar: 0, unit: "R", met: true });
-  assert.deepEqual([r.nowPos, r.barPos, r.nowText, r.barText, r.met], [rPos(0.31), rPos(0), "+0.31R", "> 0R", true]);
-  const b = gateTrack({ key: "exit_net", label: "graded exit net", now: -5, bar: 0, unit: "bps" });
-  assert.ok(b.nowPos < b.barPos && b.barPos === 50, "below the bar sits left of it");
-  assert.deepEqual(gateTrack({ key: "holdout_line", label: "a holdout line", now: null, bar: null, unit: null }).kind, "step");
-  assert.equal(gateTrack(null), null);
+test("gates are a plain checklist: one sentence each, the number now, fresh coins = the holdout", () => {
+  assert.deepEqual(gateLine({ key: "random", label: "beats random entries", now: 22.2, bar: 95, unit: "%", met: false }),
+    { key: "random", text: "Beats random trades 95% of the time", nowText: "22.2%", met: false });
+  assert.deepEqual(gateLine({ key: "random_long", label: "longs vs random longs", now: 4.7, bar: 50, unit: "%" }).text, "Its longs beat random longs 50% of the time");
+  assert.deepEqual(gateLine({ key: "events", label: "out-of-sample events", now: 12, bar: 30, unit: "events" }).nowText, "12 so far");
+  const r = gateLine({ key: "holdout_r", label: "holdout mean R > 0", now: 0.75, bar: 0, unit: "R", met: true });
+  assert.deepEqual([r.text, r.nowText, r.met], ["Makes money on fresh coins too", "+0.75R", true]);
+  assert.equal(gateLine({ key: "holdout_random", now: 78.5, bar: 80, unit: "%" }).text, "Beats random 80% of the time on fresh coins");
+  assert.equal(gateLine({ key: "holdout_line", now: null, bar: null, unit: null }).nowText, null, "a step has no number");
+  assert.equal(gateLine({ key: "something_new", label: "a new bar", now: 1, bar: 2, unit: "%" }).text, "a new bar", "an unknown bar keeps its served label");
+  assert.equal(gateLine(null), null);
+});
+
+test("vs random in words: the backtest's own cutoffs; too few under 5 trades; the lead sentence", () => {
+  const ladder = { BEATS: "BEATS_RANDOM", LEANS: "LEANS_ABOVE", SAME: "NOT_DISTINGUISHABLE", WORSE: "BELOW_RANDOM" };
+  for (const p of [0, 5, 5.1, 50, 79.9, 80, 94.9, 95, 100]) assert.equal(ladder[randomWord(p, 30).key], baselineVerdict(p), `at ${p}%`);
+  assert.equal(randomWord(99, 4).key, "FEW");
+  assert.equal(randomWord(null, 40).text, RANDOM_WORDS.FEW);
+  assert.equal(beatSentence(61.2), "Beat random trades 61% of the time.");
+  assert.match(beatSentence(null), /Too few/);
+});
+
+test("vsRandomCards: each side as a word, best side first, a read with no side at 5+ trades last", () => {
+  const rows = [
+    { axis: "a", label: "A", sides: { LONG: { n: 91, pct: 99.5, meanR: -0.15, randomR: -0.45 }, SHORT: { n: 27, pct: 11.8, meanR: 0.2, randomR: 0.48 } } },
+    { axis: "b", label: "B", sides: { LONG: { n: 2, pct: 100, meanR: -1, randomR: null }, SHORT: null } },
+    { axis: "c", label: "C", sides: { LONG: { n: 40, pct: 60, meanR: 0.1, randomR: 0 }, SHORT: { n: 30, pct: 2, meanR: -0.4, randomR: 0.3 } } },
+  ];
+  const cards = vsRandomCards(rows);
+  assert.deepEqual(cards.map((c) => c.axis), ["a", "c", "b"]);
+  assert.deepEqual([cards[0].sides.LONG.word.key, cards[0].sides.SHORT.word.key, cards[1].sides.SHORT.word.key], ["BEATS", "SAME", "WORSE"]);
+  assert.deepEqual([cards[2].sides.LONG.word.key, cards[2].sides.SHORT.n], ["FEW", 0], "2 trades at 100% is too few, not a win");
 });
 
 test("paper: a count of 30 where a run exists, 'No paper run yet' where none does; never R or dollars", () => {
@@ -70,12 +91,12 @@ test("leadCards: the board's lead rows in the board's order, with their gates an
   assert.equal(c.stage, "LEAD");
   assert.equal(c.events, 97);
   assert.deepEqual(c.pooled.pct, 0);
-  assert.deepEqual(c.gates.map((g) => [g.key, g.nowPos, g.barPos]), [["random", 0, 95], ["random_long", 4.7, 50]]);
+  assert.deepEqual(c.gates.map((g) => [g.key, g.nowText]), [["random", "0%"], ["random_long", "4.7%"]]);
   assert.equal(c.next, REG_LEAD.next, "the served sentence, word for word");
   assert.equal(c.paper.text, "Paper run: 1 of 30 trades · 1 open");
   assert.equal(leadCards(groups, {})[0].paper.text, "No paper run yet");
   assert.deepEqual(leadCards(null), []);
-  // A board cached before `gates` existed: no tracks, the sentence still shows.
+  // A board cached before `gates` existed: no checklist.
   const [old] = leadCards([{ key: "lead", rows: [{ a: BTC_LEAD_LAG, reg: { ...REG_LEAD, gates: undefined } }] }]);
   assert.deepEqual([old.gates, old.next], [[], REG_LEAD.next]);
 });
@@ -89,8 +110,15 @@ test("the page: one source for the counts, mean R always beside random, no progr
   for (const line of cards.split("\n").filter((l) => /fmtR\((c\.pooled|v)\.meanR\)/.test(l) && !l.includes("title="))) {
     assert.match(line, /randomR/, `mean R printed alone: ${line.trim()}`);
   }
-  const gate = cards.slice(cards.indexOf("function GateTrack"), cards.indexOf("function PaperCount"));
-  assert.doesNotMatch(gate, /width: `\$\{/, "a gate is a dot and a tick, never a bar that fills");
+  // Plain words (2026-11-21): no rulers or tracks on a card or the vs-random section; the bars are a checklist.
+  const chart = page("EngineOverview.tsx");
+  for (const src of [cards, chart]) assert.doesNotMatch(src, /rPos\(|chartPct\(|VsRuler|GateTrack|SidePanel/, "no ruler");
+  assert.match(cards, /function Check\(/);
+  assert.match(cards, /beatSentence\(/);
+  assert.match(chart, /vsRandomCards\(rows\)/);
+  assert.match(chart, /Every read vs random trades/);
+  // The tile with its average always sits next to the random average's tile.
+  assert.match(cards, /"ITS AVERAGE"\)\}\n\s*\{tile\([^\n]*randomR[^\n]*"RANDOM AVERAGE"\)/);
   assert.match(strip, /isMobile \? \{\} : \{ position: "sticky" as const/, "sticky on desktop only");
   // The order of the reads half, and the bar line kept whole (FeaturedLead prints PROOF_BAR_LINE).
   const order = ["<FeaturedLead", "<ProofStatus", "<LeadCards", "<SideChart", "<PaperWallets", "<SignalBoard", "<PlainWords", "<MarketStats", "<WeeklyScorecard"].map((t) => idx.indexOf(t));

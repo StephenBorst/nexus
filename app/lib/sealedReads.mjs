@@ -47,19 +47,27 @@ export const SEALED_READS = Object.freeze([
     label: "House signal",
     fingerprint: "b71e0dfd42b32465f0cdc7e1c45abf13e62e75c4766e50ba333fca8f388b0c6e",
     wallet: "0x76A22635ECD0e86c555Ccd2202D250D82f3bB17B", // borst 2026-11-20: posts calls only; he holds the key
-    committedAt: "2026-11-20",
+    committedAt: "2026-11-20", // PR #397, merged on GitHub 2026-11-20: the public date the fingerprint holds
     xPost: null, // { url, at (ISO) } once borst has posted the fingerprint from his public X account
+    // borst's ruling 2026-11-21 (recorded under the page's Results): the X post is waived for house-1; the GitHub
+    // merge of the fingerprint is the outside date. It counts from the next 00:00 UTC after this ruling.
+    xPostWaivedAt: "2026-11-21",
   }),
 ]);
 
 const DAY_MS = 24 * 3600e3;
 /**
  * When a sealed read starts counting (page §1.2): the next 00:00 UTC after BOTH the commit here and borst's X post.
- * Null until the X post is recorded: nothing counts before an outside party holds the date.
+ * Null until the X post is recorded: nothing counts before an outside party holds the date. A read borst has ruled
+ * the X post waived for (`xPostWaivedAt`, a date recorded under the page's Results) counts from the next 00:00 UTC
+ * after the commit and that ruling: the GitHub merge of the fingerprint is then the outside date.
  */
 export function sealedCountsFrom(read) {
-  const c = Date.parse(`${read?.committedAt}T00:00:00Z`), x = Date.parse(read?.xPost?.at || "");
-  if (!Number.isFinite(c) || !Number.isFinite(x) || typeof read?.xPost?.url !== "string") return null;
+  const c = Date.parse(`${read?.committedAt}T00:00:00Z`);
+  const posted = typeof read?.xPost?.url === "string" ? Date.parse(read?.xPost?.at || "") : NaN;
+  const waived = /^\d{4}-\d{2}-\d{2}$/.test(read?.xPostWaivedAt || "") ? Date.parse(`${read.xPostWaivedAt}T00:00:00Z`) : NaN;
+  const x = Number.isFinite(posted) ? posted : waived;
+  if (!Number.isFinite(c) || !Number.isFinite(x)) return null;
   const later = Math.max(c, x);
   return new Date(Math.floor(later / DAY_MS) * DAY_MS + DAY_MS).toISOString();
 }

@@ -45,10 +45,21 @@ test("house-1 is on record with its fingerprint and wallet, and counts only once
   const h = SEALED_READS.find((r) => r.name === "house-1");
   assert.match(h.fingerprint, /^[0-9a-f]{64}$/);
   assert.match(h.wallet, /^0x[0-9a-fA-F]{40}$/);
-  assert.equal(sealedCountsFrom({ ...h, xPost: null }), null, "no X post, no start");
+  assert.equal(sealedCountsFrom({ ...h, xPost: null, xPostWaivedAt: undefined }), null, "no X post, no start");
   assert.equal(sealedCountsFrom({ ...h, xPost: { url: "https://x.com/borstxbt/status/1", at: "2026-11-20T15:00:00Z" } }), "2026-11-21T00:00:00.000Z");
   assert.equal(sealedCountsFrom({ ...h, xPost: { url: "https://x.com/borstxbt/status/1", at: "2026-11-22T23:59:00Z" } }), "2026-11-23T00:00:00.000Z", "the later of the two");
-  assert.equal(sealedCountsFrom({ ...h, xPost: { at: "2026-11-20T15:00:00Z" } }), null, "a date without a link is not a post");
+  assert.equal(sealedCountsFrom({ ...h, xPost: { at: "2026-11-20T15:00:00Z" }, xPostWaivedAt: undefined }), null, "a date without a link is not a post");
   // Nothing private on record: only these fields.
-  assert.deepEqual(Object.keys(h).sort(), ["committedAt", "fingerprint", "label", "name", "wallet", "xPost"]);
+  assert.deepEqual(Object.keys(h).sort(), ["committedAt", "fingerprint", "label", "name", "wallet", "xPost", "xPostWaivedAt"]);
+});
+
+test("house-1: borst waived the X post on 2026-11-21 (recorded under Results); it counts from 2026-11-22T00:00Z", () => {
+  const h = SEALED_READS.find((r) => r.name === "house-1");
+  assert.equal(h.xPostWaivedAt, "2026-11-21");
+  assert.equal(sealedCountsFrom(h), "2026-11-22T00:00:00.000Z");
+  assert.equal(sealedCountsFrom({ ...h, xPostWaivedAt: "nope" }), null, "only a real date waives it");
+  const page = readFileSync(new URL("../../docs/research/sealed-reads.md", import.meta.url), "utf8");
+  const results = page.slice(page.indexOf("## Results"));
+  assert.match(results, /2026-11-21 · borst's ruling: the X post is waived for house-1/);
+  assert.match(results, /2026-11-22T00:00:00Z/);
 });

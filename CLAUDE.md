@@ -622,6 +622,13 @@ product is what sits on top:
   nothing else calls `boardGroups`). A card never prints mean R without the random entry's beside it (pooled + per side,
   dot vs ring). Bars are tracks (dot = now, tick = bar) drawn from the served `pipeline.reads[].gates` (the `next` bars as
   data, `axisbt:v31`), never filling progress bars. Paper = a count of 30 only where a run exists, else "No paper run yet".
+  **Plain words** (borst 2026-11-21, "way too complicated for a normie"; rules in proofLayout.mjs): a lead card = one
+  word chip + "Beat random trades N% of the time." (`randomWord` / `beatSentence`, the backtest's own baselineVerdict
+  cutoffs 95 / 80 / 5, < 5 trades = too few; chips bone / ink / amber, never green-red) → four tiles (new trades · beat
+  random · its average · random average, the last two always side by side) → "To move up" = a checklist, one plain
+  sentence per served gate with its number now (`gateLine`; holdout = "fresh coins") → paper count → sides on a tap.
+  "Every read vs random trades" (`SideChart`) = one card per read, each side a word chip + trades + %, best first
+  (`vsRandomCards`), 6 then "Show all"; no ruler, no tracks (test-pinned).
   One read table: the overview's left; each read's new-data sides open under its board row; Still testing is on a tap.
   **The board** (borst 2026-11-17, pipeline-if-then.md § "Board layout and the CLEARED badge"; `boardGroups` +
   `isCleared` in signalCard.mjs): "Every read, best first" = **Cleared** (served TRADEABLE/PAPER + no promotion lock +
@@ -666,7 +673,9 @@ product is what sits on top:
   (`PIPELINE_RULES`), then its first 30 calls after TRADEABLE judged by the paper-judgment rules; CLEARED → the headline.
   Until then a "House signal · testing" panel tops /proof. Revealed at CLEARED or borst's date; a hash mismatch voids it.
   **On record** (`SEALED_READS`): `house-1` ("House signal", fingerprint `b71e0dfd…0c6e`, posting wallet `0x76A2…B17B`,
-  borst holds its key; committed 2026-11-20). `sealedCountsFrom` = null until borst's X post is recorded on the entry.
+  borst holds its key; committed 2026-11-20, PR #397). **X post WAIVED for house-1** (borst 2026-11-21, ruling under the
+  page's Results; `xPostWaivedAt`): the GitHub merge is the outside date; **counts from 2026-11-22T00:00:00Z**
+  (`sealedCountsFrom`). A later sealed read still needs its X post unless borst rules again.
   **Fires → calls** (`POST /sealed/fire`, `routes-sealed.mjs`, rules `app/lib/sealedFire.mjs`): the private worker sends
   `{name, coin, side, fireAt}` signed by the read's OWN wallet (`sealedFireMessage`); lab-api builds the call in public
   (entry = Orderly mark, stop/target from `gradedExitLevels` on Orderly's last 81 hourly bars, `timeStopH` 168) and seals it
