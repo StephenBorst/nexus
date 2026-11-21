@@ -184,18 +184,22 @@ export default function ThesisPage() {
   };
   useEffect(() => {
     if (!wallet || !id) return;
+    // Moving from one call to another before this read lands must not show the first call on the second's page.
+    let live = true;
     setLoading(true);
     setNotFound(false);
     setGone(false);
     setVerifyResult(null);
     fetch(`${API_BASE}/thesis/${wallet}/${id}`)
       .then((r) => {
+        if (!live) return null;
         if (r.status === 404) { setNotFound(true); setGone(true); return null; }
         return r.json();
       })
-      .then((data) => { const t = readThesis(data); if (t) setThesis(t); })
-      .catch(() => setNotFound(true))
-      .finally(() => setLoading(false));
+      .then((data) => { if (!live) return; const t = readThesis(data); if (t) setThesis(t); })
+      .catch(() => { if (live) setNotFound(true); })
+      .finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
   }, [wallet, id]);
 
   // ── Keep an open call live ──────────────────────────────────────────────────

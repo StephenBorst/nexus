@@ -99,6 +99,7 @@ export function Simulate({ body, label = "◆ Simulate", wallet: walletProp }: {
       if (stop) return;
       try {
         const j = await fetch(`${AGENT_API}/wargame/status?url=${encodeURIComponent(statusUrl)}`).then((r) => r.json());
+        if (stop) return; // this run was replaced or the card closed while the read was in flight
         const x = (j && j.data) || {};
         setProg({ stage: x.current_stage, progress: x.progress, message: x.message });
         const finish = (d: Done) => { const run = { statusUrl, startedAt: saved?.startedAt ?? Date.now(), done: d }; saveRun(key, run); setSaved(run); setDone(d); setState("done"); };

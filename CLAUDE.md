@@ -764,6 +764,9 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   call page prints a PATH line. Paper: `paperRun(…, { candles })` gives each closed trade `maeR` / `mfeR` from candle:hist
   after its entry hour (`paperExcursion`, risk = `sl_percent`); the paper run page's "Against / for" column, per trade,
   never summed. Display only: no rule tightens on it; a tighter rule found here is a new registered read.
+- **Stale reads** (2026-11-21, `app/lib/staleReads.test.mjs`): the call page, the trader profile and the sim status poll
+  guard every write after a fetch (`live` / `stop`), so tapping from one call / trader / run to the next before the
+  first read lands never shows the first one's data on the second's page.
 - **Cards** re-read an open call every 30 s on its own page (`callPollMs`, stops once graded). They read R:R from the levels (`callRR`), show a position only once the entry trades (`callLifecycle.mjs`,
   `AwaitingFill.tsx`), and show NOT GRADED for INVALID. `/feed` carries resolution rows: filter them before treating rows as calls.
 - **One call, one wallet:** the Lab device cache is per wallet (`app/lib/labCache.mjs`); copies held by other wallets

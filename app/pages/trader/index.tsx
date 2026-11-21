@@ -526,6 +526,9 @@ export default function TraderPage() {
   // Fetch all public theses, filter to this wallet
   useEffect(() => {
     if (!wallet) return;
+    // Tapping from one trader to another before this read lands must not show the first trader's record on the
+    // second one's page (2026-11-21): every write after a fetch checks it's still this wallet.
+    let live = true;
     setLoading(true);
     setError(false);
     setMerit(null);
@@ -549,12 +552,13 @@ export default function TraderPage() {
         // /feed also carries RESOLUTION rows ("BTC SHORT stopped out, −1R": no levels, they used to
         // land here as $0.00 calls) and this wallet's AGENT trades (named "Nexus Agent", so the
         // profile could take that name). Only the wallet's own published calls count here.
-        setTheses(profileCalls(all, wallet) as FeedThesis[]);
+        if (live) setTheses(profileCalls(all, wallet) as FeedThesis[]);
       })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
+      .catch(() => { if (live) setError(true); })
+      .finally(() => { if (live) setLoading(false); });
     sharedJson(`${API_BASE}/theses/process/${wallet.toLowerCase()}`)
       .then((d) => {
+        if (!live) return;
         setMerit(d?.meritRank?.title ? { glyph: String(d.meritRank.glyph ?? ""), title: String(d.meritRank.title) } : null);
         if (d && typeof d.calls === "number") setRecord(normRecord(d));
         setRisk(d?.risk && typeof d.risk.calls === "number" ? d.risk as RecordRisk : null);
@@ -562,8 +566,9 @@ export default function TraderPage() {
       .catch(() => {});
     // Hub: this trader's graded AGENT record + their published strategies.
     setAgentRec(null); setPubStrats([]);
-    fetch(`${API_BASE}/agents/standing/${wallet}`).then((r) => r.ok ? r.json() : null).then((d) => setAgentRec(d?.stats && d.stats.trades > 0 ? d.stats : null)).catch(() => {});
-    fetch(`${API_BASE}/agent/${wallet}/strategies`).then((r) => r.ok ? r.json() : null).then((d) => setPubStrats((d?.strategies || []).filter((s: SavedStrategy) => s.public))).catch(() => {});
+    fetch(`${API_BASE}/agents/standing/${wallet}`).then((r) => r.ok ? r.json() : null).then((d) => live && setAgentRec(d?.stats && d.stats.trades > 0 ? d.stats : null)).catch(() => {});
+    fetch(`${API_BASE}/agent/${wallet}/strategies`).then((r) => r.ok ? r.json() : null).then((d) => live && setPubStrats((d?.strategies || []).filter((s: SavedStrategy) => s.public))).catch(() => {});
+    return () => { live = false; };
   }, [wallet]);
 
   // Live prices for active theses
