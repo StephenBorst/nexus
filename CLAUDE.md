@@ -1060,6 +1060,15 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   order (`liveOrderReady`); an unsized call saves size 0. Order: coin → side → levels (2×2 on a phone) → stop/target
   knobs → the Read as one foldable line (`LiveRead foldable`, `nx_read_open`; folded on a phone, still reads for the
   WATCH gate) → optional size → Post. The Sim folds to one line.
+  **Starting points + facts before Post** (borst 2026-11-21, rules `app/lib/callStart.mjs`, UI `CallStarts.tsx`): with no
+  coin, chips from your watchlist, markets past the Intel tape's funding lines (by how far past) and coins with an open
+  public call (people / engines counted apart); a chip fills the SYMBOL only, never a side (test-pinned). Above Post,
+  "Before you post · facts, not advice": stop vs the live H4 ATR (< 1× = inside one ordinary 4h bar, > 4× = wide),
+  filled at the post or resting (the grader's `ENTRY_AT_MARK_PCT` vs the mark the build read), the stop as % of margin
+  at the sized leverage (≥ 80% flagged), and the trader's own graded record on the coin.
+  **Hardening (2026-11-21):** a Quick Call build is dropped if the coin changed while the mark was in flight (it used to
+  write the old coin's price onto the new call); a live order whose entry went in but whose stop/target was refused
+  now says the entry IS resting with no stop.
 - **Position → call (Trade, 2026-11-05):** `PositionCallButton.tsx` sits at the right end of the Trade strip, only when the
   wallet holds a position in the market on screen; one tap opens the Thesis Engine with a draft (`app/lib/positionCall.mjs`):
   side from the position, ENTRY = the mark at the tap (never the average open price: a call starts when posted), stop/target
