@@ -177,3 +177,17 @@ test("GET /theses/status/:wallet: a failed refresh reuses marks ≤2 min old, fl
   assert.deepEqual([gone.marksAvailable, gone.marksStale, gone.markAt, gone.markAgeSec], [false, false, null, null], "a 5-minute-old mark is not served");
   assert.equal(gone.calls[0].live, null);
 });
+
+test("GET /theses/status/:wallet: expired orders listed apart (not a grade), and the +0.5R stamp rides on the row", async () => {
+  _resetMarkCache();
+  const env = { LAB_STORE: kv({ [`lab:${W}`]: { theses: [
+    call({ id: "half", fillState: "OPEN", filledAt: T0, halfRAt: T0 + 5, createdAt: T0 + 1 }),
+    call({ id: "exp", fillState: "EXPIRED", status: "EXPIRED", expiredAt: T0 + 7, expiredReason: "WINDOW", fillWithinH: 4, createdAt: T0 }),
+  ] } }) };
+  const body = await (await handleCallStatus(["theses", "status", W], get(`/theses/status/${W}`), env, { fetchImpl: futures({ PERP_BTC_USDC: 101 }, { n: 0 }), now: () => T0 + 60_000 })).json();
+  assert.deepEqual(body.calls.map((c) => c.id), ["half"], "an expired order is not open");
+  assert.equal(body.calls[0].halfRAt, T0 + 5);
+  assert.equal(body.calls[0].expiredAt, undefined);
+  assert.deepEqual(body.expired.map((c) => [c.id, c.expiredAt, c.expiredReason, c.fillWithinH, c.graded]), [["exp", T0 + 7, "WINDOW", 4, null]]);
+  assert.deepEqual(body.recent, [], "never counted as a grade");
+});

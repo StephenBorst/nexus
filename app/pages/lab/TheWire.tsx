@@ -4,13 +4,15 @@
 // newest few, filter chips, "Show all". What's scheduled in the next 12h sits above the stream.
 // Your own calls (2026-11-21): the connected wallet's GET /theses/status/:wallet, read here in the browser (the shared
 // route never carries a wallet), merged in as "Your call" rows by myCallRows / withMine.
-import { useEffect, useState } from "react";
+// New since your last look (2026-11-21): the time this device last opened the Wire (localStorage WIRE_SEEN_KEY) splits
+// the stream; it is read once on mount and moved to now once the Wire has loaded, so the next visit starts from here.
+import { Fragment, useEffect, useState } from "react";
 import { useAccount } from "@orderly.network/hooks";
 import { Link } from "react-router-dom";
 import { C, MONO, UI } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
 import { sharedJson } from "@/lib/sharedJson.mjs";
-import { WIRE_FILTERS, WIRE_KINDS, filterWire, wireWhen, myCallRows, withMine } from "@/lib/wire.mjs";
+import { WIRE_FILTERS, WIRE_KINDS, filterWire, wireWhen, myCallRows, withMine, wireSeenSplit, WIRE_SEEN_KEY } from "@/lib/wire.mjs";
 import { CoinLink } from "@/components/CoinLink";
 import { boardsAt } from "@/lib/intelLenses.mjs";
 
@@ -33,6 +35,11 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
   const { state: acct } = useAccount();
   const wallet = (acct as { address?: string })?.address ?? null;
   const [mine, setMine] = useState<Row[] | null | undefined>(undefined); // undefined = no wallet / reading, null = unread
+  const [lastLook] = useState<number | null>(() => { try { const v = Number(localStorage.getItem(WIRE_SEEN_KEY)); return v > 0 ? v : null; } catch { return null; } });
+  useEffect(() => {
+    if (!wire) return;
+    try { localStorage.setItem(WIRE_SEEN_KEY, String(Date.now())); } catch { /* private mode: no baseline, no divider */ }
+  }, [wire]);
 
   useEffect(() => {
     let alive = true;
@@ -58,7 +65,9 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
 
   const merged: Row[] = wire ? (withMine(wire.rows, mine ?? [], now) as Row[]) : [];
   const rows: Row[] = wire ? filterWire(merged, filter) : [];
-  const shown = all ? rows : rows.slice(0, FIRST);
+  const split = wireSeenSplit(rows, lastLook) as { newCount: number; at: number } | null;
+  const shown = all ? rows : rows.slice(0, Math.max(FIRST, split && split.newCount < 20 ? split.newCount + 1 : 0));
+  const newLine = split ? `${split.newCount === 0 ? "Nothing new" : `${split.newCount} new`} since your last look ${wireWhen(split.at, now)}${wireWhen(split.at, now) === "now" ? "" : " ago"}` : null;
   const chip = (on: boolean): React.CSSProperties => ({
     flexShrink: 0, fontFamily: UI, fontSize: 13, fontWeight: on ? 600 : 500, cursor: "pointer", padding: "6px 12px",
     borderRadius: 999, background: on ? C.accent : "transparent", color: on ? C.canvas : C.text.fog,
@@ -108,8 +117,17 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
 
       {wire && (
         <div style={{ marginTop: 10 }}>
-          {shown.map((r) => (
-            <article key={r.id} style={{ display: "flex", gap: 10, padding: "11px 0", borderTop: `1px solid ${C.border}` }}>
+          {newLine && (
+            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", color: C.text.muted, paddingBottom: 6 }}>{newLine.toUpperCase()}</div>
+          )}
+          {shown.map((r, i) => (
+            <Fragment key={r.id}>
+            {split && split.newCount > 0 && i === split.newCount && (
+              <div role="separator" aria-label="Seen before" style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0 2px", fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.text.muted }}>
+                <span style={{ flex: 1, height: 1, background: C.borderStrong }} />SEEN BEFORE<span style={{ flex: 1, height: 1, background: C.borderStrong }} />
+              </div>
+            )}
+            <article style={{ display: "flex", gap: 10, padding: "11px 0", borderTop: `1px solid ${C.border}` }}>
               <span style={{ flexShrink: 0, width: 32, fontFamily: MONO, fontSize: 11, color: C.text.muted, paddingTop: 1 }}>{wireWhen(r.t, now)}</span>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "baseline", fontFamily: MONO, fontSize: 10, letterSpacing: "0.06em", color: C.text.muted }}>
@@ -128,6 +146,7 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
                 {r.graded && <div style={{ marginTop: 3, fontFamily: UI, fontSize: 12, lineHeight: 1.45, color: C.text.muted }}>{r.graded}</div>}
               </div>
             </article>
+            </Fragment>
           ))}
           {rows.length === 0 && (
             <div style={{ padding: "11px 0", borderTop: `1px solid ${C.border}`, fontFamily: UI, fontSize: 13, color: C.text.muted }}>

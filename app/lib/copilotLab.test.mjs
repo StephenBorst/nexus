@@ -156,3 +156,36 @@ test("scoreboard: the tide, each registered read's sides against random on new d
   const prompt = readFileSync(new URL("../config/assistant.ts", import.meta.url), "utf8");
   assert.match(prompt, /THE TIDE: judge every side against a random entry on that side/);
 });
+
+test("get_wire: the Wire's own rows, your calls merged by its rules, sources and grade lines kept, baseline read only", async () => {
+  const { wireForCopilot } = await import("./copilotLab.mjs");
+  const NOW = Date.parse("2026-11-21T12:00:00Z"), M = 60_000;
+  const wire = {
+    builtAt: NOW - 20_000, unread: ["news: Fed"],
+    rows: [
+      { id: "n1", kind: "NEWS", t: NOW - 2 * M, coin: "BTC", title: "Bitcoin slips", source: "CoinDesk", graded: "A headline, not a read.", link: "https://x.test" },
+      { id: "call-a", kind: "CALL", t: NOW - 5 * M, coin: "ETH", title: "ETH short by you graded WIN", source: "Caller", graded: "Graded from public price, first touch.", path: "/feed/thesis/0xabc0000000000000000000000000000000000001/d" },
+      { id: "f1", kind: "FUNDING", t: NOW - 60 * M, coin: "ETH", title: "ETH funding stretched", source: "Nexus", graded: "Nearest graded relative: NOISE." },
+    ],
+    upcoming: [{ id: "s", kind: "MACRO", t: NOW + 60 * M, title: "CPI", impact: "High" }, { id: "p", kind: "MARKET", t: NOW + 90 * M, title: "SOL ETF?", coins: ["SOL"] }],
+  };
+  const mine = [{ id: "mine-d-graded", kind: "MINE", t: NOW - 4 * M, coin: "ETH", title: "Your ETH short graded WIN +1.00R", source: "Your call", graded: "Graded from public price, first touch.", path: "/feed/thesis/0xabc0000000000000000000000000000000000001/d" }];
+  const out = wireForCopilot(wire, mine, { now: NOW, lastLook: NOW - 3 * M });
+  assert.deepEqual(out.rows.map((r) => r.what), ["Bitcoin slips", "Your ETH short graded WIN +1.00R", "ETH funding stretched"], "your own graded call replaces its public twin");
+  assert.equal(out.rows[0].grade_line, "A headline, not a read.");
+  assert.equal(out.rows[1].kind, "Your call");
+  assert.equal(out.new_since_last_look, 1);
+  assert.deepEqual(out.unread, ["news: Fed"]);
+  const eth = wireForCopilot(wire, mine, { now: NOW, coin: "eth", filter: "mine" });
+  assert.deepEqual(eth.rows.map((r) => r.what), ["Your ETH short graded WIN +1.00R"]);
+  assert.deepEqual(eth.coming_up_12h.map((e) => e.what), ["CPI"], "a coin keeps macro, drops other coins' markets");
+  assert.equal(wireForCopilot(wire, null, { now: NOW }).new_since_last_look, undefined, "no baseline = no count");
+  assert.deepEqual(wireForCopilot(wire, null, { now: NOW, walletUnread: true }).unread, ["news: Fed", "your calls"]);
+  assert.ok(wireForCopilot(null, null).error);
+  // the tool only READS the Wire's baseline
+  const tools = readFileSync(new URL("../config/assistantTools.ts", import.meta.url), "utf8");
+  const tool = tools.slice(tools.indexOf('name: "get_wire"'), tools.indexOf('name: "get_watchlist"'));
+  assert.match(tool, /\/intel\/wire/);
+  assert.match(tool, /myCallRows\(/);
+  assert.doesNotMatch(tool, /localStorage\.setItem/);
+});

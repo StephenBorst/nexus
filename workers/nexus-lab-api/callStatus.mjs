@@ -58,6 +58,8 @@ export function callStatusRow(t, mark) {
     state,
     filledAt: t.filledAt ?? null,
     tp1HitAt: t.tp1HitAt ?? null,
+    halfRAt: t.halfRAt ?? null,
+    ...(t.fillState === "EXPIRED" || t.status === "EXPIRED" ? { expiredAt: t.expiredAt ?? null, expiredReason: t.expiredReason ?? null, fillWithinH: t.fillWithinH ?? null } : {}),
     graded: state === "WIN" || state === "LOSS" ? { outcome: state, r: t.gradedR ?? null, at: t.gradedAt ?? null, exitedAt: t.exitedAt ?? null } : null,
     ...(state === "INVALID" ? { invalidReason: invalidReason(t) } : {}),
     live: null,

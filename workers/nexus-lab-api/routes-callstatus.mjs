@@ -54,6 +54,9 @@ export async function handleCallStatus(parts, request, env, deps = {}) {
   const resolved = (t) => t.gradedOutcome === "WIN" || t.gradedOutcome === "LOSS";
   const open = calls.filter((t) => !resolved(t) && (!t.status || t.status === "ACTIVE"));
   const done = calls.filter(resolved).sort((a, b) => (b.gradedAt || 0) - (a.gradedAt || 0)).slice(0, RECENT);
+  // Orders that expired unfilled (plans v2 `fillWithinH`, or a breakout whose stop traded first): not a grade, listed apart.
+  const expired = calls.filter((t) => !resolved(t) && (t.fillState === "EXPIRED" || t.status === "EXPIRED"))
+    .sort((a, b) => (b.expiredAt || 0) - (a.expiredAt || 0)).slice(0, RECENT);
 
   const mk = open.some((t) => callState(t) !== "INVALID") ? await readMarks({ fetchImpl: deps.fetchImpl, now, sleep: deps.sleep }) : { at: null, marks: null, stale: false };
   const markOf = (t) => (mk.marks ? mk.marks[normalizeSymbol(t.symbol)] ?? null : null);
@@ -70,6 +73,7 @@ export async function handleCallStatus(parts, request, env, deps = {}) {
     counts: { working: count("WORKING"), open: count("OPEN"), runner: count("RUNNER"), unchecked: count("UNCHECKED"), invalid: count("INVALID"), recentGraded: done.length },
     calls: rows,
     recent: done.map((t) => callStatusRow(t, null)),
-    note: "state = the hourly grader's stamp (WORKING: entry not traded · OPEN: live · RUNNER: split call, TP1 half closed · UNCHECKED: not stamped yet · INVALID: the grader can never grade it, see invalidReason; it stays published and counts nowhere). live = the Orderly mark at markAt (≤20 s old normally; up to 2 min with marksStale: true when Orderly can't be read; none past that), not a grade: a mark through the entry is a fill only once the hourly grade says so. levels.*.r = distance from the mark in units of the call's risk.",
+    expired: expired.map((t) => callStatusRow(t, null)),
+    note: "state = the hourly grader's stamp (WORKING: entry not traded · OPEN: live · RUNNER: split call, TP1 half closed · UNCHECKED: not stamped yet · INVALID: the grader can never grade it, see invalidReason; it stays published and counts nowhere). expired = orders that expired unfilled (not a win, not a loss). live = the Orderly mark at markAt (≤20 s old normally; up to 2 min with marksStale: true when Orderly can't be read; none past that), not a grade: a mark through the entry is a fill only once the hourly grade says so. levels.*.r = distance from the mark in units of the call's risk.",
   }, request);
 }

@@ -8,6 +8,7 @@ import { venueLine, VENUE_NOTE } from "./crossFunding.mjs";
 import { untilWords, eventDetail, CALENDAR_NOTE } from "./eventsCalendar.mjs";
 import { riskLine, usd, RISK_NOTE } from "./riskDesk.mjs";
 import { watchRow } from "./watchlist.mjs";
+import { withMine, filterWire, wireSeenSplit, WIRE_KINDS, WIRE_FILTERS } from "./wire.mjs";
 
 const DAY = 86_400_000;
 const bare = (c) => String(c ?? "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "").replace(/[^A-Z0-9]/g, "");
@@ -198,5 +199,40 @@ export function scoreboardForCopilot(sc) {
     note: "registered_reads = the reads under test, graded on NEW data only (events since new_data_since); stage is the served one. axes = every read on all recorded history (old data, in-sample). " +
       "Judge each side against its random entry, never against zero: a side that made money while trailing its random entry rode the market; a side that lost less than its random entry still lost. " +
       "PREDICTIVE is graded against zero. A read is not an edge until it BEATS_RANDOM on its side. We publish the misses too.",
+  };
+}
+
+// ── The Wire in chat (2026-11-21, borst: "Ask Nexus reads the Wire") ─────────────────────────────────────────────────
+// GET /intel/wire + (with a wallet) the user's own /theses/status, merged by the Wire's OWN rules (withMine), so chat and
+// Lab home list the same rows. Each row keeps its source and its grade line; nothing is added up into a direction.
+// READ only: the "new since your last look" baseline is reported when it exists, never moved (the Wire moves it).
+/**
+ * @param {any} wire GET /intel/wire
+ * @param {any[]|null} mine myCallRows(status) rows, or null (no wallet / unread)
+ * @param {{ coin?: string|null, filter?: string|null, lastLook?: number|null, now?: number, max?: number, walletUnread?: boolean }} [opts]
+ */
+export function wireForCopilot(wire, mine, { coin = null, filter = null, lastLook = null, now = Date.now(), max = 15, walletUnread = false } = {}) {
+  if (!wire || !Array.isArray(wire.rows)) return { error: "the Wire is unread right now" };
+  const iso = (ms) => (Number(ms) > 0 ? new Date(Number(ms)).toISOString().replace(/\.\d{3}/, "") : null);
+  const c = coin ? bare(coin) : null;
+  const f = filter && WIRE_FILTERS.some((x) => x.id === filter) ? filter : "all";
+  let rows = filterWire(withMine(wire.rows, mine || [], now), f);
+  if (c) rows = rows.filter((r) => bare(r.coin) === c);
+  const split = wireSeenSplit(rows, lastLook);
+  const out = rows.slice(0, max).map((r) => ({
+    utc: iso(r.t), kind: WIRE_KINDS[r.kind] ?? r.kind, coin: r.coin ?? undefined, what: r.title,
+    ...(r.detail ? { detail: r.detail } : {}), source: r.source ?? undefined, grade_line: r.graded ?? undefined,
+  }));
+  const soon = (Array.isArray(wire.upcoming) ? wire.upcoming : [])
+    .filter((e) => !c || (Array.isArray(e.coins) && e.coins.map(bare).includes(c)) || e.kind === "MACRO")
+    .map((e) => ({ utc: iso(e.t), what: e.title, ...(e.impact ? { impact: e.impact } : {}), ...(e.detail ? { detail: e.detail } : {}) }));
+  const unread = [...unreadOf(wire), ...(walletUnread ? ["your calls"] : [])];
+  return {
+    built_utc: iso(wire.builtAt), filter: f, ...(c ? { coin: c } : {}),
+    rows: out, more: Math.max(0, rows.length - max),
+    ...(split ? { new_since_last_look: split.newCount, last_look_utc: iso(split.at) } : {}),
+    coming_up_12h: soon,
+    ...(unread.length ? { unread } : {}),
+    note: "The Wire on Lab home, read as is: what changed in the last day, newest first, each row with its own source and grade line (a headline is not a read; a tracked wallet's move is not a reason to follow it; 'Your call' rows are the user's own calls as the grader stamped them). Never add rows up into a direction or a call. A source in `unread` was not read: say so, never 'nothing happened'.",
   };
 }
