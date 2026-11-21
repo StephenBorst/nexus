@@ -3,7 +3,7 @@
 // No third party sees the reader. A feed that failed is named under the list, never shown as "no news". Headlines are
 // inputs, never a direction: nothing here reads tone or adds stories up.
 import { useEffect, useMemo, useState } from "react";
-import { C, MONO, UI } from "@/config/theme";
+import { C, MONO, UI, CHIP_SCROLL_GAP } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { newsAge, NEWS_CATEGORIES } from "@/lib/newsWire.mjs";
@@ -56,7 +56,7 @@ export function NewsWire({ coin = null, limit = 60, compact = false }: { coin?: 
     borderRadius: 999, background: on ? C.accent : "transparent", color: on ? C.canvas : C.text.fog,
     border: `1px solid ${on ? C.accent : C.borderStrong}`,
   });
-  const row: React.CSSProperties = { display: "flex", gap: 6, overflowX: isMobile ? "auto" : "visible", flexWrap: isMobile ? "nowrap" : "wrap", paddingBottom: 2, WebkitOverflowScrolling: "touch" };
+  const row: React.CSSProperties = { display: "flex", gap: 6, overflowX: isMobile ? "auto" : "visible", flexWrap: isMobile ? "nowrap" : "wrap", paddingBottom: isMobile ? CHIP_SCROLL_GAP : 2, WebkitOverflowScrolling: "touch" };
 
   return (
     <div>
