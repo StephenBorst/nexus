@@ -25,6 +25,7 @@ import { MarketStatStrip } from "@/components/MarketStatStrip";
 import { SimComposer } from "./SimComposer";
 import { useIsMobile } from "./useIsMobile";
 import { bareTicker } from "@/utils/utils";
+import { GuestPanel } from "@/components/GuestPanel";
 
 /**
  * One open position + a one-tap CLOSE (market, full size). Rendered only when a
@@ -237,12 +238,20 @@ export function QuickTrade() {
     // Signed out there is nothing to show (the ticket spends real collateral). Say so once and
     // point at the one place a guest CAN look at a market: the trading page.
     return (
-      <div style={{ textAlign: "center", padding: "48px 20px", fontFamily: "var(--nx-font-ui)", fontSize: 13.5, color: C.text.fog, lineHeight: 1.6 }}>
-        Quick Trade places market orders from your wallet. Connect one to use it.
-        <div style={{ marginTop: 10 }}>
-          <a href="/" className="nx-text-action" style={{ fontWeight: 600, color: C.text.muted, textDecoration: "none" }}>Open the trading page →</a>
-        </div>
-      </div>
+      <GuestPanel
+        eyebrow="Real orders"
+        title="Quick Trade"
+        lede="A one-screen market order on any Orderly perp, from your own wallet. Real collateral, so it needs a connected wallet."
+        rows={[
+          { k: "Before you tap", v: "Notional, margin and an estimated liquidation price, for the size and leverage you set." },
+          { k: "Leverage first", v: "Your account leverage is set before the order. If that change fails, the order isn't sent and it says so." },
+          { k: "Your keys", v: "Orders are signed by your wallet's Orderly key. Nexus holds no funds and can't withdraw." },
+        ]}
+        footnote="No wallet yet? A call in the Thesis Engine is graded from public price with no capital at all."
+      >
+        <a href="/" className="nx-btn" style={{ textDecoration: "none", display: "inline-block", padding: "9px 16px" }}>Open the trading page →</a>
+        <a href="/lab?tab=thesis" className="nx-text-action" style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.fog, textDecoration: "none" }}>Post a graded call →</a>
+      </GuestPanel>
     );
   }
 

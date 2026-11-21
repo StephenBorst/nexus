@@ -210,6 +210,9 @@ product is what sits on top:
   `/signals/paper-counts` as n of 30 (a dot on a track with the 30 tick, never a filling bar), "TRADE OPEN" flags, each row
   → `/proof/paper/:axis`; live entries open / paused from `GET /ops/halt`; live agents publishing from `/agents/live`.
   Counts and states only, never an R, sum or dollar figure; unread says unread (test-pinned).
+- **Logged-out Quick Trade + Holders Room** (2026-11-21, `app/components/GuestPanel.tsx`, `app/lib/guestPanels.test.mjs`):
+  what the tab does + the next step instead of one line. Holders tiers read `TIER_THRESHOLDS` (Operator = the room,
+  Architect = + PRO while held, Oracle = the badge, no extra access); "no yield, no revenue share" stays.
 - **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open with no TP or
   trail and only what rests on Orderly (the backstop stop, or the owner's own; none on DCA/paper): the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.
