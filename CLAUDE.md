@@ -1282,8 +1282,14 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
 - **Tracked Record sweep** (`sweepTrackedXray`, 12h cron; fixed 2026-11-21, `xraySnapshot.test.mjs`): one wallet at a
   time, starts ≥ 1 s apart (the 6-wide batches fired 48 indexer reads at once; live records had 3 snapshots in 44 days);
   a PARTIAL read (any broker unread) is never stored (it understated realized and booked the gap as P&L), retried once
-  after 2 s; the log line counts `partial`. Hyperliquid wallets get no snapshot yet (the aggregate reads Orderly brokers
-  only): their own source is open work.
+  after 2 s; the log line counts `partial`.
+- **Hyperliquid watched record** (borst 2026-11-21, rules `app/lib/hlRecord.mjs`, tests `hlRecord.test.mjs` +
+  `xraySnapshot.test.mjs`): the same sweep syncs each board HL wallet's fill tape (+ any watched wallet we hold a tape
+  for; ≤ 30, ≥ 6 s apart) and stores `xray:hlhist:{addr}`: realized = closed P&L net of fees on the tape since the
+  record's FIRST row (its `anchor`; fills before it never count, forward only). Never stored: no tape, a tape not synced
+  in the last 5 min, or one complete only from after the anchor (`refused`). Graded by the same `xrayTrack`.
+  `/smart/xray/tracked` and `/smart/xray/history` use the Orderly record once it has 2 rows, else the HL one (`venue`);
+  tier events keep one tier per record (`xray:tier:hl:{addr}`).
 
 ## Token + tokenomics
 - $NEXUS = a meme token with cosmetic/access perks only (tiers OPERATOR 50M / ARCHITECT 100M / ORACLE 250M,

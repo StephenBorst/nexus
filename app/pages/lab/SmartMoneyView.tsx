@@ -612,7 +612,7 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
                   </div>
                 ) : (
                   <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>
-                    {tk ? `Building a record · ${buildingLine(tk)}` : t.source === "hl" ? "No daily record: Hyperliquid wallets aren’t snapshotted yet" : "No daily record yet: the daily sweep starts it"}
+                    {tk ? `Building a record · ${buildingLine(tk)}` : "No daily record yet: the daily sweep starts it"}
                   </div>
                 )}
                 {/* The venue's own board number (money), as before. */}

@@ -48,3 +48,49 @@ test("the sweep reads one wallet at a time, ≥ 1 s apart, retries a partial onc
   assert.equal((await readXrayHist(env, A)).length, 1);
   assert.equal((await readXrayHist(env, B)).length, 0, "two partial reads: nothing stored");
 });
+
+import { snapshotHlRecord, readHlHist, handleSmart } from "./routes-smart.mjs";
+
+const HL = "0x" + "c".repeat(40);
+const T0 = 1_790_000_000_000;
+const tapeAt = (syncedAt, fills = [], completeFrom = null) => ({ record: { v: 1, fills, completeFrom, syncedAt, seededAt: syncedAt } });
+
+test("Hyperliquid wallets on the board get a daily record from their fill tape; a stale tape is never stored", async () => {
+  const env = { LAB_STORE: kv({ "sm:board:v5": JSON.stringify({ traders: [{ source: "hl", address: HL }, { source: "orderly", address: A }] }) }) };
+  const aggregate = async () => full(100);
+  let syncs = 0;
+  const hlSync = async (_env, a, { now }) => { syncs++; assert.equal(a, HL); return tapeAt(now); };
+  const r1 = await sweepTrackedXray(env, { aggregate, hlSync, hlNow: () => T0, sleep: async () => {} });
+  assert.deepEqual(r1.hl, { watched: 1, snapped: 1, partial: 0 });
+  assert.equal(syncs, 1, "the Orderly wallet is not read on Hyperliquid");
+  assert.equal((await readHlHist(env, HL))[0].anchor, T0);
+
+  const stale = async (_env, _a, { now }) => tapeAt(now - 60 * 60e3);
+  const r2 = await sweepTrackedXray(env, { aggregate, hlSync: stale, hlNow: () => T0 + 86_400_000, sleep: async () => {} });
+  assert.deepEqual(r2.hl, { watched: 1, snapped: 0, partial: 1 });
+  assert.equal((await readHlHist(env, HL)).length, 1);
+
+  const fills = [[1, T0 + 1000, "ETH", "1", "1", "A", "Close Long", "250", "5"]];
+  const ok = async (_env, _a, { now }) => tapeAt(now, fills);
+  const s3 = await snapshotHlRecord(env, HL, { sync: ok, now: () => T0 + 86_400_000 });
+  assert.equal(s3.length, 2);
+  assert.equal(s3[1].realized, 245);
+});
+
+test("/smart/xray/tracked and /smart/xray/history read the Hyperliquid record when there's no Orderly one", async () => {
+  const rows = [0, 1, 2, 3, 4, 5].map((d) => ({ t: T0 + d * 86_400_000, anchor: T0, realized: d * 100, markets: 1, venue: "hl" }));
+  const env = { LAB_STORE: kv({ ["xray:hlhist:" + HL]: JSON.stringify(rows) }) };
+  const req = (u) => new Request(`https://og.example${u}`);
+  const t = await (await handleSmart(["smart", "xray", "tracked"], req(`/smart/xray/tracked?addresses=${HL}`), env, {})).json();
+  assert.equal(t.tracked[HL].venue, "hl");
+  assert.equal(t.tracked[HL].scored, true);
+  assert.equal(t.tracked[HL].netRealized, 500);
+  // history: the stored Orderly series is empty; the snapshot attempt reads nothing (no network in tests → it fails closed).
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("no network in tests"); };
+  try {
+    const h = await (await handleSmart(["smart", "xray", "history"], req(`/smart/xray/history?address=${HL}`), env, {})).json();
+    assert.equal(h.venue, "hl");
+    assert.equal(h.track.netRealized, 500);
+  } finally { globalThis.fetch = realFetch; }
+});
