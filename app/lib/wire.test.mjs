@@ -161,3 +161,30 @@ test("your calls on the Wire are read in the browser from your own status, never
   const route = readFileSync(new URL("../../workers/nexus-lab-api/routes-wire.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(route, /theses\/status|myCallRows/);
 });
+
+test("your calls: +0.5R reached and an order that expired, in the alerts' own words; an expiry is not a grade", async () => {
+  const { wireSeenSplit } = await import("./wire.mjs");
+  const status = {
+    wallet: "0xabc0000000000000000000000000000000000001",
+    calls: [{ id: "h", symbol: "PERP_ETH_USDC", direction: "LONG", entryPrice: 100, stopLoss: 98, takeProfit1: 103, postedAt: NOW - 5 * H, filledAt: NOW - 5 * H, halfRAt: NOW - 20 * M }],
+    recent: [],
+    expired: [
+      { id: "x1", symbol: "PERP_SOL_USDC", direction: "SHORT", entryPrice: 150, stopLoss: 155, expiredAt: NOW - 2 * H, expiredReason: "WINDOW", fillWithinH: 4 },
+      { id: "x2", symbol: "BTC", direction: "LONG", entryPrice: 61000, stopLoss: 60000, expiredAt: NOW - 3 * H, expiredReason: "STOP_FIRST" },
+      { id: "x3", symbol: "BTC", direction: "LONG", expiredAt: NOW - 3 * WIRE_WINDOW_MS },
+    ],
+  };
+  const rows = myCallRows(status, NOW);
+  assert.deepEqual(rows.map((r) => [r.id, r.title, r.detail]), [
+    ["mine-h-halfr", "Your ETH long reached +0.5R (101)", "Still open: graded at TP1 103 or the stop 98"],
+    ["mine-x1-expired", "Your SOL short order expired", "The entry 150 didn't trade within 4h"],
+    ["mine-x2-expired", "Your BTC long order expired", "The stop 60000 traded before the entry"],
+  ]);
+  assert.match(rows[1].graded, /Not a win, not a loss/);
+
+  // new since your last look: rows newer than the baseline, newest first; no baseline = no split
+  const stream = [{ t: NOW - M }, { t: NOW - 2 * M }, { t: NOW - H }, { t: NOW - 2 * H }];
+  assert.deepEqual(wireSeenSplit(stream, NOW - 30 * M), { newCount: 2, at: NOW - 30 * M });
+  assert.deepEqual(wireSeenSplit(stream, NOW), { newCount: 0, at: NOW });
+  assert.equal(wireSeenSplit(stream, null), null);
+});

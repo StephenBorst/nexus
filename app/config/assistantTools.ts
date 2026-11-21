@@ -21,7 +21,8 @@ import { fetchDeribitTerm } from "@/lib/deribit.mjs";
 import { fetchHLTape, fetchHLPortfolio } from "@/utils/hyperliquid";
 import { xraySummary, fmtPf } from "@/lib/xrayGrade.mjs";
 // The Lab's venues / calendar / risk panels, shaped by their own rules (one answer on screen and in chat).
-import { venuesForCopilot, calendarForCopilot, riskForCopilot, watchlistForCopilot, callsForCopilot, scoreboardForCopilot } from "@/lib/copilotLab.mjs";
+import { venuesForCopilot, calendarForCopilot, riskForCopilot, watchlistForCopilot, callsForCopilot, scoreboardForCopilot, wireForCopilot } from "@/lib/copilotLab.mjs";
+import { myCallRows, WIRE_SEEN_KEY } from "@/lib/wire.mjs";
 import { readWatch } from "@/lib/watchStore";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 
@@ -427,6 +428,35 @@ export const TOOLS: ToolDef[] = [
         const r = await fetch(`${AGENT_API}/theses/status/${w}`);
         return JSON.stringify(callsForCopilot(r.ok ? await r.json() : null));
       } catch { return JSON.stringify({ error: "calls unavailable right now" }); }
+    },
+  },
+  {
+    name: "get_wire",
+    description:
+      "THE WIRE, as Lab home shows it: what changed in the last day, newest first, from every board on one clock: headlines, registered reads opening or closing paper trades, funding crossing its stated line, tracked wallets moving ≥ $10k, graded calls, and (with a wallet) the user's OWN calls filling, reaching +0.5R or TP1, getting graded or expiring; plus what's scheduled in the next 12h. Use for 'what changed today', 'catch me up', 'what's happening on ETH', 'anything on my calls'. Filter: news, reads, markets, wallets, calls, mine. Each row keeps its source and grade line: pass them on, never add rows up into a direction or a call. `new_since_last_look` = rows since the user last opened the Wire (read only). A source in `unread` was not read: say so.",
+    input_schema: {
+      type: "object",
+      properties: {
+        coin: { type: "string", description: "Optional ticker, e.g. ETH: only rows about that coin" },
+        filter: { type: "string", enum: ["all", "news", "reads", "markets", "wallets", "calls", "mine"], description: "Optional; default all" },
+      },
+    },
+    run: async (args, ctx) => {
+      let wire: unknown = null;
+      try { wire = await sharedJson(`${AGENT_API}/intel/wire`); } catch { wire = null; }
+      const w = String(ctx.wallet || "").trim().toLowerCase();
+      let mine: unknown[] | null = null, walletUnread = false;
+      if (/^0x[0-9a-f]{40}$/.test(w)) {
+        try {
+          const st = await sharedJson(`${AGENT_API}/theses/status/${w}`);
+          if (Array.isArray(st?.calls)) mine = myCallRows(st, Date.now()); else walletUnread = true;
+        } catch { walletUnread = true; }
+      }
+      let lastLook: number | null = null;
+      try { const v = Number(localStorage.getItem(WIRE_SEEN_KEY)); lastLook = v > 0 ? v : null; } catch { lastLook = null; }
+      return JSON.stringify(wireForCopilot(wire, mine, {
+        coin: args.coin ? shortTicker(String(args.coin)) : null, filter: args.filter ? String(args.filter) : null, lastLook, walletUnread,
+      }));
     },
   },
   {

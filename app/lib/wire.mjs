@@ -40,6 +40,7 @@ export const WALLET_LINE = "A tracked wallet's own move: not a read, and not a r
 const bare = (s) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "") || null;
 const side = (s) => (String(s).toUpperCase() === "SHORT" ? "short" : "long");
 const usd = (n) => (n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`);
+const round6 = (x) => Number(Number(x).toPrecision(6));
 const signedR = (r) => `${r >= 0 ? "+" : "−"}${Math.abs(r).toFixed(2)}R`;
 
 /** News wire items → rows. Undated stories use the time we first saw them. */
@@ -133,14 +134,43 @@ export function myCallRows(status, now = Date.now()) {
     if (fresh(tp1)) {
       rows.push({ ...base, id: `mine-${c.id}-tp1`, kind: "MINE", t: tp1, title: `Your ${coin} ${dir} reached TP1 ${c.takeProfit1}${Number.isFinite(r1) ? ` · half closed ${signedR(r1 / 2)}` : ""}`, detail: c.graded ? null : "Runner still open" });
     }
+    const half = Number(c.halfRAt), entry = Number(c.entryPrice), stop = Number(c.stopLoss);
+    if (fresh(half) && entry > 0 && stop > 0) {
+      const lvl = round6(entry + (entry > stop ? 0.5 : -0.5) * Math.abs(entry - stop));
+      rows.push({ ...base, id: `mine-${c.id}-halfr`, kind: "MINE", t: half, title: `Your ${coin} ${dir} reached +0.5R (${lvl})`, detail: `Still open: graded at TP1 ${c.takeProfit1} or the stop ${c.stopLoss}` });
+    }
     const g = c.graded, gt = Number(g?.at ?? g?.exitedAt), r = Number(g?.r);
     if (g && (g.outcome === "WIN" || g.outcome === "LOSS") && fresh(gt)) {
       const how = { TIME: "time stop", TRAIL: "trail", BE: "stop at entry" }[c.exitReason] || null;
       rows.push({ ...base, id: `mine-${c.id}-graded`, kind: "MINE", t: gt, title: `Your ${coin} ${dir} graded ${g.outcome}${Number.isFinite(r) ? ` ${signedR(r)}` : ""}`, detail: how ? `Closed on the ${how}` : null });
     }
   }
+  // Orders that expired unfilled: not a win, not a loss (plans v2; callStatus.mjs fillEventMessage words).
+  for (const c of Array.isArray(status.expired) ? status.expired : []) {
+    const t = Number(c?.expiredAt);
+    if (!c || !c.id || !c.symbol || !fresh(t)) continue;
+    const coin = bare(c.symbol), dir = side(c.direction);
+    const why = c.expiredReason === "STOP_FIRST" ? `the stop ${c.stopLoss} traded before the entry`
+      : `the entry ${c.entryPrice} didn't trade${Number(c.fillWithinH) > 0 ? ` within ${c.fillWithinH}h` : " in time"}`;
+    rows.push({ id: `mine-${c.id}-expired`, kind: "MINE", t, coin, source: "Your call", graded: "Not a win, not a loss: an order that never filled counts in no record.",
+      path: `/feed/thesis/${wallet}/${encodeURIComponent(String(c.id))}`, title: `Your ${coin} ${dir} order expired`, detail: `${why[0].toUpperCase()}${why.slice(1)}` });
+  }
   return rows;
 }
+
+/**
+ * "New since your last look" on the Wire (2026-11-21): rows newer than the time this device last opened the Wire
+ * (localStorage, TheWire.tsx). Rows arrive newest first. No baseline yet (first visit) = no split, never "all new".
+ * @returns {{ newCount: number, at: number } | null}
+ */
+export function wireSeenSplit(rows, lastSeenAt) {
+  const at = Number(lastSeenAt);
+  if (!Number.isFinite(at) || at <= 0) return null;
+  let n = 0;
+  for (const r of rows || []) { if (Number(r?.t) > at) n++; else break; }
+  return { newCount: n, at };
+}
+export const WIRE_SEEN_KEY = "nx_wire_seen_v1";
 
 /** The shared stream with your rows merged in: the public row for a call you were graded on is dropped (it is yours). */
 export function withMine(rows, mine, now = Date.now()) {

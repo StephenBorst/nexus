@@ -950,7 +950,12 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   "Your call" rows (kind MINE): a resting entry that traded later (a fill at the post isn't news, as `fillEvents`),
   TP1 on a split, the grade (WIN/LOSS in R, TIME/TRAIL/BE named), each at the grader's own stamp, last 24h. The public
   row for your own graded call is dropped; a "Mine" chip shows only with a wallet; unread = "your calls" in `unread`.
-  Expired orders and +0.5R aren't in the status reply, so not shown.
+  Also +0.5R reached (`halfRAt`) and orders that expired unfilled ("not a win, not a loss"): the status reply carries
+  `halfRAt` on each row and an `expired` list (callStatus.mjs / routes-callstatus.mjs, 2026-11-21). **New since your last
+  look** (`wireSeenSplit`, key `nx_wire_seen_v1`): the time this device last opened the Wire, read once on mount and moved
+  to now after the Wire loads; "N new since your last look" + a SEEN BEFORE rule; first visit = no split.
+  **Ask Nexus reads the Wire** (`get_wire`, `wireForCopilot` in copilotLab.mjs): the same rows via `withMine`, filters
+  + a coin, each row's source and grade line, the next 12h, `unread`; it READS the Wire's baseline, never sets it (test-pinned).
 - **⌘K command line (2026-11-20, rules `app/lib/terminalCommand.mjs`, `CommandPalette.tsx`):** a coin ("eth", "$ETH",
   "spx500") → its drawer (every lens + "News on ETH", `NewsWire compact`) or Trade; a 0x address → its X-Ray; "news" /
   "wire". A coin the news wire knows leads; any other ticker-shaped word comes after the menu's own matches.
