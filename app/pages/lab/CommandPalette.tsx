@@ -61,11 +61,12 @@ export function CommandPalette({ onSelectTab }: { onSelectTab: (t: TabId) => voi
   // The command line (terminalCommand.mjs): a coin, an address, "news", "wire". A known coin leads; any other
   // ticker-shaped word comes after the menu's own matches.
   const results = useMemo(() => {
-    type Intent = { kind: string; coin?: string; address?: string };
+    type Intent = { kind: string; coin?: string; address?: string; name?: string };
     const act = (i: Intent) => () => {
       if (i.kind === "market" && i.coin) openMarket(i.coin);
       else if (i.kind === "trade" && i.coin) navigate(tradePath(i.coin));
       else if (i.kind === "xray" && i.address) navigate(`/analyze?address=${i.address}`);
+      else if (i.kind === "xray" && i.name) navigate(`/analyze?name=${encodeURIComponent(i.name)}`);
       else if (i.kind === "news") navigate("/lab?lens=news");
       else if (i.kind === "wire") { onSelectTab("intel"); window.scrollTo({ top: 0 }); }
     };

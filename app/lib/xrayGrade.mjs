@@ -102,11 +102,15 @@ export function decayRow(grades) {
 //               watched record underwater) — a weak read on one venue isn't
 //               outvoted by a good one on the other.
 // Returns the reasons in plain words so a locked gate can say WHY, not just hide.
-/** @param {{ hl30?: any, watched?: any }} [input] */
-export function edgeGate({ hl30 = null, watched = null } = {}) {
+// A PARTIAL 30D window (2026-11-21) is not a 30-day record: when Hyperliquid's tape reaches back only N < 30 days
+// (`hl30CoveredDays`), a positive read there is not evidence (a 17k-trade bot cleared the gate on 5 days); a negative
+// one still vetoes. null = the tape covers the whole window (or the caller can't tell, the old behaviour).
+/** @param {{ hl30?: any, watched?: any, hl30CoveredDays?: number | null }} [input] */
+export function edgeGate({ hl30 = null, watched = null, hl30CoveredDays = null } = {}) {
   const reasons = [];
   const evidence = [];
   let veto = false;
+  const partial30 = Number.isFinite(hl30CoveredDays) && hl30CoveredDays < 30;
 
   if (hl30) {
     if (hl30.status !== "GRADED") {
@@ -114,6 +118,9 @@ export function edgeGate({ hl30 = null, watched = null } = {}) {
     } else if (hl30.net <= 0 || !(hl30.pf > 1)) {
       veto = true;
       reasons.push(`Hyperliquid 30D: ${hl30.net <= 0 ? "net negative" : "no edge"} (PF ${fmtPf(hl30.pf)} over ${hl30.trades} trades)`);
+    } else if (partial30) {
+      const d = Math.max(0, Math.floor(hl30CoveredDays));
+      reasons.push(`Hyperliquid 30D: the tape covers only the last ${d} day${d === 1 ? "" : "s"} of 30, not a 30-day record`);
     } else {
       evidence.push({ source: "HL30", label: `30D grade · ${hl30.trades} trades · PF ${fmtPf(hl30.pf)} · ${hl30.winRate.toFixed(0)}% win` });
     }
@@ -222,6 +229,7 @@ export function xraySummary({ fills = [], completeFrom = null, track = null, now
   const partialWindows = completeFrom != null && trades.length
     ? XRAY_WINDOWS.map((w) => w.key).filter((k) => !windowComplete(k, now, { truncated: true, oldestTs }))
     : [];
-  const gate = edgeGate({ hl30: grades ? grades["30D"] : null, watched: track && !track.building ? track : null });
+  const hl30CoveredDays = partialWindows.includes("30D") && Number.isFinite(oldestTs) ? (now - oldestTs) / 86400000 : null;
+  const gate = edgeGate({ hl30: grades ? grades["30D"] : null, watched: track && !track.building ? track : null, hl30CoveredDays });
   return { trades, grades, defaultWindow: dflt, decay: grades ? decayRow(grades) : null, partialWindows, gate, completeFrom, oldestTs };
 }

@@ -45,3 +45,9 @@ test("trade path; the palette runs every intent", () => {
   for (const k of ["market", "trade", "xray", "news", "wire"]) assert.ok(src.includes(`"${k}"`), k);
   assert.match(src, /terminalCommands\(query\)/);
 });
+
+test("an ENS name opens its X-Ray by name; the page resolves it", () => {
+  const { lead } = terminalCommands("Vitalik.eth");
+  assert.deepEqual(lead.map((c) => c.intent), [{ kind: "xray", name: "vitalik.eth" }]);
+  assert.deepEqual(terminalCommands("eth").lead.map((c) => c.intent.kind), ["market", "trade"], "a bare ticker stays a coin");
+});

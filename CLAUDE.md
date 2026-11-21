@@ -1276,6 +1276,20 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
 ## Wallet X-Ray (`/analyze`, rules in `app/lib/xrayGrade.mjs`)
 - Windows 24H/7D/30D/ALL with minimums 5/10/20/20 (else ACCRUING). Every COPY goes through `edgeGate` (30D net > 0 and
   PF > 1, or a ≥20-day watched record; any negative graded evidence vetoes). Never estimate Orderly leverage/liq.
+  **A partial 30D is not a 30-day record** (2026-11-21): when the HL tape reaches back < 30 days (`hl30CoveredDays`,
+  passed by the page, the compare and `xraySummary`), a positive 30D isn't evidence (a 17k-trade bot cleared the gate on
+  5 days); a negative one still vetoes.
+- **The page (borst 2026-11-21):** the box takes a 0x address or an ENS name (`app/lib/xrayInput.mjs parseWalletInput`;
+  resolved on mainnet in the browser, `app/pages/analyze/ens.ts`, viem loaded on demand, public RPCs); the page always
+  grades the RESOLVED address and prints "name → 0x…"; links carry `?address=` (+ `name=`); `?name=` alone resolves
+  first (⌘K "vitalik.eth" → X-Ray). Empty page (`XrayExtras.tsx XrayHome`): recent X-rays on this device
+  (`nx_xray_recent_v1`, ≤ 8), starred wallets, the Smart Money board via `sortWallets`, what an X-Ray reads. Compare
+  (`?vs=`, `XrayCompare`, rules `app/lib/xrayCompare.mjs`): the same windows, watched record, lifetime (context only),
+  open count and copy gate side by side; no winner, unread never 0. Each run has an id: a slower earlier read never
+  writes over a later wallet; back/forward follow the URL; a malformed `?address=` says so.
+- **Big records** (`app/lib/chartThin.mjs`): PnlChart thins to ≤ 800 points (each stretch's low + high kept), PnlBars
+  sums consecutive trades into ≤ 400 bars labelled by trade range; min/max via `extent`, never a spread. 17k bars froze
+  the tab. Grades and totals still use every trade.
 - Hyperliquid: read every perp dex (`perpDexs`), and HL serves only the latest 10k fills, so we collect forward
   (`GET /xray/hltape`, `hlTape.mjs`; gaps disclosed via `completeFrom`). Share card + copilot use the same grade.
 - **Smart Money, visual-first** (borst 2026-11-21, rules `app/lib/smartLayout.mjs`, tested): a strip (wallets by venue,

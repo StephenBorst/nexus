@@ -1,6 +1,7 @@
 // Shared presentational primitives for The Lab.
 // Extracted from index.tsx (god-file split) — prop-driven presentational pieces.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { thinSeries, bucketBars, extent } from "@/lib/chartThin.mjs";
 import { C } from "@/config/theme";
 
 // ─── Count-up number ─────────────────────────────────────
@@ -145,7 +146,9 @@ export function TableSkeleton({ rows = 4 }: { rows?: number }) {
 // Cumulative-P&L equity curve. Measures its container so the line draws to the
 // FULL width (a fixed-viewBox svg stretched to 100% just letterboxes a ~500px
 // line in dead space). Gradient area fill + soft glow + zero baseline for depth.
-export function PnlChart({ points }: { points: number[] }) {
+export function PnlChart({ points: rawPoints }: { points: number[] }) {
+  // A long record thins to <= 800 points, keeping each stretch's low and high (chartThin.mjs): 17k points froze a page.
+  const points = useMemo(() => thinSeries(rawPoints) as number[], [rawPoints]);
   const [w, setW] = useState(0);
   const roRef = useRef<ResizeObserver | null>(null);
   // Callback ref: fires the moment the chart div attaches (which only happens once
@@ -175,8 +178,9 @@ export function PnlChart({ points }: { points: number[] }) {
   // Right gutter reserves room for the value-axis labels so the curve never draws
   // under them; left padding keeps the first point off the edge.
   const h = 190, padY = 22, padX = 8, gutter = 52;
-  const min = Math.min(0, ...points);
-  const max = Math.max(0, ...points) || 1;
+  const ext = extent(points);
+  const min = Math.min(0, ext.lo);
+  const max = Math.max(0, ext.hi) || 1;
   const range = max - min || 1;
   const iw = Math.max(1, cw - padX - gutter);
   const x = (i: number) => padX + (i / (points.length - 1)) * iw;
@@ -253,7 +257,10 @@ export function PnlChart({ points }: { points: number[] }) {
 // Companion to the cumulative curve: one bar per closed trade (green win / red
 // loss), heights scaled to the biggest |P&L| around a centered zero line. Shows
 // the DISTRIBUTION the equity line hides (a few big losses vs many small wins).
-export function PnlBars({ values, labels }: { values: number[]; labels?: string[] }) {
+export function PnlBars({ values: rawValues, labels: rawLabels }: { values: number[]; labels?: string[] }) {
+  // <= 400 bars: consecutive trades summed, each bucket labelled with its range (chartThin.mjs). Callers that print a
+  // legend bucket first with the same function, so this is a no-op for them.
+  const { values, labels } = useMemo(() => bucketBars(rawValues, rawLabels) as { values: number[]; labels?: string[] }, [rawValues, rawLabels]);
   const [w, setW] = useState(0);
   const roRef = useRef<ResizeObserver | null>(null);
   const measureRef = useCallback((node: HTMLDivElement | null) => {
@@ -278,7 +285,8 @@ export function PnlBars({ values, labels }: { values: number[]; labels?: string[
   const cw = w || 720;
   const h = 96, padY = 10;
   const n = values.length;
-  const maxAbs = Math.max(1, ...values.map((v) => Math.abs(v)));
+  const ve = extent(values);
+  const maxAbs = Math.max(1, Math.abs(ve.lo), Math.abs(ve.hi));
   const gap = n > 80 ? 0.5 : n > 40 ? 1 : 2;
   const bw = Math.max(1, (cw - (n - 1) * gap) / n);
   const zeroY = h / 2;

@@ -152,7 +152,7 @@ test("xraySummary composes exactly what the page composes", () => {
   const s = xraySummary({ fills, completeFrom: NOW - 20 * DAY, track, now: NOW });
   const trades = fillsToClosedTrades(fills);
   assert.deepEqual(s.grades, gradeAllWindows(trades, NOW));
-  assert.deepEqual(s.gate, edgeGate({ hl30: gradeAllWindows(trades, NOW)["30D"], watched: track }));
+  assert.deepEqual(s.gate, edgeGate({ hl30: gradeAllWindows(trades, NOW)["30D"], watched: track, hl30CoveredDays: 20 }));
   assert.equal(s.gate.pass, true);
   assert.deepEqual(s.defaultWindow, { key: "30D", fellBack: false });
   assert.deepEqual(s.partialWindows, ["30D", "ALL"], "tape complete from 20d ago can't cover 30D or ALL");
@@ -165,4 +165,18 @@ test("xraySummary with no tape: no grades, gate falls to the watched record", ()
   assert.equal(s.decay, null);
   assert.deepEqual(s.partialWindows, []);
   assert.equal(s.gate.pass, false, "an underwater watched record locks copy");
+});
+
+test("a partial 30D window is not a 30-day record: positive isn't evidence, negative still vetoes", () => {
+  const good = { key: "30D", status: "GRADED", trades: 16932, min: 20, net: 5.8e6, pf: 17.3, winRate: 82 };
+  const part = edgeGate({ hl30: good, hl30CoveredDays: 5.2 });
+  assert.equal(part.pass, false);
+  assert.match(part.reasons[0], /covers only the last 5 days of 30/);
+  assert.equal(edgeGate({ hl30: good, hl30CoveredDays: 30 }).pass, true, "a full window still clears");
+  assert.equal(edgeGate({ hl30: good }).pass, true, "unknown coverage keeps the old rule");
+  const bad = { ...good, net: -10, pf: 0.9 };
+  assert.equal(edgeGate({ hl30: bad, hl30CoveredDays: 5, watched: { netRealized: 900, gradedWindows: 25, daysTracked: 26 } }).pass, false, "a partial loss still vetoes");
+  assert.equal(edgeGate({ hl30: good, hl30CoveredDays: 5, watched: { netRealized: 900, gradedWindows: 25, daysTracked: 26 } }).pass, true, "a 20-day watched record can still clear it");
+  const s = xraySummary({ fills: [], now: NOW });
+  assert.equal(s.gate.pass, false);
 });
