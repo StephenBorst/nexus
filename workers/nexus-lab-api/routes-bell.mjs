@@ -4,6 +4,7 @@
 // stages) and /signals/paper-run/:axis for each registered read with a paper wallet. Read-only, 60 s cache.
 // A board that fails drops its rows (fail-soft); the scoreboard unread = funding rows say their grade is unread.
 
+import { swrServe } from "./swrCache.mjs";
 import { buildSignals } from "../../app/lib/signals.mjs";
 import { json } from "./shared.mjs";
 
@@ -47,13 +48,10 @@ export async function composeBell(dispatch, { now = Date.now(), timeoutMs = SOUR
   return { v: 2, builtAt: now, list, unread };
 }
 
-export async function handleBell(parts, request, env, { dispatch, now = Date.now(), timeoutMs } = {}) {
+export async function handleBell(parts, request, env, { dispatch, now = Date.now(), timeoutMs, waitUntil = null } = {}) {
   if (!(parts[0] === "intel" && parts[1] === "bell" && !parts[2] && request.method === "GET")) return null;
-  try {
-    const hit = await env.LAB_STORE.get(BELL_CACHE_KEY);
-    if (hit) { const c = JSON.parse(hit); if (c && now - c.builtAt < BELL_TTL_MS) return json(c, request); }
-  } catch { /* best-effort */ }
-  const out = await composeBell(dispatch, { now, timeoutMs });
-  try { await env.LAB_STORE.put(BELL_CACHE_KEY, JSON.stringify(out), { expirationTtl: 180 }); } catch { /* best-effort */ }
-  return json(out, request);
+  // A visitor never waits on a build while a copy exists (swrCache.mjs): an older copy is served and refreshed after.
+  const { body } = await swrServe({ kv: env.LAB_STORE, key: BELL_CACHE_KEY, now, freshMs: BELL_TTL_MS, waitUntil,
+    compose: () => composeBell(dispatch, { now, timeoutMs }) });
+  return json(body, request);
 }

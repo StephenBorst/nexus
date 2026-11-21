@@ -418,6 +418,17 @@ product is what sits on top:
   stores it for 2h + a 24h last-good copy. A request serves the stored copy, builds only when none exists, and serves the
   last good one marked `stale` if that build fails (503 `scoreboard_unavailable` only with nothing stored). Check
   `[scoreboard] rebuilt in N ms` in the lab-api logs.
+  **Never in a visitor's request (2026-11-21, borst: "$0, no wrangler/billing change"):** live timing found the cold build
+  ~30 s and the Wire 1102-ing behind it. `serveScoreboard(…, { waitUntil })`: a copy older than
+  `SCOREBOARD_REFRESH_AFTER_MS` (70 min, the cron missed) is served and rebuilt after the response; the served copy gone =
+  the last good one at once, `stale` + "refreshing: built N min ago", rebuilt behind it (marker `…:rebuilding`, 120 s).
+  Builds inline only with nothing stored. **The build itself −69% CPU (8.3 → 2.6 s on the public series), output
+  byte-identical:** per-build caches in axisbt.mjs ("One build, many passes": each coin's price/candle/funding maps, the
+  BTC context, each read's events per coin, `atrPctH4At` per candle map + hour, the basis runs), and
+  `basisExtremeSeries` (basisFade.mjs: the same nearest-rank threshold from a sliding sorted window, the decision rule
+  shared with `basisExtremeSide`, pinned to the per-row loop in basisFade.test.mjs). `axisbt.memo.test.mjs` pins the
+  whole scorecard equal with the caches on / off / warm (`_setBuildCaches`, tests only). No lookback or rule was cut: a
+  faster body must fire identical events. Never shorten history to save CPU (that moves grades).
 - `GET /intel/axis-backtest` (`axisbt.mjs runScorecard`, cached; bump the `axisbt:vN` key when the payload changes) →
   /proof and the Feed SIGNALS tab. Forward returns, no lookahead, pooled across the recorded markets, half-vs-half
   stability, horizons 4/12/24h, R on a frozen contract (1.2×ATR stop, 1.5R, 168h).
@@ -960,6 +971,12 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   are dated when FIRST seen (`intel:wire:seen:v1`), so they don't sit on top forever. Each row keeps its own source and
   grade line (headline / call / wallet lines say what they are not); filter chips; no tally, no direction. A board
   that fails is named in `unread`.
+  **Served stale-while-revalidate** (2026-11-21, `workers/nexus-lab-api/swrCache.mjs` `swrServe`, also the bell and the
+  table): a copy < 60 s is served as is; an older one at once, refreshed after the response (`ctx.waitUntil`, one at a
+  time via `…:refreshing`); kept 1h; a request builds only with nothing stored; the table never stores an empty build.
+  **Drawn at once on the device** (`app/lib/lastCopy.mjs`, `nx_wire_last_v1` / `nx_table_last_v1`): the last board read,
+  ≤ 6h old, drawn on mount with its own `builtAt` age, replaced by the live read; a failed refresh says "Couldn’t
+  refresh: this is the copy from N ago".
   **Your calls on the Wire** (borst 2026-11-21, `myCallRows` / `withMine`): with a wallet connected, TheWire.tsx reads
   its own `GET /theses/status/:wallet` in the browser (the shared route never carries a wallet, test-pinned) and merges
   "Your call" rows (kind MINE): a resting entry that traded later (a fill at the post isn't news, as `fillEvents`),

@@ -14,7 +14,7 @@
 import { hourBucket, priceByHour, cvdSideForRow, smByHour, liqFlushEventsFromHist } from "../../app/lib/basisStack.mjs";
 import { h4Atr14Frac } from "../../app/lib/atr.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
-import { trailingPct, basisExtremeSide, basisDeviationSide } from "../../app/lib/basisFade.mjs";
+import { trailingPct, basisDeviationSide, basisExtremeSeries } from "../../app/lib/basisFade.mjs";
 import { AXIS_EXITS } from "../../app/lib/axisExits.mjs";
 import { GRADED_EXIT, gradedExitLevels, GRADED_EXIT_OOS_CUTOFF_MS } from "../../app/lib/gradedExit.mjs";
 import { fundingByHour, heldFundingBps } from "../../app/lib/funding.mjs";
@@ -103,14 +103,29 @@ export function smartFollowEvents(cs) {
 // trailingPct + the basis-extreme rule now live in app/lib/basisFade.mjs so the LIVE
 // agent signal and this GRADED read are the same code. Re-exported: public API unchanged.
 export { trailingPct };
+// basis_extreme and its three stacks (× smart, × liq, × cvd) all start from these events on the same coin: run once per
+// coin set and parameters within a build (the cache below), the rows are never mutated by the stacks (they filter).
+const _basisRuns = new WeakMap();
+function basisRunOnce(store, cs, cfg, run) {
+  if (!BUILD_CACHES) return run();
+  const src = Array.isArray(cs.basisHist) ? cs.basisHist : cs; // keyed on the series itself (+ its length below)
+  let byCs = store.get(src);
+  if (!byCs) { byCs = new Map(); store.set(src, byCs); }
+  const k = `${(cs.basisHist || []).length}|${cfg.window}|${cfg.minWarmup}|${cfg.pct}`;
+  if (!byCs.has(k)) byCs.set(k, run());
+  return byCs.get(k);
+}
 export function basisExtremeEvents(cs, _pmap, { window = 168, minWarmup = 48, pct = 0.9 } = {}) {
+  if (!cs || typeof cs !== "object") return basisExtremeEventsRun(cs, window, minWarmup, pct);
+  return basisRunOnce(_basisRuns, cs, { window, minWarmup, pct }, () => basisExtremeEventsRun(cs, window, minWarmup, pct)).slice();
+}
+function basisExtremeEventsRun(cs, window, minWarmup, pct) {
   const rows = (cs.basisHist || []).filter((b) => b && Number.isFinite(b.basisPct)).sort((a, b) => (a.t || 0) - (b.t || 0));
+  // basisExtremeSide at every row on the `window` rows strictly before it (premium→SHORT, discount→LONG), by a sliding
+  // sorted window (app/lib/basisFade.mjs basisExtremeSeries; equal to the per-row loop, test-pinned).
+  const sides = basisExtremeSeries(rows, { window, minWarmup, pct });
   const ev = [];
-  for (let i = 0; i < rows.length; i++) {
-    const trail = rows.slice(Math.max(0, i - window), i).map((r) => Math.abs(r.basisPct)); // strictly before i
-    const side = basisExtremeSide(trail, rows[i].basisPct, { minWarmup, pct }); // premium→SHORT, discount→LONG
-    if (side) ev.push({ t: rows[i].t, side });
-  }
+  for (let i = 0; i < rows.length; i++) if (sides[i]) ev.push({ t: rows[i].t, side: sides[i] });
   return ev;
 }
 
@@ -156,7 +171,12 @@ export function basisXcvdEvents(cs, pmap) { return basisConfluenceEvents(cs, pma
 
 // ── TWO-SIDED basis (vs the trailing mean, not zero) — see basisDeviationSide ──
 // Graded BESIDE basis_extreme so the two can be compared on the same data. No preset trades it.
+const _basisDevRuns = new WeakMap();
 export function basisDevEvents(cs, _pmap, { window = 168, minWarmup = 48, pct = 0.9 } = {}) {
+  if (!cs || typeof cs !== "object") return basisDevEventsRun(cs, window, minWarmup, pct);
+  return basisRunOnce(_basisDevRuns, cs, { window, minWarmup, pct }, () => basisDevEventsRun(cs, window, minWarmup, pct)).slice();
+}
+function basisDevEventsRun(cs, window, minWarmup, pct) {
   const rows = (cs.basisHist || []).filter((b) => b && Number.isFinite(b.basisPct)).sort((a, b) => (a.t || 0) - (b.t || 0));
   const ev = [];
   for (let i = 0; i < rows.length; i++) {
@@ -176,6 +196,11 @@ export function basisDevXcvdEvents(cs, pmap) {
 // rule (house paper runs); re-exported here for the scoreboard and its tests. rsiReset.test.mjs pins it.
 export { ema, rsi, rsiResetEvents, rsiResetDeepEvents } from "../../app/lib/rsiReset.mjs";
 import { ema, rsi, rsiResetEvents, rsiResetDeepEvents } from "../../app/lib/rsiReset.mjs";
+
+// Build caches (2026-11-21, speed; identical output): see "One build, many passes" below.
+let BUILD_CACHES = true;
+/** Tests only (axisbt.memo.test.mjs): run the build with every cache off, the old path, to compare byte for byte. */
+export function _setBuildCaches(on) { BUILD_CACHES = !!on; }
 
 // ── Grok's map: REGIME gate + RELATIVE STRENGTH (the universe) ────────────────
 // "The map is the product; RSI is optional seasoning." Continuation events should only
@@ -320,7 +345,18 @@ export function atrPctAt(cbh, hour, period) {
 // BUILD IT would have shown that hour. candle:hist stores t in ms → normalize to seconds for
 // the shared fn. Needs ~60h (15 H4 bars) of candles before `hour`; null until then (same
 // INSUFFICIENT-by-design posture as the rest of the candle path).
+// The same coin and hour is asked for many times in one build (every read's events, the random baseline, the graded
+// exit): answered once per candle map (2026-11-21, speed; a candle map is never changed after it's built).
+const _atrAt = new WeakMap();
 export function atrPctH4At(cbh, hour, lookbackH = 80) {
+  if (!BUILD_CACHES || !cbh || typeof cbh !== "object") return atrPctH4AtRun(cbh, hour, lookbackH);
+  let m = _atrAt.get(cbh);
+  if (!m) { m = new Map(); _atrAt.set(cbh, m); }
+  const k = `${hour}|${lookbackH}|${cbh.size}`;
+  if (!m.has(k)) m.set(k, atrPctH4AtRun(cbh, hour, lookbackH));
+  return m.get(k);
+}
+function atrPctH4AtRun(cbh, hour, lookbackH) {
   const hourly = [];
   for (let h = hour - lookbackH; h <= hour; h++) {
     const c = cbh.get(h);
@@ -756,22 +792,62 @@ export function windowTide(pools) {
 // (stressStudy.mjs, via eventsWithR) labels the same events with the same R.
 // `ctxSets` = coin sets passed as CONTEXT only, never graded: the holdout line has no BTC, so the main card's
 // BTC set rides along there for the reads that read BTC (btc_lead_lag). A BTC set in coinSets wins.
-function buildEvents(coinSets, signalGen, ctxSets = null) {
+// ── One build, many passes (2026-11-21, speed; identical output) ────────────────────────────────
+// A scoreboard build runs the same read on the same coin's series several times: the main row, its out-of-sample grade,
+// a registered test, the overlap block and the two conditioner studies. Each pass used to rebuild the coin's price /
+// candle / funding maps, the BTC context, and the read's events. These caches key on the coin-set OBJECT (a build loads
+// fresh objects, so nothing outlives it: WeakMaps let the old ones go) and the read's generator, and hand back the same
+// read-only maps and event lists. Nothing mutates them (checked); the output is pinned byte for byte against the old
+// path by axisbt.memo.test.mjs.
+const _coinMaps = new WeakMap();
+const coinMaps = (cs) => { if (!BUILD_CACHES) return {}; let d = _coinMaps.get(cs); if (!d) { d = {}; _coinMaps.set(cs, d); } return d; };
+const pmapOf = (cs) => (coinMaps(cs).pmap ??= priceByHour(cs.oiHist));
+const cbhOf = (cs) => (coinMaps(cs).cbh ??= candlesByHour(cs.candleHist));
+const fmapOf = (cs) => (coinMaps(cs).fmap ??= fundingByHour(cs.oiHist));
+const NO_BTC = {};
+const _btcCtx = new WeakMap();
+// BTC context off the DEEPEST btc series (candle closes preferred) so the RS/veto reaches back over the candle-depth
+// lookback, not just the shallow oi window. Built once per BTC set.
+function btcCtxOf(btcCs) {
+  if (!btcCs) return {};
+  let c = BUILD_CACHES ? _btcCtx.get(btcCs) : null;
+  if (!c) {
+    const btcSeries = priceSeries(btcCs);
+    c = { btcMap: btcRegimeByHour(btcSeries), btcPrice: priceByHour(btcSeries), btcCandles: candlesByHour(btcCs.candleHist) };
+    _btcCtx.set(btcCs, c);
+  }
+  return c;
+}
+const _genRuns = new WeakMap();
+/** A read's events on one coin, under one BTC context: run once per build, then reused. */
+function genEventsOf(gen, cs, btcCs) {
+  if (!BUILD_CACHES) return gen(cs, pmapOf(cs), btcCtxOf(btcCs)) || [];
+  let byCs = _genRuns.get(gen);
+  if (!byCs) { byCs = new WeakMap(); _genRuns.set(gen, byCs); }
+  let byCtx = byCs.get(cs);
+  if (!byCtx) { byCtx = new Map(); byCs.set(cs, byCtx); }
+  const key = btcCs || NO_BTC;
+  if (!byCtx.has(key)) byCtx.set(key, gen(cs, pmapOf(cs), btcCtxOf(btcCs)) || []);
+  return byCtx.get(key);
+}
+const isBtcSet = (c) => String(c?.coin || "").toUpperCase() === "BTC";
+
+// `fromMs` (optional): keep events at or after it (a registered read's out-of-sample grade) without wrapping the
+// generator, so the cached run is reused.
+function buildEvents(coinSets, signalGen, ctxSets = null, fromMs = null) {
   // BTC context (regime map + price map) for the RS/veto gens — built once, passed to every gen.
-  const isBtc = (c) => String(c?.coin || "").toUpperCase() === "BTC";
-  const btcCs = (coinSets || []).find(isBtc) || (ctxSets || []).find(isBtc);
-  // BTC context off the DEEPEST btc series (candle closes preferred) so the RS/veto reaches
-  // back over the candle-depth lookback, not just the shallow oi window.
-  const btcSeries = btcCs ? priceSeries(btcCs) : [];
-  const ctx = btcCs ? { btcMap: btcRegimeByHour(btcSeries), btcPrice: priceByHour(btcSeries), btcCandles: candlesByHour(btcCs.candleHist) } : {};
+  const btcCs = (coinSets || []).find(isBtcSet) || (ctxSets || []).find(isBtcSet);
   const all = [];
   (coinSets || []).forEach((cs, i) => {
-    const pmap = priceByHour(cs.oiHist);
+    const pmap = pmapOf(cs);
     if (pmap.size < 2) return;
-    const cbh = candlesByHour(cs.candleHist); // for R grading (first-touch needs highs/lows)
+    const cbh = cbhOf(cs); // for R grading (first-touch needs highs/lows)
     const mkt = mktKey(cs, i); // the SAME key buildRandomPools uses, so a replay redraws on this market
-    const fmap = fundingByHour(cs.oiHist); // hourly per-8h funding (graded exit's "net of funding" line only)
-    for (const e of signalGen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) all.push({ t: e.t, side: e.side, coin: cs.coin, mkt, pmap, cbh, fmap, rs: typeof e.rs === "number" ? e.rs : null });
+    const fmap = fmapOf(cs); // hourly per-8h funding (graded exit's "net of funding" line only)
+    for (const e of genEventsOf(signalGen, cs, btcCs)) {
+      if (!e || (fromMs != null && !(e.t >= fromMs))) continue;
+      if (e.side === "LONG" || e.side === "SHORT") all.push({ t: e.t, side: e.side, coin: cs.coin, mkt, pmap, cbh, fmap, rs: typeof e.rs === "number" ? e.rs : null });
+    }
   });
   return all;
 }
@@ -798,8 +874,8 @@ export function eventsWithR(coinSets, signalGen, ctxSets = null) {
   return out;
 }
 
-export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null, gradedExit = false, ctxSets = null } = {}) {
-  const all = buildEvents(coinSets, signalGen, ctxSets);
+export function scoreEvents(coinSets, signalGen, { horizons = [4, 12, 24], minSamples = 20, exit = null, randomPools = null, gradedExit = false, ctxSets = null, fromMs = null } = {}) {
+  const all = buildEvents(coinSets, signalGen, ctxSets, fromMs);
   const gxCut = typeof gradedExit === "number" ? gradedExit : GRADED_EXIT_OOS_CUTOFF_MS;
   if (!all.length) return { random: null, sides: { LONG: { events: 0, r: aggR([]) }, SHORT: { events: 0, r: aggR([]) } }, samples: 0, horizons: horizons.map((h) => ({ h, samples: 0, hitRate: 0, meanBps: 0, stable: false, verdict: "INSUFFICIENT" })), r: { available: false, samples: 0, hitRate: 0, meanR: 0, avgRWin: 0, maxDdR: 0, stable: false, verdict: "INSUFFICIENT" }, rsQuartileDist: [], headline: "bps", verdict: "INSUFFICIENT", bestHorizon: null, ...scoreExitVariants([], exit, 0, minSamples), exitGraded: gradedExit ? scoreGradedExit([], 0, minSamples, gxCut) : null };
   // rs_quartile written on EVERY event row that carries an rs — from closes, NOT candle-gated
@@ -973,7 +1049,7 @@ export function runScorecard(coinSets, cfg = {}) {
 
 // The out-of-sample grade of one read: its own generator, events at or after `fromMs` only.
 function registeredGrade(coinSets, gen, fromMs, opts) {
-  const s = scoreEvents(coinSets, (cs, pmap, ctx) => (gen(cs, pmap, ctx) || []).filter((e) => e && e.t >= fromMs), opts);
+  const s = scoreEvents(coinSets, gen, { ...opts, fromMs });
   return { verdict: s.verdict, r: s.r, sides: s.sides, random: s.random, exitGraded: s.exitGraded };
 }
 
@@ -1005,15 +1081,12 @@ export function readOverlap(coinSets, nameA, nameB, { windowH = 24 } = {}) {
   const genOf = (n) => AXES.find((a) => a.name === n)?.gen;
   const gA = genOf(nameA), gB = genOf(nameB);
   if (!gA || !gB) return { a: nameA, b: nameB, error: "unknown axis" };
-  const btcCs = (coinSets || []).find((c) => String(c.coin || "").toUpperCase() === "BTC");
-  const btcSeries = btcCs ? priceSeries(btcCs) : [];
-  const ctx = btcCs ? { btcMap: btcRegimeByHour(btcSeries), btcPrice: priceByHour(btcSeries), btcCandles: candlesByHour(btcCs.candleHist) } : {};
+  const btcCs = (coinSets || []).find(isBtcSet);
   const evs = (gen) => {
     const out = [];
     for (const cs of coinSets || []) {
-      const pmap = priceByHour(cs.oiHist);
-      if (pmap.size < 2) continue;
-      for (const e of gen(cs, pmap, ctx) || []) if (e && (e.side === "LONG" || e.side === "SHORT")) out.push({ coin: cs.coin, side: e.side, h: hourBucket(e.t) });
+      if (pmapOf(cs).size < 2) continue;
+      for (const e of genEventsOf(gen, cs, btcCs)) if (e && (e.side === "LONG" || e.side === "SHORT")) out.push({ coin: cs.coin, side: e.side, h: hourBucket(e.t) });
     }
     return out;
   };

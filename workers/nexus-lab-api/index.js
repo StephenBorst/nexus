@@ -1286,6 +1286,7 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
     {
       const bellRes = await handleBell(parts, request, env, {
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
+        waitUntil: (p) => ctx.waitUntil(p),
       });
       if (bellRes) return bellRes;
     }
@@ -1306,12 +1307,14 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
       // ── GET /intel/wire — one stream of what changed, across every board (routes-wire.mjs, app/lib/wire.mjs) ──
       const wireRes = await handleWire(parts, request, env, {
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
+        waitUntil: (p) => ctx.waitUntil(p),
       });
       if (wireRes) return wireRes;
       // ── GET /intel/table — one row per coin, every input its own column (routes-table.mjs, app/lib/marketTable.mjs) ──
       const tableRes = await handleTable(parts, request, env, {
         futures: () => fetchAllFutures(),
         dispatch: (path) => worker.fetch(new Request(new URL(path, request.url), { headers: request.headers }), env, ctx),
+        waitUntil: (p) => ctx.waitUntil(p),
       });
       if (tableRes) return tableRes;
     }
@@ -5005,7 +5008,7 @@ document.getElementById("btn").addEventListener("click",go);
       const CACHE = axisbtCacheKey(min); // v27 = + smart_consensus_2x (registered 2026-11-14, lens-reads-prereg.md A) + its overlap pair with smart_follow · v26 = + funding_basis_split (registered 2026-11-07, funding-basis-split-prereg.md) + its overlap pair with confluence_follow · v25 = overlap pair oi_div_reversal × oi_div_reversal_4h (#271) · v24 = + btc_lead_lag (registered 2026-11-07, btc-lead-lag-prereg.md); the holdout line gets BTC as context only · v23 = overlap block covers batch 3 (OVERLAP_PAIRS) · v22 = + batch 3 (session_fade, level_reclaim_tight, spot_absorb; registered 2026-11-06) and spotcvd:hist in each coin set · v21 = + `stressStudy` (the registered stress-hour study, judged live by stressGrading.mjs, docs/research/stress-hours-prereg.md) · v20 = exits fill at their level, not the hour's extreme (stepExit, docs/research/level-reclaim-exit-gap.md) · v19 = price spine: first oi:hist row in an hour wins (docs/research/price-spine-drift-2026-10-29.md) · v18 = + oi_coil_break (registered 2026-10-27, docs/research/oi-coil-break-prereg.md) · v17 = + oi_div_reversal_4h (registered 2026-10-27, docs/research/oi-div-reversal-4h-prereg.md) · v16 = + `regimeWindow` on basis_x_cvd (main + holdout) and the BTC regime day counts (docs/research/graded-exit-regime-prereg.md) · v15 = funding block carries `feesNetBps` (fee-net on the same covered trades) · v14 = + `exitGraded.funding` (the graded exit also net of the funding paid while open, an estimate; informational) · v13 = + the four registered explorer reads (level_reclaim, oi_div_reversal, session_momentum, confluence_follow) · v12 = main-card oos leaves holdout coins out (SUI was on both lines) · v11 = + read pipeline (`oos` per registered read, `pipeline` stages, rsi_reset_deep holdout + graded exit, `overlap`) · v10 = + `holdout` line (8 coins never pooled into the main card) · v9 = + `exitGraded` (the R contract as the agent trades it: fees in, market close at 168h) on basis_x_cvd · v8 = BELOW_RANDOM rung (≤5%) in the shared ladder — bumped so no cached verdict mislabels a reliably-worse read · v7 = random-entry baseline per read + side (`random`) and the population `tide` — merged with v6's per-horizon `drift` (a parallel build); bumped so no v6 payload lacking `random` is served · v6 = + drift baseline · v5 = per-side splits + shadow exit · v4 = + basis_dev axes · v3 = `exit` + `exit24h` (one position per market, shared window, oos)
       // Built on the minute cron (SCOREBOARD_REBUILD_MINUTE), served from KV; a request builds only when no copy
       // exists, and a failed build serves the last good copy marked stale (scoreboardCache.mjs).
-      try { return json(await serveScoreboard(env.LAB_STORE, CACHE, () => buildAxisScorecard(env, min)), request); }
+      try { return json(await serveScoreboard(env.LAB_STORE, CACHE, () => buildAxisScorecard(env, min), { waitUntil: (p) => ctx.waitUntil(p) }), request); }
       catch (e) { return json({ ok: false, error: "scoreboard_unavailable", detail: whyFailed(e) }, request, 503); }
     }
 

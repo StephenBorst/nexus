@@ -4,6 +4,7 @@
 // included), tracked wallets' moves (/smart/events), graded calls (/calls/pulse) and what's scheduled in the next 12h
 // (/intel/calendar). Read-only, 60 s cache. A board that fails drops its rows and is named in `unread`.
 
+import { swrServe } from "./swrCache.mjs";
 import { readRows } from "../../app/lib/signals.mjs";
 import { REGISTERED_READS } from "../../app/lib/readPipeline.mjs";
 import { newsRows, bellRows, walletRows, callRows, upcomingRows, wireStream, nextSeen } from "../../app/lib/wire.mjs";
@@ -73,11 +74,8 @@ export async function composeWire(env, { dispatch, news = (e) => readNews(e), no
 export async function handleWire(parts, request, env, deps = {}) {
   if (!(parts[0] === "intel" && parts[1] === "wire" && !parts[2] && request.method === "GET")) return null;
   const now = deps.now ?? Date.now();
-  try {
-    const hit = JSON.parse((await env.LAB_STORE.get(WIRE_CACHE_KEY)) || "null");
-    if (hit && now - hit.builtAt < WIRE_TTL_MS) return json(hit, request);
-  } catch { /* best-effort */ }
-  const out = await composeWire(env, { ...deps, now });
-  try { await env.LAB_STORE.put(WIRE_CACHE_KEY, JSON.stringify(out), { expirationTtl: 300 }); } catch { /* best-effort */ }
-  return json(out, request);
+  // A visitor never waits on a build while a copy exists (swrCache.mjs): an older copy is served and refreshed after.
+  const { body } = await swrServe({ kv: env.LAB_STORE, key: WIRE_CACHE_KEY, now, freshMs: WIRE_TTL_MS, waitUntil: deps.waitUntil || null,
+    compose: () => composeWire(env, { ...deps, now }) });
+  return json(body, request);
 }

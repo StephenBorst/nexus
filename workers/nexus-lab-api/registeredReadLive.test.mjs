@@ -113,10 +113,14 @@ test("the coin set carries every series the scoreboard loads, under the same KV 
   }
   // the referee above copies buildEvents's call: pin that call so a change there fails here
   const ax = readFileSync(new URL("./axisbt.mjs", import.meta.url), "utf8");
-  const be = ax.slice(ax.indexOf("function buildEvents("), ax.indexOf("export function eventsWithR"));
-  assert.match(be, /const ctx = btcCs \? \{ btcMap: btcRegimeByHour\(btcSeries\), btcPrice: priceByHour\(btcSeries\), btcCandles: candlesByHour\(btcCs\.candleHist\) \} : \{\};/);
-  assert.match(be, /const pmap = priceByHour\(cs\.oiHist\);\s+if \(pmap\.size < 2\) return;/);
-  assert.match(be, /signalGen\(cs, pmap, ctx\)/);
+  // (2026-11-21: the build caches each coin's maps, the BTC context and each read's run; the call itself is unchanged)
+  const be = ax.slice(ax.indexOf("const _coinMaps = new WeakMap();"), ax.indexOf("export function eventsWithR"));
+  assert.match(be, /const pmapOf = \(cs\) => \(coinMaps\(cs\)\.pmap \?\?= priceByHour\(cs\.oiHist\)\);/);
+  assert.match(be, /c = \{ btcMap: btcRegimeByHour\(btcSeries\), btcPrice: priceByHour\(btcSeries\), btcCandles: candlesByHour\(btcCs\.candleHist\) \};/);
+  assert.match(be, /const btcSeries = priceSeries\(btcCs\);/);
+  assert.match(be, /gen\(cs, pmapOf\(cs\), btcCtxOf\(btcCs\)\)/);
+  assert.match(be, /const pmap = pmapOf\(cs\);\s+if \(pmap\.size < 2\) return;/);
+  assert.match(be, /genEventsOf\(signalGen, cs, btcCs\)/);
   // the brain passes BTC's candles only: no shared body reads the other two context fields
   const er = readFileSync(new URL("./explorerReads.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(er, /btcMap|btcPrice/);

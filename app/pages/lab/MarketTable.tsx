@@ -21,8 +21,11 @@ import {
 import { readWatch, toggleWatchCoin } from "@/lib/watchStore";
 import { WATCH_EVENT, WATCH_MAX } from "@/lib/watchlist.mjs";
 import { wireWhen } from "@/lib/wire.mjs";
+import { readLastCopy, writeLastCopy } from "@/lib/lastCopy.mjs";
 
 const TABLE_URL = "https://og.nexustradinglabs.com/intel/table";
+const LAST_KEY = "nx_table_last_v1"; // the last table this device read: drawn at once on the next visit, with its own age
+const tableOk = (b: { rows?: unknown[] }) => Array.isArray(b?.rows) && b.rows.length > 0;
 const REFRESH_MS = 60_000;
 const FIRST = 15;
 const UNREAD_WORDS: Record<string, string> = { markets: "Orderly markets", venues: "other venues' funding", smart: "smart money", forecasts: "forecasts", news: "news", reads: "paper runs" };
@@ -40,7 +43,7 @@ const price = (p: number) => (p >= 1000 ? p.toLocaleString("en-US", { maximumFra
 
 export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => void }) {
   const isMobile = useIsMobile();
-  const [table, setTable] = useState<Table | null>(null);
+  const [table, setTable] = useState<Table | null>(() => readLastCopy(LAST_KEY, { valid: tableOk }) as Table | null);
   const [failed, setFailed] = useState(false);
   const [sort, setSort] = useState<{ col: string; dir: string }>({ ...DEFAULT_SORT });
   const [all, setAll] = useState(false);
@@ -81,7 +84,7 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
   useEffect(() => {
     let alive = true;
     const load = () => sharedJson(TABLE_URL)
-      .then((j) => { if (!alive) return; if (Array.isArray(j?.rows)) { setTable(j as Table); setFailed(false); } else setFailed(true); })
+      .then((j) => { if (!alive) return; if (Array.isArray(j?.rows)) { setTable(j as Table); setFailed(false); writeLastCopy(LAST_KEY, j, { valid: tableOk }); } else setFailed(true); })
       .catch(() => { if (alive) setFailed(true); });
     load();
     const iv = setInterval(() => { load(); setNow(Date.now()); }, REFRESH_MS);
@@ -212,6 +215,7 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
       )}
 
       {failed && !table && <div style={{ marginTop: 12, fontFamily: UI, fontSize: 13, color: C.text.muted }}>The market table is unread right now.</div>}
+      {failed && table && <div style={{ marginTop: 10, fontFamily: UI, fontSize: 12, color: C.text.muted }}>Couldn’t refresh: this is the copy from {wireWhen(table.builtAt, now)} ago.</div>}
       {!table && !failed && <div style={{ marginTop: 12, fontFamily: MONO, fontSize: 11, color: C.text.faint }}>Reading every market…</div>}
 
       {table && table.rows.length > 0 && (

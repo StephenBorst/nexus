@@ -91,3 +91,29 @@ test("two-sided: thin warmup and flat regimes never fire", () => {
   assert.equal(basisDeviationSide(Array(100).fill(-0.05), -0.2), null, "flat trail → thr 0 → no extreme claimed");
   assert.equal(basisDeviationSide(Array(100).fill(-0.05), NaN), null);
 });
+
+test("basisExtremeSeries = basisExtremeSide row by row on the strictly-prior window (kept reference, 2026-11-21)", async () => {
+  const { basisExtremeSeries, basisExtremeSide: side } = await import("./basisFade.mjs");
+  // the per-row path the scoreboard used before, kept here as the reference
+  const perRow = (rows, { window = 168, minWarmup = 48, pct = 0.9 } = {}) =>
+    rows.map((r, i) => side(rows.slice(Math.max(0, i - window), i).map((x) => Math.abs(x.basisPct)), r.basisPct, { minWarmup, pct }));
+  let s = 99;
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32; };
+  const series = (n, fn) => Array.from({ length: n }, (_, i) => ({ t: i * 3600_000, basisPct: fn(i) }));
+  let walk = 0;
+  const cases = [
+    series(900, () => { walk += (rnd() - 0.5) * 0.02; return walk; }),            // a random walk around zero
+    series(600, (i) => (i % 7 === 0 ? 0 : (rnd() - 0.6) * 0.1)),                    // zeros (+0 and −0) and a discount bias
+    series(500, (i) => Math.round((rnd() - 0.5) * 20) / 100),                       // heavy ties
+    series(400, () => -0.05),                                                       // flat: never fires
+    series(30, () => rnd()),                                                        // under warmup: never fires
+  ];
+  cases[1][14].basisPct = -0;
+  for (const rows of cases) {
+    for (const cfg of [{}, { window: 24, minWarmup: 12, pct: 0.8 }, { window: 1, minWarmup: 1, pct: 0.5 }]) {
+      assert.deepEqual(basisExtremeSeries(rows, cfg), perRow(rows, cfg));
+    }
+  }
+  assert.ok(basisExtremeSeries(cases[0]).some(Boolean), "the walk fires");
+  assert.ok(!basisExtremeSeries(cases[3]).some(Boolean), "flat never fires");
+});

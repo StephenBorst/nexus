@@ -17,6 +17,20 @@ export const SCOREBOARD_TTL_S = 2 * 3600;        // outlives one missed hourly b
 export const SCOREBOARD_LASTGOOD_TTL_S = 24 * 3600;
 
 export const lastGoodKey = (key) => `${key}:lastgood`;
+export const SCOREBOARD_REFRESH_AFTER_MS = 70 * 60_000; // one hourly build + 10 min slack
+const rebuildMark = (key) => `${key}:rebuilding`;
+
+/** One rebuild after the response, guarded by a short marker (KV has no compare-and-set: a rare double build only costs CPU). */
+async function rebuildBehind(kv, key, build, waitUntil, now) {
+  try { if (await kv.get(rebuildMark(key))) return; } catch { /* unreadable marker: try the build */ }
+  try { await kv.put(rebuildMark(key), String(now), { expirationTtl: 120 }); } catch { /* best-effort */ }
+  waitUntil((async () => {
+    const t0 = Date.now();
+    try { await rebuildScoreboard(kv, key, build); console.log(`[scoreboard] rebuilt behind a request in ${Date.now() - t0} ms`); }
+    catch (e) { console.error("[scoreboard] background rebuild failed:", String(e?.message || e).slice(0, 300)); }
+    finally { try { await kv.delete(rebuildMark(key)); } catch { /* expires on its own */ } }
+  })());
+}
 
 async function getJson(kv, key) {
   try { const raw = await kv.get(key); return raw ? JSON.parse(raw) : null; } catch { return null; }
@@ -35,9 +49,24 @@ export async function rebuildScoreboard(kv, key, build) {
  * What a request gets: the stored copy; else a build now (stored as above); else, if that build fails, the
  * last good copy with `stale: true` and why. Throws only when there is nothing at all to serve.
  */
-export async function serveScoreboard(kv, key, build) {
+export async function serveScoreboard(kv, key, build, { waitUntil = null, now = Date.now() } = {}) {
   const cached = await getJson(kv, key);
-  if (cached) return cached;
+  // Stale-while-revalidate (2026-11-21): with the request's waitUntil, a visitor never waits on a build while ANY copy
+  // exists. A copy older than an hourly build plus slack (the cron missed) is served and rebuilt after the response; the
+  // served copy gone (two missed builds) = the last good one, marked stale with its age, and rebuilt after the response.
+  const age = (c) => now - Date.parse(c?.asOf || "");
+  if (cached) {
+    if (waitUntil && age(cached) > SCOREBOARD_REFRESH_AFTER_MS) await rebuildBehind(kv, key, build, waitUntil, now);
+    return cached;
+  }
+  if (waitUntil) {
+    const last = await getJson(kv, lastGoodKey(key));
+    if (last) {
+      await rebuildBehind(kv, key, build, waitUntil, now);
+      const mins = Math.round(age(last) / 60_000);
+      return { ...last, stale: true, staleReason: `refreshing: this copy was built ${Number.isFinite(mins) ? `${mins} min` : "a while"} ago` };
+    }
+  }
   try {
     return await rebuildScoreboard(kv, key, build);
   } catch (e) {

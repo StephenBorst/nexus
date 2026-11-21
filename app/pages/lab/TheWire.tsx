@@ -15,10 +15,13 @@ import { sharedJson } from "@/lib/sharedJson.mjs";
 import { WIRE_FILTERS, WIRE_KINDS, filterWire, wireWhen, myCallRows, withMine, wireSeenSplit, WIRE_SEEN_KEY } from "@/lib/wire.mjs";
 import { CoinLink } from "@/components/CoinLink";
 import { boardsAt } from "@/lib/intelLenses.mjs";
+import { readLastCopy, writeLastCopy } from "@/lib/lastCopy.mjs";
 
 const API = "https://og.nexustradinglabs.com";
 const WIRE_URL = `${API}/intel/wire`;
 const REFRESH_MS = 60_000;
+const LAST_KEY = "nx_wire_last_v1"; // the last Wire this device read: drawn at once on the next visit, with its own age
+const wireOk = (b: { rows?: unknown }) => Array.isArray(b?.rows);
 const FIRST = 8;
 
 type Row = { id: string; kind: string; t: number; coin: string | null; title: string; detail?: string | null; source?: string; graded?: string | null; path?: string | null; link?: string | null };
@@ -27,7 +30,7 @@ type Wire = { rows: Row[]; upcoming: Soon[]; unread: string[]; builtAt: number }
 
 export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void }) {
   const isMobile = useIsMobile();
-  const [wire, setWire] = useState<Wire | null>(null);
+  const [wire, setWire] = useState<Wire | null>(() => readLastCopy(LAST_KEY, { valid: wireOk }) as Wire | null);
   const [failed, setFailed] = useState(false);
   const [filter, setFilter] = useState("all");
   const [all, setAll] = useState(false);
@@ -44,7 +47,7 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
   useEffect(() => {
     let alive = true;
     const load = () => sharedJson(WIRE_URL)
-      .then((j) => { if (!alive) return; if (Array.isArray(j?.rows)) { setWire(j as Wire); setFailed(false); } else setFailed(true); })
+      .then((j) => { if (!alive) return; if (Array.isArray(j?.rows)) { setWire(j as Wire); setFailed(false); writeLastCopy(LAST_KEY, j, { valid: wireOk }); } else setFailed(true); })
       .catch(() => { if (alive) setFailed(true); });
     load();
     const iv = setInterval(() => { load(); setNow(Date.now()); }, REFRESH_MS);
@@ -113,6 +116,7 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
       </div>
 
       {failed && !wire && <div style={{ marginTop: 12, fontFamily: UI, fontSize: 13, color: C.text.muted }}>The wire is unread right now.</div>}
+      {failed && wire && <div style={{ marginTop: 10, fontFamily: UI, fontSize: 12, color: C.text.muted }}>Couldn’t refresh: this is the copy from {wireWhen(wire.builtAt, now)} ago.</div>}
       {!wire && !failed && <div style={{ marginTop: 12, fontFamily: MONO, fontSize: 11, color: C.text.faint }}>Reading the wire…</div>}
 
       {wire && (
