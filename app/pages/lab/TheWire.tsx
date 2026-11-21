@@ -2,16 +2,20 @@
 // clock. GET /intel/wire (lab-api routes-wire.mjs, rules app/lib/wire.mjs). Each row keeps its own source and its own
 // grade line; nothing adds rows up into a call. A coin opens its drawer; a row with a page opens it. Phone first: the
 // newest few, filter chips, "Show all". What's scheduled in the next 12h sits above the stream.
+// Your own calls (2026-11-21): the connected wallet's GET /theses/status/:wallet, read here in the browser (the shared
+// route never carries a wallet), merged in as "Your call" rows by myCallRows / withMine.
 import { useEffect, useState } from "react";
+import { useAccount } from "@orderly.network/hooks";
 import { Link } from "react-router-dom";
 import { C, MONO, UI } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
 import { sharedJson } from "@/lib/sharedJson.mjs";
-import { WIRE_FILTERS, WIRE_KINDS, filterWire, wireWhen } from "@/lib/wire.mjs";
+import { WIRE_FILTERS, WIRE_KINDS, filterWire, wireWhen, myCallRows, withMine } from "@/lib/wire.mjs";
 import { CoinLink } from "@/components/CoinLink";
 import { boardsAt } from "@/lib/intelLenses.mjs";
 
-const WIRE_URL = "https://og.nexustradinglabs.com/intel/wire";
+const API = "https://og.nexustradinglabs.com";
+const WIRE_URL = `${API}/intel/wire`;
 const REFRESH_MS = 60_000;
 const FIRST = 8;
 
@@ -26,6 +30,9 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
   const [filter, setFilter] = useState("all");
   const [all, setAll] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const { state: acct } = useAccount();
+  const wallet = (acct as { address?: string })?.address ?? null;
+  const [mine, setMine] = useState<Row[] | null | undefined>(undefined); // undefined = no wallet / reading, null = unread
 
   useEffect(() => {
     let alive = true;
@@ -37,7 +44,20 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
     return () => { alive = false; clearInterval(iv); };
   }, []);
 
-  const rows: Row[] = wire ? filterWire(wire.rows, filter) : [];
+  useEffect(() => {
+    let alive = true;
+    if (!wallet) { setMine(undefined); if (filter === "mine") setFilter("all"); return; }
+    const load = () => sharedJson(`${API}/theses/status/${encodeURIComponent(wallet)}`)
+      .then((j) => { if (alive) setMine(Array.isArray(j?.calls) ? (myCallRows(j, Date.now()) as Row[]) : null); })
+      .catch(() => { if (alive) setMine(null); });
+    load();
+    const iv = setInterval(load, REFRESH_MS);
+    return () => { alive = false; clearInterval(iv); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet]);
+
+  const merged: Row[] = wire ? (withMine(wire.rows, mine ?? [], now) as Row[]) : [];
+  const rows: Row[] = wire ? filterWire(merged, filter) : [];
   const shown = all ? rows : rows.slice(0, FIRST);
   const chip = (on: boolean): React.CSSProperties => ({
     flexShrink: 0, fontFamily: UI, fontSize: 13, fontWeight: on ? 600 : 500, cursor: "pointer", padding: "6px 12px",
@@ -78,7 +98,7 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
       )}
 
       <div role="group" aria-label="Show" style={{ display: "flex", gap: 8, marginTop: 12, overflowX: isMobile ? "auto" : "visible", flexWrap: isMobile ? "nowrap" : "wrap", paddingBottom: 2, WebkitOverflowScrolling: "touch" }}>
-        {WIRE_FILTERS.map((f) => (
+        {WIRE_FILTERS.filter((f) => !("wallet" in f && f.wallet) || wallet).map((f) => (
           <button key={f.id} type="button" aria-pressed={filter === f.id} onClick={() => { setFilter(f.id); setAll(false); }} style={chip(filter === f.id)}>{f.label}</button>
         ))}
       </div>
@@ -110,15 +130,17 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
             </article>
           ))}
           {rows.length === 0 && (
-            <div style={{ padding: "11px 0", borderTop: `1px solid ${C.border}`, fontFamily: UI, fontSize: 13, color: C.text.muted }}>Nothing on this filter in the last day.</div>
+            <div style={{ padding: "11px 0", borderTop: `1px solid ${C.border}`, fontFamily: UI, fontSize: 13, color: C.text.muted }}>
+              {filter === "mine" ? (mine !== null ? "None of your calls filled, reached TP1 or got graded in the last day." : "Your calls are unread right now.") : "Nothing on this filter in the last day."}
+            </div>
           )}
           {rows.length > FIRST && (
             <button type="button" onClick={() => setAll(!all)} className="nx-text-action" style={{ marginTop: 8, fontFamily: UI, fontSize: 13, color: C.text.fog, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
               {all ? "Show fewer" : `Show all ${rows.length}`}
             </button>
           )}
-          {wire.unread.length > 0 && (
-            <div style={{ marginTop: 8, fontFamily: UI, fontSize: 12, color: C.text.muted }}>Unread right now: {wire.unread.join(", ")}.</div>
+          {(wire.unread.length > 0 || (wallet && mine === null)) && (
+            <div style={{ marginTop: 8, fontFamily: UI, fontSize: 12, color: C.text.muted }}>Unread right now: {[...wire.unread, ...(wallet && mine === null ? ["your calls"] : [])].join(", ")}.</div>
           )}
           {onOpenBoard && (
             <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: "6px 14px", alignItems: "baseline" }}>
