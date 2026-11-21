@@ -9,14 +9,13 @@ import { CoinCrowd } from "@/components/CoinCrowd";
 import { useNavigate } from "react-router-dom";
 import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
 import { useEscapeKey } from "@/utils/a11y";
-import { THESIS_DRAFT_KEY } from "@/config/assistantTools";
+import { handOffCall } from "@/lib/callHandoff";
 import { MARKET_EVENT, takePendingMarket, clearPendingMarket } from "@/lib/marketDrawerEvent.mjs";
 import { MARKET_READ_FOOTER, marketCoin } from "@/lib/marketRead.mjs";
 import { wireWhen } from "@/lib/wire.mjs";
 import { useAccount } from "@orderly.network/hooks";
 import { useLabWallet } from "@/hooks/useLabAuth";
 import { savedCoins, watchCoin, pushSupported } from "@/lib/pushAlerts";
-import { marketCallDraft } from "@/lib/marketCallDraft.mjs";
 import { readWatch, toggleWatchCoin } from "@/lib/watchStore";
 import { WATCH_EVENT, WATCH_MAX } from "@/lib/watchlist.mjs";
 
@@ -107,16 +106,7 @@ export function MarketPanel({ coin, onClose, frame, modal = false }: { coin: str
 
   // Lens → call: the trader picks the side here (the drawer never does), the Thesis Engine builds the levels
   // from live price and Post is the next tap (marketCallDraft.mjs). The events cover a Thesis tab already open.
-  const draftCall = (side: "LONG" | "SHORT") => {
-    const d = marketCallDraft(coin, side);
-    if (!d) return;
-    try { localStorage.setItem(THESIS_DRAFT_KEY, JSON.stringify(d)); } catch { /* private mode */ }
-    close(); navigate("/lab?tab=thesis");
-    try {
-      window.dispatchEvent(new CustomEvent("nexus:lab-tab", { detail: { tab: "thesis" } }));
-      window.dispatchEvent(new CustomEvent("nexus:thesis-draft"));
-    } catch { /* non-browser */ }
-  };
+  const draftCall = (side: "LONG" | "SHORT") => { if (handOffCall(coin, side, navigate, "market-drawer")) close(); };
   const ask = () => {
     window.dispatchEvent(new CustomEvent("nexus:assistant-ask", { detail: { prompt: `Read ${coin} for me with get_market_read: each lens and its grade line, no verdict. Then: what would change the picture, and how would a call on ${coin} be graded?` } }));
     close();

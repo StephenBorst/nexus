@@ -140,3 +140,17 @@ test("the table reads the device watchlist (no new data, no new source)", () => 
   assert.match(ui, /WATCH_EVENT/);
   assert.match(ui, /yourCoinsFirst\(/);
 });
+
+test("activity dots: YOUR open call and YOUR open position, watched coins only, nothing guessed", async () => {
+  const { yourMarks, openCallCoins } = await import("./marketTable.mjs");
+  const openCalls = openCallCoins({ calls: [{ symbol: "PERP_BTC_USDC" }, { symbol: "SOL" }] });
+  assert.deepEqual([...openCalls], ["BTC", "SOL"]);
+  const positions = [{ symbol: "PERP_XAU_USDC", position_qty: -0.5 }, { symbol: "PERP_ETH_USDC", position_qty: 0 }, { symbol: "PERP_SOL_USDC", position_qty: 3 }];
+  assert.deepEqual(yourMarks(["BTC", "XAU", "ETH", "$SOL"], { openCalls, positions }), {
+    BTC: { call: true, position: false }, XAU: { call: false, position: true }, SOL: { call: true, position: true },
+  });
+  assert.deepEqual(yourMarks(["DOGE"], { openCalls, positions }), {}, "a coin you don't watch gets no dot, even with a call");
+  assert.deepEqual(yourMarks(["BTC"], {}), {}, "no wallet / unread = no dots");
+  assert.equal(openCallCoins(null), null);
+  assert.equal(openCallCoins({ error: "x" }), null);
+});

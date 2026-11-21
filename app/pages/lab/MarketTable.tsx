@@ -4,7 +4,10 @@
 // row opens the coin's drawer. Phone: the coin column stays put while the rest scrolls sideways.
 // YOUR COINS FIRST (borst 2026-11-20): coins on this device's watchlist (the drawer's ☆, or the ☆ on a row) stay on top
 // whatever the table sorts by; they sort among themselves by the same column, everything else sorts underneath.
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAccount, usePositionStream } from "@orderly.network/hooks";
+import { handOffCall } from "@/lib/callHandoff";
 import { C, MONO, UI, SIGNAL } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
 import { sharedJson } from "@/lib/sharedJson.mjs";
@@ -13,7 +16,7 @@ import { openMarket } from "@/lib/marketDrawerEvent.mjs";
 import { boardsAt, boardForColumn } from "@/lib/intelLenses.mjs";
 import {
   TABLE_COLUMNS, DEFAULT_SORT, nextSort, usdShort, fundingCell, oiVolCell, gapCell, smartCell, forecastCell,
-  newsCell, readsCell, yourCoinsFirst,
+  newsCell, readsCell, yourCoinsFirst, yourMarks, openCallCoins,
 } from "@/lib/marketTable.mjs";
 import { readWatch, toggleWatchCoin } from "@/lib/watchStore";
 import { WATCH_EVENT, WATCH_MAX } from "@/lib/watchlist.mjs";
@@ -44,6 +47,24 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
   const [help, setHelp] = useState(false);
   const [watched, setWatched] = useState<string[]>(() => readWatch().coins);
   const [full, setFull] = useState(false);
+  // Table → call (2026-11-21): "Call" on a row asks the side right under it; the trader picks, never the table.
+  const [callFor, setCallFor] = useState<string | null>(null);
+  const navigate = useNavigate();
+  // Activity dots on your coins (2026-11-21): YOUR open public call (the Spot chips' source) and YOUR open Orderly position.
+  const { state: acct } = useAccount();
+  const wallet = (acct as { address?: string })?.address ?? null;
+  const [{ rows: positionRows }] = usePositionStream();
+  const [openCalls, setOpenCalls] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (!wallet) { setOpenCalls(null); return; }
+    let alive = true;
+    sharedJson(`https://og.nexustradinglabs.com/theses/status/${encodeURIComponent(wallet)}`)
+      .then((j) => { if (alive) setOpenCalls(openCallCoins(j) as Set<string> | null); })
+      .catch(() => { if (alive) setOpenCalls(null); });
+    return () => { alive = false; };
+  }, [wallet]);
+  const marks = useMemo(() => yourMarks(watched, { openCalls, positions: (positionRows ?? null) as Array<{ symbol: string; position_qty?: number }> | null }) as Record<string, { call: boolean; position: boolean }>,
+    [watched, openCalls, positionRows]);
   const [now, setNow] = useState(() => Date.now());
 
   // the device watchlist: the drawer's ☆, the Watching panel and this table stay in step (WATCH_EVENT)
@@ -77,22 +98,36 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
   );
   const renderRow = (r: Row) => {
     const on = watched.includes(r.coin);
+    const asking = callFor === r.coin;
+    const callOn = (side: "LONG" | "SHORT") => handOffCall(r.coin, side, navigate, "market-table");
+    const sideBtn = (side: "LONG" | "SHORT"): React.CSSProperties => ({
+      fontFamily: UI, fontSize: 13, fontWeight: 600, padding: "7px 12px", borderRadius: 8, cursor: "pointer", background: "transparent",
+      color: side === "LONG" ? C.pos : C.neg, border: `1px solid ${side === "LONG" ? C.pos : C.neg}`,
+    });
     return (
-      <tr key={r.coin} role="button" tabIndex={0} aria-label={`Open ${r.coin}`} onClick={() => openMarket(r.coin)} onKeyDown={pressKey(() => openMarket(r.coin))}
+      <Fragment key={r.coin}>
+      <tr role="button" tabIndex={0} aria-label={`Open ${r.coin}`} onClick={() => openMarket(r.coin)} onKeyDown={pressKey(() => openMarket(r.coin))}
         style={{ cursor: "pointer", borderTop: `1px solid ${C.border}` }}>
         <td style={{ position: "sticky", left: 0, zIndex: 1, background: C.canvas, padding: "8px 10px 8px 4px", borderTop: `1px solid ${C.border}`, whiteSpace: "nowrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button type="button" aria-pressed={on} aria-label={on ? `Unpin ${r.coin}` : `Pin ${r.coin} to the top`} title={on ? "Watching: pinned to the top" : "Watch: pin to the top"}
               onClick={(e) => { e.stopPropagation(); star(r.coin); }} onKeyDown={(e) => e.stopPropagation()}
               style={{ fontFamily: UI, fontSize: 15, lineHeight: 1, padding: "4px", background: "none", border: "none", cursor: "pointer", color: on ? C.text.bright : C.text.faint }}>{on ? "★" : "☆"}</button>
-            <div>
-              <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: C.text.bright }}>{r.coin}</div>
+            <div style={{ minWidth: 88 }}>
+              <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: C.text.bright }}>
+                {r.coin}
+                {marks[r.coin]?.call && <span title="You have an open public call on it" aria-label="your open call" style={{ marginLeft: 5, fontSize: 9, color: C.text.bright, verticalAlign: "2px" }}>●</span>}
+                {marks[r.coin]?.position && <span title="You hold an open position in it on Orderly" aria-label="your open position" style={{ marginLeft: 3, fontSize: 9, color: C.text.fog, verticalAlign: "2px" }}>○</span>}
+              </div>
               <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted }}>
                 {price(r.price)}{" "}
                 {r.change24hPct != null && <span style={{ color: r.change24hPct > 0 ? C.pos : r.change24hPct < 0 ? C.neg : C.text.muted }}>{r.change24hPct > 0 ? "+" : r.change24hPct < 0 ? "−" : ""}{Math.abs(r.change24hPct).toFixed(1)}%</span>}
                 {r.thin && <span> · thin</span>}
               </div>
             </div>
+            <button type="button" aria-expanded={asking} aria-label={`Post a call on ${r.coin}`} title={`Post a call on ${r.coin}: you pick the side, levels build from live price`}
+              onClick={(e) => { e.stopPropagation(); setCallFor(asking ? null : r.coin); }} onKeyDown={(e) => e.stopPropagation()}
+              style={{ marginLeft: 6, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "4px 9px", borderRadius: 7, cursor: "pointer", background: asking ? C.accent : "transparent", color: asking ? C.canvas : C.text.fog, border: `1px solid ${asking ? C.accent : C.borderStrong}` }}>Call</button>
           </div>
         </td>
         {td(fundingCell(r), { past: !!r.fundingPast })}
@@ -105,6 +140,19 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
           style={{ padding: "10px", textAlign: "right", fontFamily: MONO, fontSize: 12, color: r.reads && r.reads.length ? C.text.bright : C.text.muted }}>{readsCell(r)}</td>
         {td(usdShort(r.oiUsd), { dim: true })}
       </tr>
+      {asking && (
+        <tr>
+          <td colSpan={TABLE_COLUMNS.length} style={{ padding: 0, background: C.surfaceAlt }}>
+            <div className="nx-fade-in" style={{ position: "sticky", left: 0, display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "10px 10px 12px", maxWidth: "min(100vw - 32px, 640px)" }}>
+              <span style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, flexBasis: "100%" }}>Your call on {r.coin}. Which way? Levels build from live price; you post it, and it’s graded from public price.</span>
+              <button type="button" style={sideBtn("LONG")} onClick={() => callOn("LONG")}>↑ Long {r.coin}</button>
+              <button type="button" style={sideBtn("SHORT")} onClick={() => callOn("SHORT")}>↓ Short {r.coin}</button>
+              <button type="button" className="nx-text-action" onClick={() => setCallFor(null)} style={{ fontFamily: UI, fontSize: 13, color: C.text.muted, background: "none", border: "none", padding: "0 4px", cursor: "pointer" }}>Cancel</button>
+            </div>
+          </td>
+        </tr>
+      )}
+      </Fragment>
     );
   };
 
@@ -183,6 +231,7 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
           {table.leftOut > 0 && <span>{table.leftOut} thinner markets (under $30k open interest) left out unless you watch one.</span>}
           {view.missing.length > 0 && <span>Watching {view.missing.join(", ")}: not listed on Orderly right now.</span>}
           {full && <span>Your watchlist holds {WATCH_MAX} coins. Unpin one first.</span>}
+          {Object.keys(marks).length > 0 && <span>● your open call · ○ your open position</span>}
           <span>Orderly markets, venues, smart money, forecasts, news and paper runs · updated {wireWhen(table.builtAt, now)}{wireWhen(table.builtAt, now) === "now" ? "" : " ago"}.</span>
           {table.unread.length > 0 && <span>Unread right now: {table.unread.map((u) => UNREAD_WORDS[u] ?? u).join(", ")}.</span>}
         </div>
