@@ -205,6 +205,11 @@ product is what sits on top:
   markets watched (empty = evaluates nothing), the position or why it sits out (`quietLine`, stale > 20 min says so),
   the last close in words (`EXIT_WORDS`), today vs `maxTradesPerDay` / `maxDailyLossUsdc` ("Capped" when either hits).
   Display only. Regime filters are labelled "not graded"; no inverted-read pitch.
+- **Before a wallet connects** (borst 2026-11-21, rules `app/lib/agentShowcase.mjs`, UI `AgentShowcase.tsx`): live proof
+  leads, the six feature cards fold under "What it does". Every registered read's own paper agent from
+  `/signals/paper-counts` as n of 30 (a dot on a track with the 30 tick, never a filling bar), "TRADE OPEN" flags, each row
+  → `/proof/paper/:axis`; live entries open / paused from `GET /ops/halt`; live agents publishing from `/agents/live`.
+  Counts and states only, never an R, sum or dollar figure; unread says unread (test-pinned).
 - **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open with no TP or
   trail and only what rests on Orderly (the backstop stop, or the owner's own; none on DCA/paper): the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.

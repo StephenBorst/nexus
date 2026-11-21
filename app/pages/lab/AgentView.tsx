@@ -14,6 +14,7 @@ import { paperSummary } from "@/lib/paperStats.mjs";
 import { STYLE_PRESETS, deriveStyle, type TradingStyle } from "@/config/agentStyles";
 import { AGENT_PREFILL_KEY, DIRECTIVE_PREFILL_KEY, EXPERIMENTAL_FILTERS_OFF, type AgentPrefill, type DirectiveDraft } from "@/utils/agentPrefill";
 import { PnlChart, CountUp, TableSkeleton, Coachmark } from "./components";
+import { AgentShowcase } from "./AgentShowcase";
 import { Collapsible } from "./Collapsible";
 import { SharePoster, type PosterData } from "./SharePoster";
 
@@ -43,6 +44,7 @@ import { C, SIGNAL } from "@/config/theme";
 export function AgentView() {
   const isMobile = useIsMobile();
   const [config, setConfig] = useState<AgentConfig>(DEFAULT_CONFIG);
+  const [featuresOpen, setFeaturesOpen] = useState(false); // disconnected view: the feature cards fold under live proof
   // The config editor is a working copy: load the server config ONCE, then it's the
   // user's to edit. Without this, the 10s status poll re-set config on every tick and
   // silently reverted unsaved edits (worse on mobile, where editing is slower). Saving
@@ -635,16 +637,21 @@ export function AgentView() {
             <span className="nx-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: "#ededf0", boxShadow: "0 0 8px #ededf0" }} />
             Connect a wallet to configure it
           </div>
-          <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 10 }}>What it does ↓</div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8, marginTop: 8 }}>
+        {/* Live proof first (2026-11-21): our reads' own paper agents, counts of 30, live-entry state. */}
+        <AgentShowcase />
+        <button type="button" onClick={() => setFeaturesOpen((v) => !v)} aria-expanded={featuresOpen}
+          style={{ display: "block", margin: "10px 0 0", background: "none", border: "none", padding: "8px 0", minHeight: 36, cursor: "pointer", fontFamily: "var(--nx-font-ui)", fontSize: 13, color: "#a1a1aa" }}>
+          {featuresOpen ? "Hide what it does ↑" : "What it does: modes, guardrails, exits ↓"}
+        </button>
+        {featuresOpen && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 8, marginTop: 4 }}>
           {feature("EXECUTION MODES", "PAPER: simulated fills, no key. ASSISTED: signals you place yourself. AUTONOMOUS: trades inside your limits.")}
           {feature("SIGNAL STRATEGIES", "Basis fade with a CVD, smart-money or liq-flush confirm. Funding, OI and confluence. Momentum and mean-reversion. Or your own signal by webhook.", "6 modes")}
           {feature("HARD GUARDRAILS", "Daily-loss cap. Max trades per day. Take-profit, stop-loss, max hold. One-tap KILL. Order-only keys can't withdraw.")}
           {feature("ADVANCED EXITS", "Scale-out, trailing stop, breakeven. The agent manages the exit. Each slice is graded.")}
           {feature("BACKTEST + VALIDATE", "Replay a config on recorded history. Walk-forward across markets. Tested against random entries.", "◆ PRO")}
           {feature("TRUSTLESS RECORD", "Every live trade settles on Orderly with an order ID and is booked at the exchange’s fill, anchored on Arbitrum. Ranked on TOP AGENTS.")}
-        </div>
+        </div>}
       </div>
     );
   }
