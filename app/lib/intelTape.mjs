@@ -106,3 +106,73 @@ export function fundingSide(qty, fundingPct) {
   if (!q || !Number.isFinite(f) || f === 0) return null;
   return (q > 0) === (f > 0) ? "pays" : "receives";
 }
+
+// ── Visual-first pass (borst 2026-11-21, same rules as /proof): marks against stated lines ─────────────
+// Display only. Every mark is a dot against a FIXED scale with the stated line as a tick: never a bar that
+// fills toward a goal, never a sum of inputs. Colour = state only: past a line = SIGNAL.watch, else ink.
+
+/** The majors' funding percentile vs their own recorded history: the page's stated lines. */
+export const PCT_HIGH = 85;
+export const PCT_LOW = 15;
+
+/** "high" (≥ 85th), "low" (≤ 15th), "normal", or null when unread. */
+export function percentileState(pct) {
+  const p = Number(pct);
+  if (pct == null || !Number.isFinite(p)) return null;
+  return p >= PCT_HIGH ? "high" : p <= PCT_LOW ? "low" : "normal";
+}
+
+/** The source's own words for the extremes (alternative.me labels "Extreme Fear" / "Extreme Greed"). */
+export function fearGreedMark(fg) {
+  const v = Number(fg?.value);
+  if (!fg || !Number.isFinite(v)) return null;
+  return { pos: Math.max(0, Math.min(100, v)), value: v, label: String(fg.label || ""), extreme: /extreme/i.test(String(fg.label || "")) };
+}
+
+/** Every market past a line, counted (uncapped, unlike the card list), split funding vs OI. */
+export function stretchedCount(assets) {
+  let funding = 0, oi = 0;
+  for (const a of assets || []) {
+    const k = marketFlag(a).kind;
+    if (k === "CROWDED_LONGS" || k === "CROWDED_SHORTS") funding++;
+    else if (k !== "NONE") oi++;
+  }
+  return { funding, oi, total: funding + oi };
+}
+
+/** Funding breadth as one mark per market, in the list's own order (by OI): true = longs pay. */
+export function breadthMarks(assets) {
+  return (assets || []).map((a) => ({ name: a?.name ?? "", longsPay: (Number(a?.funding) || 0) > 0 }));
+}
+
+const LINE_SCALE = 3; // a line track runs from 0 to 3× the line; the line's tick sits at a third
+
+/**
+ * A flagged market against the line that flagged it: the number, the line, and where each sits on a 0 → 3×-line
+ * track. `times` = how many lines past (the list's own order). null for a market past no line.
+ */
+export function lineTrack(a) {
+  const f = marketFlag(a);
+  if (f.kind === "NONE") return null;
+  const funding = f.kind === "CROWDED_LONGS" || f.kind === "CROWDED_SHORTS";
+  const line = f.kind === "CROWDED_LONGS" ? FUNDING_LONGS_PCT : f.kind === "CROWDED_SHORTS" ? Math.abs(FUNDING_SHORTS_PCT)
+    : f.kind === "HIGH_CONCENTRATION" ? OI_CONC_X : OI_ELEV_X;
+  const value = funding ? Math.abs(Number(a.funding) || 0) : f.ratio;
+  const top = line * LINE_SCALE;
+  return {
+    kind: f.kind, funding, value, line, times: f.past,
+    nowPos: Math.min(100, (value / top) * 100), linePos: 100 / LINE_SCALE, beyond: value > top,
+    side: f.kind === "CROWDED_LONGS" ? "longs pay" : f.kind === "CROWDED_SHORTS" ? "shorts pay" : null,
+  };
+}
+
+/** OI ÷ 24h volume on the table's fixed 0 → 3× scale, with the two stated lines as ticks. */
+export function ratioMark(ratio) {
+  const r = Number(ratio);
+  if (!Number.isFinite(r) || r < 0) return null;
+  const pos = (x) => Math.min(100, (x / 3) * 100);
+  return { pos: pos(r), beyond: r > 3, ticks: [pos(OI_ELEV_X), pos(OI_CONC_X)] };
+}
+
+/** Is this market's FUNDING past its line (the table colours the number only then)? */
+export const fundingPast = (a) => { const k = marketFlag(a).kind; return k === "CROWDED_LONGS" || k === "CROWDED_SHORTS"; };

@@ -3,11 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { usePrivateQuery } from "@orderly.network/hooks";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { Sparkline } from "@/pages/lab/components";
-import { C } from "@/config/theme";
+import { C, SIGNAL } from "@/config/theme";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
 import type { OrderlyPositionRow } from "@/utils/orderlyTypes";
-import { marketFlag, flaggedMarkets, flagLine, flagLabel, lsWords, fundingBreadth, positionUpnl, fundingSide, LS_HEAVY_LONG, LS_HEAVY_SHORT } from "@/lib/intelTape.mjs";
+import { marketFlag, flaggedMarkets, flagLabel, positionUpnl, fundingSide, LS_HEAVY_LONG, LS_HEAVY_SHORT, stretchedCount, fundingPast,
+  FUNDING_LONGS_PCT, FUNDING_SHORTS_PCT, OI_CONC_X, OI_ELEV_X, PCT_LOW, PCT_HIGH } from "@/lib/intelTape.mjs";
+import { openMarket } from "@/lib/marketDrawerEvent.mjs";
+import Fold from "@/pages/proof/Fold";
+import { IntelStrip, LineCard, MajorCard, RatioCell, FlagBadge } from "./IntelVisuals";
 
 // ─── Constants ────────────────────────────────────────────────
 // Palette is DERIVED from the shared design tokens, never re-typed as hex — that's
@@ -18,9 +22,8 @@ const REFRESH_INTERVAL = 60; // seconds
 // types; without the annotation `let x = YELLOW` locks to "#fbbf24" and any
 // reassignment fails to compile.
 const TEAL:   string = C.accent; // neutral accent (headers, slight-bullish, bars)
-const GREEN:  string = C.pos;    // genuine UP/positive: gainers, +change, bullish, greed
+const GREEN:  string = C.pos;    // your own unrealised P&L only (an outcome); the market inputs here stay ink
 const RED:    string = C.neg;    // loss / down
-const YELLOW: string = C.warn;   // CAUTION ONLY — crowding, tension, squeeze risk
 // Regime scale reads by TONE, not hue: the label already says bullish/bearish, so only
 // the extremes take colour (GREEN/RED) and the middle stays neutral. No blue — that is
 // reserved for teaching copy (Coachmark/Telegram) and nothing else.
@@ -44,7 +47,6 @@ interface HLAsset {
   markPx: number;
 }
 
-interface DerivAsset { funding: number; oi: number } // 8-hour %, USD
 
 // ─── API helpers ──────────────────────────────────────────────
 async function fetchFearGreed(): Promise<FearGreedData> {
@@ -119,20 +121,8 @@ const fmtFunding = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(4)}%`;
 const fmtOI      = (v: number) => v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v/1e6).toFixed(0)}M` : `$${v.toFixed(0)}`;
 const fmtPct     = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
 
-// Crowding/dominance are DESCRIPTIVE readings: bone (emphasis by tone), never amber or green/red.
-const lsColor = (ls: number | null) =>
-  ls === null ? DIM : (ls > LS_HEAVY_LONG || ls < LS_HEAVY_SHORT) ? TEAL : MUTED;
-
-// ─── Sub-components ───────────────────────────────────────────
-function BarBlock({ value, total = 100, color = TEAL, len = 18 }: { value: number; total?: number; color?: string; len?: number }) {
-  const filled = Math.round(Math.min(1, Math.max(0, value / total)) * len);
-  return (
-    <span style={{ letterSpacing: "1px" }}>
-      <span style={{ color }}     >{"▓".repeat(filled)}</span>
-      <span style={{ color: "rgba(255,255,255,0.12)" }}>{"░".repeat(len - filled)}</span>
-    </span>
-  );
-}
+// The top-markets table's columns (desktop).
+const TABLE_COLS = "80px 96px 90px 240px minmax(0, 1fr)";
 
 function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
@@ -280,20 +270,10 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
     return () => clearInterval(t);
   }, []);
 
-  // ── Derived data ────────────────────────────────────────────
-  const getDerivData = (sym: string): DerivAsset | null => {
-    const a = hlAssets?.find(h => h.name === sym);
-    return a ? { funding: a.funding, oi: a.oi } : null;
-  };
-
-  const btcD = getDerivData("BTC"), ethD = getDerivData("ETH"), solD = getDerivData("SOL");
-
   // Markets past a stated line (intelTape.mjs), furthest past first. No confidence score.
   const signals = flaggedMarkets(hlAssets ?? [], 8) as HLAsset[];
 
   const topPositions = (hlAssets ?? []).slice(0, 12);
-
-  const breadth = fundingBreadth(hlAssets ?? []);
 
   const top10 = (hlAssets ?? []).slice(0, 10);
   const avgFunding10 = top10.length
@@ -316,42 +296,21 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
     boxSizing: "border-box",
   };
 
-  const grid3: React.CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "1.1fr 0.9fr",
-    gap: "10px",
-    marginBottom: "10px",
-  };
-
-  // ── Render helpers ───────────────────────────────────────────
-  const renderDeriv = (sym: string, data: DerivAsset | null, ls: number | null) => {
-    const fc = !data ? DIM : BRIGHT;
-    return (
-      <div key={sym} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-          <span style={{ color: BRIGHT, fontWeight: 700, width: "40px" }}>{sym}</span>
-          {data && <span style={{ color: DIM, fontSize: "11px" }}>{flagLabel(marketFlag(hlAssets?.find((h) => h.name === sym)).kind)}</span>}
-          <button onClick={() => deployToAgent({ symbols: [`PERP_${sym}_USDC`] }, `the ${sym} funding read`, undefined, navigate)}
-            title={`Set the agent to watch ${sym}. It trades your rules.`}
-            style={{ marginLeft: "auto", background: "none", border: "1px solid #33333a", color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "3px 8px", borderRadius: "3px", cursor: "pointer" }}>
-            ⚡ Agent
-          </button>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", rowGap: "2px", columnGap: "8px", fontSize: "12px" }}>
-          <div>
-            <span style={{ color: DIM }}>FUNDING 8H  </span><span style={{ color: fc }}>{data ? fmtFunding(data.funding) : "—"}</span>
-            {/* Funding percentile-vs-history lives in the "FUNDING vs ITS OWN HISTORY"
-                gauges above — de-duped from this dense row. */}
-          </div>
-          <div><span style={{ color: DIM }}>OI  </span><span style={{ color: MUTED }}>{data ? fmtOI(data.oi) : "—"}</span></div>
-          <div><span style={{ color: DIM }}>L/S  </span><span style={{ color: lsColor(ls) }}>{ls !== null ? ls.toFixed(2) : "—"}</span></div>
-          <div><span style={{ color: lsColor(ls), fontSize: "11px" }}>{lsWords(ls)}</span></div>
-        </div>
-      </div>
-    );
-  };
-
   // ── JSX ─────────────────────────────────────────────────────
+  // Visual-first (borst 2026-11-21, same rules as /proof; rules in app/lib/intelTape.mjs, pieces in IntelVisuals.tsx):
+  // the strip (Fear/Greed · funding breadth · past a line) → markets past a stated line as cards → the majors (funding
+  // WITH its percentile, the account ratio, a badge when stretched) → your positions → the top markets table → "More"
+  // (how to read, market-wide inputs, also active, movers, sources). Same numbers and sources; nothing added up.
+  const majorsList = (["BTC", "ETH", "SOL"] as const).map((sym) => ({ sym, a: hlAssets?.find((h) => h.name === sym), ctx: contexts[sym], ls: lsRatios[sym] ?? null }));
+  const pastCount = stretchedCount(hlAssets ?? []);
+  const sectionHead = (title: string, n?: string) => (
+    <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "4px 0 10px" }}>
+      <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-ui)", fontSize: "16px", fontWeight: 600, letterSpacing: "-0.01em" }}>{title}</span>
+      {n && <span style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "11px" }}>{n}</span>}
+      <span style={{ flex: 1, height: 1, background: C.border }} />
+    </div>
+  );
+
   return (
     <div className="nx-stagger" style={page}>
 
@@ -359,7 +318,7 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
       {/* Standalone: an editorial header (eyebrow → serif), matching the rest of the Lab.
           Embedded in the Lab, MarketIntelView already provides the header — so we show only
           a thin live-status line here (no duplicate title). */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
         {!embedded ? (
           <div>
             <div style={{ fontSize: "9px", color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: "5px" }}>Read the tape</div>
@@ -372,135 +331,39 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
         </div>
       </div>
 
-      {/* ── How to read this — plain-language, once, for everyone ──────────── */}
-      <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", marginBottom: "10px", padding: "10px 12px", border: "1px solid rgba(255,255,255,0.06)", borderLeft: `2px solid ${MUTED}`, borderRadius: "6px", background: "rgba(255,255,255,0.02)" }}>
-        <span style={{ color: MUTED, fontSize: "12px", flexShrink: 0 }}>?</span>
-        <span style={{ color: DIM, fontSize: "12px", lineHeight: 1.5, fontFamily: "var(--nx-font-ui, sans-serif)" }}>
-          <b style={{ color: BRIGHT }}>How to read this:</b> public numbers, each with its source. Up top, the whole
-          market’s inputs side by side. Below, markets past a stated line: funding stretched, or open interest high
-          against volume. None of it is graded here, and nothing adds them up into a call.
-        </span>
-      </div>
+      {/* ── 1 · The strip: three visuals, one line (sticky on desktop) ── */}
+      <IntelStrip fg={fearGreed} assets={hlAssets} isMobile={isMobile} />
 
-      {/* ── The tape: each input on its own (it used to be weighted into one BULLISH/BEARISH score) ── */}
-      <Card style={{ marginBottom: "10px" }}>
-        <SectionTitle>THE TAPE · INPUTS, NOT A VERDICT</SectionTitle>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: "14px" }}>
-          <div>
-            <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>FEAR / GREED</div>
-            <div style={{ color: BRIGHT, fontWeight: 600, fontSize: "15px" }}>{fearGreed ? fearGreed.value : "—"}</div>
-            <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>{fearGreed ? `“${fearGreed.label}” · alternative.me` : "unread"}</div>
-            {fearGreed && <div style={{ marginTop: "3px" }}><BarBlock value={fearGreed.value} total={100} color={MUTED} len={12} /></div>}
+      {/* ── 2 · Markets past a stated line, furthest past first ── */}
+      <section style={{ marginBottom: "16px" }}>
+        {sectionHead("Past a stated line", hlAssets ? (pastCount.total > signals.length ? `${signals.length} of ${pastCount.total}, furthest past first` : `${pastCount.total}`) : undefined)}
+        {signals.length > 0 ? (
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: "12px" }}>
+            {signals.map((a) => (
+              <LineCard key={a.name} a={a}
+                onOpen={() => openMarket(a.name)}
+                onTrade={() => navigate(`/perp/${a.symbol}`)}
+                onAgent={() => deployToAgent({ symbols: [a.symbol] }, `${a.name} (${flagLabel(marketFlag(a).kind).toLowerCase()})`, undefined, navigate)} />
+            ))}
           </div>
-          <div>
-            <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>BTC DOMINANCE</div>
-            <div style={{ color: BRIGHT, fontWeight: 600, fontSize: "15px" }}>{globalData ? `${globalData.btcDom.toFixed(1)}%` : "—"}</div>
-            <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>{globalData ? `ETH ${globalData.ethDom.toFixed(1)}% · CoinGecko` : "unread"}</div>
+        ) : (
+          <div style={{ color: DIM, fontFamily: "var(--nx-font-ui)", fontSize: "13px", padding: "10px 2px" }}>
+            {hlAssets ? "No market is past a line right now." : loading ? "Reading Orderly’s markets…" : "Orderly’s market list didn’t load."}
           </div>
-          <div>
-            <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>TOTAL MCAP 24H</div>
-            <div style={{ color: globalData ? globalData.mcapChange24h > 0 ? GREEN : globalData.mcapChange24h < 0 ? RED : MUTED : DIM, fontWeight: 600, fontSize: "15px" }}>
-              {globalData ? fmtPct(globalData.mcapChange24h) : "—"}
-            </div>
-            <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>{globalData ? `$${(globalData.totalMcap / 1e12).toFixed(2)}T · CoinGecko` : "unread"}</div>
-          </div>
-          <div>
-            <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>FUNDING · ORDERLY</div>
-            <div style={{ color: BRIGHT, fontWeight: 600, fontSize: "15px" }}>{breadth.total ? `${breadth.positive} of ${breadth.total}` : "—"}</div>
-            <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>
-              {breadth.total ? `markets where longs pay${avgFunding10 !== null ? ` · top 10 avg ${fmtFunding(avgFunding10)}/8h` : ""}` : "unread"}
-            </div>
-          </div>
-        </div>
-        <div style={{ color: DIM, fontSize: "11px", marginTop: "12px", lineHeight: 1.5, fontFamily: "var(--nx-font-ui, sans-serif)" }}>
-          Four public numbers, not added up. None is a graded read: the graded ones are on /proof.
-        </div>
-      </Card>
+        )}
+      </section>
 
-      {/* ── ALERTS — the crowding/OI signals as Signal Cards ──────────────── */}
-      {signals.length > 0 && (
-        <div style={{ marginBottom: "10px" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "2px 0 10px" }}>
-            <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontSize: "12px", fontWeight: 700, letterSpacing: "0.12em" }}>PAST A STATED LINE</span>
-            <span style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px" }}>{signals.length}</span>
-            <span style={{ flex: 1, height: 1, background: C.border }} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: "12px" }}>
-            {signals.map(a => {
-              const fl = marketFlag(a);
-              const funding = fl.kind === "CROWDED_LONGS" || fl.kind === "CROWDED_SHORTS";
-              const metric = funding ? { n: fmtFunding(a.funding), label: "Funding 8h" } : { n: `${fl.ratio.toFixed(1)}×`, label: "OI ÷ 24h volume" };
-              return (
-                <div role="link" tabIndex={0} key={a.name} className="nx-card-interactive" onClick={() => navigate(`/perp/${a.symbol}`)} onKeyDown={pressKey(() => navigate(`/perp/${a.symbol}`))} title={`Open ${a.name}`}
-                  style={{ position: "relative", border: `1px solid ${C.border}`, borderLeft: `2px solid ${C.borderStrong}`, borderRadius: "8px", padding: "14px", background: `linear-gradient(180deg, ${C.surface}, ${C.surfaceAlt})`, cursor: "pointer" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-                    <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontWeight: 700, fontSize: "14px" }}>{a.name}</span>
-                    <span style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{flagLabel(fl.kind)}</span>
-                    <span style={{ marginLeft: "auto", color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px", letterSpacing: "0.08em" }}>NOT GRADED</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
-                    <div>
-                      <div style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: "3px" }}>{metric.label}</div>
-                      <div style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontSize: "26px", fontWeight: 600, lineHeight: 0.9 }}>{metric.n}</div>
-                    </div>
-                    <span style={{ marginLeft: "auto", color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "10px" }}>OI {fmtOI(a.oi)}</span>
-                  </div>
-                  <p style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: "12.5px", lineHeight: 1.5, color: MUTED, margin: "12px 0 0", padding: "9px 11px", background: "rgba(237,237,240,0.03)", border: `1px solid ${C.border}`, borderRadius: "6px" }}>
-                    {flagLine(a.name, a)}
-                  </p>
-                  <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-                    <button onClick={(e) => { e.stopPropagation(); navigate(`/perp/${a.symbol}`); }}
-                      style={{ flex: 1, background: "none", border: `1px solid ${C.borderStrong}`, color: C.accent, fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, padding: "8px", borderRadius: "6px", cursor: "pointer" }}>→ Open {a.name}</button>
-                    <button onClick={(e) => { e.stopPropagation(); deployToAgent({ symbols: [a.symbol] }, `${a.name} (${flagLabel(fl.kind).toLowerCase()})`, undefined, navigate); }}
-                      title={`Set the agent to watch ${a.name}`}
-                      style={{ background: "none", border: `1px solid ${C.border}`, color: MUTED, fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "8px 10px", borderRadius: "6px", cursor: "pointer" }}>⚡ Agent</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {/* ── 3 · The majors: funding never alone (its percentile beside it), the account ratio, a badge when stretched ── */}
+      <section style={{ marginBottom: "16px" }}>
+        {sectionHead("The majors")}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: "12px" }}>
+          {majorsList.map(({ sym, a, ctx, ls }) => (
+            <MajorCard key={sym} sym={sym} a={a} ctx={ctx} ls={ls}
+              onOpen={() => openMarket(sym)}
+              onAgent={() => deployToAgent({ symbols: [`PERP_${sym}_USDC`] }, `the ${sym} funding read`, undefined, navigate)} />
+          ))}
         </div>
-      )}
-
-      {/* ── Funding vs its own history — percentile gauges for the majors ──── */}
-      {(() => {
-        const majors = (["BTC", "ETH", "SOL"] as const)
-          .map((sym) => ({ sym, f: contexts[sym]?.funding, data: getDerivData(sym) }))
-          .filter((m): m is typeof m & { f: { pct: number } } => m.f?.pct != null);
-        if (!majors.length) return null;
-        return (
-          <div style={{ marginBottom: "10px" }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "10px", margin: "2px 0 10px" }}>
-              <span style={{ color: DIM, fontFamily: "var(--nx-font-mono)", fontSize: "11px", fontWeight: 700, letterSpacing: "0.12em" }}>FUNDING vs ITS OWN HISTORY</span>
-              <span style={{ color: C.text.faint, fontFamily: "var(--nx-font-mono)", fontSize: "10px" }}>the majors</span>
-              <span style={{ flex: 1, height: 1, background: C.border }} />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "12px" }}>
-              {majors.map(({ sym, f, data }) => {
-                const pct = Math.max(0, Math.min(100, f.pct));
-                const stretched = f.pct >= 85 || f.pct <= 15;
-                const cap = f.pct >= 85 ? "unusually high · the crowd is stretched long"
-                  : f.pct <= 15 ? "unusually low · stretched short"
-                  : "normal · nothing stretched";
-                return (
-                  <div key={sym} style={{ border: `1px solid ${C.border}`, borderRadius: "10px", padding: "14px", background: C.surfaceAlt }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                      <span style={{ color: BRIGHT, fontFamily: "var(--nx-font-mono)", fontSize: "13px", fontWeight: 700 }}>{sym}</span>
-                      <span style={{ color: MUTED, fontFamily: "var(--nx-font-mono)", fontSize: "10px" }}>{data ? `${fmtFunding(data.funding)}/8h` : "—"}</span>
-                    </div>
-                    <div style={{ position: "relative", height: "6px", borderRadius: "4px", background: C.inset, border: `1px solid ${C.border}`, margin: "11px 0 8px" }}>
-                      <div style={{ position: "absolute", top: "-1px", bottom: "-1px", width: "2px", background: stretched ? YELLOW : C.accent, left: `${pct}%` }} />
-                    </div>
-                    <div style={{ fontFamily: "var(--nx-font-ui, sans-serif)", fontSize: "11.5px", lineHeight: 1.45, color: MUTED }}>
-                      <b style={{ color: stretched ? YELLOW : BRIGHT }}>{f.pct}th percentile</b> — {cap}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
+      </section>
 
       {/* ── Your positions: unrealised P&L computed from the row (Orderly's unsettled_pnl is
           realised-but-unsettled, not this) and the funding each one pays or receives. ── */}
@@ -553,40 +416,98 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
         );
       })()}
 
-            {/* ── Main 3-col grid ─────────────────────────────────── */}
-      <div style={grid3}>
 
-        {/* ── Derivatives Intelligence ──────────────────────── */}
-        <Card>
-          <SectionTitle>DERIVATIVES INTELLIGENCE · ORDERLY NETWORK</SectionTitle>
-
-          {renderDeriv("BTC", btcD, lsRatios["BTC"] ?? null)}
-          {renderDeriv("ETH", ethD, lsRatios["ETH"] ?? null)}
-          {renderDeriv("SOL", solD, lsRatios["SOL"] ?? null)}
-
-          {alsoActive.length > 0 && (
-            <div style={{ marginTop: "6px" }}>
-              <div style={{ color: DIM, fontSize: "10px", letterSpacing: "0.1em", marginBottom: "6px" }}>ALSO ACTIVE · FUNDING 8H</div>
-              {alsoActive.map(a => (
-                <div key={a.name} style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px", fontSize: "12px" }}>
-                  <span style={{ color: MUTED }}>{a.name}</span>
-                  <span style={{ color: a.funding >= 0 ? GREEN : RED }}>{fmtFunding(a.funding)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ color: DIM, fontSize: "10px", marginTop: "12px", letterSpacing: "0.05em" }}>
-            {"// "}VIA OKX · ORDERLY NETWORK
+      {/* ── 4 · Top markets by open interest: funding coloured by state, OI ÷ volume as a mark, the line as a badge ── */}
+      <Card style={{ marginBottom: "10px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", flexWrap: "wrap", gap: "4px" }}>
+          <SectionTitle style={{ marginBottom: 0 }}>TOP MARKETS BY OPEN INTEREST</SectionTitle>
+          <span style={{ color: DIM, fontSize: "10px" }}>ORDERLY NETWORK · {timestamp || "—"}</span>
+        </div>
+        {!isMobile && (
+          <div style={{ display: "grid", gridTemplateColumns: TABLE_COLS, gap: "8px", marginBottom: "4px" }}>
+            {["MARKET", "FUNDING 8H", "OI", "OI ÷ 24H VOL", "PAST A LINE"].map(h => (
+              <div key={h} style={{ color: DIM, fontSize: "10px", letterSpacing: "0.08em", paddingBottom: "4px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                {h}
+              </div>
+            ))}
           </div>
-        </Card>
+        )}
+        {topPositions.map(asset => {
+          const fl = marketFlag(asset);
+          const fPast = fundingPast(asset);
+          const oiPast = fl.kind === "HIGH_CONCENTRATION" || fl.kind === "ELEVATED_OI";
+          const open = () => openMarket(asset.name);
+          return isMobile ? (
+            <div key={asset.name} role="button" tabIndex={0} onClick={open} onKeyDown={pressKey(open)} style={{ padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: "12px", cursor: "pointer" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                <span style={{ color: BRIGHT, fontWeight: 700 }}>{asset.name}</span>
+                <FlagBadge kind={fl.kind} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "auto auto minmax(0, 1fr)", alignItems: "center", gap: "4px 12px", color: DIM, fontSize: "11px" }}>
+                <span>FUND <span style={{ color: fPast ? SIGNAL.watch : MUTED }}>{fmtFunding(asset.funding)}</span></span>
+                <span>OI <span style={{ color: MUTED }}>{fmtOI(asset.oi)}</span></span>
+                <RatioCell ratio={fl.ratio} past={oiPast} />
+              </div>
+            </div>
+          ) : (
+            <div key={asset.name} role="button" tabIndex={0} onClick={open} onKeyDown={pressKey(open)} style={{ display: "grid", gridTemplateColumns: TABLE_COLS, gap: "8px", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: "12px", alignItems: "center", cursor: "pointer" }}>
+              <div style={{ color: BRIGHT, fontWeight: 700 }}>{asset.name}</div>
+              <div style={{ color: fPast ? SIGNAL.watch : MUTED }}>{fmtFunding(asset.funding)}</div>
+              <div style={{ color: MUTED }}>{fmtOI(asset.oi)}</div>
+              <RatioCell ratio={fl.ratio} past={oiPast} />
+              <div><FlagBadge kind={fl.kind} /></div>
+            </div>
+          );
+        })}
+        {topPositions.length === 0 && (
+          <div style={{ color: DIM, padding: "20px 0", textAlign: "center", fontSize: "12px" }}>
+            {loading ? "Loading Orderly’s markets…" : "Orderly’s market list didn’t load."}
+          </div>
+        )}
+      </Card>
 
-        {/* ── Movers 24H ────────────────────────────────────── */}
+      {/* ── 5 · More: how to read, the market-wide inputs, also active, movers, the lines, the sources ── */}
+      <div style={{ borderBottom: `1px solid ${C.border}`, marginBottom: "10px" }}>
+        <Fold title="More" note="How to read this, BTC dominance and total market cap, also active, 24h movers, the lines and the sources.">
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ color: DIM, fontSize: "12px", lineHeight: 1.5, fontFamily: "var(--nx-font-ui, sans-serif)" }}>
+              <b style={{ color: BRIGHT }}>How to read this:</b> public numbers, each with its source. Up top, the whole
+              market’s inputs side by side. Then markets past a stated line: funding stretched, or open interest high
+              against volume. None of it is graded here, and nothing adds them up into a call.
+            </div>
+            <Card>
+              <SectionTitle>MARKET-WIDE INPUTS</SectionTitle>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
+                <div>
+                  <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>BTC DOMINANCE</div>
+                  <div style={{ color: BRIGHT, fontWeight: 600, fontSize: "15px" }}>{globalData ? `${globalData.btcDom.toFixed(1)}%` : "—"}</div>
+                  <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>{globalData ? `ETH ${globalData.ethDom.toFixed(1)}% · CoinGecko` : "unread"}</div>
+                </div>
+                <div>
+                  <div style={{ color: DIM, fontSize: "10px", marginBottom: "3px" }}>TOTAL MCAP 24H</div>
+                  <div style={{ color: globalData ? BRIGHT : DIM, fontWeight: 600, fontSize: "15px" }}>{globalData ? fmtPct(globalData.mcapChange24h) : "—"}</div>
+                  <div style={{ color: DIM, fontSize: "11px", marginTop: "2px" }}>{globalData ? `$${(globalData.totalMcap / 1e12).toFixed(2)}T · CoinGecko` : "unread"}</div>
+                </div>
+              </div>
+              {avgFunding10 !== null && <div style={{ color: DIM, fontSize: "11px", marginTop: "10px" }}>Top 10 by OI, average funding {fmtFunding(avgFunding10)}/8h · Orderly</div>}
+            </Card>
+            {alsoActive.length > 0 && (
+              <Card>
+                <SectionTitle>ALSO ACTIVE · FUNDING 8H</SectionTitle>
+                {alsoActive.map(a => (
+                  <div key={a.name} role="button" tabIndex={0} onClick={() => openMarket(a.name)} onKeyDown={pressKey(() => openMarket(a.name))} style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px", fontSize: "12px", cursor: "pointer" }}>
+                    <span style={{ color: MUTED }}>{a.name}</span>
+                    <span style={{ color: fundingPast(a) ? SIGNAL.watch : MUTED }}>{fmtFunding(a.funding)}</span>
+                  </div>
+                ))}
+              </Card>
+            )}
+            {/* ── Movers 24H ────────────────────────────────────── */}
         <Card>
           <SectionTitle>MOVERS 24H</SectionTitle>
 
           <div style={{ marginBottom: "12px" }}>
-            <div style={{ color: GREEN, fontSize: "10px", letterSpacing: "0.08em", marginBottom: "6px" }}>▲ GAINERS</div>
+            <div style={{ color: MUTED, fontSize: "10px", letterSpacing: "0.08em", marginBottom: "6px" }}>▲ GAINERS</div>
             {movers?.gainers.map(g => (
               <a
                 key={g.symbol}
@@ -600,15 +521,15 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
                 <span style={{ color: MUTED, fontSize: "12px", flexShrink: 0 }}>{g.symbol}</span>
                 <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                   <WhyChip ticker={g.symbol} />
-                  <Sparkline points={g.spark} color="#3ecf8e" />
-                  <span style={{ color: GREEN, fontSize: "12px", fontWeight: 600, width: 52, textAlign: "right" }}>+{g.change24h.toFixed(1)}%</span>
+                  <Sparkline points={g.spark} color={MUTED} />
+                  <span style={{ color: BRIGHT, fontSize: "12px", fontWeight: 600, width: 52, textAlign: "right" }}>+{g.change24h.toFixed(1)}%</span>
                 </span>
               </a>
             )) ?? <div style={{ color: DIM, fontSize: "12px" }}>Loading…</div>}
           </div>
 
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "10px" }}>
-            <div style={{ color: RED, fontSize: "10px", letterSpacing: "0.08em", marginBottom: "6px" }}>▼ LOSERS</div>
+            <div style={{ color: MUTED, fontSize: "10px", letterSpacing: "0.08em", marginBottom: "6px" }}>▼ LOSERS</div>
             {movers?.losers.map(l => (
               <a
                 key={l.symbol}
@@ -622,8 +543,8 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
                 <span style={{ color: MUTED, fontSize: "12px", flexShrink: 0 }}>{l.symbol}</span>
                 <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                   <WhyChip ticker={l.symbol} />
-                  <Sparkline points={l.spark} color="#f7525f" />
-                  <span style={{ color: RED, fontSize: "12px", fontWeight: 600, width: 52, textAlign: "right" }}>{l.change24h.toFixed(1)}%</span>
+                  <Sparkline points={l.spark} color={MUTED} />
+                  <span style={{ color: BRIGHT, fontSize: "12px", fontWeight: 600, width: 52, textAlign: "right" }}>{l.change24h.toFixed(1)}%</span>
                 </span>
               </a>
             )) ?? <div style={{ color: DIM, fontSize: "12px" }}>Loading…</div>}
@@ -633,112 +554,13 @@ export default function IntelPage({ embedded = false }: { embedded?: boolean }) 
             {"// "}VIA COINGECKO
           </div>
         </Card>
-
-        {/* Live Signals were promoted to the full-width ◆ ALERTS cards above. */}
-
-      </div>
-
-            {/* ── Long/Short Positioning ──────────────────────────────── */}
-      <Card style={{ marginBottom: "10px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-          <SectionTitle style={{ marginBottom: 0 }}>LONG / SHORT POSITIONING</SectionTitle>
-          <span style={{ color: DIM, fontSize: "10px" }}>VIA OKX ACCOUNT RATIO</span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: "10px" }}>
-          {(["BTC", "ETH", "SOL"] as const).map(sym => {
-            const ls = lsRatios[sym] ?? null;
-            const status = ls === null ? "UNREAD" : lsWords(ls);
-            const sc = lsColor(ls);
-            const longPct  = ls !== null ? Math.min(0.92, ls / (ls + 1)) : 0.5;
-            const shortPct = 1 - longPct;
-            const desc = ls === null ? "OKX’s ratio didn’t load."
-              : `${Math.round(longPct * 100)}% of OKX accounts with a position are long. A count of accounts, not of size.`;
-            return (
-              <div key={sym} style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", border: `1px solid ${ls === null ? "rgba(255,255,255,0.05)" : (ls > LS_HEAVY_LONG || ls < LS_HEAVY_SHORT) ? "rgba(237,237,240,0.18)" : "rgba(255,255,255,0.06)"}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <span style={{ color: BRIGHT, fontWeight: 700, fontSize: "14px" }}>{sym}</span>
-                  <span style={{ color: sc, fontSize: "10px", letterSpacing: "0.07em", fontWeight: 700 }}>{status}</span>
-                </div>
-
-                {/* L/S bar */}
-                <div style={{ marginBottom: "8px" }}>
-                  <div style={{ display: "flex", height: "6px", borderRadius: "2px", overflow: "hidden", gap: "1px" }}>
-                    <div style={{ flex: longPct, background: "#d4d4d8", opacity: ls !== null ? 0.7 : 0.2 }} />
-                    <div style={{ flex: shortPct, background: "#52525b", opacity: ls !== null ? 0.9 : 0.2 }} />
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "3px", fontSize: "10px" }}>
-                    <span style={{ color: "#d4d4d8" }}>L {ls !== null ? `${Math.round(longPct * 100)}%` : "—"}</span>
-                    <span style={{ color: "#71717a" }}>S {ls !== null ? `${Math.round(shortPct * 100)}%` : "—"}</span>
-                  </div>
-                </div>
-
-                <div style={{ fontSize: "11px", color: DIM, lineHeight: 1.4 }}>{desc}</div>
-                <div style={{ marginTop: "6px", fontSize: "10px", color: MUTED }}>
-                  L/S RATIO: <span style={{ color: sc }}>{ls !== null ? ls.toFixed(3) : "—"}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ color: DIM, fontSize: "10px", marginTop: "8px" }}>
-          {"// "}MORE ACCOUNTS LONG = ratio above {LS_HEAVY_LONG}; MORE ACCOUNTS SHORT = below {LS_HEAVY_SHORT}. A count of accounts on OKX, not graded.
-        </div>
-      </Card>
-
-            {/* ── Position Intelligence ───────────────────────────── */}
-      <Card style={{ marginBottom: "10px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", flexWrap: "wrap", gap: "4px" }}>
-          <SectionTitle style={{ marginBottom: 0 }}>TOP MARKETS BY OPEN INTEREST</SectionTitle>
-          <span style={{ color: DIM, fontSize: "10px" }}>ORDERLY NETWORK · {timestamp || "—"}</span>
-        </div>
-        {!isMobile && (
-          <div style={{ display: "grid", gridTemplateColumns: "70px 90px 80px 80px 1fr", gap: "4px", marginBottom: "4px" }}>
-            {["MARKET", "FUNDING 8H", "OI", "OI ÷ VOL", "PAST A LINE"].map(h => (
-              <div key={h} style={{ color: DIM, fontSize: "10px", letterSpacing: "0.08em", paddingBottom: "4px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                {h}
-              </div>
-            ))}
-          </div>
-        )}
-        {topPositions.map(asset => {
-          const fl = marketFlag(asset);
-          const flag = fl.kind === "NONE" ? "—" : flagLabel(fl.kind);
-          return isMobile ? (
-            <div key={asset.name} style={{ padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: "12px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "2px" }}>
-                <span style={{ color: BRIGHT, fontWeight: 700 }}>{asset.name}</span>
-                <span style={{ color: fl.kind === "NONE" ? DIM : TEAL, fontSize: "11px", textAlign: "right" }}>{flag}</span>
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", color: DIM, fontSize: "11px" }}>
-                <span>FUND <span style={{ color: MUTED }}>{fmtFunding(asset.funding)}</span></span>
-                <span>OI <span style={{ color: MUTED }}>{fmtOI(asset.oi)}</span></span>
-                <span>OI÷VOL <span style={{ color: MUTED }}>{fl.ratio.toFixed(1)}×</span></span>
-              </div>
+            <div style={{ color: DIM, fontSize: "10px", lineHeight: 1.6 }}>
+              {"// "}LINES: FUNDING ABOVE +{FUNDING_LONGS_PCT}% OR BELOW {FUNDING_SHORTS_PCT}% PER 8H · OI ABOVE {OI_CONC_X}× ({OI_ELEV_X}×) 24H VOLUME ON MARKETS TRADING OVER $100K · MAJORS’ FUNDING PERCENTILE TICKS AT {PCT_LOW}TH / {PCT_HIGH}TH.<br />
+              {"// "}MORE ACCOUNTS LONG = ratio above {LS_HEAVY_LONG}; MORE ACCOUNTS SHORT = below {LS_HEAVY_SHORT}. A count of accounts on OKX, not graded.<br />
+              {"// "}DATA: COINGECKO · OKX · ORDERLY NETWORK · ALTERNATIVE.ME · AUTO-REFRESH {REFRESH_INTERVAL}s
             </div>
-          ) : (
-            <div key={asset.name} style={{ display: "grid", gridTemplateColumns: "70px 90px 80px 80px 1fr", gap: "4px", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: "12px", alignItems: "center" }}>
-              <div style={{ color: BRIGHT, fontWeight: 700 }}>{asset.name}</div>
-              <div style={{ color: MUTED }}>{fmtFunding(asset.funding)}</div>
-              <div style={{ color: MUTED }}>{fmtOI(asset.oi)}</div>
-              <div style={{ color: MUTED }}>{fl.ratio.toFixed(1)}×</div>
-              <div style={{ color: fl.kind === "NONE" ? DIM : TEAL, fontSize: "11px" }}>{flag}</div>
-            </div>
-          );
-        })}
-        {topPositions.length === 0 && (
-          <div style={{ color: DIM, padding: "20px 0", textAlign: "center", fontSize: "12px" }}>
-            {loading ? "Loading Orderly’s markets…" : "Orderly’s market list didn’t load."}
           </div>
-        )}
-        <div style={{ color: DIM, fontSize: "10px", marginTop: "8px" }}>
-          {"// "}LINES: FUNDING ABOVE +0.08% OR BELOW −0.03% PER 8H · OI ABOVE 1.5× (0.9×) 24H VOLUME ON MARKETS TRADING OVER $100K.
-        </div>
-      </Card>
-
-      {/* ── Footer ──────────────────────────────────────────────────── */}
-      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "4px", color: DIM, fontSize: "10px", letterSpacing: "0.05em", marginTop: "4px" }}>
-        <div>DATA: COINGECKO · OKX · ORDERLY NETWORK · ALTERNATIVE.ME</div>
-        <div>AUTO-REFRESH: {REFRESH_INTERVAL}s · {countdown}s AGO</div>
+        </Fold>
       </div>
 
     </div>
