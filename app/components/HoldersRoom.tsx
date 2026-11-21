@@ -22,6 +22,9 @@ import {
 import { NexusTierBadge } from "@/components/NexusTierBadge";
 import { callRR, fmtRR } from "@/lib/callMath.mjs";
 import { TreasuryInventory } from "@/components/TreasuryInventory";
+import { GuestPanel } from "@/components/GuestPanel";
+import { BuyNexusButton } from "@/components/BuyNexusButton";
+import { PRO_HOLDER_TIER } from "@/config/subscription";
 
 const API_BASE = "https://og.nexustradinglabs.com";
 
@@ -124,10 +127,23 @@ export function HoldersRoom({ walletAddress }: { walletAddress: string | null })
   }, [isHolder, walletAddress, signNonce]);
 
   if (!walletAddress) {
+    // Logged out (2026-11-21): what the room is and what each tier opens, from the same thresholds the gate reads.
+    const min = (t: string) => (TIER_THRESHOLDS.find((x) => x.tier === t)?.min ?? 0).toLocaleString();
     return (
-      <div style={{ textAlign: "center", padding: "48px 20px", fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#71717a" }}>
-        Connect a wallet to check $NEXUS holder access.
-      </div>
+      <GuestPanel
+        eyebrow="$NEXUS holders"
+        title="The Holders Room"
+        lede="Calls from $NEXUS holders, visible only to holders. Your tier is read from your wallet's balance on Base when you connect: nothing to sign until you open the room."
+        rows={[
+          { k: `${TIER_META.OPERATOR.glyph} Operator`, v: <>{min("OPERATOR")} $NEXUS. Opens this room.</> },
+          { k: `${TIER_META.ARCHITECT.glyph} Architect`, v: <>{min("ARCHITECT")} $NEXUS. The room{PRO_HOLDER_TIER === "ARCHITECT" ? ", plus PRO for as long as you hold it" : ""}.</> },
+          { k: `${TIER_META.ORACLE.glyph} Oracle`, v: <>{min("ORACLE")} $NEXUS. The top badge. No extra access.</> },
+        ]}
+        footnote="$NEXUS is a community token. Tiers unlock access and status inside the Lab, nothing more: no yield, no revenue share."
+      >
+        <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: "#a1a1aa" }}>Connect a wallet (top right) to check your tier.</span>
+        <BuyNexusButton size="sm" />
+      </GuestPanel>
     );
   }
 
