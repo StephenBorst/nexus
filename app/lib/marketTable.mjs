@@ -206,3 +206,25 @@ export function openCallCoins(status) {
   if (!status || !Array.isArray(status.calls)) return null;
   return new Set(status.calls.map((c) => bare(c?.symbol)).filter(Boolean));
 }
+
+/**
+ * MOVED SINCE YOU LAST LOOKED (borst 2026-11-21): on a watched row, the price move from the baseline the Watching panel
+ * keeps on this device (`seen[COIN] = { price, at }`, app/lib/watchlist.mjs), to the table's own price. The table only
+ * READS the baseline: tapping the coin in the Watching panel moves it, the table and chat never do. No baseline yet =
+ * null ("watching from now"), never 0. A price move, so green/red; nothing else.
+ * @returns {{ pct:number, at:number } | null}
+ */
+export function sinceLook(row, seenEntry) {
+  const p0 = n(seenEntry?.price), p = n(row?.price), at = n(seenEntry?.at);
+  if (!(p0 > 0) || !(p > 0) || at == null) return null;
+  return { pct: ((p - p0) / p0) * 100, at };
+}
+
+/** "+2.3% since your look 3h ago" in parts: the signed move and the age. */
+export function sinceLookCell(s, now = Date.now()) {
+  if (!s) return null;
+  const m = Math.max(0, Math.floor((now - s.at) / 60_000));
+  const ago = m < 1 ? "just now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
+  const sign = s.pct > 0.005 ? "+" : s.pct < -0.005 ? "−" : "";
+  return { move: `${sign}${Math.abs(s.pct).toFixed(Math.abs(s.pct) < 10 ? 2 : 1)}%`, ago, dir: sign === "+" ? 1 : sign === "−" ? -1 : 0 };
+}

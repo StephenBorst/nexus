@@ -154,3 +154,18 @@ test("activity dots: YOUR open call and YOUR open position, watched coins only, 
   assert.equal(openCallCoins(null), null);
   assert.equal(openCallCoins({ error: "x" }), null);
 });
+
+test("moved since you last looked: the Watching panel's baseline to the table's price, read only", async () => {
+  const { sinceLook, sinceLookCell } = await import("./marketTable.mjs");
+  const s = sinceLook({ price: 102.5 }, { price: 100, at: NOW - 3 * 3600_000, snap: {} });
+  assert.deepEqual(s, { pct: 2.5, at: NOW - 3 * 3600_000 });
+  assert.deepEqual(sinceLookCell(s, NOW), { move: "+2.50%", ago: "3h ago", dir: 1 });
+  assert.deepEqual(sinceLookCell(sinceLook({ price: 80 }, { price: 100, at: NOW - 30 * 60_000 }), NOW), { move: "−20.0%", ago: "30m ago", dir: -1 });
+  assert.equal(sinceLook({ price: 100 }, undefined), null, "never looked = no number, not 0");
+  assert.equal(sinceLook({ price: 100 }, { price: null, at: NOW }), null);
+  assert.equal(sinceLookCell(null, NOW), null);
+  // the table never moves the baseline: no markSeen / writeWatch in it
+  const ui = readFileSync(new URL("../pages/lab/MarketTable.tsx", import.meta.url), "utf8");
+  assert.match(ui, /sinceLook\(/);
+  assert.doesNotMatch(ui, /markSeen|writeWatch/);
+});

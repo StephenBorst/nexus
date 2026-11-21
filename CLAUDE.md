@@ -972,6 +972,9 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   **Activity dots** (2026-11-21, `yourMarks` / `openCallCoins`): on WATCHED rows only, ● = the connected wallet's open
   public call on that coin (`GET /theses/status/:wallet`, the Spot chips' source), ○ = its open Orderly position (SDK
   `usePositionStream`, in the browser). Facts about you, never the market; no wallet / unread = no dot.
+  **Since your look** (2026-11-21, `sinceLook` / `sinceLookCell`): a watched row prints "−2.07% since your look 45m ago",
+  the table's price vs the Watching panel's baseline (`seen[COIN].price` / `.at`, this device). READ only: the panel's tap
+  moves the baseline, the table never does (test-pinned: no markSeen / writeWatch in MarketTable.tsx). No baseline = no line.
 - **Callers on the coin (borst 2026-11-20, rules `app/lib/coinCrowd.mjs`, `app/components/CoinCrowd.tsx`):** every coin
   panel (drawer + dock) shows "Callers on X · N positioned · M open calls · K takes this week": `GET /theses/symbol/:coin`
   (the Spot strip's route: open positions + active public calls, each caller's graded record via `callerRecordLine`, rows
