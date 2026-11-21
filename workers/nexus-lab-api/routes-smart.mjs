@@ -17,6 +17,8 @@ import { json, normalizeAddress, recoverEthAddress } from "./shared.mjs";
 import { orderlyAccountId, xrayTrack, dedupeDaily } from "./logic.mjs";
 import { nextIndex, WL_INDEX_KEY } from "./walletWatch.mjs";
 import { mapLimit } from "./orderlyGet.mjs";
+import { syncHlTape, readTape } from "./routes-hltape.mjs";
+import { nextHlRow } from "../../app/lib/hlRecord.mjs";
 
 // ── Smart Money (Phase 1) ─────────────────────────────────────────────────────
 // Curated seed of top Hyperliquid traders (snapshotted from the public HL
@@ -146,6 +148,42 @@ export async function readXrayHist(env, address) {
   try { const a = JSON.parse(raw); return Array.isArray(a) ? a : []; } catch { return []; }
 }
 
+// ── A Hyperliquid wallet's watched record (2026-11-21, rules app/lib/hlRecord.mjs) ──
+// Its own series: realized = closed P&L net of fees on the collected fill tape since the record's first row. Same
+// row shape and the same xrayTrack grade as the Orderly record; a read that can't be complete is never stored.
+const XRAY_HL_PREFIX = "xray:hlhist:";
+
+export async function readHlHist(env, address) {
+  const raw = await env.LAB_STORE.get(XRAY_HL_PREFIX + address.toLowerCase());
+  if (!raw) return [];
+  try { const a = JSON.parse(raw); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+
+export async function snapshotHlRecord(env, address, { sync = syncHlTape, now = Date.now } = {}) {
+  const a = address.toLowerCase();
+  const hist = await readHlHist(env, a);
+  const t = now();
+  const last = hist[hist.length - 1];
+  if (last && Number.isFinite(last.t) && t - last.t < XRAY_SNAP_MIN_MS) return hist;
+  let tape = null;
+  try { tape = (await sync(env, a, { now: t }))?.record || null; } catch { tape = null; }
+  const r = nextHlRow(hist, tape, { now: t, minGapMs: XRAY_SNAP_MIN_MS });
+  if (!r.row) return Object.assign(hist, r.refused ? { partial: true, refused: r.refused } : {});
+  hist.push(r.row);
+  const trimmed = hist.slice(-XRAY_HIST_CAP);
+  await env.LAB_STORE.put(XRAY_HL_PREFIX + a, JSON.stringify(trimmed), { expirationTtl: XRAY_HIST_TTL });
+  return trimmed;
+}
+
+/** The record a wallet is graded on: its Orderly record once it has two rows, else its Hyperliquid one. */
+export async function readWatchedRecord(env, address) {
+  const orderly = await readXrayHist(env, address);
+  if (orderly.length >= 2) return { hist: orderly, venue: "orderly" };
+  const hl = await readHlHist(env, address);
+  if (hl.length >= 2 || (hl.length && !orderly.length)) return { hist: hl, venue: "hl" };
+  return { hist: orderly, venue: orderly.length ? "orderly" : null };
+}
+
 // Append a snapshot if the last one is stale AND there's real indexed data to
 // record (markets>0). Returns the (possibly unchanged) series. Never throws.
 // A PARTIAL read (any broker unread) is never stored (fixed 2026-11-21): its summed realized
@@ -175,7 +213,7 @@ export async function snapshotXray(env, address, agg, { aggregate = xrayAggregat
 // Cron sweep: snapshot every wallet anyone has starred (union of all watchlists)
 // so a Tracked Record accrues even when nobody is viewing it. Bounded + best-effort.
 // Exported: the 12h cron in index.js drives it.
-export async function sweepTrackedXray(env, { sleep = (ms) => new Promise((r) => setTimeout(r, ms)), ...deps } = {}) {
+export async function sweepTrackedXray(env, { sleep = (ms) => new Promise((r) => setTimeout(r, ms)), hlSync = syncHlTape, hlNow = Date.now, readTapeFn = readTape, ...deps } = {}) {
   const listed = await env.LAB_STORE.list({ prefix: "sm:wl:" });
   const addrs = new Set();
   for (const k of listed.keys) {
@@ -204,7 +242,25 @@ export async function sweepTrackedXray(env, { sleep = (ms) => new Promise((r) =>
       if (series.length > before) { snapped++; if (await emitTierEvent(env, a, series)) events++; }
     } catch { /* one wallet never stops the sweep */ }
   }, { gapMs: 1000, sleep });
-  return { watched: targets.length, snapped, partial, events };
+
+  // Hyperliquid wallets (2026-11-21): the board's HL wallets + any watched wallet we hold an HL tape for. Each sync
+  // can page HL's fill history (a first seed is ~9 reads), so they start ≥ 6 s apart.
+  const hlAddrs = new Set();
+  try {
+    const braw = await env.LAB_STORE.get(SM_BOARD_CACHE);
+    if (braw) for (const t of (JSON.parse(braw).traders || [])) if (t?.source === "hl" && /^0x[a-f0-9]{40}$/i.test(t.address || "")) hlAddrs.add(t.address.toLowerCase());
+  } catch { /* non-fatal */ }
+  for (const a of addrs) { if (hlAddrs.size >= 30) break; if (!hlAddrs.has(a) && await readTapeFn(env, a)) hlAddrs.add(a); }
+  let hlSnapped = 0, hlPartial = 0;
+  await mapLimit([...hlAddrs].slice(0, 30), 1, async (a) => {
+    try {
+      const before = (await readHlHist(env, a)).length;
+      const series = await snapshotHlRecord(env, a, { sync: hlSync, now: hlNow });
+      if (series.partial) { hlPartial++; return; }
+      if (series.length > before) { hlSnapped++; if (await emitTierEvent(env, a, series, { venue: "hl" })) events++; }
+    } catch { hlPartial++; }
+  }, { gapMs: 6000, sleep });
+  return { watched: targets.length, snapped, partial, events, hl: { watched: hlAddrs.size, snapped: hlSnapped, partial: hlPartial } };
 }
 
 // Graded, low-noise "tracked signals": when a fresh snapshot moves a wallet ACROSS
@@ -212,16 +268,17 @@ export async function sweepTrackedXray(env, { sleep = (ms) => new Promise((r) =>
 // against the last-seen tier per wallet so we never spam — only real crossings, and
 // only ~once/day (the snapshot cadence). Returns true if an event was emitted.
 const XRAY_TIER_RANK = { "": 0, TRACKED: 1, POSITIVE: 2, CONSISTENT: 3 };
-async function emitTierEvent(env, address, series) {
+async function emitTierEvent(env, address, series, { venue = "orderly" } = {}) {
   try {
     const tk = xrayTrack(series);
     const toKey = tk.tier ? tk.tier.tier : "";
-    const prevKey = (await env.LAB_STORE.get(`xray:tier:${address}`)) || "";
+    const tierKey = `xray:tier:${venue === "hl" ? "hl:" : ""}${address}`; // one tier per record, never shared across venues
+    const prevKey = (await env.LAB_STORE.get(tierKey)) || "";
     if (toKey === prevKey) return false;
-    await env.LAB_STORE.put(`xray:tier:${address}`, toKey, { expirationTtl: 400 * 86400 });
+    await env.LAB_STORE.put(tierKey, toKey, { expirationTtl: 400 * 86400 });
     const up = (XRAY_TIER_RANK[toKey] ?? 0) > (XRAY_TIER_RANK[prevKey] ?? 0);
     const ev = {
-      wallet: address, kind: up ? "TIER_UP" : "TIER_DOWN",
+      wallet: address, venue, kind: up ? "TIER_UP" : "TIER_DOWN",
       fromTier: prevKey || null, toTier: toKey || null,
       operatorScore: tk.operatorScore, netRealized: tk.netRealized, ts: Date.now(),
     };
@@ -578,8 +635,14 @@ export async function handleSmart(parts, request, env, ctx) {
     if (stale) { try { hist = await snapshotXray(env, address); } catch { /* keep stored */ } }
     // `series` = the daily realized points behind the track, so the X-Ray can read
     // time windows (24H/7D/30D) off the watched record. Additive; old clients ignore it.
+    let venue = hist.length ? "orderly" : null;
+    if (hist.length < 2) {
+      // No Orderly record: a Hyperliquid wallet's own watched record (stored by the sweep; read-only here).
+      const hl = await readHlHist(env, address);
+      if (hl.length > hist.length) { hist = hl; venue = "hl"; }
+    }
     const series = dedupeDaily(hist).map((s) => ({ t: s.t, realized: s.realized || 0 }));
-    return json({ address, snapshots: hist.length, track: xrayTrack(hist), series, updatedAt: Date.now() }, request);
+    return json({ address, venue, snapshots: hist.length, track: xrayTrack(hist), series, updatedAt: Date.now() }, request);
   }
 
   if (parts[0] === "smart" && parts[1] === "xray" && parts[2] === "events" && request.method === "GET") {
@@ -600,7 +663,7 @@ export async function handleSmart(parts, request, env, ctx) {
       .map((s) => s.trim().toLowerCase()).filter((a) => /^0x[a-f0-9]{40}$/.test(a)))].slice(0, 60);
     const out = {};
     await Promise.all(addrs.map(async (a) => {
-      const hist = await readXrayHist(env, a);
+      const { hist, venue } = await readWatchedRecord(env, a);
       if (hist.length < 2) return;
       const tk = xrayTrack(hist);
       // The parts the score is made of ride along (visual pass 2026-11-21): Smart Money shows the facts
@@ -608,7 +671,7 @@ export async function handleSmart(parts, request, env, ctx) {
       out[a] = {
         operatorScore: tk.operatorScore, tier: tk.tier, scored: tk.scored,
         netRealized: tk.netRealized, daysTracked: tk.daysTracked, trend: tk.trend, points: tk.points,
-        gradedWindows: tk.gradedWindows, winWindows: tk.winWindows, maxDrawdown: tk.maxDrawdown,
+        gradedWindows: tk.gradedWindows, winWindows: tk.winWindows, maxDrawdown: tk.maxDrawdown, venue,
       };
     }));
     return json({ tracked: out }, request);

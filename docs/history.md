@@ -2651,3 +2651,10 @@ borst: "go" on the third visual-first pass (after /proof #416 and /intel #417).
 - Layout: strip by stage, wallets by stage then graded days, the score as a dot between its 40 / 65 bars with its
   facts, building records folded only while some wallet is scored. Same numbers, no new score.
 
+## Hyperliquid watched record (2026-11-21)
+borst: "do the Hyperliquid snapshots first". The Smart Money board's 10 Hyperliquid wallets never built a record: the
+daily snapshot summed Orderly brokers only, so an HL wallet read 0 markets and was skipped. HL has no lifetime
+realized figure and serves only the newest 10k fills, so the record sums closed P&L net of fees on our forward-collected
+fill tape from the record's first day (no back-fill: a watched record counts from when we started watching, like
+Orderly's). A tape that isn't freshly synced, or has a gap since the anchor, is never stored.
+
