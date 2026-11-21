@@ -3,6 +3,7 @@
 // mispriced board), then, in-process: the venues board, smart-money consensus, the forecasts board, the news wire and
 // every registered read's paper run. Read-only, 60 s cache. A failed source leaves its column unread and named.
 
+import { swrServe } from "./swrCache.mjs";
 import { marketTable } from "../../app/lib/marketTable.mjs";
 import { readNews } from "./routes-news.mjs";
 import { readBoard, readPaperRuns } from "./routes-wire.mjs";
@@ -29,12 +30,9 @@ export async function composeTable(env, { futures, dispatch, news = (e) => readN
 export async function handleTable(parts, request, env, deps = {}) {
   if (!(parts[0] === "intel" && parts[1] === "table" && !parts[2] && request.method === "GET")) return null;
   const now = deps.now ?? Date.now();
-  try {
-    const hit = JSON.parse((await env.LAB_STORE.get(TABLE_CACHE_KEY)) || "null");
-    if (hit && now - hit.builtAt < TABLE_TTL_MS) return json(hit, request);
-  } catch { /* best-effort */ }
-  const out = await composeTable(env, { ...deps, now });
-  // a build with no markets is never cached: the next request tries again
-  if (out.rows.length) { try { await env.LAB_STORE.put(TABLE_CACHE_KEY, JSON.stringify(out), { expirationTtl: 300 }); } catch { /* best-effort */ } }
-  return json(out, request);
+  // A visitor never waits on a build while a copy exists (swrCache.mjs); a build with no markets is never stored, so
+  // it never replaces a good table and the next request tries again.
+  const { body } = await swrServe({ kv: env.LAB_STORE, key: TABLE_CACHE_KEY, now, freshMs: TABLE_TTL_MS, waitUntil: deps.waitUntil || null,
+    keep: (o) => Array.isArray(o?.rows) && o.rows.length > 0, compose: () => composeTable(env, { ...deps, now }) });
+  return json(body, request);
 }

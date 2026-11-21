@@ -19,7 +19,10 @@ export const BASIS_FADE_DEFAULTS = Object.freeze({ window: 168, minWarmup: 48, p
 
 // Nearest-rank quantile. Lives here (not in axisbt) so grading and trading share it.
 export function trailingPct(values, p) {
-  const arr = (values || []).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  return pctOfSorted((values || []).filter((v) => Number.isFinite(v)).sort((a, b) => a - b), p);
+}
+// The same nearest-rank pick on an array already sorted ascending (no copy, no sort).
+export function pctOfSorted(arr, p) {
   if (!arr.length) return null;
   const idx = Math.min(arr.length - 1, Math.max(0, Math.ceil(p * arr.length) - 1));
   return arr[idx];
@@ -36,10 +39,36 @@ export function basisExtremeSide(trailAbs, basisPct, { minWarmup, pct } = {}) {
   if (!Number.isFinite(basisPct)) return null;
   const trail = (trailAbs || []).filter((v) => Number.isFinite(v));
   if (trail.length < cfg.minWarmup) return null;
-  const thr = trailingPct(trail, cfg.pct);
+  return extremeSideAt(trailingPct(trail, cfg.pct), basisPct);
+}
+// The decision once the threshold is known: strictly ABOVE it (a flat regime has no extreme); premium → SHORT.
+function extremeSideAt(thr, basisPct) {
   const mag = Math.abs(basisPct);
-  if (!(thr > 0) || !(mag > thr)) return null;   // strictly ABOVE — a flat regime has no extreme
+  if (!(thr > 0) || !(mag > thr)) return null;
   return basisPct > 0 ? "SHORT" : "LONG";
+}
+
+/**
+ * basisExtremeSide at EVERY row of a series, the way the scoreboard grades it: row i's trail = |basisPct| of the
+ * `window` rows strictly before it. The same decision (extremeSideAt) on the same nearest-rank threshold, from a sorted
+ * window that slides one row at a time instead of re-sorting a week of rows each hour (2026-11-21, speed; pinned equal
+ * to the per-row path by basisFade.test.mjs). `rows` = sorted by time, every basisPct finite.
+ * @returns {(("LONG"|"SHORT")|null)[]}
+ */
+export function basisExtremeSeries(rows, { window, minWarmup, pct } = {}) {
+  const cfg = { window: window ?? BASIS_FADE_DEFAULTS.window, minWarmup: minWarmup ?? BASIS_FADE_DEFAULTS.minWarmup, pct: pct ?? BASIS_FADE_DEFAULTS.pct };
+  const sorted = [];
+  const lowerBound = (v) => { let lo = 0, hi = sorted.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < v) lo = mid + 1; else hi = mid; } return lo; };
+  const out = new Array(rows.length).fill(null);
+  for (let i = 0; i < rows.length; i++) {
+    const b = rows[i].basisPct;
+    if (Number.isFinite(b) && sorted.length >= cfg.minWarmup) out[i] = extremeSideAt(pctOfSorted(sorted, cfg.pct), b);
+    const add = Math.abs(b);
+    if (Number.isFinite(add)) sorted.splice(lowerBound(add), 0, add);
+    const gone = i - cfg.window;
+    if (gone >= 0) { const v = Math.abs(rows[gone].basisPct); if (Number.isFinite(v)) { const at = lowerBound(v); if (sorted[at] === v) sorted.splice(at, 1); } }
+  }
+  return out;
 }
 
 // LIVE read off the recorded basis:hist series ([{t, basisPct}], any order).
