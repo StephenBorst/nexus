@@ -12,8 +12,8 @@ export const PROMOTION_LOCKS = Object.freeze({
     "lostStage": "LEAD",
     "demotedAt": "2026-11-20T13:53:51.022Z",
     "eventsAtDemotion": 55,
-    "cleanPasses": 0,
-    "lastPassAt": null
+    "cleanPasses": 1,
+    "lastPassAt": "2026-11-21T13:53:35.685Z"
   },
   "oi_div_reversal_4h": {
     "lostStage": "PAPER",

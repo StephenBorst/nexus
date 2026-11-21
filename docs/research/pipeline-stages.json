@@ -1,7 +1,7 @@
 {
   "note": "Last recorded stage of each registered read (served pipeline.reads[].stage) and the Basis x CVD graded-exit status (graded-exit-prereg.md bar). Written only by tools/pipeline/watch.mjs --write, inside a pipeline-watch PR. Seeded 2026-10-26: reads as served that day; the graded exit as pipeline-if-then.md recorded it on 2026-10-23 (Not yet), so any change since the signed page is reported.",
-  "recordedAt": "2026-11-20T14:47:27.002Z",
-  "asOf": "2026-11-20T13:53:51.022Z",
+  "recordedAt": "2026-11-21T14:46:49.230Z",
+  "asOf": "2026-11-21T13:53:35.685Z",
   "reads": {
     "rsi_reset_deep": {
       "stage": "REGISTERED",
@@ -11,37 +11,37 @@
     "level_reclaim": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 118
+      "events": 124
     },
     "oi_div_reversal": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 63
+      "events": 71
     },
     "session_momentum": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 165
+      "events": 168
     },
     "confluence_follow": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 109
+      "events": 114
     },
     "oi_div_reversal_4h": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 99
+      "events": 111
     },
     "oi_coil_break": {
-      "stage": "REGISTERED",
-      "next": "mean R > 0 with both halves agreeing",
+      "stage": "LEAD",
+      "next": "beat 95% of random entries (now 28.7%) · shorts beat ≥ 50% of random shorts (now 42.3%) · holdout mean R > 0 and ≥ 80% vs random (now 0.31R, 40.2%)",
       "events": 55
     },
     "session_fade": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 71
+      "events": 74
     },
     "level_reclaim_tight": {
       "stage": "REGISTERED",
@@ -50,23 +50,23 @@
     },
     "spot_absorb": {
       "stage": "REGISTERED",
-      "next": "28 more out-of-sample events",
-      "events": 2
+      "next": "25 more out-of-sample events",
+      "events": 5
     },
     "btc_lead_lag": {
       "stage": "LEAD",
-      "next": "beat 95% of random entries (now 0%) · longs beat ≥ 50% of random longs (now 2.3%) · shorts beat ≥ 50% of random shorts (now 1%) · holdout mean R > 0 and ≥ 80% vs random (now 0.16R, 16.8%)",
-      "events": 87
+      "next": "beat 95% of random entries (now 23.8%) · shorts beat ≥ 50% of random shorts (now 15%) · holdout mean R > 0 and ≥ 80% vs random (now 0.32R, 42%)",
+      "events": 106
     },
     "funding_basis_split": {
       "stage": "REGISTERED",
       "next": "mean R > 0 with both halves agreeing",
-      "events": 68
+      "events": 75
     },
     "smart_consensus_2x": {
       "stage": "LEAD",
-      "next": "beat 95% of random entries (now 42.3%) · shorts beat ≥ 50% of random shorts (now 40%) · holdout mean R > 0 and ≥ 80% vs random (now 0.48R, 63.8%)",
-      "events": 47
+      "next": "beat 95% of random entries (now 56.7%)",
+      "events": 58
     },
     "shelf_breakdown_short": {
       "stage": "REGISTERED",
@@ -74,27 +74,27 @@
       "events": 1
     },
     "bb_rsi_momentum": {
-      "stage": "REGISTERED",
-      "next": "mean R > 0 with both halves agreeing",
-      "events": 30
+      "stage": "LEAD",
+      "next": "beat 95% of random entries (now 0%) · shorts beat ≥ 50% of random shorts (now 1%) · holdout mean R > 0 and ≥ 80% vs random (now 0.13R, 0.3%)",
+      "events": 39
     },
     "session_fade_short": {
       "stage": "REGISTERED",
-      "next": "30 more out-of-sample events",
-      "events": 0
+      "next": "28 more out-of-sample events",
+      "events": 2
     },
     "oi_div_reversal_4h_long": {
       "stage": "REGISTERED",
-      "next": "27 more out-of-sample events",
-      "events": 3
+      "next": "16 more out-of-sample events",
+      "events": 14
     }
   },
   "gradedExit": {
     "basis_x_cvd": {
       "status": "FAILS",
       "reason": "the read is NOISE, below PREDICTIVE",
-      "trades": 64,
-      "netBps": -65.6
+      "trades": 70,
+      "netBps": -84.2
     }
   },
   "locks": {
@@ -116,19 +116,19 @@
       "lostStage": "LEAD",
       "demotedAt": "2026-11-20T13:53:51.022Z",
       "eventsAtDemotion": 55,
-      "cleanPasses": 0,
-      "lastPassAt": null
+      "cleanPasses": 1,
+      "lastPassAt": "2026-11-21T13:53:35.685Z"
     }
   },
   "tests": {
     "basis_x_cvd:regime_window": {
       "status": "COUNTING",
-      "reason": "needs the regime condition (one regime only: DOWN 11 days, FLAT 13 days), or the six-month limit (2027-04-27T00:00:00Z)",
-      "trades": 43,
-      "netBps": -80.5,
+      "reason": "needs the regime condition (one regime only: DOWN 12 days, FLAT 13 days), or the six-month limit (2027-04-27T00:00:00Z)",
+      "trades": 49,
+      "netBps": -105.3,
       "regime": {
         "UP": 0,
-        "DOWN": 11,
+        "DOWN": 12,
         "FLAT": 13
       },
       "belowPredictive": true,
@@ -150,8 +150,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "stress": 12,
-      "calm": 46,
+      "stress": 13,
+      "calm": 53,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -160,8 +160,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "stress": 6,
-      "calm": 30,
+      "stress": 11,
+      "calm": 35,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -170,8 +170,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "stress": 21,
-      "calm": 76,
+      "stress": 22,
+      "calm": 88,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -180,8 +180,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "stress": 10,
-      "calm": 60,
+      "stress": 13,
+      "calm": 67,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -190,8 +190,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "stress": 13,
-      "calm": 60,
+      "stress": 18,
+      "calm": 69,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -200,8 +200,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "stress": 2,
-      "calm": 36,
+      "stress": 3,
+      "calm": 41,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -223,7 +223,7 @@
       "verdict": null,
       "final": false,
       "with": 1,
-      "against": 12,
+      "against": 18,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -233,7 +233,7 @@
       "verdict": null,
       "final": false,
       "with": 1,
-      "against": 0,
+      "against": 9,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -242,8 +242,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "with": 12,
-      "against": 0,
+      "with": 15,
+      "against": 2,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -252,8 +252,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "with": 3,
-      "against": 6,
+      "with": 8,
+      "against": 10,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -263,7 +263,7 @@
       "verdict": null,
       "final": false,
       "with": 3,
-      "against": 2,
+      "against": 13,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -272,7 +272,7 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "with": 0,
+      "with": 6,
       "against": 6,
       "d": null,
       "p": null,
@@ -282,8 +282,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "with": 0,
-      "against": 14,
+      "with": 2,
+      "against": 15,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -302,8 +302,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "with": 0,
-      "against": 1,
+      "with": 1,
+      "against": 3,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -312,8 +312,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "with": 15,
-      "against": 3,
+      "with": 30,
+      "against": 4,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -322,8 +322,8 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "with": 4,
-      "against": 12,
+      "with": 6,
+      "against": 20,
       "d": null,
       "p": null,
       "judgedAt": null
@@ -332,7 +332,7 @@
       "status": "ACCRUING",
       "verdict": null,
       "final": false,
-      "with": 19,
+      "with": 33,
       "against": 0,
       "d": null,
       "p": null,
