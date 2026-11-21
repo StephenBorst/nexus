@@ -4,7 +4,9 @@
 // row opens the coin's drawer. Phone: the coin column stays put while the rest scrolls sideways.
 // YOUR COINS FIRST (borst 2026-11-20): coins on this device's watchlist (the drawer's ☆, or the ☆ on a row) stay on top
 // whatever the table sorts by; they sort among themselves by the same column, everything else sorts underneath.
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { handOffCall } from "@/lib/callHandoff";
 import { C, MONO, UI, SIGNAL } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
 import { sharedJson } from "@/lib/sharedJson.mjs";
@@ -44,6 +46,9 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
   const [help, setHelp] = useState(false);
   const [watched, setWatched] = useState<string[]>(() => readWatch().coins);
   const [full, setFull] = useState(false);
+  // Table → call (2026-11-21): "Call" on a row asks the side right under it; the trader picks, never the table.
+  const [callFor, setCallFor] = useState<string | null>(null);
+  const navigate = useNavigate();
   const [now, setNow] = useState(() => Date.now());
 
   // the device watchlist: the drawer's ☆, the Watching panel and this table stay in step (WATCH_EVENT)
@@ -77,15 +82,22 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
   );
   const renderRow = (r: Row) => {
     const on = watched.includes(r.coin);
+    const asking = callFor === r.coin;
+    const callOn = (side: "LONG" | "SHORT") => handOffCall(r.coin, side, navigate, "market-table");
+    const sideBtn = (side: "LONG" | "SHORT"): React.CSSProperties => ({
+      fontFamily: UI, fontSize: 13, fontWeight: 600, padding: "7px 12px", borderRadius: 8, cursor: "pointer", background: "transparent",
+      color: side === "LONG" ? C.pos : C.neg, border: `1px solid ${side === "LONG" ? C.pos : C.neg}`,
+    });
     return (
-      <tr key={r.coin} role="button" tabIndex={0} aria-label={`Open ${r.coin}`} onClick={() => openMarket(r.coin)} onKeyDown={pressKey(() => openMarket(r.coin))}
+      <Fragment key={r.coin}>
+      <tr role="button" tabIndex={0} aria-label={`Open ${r.coin}`} onClick={() => openMarket(r.coin)} onKeyDown={pressKey(() => openMarket(r.coin))}
         style={{ cursor: "pointer", borderTop: `1px solid ${C.border}` }}>
         <td style={{ position: "sticky", left: 0, zIndex: 1, background: C.canvas, padding: "8px 10px 8px 4px", borderTop: `1px solid ${C.border}`, whiteSpace: "nowrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button type="button" aria-pressed={on} aria-label={on ? `Unpin ${r.coin}` : `Pin ${r.coin} to the top`} title={on ? "Watching: pinned to the top" : "Watch: pin to the top"}
               onClick={(e) => { e.stopPropagation(); star(r.coin); }} onKeyDown={(e) => e.stopPropagation()}
               style={{ fontFamily: UI, fontSize: 15, lineHeight: 1, padding: "4px", background: "none", border: "none", cursor: "pointer", color: on ? C.text.bright : C.text.faint }}>{on ? "★" : "☆"}</button>
-            <div>
+            <div style={{ minWidth: 88 }}>
               <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: C.text.bright }}>{r.coin}</div>
               <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted }}>
                 {price(r.price)}{" "}
@@ -93,6 +105,9 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
                 {r.thin && <span> · thin</span>}
               </div>
             </div>
+            <button type="button" aria-expanded={asking} aria-label={`Post a call on ${r.coin}`} title={`Post a call on ${r.coin}: you pick the side, levels build from live price`}
+              onClick={(e) => { e.stopPropagation(); setCallFor(asking ? null : r.coin); }} onKeyDown={(e) => e.stopPropagation()}
+              style={{ marginLeft: 6, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "4px 9px", borderRadius: 7, cursor: "pointer", background: asking ? C.accent : "transparent", color: asking ? C.canvas : C.text.fog, border: `1px solid ${asking ? C.accent : C.borderStrong}` }}>Call</button>
           </div>
         </td>
         {td(fundingCell(r), { past: !!r.fundingPast })}
@@ -105,6 +120,19 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
           style={{ padding: "10px", textAlign: "right", fontFamily: MONO, fontSize: 12, color: r.reads && r.reads.length ? C.text.bright : C.text.muted }}>{readsCell(r)}</td>
         {td(usdShort(r.oiUsd), { dim: true })}
       </tr>
+      {asking && (
+        <tr>
+          <td colSpan={TABLE_COLUMNS.length} style={{ padding: 0, background: C.surfaceAlt }}>
+            <div className="nx-fade-in" style={{ position: "sticky", left: 0, display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "10px 10px 12px", maxWidth: "min(100vw - 32px, 640px)" }}>
+              <span style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, flexBasis: "100%" }}>Your call on {r.coin}. Which way? Levels build from live price; you post it, and it’s graded from public price.</span>
+              <button type="button" style={sideBtn("LONG")} onClick={() => callOn("LONG")}>↑ Long {r.coin}</button>
+              <button type="button" style={sideBtn("SHORT")} onClick={() => callOn("SHORT")}>↓ Short {r.coin}</button>
+              <button type="button" className="nx-text-action" onClick={() => setCallFor(null)} style={{ fontFamily: UI, fontSize: 13, color: C.text.muted, background: "none", border: "none", padding: "0 4px", cursor: "pointer" }}>Cancel</button>
+            </div>
+          </td>
+        </tr>
+      )}
+      </Fragment>
     );
   };
 

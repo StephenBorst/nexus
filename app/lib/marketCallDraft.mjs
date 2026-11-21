@@ -8,7 +8,7 @@ import { marketCoin } from "./marketRead.mjs";
  * The draft for a coin + the side the trader tapped. Clears the previous coin's levels and text, so nothing
  * from another call rides along. null for a bad coin or side.
  */
-export function marketCallDraft(coin, side) {
+export function marketCallDraft(coin, side, source = "market-drawer") {
   const c = marketCoin(coin);
   if (!c || (side !== "LONG" && side !== "SHORT")) return null;
   return {
@@ -17,6 +17,6 @@ export function marketCallDraft(coin, side) {
     notes: "", catalyst: "", targetWindow: "",
     sideChosen: true, // the trader's own tap, not a suggestion: the WATCH gate doesn't un-arm it
     build: true,      // build the levels from live price on arrival
-    source: "market-drawer",
+    source: source === "market-table" ? "market-table" : "market-drawer", // where the tap came from (a record, never a rule)
   };
 }

@@ -19,11 +19,22 @@ test("no side, no draft: the drawer never picks one", () => {
   assert.equal(marketCallDraft("../x", "LONG"), null);
 });
 
-test("the drawer asks for the side and hands off through the shared draft contract", () => {
-  const src = readFileSync(new URL("../components/MarketDrawer.tsx", import.meta.url), "utf8");
-  assert.match(src, /marketCallDraft\(coin, side\)/);
-  assert.match(src, /new CustomEvent\("nexus:thesis-draft"\)/);
-  assert.doesNotMatch(src, /From the \$\{coin\} market drawer/, "no machine-written note in the trader's call");
+test("the drawer and the market table ask for the side and hand off through ONE shared draft contract", () => {
+  const handoff = readFileSync(new URL("./callHandoff.ts", import.meta.url), "utf8");
+  assert.match(handoff, /marketCallDraft\(coin, side, source\)/);
+  assert.match(handoff, /new CustomEvent\("nexus:thesis-draft"\)/);
+  const drawer = readFileSync(new URL("../components/MarketDrawer.tsx", import.meta.url), "utf8");
+  const table = readFileSync(new URL("../pages/lab/MarketTable.tsx", import.meta.url), "utf8");
+  assert.match(drawer, /handOffCall\(coin, side, navigate, "market-drawer"\)/);
+  assert.match(table, /handOffCall\(r\.coin, side, navigate, "market-table"\)/);
+  for (const src of [handoff, drawer, table]) assert.doesNotMatch(src, /From the \$\{coin\} market drawer/, "no machine-written note in the trader's call");
+});
+
+test("a draft records where the tap came from; it never picks a side", () => {
+  assert.equal(marketCallDraft("SOL", "LONG", "market-table").source, "market-table");
+  assert.equal(marketCallDraft("SOL", "LONG").source, "market-drawer");
+  assert.equal(marketCallDraft("SOL", "LONG", "anything").source, "market-drawer");
+  assert.equal(marketCallDraft("SOL", undefined, "market-table"), null);
 });
 
 test("the Thesis Engine keeps a chosen side and builds on arrival", () => {
