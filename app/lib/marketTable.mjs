@@ -179,3 +179,30 @@ export function yourCoinsFirst(table, watched, col = DEFAULT_SORT.col, dir = DEF
     missing: want.filter((c) => !byCoin.has(c)),
   };
 }
+
+// ── Activity dots on your coins (borst 2026-11-21) ──────────────────────────────────────────────────────────────────
+// The Spot page's Recent chips carry a dot for "you have an open public call on it". On the perp table, a watched coin's
+// row carries the same two facts about YOU, never about the market: an open public call by the connected wallet
+// (GET /theses/status/:wallet, the Spot chips' source) and an open Orderly position in that market (the SDK's position
+// stream, read in the browser). Watched coins only. No wallet / unread source = no dot, never a guess.
+/**
+ * @param {string[]} watched bare coins on this device's watchlist
+ * @param {{ openCalls?: Set<string>|null, positions?: Array<{symbol:string, position_qty?:number}>|null }} mine
+ * @returns {Record<string, { call: boolean, position: boolean }>} only coins with at least one mark
+ */
+export function yourMarks(watched, { openCalls = null, positions = null } = {}) {
+  const calls = openCalls instanceof Set ? openCalls : new Set();
+  const held = new Set((Array.isArray(positions) ? positions : []).filter((p) => p && Number(p.position_qty) !== 0 && Number.isFinite(Number(p.position_qty))).map((p) => bare(p.symbol)));
+  const out = {};
+  for (const c of (watched || []).map((x) => bare(String(x).replace(/^\$/, "")))) {
+    const call = calls.has(c), position = held.has(c);
+    if (call || position) out[c] = { call, position };
+  }
+  return out;
+}
+
+/** The coins a wallet has an open public call on, from its /theses/status reply (null = unread). */
+export function openCallCoins(status) {
+  if (!status || !Array.isArray(status.calls)) return null;
+  return new Set(status.calls.map((c) => bare(c?.symbol)).filter(Boolean));
+}

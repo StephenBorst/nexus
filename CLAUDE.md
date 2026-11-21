@@ -963,6 +963,9 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   **Table → call** (2026-11-21): "Call" on each row asks Long / Short right under it (the table never picks a side), then
   `handOffCall` (`app/lib/callHandoff.ts`, the ONE hand-off the drawer uses too) writes the `marketCallDraft` (source
   `market-table`) and opens the Thesis Engine, which builds levels from live price; the trader posts.
+  **Activity dots** (2026-11-21, `yourMarks` / `openCallCoins`): on WATCHED rows only, ● = the connected wallet's open
+  public call on that coin (`GET /theses/status/:wallet`, the Spot chips' source), ○ = its open Orderly position (SDK
+  `usePositionStream`, in the browser). Facts about you, never the market; no wallet / unread = no dot.
 - **Callers on the coin (borst 2026-11-20, rules `app/lib/coinCrowd.mjs`, `app/components/CoinCrowd.tsx`):** every coin
   panel (drawer + dock) shows "Callers on X · N positioned · M open calls · K takes this week": `GET /theses/symbol/:coin`
   (the Spot strip's route: open positions + active public calls, each caller's graded record via `callerRecordLine`, rows

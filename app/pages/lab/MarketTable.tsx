@@ -6,6 +6,7 @@
 // whatever the table sorts by; they sort among themselves by the same column, everything else sorts underneath.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAccount, usePositionStream } from "@orderly.network/hooks";
 import { handOffCall } from "@/lib/callHandoff";
 import { C, MONO, UI, SIGNAL } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
@@ -15,7 +16,7 @@ import { openMarket } from "@/lib/marketDrawerEvent.mjs";
 import { boardsAt, boardForColumn } from "@/lib/intelLenses.mjs";
 import {
   TABLE_COLUMNS, DEFAULT_SORT, nextSort, usdShort, fundingCell, oiVolCell, gapCell, smartCell, forecastCell,
-  newsCell, readsCell, yourCoinsFirst,
+  newsCell, readsCell, yourCoinsFirst, yourMarks, openCallCoins,
 } from "@/lib/marketTable.mjs";
 import { readWatch, toggleWatchCoin } from "@/lib/watchStore";
 import { WATCH_EVENT, WATCH_MAX } from "@/lib/watchlist.mjs";
@@ -49,6 +50,21 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
   // Table → call (2026-11-21): "Call" on a row asks the side right under it; the trader picks, never the table.
   const [callFor, setCallFor] = useState<string | null>(null);
   const navigate = useNavigate();
+  // Activity dots on your coins (2026-11-21): YOUR open public call (the Spot chips' source) and YOUR open Orderly position.
+  const { state: acct } = useAccount();
+  const wallet = (acct as { address?: string })?.address ?? null;
+  const [{ rows: positionRows }] = usePositionStream();
+  const [openCalls, setOpenCalls] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (!wallet) { setOpenCalls(null); return; }
+    let alive = true;
+    sharedJson(`https://og.nexustradinglabs.com/theses/status/${encodeURIComponent(wallet)}`)
+      .then((j) => { if (alive) setOpenCalls(openCallCoins(j) as Set<string> | null); })
+      .catch(() => { if (alive) setOpenCalls(null); });
+    return () => { alive = false; };
+  }, [wallet]);
+  const marks = useMemo(() => yourMarks(watched, { openCalls, positions: (positionRows ?? null) as Array<{ symbol: string; position_qty?: number }> | null }) as Record<string, { call: boolean; position: boolean }>,
+    [watched, openCalls, positionRows]);
   const [now, setNow] = useState(() => Date.now());
 
   // the device watchlist: the drawer's ☆, the Watching panel and this table stay in step (WATCH_EVENT)
@@ -98,7 +114,11 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
               onClick={(e) => { e.stopPropagation(); star(r.coin); }} onKeyDown={(e) => e.stopPropagation()}
               style={{ fontFamily: UI, fontSize: 15, lineHeight: 1, padding: "4px", background: "none", border: "none", cursor: "pointer", color: on ? C.text.bright : C.text.faint }}>{on ? "★" : "☆"}</button>
             <div style={{ minWidth: 88 }}>
-              <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: C.text.bright }}>{r.coin}</div>
+              <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: C.text.bright }}>
+                {r.coin}
+                {marks[r.coin]?.call && <span title="You have an open public call on it" aria-label="your open call" style={{ marginLeft: 5, fontSize: 9, color: C.text.bright, verticalAlign: "2px" }}>●</span>}
+                {marks[r.coin]?.position && <span title="You hold an open position in it on Orderly" aria-label="your open position" style={{ marginLeft: 3, fontSize: 9, color: C.text.fog, verticalAlign: "2px" }}>○</span>}
+              </div>
               <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted }}>
                 {price(r.price)}{" "}
                 {r.change24hPct != null && <span style={{ color: r.change24hPct > 0 ? C.pos : r.change24hPct < 0 ? C.neg : C.text.muted }}>{r.change24hPct > 0 ? "+" : r.change24hPct < 0 ? "−" : ""}{Math.abs(r.change24hPct).toFixed(1)}%</span>}
@@ -211,6 +231,7 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
           {table.leftOut > 0 && <span>{table.leftOut} thinner markets (under $30k open interest) left out unless you watch one.</span>}
           {view.missing.length > 0 && <span>Watching {view.missing.join(", ")}: not listed on Orderly right now.</span>}
           {full && <span>Your watchlist holds {WATCH_MAX} coins. Unpin one first.</span>}
+          {Object.keys(marks).length > 0 && <span>● your open call · ○ your open position</span>}
           <span>Orderly markets, venues, smart money, forecasts, news and paper runs · updated {wireWhen(table.builtAt, now)}{wireWhen(table.builtAt, now) === "now" ? "" : " ago"}.</span>
           {table.unread.length > 0 && <span>Unread right now: {table.unread.map((u) => UNREAD_WORDS[u] ?? u).join(", ")}.</span>}
         </div>
