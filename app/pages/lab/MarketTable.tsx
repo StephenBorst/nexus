@@ -16,7 +16,7 @@ import { openMarket } from "@/lib/marketDrawerEvent.mjs";
 import { boardsAt, boardForColumn } from "@/lib/intelLenses.mjs";
 import {
   TABLE_COLUMNS, DEFAULT_SORT, nextSort, usdShort, fundingCell, oiVolCell, gapCell, smartCell, forecastCell,
-  newsCell, readsCell, yourCoinsFirst, yourMarks, openCallCoins,
+  newsCell, readsCell, yourCoinsFirst, yourMarks, openCallCoins, sinceLook, sinceLookCell,
 } from "@/lib/marketTable.mjs";
 import { readWatch, toggleWatchCoin } from "@/lib/watchStore";
 import { WATCH_EVENT, WATCH_MAX } from "@/lib/watchlist.mjs";
@@ -46,6 +46,8 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
   const [all, setAll] = useState(false);
   const [help, setHelp] = useState(false);
   const [watched, setWatched] = useState<string[]>(() => readWatch().coins);
+  // the Watching panel's baselines (price + time of your last look), READ only here: the table never moves them
+  const [seen, setSeen] = useState<Record<string, { price?: number; at?: number }>>(() => readWatch().seen as Record<string, { price?: number; at?: number }>);
   const [full, setFull] = useState(false);
   // Table → call (2026-11-21): "Call" on a row asks the side right under it; the trader picks, never the table.
   const [callFor, setCallFor] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
 
   // the device watchlist: the drawer's ☆, the Watching panel and this table stay in step (WATCH_EVENT)
   useEffect(() => {
-    const sync = () => setWatched(readWatch().coins);
+    const sync = () => { const w = readWatch(); setWatched(w.coins); setSeen(w.seen as Record<string, { price?: number; at?: number }>); };
     window.addEventListener(WATCH_EVENT, sync);
     window.addEventListener("storage", sync);
     return () => { window.removeEventListener(WATCH_EVENT, sync); window.removeEventListener("storage", sync); };
@@ -124,6 +126,14 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
                 {r.change24hPct != null && <span style={{ color: r.change24hPct > 0 ? C.pos : r.change24hPct < 0 ? C.neg : C.text.muted }}>{r.change24hPct > 0 ? "+" : r.change24hPct < 0 ? "−" : ""}{Math.abs(r.change24hPct).toFixed(1)}%</span>}
                 {r.thin && <span> · thin</span>}
               </div>
+              {on && (() => {
+                const sl = sinceLookCell(sinceLook(r, seen[r.coin]), now) as { move: string; ago: string; dir: number } | null;
+                return sl ? (
+                  <div title="The price move since you last opened this coin in the Watching panel (this device)" style={{ fontFamily: MONO, fontSize: 10.5, color: C.text.muted }}>
+                    <span style={{ color: sl.dir > 0 ? C.pos : sl.dir < 0 ? C.neg : C.text.muted }}>{sl.move}</span> since your look {sl.ago}
+                  </div>
+                ) : null;
+              })()}
             </div>
             <button type="button" aria-expanded={asking} aria-label={`Post a call on ${r.coin}`} title={`Post a call on ${r.coin}: you pick the side, levels build from live price`}
               onClick={(e) => { e.stopPropagation(); setCallFor(asking ? null : r.coin); }} onKeyDown={(e) => e.stopPropagation()}

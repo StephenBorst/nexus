@@ -945,6 +945,12 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   are dated when FIRST seen (`intel:wire:seen:v1`), so they don't sit on top forever. Each row keeps its own source and
   grade line (headline / call / wallet lines say what they are not); filter chips; no tally, no direction. A board
   that fails is named in `unread`.
+  **Your calls on the Wire** (borst 2026-11-21, `myCallRows` / `withMine`): with a wallet connected, TheWire.tsx reads
+  its own `GET /theses/status/:wallet` in the browser (the shared route never carries a wallet, test-pinned) and merges
+  "Your call" rows (kind MINE): a resting entry that traded later (a fill at the post isn't news, as `fillEvents`),
+  TP1 on a split, the grade (WIN/LOSS in R, TIME/TRAIL/BE named), each at the grader's own stamp, last 24h. The public
+  row for your own graded call is dropped; a "Mine" chip shows only with a wallet; unread = "your calls" in `unread`.
+  Expired orders and +0.5R aren't in the status reply, so not shown.
 - **⌘K command line (2026-11-20, rules `app/lib/terminalCommand.mjs`, `CommandPalette.tsx`):** a coin ("eth", "$ETH",
   "spx500") → its drawer (every lens + "News on ETH", `NewsWire compact`) or Trade; a 0x address → its X-Ray; "news" /
   "wire". A coin the news wire knows leads; any other ticker-shaped word comes after the menu's own matches.
@@ -966,6 +972,9 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   **Activity dots** (2026-11-21, `yourMarks` / `openCallCoins`): on WATCHED rows only, ● = the connected wallet's open
   public call on that coin (`GET /theses/status/:wallet`, the Spot chips' source), ○ = its open Orderly position (SDK
   `usePositionStream`, in the browser). Facts about you, never the market; no wallet / unread = no dot.
+  **Since your look** (2026-11-21, `sinceLook` / `sinceLookCell`): a watched row prints "−2.07% since your look 45m ago",
+  the table's price vs the Watching panel's baseline (`seen[COIN].price` / `.at`, this device). READ only: the panel's tap
+  moves the baseline, the table never does (test-pinned: no markSeen / writeWatch in MarketTable.tsx). No baseline = no line.
 - **Callers on the coin (borst 2026-11-20, rules `app/lib/coinCrowd.mjs`, `app/components/CoinCrowd.tsx`):** every coin
   panel (drawer + dock) shows "Callers on X · N positioned · M open calls · K takes this week": `GET /theses/symbol/:coin`
   (the Spot strip's route: open positions + active public calls, each caller's graded record via `callerRecordLine`, rows

@@ -1,8 +1,9 @@
 // The Wire's rules (app/lib/wire.mjs). Run: node --test app/lib/wire.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
-  newsRows, bellRows, walletRows, callRows, upcomingRows, wireStream, nextSeen, filterWire, wireWhen, coinOfTitle,
+  newsRows, bellRows, walletRows, callRows, upcomingRows, wireStream, nextSeen, filterWire, wireWhen, coinOfTitle, myCallRows, withMine,
   WIRE_FILTERS, WIRE_KINDS, WIRE_MAX, WIRE_WINDOW_MS, HEADLINE_LINE, CALL_LINE, WALLET_LINE,
 } from "./wire.mjs";
 
@@ -107,4 +108,56 @@ test("no row says a direction to take: titles state what happened", () => {
     ...walletRows([{ source: "orderly", addr: "0x1", coin: "ETH", side: "LONG", type: "OPEN", szUsd: 20_000, ts: NOW }], NOW),
   ];
   for (const r of all) assert.doesNotMatch(r.title, /\b(buy|sell|go long|go short|should|signal to)\b/i);
+});
+
+test("your calls: a later fill, TP1 on a split, the grade; each at the grader's own stamp, in your words", () => {
+  const W = "0xD9F7000000000000000000000000000000000B449";
+  const status = {
+    wallet: W.toLowerCase(),
+    calls: [
+      { id: "a", symbol: "PERP_ETH_USDC", direction: "SHORT", entryPrice: 1865, stopLoss: 1895, takeProfit1: 1805, plannedR: { tp1: 2 }, postedAt: NOW - 5 * H, filledAt: NOW - 2 * H, tp1HitAt: NOW - H, graded: null },
+      { id: "b", symbol: "PERP_BTC_USDC", direction: "LONG", entryPrice: 60000, stopLoss: 59000, takeProfit1: 62000, postedAt: NOW - 3 * H, filledAt: NOW - 3 * H + 1000, graded: null }, // filled at the post: not news
+      { id: "c", symbol: "PERP_SOL_USDC", direction: "LONG", postedAt: NOW - 3 * H, filledAt: null, graded: null },                                                   // still working: nothing
+    ],
+    recent: [
+      { id: "d", symbol: "PERP_BTC_USDC", direction: "SHORT", exitReason: "TIME", postedAt: NOW - 30 * H, graded: { outcome: "WIN", r: 0.42, at: NOW - 10 * M, exitedAt: NOW - 12 * M } },
+      { id: "e", symbol: "PERP_HYPE_USDC", direction: "LONG", postedAt: NOW - 60 * H, graded: { outcome: "LOSS", r: -1, at: NOW - 2 * WIRE_WINDOW_MS } },             // older than a day
+    ],
+  };
+  const rows = myCallRows(status, NOW);
+  assert.deepEqual(rows.map((r) => [r.id, r.title]), [
+    ["mine-a-fill", "Your ETH short filled at 1865"],
+    ["mine-a-tp1", "Your ETH short reached TP1 1805 · half closed +1.00R"],
+    ["mine-d-graded", "Your BTC short graded WIN +0.42R"],
+  ]);
+  assert.equal(rows[2].t, NOW - 10 * M, "the time the grader stamped it");
+  assert.equal(rows[2].detail, "Closed on the time stop");
+  assert.equal(rows[0].path, `/feed/thesis/${W.toLowerCase()}/a`);
+  for (const r of rows) { assert.equal(r.kind, "MINE"); assert.equal(r.source, "Your call"); assert.equal(r.graded, CALL_LINE); }
+  assert.deepEqual(myCallRows(null, NOW), []);
+  assert.deepEqual(myCallRows({ error: "rate_limited" }, NOW), []);
+});
+
+test("your rows merge into the shared stream once: the public row for your own graded call is dropped", () => {
+  const W = "0xabc0000000000000000000000000000000000001";
+  const mine = myCallRows({ wallet: W, calls: [], recent: [{ id: "d", symbol: "BTC", direction: "SHORT", graded: { outcome: "WIN", r: 1, at: NOW - M } }] }, NOW);
+  const shared = [
+    { id: "call-x", kind: "CALL", t: NOW - M, path: `/feed/thesis/${W.toUpperCase().replace("0X", "0x")}/d`, title: "BTC short by you graded WIN" },
+    { id: "n1", kind: "NEWS", t: NOW - 2 * M, title: "headline" },
+  ];
+  const merged = withMine(shared, mine, NOW);
+  assert.deepEqual(merged.map((r) => r.id), ["mine-d-graded", "n1"]);
+  assert.deepEqual(withMine(shared, [], NOW), shared, "no wallet = the shared stream as it was");
+  assert.deepEqual(filterWire(merged, "mine").map((r) => r.id), ["mine-d-graded"]);
+  assert.deepEqual(filterWire(merged, "calls").map((r) => r.id), ["mine-d-graded"]);
+  assert.equal(WIRE_FILTERS.find((f) => f.id === "mine").wallet, true, "the Mine chip shows only with a wallet");
+});
+
+test("your calls on the Wire are read in the browser from your own status, never through the shared route", () => {
+  const ui = readFileSync(new URL("../pages/lab/TheWire.tsx", import.meta.url), "utf8");
+  assert.match(ui, /theses\/status\//);
+  assert.match(ui, /myCallRows\(/);
+  assert.match(ui, /withMine\(/);
+  const route = readFileSync(new URL("../../workers/nexus-lab-api/routes-wire.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(route, /theses\/status|myCallRows/);
 });

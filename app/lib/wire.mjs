@@ -20,6 +20,7 @@ export const WIRE_KINDS = Object.freeze({
   WALLET: "Wallet",
   TIER: "Wallet",
   CALL: "Call",
+  MINE: "Your call",
 });
 /** The filter chips: a chip covers one or more kinds. */
 export const WIRE_FILTERS = Object.freeze([
@@ -28,7 +29,8 @@ export const WIRE_FILTERS = Object.freeze([
   { id: "reads", label: "Reads", kinds: ["READ"] },
   { id: "markets", label: "Markets", kinds: ["FUNDING", "MOMENTUM"] },
   { id: "wallets", label: "Wallets", kinds: ["WALLET", "TIER"] },
-  { id: "calls", label: "Calls", kinds: ["CALL"] },
+  { id: "calls", label: "Calls", kinds: ["CALL", "MINE"] },
+  { id: "mine", label: "Mine", kinds: ["MINE"], wallet: true }, // shown only with a wallet connected
 ]);
 
 export const HEADLINE_LINE = "A headline, not a read.";
@@ -104,6 +106,48 @@ export function callRows(pulse, now = Date.now()) {
   for (const c of pulse?.recentGraded || []) add(c, false);
   for (const c of pulse?.engines?.recentGraded || []) add(c, true);
   return rows;
+}
+
+/**
+ * YOUR calls moving (borst 2026-11-21: the Wire as a personal stream too). From the connected wallet's own
+ * GET /theses/status/:wallet, read in the browser (the Wire route is shared and cached, so it never carries a wallet).
+ * Three moments, each at the time the grader stamped it: a resting entry that traded later (FILL; a call filled at the
+ * post was live from the start, the same rule as the owner's fill alert, callStatus.mjs fillEvents), TP1 reached on a
+ * split call, and the grade (WIN / LOSS in R, from the grader's record). Facts about your own calls, never a signal.
+ */
+export function myCallRows(status, now = Date.now()) {
+  if (!status || !Array.isArray(status.calls) || !status.wallet) return [];
+  const wallet = String(status.wallet).toLowerCase();
+  const rows = [];
+  const fresh = (t) => Number.isFinite(t) && now - t <= WIRE_WINDOW_MS && t <= now + 60_000;
+  for (const c of [...status.calls, ...(Array.isArray(status.recent) ? status.recent : [])]) {
+    if (!c || !c.id || !c.symbol) continue;
+    const coin = bare(c.symbol), dir = side(c.direction);
+    const path = `/feed/thesis/${wallet}/${encodeURIComponent(String(c.id))}`;
+    const base = { coin, source: "Your call", graded: CALL_LINE, path };
+    const filled = Number(c.filledAt), posted = Number(c.postedAt);
+    if (fresh(filled) && Number.isFinite(posted) && filled > posted + 60_000) {
+      rows.push({ ...base, id: `mine-${c.id}-fill`, kind: "MINE", t: filled, title: `Your ${coin} ${dir} filled at ${c.entryPrice}`, detail: `Live and graded from here · stop ${c.stopLoss}, TP1 ${c.takeProfit1}` });
+    }
+    const tp1 = Number(c.tp1HitAt), r1 = Number(c.plannedR?.tp1);
+    if (fresh(tp1)) {
+      rows.push({ ...base, id: `mine-${c.id}-tp1`, kind: "MINE", t: tp1, title: `Your ${coin} ${dir} reached TP1 ${c.takeProfit1}${Number.isFinite(r1) ? ` · half closed ${signedR(r1 / 2)}` : ""}`, detail: c.graded ? null : "Runner still open" });
+    }
+    const g = c.graded, gt = Number(g?.at ?? g?.exitedAt), r = Number(g?.r);
+    if (g && (g.outcome === "WIN" || g.outcome === "LOSS") && fresh(gt)) {
+      const how = { TIME: "time stop", TRAIL: "trail", BE: "stop at entry" }[c.exitReason] || null;
+      rows.push({ ...base, id: `mine-${c.id}-graded`, kind: "MINE", t: gt, title: `Your ${coin} ${dir} graded ${g.outcome}${Number.isFinite(r) ? ` ${signedR(r)}` : ""}`, detail: how ? `Closed on the ${how}` : null });
+    }
+  }
+  return rows;
+}
+
+/** The shared stream with your rows merged in: the public row for a call you were graded on is dropped (it is yours). */
+export function withMine(rows, mine, now = Date.now()) {
+  if (!mine || mine.length === 0) return rows || [];
+  const yours = new Set(mine.filter((r) => r.id.endsWith("-graded")).map((r) => String(r.path).toLowerCase()));
+  const shared = (rows || []).filter((r) => !(r.kind === "CALL" && r.path && yours.has(String(r.path).toLowerCase())));
+  return wireStream([mine, shared], now);
 }
 
 /** Scheduled releases and market closes due in the next 12h (the calendar route's events), soonest first. */
