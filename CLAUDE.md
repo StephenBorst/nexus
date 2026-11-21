@@ -1270,6 +1270,20 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   PF > 1, or a ≥20-day watched record; any negative graded evidence vetoes). Never estimate Orderly leverage/liq.
 - Hyperliquid: read every perp dex (`perpDexs`), and HL serves only the latest 10k fills, so we collect forward
   (`GET /xray/hltape`, `hlTape.mjs`; gaps disclosed via `completeFrom`). Share card + copilot use the same grade.
+- **Smart Money, visual-first** (borst 2026-11-21, rules `app/lib/smartLayout.mjs`, tested): a strip (wallets by venue,
+  one mark per wallet coloured by STAGE in ink, `STRIP_LINE`) → THE WALLETS sorted by stage, then graded days watched
+  (`sortWallets`), never by the score alone → shovel line → consensus → feed → "More" (STRETCHED FUNDING scan, TIER
+  CHANGES). The Consistency Score (`xrayTrack`) is never shown alone: a dot on a 0–100 rail with the 40 / 65 bars as
+  ticks + the facts it's made of (`recordFacts`) + `SCORE_LINE` ("not a graded edge"). Building records fold behind a
+  tap only while some wallet is scored (`walletLists`; none scored = the building list is the board + `NONE_SCORED_LINE`).
+  **The ⚡ copy goes through `edgeGate`** like /analyze (it bypassed it before 2026-11-21): the dialog shows Clears /
+  Locked + "Open its X-Ray →", the button is disabled and the click gated. The overlays render into `document.body`
+  (`createPortal`): the Lab tab's `.nx-fade-in` wrapper keeps a transform, which pinned fixed overlays to the tab.
+- **Tracked Record sweep** (`sweepTrackedXray`, 12h cron; fixed 2026-11-21, `xraySnapshot.test.mjs`): one wallet at a
+  time, starts ≥ 1 s apart (the 6-wide batches fired 48 indexer reads at once; live records had 3 snapshots in 44 days);
+  a PARTIAL read (any broker unread) is never stored (it understated realized and booked the gap as P&L), retried once
+  after 2 s; the log line counts `partial`. Hyperliquid wallets get no snapshot yet (the aggregate reads Orderly brokers
+  only): their own source is open work.
 
 ## Token + tokenomics
 - $NEXUS = a meme token with cosmetic/access perks only (tiers OPERATOR 50M / ARCHITECT 100M / ORACLE 250M,

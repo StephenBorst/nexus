@@ -1013,7 +1013,7 @@ const worker = {
         catch (e) { console.error("[smart] refresh failed (using static seed):", String(e)); }
       })());
       ctx.waitUntil((async () => {
-        try { const r = await sweepTrackedXray(env); console.log(`[xray] snapshotted ${r.snapped}/${r.watched} watched wallets`); }
+        try { const r = await sweepTrackedXray(env); console.log(`[xray] snapshotted ${r.snapped}/${r.watched} watched wallets · ${r.partial} partial reads skipped`); }
         catch (e) { console.error("[xray] sweep failed:", String(e)); }
       })());
       // Grow every watched wallet's Hyperliquid fill tape before HL's 10k window drops fills.

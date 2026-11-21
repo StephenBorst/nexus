@@ -16,6 +16,7 @@
 import { json, normalizeAddress, recoverEthAddress } from "./shared.mjs";
 import { orderlyAccountId, xrayTrack, dedupeDaily } from "./logic.mjs";
 import { nextIndex, WL_INDEX_KEY } from "./walletWatch.mjs";
+import { mapLimit } from "./orderlyGet.mjs";
 
 // ── Smart Money (Phase 1) ─────────────────────────────────────────────────────
 // Curated seed of top Hyperliquid traders (snapshotted from the public HL
@@ -147,15 +148,22 @@ export async function readXrayHist(env, address) {
 
 // Append a snapshot if the last one is stale AND there's real indexed data to
 // record (markets>0). Returns the (possibly unchanged) series. Never throws.
-async function snapshotXray(env, address, agg) {
+// A PARTIAL read (any broker unread) is never stored (fixed 2026-11-21): its summed realized
+// understates the wallet, and the next full read would book the gap as a day of P&L. It returns
+// the series unchanged with `partial` set, so the sweep can retry it and count what it skipped.
+export async function snapshotXray(env, address, agg, { aggregate = xrayAggregate, now = Date.now } = {}) {
   try {
-    const a = agg || await xrayAggregate(address);
+    const a = agg || await aggregate(address);
     if (!a || a.markets <= 0) return await readXrayHist(env, address); // nothing indexed → don't store noise
+    if (Array.isArray(a.brokersFailed) && a.brokersFailed.length) {
+      const hist = await readXrayHist(env, address);
+      return Object.assign(hist, { partial: true });
+    }
     const hist = await readXrayHist(env, address);
     const last = hist[hist.length - 1];
-    if (last && Number.isFinite(last.t) && Date.now() - last.t < XRAY_SNAP_MIN_MS) return hist; // fresh enough
+    if (last && Number.isFinite(last.t) && now() - last.t < XRAY_SNAP_MIN_MS) return hist; // fresh enough
     hist.push({
-      t: Date.now(), realized: a.totalRealized, unrealized: a.totalUnrealized,
+      t: now(), realized: a.totalRealized, unrealized: a.totalUnrealized,
       markets: a.markets, wins: a.totalWins, losses: a.totalLosses, open: a.totalOpen,
     });
     const trimmed = hist.slice(-XRAY_HIST_CAP);
@@ -167,7 +175,7 @@ async function snapshotXray(env, address, agg) {
 // Cron sweep: snapshot every wallet anyone has starred (union of all watchlists)
 // so a Tracked Record accrues even when nobody is viewing it. Bounded + best-effort.
 // Exported: the 12h cron in index.js drives it.
-export async function sweepTrackedXray(env) {
+export async function sweepTrackedXray(env, { sleep = (ms) => new Promise((r) => setTimeout(r, ms)), ...deps } = {}) {
   const listed = await env.LAB_STORE.list({ prefix: "sm:wl:" });
   const addrs = new Set();
   for (const k of listed.keys) {
@@ -183,15 +191,20 @@ export async function sweepTrackedXray(env) {
     if (braw) for (const t of (JSON.parse(braw).traders || [])) if (/^0x[a-f0-9]{40}$/i.test(t.address || "")) addrs.add(t.address.toLowerCase());
   } catch { /* non-fatal */ }
   const targets = [...addrs].slice(0, 200);
-  let snapped = 0, events = 0;
-  for (let i = 0; i < targets.length; i += 6) {
-    await Promise.all(targets.slice(i, i + 6).map(async (a) => {
+  // One wallet at a time, starts ≥ 1 s apart (fixed 2026-11-21): each wallet is 8 indexer reads, and
+  // the old 6-wide batches fired 48 at once; live records showed 3 snapshots in 44 days. A partial
+  // read is retried once after 2 s, then skipped (never stored).
+  let snapped = 0, events = 0, partial = 0;
+  await mapLimit(targets, 1, async (a) => {
+    try {
       const before = (await readXrayHist(env, a)).length;
-      const series = await snapshotXray(env, a);
+      let series = await snapshotXray(env, a, null, deps);
+      if (series.partial) { await sleep(2000); series = await snapshotXray(env, a, null, deps); }
+      if (series.partial) { partial++; return; }
       if (series.length > before) { snapped++; if (await emitTierEvent(env, a, series)) events++; }
-    }));
-  }
-  return { watched: targets.length, snapped, events };
+    } catch { /* one wallet never stops the sweep */ }
+  }, { gapMs: 1000, sleep });
+  return { watched: targets.length, snapped, partial, events };
 }
 
 // Graded, low-noise "tracked signals": when a fresh snapshot moves a wallet ACROSS
@@ -590,9 +603,12 @@ export async function handleSmart(parts, request, env, ctx) {
       const hist = await readXrayHist(env, a);
       if (hist.length < 2) return;
       const tk = xrayTrack(hist);
+      // The parts the score is made of ride along (visual pass 2026-11-21): Smart Money shows the facts
+      // (green days of graded days, max drawdown), never the blended score on its own.
       out[a] = {
         operatorScore: tk.operatorScore, tier: tk.tier, scored: tk.scored,
         netRealized: tk.netRealized, daysTracked: tk.daysTracked, trend: tk.trend, points: tk.points,
+        gradedWindows: tk.gradedWindows, winWindows: tk.winWindows, maxDrawdown: tk.maxDrawdown,
       };
     }));
     return json({ tracked: out }, request);
