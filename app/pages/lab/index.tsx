@@ -40,7 +40,6 @@ import { CommandPalette } from "./CommandPalette";
 import { CreatorEarnings } from "./CreatorEarnings";
 import { NexusBriefing } from "./NexusBriefing";
 import { DecisionBoard } from "./DecisionBoard";
-import { LabCallsPanel } from "./LabCallsPanel";
 import { WatchlistPanel } from "./WatchlistPanel";
 import { RiskDeskPanel } from "./RiskDeskPanel";
 import { FundingVenues } from "./FundingVenues";
@@ -345,15 +344,14 @@ export default function TheLabPage() {
           // The Board (every market, one verifiable read) sits between the narrative
           // Briefing and the deep Market Intel — scan the whole book at a glance. Shown
           // to everyone; it's market-level, no wallet needed.
-          // Folded by default (borst, 2026-11-05): Lab home leads with the graded calls; the dense board is one
-          // tap away and remembers being opened.
+          // Folded by default (borst, 2026-11-05): the dense board is one tap away and remembers being opened.
           const board = (
             <Collapsible title="The board · every market, one read" subtitle="funding, crowd and smart money, one line per market" shortTitle="The board" shortSub="every market, one read" storageKey="nx_board_open">
               <DecisionBoard hideHeader onSelectTab={setActiveTab} trades={connected ? processedTrades : undefined} wallet={rootWalletAddress} theses={connected ? theses : undefined} positions={connected ? briefingPositions : undefined} />
             </Collapsible>
           );
-          // ◆ CALLS leads Lab home: the "graded from public price" line + open and graded calls, above every fold.
-          const calls = <LabCallsPanel onSelectTab={setActiveTab} />;
+          // No Calls panel here (borst 2026-11-21): the graded calls live on /proof and the Wire; Lab home ends on
+          // Watching → the briefing → the board.
           // THE DEEP BOARDS (2026-11-20): no chip strip. The Wire and the table open one board at a time, under the table
           // (DeepBoard.tsx, registry app/lib/intelLenses.mjs); per coin, every one is already a lens in the drawer.
           const renderBoard = (id: string) => {
@@ -374,7 +372,7 @@ export default function TheLabPage() {
           // — lands straight on the Briefing → Board → lenses read. No wallet needed to
           // scan the whole book; only COPY / PUBLISH / ARM LIVE ask for a connect.
           const showSplash = !connected && !guestPreview;
-          // WATCHING (2026-11-14): the coins this device watches, what changed since the last look. Under Calls.
+          // WATCHING (2026-11-14): the coins this device watches, what changed since the last look. Above the briefing.
           // borst 2026-11-20: Wire → table → positions. The Wire (what changed), every market as one table, then YOUR OPEN RISK.
           const deep = deepBoard && <DeepBoard id={deepBoard} onClose={() => setDeepBoard(null)} render={renderBoard} />;
           // Wide screens (≥ 1280 px, 2026-11-20): the Wire, the table and one coin side by side; the coin stays on screen
@@ -386,7 +384,7 @@ export default function TheLabPage() {
               <MarketDock />
             </div>
           ) : <><TheWire onOpenBoard={openBoard} /><MarketTable onOpenBoard={openBoard} />{deep}</>;
-          return <>{showSplash && <LabWelcome />}{terminal}<RiskDeskPanel />{calls}<WatchlistPanel />{briefing}{board}</>;
+          return <>{showSplash && <LabWelcome />}{terminal}<RiskDeskPanel /><WatchlistPanel />{briefing}{board}</>;
         })()}
         {activeTab === "smart" && (
           // Smart Money is now the DEEP WALLET DRILL-DOWN the Intel funnel's Positioning lens
