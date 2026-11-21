@@ -940,8 +940,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   **Drawer → call** (`app/lib/marketCallDraft.mjs`): "Post a call" asks Long / Short IN the drawer (it never picks one),
   hands off via `nexus_thesis_draft` with `sideChosen` (the WATCH gate keeps the trader's pick) + `build` (the Thesis
   Engine builds at the 1.2× ATR stop on arrival, `pendingDraft`), levels of the last coin cleared, no machine note.
-  **Watching** (`app/lib/watchlist.mjs`, store `watchStore.ts` key `nx_watchlist_v1`, panel `WatchlistPanel.tsx` under
-  Calls on Lab home): ☆ Watch in the drawer (this device, no wallet/push, ≤10); one request `GET /intel/markets?coins=`
+  **Watching** (`app/lib/watchlist.mjs`, store `watchStore.ts` key `nx_watchlist_v1`, panel `WatchlistPanel.tsx` above
+  the briefing on Lab home): ☆ Watch in the drawer (this device, no wallet/push, ≤10); one request `GET /intel/markets?coins=`
   (routes-market.mjs `handleMarkets`: mispriced + smart + forecasts read once, `marketSnapshot` per coin, 60 s cache);
   each row = price, 24h, the move since the last look + the alerts' changes (`marketTransitions`); first look = baseline;
   tapping a row opens the drawer and marks it seen.
