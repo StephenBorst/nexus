@@ -18,7 +18,7 @@
 //
 // ⚠️ This page deliberately uses NO Orderly private hooks — only public APIs and
 // our own worker proxy. Keep it that way (see the SWR-key-collision incident).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { AnalyticsView } from "@/pages/lab/AnalyticsView";
@@ -35,6 +35,9 @@ import {
   gradeAllWindows, defaultWindow, decayRow, tradesInWindow, windowComplete, edgeGate, watchedWindow,
   hlCoinToOrderly, fillsToClosedTrades,
 } from "@/lib/xrayGrade.mjs";
+import { XrayHome, XrayCompare, type CompareSide } from "./XrayExtras";
+import { parseWalletInput, pushRecent, readRecent, RECENT_KEY, walletLabel } from "@/lib/xrayInput.mjs";
+import { resolveEnsName, primaryEnsName } from "./ens";
 import { WindowGradeCard, EdgeGateCard, PositionsPanel, type WindowKey, type WindowGrade, type WatchedWin, type DecayCell, type Gate, type PosRow, WINDOW_KEYS, ShareXrayButton } from "./XrayPanels";
 
 // Shared design tokens — same set the Arena uses, so the two pages read as one system.
@@ -127,12 +130,16 @@ const fillsToTrades = (fills: HLFill[]): ProcessedTrade[] => fillsToClosedTrades
 export default function AnalyzePage() {
   const [params, setParams] = useSearchParams();
   const [input, setInput] = useState(params.get("address") ?? "");
-  const [address, setAddress] = useState<string | null>(params.get("address"));
+  // Only a well-formed address is ever run; a broken ?address= link says so instead of a blank page.
+  const [address, setAddress] = useState<string | null>(isAddress(params.get("address") ?? "") ? params.get("address") : null);
   const [trades, setTrades] = useState<ProcessedTrade[] | null>(null);
   const [orderly, setOrderly] = useState<XrayResult | null>(null);
   const [track, setTrack] = useState<XrayTrack | null>(null); // the graded, WATCHED record (settlement deltas over time)
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    const a = params.get("address");
+    return a && !isAddress(a) ? "That link’s wallet address isn’t a valid 0x… address." : null;
+  });
   const [partialTape, setPartialTape] = useState(false); // we hold HL's 10k serving cap — older history isn't public
   const [tape, setTape] = useState<{ fills: number; oldestTs: number | null; source: "stored" | "direct"; seededAt: number | null } | null>(null);
   const [watch, setWatch] = useState<string[]>(loadWatch);
@@ -143,6 +150,18 @@ export default function AnalyzePage() {
   const [marks, setMarks] = useState<Record<string, number> | null>(null);
   const [win, setWin] = useState<WindowKey | null>(null);        // null = use the default (30D, or ALL fallback)
   const [loadedAt, setLoadedAt] = useState(() => Date.now());
+  // ENS (2026-11-21): a name in the box resolves to an address first; the page always grades the ADDRESS.
+  const [ensName, setEnsName] = useState<string | null>(params.get("name"));
+  const [resolving, setResolving] = useState(false);
+  // Compare (2026-11-21): ?vs=0x… puts a second wallet beside this one on the same grade.
+  const [vs, setVs] = useState<string | null>(isAddress(params.get("vs") ?? "") ? params.get("vs") : null);
+  const [vsName, setVsName] = useState<string | null>(params.get("vsName"));
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [vsInput, setVsInput] = useState("");
+  const [vsError, setVsError] = useState<string | null>(null);
+  // Each run gets an id; a slower earlier run never writes over a later wallet's results (it used to).
+  const runRef = useRef(0);
+  const nameRef = useRef<string | null>(params.get("name")); // the ENS name the current wallet came from, if any
   const navigate = useNavigate();
 
   const toggleWatch = (addr: string) => {
@@ -191,14 +210,17 @@ export default function AnalyzePage() {
   // allSettled and only surfaces an error when NEITHER venue returned anything.
   const run = useCallback(async (addr: string) => {
     if (!isAddress(addr)) { setError("Enter a valid 0x… wallet address"); return; }
+    const id = ++runRef.current;
+    const live = () => id === runRef.current;
     setLoading(true); setError(null); setTrades(null); setOrderly(null); setTrack(null); setPartialTape(false); setTape(null); setHlDexFailed([]);
     setHlPos([]); setHlPosFailed(false); setSeries(null); setWin(null); setLoadedAt(Date.now());
     const [hl, ord, pf] = await Promise.allSettled([fetchHLTape(addr), fetchOrderlyXray(addr), fetchHLPortfolio(addr)]);
     // Live positions + marks are context, never a blocker — fail-soft, off the critical path.
+    if (!live()) return;
     fetchHLPositions(addr)
-      .then((r) => { setHlPos(r.positions); setHlDexFailed(r.failedDexes); })
-      .catch(() => setHlPosFailed(true));
-    fetchOrderlyMarks().then(setMarks).catch(() => setMarks({}));
+      .then((r) => { if (live()) { setHlPos(r.positions); setHlDexFailed(r.failedDexes); } })
+      .catch(() => { if (live()) setHlPosFailed(true); });
+    fetchOrderlyMarks().then((m) => { if (live()) setMarks(m); }).catch(() => { if (live()) setMarks({}); });
 
     const fills = hl.status === "fulfilled" ? hl.value.fills : [];
     const t = fillsToTrades(fills);
@@ -215,6 +237,7 @@ export default function AnalyzePage() {
     // grade. Self-seeds on read; fail-soft (leaves the lifetime verdict as the only number).
     fetch(`${AGENT_API}/smart/xray/history?address=${encodeURIComponent(addr)}`)
       .then((r) => r.json()).then((x) => {
+        if (!live()) return;
         if (x && x.track) setTrack(x.track as XrayTrack);
         if (x && Array.isArray(x.series)) setSeries(x.series as SeriesPt[]);
       })
@@ -222,6 +245,10 @@ export default function AnalyzePage() {
 
     const hasHL = t.length > 0;
     const hasOrderly = !!ox && ox.venues.length > 0;
+    if (hasHL || hasOrderly) {
+      // Remember it on this device (the empty page's "Your recent X-rays").
+      try { localStorage.setItem(RECENT_KEY, JSON.stringify(pushRecent(readRecent(localStorage.getItem(RECENT_KEY)), { address: addr, name: nameRef.current || undefined, at: Date.now() }))); } catch { /* storage off */ }
+    }
     if (!hasHL && !hasOrderly) {
       const portfolio = pf.status === "fulfilled" ? pf.value : null;
       if (hl.status === "rejected" && ord.status === "rejected") {
@@ -252,11 +279,93 @@ export default function AnalyzePage() {
   // Auto-run from a shared ?address= link.
   useEffect(() => { if (address && isAddress(address)) run(address); }, [address, run]);
 
-  const submit = () => {
-    const addr = input.trim();
-    if (!isAddress(addr)) { setError("Enter a valid 0x… wallet address"); return; }
-    setAddress(addr);
-    setParams({ address: addr });
+  // Back / forward: the URL is the source of truth for which wallet (and which compare) is on screen.
+  const urlAddress = params.get("address");
+  const urlVs = params.get("vs");
+  useEffect(() => {
+    const a = urlAddress && isAddress(urlAddress) ? urlAddress : null;
+    if ((a ?? "").toLowerCase() !== (address ?? "").toLowerCase()) {
+      nameRef.current = params.get("name");
+      setEnsName(params.get("name"));
+      setInput(params.get("name") || a || "");
+      setAddress(a);
+      if (!a) { runRef.current++; setTrades(null); setOrderly(null); setTrack(null); setLoading(false); }
+    }
+    const v = urlVs && isAddress(urlVs) ? urlVs : null;
+    if ((v ?? "") !== (vs ?? "")) { setVs(v); setVsName(params.get("vsName")); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlAddress, urlVs]);
+
+  // The address's primary ENS name, when it has one that resolves back to it (display only).
+  useEffect(() => {
+    if (!address || !isAddress(address) || nameRef.current) return;
+    let off = false;
+    setEnsName(null);
+    primaryEnsName(address).then((n) => { if (!off && n) setEnsName(n); });
+    return () => { off = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address]);
+
+  // Resolve whatever the box holds to an address: a 0x address as is, an ENS name on mainnet.
+  const toAddress = async (raw: string): Promise<{ address: string; name?: string } | { error: string }> => {
+    const p = parseWalletInput(raw) as { kind: string; address?: string; name?: string; reason?: string };
+    if (p.kind === "address") return { address: p.address! };
+    if (p.kind === "name") {
+      const r = await resolveEnsName(p.name!);
+      return "address" in r ? { address: r.address, name: p.name } : { error: r.error };
+    }
+    return { error: p.kind === "empty" ? "Paste a 0x… address or an ENS name." : p.reason! };
+  };
+
+  // Go to a wallet: the URL carries the resolved address (+ the name it came from), so a shared link grades the same
+  // wallet even if the name later points elsewhere. Re-submitting the same wallet re-reads it.
+  const goTo = (addr: string, name?: string, keepVs = false) => {
+    setInput(name || addr);
+    setEnsName(name ?? null);
+    nameRef.current = name ?? null;
+    const next: Record<string, string> = { address: addr };
+    if (name) next.name = name;
+    if (keepVs && vs) { next.vs = vs; if (vsName) next.vsName = vsName; } else { setVs(null); setVsName(null); setCompareOpen(false); }
+    setParams(next);
+    if (address && addr.toLowerCase() === address.toLowerCase()) run(addr); else setAddress(addr);
+  };
+
+  // A ?name= link with no address (⌘K "vitalik.eth"): resolve it once, then run.
+  useEffect(() => {
+    const n = params.get("name");
+    if (address || !n) return;
+    setResolving(true);
+    toAddress(n).then((r) => { setResolving(false); if ("address" in r) goTo(r.address, r.name); else setError(r.error); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const submit = async () => {
+    if (resolving) return;
+    setError(null);
+    setResolving(true);
+    const r = await toAddress(input);
+    setResolving(false);
+    if ("error" in r) { setError(r.error); return; }
+    goTo(r.address, r.name);
+  };
+
+  const submitVs = async () => {
+    if (!address) return;
+    setVsError(null);
+    const r = await toAddress(vsInput);
+    if ("error" in r) { setVsError(r.error); return; }
+    if (r.address.toLowerCase() === address.toLowerCase()) { setVsError("That’s the same wallet."); return; }
+    setVs(r.address); setVsName(r.name ?? null); setCompareOpen(false); setVsInput("");
+    const next: Record<string, string> = { address, vs: r.address };
+    if (ensName && params.get("name")) next.name = ensName;
+    if (r.name) next.vsName = r.name;
+    setParams(next);
+  };
+  const closeCompare = () => {
+    setVs(null); setVsName(null);
+    const next: Record<string, string> = { address: address ?? "" };
+    if (params.get("name")) next.name = params.get("name")!;
+    setParams(next);
   };
 
   // Lifetime HL realized — the verdict's context line. Win rate etc. live per window now.
@@ -287,7 +396,9 @@ export default function AnalyzePage() {
   const gate: Gate = useMemo(() => edgeGate({
     hl30: grades ? grades["30D"] : null,
     watched: track && !track.building ? track : null,
-  }) as Gate, [grades, track]);
+    // A tape that doesn't reach back 30 days isn't a 30-day record (xrayGrade.mjs edgeGate).
+    hl30CoveredDays: partialKeys.includes("30D") && tape?.oldestTs ? (loadedAt - tape.oldestTs) / 86400000 : null,
+  }) as Gate, [grades, track, partialKeys, tape, loadedAt]);
   const windowTrades = useMemo(
     () => (trades && trades.length ? tradesInWindow(trades, activeWin, loadedAt) as ProcessedTrade[] : []),
     [trades, activeWin, loadedAt],
@@ -330,6 +441,18 @@ export default function AnalyzePage() {
 
   const isMobile = useIsMobile();
 
+  // Wallet A for the compare table: the same numbers this page already shows.
+  const sideA: CompareSide = useMemo(() => ({
+    grades: grades as Record<string, unknown> | null,
+    track: track && !track.building ? track : null,
+    gate,
+    hlLifetime: trades && trades.length ? totalPnl : null,
+    orderlyRealized: orderly && orderly.venues.length ? orderly.totalRealized : null,
+    openPositions: hlPosFailed ? null : posRows.length,
+  }), [grades, track, gate, trades, totalPnl, orderly, hlPosFailed, posRows]);
+  const aLabel = address ? walletLabel({ address, name: ensName ?? undefined }) : "";
+  const hasResult = !loading && !!address && ((trades && trades.length > 0) || (orderly && orderly.venues.length > 0));
+
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "20px 14px 60px" : "32px 24px 80px", color: BRIGHT }}>
       <SectionHeader
@@ -349,26 +472,56 @@ export default function AnalyzePage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-          placeholder="0x… any wallet address"
+          placeholder="0x… address or name.eth"
           spellCheck={false}
           style={{
             flex: "1 1 360px", boxSizing: "border-box", background: "#08080a",
-            border: `1px solid ${isAddress(input) ? BONE : BORDER}`,
+            border: `1px solid ${parseWalletInput(input).kind === "address" || parseWalletInput(input).kind === "name" ? BONE : BORDER}`,
             borderRadius: 4, padding: "10px 12px", color: BRIGHT, fontFamily: MONO, fontSize: 12, outline: "none",
           }}
         />
         <button
           onClick={submit}
-          disabled={loading}
+          disabled={loading || resolving}
           className="nx-btn nx-btn-primary"
           style={{ padding: "10px 20px" }}
         >
-          {loading ? "Analyzing…" : "Analyze →"}
+          {resolving ? "Looking up…" : loading ? "Analyzing…" : "Analyze →"}
         </button>
       </div>
 
       {error && (
         <div style={{ fontFamily: MONO, fontSize: 12, color: NEG, marginBottom: 16 }}>{error}</div>
+      )}
+
+      {/* A name resolves to an address: say which one, so the reader sees exactly which wallet is graded. */}
+      {address && ensName && params.get("name") && (
+        <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, margin: "-14px 0 16px", overflowWrap: "anywhere" }}>{ensName} → {address} · resolved on Ethereum</div>
+      )}
+
+      {/* Nothing pasted yet: recent, starred, the wallets Smart Money watches, and what an X-Ray reads. */}
+      {!address && !loading && !resolving && <XrayHome onPick={(a, n) => goTo(a, n)} />}
+
+      {/* Compare: a second wallet on the same grade. */}
+      {hasResult && vs && (
+        <XrayCompare a={sideA} aLabel={aLabel} b={vs} bLabel={walletLabel({ address: vs, name: vsName ?? undefined })} onClose={closeCompare} onOpen={(b) => goTo(b, vsName ?? undefined)} />
+      )}
+      {hasResult && !vs && (
+        compareOpen ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "-8px 0 20px" }}>
+            <input value={vsInput} onChange={(e) => setVsInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submitVs(); }}
+              placeholder="Second wallet: 0x… or name.eth" spellCheck={false}
+              style={{ flex: "1 1 280px", boxSizing: "border-box", background: "#08080a", border: `1px solid ${BORDER}`, borderRadius: 4, padding: "9px 12px", color: BRIGHT, fontFamily: MONO, fontSize: 12, outline: "none" }} />
+            <button type="button" onClick={submitVs} className="nx-btn" style={{ padding: "9px 16px" }}>Compare →</button>
+            <button type="button" onClick={() => { setCompareOpen(false); setVsError(null); }} style={{ background: "none", border: "none", color: MUTED, fontFamily: UI, fontSize: 12.5, cursor: "pointer", minHeight: 36 }}>Cancel</button>
+            {vsError && <div style={{ flexBasis: "100%", fontFamily: MONO, fontSize: 11.5, color: NEG }}>{vsError}</div>}
+          </div>
+        ) : (
+          <button type="button" onClick={() => setCompareOpen(true)}
+            style={{ display: "block", margin: "-10px 0 18px", background: "none", border: "none", padding: "6px 0", minHeight: 32, cursor: "pointer", fontFamily: UI, fontSize: 13, color: FOG }}>
+            Compare with another wallet +
+          </button>
+        )
       )}
 
       {loading && (
@@ -403,7 +556,7 @@ export default function AnalyzePage() {
         return (
           <div className="nx-fade-in" style={{ border: `1px solid ${BORDER}`, borderLeft: `3px solid ${(hasWatched ? wGood : good) ? POS : NEG}`, borderRadius: 8, background: SURFACE_ALT, padding: "18px 20px", marginBottom: 22 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-              <div style={label}>◆ X-RAY VERDICT · {short(address)}</div>
+              <div style={label}>◆ X-RAY VERDICT · {ensName ? `${ensName} · ` : ""}{short(address)}</div>
               <ShareXrayButton address={address} isMobile={isMobile} />
             </div>
             {hasWatched ? (

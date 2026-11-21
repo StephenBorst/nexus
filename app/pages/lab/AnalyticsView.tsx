@@ -13,6 +13,7 @@ import { YourRecordCard, MoneyGoesCard, LensRecordCard } from "./StatsCards";
 import { Collapsible } from "./Collapsible";
 import { useIsMobile } from "./useIsMobile";
 import { computeEdge } from "@/config/edge";
+import { bucketBars, extent } from "@/lib/chartThin.mjs";
 import { bareTicker } from "@/utils/utils";
 
 // ─── Breakdown Row ────────────────────────────────────────
@@ -461,8 +462,21 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
   const volume = useMemo(() => orders.reduce((s, o) => s + o.qty * o.price, 0), [orders]);
   const avgWin = useMemo(() => { const w = orders.filter((o) => o.pnl > 0); return w.length ? w.reduce((s, o) => s + o.pnl, 0) / w.length : 0; }, [orders]);
   const avgLoss = useMemo(() => { const l = orders.filter((o) => o.pnl < 0); return l.length ? Math.abs(l.reduce((s, o) => s + o.pnl, 0) / l.length) : 0; }, [orders]);
-  const bestTrade = useMemo(() => Math.max(0, ...orders.map((o) => o.pnl)), [orders]);
-  const worstTrade = useMemo(() => Math.min(0, ...orders.map((o) => o.pnl)), [orders]);
+  const pnlExt = useMemo(() => extent(orders.map((o) => o.pnl)), [orders]);
+  const bestTrade = Math.max(0, pnlExt.hi);
+  const worstTrade = Math.min(0, pnlExt.lo);
+  // Per-trade bars: a big record is summed into <= 400 bars first (chartThin.mjs), so labels are built only when each
+  // bar is one trade (17k date strings + 17k SVG bars froze the X-Ray on a market-making wallet).
+  const bars = useMemo(() => {
+    const vals = orders.map((o) => o.pnl);
+    const b = bucketBars(vals, undefined) as { values: number[]; labels?: string[]; size: number };
+    if (b.size > 1) return b;
+    return { ...b, labels: orders.map((o) => {
+      const sym = bareTicker(o.symbol);
+      const d = o.timestamp ? new Date(o.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+      return `${sym} ${o.direction}${d ? ` · ${d}` : ""} · ${o.pnl >= 0 ? "+" : "-"}$${Math.abs(o.pnl).toFixed(2)}`;
+    }) };
+  }, [orders]);
   const cumulativePnl = useMemo(() => { let r = 0; return [0, ...orders.map((o) => { r += o.pnl; return r; })]; }, [orders]);
   const isMobile = useIsMobile();
 
@@ -543,16 +557,9 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       {orders.length > 0 && (
         <div style={{ ...cardStyle, marginBottom: 8 }}>
           <div style={labelStyle}>&#9632; PER-TRADE P&amp;L</div>
-          <PnlBars
-            values={orders.map((o) => o.pnl)}
-            labels={orders.map((o) => {
-              const sym = bareTicker(o.symbol);
-              const d = o.timestamp ? new Date(o.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
-              return `${sym} ${o.direction}${d ? ` · ${d}` : ""} · ${o.pnl >= 0 ? "+" : "-"}$${Math.abs(o.pnl).toFixed(2)}`;
-            })}
-          />
+          <PnlBars values={bars.values} labels={bars.labels} />
           <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginTop: 4 }}>
-            <span style={{ color: "#3ecf8e" }}>■</span> win · <span style={{ color: "#f7525f" }}>■</span> loss · oldest → newest · {orders.length} trades
+            <span style={{ color: "#3ecf8e" }}>■</span> win · <span style={{ color: "#f7525f" }}>■</span> loss · oldest → newest · {orders.length.toLocaleString()} trades{bars.size > 1 ? ` · each bar sums ${bars.size} trades` : ""}
           </div>
         </div>
       )}
