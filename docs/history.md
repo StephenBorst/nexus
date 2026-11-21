@@ -2627,3 +2627,13 @@ request path nothing called, was deleted. Bankr's model list confirmed the haiku
   50% reads as "44% of the way to cleared". `pipelineStage` now serves `gates` (the `next` bars as data; `axisbt:v31`).
 - The overview's read-by-read table left (pipeline-if-then.md "Engine overview" says the panel MAY carry one); each
   read's new-data sides moved under its own board row, so no number left the page. The board rows are unchanged.
+
+## 2026-11-21 · /intel (and the Lab's Market Intel tab), visual-first
+
+- Same pass as /proof: the tape card, "Derivatives intelligence", "Funding vs its own history" and "Long / short
+  positioning" (three places the majors showed up) became one strip + one card per major. Funding is never printed without
+  its percentile vs its own history beside it (82nd of 167 days for BTC that day). Markets past a line became cards with the
+  line as a tick on a fixed track; the table got the OI ÷ volume dot and the flag as a badge. How-to-read, dominance, mcap,
+  also active, movers and the source notes moved under "More". Same numbers and sources, nothing summed.
+- Colour = state: past a line / an extreme in `SIGNAL.watch`, everything else ink. The old page coloured funding and the
+  24h movers green/red; those are inputs, not outcomes, so they went to ink. Green/red stays on the viewer's own P&L.

@@ -588,7 +588,15 @@ product is what sits on top:
   Lab's Market Intel tab) shows each input with its source: Fear & Greed, BTC dominance, total mcap 24h, funding breadth;
   markets past a STATED line (funding > +0.08% / < −0.03% per 8h, OI > 1.5× / 0.9× 24h volume on > $100k) ordered by how
   far past; positions with computed uPnL (never `unsettled_pnl`) + funding paid/received. No regime score, no "CONF %", no
-  liquidation estimates, no LONG FLUSH labels on an account ratio, no advice. The Thesis/Agent tape strip (`MarketTape`)
+  liquidation estimates, no LONG FLUSH labels on an account ratio, no advice. **Visual-first** (borst 2026-11-21, same
+  rules as /proof; rules in intelTape.mjs, pieces `app/pages/intel/IntelVisuals.tsx`): a strip (Fear/Greed dot · funding
+  breadth one mark per market · "past a line" count, uncapped; "Public inputs. Nothing graded here."; sticky on desktop
+  only) → markets past a line as cards (number, the line as a tick on a 0 → 3×-line track, × the line; tap = the drawer)
+  → the majors (funding NEVER without its percentile vs its own history, ticks 15th / 85th, a STRETCHED badge; the OKX
+  account bar kept) → your positions → the table (funding coloured only past its line, OI ÷ vol as a dot on 0 → 3× with
+  both lines as ticks, the flag as a badge) → "More" (how to read, dominance + mcap, also active, movers, lines, sources).
+  Colour = state only (`SIGNAL.watch` past a line / extreme, ink otherwise); green/red only on your own P&L. Marks are
+  dots and ticks, never a filling bar (test-pinned). The Thesis/Agent tape strip (`MarketTape`)
   = up 24h · BTC · longs pay, no RISK-ON score or preset advice. /intel and /arena skip the connect-wallet wall
   (`PUBLIC_ROUTES`, App.tsx).
 - **The Read / Briefing / FADE:** show inputs, never a tally or crown of ungraded reads; the Board's FADE is "a
