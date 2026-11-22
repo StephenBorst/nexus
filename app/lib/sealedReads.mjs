@@ -52,6 +52,9 @@ export const SEALED_READS = Object.freeze([
     // borst's ruling 2026-11-21 (recorded under the page's Results): the X post is waived for house-1; the GitHub
     // merge of the fingerprint is the outside date. It counts from the next 00:00 UTC after this ruling.
     xPostWaivedAt: "2026-11-21",
+    // borst's ruling 2026-11-22 (under Results): nothing counts before the poster runs. The private auto-poster's first
+    // deploy (nexus-house-signal Actions run 45060437766, step "Deploy the worker" done at this time).
+    posterLiveAt: "2026-11-22T19:23:28Z",
   }),
 ]);
 
@@ -60,14 +63,18 @@ const DAY_MS = 24 * 3600e3;
  * When a sealed read starts counting (page §1.2): the next 00:00 UTC after BOTH the commit here and borst's X post.
  * Null until the X post is recorded: nothing counts before an outside party holds the date. A read borst has ruled
  * the X post waived for (`xPostWaivedAt`, a date recorded under the page's Results) counts from the next 00:00 UTC
- * after the commit and that ruling: the GitHub merge of the fingerprint is then the outside date.
+ * after the commit and that ruling: the GitHub merge of the fingerprint is then the outside date. And never before the
+ * poster's first deploy (`posterLiveAt`, borst 2026-11-22): the start is the next 00:00 UTC after the latest of the three.
  */
 export function sealedCountsFrom(read) {
   const c = Date.parse(`${read?.committedAt}T00:00:00Z`);
   const posted = typeof read?.xPost?.url === "string" ? Date.parse(read?.xPost?.at || "") : NaN;
   const waived = /^\d{4}-\d{2}-\d{2}$/.test(read?.xPostWaivedAt || "") ? Date.parse(`${read.xPostWaivedAt}T00:00:00Z`) : NaN;
   const x = Number.isFinite(posted) ? posted : waived;
-  if (!Number.isFinite(c) || !Number.isFinite(x)) return null;
-  const later = Math.max(c, x);
+  // borst 2026-11-22: no sealed read counts before its poster is running (a fire nobody could send is neither a call
+  // nor a listed miss). No recorded first deploy = not started.
+  const live = Date.parse(read?.posterLiveAt || "");
+  if (!Number.isFinite(c) || !Number.isFinite(x) || !Number.isFinite(live)) return null;
+  const later = Math.max(c, x, live);
   return new Date(Math.floor(later / DAY_MS) * DAY_MS + DAY_MS).toISOString();
 }

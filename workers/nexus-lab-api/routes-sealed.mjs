@@ -19,13 +19,20 @@ import { sealedFireMessage, fireRefusal, sealedCall } from "../../app/lib/sealed
 
 const ORDERLY = "https://api-evm.orderly.org";
 export const sealedLogKey = (name) => `sealed:log:${name}`;
-const LOG_MAX = 2000;
+// Signature-checked dry runs (borst 2026-11-22: "check the dry runs"): the poster's sends while MODE = "dry", kept so
+// they can be read. Never a fire on the record, never a call. Last DRY_MAX.
+export const sealedDryKey = (name) => `sealed:dry:${name}`;
+const LOG_MAX = 2000, DRY_MAX = 50;
 
 async function readLog(env, name) {
   try { const raw = await env.LAB_STORE.get(sealedLogKey(name)); const v = raw ? JSON.parse(raw) : []; return Array.isArray(v) ? v : []; }
   catch { return []; }
 }
 const writeLog = (env, name, log) => env.LAB_STORE.put(sealedLogKey(name), JSON.stringify(log.slice(-LOG_MAX)));
+async function readDry(env, name) {
+  try { const raw = await env.LAB_STORE.get(sealedDryKey(name)); const v = raw ? JSON.parse(raw) : []; return Array.isArray(v) ? v : []; }
+  catch { return []; }
+}
 
 /** The coin's H4 ATR-14 fraction from Orderly's last GRADED_EXIT_LOOKBACK_H + 1 hourly bars, or null. */
 export async function readAtrFrac(coin, { fetchImpl = globalThis.fetch, now = Date.now } = {}) {
@@ -49,12 +56,12 @@ export async function handleSealed(parts, request, env, {
     if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "method not allowed", received: request.method, allowed: ["GET"] }, request, 405);
     const read = reads.find((r) => r.name === parts[1]);
     if (!read) return json({ error: "unknown_read" }, request, 404);
-    const log = await readLog(env, read.name);
+    const [log, dryRuns] = await Promise.all([readLog(env, read.name), readDry(env, read.name)]);
     return json({
       name: read.name, label: read.label, fingerprint: read.fingerprint, wallet: read.wallet,
       committedAt: read.committedAt, xPost: read.xPost, countsFrom: sealedCountsFrom(read),
       posted: log.filter((e) => e.status === "POSTED").length, missed: log.filter((e) => e.status === "MISSED").length,
-      fires: log,
+      fires: log, dryRuns,
     }, request);
   }
   if (!(parts.length === 2 && parts[1] === "fire")) return json({ error: "not found" }, request, 404);
@@ -83,7 +90,12 @@ export async function handleSealed(parts, request, env, {
       const [mark, atrFrac] = await Promise.all([readMark(coin), readAtr(coin)]);
       const call = sealedCall({ read, coin, side, fireAt, markPx: mark?.px, atrFrac, now: at });
       if (!call) return json({ error: "levels_unread", hint: "The mark or the ATR could not be read; retry inside the 5-minute window." }, request, 503);
-      if (dryRun) return json({ dryRun: true, call }, request);
+      if (dryRun) {
+        const row = { coin, side, fireAt, receivedAt: at, entryPrice: call.entryPrice, stopLoss: call.stopLoss, takeProfit1: call.takeProfit1 };
+        try { await env.LAB_STORE.put(sealedDryKey(read.name), JSON.stringify([...(await readDry(env, read.name)), row].slice(-DRY_MAX))); }
+        catch { /* the dry log is a convenience: a failed write never turns into an error */ }
+        return json({ dryRun: true, call }, request);
+      }
 
       const wallet = read.wallet.toLowerCase();
       const raw = await env.LAB_STORE.get(`lab:${wallet}`);

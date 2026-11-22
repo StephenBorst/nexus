@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { privateKeyToAccount } from "viem/accounts";
-import { handleSealed, sealedLogKey } from "./routes-sealed.mjs";
+import { handleSealed, sealedLogKey, sealedDryKey } from "./routes-sealed.mjs";
 import { sealedFireMessage, FIRE_WINDOW_MS } from "../../app/lib/sealedFire.mjs";
 import { SEALED_READS } from "../../app/lib/sealedReads.mjs";
 
@@ -11,7 +11,7 @@ const H = 3600e3;
 const house = privateKeyToAccount("0x" + "c3".repeat(32));
 const other = privateKeyToAccount("0x" + "d4".repeat(32));
 const READ = Object.freeze({ name: "house-t", label: "House signal", fingerprint: "ab".repeat(32), wallet: house.address,
-  committedAt: "2026-11-20", xPost: { url: "https://x.com/borstxbt/status/1", at: "2026-11-20T15:00:00Z" } });
+  committedAt: "2026-11-20", xPost: { url: "https://x.com/borstxbt/status/1", at: "2026-11-20T15:00:00Z" }, posterLiveAt: "2026-11-20T16:00:00Z" });
 const START = Date.parse("2026-11-21T00:00:00Z");
 const FIRE = START + 30 * H;                  // a bar close after the start
 
@@ -62,7 +62,13 @@ test("before the X post is recorded, or before the start, nothing posts (a dry r
   const dry = await go(e, await fire(house, { fireAt: early, dryRun: true }), { at: early + 1000, reads: [noPost] });
   assert.equal(dry.status, 200);
   assert.equal((await dry.json()).dryRun, true);
-  assert.equal(e.LAB_STORE.m.size, 0, "dry runs write nothing");
+  assert.equal(e.LAB_STORE.m.get(`lab:${house.address.toLowerCase()}`), undefined, "a dry run posts no call");
+  assert.equal(e.LAB_STORE.m.get(sealedLogKey(READ.name)), undefined, "and is no fire on the record");
+  const dryLog = JSON.parse(e.LAB_STORE.m.get(sealedDryKey(READ.name)));
+  assert.deepEqual(dryLog.map((x) => [x.coin, x.side, x.fireAt]), [["ETH", "LONG", early]], "only the dry-run log, so the poster can be checked");
+  assert.equal(dryLog[0].stopLoss < dryLog[0].entryPrice, true);
+  assert.equal((await go(e, { ...(await fire(house, { fireAt: early, dryRun: true })), sig: (await fire(other, { fireAt: early })).sig }, { at: early + 1000, reads: [noPost] })).status, 401, "an unsigned dry run logs nothing");
+  assert.equal(JSON.parse(e.LAB_STORE.m.get(sealedDryKey(READ.name))).length, 1);
 });
 
 test("more than 5 minutes late = a recorded miss and no call; duplicates and the 24h cooldown refuse", async () => {
@@ -96,6 +102,7 @@ test("GET /sealed/:name is the public record; house-1 is served from the real re
   const b = await r.json();
   assert.equal(b.countsFrom, "2026-11-21T00:00:00.000Z");
   assert.equal(b.posted, 1);
+  assert.deepEqual(b.dryRuns, []);
   const real = await (await handleSealed(["sealed", "house-1"], new Request("https://og.test/sealed/house-1"), env())).json();
   assert.equal(real.fingerprint, SEALED_READS[0].fingerprint);
   assert.ok(!("rule" in real) && !("params" in real), "nothing private is served");
