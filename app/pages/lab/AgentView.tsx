@@ -940,14 +940,18 @@ export function AgentView() {
               </span>
             ))}
           </div>
-          {/* Strategy shelf: every strategy on its way to the agent, by its served stage. Load only
-              at Paper (app/lib/strategyShelf.mjs). Loads exactly like a Quick-start preset. */}
-          <StrategyShelf onLoad={(id) => {
-            const p = STRATEGY_PRESETS.find((x) => x.id === id);
-            if (!p) return;
-            setConfig((prev) => ({ ...prev, ...EXPERIMENTAL_FILTERS_OFF, ...p.config }));
-            setSuccess(`Loaded "${p.name}" exactly. Filters reset to the preset's. Review and Save below.`);
-            setTimeout(() => setSuccess(null), 5000);
+          {/* Strategy shelf: every strategy, by its served stage + grade. Every row loads ON PAPER
+              (app/lib/strategyShelf.mjs, borst 2026-11-22). Never over a live position: switching a live
+              agent to paper would leave that position unmanaged by its own config. */}
+          <StrategyShelf onLoad={({ name, stageWord, config: cfg }) => {
+            if (hasPosition && config.mode !== "PAPER") {
+              setError(`Your agent holds a live position. Close it first, then load "${name}" on paper.`);
+              return;
+            }
+            setError(null);
+            setConfig((prev) => ({ ...prev, ...EXPERIMENTAL_FILTERS_OFF, ...(cfg as Partial<AgentConfig>), mode: "PAPER", invertSignal: false }));
+            setSuccess(`Loaded "${name}" on paper, at its exact rule. Stage: ${stageWord}. Review and Save below.`);
+            setTimeout(() => setSuccess(null), 6000);
           }} />
           {/* Quick-start (style + presets) is the ONBOARDING on-ramp — collapsed once the
               user has configured (has symbols), so the config opens on the essentials, not
@@ -1148,6 +1152,12 @@ export function AgentView() {
                 level_reclaim · paper · as registered
               </div>
             )}
+            {/* REGISTERED_READ has no mode button: the Strategy Shelf loads it, any registered read on paper (2026-11-22). */}
+            {config.signalMode === "REGISTERED_READ" && (
+              <div style={{ marginTop: 8, display: "inline-block", background: "#ededf015", border: "1px solid #ededf060", borderRadius: 3, padding: "4px 10px", color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 11 }}>
+                {config.read || "registered read"} · paper · as registered
+              </div>
+            )}
             {/* OI_DIV_4H has no mode button either: only its hidden setup link loads it (paper wallet, 2026-11-13). */}
             {config.signalMode === "OI_DIV_4H" && (
               <div style={{ marginTop: 8, display: "inline-block", background: "#ededf015", border: "1px solid #ededf060", borderRadius: 3, padding: "4px 10px", color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 11 }}>
@@ -1187,6 +1197,7 @@ export function AgentView() {
                 MOMENTUM: "Trades with a price move once it clears your threshold. Noisy on small moves. PAPER it first.",
                 MEAN_REVERSION: "Fades a sharp move once it clears your threshold. Bets it snaps back. PAPER it first.",
                 LEVEL_RECLAIM: "The registered level_reclaim read: price sweeps the prior UTC day’s high or low by 0.4× the H4 ATR and closes back inside within 6h; it fades the sweep. Traded on the graded exit only (stop 1.2× H4 ATR, target 1.5×, 168h). PAPER only. Pick another mode above to leave it.",
+                REGISTERED_READ: "A registered read from the Strategy Shelf, traded at its exact rule by the scoreboard’s own code, on the graded exit only (stop 1.2× H4 ATR, target 1.5×, 168h). PAPER only: it never trades live. Its stage and grade are on the shelf. Pick another mode above to leave it.",
                 OI_DIV_4H: "The registered oi_div_reversal_4h read: a 4h move at or above its own 90th percentile of the last 30 days while open interest fell at least 2% over the same 4h; it fades the move. 12h cooldown per coin. Traded on the graded exit only (stop 1.2× H4 ATR, target 1.5×, 168h). PAPER only. Pick another mode above to leave it.",
                 BASIS_FADE: "Fades an extreme spot-perp basis: a perp trading far above spot is froth (short it), far below is capitulation (long it). Extreme is measured against this market's own last week, not a fixed number. The scoreboard grades the read PREDICTIVE. That rates the read, not a strategy. Entries, exits and fees are unproven. EXPERIMENTAL. PAPER only.",
               } as Record<string, string>)[config.signalMode ?? "FUNDING_ONLY"]}

@@ -53,6 +53,15 @@ export const housePaperRead = (address) => Object.keys(HOUSE_PAPER_IDS).find((r)
 /** The config a house paper run is set up with (and must keep). */
 export function housePaperConfig(read) {
   if (!HOUSE_PAPER_IDS[read]) throw new Error(`${read} has no house paper run`);
+  return readPaperConfig(read);
+}
+
+/**
+ * Any registered read on paper, at its exact rule: what a house run trades, and what the Strategy Shelf loads into a
+ * user's agent (borst 2026-11-22, "open the shelf"). The brain refuses it anywhere but PAPER (registeredReadRefusal) and
+ * lab-api refuses the graded exit live (gradedExitRefusal), so it can't become a live config by an edit.
+ */
+export function readPaperConfig(read) {
   // level_reclaim's paper wallet config, field for field, with this mode and read (housePaper.test.mjs pins it)
   return {
     ...LEVEL_RECLAIM_PAPER_CONFIG,

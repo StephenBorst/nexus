@@ -2,21 +2,46 @@
 // borst, 2026-10-26: "strategy shelf in the Agent tab. Load enabled only at PAPER, everything else
 // greyed with the reason."
 //
-// Display only. Stages come from GET /intel/axis-backtest as served (`pipeline.reads[].stage`, rules
-// in readPipeline.mjs) and the Basis × CVD graded-exit line is judged by the same bar the pipeline
+// borst, 2026-11-22: "open the shelf. Every strategy loads in paper mode, no matter its stage. Grades
+// stay shown." Same call as open paper (Nov 17) and the strip-back (Nov 20): everything runs on paper,
+// only the CLEARED badge is gated.
+//
+// Stages come from GET /intel/axis-backtest as served (`pipeline.reads[].stage`, rules in
+// readPipeline.mjs) and the Basis × CVD graded-exit line is judged by the same bar the pipeline
 // watcher uses (pipelineWatch.mjs `gradedExitStatus`, from graded-exit-prereg.md). Nothing here
-// grades, and a row can only Load when its stage is PAPER AND an agent preset trades its exact rule
-// (`SHELF_PRESETS`, empty today: no read has an agent rule yet). The dates are rough: today's event
-// pace carried forward, labelled as such, for a count only (never for a stage).
+// grades. Every row carries the PAPER config that trades its exact rule (`config`): a registered read
+// = `readPaperConfig` (the house run's config, signalMode REGISTERED_READ, which the brain refuses
+// anywhere but paper); the Basis × CVD rows = the basis fade with CVD confirm on the graded exit. A
+// user's paper run moves no stage (only a read's registered paper wallet does). The dates are rough:
+// today's event pace carried forward, labelled as such, for a count only (never for a stage).
 
 import { gradedExitStatus, GRADED_EXIT_AXIS } from "./pipelineWatch.mjs";
 import { GRADED_EXIT_OOS_CUTOFF_MS } from "./gradedExit.mjs";
 import { retiredGradedExit, retiredLine } from "./proofCopy.mjs";
 import { REGIME_WINDOW, REGIME_RESULT, judgeRegimeWindow, regimeFromMs } from "./regimeWindow.mjs";
+import { readPaperConfig } from "./housePaper.mjs";
+import { LEVEL_RECLAIM_PAPER_CONFIG } from "./levelReclaim.mjs";
+import { REGISTERED_READS } from "./readPipeline.mjs";
+import { randomWord, beatSentence } from "./proofLayout.mjs";
 
-// Registered read (scoreboard axis) → the preset id that trades its exact rule. A read joins this map
-// in its own reviewed PR, after the parity test the pipeline page asks for at Edge. Empty until then.
-export const SHELF_PRESETS = Object.freeze({});
+const REGISTERED = new Set(REGISTERED_READS.map((r) => r.axis));
+/**
+ * The Basis × CVD graded exit, on paper: the basis fade with CVD confirm (the scoreboard's basis_x_cvd, the
+ * shared rule basisStack.mjs) on the graded exit, with the house runs' coins and caps. Both Basis × CVD rows load it.
+ */
+export const BASIS_CVD_GRADED_PAPER = Object.freeze({
+  ...LEVEL_RECLAIM_PAPER_CONFIG, signalMode: "BASIS_FADE", basisConfirm: "CVD", symbols: Object.freeze([...LEVEL_RECLAIM_PAPER_CONFIG.symbols]),
+});
+/** What every Load forces, whatever the row: paper, and the read as registered (never inverted). */
+export const SHELF_FORCED = Object.freeze({ mode: "PAPER", invertSignal: false });
+/** The config a row loads, or null. Always PAPER. */
+export function shelfConfig(row) {
+  if (!row) return null;
+  if (row.kind === "read") return REGISTERED.has(row.id) ? { ...readPaperConfig(row.id), ...SHELF_FORCED } : null;
+  if (row.kind === "exit" || row.kind === "test") return { ...BASIS_CVD_GRADED_PAPER, symbols: [...BASIS_CVD_GRADED_PAPER.symbols], ...SHELF_FORCED };
+  return null;
+}
+const LOAD_REASON = "Loads into your agent on paper: simulated fills, no orders, no key. Review, then Save.";
 
 const LADDER = ["REGISTERED", "LEAD", "EDGE", "TRADEABLE", "PAPER"];
 const DAY = 86400000;
@@ -59,17 +84,20 @@ function readRow(reg, labels, now, killEvents) {
     need = `${need}. Labelled failing at ${killEvents} events unless it recovers`;
     if (at) eta = `${killEvents} events ~${fmtDay(at)}`;
   }
-  const presetId = SHELF_PRESETS[reg.axis] || null;
-  const canLoad = stage === "PAPER" && !!presetId;
-  const reason = canLoad ? ""
-    : stage === "RETIRED" ? "Retired. It stays on the record and never loads."
-    : stage === "PAPER" ? "This strategy is at Paper, but no agent preset trades its exact rule yet."
-    : failing ? `This strategy is failing its test. It loads once the strategy itself reaches Paper.`
-    : `This strategy is at ${WORD[stage] || stage}. It loads once the strategy itself reaches Paper.`;
+  const canLoad = REGISTERED.has(reg.axis);
+  const reason = canLoad ? LOAD_REASON : "Not a registered read in this build. Reload the page.";
   return {
     id: reg.axis, kind: "read", name: labels[reg.axis] || reg.axis, stage,
-    stageWord: failing ? "Failing" : (WORD[stage] || stage), need, note: "", eta, canLoad, presetId, reason,
+    stageWord: failing ? "Failing" : (WORD[stage] || stage), need, note: "", eta, canLoad, presetId: null, reason,
+    grade: readGrade(n),
   };
+}
+
+/** The grade beside a read's Load: its new-data trades and how often it beat random entries (proofLayout's words). */
+function readGrade(n) {
+  const events = Number(n?.events) || 0;
+  const pct = Number.isFinite(n?.beatsRandomPct) ? n.beatsRandomPct : null;
+  return { word: randomWord(pct, events).text, line: `${events} new-data trade${events === 1 ? "" : "s"}. ${events >= 5 ? beatSentence(pct) : "Too few to compare with random yet."}` };
 }
 
 function exitRow(axis, now) {
@@ -79,7 +107,7 @@ function exitRow(axis, now) {
     return {
       id: `${GRADED_EXIT_AXIS}:graded-exit`, kind: "exit", name: "Basis × CVD, graded exit",
       stage: "RETIRED", stageWord: "Retired", need: "", note: retiredLine(retired), eta: null,
-      canLoad: false, presetId: null, reason: "Retired. It stays on the record and never loads.",
+      canLoad: true, presetId: null, reason: `Retired: its record stays as it is. ${LOAD_REASON}`,
     };
   }
   const ge = gradedExitStatus(axis);
@@ -97,37 +125,33 @@ function exitRow(axis, now) {
     // "Needs …" only while it is counting; a verdict is a plain note.
     need: ge.status === "NOT_YET" ? ge.reason : "",
     note: ge.status === "FAILS" ? `Fails its bar: ${ge.reason}.` : ge.status === "CLEARS" ? `Clears its bar: ${ge.reason}.` : "",
-    eta, canLoad: false, presetId: null,
-    reason: ge.status === "FAILS"
-      ? "Failed the bar it was registered with. Its paper wallet stays as a record."
-      : ge.status === "CLEARS" ? "Cleared. A paper-only preset gets proposed in its own PR before it loads."
-      : "Its exit is still being tested. It loads once the strategy itself reaches Paper.",
+    eta, canLoad: true, presetId: null,
+    reason: ge.status === "FAILS" ? `Failed the bar it was registered with. ${LOAD_REASON}` : LOAD_REASON,
   };
 }
 
 /** Every shelf row from a served scorecard, closest to Paper first, retired last. [] when unreadable. */
 // The Basis × CVD regime window (docs/research/graded-exit-regime-prereg.md, signed 2026-10-26): judged
 // by the same rule the watcher uses (judgeRegimeWindow). A recorded result (REGIME_RESULT) is final and
-// wins over the live numbers. It never loads: a clear only lets a paper-only preset be proposed.
+// wins over the live numbers. It loads the same paper config as the graded-exit row (2026-11-22).
 const REGIME_WORD = { COUNTING: "Testing", CLEARS: "Cleared", FAILS: "Failed its bar", NOT_CLEARED: "Not cleared", INCONCLUSIVE: "Inconclusive" };
 function regimeRow(sc, now) {
-  const base = { id: `${REGIME_WINDOW.axis}:regime-window`, kind: "test", name: "Basis × CVD, graded exit · regime window", canLoad: false, presetId: null, eta: null };
+  const base = { id: `${REGIME_WINDOW.axis}:regime-window`, kind: "test", name: "Basis × CVD, graded exit · regime window", canLoad: true, presetId: null, eta: null, reason: `The same strategy as the graded exit, judged inside a regime window. ${LOAD_REASON}` };
   const days = (c) => (c ? `BTC regime so far: UP ${c.UP || 0} · DOWN ${c.DOWN || 0} · FLAT ${c.FLAT || 0} days (needs 14+ in two, one DOWN).` : "");
   const counts = sc?.regimeWindow?.regime?.counts || null;
   if (REGIME_RESULT) {
     return { ...base, stage: REGIME_RESULT === "CLEARS" ? "TRADEABLE" : "RETIRED", stageWord: REGIME_WORD[REGIME_RESULT], need: "",
-      note: `Judged: ${REGIME_WORD[REGIME_RESULT]}. Final.`,
-      reason: REGIME_RESULT === "CLEARS" ? "Cleared. A paper-only preset gets proposed in its own PR before it loads." : "Judged and final. It never loads." };
+      note: `Judged: ${REGIME_WORD[REGIME_RESULT]}. Final.` };
   }
   const main = (sc?.axes || []).find((a) => a?.name === REGIME_WINDOW.axis)?.regimeWindow;
   const hold = (sc?.holdout?.axes || []).find((a) => a?.name === REGIME_WINDOW.axis)?.regimeWindow;
   const j = judgeRegimeWindow({ main, holdout: hold, regime: sc?.regimeWindow?.regime }, now);
   const start = new Date(regimeFromMs()).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-  if (!j) return { ...base, stage: "REGISTERED", stageWord: "Testing", need: "", note: "Its numbers couldn't be read right now.", reason: "Being tested. It loads once the strategy itself reaches Paper." };
+  if (!j) return { ...base, stage: "REGISTERED", stageWord: "Testing", need: "", note: "Its numbers couldn't be read right now." };
   if (j.status !== "COUNTING") {
     // The live numbers reach a judgment; it becomes final when the watcher records it.
     return { ...base, stage: j.status === "CLEARS" ? "TRADEABLE" : "RETIRED", stageWord: REGIME_WORD[j.status], need: "",
-      note: `Reads ${REGIME_WORD[j.status].toLowerCase()} on today's numbers: ${j.reason}. Final once recorded.`, reason: "Being judged. It loads once the strategy itself reaches Paper." };
+      note: `Reads ${REGIME_WORD[j.status].toLowerCase()} on today's numbers: ${j.reason}. Final once recorded.` };
   }
   const trades = j.numbers.trades;
   const elapsed = (now - regimeFromMs()) / 86_400_000;
@@ -138,7 +162,7 @@ function regimeRow(sc, now) {
   }
   return { ...base, stage: "REGISTERED", stageWord: "Testing",
     need: now < regimeFromMs() ? "" : `${Math.max(0, REGIME_WINDOW.minTrades - trades)} more counted trades and the regime condition, or the limit (Apr 27, 2027)`,
-    note: now < regimeFromMs() ? `Counts from ${start}.` : days(counts), eta, reason: "Being tested. It loads once the strategy itself reaches Paper." };
+    note: now < regimeFromMs() ? `Counts from ${start}.` : days(counts), eta };
 }
 
 export function shelfRows(sc, now = Date.now()) {
@@ -154,11 +178,7 @@ export function shelfRows(sc, now = Date.now()) {
   return rows.map((r, i) => ({ r, i })).sort((a, b) => rank(b.r) - rank(a.r) || a.i - b.i).map(({ r }) => r);
 }
 
-/** The disabled button's label: the strategy's own stage, so it never reads as the user's agent mode (2026-11-22). */
+/** The button's label. Every row loads on paper (2026-11-22, the shelf opened); the stage sits beside it as a chip. */
 export function shelfButtonLabel(row) {
-  if (!row) return "Load";
-  if (row.canLoad) return "Load";
-  if (row.stage === "RETIRED") return "Retired";
-  if (row.stage === "PAPER") return "At Paper · no preset yet";
-  return `${row.stageWord} · not at Paper yet`;
+  return row && row.canLoad ? "Load on paper" : "Can’t load";
 }

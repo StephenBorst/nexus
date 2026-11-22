@@ -216,9 +216,16 @@ product is what sits on top:
 - **PRO-locked clicks + the shelf's words** (borst 2026-11-22): a PRO preset / strategy button clicked without PRO shows
   `ProLockNote.tsx` right under what was clicked (words `app/lib/proLock.mjs`: what it is, "wasn't loaded", hold
   100M $NEXUS or $20/mo USDC / $15 in $NEXUS, "See PRO ↓" → `#nexus-pro`; "Checking…" while the tier loads, never
-  "not PRO"). The shelf says Paper is the STRATEGY's stage, not the agent's mode; each disabled button names the stage
-  (`shelfButtonLabel`: "Lead · not at Paper yet" / "At Paper · no preset yet"), and every read row links its public paper
-  run (`paperCountLine`). Tests `proLock.test.mjs`, `strategyShelf.test.mjs`.
+  "not PRO"). Every read row on the shelf links its public paper run (`paperCountLine`). Tests `proLock.test.mjs`.
+- **Strategy Shelf is OPEN** (borst 2026-11-22, "everything runs on paper, only the CLEARED badge is gated"; rules
+  `app/lib/strategyShelf.mjs`, tested): every row loads into the agent ON PAPER whatever its stage (Testing, Lead,
+  Failing, Retired), button "Load on paper", stage chip + grade line (`readGrade`: new-data trades + proofLayout's
+  `randomWord` / `beatSentence`) beside it. A registered read loads `readPaperConfig(read)` (housePaper.mjs; the house
+  run's config exactly: REGISTERED_READ + `read`, graded exit, 11 main coins); both Basis × CVD rows load
+  `BASIS_CVD_GRADED_PAPER` (BASIS_FADE + CVD on the graded exit). Load forces `mode: "PAPER"`, `invertSignal: false` +
+  `EXPERIMENTAL_FILTERS_OFF`, and refuses over a live position. Safe by construction: the brain refuses REGISTERED_READ
+  off paper, lab-api 409s the graded exit live. A user's run moves no stage and is never a read's `paperWallet`. Brain
+  cost is per READ (shared), not per wallet; a user adding coins beyond the 11 adds series reads.
 - **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open with no TP or
   trail and only what rests on Orderly (the backstop stop, or the owner's own; none on DCA/paper): the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.
@@ -240,7 +247,8 @@ product is what sits on top:
   hour after an event, `sourceT` = the event time. **Loaded only by the hidden link `/lab?tab=agent&deploy=level-reclaim-paper`**
   (borst: a FRESH wallet, owner-only) with `LEVEL_RECLAIM_PAPER_CONFIG` (graded exit, 11 main-card coins, no filters, wide
   caps). No mode button, no Strategy Library preset, no /proof Load until its wallet has 30 paper trades with parity
-  CLEAN, judged after fees (`/paper-costs`), tested. Parity: `levelReclaim.test.mjs` (hour by hour), `/agent/:a/parity`. **OI_DIV_4H = ON for PAPER only**
+  CLEAN, judged after fees (`/paper-costs`), tested. (Superseded for paper by the open shelf, 2026-11-22: anyone can
+  load the read on paper through REGISTERED_READ; the LEVEL_RECLAIM mode itself stays on the hidden link.) Parity: `levelReclaim.test.mjs` (hour by hour), `/agent/:a/parity`. **OI_DIV_4H = ON for PAPER only**
   (2026-11-13, oi_div_reversal_4h served TRADEABLE that day, #299): same pattern. Shared rule `app/lib/oiDivReversal.mjs`
   (the grader's `oiDivReversalEvents` + `oiDivReversal4hEvents` moved there unchanged; explorerReads re-exports them),
   computed by the brain on `oi:hist` behind `OI_DIV_4H_LIVE = "true"`, PAPER only (`oiDiv4hRefusal`, no live lift);
