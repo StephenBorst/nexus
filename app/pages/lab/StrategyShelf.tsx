@@ -3,7 +3,10 @@
 // for a strategy an agent preset trades exactly; every other row is greyed with the reason.
 // Rules: app/lib/strategyShelf.mjs (tested). Display only: nothing here grades or trades.
 import { useEffect, useState } from "react";
-import { shelfRows } from "@/lib/strategyShelf.mjs";
+import { shelfRows, shelfButtonLabel } from "@/lib/strategyShelf.mjs";
+import { sharedJson } from "@/lib/sharedJson.mjs";
+import { paperCountLine } from "@/lib/paperRun.mjs";
+import { Link } from "react-router-dom";
 import { agentCardStyle, agentLabelStyle } from "./styles";
 import { C } from "@/config/theme";
 import { Button } from "@/components/ui";
@@ -18,7 +21,15 @@ type ShelfRow = ReturnType<typeof shelfRows>[number];
 export function StrategyShelf({ onLoad }: { onLoad: (presetId: string) => void }) {
   const [rows, setRows] = useState<ShelfRow[] | null>(null);
   const [failed, setFailed] = useState(false);
+  // Every registered read already runs its own public paper agent (house runs): each row links to it, so a row that
+  // can't load yet still has something live to open (2026-11-22).
+  const [runs, setRuns] = useState<Record<string, { count?: number; target?: number; open?: boolean; unread?: boolean }>>({});
   const isMobile = useIsMobile();
+  useEffect(() => {
+    let alive = true;
+    sharedJson("https://og.nexustradinglabs.com/signals/paper-counts").then((d: { runs?: Record<string, never> } | null) => { if (alive && d?.runs) setRuns(d.runs); });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -35,10 +46,11 @@ export function StrategyShelf({ onLoad }: { onLoad: (presetId: string) => void }
 
   return (
     <div style={agentCardStyle}>
-      <div style={agentLabelStyle}>STRATEGY SHELF <span style={{ color: C.text.muted }}>· loads at Paper</span></div>
-      <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 11, lineHeight: 1.5, marginTop: 4 }}>
-        Each strategy earns its way here on new data: Testing → Lead → Edge → Tradeable → Paper. Load turns on at Paper.
-        {rows && !rows.some((r) => r.canLoad) ? " Nothing is there yet." : ""}
+      <div style={agentLabelStyle}>STRATEGY SHELF <span style={{ color: C.text.muted }}>· a strategy loads once it reaches Paper</span></div>
+      <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
+        Each strategy earns its way here on new data: Testing → Lead → Edge → Tradeable → Paper. Paper is the strategy’s own
+        stage, not your agent’s mode: Load turns on once the strategy reaches it and an agent preset trades its exact rule.
+        {rows && !rows.some((r) => r.canLoad) ? " None is there yet. Each one’s public paper run is linked below." : ""}
       </div>
       {failed && (
         <div style={{ color: C.text.muted, fontFamily: UI, fontSize: 11, marginTop: 12 }}>Couldn’t read the scoreboard. Try again later.</div>
@@ -64,9 +76,14 @@ export function StrategyShelf({ onLoad }: { onLoad: (presetId: string) => void }
               <div style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: isMobile ? "flex-start" : "flex-end", gap: 3, maxWidth: isMobile ? "100%" : 260 }}>
                 <Button variant={r.canLoad ? "primary" : "secondary"} size="sm" disabled={!r.canLoad} onClick={() => r.canLoad && r.presetId && onLoad(r.presetId)}
                   title={r.canLoad ? "Load into the agent, review, then Save" : r.reason}>
-                  Load
+                  {shelfButtonLabel(r)}
                 </Button>
-                {!r.canLoad && <span style={{ color: C.text.muted, fontFamily: UI, fontSize: 10, textAlign: isMobile ? "left" : "right", lineHeight: 1.4 }}>{r.reason}</span>}
+                {!r.canLoad && <span style={{ color: C.text.muted, fontFamily: UI, fontSize: 11, textAlign: isMobile ? "left" : "right", lineHeight: 1.4 }}>{r.reason}</span>}
+                {r.kind === "read" && runs[r.id] && (
+                  <Link to={`/proof/paper/${r.id}`} style={{ color: C.text.fog, fontFamily: UI, fontSize: 11.5, textDecoration: "none" }}>
+                    {paperCountLine(runs[r.id])} →
+                  </Link>
+                )}
               </div>
             </div>
           ))}

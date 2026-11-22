@@ -409,7 +409,8 @@ export default function TheLabPage() {
         <div style={{ marginTop: isMobile ? 14 : 24, paddingTop: 16, paddingBottom: isMobile ? 24 : 0, borderTop: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 12 }}>
           <NexusBuyBar />
           {connected && <CreatorEarnings address={rootWalletAddress} />}
-          {connected && <NexusPro walletAddress={rootWalletAddress} />}
+          {/* #nexus-pro: a PRO-locked click's "See PRO" scrolls here (ProLockNote.tsx). */}
+          {connected && <div id="nexus-pro" style={{ scrollMarginTop: 80 }}><NexusPro walletAddress={rootWalletAddress} /></div>}
         </div>
       </div>
       <CommandPalette onSelectTab={setActiveTab} />
