@@ -1281,6 +1281,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
 - **Key proxies** (`keyProxy.mjs`): `/flash/*`, `/swap/jup/*`, `/xc/quote` accept only our origins + per-IP budgets.
 - **Discovery** rules in `app/lib/spotDiscovery.mjs` (recent views, address search, real-market floors incl. padded/thin
   pools, safe logo hosts, read brief, callers line). No long/short split on callers until the board has a net-positive caller.
+  Recent views follow other tabs (2026-11-22): the Spot page re-reads `nx_spot_viewed_v1` on another tab's `storage` write
+  (`viewedChanged`) and when it comes back into view; a coin opened from the Lab in another tab used to need a reload.
 - Local live checks: Node's fetch ignores HTTPS_PROXY here; use `NODE_USE_ENV_PROXY=1`.
 
 ## x402 patterns

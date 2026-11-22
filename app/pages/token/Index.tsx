@@ -30,7 +30,7 @@ import { tickerLabel } from "@/lib/tickerLabel.mjs";
 import { FlashOrders } from "./FlashOrders";
 import { CrossChainCard, hasTransferInFlight } from "./CrossChainCard";
 import { Collapsible } from "@/pages/lab/Collapsible";
-import { addViewed, readViewed, writeViewed, viewedHref, didYouMean, SPOT_MAJORS, majorHref, needsSolanaFunds, openCallCount, callCountLine, poolCaution,
+import { addViewed, readViewed, writeViewed, viewedChanged, viewedHref, didYouMean, SPOT_MAJORS, majorHref, needsSolanaFunds, openCallCount, callCountLine, poolCaution,
   readBrief, fundingPayLine, callerRecordLine, callDraft, chipMarks, chipKey, majorLogo, safeLogoUrl,
   callStrip, openChipLine, labRowLine, readLabOpen, writeLabOpen, EMPTY_STRIP_LINE } from "@/lib/spotDiscovery.mjs";
 import { swapOutcome } from "@/lib/solSwapGuards.mjs";
@@ -684,6 +684,18 @@ export default function TokenTerminal() {
     return () => { alive = false; };
   }, [pair?.baseAddress, pair?.chainId, pair?.imageUrl]); // eslint-disable-line react-hooks/exhaustive-deps
   const logoSrc = pair ? (pair.imageUrl || gtLogo) : null;
+
+  // ── recently viewed, kept in step with other tabs ── a coin opened in another tab (the Lab's "Express on Spot", a
+  // second Spot tab) writes the list there; this page re-reads it on that tab's write and when it comes back into view.
+  useEffect(() => {
+    const store = () => { try { return window.localStorage; } catch { return null; } };
+    const reread = () => setViewed(readViewed(store()));
+    const onStorage = (e: StorageEvent) => { if (viewedChanged(e)) reread(); };
+    const onVisible = () => { if (document.visibilityState === "visible") reread(); };
+    window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.removeEventListener("storage", onStorage); document.removeEventListener("visibilitychange", onVisible); };
+  }, []);
 
   // ── recently viewed ── a resolved token (by chain + CA) or a perp-only major (by ticker). Its logo rides
   // along (checked against the image hosts again on every read) so the chips and the majors row can show it.
