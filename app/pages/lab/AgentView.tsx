@@ -40,6 +40,7 @@ import { quietLine, quietAgeText } from "@/lib/quietLine.mjs";
 import { agentStory } from "@/lib/agentStory.mjs";
 import { pressKey } from "@/utils/a11y";
 import { C, SIGNAL } from "@/config/theme";
+import { ProLockNote } from "./ProLockNote";
 
 export function AgentView() {
   const isMobile = useIsMobile();
@@ -82,8 +83,9 @@ export function AgentView() {
 
   const walletAddress = getWalletAddress();
   const tradingKey = findOrderlyTradingKey();
-  const { isPro } = useSubscription(walletAddress);
-  const [proNote, setProNote] = useState(false);
+  const { isPro, isLoading: subLoading } = useSubscription(walletAddress);
+  // A PRO-locked click says so next to what was clicked (2026-11-22: it used to render far below, so a preset looked dead).
+  const [proLock, setProLock] = useState<{ where: "preset" | "mode"; name: string } | null>(null);
   // Advanced config (scale-out exits, DCA ladder, external webhooks) is collapsed
   // by default — the agent runs on sensible defaults; this is opt-in tuning.
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -991,8 +993,8 @@ export function AgentView() {
                 return (
                   <button key={p.id} title={locked ? "Advanced strategy — PRO" : p.blurb}
                     onClick={() => {
-                      if (locked) { setProNote(true); return; }
-                      setProNote(false);
+                      if (locked) { setProLock({ where: "preset", name: p.name }); return; }
+                      setProLock(null);
                       // A preset is a whole strategy — it replaces the filter set (its own filters,
                       // if any, come back in via p.config), so nothing ungraded rides along.
                       setConfig((prev) => ({ ...prev, ...EXPERIMENTAL_FILTERS_OFF, ...p.config }));
@@ -1013,6 +1015,7 @@ export function AgentView() {
                 );
               })}
             </div>
+            {proLock?.where === "preset" && <ProLockNote name={proLock.name} loading={subLoading} onClose={() => setProLock(null)} />}
           </div>
           </Collapsible>
 
@@ -1164,7 +1167,7 @@ export function AgentView() {
                 const locked = isProStrategy(v) && !isPro;
                 return (
                   <button key={v} title={locked ? "Advanced strategy — PRO" : hint}
-                    onClick={() => { if (locked) { setProNote(true); return; } setProNote(false); setConfig({ ...config, signalMode: v }); }}
+                    onClick={() => { if (locked) { setProLock({ where: "mode", name: label }); return; } setProLock(null); setConfig({ ...config, signalMode: v }); }}
                     style={{
                     background: sel ? "#ededf015" : "#0a0a0b",
                     border: `1px solid ${sel ? "#ededf060" : "#232327"}`,
@@ -1175,11 +1178,7 @@ export function AgentView() {
                 );
               })}
             </div>
-            {proNote && (
-              <div style={{ ...agentLabelStyle, fontSize: 9, marginTop: 6, color: "#ededf0" }}>
-                ◆ Advanced strategies are PRO — hold $NEXUS or subscribe (see PRO in the Lab).
-              </div>
-            )}
+            {proLock?.where === "mode" && <ProLockNote name={proLock.name} loading={subLoading} onClose={() => setProLock(null)} />}
             <div style={{ ...agentLabelStyle, fontSize: 9, marginTop: 8, color: "#71717a" }}>
               {({
                 CONFLUENCE: "Strictest filter. Acts only when the crowd is offside two ways at once: paying to hold one side (funding) and piling into it (open interest). Fewest trades.",

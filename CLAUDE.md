@@ -213,6 +213,12 @@ product is what sits on top:
 - **Logged-out Quick Trade + Holders Room** (2026-11-21, `app/components/GuestPanel.tsx`, `app/lib/guestPanels.test.mjs`):
   what the tab does + the next step instead of one line. Holders tiers read `TIER_THRESHOLDS` (Operator = the room,
   Architect = + PRO while held, Oracle = the badge, no extra access); "no yield, no revenue share" stays.
+- **PRO-locked clicks + the shelf's words** (borst 2026-11-22): a PRO preset / strategy button clicked without PRO shows
+  `ProLockNote.tsx` right under what was clicked (words `app/lib/proLock.mjs`: what it is, "wasn't loaded", hold
+  100M $NEXUS or $20/mo USDC / $15 in $NEXUS, "See PRO ↓" → `#nexus-pro`; "Checking…" while the tier loads, never
+  "not PRO"). The shelf says Paper is the STRATEGY's stage, not the agent's mode; each disabled button names the stage
+  (`shelfButtonLabel`: "Lead · not at Paper yet" / "At Paper · no preset yet"), and every read row links its public paper
+  run (`paperCountLine`). Tests `proLock.test.mjs`, `strategyShelf.test.mjs`.
 - **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open with no TP or
   trail and only what rests on Orderly (the backstop stop, or the owner's own; none on DCA/paper): the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.

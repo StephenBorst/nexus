@@ -63,9 +63,9 @@ function readRow(reg, labels, now, killEvents) {
   const canLoad = stage === "PAPER" && !!presetId;
   const reason = canLoad ? ""
     : stage === "RETIRED" ? "Retired. It stays on the record and never loads."
-    : stage === "PAPER" ? "At Paper, but no agent preset trades this rule yet."
-    : failing ? "Failing its test. Loads only at Paper."
-    : `${WORD[stage] || stage}. Loads only at Paper.`;
+    : stage === "PAPER" ? "This strategy is at Paper, but no agent preset trades its exact rule yet."
+    : failing ? `This strategy is failing its test. It loads once the strategy itself reaches Paper.`
+    : `This strategy is at ${WORD[stage] || stage}. It loads once the strategy itself reaches Paper.`;
   return {
     id: reg.axis, kind: "read", name: labels[reg.axis] || reg.axis, stage,
     stageWord: failing ? "Failing" : (WORD[stage] || stage), need, note: "", eta, canLoad, presetId, reason,
@@ -100,8 +100,8 @@ function exitRow(axis, now) {
     eta, canLoad: false, presetId: null,
     reason: ge.status === "FAILS"
       ? "Failed the bar it was registered with. Its paper wallet stays as a record."
-      : ge.status === "CLEARS" ? "Cleared. A paper-only preset gets proposed in its own PR. Loads only at Paper."
-      : "Its exit is still being tested. Loads only at Paper.",
+      : ge.status === "CLEARS" ? "Cleared. A paper-only preset gets proposed in its own PR before it loads."
+      : "Its exit is still being tested. It loads once the strategy itself reaches Paper.",
   };
 }
 
@@ -117,17 +117,17 @@ function regimeRow(sc, now) {
   if (REGIME_RESULT) {
     return { ...base, stage: REGIME_RESULT === "CLEARS" ? "TRADEABLE" : "RETIRED", stageWord: REGIME_WORD[REGIME_RESULT], need: "",
       note: `Judged: ${REGIME_WORD[REGIME_RESULT]}. Final.`,
-      reason: REGIME_RESULT === "CLEARS" ? "Cleared. A paper-only preset gets proposed in its own PR. Loads only at Paper." : "Judged and final. It never loads." };
+      reason: REGIME_RESULT === "CLEARS" ? "Cleared. A paper-only preset gets proposed in its own PR before it loads." : "Judged and final. It never loads." };
   }
   const main = (sc?.axes || []).find((a) => a?.name === REGIME_WINDOW.axis)?.regimeWindow;
   const hold = (sc?.holdout?.axes || []).find((a) => a?.name === REGIME_WINDOW.axis)?.regimeWindow;
   const j = judgeRegimeWindow({ main, holdout: hold, regime: sc?.regimeWindow?.regime }, now);
   const start = new Date(regimeFromMs()).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-  if (!j) return { ...base, stage: "REGISTERED", stageWord: "Testing", need: "", note: "Its numbers couldn't be read right now.", reason: "Being tested. Loads only at Paper." };
+  if (!j) return { ...base, stage: "REGISTERED", stageWord: "Testing", need: "", note: "Its numbers couldn't be read right now.", reason: "Being tested. It loads once the strategy itself reaches Paper." };
   if (j.status !== "COUNTING") {
     // The live numbers reach a judgment; it becomes final when the watcher records it.
     return { ...base, stage: j.status === "CLEARS" ? "TRADEABLE" : "RETIRED", stageWord: REGIME_WORD[j.status], need: "",
-      note: `Reads ${REGIME_WORD[j.status].toLowerCase()} on today's numbers: ${j.reason}. Final once recorded.`, reason: "Being judged. Loads only at Paper." };
+      note: `Reads ${REGIME_WORD[j.status].toLowerCase()} on today's numbers: ${j.reason}. Final once recorded.`, reason: "Being judged. It loads once the strategy itself reaches Paper." };
   }
   const trades = j.numbers.trades;
   const elapsed = (now - regimeFromMs()) / 86_400_000;
@@ -138,7 +138,7 @@ function regimeRow(sc, now) {
   }
   return { ...base, stage: "REGISTERED", stageWord: "Testing",
     need: now < regimeFromMs() ? "" : `${Math.max(0, REGIME_WINDOW.minTrades - trades)} more counted trades and the regime condition, or the limit (Apr 27, 2027)`,
-    note: now < regimeFromMs() ? `Counts from ${start}.` : days(counts), eta, reason: "Being tested. Loads only at Paper." };
+    note: now < regimeFromMs() ? `Counts from ${start}.` : days(counts), eta, reason: "Being tested. It loads once the strategy itself reaches Paper." };
 }
 
 export function shelfRows(sc, now = Date.now()) {
@@ -152,4 +152,13 @@ export function shelfRows(sc, now = Date.now()) {
   rows.push(regimeRow(sc, now));
   const rank = (r) => (r.stage === "RETIRED" ? -1 : r.stageWord === "Failing" ? -0.5 : LADDER.indexOf(r.stage));
   return rows.map((r, i) => ({ r, i })).sort((a, b) => rank(b.r) - rank(a.r) || a.i - b.i).map(({ r }) => r);
+}
+
+/** The disabled button's label: the strategy's own stage, so it never reads as the user's agent mode (2026-11-22). */
+export function shelfButtonLabel(row) {
+  if (!row) return "Load";
+  if (row.canLoad) return "Load";
+  if (row.stage === "RETIRED") return "Retired";
+  if (row.stage === "PAPER") return "At Paper · no preset yet";
+  return `${row.stageWord} · not at Paper yet`;
 }

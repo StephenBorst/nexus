@@ -108,3 +108,14 @@ test("regime window row: a judgment on today's numbers is shown, final only once
   assert.match(unread.note, /couldn't be read/);
   assert.equal(unread.canLoad, false);
 });
+
+test("the shelf says Paper is the strategy's stage, and the button names where it is now (2026-11-22)", async () => {
+  const { shelfButtonLabel } = await import("./strategyShelf.mjs");
+  assert.equal(shelfButtonLabel({ canLoad: false, stage: "LEAD", stageWord: "Lead" }), "Lead · not at Paper yet");
+  assert.equal(shelfButtonLabel({ canLoad: false, stage: "PAPER", stageWord: "Paper" }), "At Paper · no preset yet");
+  assert.equal(shelfButtonLabel({ canLoad: false, stage: "RETIRED", stageWord: "Retired" }), "Retired");
+  assert.equal(shelfButtonLabel({ canLoad: true, stage: "PAPER" }), "Load");
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./strategyShelf.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /Loads only at Paper/, "the old wording read like the user's agent mode");
+});
