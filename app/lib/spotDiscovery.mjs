@@ -60,6 +60,14 @@ export function readViewed(storage) {
   } catch { return []; }
 }
 
+/**
+ * Did another tab change the recently-viewed list? (borst 2026-11-22: a coin opened from the Lab in one tab never showed
+ * on a Spot page already open in another until a reload.) A `storage` event for our key, or a cleared storage (key null).
+ */
+export function viewedChanged(e) {
+  return !!e && (e.key === VIEWED_KEY || e.key === null);
+}
+
 export function writeViewed(storage, list) {
   try { storage?.setItem(VIEWED_KEY, JSON.stringify(list)); } catch { /* blocked storage: nothing remembered */ }
 }

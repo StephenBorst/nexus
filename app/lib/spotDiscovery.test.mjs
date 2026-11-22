@@ -328,3 +328,16 @@ test("calls strip: empty only when the feed answered; a failed read is never sho
   assert.equal(callStrip([], undefined, { now: NOW }).mode, null);
   assert.match(EMPTY_STRIP_LINE, /^No public calls in flight or graded this week\.$/);
 });
+
+test("recently viewed follows other tabs: our key or a cleared storage re-reads, other keys don't; the Spot page listens", async () => {
+  const { viewedChanged, VIEWED_KEY } = await import("./spotDiscovery.mjs");
+  assert.equal(viewedChanged({ key: VIEWED_KEY }), true);
+  assert.equal(viewedChanged({ key: null }), true, "localStorage.clear() in another tab");
+  assert.equal(viewedChanged({ key: "nx_watchlist_v1" }), false);
+  assert.equal(viewedChanged(null), false);
+  const { readFileSync } = await import("node:fs");
+  const page = readFileSync(new URL("../pages/token/Index.tsx", import.meta.url), "utf8");
+  assert.match(page, /addEventListener\("storage", onStorage\)/);
+  assert.match(page, /if \(viewedChanged\(e\)\) reread\(\)/);
+  assert.match(page, /addEventListener\("visibilitychange", onVisible\)/);
+});
