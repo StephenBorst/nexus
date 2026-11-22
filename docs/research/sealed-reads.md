@@ -76,3 +76,13 @@ anything." The X post in §1.2 is waived for house-1. Its outside date is the fi
 repository on GitHub: PR #397, merged 2026-11-20, a time GitHub records and this repository can't rewrite. house-1
 counts from **2026-11-22T00:00:00Z**, the next 00:00 UTC after this ruling; nothing fired before it counts. Everything
 else on this page stands. A later sealed read follows §1.2 as written unless borst rules again here.
+
+### 2026-11-22 · borst's ruling: house-1 counts from the first 00:00 UTC after its poster went live
+
+borst, in session 2026-11-22: "Skipping the X post. Date the fingerprint by the public #397 commit instead, and start
+the count at the next 00:00 UTC after deploy." The auto-poster (the private worker that sends each fire) was first
+deployed 2026-11-22T19:23:28Z. Between the 2026-11-22T00:00Z start recorded above and that deploy, nothing could post:
+two fires that morning were never sent, so they could not be listed as misses either. house-1 therefore counts from
+**2026-11-23T00:00:00Z**, the next 00:00 UTC after the deploy; this replaces the start above. From here on, no sealed
+read counts before its poster is running: the start is the next 00:00 UTC after the latest of the commit, the outside
+date (X post or a recorded waiver) and the poster's first deploy.

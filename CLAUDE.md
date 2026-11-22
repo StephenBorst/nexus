@@ -682,8 +682,13 @@ product is what sits on top:
   Until then a "House signal · testing" panel tops /proof. Revealed at CLEARED or borst's date; a hash mismatch voids it.
   **On record** (`SEALED_READS`): `house-1` ("House signal", fingerprint `b71e0dfd…0c6e`, posting wallet `0x76A2…B17B`,
   borst holds its key; committed 2026-11-20, PR #397). **X post WAIVED for house-1** (borst 2026-11-21, ruling under the
-  page's Results; `xPostWaivedAt`): the GitHub merge is the outside date; **counts from 2026-11-22T00:00:00Z**
-  (`sealedCountsFrom`). A later sealed read still needs its X post unless borst rules again.
+  page's Results; `xPostWaivedAt`): the GitHub merge is the outside date. **Poster live 2026-11-22T19:23:28Z** (borst's
+  second ruling, same Results; `posterLiveAt`, the private worker's first deploy): no sealed read counts before its poster
+  runs, so the start = next 00:00 UTC after the latest of commit / outside date / poster → **house-1 counts from
+  2026-11-23T00:00:00Z** (`sealedCountsFrom`; no `posterLiveAt` = not started). A later sealed read still needs its X
+  post unless borst rules again. The poster = private worker `nexus-house-signal` (cron minutes 1–4, `MODE` dry | live in
+  its wrangler.toml, deployed by hand from its Actions tab). **Dry runs are logged** (`sealed:dry:{name}`, last 50,
+  signature-checked, never a fire or a call; `dryRuns` on `GET /sealed/:name`).
   **Fires → calls** (`POST /sealed/fire`, `routes-sealed.mjs`, rules `app/lib/sealedFire.mjs`): the private worker sends
   `{name, coin, side, fireAt}` signed by the read's OWN wallet (`sealedFireMessage`); lab-api builds the call in public
   (entry = Orderly mark, stop/target from `gradedExitLevels` on Orderly's last 81 hourly bars, `timeStopH` 168) and seals it
