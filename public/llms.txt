@@ -2,7 +2,7 @@
 
 > Verifiable perpetuals trading terminal on Orderly Network. Plan trades, automate them
 > with autonomous agents, and build track records that are graded from public price and
-> anchored on-chain — never self-reported. 130+ perp markets, USDC-settled.
+> anchored on-chain — never self-reported. 140+ perp markets, USDC-settled.
 
 ## For AI agents (start here)
 
