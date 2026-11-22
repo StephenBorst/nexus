@@ -1,9 +1,9 @@
-// The strategy shelf (Agent → Config): every strategy on its way to the agent, its stage as the
-// scoreboard serves it, what it still needs and a rough date. Load works only at Paper, and only
-// for a strategy an agent preset trades exactly; every other row is greyed with the reason.
-// Rules: app/lib/strategyShelf.mjs (tested). Display only: nothing here grades or trades.
+// The strategy shelf (Agent → Config): every strategy, its stage as the scoreboard serves it, its grade,
+// what it still needs and a rough date. Every row loads into the agent ON PAPER, whatever its stage
+// (borst 2026-11-22, "open the shelf"; only the CLEARED badge is gated). Rules + the config each row
+// loads: app/lib/strategyShelf.mjs (tested). Nothing here grades or trades: Load fills the form, Save sends it.
 import { useEffect, useState } from "react";
-import { shelfRows, shelfButtonLabel } from "@/lib/strategyShelf.mjs";
+import { shelfRows, shelfButtonLabel, shelfConfig } from "@/lib/strategyShelf.mjs";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { paperCountLine } from "@/lib/paperRun.mjs";
 import { Link } from "react-router-dom";
@@ -18,11 +18,13 @@ const UI = "var(--nx-font-ui)";
 
 type ShelfRow = ReturnType<typeof shelfRows>[number];
 
-export function StrategyShelf({ onLoad }: { onLoad: (presetId: string) => void }) {
+export type ShelfLoad = { name: string; stageWord: string; config: Record<string, unknown> };
+
+export function StrategyShelf({ onLoad }: { onLoad: (load: ShelfLoad) => void }) {
   const [rows, setRows] = useState<ShelfRow[] | null>(null);
   const [failed, setFailed] = useState(false);
-  // Every registered read already runs its own public paper agent (house runs): each row links to it, so a row that
-  // can't load yet still has something live to open (2026-11-22).
+  // Every registered read also runs its own public paper agent (house runs): each row links to it, so you can see
+  // the strategy's own paper record before you load it (2026-11-22).
   const [runs, setRuns] = useState<Record<string, { count?: number; target?: number; open?: boolean; unread?: boolean }>>({});
   const isMobile = useIsMobile();
   useEffect(() => {
@@ -46,11 +48,11 @@ export function StrategyShelf({ onLoad }: { onLoad: (presetId: string) => void }
 
   return (
     <div style={agentCardStyle}>
-      <div style={agentLabelStyle}>STRATEGY SHELF <span style={{ color: C.text.muted }}>· a strategy loads once it reaches Paper</span></div>
+      <div style={agentLabelStyle}>STRATEGY SHELF <span style={{ color: C.text.muted }}>· every strategy loads on paper</span></div>
       <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
-        Each strategy earns its way here on new data: Testing → Lead → Edge → Tradeable → Paper. Paper is the strategy’s own
-        stage, not your agent’s mode: Load turns on once the strategy reaches it and an agent preset trades its exact rule.
-        {rows && !rows.some((r) => r.canLoad) ? " None is there yet. Each one’s public paper run is linked below." : ""}
+        Load any strategy into your agent on paper, at its exact rule: simulated fills, no orders, no key. Each one’s stage
+        and grade stay beside it (Testing → Lead → Edge → Tradeable → Paper). Only a strategy marked CLEARED on /proof has
+        passed its bar; everything else is still being tested. Your paper run moves no stage.
       </div>
       {failed && (
         <div style={{ color: C.text.muted, fontFamily: UI, fontSize: 11, marginTop: 12 }}>Couldn’t read the scoreboard. Try again later.</div>
@@ -69,13 +71,19 @@ export function StrategyShelf({ onLoad }: { onLoad: (presetId: string) => void }
                     {r.stageWord}
                   </span>
                 </div>
+                {r.grade && (
+                  <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 11.5, marginTop: 3, lineHeight: 1.4 }}>
+                    <span style={{ color: C.text.bright }}>{r.grade.word}.</span> {r.grade.line}
+                  </div>
+                )}
                 {r.need && <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 11, marginTop: 3, lineHeight: 1.4 }}>Needs {r.need}.</div>}
                 {r.note && <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 11, marginTop: 3, lineHeight: 1.4 }}>{r.note}</div>}
                 {r.eta && <div style={{ color: C.text.muted, fontFamily: MONO, fontSize: 10, marginTop: 2 }}>{r.eta}</div>}
               </div>
               <div style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: isMobile ? "flex-start" : "flex-end", gap: 3, maxWidth: isMobile ? "100%" : 260 }}>
-                <Button variant={r.canLoad ? "primary" : "secondary"} size="sm" disabled={!r.canLoad} onClick={() => r.canLoad && r.presetId && onLoad(r.presetId)}
-                  title={r.canLoad ? "Load into the agent, review, then Save" : r.reason}>
+                <Button variant={r.canLoad ? "primary" : "secondary"} size="sm" disabled={!r.canLoad}
+                  onClick={() => { const config = shelfConfig(r); if (r.canLoad && config) onLoad({ name: r.name, stageWord: r.stageWord, config }); }}
+                  title={r.reason}>
                   {shelfButtonLabel(r)}
                 </Button>
                 {!r.canLoad && <span style={{ color: C.text.muted, fontFamily: UI, fontSize: 11, textAlign: isMobile ? "left" : "right", lineHeight: 1.4 }}>{r.reason}</span>}
