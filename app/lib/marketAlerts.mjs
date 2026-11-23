@@ -3,10 +3,12 @@
 //   FUNDING_STRETCH   funding moved past the coin's own range (it wasn't stretched last look)
 //   CONSENSUS_FORMED  tracked traders now clearly agree on a side (CONSENSUS_RATIO), or the agreed side FLIPPED
 //   FORECAST_SWING    the coin's most traded forecast moved ≥ FORECAST_SWING_PT points from the last alerted level
+//   UNUSUAL_MOVE      the coin's 4-hour move passed its own 10/90 line over 90 days (unusualMove.mjs; runner-built)
 // The first look at a coin only records a baseline (switching alerts on never replays old moves). An unread board keeps
 // the previous values and fires nothing. Pure, tested; the worker runner is lab-api marketWatch.mjs.
 import { marketCoin } from "./marketRead.mjs";
 import { CONSENSUS_RATIO } from "./smartConsensus.mjs";
+import { moveMessage } from "./unusualMove.mjs";
 
 export const FORECAST_SWING_PT = 15;
 export const MARKET_WATCH_COINS_MAX = 10; // per device
@@ -102,6 +104,7 @@ export function marketAlertMessage(ev) {
     const up = ev.to > ev.from;
     return `${c}: forecast ${up ? "up" : "down"} ${Math.abs(Math.round(ev.to - ev.from))} pts to ${Math.round(ev.to)}% YES. "${String(ev.question ?? "").slice(0, 90)}"`;
   }
+  if (ev.kind === "UNUSUAL_MOVE" && ev.move) return moveMessage(c, ev.move);
   return `${c}: something changed.`;
 }
 

@@ -972,8 +972,13 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   inputs only, no tally; each lens prints its nearest graded relative's live grade or "not graded"
   (`fadeGrade.mjs lensGradeLine`). **Market alerts** (`app/lib/marketAlerts.mjs`, runner lab-api `marketWatch.mjs` on
   the */5 cron): "Alert me on ETH" in the drawer; push switch `markets` (OFF by default) + ≤10 coins on the device
-  record; fires only on a CHANGE (funding stretched, 2× consensus formed/flipped, forecast ±15 pts), first look =
-  baseline; tap opens `/lab?tab=intel&market=ETH`. **Speed:** `sharedJson` (`app/lib/sharedJson.mjs`) shares one
+  record; fires only on a CHANGE (funding stretched, 2× consensus formed/flipped, forecast ±15 pts, or an UNUSUAL MOVE),
+  first look = baseline; tap opens `/lab?tab=intel&market=ETH`. **Unusual move** (borst 2026-11-23, rules
+  `app/lib/unusualMove.mjs`, tested): the coin's 4-hour move past its OWN 10th / 90th percentile of 4-hour moves over 90
+  days (Orderly hourly bars, overlapping windows, ≥ 500 samples, lines kept 6h per coin in LAB_STORE `move:lines:v1:{COIN}`;
+  the move now from the last hourly bars each run, paced). Measured, never the ProjectionBand's bell-curve 25–75% box
+  (crossed half the time by construction). Once per side per coin per 4h (`moveDue`, stored as `um` in
+  `push:marketseen:v1`); unread bars = no alert. Message says how rare in words + "A move, not a signal." **Speed:** `sharedJson` (`app/lib/sharedJson.mjs`) shares one
   request per URL for 30 s; the FADE line reads `GET /intel/fade-grade` (not the 200 KB scoreboard). Lens reads to
   grade exactly: `docs/research/lens-reads-prereg.md` (A `smart_consensus_2x` signed 2026-11-14, counts from 2026-11-15; B unsigned).
   **Drawer → call** (`app/lib/marketCallDraft.mjs`): "Post a call" asks Long / Short IN the drawer (it never picks one),
@@ -1167,8 +1172,7 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   and draw "traded above $X" ONLY if a bar there did (`verifyCross`; an edited link = "didn't trade … then", NOT
   VERIFIED); 15-minute closes 18h before → 6h after, the level as a dashed line, the minute as a ring; bone, no
   green/red; a verified check is kept in KV (`palert:share:*`). Facts only: no direction, no advice. The fired alert
-  also lands in the bell's **Yours** tab (below). **Next (not built):** unusual-move alerts at MEASURED 10/90 edges (the
-  ProjectionBand IQR fires half the time by construction).
+  also lands in the bell's **Yours** tab (below).
 - **Wallet move alerts** (2026-11-14, `workers/nexus-lab-api/walletWatch.mjs`, */5 cron): a starred Smart Money wallet
   (`sm:wl:{caller}`, index `sm:wl:index` kept by the watchlist POST) opening/closing an Orderly position (`sm:ord:events`,
   the board's hourly diff) → a `wallet_move` note to each watcher with the wallet's X-Ray tier (`recordWords`); bell

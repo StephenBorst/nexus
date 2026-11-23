@@ -119,7 +119,7 @@ export function MarketPanel({ coin, onClose, frame, modal = false }: { coin: str
     setAlertBusy(true); setAlertNote("");
     const r = await watchCoin(wallet, labWallet, coin, !watched);
     setAlertBusy(false);
-    if (r.ok) { setWatching(savedCoins()); setAlertNote(watched ? `No more alerts on ${coin}.` : `You’ll get a ping when ${coin}’s funding breaks its range, consensus forms or flips, or a forecast swings 15+ pts.`); }
+    if (r.ok) { setWatching(savedCoins()); setAlertNote(watched ? `No more alerts on ${coin}.` : `You’ll get a ping when ${coin}’s funding breaks its range, consensus forms or flips, a forecast swings 15+ pts, or it moves more in 4 hours than 9 in 10 of its own 4-hour moves.`); }
     else setAlertNote(r.error);
   };
 
