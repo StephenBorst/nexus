@@ -313,11 +313,15 @@ export function buildThesisOgSvg({ displayName, wallet, ticker, direction, entry
   const lvl = (x, y, label, value, size) => `
   <text x="${x}" y="${y}" fill="${faint}" font-size="12" letter-spacing="3">${label}</text>
   <text x="${x}" y="${y + size + 6}" fill="${bright}" font-size="${size}">${esc(value)}</text>`;
+  // Columns sit ~266px apart: shrink the mono size so the longest value (0.6em a glyph) keeps a 24px gap,
+  // e.g. a $100k BTC level ("$104250.00").
+  const longest = Math.max(...[money(entryPrice), money(stopLoss), money(takeProfit1), rr].map((v) => v.length));
+  const fit = (base) => Math.min(base, Math.floor(242 / (longest * 0.6)));
   const levels = chart
-    ? lvl(64, 374, "ENTRY", money(entryPrice), 32) + lvl(330, 374, "STOP", money(stopLoss), 32)
-      + lvl(64, 444, "TP1", money(takeProfit1), 32) + lvl(330, 444, "R:R", rr, 32)
-    : lvl(64, 360, "ENTRY", money(entryPrice), 44) + lvl(332, 360, "STOP", money(stopLoss), 44)
-      + lvl(600, 360, "TP1", money(takeProfit1), 44) + lvl(868, 360, "R:R", rr, 44);
+    ? lvl(64, 374, "ENTRY", money(entryPrice), fit(32)) + lvl(330, 374, "STOP", money(stopLoss), fit(32))
+      + lvl(64, 444, "TP1", money(takeProfit1), fit(32)) + lvl(330, 444, "R:R", rr, fit(32))
+    : lvl(64, 360, "ENTRY", money(entryPrice), fit(44)) + lvl(332, 360, "STOP", money(stopLoss), fit(44))
+      + lvl(600, 360, "TP1", money(takeProfit1), fit(44)) + lvl(868, 360, "R:R", rr, fit(44));
 
   const chartPanel = chart ? `
   <rect x="640" y="266" width="496" height="292" fill="${panel}" stroke="${border}" stroke-width="1" rx="6"/>
@@ -329,7 +333,11 @@ export function buildThesisOgSvg({ displayName, wallet, ticker, direction, entry
   const qTop = chart ? 530 : 478;
   const quote = qLines.map((l, i) => `<text class="serif" x="64" y="${qTop + i * Math.round(qSize * 1.5)}" fill="${fog}" font-size="${qSize}">${esc(l)}</text>`).join("\n  ");
 
-  const kicker = `PUBLIC CALL · ${String(displayName || shortAddr)} · ${shortAddr}`;
+  // No display name (or one that is just the address) = the address once, not twice.
+  const nm = String(displayName || "").trim();
+  const kicker = nm && nm.toLowerCase() !== shortAddr.toLowerCase() && !/^0x[0-9a-f]{4}\s*(…|\.\.\.)/i.test(nm)
+    ? `PUBLIC CALL · ${nm} · ${shortAddr}`
+    : `PUBLIC CALL · ${shortAddr}`;
   return heroSvg({
     fontFamily,
     body: `<text x="64" y="150" fill="${muted}" font-size="13" letter-spacing="2.6">${esc(kicker)}</text>
