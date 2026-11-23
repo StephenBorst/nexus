@@ -5,6 +5,12 @@ compatibility_date = "2024-01-01"
 # Ph20: custom domain so OG image URL is og.nexustradinglabs.com/og/trader/:wallet
 # On first deploy after this change, wrangler creates the CF DNS record automatically.
 # Requires nexustradinglabs.com to be a Cloudflare-managed zone (it is).
+# The share cards' serif font (index.js imports it): a .ttf is bundled as raw bytes (an ArrayBuffer).
+[[rules]]
+type = "Data"
+globs = ["**/*.ttf"]
+fallthrough = true
+
 [[routes]]
 pattern = "og.nexustradinglabs.com"
 custom_domain = true

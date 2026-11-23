@@ -1497,6 +1497,15 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
 - Voice: a terminal that speaks. Short end-stopped lines, fact → rule → action, numbers over adjectives, no hype, no
   emoji in brand copy. Verifiability stated calmly, once. Never "proven" unless the scoreboard says so.
 - Share previews render from `tools/brand/previews.html`; bump the image `?v=` after a change (X caches by URL).
+- **Hero-look share cards** (borst 2026-11-23): the thesis card (`og/thesis/:wallet/:id.png`) and the Arena agent card
+  (`/og/arena/:wallet.png`) match the brand hero (`public/embed-mini.png`): the Nexus mark (`ogMark.mjs`, 60×72 PNG from
+  `public/logo-mark.png`) + "NEXUS TRADING LABS", the silk streak as SVG gradients (bone/bright at an opacity only, no
+  grain), a serif headline (Libre Baskerville, the app's own `public/fonts/` file imported into lab-api as a Data module via
+  wrangler.toml `[[rules]] **/*.ttf`; `renderHeroPng` passes it beside JetBrains Mono; only the regular instance renders),
+  numbers in mono. Green/red only on the graded WIN/LOSS and the Arena net P&L. Notes = ≤ 2 lines broken between words,
+  "…" when cut (`quoteLines`); levels under $1 print 4 significant figures (`cardPrice`). Same URLs, titles and
+  descriptions; X keeps an already-shared card's old picture. Board, read, record and X-Ray cards stay mono
+  (`ogCards.test.mjs` pins both).
   `ogCards.test.mjs` enforces card colours.
 
 ## Settled — don't re-raise
