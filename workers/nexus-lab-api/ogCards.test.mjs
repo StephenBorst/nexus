@@ -226,3 +226,20 @@ test("serif headline sizes shrink with the name and stay inside the card", () =>
   assert.ok(long < 84 && long >= 28);
   assert.ok(serifSize("x".repeat(400), 1072, 84) === 28);
 });
+
+test("thesis kicker: the address once when there's no display name", () => {
+  const base = { wallet: W, ticker: "NEAR", direction: "SHORT", entryPrice: 3.04, stopLoss: 3.14, takeProfit1: 2.88, riskReward: 1.5, status: "ACTIVE" };
+  for (const displayName of [undefined, "", "0x9a30…cb28", "0x9a30...cb28"]) {
+    const svg = buildThesisOgSvg({ ...base, displayName });
+    assert.match(svg, />PUBLIC CALL · 0x9a30\.\.\.cb28</, String(displayName));
+  }
+  assert.match(buildThesisOgSvg({ ...base, displayName: "Banksy" }), />PUBLIC CALL · Banksy · 0x9a30\.\.\.cb28</);
+});
+
+test("thesis levels: a $100k+ price shrinks to keep a gap between columns", () => {
+  const sizes = (svg) => [...svg.matchAll(/fill="#f4f4f5" font-size="(\d+)">\$/g)].map((m) => Number(m[1]));
+  const small = buildThesisOgSvg({ displayName: "x", wallet: W, ticker: "BTC", direction: "SHORT", entryPrice: 63400, stopLoss: 64200, takeProfit1: 62150, riskReward: 1.56, status: "ACTIVE" });
+  assert.deepEqual(sizes(small), [44, 44, 44]);
+  const big = buildThesisOgSvg({ displayName: "x", wallet: W, ticker: "BTC", direction: "SHORT", entryPrice: 104250, stopLoss: 105900, takeProfit1: 101800, riskReward: 1.56, status: "ACTIVE" });
+  for (const s of sizes(big)) assert.ok(s < 44 && "$105900.00".length * 0.6 * s <= 242, String(s));
+});
