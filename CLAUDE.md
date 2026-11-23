@@ -1166,9 +1166,8 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   `GET /share/alert?c=&l=&d=&t=` + `/og/alert(.png)` (`routes-alertshare.mjs`) re-read Orderly's 1-minute bars at `t`
   and draw "traded above $X" ONLY if a bar there did (`verifyCross`; an edited link = "didn't trade … then", NOT
   VERIFIED); 15-minute closes 18h before → 6h after, the level as a dashed line, the minute as a ring; bone, no
-  green/red; a verified check is kept in KV (`palert:share:*`). Facts only: no direction, no advice. **Note:** no screen
-  reads the personal `notif:{w}` list (`NotificationBell.tsx` is unmounted; the nav bell is the signals list), so the
-  panel's own list is the in-app channel. **Next (not built):** unusual-move alerts at MEASURED 10/90 edges (the
+  green/red; a verified check is kept in KV (`palert:share:*`). Facts only: no direction, no advice. The fired alert
+  also lands in the bell's **Yours** tab (below). **Next (not built):** unusual-move alerts at MEASURED 10/90 edges (the
   ProjectionBand IQR fires half the time by construction).
 - **Wallet move alerts** (2026-11-14, `workers/nexus-lab-api/walletWatch.mjs`, */5 cron): a starred Smart Money wallet
   (`sm:wl:{caller}`, index `sm:wl:index` kept by the watchlist POST) opening/closing an Orderly position (`sm:ord:events`,
@@ -1181,6 +1180,14 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   `?dm=` link goes through `dmTarget` + `canMessage` (bad address / your own / not on XMTP = a line or the invite,
   never silent); `re=` via `draftFromLink`. The nav badge = one `syncAll` + each thread's newest inbound message.
 - The nav bell is `SignalsNavButton.tsx`. Before adding UI to a component, grep that something mounts it.
+  **Yours tab (borst 2026-11-23, rules `app/lib/inbox.mjs`, tested):** the wallet's own `notif:{w}` list (price alerts,
+  calls graded / filled / TP1 / +0.5R / expired, agent trades, follows, copies, market + wallet alerts), which NO screen
+  read before (`NotificationBell.tsx` was never mounted). Read with `POST /notifications/:w` + the Lab signature, ONLY by
+  itself while that signature is already held (`cachedLabAuth`; the bell never prompts), else "Show my alerts" signs
+  once; polled 2 min. Badge = unseen signals + unread yours; the bell opens on Yours when something of yours is unread;
+  opening the tab marks rows read (`PUT …/read`). Labels = push.mjs TITLES word for word (test-pinned); a tap stays
+  in the app (`inboxHref`: the row's own "/" path or its call under the AUTHOR's wallet); a fired price alert carries
+  Share on 𝕏 / Copy link (`inboxShare`, the verified card).
   **The bell, graded (v2, borst 2026-11-14, rules `app/lib/signals.mjs`, route `GET /intel/bell` routes-bell.mjs, 60 s
   cache):** every row carries `graded`: READ rows (a registered read with a paper wallet opened a paper trade, or closed
   one in the last 24h; served stage, n of 30, out-of-sample events / mean R / beats-random %) lead; funding rows carry the
