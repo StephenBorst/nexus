@@ -15,6 +15,7 @@ const SUFFIX = ` | ${SITE_TITLE}`;
 export const DEFAULT_IMAGE = `${SITE}/embed-mini.png?v=2026-09-29b`;
 // /proof's card: the record's counts (routes-recordshare.mjs), the same card its share link unfurls into.
 const RECORD_IMAGE = "https://og.nexustradinglabs.com/og/record.png";
+const BOARD_IMAGE = "https://og.nexustradinglabs.com/og/board.png";
 
 export const ROUTE_META = Object.freeze({
   "/proof": {
@@ -25,6 +26,7 @@ export const ROUTE_META = Object.freeze({
   "/lab": {
     name: "The Lab: plan, run and grade a trade",
     description: "Write a call with an entry, a stop and a target, or run a paper agent on a registered read. Every published call is graded from public price, wins and losses.",
+    image: BOARD_IMAGE,
   },
   "/feed": {
     name: "Feed: traders’ calls, graded",
