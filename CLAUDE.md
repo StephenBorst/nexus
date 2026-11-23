@@ -1151,6 +1151,25 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   cap `Client.create` throws "…already registered N/M installations…"; `useXMTP` catches it (`app/lib/xmtpLimit.mjs`) and
   the Messages page offers REMOVE OLD DEVICES: one signature, `Client.revokeInstallations` without a client, keeps the 3
   newest, then enables here.
+- **Price alerts you set** (borst 2026-11-23: "all three, a switch each" + "Share button"; rules `app/lib/priceAlerts.mjs`,
+  tested): a level on a coin, set in the coin panel (`PriceAlertsBox.tsx`, drawer + dock), ≤ `PRICE_ALERTS_MAX` 20 armed a
+  wallet, 0.1–50% from the mark the SERVER reads (`alertBars.mjs readMark`); `dir` = above/below from that mark. Routes
+  `POST /alerts/price/:wallet[/add|/remove|/channels]` (`routes-pricealerts.mjs`): Lab-signed, the LIST is private too
+  (levels say where positions are); list key `palert:{w}` written only there under NexusLock `palert:{w}`; index
+  `palert:index` under `palert:index` (full = drops wallets with nothing armed). Runner `priceWatch.mjs` on the */5 cron:
+  Orderly's 1-MINUTE bars since its cursor (−2 min, ≤ 6h back) per coin once (mapLimit), so a wick counts; the minute
+  the alert was set never counts; fires once (`crossedIn`), stamps `palert:fired:{w}` (runner-only key) BEFORE notifying;
+  a coin whose bars didn't load keeps the cursor (re-read next run). Delivery = notification type `price_alert`: the
+  panel's list always (the fired row with its minute + price), the phone behind push topic `prices` (ON by default:
+  setting an alert is the opt-in) AND the alert's own `channels.phone` (`appendNotification` opts `push:false`), Telegram
+  behind `channels.telegram`. **Share** = a button on a fired row (X intent + copy link), never automatic:
+  `GET /share/alert?c=&l=&d=&t=` + `/og/alert(.png)` (`routes-alertshare.mjs`) re-read Orderly's 1-minute bars at `t`
+  and draw "traded above $X" ONLY if a bar there did (`verifyCross`; an edited link = "didn't trade … then", NOT
+  VERIFIED); 15-minute closes 18h before → 6h after, the level as a dashed line, the minute as a ring; bone, no
+  green/red; a verified check is kept in KV (`palert:share:*`). Facts only: no direction, no advice. **Note:** no screen
+  reads the personal `notif:{w}` list (`NotificationBell.tsx` is unmounted; the nav bell is the signals list), so the
+  panel's own list is the in-app channel. **Next (not built):** unusual-move alerts at MEASURED 10/90 edges (the
+  ProjectionBand IQR fires half the time by construction).
 - **Wallet move alerts** (2026-11-14, `workers/nexus-lab-api/walletWatch.mjs`, */5 cron): a starred Smart Money wallet
   (`sm:wl:{caller}`, index `sm:wl:index` kept by the watchlist POST) opening/closing an Orderly position (`sm:ord:events`,
   the board's hourly diff) → a `wallet_move` note to each watcher with the wallet's X-Ray tier (`recordWords`); bell

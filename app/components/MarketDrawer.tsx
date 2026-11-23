@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { NewsWire } from "@/pages/lab/NewsWire";
 import { CoinCrowd } from "@/components/CoinCrowd";
+import { PriceAlertsBox } from "@/components/PriceAlertsBox";
 import { useNavigate } from "react-router-dom";
 import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
 import { useEscapeKey } from "@/utils/a11y";
@@ -169,6 +170,8 @@ export function MarketPanel({ coin, onClose, frame, modal = false }: { coin: str
               <NewsWire coin={coin} limit={5} compact />
             </div>
           )}
+          {/* Price alerts you set on this coin (2026-11-23): this list + phone + Telegram, a switch each; Share on a fired one. */}
+          {data && <PriceAlertsBox coin={coin} price={data.price ?? null} wallet={wallet} labWallet={labWallet} />}
           {data && pushSupported() && (
             <div style={{ padding: "12px 0 0" }}>
               <button type="button" disabled={alertBusy} onClick={toggleAlert}
