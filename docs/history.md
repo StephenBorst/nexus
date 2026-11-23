@@ -2174,6 +2174,10 @@ The cold-start/distribution weapon: a slim Nexus surface native to Warpcast, whe
   yours to fix, not pre-existing noise.
 
 ## Brand & voice — design source of truth ⭐ (read BEFORE any brand-facing asset: landing, decks, videos, share cards, motion, marketing)
+- **2026-11-23 (borst): thesis + Arena share cards restyled to the hero look.** Before: mono data cards (JetBrains Mono only, a
+  panel frame on Arena, notes cut mid-word at 46/90 chars, every price `toFixed(2)` so a $0.02 coin printed entry = stop = TP).
+  Font approach picked: bundle the app's Libre Baskerville into lab-api (no runtime fetch, can't drift from the site).
+  Rules now in CLAUDE.md § Brand + voice.
 Canonical system = **`app/config/theme.ts`** (`C` tokens), mirrored 1:1 by the landing (`nexus-landing/index.html` `:root`). Pull colors from these — never invent.
 - **⭐ THE RULE (2026-09-28, borst via Ember) = `docs/brand.md` — read it first.** Black surfaces · bone type · **bone
   `#ededf0` (`C.brand`, landing `--brand`; same value as `C.accent`) is the ACCENT MARK** (every share card's 3px top

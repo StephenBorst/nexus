@@ -19,6 +19,9 @@
 import { spotQuote } from "./spotQuote.mjs";
 import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
+// Libre Baskerville for the hero-style share cards (thesis + Arena, 2026-11-23): bundled as a Data module
+// (wrangler.toml [[rules]] "**/*.ttf"), the app's own copy, so the card's serif can't drift from the site's.
+import serifTtf from "../../public/fonts/LibreBaskerville/LibreBaskerville-Variable.ttf";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, hostedCacheBreakpoints, resolveAiUpstream, HOSTED_BODY_MAX_BYTES, questionId, takeHostedSlot, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, forecastBarCoins, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
@@ -272,6 +275,16 @@ async function getMonoFont() {
 
 
 
+
+// SVG → PNG for the hero-style cards (thesis + Arena): JetBrains Mono for the numbers + Libre Baskerville for
+// the headline (`class="serif"` in ogCards.mjs). Only the regular instance of each renders.
+let serifCache = null;
+async function renderHeroPng(svg) {
+  await ensureResvg();
+  const mono = await getMonoFont();
+  if (!serifCache) serifCache = new Uint8Array(serifTtf);
+  return new Resvg(svg, { font: { loadSystemFonts: false, fontBuffers: [mono, serifCache], defaultFontFamily: "JetBrains Mono" } }).render().asPng();
+}
 
 // SVG → PNG with the shared mono font (the same path every OG card here uses).
 async function renderMonoPng(svg) {
@@ -1393,13 +1406,9 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
         // Only the FIRST chart goes on the share card — an unfurl needs one legible
         // image, not four thumbnails. Also keeps the fetch/size budget bounded.
         renderPng: async (payload, thesis) => {
-          await ensureResvg();
-          const font = await getMonoFont();
           const firstChart = (thesis.chartUrls && thesis.chartUrls[0]) || thesis.chartUrl;
           const chartDataUri = await fetchChartDataUri(firstChart);
-          const svg = buildThesisOgSvg({ ...payload, chartDataUri, fontFamily: "'JetBrains Mono'" });
-          const resvg = new Resvg(svg, { font: { loadSystemFonts: false, fontBuffers: [font], defaultFontFamily: "JetBrains Mono" } });
-          return resvg.render().asPng();
+          return renderHeroPng(buildThesisOgSvg({ ...payload, chartDataUri, fontFamily: "'JetBrains Mono'" }));
         },
       });
       if (ogThesisRes) return ogThesisRes;
@@ -1417,7 +1426,7 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
       const svg = buildArenaAgentSvg(card);
       if (isPng) {
         try {
-          const png = await renderMonoPng(svg);
+          const png = await renderHeroPng(svg);
           return new Response(png, { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=300, stale-while-revalidate=60", "Access-Control-Allow-Origin": "*" } });
         } catch (e) {
           console.error("[og arena PNG] failed, falling back to SVG:", String(e));

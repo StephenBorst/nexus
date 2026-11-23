@@ -5,6 +5,7 @@
 // accent mark, and green/red ONLY on money (P&L, WIN/LOSS, price moves, Buy/Sell).
 import { BRAND, cardTopRule } from "../../app/lib/brand.mjs";
 import { identityCardModel } from "../../app/lib/identityCard.mjs";
+import { MARK_PNG, MARK_W, MARK_H } from "./ogMark.mjs";
 
 function esc(str) {
   return String(str)
@@ -164,99 +165,191 @@ export function buildIdentitySvg({ profile, record, wallet, displayName, fontFam
 </svg>`;
 }
 
+// ── The hero look (thesis + Arena cards, borst 2026-11-23) ────────────────────
+// The two cards people share most now match the brand hero (public/embed-mini.png, tools/brand/previews.html):
+// black canvas, the silk-light streak top right drawn with SVG gradients only (no grain: it bloats the PNG),
+// the Nexus mark + "NEXUS TRADING LABS" on top, a serif headline (Libre Baskerville, bundled into the worker
+// and passed to resvg beside JetBrains Mono), numbers in mono. Every stop colour is a brand colour; light is
+// opacity only. Green/red stay on money: the graded WIN/LOSS and the Arena net P&L.
+// The board and record cards keep the mono data look (borst: "stay mono for now").
+const SERIF = "'Libre Baskerville', Georgia, serif";
+
+// The streak: a soft sheen, a brighter core and a thin hairline, rotated like the landing's ribbon, kept in
+// the top-right corner so no text sits on it, plus a faint low glow bottom left.
+function heroLight() {
+  const { bright, bone } = BRAND;
+  const glow = (id, stops) => `<radialGradient id="${id}">${stops.map(([o, c, a]) => `<stop offset="${o}" stop-color="${c}" stop-opacity="${a}"/>`).join("")}</radialGradient>`;
+  return {
+    defs: [
+      `<radialGradient id="atmos" cx="0.86" cy="0.06" r="0.6">${[[0, bone, 0.07], [0.7, bone, 0]].map(([o, c, a]) => `<stop offset="${o}" stop-color="${c}" stop-opacity="${a}"/>`).join("")}</radialGradient>`,
+      glow("sheen", [[0, bone, 0.085], [0.52, bone, 0.025], [0.74, bone, 0]]),
+      glow("core", [[0, bright, 0.2], [0.48, bright, 0.055], [0.76, bright, 0]]),
+      glow("edge", [[0, bright, 0.34], [0.55, bright, 0.06], [0.8, bright, 0]]),
+      glow("low", [[0, bone, 0.05], [0.72, bone, 0]]),
+    ].join(""),
+    body: `<rect width="1200" height="630" fill="url(#atmos)"/>
+  <ellipse cx="300" cy="660" rx="1100" ry="170" fill="url(#low)" transform="rotate(-17 300 660)"/>
+  <ellipse cx="930" cy="10" rx="1100" ry="230" fill="url(#sheen)" transform="rotate(-17 930 10)"/>
+  <ellipse cx="960" cy="34" rx="760" ry="44" fill="url(#core)" transform="rotate(-16 960 34)"/>
+  <ellipse cx="940" cy="44" rx="440" ry="6.5" fill="url(#edge)" transform="rotate(-17 940 44)"/>`,
+  };
+}
+
+// The mark + wordmark, as on the hero.
+function heroBrandRow() {
+  const h = 26, w = Math.round((h * MARK_W) / MARK_H);
+  return `<image x="64" y="52" width="${w}" height="${h}" href="${MARK_PNG}"/>
+  <text x="${64 + w + 14}" y="72" fill="${BRAND.fog}" font-size="14" letter-spacing="3.4">NEXUS TRADING LABS</text>`;
+}
+
+function heroSvg({ fontFamily, body }) {
+  const light = heroLight();
+  return `<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <defs><style>text { font-family: ${fontFamily}; } .serif { font-family: ${SERIF}; }</style>${light.defs}</defs>
+  <rect width="1200" height="630" fill="${BRAND.canvas}"/>
+  ${light.body}
+  ${cardTopRule()}
+  ${heroBrandRow()}
+  ${body}
+</svg>`;
+}
+
+// Size a serif headline to fit `width`. Libre Baskerville, measured in resvg: ~0.62em a lowercase glyph,
+// ~0.78em a capital or digit, ~0.3em a space; 4% kept spare so a wide name never runs off the card.
+export function serifSize(text, width, max) {
+  const s = String(text);
+  const ems = [...s].reduce((a, ch) => a + (/[A-Z0-9]/.test(ch) ? 0.78 : /\s/.test(ch) ? 0.3 : 0.62), 0);
+  return Math.max(28, Math.min(max, Math.floor((width * 0.96) / Math.max(ems, 1))));
+}
+
+/**
+ * A call's notes as at most `maxLines` lines of at most `maxChars` characters, broken between words, inside
+ * curly quotes. Text that doesn't fit ends in "…" on the last line, at a word boundary (a single word longer
+ * than a line is cut). Returns [] for empty notes.
+ */
+export function quoteLines(notes, maxChars, maxLines = 2) {
+  const words = String(notes ?? "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (!words.length) return [];
+  const lines = [];
+  let cur = "";
+  let i = 0;
+  // Budget: the opening quote rides on line 1, the closing quote on the last line.
+  for (; i < words.length; i++) {
+    const room = maxChars - (lines.length === 0 ? 1 : 0) - 1;
+    const w = words[i].length > room ? words[i].slice(0, room) : words[i];
+    const next = cur ? `${cur} ${w}` : w;
+    if (next.length <= room) { cur = next; continue; }
+    if (lines.length + 1 >= maxLines) break;
+    lines.push(cur);
+    cur = w;
+  }
+  if (i < words.length) {
+    // Doesn't fit: drop whole words from the end of the last line until "…" fits, then trim dangling punctuation.
+    const room = maxChars - (lines.length === 0 ? 1 : 0) - 2;
+    let parts = cur.split(" ");
+    while (parts.length > 1 && parts.join(" ").length > room) parts.pop();
+    let last = parts.join(" ");
+    if (last.length > room) last = last.slice(0, room);
+    cur = `${last.replace(/[\s,;:.\-–—]+$/, "")}…`;
+  }
+  lines.push(cur);
+  lines[0] = `“${lines[0]}`;
+  lines[lines.length - 1] = `${lines[lines.length - 1]}”`;
+  return lines;
+}
+
+// A level on the card. Two decimals from $1 up (as before); under $1, four significant figures, so a
+// 0.02-ish coin's entry, stop and target don't all print "$0.02".
+export function cardPrice(v) {
+  const n = parseFloat(v);
+  if (!Number.isFinite(n)) return "$—";
+  if (Math.abs(n) >= 1 || n === 0) return `$${n.toFixed(2)}`;
+  return `$${String(Number(n.toPrecision(4)))}`;
+}
+
 // ── Ph22: Thesis OG SVG ───────────────────────────────────────────────────────
-// This card is the most public brand surface we have — it's what unfurls when a call is
-// shared to X. It was still on the RETIRED palette (#0a0e0a green-tinted black, #00ff88
-// terminal green, #4a9fff blue, green-tinted greys). Now monochrome, matching the app:
-// bone/greys for structure, and chroma ONLY where it carries meaning (green=profit/up,
-// red=loss/down, amber=caution).
+// The card that unfurls when a call is shared to X. Hero look since 2026-11-23 (above); before that a mono
+// data card. Direction, levels, R:R and an open status are a PLAN, not money → monochrome. Only the graded
+// outcome (WIN / LOSS, its R, HIT TP / STOPPED OUT) carries green / red.
 //
-// `chartDataUri` is optional and already SSRF-gated + size-capped by fetchChartDataUri().
-// With a chart we run a two-column layout; without one we keep the full-width layout so
-// the card never has a dead half.
+// `chartDataUri` is optional and already SSRF-gated + size-capped by fetchChartDataUri(). With a chart the
+// levels sit 2×2 on the left and the chart panel on the right; without one the levels run in one row.
 export function buildThesisOgSvg({ displayName, wallet, ticker, direction, entryPrice, stopLoss, takeProfit1, riskReward, status, gradedR = null, runnerStopped = false, notes, chartDataUri = null, fontFamily = "'Courier New', Courier, monospace" }) {
   const shortAddr = `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
-  const name = esc(displayName || shortAddr);
-  const { canvas, panel, border, bright, bone, fog, muted, faint, win, loss } = BRAND;
-  // Direction, levels, R:R and an open status are a PLAN, not money → monochrome. Only the
-  // graded outcome (WIN / LOSS, its R, HIT TP / STOPPED OUT) carries green / red.
-  const dirColor = bright;
-  const dirArrow = direction === "LONG" ? "↑" : "↓";
-  const rrColor = bright;
+  const { panel, border, bright, bone, fog, muted, faint, win, loss } = BRAND;
   // NOT_GRADED = the grader can never grade this call (callMath.mjs callInvalidReason): no money, monochrome.
   const statusMap = { HIT_TP: "HIT TP ✓", STOPPED_OUT: "STOPPED OUT", ACTIVE: "ACTIVE", INVALIDATED: "INVALIDATED", NOT_GRADED: "NOT GRADED" };
   const statusColorMap = { HIT_TP: win, STOPPED_OUT: loss, ACTIVE: bone, INVALIDATED: muted, NOT_GRADED: muted };
   const statusLabel = statusMap[status] || status;
   const statusColor = statusColorMap[status] || fog;
-  const notesLine = notes ? esc(String(notes).slice(0, chartDataUri ? 46 : 90)) : "";
+  const chart = !!chartDataUri;
+  const dirWord = direction === "LONG" ? "Long" : direction === "SHORT" ? "Short" : String(direction || "");
+  const dirArrow = direction === "LONG" ? "↑" : "↓";
 
-  // Level block — positions differ between the one- and two-column layouts.
-  const lvl = (x, y, label, value, color) => `
+  const headline = `${dirWord} ${ticker}`;
+  const hSize = serifSize(headline, 1072, 92);
+
+  // The outcome row under the headline. Resolved calls hero the graded R; open ones keep the calm status.
+  const resolved = (status === "HIT_TP" || status === "STOPPED_OUT") && gradedR != null;
+  let outcome;
+  if (resolved) {
+    // A split whose runner was stopped (callMath.mjs splitRunnerStopped): half at TP1, half on the stop. The
+    // result keeps its WIN / LOSS and R; the line beside it says how it closed.
+    const won = status === "HIT_TP";
+    const rTxt = `${gradedR >= 0 ? "+" : ""}${Math.round(gradedR * 100) / 100}R`;
+    const big = `${won ? "✓ WIN" : "✗ LOSS"} ${rTxt}`;
+    const how = runnerStopped ? "GRADED · TP1 HIT, RUNNER STOPPED" : "GRADED · first-touch vs public price";
+    // Full width: the line sits beside the result. With a chart the panel is on the right, so it goes under.
+    outcome = `<text x="64" y="306" fill="${won ? win : loss}" font-size="40" font-weight="bold">${esc(big)}</text>
+  ${chart
+    ? `<text x="64" y="332" fill="${muted}" font-size="13" letter-spacing="1.3">${how}</text>`
+    : `<text x="${64 + Math.ceil(big.length * 24) + 22}" y="300" fill="${muted}" font-size="14" letter-spacing="1.4">${how}</text>`}`;
+  } else {
+    outcome = `<text x="64" y="300" fill="${statusColor}" font-size="22" font-weight="bold" letter-spacing="2.2">${esc(statusLabel)}</text>`;
+  }
+
+  const money = cardPrice;
+  const rr = `1:${parseFloat(riskReward).toFixed(2)}`;
+  const lvl = (x, y, label, value, size) => `
   <text x="${x}" y="${y}" fill="${faint}" font-size="12" letter-spacing="3">${label}</text>
-  <text x="${x}" y="${y + 62}" fill="${color}" font-size="${chartDataUri ? 40 : 52}" font-weight="bold">${value}</text>`;
+  <text x="${x}" y="${y + size + 6}" fill="${bright}" font-size="${size}">${esc(value)}</text>`;
+  const levels = chart
+    ? lvl(64, 374, "ENTRY", money(entryPrice), 32) + lvl(330, 374, "STOP", money(stopLoss), 32)
+      + lvl(64, 444, "TP1", money(takeProfit1), 32) + lvl(330, 444, "R:R", rr, 32)
+    : lvl(64, 360, "ENTRY", money(entryPrice), 44) + lvl(332, 360, "STOP", money(stopLoss), 44)
+      + lvl(600, 360, "TP1", money(takeProfit1), 44) + lvl(868, 360, "R:R", rr, 44);
 
-  const money = (v) => `$${parseFloat(v).toFixed(2)}`;
+  const chartPanel = chart ? `
+  <rect x="640" y="266" width="496" height="292" fill="${panel}" stroke="${border}" stroke-width="1" rx="6"/>
+  <image x="648" y="274" width="480" height="276" href="${chartDataUri}" preserveAspectRatio="xMidYMid meet"/>` : "";
 
-  const levels = chartDataUri
-    // two-column: 2x2 on the left, chart panel on the right
-    ? lvl(60, 312, "ENTRY", money(entryPrice), bright)
-      + lvl(300, 312, "STOP", money(stopLoss), bright)
-      + lvl(60, 430, "TP1", money(takeProfit1), bright)
-      + lvl(300, 430, "R:R", `1:${parseFloat(riskReward).toFixed(2)}`, rrColor)
-    // full-width: single row of four
-    : lvl(60, 312, "ENTRY", money(entryPrice), bright)
-      + lvl(360, 312, "STOP", money(stopLoss), bright)
-      + lvl(660, 312, "TP1", money(takeProfit1), bright)
-      + lvl(960, 312, "R:R", `1:${parseFloat(riskReward).toFixed(2)}`, rrColor);
+  // Notes: up to 2 lines of serif, broken between words, "…" when they don't fit.
+  const qSize = chart ? 18 : 20;
+  const qLines = quoteLines(notes, chart ? 54 : 94, 2);
+  const qTop = chart ? 530 : 478;
+  const quote = qLines.map((l, i) => `<text class="serif" x="64" y="${qTop + i * Math.round(qSize * 1.5)}" fill="${fog}" font-size="${qSize}">${esc(l)}</text>`).join("\n  ");
 
-  const chartPanel = chartDataUri ? `
-  <rect x="596" y="286" width="556" height="330" fill="${panel}" stroke="${border}" stroke-width="1" rx="4"/>
-  <image x="604" y="294" width="540" height="314" href="${chartDataUri}" preserveAspectRatio="xMidYMid meet"/>` : "";
-
-  return `<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
-  <defs><style>text { font-family: ${fontFamily}; }</style></defs>
-  <rect width="1200" height="630" fill="${canvas}"/>
-  ${cardTopRule()}
-  <rect y="627" width="1200" height="3" fill="${border}"/>
-  <text x="48" y="54" fill="${muted}" font-size="13" letter-spacing="3">NEXUS TRADING LABS</text>
-  <text x="1152" y="54" fill="${muted}" font-size="13" text-anchor="end">trade.nexustradinglabs.com</text>
-  <text x="48" y="180" fill="${bright}" font-size="86" font-weight="bold">${esc(ticker)}</text>
-  <text x="48" y="232" fill="${dirColor}" font-size="32" font-weight="bold">${dirArrow} ${esc(direction)}</text>
-  ${(() => {
-    // Resolved calls HERO the graded R result — the scroll-stopping proof ("+2R,
-    // graded on-chain"), not a 22px corner label. Unresolved keep the calm status.
-    const resolved = (status === "HIT_TP" || status === "STOPPED_OUT") && gradedR != null;
-    if (resolved) {
-      // A split whose runner was stopped (callMath.mjs splitRunnerStopped): half at TP1, half on the
-      // stop. The headline keeps its WIN / LOSS and R; the line under it says how it closed.
-      const won = status === "HIT_TP";
-      const rTxt = `${gradedR >= 0 ? "+" : ""}${Math.round(gradedR * 100) / 100}R`;
-      return `<text x="1152" y="162" fill="${won ? win : loss}" font-size="60" font-weight="bold" text-anchor="end">${won ? "✓ WIN" : "✗ LOSS"} ${rTxt}</text>
-  <text x="1152" y="196" fill="${muted}" font-size="15" text-anchor="end">${runnerStopped ? "GRADED · TP1 HIT, RUNNER STOPPED" : "GRADED · first-touch vs public price"}</text>
-  <text x="1152" y="228" fill="${fog}" font-size="14" text-anchor="end">${name}</text>
-  <text x="1152" y="248" fill="${muted}" font-size="12" text-anchor="end">${esc(shortAddr)}</text>`;
-    }
-    return `<text x="1152" y="180" fill="${statusColor}" font-size="22" font-weight="bold" text-anchor="end">${statusLabel}</text>
-  <text x="1152" y="214" fill="${fog}" font-size="14" text-anchor="end">${name}</text>
-  <text x="1152" y="234" fill="${muted}" font-size="12" text-anchor="end">${esc(shortAddr)}</text>`;
-  })()}
-  <line x1="48" y1="270" x2="1152" y2="270" stroke="${border}" stroke-width="1"/>
+  const kicker = `PUBLIC CALL · ${String(displayName || shortAddr)} · ${shortAddr}`;
+  return heroSvg({
+    fontFamily,
+    body: `<text x="64" y="150" fill="${muted}" font-size="13" letter-spacing="2.6">${esc(kicker)}</text>
+  <text class="serif" x="60" y="242" fill="${bright}" font-size="${hSize}" letter-spacing="-1"><tspan fill="${fog}">${esc(dirWord)} </tspan>${esc(ticker)}</text>
+  <text x="1136" y="150" fill="${muted}" font-size="13" text-anchor="end" letter-spacing="2.6">${dirArrow} ${esc(direction)}</text>
+  ${outcome}
   ${levels}
   ${chartPanel}
-  ${notesLine ? `<text x="48" y="${chartDataUri ? 556 : 464}" fill="${fog}" font-size="16" font-style="italic">"${notesLine}"</text>` : ""}
-  ${chartDataUri ? "" : `<line x1="48" y1="530" x2="1152" y2="530" stroke="${border}" stroke-width="1"/>`}
-  <text x="48" y="592" fill="${muted}" font-size="13" letter-spacing="1">graded from public price · anchored on arbitrum</text>
-  ${chartDataUri ? "" : `<text x="1152" y="592" fill="${faint}" font-size="13" text-anchor="end">${esc(wallet)}</text>`}
-</svg>`;
+  ${quote}
+  <text x="64" y="594" fill="${faint}" font-size="14" letter-spacing="0.6">Graded from public price · anchored on Arbitrum</text>
+  <text x="1136" y="594" fill="${faint}" font-size="14" text-anchor="end">trade.nexustradinglabs.com</text>`,
+  });
 }
 
 // ── Arena agent card (/og/arena) ──────────────────────────────────────────────
-// PAPER record only (the OG path never reads Supabase). Green/red = money (net P&L)
-// only; trades, win rate, qualify and resets stay monochrome. Built ONLY for an
-// agent with at least one graded paper close; the route 404s otherwise.
+// PAPER record only (the OG path never reads Supabase). Green/red = money (net P&L) only; trades, win rate,
+// qualify and resets stay monochrome. Built ONLY for an agent with at least one graded paper close; the route
+// 404s otherwise. Hero look since 2026-11-23: the agent's name in serif, every number in mono.
 export function buildArenaAgentSvg({ name, builder = "", wallet, paper, operator = null, fontFamily = "'JetBrains Mono'" }) {
-  const { bone: BONE, bright: BRIGHT, muted: MUTED, faint: FAINT, fog: FOG, win: POS, loss: NEG, border: BORDER, panel: PANEL, canvas: CANVAS, brand: MARK } = BRAND;
-  const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const { bone: BONE, bright: BRIGHT, muted: MUTED, faint: FAINT, fog: FOG, win: POS, loss: NEG } = BRAND;
   const shortAddr = `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
   const trades = paper.trades;
   const net = paper.netPnl;
@@ -278,28 +371,21 @@ export function buildArenaAgentSvg({ name, builder = "", wallet, paper, operator
     ["WIN RATE", `${paper.winRate}%`, `profit factor ${paper.profitFactor}`, BRIGHT],
     ["NET P&L (PAPER)", netTxt, `${paper.daysActive} active day${paper.daysActive === 1 ? "" : "s"}`, net >= 0 ? POS : NEG],
   ];
-  const colX = [96, 500, 872];
+  const colX = [64, 468, 860];
   const cellSvg = cells.map(([lab, val, sub, col], i) => `
-  <text x="${colX[i]}" y="332" fill="${FAINT}" font-size="15" letter-spacing="2">${esc(lab)}</text>
-  <text x="${colX[i]}" y="380" fill="${col}" font-size="40" font-weight="bold">${esc(val)}</text>
-  <text x="${colX[i]}" y="404" fill="${MUTED}" font-size="14">${esc(sub)}</text>`).join("");
-  return `<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
-  <defs><style>text { font-family: ${fontFamily}; }</style></defs>
-  <rect width="1200" height="630" fill="${CANVAS}"/>
-  <rect x="16" y="16" width="1168" height="598" fill="${PANEL}" stroke="${BORDER}" stroke-width="1" rx="10"/>
-  <rect x="16" y="16" width="1168" height="3" fill="${MARK}" rx="1"/>
-  <text x="48" y="86" fill="${BRIGHT}" font-size="24" font-weight="bold" letter-spacing="4">// NEXUS ARENA</text>
-  <text x="48" y="112" fill="${MUTED}" font-size="15" letter-spacing="2">AI TRADING AGENT · PAPER RECORD</text>
-  <line x1="48" y1="150" x2="1152" y2="150" stroke="${BORDER}" stroke-width="1"/>
-  <text x="48" y="236" fill="${BRIGHT}" font-size="${Math.min(58, Math.floor(1000 / (Math.max(name.length, 1) * 0.6)))}" font-weight="bold">${esc(name)}</text>
-  <text x="48" y="276" fill="${FOG}" font-size="18">${esc(builder ? `built by ${builder} · ${shortAddr}` : shortAddr)}</text>
-  <line x1="48" y1="300" x2="1152" y2="300" stroke="${BORDER}" stroke-width="1"/>
+  <text x="${colX[i]}" y="356" fill="${FAINT}" font-size="13" letter-spacing="2.6">${esc(lab)}</text>
+  <text x="${colX[i]}" y="404" fill="${col}" font-size="42">${esc(val)}</text>
+  <text x="${colX[i]}" y="432" fill="${MUTED}" font-size="15">${esc(sub)}</text>`).join("");
+  return heroSvg({
+    fontFamily,
+    body: `<text x="64" y="150" fill="${MUTED}" font-size="13" letter-spacing="2.6">NEXUS ARENA · AI TRADING AGENT · PAPER RECORD</text>
+  <text class="serif" x="60" y="236" fill="${BRIGHT}" font-size="${serifSize(name, 1072, 84)}" letter-spacing="-1">${esc(name)}</text>
+  <text x="64" y="280" fill="${FOG}" font-size="18">${esc(builder ? `built by ${builder} · ${shortAddr}` : shortAddr)}</text>
   ${cellSvg}
-  <text x="48" y="456" fill="${BONE}" font-size="20">${esc(qualifyTxt)}</text>
-  <text x="48" y="488" fill="${MUTED}" font-size="15">${esc(resets)}</text>
-  ${opLine ? `<text x="48" y="520" fill="${FOG}" font-size="15">${esc(opLine)}</text>` : ""}
-  <line x1="48" y1="556" x2="1152" y2="556" stroke="${BORDER}" stroke-width="1"/>
-  <text x="48" y="590" fill="${MUTED}" font-size="15">${esc(name)} · verify → trade.nexustradinglabs.com/arena</text>
-  <text x="1152" y="590" fill="${FAINT}" font-size="14" text-anchor="end">fills graded by the exec engine, not self-reported</text>
-</svg>`;
+  <text x="64" y="488" fill="${BONE}" font-size="19" letter-spacing="1">${esc(qualifyTxt)}</text>
+  <text x="64" y="516" fill="${MUTED}" font-size="15">${esc(resets)}</text>
+  ${opLine ? `<text x="64" y="544" fill="${FOG}" font-size="15">${esc(opLine)}</text>` : ""}
+  <text x="64" y="594" fill="${FAINT}" font-size="13">${esc(name)} · verify → trade.nexustradinglabs.com/arena</text>
+  <text x="1136" y="594" fill="${FAINT}" font-size="13" text-anchor="end">fills graded by the exec engine, not self-reported</text>`,
+  });
 }

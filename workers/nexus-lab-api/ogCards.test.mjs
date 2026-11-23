@@ -9,13 +9,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { BRAND, moneyColor } from "../../app/lib/brand.mjs";
-import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg } from "./ogCards.mjs";
+import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg, buildArenaAgentSvg, quoteLines, cardPrice, serifSize } from "./ogCards.mjs";
+import { MARK_PNG, MARK_W, MARK_H } from "./ogMark.mjs";
 import { buildXrayCardSvg } from "./routes-xrayshare.mjs";
 
 const ALLOWED = new Set(Object.values(BRAND).map((c) => c.toLowerCase()));
 const colours = (svg) => [...svg.matchAll(/#[0-9a-fA-F]{6}\b/g)].map((m) => m[0].toLowerCase());
 const W = "0x9a3012988d60d61b34660be06a321f7bf7bccb28";
 
+const LONG_NOTES = "Funding is stretched on LINK while the basis sits at its 30-day median, the 4h trend still points up and the last two reclaims held. Taking it with a tight stop under the shelf, size small.";
+const arenaPaper = (over) => ({ trades: 7, wins: 4, winRate: 57, profitFactor: 1.4, netPnl: 12.5, daysActive: 3, resets: 0, qualify: { eligible: false, criteria: [{ key: "trades", met: false, value: 7, target: 10 }] }, ...over });
 const board = (klass, dir, agree, lens) => ({ coin: "BTC", play: { klass, dir, label: klass === "FADE" ? `FADE ${dir}` : "WATCH", strong: klass === "FADE" }, agree, lens });
 const CARDS = {
   "board · rows": buildBoardOgSvg([
@@ -36,7 +39,10 @@ const CARDS = {
   "thesis · active long": buildThesisOgSvg({ displayName: "Nexus Signals", wallet: W, ticker: "LINK", direction: "LONG", entryPrice: 15.42, stopLoss: 14.96, takeProfit1: 16.04, riskReward: 1.33, status: "ACTIVE", notes: "funding stretched" }),
   "thesis · won": buildThesisOgSvg({ displayName: "x", wallet: W, ticker: "BTC", direction: "SHORT", entryPrice: 100, stopLoss: 102, takeProfit1: 96, riskReward: 2, status: "HIT_TP", gradedR: 2 }),
   "thesis · lost, invalidated chart layout": buildThesisOgSvg({ displayName: "x", wallet: W, ticker: "BTC", direction: "LONG", entryPrice: 100, stopLoss: 98, takeProfit1: 104, riskReward: 2, status: "STOPPED_OUT", gradedR: -1, chartDataUri: "data:image/png;base64,AA==" }),
+  "thesis · long notes": buildThesisOgSvg({ displayName: "x", wallet: W, ticker: "LINK", direction: "LONG", entryPrice: 15.42, stopLoss: 14.96, takeProfit1: 16.04, riskReward: 1.33, status: "ACTIVE", notes: LONG_NOTES }),
   "thesis · invalidated": buildThesisOgSvg({ displayName: "x", wallet: W, ticker: "BTC", direction: "LONG", entryPrice: 100, stopLoss: 98, takeProfit1: 104, riskReward: 2, status: "INVALIDATED" }),
+  "arena · up": buildArenaAgentSvg({ name: "Ada", builder: "kai", wallet: W, paper: arenaPaper({}) }),
+  "arena · down, operator slot": buildArenaAgentSvg({ name: "Ada", wallet: W, paper: arenaPaper({ netPnl: -12.5, resets: 2 }), operator: { walletCount: 2, paper: { trades: 22, netPnl: 40 } } }),
   "xray · graded": buildXrayCardSvg({ status: "GRADED", kind: "HL", who: "0x9a30…cb28", headline: "+$1,204 IN 30D", headlineTone: "pos", context: "Hyperliquid", stats: [
     { label: "NET 30D", value: "+$1,204", tone: "pos" }, { label: "TRADES", value: "41", tone: null }, { label: "WIN RATE", value: "58%", tone: null }, { label: "PF", value: "1.4", tone: null },
   ], partialNote: "tape partial before Aug 2", stamp: "Sep 28 · 18:41 UTC" }),
@@ -59,7 +65,7 @@ for (const [name, svg] of Object.entries(CARDS)) {
 }
 
 // Cards that show no money figure must not paint green or red anywhere.
-const moneyFree = ["board · rows", "board · empty", "read · FADE with smart money", "read · WATCH against", "identity · cold start", "thesis · active long", "thesis · invalidated", "xray · accruing"];
+const moneyFree = ["board · rows", "board · empty", "read · FADE with smart money", "read · WATCH against", "identity · cold start", "thesis · active long", "thesis · long notes", "thesis · invalidated", "xray · accruing"];
 for (const name of moneyFree) {
   test(`${name}: no green/red (it shows no money)`, () => {
     const c = colours(CARDS[name]);
@@ -118,4 +124,105 @@ test("identity: no rank, no chip; the record is in parts; third person", () => {
   assert.match(est, /◆ SHARP/);
   assert.match(est, /Their edge is real in trends/);
   assert.ok(!/[Yy]our edge/.test(est));
+});
+
+// ── The hero look (thesis + Arena, borst 2026-11-23) ─────────────────────────────
+const HERO = ["thesis · active long", "thesis · won", "thesis · lost, invalidated chart layout", "thesis · long notes", "thesis · invalidated", "arena · up", "arena · down, operator slot"];
+const MONO_CARDS = ["board · rows", "board · empty", "read · FADE with smart money", "read · WATCH against", "identity · cold start", "identity · established", "xray · graded", "xray · accruing"];
+
+for (const name of HERO) {
+  test(`${name}: hero look (mark + wordmark, serif headline, streak, light from brand colours only)`, () => {
+    const svg = CARDS[name];
+    assert.ok(svg.includes(`href="${MARK_PNG}"`), "no Nexus mark");
+    assert.match(svg, />NEXUS TRADING LABS</);
+    assert.match(svg, /<text class="serif"[^>]*>/, "no serif headline");
+    assert.match(svg, /\.serif \{ font-family: 'Libre Baskerville'/);
+    for (const id of ["atmos", "sheen", "core", "edge"]) assert.match(svg, new RegExp(`fill="url\\(#${id}\\)"`), `streak layer ${id} missing`);
+    // The light is bone at an opacity: never green/red, never a colour of its own.
+    const stops = [...svg.matchAll(/<stop [^>]*stop-color="(#[0-9a-f]{6})"/gi)].map((m) => m[1].toLowerCase());
+    assert.ok(stops.length >= 10);
+    for (const c of stops) assert.ok(c === BRAND.bone || c === BRAND.bright, `stop ${c}`);
+    assert.match(svg, /<svg width="1200" height="630"/);
+  });
+}
+
+test("board, read, record and X-Ray cards stay mono (borst: not this pass)", () => {
+  for (const name of MONO_CARDS) {
+    assert.ok(!CARDS[name].includes("class=\"serif\""), `${name} went serif`);
+    assert.ok(!CARDS[name].includes(MARK_PNG), `${name} carries the mark`);
+  }
+});
+
+test("the mark is the logo's PNG at 60×72", () => {
+  const png = Buffer.from(MARK_PNG.split(",")[1], "base64");
+  assert.equal(png.subarray(1, 4).toString("ascii"), "PNG");
+  assert.equal(png.readUInt32BE(16), MARK_W);
+  assert.equal(png.readUInt32BE(20), MARK_H);
+});
+
+test("arena: net P&L green when up, red when down; nothing else is green/red", () => {
+  const up = CARDS["arena · up"], down = CARDS["arena · down, operator slot"];
+  assert.match(up, new RegExp(`fill="${BRAND.win}"[^>]*>\\+\\$12\\.50<`));
+  assert.match(down, new RegExp(`fill="${BRAND.loss}"[^>]*>-\\$12\\.50<`));
+  for (const svg of [up, down]) {
+    const greenRed = [...svg.matchAll(new RegExp(`fill="(${BRAND.win}|${BRAND.loss})"[^>]*>([^<]*)<`, "g"))].map((m) => m[2]);
+    assert.equal(greenRed.length, 1, `only the net P&L is coloured, got: ${greenRed.join(" | ")}`);
+  }
+  // The qualify line keeps its meaning and its bone; the operator slot is named.
+  assert.match(up, new RegExp(`fill="${BRAND.bone}"[^>]*>7 OF 10 TRADES TO QUALIFY<`));
+  assert.match(down, /1 OF 2 WALLETS · OPERATOR SLOT: 22 TRADES · NET \+\$40\.00/);
+  assert.match(down, /2 RESETS ON RECORD/);
+  assert.match(up, />built by kai · 0x9a30…cb28</);
+  assert.match(up, /<text class="serif"[^>]*>Ada</);
+});
+
+test("thesis: green/red only on the graded outcome", () => {
+  for (const name of ["thesis · won", "thesis · lost, invalidated chart layout"]) {
+    const coloured = [...CARDS[name].matchAll(new RegExp(`fill="(${BRAND.win}|${BRAND.loss})"[^>]*>([^<]*)<`, "g"))].map((m) => m[2]);
+    assert.equal(coloured.length, 1, coloured.join(" | "));
+    assert.match(coloured[0], /^(✓ WIN|✗ LOSS) [+-]?\d/);
+  }
+  // The headline is the plan: never coloured.
+  assert.match(CARDS["thesis · won"], new RegExp(`<text class="serif"[^>]*fill="${BRAND.bright}"[^>]*><tspan fill="${BRAND.fog}">Short </tspan>BTC<`));
+});
+
+test("thesis notes: two lines at most, broken between words, ending in “…” when cut", () => {
+  const lines = quoteLines(LONG_NOTES, 54, 2);
+  assert.equal(lines.length, 2);
+  assert.ok(lines.every((l) => l.length <= 54), lines.join(" / "));
+  assert.ok(lines[0].startsWith("“"));
+  assert.ok(lines[1].endsWith("…”"));
+  // Every word on the card is a whole word of the notes (no mid-word cut).
+  const words = new Set(LONG_NOTES.split(/\s+/));
+  for (const w of lines.join(" ").replace(/[“”…]/g, "").split(" ")) assert.ok(words.has(w) || words.has(`${w},`) || words.has(`${w}.`), `cut word: ${w}`);
+  assert.deepEqual(quoteLines("short", 54), ["“short”"]);
+  assert.deepEqual(quoteLines("  ", 54), []);
+  assert.deepEqual(quoteLines(null, 54), []);
+  // Fits exactly: no ellipsis.
+  assert.deepEqual(quoteLines("one two three", 20), ["“one two three”"]);
+  // Dangling punctuation is dropped before the ellipsis.
+  assert.equal(quoteLines("alpha beta, gamma delta epsilon", 14, 1)[0], "“alpha beta…”");
+  // A word longer than a line is cut, not lost.
+  assert.ok(quoteLines("x".repeat(80), 20, 2).join("").length <= 40);
+  const card = CARDS["thesis · long notes"];
+  const quoteRows = [...card.matchAll(/<text class="serif"[^>]*font-size="20">([^<]*)</g)];
+  assert.equal(quoteRows.length, 2);
+  assert.ok(quoteRows[1][1].endsWith("…”"));
+});
+
+test("card prices: two decimals from $1, four significant figures under it", () => {
+  assert.equal(cardPrice(15.42), "$15.42");
+  assert.equal(cardPrice(100), "$100.00");
+  assert.equal(cardPrice(0.021), "$0.021");
+  assert.equal(cardPrice(0.00001234567), "$0.00001235");
+  assert.equal(cardPrice("0.5"), "$0.5");
+  assert.equal(cardPrice(0), "$0.00");
+  assert.equal(cardPrice("n/a"), "$—");
+});
+
+test("serif headline sizes shrink with the name and stay inside the card", () => {
+  assert.equal(serifSize("Ada", 1072, 84), 84);
+  const long = serifSize("Momentum Reversion Hunter v2", 1072, 84);
+  assert.ok(long < 84 && long >= 28);
+  assert.ok(serifSize("x".repeat(400), 1072, 84) === 28);
 });
