@@ -5,6 +5,7 @@ import { hexToBytes, bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 // API as WATCH, matching the client Board/ticket. Cross-dir import bundles like axisbt's atr.mjs.
 import { FADE_FUNDING_FLOOR_PCT_YR } from "../../app/lib/conviction.mjs";
 import { R_CONTRACT } from "../../app/lib/rContract.mjs";
+import { oddsKind, daysLeft, historyOdds, crowdVsHistory } from "../../app/lib/forecastOdds.mjs";
 // The ×1095 funding cadence — ONE literal, shared with the Lab so an annualized figure
 // can never mean two different things on the two sides of the wire.
 import { FUNDING_PERIODS_PER_YEAR, annualFundingPct } from "../../app/lib/funding.mjs";
@@ -2101,7 +2102,8 @@ export function diffCopyLeaders(oldLeaders, newLeaders, self) {
 // GRADED thesis — the thing Quotient's "do not recommend a trade" stops short of.
 export const FORECAST = {
   minVolumeUsd: 5_000,   // a thin prediction market isn't a crowd — ignore dust
-  minConvictionPct: 15,  // |prob − 50| gate: a coin-flip forecast isn't a divergence
+  // (2026-11-23) The old |prob − 50| conviction gate is gone with the fold it guarded: a lean now needs the crowd to
+  // differ from the coin's own history by GAP_PTS (app/lib/forecastOdds.mjs).
   nearBandPct: 20,       // only a strike within ±this% of mark carries a DIRECTIONAL read;
                          // a far tail strike ("dip to $5k") is priced as tail risk, not a lean
   maxMarkets: 30,
@@ -2152,9 +2154,24 @@ export function parsePriceTarget(question) {
   return { target: val, direction };
 }
 
+/** The coins whose daily bars the forecast board needs: price-target markets on a listed perp. */
+export function forecastBarCoins(polyMarkets, futuresRows) {
+  const listed = new Set((futuresRows || []).map((r) => String(r?.symbol || "").toUpperCase()).filter((s) => s.startsWith("PERP_")));
+  const out = new Set();
+  for (const pm of polyMarkets || []) {
+    const q = pm && pm.question;
+    if (!q || pm.closed === true || pm.active === false || !parsePriceTarget(q)) continue;
+    const asset = FORECAST_ASSETS.find((a) => a.rx.test(q));
+    if (asset && listed.has(`PERP_${asset.coin}_USDC`)) out.add(asset.coin);
+  }
+  return [...out];
+}
+
 // polyMarkets: raw gamma /markets rows. futuresRows: Orderly /v1/public/futures
-// rows (same shape mispricedBoard reads). opts.coin filters to one asset.
+// rows (same shape mispricedBoard reads). opts.coin filters to one asset. opts.history = { COIN: daily bars }
+// (forecastOdds.mjs dailyBars), opts.now: the coin's own base rate for each strike; no bars = no lean.
 export function forecastDivergence(polyMarkets, futuresRows, cfg = FORECAST, opts = {}) {
+  const now = Number.isFinite(opts.now) ? opts.now : Date.now();
   const wantCoin = opts.coin ? String(opts.coin).toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "") : null;
   // Build coin → tape snapshot (mark + funding) from Orderly's public futures.
   const tape = {};
@@ -2205,6 +2222,8 @@ export function forecastDivergence(polyMarkets, futuresRows, cfg = FORECAST, opt
       target: null, targetDirection: null, distancePct: null,
       forecastLean: null, nearMoney: null,
       fundingLean: null, alignment: null, divergence: false,
+      // The coin's own base rate for this strike (forecastOdds.mjs historyOdds) and the crowd's gap to it, in points.
+      history: null, crowdGapPts: null,
     };
 
     const pt = parsePriceTarget(q);
@@ -2212,10 +2231,19 @@ export function forecastDivergence(polyMarkets, futuresRows, cfg = FORECAST, opt
       entry.target = pt.target;
       entry.targetDirection = pt.direction;   // the direction the YES outcome bets on
       entry.distancePct = round(((pt.target - t.mark) / t.mark) * 100, 2);
-      // Effective forecast lean FOLDS the probability: a LOW YES on an "up" bet means the
-      // crowd is betting price WON'T get there (a down/flat lean), and vice-versa. Without
-      // this fold, "2% chance BTC dips to $15k" (a bullish crowd) would read as bearish.
-      entry.forecastLean = yesProb >= 50 ? pt.direction : (pt.direction === "UP" ? "DOWN" : "UP");
+      // The lean is the crowd vs the coin's OWN history (2026-11-23). It used to FOLD the probability (YES < 50% on
+      // an up strike = "leans DOWN"), which called "12% that BTC climbs 14% this week" bearish when BTC itself only
+      // did that in ~1 week in 10. Now: how often did this coin make this move in this much time over its last year,
+      // and is the crowd materially (GAP_PTS) more or less confident than that? No bars / no end date = no lean.
+      const days = daysLeft(entry.endDate, now);
+      const bars = opts.history?.[asset.coin];
+      const odds = days != null && Array.isArray(bars) ? historyOdds(bars, { distancePct: entry.distancePct, days, kind: oddsKind(q) }) : null;
+      if (odds) {
+        entry.history = odds;
+        const g = crowdVsHistory({ yesPct: yesProb, direction: pt.direction, historyPct: odds.pct });
+        entry.crowdGapPts = g.gapPts;
+        entry.forecastLean = g.lean;
+      }
       // Only a NEAR-money strike carries a directional read vs positioning; a far tail
       // strike ("dip to $5k", 90% away) is priced as tail risk, so we surface the forecast
       // but never flag it as a divergence.
@@ -2225,18 +2253,18 @@ export function forecastDivergence(polyMarkets, futuresRows, cfg = FORECAST, opt
         // negative ⇒ leans DOWN. (The mispriced board FADES this; here we only read its
         // direction to compare against the forecast.)
         entry.fundingLean = t.funding > 0 ? "UP" : "DOWN";
-        if (entry.nearMoney) {
+        if (entry.nearMoney && entry.forecastLean) {
           entry.alignment = entry.forecastLean === entry.fundingLean ? "ALIGNED" : "DIVERGENT";
-          // Flag only a CONVICTION divergence: forecasters lean one way, the tape the
-          // other, and the forecast isn't a coin-flip. That gap = worth investigating.
-          entry.divergence = entry.alignment === "DIVERGENT" && Math.abs(yesProb - 50) >= cfg.minConvictionPct;
+          // A divergence: the crowd is materially more confident than history one way, funding leans the other.
+          entry.divergence = entry.alignment === "DIVERGENT";
         }
       }
     }
     out.push(entry);
   }
-  // Flagged divergences first, then by crowd depth (volume = forecast quality).
-  out.sort((a, b) => (Number(b.divergence) - Number(a.divergence)) || (b.volumeUsd - a.volumeUsd));
+  // Flagged divergences first, then the biggest crowd-vs-history gap, then crowd depth (volume = forecast quality).
+  const gap = (m) => (m.crowdGapPts == null ? -1 : Math.abs(m.crowdGapPts));
+  out.sort((a, b) => (Number(b.divergence) - Number(a.divergence)) || (gap(b) - gap(a)) || (b.volumeUsd - a.volumeUsd));
   return {
     scanned: out.length,
     divergentCount: out.filter((m) => m.divergence).length,

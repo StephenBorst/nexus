@@ -15,7 +15,7 @@ const ORDERLY_API = "https://api-evm.orderly.org";
 const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
-const POS = "#3ecf8e", NEG = "#f7525f", BONE = "#ededf0", BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b", BORDER = "#232327";
+const BONE = "#ededf0", BRIGHT = "#f4f4f5", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b", BORDER = "#232327";
 
 const bare = (s: string) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
 const fmtPx = (v: number) => (v >= 1000 ? `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toPrecision(4)}`);
@@ -24,7 +24,9 @@ const Z25 = 0.6745, Z80 = 1.2816; // interquartile / 10th–90th z-scores (norma
 
 type Lean = { dir: "LONG" | "SHORT"; fundingAnnualPct: number | null } | null;
 
-export function ProjectionBand({ symbol, height = 216, horizonHours, fill }: { symbol: string; height?: number; horizonHours?: number; fill?: boolean }) {
+// `showLean={false}` (Forecast Divergence, 2026-11-23): no funding-fade lean and no magnet target, just the cone. In a
+// card whose subject is another read, a third, ungraded directional call only competes with it.
+export function ProjectionBand({ symbol, height = 216, horizonHours, fill, showLean = true }: { symbol: string; height?: number; horizonHours?: number; fill?: boolean; showLean?: boolean }) {
   const coin = bare(symbol);
   // Controlled horizon (Quick Trade syncs it to the chart's timeframe) or self-managed chips.
   const controlledHz = typeof horizonHours === "number";
@@ -61,6 +63,7 @@ export function ProjectionBand({ symbol, height = 216, horizonHours, fill }: { s
   // The read's lean (fade side) from the mispriced board + the liq-magnet heatmap.
   useEffect(() => {
     let off = false; setLean(null); setLiq(null);
+    if (!showLean) return () => { off = true; };
     fetch(`${AGENT_API}/intel/mispriced`).then((r) => r.json())
       .then((d) => { if (off) return; const m = (d?.markets || []).find((x: { coin?: string }) => String(x.coin).toUpperCase() === coin); if (m && (m.direction === "LONG" || m.direction === "SHORT")) setLean({ dir: m.direction, fundingAnnualPct: Number(m.fundingAnnualPct) ?? null }); })
       .catch(() => {});
@@ -68,7 +71,7 @@ export function ProjectionBand({ symbol, height = 216, horizonHours, fill }: { s
       .then((d) => { if (!off && d?.available && d.currentPrice > 0) setLiq({ below: d.below || [], above: d.above || [], currentPrice: d.currentPrice }); })
       .catch(() => {});
     return () => { off = true; };
-  }, [coin]);
+  }, [coin, showLean]);
 
   // Directional target = the strongest liq magnet on the fade side (strength ÷ distance).
   const target = useMemo(() => {
@@ -152,7 +155,8 @@ export function ProjectionBand({ symbol, height = 216, horizonHours, fill }: { s
         const lineW = nowX - LPAD;
         const path = pts.map((c, i) => `${i === 0 ? "M" : "L"}${(LPAD + (i / (pts.length - 1)) * lineW).toFixed(1)},${y(c).toFixed(1)}`).join(" ");
         const dir = lean?.dir;
-        const tgtColor = dir === "LONG" ? POS : dir === "SHORT" ? NEG : BONE;
+        // Bone, not green/red: a lean is a direction, not money (brand rule, 2026-11-23).
+        const tgtColor = BONE;
         const settleStr = new Date(settle).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
         return (
@@ -210,12 +214,12 @@ export function ProjectionBand({ symbol, height = 216, horizonHours, fill }: { s
                 {/* The RANGE is the projection, not a point target (Grok): a "→ $83 (+0.3%)"
                     next to a 1.5R contract is a cousin of fake E[R]. The lean names the play's
                     direction only; the expected RANGE below is the number. */}
-                <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: MUTED, flexShrink: 0 }}>LEAN</span>
-                {dir
+                <span style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: "0.1em", color: MUTED, flexShrink: 0 }}>{showLean ? "LEAN" : "CONE"}</span>
+                {!showLean ? <span style={{ color: MUTED }}>from 30 days of realized volatility · not a forecast</span> : dir
                   ? <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}><b style={{ color: FOG }}>{dir === "SHORT" ? "funding fade: short" : "funding fade: long"}</b><span style={{ color: MUTED }}> · not graded</span></span>
                   : <span style={{ color: MUTED }}>no funding lean</span>}
               </div>
-              <div style={{ fontFamily: MONO, fontSize: 9.5, color: FOG, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><span style={{ fontSize: 8.5, letterSpacing: "0.1em", color: MUTED }}>{hLabel} EXPECTED RANGE </span><b>{fmtPx(wide.lo)}–{fmtPx(wide.hi)}</b></div>
+              <div style={{ fontFamily: MONO, fontSize: 9.5, color: FOG, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><span style={{ fontSize: 8.5, letterSpacing: "0.1em", color: MUTED }}>{hLabel} 10–90% RANGE </span><b>{fmtPx(wide.lo)}–{fmtPx(wide.hi)}</b></div>
             </div>
           </>
         );

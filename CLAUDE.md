@@ -984,6 +984,20 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   (routes-market.mjs `handleMarkets`: mispriced + smart + forecasts read once, `marketSnapshot` per coin, 60 s cache);
   each row = price, 24h, the move since the last look + the alerts' changes (`marketTransitions`); first look = baseline;
   tapping a row opens the drawer and marks it seen.
+- **Forecast Divergence = the crowd vs the coin's own history (borst 2026-11-23, rules `app/lib/forecastOdds.mjs`,
+  tested):** each price-target market on `/intel/forecasts` (cache key `intel:forecasts:v2`) carries `history` = how often
+  the coin itself made that move in the time left, from each start day of its last year (Orderly DAILY bars,
+  `forecastBars.mjs`, one read per coin, cached 6h; "reach / hit / dip to" = a touch, "above / below" = a close; overlapping
+  windows, ≥ 60, a base rate, not a fair value) + `crowdGapPts` = YES − that rate. `forecastLean` is set ONLY past
+  `GAP_PTS` 10 (the direction the crowd is more sure of than history); `divergence` = that lean against funding's, near
+  money. The OLD FOLD is gone (YES < 50% on an up strike read as "leans DOWN", so "12% BTC climbs 14% this week" was
+  called bearish). No bars / no end date = no lean, never the fold. One rule for every reader: the tab, the drawer's
+  forecast lens (`forecastRead`), the table's forecast column, DecisionBoard, the share card. The tab
+  (`ForecastDivergence.tsx`): `OddsTrack` (crowd dot vs history ring on 0–100%), `forecastChip` (amber only for crowd vs
+  funding), the plain read, Long / Short via `handOffCall` source `forecast-divergence` (it used to pick the crowd's side
+  and write the note), ProjectionBand `showLean={false}`; leans in ink, never green/red. **Lens read B
+  (`forecast_divergence`, lens-reads-prereg.md, unsigned) was drafted on the old fold:** register it on THIS rule under
+  its own new page, not that text.
 - **Funding across venues (2026-11-15, rules `app/lib/crossFunding.mjs`, route `GET /intel/funding-venues[/:coin]`
   `routes-venues.mjs`, 5-min cache `intel:venues:v1`):** the same coin's funding on Orderly (from /intel/mispriced,
   in-process), Hyperliquid (one `metaAndAssetCtxs` POST, hourly rate) and OKX (`funding-rate` per coin, paced, recorded
