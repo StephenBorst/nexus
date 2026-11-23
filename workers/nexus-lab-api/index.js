@@ -133,6 +133,9 @@ import { parityEvents } from "./parityEvents.mjs";
 import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
 import { runWeekly, handleWeekly, WEEKLY_RUN_MINUTE } from "./weeklyScorecard.mjs";
 import { handleRecordShare } from "./routes-recordshare.mjs";
+import { handleAlertShare } from "./routes-alertshare.mjs";
+import { handlePriceAlerts } from "./routes-pricealerts.mjs";
+import { runPriceWatch } from "./priceWatch.mjs";
 import { runAgentWatch } from "./push.mjs";
 import { runMarketWatch } from "./marketWatch.mjs";
 import { buildBoardOgSvg, buildReadOgSvg, buildIdentitySvg, buildThesisOgSvg, buildArenaAgentSvg } from "./ogCards.mjs";
@@ -848,6 +851,14 @@ const worker = {
             if (r.events) console.log(`[push] market watch: ${r.events} change(s) on ${r.coins} coins, ${r.sent} sent`);
           } catch (e) { console.error("[push] market watch failed:", String(e)); }
         })());
+        // Price alerts you set (priceWatch.mjs, rules app/lib/priceAlerts.mjs): 1-minute highs/lows since the last look,
+        // fired once; the in-app list always, the phone and Telegram each behind the alert's own switch.
+        ctx.waitUntil((async () => {
+          try {
+            const r = await runPriceWatch(env, (w, n, opts) => appendNotification(env, w, n, opts));
+            if (r.fired || r.unread?.length) console.log(`[price-watch] ${JSON.stringify(r)}`);
+          } catch (e) { console.error("[price-watch] failed:", String(e)); }
+        })());
         // On-chain → Lab watchdog (regWatch.mjs): a registration missing from the Lab 5 min after it's seen is indexed
         // here (indexRegistration, the /theses/index path) and the owner is told; one that can't be is reported.
         ctx.waitUntil((async () => {
@@ -1065,6 +1076,11 @@ const worker = {
       if (tapeRes) return tapeRes;
     }
     // GET /share/xray/:address + /og/xray/:address(.png) — X-Ray share links (routes-xrayshare.mjs).
+    // /alerts/price/:wallet — price alerts you set (routes-pricealerts.mjs), Lab-signed, private.
+    {
+      const paRes = await handlePriceAlerts(parts, request, env);
+      if (paRes) return paRes;
+    }
     // /push/* — phone alerts (routes-push.mjs).
     {
       const pushRes = await handlePush(parts, request, env);
@@ -1356,6 +1372,11 @@ Loading the ${esc(coin)} read… <a style="color:#ededf0" href="${appUrl}">open 
     {
       const recordRes = await handleRecordShare(parts, request, env, { renderPng: renderMonoPng, scorecardKey: axisbtCacheKey(20) });
       if (recordRes) return recordRes;
+    }
+    // ── /share/alert + /og/alert(.png) → a fired price alert, re-checked on Orderly's bars (routes-alertshare.mjs) ─
+    {
+      const alertRes = await handleAlertShare(parts, request, env, { renderPng: renderMonoPng });
+      if (alertRes) return alertRes;
     }
 
     // ── /thesis/:wallet/:id/meta → the call page's head tags (routes-callmeta.mjs) ─

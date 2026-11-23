@@ -133,7 +133,10 @@ export async function appendNotification(env, wallet, notif, opts = {}) {
 
   // Phone push (push.mjs): only the types a device switched on; a no-op until VAPID_PRIVATE_JWK
   // is set. Before the Telegram opt-out below, so a caller with its own Telegram DM still pushes.
-  try { await pushNotification(env, w, notif); } catch (e) { console.error("[notif] push failed", e?.message || e); }
+  // `opts.push === false` = this alert's own phone switch is off (price alerts, priceWatch.mjs).
+  if (opts.push !== false) {
+    try { await pushNotification(env, w, notif); } catch (e) { console.error("[notif] push failed", e?.message || e); }
+  }
 
   // Fan the SAME alert out to Telegram if this wallet linked a chat — so comments,
   // reactions, follows and copies all reach the bot, not just call resolutions.

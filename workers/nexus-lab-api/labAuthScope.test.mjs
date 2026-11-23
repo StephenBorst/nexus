@@ -17,6 +17,7 @@ const USES = {
   "routes-feed.mjs": ["comments", "reactions", "takes"],
   "routes-social.mjs": ["follows", "notifications"],
   "routes-push.mjs": ["phone alerts"],
+  "routes-pricealerts.mjs": ["notifications", "phone alerts"], // price alerts you set: delivered as notifications + phone alerts
   "routes-telegram.mjs": ["Telegram link"],
   "routes-revenue.mjs": ["sign in"],                           // the owner revenue page: a read, proof of who is looking
 };
