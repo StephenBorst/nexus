@@ -91,7 +91,8 @@ export function composeMarket({ coin, mispriced, signals, smart, callers, foreca
     .sort((a, b) => Number(!!b.divergence) - Number(!!a.divergence) || (num(b.volumeUsd) ?? 0) - (num(a.volumeUsd) ?? 0))[0];
   if (fm) {
     const r = forecastRead({ coin: c, yesPct: fm.forecastProbPct, target: fm.target, targetDirection: fm.targetDirection, distancePct: fm.distancePct,
-      forecastLean: fm.forecastLean, fundingLean: fm.fundingLean, divergence: !!fm.divergence, ends: fm.endDate ? ends(fm.endDate) : null });
+      forecastLean: fm.forecastLean, fundingLean: fm.fundingLean, divergence: !!fm.divergence, ends: fm.endDate ? ends(fm.endDate) : null,
+      history: fm.history ?? null, crowdGapPts: fm.crowdGapPts ?? null });
     add("forecast", "Forecasts", r.read, { detail: r.caveat ?? undefined, tone: r.caveat ? "watch" : "plain" });
   }
 

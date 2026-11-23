@@ -8,7 +8,8 @@ const boards = {
   signals: { signals: [{ symbol: "PERP_ETH_USDC", mark_price: 1852, funding_annual_pct: 10.9, oi_change_pct: 2.34, delta_fresh: true }] },
   smart: { consensus: { ETH: { side: "SHORT", count: 10, long: 7, short: 10 }, BTC: { long: 2, short: 12 } } },
   callers: { consensus: { ETH: { side: "SHORT", participants: 1, longCount: 0, shortCount: 1 } } },
-  forecasts: { markets: [{ coin: "ETH", forecastProbPct: 30, target: 1500, targetDirection: "DOWN", distancePct: -19, forecastLean: "DOWN", fundingLean: "UP", divergence: true, endDate: "2026-12-31T12:00:00Z", volumeUsd: 1e6 }] },
+  forecasts: { markets: [{ coin: "ETH", forecastProbPct: 30, target: 1500, targetDirection: "DOWN", distancePct: -19, forecastLean: "DOWN", fundingLean: "UP", divergence: true, endDate: "2026-12-31T12:00:00Z", volumeUsd: 1e6,
+    history: { pct: 5, days: 38, kind: "touch", lookbackDays: 365, windows: 327 }, crowdGapPts: 25 }] },
   catalysts: { catalysts: [{ question: "Will the Fed cut in December?", yesProbPct: 61.2, volumeUsd: 5e6, impacts: [{ coin: "ETH", direction: "LONG" }] }] },
   pulse: { openCalls: [{ symbol: "PERP_ETH_USDC" }], engines: { openCalls: [{ symbol: "ETH" }, { symbol: "BTC" }] } },
 };
@@ -29,7 +30,7 @@ test("every lens in plain words, none adds up to a verdict", () => {
   assert.equal(line("tape"), "Price −5.5% in 24h, open interest +2.3% since the last check.");
   assert.equal(line("smart"), "10 short · 7 long among tracked traders: split, no clear agreement.");
   assert.equal(line("callers"), "1 graded caller leans short (0 long · 1 short).");
-  assert.match(line("forecast"), /^Forecasters give 30% that ETH dips to \$1,500 by Dec 31\. Funding leans up: longs are paying to hold\. The two disagree\.$/);
+  assert.match(line("forecast"), /^Forecasters give 30% that ETH dips to \$1,500 by Dec 31\. In ETH’s last 365 days, a 19\.0% drop within 38 days happened from 5% of start days\. The crowd rates it 25 points more likely than ETH’s own history does\. Funding leans up: longs are paying to hold\. The crowd and funding lean opposite ways\.$/);
   assert.equal(line("catalysts"), "1 world event maps to ETH. Biggest: \"Will the Fed cut in December?\" at 61% YES, read as long for ETH.");
   assert.equal(line("calls"), "1 by people · 1 by our engines, graded from public price.");
   for (const l of m.lenses) assert.doesNotMatch(l.line, /edge|proven|buy now|sell now|strong (buy|sell)/i, l.id);

@@ -11,7 +11,7 @@ import {
   mispricedBoard, staleBoardFallback, BOARD_LAST_GOOD_MS, consensusBySymbol, fundingReversion, edgeQuality, coinFlipUpperTail, mergeFundingPrice,
   LOSS_REASONS, isLossReason, postmortemSummary,
   validateArenaRegistration, arenaAgentConfig,
-  parsePriceTarget, forecastDivergence, FORECAST,
+  parsePriceTarget, forecastDivergence, forecastBarCoins, FORECAST,
   quotientSignals, QUOTIENT, quotientPerpMap,
   classifyMacro, macroEvents,
   houseCallFromSignal, wargameScenario,
@@ -1756,12 +1756,18 @@ const futures = [
   { symbol: "PERP_ETH_USDC", mark_price: 3000, last_funding_rate: -0.0002 },    // funding − ⇒ tape leans DOWN
 ];
 
-test("forecastDivergence: flags a near-money conviction divergence (forecast UP vs tape DOWN)", () => {
+// A flat daily tape: the coin never moved more than 1% in a day, so its own history gives ~0% to any 5%+ move.
+const FC_NOW = Date.parse("2026-09-01T00:00:00Z");
+const flatBars = Array.from({ length: 400 }, (_, i) => ({ t: FC_NOW - (400 - i) * 86400000, h: 101, l: 99, c: 100 }));
+const fcHistory = { BTC: flatBars, ETH: flatBars };
+const fcOpts = { history: fcHistory, now: FC_NOW };
+
+test("forecastDivergence: the crowd far more confident than the coin's own history = a lean; against funding = divergence", () => {
   const poly = [
-    // ETH: near-money $3,300 (+10%) at 72% YES ⇒ crowd leans UP; funding negative ⇒ tape DOWN ⇒ DIVERGENT
+    // ETH: $3,300 (+10%) by Sept 30 at 72% YES; its flat history gives ~0% → the crowd is 72 points more confident: UP.
     { id: "1", question: "Will Ethereum reach $3,300 by Sept?", outcomes: '["Yes","No"]', outcomePrices: '["0.72","0.28"]', volumeNum: 250000, liquidity: "40000", endDate: "2026-09-30" },
   ];
-  const r = forecastDivergence(poly, futures);
+  const r = forecastDivergence(poly, futures, FORECAST, fcOpts);
   assert.equal(r.markets.length, 1);
   const m = r.markets[0];
   assert.equal(m.coin, "ETH");
@@ -1769,7 +1775,11 @@ test("forecastDivergence: flags a near-money conviction divergence (forecast UP 
   assert.equal(m.forecastProbPct, 72);
   assert.equal(m.target, 3300);
   assert.equal(m.targetDirection, "UP");
-  assert.equal(m.forecastLean, "UP");     // 72% YES on an up-bet ⇒ crowd leans UP
+  assert.equal(m.history.kind, "touch");
+  assert.equal(m.history.days, 29);
+  assert.equal(m.history.pct, 0);
+  assert.equal(m.crowdGapPts, 72);
+  assert.equal(m.forecastLean, "UP");
   assert.equal(m.nearMoney, true);
   assert.equal(m.fundingLean, "DOWN");
   assert.equal(m.alignment, "DIVERGENT");
@@ -1777,42 +1787,64 @@ test("forecastDivergence: flags a near-money conviction divergence (forecast UP 
   assert.equal(r.divergentCount, 1);
 });
 
-test("forecastDivergence: probability fold — low YES on a far DOWN tail = UP lean, never flagged", () => {
+test("forecastDivergence: a LOW YES on a far-ish strike is not bearish (the old fold read it as DOWN)", () => {
   const poly = [
-    // "dip to $15k" at 2.6% YES: crowd 97% says it WON'T dip ⇒ effectively bullish (UP), matching funding.
-    { id: "2", question: "Will Bitcoin dip to $15,000 by 2026?", outcomes: '["Yes","No"]', outcomePrices: '["0.026","0.974"]', volumeNum: 900000 },
+    // 8% that BTC reaches +6% by month end, history ~0%: 8 points, under the gap → no lean, nothing flagged,
+    // even though funding is UP (the old code called this DOWN vs UP = DIVERGENT).
+    { id: "9", question: "Will Bitcoin reach $125,000 by Sept?", outcomes: '["Yes","No"]', outcomePrices: '["0.08","0.92"]', volumeNum: 500000, endDate: "2026-09-30" },
   ];
-  const r = forecastDivergence(poly, futures);
-  const m = r.markets[0];
-  assert.equal(m.targetDirection, "DOWN");
-  assert.equal(m.forecastLean, "UP");     // folded: low YES on a DOWN bet ⇒ UP lean (not DOWN)
-  assert.equal(m.nearMoney, false);       // −87% away ⇒ tail strike, no directional read
-  assert.equal(m.alignment, null);        // far strike ⇒ not scored for divergence
+  const m = forecastDivergence(poly, futures, FORECAST, fcOpts).markets[0];
+  assert.equal(m.crowdGapPts, 8);
+  assert.equal(m.forecastLean, null);
+  assert.equal(m.alignment, null);
   assert.equal(m.divergence, false);
 });
 
-test("forecastDivergence: aligned when folded forecast lean matches funding lean", () => {
+test("forecastDivergence: no history (or no end date) = no lean, never the old fold", () => {
   const poly = [
-    // Near-money $125k (+6%) at 65% YES ⇒ UP lean; BTC funding + ⇒ UP ⇒ ALIGNED
-    { id: "3", question: "Will Bitcoin reach $125,000 by Sept?", outcomes: '["Yes","No"]', outcomePrices: '["0.65","0.35"]', volumeNum: 500000, endDate: "2026-09-30" },
+    { id: "1", question: "Will Ethereum reach $3,300 by Sept?", outcomes: '["Yes","No"]', outcomePrices: '["0.72","0.28"]', volumeNum: 250000, endDate: "2026-09-30" },
+    { id: "2", question: "Will Bitcoin reach $125,000?", outcomes: '["Yes","No"]', outcomePrices: '["0.72","0.28"]', volumeNum: 250000 },
   ];
-  const r = forecastDivergence(poly, futures);
-  assert.equal(r.markets[0].nearMoney, true);
+  for (const m of forecastDivergence(poly, futures, FORECAST, { now: FC_NOW }).markets) {
+    assert.equal(m.history, null);
+    assert.equal(m.forecastLean, null);
+    assert.equal(m.divergence, false);
+  }
+  const noEnd = forecastDivergence(poly, futures, FORECAST, fcOpts).markets.find((m) => m.coin === "BTC");
+  assert.equal(noEnd.history, null, "no end date = no window to compare");
+});
+
+test("forecastDivergence: a far tail strike carries its history but is never scored for divergence", () => {
+  const poly = [
+    { id: "2", question: "Will Bitcoin dip to $15,000 by Sept?", outcomes: '["Yes","No"]', outcomePrices: '["0.026","0.974"]', volumeNum: 900000, endDate: "2026-09-30" },
+  ];
+  const m = forecastDivergence(poly, futures, FORECAST, fcOpts).markets[0];
+  assert.equal(m.targetDirection, "DOWN");
+  assert.equal(m.nearMoney, false);
+  assert.equal(m.forecastLean, null, "2.6% vs ~0%: under the gap");
+  assert.equal(m.alignment, null);
+  assert.equal(m.divergence, false);
+});
+
+test("forecastDivergence: aligned when the crowd's lean vs history matches funding; biggest gap sorts first", () => {
+  const poly = [
+    { id: "3", question: "Will Bitcoin reach $125,000 by Sept?", outcomes: '["Yes","No"]', outcomePrices: '["0.65","0.35"]', volumeNum: 500000, endDate: "2026-09-30" },
+    { id: "4", question: "Will Bitcoin reach $124,000 by Sept?", outcomes: '["Yes","No"]', outcomePrices: '["0.30","0.70"]', volumeNum: 900000, endDate: "2026-09-30" },
+  ];
+  const r = forecastDivergence(poly, futures, FORECAST, fcOpts);
+  assert.deepEqual(r.markets.map((m) => m.id), ["3", "4"], "gap 65 before gap 30, whatever the volume");
   assert.equal(r.markets[0].forecastLean, "UP");
   assert.equal(r.markets[0].fundingLean, "UP");
   assert.equal(r.markets[0].alignment, "ALIGNED");
   assert.equal(r.markets[0].divergence, false);
 });
 
-test("forecastDivergence: a coin-flip forecast is not a divergence (conviction gate)", () => {
+test("forecastBarCoins: only listed coins with a price-target market", () => {
   const poly = [
-    // Near-money but 52% ⇒ folded lean UP, funding DOWN ⇒ DIVERGENT direction, but conviction 2 < 15
-    { id: "4", question: "Will Ethereum reach $3,200 by Sept?", outcomes: '["Yes","No"]', outcomePrices: '["0.52","0.48"]', volumeNum: 80000 },
+    { question: "Will Bitcoin reach $150k?" }, { question: "Will Ethereum reach $5k?", closed: true },
+    { question: "Will there be a spot Solana ETF?" }, { question: "Will XRP reach $5?" },
   ];
-  const r = forecastDivergence(poly, futures);
-  assert.equal(r.markets[0].nearMoney, true);
-  assert.equal(r.markets[0].alignment, "DIVERGENT"); // direction disagrees…
-  assert.equal(r.markets[0].divergence, false);       // …but 52% is a coin-flip ⇒ not flagged
+  assert.deepEqual(forecastBarCoins(poly, futures), ["BTC"]);
 });
 
 test("classifyMacro categorizes events and attaches a lens only where textbook", () => {

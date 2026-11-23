@@ -17,6 +17,7 @@ export function marketCallDraft(coin, side, source = "market-drawer") {
     notes: "", catalyst: "", targetWindow: "",
     sideChosen: true, // the trader's own tap, not a suggestion: the WATCH gate doesn't un-arm it
     build: true,      // build the levels from live price on arrival
-    source: source === "market-table" ? "market-table" : "market-drawer", // where the tap came from (a record, never a rule)
+    // where the tap came from (a record, never a rule)
+    source: source === "market-table" || source === "forecast-divergence" ? source : "market-drawer",
   };
 }

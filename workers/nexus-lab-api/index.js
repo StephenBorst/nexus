@@ -21,8 +21,11 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 // Holders Room signature gate — EIP-191 ecrecover (verifies wallet ownership)
 import { hexToBytes } from "@noble/hashes/utils.js";
-import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, hostedCacheBreakpoints, resolveAiUpstream, HOSTED_BODY_MAX_BYTES, questionId, takeHostedSlot, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
+import { gradeCall, callR, verifyErc20Payment, simCreditsFor, nexusMinUnits, resolveHostedModel, shapeHostedBody, hostedCacheBreakpoints, resolveAiUpstream, HOSTED_BODY_MAX_BYTES, questionId, takeHostedSlot, buildChallenge, verifyV2, AUTH_V2_ACTIONS, parseWebhookAlert, normalizeSymbol, percentileRank, oiStats, safeChartUrl, symbolToQuery, diffCopyLeaders, mispricedBoard, staleBoardFallback, fundingReversion, edgeQuality, EDGE_QUALITY_RANK, mergeFundingPrice, forecastDivergence, forecastBarCoins, quotientSignals, macroEvents, houseCallFromSignal, wargameScenario, deriveSetupMomentum, computeBeta, catalystBoard, attachCatalystTheses, catalystHouseCall, CATALYST_MARKETS, boardCardRows, fundingStretched, readVerdict, creatorEarnings, CREATOR_FEE, validateOperatorConfig } from "./logic.mjs";
 import { orderlyGet, mapLimit, whyFailed, ORDERLY_CONCURRENCY } from "./orderlyGet.mjs";
+import { loadForecastBars } from "./forecastBars.mjs";
+// v2 (2026-11-23): each market carries `history` + `crowdGapPts`, and forecastLean is the crowd vs history.
+const FORECASTS_CACHE_KEY = "intel:forecasts:v2";
 import { serveScoreboard, rebuildScoreboard, SCOREBOARD_REBUILD_MINUTE } from "./scoreboardCache.mjs";
 
 // ── Autocopy copiers reverse-index ───────────────────────────────────────────
@@ -1146,7 +1149,7 @@ const worker = {
         }
       } catch { /* catalyst lens dim */ }
       try {
-        const c = await env.LAB_STORE.get("intel:forecasts:v1"); const b = c ? JSON.parse(c) : null;
+        const c = await env.LAB_STORE.get(FORECASTS_CACHE_KEY); const b = c ? JSON.parse(c) : null;
         if (b && Array.isArray(b.markets)) {
           const t = {};
           for (const m of b.markets) { if (m.markPrice == null || !m.forecastLean) continue; const co = String(m.coin || "").toUpperCase(); if (!co) continue; t[co] = t[co] || { L: 0, S: 0 }; if (m.forecastLean === "UP") t[co].L++; else if (m.forecastLean === "DOWN") t[co].S++; }
@@ -2906,7 +2909,7 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
     // datacenter IPs (verified), so the Worker fetch works where CoinGecko/rss2json don't.
     if (parts[0] === "intel" && parts[1] === "forecasts" && request.method === "GET") {
       const coin = parts[2] ? String(parts[2]).toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "") : null;
-      const CACHE_KEY = "intel:forecasts:v1", TTL_MS = 300 * 1000;
+      const CACHE_KEY = FORECASTS_CACHE_KEY, TTL_MS = 300 * 1000;
       const respond = (payload) => new Response(JSON.stringify(payload), {
         headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=180", ...cors(request) },
       });
@@ -2933,10 +2936,13 @@ Redirecting to the call… <a style="color:#ededf0" href="${appUrl}">view on Nex
           fetchAllFutures(), // proxy-first — direct api-evm was 403/rate-limiting → empty divergence board
         ]);
         const rows = Array.isArray(pm) ? pm : (pm?.data || []);
-        const board = forecastDivergence(rows, futRows);
+        // Each strike's base rate: how often the coin made that move in that much time over its last year
+        // (app/lib/forecastOdds.mjs). One daily-bar read per coin with a price-target market, cached 6h.
+        const history = await loadForecastBars(env.LAB_STORE, forecastBarCoins(rows, futRows));
+        const board = forecastDivergence(rows, futRows, undefined, { history });
         const payload = {
           asOf: new Date().toISOString(), asOfMs: Date.now(), ...board,
-          criteria: { note: "Polymarket forecast probability joined to Orderly funding. On price-target markets, a DIVERGENCE = the forecasting crowd leans one way (conviction ≥15pts off a coin-flip) while leveraged positioning (funding) leans the other. Not a fair-value oracle and not advice — a prompt to investigate, and to stake a graded thesis on the gap." },
+          criteria: { note: "Polymarket forecast probability joined to Orderly funding. For each price-target market, `history` = how often the coin itself made that move in the time left, from each start day of its last year (daily bars, overlapping windows: a base rate, not independent samples). The crowd LEANS only when its YES differs from that rate by 10+ points; a DIVERGENCE = that lean against funding's. Not a fair-value oracle and not advice: a prompt to investigate, and to stake a graded thesis on the gap." },
         };
         try { await env.LAB_STORE.put(CACHE_KEY, JSON.stringify(payload), { expirationTtl: 900 }); } catch { /* best-effort */ }
         return respond(filterCoin(payload));
