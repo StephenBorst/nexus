@@ -21,5 +21,12 @@ export const PROMOTION_LOCKS = Object.freeze({
     "eventsAtDemotion": 89,
     "cleanPasses": 0,
     "lastPassAt": null
+  },
+  "smart_consensus_2x": {
+    "lostStage": "LEAD",
+    "demotedAt": "2026-11-24T13:53:44.056Z",
+    "eventsAtDemotion": 87,
+    "cleanPasses": 0,
+    "lastPassAt": null
   }
 });
