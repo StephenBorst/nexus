@@ -5,8 +5,9 @@
  * a map of symbol → markPrice for the requested symbols.
  *
  * Usage:
- *   const prices = useLivePrices(["PERP_BTC_USDC", "PERP_ETH_USDC"]);
+ *   const prices = useLivePrices(["PERP_BTC_USDC", "PERP_ETH_USDC", "SOL"]);
  *   prices["PERP_BTC_USDC"] // → 67500.5 | null
+ *   prices["SOL"]           // → 66.82 | null (normalizes bare tickers to PERP_‹SYMBOL›_USDC)
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -26,6 +27,26 @@ type FuturesResponse = {
     rows: FuturesRow[];
   };
 };
+
+/**
+ * Resolve price from Orderly map for a requested symbol.
+ * Checks exact match, uppercase match, and PERP_‹SYMBOL›_USDC fallback.
+ */
+export function lookupPrice(rawSymbol: string, map: PriceMap): number | null {
+  if (!rawSymbol) return null;
+  if (map[rawSymbol] !== undefined && map[rawSymbol] !== null) {
+    return map[rawSymbol];
+  }
+  const upper = rawSymbol.trim().toUpperCase();
+  if (map[upper] !== undefined && map[upper] !== null) {
+    return map[upper];
+  }
+  const perpSymbol = `PERP_${upper}_USDC`;
+  if (map[perpSymbol] !== undefined && map[perpSymbol] !== null) {
+    return map[perpSymbol];
+  }
+  return null;
+}
 
 // Module-level cache so multiple components share one fetch
 let cachedPrices: PriceMap = {};
@@ -80,7 +101,9 @@ export function useLivePrices(symbols: string[]): PriceMap {
   const [prices, setPrices] = useState<PriceMap>(() => {
     // Seed from cache immediately
     const seed: PriceMap = {};
-    symbols.forEach((s) => { seed[s] = cachedPrices[s] ?? null; });
+    symbols.forEach((s) => {
+      seed[s] = lookupPrice(s, cachedPrices);
+    });
     return seed;
   });
 
@@ -92,7 +115,9 @@ export function useLivePrices(symbols: string[]): PriceMap {
 
     const handleUpdate = (allPrices: PriceMap) => {
       const next: PriceMap = {};
-      symbolsRef.current.forEach((s) => { next[s] = allPrices[s] ?? null; });
+      symbolsRef.current.forEach((s) => {
+        next[s] = lookupPrice(s, allPrices);
+      });
       setPrices(next);
     };
 
