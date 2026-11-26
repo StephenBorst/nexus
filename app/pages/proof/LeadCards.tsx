@@ -1,14 +1,18 @@
-// The leads on /proof as cards (borst 2026-11-21; plain-words pass the same day: "way too complicated for a normie").
-// Each card reads like the paper wallet cards: the read, its stage, one sentence (how often it beat random trades), four
-// number tiles (new trades · its average · a random trade's average · beat random %), the bars still in the way as a
-// plain checklist with each number now, the paper run as a count of 30, and the sides under a tap. Rules in
-// app/lib/proofLayout.mjs. Same numbers as the board. Display only: not a grade (the stage is).
-import { useState } from "react";
+// The leads on /proof as cards (borst 2026-11-21; plain-words pass the same day; visual pass 2026-11-26: "a normie can
+// scan the cards and understand what's working without reading the pipeline rules"). First view: the read, its stage,
+// one word chip + one sentence (how often it beat random trades) and four tiles (new trades · beat random · its average
+// · a random trade's average, the last two always side by side), each tile tapping open its exact definition. The
+// checklist of bars still in the way and the sides sit behind one Details tap; the paper run is a small line. One card
+// language with the Strategy Shelf (app/components/ReadCard.tsx). Rules in app/lib/proofLayout.mjs. Same numbers as
+// the board. Display only: not a grade (the stage is).
 import { Link } from "react-router-dom";
-import { C, SIGNAL } from "@/config/theme";
+import { C } from "@/config/theme";
 import { beatSentence, randomWord } from "@/lib/proofLayout.mjs";
 import { splitLabel } from "@/lib/signalCard.mjs";
 import { fmtR } from "@/lib/engineOverview.mjs";
+import { CardHead, CardShell, Details, Tiles, WHY, WordChip } from "@/components/ReadCard";
+
+export { WordChip };
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
@@ -19,34 +23,6 @@ type Vs = { n: number; meanR: number | null; randomR: number | null; pct: number
 type Line = { key: string; text: string; nowText: string | null; met: boolean };
 type Paper = { state: "none" | "unread" | "running"; text: string; count?: number; target?: number; open?: boolean };
 export type LeadCard = { axis: string; label: string; stage: string | null; events: number; pooled: Vs; sides: { LONG: Vs; SHORT: Vs }; gates: Line[]; next: string | null; paper: Paper };
-
-const stageChip = (stage: string | null) => stage && (
-  <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.1em", padding: "3px 6px", borderRadius: 3, whiteSpace: "nowrap", border: `1px solid ${C.accent}`, color: BRIGHT }}>{stage}</span>
-);
-
-// A word chip for "vs random": bone = beats random, ink for the middle, amber = worse than random. Never green/red
-// (those are money).
-const CHIP: Record<string, { border: string; color: string; dashed?: boolean }> = {
-  BEATS: { border: C.accent, color: BRIGHT },
-  LEANS: { border: C.borderStrong, color: FOG },
-  SAME: { border: C.border, color: MUTED },
-  WORSE: { border: SIGNAL.watch, color: SIGNAL.watch },
-  FEW: { border: C.borderStrong, color: MUTED, dashed: true },
-};
-export function WordChip({ word }: { word: { key: string; text: string } }) {
-  const s = CHIP[word.key] ?? CHIP.FEW;
-  return (
-    <span style={{ fontFamily: MONO, fontSize: 10.5, padding: "4px 7px", borderRadius: 3, whiteSpace: "nowrap", border: `1px ${s.dashed ? "dashed" : "solid"} ${s.border}`, color: s.color }}>{word.text}</span>
-  );
-}
-
-// A big number over a small caps label, like the board's tiles.
-const tile = (big: React.ReactNode, cap: string) => (
-  <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-    <span style={{ fontFamily: MONO, fontSize: 20, fontWeight: 500, fontVariantNumeric: "tabular-nums", color: BRIGHT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{big}</span>
-    <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.12em", color: MUTED }}>{cap}</span>
-  </div>
-);
 
 // One bar still in the way: a filled dot when it passes, a ring when it doesn't, the sentence, and the number now.
 function Check({ g }: { g: Line }) {
@@ -59,20 +35,11 @@ function Check({ g }: { g: Line }) {
   );
 }
 
-// The paper run as a count of 30: one segment per closed trade. A count, never R or dollars.
-function PaperCount({ axis, p }: { axis: string; p: Paper }) {
-  if (p.state !== "running") return <div style={{ fontFamily: UI, fontSize: 12.5, color: MUTED }}>{p.text}</div>;
-  const target = p.target ?? 30, n = Math.min(p.count ?? 0, target);
-  return (
-    <Link to={`/proof/paper/${encodeURIComponent(axis)}`} style={{ display: "flex", flexDirection: "column", gap: 6, textDecoration: "none" }}>
-      <span style={{ display: "flex", justifyContent: "space-between", gap: 8, fontFamily: UI, fontSize: 13, color: FOG }}>
-        <span>{p.text}</span><span style={{ color: MUTED }}>→</span>
-      </span>
-      <span aria-hidden style={{ display: "flex", gap: 2 }}>
-        {Array.from({ length: target }, (_, i) => <span key={i} style={{ flex: 1, height: 4, borderRadius: 1, background: i < n ? C.accent : C.border }} />)}
-      </span>
-    </Link>
-  );
+// The paper run, secondary: one small line, a count of 30, never R or dollars.
+function PaperLine({ axis, p }: { axis: string; p: Paper }) {
+  const style = { fontFamily: UI, fontSize: 12, color: MUTED, textDecoration: "none" };
+  if (p.state !== "running") return <span style={style}>{p.text}</span>;
+  return <Link to={`/proof/paper/${encodeURIComponent(axis)}`} style={style}>{p.text} →</Link>;
 }
 
 // One side in words: trades, its average beside a random trade's, how often it beat random.
@@ -92,20 +59,13 @@ function SideLine({ label, v }: { label: string; v: Vs }) {
 }
 
 function Card({ c }: { c: LeadCard }) {
-  const [open, setOpen] = useState(false);
   const { main, aside } = splitLabel(c.label);
   const left = c.gates.filter((g) => !g.met).length;
   const p = c.pooled;
   const word = randomWord(p?.pct ?? null, p?.n ?? 0);
   return (
-    <article style={{ border: `1px solid ${C.border}`, borderRadius: 10, background: C.surfaceAlt, padding: 14, display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-        <span style={{ minWidth: 0 }}>
-          <span style={{ display: "block", fontFamily: UI, fontSize: 15, fontWeight: 600, color: BRIGHT, letterSpacing: "-0.01em" }}>{main}{aside && <span style={{ fontWeight: 400, color: MUTED }}> {aside}</span>}</span>
-          <span style={{ display: "block", marginTop: 2, fontFamily: MONO, fontSize: 10.5, color: MUTED, overflowWrap: "anywhere" }}>{c.axis}</span>
-        </span>
-        {stageChip(c.stage)}
-      </div>
+    <CardShell>
+      <CardHead title={main} aside={aside} stage={c.stage} />
 
       {/* One sentence, then the numbers. Its average never stands alone: a random trade's sits next to it. */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -113,37 +73,35 @@ function Card({ c }: { c: LeadCard }) {
         <span style={{ fontFamily: UI, fontSize: 13.5, color: FOG }}>{beatSentence(p?.pct ?? null)}</span>
       </div>
       {p && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-          {tile(p.n, "NEW TRADES")}
-          {tile(p.pct == null ? "—" : `${Math.round(p.pct)}%`, "BEAT RANDOM")}
-          {tile(<span style={{ color: tone(p.meanR) }}>{fmtR(p.meanR)}</span>, "ITS AVERAGE")}
-          {tile(<span style={{ color: tone(p.randomR) }}>{p.randomR == null ? "—" : fmtR(p.randomR)}</span>, "RANDOM AVERAGE")}
-        </div>
+        <Tiles tiles={[
+          { key: "n", big: p.n, cap: "NEW TRADES", why: WHY.trades },
+          { key: "pct", big: p.pct == null ? "—" : `${Math.round(p.pct)}%`, cap: "BEAT RANDOM", why: WHY.beat },
+          { key: "avg", big: <span style={{ color: tone(p.meanR) }}>{fmtR(p.meanR)}</span>, cap: "ITS AVERAGE", why: WHY.avg },
+          { key: "rnd", big: <span style={{ color: tone(p.randomR) }}>{p.randomR == null ? "—" : fmtR(p.randomR)}</span>, cap: "RANDOM AVERAGE", why: WHY.random },
+        ]} />
       )}
 
-      {/* The bars still in the way, as a checklist. */}
-      {c.gates.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-          <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.12em", color: MUTED }}>TO MOVE UP · {left} {left === 1 ? "THING" : "THINGS"} LEFT</span>
-          {c.gates.map((g) => <Check key={g.key} g={g} />)}
-        </div>
-      )}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+        <PaperLine axis={c.axis} p={c.paper} />
+      </div>
 
-      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}><PaperCount axis={c.axis} p={c.paper} /></div>
-
-      <div>
-        <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
-          style={{ background: "none", border: "none", padding: "4px 0", minHeight: 28, cursor: "pointer", fontFamily: UI, fontSize: 12.5, color: MUTED }}>
-          {open ? "Longs and shorts −" : "Longs and shorts +"}
-        </button>
-        {open && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 6 }}>
-            <SideLine label="LONGS" v={c.sides.LONG} />
-            <SideLine label="SHORTS" v={c.sides.SHORT} />
+      {/* The depth: the bars still in the way as a checklist, then each side. */}
+      <Details label={c.gates.length ? `Details · ${left} ${left === 1 ? "thing" : "things"} left to move up` : "Details"}>
+        {c.gates.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.12em", color: MUTED }}>TO MOVE UP · {left} {left === 1 ? "THING" : "THINGS"} LEFT</span>
+            {c.gates.map((g) => <Check key={g.key} g={g} />)}
           </div>
         )}
-      </div>
-    </article>
+        {!c.gates.length && c.next && <span style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.45 }}>Next: {c.next}</span>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+          <span style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: "0.12em", color: MUTED }}>LONGS AND SHORTS</span>
+          <SideLine label="LONGS" v={c.sides.LONG} />
+          <SideLine label="SHORTS" v={c.sides.SHORT} />
+        </div>
+        <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTED, overflowWrap: "anywhere" }}>{c.axis}</span>
+      </Details>
+    </CardShell>
   );
 }
 

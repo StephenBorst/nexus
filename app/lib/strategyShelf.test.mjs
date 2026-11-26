@@ -164,3 +164,17 @@ test("the shelf copy: on paper, stage beside it, no old gate words (2026-11-22)"
   assert.match(agent, /hasPosition && config\.mode !== "PAPER"/, "never loaded over a live position");
   assert.match(agent, /mode: "PAPER", invertSignal: false \}\)\)/, "Load forces paper, as registered");
 });
+
+test("the shelf as cards: the preset look, the rule, the numbers, no mean R alone (visual pass 2026-11-26)", () => {
+  const ui = readFileSync(new URL("../pages/lab/StrategyShelf.tsx", import.meta.url), "utf8");
+  assert.match(ui, /from "@\/components\/ReadCard"/, "one card language with /proof's lead cards");
+  assert.match(ui, /<CardHead title=\{r\.name\} stage=\{r\.stageWord\}/);
+  assert.match(ui, /r\.rule/);
+  assert.doesNotMatch(ui, /meanR/, "the shelf prints no mean R, so none stands without random beside it");
+  assert.match(ui, /Needs \{r\.need\}/, "what it still needs stays");
+  const sc = { axes: [{ name: "level_reclaim", label: "Prior-day high/low swept and reclaimed" }],
+    pipeline: { reads: [{ axis: "level_reclaim", stage: "LEAD", registeredAt: "2026-10-17T00:00:00Z", next: "", numbers: { events: 40, beatsRandomPct: 61 } }] } };
+  const [row] = shelfRows(sc, Date.parse("2026-11-26T00:00:00Z")).filter((r) => r.id === "level_reclaim");
+  assert.deepEqual([row.grade.events, row.grade.pct, typeof row.grade.key], [40, 61, "string"]);
+  assert.match(row.rule, /sweeps the prior day/);
+});
