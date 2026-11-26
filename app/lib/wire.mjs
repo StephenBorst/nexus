@@ -172,6 +172,50 @@ export function wireSeenSplit(rows, lastSeenAt) {
 }
 export const WIRE_SEEN_KEY = "nx_wire_seen_v1";
 
+/**
+ * The Wire's summary line (visual pass, borst 2026-11-26: "what changed since my last look"): one or two sentences
+ * counted from the rows already on the Wire (all of them, whatever the filter), nothing else read. New = a row stamped
+ * after the device's last look; first visit = the last day. Counts by kind, coins named for funding and trends (≤ 3, then
+ * "+N more"); a funding line that was already standing before the last look is "still stretched". Facts only: no direction, no
+ * advice, no tally of a side. Returns null with no rows.
+ * @param {Array<{kind: string, t: number, coin?: string|null}>} rows @param {number|null} lastSeenAt @param {number} now
+ */
+export function wireSummary(rows, lastSeenAt, now = Date.now()) {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const seen = Number(lastSeenAt);
+  const looked = Number.isFinite(seen) && seen > 0;
+  const since = looked ? seen : now - 86_400_000;
+  const fresh = rows.filter((r) => Number(r?.t) > since);
+  const count = (kinds) => fresh.filter((r) => kinds.includes(r.kind)).length;
+  const coins = (list) => {
+    const u = [...new Set(list.map((r) => r.coin).filter(Boolean))];
+    return u.length > 3 ? `${u.slice(0, 3).join(", ")} +${u.length - 3} more` : u.join(", ");
+  };
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const parts = [];
+  const news = count(["NEWS"]);
+  if (news) parts.push(plural(news, "headline", "headlines"));
+  const reads = count(["READ"]);
+  if (reads) parts.push(`${plural(reads, "paper trade", "paper trades")} opened or closed by our reads`);
+  const fund = fresh.filter((r) => r.kind === "FUNDING");
+  if (fund.length) parts.push(coins(fund) ? `funding stretched on ${coins(fund)}` : plural(fund.length, "funding row", "funding rows"));
+  const trend = fresh.filter((r) => r.kind === "MOMENTUM");
+  if (trend.length) parts.push(coins(trend) ? `a trend on ${coins(trend)}` : plural(trend.length, "trend", "trends"));
+  const wallets = count(["WALLET", "TIER"]);
+  if (wallets) parts.push(plural(wallets, "wallet move", "wallet moves"));
+  const calls = count(["CALL"]);
+  if (calls) parts.push(plural(calls, "call graded", "calls graded"));
+  const mine = count(["MINE"]);
+  if (mine) parts.push(plural(mine, "update on your calls", "updates on your calls"));
+  const lead = looked ? `since your last look ${wireWhen(seen, now)}${wireWhen(seen, now) === "now" ? "" : " ago"}` : "in the last day";
+  const first = parts.length
+    ? `${lead[0].toUpperCase()}${lead.slice(1)}: ${parts.join(", ")}.`
+    : `Nothing new ${lead}.`;
+  const still = looked ? rows.filter((r) => r.kind === "FUNDING" && Number(r?.t) <= since) : [];
+  const second = still.length && coins(still) ? ` Funding still stretched: ${coins(still)}.` : "";
+  return first + second;
+}
+
 /** The shared stream with your rows merged in: the public row for a call you were graded on is dropped (it is yours). */
 export function withMine(rows, mine, now = Date.now()) {
   if (!mine || mine.length === 0) return rows || [];

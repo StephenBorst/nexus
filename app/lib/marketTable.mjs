@@ -26,6 +26,31 @@ export const TABLE_COLUMNS = Object.freeze([
 ]);
 export const DEFAULT_SORT = Object.freeze({ col: "oi", dir: "desc" });
 
+// Tabs over the table (visual pass, borst 2026-11-26: "promote the useful columns to tabs like the Wire's; the full table
+// stays"). A tab shows the coin, its one column and open interest, sorted by that column (biggest first; funding and the
+// venue gap by size); "All columns" is the full table, as before. The same rows and cells: no new data, no score. Each
+// tab names the full board behind it (app/lib/intelLenses.mjs).
+export const TABLE_TABS = Object.freeze([
+  Object.freeze({ id: "all", label: "All columns", col: null, board: null }),
+  Object.freeze({ id: "funding", label: "Funding", col: "funding", board: "funding" }),
+  Object.freeze({ id: "venues", label: "Venues", col: "gap", board: "venues" }),
+  Object.freeze({ id: "positioning", label: "Positioning", col: "oiVol", board: "tape" }),
+  Object.freeze({ id: "smart", label: "Smart", col: "smart", board: "positioning" }),
+]);
+
+/** The column ids a tab shows, in table order. Unknown tab = every column. */
+export function tabColumns(tabId) {
+  const t = TABLE_TABS.find((x) => x.id === tabId);
+  if (!t || !t.col) return TABLE_COLUMNS.map((c) => c.id);
+  return TABLE_COLUMNS.map((c) => c.id).filter((id) => id === "coin" || id === t.col || id === "oi");
+}
+
+/** The sort a tab opens on: its own column, biggest first; "All columns" = the default order. */
+export function tabSort(tabId) {
+  const t = TABLE_TABS.find((x) => x.id === tabId);
+  return t && t.col ? { col: t.col, dir: "desc" } : { ...DEFAULT_SORT };
+}
+
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : null; };
 const bare = (s) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");

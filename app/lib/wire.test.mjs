@@ -188,3 +188,24 @@ test("your calls: +0.5R reached and an order that expired, in the alerts' own wo
   assert.deepEqual(wireSeenSplit(stream, NOW), { newCount: 0, at: NOW });
   assert.equal(wireSeenSplit(stream, null), null);
 });
+
+test("wireSummary: what changed since the last look, counted from the rows on the Wire (visual pass 2026-11-26)", async () => {
+  const { wireSummary } = await import("./wire.mjs");
+  const NOW = Date.parse("2026-11-26T20:00:00Z"), H = 3_600_000, LOOK = NOW - 3 * H;
+  const rows = [
+    { kind: "NEWS", t: NOW - H }, { kind: "NEWS", t: NOW - 2 * H }, { kind: "READ", t: NOW - H, coin: "ETH" },
+    { kind: "WALLET", t: NOW - H, coin: "SOL" }, { kind: "FUNDING", t: NOW - H, coin: "ETH" },
+    { kind: "FUNDING", t: NOW - 10 * H, coin: "BTC" }, { kind: "NEWS", t: NOW - 5 * H },
+  ];
+  assert.equal(wireSummary(rows, LOOK, NOW),
+    "Since your last look 3h ago: 2 headlines, 1 paper trade opened or closed by our reads, funding stretched on ETH, 1 wallet move. Funding still stretched: BTC.");
+  assert.equal(wireSummary([{ kind: "FUNDING", t: NOW - 10 * H, coin: "BTC" }], LOOK, NOW), "Nothing new since your last look 3h ago. Funding still stretched: BTC.");
+  assert.match(wireSummary(rows, null, NOW), /^In the last day: 3 headlines,/, "first visit = the last day, no 'still'");
+  assert.doesNotMatch(wireSummary(rows, null, NOW), /still/);
+  assert.equal(wireSummary([], LOOK, NOW), null);
+  const many = ["A", "B", "C", "D", "E"].map((c) => ({ kind: "FUNDING", t: NOW - H, coin: c }));
+  assert.match(wireSummary(many, LOOK, NOW), /funding stretched on A, B, C \+2 more/);
+  for (const s of [wireSummary(rows, LOOK, NOW), wireSummary(many, null, NOW)]) assert.doesNotMatch(s, /\b(buy|sell|long|short|bullish|bearish|should|edge|proven)\b/i, "facts, no direction");
+  const ui = readFileSync(new URL("../pages/lab/TheWire.tsx", import.meta.url), "utf8");
+  assert.match(ui, /wireSummary\(merged, lastLook, now\)/, "every row, whatever the filter, from the device's last look");
+});

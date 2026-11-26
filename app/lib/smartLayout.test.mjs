@@ -121,3 +121,13 @@ test("buildingLine never counts snapshots as graded windows", () => {
   assert.equal(buildingLine({ scored: false, points: 5, gradedWindows: 0 }), "0 of 4 daily windows", "far-apart snapshots grade nothing");
   assert.equal(buildingLine(null), "not watched yet");
 });
+
+test("one card a wallet: P&L + positions + Trade up front, the record's detail behind Details (visual pass 2026-11-26)", () => {
+  const v = readFileSync(new URL("../pages/lab/SmartMoneyView.tsx", import.meta.url), "utf8");
+  const card = v.slice(v.indexOf("const walletCard"), v.indexOf("THE WALLETS <span"));
+  const det = card.indexOf("<Details>"), end = card.indexOf("</Details>");
+  assert.ok(det > 0 && end > det, "one Details per card");
+  for (const t of ["{usd(t.pnl)}", "tradeBtn(", "STAGE_WORD[stage]", "toggleWatch(", "{p.coin}"]) assert.ok(card.indexOf(t) > 0 && card.indexOf(t) < det, `${t} in the first view`);
+  for (const t of ["Building a record", "score {mark.score}", "last move:", "uPnL <span"]) assert.ok(card.indexOf(t) > det && card.indexOf(t) < end, `${t} behind Details`);
+  assert.match(v, /from "@\/components\/ReadCard"/, "the same Details as /proof and the shelf");
+});
