@@ -847,6 +847,13 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   print all-time P&L beside the month's days); TODAY works; prices via `fmtPrice` (4 sig figs under $1, never "$0.00");
   search = coin, "2026-11-05" / "nov 5" / "11/5", or a month; the day view = net, best / worst trade, net per coin, hold
   time; `coverageLine` names Orderly's 500 cap. Direction in ink, no decorative dots, no filling bar.
+- **Analytics tab** (`AnalyticsView.tsx`, borst 2026-11-26, rules `app/lib/analyticsRules.mjs`, tested): rows sorted
+  oldest → newest once (`chronological`; the curve + bars plotted Orderly's own order under an "oldest → newest"
+  label); every dollar signed (`perfRows`: avg loss / worst trade used to print "$13.70"); NO Sharpe / Sortino (uneven
+  dollar trades; YOUR RECORD carries expectancy / PF / payoff / drawdown); best hours = hours with ≥ `SLICE_MIN_TRADES`
+  trades by net $ (`peakHours`; one lucky trade used to top it), the strip in ink by count; weekdays vs weekends with
+  "—" for none (`weekSplit`); win rates in ink; ONE strengths / leaks list (WHERE THE MONEY GOES; the edge card's own
+  3-trade list is gone); the 500 cap named (`coverageLine`). The deep fold's PERFORMANCE ANALYSIS card is gone (dupes).
 - **Public only:** share cards, permalinks and `/verify` answer `isPublicCall` (public, not holders-only, not a
   copy) → else 404. The call page's HTML meta comes from `GET /thesis/:w/:id/meta` (stored call, current stamps only).
 - Orderly's trading API is private per account; the public dashboard indexer
