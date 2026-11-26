@@ -374,6 +374,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
         notes: `Copied from ${traderName}${thesis.notes ? `\n\n${thesis.notes}` : ""}`,
         createdAt: Date.now(), status: "ACTIVE", actualPnl: null, isPublic: false,
         copiedFromWallet: thesis.wallet,
+        copiedFromId: thesis.id, // the original, so Copy Trades can show its grade (a private copy is never graded)
       };
       // Signed by this wallet, appended to its FULL record (nothing is written if that can't be read).
       const r = await appendToLab(walletAddress, labWallet, newThesis, {
