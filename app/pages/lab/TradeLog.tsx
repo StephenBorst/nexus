@@ -1,5 +1,7 @@
 // Trade Log tab — calendar heatmap + day-by-day journal (CalendarView is used
 // internally by TradeLogAllView's list⇄calendar toggle). Extracted from index.tsx.
+// Rules (win = P&L > 0 everywhere, the month's own numbers, prices, search, hold time, the 500 cap) live in
+// app/lib/tradeLog.mjs (tested). Green/red only on P&L; direction is ink.
 import { useState, useMemo } from "react";
 import type { DayGroup } from "./types";
 import { cardStyle, labelStyle, navBtnStyle, inputStyle } from "./styles";
@@ -9,15 +11,17 @@ import { useIsMobile } from "./useIsMobile";
 import { C } from "@/config/theme";
 import { bareTicker } from "@/utils/utils";
 import { pressKey } from "@/utils/a11y";
+import { dayStats, dayPasses, monthStats, matchesSearch, fmtPrice, holdText, coverageLine, wonLine } from "@/lib/tradeLog.mjs";
 
-function CalendarView({ dayGroups, onDayClick, viewMonth, viewYear, onPrevMonth, onNextMonth, totalPnl }: { dayGroups: Record<string, DayGroup>; onDayClick: (key: string, day: number) => void; viewMonth: number; viewYear: number; onPrevMonth: () => void; onNextMonth: () => void; totalPnl: number; }) {
+function CalendarView({ dayGroups, onDayClick, viewMonth, viewYear, onPrevMonth, onNextMonth, onToday }: { dayGroups: Record<string, DayGroup>; onDayClick: (key: string, day: number) => void; viewMonth: number; viewYear: number; onPrevMonth: () => void; onNextMonth: () => void; onToday: () => void; totalPnl?: number; }) {
   const isMobile = useIsMobile();
   const cellH = isMobile ? 60 : 80; // fixed cell height → every day is the same size
   const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
   const totalDays = daysInMonth(viewMonth, viewYear);
   const firstDay = firstDayOfMonth(viewMonth, viewYear);
   const today = new Date();
-  const tradingDays = Object.keys(dayGroups).filter((k) => { const p = k.split("-"); return parseInt(p[1]) - 1 === viewMonth && parseInt(p[0]) === viewYear; }).length;
+  // The month on screen only: the card used to print the ALL-TIME P&L beside this month's day count.
+  const month = monthStats(dayGroups, viewMonth, viewYear);
   const cells = Array.from({ length: 42 }, (_, i) => { const d = i - firstDay + 1; return d >= 1 && d <= totalDays ? d : null; });
 
   return (
@@ -25,14 +29,16 @@ function CalendarView({ dayGroups, onDayClick, viewMonth, viewYear, onPrevMonth,
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "center", justifyContent: "space-between", gap: isMobile ? 12 : 0, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <button style={navBtnStyle} onClick={onPrevMonth}>&#8592;</button>
-          <button style={{ ...navBtnStyle, background: "#ededf0", color: "#0f0f11", border: "none", fontWeight: "bold" }}>TODAY</button>
+          <button style={{ ...navBtnStyle, background: "#ededf0", color: "#0f0f11", border: "none", fontWeight: "bold" }} onClick={onToday}>TODAY</button>
           <button style={navBtnStyle} onClick={onNextMonth}>&#8594;</button>
           <span style={{ fontSize: 20, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{MONTH_NAMES[viewMonth]} {viewYear}</span>
         </div>
         <div style={{ ...cardStyle, display: "flex", gap: 20, padding: "10px 16px" }}>
-          <div><div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{"PNL"}</div><div style={{ fontSize: 16, color: totalPnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)" }}>{formatPnl(totalPnl)}</div></div>
+          <div><div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>{"MONTH P&L"}</div><div style={{ fontSize: 16, color: month.days ? (month.pnl >= 0 ? "#3ecf8e" : "#f7525f") : "#71717a", fontFamily: "var(--nx-font-mono)" }}>{month.days ? formatPnl(month.pnl) : "—"}</div></div>
           <div style={{ width: 1, background: "#232327" }} />
-          <div><div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{"DAYS"}</div><div style={{ fontSize: 16, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{tradingDays}</div></div>
+          <div><div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>{"DAYS"}</div><div style={{ fontSize: 16, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{month.days}</div></div>
+          <div style={{ width: 1, background: "#232327" }} />
+          <div><div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>{"WIN DAYS"}</div><div style={{ fontSize: 16, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{month.days ? `${month.winDays} / ${month.days}` : "—"}</div></div>
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
@@ -57,7 +63,6 @@ function CalendarView({ dayGroups, onDayClick, viewMonth, viewYear, onPrevMonth,
                 </div>
               ) : (
                 <div>
-                  <div style={{ fontSize: 10, color: "#52525b" }}>&#9632;</div>
                   <div style={{ fontSize: 13, color: data.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontWeight: "bold" }}>{formatPnl(data.pnl)}</div>
                   <div style={{ fontSize: 9, color: "#52525b" }}>{data.trades}T</div>
                   <div style={{ fontSize: 9, color: "#52525b" }}>{data.trades ? `${Math.round((data.wins / data.trades) * 100)}%` : ""}</div>
@@ -97,19 +102,13 @@ export function TradeLogAllView({
     [dayGroups]
   );
 
-  const filtered = useMemo(() => sortedDays.filter(([key, g]) => {
-    if (filter === "wins" && g.pnl < 0) return false;
-    if (filter === "losses" && g.pnl >= 0) return false;
-    if (search) {
-      const syms = g.tradeList.map(t => bareTicker(t.symbol).toLowerCase());
-      if (!syms.some(s => s.includes(search.toLowerCase())) && !key.includes(search)) return false;
-    }
-    return true;
-  }), [sortedDays, filter, search]);
+  // One win rule (P&L > 0): the filter used to keep a $0 day under WINS while WIN DAYS didn't count it.
+  const filtered = useMemo(() => sortedDays.filter(([key, g]) => dayPasses(filter, g.pnl) && matchesSearch(key, g.tradeList, search)), [sortedDays, filter, search]);
 
   const totalPnl = useMemo(() => sortedDays.reduce((s, [, g]) => s + g.pnl, 0), [sortedDays]);
   const totalTrades = useMemo(() => sortedDays.reduce((s, [, g]) => s + g.trades, 0), [sortedDays]);
   const winDays = useMemo(() => sortedDays.filter(([, g]) => g.pnl > 0).length, [sortedDays]);
+  const coverage = coverageLine(totalTrades);
 
   const formatKey = (key: string) => {
     const [y, m, d] = key.split("-").map(Number);
@@ -174,6 +173,8 @@ export function TradeLogAllView({
         ))}
       </div>
 
+      {coverage && <div style={{ fontSize: 11, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", marginBottom: 12, lineHeight: 1.5 }}>{coverage}</div>}
+
       {/* ── Filters ── */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
         {(["all", "wins", "losses"] as const).map(f => (
@@ -185,7 +186,7 @@ export function TradeLogAllView({
           }}>{f.toUpperCase()}</button>
         ))}
         <input
-          placeholder="search symbol or date…"
+          placeholder="coin, date (nov 5) or month…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{ ...inputStyle, width: 220, padding: "5px 10px", fontSize: 11 }}
@@ -196,8 +197,9 @@ export function TradeLogAllView({
       {/* Desktop: one dense row. Phone: two lines, nothing off-screen (2026-11-14; the 620px row scrolled
           sideways, so the P&L and win rate sat past the right edge). */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {filtered.length === 0 && <div style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", padding: "12px 2px" }}>No days match{search ? ` “${search}”` : ""}{filter !== "all" ? ` under ${filter.toUpperCase()}` : ""}.</div>}
         {filtered.map(([key, g]) => {
-          const winRate = g.trades ? Math.round((g.wins / g.trades) * 100) : 0;
+          const st = dayStats(g.tradeList);
           const [, , d] = key.split("-").map(Number);
           const syms = [...new Set(g.tradeList.map(t => bareTicker(t.symbol)))];
           if (isMobile) return (
@@ -219,7 +221,7 @@ export function TradeLogAllView({
                   ))}
                   {syms.length > 4 && <span style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", padding: "2px 0" }}>+{syms.length - 4}</span>}
                 </span>
-                <span style={{ fontSize: 11, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", flexShrink: 0 }}>{g.trades} {g.trades === 1 ? "trade" : "trades"} · {winRate}% won</span>
+                <span style={{ fontSize: 11, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", flexShrink: 0 }}>{wonLine(st)}</span>
                 <span style={{ fontSize: 14, color: "#71717a", fontFamily: "var(--nx-font-mono)", flexShrink: 0 }}>›</span>
               </div>
             </div>
@@ -230,7 +232,7 @@ export function TradeLogAllView({
               onClick={() => onDaySelect(key, d)} onKeyDown={pressKey(() => onDaySelect(key, d))}
               style={{
                 ...cardStyle, cursor: "pointer", display: "grid",
-                gridTemplateColumns: "180px 1fr repeat(4, 90px) 28px",
+                gridTemplateColumns: "180px 1fr repeat(3, 96px) 28px",
                 alignItems: "center", gap: 12,
                 borderColor: g.pnl >= 0 ? "#232327" : "#4a1e22",
                 transition: "background 0.15s",
@@ -259,13 +261,8 @@ export function TradeLogAllView({
                 <div style={{ fontSize: 14, fontFamily: "var(--nx-font-mono)", color: "#a1a1aa" }}>{g.trades}</div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>WIN RATE</div>
-                <div style={{ fontSize: 14, fontFamily: "var(--nx-font-mono)", color: "#a1a1aa" }}>{winRate}%</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ height: 40, width: 4, background: "#232327", borderRadius: 2, display: "inline-block", position: "relative", verticalAlign: "middle" }}>
-                  <div style={{ position: "absolute", bottom: 0, width: "100%", height: `${winRate}%`, background: g.pnl >= 0 ? "#3ecf8e" : "#f7525f", borderRadius: 2 }} />
-                </div>
+                <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>WON</div>
+                <div style={{ fontSize: 14, fontFamily: "var(--nx-font-mono)", color: "#a1a1aa" }}>{st.wins} of {st.trades}</div>
               </div>
               <div style={{ fontSize: 14, color: "#52525b", fontFamily: "var(--nx-font-mono)", textAlign: "right" }}>›</div>
             </div>
@@ -288,6 +285,8 @@ export function TradeLogView({ dayKey, data, onBack, initialNote, onSaveNote }: 
   // shared key: a shared key is how one wallet's journal used to show up in another's.
   const [note, setNote] = useState(initialNote ?? "");
   const [saved, setSaved] = useState(false);
+  const st = useMemo(() => dayStats(data.tradeList), [data.tradeList]);
+  const trades = useMemo(() => [...data.tradeList].sort((a, b) => a.timestamp - b.timestamp), [data.tradeList]);
   const saveNote = () => {
     onSaveNote?.(dayKey, note);
     setSaved(true);
@@ -301,14 +300,26 @@ export function TradeLogView({ dayKey, data, onBack, initialNote, onSaveNote }: 
           <button onClick={onBack} style={{ ...navBtnStyle, fontSize: 12 }}>&#8592; BACK</button>
           <span style={{ fontSize: 13, color: "#ededf0" }}>&#9632; TRADING_LOG/{dayKey}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 9, color: "#52525b", background: "#141416", border: "1px solid #232327", padding: "3px 8px", borderRadius: 3, fontFamily: "var(--nx-font-mono)" }}>{data.trades} TRADES</span>
-          <div style={{ display: "flex", gap: 4 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f7525f" }} />
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fbbf24" }} />
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#3ecf8e" }} />
-          </div>
+        <span style={{ fontSize: 9, color: "#a1a1aa", background: "#141416", border: "1px solid #232327", padding: "3px 8px", borderRadius: 3, fontFamily: "var(--nx-font-mono)" }}>{data.trades} {data.trades === 1 ? "TRADE" : "TRADES"}</span>
+      </div>
+      {/* The day in numbers: net, the count, best and worst trade, and net per coin. Orderly's realized P&L. */}
+      <div style={{ ...cardStyle, marginBottom: 12 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "baseline" }}>
+          <div><div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>DAY P&L</div><div style={{ fontSize: 20, fontWeight: "bold", color: st.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)" }}>{formatPnl(st.pnl)}</div></div>
+          <div><div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>WON</div><div style={{ fontSize: 14, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{wonLine(st)}</div></div>
+          {st.best && <div><div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>BEST TRADE</div><div style={{ fontSize: 14, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{bareTicker(st.best.symbol)} <span style={{ color: "#3ecf8e" }}>{formatPnl(st.best.pnl)}</span></div></div>}
+          {st.worst && <div><div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>WORST TRADE</div><div style={{ fontSize: 14, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{bareTicker(st.worst.symbol)} <span style={{ color: "#f7525f" }}>{formatPnl(st.worst.pnl)}</span></div></div>}
         </div>
+        {st.coins.length > 1 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+            {st.coins.map((c) => (
+              <span key={c.coin} style={{ fontSize: 10, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", background: "#141416", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px" }}>
+                {c.coin} · {c.trades} · <span style={{ color: c.pnl > 0 ? "#3ecf8e" : c.pnl < 0 ? "#f7525f" : "#a1a1aa" }}>{formatPnl(c.pnl)}</span>
+              </span>
+            ))}
+          </div>
+        )}
+        <div style={{ fontSize: 10, color: "#71717a", fontFamily: "var(--nx-font-mono)", marginTop: 10 }}>Realized P&L as Orderly reports each closed position.</div>
       </div>
       <div style={{ ...cardStyle, marginBottom: 12 }}>
         <div style={{ fontSize: 10, color: "#52525b", letterSpacing: "0.08em", marginBottom: 8, fontFamily: "var(--nx-font-mono)" }}>&#9632; NOTES</div>
@@ -318,12 +329,12 @@ export function TradeLogView({ dayKey, data, onBack, initialNote, onSaveNote }: 
           &#9632; {saved ? "SAVED!" : "SAVE NOTE"}
         </button>
       </div>
-      {data.tradeList.map((trade, i) => (
+      {trades.map((trade, i) => (
         <div key={i} style={{ ...cardStyle, marginBottom: 8 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
             <div>
               <div style={{ fontSize: 16, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{bareTicker(trade.symbol)}</div>
-              <div style={{ fontSize: 10, color: trade.direction === "SHORT" ? "#f7525f" : "#3ecf8e", marginTop: 3, fontFamily: "var(--nx-font-mono)" }}>
+              <div style={{ fontSize: 10, color: "#a1a1aa", marginTop: 3, fontFamily: "var(--nx-font-mono)" }}>
                 {trade.direction === "SHORT" ? "↓" : "↑"} {trade.direction} {trade.leverage ? `${trade.leverage}x` : ""}
               </div>
             </div>
@@ -332,19 +343,15 @@ export function TradeLogView({ dayKey, data, onBack, initialNote, onSaveNote }: 
               <div style={{ fontSize: 18, fontWeight: "bold", color: trade.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)" }}>{formatPnl(trade.pnl)}</div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 24, marginTop: 10 }}>
-            <div><div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>ENTRY</div><div style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>${trade.entryPrice?.toFixed(2) ?? "—"}</div></div>
-            <div><div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>EXIT</div><div style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>${trade.price.toFixed(2)}</div></div>
+          <div style={{ display: "flex", gap: 24, marginTop: 10, flexWrap: "wrap" }}>
+            <div><div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>ENTRY</div><div style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>{fmtPrice(trade.entryPrice)}</div></div>
+            <div><div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>EXIT</div><div style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>{fmtPrice(trade.price)}</div></div>
             <div><div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>QTY</div><div style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>{trade.qty}</div></div>
+            {holdText(trade.openTimestamp, trade.timestamp) && <div><div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>HELD</div><div style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>{holdText(trade.openTimestamp, trade.timestamp)}</div></div>}
           </div>
-          <div style={{ fontSize: 9, color: "#71717a", marginTop: 8, fontFamily: "var(--nx-font-mono)" }}>{new Date(trade.timestamp).toLocaleTimeString()}</div>
+          <div style={{ fontSize: 9, color: "#71717a", marginTop: 8, fontFamily: "var(--nx-font-mono)" }}>Closed {new Date(trade.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
         </div>
       ))}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 12 }}>
-        <div style={cardStyle}><div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>TOTAL P&L</div><div style={{ fontSize: 14, color: data.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)" }}>{formatPnl(data.pnl)}</div></div>
-        <div style={cardStyle}><div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>WIN RATE</div><div style={{ fontSize: 14, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{data.trades ? `${Math.round((data.wins / data.trades) * 100)}%` : "—"}</div></div>
-        <div style={cardStyle}><div style={{ fontSize: 8, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>TRADES</div><div style={{ fontSize: 14, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{data.trades}</div></div>
-      </div>
     </div>
   );
 }

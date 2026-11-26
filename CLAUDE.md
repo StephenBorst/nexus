@@ -841,6 +841,12 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   words (`originalState`), what you changed from the caller's plan (`planDrift` / `driftLine`: "the original's grade is
   the caller's plan, not yours"), how late you copied and whether its entry had already traded (`copyTiming`), and per
   caller "Their originals: …" (`originalsLine`) + the grader's risk lines from `/theses/process/:w` (`riskLines`).
+- **Trading Log tab** (`TradeLog.tsx`, borst 2026-11-26, rules `app/lib/tradeLog.mjs`, tested): the account's closed
+  Orderly positions (`/v1/position_history?limit=500`, realized P&L as Orderly reports it) by local day. One win rule
+  everywhere (P&L > 0; $0 = flat, in neither filter); the calendar card = the MONTH on screen (`monthStats`; it used to
+  print all-time P&L beside the month's days); TODAY works; prices via `fmtPrice` (4 sig figs under $1, never "$0.00");
+  search = coin, "2026-11-05" / "nov 5" / "11/5", or a month; the day view = net, best / worst trade, net per coin, hold
+  time; `coverageLine` names Orderly's 500 cap. Direction in ink, no decorative dots, no filling bar.
 - **Public only:** share cards, permalinks and `/verify` answer `isPublicCall` (public, not holders-only, not a
   copy) → else 404. The call page's HTML meta comes from `GET /thesis/:w/:id/meta` (stored call, current stamps only).
 - Orderly's trading API is private per account; the public dashboard indexer
