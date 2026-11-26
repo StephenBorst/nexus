@@ -1,5 +1,7 @@
 // Analytics tab + its charts/sections (your record, where the money goes, breakdowns,
 // top assets, performance). Extracted from index.tsx (god-file split).
+// Rules (oldest → newest rows, signed dollars, peak hours gated by sample, weekday/weekend, the 500 cap) live in
+// app/lib/analyticsRules.mjs + app/lib/tradeLog.mjs (tested). Green/red only on money that won or lost.
 import { useMemo } from "react";
 import type { ProcessedTrade, ThesisTrade } from "./types";
 import { cardStyle, labelStyle } from "./styles";
@@ -13,8 +15,11 @@ import { YourRecordCard, MoneyGoesCard, LensRecordCard } from "./StatsCards";
 import { Collapsible } from "./Collapsible";
 import { useIsMobile } from "./useIsMobile";
 import { computeEdge } from "@/config/edge";
-import { bucketBars, extent } from "@/lib/chartThin.mjs";
+import { bucketBars } from "@/lib/chartThin.mjs";
 import { bareTicker } from "@/utils/utils";
+import { chronological, perfRows, peakHours, weekSplit, wonWords, signed } from "@/lib/analyticsRules.mjs";
+import { coverageLine } from "@/lib/tradeLog.mjs";
+import { SLICE_MIN_TRADES } from "@/lib/tradeStats.mjs";
 
 // ─── Breakdown Row ────────────────────────────────────────
 function BreakdownRow({ orders }: { orders: ProcessedTrade[] }) {
@@ -48,15 +53,8 @@ function BreakdownRow({ orders }: { orders: ProcessedTrade[] }) {
       data[day].trades++; data[day].pnl += o.pnl;
       if (o.pnl > 0) data[day].wins++;
     });
-    const weekdayTrades = data.slice(1, 6).reduce((s, d) => s + d.trades, 0);
-    const weekdayWins = data.slice(1, 6).reduce((s, d) => s + d.wins, 0);
-    const weekendTrades = [data[0], data[6]].reduce((s, d) => s + d.trades, 0);
-    const weekendWins = [data[0], data[6]].reduce((s, d) => s + d.wins, 0);
-    return {
-      days: data,
-      weekdayWR: weekdayTrades ? ((weekdayWins / weekdayTrades) * 100).toFixed(1) : "0.0",
-      weekendWR: weekendTrades ? ((weekendWins / weekendTrades) * 100).toFixed(1) : "0.0",
-    };
+    // Weekend win rate used to paint anything above 0% green and print "0.0%" with no weekend trades.
+    return { days: data, split: weekSplit(orders) };
   }, [orders]);
 
   const leverage = useMemo(() => {
@@ -92,8 +90,8 @@ function BreakdownRow({ orders }: { orders: ProcessedTrade[] }) {
                 </div>
               )}
             </div>
-            <div style={{ fontSize: 10, color: b.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", width: 44, textAlign: "right" }}>
-              {b.count > 0 ? formatPnl(b.pnl) : "+$0"}
+            <div style={{ fontSize: 10, color: !b.count ? "#71717a" : b.pnl > 0 ? "#3ecf8e" : b.pnl < 0 ? "#f7525f" : "#a1a1aa", fontFamily: "var(--nx-font-mono)", minWidth: 64, textAlign: "right", whiteSpace: "nowrap" }}>
+              {b.count > 0 ? formatPnl(b.pnl) : "—"}
             </div>
           </div>
         ))}
@@ -110,9 +108,14 @@ function BreakdownRow({ orders }: { orders: ProcessedTrade[] }) {
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <div><div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.16em", textTransform: "uppercase" }}>WEEKDAY WR</div><div style={{ fontSize: 16, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{weekday.weekdayWR}%</div></div>
-          <div style={{ textAlign: "right" }}><div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.16em", textTransform: "uppercase" }}>WEEKEND WR</div><div style={{ fontSize: 16, color: parseFloat(weekday.weekendWR) > 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)" }}>{weekday.weekendWR}%</div></div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+          {([["WEEKDAYS", weekday.split.weekday], ["WEEKENDS", weekday.split.weekend]] as const).map(([label, p], i) => (
+            <div key={label} style={{ textAlign: i ? "right" : "left", minWidth: 0 }}>
+              <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.16em" }}>{label}</div>
+              <div style={{ fontSize: 16, color: "#ededf0", fontFamily: "var(--nx-font-mono)" }}>{p.winRate == null ? "—" : `${p.winRate}% won`}</div>
+              <div style={{ fontSize: 10, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>{p.trades} {p.trades === 1 ? "trade" : "trades"}{p.trades ? <> · <span style={{ color: p.pnl > 0 ? "#3ecf8e" : p.pnl < 0 ? "#f7525f" : "#a1a1aa" }}>{signed(p.pnl)}</span></> : null}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -167,13 +170,10 @@ function TopAssets({ orders }: { orders: ProcessedTrade[] }) {
             <div key={sym} style={{ background: "#0a0a0b", border: "1px solid #232327", borderRadius: 6, padding: "10px 12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                 <span style={{ fontSize: 13, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{sym}</span>
-                <span style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{data.trades}</span>
+                <span style={{ fontSize: 10, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>{data.trades} {data.trades === 1 ? "trade" : "trades"}</span>
               </div>
               <div style={{ fontSize: 16, color: data.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", fontWeight: "bold", marginBottom: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{formatPnlCompact(data.pnl)}</div>
-              <div style={{ height: 3, background: "#232327", borderRadius: 2, marginBottom: 4 }}>
-                <div style={{ height: 3, background: wr > 50 ? "#3ecf8e" : "#f7525f", borderRadius: 2, width: `${wr}%` }} />
-              </div>
-              <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{wr}% WR</div>
+              <div style={{ fontSize: 10, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>{wr}% won</div>
             </div>
           );
         })}
@@ -182,17 +182,11 @@ function TopAssets({ orders }: { orders: ProcessedTrade[] }) {
   );
 }
 
-// ─── Timing & Risk (peak hours, streaks, sample-gated ratios) ─
-// ⚠️ Risk ratios are gated behind a minimum sample size — small-sample Sharpe/
-// Sortino are statistically meaningless (the "Sharpe 16 on 7 trades" vanity trap).
-// We show the honest "need N more trades" state instead of an inflated number.
-const RISK_SAMPLE_GATE = 20;
-function hourWinColor(wr: number, trades: number) {
-  if (!trades) return "#141416";
-  if (wr >= 60) return "#33333a";
-  if (wr >= 40) return "#4a3a00";
-  return "#4a1e22";
-}
+// ─── Timing (streaks, peak hours) ─
+// Sharpe / Sortino are gone (2026-11-26): dollar P&L of trades with different sizes and gaps isn't an evenly spaced
+// return series, and YOUR RECORD above already carries expectancy, profit factor, payoff and drawdown. Peak hours
+// rank only hours with enough trades, by net dollars (analyticsRules.mjs peakHours); the strip shows how many trades
+// each hour holds, in ink.
 function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {
   const isMobile = useIsMobile();
   const stats = useMemo(() => {
@@ -207,32 +201,12 @@ function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {
       if (sign === -1) worstLoss = Math.max(worstLoss, run);
     }
     const current = run * sign; // signed: + win streak, - loss streak
-    const hours = Array.from({ length: 24 }, (_, h) => ({ h, trades: 0, wins: 0, pnl: 0 }));
-    for (const o of orders) {
-      const h = new Date(o.timestamp).getHours();
-      hours[h].trades++; hours[h].pnl += o.pnl; if (o.pnl > 0) hours[h].wins++;
-    }
-    const peak = hours.filter((b) => b.trades > 0)
-      .sort((a, b) => (b.wins / b.trades) - (a.wins / a.trades) || b.trades - a.trades)
-      .slice(0, 3);
-    const pnls = orders.map((o) => o.pnl);
-    const n = pnls.length;
-    const mean = pnls.reduce((s, v) => s + v, 0) / n;
-    const variance = pnls.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
-    const std = Math.sqrt(variance);
-    const downside = Math.sqrt(pnls.filter((v) => v < 0).reduce((s, v) => s + v * v, 0) / n);
-    // TRUE per-trade risk-adjusted ratios (mean ÷ volatility). NOT × √n — that's a
-    // t-statistic, which grows with sample size and would show a 100-trade record ~3×
-    // the "Sharpe" of a 10-trade one at identical risk-adjusted returns (the vanity
-    // inflation this card exists to avoid). Sample confidence is the GATE, not the value.
-    const sharpe = std > 0 ? mean / std : 0;
-    const sortino = downside > 0 ? mean / downside : 0;
-    return { current, bestWin, worstLoss, hours, peak, sharpe, sortino, expectancy: mean, n };
+    const { hours, peak, thin } = peakHours(orders);
+    return { current, bestWin, worstLoss, hours, peak, thin };
   }, [orders]);
 
   if (!stats) return null;
   const maxHourTrades = Math.max(...stats.hours.map((h) => h.trades), 1);
-  const gated = stats.n < RISK_SAMPLE_GATE;
   const fmtHr = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
   return (
@@ -258,125 +232,29 @@ function TimingAndRisk({ orders }: { orders: ProcessedTrade[] }) {
         </div>
       </div>
 
-      {/* Risk-adjusted (gated) */}
-      <div style={cardStyle}>
-        <div style={{ fontSize: 10, color: "#71717a", letterSpacing: "0.1em", marginBottom: 14, fontFamily: "var(--nx-font-mono)" }}>&#9632; RISK-ADJUSTED</div>
-        {gated ? (
-          <div style={{ fontSize: 11, color: "#52525b", fontFamily: "var(--nx-font-ui)", lineHeight: 1.7 }}>
-            need <span style={{ color: "#ededf0" }}>{RISK_SAMPLE_GATE - stats.n}</span> more closed trades<br />
-            <span style={{ color: "#71717a" }}>ratios are meaningless under {RISK_SAMPLE_GATE} samples. We won&apos;t fake them</span>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {[
-              { label: "SHARPE", num: stats.sharpe, value: stats.sharpe.toFixed(2) },
-              { label: "SORTINO", num: stats.sortino, value: stats.sortino.toFixed(2) },
-              { label: "EXPECTANCY", num: stats.expectancy, value: formatPnl(stats.expectancy) },
-            ].map((r) => (
-              <div key={r.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)", letterSpacing: "0.06em" }}>{r.label}</span>
-                <span style={{ fontSize: 18, color: r.num >= 0 ? "#ededf0" : "#f7525f", fontFamily: "var(--nx-font-mono)" }}>{r.value}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* Peak hours + heatmap */}
       <div style={{ ...cardStyle, gridColumn: isMobile ? "auto" : "span 2" }}>
-        <div style={{ fontSize: 10, color: "#71717a", letterSpacing: "0.1em", marginBottom: 12, fontFamily: "var(--nx-font-mono)" }}>&#9632; PEAK HOURS <span style={{ color: "#71717a" }}>(local)</span></div>
+        <div style={{ fontSize: 10, color: "#71717a", letterSpacing: "0.1em", marginBottom: 12, fontFamily: "var(--nx-font-mono)" }}>&#9632; BEST HOURS <span style={{ color: "#71717a" }}>(close time, local · ≥ {SLICE_MIN_TRADES} trades, by net $)</span></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(24, 1fr)", gap: 2, marginBottom: 12 }}>
           {stats.hours.map((b) => {
             const wr = b.trades ? Math.round((b.wins / b.trades) * 100) : 0;
             return (
-              <div key={b.h} title={`${fmtHr(b.h)}. ${b.trades} trades, ${wr}% WR`} style={{
-                height: 22, borderRadius: 2, background: hourWinColor(wr, b.trades),
-                border: "1px solid #141416", opacity: b.trades ? Math.max(0.4, b.trades / maxHourTrades) : 1,
+              <div key={b.h} title={`${fmtHr(b.h)}. ${b.trades} trades, ${wr}% won, ${signed(b.pnl)}`} style={{
+                height: 22, borderRadius: 2, background: b.trades ? "#a1a1aa" : "#141416",
+                border: "1px solid #141416", opacity: b.trades ? Math.max(0.15, b.trades / maxHourTrades) : 1,
               }} />
             );
           })}
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {stats.peak.length === 0
-            ? <span style={{ fontSize: 11, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>no timing data</span>
+            ? <span style={{ fontSize: 11, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", lineHeight: 1.5 }}>{stats.thin ? `No hour has ${SLICE_MIN_TRADES} trades yet, so none is named. The strip shows where your trades closed.` : "No hour with enough trades made money."}</span>
             : stats.peak.map((b) => (
               <div key={b.h} style={{ background: "#141416", border: "1px solid #232327", borderRadius: 6, padding: "6px 10px" }}>
                 <div style={{ fontSize: 12, color: "#fff", fontFamily: "var(--nx-font-mono)" }}>{fmtHr(b.h)}-{fmtHr((b.h + 1) % 24)}</div>
-                <div style={{ fontSize: 9, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{b.trades} trades · <span style={{ color: "#ededf0" }}>{Math.round((b.wins / b.trades) * 100)}%</span></div>
+                <div style={{ fontSize: 9, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>{wonWords(b.wins, b.trades)} · <span style={{ color: "#3ecf8e" }}>{signed(b.pnl)}</span></div>
               </div>
             ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Performance Analysis ─────────────────────────────────
-function PerformanceAnalysis({ orders }: { orders: ProcessedTrade[] }) {
-  const data = useMemo(() => {
-    if (!orders.length) return null;
-    const sorted = [...orders].sort((a, b) => b.pnl - a.pnl);
-    const best = sorted[0];
-    const worst = sorted[sorted.length - 1];
-    const longs = orders.filter((o) => o.direction === "LONG");
-    const shorts = orders.filter((o) => o.direction === "SHORT");
-    const longWins = longs.filter((o) => o.pnl > 0).length;
-    const shortWins = shorts.filter((o) => o.pnl > 0).length;
-    return { best, worst, longs, shorts, longWins, shortWins };
-  }, [orders]);
-
-  if (!data) return null;
-
-  const bestSym = bareTicker(data.best.symbol);
-  const worstSym = bareTicker(data.worst.symbol);
-
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8, marginTop: 8 }}>
-      <div style={cardStyle}>
-        <div style={{ fontSize: 10, color: "#71717a", letterSpacing: "0.1em", marginBottom: 12, fontFamily: "var(--nx-font-mono)" }}>&#9632; PERFORMANCE ANALYSIS</div>
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 9, color: "#ededf0", fontFamily: "var(--nx-font-mono)", marginBottom: 4 }}>Best Trade</div>
-          <div style={{ background: "#141416", border: "1px solid #232327", borderRadius: 6, padding: "10px 12px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontSize: 14, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{bestSym} {data.best.direction.toLowerCase()}</span>
-              <span style={{ fontSize: 16, color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{formatPnl(data.best.pnl)}</span>
-            </div>
-            {data.best.leverage && <div style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginTop: 4 }}>{data.best.leverage}x leverage</div>}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: 9, color: "#f7525f", fontFamily: "var(--nx-font-mono)", marginBottom: 4 }}>Worst Trade</div>
-          <div style={{ background: "#241012", border: "1px solid #4a1e22", borderRadius: 6, padding: "10px 12px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontSize: 14, color: "#fff", fontWeight: "bold", fontFamily: "var(--nx-font-mono)" }}>{worstSym} {data.worst.direction.toLowerCase()}</span>
-              <span style={{ fontSize: 16, color: "#f7525f", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{formatPnl(data.worst.pnl)}</span>
-            </div>
-            {data.worst.leverage && <div style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)", marginTop: 4 }}>{data.worst.leverage}x leverage</div>}
-          </div>
-        </div>
-      </div>
-
-      <div style={cardStyle}>
-        <div style={{ fontSize: 10, color: "#71717a", letterSpacing: "0.1em", marginBottom: 12, fontFamily: "var(--nx-font-mono)" }}>&#9632; LONG vs SHORT</div>
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <span style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>Long Trades</span>
-            <span style={{ fontSize: 12, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{data.longs.length} trades</span>
-          </div>
-          <div style={{ height: 6, background: "#232327", borderRadius: 3, marginBottom: 4 }}>
-            <div style={{ height: 6, background: data.longs.length ? "#d4d4d8" : "#232327", borderRadius: 3, width: `${data.longs.length ? (data.longWins / data.longs.length) * 100 : 0}%` }} />
-          </div>
-          <div style={{ fontSize: 11, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{data.longs.length ? `${Math.round((data.longWins / data.longs.length) * 100)}%` : "0%"}</div>
-        </div>
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <span style={{ fontSize: 12, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>Short Trades</span>
-            <span style={{ fontSize: 12, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{data.shorts.length} trades</span>
-          </div>
-          <div style={{ height: 6, background: "#232327", borderRadius: 3, marginBottom: 4 }}>
-            <div style={{ height: 6, background: data.shorts.length ? "#ededf0" : "#232327", borderRadius: 3, width: `${data.shorts.length ? (data.shortWins / data.shorts.length) * 100 : 0}%` }} />
-          </div>
-          <div style={{ fontSize: 11, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>{data.shorts.length ? `${Math.round((data.shortWins / data.shorts.length) * 100)}%` : "0%"}</div>
         </div>
       </div>
     </div>
@@ -396,7 +274,7 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
     [orders]
   );
   if (!edge) return null;
-  const { by_side, best_symbol, worst_symbol, better_side, strengths, weaknesses, sample_note } = edge;
+  const { by_side, best_symbol, worst_symbol, better_side, sample_note } = edge;
 
   const symTile = (title: string, s: typeof best_symbol, tone: "pos" | "neg") => (
     <div style={{ flex: 1, minWidth: 0, border: "1px solid #232327", borderRadius: 6, padding: "10px 12px" }}>
@@ -434,16 +312,8 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
         {sideTile("LONG")}
         {sideTile("SHORT")}
       </div>
-      {(strengths.length > 0 || weaknesses.length > 0) && (
-        <div style={{ borderTop: "1px solid #232327", paddingTop: 8, marginTop: 2, display: "flex", flexDirection: "column", gap: 4 }}>
-          {strengths.map((s, i) => (
-            <div key={`s${i}`} style={{ fontSize: 11, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", lineHeight: 1.5 }}><span style={{ color: "#3ecf8e" }}>▲</span> {s}</div>
-          ))}
-          {weaknesses.map((w, i) => (
-            <div key={`w${i}`} style={{ fontSize: 11, color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", lineHeight: 1.5 }}><span style={{ color: "#f7525f" }}>▼</span> {w}</div>
-          ))}
-        </div>
-      )}
+      {/* The strengths / leaks list lived here too, on a 3-trade floor, and could disagree with WHERE THE MONEY GOES
+          below (5 trades, deduped). One list now: that card. */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 10 }}>
         <button
           type="button"
@@ -458,13 +328,13 @@ function YourEdgeCard({ orders }: { orders: ProcessedTrade[] }) {
   );
 }
 
-export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = [], wallet = null }: { orders: ProcessedTrade[]; totalPnl: number; winRate: number; collateral: number; theses?: ThesisTrade[]; wallet?: string | null; }) {
-  const volume = useMemo(() => orders.reduce((s, o) => s + o.qty * o.price, 0), [orders]);
-  const avgWin = useMemo(() => { const w = orders.filter((o) => o.pnl > 0); return w.length ? w.reduce((s, o) => s + o.pnl, 0) / w.length : 0; }, [orders]);
-  const avgLoss = useMemo(() => { const l = orders.filter((o) => o.pnl < 0); return l.length ? Math.abs(l.reduce((s, o) => s + o.pnl, 0) / l.length) : 0; }, [orders]);
-  const pnlExt = useMemo(() => extent(orders.map((o) => o.pnl)), [orders]);
-  const bestTrade = Math.max(0, pnlExt.hi);
-  const worstTrade = Math.min(0, pnlExt.lo);
+export function AnalyticsView({ orders: rawOrders, totalPnl, winRate, collateral, theses = [], wallet = null }: { orders: ProcessedTrade[]; totalPnl: number; winRate: number; collateral: number; theses?: ThesisTrade[]; wallet?: string | null; }) {
+  // Oldest → newest by close time, once: the curve and the bars used to plot Orderly's own order under an
+  // "oldest → newest" label.
+  const orders = useMemo(() => chronological(rawOrders) as ProcessedTrade[], [rawOrders]);
+  const perf = useMemo(() => perfRows(orders), [orders]);
+  const winCount = useMemo(() => orders.filter((o) => o.pnl > 0).length, [orders]);
+  const coverage = coverageLine(orders.length);
   // Per-trade bars: a big record is summed into <= 400 bars first (chartThin.mjs), so labels are built only when each
   // bar is one trade (17k date strings + 17k SVG bars froze the X-Ray on a market-making wallet).
   const bars = useMemo(() => {
@@ -506,7 +376,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
         <div style={cardStyle}>
           <div style={labelStyle}>WIN RATE</div>
           <div style={{ fontSize: 22, fontWeight: "bold", fontFamily: "var(--nx-font-mono)", color: "#d4d4d8", fontVariantNumeric: "tabular-nums" }}>{orders.length ? <CountUp value={winRate} format={(v) => `${v.toFixed(1)}%`} /> : "—"}</div>
-          <div style={{ height: 4, background: "#232327", borderRadius: 2, marginTop: 8 }}><div style={{ height: 4, background: "#d4d4d8", borderRadius: 2, width: `${winRate}%`, transition: "width 620ms var(--nx-ease)" }} /></div>
+          <div style={{ fontSize: 10, color: "#71717a", marginTop: 4, fontFamily: "var(--nx-font-mono)" }}>{orders.length ? `${winCount} of ${orders.length} won` : "no trades"}</div>
         </div>
         <div style={cardStyle}>
           <div style={labelStyle}>TRADES</div>
@@ -520,6 +390,7 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
         </div>
       </div>
 
+      {coverage && <div style={{ fontSize: 11, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", margin: "0 2px 8px", lineHeight: 1.5 }}>{coverage}</div>}
       <YourEdgeCard orders={orders} />
       {/* Measured, not scored: the record in dollars + the slices costing and paying you (app/lib/tradeStats.mjs). */}
       <YourRecordCard orders={orders} />
@@ -537,18 +408,12 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
         </div>
         <div style={cardStyle}>
           <div style={{ fontSize: 10, color: "#71717a", letterSpacing: "0.1em", marginBottom: 14, fontFamily: "var(--nx-font-mono)" }}>PERFORMANCE</div>
-          {[
-            // Tone by meaning: wins green, losses red, neutral bright — NOT all green
-            // (which mislabeled AVG LOSS / WORST TRADE as if they were positive).
-            { label: "AVG WIN", value: orders.length ? `$${avgWin.toFixed(2)}` : "—", tone: "pos" },
-            { label: "AVG LOSS", value: orders.length ? `$${avgLoss.toFixed(2)}` : "—", tone: "neg" },
-            { label: "BEST TRADE", value: orders.length ? `$${bestTrade.toFixed(2)}` : "—", tone: "pos" },
-            { label: "WORST TRADE", value: orders.length ? `$${Math.abs(worstTrade).toFixed(2)}` : "—", tone: "neg" },
-            { label: "VOLUME", value: volume > 0 ? `$${volume.toFixed(0)}` : "—", tone: "neutral" },
-          ].map((r) => (
+          {/* Every dollar signed (analyticsRules.mjs perfRows): AVG LOSS and WORST TRADE used to print "$13.70". */}
+          {perf.map((r) => (
             <div key={r.label} style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: "#52525b", letterSpacing: "0.08em", fontFamily: "var(--nx-font-mono)" }}>{r.label}</div>
-              <div style={{ fontSize: 18, color: r.value === "—" ? "#71717a" : r.tone === "pos" ? "#3ecf8e" : r.tone === "neg" ? "#f7525f" : "#f4f4f5", fontFamily: "var(--nx-font-mono)" }}>{r.value}</div>
+              <div style={{ fontSize: 9, color: "#71717a", letterSpacing: "0.08em", fontFamily: "var(--nx-font-mono)" }}>{r.label}</div>
+              <div style={{ fontSize: 18, color: r.value === "—" ? "#71717a" : r.tone === "pos" ? "#3ecf8e" : r.tone === "neg" ? "#f7525f" : "#f4f4f5", fontFamily: "var(--nx-font-mono)", whiteSpace: "nowrap" }}>{r.value}</div>
+              {r.sub && <div style={{ fontSize: 9, color: "#71717a", fontFamily: "var(--nx-font-mono)" }}>{r.sub}</div>}
             </div>
           ))}
         </div>
@@ -567,10 +432,9 @@ export function AnalyticsView({ orders, totalPnl, winRate, collateral, theses = 
       {/* Core analytics (operator read, key stats, equity curve) stay up top; the deeper
           drill-downs collapse so the tab reads as a synthesis, not an instrument dump. */}
       {orders.length > 0 && (
-        <Collapsible title="Deeper breakdowns" subtitle="hold time, leverage, timing, streaks, top assets, regime and loss tags" storageKey="nx_analytics_deep_open">
+        <Collapsible title="Deeper breakdowns" subtitle="hold time, leverage, weekdays, streaks, best hours, top assets, regime and loss tags" storageKey="nx_analytics_deep_open">
           <BreakdownRow orders={orders} />
           <TimingAndRisk orders={orders} />
-          <PerformanceAnalysis orders={orders} />
           <TopAssets orders={orders} />
           {/* PROCESS — outcome analytics say how you did; these say how to get better. */}
           <ProcessSection wallet={wallet} theses={theses} />
