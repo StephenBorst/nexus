@@ -170,6 +170,7 @@ export default function TheLabPage() {
   const handleDayClick = (key: string, day: number) => { setSelectedDayKey(key); setSelectedDay(day); setActiveTab("tradelog"); };
   const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); } else setViewMonth((m) => m - 1); };
   const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); } else setViewMonth((m) => m + 1); };
+  const goToday = () => { const now = new Date(); setViewMonth(now.getMonth()); setViewYear(now.getFullYear()); };
 
   const isMobile = useIsMobile();
   const wide = !useIsMobile(1280); // the side-by-side terminal (Wire · table · one coin)
@@ -224,7 +225,7 @@ export default function TheLabPage() {
   const condensedNav = !showAllTabs && navRooms.includes(activeTab);
   const visibleTabs = condensedNav ? tabs.filter((t) => navRooms.includes(t.id)) : tabs;
 
-  const calendarProps = { dayGroups, onDayClick: handleDayClick, viewMonth, viewYear, onPrevMonth: prevMonth, onNextMonth: nextMonth, totalPnl };
+  const calendarProps = { dayGroups, onDayClick: handleDayClick, viewMonth, viewYear, onPrevMonth: prevMonth, onNextMonth: nextMonth, onToday: goToday, totalPnl };
 
   const connected = !!rootWalletAddress;
   // ── Guest Lab ───────────────────────────────────────────────────────────────
