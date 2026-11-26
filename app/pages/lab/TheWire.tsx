@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 import { C, MONO, UI, CHIP_SCROLL_GAP } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
 import { sharedJson } from "@/lib/sharedJson.mjs";
-import { WIRE_FILTERS, WIRE_KINDS, filterWire, wireWhen, myCallRows, withMine, wireSeenSplit, WIRE_SEEN_KEY } from "@/lib/wire.mjs";
+import { WIRE_FILTERS, WIRE_KINDS, filterWire, wireWhen, myCallRows, withMine, wireSeenSplit, wireSummary, WIRE_SEEN_KEY } from "@/lib/wire.mjs";
 import { CoinLink } from "@/components/CoinLink";
 import { boardsAt } from "@/lib/intelLenses.mjs";
 import { readLastCopy, writeLastCopy } from "@/lib/lastCopy.mjs";
@@ -68,6 +68,7 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
 
   const merged: Row[] = wire ? (withMine(wire.rows, mine ?? [], now) as Row[]) : [];
   const rows: Row[] = wire ? filterWire(merged, filter) : [];
+  const summary = wire ? (wireSummary(merged, lastLook, now) as string | null) : null;
   const split = wireSeenSplit(rows, lastLook) as { newCount: number; at: number } | null;
   const shown = all ? rows : rows.slice(0, Math.max(FIRST, split && split.newCount < 20 ? split.newCount + 1 : 0));
   const newLine = split ? `${split.newCount === 0 ? "Nothing new" : `${split.newCount} new`} since your last look ${wireWhen(split.at, now)}${wireWhen(split.at, now) === "now" ? "" : " ago"}` : null;
@@ -90,6 +91,9 @@ export function TheWire({ onOpenBoard }: { onOpenBoard?: (id: string) => void })
       <div style={{ fontFamily: UI, fontSize: 13, color: C.text.muted, marginTop: 4, lineHeight: 1.45 }}>
         What changed in the last day, from every board, on one clock. Each row keeps its own source and grade.
       </div>
+
+      {/* The summary (visual pass 2026-11-26): counted from the rows below, every filter, since this device's last look. */}
+      {summary && <p style={{ margin: "10px 0 0", fontFamily: UI, fontSize: 14.5, lineHeight: 1.5, color: C.text.bright }}>{summary}</p>}
 
       {wire && wire.upcoming.length > 0 && (
         <div style={{ marginTop: 12, padding: "10px 12px", border: `1px solid ${C.border}`, borderRadius: 8, background: C.surfaceAlt }}>

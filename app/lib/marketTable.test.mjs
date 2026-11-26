@@ -169,3 +169,21 @@ test("moved since you last looked: the Watching panel's baseline to the table's 
   assert.match(ui, /sinceLook\(/);
   assert.doesNotMatch(ui, /markSeen|writeWatch/);
 });
+
+test("tabs over the table: one column + OI, sorted by it, full table under All (visual pass 2026-11-26)", async () => {
+  const { TABLE_TABS, tabColumns, tabSort, TABLE_COLUMNS, DEFAULT_SORT } = await import("./marketTable.mjs");
+  const { INTEL_LENSES } = await import("./intelLenses.mjs");
+  assert.deepEqual(TABLE_TABS.map((t) => t.label), ["All columns", "Funding", "Venues", "Positioning", "Smart"]);
+  assert.deepEqual(tabColumns("all"), TABLE_COLUMNS.map((c) => c.id), "All = the full table, unchanged");
+  assert.deepEqual(tabColumns("funding"), ["coin", "funding", "oi"]);
+  assert.deepEqual(tabColumns("venues"), ["coin", "gap", "oi"]);
+  assert.deepEqual(tabColumns("smart"), ["coin", "smart", "oi"]);
+  assert.deepEqual(tabSort("venues"), { col: "gap", dir: "desc" });
+  assert.deepEqual(tabSort("all"), { ...DEFAULT_SORT });
+  for (const t of TABLE_TABS) if (t.board) assert.ok(INTEL_LENSES.some((l) => l.id === t.board), `${t.id}: its full board exists`);
+  const ui = readFileSync(new URL("../pages/lab/MarketTable.tsx", import.meta.url), "utf8");
+  assert.match(ui, /overflowX: isMobile \? "auto" : "visible"/, "the tabs scroll on a phone");
+  assert.match(ui, /TABLE_COLUMNS\.filter\(\(c\) => shows\(c\.id\)\)/, "headers follow the tab");
+  for (const id of ["funding", "oiVol", "gap", "smart", "forecast", "news", "reads", "oi"]) assert.match(ui, new RegExp(`shows\\("${id}"\\)`), `${id} cell follows the tab`);
+  assert.doesNotMatch(ui, /colSpan=\{TABLE_COLUMNS\.length\}/);
+});

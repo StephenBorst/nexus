@@ -4,11 +4,14 @@
 // row opens the coin's drawer. Phone: the coin column stays put while the rest scrolls sideways.
 // YOUR COINS FIRST (borst 2026-11-20): coins on this device's watchlist (the drawer's ☆, or the ☆ on a row) stay on top
 // whatever the table sorts by; they sort among themselves by the same column, everything else sorts underneath.
+// TABS (visual pass, borst 2026-11-26): Funding · Venues · Positioning · Smart over the table, chips like the Wire's
+// (a scrolling row on a phone). A tab = the coin, that one column and OI, sorted by it, with its full board one tap away.
+// "All columns" is the full table, unchanged. Rules: TABLE_TABS / tabColumns / tabSort in app/lib/marketTable.mjs.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccount, usePositionStream } from "@orderly.network/hooks";
 import { handOffCall } from "@/lib/callHandoff";
-import { C, MONO, UI, SIGNAL } from "@/config/theme";
+import { C, MONO, UI, SIGNAL, CHIP_SCROLL_GAP } from "@/config/theme";
 import { useIsMobile } from "./useIsMobile";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { pressKey } from "@/utils/a11y";
@@ -16,7 +19,7 @@ import { openMarket } from "@/lib/marketDrawerEvent.mjs";
 import { boardsAt, boardForColumn } from "@/lib/intelLenses.mjs";
 import {
   TABLE_COLUMNS, DEFAULT_SORT, nextSort, usdShort, fundingCell, oiVolCell, gapCell, smartCell, forecastCell,
-  newsCell, readsCell, yourCoinsFirst, yourMarks, openCallCoins, sinceLook, sinceLookCell,
+  newsCell, readsCell, yourCoinsFirst, TABLE_TABS, tabColumns, tabSort, yourMarks, openCallCoins, sinceLook, sinceLookCell,
 } from "@/lib/marketTable.mjs";
 import { readWatch, toggleWatchCoin } from "@/lib/watchStore";
 import { WATCH_EVENT, WATCH_MAX } from "@/lib/watchlist.mjs";
@@ -47,6 +50,11 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
   const [failed, setFailed] = useState(false);
   const [sort, setSort] = useState<{ col: string; dir: string }>({ ...DEFAULT_SORT });
   const [all, setAll] = useState(false);
+  const [tab, setTab] = useState("all");
+  const cols = tabColumns(tab) as string[];
+  const shows = (id: string) => cols.includes(id);
+  const tabNow = TABLE_TABS.find((t) => t.id === tab) ?? TABLE_TABS[0];
+  const pickTab = (id: string) => { setTab(id); setSort(tabSort(id) as { col: string; dir: string }); setAll(false); };
   const [help, setHelp] = useState(false);
   const [watched, setWatched] = useState<string[]>(() => readWatch().coins);
   // the Watching panel's baselines (price + time of your last look), READ only here: the table never moves them
@@ -96,7 +104,7 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
   const shown = all ? sorted : sorted.slice(0, FIRST);
   const group = (label: string) => (
     <tr aria-hidden="true">
-      <td colSpan={TABLE_COLUMNS.length} style={{ padding: 0, borderTop: `1px solid ${C.borderStrong}` }}>
+      <td colSpan={cols.length} style={{ padding: 0, borderTop: `1px solid ${C.borderStrong}` }}>
         <div style={{ position: "sticky", left: 0, display: "inline-block", padding: "6px 10px", fontFamily: MONO, fontSize: 10, letterSpacing: "0.12em", color: C.text.muted }}>{label}</div>
       </td>
     </tr>
@@ -143,19 +151,19 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
               style={{ marginLeft: 6, fontFamily: UI, fontSize: 12, fontWeight: 600, padding: "4px 9px", borderRadius: 7, cursor: "pointer", background: asking ? C.accent : "transparent", color: asking ? C.canvas : C.text.fog, border: `1px solid ${asking ? C.accent : C.borderStrong}` }}>Call</button>
           </div>
         </td>
-        {td(fundingCell(r), { past: !!r.fundingPast })}
-        {td(oiVolCell(r), { past: r.oiVolPast })}
-        {td(gapCell(r), { dim: r.gap == null })}
-        {td(smartCell(r), { dim: !r.smart || r.smart.side === "NONE" })}
-        {td(forecastCell(r), { dim: !r.forecast || r.forecast.divergent === 0 })}
-        {td(newsCell(r), { dim: !r.news })}
-        <td title={r.reads && r.reads.length ? r.reads.map((x) => `${x.axis} (${x.side.toLowerCase()})`).join(", ") : undefined}
-          style={{ padding: "10px", textAlign: "right", fontFamily: MONO, fontSize: 12, color: r.reads && r.reads.length ? C.text.bright : C.text.muted }}>{readsCell(r)}</td>
-        {td(usdShort(r.oiUsd), { dim: true })}
+        {shows("funding") && td(fundingCell(r), { past: !!r.fundingPast })}
+        {shows("oiVol") && td(oiVolCell(r), { past: r.oiVolPast })}
+        {shows("gap") && td(gapCell(r), { dim: r.gap == null })}
+        {shows("smart") && td(smartCell(r), { dim: !r.smart || r.smart.side === "NONE" })}
+        {shows("forecast") && td(forecastCell(r), { dim: !r.forecast || r.forecast.divergent === 0 })}
+        {shows("news") && td(newsCell(r), { dim: !r.news })}
+        {shows("reads") && <td title={r.reads && r.reads.length ? r.reads.map((x) => `${x.axis} (${x.side.toLowerCase()})`).join(", ") : undefined}
+          style={{ padding: "10px", textAlign: "right", fontFamily: MONO, fontSize: 12, color: r.reads && r.reads.length ? C.text.bright : C.text.muted }}>{readsCell(r)}</td>}
+        {shows("oi") && td(usdShort(r.oiUsd), { dim: true })}
       </tr>
       {asking && (
         <tr>
-          <td colSpan={TABLE_COLUMNS.length} style={{ padding: 0, background: C.surfaceAlt }}>
+          <td colSpan={cols.length} style={{ padding: 0, background: C.surfaceAlt }}>
             <div className="nx-fade-in" style={{ position: "sticky", left: 0, display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "10px 10px 12px", maxWidth: "min(100vw - 32px, 640px)" }}>
               <span style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, flexBasis: "100%" }}>Your call on {r.coin}. Which way? Levels build from live price; you post it, and it’s graded from public price.</span>
               <button type="button" style={sideBtn("LONG")} onClick={() => callOn("LONG")}>↑ Long {r.coin}</button>
@@ -214,15 +222,35 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
         </dl>
       )}
 
+      {/* The tabs: chips like the Wire's, a scrolling row on a phone. */}
+      <div role="group" aria-label="Columns" style={{ display: "flex", gap: 8, marginTop: 12, overflowX: isMobile ? "auto" : "visible", flexWrap: isMobile ? "nowrap" : "wrap", paddingBottom: isMobile ? CHIP_SCROLL_GAP : 2, WebkitOverflowScrolling: "touch" }}>
+        {TABLE_TABS.map((t) => {
+          const on = tab === t.id;
+          return (
+            <button key={t.id} type="button" aria-pressed={on} onClick={() => pickTab(t.id)}
+              style={{ flexShrink: 0, fontFamily: UI, fontSize: 13, fontWeight: on ? 600 : 500, cursor: "pointer", padding: "6px 12px", borderRadius: 999, background: on ? C.accent : "transparent", color: on ? C.canvas : C.text.fog, border: `1px solid ${on ? C.accent : C.borderStrong}` }}>{t.label}</button>
+          );
+        })}
+      </div>
+      {tabNow.col && (
+        <div style={{ marginTop: 8, fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, color: C.text.fog }}>
+          {TABLE_COLUMNS.find((c) => c.id === tabNow.col)?.help}
+          {onOpenBoard && tabNow.board && (
+            <> <button type="button" className="nx-text-action" onClick={() => onOpenBoard(tabNow.board!)}
+              style={{ fontFamily: UI, fontSize: 12.5, color: C.text.bright, background: "none", border: "none", padding: 0, cursor: "pointer" }}>Full board →</button></>
+          )}
+        </div>
+      )}
+
       {failed && !table && <div style={{ marginTop: 12, fontFamily: UI, fontSize: 13, color: C.text.muted }}>The market table is unread right now.</div>}
       {failed && table && <div style={{ marginTop: 10, fontFamily: UI, fontSize: 12, color: C.text.muted }}>Couldn’t refresh: this is the copy from {wireWhen(table.builtAt, now)} ago.</div>}
       {!table && !failed && <div style={{ marginTop: 12, fontFamily: MONO, fontSize: 11, color: C.text.faint }}>Reading every market…</div>}
 
       {table && table.rows.length > 0 && (
         <div style={{ marginTop: 10, overflowX: "auto", WebkitOverflowScrolling: "touch", border: `1px solid ${C.border}`, borderRadius: 8 }}>
-          <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", minWidth: 760 }}>
+          <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", minWidth: tab === "all" ? 760 : undefined }}>
             <thead>
-              <tr>{TABLE_COLUMNS.map((c) => th(c.id, c.label, c.id === "coin" ? "left" : "right"))}</tr>
+              <tr>{TABLE_COLUMNS.filter((c) => shows(c.id)).map((c) => th(c.id, c.label, c.id === "coin" ? "left" : "right"))}</tr>
             </thead>
             <tbody>
               {view.pinned.length > 0 && group("YOUR COINS")}

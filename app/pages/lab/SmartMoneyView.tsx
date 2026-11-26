@@ -22,6 +22,7 @@ import { pressKey, useEscapeKey } from "@/utils/a11y";
 import { feedRows, FEED_MIN_USD } from "@/lib/smartFeed.mjs";
 import { consensusFromBoard, CONSENSUS_RATIO } from "@/lib/smartConsensus.mjs";
 import { edgeGate } from "@/lib/xrayGrade.mjs";
+import { Details } from "@/components/ReadCard";
 import { walletStage, scoreMark, buildingLine, recordFacts, sortWallets, stripCounts, lastMoves, walletLists, NONE_SCORED_LINE, STAGE_WORD, SCORE_LINE, STRIP_LINE, TIER_BARS } from "@/lib/smartLayout.mjs";
 import Fold from "@/pages/proof/Fold";
 
@@ -574,88 +575,92 @@ export function SmartMoneyView({ myPositions = [] }: { myPositions?: { symbol?: 
           const mark = scoreMark(tk) as { pos: number; score: number; ticks: number[] } | null;
           const facts = recordFacts(tk) as { key: string; text: string; money?: number }[];
           const mv = moves[t.address.toLowerCase()];
+          const explorer = t.source === "hl" ? `/analyze?address=${t.address}` : `https://orderly-dashboard.orderly.network/address/${t.address}`;
+          const lev = (p: SmPosition) => (p.lev ? ` ${p.lev}x` : "");
+          const entry = (p: SmPosition) => (p.entry > 0 ? `$${p.entry.toLocaleString(undefined, { maximumFractionDigits: p.entry < 10 ? 4 : 2 })}` : "—");
+          // Visual pass (borst 2026-11-26): one card a wallet. First view = who, its stage, its realized P&L, its open
+          // positions as coin · side · size with Trade. The record's detail (the score with its facts and bars, or the
+          // "building a record" count), the last move, account size, entries and uPnL sit behind Details.
           return (
-              <div key={t.address} style={{ border: "1px solid #1a1a1e", borderRadius: 8, padding: "11px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+              <div key={t.address} style={{ border: "1px solid #1a1a1e", borderRadius: 8, background: "#0f0f11", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={() => toggleWatch(t.address)} title={starred ? "Unwatch: no more move notes" : "Watch: a note when their Orderly positions open or close"}
-                    style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13, color: starred ? TRACKED : "#52525b", flexShrink: 0, lineHeight: 1 }}>
-                    {starred ? "★" : "☆"}
-                  </button>
+                  <span role="button" tabIndex={0} onClick={() => openDetail(t.address, t.source, t.accountId)} onKeyDown={pressKey(() => openDetail(t.address, t.source, t.accountId))} title="View trader detail" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#ededf0", flexShrink: 0, cursor: "pointer", textDecoration: "underline", textDecorationColor: "#33333a" }}>{short(t.address)}</span>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, letterSpacing: "0.05em", color: t.source === "orderly" ? "#a1a1aa" : "#71717a", border: "1px solid #232327", borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>{t.source === "orderly" ? "◆ ORDERLY" : "HL"}</span>
-                  <span role="button" tabIndex={0} onClick={() => openDetail(t.address, t.source, t.accountId)} onKeyDown={pressKey(() => openDetail(t.address, t.source, t.accountId))} title="View trader detail" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", flexShrink: 0, cursor: "pointer", textDecoration: "underline", textDecorationColor: "#33333a" }}>{short(t.address)}</span>
                   <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", padding: "2px 6px", borderRadius: 3, border: `1px solid ${STAGE_INK[stage].border}`, color: STAGE_INK[stage].text, flexShrink: 0 }}>{tk?.tier?.glyph ? `${tk.tier.glyph} ` : ""}{STAGE_WORD[stage]}</span>
-                  {mv && (
-                    <span title="Its newest move in the live feed" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a", border: "1px solid #232327", borderRadius: 3, padding: "1px 6px", flexShrink: 0 }}>
-                      {mv.type === "OPEN" ? "opened" : "closed"} <span style={{ color: mv.side === "LONG" ? "#3ecf8e" : "#f7525f" }}>{mv.side}</span> {mv.sym} · {ago(mv.ts)}
-                    </span>
-                  )}
-                  <a href={t.source === "hl" ? `/analyze?address=${t.address}` : `https://orderly-dashboard.orderly.network/address/${t.address}`} target="_blank" rel="noopener noreferrer"
-                    style={{ marginLeft: isMobile ? 0 : "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a", textDecoration: "none", border: "1px solid #232327", borderRadius: 3, padding: "3px 8px", flexShrink: 0 }}>
-                    {t.source === "hl" ? "x-ray ↗" : "explorer ↗"}
-                  </a>
+                  <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                    <button onClick={() => toggleWatch(t.address)} aria-label={starred ? "Unwatch" : "Watch"} title={starred ? "Unwatch: no more move notes" : "Watch: a note when their Orderly positions open or close"}
+                      style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", minWidth: 28, minHeight: 28, fontSize: 12, color: starred ? TRACKED : "#52525b", lineHeight: 1 }}>
+                      {starred ? "★" : "☆"}
+                    </button>
+                    <a href={explorer} target="_blank" rel="noopener noreferrer" aria-label={t.source === "hl" ? "Open its X-Ray" : "Open in the Orderly explorer"} title={t.source === "hl" ? "x-ray" : "explorer"}
+                      style={{ fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", textDecoration: "none", padding: "4px 6px", minHeight: 28, display: "inline-flex", alignItems: "center" }}>↗</a>
+                  </span>
                 </div>
-                {/* The score, never alone: a dot on its rail, the two stated bars as ticks, and what it's made of. */}
-                {mark ? (
-                  <div title={`${SCORE_LINE} Score = 0.5 × green-day share + 0.3 × how much realized flow stuck + 0.2 × drawdown control, shrunk while the record is short.`}
-                    style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 220px) minmax(0, 1fr)", gap: isMobile ? 4 : 14, alignItems: "center" }}>
-                    <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                      <span style={{ position: "relative", display: "block", height: 12 }}>
-                        <span style={{ position: "absolute", left: 0, right: 0, top: 5, height: 2, borderRadius: 1, background: "#232327" }} />
-                        {mark.ticks.map((x) => <span key={x} style={{ position: "absolute", left: `${x}%`, top: 0, bottom: 0, width: 2, marginLeft: -1, background: "#71717a" }} />)}
-                        <span style={{ position: "absolute", top: "50%", left: `${mark.pos}%`, width: 9, height: 9, margin: "-4.5px 0 0 -4.5px", borderRadius: "50%", background: STAGE_INK[stage].dot, boxShadow: "0 0 0 2px #0a0a0b" }} />
-                      </span>
-                      <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>score {mark.score} · bars {TIER_BARS.POSITIVE.score} / {TIER_BARS.CONSISTENT.score}</span>
-                    </span>
-                    <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", lineHeight: 1.6 }}>
-                      {facts.map((f, i) => <span key={f.key}>{i ? " · " : ""}<span style={f.key === "net" && f.money != null ? { color: f.money >= 0 ? "#3ecf8e" : "#f7525f" } : undefined}>{f.text}</span></span>)}
-                    </span>
-                  </div>
-                ) : (
-                  <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>
-                    {tk ? `Building a record · ${buildingLine(tk)}` : "No daily record yet: the daily sweep starts it"}
-                  </div>
-                )}
-                {/* The venue's own board number (money), as before. */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>
-                  <span style={{ color: t.pnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{usd(t.pnl)} <span style={{ color: "#52525b" }}>{t.pnlLabel}</span></span>
-                  {t.roi != null && <span style={{ color: "#a1a1aa" }}>{(t.roi * 100).toFixed(0)}% ROI</span>}
-                  {t.accountValue != null && t.accountValue > 0 && <span style={{ fontSize: 10, color: "#71717a" }}>{usd(t.accountValue)} acct</span>}
+                {/* Realized P&L, the venue's own board number (money). */}
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 20, fontWeight: 500, fontVariantNumeric: "tabular-nums", color: t.pnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{usd(t.pnl)}</span>
+                  <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9.5, letterSpacing: "0.12em", color: "#71717a", textTransform: "uppercase" }}>{t.pnlLabel}</span>
+                  {t.roi != null && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa" }}>{(t.roi * 100).toFixed(0)}% ROI</span>}
                 </div>
-                {t.positions.length > 0 && (
-                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                {/* Open positions: coin · side · size · Trade. */}
+                {t.positions.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column" }}>
                     {t.positions.slice(0, 5).map((p, j) => (
-                      isMobile ? (
-                      // Phone: two lines, nothing off-screen. Coin · side · size · uPnL, then the entry + Trade.
-                      <div key={j} style={{ padding: "7px 0", borderTop: j ? "1px solid #1a1a1e" : "none" }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#f4f4f5", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.coin}</span>
-                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.side === "LONG" ? "#3ecf8e" : "#f7525f", flexShrink: 0 }}>{p.side === "LONG" ? "↑ LONG" : "↓ SHORT"}{p.lev ? ` ${p.lev}x` : ""}</span>
-                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#a1a1aa", flexShrink: 0 }}>{usd(p.szUsd)}</span>
-                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.uPnl >= 0 ? "#3ecf8e" : "#f7525f", flexShrink: 0, minWidth: 56, textAlign: "right" }}>{p.uPnl >= 0 ? "+" : ""}{usd(p.uPnl)}</span>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 4 }}>
-                          <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>{p.entry > 0 ? `entry $${p.entry.toLocaleString(undefined, { maximumFractionDigits: p.entry < 10 ? 4 : 2 })}` : ""}</span>
+                      <div key={j} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid #1a1a1e" }}>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#f4f4f5", flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.coin}</span>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.side === "LONG" ? "#3ecf8e" : "#f7525f", flexShrink: 0 }}>{p.side === "LONG" ? "↑ LONG" : "↓ SHORT"}{lev(p)}</span>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#a1a1aa", flexShrink: 0, minWidth: 64, textAlign: "right" }}>{usd(p.szUsd)}</span>
+                        <span style={{ flexShrink: 0 }}>
                           {p.tradeable && p.sym
                             ? tradeBtn(() => copy(p.sym as string, p.side, p.entry, p.lev, t.address, t.source))
                             : <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", whiteSpace: "nowrap" }}>HL-only</span>}
-                        </div>
-                      </div>
-                      ) :
-                      <div key={j} style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 0", flexWrap: "nowrap", overflowX: "auto" }}>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, color: "#f4f4f5", flex: "1 1 72px", minWidth: 72 }}>{p.coin}</span>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.side === "LONG" ? "#3ecf8e" : "#f7525f", width: 78, flexShrink: 0 }}>{p.side === "LONG" ? "↑ LONG" : "↓ SHORT"}{p.lev ? ` ${p.lev}x` : ""}</span>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#a1a1aa", flex: "1 1 88px", minWidth: 88, textAlign: "right" }}>{usd(p.szUsd)}</span>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#52525b", flex: "1 1 92px", minWidth: 92, textAlign: "right" }}>{p.entry > 0 ? `@ $${p.entry.toLocaleString(undefined, { maximumFractionDigits: p.entry < 10 ? 4 : 2 })}` : ""}</span>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600, color: p.uPnl >= 0 ? "#3ecf8e" : "#f7525f", flex: "1 1 88px", minWidth: 88, textAlign: "right" }}>{p.uPnl >= 0 ? "+" : ""}{usd(p.uPnl)}</span>
-                        <span style={{ marginLeft: 10, flexShrink: 0 }}>
-                          {p.tradeable && p.sym
-                            ? tradeBtn(() => copy(p.sym as string, p.side, p.entry, p.lev, t.address, t.source))
-                            : <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 8, color: "#52525b", whiteSpace: "nowrap" }}>HL-only</span>}
                         </span>
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, color: "#71717a" }}>No open positions.</div>
                 )}
+                <Details>
+                  {/* The score, never alone: a dot on its rail, the two stated bars as ticks, and what it's made of. */}
+                  {mark ? (
+                    <div title={`${SCORE_LINE} Score = 0.5 × green-day share + 0.3 × how much realized flow stuck + 0.2 × drawdown control, shrunk while the record is short.`}
+                      style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 220px) minmax(0, 1fr)", gap: isMobile ? 4 : 14, alignItems: "center" }}>
+                      <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <span style={{ position: "relative", display: "block", height: 12 }}>
+                          <span style={{ position: "absolute", left: 0, right: 0, top: 5, height: 2, borderRadius: 1, background: "#232327" }} />
+                          {mark.ticks.map((x) => <span key={x} style={{ position: "absolute", left: `${x}%`, top: 0, bottom: 0, width: 2, marginLeft: -1, background: "#71717a" }} />)}
+                          <span style={{ position: "absolute", top: "50%", left: `${mark.pos}%`, width: 9, height: 9, margin: "-4.5px 0 0 -4.5px", borderRadius: "50%", background: STAGE_INK[stage].dot, boxShadow: "0 0 0 2px #0a0a0b" }} />
+                        </span>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#71717a" }}>score {mark.score} · bars {TIER_BARS.POSITIVE.score} / {TIER_BARS.CONSISTENT.score}</span>
+                      </span>
+                      <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", lineHeight: 1.6 }}>
+                        {facts.map((f, i) => <span key={f.key}>{i ? " · " : ""}<span style={f.key === "net" && f.money != null ? { color: f.money >= 0 ? "#3ecf8e" : "#f7525f" } : undefined}>{f.text}</span></span>)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>
+                      {tk ? `Building a record · ${buildingLine(tk)}` : "No daily record yet: the daily sweep starts it"}
+                    </div>
+                  )}
+                  {(mv || (t.accountValue != null && t.accountValue > 0)) && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#71717a" }}>
+                      {mv && <span title="Its newest move in the live feed">last move: {mv.type === "OPEN" ? "opened" : "closed"} <span style={{ color: mv.side === "LONG" ? "#3ecf8e" : "#f7525f" }}>{mv.side}</span> {mv.sym} · {ago(mv.ts)}</span>}
+                      {t.accountValue != null && t.accountValue > 0 && <span>{usd(t.accountValue)} account</span>}
+                    </div>
+                  )}
+                  {t.positions.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {t.positions.slice(0, 5).map((p, j) => (
+                        <div key={j} style={{ display: "flex", flexWrap: "wrap", gap: 10, fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa" }}>
+                          <span style={{ color: "#f4f4f5", minWidth: 56 }}>{p.coin}</span>
+                          <span>entry {entry(p)}</span>
+                          <span>uPnL <span style={{ color: p.uPnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{p.uPnl >= 0 ? "+" : ""}{usd(p.uPnl)}</span></span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Details>
               </div>
           );
         };
