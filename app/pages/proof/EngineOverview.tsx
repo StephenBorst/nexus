@@ -7,7 +7,7 @@ import { C } from "@/config/theme";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { overviewReads, tideOf, btcRegime, strongSides, paperCard, fmtR } from "@/lib/engineOverview.mjs";
 import { vsRandomCards, RANDOM_WORDS } from "@/lib/proofLayout.mjs";
-import { WordChip } from "./LeadCards";
+import { WordChip } from "@/components/ReadCard";
 import { pressKey } from "@/utils/a11y";
 
 const API = "https://og.nexustradinglabs.com";

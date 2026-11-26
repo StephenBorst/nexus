@@ -1,5 +1,7 @@
 // The strategy shelf (Agent → Config): every strategy, its stage as the scoreboard serves it, its grade,
-// what it still needs and a rough date. Every row loads into the agent ON PAPER, whatever its stage
+// what it still needs and a rough date. As cards (visual pass, borst 2026-11-26): the Quick-start preset look, one card
+// language with /proof's lead cards (app/components/ReadCard.tsx): stage chip, the rule in one line, the numbers, Load;
+// what it still needs stays, smaller. Every row loads into the agent ON PAPER, whatever its stage
 // (borst 2026-11-22, "open the shelf"; only the CLEARED badge is gated). Rules + the config each row
 // loads: app/lib/strategyShelf.mjs (tested). Nothing here grades or trades: Load fills the form, Save sends it.
 import { useEffect, useState } from "react";
@@ -11,6 +13,7 @@ import { agentCardStyle, agentLabelStyle } from "./styles";
 import { C } from "@/config/theme";
 import { Button } from "@/components/ui";
 import { useIsMobile } from "./useIsMobile";
+import { CardHead, CardShell, Tiles, WHY, WordChip } from "@/components/ReadCard";
 
 const SCOREBOARD = "https://og.nexustradinglabs.com/intel/axis-backtest";
 const MONO = "var(--nx-font-mono)";
@@ -61,39 +64,47 @@ export function StrategyShelf({ onLoad }: { onLoad: (load: ShelfLoad) => void })
         <div style={{ color: C.text.muted, fontFamily: MONO, fontSize: 11, marginTop: 12 }}>Reading the scoreboard…</div>
       )}
       {rows && (
-        <div style={{ display: "flex", flexDirection: "column", marginTop: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))", gap: 10, marginTop: 12 }}>
           {rows.map((r) => (
-            <div key={r.id} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.border}` }}>
-              <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "baseline" }}>
-                  <span style={{ color: C.text.bright, fontFamily: MONO, fontSize: 12, fontWeight: 600 }}>{r.name}</span>
-                  <span style={{ color: C.text.fog, fontFamily: MONO, fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", border: `1px solid ${C.borderStrong}`, borderRadius: 3, padding: "1px 5px" }}>
-                    {r.stageWord}
-                  </span>
-                </div>
-                {r.grade && (
-                  <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 11.5, marginTop: 3, lineHeight: 1.4 }}>
-                    <span style={{ color: C.text.bright }}>{r.grade.word}.</span> {r.grade.line}
+            <CardShell key={r.id}>
+              <CardHead title={r.name} stage={r.stageWord} />
+              {r.rule && <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 12, lineHeight: 1.5, marginTop: -4 }}>{r.rule}</div>}
+
+              {/* The numbers: new-data trades + how often it beat random. No mean R here, so nothing stands alone. */}
+              {r.grade && (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <WordChip word={{ key: r.grade.key, text: r.grade.word }} />
                   </div>
-                )}
-                {r.need && <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 11, marginTop: 3, lineHeight: 1.4 }}>Needs {r.need}.</div>}
-                {r.note && <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 11, marginTop: 3, lineHeight: 1.4 }}>{r.note}</div>}
-                {r.eta && <div style={{ color: C.text.muted, fontFamily: MONO, fontSize: 10, marginTop: 2 }}>{r.eta}</div>}
-              </div>
-              <div style={{ flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: isMobile ? "flex-start" : "flex-end", gap: 3, maxWidth: isMobile ? "100%" : 260 }}>
+                  <Tiles tiles={[
+                    { key: "n", big: r.grade.events, cap: "NEW TRADES", why: WHY.trades },
+                    { key: "pct", big: r.grade.events >= 5 && r.grade.pct != null ? `${Math.round(r.grade.pct)}%` : "—", cap: "BEAT RANDOM", why: WHY.beat },
+                  ]} />
+                </>
+              )}
+              {r.note && <div style={{ color: C.text.fog, fontFamily: UI, fontSize: 12, lineHeight: 1.45 }}>{r.note}</div>}
+
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                 <Button variant={r.canLoad ? "primary" : "secondary"} size="sm" disabled={!r.canLoad}
                   onClick={() => { const config = shelfConfig(r); if (r.canLoad && config) onLoad({ name: r.name, stageWord: r.stageWord, config }); }}
                   title={r.reason}>
                   {shelfButtonLabel(r)}
                 </Button>
-                {!r.canLoad && <span style={{ color: C.text.muted, fontFamily: UI, fontSize: 11, textAlign: isMobile ? "left" : "right", lineHeight: 1.4 }}>{r.reason}</span>}
                 {r.kind === "read" && runs[r.id] && (
                   <Link to={`/proof/paper/${r.id}`} style={{ color: C.text.fog, fontFamily: UI, fontSize: 11.5, textDecoration: "none" }}>
                     {paperCountLine(runs[r.id])} →
                   </Link>
                 )}
               </div>
-            </div>
+              {!r.canLoad && <span style={{ color: C.text.muted, fontFamily: UI, fontSize: 11, lineHeight: 1.4 }}>{r.reason}</span>}
+
+              {/* What it still needs: kept, secondary. */}
+              {(r.need || r.eta) && (
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, color: C.text.muted, fontFamily: UI, fontSize: 11, lineHeight: 1.45 }}>
+                  {r.need && <>Needs {r.need}.</>}{r.eta && <span style={{ fontFamily: MONO, fontSize: 10 }}>{r.need ? " " : ""}{r.eta}</span>}
+                </div>
+              )}
+            </CardShell>
           ))}
         </div>
       )}

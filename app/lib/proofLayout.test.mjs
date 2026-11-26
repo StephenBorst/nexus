@@ -107,7 +107,7 @@ test("the page: one source for the counts, mean R always beside random, no progr
   assert.match(idx, /useBoardGroups\(scorecard\)/, "the strip and the cards take the board's own groups");
   assert.doesNotMatch(idx, /boardGroups\(/, "no second grouping on the page");
   // Every line that prints a mean R on a card also prints the random entry's.
-  for (const line of cards.split("\n").filter((l) => /fmtR\((c\.pooled|v)\.meanR\)/.test(l) && !l.includes("title="))) {
+  for (const line of cards.split("\n").filter((l) => /fmtR\((c\.pooled|v|p)\.meanR\)/.test(l) && !l.includes("title=") && !l.includes('cap: "ITS AVERAGE"'))) {
     assert.match(line, /randomR/, `mean R printed alone: ${line.trim()}`);
   }
   // Plain words (2026-11-21): no rulers or tracks on a card or the vs-random section; the bars are a checklist.
@@ -118,7 +118,14 @@ test("the page: one source for the counts, mean R always beside random, no progr
   assert.match(chart, /vsRandomCards\(rows\)/);
   assert.match(chart, /Every read vs random trades/);
   // The tile with its average always sits next to the random average's tile.
-  assert.match(cards, /"ITS AVERAGE"\)\}\n\s*\{tile\([^\n]*randomR[^\n]*"RANDOM AVERAGE"\)/);
+  assert.match(cards, /cap: "ITS AVERAGE"[^\n]*\n\s*\{[^\n]*randomR[^\n]*cap: "RANDOM AVERAGE"/);
+  // Visual pass (2026-11-26): the first view is the chip, the sentence and the tiles; the checklist and the sides sit
+  // behind one Details tap; the paper run is one small line; one card language with the shelf.
+  assert.match(cards, /from "@\/components\/ReadCard"/);
+  const det = cards.indexOf("<Details"), chk = cards.indexOf("TO MOVE UP"), sides = cards.indexOf("<SideLine label=\"LONGS\"");
+  assert.ok(det > 0 && chk > det && sides > det && cards.indexOf("</Details>") > sides, "checklist + sides inside Details");
+  assert.ok(cards.indexOf("<Tiles") < det, "the numbers are never behind the tap");
+  assert.doesNotMatch(cards, /Array\.from\(\{ length: target \}/, "no filling paper bar");
   assert.match(strip, /isMobile \? \{\} : \{ position: "sticky" as const/, "sticky on desktop only");
   // The order of the reads half, and the bar line kept whole (FeaturedLead prints PROOF_BAR_LINE).
   const order = ["<FeaturedLead", "<ProofStatus", "<LeadCards", "<SideChart", "<PaperWallets", "<SignalBoard", "<PlainWords", "<MarketStats", "<WeeklyScorecard"].map((t) => idx.indexOf(t));

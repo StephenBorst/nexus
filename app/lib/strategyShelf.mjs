@@ -23,6 +23,7 @@ import { readPaperConfig } from "./housePaper.mjs";
 import { LEVEL_RECLAIM_PAPER_CONFIG } from "./levelReclaim.mjs";
 import { REGISTERED_READS } from "./readPipeline.mjs";
 import { randomWord, beatSentence } from "./proofLayout.mjs";
+import { AXIS_BLURB } from "./signalCard.mjs";
 
 const REGISTERED = new Set(REGISTERED_READS.map((r) => r.axis));
 /**
@@ -89,7 +90,7 @@ function readRow(reg, labels, now, killEvents) {
   return {
     id: reg.axis, kind: "read", name: labels[reg.axis] || reg.axis, stage,
     stageWord: failing ? "Failing" : (WORD[stage] || stage), need, note: "", eta, canLoad, presetId: null, reason,
-    grade: readGrade(n),
+    grade: readGrade(n), rule: AXIS_BLURB[reg.axis] || "",
   };
 }
 
@@ -97,7 +98,9 @@ function readRow(reg, labels, now, killEvents) {
 function readGrade(n) {
   const events = Number(n?.events) || 0;
   const pct = Number.isFinite(n?.beatsRandomPct) ? n.beatsRandomPct : null;
-  return { word: randomWord(pct, events).text, line: `${events} new-data trade${events === 1 ? "" : "s"}. ${events >= 5 ? beatSentence(pct) : "Too few to compare with random yet."}` };
+  const w = randomWord(pct, events);
+  // The card's tiles read `events` + `pct` (the same numbers as the line); `key` picks the chip's tone.
+  return { word: w.text, key: w.key, events, pct, line: `${events} new-data trade${events === 1 ? "" : "s"}. ${events >= 5 ? beatSentence(pct) : "Too few to compare with random yet."}` };
 }
 
 function exitRow(axis, now) {
@@ -105,7 +108,7 @@ function exitRow(axis, now) {
   const retired = retiredGradedExit(GRADED_EXIT_AXIS);
   if (retired) {
     return {
-      id: `${GRADED_EXIT_AXIS}:graded-exit`, kind: "exit", name: "Basis × CVD, graded exit",
+      id: `${GRADED_EXIT_AXIS}:graded-exit`, kind: "exit", name: "Basis × CVD, graded exit", rule: AXIS_BLURB.basis_x_cvd || "",
       stage: "RETIRED", stageWord: "Retired", need: "", note: retiredLine(retired), eta: null,
       canLoad: true, presetId: null, reason: `Retired: its record stays as it is. ${LOAD_REASON}`,
     };
@@ -119,7 +122,7 @@ function exitRow(axis, now) {
     if (at) eta = `~${fmtDay(at)} at today's pace`;
   }
   return {
-    id: `${GRADED_EXIT_AXIS}:graded-exit`, kind: "exit", name: "Basis × CVD, graded exit",
+    id: `${GRADED_EXIT_AXIS}:graded-exit`, kind: "exit", name: "Basis × CVD, graded exit", rule: AXIS_BLURB.basis_x_cvd || "",
     stage: ge.status === "CLEARS" ? "TRADEABLE" : ge.status === "FAILS" ? "RETIRED" : "REGISTERED",
     stageWord: word,
     // "Needs …" only while it is counting; a verdict is a plain note.
@@ -136,7 +139,7 @@ function exitRow(axis, now) {
 // wins over the live numbers. It loads the same paper config as the graded-exit row (2026-11-22).
 const REGIME_WORD = { COUNTING: "Testing", CLEARS: "Cleared", FAILS: "Failed its bar", NOT_CLEARED: "Not cleared", INCONCLUSIVE: "Inconclusive" };
 function regimeRow(sc, now) {
-  const base = { id: `${REGIME_WINDOW.axis}:regime-window`, kind: "test", name: "Basis × CVD, graded exit · regime window", canLoad: true, presetId: null, eta: null, reason: `The same strategy as the graded exit, judged inside a regime window. ${LOAD_REASON}` };
+  const base = { id: `${REGIME_WINDOW.axis}:regime-window`, kind: "test", name: "Basis × CVD, graded exit · regime window", rule: AXIS_BLURB.basis_x_cvd || "", canLoad: true, presetId: null, eta: null, reason: `The same strategy as the graded exit, judged inside a regime window. ${LOAD_REASON}` };
   const days = (c) => (c ? `BTC regime so far: UP ${c.UP || 0} · DOWN ${c.DOWN || 0} · FLAT ${c.FLAT || 0} days (needs 14+ in two, one DOWN).` : "");
   const counts = sc?.regimeWindow?.regime?.counts || null;
   if (REGIME_RESULT) {
