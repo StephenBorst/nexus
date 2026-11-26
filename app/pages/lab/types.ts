@@ -84,6 +84,7 @@ export interface ThesisTrade {
   onChainId?: number;
   onChainTxHash?: string;
   copiedFromWallet?: string;
+  copiedFromId?: string; // the original call's id (saved since 2026-11-26; older copies match on levels, copyMatch.mjs)
   copyCount?: number;
 }
 

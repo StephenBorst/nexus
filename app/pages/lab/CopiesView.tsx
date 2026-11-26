@@ -2,6 +2,11 @@
 // their WHOLE graded record from the public feed (losses included, copies out), whether they're on the ranked board
 // or why not, and where your copies of them stand. Rules app/lib/copyLeaders.mjs + feedRecord.mjs (tested).
 // Never a "copy more" nudge; the record says it. Green/red only on money.
+//
+// 2026-11-26 (borst: "pick up Copy Trades"): a copy is private and the grader grades only public calls, so a copy's
+// own status stayed "open" forever. Each copy now reads its ORIGINAL from the public feed (app/lib/copyMatch.mjs):
+// the grader's outcome on the caller's plan, what you changed from it, and how late you copied. The caller's risk in
+// R (/theses/process, the profile's own source) sits beside the record.
 import { C, MONO, UI } from "@/config/theme";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -14,7 +19,9 @@ import { EmptyState } from "./components";
 import { bareTicker } from "@/utils/utils";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { feedRecords, recordLine } from "@/lib/feedRecord.mjs";
-import { copyLeaders, mineLine } from "@/lib/copyLeaders.mjs";
+import { copyLeaders } from "@/lib/copyLeaders.mjs";
+import { findOriginal, originalState, planDrift, driftLine, copyTiming, originalsLine } from "@/lib/copyMatch.mjs";
+import { riskLines } from "@/lib/recordRisk.mjs";
 import { callRR, fmtRR } from "@/lib/callMath.mjs";
 import { CoinLink } from "@/components/CoinLink";
 
@@ -32,6 +39,8 @@ export function CopiesView() {
   const [records, setRecords] = useState<Map<string, Rec> | null>(null);
   const [names, setNames] = useState<Map<string, string>>(new Map());
   const [ranked, setRanked] = useState<Set<string>>(new Set());
+  const [rowsBy, setRowsBy] = useState<Map<string, Record<string, unknown>[]>>(new Map()); // caller → their public calls
+  const [risk, setRisk] = useState<Map<string, string[]>>(new Map()); // caller → the grader's risk lines
 
   const copiedTheses = useMemo(() => theses.filter((t) => t.copiedFromWallet || t.id.startsWith("copy_")), [theses]);
 
@@ -50,6 +59,20 @@ export function CopiesView() {
       for (const t of rows as { wallet?: string; displayName?: string }[]) if (t.wallet && t.displayName) nm.set(t.wallet.toLowerCase(), t.displayName);
       setNames(nm);
       setRanked(new Set(((board?.leaderboard ?? []) as { wallet?: string }[]).map((e) => String(e.wallet || "").toLowerCase())));
+      const by = new Map<string, Record<string, unknown>[]>();
+      for (const t of rows as Record<string, unknown>[]) {
+        const w = String(t.wallet || "").toLowerCase();
+        if (w) by.set(w, [...(by.get(w) ?? []), t]);
+      }
+      setRowsBy(by);
+      // The grader's own risk in R per caller (the trader profile's source), at most 8 callers.
+      const callers = [...new Set(copiedTheses.map((t) => String(t.copiedFromWallet || "").toLowerCase()).filter(Boolean))].slice(0, 8);
+      const rk = new Map<string, string[]>();
+      await Promise.all(callers.map(async (w) => {
+        const p = await sharedJson(`${AGENT_API}/theses/process/${w}`).catch(() => null);
+        if (p?.risk) rk.set(w, riskLines(p.risk) as string[]);
+      }));
+      if (alive) setRisk(rk);
     })();
     return () => { alive = false; };
   }, [copiedTheses.length]);
@@ -70,7 +93,8 @@ export function CopiesView() {
           Copy Trades <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 400, color: C.text.muted, letterSpacing: "0.06em" }}>· {copiedTheses.length} copied</span>
         </div>
         <div style={{ fontFamily: UI, fontSize: 13, color: C.text.muted, marginTop: 6, lineHeight: 1.5 }}>
-          Each caller with their whole graded record, losses included, beside your copies of them.
+          Each caller with their whole graded record, losses included, beside your copies of them. A copy is private, so it
+          is never graded on its own: each one shows how the original did, and what you changed from it.
         </div>
       </div>
 
@@ -91,13 +115,25 @@ export function CopiesView() {
                 {records ? `Whole record: ${recordLine(l.record)}` : "Reading their record…"}
               </div>
               {records && l.why && <div style={{ fontFamily: UI, fontSize: 12.5, color: C.text.muted, marginTop: 2 }}>{l.why}</div>}
-              <div style={{ fontFamily: UI, fontSize: 12.5, color: C.text.muted, marginTop: 2, marginBottom: 6 }}>{mineLine(l.mine, l.copies.length)}</div>
+              {(risk.get(l.wallet) ?? []).map((line) => <div key={line} style={{ fontFamily: UI, fontSize: 12.5, color: C.text.muted, marginTop: 2 }}>{line}</div>)}
+              {(() => {
+                const st = l.copies.map((t) => originalState(findOriginal(t, rowsBy.get(l.wallet) ?? [])));
+                const line = records ? originalsLine(st) : null;
+                return <div style={{ fontFamily: UI, fontSize: 12.5, color: C.text.fog, marginTop: 4, marginBottom: 6 }}>Your copies: {l.copies.length}.{line ? ` ${line}` : ""}</div>;
+              })()}
               {l.copies.map((t) => {
                 const ticker = bareTicker(t.symbol);
-                const cfg = STATUS_CONFIG[effectiveStatus(t)] ?? STATUS_CONFIG.ACTIVE;
+                const orig = records ? findOriginal(t, rowsBy.get(l.wallet) ?? []) as (Record<string, unknown> & { id?: string }) | null : null;
+                const os = records ? originalState(orig) : null;
+                const drift = orig ? planDrift(t, orig) : [];
+                const timing = orig ? copyTiming(t, orig) : null;
+                // Your own row: only a status you set by hand (a private copy is never graded); else the original's.
+                const own = effectiveStatus(t);
+                const cfg = STATUS_CONFIG[own] ?? STATUS_CONFIG.ACTIVE;
                 const rr = callRR(t);
                 return (
-                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${C.border}`, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+                  <div key={t.id} style={{ padding: "9px 0", borderTop: `1px solid ${C.border}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: isMobile ? "wrap" : "nowrap" }}>
                     <span style={{ fontFamily: UI, fontSize: 14, fontWeight: 600, color: C.text.bright }}><CoinLink coin={ticker}>{ticker}</CoinLink></span>
                     <span style={{ fontFamily: MONO, fontSize: 10, color: C.text.fog, border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "1px 6px" }}>{t.direction === "LONG" ? "↑ LONG" : "↓ SHORT"}</span>
                     <span style={{ fontFamily: MONO, fontSize: 11.5, color: C.text.muted, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -106,7 +142,16 @@ export function CopiesView() {
                     {t.actualPnl !== null && t.actualPnl !== undefined && effectiveStatus(t) !== "ACTIVE" && (
                       <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: t.actualPnl >= 0 ? C.pos : C.neg }}>{t.actualPnl >= 0 ? "+" : "−"}${Math.abs(t.actualPnl).toFixed(2)}</span>
                     )}
-                    <span style={{ fontFamily: MONO, fontSize: 9.5, padding: "2px 8px", borderRadius: 3, background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color, flexShrink: 0 }}>{cfg.label}</span>
+                    {own !== "ACTIVE" && <span style={{ fontFamily: MONO, fontSize: 9.5, padding: "2px 8px", borderRadius: 3, background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color, flexShrink: 0 }}>{cfg.label}</span>}
+                  </div>
+                  {os && (
+                    <div style={{ fontFamily: UI, fontSize: 12.5, lineHeight: 1.5, marginTop: 4 }}>
+                      <span style={{ color: C.text.bright }}>{os.line}</span>
+                      {orig?.id && <> <button type="button" className="nx-text-action" onClick={() => navigate(`/feed/thesis/${l.wallet}/${orig.id}`)}
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: C.text.fog, fontFamily: UI, fontSize: 12.5 }}>See it ↗</button></>}
+                      {orig && <div style={{ color: drift.length ? C.text.fog : C.text.muted }}>{driftLine(drift)}{timing ? ` ${timing}` : ""}</div>}
+                    </div>
+                  )}
                   </div>
                 );
               })}

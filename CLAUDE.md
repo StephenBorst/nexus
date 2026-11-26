@@ -834,6 +834,13 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
 - **Ranks:** only graded callers, in the grader's order, then emerging unranked. No self-scored REP anywhere; Rep Score
   code is deleted. Merit ranks (`rankCaller`): Signal / Sharp / Apex. Identity card = `app/lib/identityCard.mjs` on
   `loadIdentity`; no badge unless the grader gave one.
+- **Copy Trades tab** (`CopiesView.tsx`, borst 2026-11-26, rules `app/lib/copyMatch.mjs`, tested): a copy is PRIVATE and
+  the grader grades only public calls, so a copy never gets its own grade (the tab used to say "3 open" forever). Each
+  copy reads its ORIGINAL from /feed (`findOriginal`: the `copiedFromId` both copy modals save since 2026-11-26, else the
+  caller's public call with the same coin / side / entry / stop posted before the copy) and shows the grader's outcome in
+  words (`originalState`), what you changed from the caller's plan (`planDrift` / `driftLine`: "the original's grade is
+  the caller's plan, not yours"), how late you copied and whether its entry had already traded (`copyTiming`), and per
+  caller "Their originals: …" (`originalsLine`) + the grader's risk lines from `/theses/process/:w` (`riskLines`).
 - **Public only:** share cards, permalinks and `/verify` answer `isPublicCall` (public, not holders-only, not a
   copy) → else 404. The call page's HTML meta comes from `GET /thesis/:w/:id/meta` (stored call, current stamps only).
 - Orderly's trading API is private per account; the public dashboard indexer
