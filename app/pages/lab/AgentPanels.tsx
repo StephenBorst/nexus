@@ -13,6 +13,8 @@ import { paperBlotter, tradeNotional, holdHours } from "@/lib/paperStats.mjs";
 import { slippageSummary, slippageLine } from "@/lib/slippage.mjs";
 import { bareTicker } from "@/utils/utils";
 import { AGENT_API } from "./agentTypes";
+import { sharedJson } from "@/lib/sharedJson.mjs";
+import { graduation } from "@/lib/paperGraduation.mjs";
 
 /**
  * Number input that holds its own text state so you can clear/edit freely
@@ -211,17 +213,43 @@ export function LiveSlippageLine({ slip }: { slip?: unknown }) {
   );
 }
 
-export function PaperCostLine({ address, refreshKey }: { address?: string | null; refreshKey?: string | number }) {
-  const [c, setC] = useState<PaperCosts | null>(null);
+/** The after-costs re-read, one request shared by the cost line and the paper-record card (sharedJson). */
+function usePaperCosts(address?: string | null, refreshKey?: string | number): { c: PaperCosts | null; read: boolean } {
+  const [st, setSt] = useState<{ c: PaperCosts | null; read: boolean }>({ c: null, read: false });
   useEffect(() => {
-    if (!address) { setC(null); return; }
+    if (!address) { setSt({ c: null, read: false }); return; }
     let live = true;
-    fetch(`${AGENT_API}/agent/${address.toLowerCase()}/paper-costs`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (live) setC(j && j.ok ? j : null); })
-      .catch(() => { if (live) setC(null); });
+    sharedJson(`${AGENT_API}/agent/${address.toLowerCase()}/paper-costs?r=${encodeURIComponent(String(refreshKey ?? ""))}`)
+      .then((j: PaperCosts | null) => { if (live) setSt({ c: j && j.ok ? j : null, read: true }); });
     return () => { live = false; };
   }, [address, refreshKey]);
+  return st;
+}
+
+/**
+ * The paper record against the house bar (app/lib/paperGraduation.mjs): n of 30, then after fees and funding. It
+ * replaced READY TO GO LIVE?, which offered "Go autonomous" after 5 trades of fee-free paper P&L. It never offers
+ * AUTONOMOUS; past the bar with a positive net it offers ASSISTED (signals only).
+ */
+export function PaperRecordCard({ address, refreshKey, lifetimeTrades, onAssisted }: { address?: string | null; refreshKey?: string | number; lifetimeTrades: number | null; onAssisted: () => void }) {
+  const { c, read } = usePaperCosts(address, refreshKey);
+  const g = graduation({ lifetimeTrades, costs: read ? c : null });
+  if (!g || (g.stage === "UNREAD" && !read)) return null;
+  return (
+    <div style={{ ...agentCardStyle, borderColor: "#33333a" }}>
+      <div style={{ ...agentLabelStyle, color: "#ededf0" }}>{g.title}</div>
+      <div style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, lineHeight: 1.6, marginTop: 8 }}>{g.line}</div>
+      {g.offerAssisted && (
+        <button onClick={onAssisted} style={{ marginTop: 12, background: "transparent", border: "1px solid #ededf0", borderRadius: 4, color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 12, padding: "8px 16px", cursor: "pointer" }}>
+          Switch to ASSISTED
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function PaperCostLine({ address, refreshKey }: { address?: string | null; refreshKey?: string | number }) {
+  const { c } = usePaperCosts(address, refreshKey);
   if (!c || !c.trades) return null;
   const mono = { fontFamily: "var(--nx-font-mono)", fontSize: 11 } as const;
   const usd = (v: number) => fmtUsdExact(Math.abs(v)).slice(1);   // "$1.23", sign added below
