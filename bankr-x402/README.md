@@ -34,6 +34,19 @@ response (`grade`), and the listing no longer calls it "the edge". Plan: swap th
 basis reads after the Oct-15 re-validation. **Redeploy to make it live:** `bankr x402 deploy nexus-signals`
 (Bankr hosts the handler; pushing to GitHub does not update it).
 
+## CLEARED gate (2026-11-27, built in, inert until a read clears)
+`nexus-signals.ts` first asks lab-api `GET /signals/read/btc_lead_lag` (`workers/nexus-lab-api/routes-readsignals.mjs`,
+rules `app/lib/soldRead.mjs`). That route answers 403 `not_cleared` (no signals) until the read is CLEARED on /proof
+(served Tradeable/Paper, not failing, no promotion lock, a recorded 30-trade paper PASS that beat random entries,
+pipeline-if-then.md "Only a CLEARED read may be marketed or promoted: … the paid feed"). The handler serves btc_lead_lag
+only on a cleared 200 with its grade; anything else serves today's funding-fade feed with its NOISE grade, as before.
+Every response names its `read` and carries `grade`. Nothing switches by hand: the gate is re-read on every call, and
+it switches back by itself if the read loses CLEARED.
+
+Deploy: after the PR merges, `bankr x402 deploy nexus-signals` from the deployer wallet (a separate step). Check: pay
+one call and see `read: "funding_fade"` with the NOISE grade (btc_lead_lag hasn't cleared). The basis swap below stays
+staged; don't run it.
+
 ## Oct-15 basis swap (STAGED — do not run before the verdict)
 `nexus-signals-basis.ts` is the basis × CVD version of `nexus-signals`, pre-built. It is **not** in
 `bankr.x402.json`, so nothing ships it today, and its data route (`GET /signals/basis`) answers 404

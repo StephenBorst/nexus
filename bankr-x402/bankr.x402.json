@@ -14,7 +14,7 @@
       "tokenAddress": "0x3D958634ab725B627919EF8F2Ed59227309fDba3"
     },
     "nexus-signals": {
-      "description": "Nexus signals — funding-extreme + OI-divergence reads per symbol, same rules as the Nexus agent. Graded in public on /proof; each response carries the live grade. Not a proven edge.",
+      "description": "Nexus signals — per-market reads graded in public on /proof. Serves a registered read only once it has CLEARED there (none has yet); until then the funding-extreme + OI-divergence read, which grades NOISE. Each response names its read and carries the live grade. Not a proven edge.",
       "price": "50000",
       "currency": "NEXUS",
       "tokenAddress": "0x3D958634ab725B627919EF8F2Ed59227309fDba3"

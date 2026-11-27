@@ -135,6 +135,7 @@ import { handlePaperRun } from "./routes-paperrun.mjs";
 import { gapFor } from "./routes-gap.mjs";
 import { parityEvents } from "./parityEvents.mjs";
 import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
+import { handleReadSignals } from "./routes-readsignals.mjs";
 import { runWeekly, handleWeekly, WEEKLY_RUN_MINUTE } from "./weeklyScorecard.mjs";
 import { handleRecordShare } from "./routes-recordshare.mjs";
 import { handleAlertShare } from "./routes-alertshare.mjs";
@@ -6138,6 +6139,12 @@ document.getElementById("btn").addEventListener("click",go);
     }
     // Ops/verify: what WOULD the Telegram push send right now, and why did/didn't it fire?
     // Dry-run by default (no send, no throttle write); `?send=1` actually delivers.
+    // ── GET /signals/read/:axis — a registered read for the paid x402 feed, refused (403 not_cleared) until it is
+    // CLEARED (routes-readsignals.mjs, rules app/lib/soldRead.mjs; borst 2026-11-27).
+    {
+      const soldRes = await handleReadSignals(parts, request, env, { scorecardKey: axisbtCacheKey(20) });
+      if (soldRes) return soldRes;
+    }
     // ── GET /signals/basis — STAGED for Oct-15 (404 until BASIS_SIGNALS_LIVE="true") ──
     // The graded basis-stack read per market, via the brain's own deriveSignal — the future
     // source of the paid nexus-signals feed. See basisSignals.mjs.

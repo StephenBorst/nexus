@@ -24,7 +24,7 @@ product is what sits on top:
   Sweep the receivers → the Safe on a cadence.
 - **x402 data (Bankr-hosted, priced in $NEXUS on Base):** `nexus-signals` (50k/req, `/signals`; the read grades NOISE,
   so every response carries the live `grade` from `/intel/axis-backtest` and the listing says "not a proven edge";
-  swap only to a read that clears), `nexus-callers` (10k, `/theses/leaderboard`), `nexus-agents-live` (10k,
+  swap only to a read that clears; the CLEARED gate is built in, borst 2026-11-27: the handler serves btc_lead_lag only on a cleared 200 from `GET /signals/read/:axis` (`routes-readsignals.mjs`, rules `app/lib/soldRead.mjs`, 403 `not_cleared` with no signals until then), else funding-fade + NOISE as today), `nexus-callers` (10k, `/theses/leaderboard`), `nexus-agents-live` (10k,
   `/agents/live`). Handler + config in `bankr-x402/`; changes go live only via `bankr x402 deploy <name>`. Payout = the
   DEPLOYER wallet (Bankr wallet `0xd9f7…b449`, 95% after Bankr's 5%) → sweep it to the Safe (a multisig can't be the
   deployer). Token-demand framing is internal analysis only, never public copy.
