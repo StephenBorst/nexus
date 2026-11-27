@@ -15,9 +15,11 @@ const slim = (j: Record<string, unknown>): Judgment => {
   return { recorded: j.recorded === true, verdict: j.verdict as string | undefined, random: rc?.verdict, randomPct: rc?.pctBeaten ?? null, randomUsable: rc?.usable ?? null, target: j.target as number | undefined };
 };
 
-export function usePaperJudgments(reads: ReadRow[] | null | undefined): Record<string, Judgment> {
+// `anyStage`: every read with a paper run, whatever its served stage (the graveyard lists a recorded FAIL on a read
+// that has since fallen back). The badge callers keep the default.
+export function usePaperJudgments(reads: ReadRow[] | null | undefined, { anyStage = false }: { anyStage?: boolean } = {}): Record<string, Judgment> {
   const [judgments, setJudgments] = useState<Record<string, Judgment>>({});
-  const key = (reads || []).filter((r) => (r.stage === "PAPER" || r.stage === "TRADEABLE") && (r.paperWallet || r.axis in HOUSE_PAPER_IDS)).map((r) => r.axis).sort().join(",");
+  const key = (reads || []).filter((r) => (anyStage || r.stage === "PAPER" || r.stage === "TRADEABLE") && (r.paperWallet || r.axis in HOUSE_PAPER_IDS)).map((r) => r.axis).sort().join(",");
   useEffect(() => {
     if (!key) { setJudgments({}); return; }
     let live = true;

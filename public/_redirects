@@ -17,6 +17,8 @@
 /proof/                   / 200
 /proof/paper/:axis        / 200
 /proof/paper/:axis/       / 200
+/proof/graveyard          / 200
+/proof/graveyard/         / 200
 /ops/revenue              / 200
 /ops/revenue/             / 200
 /ops/preflight            / 200
