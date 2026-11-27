@@ -8,7 +8,7 @@
 //
 // A send that fails leaves the state as it was, so the same alert goes out on the next run, never lost or doubled.
 import { readsWithClaims, PAPER_SETUPS } from "../../app/lib/paperClaim.mjs";
-import { PAPER_JUDGMENTS } from "../../app/lib/paperJudge.mjs";
+import { judgmentsFor } from "../../app/lib/paperJudge.mjs";
 import { paperRun } from "../../app/lib/paperRun.mjs";
 import { paperParity, axisForConfig, parityWindowStart } from "../../app/lib/paperParity.mjs";
 import { quietLine } from "../../app/lib/quietLine.mjs";
@@ -58,7 +58,7 @@ export async function gatherFacts(env, { scorecardKey, nowMs = Date.now(), event
   const reads = readsWithClaims(claims).map((r) => ({
     axis: r.axis, stage: stages?.[r.axis] ?? null, wallet: r.paperWallet || null, hasSetup: !!PAPER_SETUPS[r.axis],
     // A rules page is owed only for a wallet the pipeline registered (a claim) that the code doesn't judge yet.
-    signed: r.paperWallet && claims[r.axis] && !PAPER_JUDGMENTS[r.axis] ? !!sigs[r.axis] : null,
+    signed: r.paperWallet && claims[r.axis] && !judgmentsFor(claims)[r.axis] ? !!sigs[r.axis] : null,
   }));
 
   const paper = [];

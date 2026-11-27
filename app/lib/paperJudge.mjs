@@ -74,15 +74,27 @@ const HOUSE_JUDGMENTS = Object.freeze(Object.fromEntries(Object.entries(HOUSE_PA
 
 // Pages the pipeline drafted and the owner signed with the owner wallet (paperJudgePage.mjs), written into git by the
 // watcher (pipelineRecords.mjs): the same rules with the same constants. An entry written above always wins.
-export const PAPER_JUDGMENTS = Object.freeze({
-  ...Object.fromEntries(Object.entries(JUDGMENT_RECORDS).map(([axis, e]) => [axis, Object.freeze({
-    doc: e.doc, signedAt: e.signedAt, wallet: e.wallet, trades: PAPER_MIN_TRADES, feeBps: e.feeBps,
-    tapeTolBps: TAPE_TOL_BPS, parityEarlyMs: PARITY_EARLY_MS, paritySettleMs: PARITY_SETTLE_MS, passAboveBps: 0,
-    signature: e.signature === "signed" ? "signed" : "pending",
-  })])),
-  ...HOUSE_JUDGMENTS,
-  ...CODED_JUDGMENTS,
-});
+const RECORDED_JUDGMENTS = Object.freeze(Object.fromEntries(Object.entries(JUDGMENT_RECORDS).map(([axis, e]) => [axis, Object.freeze({
+  doc: e.doc, signedAt: e.signedAt, wallet: e.wallet, trades: PAPER_MIN_TRADES, feeBps: e.feeBps,
+  tapeTolBps: TAPE_TOL_BPS, parityEarlyMs: PARITY_EARLY_MS, paritySettleMs: PARITY_SETTLE_MS, passAboveBps: 0,
+  signature: e.signature === "signed" ? "signed" : "pending",
+})])));
+
+/**
+ * Which run is judged for each read, given the stored paper-wallet claims (paperClaim.mjs, LAB_STORE; {} = none).
+ * The judgment follows the read's OWN wallet (borst 2026-11-27, option (a)): a read with a paper wallet (in code, or a
+ * stored claim) never has its house run judged. Its own entry (a signed page) judges that wallet; until the page is
+ * signed the read has no judgment entry at all, so the /ops box drafts one. The house run keeps trading as data.
+ * Reads with no own wallet keep their house run's entry (paper-judgment-house-runs.md, signed 2026-11-20).
+ */
+export function judgmentsFor(claims = {}) {
+  const ownWallet = (axis) => registrationFor(axis)?.paperWallet || claims?.[axis]?.wallet || null;
+  const house = Object.fromEntries(Object.entries(HOUSE_JUDGMENTS).filter(([axis]) => !ownWallet(axis)));
+  return Object.freeze({ ...house, ...RECORDED_JUDGMENTS, ...CODED_JUDGMENTS });
+}
+
+/** The judgments as the code alone knows them (wallets in code; stored claims are added by `judgmentsFor`). */
+export const PAPER_JUDGMENTS = judgmentsFor({});
 
 export const FINAL_VERDICTS = Object.freeze(["PASS", "FAIL", "RESET"]);
 
@@ -108,8 +120,8 @@ export function runRows(state) {
  * slack. `parityUntil` is what the caller passes paperParity as `until` (it judges up to until − settle, so the
  * window is settled by then). `readableAt` = the later of that and the 30th close. null until 30 trades closed.
  */
-export function judgeWindow(axis, state) {
-  const rule = PAPER_JUDGMENTS[axis];
+export function judgeWindow(axis, state, { judgments = PAPER_JUDGMENTS } = {}) {
+  const rule = judgments[axis];
   if (!rule || !state) return null;
   const rows = runRows(state);
   if (rows.length < rule.trades) return null;
@@ -168,11 +180,11 @@ const UNCHECKED = new Set(["NO_DATA", "NO_TRADES"]);
 /**
  * @param {string} axis
  * @param {{ state: object|null, tape?: {checks?: object}|null, oiHistBySymbol?: Record<string, any[]>,
- *           parity?: {verdict:string}|null, nowMs?: number }} o
+ *           parity?: {verdict:string}|null, nowMs?: number, judgments?: object }} o
  *   parity = paperParity({ since, until: parityUntil }) from judgeWindow(axis, state); null = not read yet.
  */
-export function judgePaperRun(axis, { state, tape = null, oiHistBySymbol = {}, parity = null, nowMs = Date.now() }) {
-  const rule = PAPER_JUDGMENTS[axis];
+export function judgePaperRun(axis, { state, tape = null, oiHistBySymbol = {}, parity = null, nowMs = Date.now(), judgments = PAPER_JUDGMENTS }) {
+  const rule = judgments[axis];
   if (!rule) return null;
   const reg = registrationFor(axis);
   const base = { axis, wallet: rule.wallet, doc: rule.doc, signedAt: rule.signedAt, target: rule.trades,

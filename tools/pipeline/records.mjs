@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { recoverMessageAddress } from "viem";
 import { PAPER_WALLET_RECORDS, JUDGMENT_RECORDS } from "../../app/lib/pipelineRecords.mjs";
-import { PAPER_JUDGMENTS } from "../../app/lib/paperJudge.mjs";
+import { judgmentsFor } from "../../app/lib/paperJudge.mjs";
 import { nextRecords, nextPlanRecords, recordsModuleSource, recordsReport } from "../../app/lib/pipelineRecordsWrite.mjs";
 import { LIVE_PLAN_TEXT } from "../../app/lib/livePlanText.mjs";
 import { judgmentDocPath } from "../../app/lib/paperJudgePage.mjs";
@@ -37,8 +37,10 @@ let claims;
 try { claims = curlJson(`${API}/pipeline/paper-wallets`).claims; } catch (e) { fail(`paper wallets unreadable: ${String(e?.message || e).slice(0, 160)}`); }
 if (!Array.isArray(claims)) fail("paper wallets reply has no claims list");
 
-// The hand-written judgments (the merged PAPER_JUDGMENTS minus what the pipeline recorded).
-const coded = Object.fromEntries(Object.entries(PAPER_JUDGMENTS).filter(([a]) => !JUDGMENT_RECORDS[a]));
+// The hand-written judgments (the merged judgments minus what the pipeline recorded). A claimed wallet replaces its
+// read's house run (judgmentsFor), so a claim on a read that has one still gets its signed page recorded.
+const claimMap = Object.fromEntries(claims.filter((c) => c?.axis && c?.wallet).map((c) => [c.axis, c]));
+const coded = Object.fromEntries(Object.entries(judgmentsFor(claimMap)).filter(([a]) => !JUDGMENT_RECORDS[a]));
 const drafts = {};
 const docs = {};
 try {

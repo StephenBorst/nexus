@@ -120,3 +120,25 @@ test("the route: 404 for a read with no judgment, 405 for a write, null for anot
   const body = await (await handlePaperJudge(["signals", "paper-judge", "level_reclaim"], new Request("https://x/"), env)).json();
   assert.deepEqual([body.verdict, body.count, body.recorded], ["ACCRUING", 6, false]);
 });
+
+// borst 2026-11-27, option (a): a claimed paper wallet replaces its read's house run in the judgment.
+test("a read with a claimed wallet: its house run is not judged, and the route has no judgment for it yet", async () => {
+  const { PAPER_CLAIMS_KEY } = await import("../../app/lib/paperClaim.mjs");
+  const claims = { btc_lead_lag: { axis: "btc_lead_lag", wallet: "0x" + "7".repeat(40), at: "2026-11-28T00:00:00Z", startedAt: "2026-11-27T23:00:00Z" } };
+  const env = { NEXUS_AGENT: kv({}), LAB_STORE: kv({ [PAPER_CLAIMS_KEY]: claims }) };
+  const r = await runPaperJudge(env, { eventsFor: async () => [] });
+  assert.ok(!("btc_lead_lag" in r), "the house run is not judged once a wallet is claimed");
+  assert.ok("rsi_reset_deep" in r, "other house runs still are");
+  assert.ok(!env.NEXUS_AGENT.gets.includes("agent:state:0x97371cec6dc63aa0e9c0747110e5e3042b6217a5"));
+  const res = await handlePaperJudge(["signals", "paper-judge", "btc_lead_lag"], new Request("https://og.test/x"), env);
+  assert.equal(res.status, 404);
+  // without the claim it is the house run's judgment, as before
+  const env2 = { NEXUS_AGENT: kv({}), LAB_STORE: kv({}) };
+  const res2 = await handlePaperJudge(["signals", "paper-judge", "btc_lead_lag"], new Request("https://og.test/x"), env2);
+  assert.equal((await res2.json()).wallet, "0x97371cec6dc63aa0e9c0747110e5e3042b6217a5");
+});
+
+test("claims that can't be read: the hourly job records nothing (never a house run judged in a claimed wallet's place)", async () => {
+  const env = { NEXUS_AGENT: kv({}), LAB_STORE: { ...kv({}), async get() { throw new Error("kv down"); } } };
+  await assert.rejects(runPaperJudge(env, { eventsFor: async () => [] }), /claims_unread/);
+});

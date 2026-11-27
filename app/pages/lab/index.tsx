@@ -13,6 +13,7 @@ import { useIsMobile } from "./useIsMobile";
 import { deployToAgent } from "@/utils/agentPrefill";
 import { LEVEL_RECLAIM_DEPLOY, LEVEL_RECLAIM_PAPER_CONFIG } from "@/lib/levelReclaim.mjs";
 import { OI_DIV_4H_DEPLOY, OI_DIV_4H_PAPER_CONFIG } from "@/lib/oiDivReversal.mjs";
+import { BTC_LEAD_LAG_DEPLOY, BTC_LEAD_LAG_PAPER_CONFIG } from "@/lib/btcLeadLagPaper.mjs";
 // Extracted Lab views
 import { AnalyticsView } from "./AnalyticsView";
 import { TradeLogAllView, TradeLogView } from "./TradeLog";
@@ -88,6 +89,15 @@ export default function TheLabPage() {
     deployToAgent({ ...OI_DIV_4H_PAPER_CONFIG, symbols: [...OI_DIV_4H_PAPER_CONFIG.symbols], takeProfits: [] },
       "the oi_div_reversal_4h paper setup (as registered)",
       "oi_div_reversal_4h, exactly as graded: the registered rule, the graded exit (1.2× H4 ATR stop, 1.5× target, 168h), the 11 main-card coins, PAPER only. Use a FRESH wallet so its record starts at zero. Parity must read CLEAN.",
+      navigate, { replaceFilters: true });
+  }, [searchParams, navigate]);
+  // btc_lead_lag's paper wallet setup (served TRADEABLE 2026-11-26, borst 2026-11-27): the same kind of hidden link, the
+  // house run's config exactly (app/lib/btcLeadLagPaper.mjs). PAPER only: the brain refuses REGISTERED_READ off paper.
+  useEffect(() => {
+    if (searchParams.get("deploy") !== BTC_LEAD_LAG_DEPLOY) return;
+    deployToAgent({ ...BTC_LEAD_LAG_PAPER_CONFIG, symbols: [...BTC_LEAD_LAG_PAPER_CONFIG.symbols], takeProfits: [] },
+      "the btc_lead_lag paper setup (as registered)",
+      "btc_lead_lag, exactly as graded: the registered rule, the graded exit (1.2× H4 ATR stop, 1.5× target, 168h), the 11 main-card coins, PAPER only. Use a FRESH wallet so its record starts at zero. Parity must read CLEAN.",
       navigate, { replaceFilters: true });
   }, [searchParams, navigate]);
   // Programmatic tab switches (deployToAgent / deployDirectiveFromThesis) fire this

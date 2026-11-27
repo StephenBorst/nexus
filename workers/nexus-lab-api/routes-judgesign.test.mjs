@@ -131,3 +131,16 @@ test("refused: a different page, a non-owner, a forged signer, an old signature,
   assert.equal((await (await sign(late, await signedBody(owner, sha256))).json()).error, "too_late", "signing after the result is not signing rules");
   assert.equal(env.LAB_STORE.m.has(JUDGMENT_SIGS_KEY), false, "nothing written on a refusal");
 });
+
+test("btc_lead_lag (house run + a claimed wallet): the claimed wallet gets its own page to sign", async () => {
+  const claim = { axis: "btc_lead_lag", wallet: PW, at: "2026-11-28T00:00:00Z", startedAt: "2026-11-27T23:00:00Z" };
+  const env = envWith({ claims: { btc_lead_lag: claim } });
+  const res = await get(env, "btc_lead_lag", { lock: deps.lock, fetchImpl: deps.fetchImpl });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.match(body.page, /BTC_LEAD_LAG_PAPER_CONFIG/);
+  assert.equal(body.sha256, sha(pageAboveResults(body.page)));
+  // no claim: the house run's signed page covers it, so nothing is drafted
+  const res2 = await get(envWith({ claims: {} }), "btc_lead_lag", { lock: deps.lock, fetchImpl: deps.fetchImpl });
+  assert.equal(res2.status, 404);
+});

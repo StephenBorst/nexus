@@ -19,6 +19,7 @@
 import { REGISTERED_READS, registrationFor } from "./readPipeline.mjs";
 import { LEVEL_RECLAIM_PAPER_CONFIG, LEVEL_RECLAIM_DEPLOY } from "./levelReclaim.mjs";
 import { OI_DIV_4H_PAPER_CONFIG, OI_DIV_4H_DEPLOY } from "./oiDivReversal.mjs";
+import { BTC_LEAD_LAG_PAPER_CONFIG, BTC_LEAD_LAG_DEPLOY } from "./btcLeadLagPaper.mjs";
 
 export const PAPER_CLAIMS_KEY = "pipeline:paperwallets:v1"; // LAB_STORE: { [axis]: claim record }
 export const CLAIM_SIG_MAX_AGE_MS = 5 * 60 * 1000;
@@ -29,6 +30,8 @@ export const CLAIM_SIG_SKEW_MS = 60 * 1000;
 export const PAPER_SETUPS = Object.freeze({
   level_reclaim: Object.freeze({ config: LEVEL_RECLAIM_PAPER_CONFIG, configName: "LEVEL_RECLAIM_PAPER_CONFIG", deploy: LEVEL_RECLAIM_DEPLOY }),
   oi_div_reversal_4h: Object.freeze({ config: OI_DIV_4H_PAPER_CONFIG, configName: "OI_DIV_4H_PAPER_CONFIG", deploy: OI_DIV_4H_DEPLOY }),
+  // borst 2026-11-27: the house config exactly (btcLeadLagPaper.mjs); the brain trades it as REGISTERED_READ.
+  btc_lead_lag: Object.freeze({ config: BTC_LEAD_LAG_PAPER_CONFIG, configName: "BTC_LEAD_LAG_PAPER_CONFIG", deploy: BTC_LEAD_LAG_DEPLOY }),
 });
 
 // Filters and sizing the presets leave unset: on a paper wallet they must stay off, or the record isn't the read's.
