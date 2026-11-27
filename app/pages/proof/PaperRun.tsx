@@ -24,14 +24,14 @@ type Trade = {
   entry: number | null; exit: number | null; reason: string | null; outcome: string; movePct: number | null;
   r: number | null; rBasis: "fill" | "contract" | null;
   maeR?: number; mfeR?: number;
-  tape?: { entry: string; exit: string; trigger?: string };
+  tape?: { entry: string; exit: string; trigger?: string; entrySource?: string; exitSource?: string };
 };
 type TapeSummary = { fills: number; judged: number; onTape: number; near: number; off: number; noTrades: number; noData: number; averaged: number; pending: number; triggers?: number; markOnly?: number; line: string | null };
 type Run = {
   ok?: boolean; error?: string; axis: string; wallet: string; house?: boolean; target: number; unread?: boolean; count: number;
   remaining: number; complete: boolean; startedAt: string | null; windowed: boolean;
   tally: { win: number; loss: number; time: number; other: number };
-  open: { n?: number; coin: string; side: string; openedAt: string | null; entry?: number | null; tape?: { entry: string } } | null; trades: Trade[];
+  open: { n?: number; coin: string; side: string; openedAt: string | null; entry?: number | null; tape?: { entry: string; entrySource?: string } } | null; trades: Trade[];
   tape?: TapeSummary;
   quiet?: { text: string; ageMin: number; stale: boolean; checkedAt: number } | null;
 };
@@ -48,6 +48,13 @@ const TAPE_MARK: Record<string, { mark: string; word: string }> = {
   PENDING: { mark: "…", word: "not checked yet (within the hour)" },
 };
 const tapeMark = (v: string) => TAPE_MARK[v] || TAPE_MARK.PENDING;
+// One fill's mark; with a source it links to the exact public Orderly request the check read (an audit link).
+function TapeCell({ v, source, label }: { v: string; source?: string; label: string }) {
+  const style = { color: v === "OFF" ? SIGNAL.watch : BRIGHT };
+  return source
+    ? <a href={source} target="_blank" rel="noopener noreferrer" aria-label={`${label}: ${tapeMark(v).word}. Open the Orderly bar it was checked against.`} style={{ ...style, textDecoration: "underline", textDecorationColor: MUTED, textUnderlineOffset: 3 }}>{tapeMark(v).mark}</a>
+    : <span style={style}>{tapeMark(v).mark}</span>;
+}
 
 const fmtR = (r: number | null) => (r == null ? "unread" : `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(2)}R`);
 const fmtDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) : "—");
@@ -203,7 +210,7 @@ export default function PaperRunPage() {
                             title={run.open.tape ? `Entry: ${tapeMark(run.open.tape.entry).word}.` : undefined}>
                           {run.open.tape ? (
                             <>
-                              <span style={{ color: run.open.tape.entry === "OFF" ? SIGNAL.watch : BRIGHT }}>{tapeMark(run.open.tape.entry).mark}</span>
+                              <TapeCell v={run.open.tape.entry} source={run.open.tape.entrySource} label="Entry" />
                               <span style={{ color: MUTED }}> → </span>
                               <span style={{ color: FOG }}>—</span>
                             </>
@@ -226,9 +233,9 @@ export default function PaperRunPage() {
                             title={t.tape ? `Entry: ${tapeMark(t.tape.entry).word}. Exit: ${tapeMark(t.tape.exit).word}.${t.tape.trigger === "MARK_ONLY" ? " The exit fired on the mark: no trade reached its level." : t.tape.trigger === "TRADED" ? " The tape traded at the exit’s level." : ""}` : undefined}>
                           {t.tape ? (
                             <>
-                              <span style={{ color: t.tape.entry === "OFF" ? SIGNAL.watch : BRIGHT }}>{tapeMark(t.tape.entry).mark}</span>
+                              <TapeCell v={t.tape.entry} source={t.tape.entrySource} label="Entry" />
                               <span style={{ color: MUTED }}> → </span>
-                              <span style={{ color: t.tape.exit === "OFF" ? SIGNAL.watch : BRIGHT }}>{tapeMark(t.tape.exit).mark}</span>
+                              <TapeCell v={t.tape.exit} source={t.tape.exitSource} label="Exit" />
                               {t.tape.trigger === "MARK_ONLY" && <span style={{ color: SIGNAL.watch }}> mark only</span>}
                             </>
                           ) : <span style={{ color: FOG }}>—</span>}
@@ -263,10 +270,26 @@ export default function PaperRunPage() {
               <p style={{ margin: "10px 0 0", color: FOG, fontSize: 12.5, lineHeight: 1.6, maxWidth: 680 }}>
                 <span style={{ color: BRIGHT }}>Tape check.</span>{" "}
                 {run.tape.line ? `${run.tape.line}.` : "No fill checked yet: each one is checked within the hour of its minute closing."}{" "}
-                Paper fills are prices our own agent wrote down. Each one is checked against the public 1-minute bar for that minute, and the bar is kept.{" "}
+                Paper fills are prices our own agent wrote down. Each one is checked against the public 1-minute bar for that minute, and the bar is kept. Tap a mark to open the exact Orderly request it was checked against.{" "}
                 <a href={`${AGENT_API}/agent/${run.wallet}/tape`} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>The checks and their sources (JSON)</a>
               </p>
             )}
+
+            {/* Don't trust: verify. One standalone script re-checks this run with public reads only (public/verify/paper-run.mjs). */}
+            <div style={{ marginTop: 18, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", background: C.surface, maxWidth: 720 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: BRIGHT }}>Check it yourself</div>
+              <p style={{ margin: "6px 0 10px", color: FOG, fontSize: 13, lineHeight: 1.6 }}>
+                {run.house ? "This run’s wallet is a hash of the read’s name, so no private key for it exists: nobody, us included, can sign for it. " : ""}
+                One script, no dependencies, public reads only. It re-fetches every fill’s bar from Orderly itself, re-judges it, and re-derives each trade’s R from its entry, exit and stop.{run.house ? " It checks the wallet hash too." : ""} Read it before you run it.
+              </p>
+              <pre style={{ margin: 0, padding: "10px 12px", background: C.inset, border: `1px solid ${C.border}`, borderRadius: 6, fontFamily: MONO, fontSize: 12, lineHeight: 1.6, color: BRIGHT, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+                {`curl -sO https://trade.nexustradinglabs.com/verify/paper-run.mjs\nnode paper-run.mjs ${axis}`}
+              </pre>
+              <p style={{ margin: "8px 0 0", color: MUTED, fontSize: 12, lineHeight: 1.5 }}>
+                Node 18 or newer. Orderly keeps 1-minute bars a few days; for older fills the script re-checks the bar each check kept and says so.{" "}
+                <a href="https://github.com/StephenBorst/nexus/blob/main/public/verify/paper-run.mjs" target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>The source</a>
+              </p>
+            </div>
           </section>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 22, marginTop: 28, fontSize: 13 }}>

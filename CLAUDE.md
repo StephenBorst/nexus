@@ -230,6 +230,12 @@ product is what sits on top:
   `EXPERIMENTAL_FILTERS_OFF`, and refuses over a live position. Safe by construction: the brain refuses REGISTERED_READ
   off paper, lab-api 409s the graded exit live. A user's run moves no stage and is never a read's `paperWallet`. Brain
   cost is per READ (shared), not per wallet; a user adding coins beyond the 11 adds series reads.
+- **Execution gap** (borst 2026-11-26, the moat list; rules `app/lib/executionGap.mjs`, route `GET /agent/:a/gap`
+  `routes-gap.mjs`, card `ExecutionGapCard.tsx` on the Agent tab): a PAPER agent on a registered read vs that read's own run
+  (paper wallet, claim, else house id, as `paperRun` resolves it), from the later record start. Pairs = same coin + side
+  opened within `PAIR_WINDOW_MIN` 10 min, nearest first; per pair the lag, entry / exit in bps (+ = yours worse) and both
+  R's side by side (never summed); missed / extra; config fields that change entries named (sizing apart). Both paper at
+  the mark: timing, caps and busy, "not slippage". Display only.
 - **Paper record card** (Agent tab, borst 2026-11-27, rules `app/lib/paperGraduation.mjs`, `PaperRecordCard` in
   AgentPanels.tsx, tested): replaced READY TO GO LIVE?, which offered "Go autonomous" after 5 trades of fee-free paper
   P&L. Under 30 lifetime trades (`paper_agg`) = "n OF 30", nothing to switch; 30+ = judged on the after-costs re-read
@@ -390,6 +396,12 @@ product is what sits on top:
   market exits at the mark (no wick fills); this only proves the price was real. **Trigger check:** an SL/TP row with
   its level (`sl_percent` / `tp_percent`, exec stamps both, record only, pinned) also gets TRADED or MARK_ONLY (the exit
   fired on the mark, no trade reached the level). A fill > 3 days old Orderly refused on 3 runs = NO_DATA + reason.
+  **Audit links + verify script** (borst 2026-11-26, the moat list): each tape mark on `/proof/paper/:axis` links the exact
+  public Orderly request its check read (`entrySource` / `exitSource` on `paperRun` rows, + `slPct` / `tpPct`).
+  `public/verify/paper-run.mjs` (served at `/verify/paper-run.mjs`, no deps, public reads only, fetches bars ONLY from
+  `api-evm.orderly.org/tv/history`) re-judges every fill on Orderly's own bars (else on the bar the check kept, named),
+  re-derives R, and checks a house wallet = its sha256 id. Its rule copies are pinned equal to paperTape / paperRun /
+  housePaper by `verifyPaperRun.test.mjs`: change a rule there = change the script too.
 - **30-trade paper judgment** (borst 2026-11-13, `docs/research/paper-judgment-level-reclaim.md`, signed; text above
   Results sha256-pinned): `app/lib/paperJudge.mjs` (`PAPER_JUDGMENTS`, `judgePaperRun`) judges the FIRST 30 closed trades
   from the record start: per trade net bps = move − 2.5 bps taker each side (frozen) − funding paid; mean (unrounded) > 0
