@@ -21,6 +21,7 @@ import { prepareSeal, claimLegacyOwners } from "./labWrite.mjs";
 import { readPublishMark } from "./publishMark.mjs";
 import { notifyFollowersOfCalls } from "./followAlerts.mjs";
 import { REGISTRY_KEY, readRegistry, bootstrapRegistry, isPublished } from "./callLock.mjs";
+import { listAllKeys } from "./kvList.mjs"; // every lab:* record, past KV's 1000-key page (2026-11-27)
 
 // 401 and nothing else happens. `error` tells the client which action to re-sign for.
 const unsigned = (request, error, v) =>
@@ -173,7 +174,7 @@ export async function handleLab(parts, request, env, { now = Date.now, readMark 
         }
       }
       if (newlyPublic.length) {
-        const listed = await env.LAB_STORE.list({ prefix: "lab:" });
+        const listed = { keys: await listAllKeys(env.LAB_STORE, "lab:") };
         for (const nt of newlyPublic.slice(0, 3)) {
           const sym = String(nt.symbol);
           const bareSym = sym.replace("PERP_", "").replace("_USDC", "");

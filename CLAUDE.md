@@ -174,6 +174,10 @@ product is what sits on top:
   (`nextPlanRecords`) appends the signed line under Sign-off once, after re-checking hash + signer. A plan is listed in
   `LIVE_PLANS`. Also refused unless the read is SERVED TRADEABLE / PAPER (`read_demoted`; unread board = 503) with no
   promotion lock (`promotion_locked`, Backwards moves under the watcher). **Signing ARMS NOTHING:** `GRADED_EXIT_LIVE_LIFT` stays empty (test-pinned); arming is borst's own PR.
+- **KV list() returns ≤ 1000 keys a page:** every `lab:*` reader in lab-api (grader passes, /feed, leaderboard, theses
+  boards, call dedupe, the Holders Room) goes through `workers/nexus-lab-api/kvList.mjs listAllKeys` (2026-11-27;
+  `kvList.test.mjs` fails on a single-page `list({ prefix: "lab:" })`). nexus-lab-alerts (manual deploy) still reads
+  one page.
 - KV: brain/exec/lab-api agent routes share `NEXUS_AGENT` = `c3c0582ec71c4d049d0795872f39f033`; lab data = `LAB_STORE`.
   Agent keys: `agent:users|config|key|state|signal|pending|kill:{addr}`.
 - Observability logs on in every wrangler.toml. "Agents down" is usually idle by design (`direction:NONE`): check the
