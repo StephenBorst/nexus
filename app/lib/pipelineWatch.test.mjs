@@ -409,3 +409,40 @@ test("the generated locks module is the snapshot's locks (run the watcher with -
     assert.ok(Number.isFinite(l.eventsAtDemotion) && l.cleanPasses >= 0 && l.cleanPasses <= 2, a);
   }
 });
+
+test("failing labels: dated from git on the first snapshot, from the watcher's own run after; cleared = a record-only change", async () => {
+  const { diffPipeline, stateFromScorecard, FAILING_SEEDS, FAILING_TRIGGERS, failingReadsModule, FAILING_MODULE_PATH } = await import("./pipelineWatch.mjs");
+  const sc = (asOf, rows) => ({ asOf, pipeline: { reads: rows.map(([axis, stage, failing]) => ({ axis, stage, next: null, numbers: { events: 120 }, ...(failing ? { failing } : {}) })) } });
+  const prevNoMap = { reads: { level_reclaim: { stage: "REGISTERED", next: null, events: 118 }, session_fade: { stage: "REGISTERED", next: null, events: 100 } } };
+  // first run with the map: a seeded read keeps its git date, a new one gets this run's asOf
+  let cur = stateFromScorecard(sc("2026-11-27T13:53:00.000Z", [["level_reclaim", "REGISTERED", ["main card: 129 events, mean R -0.1"]], ["session_fade", "REGISTERED", ["main card: 104 events, mean R -0.2, worse than random"]]]));
+  let { changes, next } = diffPipeline(prevNoMap, cur);
+  assert.equal(next.failing.level_reclaim.since, FAILING_SEEDS.level_reclaim);
+  assert.equal(next.failing.session_fade.since, "2026-11-27T13:53:00.000Z");
+  assert.deepEqual(next.failing.session_fade.reasons, ["main card: 104 events, mean R -0.2, worse than random"]);
+  const fc = changes.filter((c) => c.kind === "failing");
+  assert.deepEqual(fc.map((c) => [c.key, c.from, c.to]), [["failing:level_reclaim", "passing", "failing"], ["failing:session_fade", "passing", "failing"]]);
+  assert.equal(fc[0].trigger, FAILING_TRIGGERS.ON);
+  const page = readFileSync(new URL("../../docs/research/pipeline-if-then.md", import.meta.url), "utf8");
+  for (const t of Object.values(FAILING_TRIGGERS)) assert.ok(page.includes(t.section), "the trigger names a section on the page");
+  // next run: still failing = no change, date kept; one clears = a change; reasons refresh
+  cur = stateFromScorecard(sc("2026-11-28T13:53:00.000Z", [["level_reclaim", "REGISTERED", ["main card: 131 events, mean R -0.1"]], ["session_fade", "REGISTERED", null]]));
+  ({ changes, next } = diffPipeline({ ...prevNoMap, failing: next.failing }, cur));
+  assert.equal(next.failing.level_reclaim.since, FAILING_SEEDS.level_reclaim);
+  assert.deepEqual(next.failing.level_reclaim.reasons, ["main card: 131 events, mean R -0.1"]);
+  assert.equal("session_fade" in next.failing, false);
+  assert.deepEqual(changes.filter((c) => c.kind === "failing").map((c) => [c.key, c.to, c.trigger]), [["failing:session_fade", "passing", FAILING_TRIGGERS.OFF]]);
+  // a seed never re-applies once the map exists: failing again later = that run's date
+  cur = stateFromScorecard(sc("2026-12-01T13:53:00.000Z", [["level_reclaim", "REGISTERED", null], ["session_fade", "REGISTERED", null], ["session_momentum", "REGISTERED", ["x"]]]));
+  ({ next } = diffPipeline({ reads: { ...prevNoMap.reads, session_momentum: { stage: "REGISTERED" } }, failing: {} }, cur));
+  assert.equal(next.failing.session_momentum.since, "2026-12-01T13:53:00.000Z");
+  // not served = kept as recorded, no change
+  cur = stateFromScorecard(sc("2026-12-02T13:53:00.000Z", [["session_fade", "REGISTERED", null]]));
+  ({ changes, next } = diffPipeline({ reads: prevNoMap.reads, failing: { level_reclaim: { since: "x", reasons: [] } } }, cur));
+  assert.deepEqual(next.failing.level_reclaim, { since: "x", reasons: [] });
+  assert.equal(changes.filter((c) => c.kind === "failing").length, 0);
+  // the generated module matches the recorded snapshot
+  const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
+  const snap = JSON.parse(read("docs/research/pipeline-stages.json"));
+  assert.equal(read(FAILING_MODULE_PATH), failingReadsModule(snap.failing || {}));
+});

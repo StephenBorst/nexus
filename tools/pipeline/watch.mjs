@@ -6,7 +6,8 @@
 //
 //   --from   read a saved GET /intel/axis-backtest instead of fetching it (cloud sessions: Node's fetch
 //            ignores HTTPS_PROXY, so curl it to a file first, or run with NODE_USE_ENV_PROXY=1)
-//   --write  record the served stages + promotion locks in the snapshot, and the locks in app/lib/promotionLocks.mjs
+//   --write  record the served stages + promotion locks + failing labels in the snapshot, the locks in
+//            app/lib/promotionLocks.mjs and the failing labels in app/lib/failingReads.mjs
 //            (the watcher PR does this; nothing else does)
 //
 // Prints { ok, asOf, changed, changes, issues, pr:{title,body} }. Exit 0 whether or not anything
@@ -14,7 +15,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { stateFromScorecard, diffPipeline, changeReport, SNAPSHOT_PATH, LOCKS_MODULE_PATH, promotionLocksModule } from "../../app/lib/pipelineWatch.mjs";
+import { stateFromScorecard, diffPipeline, changeReport, SNAPSHOT_PATH, LOCKS_MODULE_PATH, promotionLocksModule, FAILING_MODULE_PATH, failingReadsModule } from "../../app/lib/pipelineWatch.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const URL_ = "https://og.nexustradinglabs.com/intel/axis-backtest";
@@ -41,5 +42,6 @@ const pr = changes.length ? changeReport(changes, issues, cur.asOf) : null;
 if (flag("--write") && changes.length) {
   writeFileSync(snapFile, JSON.stringify({ note: snap.note, recordedAt: new Date().toISOString(), ...next }, null, 2) + "\n");
   writeFileSync(resolve(ROOT, LOCKS_MODULE_PATH), promotionLocksModule(next.locks));
+  writeFileSync(resolve(ROOT, FAILING_MODULE_PATH), failingReadsModule(next.failing));
 }
 console.log(JSON.stringify({ ok: true, asOf: cur.asOf, changed: changes.length > 0, changes, issues, pr }, null, 2));

@@ -819,7 +819,7 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   request). The daily digest prints the watchdog's line (`watchdogLine`: reading / blind + last read, calls indexed late in 7 days).
 - **Reads:** `GET /theses/leaderboard` (≥5 graded, net-positive R; an empty board is correct when nobody qualifies:
   check `/theses/process/:wallet` before debugging), `/theses/status/:wallet`, `/verify/:wallet/:id` (the grader
-  re-run), `/theses/ledger` (+ chain, anchored). Fill/TP1 alerts go out from the pass that stamps them (hourly, or the minute grader).
+  re-run), `/theses/ledger` (+ chain; on-chain anchoring off). Fill/TP1 alerts go out from the pass that stamps them (hourly, or the minute grader).
 - **Trader profile** (`/feed/trader/:wallet`, rules `app/lib/profileRecord.mjs`, 2026-11-15): calls = the wallet's own
   published rows from /feed (`profileCalls`: no agent rows, which carry "Nexus Agent", no resolution rows); the WIN RATE /
   AVG R tiles read the grader's record (`/theses/process`, one shared request) like the share card and rank
@@ -948,8 +948,10 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   close) exec records the exchange fill vs the mark it decided on, bps signed so + = paid worse, in `state.live_slip`
   (last 100; only `source:"exchange"` fills, a mark fallback is unknown, never 0). `GET /agent/:a/slippage` + the
   Lab's LIVE EXECUTION line. Record only, nothing trades on it; paper has none by construction.
-- `GET /agents/ledger` + chain, anchored on Arbitrum by `NexusLedgerAnchor` `0x57a698df84a44F3dA3dac3E08CA455a55A4eff84`
-  (dedicated signer, `ANCHOR_PRIVATE_KEY`). The call-ledger hash has a fixed field list: changing it breaks the chain.
+- `GET /agents/ledger` + chain (hash-chained in lab-api). **On-chain anchoring is OFF** (`ONCHAIN_ANCHOR_LIVE = "false"` in
+  nexus-ledger-anchor + lab-api wrangler.toml; borst 2026-11-26 "keep it off, $0"): `NexusLedgerAnchor`
+  `0x57a698df84a44F3dA3dac3E08CA455a55A4eff84` (dedicated signer, `ANCHOR_PRIVATE_KEY`) is deployed but posts nothing;
+  never say "anchored on Arbitrum" in copy. The call-ledger hash has a fixed field list: changing it breaks the chain.
 
 ## Engagement surfaces
 - `/agents/live` (uPnL from public marks; humans opt in via signed `POST /live/publish`, ~6-min TTL), Desks (score =

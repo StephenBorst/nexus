@@ -64,6 +64,7 @@ const ArenaLayout = lazy(() => import('./pages/arena/Layout'));
 const ProofPage = lazy(() => import('./pages/proof'));
 const ProofLayout = lazy(() => import('./pages/proof/Layout'));
 const PaperRunPage = lazy(() => import('./pages/proof/PaperRun'));
+const GraveyardPage = lazy(() => import('./pages/proof/Graveyard'));
 const RevenuePage = lazy(() => import('./pages/ops/revenue'));
 const PreflightPage = lazy(() => import('./pages/ops/preflight'));
 const OpsLayout = lazy(() => import('./pages/ops/Layout'));
@@ -169,6 +170,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <ProofPage /> },
           { path: 'paper/:axis', element: <PaperRunPage /> },
+          { path: 'graveyard', element: <GraveyardPage /> },
         ],
       },
 

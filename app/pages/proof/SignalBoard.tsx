@@ -8,7 +8,7 @@
 // and the new-data share it is ordered by; its grade on old data opens on tap, labelled as such.
 // The tide and the method moved to "How we grade" (HowWeGrade.tsx).
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { AXIS_PRESET, AXIS_PAUSED, presetById } from "@/config/strategyPresets";
 import { deployToAgent } from "@/utils/agentPrefill";
@@ -560,7 +560,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
       <p style={{ margin: "6px 0 10px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: MUTED }}>
         Cleared first, then leads, then reads still testing. Inside each group: the furthest along, then the share of random entries beaten on new data{since ? ` (counting since ${since})` : ""}. Tap a read for its grade on old data.
       </p>
-      <p style={{ margin: "0 0 10px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: FOG }}>{NO_RETIRE_LINE}</p>
+      <p style={{ margin: "0 0 10px", fontFamily: UI, fontSize: 13, lineHeight: 1.5, color: FOG }}>{NO_RETIRE_LINE} <Link to="/proof/graveyard" style={{ color: FOG }}>The graveyard: every read that failed, fell back or was dropped →</Link></p>
 
       {scorecard === null ? status("Loading…") : scorecard.failed ? (
         // A failed read is never shown as an empty board.
