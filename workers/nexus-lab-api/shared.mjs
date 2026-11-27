@@ -106,17 +106,8 @@ export function checkLabAuth(address, auth, now = Date.now()) {
   return verifyLabAuth({ address, auth, now, recoverEvm: recoverEthAddress, verifySol: verifySolSignature });
 }
 
-/**
- * Canonical Holders-Room challenge — client and server MUST build this identically or
- * ecrecover yields a different address and the gate silently denies everyone. Lives
- * here (not in a route module) because both the /feed/holders route and index.js's
- * auth paths construct it.
- */
-export function holdersRoomMessage(address, ts) {
-  return `Nexus Holders Room
-Address: ${address.toLowerCase()}
-Timestamp: ${ts}`;
-}
+// Canonical Holders-Room challenge: one copy, shared with the client (app/lib/holdersRoom.mjs).
+export { holdersRoomMessage } from "../../app/lib/holdersRoom.mjs";
 
 /**
  * Append to a wallet's in-app notification list (newest first, capped at 50).

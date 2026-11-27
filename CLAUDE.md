@@ -915,8 +915,14 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   = what Orderly accepted (0 on a refusal).
 - **Telegram:** `POST /tg/link {wallet, labAuth}` → one-time code; `/start <address>` links nothing. Webhook secret
   derived from `TELEGRAM_TOKEN`; check `GET /tg/status` after a deploy.
-- **Holders gate:** `GET /feed/holders` = signed challenge + on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must
-  match the frontend OPERATOR tier (50M).
+- **Holders gate:** `POST /feed/holders {address, ts, sig}` (since 2026-11-27; GET = 405, the signature used to ride in
+  the URL) = signed challenge (`holdersRoomMessage`, one copy in `app/lib/holdersRoom.mjs`, shared.mjs re-exports it) +
+  on-chain `balanceOf ≥ OPERATOR_MIN`; `OPERATOR_MIN` must match the frontend OPERATOR tier (50M). No Base RPC answer =
+  503 `balance_unread`, never "not a holder". `lab:*` paged to the end (`kvList.mjs listAllKeys`), the built feed kept
+  60 s (`feed:holders:v1`). The room (`HoldersRoom.tsx`, rules holdersRoom.mjs, tested) signs with the CONNECTED
+  wallet's provider (`useLabWallet`), an unread balance says so (never "LOCKED"), the lock names your balance + what's
+  left, and each row shows levels, the note and "The author marks it: …. Not graded." (holders calls are private, so
+  the grader never grades them); direction + R:R in ink.
 - **appkv (Bankr) is not private:** no credential of any kind goes there. Tracker plan = `docs/bankr-tracker-spec.md`
   (positions from public `/smart/xray`; orders refreshed on demand in chat). `/order-history` answers a refused Orderly
   read with 502 `orderly_error`, never an empty book.
