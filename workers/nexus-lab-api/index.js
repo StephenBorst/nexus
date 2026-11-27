@@ -136,6 +136,7 @@ import { gapFor } from "./routes-gap.mjs";
 import { parityEvents } from "./parityEvents.mjs";
 import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
 import { handleReadSignals } from "./routes-readsignals.mjs";
+import { runReadHouseCallers, handleReadHouse, READ_HOUSE_RUN_MINUTES } from "./readHouseCaller.mjs";
 import { runWeekly, handleWeekly, WEEKLY_RUN_MINUTE } from "./weeklyScorecard.mjs";
 import { handleRecordShare } from "./routes-recordshare.mjs";
 import { handleAlertShare } from "./routes-alertshare.mjs";
@@ -841,6 +842,14 @@ const worker = {
         ctx.waitUntil((async () => {
           try { const r = await runOpsDigest(env, { scorecardKey: axisbtCacheKey(20) }); if (r.alerts || r.digest || !r.sent) console.log(`[digest] ${JSON.stringify(r)}`); }
           catch (e) { console.error("[digest] run failed:", String(e?.message || e)); }
+        })());
+      }
+      // The house caller for a CLEARED read (readHouseCaller.mjs, rules app/lib/readHouseCall.mjs; borst 2026-11-27): OFF
+      // until the read is CLEARED (the paid feed's gate, re-read each run) and HOUSE_READ_CALLER_ADDRESS is set.
+      if (READ_HOUSE_RUN_MINUTES.includes(minute)) {
+        ctx.waitUntil((async () => {
+          try { const r = await runReadHouseCallers(env, { scorecardKey: axisbtCacheKey(20) }); if (Object.values(r).some((x) => !x.skipped)) console.log(`[read-house] ${JSON.stringify(r)}`); }
+          catch (e) { console.error("[read-house] run failed:", String(e?.message || e)); }
         })());
       }
       // Once an hour, its own invocation: rebuild the scoreboard (GET /intel/axis-backtest) so no visitor ever waits on
@@ -6139,6 +6148,11 @@ document.getElementById("btn").addEventListener("click",go);
     }
     // Ops/verify: what WOULD the Telegram push send right now, and why did/didn't it fire?
     // Dry-run by default (no send, no throttle write); `?send=1` actually delivers.
+    // ── GET /signals/read-house — the CLEARED-read house caller's status (readHouseCaller.mjs); never its signals.
+    {
+      const rhRes = await handleReadHouse(parts, request, env, { scorecardKey: axisbtCacheKey(20) });
+      if (rhRes) return rhRes;
+    }
     // ── GET /signals/read/:axis — a registered read for the paid x402 feed, refused (403 not_cleared) until it is
     // CLEARED (routes-readsignals.mjs, rules app/lib/soldRead.mjs; borst 2026-11-27).
     {

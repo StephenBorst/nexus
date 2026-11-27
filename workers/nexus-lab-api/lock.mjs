@@ -42,6 +42,7 @@ export const LOCK_KEYS = {
   proofWeekly: (week) => `proofweekly:${week}`,
   // Sealed reads (routes-sealed.mjs): one fire at a time per read, so a retry can't post the same call twice.
   sealedFire: (name) => `sealedfire:${name}`,
+  readHouse: (axis) => `readhouse:${axis}`,
 };
 
 const MAX_TTL_MS = 10 * 60 * 1000;

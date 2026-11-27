@@ -741,6 +741,12 @@ product is what sits on top:
   `enabled` on `/signals/house` and `/signals/catalyst-house`, never by a quiet run. `POST /signals/house` with
   `HOUSE_SIGNALS_ADMIN` still posts by hand regardless. Keep `HOUSE_CALLER_ADDRESS` set (the dedupe reads it). On again
   only for a read that clears.
+  **CLEARED-read house caller** (borst 2026-11-27, `workers/nexus-lab-api/readHouseCaller.mjs`, rules `app/lib/readHouseCall.mjs`):
+  btc_lead_lag from its OWN wallet `HOUSE_READ_CALLER_ADDRESS` (0x65eC…C0C8, wrangler.toml; key held by borst, never used
+  here: calls are sealed server-side). OFF until the read is CLEARED: every run (minutes 8/23/38/58) re-reads the paid
+  feed's gate (`soldReadGate`); refused = nothing read or posted. Graded contract (1.2× H4 ATR, 1.5R, 168h), one call per
+  event, 24h per coin + side, ids `houseread-…` (callDedupe proof). Left out of pulse + weekly counts. Status `GET
+  /signals/read-house` (never signals). house-1 (`0x76A2…B17B`) and HOUSE_CALLER_ADDRESS untouched.
 
 ## Calls (human + house) — graded from public price
 - A published thesis is a call, graded from Orderly 1h candles (`tvhist:v2:{PERP}`, `gradeCandles.mjs`, contiguous

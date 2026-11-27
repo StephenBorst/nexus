@@ -21,7 +21,7 @@ const reply = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 const readJson = async (kv, key) => { const raw = await kv.get(key); return raw ? JSON.parse(raw) : null; };
 
-async function storedScoreboard(env, scorecardKey) {
+export async function storedScoreboard(env, scorecardKey) {
   for (const key of [scorecardKey, `${scorecardKey}:lastgood`]) {
     try { const sc = await readJson(env.LAB_STORE, key); if (Array.isArray(sc?.pipeline?.reads)) return sc; } catch { /* next */ }
   }
@@ -29,7 +29,7 @@ async function storedScoreboard(env, scorecardKey) {
 }
 
 /** The brain's live read on every sold coin + BTC (context), read from the series the brain records. */
-async function liveRead(env, axis, now) {
+export async function liveRead(env, axis, now) {
   const sets = [];
   for (const coin of [...new Set([...SOLD_COINS, "BTC"])]) {
     const cs = { coin };

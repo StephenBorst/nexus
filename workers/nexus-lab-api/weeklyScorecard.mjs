@@ -53,7 +53,7 @@ export async function runWeekly(env, { now = Date.now(), scorecardKey, lock = (k
     if (rec) records.push({ wallet: name.slice(4), theses: rec.theses || [] });
   }
   const calls = weeklyCalls(records, week, {
-    exclude: [env.HOUSE_CALLER_ADDRESS, env.HOUSE_CATALYST_ADDRESS], engines: [env.ENGINE_CALLER_ADDRESSES],
+    exclude: [env.HOUSE_CALLER_ADDRESS, env.HOUSE_CATALYST_ADDRESS, env.HOUSE_READ_CALLER_ADDRESS], engines: [env.ENGINE_CALLER_ADDRESSES],
     personFrom: [env.PERSON_FROM_ADDRESSES], isCurrent: isCurrentStamp,
   });
   const agentKv = env.NEXUS_AGENT || env.LAB_STORE;
