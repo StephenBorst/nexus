@@ -132,6 +132,7 @@ import { ensureHousePaper } from "./housePaperSetup.mjs";
 import { isHousePaper } from "../../app/lib/housePaper.mjs";
 import { marketCoin } from "../../app/lib/marketRead.mjs";
 import { handlePaperRun } from "./routes-paperrun.mjs";
+import { gapFor } from "./routes-gap.mjs";
 import { parityEvents } from "./parityEvents.mjs";
 import { runPaperJudge, handlePaperJudge } from "./paperJudge.mjs";
 import { runWeekly, handleWeekly, WEEKLY_RUN_MINUTE } from "./weeklyScorecard.mjs";
@@ -5411,6 +5412,13 @@ document.getElementById("btn").addEventListener("click",go);
         catch (e) { if (e instanceof KeyRefused) return json(e.body, request, e.status); throw e; }
       };
       const storedConfig = async () => { try { return JSON.parse((await AGENT_KV.get(`agent:config:${address}`)) || "null"); } catch { return null; } };
+
+      // GET /agent/:address/gap — this wallet's paper run of a registered read vs the read's own run (routes-gap.mjs,
+      // rule app/lib/executionGap.mjs). Public, read-only.
+      if (request.method === "GET" && parts[2] === "gap") {
+        const { status, body } = await gapFor(address, env);
+        return json(body, request, status);
+      }
 
       // GET /agent/:address/parity — LIVE-vs-GRADED parity (public, read-only)
       // Pairs every paper entry with the scoreboard event it traded (same market, side, basis

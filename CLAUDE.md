@@ -226,6 +226,12 @@ product is what sits on top:
   `EXPERIMENTAL_FILTERS_OFF`, and refuses over a live position. Safe by construction: the brain refuses REGISTERED_READ
   off paper, lab-api 409s the graded exit live. A user's run moves no stage and is never a read's `paperWallet`. Brain
   cost is per READ (shared), not per wallet; a user adding coins beyond the 11 adds series reads.
+- **Execution gap** (borst 2026-11-26, the moat list; rules `app/lib/executionGap.mjs`, route `GET /agent/:a/gap`
+  `routes-gap.mjs`, card `ExecutionGapCard.tsx` on the Agent tab): a PAPER agent on a registered read vs that read's own run
+  (paper wallet, claim, else house id, as `paperRun` resolves it), from the later record start. Pairs = same coin + side
+  opened within `PAIR_WINDOW_MIN` 10 min, nearest first; per pair the lag, entry / exit in bps (+ = yours worse) and both
+  R's side by side (never summed); missed / extra; config fields that change entries named (sizing apart). Both paper at
+  the mark: timing, caps and busy, "not slippage". Display only.
 - **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open with no TP or
   trail and only what rests on Orderly (the backstop stop, or the owner's own; none on DCA/paper): the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.

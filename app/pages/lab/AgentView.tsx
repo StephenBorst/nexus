@@ -38,6 +38,7 @@ import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSi
 import { bareTicker } from "@/utils/utils";
 import { quietLine, quietAgeText } from "@/lib/quietLine.mjs";
 import { agentStory } from "@/lib/agentStory.mjs";
+import { ExecutionGapCard } from "./ExecutionGapCard";
 import { pressKey } from "@/utils/a11y";
 import { C, SIGNAL } from "@/config/theme";
 import { ProLockNote } from "./ProLockNote";
@@ -756,6 +757,9 @@ export function AgentView() {
           </section>
         );
       })()}
+
+      {/* ── Your paper run of a registered read vs that read's own run (rule app/lib/executionGap.mjs). Paper only. ── */}
+      <ExecutionGapCard wallet={walletAddress} config={config as unknown as { mode?: string } & Record<string, unknown>} />
 
       {/* ── Telegram trade alerts — passive updates without opening the app ── */}
       {walletAddress && (
