@@ -12,6 +12,8 @@
 // (Since 2026-10-16 every write here — comment, comment delete, reaction, take, take delete —
 // needs the wallet's Lab signature: socialAuth.mjs.)
 import { json, recoverEthAddress, holdersRoomMessage, appendNotification } from "./shared.mjs";
+import { isHoldersCall, HOLDERS_SIG_TTL_MS } from "../../app/lib/holdersRoom.mjs";
+import { listAllKeys } from "./kvList.mjs";
 import { RESOLVED_FEED_KEY } from "./resolutions.mjs";
 import { provenWallet, unsignedSocial, verifiedAuthor } from "./socialAuth.mjs";
 
@@ -87,24 +89,24 @@ export async function handleFeed(parts, request, env, { now = Date.now } = {}) {
   }
 
   // ── /feed/holders ──────────────────────────────────────
-  // $NEXUS Holders Room: theses marked holdersOnly. Server-side gated — the
-  // caller must pass ?address=&ts=&sig= — the signature proves wallet
-  // ownership (EIP-191), and an on-chain balanceOf read on Base proves the
-  // wallet holds the OPERATOR threshold. Signature + fresh timestamp defeats
-  // address-spoofing and replay.
+  // $NEXUS Holders Room: holders-only calls. POST {address, ts, sig} (2026-11-27: the signature used to ride in the
+  // query string, so it sat in edge and proxy logs). The signature proves the wallet (EIP-191, 10-min window) and an
+  // on-chain balanceOf on Base proves the OPERATOR line. No RPC answer = 503 balance_unread, never "not a holder".
+  // The built feed is the same for every holder, so it is kept 60 s; `lab:*` is paged with the cursor (one list call
+  // returns <= 1000 keys, so records past the first page never reached the room).
   if (parts[0] === "feed" && parts[1] === "holders") {
-    if (request.method !== "GET") {
-      return json({ error: "method not allowed" }, request, 405);
+    if (request.method !== "POST") {
+      return json({ error: "use_post", hint: "POST {address, ts, sig}: a signature never goes in a URL" }, request, 405);
     }
-    const url = new URL(request.url);
-    const claimed = (url.searchParams.get("address") || "").toLowerCase();
-    const ts = parseInt(url.searchParams.get("ts") || "0", 10);
-    const sig = url.searchParams.get("sig") || "";
+    let body;
+    try { body = await request.json(); } catch { return json({ error: "invalid json" }, request, 400); }
+    const claimed = String(body?.address || "").toLowerCase();
+    const ts = Number(body?.ts) || 0;
+    const sig = typeof body?.sig === "string" ? body.sig : "";
     if (!/^0x[0-9a-f]{40}$/.test(claimed)) {
       return json({ error: "address required" }, request, 400);
     }
-    // 1) Signature must be fresh (10-min window) and recover to the claimed address.
-    if (!ts || Math.abs(Date.now() - ts) > 600000) {
+    if (!ts || Math.abs(Date.now() - ts) > HOLDERS_SIG_TTL_MS) {
       return json({ error: "stale or missing timestamp" }, request, 401);
     }
     const recovered = recoverEthAddress(holdersRoomMessage(claimed, ts), sig);
@@ -113,9 +115,8 @@ export async function handleFeed(parts, request, env, { now = Date.now } = {}) {
     }
     const NEXUS_TOKEN = "0x3D958634ab725B627919EF8F2Ed59227309fDba3";
     const OPERATOR_MIN = 50000000n * (10n ** 18n); // matches frontend TIER_THRESHOLDS (OPERATOR)
-    // eth_call balanceOf(address)
     const callData = "0x70a08231000000000000000000000000" + claimed.slice(2);
-    let isHolder = false;
+    let balance = null;
     for (const rpc of ["https://base-rpc.publicnode.com", "https://mainnet.base.org", "https://base.llamarpc.com"]) {
       try {
         const res = await fetch(rpc, {
@@ -124,29 +125,37 @@ export async function handleFeed(parts, request, env, { now = Date.now } = {}) {
           body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: NEXUS_TOKEN, data: callData }, "latest"] }),
         });
         const j = await res.json();
-        if (j.result) { isHolder = BigInt(j.result) >= OPERATOR_MIN; break; }
+        if (typeof j?.result === "string" && /^0x[0-9a-f]*$/i.test(j.result)) { balance = BigInt(j.result === "0x" ? 0 : j.result); break; }
       } catch (_) { /* try next rpc */ }
     }
-    if (!isHolder) {
-      return json({ error: "not a $NEXUS holder", feed: [] }, request, 403);
-    }
+    if (balance == null) return json({ error: "balance_unread", feed: [] }, request, 503);
+    if (balance < OPERATOR_MIN) return json({ error: "not a $NEXUS holder", feed: [] }, request, 403);
 
-    const listed = await env.LAB_STORE.list({ prefix: "lab:" });
+    const CACHE = "feed:holders:v1";
+    const cached = await env.LAB_STORE.get(CACHE, "json").catch(() => null);
+    if (cached && Array.isArray(cached.feed) && Date.now() - Number(cached.at) < 60_000) {
+      return json({ feed: cached.feed, builtAt: cached.at }, request);
+    }
     const feedItems = [];
-    for (const key of listed.keys) {
+    for (const key of await listAllKeys(env.LAB_STORE, "lab:")) {
       const raw = await env.LAB_STORE.get(key.name);
       if (!raw) continue;
-      const data = JSON.parse(raw);
+      let data;
+      try { data = JSON.parse(raw); } catch { continue; }
+      const holderTheses = (data.theses || []).filter(isHoldersCall);
+      if (!holderTheses.length) continue;
       const address = key.name.replace("lab:", "");
       const profileRaw = await env.LAB_STORE.get(`profile:${address}`);
-      const profile = profileRaw ? JSON.parse(profileRaw) : {};
-      const holderTheses = (data.theses || []).filter((t) => t.holdersOnly === true);
+      let profile = {};
+      try { profile = profileRaw ? JSON.parse(profileRaw) : {}; } catch { profile = {}; }
       for (const thesis of holderTheses) {
         feedItems.push({ ...thesis, wallet: address, pfp: profile.pfp || null, displayName: profile.displayName || null });
       }
     }
     feedItems.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    return json({ feed: feedItems }, request);
+    const at = Date.now();
+    await env.LAB_STORE.put(CACHE, JSON.stringify({ at, feed: feedItems }), { expirationTtl: 120 }).catch(() => {});
+    return json({ feed: feedItems, builtAt: at }, request);
   }
 
   // ── /profile/:address ──────────────────────────────────
