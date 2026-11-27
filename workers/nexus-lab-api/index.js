@@ -157,6 +157,7 @@ import { loadOiHistForBacktest, revalidateStrategy, OI_BACKTEST_MIN_DAYS, OI_BAC
 import { strategyLabel, backtestGateSupport } from "../../app/lib/strategyLabel.mjs";
 import { json, cors, normalizeAddress, recoverEthAddress, appendNotification } from "./shared.mjs";
 import { revokedWallets, revokedTradingRefusal } from "./revokedTrading.mjs";
+import { v1RetiredRefusal } from "./v1Retire.mjs";
 import { handleRemoveKey } from "./routes-removekey.mjs";
 import { handleSession } from "./routes-session.mjs";
 import { handleKey, checkChallenge, Refused as KeyRefused } from "./routes-key.mjs";
@@ -1077,6 +1078,13 @@ const worker = {
         const refusal = revokedTradingRefusal({ method: request.method, parts, body, revoked, recover: recoverEthAddress });
         if (refusal) return json(refusal.body, request, refusal.status);
       }
+    }
+    // A wallet that moved to v2 and had its v1 key removed (v1Retire.mjs): its v1 walletSig = 401.
+    if (request.method !== "GET" && request.method !== "HEAD" && env.NEXUS_AGENT) {
+      let body = null;
+      try { body = JSON.parse(await request.clone().text()); } catch { body = null; }
+      const refusal = await v1RetiredRefusal({ method: request.method, parts, body, kv: env.NEXUS_AGENT, recover: recoverEthAddress });
+      if (refusal) return json(refusal.body, request, refusal.status);
     }
 
     // ── GET /smart/board — graded top traders + their live positions ────────────
