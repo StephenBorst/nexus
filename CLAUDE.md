@@ -387,6 +387,12 @@ product is what sits on top:
   `0xa77ca113f39405b50617c2cc9ba5d6e3ced4a9a7` · nine-market 24h `0x325Da3ed024f533764407524918a847bCb3f95DE` · level_reclaim paper (fresh,
   2026-11-05, the hidden link) `0x95e26E980e300C34360933b849457F42c6Bd7622` · oi_div_reversal_4h paper (fresh, 2026-11-13
   19:35 UTC, the hidden link) `0xd446acE5934a0A337A9ee5F0D8ad37FdF8a1e2CD`.
+  **btc_lead_lag** (borst 2026-11-27, option (a)): preset `BTC_LEAD_LAG_PAPER_CONFIG` (`app/lib/btcLeadLagPaper.mjs`) = its
+  house run's config exactly (REGISTERED_READ, test-pinned to `housePaperConfig`), hidden link
+  `/lab?tab=agent&deploy=btc-lead-lag-paper`, a `PAPER_SETUPS` entry; wallet `0x1F74…eEB` to be claimed on /ops. **The
+  judgment follows the read's own wallet** (`judgmentsFor(claims)`, paperJudge.mjs): a read with a code or claimed wallet
+  drops its house run's entry, so its claim drafts its own page; the house run keeps trading as data, unjudged and not
+  shown as the run. The hourly judge reads the claims first and records nothing if they can't be read.
 - **Paper tape check** (borst 2026-11-13, `docs/research/paper-tape.md`): every paper fill (entry + exit) is checked
   against Orderly's public 1-minute bar for its minute or the one before (`app/lib/paperTape.mjs`: ON_TAPE / NEAR ≤
   `TAPE_TOL_BPS` 10 / OFF / NO_TRADES / NO_DATA / AVERAGED for a DCA blended entry, `entry_avg` on paper rows / PENDING).

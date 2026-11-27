@@ -13,7 +13,7 @@ import { withLock, LOCK_KEYS, LockBusy } from "./lock.mjs";
 import { readPaperClaims } from "./routes-paperclaim.mjs";
 import { CLAIM_SIG_MAX_AGE_MS, CLAIM_SIG_SKEW_MS } from "../../app/lib/paperClaim.mjs";
 import { renderJudgmentPage, pageAboveResults, judgmentSignMessage } from "../../app/lib/paperJudgePage.mjs";
-import { PAPER_JUDGMENTS } from "../../app/lib/paperJudge.mjs";
+import { judgmentsFor } from "../../app/lib/paperJudge.mjs";
 import { PAPER_MIN_TRADES } from "../../app/lib/readPipeline.mjs";
 
 export const JUDGMENT_SIGS_KEY = "pipeline:judgsigs:v1"; // LAB_STORE: { [axis]: signature record }
@@ -33,9 +33,11 @@ export async function readJudgmentSigs(env) {
 }
 
 /** The draft for a read: its claim, page and hash; null = no draft (no claim, or the code already judges it). */
-export async function judgmentDraft(env, axis, { judgments = PAPER_JUDGMENTS, setups } = {}) {
-  if (judgments[axis]) return null;
-  const claim = (await readPaperClaims(env))[axis];
+export async function judgmentDraft(env, axis, { judgments = null, setups } = {}) {
+  const claims = await readPaperClaims(env);
+  // a claimed wallet replaces the read's house run (paperJudge.mjs judgmentsFor), so it gets a page of its own
+  if ((judgments || judgmentsFor(claims))[axis]) return null;
+  const claim = claims[axis];
   if (!claim) return null;
   const page = setups ? renderJudgmentPage(claim, setups) : renderJudgmentPage(claim);
   const above = pageAboveResults(page);
