@@ -1475,8 +1475,14 @@ limits, EIP-712 verifyingContract: registration = the all-C sentinel, withdraw =
 - **Crash screen** (`app/components/ErrorBoundary.tsx`, the routes' `errorElement`, pinned by `app/lib/errorScreen.test.mjs`):
   "This page hit an error." + "A screen error moves no money", Reload / Go home / Copy error details, the stack folded,
   every line wrapping; the stale-chunk self-heal ("Updating Nexus…") is unchanged.
-- **Lab Quick Trade** sets the account leverage before its market order; a failed change stops the order and says so
-  (`quickTradeGuard.test.mjs`; it used to "keep going at current lev").
+- **Lab Quick Trade** sets THIS MARKET's leverage (`useSymbolLeverage(symbol).update({leverage, symbol, margin_mode})`,
+  current from `useLeverageBySymbol`; Orderly leverage is per market + margin mode, as exec sends it) before its market
+  order; a failed change stops the order and says so (`quickTradeGuard.test.mjs`; it used to "keep going at current
+  lev", and until 2026-11-27 it set the ACCOUNT-wide max, so a 2× ticket could fill at the market's own setting). Rules
+  `app/lib/quickTradeRules.mjs` (tested): no home-made liquidation price (the isolated-margin guess on a cross account
+  is gone); > $100 or ≥ 10× asks twice and the confirm step shows Orderly's `estLiqPrice` for that exact order
+  (`liqLine`); Max = free × lev × 0.95; the result reads `submit()`'s `success` (`placedResult`, "sent", never
+  "filled"); Long filled / Short outlined, both ink.
 
 ## Build + mobile load
 - Minified build; `vendorChunk()` puts the entry's static node_modules graph in one `vendor` chunk (never a catch-all

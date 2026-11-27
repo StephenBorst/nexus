@@ -12,13 +12,18 @@
  * free collateral × leverage), the DEX's OWN favorites (same store as the trading
  * page — star here, it shows there), and a featured Miroshark sim to pressure-
  * test the exact trade before you fire.
+ *
+ * Money rules (app/lib/quickTradeRules.mjs, tested, 2026-11-27): leverage is set on THIS market (symbol + margin
+ * mode), never the account-wide max; the liquidation line is Orderly's own estimate for the exact order, on the
+ * confirm step; ≥ 10× or > $100 asks twice; Max keeps 5%; the result reads Orderly's `success`.
  */
 
 import { C } from "@/config/theme";
 import { useEffect, useMemo, useState } from "react";
 import { ThesisAdvisor } from "./ThesisAdvisor";
-import { useOrderEntry, useLeverage, useMaxLeverage, useCollateral, useAccount, usePositionStream, usePositionClose, useMarkets, MarketsType } from "@orderly.network/hooks";
-import { OrderSide, OrderType } from "@orderly.network/types";
+import { useOrderEntry, useSymbolLeverage, useLeverageBySymbol, useMarginModeBySymbol, useMaxLeverage, useCollateral, useAccount, usePositionStream, usePositionClose, useMarkets, MarketsType } from "@orderly.network/hooks";
+import { OrderSide, OrderType, MarginMode } from "@orderly.network/types";
+import { needsConfirm, maxNotionalFor, leverageChange, liqLine, placedResult } from "@/lib/quickTradeRules.mjs";
 import { TradeChart, CHART_TFS } from "@/components/TradeChart";
 import { ProjectionBand } from "@/components/ProjectionBand";
 import { MarketStatStrip } from "@/components/MarketStatStrip";
@@ -52,7 +57,7 @@ function PositionRow({ position }: { position: Record<string, unknown> }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#0a0a0b", border: "1px solid #232327", borderRadius: 4, flexWrap: "wrap" }}>
       <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: "#fff", minWidth: 56 }}>{ticker}</span>
-      <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: isLong ? "#3ecf8e" : "#f7525f" }}>{isLong ? "↑ LONG" : "↓ SHORT"}</span>
+      <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#ededf0" }}>{isLong ? "↑ LONG" : "↓ SHORT"}</span>
       <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>{Math.abs(qty)} @ ${entry.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
       <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, fontWeight: "bold", color: uPnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{uPnl >= 0 ? "+" : ""}${uPnl.toFixed(2)}</span>
       <button onClick={close} disabled={isMutating} style={{
@@ -132,7 +137,11 @@ export function QuickTrade() {
     marketsStore.updateSymbolFavoriteState(item as never, favTab, !!(item as { isFavorite?: boolean }).isFavorite);
   }
 
-  const { curLeverage, maxLeverage, update: updateLeverage } = useLeverage();
+  // Leverage lives PER MARKET on Orderly (and per margin mode). The account-wide max leverage used to be set and
+  // compared here (the old account-wide hook), so a 2× ticket could fill at the market’s own setting.
+  const { marginMode } = useMarginModeBySymbol(symbol, MarginMode.CROSS);
+  const curLeverage = useLeverageBySymbol(symbol, marginMode);
+  const { maxLeverage, update: updateSymbolLeverage } = useSymbolLeverage(symbol);
   // Per-SYMBOL max leverage (respects each market's base_imr) — BTC 100x, alts 20x.
   const symbolMaxLev = useMaxLeverage(symbol);
   const [lev, setLev] = useState<number>(5);
@@ -141,20 +150,20 @@ export function QuickTrade() {
   const [busy, setBusy] = useState<null | "BUY" | "SELL">(null);
   const [confirmSide, setConfirmSide] = useState<null | "BUY" | "SELL">(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const CONFIRM_OVER = 100; // orders above this $ notional require a confirm tap
+  const { submit, setValues, markPrice, symbolInfo, isMutating, estLiqPrice } = useOrderEntry(symbol, {});
 
-  // Small orders fire instantly; larger ones arm a confirm first (fat-finger guard).
+  // Big or high-leverage orders arm a confirm first (fat-finger guard). Arming writes the side + size into the order
+  // form, so the confirm step can show Orderly's own liquidation estimate for exactly this order.
   function tap(side: "BUY" | "SELL") {
-    if (notional > CONFIRM_OVER && confirmSide !== side) {
+    if (needsConfirm({ notional, lev: levClamped }) && confirmSide !== side) {
+      setValues({ order_type: OrderType.MARKET, side: side === "BUY" ? OrderSide.BUY : OrderSide.SELL, order_quantity: String(qty) });
       setConfirmSide(side);
-      setTimeout(() => setConfirmSide((c) => (c === side ? null : c)), 3000);
+      setTimeout(() => setConfirmSide((c) => (c === side ? null : c)), 8000);
       return;
     }
     setConfirmSide(null);
     place(side);
   }
-
-  const { submit, setValues, markPrice, symbolInfo, isMutating } = useOrderEntry(symbol, {});
   const [{ rows: positionRows }] = usePositionStream();
   const openPositions = (positionRows ?? []).filter((p) => Number((p as { position_qty?: number }).position_qty) !== 0);
 
@@ -177,16 +186,12 @@ export function QuickTrade() {
   }, [cap]);
 
   const minNotional = Number((symbolInfo as { min_notional?: number } | undefined)?.min_notional) || 0;
-  const mmr = Number((symbolInfo as { base_mmr?: number } | undefined)?.base_mmr) || 0.005;
   const mark = Number(markPrice) || 0;
-  // Approx. isolated-style liquidation: entry ∓ (1/lev − maint-margin). An estimate —
-  // cross-margin & fees shift it — but a useful pre-tap "how much room" gauge.
-  const liqDistPct = Math.max(0, 1 / levClamped - mmr);
-  const liqLong = mark > 0 ? mark * (1 - liqDistPct) : 0;
-  const liqShort = mark > 0 ? mark * (1 + liqDistPct) : 0;
+  // No home-made liquidation price: the account is cross margin, so the real line depends on everything else held.
+  // The confirm step shows Orderly's own estimate for this exact order (quickTradeRules liqLine).
 
-  // MAX notional this account can open on the current leverage (free collateral × lev).
-  const maxNotional = Math.max(0, Math.floor((Number(freeCollateral) || 0) * levClamped));
+  // MAX notional on the chosen leverage, keeping 5% for fees and the move while it fills (all of it gets refused).
+  const maxNotional = maxNotionalFor(freeCollateral, levClamped);
 
   const qty = useMemo(() => {
     if (!markPrice || !symbolInfo) return 0;
@@ -207,6 +212,8 @@ export function QuickTrade() {
   }, [notional, markPrice, symbolInfo, minNotional]);
 
   const tooSmall = qty <= 0 || (minNotional > 0 && notional < minNotional);
+  // A changed size, leverage or market disarms the confirm: its liquidation line was for the old order.
+  useEffect(() => { setConfirmSide(null); }, [notional, levClamped, symbol]);
 
   async function place(side: "BUY" | "SELL") {
     if (!connected || tooSmall || busy) return;
@@ -216,17 +223,20 @@ export function QuickTrade() {
       // The leverage you picked must be the account's before the order goes: a failed change
       // used to "keep going at current lev", so a 2× ticket could fill on a 20× account with
       // the liquidation estimate above showing 2×. Now it stops and says so; nothing is placed.
-      if (levClamped && levClamped !== curLeverage) {
+      // This MARKET's leverage (symbol + margin mode), the setting Orderly fills the order at.
+      const change = leverageChange(levClamped, curLeverage);
+      if (change) {
         try {
-          await updateLeverage({ leverage: levClamped });
+          const r = await updateSymbolLeverage({ leverage: change, symbol, margin_mode: marginMode });
+          if (r && r.success === false) throw new Error(r.message || "refused");
         } catch (e) {
-          setMsg({ ok: false, text: `Leverage didn’t change to ${levClamped}× (still ${curLeverage ?? "?"}×): ${(e as Error)?.message || "refused"}. Nothing was placed.` });
+          setMsg({ ok: false, text: `Leverage on ${tk(symbol)} didn’t change to ${change}× (still ${curLeverage ?? "?"}×): ${(e as Error)?.message || "refused"}. Nothing was placed.` });
           return;
         }
       }
       setValues({ order_type: OrderType.MARKET, side: side === "BUY" ? OrderSide.BUY : OrderSide.SELL, order_quantity: String(qty) });
-      await submit();
-      setMsg({ ok: true, text: `${side === "BUY" ? "LONG" : "SHORT"} ${qty} ${tk(symbol)} — order placed ✓` });
+      const res = await submit();
+      setMsg(placedResult(res as { success?: boolean; message?: string } | undefined, { side, qty, coin: tk(symbol) }));
     } catch (e) {
       setMsg({ ok: false, text: (e as Error)?.message || "order failed" });
     } finally {
@@ -243,8 +253,8 @@ export function QuickTrade() {
         title="Quick Trade"
         lede="A one-screen market order on any Orderly perp, from your own wallet. Real collateral, so it needs a connected wallet."
         rows={[
-          { k: "Before you tap", v: "Notional, margin and an estimated liquidation price, for the size and leverage you set." },
-          { k: "Leverage first", v: "Your account leverage is set before the order. If that change fails, the order isn't sent and it says so." },
+          { k: "Before you tap", v: "Notional and margin for the size and leverage you set; big or high-leverage orders show Orderly's liquidation estimate before the second tap." },
+          { k: "Leverage first", v: "That market's leverage is set before the order. If that change fails, the order isn't sent and it says so." },
           { k: "Your keys", v: "Orders are signed by your wallet's Orderly key. Nexus holds no funds and can't withdraw." },
         ]}
         footnote="No wallet yet? A call in the Thesis Engine is graded from public price with no capital at all."
@@ -316,7 +326,8 @@ export function QuickTrade() {
       })()}
       <div style={{ ...label, marginTop: 10, color: "#a1a1aa" }}>
         MARK: {markPrice ? `$${px(mark)}` : "—"}
-        {totalCollateral != null && <span style={{ marginLeft: 14 }} title="Total account value — all collateral marked to USDC (matches the DEX header)">TOTAL VALUE: ${Number(totalCollateral).toFixed(2)}</span>}
+        {totalCollateral != null && <span style={{ marginLeft: 14 }} title="All collateral marked to USDC (matches the header)">ORDERLY BALANCE: ${Number(totalCollateral).toFixed(2)}</span>}
+        {curLeverage != null && <span style={{ marginLeft: 14 }} title="This market's own leverage setting on your account">{tk(symbol)} LEVERAGE NOW: {curLeverage}×</span>}
       </div>
     </div>
   );
@@ -350,9 +361,9 @@ export function QuickTrade() {
                 borderRadius: 3, padding: "3px 9px", cursor: "pointer", color: notional === v ? "#ededf0" : "#71717a", fontFamily: "var(--nx-font-ui)", fontSize: 12,
               }}>${v}</button>
             ))}
-            <button onClick={() => maxNotional > 0 && setNotional(maxNotional)} disabled={maxNotional <= 0} title={`Max on ${levClamped}x from free collateral`} style={{
-              background: "transparent", border: `1px solid ${maxNotional > 0 ? "#3a3320" : "#232327"}`, borderRadius: 3,
-              padding: "3px 9px", cursor: maxNotional > 0 ? "pointer" : "not-allowed", color: maxNotional > 0 ? "#e0a458" : "#3f3f46", fontFamily: "var(--nx-font-ui)", fontSize: 12,
+            <button onClick={() => maxNotional > 0 && setNotional(maxNotional)} disabled={maxNotional <= 0} title={`Max on ${levClamped}x from free collateral, keeping 5% for fees and the move while it fills`} style={{
+              background: "transparent", border: "1px solid #232327", borderRadius: 3,
+              padding: "3px 9px", cursor: maxNotional > 0 ? "pointer" : "not-allowed", color: maxNotional > 0 ? "#a1a1aa" : "#52525b", fontFamily: "var(--nx-font-ui)", fontSize: 12,
             }}>Max</button>
           </div>
         </div>
@@ -386,13 +397,19 @@ export function QuickTrade() {
           <div key={l}><div style={label}>{l}</div><div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, color: "#f4f4f5", fontWeight: 600 }}>{v}</div></div>
         ))}
       </div>
-      {mark > 0 && qty > 0 && (
-        <div style={{ ...label, marginTop: 10, color: "#71717a", display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <span>EST. LIQ · <span style={{ color: "#3ecf8e" }}>LONG ${px(liqLong)}</span></span>
-          <span><span style={{ color: "#f7525f" }}>SHORT ${px(liqShort)}</span></span>
-          <span style={{ color: "#3f3f46" }}>≈{(liqDistPct * 100).toFixed(1)}% away</span>
+      {needsConfirm({ notional, lev: levClamped }) && !confirmSide && qty > 0 && (
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, marginTop: 10, color: "#a1a1aa", lineHeight: 1.5 }}>
+          {levClamped >= 10 ? `${levClamped}×` : `$${notional.toFixed(0)}`} asks twice: the first tap shows Orderly’s liquidation estimate for this order.
         </div>
       )}
+      {confirmSide && (() => {
+        const l = liqLine({ estLiqPrice, mark, side: confirmSide });
+        return (
+          <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, marginTop: 10, color: l.warn ? "#fbbf24" : "#ededf0", lineHeight: 1.5 }}>
+            {confirmSide === "BUY" ? "Long" : "Short"} {qty} {tk(symbol)} at {levClamped}×, about ${margin.toFixed(2)} margin. {l.line}
+          </div>
+        );
+      })()}
       {tooSmall && notional > 0 && (
         <div style={{ ...label, color: "#fbbf24", marginTop: 8 }}>
           Below this market’s minimum size{minNotional ? ` ($${minNotional} notional)` : ""}.
@@ -406,14 +423,15 @@ export function QuickTrade() {
           borderRadius: 4, padding: "14px 0", cursor: tooSmall ? "not-allowed" : "pointer", fontFamily: "var(--nx-font-ui)",
           fontSize: 14, fontWeight: 600, opacity: busy === "SELL" ? 0.4 : 1,
         }}>{busy === "BUY" ? "Placing…" : confirmSide === "BUY" ? "Tap to confirm ✓" : "↑ Long"}</button>
+        {/* Short is outlined, Long filled: both in ink (green/red is money only, not a direction). */}
         <button onClick={() => tap("SELL")} disabled={tooSmall || !!busy || isMutating} style={{
-          background: tooSmall ? "#241012" : "#f7525f", color: tooSmall ? "#52525b" : "#fff", border: "1px solid #f7525f",
+          background: tooSmall ? "#1a1a1e" : "transparent", color: tooSmall ? "#71717a" : "#ededf0", border: "1px solid #ededf0",
           borderRadius: 4, padding: "14px 0", cursor: tooSmall ? "not-allowed" : "pointer", fontFamily: "var(--nx-font-ui)",
           fontSize: 14, fontWeight: 600, opacity: busy === "BUY" ? 0.4 : 1,
         }}>{busy === "SELL" ? "Placing…" : confirmSide === "SELL" ? "Tap to confirm ✓" : "↓ Short"}</button>
       </div>
       {msg && (
-        <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: msg.ok ? "#3ecf8e" : "#f7525f", textAlign: "center", marginTop: 10 }}>{msg.text}</div>
+        <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, color: msg.ok ? "#ededf0" : C.warn, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>{msg.text}</div>
       )}
     </div>
   );
