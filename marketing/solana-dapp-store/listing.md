@@ -33,7 +33,7 @@ wallet and trade BTC, ETH, SOL and 90+ markets. Your keys never leave your walle
 Plan it. Run it. Prove it.
 
 • Write a trade thesis with entry, stop and target, and publish it to the feed.
-• Every published call is graded against public price. The record is anchored on Arbitrum.
+• Every published call is graded against public price. The record is hash-chained: anyone can recompute it.
 • Hand an agent your rules. It runs on paper first, and trades live only when you say so.
 • Spot: Solana tokens route through Jupiter. Move USDC to Solana from Arbitrum, Base or Ethereum in one transfer.
 • Live marks, funding rates and open positions in one terminal.

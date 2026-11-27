@@ -347,7 +347,7 @@ export function buildThesisOgSvg({ displayName, wallet, ticker, direction, entry
   ${levels}
   ${chartPanel}
   ${quote}
-  <text x="64" y="594" fill="${faint}" font-size="14" letter-spacing="0.6">Graded from public price · anchored on Arbitrum</text>
+  <text x="64" y="594" fill="${faint}" font-size="14" letter-spacing="0.6">Graded from public price · hash-chained ledger</text>
   <text x="1136" y="594" fill="${faint}" font-size="14" text-anchor="end">trade.nexustradinglabs.com</text>`,
   });
 }
