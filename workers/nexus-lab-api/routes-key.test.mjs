@@ -75,6 +75,7 @@ function fakeOrderly({ refuseAdd = false, refuseRemove = false, accounts = new S
   let bankrAccount = alice;
   const bankr = async (init) => {
     const b = JSON.parse(init.body);
+    if (b.signatureType === "personal_sign") return new Response(JSON.stringify({ success: true, signature: await bankrAccount.signMessage({ message: b.message }) }));
     const { EIP712Domain, ...types } = b.typedData.types;
     const signature = await bankrAccount.signTypedData({ domain: b.typedData.domain, types, primaryType: b.typedData.primaryType, message: b.typedData.message });
     return new Response(JSON.stringify({ success: true, signature }));

@@ -25,6 +25,7 @@ import { aesGcmEncrypt, aesGcmDecrypt } from "./seedVault.mjs";
 import { keyPresent } from "./routes-removekey.mjs";
 import bs58 from "bs58";
 import { keyInUse } from "./keyInUse.mjs";
+import { retireV1Key } from "./v1Retire.mjs";
 import {
   BROKER_ID, ORDERLY_CHAIN_ID, ORDERLY_VC, V2_KEY, V2_PENDING, V2_PENDING_TTL_S,
   newKeyMaterial, orderlyKeyOf, addKeyMessage, addKeyTypedData, addKeyRefusal, keyRecord, publicKeyStatus, orderlyHeaders,
@@ -171,6 +172,25 @@ export async function removeKey(env, wallet, { now = Date.now(), fetchImpl = fet
   });
 }
 
+/**
+ * After a Bankr v2 registration: remove the wallet's v1 derived key at Orderly, signed by the new v2
+ * key, and flag the wallet so its v1 walletSig is refused (v1Retire.mjs). Under the wallet's key lock.
+ */
+async function retireV1(env, wallet, bankrApiKey, { now, fetchImpl }) {
+  return locked(env, wallet, async () => {
+    const kv = kvOf(env);
+    let rec = null;
+    try { rec = JSON.parse((await kv.get(V2_KEY(wallet))) || "null"); } catch { rec = null; }
+    if (!rec || rec.v !== 2) return { status: "no_v2_key" };
+    const secret = await aesGcmDecrypt(rec.tradingKey, env.AGENT_ENC_KEY);
+    return retireV1Key({
+      kv, wallet, bankrApiKey, fetchImpl, bankrBase: BANKR_BASE, recover: recoverEthAddress, now,
+      lookup: ({ orderlyKey }) => lookupKey({ accountId: rec.accountId, orderlyKey, fetchImpl }),
+      remove: ({ orderlyKey }) => removeAtOrderly({ secret, signerKey: rec.orderlyKey, accountId: rec.accountId, orderlyKey, fetchImpl, now }),
+    });
+  });
+}
+
 /** Bankr: make sure the Orderly account exists (Bankr signs Registration), as /proxy/bankr-register does. */
 async function ensureAccount(wallet, bankrApiKey, { fetchImpl, now }) {
   const got = await readJson(await fetchImpl(`${ORDERLY_BASE}/v1/get_account?address=${wallet}&broker_id=${BROKER_ID}`));
@@ -234,7 +254,11 @@ export async function handleKey(parts, request, env, deps = {}) {
       await ensureAccount(wallet, body.bankrApiKey, { fetchImpl, now });
       const begun = await beginKey(env, wallet, { now, randomBytes: deps.randomBytes });
       const eip712Sig = await bankrSignTyped(body.bankrApiKey, begun.typedData, fetchImpl);
-      return json(await completeKey(env, wallet, { pendingId: begun.pendingId, eip712Sig }, { now, fetchImpl }), request);
+      const done = await completeKey(env, wallet, { pendingId: begun.pendingId, eip712Sig }, { now, fetchImpl });
+      let v1Retire;
+      try { v1Retire = await retireV1(env, wallet, body.bankrApiKey, { now, fetchImpl }); }
+      catch (e) { console.error("[v2key] v1 retire", e?.message || e); v1Retire = { status: "error" }; }
+      return json({ ...done, v1Retire }, request);
     }
     const wallet = String(body?.wallet || "").trim().toLowerCase();
     if (!ADDR.test(wallet)) return json({ error: "bad_wallet" }, request, 400);
