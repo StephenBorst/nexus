@@ -49,7 +49,9 @@ test("the handler's read list matches soldRead.mjs, and the listing names no rea
   assert.match(src, new RegExp(`const SOLD_READS = \\[${SOLD_READS.map((r) => `"${r}"`).join(", ")}\\]`));
   const cfg = JSON.parse(readFileSync(new URL("../../bankr-x402/bankr.x402.json", import.meta.url), "utf8"));
   const d = cfg.services["nexus-signals"].description;
-  assert.match(d, /CLEARED/); assert.match(d, /NOISE/); assert.match(d, /live grade/); assert.match(d, /Not a proven edge\./);
+  assert.match(d, /CLEARED/); assert.match(d, /names its read/); assert.match(d, /live grade/); assert.match(d, /Not a proven edge\./);
+  // the grade moves, so the listing never states one (it went stale once: NOISE while the board served PROMISING)
+  for (const g of ["PREDICTIVE", "PROMISING", "NOISE", "ACCRUING", "INSUFFICIENT"]) assert.ok(!d.includes(g), `the listing asserts no grade (${g})`);
   for (const r of SOLD_READS) assert.ok(!d.includes(r), `the listing doesn't market ${r} before it clears`);
   assert.ok(!("nexus-signals-basis" in cfg.services), "the basis swap stays staged");
 });
