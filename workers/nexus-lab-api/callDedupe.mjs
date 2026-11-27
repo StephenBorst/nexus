@@ -25,7 +25,7 @@ import { listAllKeys } from "./kvList.mjs"; // every lab:* record, past KV's 100
 export { THESIS_REGISTRY };
 export const REPORT_KEY = "dedupe:report";
 export const PROOF_KEY = (id) => `callproof:${id}`;
-const HOUSE_IDS = [["nexus-", "HOUSE_CALLER_ADDRESS"], ["catalyst-", "HOUSE_CATALYST_ADDRESS"]];
+const HOUSE_IDS = [["nexus-", "HOUSE_CALLER_ADDRESS"], ["catalyst-", "HOUSE_CATALYST_ADDRESS"], ["houseread-", "HOUSE_READ_CALLER_ADDRESS"]];
 
 const lower = (a) => String(a || "").trim().toLowerCase();
 

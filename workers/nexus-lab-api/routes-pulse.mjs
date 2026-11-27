@@ -120,7 +120,7 @@ export async function buildPulse(env, { now = Date.now(), scorecardKey, locks = 
     try { records.push({ wallet: name.slice(4), theses: JSON.parse(raw).theses || [] }); } catch { /* unreadable record: skip */ }
   }
   const counts = callPulse(records, now, {
-    exclude: [env.HOUSE_CALLER_ADDRESS, env.HOUSE_CATALYST_ADDRESS],
+    exclude: [env.HOUSE_CALLER_ADDRESS, env.HOUSE_CATALYST_ADDRESS, env.HOUSE_READ_CALLER_ADDRESS],
     engines: [env.ENGINE_CALLER_ADDRESSES],
     personFrom: [env.PERSON_FROM_ADDRESSES],
     isCurrent: isCurrentStamp,
