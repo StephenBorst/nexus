@@ -81,12 +81,17 @@ export function paperRun(axis, state, tape = null, { wallet: claimed = null, can
       holdH: opened != null ? r2((closed - opened) / 3600000) : null,
       entry: Number(t.entry_price) || null, exit: Number(t.exit_price) || null,
       reason: t.reason || null, outcome, ...tradeR(t),
+      // The stop / target distances exec stamped on the row (record only): with entry and exit, anyone re-derives R.
+      ...(Number(t.sl_percent) > 0 ? { slPct: Number(t.sl_percent) } : {}), ...(Number(t.tp_percent) > 0 ? { tpPct: Number(t.tp_percent) } : {}),
       ...(candles ? (() => { const x = paperExcursion(t, candles[coinOf(t.symbol)]); return x ? { maeR: x.maeR, mfeR: x.mfeR } : {}; })() : {}),
       ...(tape ? { tape: {
         entry: t.entry_avg ? "AVERAGED" : tape.checks?.[entryKey(t.symbol, opened)]?.verdict || "PENDING",
         exit: tape.checks?.[exitKeyOf(t)]?.verdict || "PENDING",
         // A stop/target exit: did the tape trade at its level (TRADED) or did it fire on the mark alone (MARK_ONLY)?
         ...(tape.checks?.[exitKeyOf(t)]?.trigger ? { trigger: tape.checks[exitKeyOf(t)].trigger.verdict } : {}),
+        // The public Orderly request each check read (an audit link: open it and look at the bar yourself).
+        ...(tape.checks?.[entryKey(t.symbol, opened)]?.source ? { entrySource: tape.checks[entryKey(t.symbol, opened)].source } : {}),
+        ...(tape.checks?.[exitKeyOf(t)]?.source ? { exitSource: tape.checks[exitKeyOf(t)].source } : {}),
       } } : {}),
     };
   });
@@ -97,7 +102,10 @@ export function paperRun(axis, state, tape = null, { wallet: claimed = null, can
     ? {
       n: count + 1, coin: coinOf(p.symbol), side: p.direction === "SHORT" ? "SHORT" : "LONG",
       openedAt: pOpened != null ? new Date(pOpened).toISOString() : null, entry: Number(p.entry_price) || null,
-      ...(tape ? { tape: { entry: p.entry_avg ? "AVERAGED" : tape.checks?.[entryKey(p.symbol, pOpened)]?.verdict || "PENDING" } } : {}),
+      ...(tape ? { tape: {
+        entry: p.entry_avg ? "AVERAGED" : tape.checks?.[entryKey(p.symbol, pOpened)]?.verdict || "PENDING",
+        ...(tape.checks?.[entryKey(p.symbol, pOpened)]?.source ? { entrySource: tape.checks[entryKey(p.symbol, pOpened)].source } : {}),
+      } } : {}),
     }
     : null;
   return {

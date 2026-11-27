@@ -118,7 +118,7 @@ test("/feed/holders: POST body only, 503 when the balance is unread, records pas
   const below = await withRpc(hex(OPERATOR - 1n), () => handleFeed(["feed", "holders"], req({ address: A, ts, sig }), env));
   assert.equal(below.status, 403);
 
-  const bad = await withRpc(hex(OPERATOR), () => handleFeed(["feed", "holders"], req({ address: A, ts, sig: sig.slice(0, -2) + "00" }), env));
+  const bad = await withRpc(hex(OPERATOR), () => handleFeed(["feed", "holders"], req({ address: A, ts, sig: sig.slice(0, 10) + (sig[10] === "0" ? "1" : "0") + sig.slice(11) }), env));
   assert.equal(bad.status, 401);
 
   const ok = await withRpc(hex(OPERATOR), () => handleFeed(["feed", "holders"], req({ address: A, ts, sig }), env));

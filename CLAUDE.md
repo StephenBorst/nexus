@@ -380,6 +380,12 @@ product is what sits on top:
   market exits at the mark (no wick fills); this only proves the price was real. **Trigger check:** an SL/TP row with
   its level (`sl_percent` / `tp_percent`, exec stamps both, record only, pinned) also gets TRADED or MARK_ONLY (the exit
   fired on the mark, no trade reached the level). A fill > 3 days old Orderly refused on 3 runs = NO_DATA + reason.
+  **Audit links + verify script** (borst 2026-11-26, the moat list): each tape mark on `/proof/paper/:axis` links the exact
+  public Orderly request its check read (`entrySource` / `exitSource` on `paperRun` rows, + `slPct` / `tpPct`).
+  `public/verify/paper-run.mjs` (served at `/verify/paper-run.mjs`, no deps, public reads only, fetches bars ONLY from
+  `api-evm.orderly.org/tv/history`) re-judges every fill on Orderly's own bars (else on the bar the check kept, named),
+  re-derives R, and checks a house wallet = its sha256 id. Its rule copies are pinned equal to paperTape / paperRun /
+  housePaper by `verifyPaperRun.test.mjs`: change a rule there = change the script too.
 - **30-trade paper judgment** (borst 2026-11-13, `docs/research/paper-judgment-level-reclaim.md`, signed; text above
   Results sha256-pinned): `app/lib/paperJudge.mjs` (`PAPER_JUDGMENTS`, `judgePaperRun`) judges the FIRST 30 closed trades
   from the record start: per trade net bps = move − 2.5 bps taker each side (frozen) − funding paid; mean (unrounded) > 0
