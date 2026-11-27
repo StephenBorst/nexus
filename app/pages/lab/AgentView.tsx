@@ -9,7 +9,7 @@ import { agentCardStyle, agentLabelStyle, agentInputStyle, agentBtnStyle, btnPri
 import { useSubscription } from "@/hooks/useSubscription";
 import { isProStrategy } from "@/config/subscription";
 import { STRATEGY_PRESETS } from "@/config/strategyPresets";
-import { fmtUsdExact, fmtUsdLoss } from "@/lib/fmtUsd.mjs";
+import { fmtUsdLoss } from "@/lib/fmtUsd.mjs";
 import { paperSummary } from "@/lib/paperStats.mjs";
 import { STYLE_PRESETS, deriveStyle, type TradingStyle } from "@/config/agentStyles";
 import { AGENT_PREFILL_KEY, DIRECTIVE_PREFILL_KEY, EXPERIMENTAL_FILTERS_OFF, type AgentPrefill, type DirectiveDraft } from "@/utils/agentPrefill";
@@ -26,7 +26,7 @@ import { SharePoster, type PosterData } from "./SharePoster";
 import { AGENT_API, AVAILABLE_SYMBOLS, type ActiveDirective, type AgentStanding, type SavedStrategy, type CommunityStrategy } from "./agentTypes";
 import type { BacktestResult, SweepResult, ValidationResult } from "./backtestTypes";
 import { errText } from "./helpers";
-import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter, PaperCostLine, LiveSlippageLine } from "./AgentPanels";
+import { NumberField, AgentTrackRecord, AgentToggleCard, PaperBlotter, PaperCostLine, PaperRecordCard, LiveSlippageLine } from "./AgentPanels";
 import { gradedExitRefusal } from "@/lib/gradedExit.mjs";
 import { riskSizingRefusal, RISK_PER_TRADE_MAX_USD } from "@/lib/riskSizing.mjs";
 import { deactivateWarning, deactivatedMessage } from "@/lib/agentControls.mjs";
@@ -805,7 +805,7 @@ export function AgentView() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8, marginBottom: 12 }}>
               {[
                 { label: "ENTRY", val: num(directiveDraft.entryPrice), color: "#a1a1aa" },
-                { label: "STOP", val: num(directiveDraft.stopLoss), color: "#f7525f" },
+                { label: "STOP", val: num(directiveDraft.stopLoss), color: "#ededf0" },
                 { label: "TP1", val: num(directiveDraft.takeProfit1), color: "#ededf0" },
                 ...(directiveDraft.takeProfit2 ? [{ label: "TP2", val: num(directiveDraft.takeProfit2), color: "#ededf0" }] : []),
               ].map(({ label, val, color }) => (
@@ -898,7 +898,7 @@ export function AgentView() {
             </div>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#a1a1aa", marginBottom: armed ? 12 : 0 }}>
               <span>entry {num(activeDirective.entryPrice)}</span>
-              <span style={{ color: "#f7525f" }}>stop {num(activeDirective.stopLoss)}</span>
+              <span style={{ color: "#ededf0" }}>stop {num(activeDirective.stopLoss)}</span>
               <span style={{ color: "#ededf0" }}>tp1 {num(activeDirective.takeProfit1)}</span>
               {activeDirective.takeProfit2 ? <span style={{ color: "#ededf0" }}>tp2 {num(activeDirective.takeProfit2)}</span> : null}
             </div>
@@ -1040,42 +1040,20 @@ export function AgentView() {
           {/* Live execution cost: shows once a live order has filled (nothing on paper to measure). */}
           <LiveSlippageLine slip={(agentState as { live_slip?: unknown } | null)?.live_slip} />
 
-          {/* Graduation nudge — once a paper agent is proven, bridge to live */}
-          {config.mode === "PAPER" && (() => {
-            const pt = agentState?.paper_trades ?? [];
-            const net = pt.reduce((s, t) => s + t.pnl, 0);
-            const wins = pt.filter((t) => t.pnl > 0).length;
-            const wr = pt.length ? Math.round((wins / pt.length) * 100) : 0;
-            // exec caps paper_trades at the last 50, so past the cap these numbers are a
-            // ROLLING window, not a lifetime record — say so rather than imply a total.
-            const rolling = pt.length >= 50;
-            if (pt.length < 5 || net <= 0) return null;
-            return (
-              <div style={{ ...agentCardStyle, borderColor: "#33333a", background: "#1a1a1e" }}>
-                <div style={{ ...agentLabelStyle, color: "#ededf0" }}>READY TO GO LIVE?</div>
-                <div style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-ui)", fontSize: 12, lineHeight: 1.6, marginTop: 8 }}>
-                  Your paper agent is up <strong style={{ color: "#ededf0" }}>{fmtUsdExact(net)}</strong> over{" "}
-                  <strong style={{ color: "#fff" }}>{pt.length}</strong> simulated trades ({wr}% win rate)
-                  {rolling ? " · the rolling last 50, not a lifetime record" : ""}. Paper fills don&apos;t slip, and nothing
-                  is graded until it trades live: a reason to look closer, not proof. Same strategy, same guardrails —
-                  switch it to live when you&apos;re ready.
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                  <button onClick={() => { setConfig({ ...config, mode: "ASSISTED" }); setSuccess("Mode → ASSISTED. Review, then Update below."); setTimeout(() => setSuccess(null), 4000); }}
-                    style={{ background: "#ededf015", border: "1px solid #ededf0", borderRadius: 4, color: "#ededf0", fontFamily: "var(--nx-font-ui)", fontSize: 11, padding: "8px 16px", cursor: "pointer" }}>
-                    → Go assisted
-                  </button>
-                  <button onClick={() => { setConfig({ ...config, mode: "AUTONOMOUS" }); setSuccess("Mode → AUTONOMOUS. Needs a trading key. Review below."); setTimeout(() => setSuccess(null), 4000); }}
-                    style={{ background: "#fbbf2415", border: "1px solid #fbbf24", borderRadius: 4, color: "#fbbf24", fontFamily: "var(--nx-font-ui)", fontSize: 11, padding: "8px 16px", cursor: "pointer" }}>
-                    → Go autonomous
-                  </button>
-                </div>
-                <div style={{ fontFamily: "var(--nx-font-ui)", fontSize: 9, color: "#52525b", marginTop: 10, lineHeight: 1.5 }}>
-                  Paper results don’t guarantee live results — live trades face real fills, slippage, and funding. Start with size you can afford to lose.
-                </div>
-              </div>
-            );
-          })()}
+          {/* The paper record against the house bar (paperGraduation.mjs): 30 trades, judged after fees and funding.
+              It replaced READY TO GO LIVE?, which offered "Go autonomous" after 5 fee-free paper trades. */}
+          {config.mode === "PAPER" && (
+            <PaperRecordCard
+              address={walletAddress}
+              refreshKey={`${agentState?.paper_trades?.length ?? 0}:${agentState?.paper_trades?.[0]?.closed_at ?? ""}`}
+              lifetimeTrades={(() => {
+                const agg = (agentState as unknown as { paper_agg?: { trades?: number } } | null)?.paper_agg;
+                const n = Number(agg?.trades);
+                return Number.isFinite(n) && n > 0 ? n : (agentState?.paper_trades?.length ?? 0) || null;
+              })()}
+              onAssisted={() => { setConfig({ ...config, mode: "ASSISTED" }); setSuccess("Mode → ASSISTED: the agent signals, you place each order. Review, then Update below."); setTimeout(() => setSuccess(null), 5000); }}
+            />
+          )}
 
           <AgentTrackRecord title="LIVE TRACK RECORD" accent="#a1a1aa" trades={trades} summary={standing?.stats ?? null} />
 
@@ -1886,7 +1864,7 @@ export function AgentView() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 12, marginTop: 8 }}>
               <div>
                 <div style={{ ...agentLabelStyle, fontSize: 9 }}>STATE</div>
-                <div style={{ color: isActive ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", fontSize: 16, fontWeight: 600 }}>
+                <div style={{ color: isActive ? "#ededf0" : "#71717a", fontFamily: "var(--nx-font-mono)", fontSize: 16, fontWeight: 600 }}>
                   {isActive ? (hasPosition ? "TRADING" : "WATCHING") : "INACTIVE"}
                 </div>
               </div>
@@ -1960,7 +1938,8 @@ export function AgentView() {
             const dailyLoss = Math.max(0, -(agentState?.daily_pnl ?? 0));
             const lossPct = Math.min(100, (dailyLoss / (config.maxDailyLossUsdc || 1)) * 100);
             const tradesPct = Math.min(100, ((agentState?.trades_today ?? 0) / (config.maxTradesPerDay || 1)) * 100);
-            const barColor = (pct: number) => pct >= 90 ? "#f7525f" : pct >= 60 ? "#fbbf24" : "#3ecf8e";
+            // A cap filling up is caution, not money: ink, then amber, then danger (green/red is money only).
+            const barColor = (pct: number) => pct >= 90 ? C.warn : pct >= 60 ? SIGNAL.watch : "#a1a1aa";
             return (
               <div style={{ ...agentCardStyle, borderColor: lossPct >= 90 ? "#f7525f60" : "#232327" }}>
                 <div style={agentLabelStyle}>ACTIVE GUARDRAILS</div>
@@ -2189,7 +2168,7 @@ export function AgentView() {
                       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                         <span style={{ color: "#d4d4d8", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 600 }}>{asset}</span>
                         <span style={{ color: "#a1a1aa", fontFamily: "var(--nx-font-mono)", fontSize: 11 }}>{trade.direction}</span>
-                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: trade.reason === "TP" ? "#3ecf8e" : trade.reason === "SL" ? "#f7525f" : trade.reason === "BE" ? "#d4d4d8" : "#fbbf24" }}>{trade.reason}</span>
+                        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>{trade.reason}</span>
                         <span style={{ marginLeft: "auto", color: trade.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: 600 }}>
                           {trade.pnl >= 0 ? "+" : ""}${trade.pnl.toFixed(2)}
                         </span>
@@ -2211,7 +2190,7 @@ export function AgentView() {
                       <span style={{ color: trade.pnl >= 0 ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: 600 }}>
                         {trade.pnl >= 0 ? "+" : ""}${trade.pnl.toFixed(2)}
                       </span>
-                      <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: trade.reason === "TP" ? "#3ecf8e" : trade.reason === "SL" ? "#f7525f" : trade.reason === "BE" ? "#d4d4d8" : "#fbbf24" }}>
+                      <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
                         {trade.reason}
                       </span>
                       <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", minWidth: 0 }}>

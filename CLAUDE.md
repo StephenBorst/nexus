@@ -226,6 +226,12 @@ product is what sits on top:
   `EXPERIMENTAL_FILTERS_OFF`, and refuses over a live position. Safe by construction: the brain refuses REGISTERED_READ
   off paper, lab-api 409s the graded exit live. A user's run moves no stage and is never a read's `paperWallet`. Brain
   cost is per READ (shared), not per wallet; a user adding coins beyond the 11 adds series reads.
+- **Paper record card** (Agent tab, borst 2026-11-27, rules `app/lib/paperGraduation.mjs`, `PaperRecordCard` in
+  AgentPanels.tsx, tested): replaced READY TO GO LIVE?, which offered "Go autonomous" after 5 trades of fee-free paper
+  P&L. Under 30 lifetime trades (`paper_agg`) = "n OF 30", nothing to switch; 30+ = judged on the after-costs re-read
+  (`/paper-costs`, one shared request with `PaperCostLine`): ≤ 0 = says so, > 0 = "a reason to look closer, not proof" +
+  one button, ASSISTED. It never offers AUTONOMOUS (the mode picker keeps its GO LIVE confirm). State, guardrail caps
+  (ink → SIGNAL.watch → C.warn), exit reasons and stop levels in ink; green/red stays on P&L.
 - **Controls:** ASSISTED = pause entries, still manages. DEACTIVATE = stop + delete key, position left open with no TP or
   trail and only what rests on Orderly (the backstop stop, or the owner's own; none on DCA/paper): the Lab confirms first via `app/lib/agentControls.mjs`; `DELETE /agent/:a` returns `leftOpen` + `warning` for a live one). KILL =
   close + delete key + deactivate. The agent must be flat before you trade manually on the same account.
