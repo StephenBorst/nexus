@@ -1,6 +1,6 @@
 // ── Paper ledger: an append-only, hash-chained record of every PAPER close ──────
 // Why: paper was the one part of the Arena nobody could check. The live ledger is
-// hashed and anchored on Arbitrum; paper was a running total in a KV blob the owner
+// hash-chained (on-chain anchoring is paused: ONCHAIN_ANCHOR_LIVE="false", borst 2026-11-26); paper was a running total in a KV blob the owner
 // could reset. This module gives every paper close a numbered row and chains each
 // row to the one before it, so any gap, edit or deletion breaks the chain.
 //

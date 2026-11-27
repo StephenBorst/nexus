@@ -16,10 +16,10 @@ can send). Regenerate/update it any time; it lives in `scratchpad/nexus-onepager
 > Nexus Trading Labs — a non-custodial perp terminal that grades your track record on-chain. Plan it, automate it, prove it. 130+ markets, no login to look around → trade.nexustradinglabs.com
 
 **Short (2 sentences):**
-> Nexus turns every position into a process: plan it in the Thesis Engine, automate it with a non-custodial agent, and prove it on leaderboards graded from public data and anchored on-chain. It's the trading terminal built on one idea — verify, don't trust.
+> Nexus turns every position into a process: plan it in the Thesis Engine, automate it with a non-custodial agent, and prove it on leaderboards graded from public data and kept in a hash-chained ledger. It's the trading terminal built on one idea — verify, don't trust.
 
 **Medium (warm intro / partner DM):**
-> Most perp apps just let you trade. Nexus turns trading into a loop you can actually improve at — you plan a thesis (sized by R:R, timestamped on-chain), hand it to an autonomous agent that runs it 24/7 non-custodially, and every result gets graded objectively from public price and anchored on-chain. No self-reported PnL, no track records you can fake. 130+ perp markets on Orderly + Arbitrum underneath. The whole thing is open to explore before you connect a wallet.
+> Most perp apps just let you trade. Nexus turns trading into a loop you can actually improve at — you plan a thesis (sized by R:R, timestamped on-chain), hand it to an autonomous agent that runs it 24/7 non-custodially, and every result gets graded objectively from public price and kept in a hash-chained ledger anyone can recompute. No self-reported PnL, no track records you can fake. 130+ perp markets on Orderly + Arbitrum underneath. The whole thing is open to explore before you connect a wallet.
 
 ## 1b. Blurbs (founder voice — lowercase, direct, for personal drops)
 
@@ -49,7 +49,7 @@ voice for your personal account. Each is true.
 > Anyone can clone a trading front-end.
 > Nobody can clone a social graph of *verifiable* track records.
 >
-> Every call and every agent trade on Nexus is graded from public price and anchored on-chain. No self-reported PnL. The proof is the product.
+> Every call and every agent trade on Nexus is graded from public price and kept in a hash-chained ledger. No self-reported PnL. The proof is the product.
 
 **Day 3 — free tool (top-of-funnel, no wallet needed)**
 > Free, no login: paste any wallet and x-ray its real perp record — read straight off public on-chain data across Orderly + Hyperliquid.
@@ -94,7 +94,7 @@ voice for your personal account. Each is true.
 
 When a door opens, lead with the **one-pager link** + the **short blurb**, then offer:
 - **the free hook:** "x-ray any wallet free, no login" (`/analyze`) — lowest-friction way to get someone to click.
-- **the credibility line:** everything is graded from public data and anchored on-chain — they can verify any claim themselves.
+- **the credibility line:** everything is graded from public data and kept in a hash-chained ledger — they can verify any claim themselves.
 - **what you need from them:** [fill per chat — a retweet, an intro to X, a spot in their tools list, etc.]
 
 Keep the ask specific and small. A polished asset + a clear small ask beats a wall of text every time.

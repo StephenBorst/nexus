@@ -652,7 +652,7 @@ export function AgentView() {
           {feature("HARD GUARDRAILS", "Daily-loss cap. Max trades per day. Take-profit, stop-loss, max hold. One-tap KILL. Order-only keys can't withdraw.")}
           {feature("ADVANCED EXITS", "Scale-out, trailing stop, breakeven. The agent manages the exit. Each slice is graded.")}
           {feature("BACKTEST + VALIDATE", "Replay a config on recorded history. Walk-forward across markets. Tested against random entries.", "◆ PRO")}
-          {feature("TRUSTLESS RECORD", "Every live trade settles on Orderly with an order ID and is booked at the exchange’s fill, anchored on Arbitrum. Ranked on TOP AGENTS.")}
+          {feature("TRUSTLESS RECORD", "Every live trade settles on Orderly with an order ID and is booked at the exchange’s fill, in a hash-chained ledger anyone can recompute. Ranked on TOP AGENTS.")}
         </div>}
       </div>
     );
@@ -698,7 +698,7 @@ export function AgentView() {
               </span>
             </span>
             <span style={{ display: "block", fontFamily: "var(--nx-font-ui)", fontSize: 11, color: "#71717a", marginTop: 6, lineHeight: 1.5, maxWidth: 520 }}>
-              Runs <strong style={{ color: "#a1a1aa" }}>your</strong> strategy inside your caps. Live trades are booked from the exchange’s own fills and anchored on Arbitrum; paper trades are checked against the public tape. No self-reporting.
+              Runs <strong style={{ color: "#a1a1aa" }}>your</strong> strategy inside your caps. Live trades are booked from the exchange’s own fills into a hash-chained ledger anyone can recompute; paper trades are checked against the public tape. No self-reporting.
             </span>
           </span>
         </div>

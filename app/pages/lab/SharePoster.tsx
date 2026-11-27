@@ -194,7 +194,7 @@ export function SharePoster({ data, onClose }: { data: PosterData; onClose: () =
   }, []);
 
   const shareText = data.kind === "trade"
-    ? `${asset(data.symbol)} ${data.direction} closed ${data.pnlPct != null ? `${data.pnlPct >= 0 ? "+" : ""}${data.pnlPct.toFixed(2)}%` : ""} — autonomous, on-chain-anchored. // Nexus Trading Labs`
+    ? `${asset(data.symbol)} ${data.direction} closed ${data.pnlPct != null ? `${data.pnlPct >= 0 ? "+" : ""}${data.pnlPct.toFixed(2)}%` : ""} — autonomous, booked at the exchange’s fill. // Nexus Trading Labs`
     : data.kind === "smart"
     ? `${data.consensus && data.consensus > 1 ? `${data.consensus} smart-money traders are` : "Smart money is"} ${data.direction} ${asset(data.symbol)} — track it + copy to a graded agent on Nexus. // verify, don't trust`
     : `${asset(data.symbol)} ${data.direction} thesis${data.rr != null ? ` · ${data.rr.toFixed(2)}R` : ""} — graded from public price, verify don't trust. // Nexus Trading Labs`;

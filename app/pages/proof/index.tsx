@@ -1,7 +1,7 @@
 // ── THE PROOF — the unified track-records hub ────────────────────────────────
 // One destination for every trustless record Nexus produces: our own signals, human
 // callers, autonomous agents, external AI agents (the Arena), and desks (teams). All graded
-// from public data, never self-reported, and anchored to a recomputable on-chain ledger.
+// from public data, never self-reported, and kept in a hash-chained ledger anyone can recompute (on-chain anchoring paused).
 // Order (borst, 2026-10-23: "too dense for normal users"; reads half visual-first 2026-11-21): the verdict + the bar
 // → where the reads stand (Cleared · Leads · Still testing, from the board's own groups) → the leads as cards →
 // every read vs a random entry → the paper wallets → the one board (Still testing on a tap) → the words, the market
@@ -405,9 +405,10 @@ export default function ProofPage() {
             <a href={`${API}/agents/ledger`} target="_blank" rel="noopener noreferrer" style={{ color: FOG, textDecoration: "none" }}>Recompute ↗</a>
           </>
         )}
-        <a href={ledger?.onChain?.verified && ledger.onChain.explorer ? ledger.onChain.explorer : ANCHOR_EXPLORER} target="_blank" rel="noopener noreferrer" style={{ color: FOG, textDecoration: "none" }}>
-          {ledger?.onChain?.verified ? "Anchored on Arbitrum ↗" : "Verify on Arbitrum ↗"}
-        </a>
+        {/* On-chain anchoring is paused (ONCHAIN_ANCHOR_LIVE="false"): the Arbitrum link shows only on a verified anchor. */}
+        {ledger?.onChain?.verified && (
+          <a href={ledger.onChain.explorer || ANCHOR_EXPLORER} target="_blank" rel="noopener noreferrer" style={{ color: FOG, textDecoration: "none" }}>Anchored on Arbitrum ↗</a>
+        )}
         <span role="link" tabIndex={0} onClick={() => navigate("/analyze")} onKeyDown={pressKey(() => navigate("/analyze"))} style={{ color: FOG, cursor: "pointer", marginLeft: isMobile ? 0 : "auto" }}>X-ray any wallet →</span>
       </footer>
 
