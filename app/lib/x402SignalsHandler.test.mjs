@@ -55,3 +55,12 @@ test("the handler's read list matches soldRead.mjs, and the listing names no rea
   for (const r of SOLD_READS) assert.ok(!d.includes(r), `the listing doesn't market ${r} before it clears`);
   assert.ok(!("nexus-signals-basis" in cfg.services), "the basis swap stays staged");
 });
+
+test("the README states no grade as current: the only grade word is the dated 2026-09-25 record", () => {
+  const md = readFileSync(new URL("../../bankr-x402/README.md", import.meta.url), "utf8");
+  const GRADE = /\b(PREDICTIVE|PROMISING|NOISE|ACCRUING|INSUFFICIENT)\b/;
+  const dated = md.slice(md.indexOf("The record on 2026-09-25:"), md.indexOf("Today's grade is on\n/proof."));
+  assert.ok(dated.length > 0 && GRADE.test(dated), "the dated record keeps its numbers");
+  assert.ok(!GRADE.test(md.replace(dated, "")), "no grade word outside the dated record");
+  assert.match(md, /see `read: "funding_fade"` with its live grade from the scoreboard/);
+});
