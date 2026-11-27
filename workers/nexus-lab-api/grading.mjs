@@ -25,6 +25,7 @@ import { REGIME_PAD_S, makeGradeCandles, candlesForCall, callWindow, gradeSymbol
 import { loadMinuteWindow } from "./minuteCandles.mjs";
 import { reconcileMinuteIndex } from "./minuteIndex.mjs";
 import { isMinuteGraded } from "../../app/lib/minuteGrade.mjs";
+import { listAllKeys } from "./kvList.mjs"; // every lab:* record, past KV's 1000-key page (2026-11-27)
 
 // Candle pages one grading pass may fetch. The hourly cron can take a whole cold backfill (67 pages
 // for the 27 symbols on 2026-09-27); a leaderboard read is a user waiting, so it takes less and
@@ -312,7 +313,7 @@ export async function fetchGradeHistory(symbol, createdAt, env, opts = {}) {
 // reads the stamp, never a self-report. Single writer (cron) = no race with the user's
 // own edits, and we only write a wallet back when something actually changed.
 export async function gradePublicTheses(env) {
-  const listed = await env.LAB_STORE.list({ prefix: "lab:" });
+  const listed = { keys: await listAllKeys(env.LAB_STORE, "lab:") };
   let graded = 0, regraded = 0, walletsWritten = 0;
   // One candle-store run for the whole pass: each symbol is loaded once and extended back to the
   // oldest call that needs it, within the run's page budget.
@@ -409,7 +410,7 @@ export async function gradePublicTheses(env) {
 // longer a fixed horizon, it's each call's own (see below).
 export async function computeCallerStats(env, _unusedHorizonS = 30 * 86400, opts = {}) {
   const onlyWallet = opts.onlyWallet ? String(opts.onlyWallet).toLowerCase() : null;
-  const listed = await env.LAB_STORE.list({ prefix: "lab:" });
+  const listed = { keys: await listAllKeys(env.LAB_STORE, "lab:") };
   const calls = [];
   for (const key of listed.keys) {
     const wallet = key.name.replace("lab:", "");
@@ -584,7 +585,7 @@ export async function gatherStanceEntries(env, { freshMs = 14 * 86400 * 1000, co
 
   // 2) Active (unresolved, fresh) public calls → directional stances.
   try {
-    const listed = await env.LAB_STORE.list({ prefix: "lab:" });
+    const listed = { keys: await listAllKeys(env.LAB_STORE, "lab:") };
     for (const key of listed.keys) {
       const raw = await env.LAB_STORE.get(key.name);
       if (!raw) continue;

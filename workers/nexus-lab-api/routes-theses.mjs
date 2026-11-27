@@ -22,6 +22,7 @@ import {
   estimateResolution, aggregateSideRecord, standoffVerdict, entryVsMarket,
 } from "./logic.mjs";
 import { computeCallerStats, gatherStanceEntries, ADVICE_FLAG_TEXT } from "./grading.mjs";
+import { listAllKeys } from "./kvList.mjs"; // every lab:* record, past KV's 1000-key page (2026-11-27)
 
 export async function handleTheses(parts, request, env) {
   if (parts[0] !== "theses") return null;
@@ -414,7 +415,7 @@ export async function handleTheses(parts, request, env) {
   if (parts[0] === "theses" && parts[1] === "proof-of-edge") {
     if (request.method !== "GET") return json({ error: "method not allowed" }, request, 405);
     const TOP_N = 15;
-    const listed = await env.LAB_STORE.list({ prefix: "lab:" });
+    const listed = { keys: await listAllKeys(env.LAB_STORE, "lab:") };
     const resolved = [];
     let wins = 0, rSum = 0;
     for (const key of listed.keys) {
@@ -572,7 +573,7 @@ export async function handleTheses(parts, request, env) {
     const reasons = [];
     let contributors = 0;
     try {
-      const listed = await env.LAB_STORE.list({ prefix: "lab:" });
+      const listed = { keys: await listAllKeys(env.LAB_STORE, "lab:") };
       for (const key of listed.keys) {
         const raw = await env.LAB_STORE.get(key.name);
         if (!raw) continue;
@@ -617,7 +618,7 @@ export async function handleTheses(parts, request, env) {
       return json({ chain, length: chain.length, note: "Append-only prev-linked SHA-256 checkpoints of the public call ledger." }, request);
     }
 
-    const listed = await env.LAB_STORE.list({ prefix: "lab:" });
+    const listed = { keys: await listAllKeys(env.LAB_STORE, "lab:") };
     const recs = [];
     for (const key of listed.keys) {
       const raw = await env.LAB_STORE.get(key.name);

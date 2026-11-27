@@ -24,7 +24,7 @@ export async function handleFeed(parts, request, env, { now = Date.now } = {}) {
       return json({ error: "method not allowed" }, request, 405);
     }
     // List all LAB_STORE keys, collect public theses across all wallets
-    const listed = await env.LAB_STORE.list({ prefix: "lab:" });
+    const listed = { keys: await listAllKeys(env.LAB_STORE, "lab:") };
     const feedItems = [];
 
     for (const key of listed.keys) {

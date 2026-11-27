@@ -20,6 +20,7 @@
 // pass writes the plan to `dedupe:report` (GET /theses/duplicates) and changes nothing.
 import { thesisRegistrant } from "./callLock.mjs";
 import { registryEvents, THESIS_REGISTRY } from "../../app/lib/registryEvent.mjs";
+import { listAllKeys } from "./kvList.mjs"; // every lab:* record, past KV's 1000-key page (2026-11-27)
 
 export { THESIS_REGISTRY };
 export const REPORT_KEY = "dedupe:report";
@@ -61,7 +62,7 @@ export function houseProof(id, env) {
  */
 export async function resolveDuplicates(env, { fetchReceipt = async () => null, live = env.CALL_DEDUPE_LIVE === "true", now = Date.now(), maxReceipts = 40 } = {}) {
   const kv = env.LAB_STORE;
-  const listed = await kv.list({ prefix: "lab:" });
+  const listed = { keys: await listAllKeys(kv, "lab:") };
   const records = [];
   for (const key of listed.keys) {
     try { const d = JSON.parse((await kv.get(key.name)) || "null"); if (d && Array.isArray(d.theses)) records.push({ wallet: key.name.slice(4), theses: d.theses }); } catch { /* skip a bad record */ }
