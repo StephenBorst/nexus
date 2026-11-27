@@ -10,6 +10,13 @@
 // can't be reached the grade says UNAVAILABLE — it never falls back to a flattering claim.
 // Plan: swap this feed to the graded basis reads after the Oct-15 re-validation.
 //
+// CLEARED GATE (borst 2026-11-27): the feed carries a registered read (SOLD_READS: btc_lead_lag) ONLY while lab-api's
+// GET /signals/read/:axis answers 200 with `cleared: true` (app/lib/soldRead.mjs: served Tradeable/Paper, not failing,
+// no promotion lock, a recorded 30-trade paper PASS that beat random entries), re-checked on every call. Anything else
+// (403 not_cleared, 503, a timeout, a body without cleared/grade) = today's funding-fade feed below, unchanged, with its
+// live grade. Only a CLEARED read may be sold (pipeline-if-then.md, signed 2026-11-17). Tested by
+// app/lib/x402SignalsHandler.test.mjs. Changes go live only via `bankr x402 deploy nexus-signals`.
+//
 // Shape (one clean row per market): symbol · verdict (FADE|WATCH|NONE) · side (fade direction)
 // · funding_annual_pct · stretched (is funding economically stretched — the FADE gate) ·
 // edgeQuality (PROVEN|TRAP|MIXED|UNPROVEN, null when unproven) · n (reversion samples) · mark.
@@ -17,14 +24,40 @@
 // + n are merged from /intel/mispriced (best-effort — null when a market has no reversion history).
 
 const LAB_API = "https://og.nexustradinglabs.com";
+const SOLD_READS = ["btc_lead_lag"]; // = app/lib/soldRead.mjs SOLD_READS (test-pinned)
+const hdr = { "content-type": "application/json" };
 
-export default async function handler(_req: Request): Promise<Response> {
-  const hdr = { "content-type": "application/json" };
+type SoldBody = { ok?: boolean; cleared?: boolean; axis?: string; grade?: Record<string, unknown> & { cleared?: boolean }; generated_at?: string; signals?: unknown[] };
+
+// A cleared read's feed, or null (anything short of a cleared 200 with its grade = null: the funding-fade feed serves).
+async function clearedFeed(fetchImpl: typeof fetch): Promise<Response | null> {
+  for (const axis of SOLD_READS) {
+    try {
+      const r = await fetchImpl(`${LAB_API}/signals/read/${axis}`);
+      if (r.status !== 200) continue;
+      const b = (await r.json()) as SoldBody;
+      if (b?.ok !== true || b.cleared !== true || b.axis !== axis || !b.grade || b.grade.cleared !== true || !Array.isArray(b.signals)) continue;
+      return new Response(JSON.stringify({
+        source: `Nexus Trading Labs. The ${axis} read, per market: a read that CLEARED on /proof (graded on new data, beat random entries, passed its 30-trade paper judgment after fees).`,
+        read: axis,
+        grade: b.grade,
+        note: "Cleared on our public scoreboard; `grade` is its live record, re-checked on every call. Cleared is a graded record, not a promise of future returns. Verify at /proof.",
+        generated_at: b.generated_at || new Date().toISOString(),
+        signals: b.signals,
+      }), { headers: hdr });
+    } catch { /* next read, then the funding-fade feed */ }
+  }
+  return null;
+}
+
+export default async function handler(_req: Request, fetchImpl: typeof fetch = fetch): Promise<Response> {
   try {
+    const sold = await clearedFeed(fetchImpl);
+    if (sold) return sold;
     const [sigR, mispR, gradeR] = await Promise.all([
-      fetch(`${LAB_API}/signals`),
-      fetch(`${LAB_API}/intel/mispriced`).catch(() => null),
-      fetch(`${LAB_API}/intel/axis-backtest`).catch(() => null),
+      fetchImpl(`${LAB_API}/signals`),
+      fetchImpl(`${LAB_API}/intel/mispriced`).catch(() => null),
+      fetchImpl(`${LAB_API}/intel/axis-backtest`).catch(() => null),
     ]);
     if (!sigR.ok) {
       return new Response(JSON.stringify({ error: "upstream_unavailable", status: sigR.status }), { status: 502, headers: hdr });
@@ -81,6 +114,7 @@ export default async function handler(_req: Request): Promise<Response> {
 
     return new Response(JSON.stringify({
       source: "Nexus Trading Labs. The board's funding read, per market. Same verdict as THE PLAY on trade.nexustradinglabs.com.",
+      read: "funding_fade",
       grade,
       note: "Our scoreboard grades this read in public. `grade` is its live verdict; a read is not an edge until it grades PREDICTIVE. Verify at /proof.",
       generated_at: sig.generated_at || new Date().toISOString(),
