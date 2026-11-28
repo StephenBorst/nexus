@@ -5,6 +5,10 @@
 // key, works for everyone, instant. The insights nobody else can compute because
 // nobody else has your graded record.
 //
+// 2026-11-28 (Lab pass): facts, not advice. No RISK-ON / RISK-OFF mood score (it was a hand-weighted 50/40/10 blend),
+// no "your setup" crowning of an ungraded fade, no "press the edge / sit it out / size down", no momentum "room to
+// run". The market side says what is true now; the personal side says your record in numbers.
+//
 // Pure + side-effect-free so the logic is testable and can't drift with the UI.
 // Design law: green = genuinely positive (profit-adjacent), amber = caution, bone =
 // neutral info. Red is reserved for realized loss elsewhere — a risk *warning* is
@@ -37,41 +41,29 @@ export interface BriefingInput {
   winRate: number;                  // 0-100, overall
   totalPnl: number;
   openPositions: { symbol: string; direction: "LONG" | "SHORT" }[];
-  tape: { label: string; score: number } | null; // RISK-ON / NEUTRAL / RISK-OFF
+  tape?: Breadth | null;            // breadth facts only (no score); unused by the personal reads
   agent: { active: boolean } | null;
 }
 
-// Compute the market TAPE from the public futures rows — same formula as MarketTape
-// The economic floor for a FADE badge (Grok): a row must be stretched vs its OWN range AND
-// the crowd must be paying a meaningful annualized cost to hold. Below this, a "stretch" on a
-// tiny band (e.g. −0.66%/yr) is WATCH, not FADE. ONE literal, owned by conviction.mjs (the
-// scanner's file of truth) and re-exported here so the ticket + Board import it from one place.
-// Imported locally too (the briefing rows gate their FADE/WATCH word on it — one floor).
 import { FADE_FUNDING_FLOOR_PCT_YR } from "@/lib/conviction.mjs";
 import { bareTicker } from "@/utils/utils";
 export { FADE_FUNDING_FLOOR_PCT_YR };
 
-// (breadth 50% / BTC trend 40% / funding crowding 10%). Kept pure here so the
-// Briefing can read the tape without mounting the strip. Returns null on no data.
-export function computeTape(rows: { symbol: string; "24h_open"?: string | number; "24h_close"?: string | number; last_funding_rate?: string | number }[] | null) {
+// Breadth from the public futures rows: how many markets are up over 24h, and BTC's move. Counts only (it used to
+// blend these 50/40/10 into a RISK-ON / RISK-OFF score with made-up weights). null on no data.
+export interface Breadth { up: number; total: number; btcChg: number | null }
+export function computeBreadth(rows: { symbol: string; "24h_open"?: string | number; "24h_close"?: string | number }[] | null): Breadth | null {
   if (!rows || !rows.length) return null;
   const pct = (o?: string | number, c?: string | number) => {
     const oo = parseFloat(String(o ?? 0)), cc = parseFloat(String(c ?? 0));
-    if (!oo || !cc) return 0;
+    if (!oo || !cc) return null;
     const p = ((cc - oo) / oo) * 100;
-    return Math.abs(p) > 50 ? 0 : p;
+    return Math.abs(p) > 50 ? null : p;
   };
-  const changes = rows.map((m) => pct(m["24h_open"], m["24h_close"]));
-  const breadth = Math.round((changes.filter((c) => c > 0).length / changes.length) * 100);
+  const changes = rows.map((m) => pct(m["24h_open"], m["24h_close"])).filter((c): c is number => c != null);
+  if (!changes.length) return null;
   const btc = rows.find((m) => m.symbol === "PERP_BTC_USDC");
-  const btcChg = btc ? pct(btc["24h_open"], btc["24h_close"]) : 0;
-  const fundings = rows.map((m) => parseFloat(String(m.last_funding_rate ?? 0))).filter((f) => !isNaN(f));
-  const fundSkew = fundings.length ? Math.round((fundings.filter((f) => f > 0).length / fundings.length) * 100) : 50;
-  const btcScore = Math.max(0, Math.min(100, 50 + btcChg * 6));
-  const fundScore = 100 - Math.abs(fundSkew - 50) * 2;
-  const score = Math.round(breadth * 0.5 + btcScore * 0.4 + fundScore * 0.1);
-  const label = score >= 60 ? "RISK-ON" : score >= 42 ? "NEUTRAL" : "RISK-OFF";
-  return { score, label };
+  return { up: changes.filter((c) => c > 0).length, total: changes.length, btcChg: btc ? pct(btc["24h_open"], btc["24h_close"]) : null };
 }
 
 const ticker = (sym: string) => bareTicker(sym);
@@ -137,18 +129,11 @@ export interface MarketSignal {
   stretched?: boolean | null;                         // pierced its own p25–p75 range
 }
 
-// A trend needs rising open interest (new money committing) to be a real momentum setup —
-// otherwise it's a squeeze/exhaustion (fakeout). >= this %/hr OI growth = confirmed.
-const MOMENTUM_OI_MIN = 1;
-// Funding at/above this (per 8h) means the crowd is already max-positioned on the trend's
-// side — the ride is late (and it's the fade class's setup). Same band as the fade trigger.
-const CROWDED_FUNDING = 0.0004;
-
 export interface MarketReadInput {
   rows: { symbol: string; "24h_open"?: string | number; "24h_close"?: string | number }[] | null;
   signals: MarketSignal[] | null;
   liveAgents: number | null;
-  tape: { label: string; score: number } | null;
+  tape: Breadth | null;
   // The graded-caller lean per symbol — so a briefing row can name a caller crowd that FIGHTS
   // the fade ("FADE X · CALLERS Y"), the conflict grammar (Grok). Optional/fail-soft.
   consensus?: Record<string, { side: "LONG" | "SHORT" | "SPLIT"; lean: number; participants: number }> | null;
@@ -173,22 +158,16 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
   const familyLine = fadeFamilyLine(fadeGrade);
   const fadeNote = `The mechanical fade, not graded yet.${familyLine ? ` ${familyLine}` : ""}`;
 
-  // 1 — Tape headline: the BREADTH lens (what setups the tape favors) — NOT a second
-  // market-mood SCORE. The Market Terminal's "THE MARKET READ" gauge is the one
-  // canonical numeric regime read on this tab (fear-greed + BTC dom + mcap); this line
-  // stays qualitative (label + setup guidance) so the two don't read as duplicate scores.
+  // 1 — Breadth: a count, never a mood score or a setup guide.
   if (tape) {
-    const guide =
-      tape.label === "RISK-ON" ? "Broad strength. Momentum/trend setups favored; funding fades are riskier into a bid."
-      : tape.label === "RISK-OFF" ? "Broad weakness. Mean-reversion fades and tighter stops; don't chase longs."
-      : "Rangebound tape. Funding-harvest and confluence setups fit best.";
+    const btc = tape.btcChg != null ? ` · BTC ${tape.btcChg >= 0 ? "+" : ""}${tape.btcChg.toFixed(1)}%` : "";
     out.push({
       id: "read-tape",
       priority: 60,
-      tone: tape.label === "RISK-OFF" ? "caution" : "info",
-      title: `${tape.label} tape. What the breadth favors`,
-      detail: guide,
-      action: { label: "Full regime read", tab: "intel" },
+      tone: "info",
+      title: `${tape.up} of ${tape.total} markets up over 24h${btc}`,
+      detail: "A count of the board, not a forecast.",
+      action: { label: "Market Intel", tab: "intel" },
     });
   }
 
@@ -264,7 +243,7 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
         priority: 48,
         tone: "info",
         title: `${top.sym} +${top.chg.toFixed(1)}% leads · ${bot.sym} ${bot.chg.toFixed(1)}% lags`,
-        detail: "The widest 24h dispersion on the board. Where the momentum and the mean-reversion both live.",
+        detail: "The biggest 24h gain and loss on the board.",
         action: { label: "Market Intel", tab: "intel" },
       });
     }
@@ -276,8 +255,8 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
       id: "read-live-agents",
       priority: 44,
       tone: "info",
-      title: `${liveAgents} autonomous ${liveAgents === 1 ? "agent is" : "agents are"} live in the market`,
-      detail: "Real positions from Nexus agents right now. Every entry and exit graded on-chain. Watch them work, or put yours in.",
+      title: `${liveAgents} ${liveAgents === 1 ? "agent is" : "agents are"} publishing live positions`,
+      detail: "Real positions from Nexus agents right now, booked at the exchange's fill. Not graded: a position isn't a call.",
       action: { label: "Trading Agent", tab: "agent" },
     });
   }
@@ -291,7 +270,7 @@ export function buildMarketRead(input: MarketReadInput): Insight[] {
       priority: 40,
       tone: "info",
       title: `Open interest is ${oiHot.oi_change_pct > 0 ? "surging" : "flushing"} on ${oiHot.symbol} (${oiHot.oi_change_pct > 0 ? "+" : ""}${oiHot.oi_change_pct.toFixed(1)}%)`,
-      detail: oiHot.oi_change_pct > 0 ? "New money is committing. Conviction, or a crowd building to fade." : "Positions are unwinding. A squeeze or a reset in progress.",
+      detail: oiHot.oi_change_pct > 0 ? "More positions opened than closed. Not a direction on its own." : "More positions closed than opened. Not a direction on its own.",
       action: { label: "Market Intel", tab: "intel" },
     });
   }
@@ -321,211 +300,55 @@ export function buildForecastRead(markets: ForecastRead[] | null): Insight[] {
       id: `forecast-${m.coin}`,
       priority: 66,
       tone: "caution" as const,
-      title: `${m.coin}. Forecasters ${m.forecastLean === "UP" ? "bullish" : "bearish"}, tape offside`,
-      detail: `Polymarket leans ${m.forecastLean} (${m.forecastProbPct}%) on "${q}" while funding leans ${m.fundingLean}. A near-money divergence worth a graded thesis.`,
+      title: `${m.coin}: the prediction market and funding lean opposite ways`,
+      detail: `On "${q}" the crowd is more sure of ${m.forecastLean === "UP" ? "a move up" : "a move down"} than ${m.coin}'s own history (${m.forecastProbPct}% yes), while funding leans ${m.fundingLean === "UP" ? "up" : "down"}. Two inputs that disagree, neither graded.`,
       action: { label: "Forecasts", tab: "intel" },
       meta: { symbol: m.coin, direction: (m.forecastLean === "UP" ? "LONG" : "SHORT") as "LONG" | "SHORT" },
     };
   });
 }
 
-// ── THE FUSION — the synthesis of syntheses ──────────────────────────────────
-// Every other read is EITHER about the market (tape, funding, movers) OR about you
-// (your record, your leaks). This is the intersection nobody else can compute: it
-// takes the market's cleanest fade setup (crowded funding), the merit-weighted CALLER
-// consensus on that symbol, and YOUR edge (which side you're actually good at + whether
-// you're a proven crowd-fader) and asks the only question that matters — "is this setup
-// MINE?". Aligned → your highest-conviction, personalized play. Off your edge → the
-// blunt "sit it out". This is the moat: it requires the graded market, the graded crowd,
-// and your graded record all at once. Pure + fail-soft on any missing input.
+// ── THE FADE, beside your own record (2026-11-28) ────────────────────────────
+// This used to be "THE FUSION": it crowned the market's fade as "Your setup" when your win rate on that side was
+// higher (from 4 trades a side), called counter-trend fades "where your edge lives", told off-side traders to "sit
+// it out", and pitched a momentum ride with "room to run". The fade is a mechanical rule, not graded; a win rate on
+// a handful of trades is not an edge. Now: the stretched fade (the server's FADE over the floor), the graded callers'
+// lean as a fact, and your own record on that side as a count from 5 trades. Nothing is called yours.
 export interface FusionInput {
   trades: BriefingTrade[];
   signals: MarketSignal[] | null;
   consensus: Record<string, { side: "LONG" | "SHORT" | "SPLIT"; lean: number; participants: number }> | null;
-  tape: { label: string; score: number } | null;
-  contrarian?: { calls: number; avgR: number } | null; // the user's OWN fade record
-  // The user's ALIGN edge (with-trend vs counter-trend), from the graded regime
-  // attribution — the honest per-CLASS edge. A funding fade is a counter-trend play,
-  // so a strong AGAINST_TREND edge means the setup is the user's kind of trade.
-  alignEdge?: { best: { bucket: string; avgR: number } } | null;
+  fadeGrade?: FadeFamilyGrade | null;
 }
 
+const SIDE_MIN = 5;
+
 export function buildFusion(input: FusionInput): Insight[] {
-  const { trades, signals, consensus, contrarian } = input;
-  const out: Insight[] = [];
-
-  const sideWord = (d: "LONG" | "SHORT") => (d === "LONG" ? "long" : "short");
-
-  // Your edge: which side you're measurably better on (needs a real sample both sides).
-  const longs = trades.filter((t) => t.direction === "LONG");
-  const shorts = trades.filter((t) => t.direction === "SHORT");
-  let userSide: "LONG" | "SHORT" | null = null, userWr = 0;
-  if (longs.length >= 4 && shorts.length >= 4) {
-    const lw = wrOf(longs), sw = wrOf(shorts);
-    if (Math.abs(lw - sw) >= 12) { userSide = lw > sw ? "LONG" : "SHORT"; userWr = Math.max(lw, sw); }
-  }
-  const provenFader = !!(contrarian && contrarian.calls >= 3 && contrarian.avgR > 0);
-  const faderNote = provenFader ? `, and your record fading the crowd is +${contrarian!.avgR}R over ${contrarian!.calls} calls` : "";
-
-  // Per-CLASS edge (the matrix). A funding fade is a COUNTER-TREND / mean-reversion play;
-  // riding a trend is a WITH-trend / momentum play. Match the setup to the user's ALIGN
-  // edge: AGAINST_TREND traders get fades, WITH_TREND traders get the trend to ride.
-  const alignBest = input.alignEdge?.best?.bucket || null;
-  const alignAvgR = input.alignEdge?.best?.avgR ?? 0;
-  const classAgainst = alignBest === "align:AGAINST_TREND"; // mean-reversion / fader
-  const classWith = alignBest === "align:WITH_TREND";       // momentum / trend-rider
-  const classNote = classAgainst ? ` Counter-trend fades are your class. Your align edge is +${alignAvgR}R against the trend.`
-    : classWith ? " ⚠ Your record leans WITH-trend, so this counter-trend fade is off your usual style. Respect the risk."
+  const { trades, signals, consensus } = input;
+  const fade = (signals || [])
+    .filter((s) => s.verdict === "FADE" && (s.fade_dir === "LONG" || s.fade_dir === "SHORT"))
+    .map((s) => ({ s, annual: Number(s.funding_annual_pct ?? annualFundingPct(s.funding_rate_8h) ?? NaN) }))
+    .filter(({ annual }) => Number.isFinite(annual) && Math.abs(annual) >= FADE_FUNDING_FLOOR_PCT_YR)
+    .sort((a, b) => Math.abs(b.annual) - Math.abs(a.annual))[0];
+  if (!fade) return [];
+  const dir = fade.s.fade_dir as "LONG" | "SHORT";
+  const sym = fade.s.symbol;
+  const side = trades.filter((t) => t.direction === dir);
+  const mine = side.length >= SIDE_MIN
+    ? ` Your ${dir === "LONG" ? "longs" : "shorts"}: ${side.filter((t) => t.pnl > 0).length} of ${side.length} won.`
     : "";
-
-  // ── MOMENTUM setup (evaluated FIRST, independent of any fade setup) ──
-  // The strongest-trending core symbol, CONFIRMED by rising OI (new money committing —
-  // a trend on thinning OI is a squeeze/exhaustion, not a setup). Cross-checked against
-  // funding: crowd already max-positioned on the trend's side = a LATE ride, graded not hidden.
-  const trending = (signals || [])
-    .filter((s) => (s.trend === "TREND_UP" || s.trend === "TREND_DOWN") && (s.trend_oi_pct ?? 0) >= MOMENTUM_OI_MIN)
-    .sort((a, b) => Math.abs(b.trend_move_pct ?? 0) - Math.abs(a.trend_move_pct ?? 0));
-  const mom = trending[0] || null;
-  const momDir: "LONG" | "SHORT" | null = mom ? (mom.trend === "TREND_UP" ? "LONG" : "SHORT") : null;
-  const momMove = mom?.trend_move_pct ?? 0;
-  const momOi = mom?.trend_oi_pct ?? 0;
-  const momFunding = mom?.funding_rate_8h ?? 0;
-  const momExtended = !!mom && ((momDir === "LONG" && momFunding >= CROWDED_FUNDING) || (momDir === "SHORT" && momFunding <= -CROWDED_FUNDING));
-  const fundingNote = momExtended
-    ? ` But funding is already crowded ${momDir === "LONG" ? "long" : "short"} (${(momFunding * 100).toFixed(3)}%/8h). The trend is LATE, so tighten the stop; this is where trends snap.`
-    : ` Funding isn't crowded yet (${(momFunding * 100).toFixed(3)}%/8h), so the crowd isn't all-in. Room to run.`;
-
-  // ── The NARROW risk-off gate (Grok) ──────────────────────────────────────────
-  // A momentum LONG into a RISK-OFF tape (or a SHORT into RISK-ON) is the textbook
-  // "chase" — so we DON'T promote it. But the gate stays surgical: it only touches a
-  // WITH-trend momentum ride against the tape, NEVER a fade. A stretched fade-long IS
-  // the mean-reversion book that works in risk-off, so it must keep flowing through
-  // below (and gets a RISK-OFF · FADE tag), never suppressed with the chases.
-  const tapeLabel = input.tape?.label || null;
-  const momChasesTape = !!mom && ((tapeLabel === "RISK-OFF" && momDir === "LONG") || (tapeLabel === "RISK-ON" && momDir === "SHORT"));
-
-  // A momentum trader + a live, OI-confirmed trend = ride it. This IS their read, so it
-  // returns early — no need to also throw a fade at a trend-rider. EXCEPT when the ride
-  // chases the tape: then we demote it to a caution and fall through, so the stretched
-  // fade (the book that works in this tape) can still surface as the alternative.
-  if (mom && momDir && classWith && !momChasesTape) {
-    out.push({
-      id: "fusion-momentum",
-      priority: momExtended ? 90 : 92,
-      tone: momExtended ? "caution" : "positive",
-      title: `Your setup: ride the ${mom.symbol} trend (${sideWord(momDir)})`,
-      detail: `${mom.symbol} is in a strong ${momDir === "LONG" ? "uptrend" : "downtrend"} (${momMove >= 0 ? "+" : ""}${momMove}%) and open interest is rising (+${momOi}%/hr). New money committing, not a squeeze. Momentum is your class: your align edge is +${alignAvgR}R WITH the trend.${fundingNote}`,
-      action: { label: "Structure it", tab: "thesis" },
-      meta: { symbol: mom.symbol, direction: momDir },
-    });
-    return out;
-  }
-  if (mom && momDir && classWith && momChasesTape) {
-    out.push({
-      id: "fusion-momentum-chase",
-      priority: 78,   // below a real fade. A chase must never headline the briefing
-      tone: "caution",
-      title: `${mom.symbol} is trending ${sideWord(momDir)}, but the tape is ${tapeLabel}. That's a chase`,
-      detail: `${mom.symbol} is ${momDir === "LONG" ? "up" : "down"} ${momMove >= 0 ? "+" : ""}${momMove}% on rising OI. Normally your class. But the broad tape is ${tapeLabel === "RISK-OFF" ? "weak" : "strong"}, against the ride, so a momentum ${sideWord(momDir)} here is chasing. Take the trend only small with a tight stop; the stretched fade below is the book that actually works in a ${tapeLabel} tape.${fundingNote}`,
-      action: { label: "Structure it", tab: "thesis" },
-      meta: { symbol: mom.symbol, direction: momDir },
-    });
-    // no early return — fall through so the fade setup surfaces as the real play
-  }
-
-  // ── FADE setup (may not exist) ──
-  // A confluence read (funding AND OI agree) wins; otherwise the most-stretched funding
-  // market. The direction is the fade. No fade setup + no momentum above → nothing to say.
-  const confl = (signals || []).find((s) => s.confluence === "LONG" || s.confluence === "SHORT");
-  const byFund = [...(signals || [])].sort((a, b) => Math.abs(b.funding_rate_8h) - Math.abs(a.funding_rate_8h));
-  const hot = byFund.find((s) => Math.abs(s.funding_rate_8h) >= 0.0004);
-  const pick = confl || hot;
-  if (!pick) return out;
-  const klass: "confluence" | "funding" = confl ? "confluence" : "funding";
-  const fadeDir: "LONG" | "SHORT" = klass === "confluence" ? (pick.confluence as "LONG" | "SHORT") : (pick.funding_rate_8h > 0 ? "SHORT" : "LONG");
-  const heavy = fadeDir === "SHORT" ? "long" : "short";   // crowd is on the opposite side of the fade
-  const sym = pick.symbol;                                // signals use bare tickers
-  const fundPct = (pick.funding_rate_8h * 100).toFixed(3);
-  const setupPhrase = klass === "confluence"
-    ? "funding and open interest both agree"
-    : `funding is stretched (${fundPct}%/8h)`;
-
-  // The graded crowd's lean on this symbol (merit-weighted callers), if any.
   const lean = consensus?.[sym] || null;
-  const callersAgree = !!(lean && lean.side === fadeDir);
-  const callersFight = !!(lean && lean.side !== fadeDir && lean.side !== "SPLIT");
-  const callerNote = callersAgree ? ` The graded callers are ${lean!.side} too. WITH the fade.`
-    : callersFight ? ` But write it as the conflict it is: FADE ${fadeDir} · CALLERS ${lean!.side}. A real disagreement, so treat it as lower-odds.`
-    : "";
-
-  // ── No tally (2026-09-30, borst) ────────────────────────────────────────────
-  // This used to count the reads backing the fade, print "N independent reads align", crown
-  // three or more with ◆, lift the insight's priority by the count (up to +10, enough to
-  // outrank a live-risk warning on an open position) and keep it green over a stated
-  // disagreement. A count of reads that aren't graded as an edge is a score with no grade
-  // behind it, the same rule THE READ follows. Each read is still stated in words
-  // (setupPhrase, your side / class / fading record, callerNote). What moves the insight is
-  // only the graded callers disagreeing: it drops 3 and reads caution.
-  const callerDock = callersFight ? 3 : 0;
-  const fadeTone: InsightTone = callersFight ? "caution" : "positive";
-  // A stretched fade in the direction the tape's mean-reversion favors (long into RISK-OFF,
-  // short into RISK-ON) is the book that WORKS in that tape — surface it AS that, tagged, so
-  // the risk-off gate above reads as "suppress the chase, keep the fade," not "kill all longs."
-  const tapeFavorsFade = (tapeLabel === "RISK-OFF" && fadeDir === "LONG") || (tapeLabel === "RISK-ON" && fadeDir === "SHORT");
-  const tapeFadeTag = tapeFavorsFade ? `${tapeLabel} · FADE · ` : "";
-  const tapeFadeNote = tapeFavorsFade ? ` The tape is ${tapeLabel}, so this stretched fade is the mean-reversion book it favors. Not a chase.` : "";
-
-  if (userSide && userSide === fadeDir) {
-    out.push({
-      id: "fusion-your-setup",
-      priority: 92 - callerDock,
-      tone: fadeTone,
-      title: `${tapeFadeTag}Your setup: fade the crowd ${sideWord(fadeDir)} on ${sym}`,
-      detail: `${sym}: ${setupPhrase}. The crowd is heavily ${heavy}, so the clean fade is ${sideWord(fadeDir)}, and that's your stronger side (${userWr}% win rate)${faderNote}.${classNote}${callerNote}${tapeFadeNote}`,
-      action: { label: "Structure it", tab: "thesis" },
-      meta: { symbol: sym, direction: fadeDir },
-    });
-  } else if (!userSide && classAgainst) {
-    // No directional edge, but the SETUP CLASS is where their edge lives.
-    out.push({
-      id: "fusion-your-class",
-      priority: 88 - callerDock,
-      tone: fadeTone,
-      title: `${tapeFadeTag}Your kind of setup: counter-trend fade ${sideWord(fadeDir)} on ${sym}`,
-      detail: `${sym}: ${setupPhrase}. The clean fade is ${sideWord(fadeDir)}, and counter-trend fades are where your edge lives (align +${alignAvgR}R against the trend)${faderNote}.${callerNote}${tapeFadeNote}`,
-      action: { label: "Structure it", tab: "thesis" },
-      meta: { symbol: sym, direction: fadeDir },
-    });
-  } else if (userSide && userSide !== fadeDir) {
-    out.push({
-      id: "fusion-not-your-side",
-      priority: 84,
-      tone: "caution",
-      title: `${sym}'s setup is a ${sideWord(fadeDir)} fade. Not your side`,
-      detail: `The crowd is heavily ${heavy}, so the clean fade is ${sideWord(fadeDir)}. But your edge is ${sideWord(userSide)}-side (${userWr}%). Sit it out or size down. Chasing setups off your edge is where records leak.${callerNote}`,
-      action: { label: "Why", tab: "analytics" },
-    });
-  } else if (callersAgree) {
-    out.push({
-      id: "fusion-signal-crowd",
-      priority: 74,
-      tone: "info",
-      title: `${sym}: the signal and the graded callers both say fade ${sideWord(fadeDir)}`,
-      detail: `${setupPhrase}. The crowd is heavily ${heavy}. And the graded callers are ${fadeDir} too (WITH the fade). The fade itself is a mechanical rule, not graded yet.`,
-      action: { label: "See the read", tab: "intel" },
-    });
-  } else if (callersFight) {
-    out.push({
-      id: "fusion-divergence",
-      priority: 70,
-      tone: "info",
-      title: `${sym}: the signal and the sharp callers disagree`,
-      detail: `Write it as the conflict it is: FADE ${fadeDir} · CALLERS ${lean!.side}. Funding says fade ${sideWord(fadeDir)}, the graded callers are ${sideWord(lean!.side as "LONG" | "SHORT")}. Disagreement is where the information is; look before you commit.`,
-      action: { label: "Smart money", tab: "smart" },
-    });
-  }
-
-  return out.sort((a, b) => b.priority - a.priority);
+  const callers = lean && lean.side !== "SPLIT" ? ` Graded callers lean ${lean.side.toLowerCase()}.` : "";
+  const family = fadeFamilyLine(input.fadeGrade ?? null);
+  return [{
+    id: "fusion-fade",
+    priority: 80,
+    tone: "info",
+    title: `${sym} · FADE ${dir} · ${fade.annual >= 0 ? "+" : ""}${fade.annual.toFixed(0)}%/yr`,
+    detail: `Funding is stretched vs its own range. The fade is a mechanical rule, not graded yet.${family ? ` ${family}` : ""}${callers}${mine}`,
+    action: { label: "See the read", tab: "intel" },
+    meta: { symbol: sym, direction: dir },
+  }];
 }
 
 /**
@@ -533,29 +356,10 @@ export function buildFusion(input: FusionInput): Insight[] {
  * (e.g. no trades yet) — the caller renders nothing rather than filler.
  */
 export function buildBriefing(input: BriefingInput): Insight[] {
-  const { trades, winRate, totalPnl, openPositions, tape, agent } = input;
+  const { trades, winRate, totalPnl, openPositions, agent } = input;
   const out: Insight[] = [];
   const sorted = [...trades].sort((a, b) => b.timestamp - a.timestamp); // newest first
   const n = sorted.length;
-
-  // 1 — Open position fighting the tape (highest priority: it's live risk NOW).
-  if (tape && openPositions.length) {
-    for (const p of openPositions) {
-      const fights =
-        (tape.label === "RISK-OFF" && p.direction === "LONG") ||
-        (tape.label === "RISK-ON" && p.direction === "SHORT");
-      if (fights) {
-        out.push({
-          id: `conflict-${ticker(p.symbol)}`,
-          priority: 95,
-          tone: "caution",
-          title: `Your ${p.direction} ${ticker(p.symbol)} is against a ${tape.label} tape`,
-          detail: `Broad ${tape.label === "RISK-OFF" ? "weakness" : "strength"} on the tape. Tighten the stop or size down unless your thesis is specifically a fade.`,
-          action: { label: "Check the tape", tab: "smart" },
-        });
-      }
-    }
-  }
 
   // 1b — Hidden concentration: is the open book secretly one bet? (live risk, so it ranks
   // just under a direct tape conflict). Count-weighted here — the Briefing only has
@@ -570,8 +374,8 @@ export function buildBriefing(input: BriefingInput): Insight[] {
         ? `${conc.topSector.count} of your positions are ${conc.topSector.side} ${conc.topSector.name}. That's one bet`
         : `Your open book is ${conc.netPct}% net ${conc.netSide}. One directional bet`,
       detail: conc.kind === "sector" && conc.topSector
-        ? `${conc.topSector.name} names move together, so this book is really one ${conc.topSector.name} position at ${conc.topSector.count}× size. A single ${conc.topSector.name} move hits all of it. Size it like the one bet it is.`
-        : `Across ${conc.positions} positions you're almost entirely one way. There's no hedge here, just leverage on one direction. Make sure that's intentional.`,
+        ? `${conc.topSector.name} names tend to move together, so one ${conc.topSector.name} move reaches all ${conc.topSector.count} of them.`
+        : `Across ${conc.positions} positions, almost all of it points one way.`,
       action: { label: "Review positions", tab: "quicktrade" },
     });
   }
@@ -589,16 +393,16 @@ export function buildBriefing(input: BriefingInput): Insight[] {
         priority: 85,
         tone: "caution",
         title: `${lossRun} straight losses`,
-        detail: "Cold streaks compound when you press to get even. Size down or step away. The tape will still be here tomorrow.",
+        detail: `Your last ${lossRun} closed trades each lost.`,
         action: { label: "Review the log", tab: "tradelog" },
       });
     } else if (winRun >= 4) {
       out.push({
         id: "streak-hot",
         priority: 55,
-        tone: "positive",
+        tone: "info",
         title: `${winRun} wins in a row`,
-        detail: "You're in rhythm. Press the edge, but keep the same risk per trade. Streaks end when size creeps.",
+        detail: `Your last ${winRun} closed trades each won. A run, not a record.`,
         action: { label: "See what's working", tab: "analytics" },
       });
     }
@@ -607,7 +411,7 @@ export function buildBriefing(input: BriefingInput): Insight[] {
   // 3 — Directional edge (needs a real sample on both sides).
   const longs = trades.filter((t) => t.direction === "LONG");
   const shorts = trades.filter((t) => t.direction === "SHORT");
-  if (longs.length >= 4 && shorts.length >= 4) {
+  if (longs.length >= SIDE_MIN && shorts.length >= SIDE_MIN) {
     const lw = wrOf(longs), sw = wrOf(shorts);
     if (Math.abs(lw - sw) >= 15) {
       const strong = lw > sw ? "long" : "short";
@@ -634,8 +438,8 @@ export function buildBriefing(input: BriefingInput): Insight[] {
         id: "market-spread",
         priority: 60,
         tone: "info",
-        title: `${bName} pays you; ${wName} bleeds you`,
-        detail: `${bName} ${money(bV.net)} over ${bV.n} trades. ${wName} ${money(wV.net)} over ${wV.n}. Concentrate where you have the read.`,
+        title: `Your best market ${bName}, your worst ${wName}`,
+        detail: `${bName} ${money(bV.net)} over ${bV.n} trades. ${wName} ${money(wV.net)} over ${wV.n}.`,
         action: { label: "By-market stats", tab: "analytics" },
       });
     }
@@ -661,7 +465,7 @@ export function buildBriefing(input: BriefingInput): Insight[] {
             priority: 65,
             tone: "caution",
             title: "You win less on high-volume days",
-            detail: `${bw}% on busy days vs ${cw}% on selective days. The extra trades are costing you. Fewer, better setups.`,
+            detail: `${bw}% won on your busier days vs ${cw}% on quieter ones (${busy.length} and ${calm.length} trades).`,
             action: { label: "Open the calendar", tab: "tradelog" },
           });
         }
@@ -685,7 +489,7 @@ export function buildBriefing(input: BriefingInput): Insight[] {
           priority: 72,
           tone: "caution",
           title: "You trade worse right after a loss",
-          detail: `${alWr}% win rate on the ${afterLoss.length} trades you took immediately after a red close (${money(alNet)}) vs ${winRate.toFixed(0)}% overall. That's tilt. After a loss, step back before the next entry instead of pressing.`,
+          detail: `${alWr}% won on the ${afterLoss.length} trades you took right after a losing close (${money(alNet)}), vs ${winRate.toFixed(0)}% overall.`,
           action: { label: "Open the log", tab: "tradelog" },
         });
       }
@@ -704,7 +508,7 @@ export function buildBriefing(input: BriefingInput): Insight[] {
       priority: 58,
       tone: "info",
       title: `You’ve done better in the ${bName} session`,
-      detail: `${bName} hours ${money(bV.net)} over ${bV.n} trades (${Math.round((bV.wins / bV.n) * 100)}% win). ${wName} hours ${money(wV.net)} over ${wV.n} (${Math.round((wV.wins / wV.n) * 100)}%). Trade when you're sharp; sit out the ${wName} session or size down.`,
+      detail: `${bName} hours ${money(bV.net)} over ${bV.n} trades (${Math.round((bV.wins / bV.n) * 100)}% won). ${wName} hours ${money(wV.net)} over ${wV.n} (${Math.round((wV.wins / wV.n) * 100)}%).`,
       action: { label: "By-time stats", tab: "analytics" },
     });
   }
@@ -726,12 +530,10 @@ export function buildBriefing(input: BriefingInput): Insight[] {
     out.push({
       id: "record-anchor",
       priority: 20,
-      tone: totalPnl >= 0 && winRate >= 50 ? "positive" : "info",
-      title: `Your record: ${n} trades · ${winRate.toFixed(0)}% · ${money(totalPnl)}`,
-      detail: totalPnl >= 0
-        ? "Net-positive and graded from public price. The kind of record you can actually stand behind."
-        : "Underwater right now. The log below is where the fix starts. Find the pattern, cut it.",
-      action: { label: "Prove it / dig in", tab: "analytics" },
+      tone: "info",
+      title: `Your record: ${n} trades · ${winRate.toFixed(0)}% won · ${money(totalPnl)}`,
+      detail: "Realized P&L on your closed Orderly positions, as Orderly reports it. Your graded calls are on your profile.",
+      action: { label: "Analytics", tab: "analytics" },
     });
   }
 
