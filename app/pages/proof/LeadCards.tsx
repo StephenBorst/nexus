@@ -110,8 +110,8 @@ export default function LeadCards({ cards, isMobile, onWords }: { cards: LeadCar
     <section id="proof-leads" style={{ marginTop: 32, scrollMarginTop: 120 }}>
       <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 22 : 26, fontWeight: 600, letterSpacing: "-0.02em", color: BRIGHT }}>Leads</h2>
       <p style={{ margin: "6px 0 14px", fontFamily: UI, fontSize: 13.5, lineHeight: 1.55, color: MUTED, maxWidth: 680 }}>
-        Reads making money on new data, not cleared yet. Each one is checked against 300 random trades on the same coins and
-        hours: it only counts if it beats them.{" "}
+        Reads averaging above 0R on new data, with both halves agreeing. Not cleared yet: fees, fresh coins and paper
+        come later. Each one is checked against 300 random trades on the same coins and hours: it only counts if it beats them.{" "}
         <button type="button" onClick={onWords} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: UI, fontSize: 13.5, color: FOG, textDecoration: "underline", textUnderlineOffset: 3, textDecorationColor: C.borderStrong }}>What the words mean ↓</button>
       </p>
       {cards.length

@@ -11,6 +11,8 @@
 //     (`randomWord`, the backtest's own baselineVerdict cutoffs), each remaining bar is one plain sentence with its number
 //     now (`gateLine`), and "Every read vs random trades" is cards of word chips (`vsRandomCards`), not a ruler.
 import { CHART, chartPct, fmtR } from "./engineOverview.mjs";
+import { PIPELINE_RULES, PAPER_MIN_TRADES } from "./readPipeline.mjs";
+import { BADGE_BAR } from "./badgeBar.mjs";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const r2 = (v) => (num(v) == null ? null : Math.round(v * 100) / 100);
@@ -54,20 +56,25 @@ export { CHART };
  * A read (or one side) against 300 random trades on the same coins, side and hours, in words. The cutoffs are the
  * backtest's own `baselineVerdict` (95 / 80 / 5, pinned by test); under 5 trades is "too few".
  */
+export const RANDOM_CUTOFFS = Object.freeze({ beats: 95, leans: 80, worse: 5, minTrades: 5 });
 export const RANDOM_WORDS = Object.freeze({
   BEATS: "Beats random", LEANS: "Leaning better", SAME: "No better than random", WORSE: "Worse than random", FEW: "Too few trades yet",
 });
 export function randomWord(pct, n) {
   const p = num(pct);
-  if (p == null || !(num(n) >= 5)) return { key: "FEW", text: RANDOM_WORDS.FEW };
-  const key = p >= 95 ? "BEATS" : p >= 80 ? "LEANS" : p <= 5 ? "WORSE" : "SAME";
+  const c = RANDOM_CUTOFFS;
+  if (p == null || !(num(n) >= c.minTrades)) return { key: "FEW", text: RANDOM_WORDS.FEW };
+  const key = p >= c.beats ? "BEATS" : p >= c.leans ? "LEANS" : p <= c.worse ? "WORSE" : "SAME";
   return { key, text: RANDOM_WORDS[key] };
 }
 
-/** "Beat random trades 61% of the time." — the one sentence a card leads with. */
+/**
+ * "Did better than 61% of random runs." — the one sentence a card leads with. The number is the share of the 300
+ * random replays (same coins, side, hours) whose average this read's average beat: not how often a trade won.
+ */
 export function beatSentence(pct) {
   const p = num(pct);
-  return p == null ? "Too few trades to compare with random yet." : `Beat random trades ${Math.round(p)}% of the time.`;
+  return p == null ? "Too few trades to compare with random yet." : `Did better than ${Math.round(p)}% of random runs.`;
 }
 
 const pctText = (v) => (num(v) == null ? "—" : `${Math.round(v * 10) / 10}%`);
@@ -80,21 +87,25 @@ export function gateLine(g) {
   const now = num(g.now), bar = num(g.bar);
   const side = /^random_(long|short)$/.exec(g.key || "")?.[1];
   let text, nowText = null;
+  // Fallback numbers are the pipeline's own (PIPELINE_RULES): the served bar wins whenever it is there.
+  const R = PIPELINE_RULES;
   switch (side ? "random_side" : g.key) {
-    case "events": text = `${bar ?? 30} new trades to judge it on`; nowText = `${now ?? 0} so far`; break;
-    case "mean_r": text = "Makes money on average (above 0R)"; nowText = fmtR(now); break;
+    case "events": text = `${bar ?? R.minEvents} new trades to judge it on`; nowText = `${now ?? 0} so far`; break;
+    case "mean_r": text = "Averages above 0R on new data"; nowText = fmtR(now); break;
     case "halves": text = "Holds up in both halves of the data"; break;
-    case "random": text = `Beats random trades ${bar ?? 95}% of the time`; nowText = pctText(now); break;
-    case "random_side": text = `Its ${side}s beat random ${side}s ${bar ?? 50}% of the time`; nowText = pctText(now); break;
+    case "random": text = `Does better than ${bar ?? R.edgePct}% of random runs`; nowText = pctText(now); break;
+    case "random_side": text = `Its ${side}s do better than ${bar ?? R.sidePct}% of random ${side} runs`; nowText = pctText(now); break;
     case "holdout_line": text = "Tested on fresh coins"; break;
-    case "holdout_events": text = `${bar ?? 30} trades on fresh coins`; nowText = `${now ?? 0} so far`; break;
-    case "holdout_r": text = "Makes money on fresh coins too"; nowText = fmtR(now); break;
-    case "holdout_random": text = `Beats random ${bar ?? 80}% of the time on fresh coins`; nowText = pctText(now); break;
+    case "holdout_events": text = `${bar ?? R.holdoutMinEvents} trades on fresh coins`; nowText = `${now ?? 0} so far`; break;
+    case "holdout_r": text = "Averages above 0R on fresh coins too"; nowText = fmtR(now); break;
+    case "holdout_random": text = `Does better than ${bar ?? R.holdoutPct}% of random runs on fresh coins`; nowText = pctText(now); break;
     case "exit_line": text = "Tested with real exits"; break;
-    case "exit_trades": text = `${bar ?? 30} trades with real exits`; nowText = `${now ?? 0} so far`; break;
+    case "exit_trades": text = `${bar ?? R.exitMinTrades} trades with real exits`; nowText = `${now ?? 0} so far`; break;
     case "exit_net": text = "Makes money after fees"; nowText = now == null ? "—" : `${now > 0 ? "+" : ""}${now} bps`; break;
     case "paper_wallet": text = "A paper wallet running it"; break;
-    case "paper_record": text = "30 paper trades, judged after fees"; break;
+    // The served PAPER bar ("its own paper record + parity clean") in full: the 30-trade judgment after fees, parity,
+    // and the badge bar's random check (paperJudge.mjs + badgeBar.mjs), which is what CLEARED reads.
+    case "paper_record": text = `${PAPER_MIN_TRADES} paper trades: net positive after fees, parity clean, better than ${BADGE_BAR.beatPct}% of random entries`; break;
     default: text = String(g.label || g.key || "");
   }
   return { key: g.key, text, nowText, met: !!g.met };
@@ -106,7 +117,7 @@ export function paperRun(count) {
   if (count.unread) return { state: "unread", text: "Paper run: unread right now" };
   const n = num(Number(count.count));
   if (n == null) return { state: "none", text: "No paper run yet" };
-  const target = num(Number(count.target)) ?? 30;
+  const target = num(Number(count.target)) ?? PAPER_MIN_TRADES;
   return { state: "running", count: n, target, open: !!count.open, text: `Paper run: ${n} of ${target} trades${count.open ? " · 1 open" : ""}` };
 }
 

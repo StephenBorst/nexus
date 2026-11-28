@@ -77,7 +77,7 @@ test("the Basis × CVD rows load the basis fade with CVD confirm on the graded e
 
 test("each read row carries its grade in plain words", () => {
   const [a] = shelfRows(sc([reg("session_fade", "LEAD", "", { events: 40, beatsRandomPct: 61 })], []), NOW);
-  assert.equal(a.grade.line, "40 new-data trades. Beat random trades 61% of the time.");
+  assert.equal(a.grade.line, "40 new-data trades. Did better than 61% of random runs.");
   assert.match(a.grade.word, /\S/);
   const [b] = shelfRows(sc([reg("session_fade", "REGISTERED", "", { events: 2 })], []), NOW);
   assert.equal(b.grade.line, "2 new-data trades. Too few to compare with random yet.");

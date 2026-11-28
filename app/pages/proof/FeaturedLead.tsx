@@ -96,7 +96,7 @@ export default function FeaturedLead({ isMobile, onHowWeGrade, scorecard, shareH
 // Basis × CVD, the strongest read on the board then: its entries beat random, its traded exits lose.
 const NEG = C.neg;
 const RECEIPTS: { label: string; value: string; tone?: string }[] = [
-  { label: "basis × cvd · R grade", value: "+0.19R · 62" },
+  { label: "basis × cvd · mean R", value: "+0.19R" },
   { label: "vs random entries", value: "beats 97.3%" },
   { label: "as traded · 12h · since Sep 25", value: "−33.9 bps · 20T", tone: NEG },
   { label: "as traded · 24h · since Sep 25", value: "−30.2 bps · 20T", tone: NEG },

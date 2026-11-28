@@ -5,6 +5,9 @@
 // can't drift from what the grader enforces.
 import { C } from "@/config/theme";
 import { Oct15Result } from "./FeaturedLead";
+import { PIPELINE_RULES, PAPER_MIN_TRADES } from "@/lib/readPipeline.mjs";
+import { BADGE_BAR } from "@/lib/badgeBar.mjs";
+import { RANDOM_CUTOFFS } from "@/lib/proofLayout.mjs";
 import type { Scorecard } from "./SignalBoard";
 
 const MONO = "var(--nx-font-mono)";
@@ -23,9 +26,10 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 }
 
 export default function HowWeGrade({ scorecard, isMobile }: { scorecard: Scorecard | null; isMobile?: boolean }) {
-  const rules = (scorecard?.pipeline?.rules || {}) as Record<string, number | undefined>;
-  const n = rules.minEvents ?? 30, edge = rules.edgePct ?? 95, hN = rules.holdoutMinEvents ?? 30, hPct = rules.holdoutPct ?? 80;
-  const exitN = rules.exitMinTrades ?? 30, kill = rules.failEvents ?? rules.killEvents ?? 100;
+  // The served rules (the same numbers the stage and the watcher use), else the pipeline's own copy: never a third.
+  const rules = { ...PIPELINE_RULES, ...((scorecard?.pipeline?.rules || {}) as Record<string, number | undefined>) };
+  const n = rules.minEvents, edge = rules.edgePct, hN = rules.holdoutMinEvents, hPct = rules.holdoutPct;
+  const exitN = rules.exitMinTrades, kill = rules.failEvents, sideN = rules.sideMinEvents, sidePct = rules.sidePct;
   const tide = scorecard?.tide;
   const coins = scorecard?.config?.coins?.length;
   return (
@@ -35,9 +39,10 @@ export default function HowWeGrade({ scorecard, isMobile }: { scorecard: Scoreca
         <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
           {[
             ["A lead", `${n}+ events, positive on average, in both halves.`],
-            ["An edge", `beats ${edge}% of random entries on its side, and repeats on markets it was never picked on (${hN}+ events, beats ${hPct}% of random).`],
+            ["An edge", `beats ${edge}% of random entries on its side, each side with ${sideN}+ events beats ${sidePct}% of its own random entries, and it repeats on markets it was never picked on (${hN}+ events, positive, beats ${hPct}% of random).`],
             ["Tradeable", `makes money after fees as the agent trades it, over ${exitN}+ trades.`],
-            ["On paper", "a paper wallet trades it. Real money is a separate review."],
+            ["On paper", "a paper wallet trades it, every fill checked against the public tape."],
+            ["Cleared", `its first ${PAPER_MIN_TRADES} paper trades are net positive after fees and funding, parity reads clean, and those trades beat ${BADGE_BAR.beatPct}% of ${BADGE_BAR.runs} random entries on the same coins and side. The only claim we make. Real money is a separate review.`],
           ].map(([t, d], i) => (
             <div key={t} style={{ display: "grid", gridTemplateColumns: "18px minmax(0, 1fr)", gap: 6 }}>
               <span style={{ fontFamily: MONO, fontSize: 11, color: MUTED, lineHeight: "20.8px" }}>{i + 1}</span>
@@ -57,8 +62,8 @@ export default function HowWeGrade({ scorecard, isMobile }: { scorecard: Scoreca
           picked on old data tend to look better there than they will later.
         </div>
         <div style={{ marginTop: 8 }}>
-          Against random: every event is re-entered at 300 random hours on the same market, same side, same window. Beating {edge}% of
-          them beats random. Beating 5% or fewer is worse than random.
+          Against random: every event is re-entered at 300 random hours on the same market, same side, same window. Beating {RANDOM_CUTOFFS.beats}% of
+          them beats random. Beating {RANDOM_CUTOFFS.worse}% or fewer is worse than random.
         </div>
       </Block>
 

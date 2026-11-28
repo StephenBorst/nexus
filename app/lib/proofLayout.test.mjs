@@ -45,12 +45,12 @@ test("statusCounts: from the board's own groups; a group the board left out coun
 
 test("gates are a plain checklist: one sentence each, the number now, fresh coins = the holdout", () => {
   assert.deepEqual(gateLine({ key: "random", label: "beats random entries", now: 22.2, bar: 95, unit: "%", met: false }),
-    { key: "random", text: "Beats random trades 95% of the time", nowText: "22.2%", met: false });
-  assert.deepEqual(gateLine({ key: "random_long", label: "longs vs random longs", now: 4.7, bar: 50, unit: "%" }).text, "Its longs beat random longs 50% of the time");
+    { key: "random", text: "Does better than 95% of random runs", nowText: "22.2%", met: false });
+  assert.deepEqual(gateLine({ key: "random_long", label: "longs vs random longs", now: 4.7, bar: 50, unit: "%" }).text, "Its longs do better than 50% of random long runs");
   assert.deepEqual(gateLine({ key: "events", label: "out-of-sample events", now: 12, bar: 30, unit: "events" }).nowText, "12 so far");
   const r = gateLine({ key: "holdout_r", label: "holdout mean R > 0", now: 0.75, bar: 0, unit: "R", met: true });
-  assert.deepEqual([r.text, r.nowText, r.met], ["Makes money on fresh coins too", "+0.75R", true]);
-  assert.equal(gateLine({ key: "holdout_random", now: 78.5, bar: 80, unit: "%" }).text, "Beats random 80% of the time on fresh coins");
+  assert.deepEqual([r.text, r.nowText, r.met], ["Averages above 0R on fresh coins too", "+0.75R", true]);
+  assert.equal(gateLine({ key: "holdout_random", now: 78.5, bar: 80, unit: "%" }).text, "Does better than 80% of random runs on fresh coins");
   assert.equal(gateLine({ key: "holdout_line", now: null, bar: null, unit: null }).nowText, null, "a step has no number");
   assert.equal(gateLine({ key: "something_new", label: "a new bar", now: 1, bar: 2, unit: "%" }).text, "a new bar", "an unknown bar keeps its served label");
   assert.equal(gateLine(null), null);
@@ -61,7 +61,7 @@ test("vs random in words: the backtest's own cutoffs; too few under 5 trades; th
   for (const p of [0, 5, 5.1, 50, 79.9, 80, 94.9, 95, 100]) assert.equal(ladder[randomWord(p, 30).key], baselineVerdict(p), `at ${p}%`);
   assert.equal(randomWord(99, 4).key, "FEW");
   assert.equal(randomWord(null, 40).text, RANDOM_WORDS.FEW);
-  assert.equal(beatSentence(61.2), "Beat random trades 61% of the time.");
+  assert.equal(beatSentence(61.2), "Did better than 61% of random runs.");
   assert.match(beatSentence(null), /Too few/);
 });
 

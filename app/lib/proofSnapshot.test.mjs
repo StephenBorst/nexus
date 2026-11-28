@@ -24,7 +24,7 @@ test("the header as the live page writes it: headline, paper count, the gate, th
   assert.match(s, /level_reclaim cleared the bar\./);
   assert.match(s, /68 trades, net positive after fees\. As of Nov 13\./);
   assert.match(s, /On paper: 6 of 30 trades\./);
-  assert.match(s, /A live plan is written only after 30 paper trades, net positive after fees\. Nothing is armed\./);
+  assert.match(s, /A live plan is written only after 30 paper trades, net positive after fees, that also beat 90% of random entries\. Nothing is armed\./);
   assert.match(s, /href="\/proof\/paper\/level_reclaim"/);
   assert.ok(s.includes(PROOF_BAR_LINE));
 });

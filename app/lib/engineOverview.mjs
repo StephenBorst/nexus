@@ -4,6 +4,8 @@
 // a fixed rule from the numbers beside it: a side is judged against its random entry, never zero; paper runs are
 // counts and per-trade outcomes, never a sum or average of R before their 30-trade judgment, never dollars.
 
+import { PIPELINE_RULES } from "./readPipeline.mjs";
+
 const SIDES = ["LONG", "SHORT"];
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const r2 = (v) => (num(v) == null ? null : Math.round(v * 100) / 100);
@@ -76,15 +78,20 @@ export function overviewReads(board, { line = "main", minEvents = 30 } = {}) {
   });
 }
 
-/** Sides that beat their own random entry on BOTH coin sets (new data, 10+ events each): the strongest a side can show. */
+/**
+ * Sides that beat their own random entry on BOTH coin sets (new data). The bars are the served pipeline's (a side
+ * needs `sideMinEvents` on each set and `edgePct` on each), the same numbers the stage uses: never a second copy.
+ */
 export function strongSides(board) {
+  const rules = board?.pipeline?.rules || {};
+  const minN = num(rules.sideMinEvents) ?? PIPELINE_RULES.sideMinEvents, bar = num(rules.edgePct) ?? PIPELINE_RULES.edgePct;
   const main = new Map(overviewReads(board, { line: "main" }).map((r) => [r.axis, r]));
   const out = [];
   for (const h of overviewReads(board, { line: "holdout" })) {
     const m = main.get(h.axis);
     for (const s of SIDES) {
       const a = m?.sides[s], b = h.sides[s];
-      if (a?.n >= 10 && b?.n >= 10 && a.pct >= 95 && b.pct >= 95) out.push({ axis: h.axis, side: s });
+      if (a?.n >= minN && b?.n >= minN && a.pct >= bar && b.pct >= bar) out.push({ axis: h.axis, side: s });
     }
   }
   return out;

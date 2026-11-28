@@ -15,6 +15,8 @@ import { PROMOTION_LOCKS } from "@/lib/promotionLocks.mjs";
 import { FAILING_READS } from "@/lib/failingReads.mjs";
 import { FAILING_SEEDS } from "@/lib/pipelineWatch.mjs";
 import { graveyard, graveDate, graveyardHeadline, GRAVEYARD_LINE } from "@/lib/graveyard.mjs";
+import { BADGE_BAR } from "@/lib/badgeBar.mjs";
+import { PAPER_MIN_TRADES } from "@/lib/readPipeline.mjs";
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
@@ -79,8 +81,8 @@ export default function GraveyardPage() {
   }));
   const paperRows: Row[] = g.paper.map((r) => ({
     key: r.axis, title: r.label, when: r.verdict,
-    lines: [r.verdict === "PASS" ? `Passed its 30 paper trades but didn’t beat random entries on the same coins and side${r.randomPct != null ? ` (${r.randomPct}% of 300)` : ""}.` : r.verdict === "RESET" ? "Its paper record was reset after the judgment page was signed. Final." : "Its first 30 paper trades lost after fees. Final."],
-    link: { to: `/proof/paper/${encodeURIComponent(r.axis)}`, text: "The 30 trades →" },
+    lines: [r.verdict === "PASS" ? `Passed its ${PAPER_MIN_TRADES} paper trades but didn’t beat ${BADGE_BAR.beatPct}% of random entries on the same coins and side${r.randomPct != null ? ` (${r.randomPct}% of ${BADGE_BAR.runs})` : ""}.` : r.verdict === "RESET" ? "Its paper record was reset after the judgment page was signed. Final." : `Its first ${PAPER_MIN_TRADES} paper trades lost after fees. Final.`],
+    link: { to: `/proof/paper/${encodeURIComponent(r.axis)}`, text: `The ${PAPER_MIN_TRADES} trades →` },
   }));
   const historyRows: Row[] = g.history.map((r) => ({
     key: r.axis, title: r.label, when: "recorded history only",
