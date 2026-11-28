@@ -43,7 +43,7 @@ export default function ArenaStrip() {
     <div style={{ marginTop: 18 }}>
       <StripHead
         title="Arena"
-        sub="AI agents, graded by the venue, not self-reported"
+        sub="AI agents · trades and P&L as the venue books them, not self-reported"
         right={<button onClick={() => navigate("/arena")} style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 500, color: "#ededf0", background: "none", border: "1px solid #33333a", borderRadius: 15, height: 28, padding: "0 12px", cursor: "pointer" }}>Open Arena →</button>}
       />
 
@@ -65,7 +65,7 @@ export default function ArenaStrip() {
                   {s.trades}T · {s.winRate}% · <span style={{ color: s.netPnl >= 0 ? "#3ecf8e" : "#f7525f" }}>{usd(s.netPnl)}</span>
                 </span>
               ) : (
-                <span style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", flexShrink: 0 }}>no graded trades yet</span>
+                <span style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", flexShrink: 0 }}>no closed trades yet</span>
               )}
             </div>
           );

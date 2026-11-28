@@ -399,7 +399,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
           <div>
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 15, fontWeight: "bold", color: "#fff" }}>
-              {ticker} <span style={{ fontSize: 11, color: thesis.direction === "LONG" ? "#3ecf8e" : "#f7525f" }}>{thesis.direction}</span>
+              {ticker} <span style={{ fontSize: 11, color: "#ededf0" }}>{thesis.direction}</span>
             </div>
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 2 }}>copying from {traderName}</div>
           </div>
@@ -434,7 +434,7 @@ function CopyModal({ thesis, walletAddress, onClose }: { thesis: FeedThesis; wal
               </div>
               <div>
                 <div style={{ fontSize: 7, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>LEVERAGE</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: calc.leverage > 25 ? "#f7525f" : calc.leverage > 10 ? "#fbbf24" : "#3ecf8e" }}>{calc.leverage.toFixed(1)}x</div>
+                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: calc.leverage > 25 ? "#f7525f" : calc.leverage > 10 ? "#fbbf24" : "#ededf0" }}>{calc.leverage.toFixed(1)}x</div>
               </div>
               <div>
                 <div style={{ fontSize: 7, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>R:R</div>
@@ -853,7 +853,6 @@ export default function TraderPage() {
                         { l: "NET P&L", v: signedUsd(agentRec.netPnl), c: agentRec.netPnl >= 0 ? "#3ecf8e" : "#f7525f" },
                         { l: "WIN RATE", v: `${agentRec.winRate}%`, c: "#d4d4d8" },
                         { l: "TRADES", v: String(agentRec.trades), c: "#d4d4d8" },
-                        { l: "BOARD SCORE", v: `${agentRec.score}`, c: "#d4d4d8" },
                       ].map((x) => (
                         <div key={x.l}>
                           <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", letterSpacing: "0.1em", marginBottom: 3 }}>{x.l}</div>

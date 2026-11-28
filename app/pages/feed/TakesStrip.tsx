@@ -7,12 +7,10 @@ import { StripHead } from "@/components/ui/StripHead";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchCallerMerit, type CallerMerit } from "@/pages/token/data";
-import { SIGNAL, LINE } from "@/config/theme";
+import { SIGNAL } from "@/config/theme";
 import { pressKey } from "@/utils/a11y";
 
 const API_BASE = "https://og.nexustradinglabs.com";
-const green = "#3ecf8e";
-const red = "#f7525f";
 const mono = "var(--nx-font-mono)";
 
 type HotTake = {
@@ -54,7 +52,7 @@ export default function TakesStrip() {
 
   return (
     <div style={{ marginBottom: 14 }}>
-      <StripHead title="Hot takes" sub="ungraded conviction on spot tokens" />
+      <StripHead title="Hot takes" sub="opinions on spot tokens · not graded" />
 
       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
         {takes.map((t) => {
@@ -66,13 +64,13 @@ export default function TakesStrip() {
               onClick={() => navigate(`/token/${t.ca}`)} onKeyDown={pressKey(() => navigate(`/token/${t.ca}`))}
               style={{
                 flex: "1 1 190px", minWidth: 190, maxWidth: 240, background: "#0a0a0b",
-                border: `1px solid ${bull ? LINE.pos : "#4a1e22"}`, borderRadius: 5,
+                border: "1px solid #232327", borderRadius: 5,
                 padding: "9px 11px", fontFamily: mono, cursor: "pointer",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
                 <span style={{ fontSize: 12, fontWeight: "bold", color: "#fff" }}>${t.sym || "—"}</span>
-                <span style={{ fontSize: 8.5, fontWeight: "bold", letterSpacing: "0.04em", color: bull ? green : red }}>{t.direction}</span>
+                <span style={{ fontSize: 8.5, fontWeight: "bold", letterSpacing: "0.04em", color: "#ededf0" }}>{bull ? "↑ " : "↓ "}{t.direction}</span>
                 <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                   {t.fire ? <span style={{ fontSize: 8.5, color: SIGNAL.heat }}>🔥 {t.fire}</span> : null}
                   <span style={{ fontSize: 8, color: "#52525b" }}>{ago(t.createdAt)}</span>
@@ -81,7 +79,7 @@ export default function TakesStrip() {
               <div style={{ fontSize: 11, color: "#d4d4d8", lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.text}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6, overflow: "hidden" }}>
                 <span style={{ fontSize: 8, color: "#52525b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.displayName || shortAddr(t.wallet)}</span>
-                {m && <span title={`${m.title} caller · ${m.hitRate}% hit`} style={{ flexShrink: 0, fontSize: 7.5, fontWeight: "bold", letterSpacing: "0.03em", color: green, border: `1px solid ${green}44`, borderRadius: 4, padding: "1px 4px" }}>{m.glyph} {m.hitRate}%</span>}
+                {m && <span title={`${m.title} caller · ${m.hitRate}% hit`} style={{ flexShrink: 0, fontSize: 7.5, fontWeight: "bold", letterSpacing: "0.03em", color: "#a1a1aa", border: "1px solid #33333a", borderRadius: 4, padding: "1px 4px" }}>{m.glyph} {m.hitRate}%</span>}
                 {t.target ? <span style={{ flexShrink: 0, fontSize: 8, color: "#52525b" }}>target {t.target}</span> : null}
               </div>
             </div>

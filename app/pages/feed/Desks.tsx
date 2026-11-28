@@ -5,6 +5,7 @@
 // Reuses the cached `nexus_agent_sig_{addr}` session signature (no extra prompt if
 // the user already signed for the agent).
 import { StripHead } from "@/components/ui/StripHead";
+import { ORDER_LINES } from "@/lib/proofCopy.mjs";
 import { useEffect, useState } from "react";
 import { signWithInjected } from "@/utils/injectedWallet";
 
@@ -61,7 +62,7 @@ export default function Desks({ walletAddress }: { walletAddress: string | null 
 
   return (
     <div style={{ marginTop: 18 }}>
-      <StripHead title="Desks" sub="teams ranked by their combined verified record" />
+      <StripHead title="Desks" sub={ORDER_LINES.desks} />
 
       {/* Create */}
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
@@ -84,10 +85,9 @@ export default function Desks({ walletAddress }: { walletAddress: string | null 
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, fontWeight: "bold", color: "#fff", flexShrink: 0 }}>{d.name}</span>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a", flexShrink: 0 }}>{d.members}👤</span>
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#a1a1aa", flexShrink: 0 }}>{d.calls} calls · {d.hitRate}% · {d.totalR >= 0 ? "+" : ""}{d.totalR}R</span>
-            <span style={{ marginLeft: "auto", fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: d.score > 0 ? green : "#52525b", flexShrink: 0 }}>{d.score || "—"}</span>
             {myDeskId === d.id
-              ? <button onClick={() => leave(d.id)} disabled={busy} style={{ flexShrink: 0, background: "#241012", color: "#f7525f", border: "1px solid #4a1e2255", borderRadius: 4, padding: "5px 9px", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Leave</button>
-              : <button onClick={() => join(d.id)} disabled={busy} style={{ flexShrink: 0, background: "#1a1a1e", color: green, border: "1px solid #33333a", borderRadius: 4, padding: "5px 9px", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Join</button>}
+              ? <button onClick={() => leave(d.id)} disabled={busy} style={{ marginLeft: "auto", flexShrink: 0, background: "#241012", color: "#f7525f", border: "1px solid #4a1e2255", borderRadius: 4, padding: "5px 9px", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Leave</button>
+              : <button onClick={() => join(d.id)} disabled={busy} style={{ marginLeft: "auto", flexShrink: 0, background: "#1a1a1e", color: green, border: "1px solid #33333a", borderRadius: 4, padding: "5px 9px", fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Join</button>}
           </div>
         ))}
       </div>
