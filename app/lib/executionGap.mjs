@@ -10,11 +10,18 @@
 //   - the config fields where yours differs from the read's own (a tweak changes what is traded, so it is named).
 // Both runs are paper, filled at the mark: the gap here is timing, caps and being busy, never slippage. A live run's
 // slippage is its own record (app/lib/slippage.mjs). Display only; nothing trades on it. Pure; tested.
+// borst 2026-11-28 ("counts + pairs until 30"): numbers only, no comparative words. Each run as n of 30 (the judgment's
+// count); medians only from GAP_MIN_MATCHED paired trades; no mean R or beat-random before a run's 30-trade verdict
+// (that is the judgment's job). A user's run never moves a stage (NO_STAGE_LINE).
 
 import { readPaperConfig } from "./housePaper.mjs";
 import { tradeR } from "./paperRun.mjs";
 
 export const PAIR_WINDOW_MIN = 10;
+export const GAP_MIN_MATCHED = 5;
+export const GAP_TARGET = 30;
+export const NO_STAGE_LINE = "Your run never moves this read’s stage. Only the read’s own run is judged.";
+export const GAP_SIGN_LINE = "+ bps = your fill paid more than the read’s own run. Lag = minutes after its entry.";
 export const GAP_LINE_PAPER = "Both runs are paper, filled at the mark: this gap is timing, caps and being busy, not slippage.";
 
 const ms = (v) => { const t = typeof v === "number" ? v : Date.parse(v); return Number.isFinite(t) ? t : null; };
@@ -44,6 +51,14 @@ export function configDiff(read, config) {
   };
 }
 
+/** Closed paper trades since the record start (paper_agg is the lifetime count; the 50-row window can't be). */
+export function lifetimeCount(state) {
+  const n = Number(state?.paper_agg?.trades);
+  const since = recordStart(state);
+  const rows = (Array.isArray(state?.paper_trades) ? state.paper_trades : []).filter((t) => t && ms(t.closed_at) != null && (ms(t.opened_at) ?? 0) >= since && t.reason !== "TP_PARTIAL").length;
+  return Number.isFinite(n) && n >= rows ? n : rows;
+}
+
 const rowsOf = (state, from) => (Array.isArray(state?.paper_trades) ? state.paper_trades : [])
   .filter((t) => t && t.symbol && ms(t.opened_at) != null && ms(t.closed_at) != null && ms(t.opened_at) >= from && t.reason !== "TP_PARTIAL")
   .map((t) => ({ coin: coinOf(t.symbol), side: t.direction === "SHORT" ? "SHORT" : "LONG", openedMs: ms(t.opened_at), closedMs: ms(t.closed_at),
@@ -55,7 +70,7 @@ const openOf = (state, from) => {
 };
 
 // + = yours was worse: a long pays more / sells for less, a short sells for less / buys back for more.
-const worseBps = (mine, ref, side, leg) => {
+const gapBps = (mine, ref, side, leg) => {
   if (!(mine > 0) || !(ref > 0)) return null;
   const up = (mine / ref - 1) * 10_000;
   const buy = (side === "LONG") === (leg === "entry");
@@ -89,8 +104,8 @@ export function executionGap({ read, config, state, refWallet, refState, now = D
     const a = ref[c.i], b = mine[c.j];
     pairs.push({
       coin: a.coin, side: a.side, refOpenedAt: new Date(a.openedMs).toISOString(), lagMin: r1(c.lag),
-      entryBps: worseBps(b.entry, a.entry, a.side, "entry"),
-      exitBps: a.open || b.open ? null : worseBps(b.exit, a.exit, a.side, "exit"),
+      entryBps: gapBps(b.entry, a.entry, a.side, "entry"),
+      exitBps: a.open || b.open ? null : gapBps(b.exit, a.exit, a.side, "exit"),
       refR: a.open ? null : a.r ?? null, myR: b.open ? null : b.r ?? null,
       refExit: a.open ? "OPEN" : a.reason, myExit: b.open ? "OPEN" : b.reason,
     });
@@ -101,30 +116,36 @@ export function executionGap({ read, config, state, refWallet, refState, now = D
   const extra = mine.filter((_, j) => !usedM.has(j) && now - mine[j].openedMs > PAIR_WINDOW_MIN * 60000).map(at);
   pairs.sort((x, y) => Date.parse(y.refOpenedAt) - Date.parse(x.refOpenedAt));
   const entryGaps = pairs.map((p) => p.entryBps).filter((v) => v != null);
+  const enough = pairs.length >= GAP_MIN_MATCHED;
   return {
     ...base, from: from ? new Date(from).toISOString() : null,
     refCount: ref.filter((_, i) => usedR.has(i) || now - ref[i].openedMs > PAIR_WINDOW_MIN * 60000).length,
     matched: pairs.length, missed, extra, pairs,
-    medianEntryBps: entryGaps.length ? r1(median(entryGaps)) : null,
-    medianLagMin: pairs.length ? r1(median(pairs.map((p) => p.lagMin))) : null,
+    // Medians only from GAP_MIN_MATCHED paired trades: fewer is an anecdote, not a number to read.
+    medianEntryBps: enough && entryGaps.length ? r1(median(entryGaps)) : null,
+    medianLagMin: enough ? r1(median(pairs.map((p) => p.lagMin))) : null,
+    // Each run as n of 30 closed trades since its own record start (the 30-trade judgment's count).
+    runs: { mine: { count: lifetimeCount(state), target: GAP_TARGET }, ref: { count: lifetimeCount(refState), target: GAP_TARGET } },
     configDiff: diff,
   };
 }
 
-/** One plain line. */
+const signed = (x, unit) => `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x)}${unit}`;
+
+/** One line, numbers only: paired / missed / extra, then the medians once GAP_MIN_MATCHED trades are paired. */
 export function gapLine(g) {
   if (!g) return null;
-  if (g.unread) return "Your run or the reference run couldn’t be read right now.";
-  if (!g.refCount && !g.extra.length) return "No trades on either run since both started. The comparison starts with the next one.";
-  const parts = [`You took ${g.matched} of the reference run’s ${g.refCount} trade${g.refCount === 1 ? "" : "s"}`];
-  if (g.missed.length) parts.push(`missed ${g.missed.length}`);
-  if (g.extra.length) parts.push(`took ${g.extra.length} it didn’t`);
-  let s = parts.join(", ") + ".";
-  if (g.matched) {
-    const b = g.medianEntryBps ?? 0, lag = g.medianLagMin ?? 0;
-    const price = b === 0 ? "Entries at the same price (median)" : `Entries a median ${Math.abs(b)} bps ${b > 0 ? "worse" : "better"}`;
-    s += ` ${price}, ${lag === 0 ? "in the same minute" : `${Math.abs(lag)} min ${lag > 0 ? "later" : "earlier"}`}.`;
-  }
+  if (g.unread) return "Your run or the read’s own run couldn’t be read right now.";
+  if (!g.refCount && !g.extra.length) return "No trades on either run since both started. Pairing starts with the next one.";
+  let s = `Paired ${g.matched} of the read’s own ${g.refCount} trade${g.refCount === 1 ? "" : "s"} · missed ${g.missed.length} · extra ${g.extra.length}.`;
+  if (g.medianEntryBps != null && g.medianLagMin != null) s += ` Median entry gap ${signed(g.medianEntryBps, " bps")} · median lag ${signed(g.medianLagMin, " min")}.`;
+  else if (g.matched) s += ` Medians from ${GAP_MIN_MATCHED} paired trades (${g.matched} so far).`;
   if (g.configDiff?.entries?.length) s += ` Your config differs in ${g.configDiff.entries.join(", ")}: that changes which trades are taken, so it is a different run.`;
   return s;
+}
+
+/** The runs as counts: "Your run 3 of 30 · its own run 6 of 30". */
+export function runsLine(g) {
+  if (!g || g.unread || !g.runs) return null;
+  return `Your run ${g.runs.mine.count} of ${g.runs.mine.target} · its own run ${g.runs.ref.count} of ${g.runs.ref.target}`;
 }

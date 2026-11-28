@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { executionGap, gapLine, configDiff, PAIR_WINDOW_MIN, GAP_LINE_PAPER } from "./executionGap.mjs";
+import { executionGap, gapLine, runsLine, configDiff, lifetimeCount, PAIR_WINDOW_MIN, GAP_MIN_MATCHED, GAP_LINE_PAPER, NO_STAGE_LINE, GAP_SIGN_LINE } from "./executionGap.mjs";
 import { readPaperConfig } from "./housePaper.mjs";
 
 const T0 = Date.parse("2026-11-20T00:00:00Z");
@@ -32,9 +32,11 @@ test("pairs by coin + side within the window, nearest first; missed, extra and t
   assert.equal(btc.entryBps, 1, "a short selling lower is worse");
   assert.deepEqual(g.missed.map((m) => m.coin), ["SOL"]);
   assert.deepEqual(g.extra.map((m) => `${m.coin} ${m.side}`).sort(), ["BTC SHORT", "ETH SHORT"]);
-  assert.equal(g.medianLagMin, 2);
+  assert.equal(g.medianLagMin, null, "under 5 paired trades: no medians");
+  assert.equal(g.medianEntryBps, null);
   assert.deepEqual(g.configDiff, { entries: [], sizing: [] });
-  assert.match(gapLine(g), /^You took 2 of the reference run’s 3 trades, missed 1, took 2 it didn’t\. Entries a median 1\.5 bps worse, 2 min later\.$/);
+  assert.equal(gapLine(g), "Paired 2 of the read’s own 3 trades · missed 1 · extra 2. Medians from 5 paired trades (2 so far).");
+  assert.equal(runsLine(g), "Your run 4 of 30 · its own run 3 of 30");
 });
 
 test("trades before the later record start never count; a fresh reference trade isn't 'missed' yet; open trades pair without R", () => {
@@ -66,4 +68,43 @@ test("unread stays unread; nothing yet says so; the words never claim slippage, 
   assert.match(GAP_LINE_PAPER, /not slippage/);
   const src = readFileSync(new URL("./executionGap.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(src.replace(/^\/\/.*$/gm, ""), /\bedge\b|proven|total R|sumR|reduce\(\(s, ?p\) => s \+ p\.(my|ref)R/);
+});
+
+test("medians from 5 paired trades; each run counted n of 30 from its own record start", () => {
+  const refRows = [], myRows = [];
+  for (let k = 0; k < GAP_MIN_MATCHED; k++) {
+    refRows.push(row("ETH", "LONG", 100 + k * 500, 300 + k * 500, 3000, 3030, "TP"));
+    myRows.push(row("ETH", "LONG", 100 + k * 500 + (k % 2 ? 2 : 1), 300 + k * 500, 3000 * (1 + (k + 1) / 10_000), 3030, "TP"));
+  }
+  const g = executionGap({ read: "oi_div_reversal", config: readPaperConfig("oi_div_reversal"), state: { ...st(0, myRows), paper_agg: { trades: 12 } }, refWallet: "0xref", refState: st(0, refRows), now: NOW });
+  assert.equal(g.matched, 5);
+  assert.equal(g.medianEntryBps, 3);
+  assert.equal(g.medianLagMin, 1);
+  assert.equal(gapLine(g), "Paired 5 of the read’s own 5 trades · missed 0 · extra 0. Median entry gap +3 bps · median lag +1 min.");
+  assert.deepEqual(g.runs, { mine: { count: 12, target: 30 }, ref: { count: 5, target: 30 } }, "paper_agg is the lifetime count");
+  assert.equal(lifetimeCount(st(400, refRows)), 4, "a trade opened before the record start doesn't count");
+});
+
+test("numbers only: no comparative words, no mean R, and the no-stage line is said", () => {
+  const src = readFileSync(new URL("./executionGap.mjs", import.meta.url), "utf8");
+  const strings = [...src.matchAll(/["`]([^"`]*)["`]/g)].map((m) => m[1]).join("\n");
+  assert.doesNotMatch(strings, /\b(worse|better|beat|beats|outperform|ahead|behind|edge|proven|stronger|weaker)\b/i);
+  assert.doesNotMatch(src.replace(/^\s*\/\/.*$/gm, ""), /meanR|mean R|average R/i, "code, not comments");
+  assert.match(NO_STAGE_LINE, /never moves this read’s stage/);
+  assert.match(GAP_SIGN_LINE, /\+ bps = your fill paid more/);
+});
+
+test("the card: on the Agent tab, the read's Shelf card and its paper page; only for that read; ink only; numbers only", () => {
+  const card = readFileSync(new URL("../pages/lab/ExecutionGapCard.tsx", import.meta.url), "utf8");
+  assert.match(card, /gap\.read !== read\)\) return null/, "only the wallet's own read");
+  assert.match(card, /gap\.self/, "never on the read's own wallet");
+  assert.doesNotMatch(card.replace(/^\s*\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, ""), /C\.pos|C\.neg|\bworse\b|\bbetter\b|\bbeat\b|meanR|later|earlier/, "code and copy, not comments");
+  assert.match(card, /NO_STAGE_LINE/);
+  const agent = readFileSync(new URL("../pages/lab/AgentView.tsx", import.meta.url), "utf8");
+  assert.match(agent, /<ExecutionGapCard wallet=\{walletAddress\} read=/);
+  assert.match(agent, /<StrategyShelf mine=\{\{ wallet: walletAddress/);
+  const shelf = readFileSync(new URL("../pages/lab/StrategyShelf.tsx", import.meta.url), "utf8");
+  assert.match(shelf, /mine\.read === r\.id && \(\s*<ExecutionGapCard[^>]*compact/);
+  const page = readFileSync(new URL("../pages/proof/PaperRun.tsx", import.meta.url), "utf8");
+  assert.match(page, /<ExecutionGapCard wallet=\{wallet\} read=\{axis\} \/>/);
 });

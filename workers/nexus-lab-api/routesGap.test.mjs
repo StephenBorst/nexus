@@ -24,7 +24,8 @@ test("a user's paper run of a read is compared with that read's house run; nothi
   assert.equal(body.house, true);
   assert.equal(body.matched, 1);
   assert.equal(body.pairs[0].entryBps, 2);
-  assert.match(body.line, /You took 1 of the reference run’s 1 trade\./);
+  assert.match(body.line, /^Paired 1 of the read’s own 1 trade · missed 0 · extra 0\./);
+  assert.deepEqual(body.runs.mine, { count: 1, target: 30 });
   assert.match(body.note, /not slippage/);
 });
 

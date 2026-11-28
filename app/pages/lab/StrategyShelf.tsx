@@ -14,6 +14,7 @@ import { C } from "@/config/theme";
 import { Button } from "@/components/ui";
 import { useIsMobile } from "./useIsMobile";
 import { CardHead, CardShell, Tiles, WHY, WordChip } from "@/components/ReadCard";
+import { ExecutionGapCard, type Gap } from "./ExecutionGapCard";
 
 const SCOREBOARD = "https://og.nexustradinglabs.com/intel/axis-backtest";
 const MONO = "var(--nx-font-mono)";
@@ -23,7 +24,8 @@ type ShelfRow = ReturnType<typeof shelfRows>[number];
 
 export type ShelfLoad = { name: string; stageWord: string; config: Record<string, unknown> };
 
-export function StrategyShelf({ onLoad }: { onLoad: (load: ShelfLoad) => void }) {
+// `mine`: the connected wallet's own paper run, if it runs one of these reads: that card shows it (counts + pairs).
+export function StrategyShelf({ onLoad, mine }: { onLoad: (load: ShelfLoad) => void; mine?: { wallet: string | null; read: string | null; gap?: Gap | null | "failed" } }) {
   const [rows, setRows] = useState<ShelfRow[] | null>(null);
   const [failed, setFailed] = useState(false);
   // Every registered read also runs its own public paper agent (house runs): each row links to it, so you can see
@@ -97,6 +99,11 @@ export function StrategyShelf({ onLoad }: { onLoad: (load: ShelfLoad) => void })
                 )}
               </div>
               {!r.canLoad && <span style={{ color: C.text.muted, fontFamily: UI, fontSize: 11, lineHeight: 1.4 }}>{r.reason}</span>}
+
+              {/* Your own paper run of this read, beside the read's own (2026-11-28, counts + pairs only). */}
+              {r.kind === "read" && mine && mine.read === r.id && (
+                <ExecutionGapCard wallet={mine.wallet} read={r.id} gap={mine.gap} compact />
+              )}
 
               {/* What it still needs: kept, secondary. */}
               {(r.need || r.eta) && (

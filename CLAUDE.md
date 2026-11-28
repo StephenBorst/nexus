@@ -236,7 +236,11 @@ product is what sits on top:
   (paper wallet, claim, else house id, as `paperRun` resolves it), from the later record start. Pairs = same coin + side
   opened within `PAIR_WINDOW_MIN` 10 min, nearest first; per pair the lag, entry / exit in bps (+ = yours worse) and both
   R's side by side (never summed); missed / extra; config fields that change entries named (sizing apart). Both paper at
-  the mark: timing, caps and busy, "not slippage". Display only.
+  the mark: timing, caps and busy, "not slippage". Display only. **Numbers only** (borst 2026-11-28, "counts + pairs until
+  30"): each run as n of 30 (`runs`, `lifetimeCount`), medians only from `GAP_MIN_MATCHED` 5 pairs, signed bps / minutes,
+  no comparative words, no mean R / beat-random before a run's 30-trade verdict, `NO_STAGE_LINE` always (test-pinned).
+  One read (`useExecutionGap`) feeds the Agent-tab card, the read's Shelf card (compact) and its `/proof/paper/:axis` page
+  (the connected wallet's run; renders only when the wallet's run IS that read and isn't the read's own wallet).
 - **Paper record card** (Agent tab, borst 2026-11-27, rules `app/lib/paperGraduation.mjs`, `PaperRecordCard` in
   AgentPanels.tsx, tested): replaced READY TO GO LIVE?, which offered "Go autonomous" after 5 trades of fee-free paper
   P&L. Under 30 lifetime trades (`paper_agg`) = "n OF 30", nothing to switch; 30+ = judged on the after-costs re-read
