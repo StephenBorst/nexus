@@ -725,7 +725,14 @@ product is what sits on top:
   runs `isCleared`; /proof's header + board read the verdicts via `usePaperJudgments` (sharedJson), the pulse reads
   LAB_STORE `pjudge:{axis}` + `PROMOTION_LOCKS` (`buildPulse(..., { locks })` for tests). Every place that shows the
   pulse's `signals` (landing, share card, boot snapshot, header) already gates on `headline.cleared`.
-  Plain-words copy in `app/lib/proofCopy.mjs`; method in `HowWeGrade.tsx`. The tide (what a random long / short earned) sits
+  Plain-words copy in `app/lib/proofCopy.mjs`; method in `HowWeGrade.tsx`.
+  **Honesty pass (borst 2026-11-28, pinned by `app/lib/proofHonesty.test.mjs`):** every bar /proof states comes from ONE
+  source: the served gates / `pipeline.rules` (else `PIPELINE_RULES`), `PAPER_MIN_TRADES` and `BADGE_BAR` (`CLEARED_LINE`,
+  `paperGateLine`, `gateLine`, HowWeGrade's ladder now ends at Cleared + the side rule; the Lead line's holdout caveat
+  reads the served `holdout_*` gates, never re-derives them). "beat N%" = a share of random runs (`beatSentence`: "Did
+  better than N% of random runs"), never "of the time". Board tracks = a dot + ticks at `RANDOM_CUTOFFS`, ink. No
+  composite score on caller / agent / desk rows (callerScore / agentScore are orderings): `ORDER_LINES` says the order.
+  The carry sleeve is paper, ungraded, claims nothing (no "edge", no "proven"). The tide (what a random long / short earned) sits
   in the folded "The market these reads ran in" (`MarketStats`) since 2026-11-21; `tideLine` stays in signalCard.mjs, and each
   side in a tapped card shows its random entry's R (`sideBar.randomR`).
   Registered/Lead rows themselves stay as pipeline-if-then.md "What we say" fixes them.

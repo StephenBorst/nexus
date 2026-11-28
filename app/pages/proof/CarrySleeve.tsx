@@ -1,9 +1,9 @@
-// ── HOUSE CARRY SLEEVE — our own strategy, proven in the open ─────────────────
-// The transparency-as-product artifact: Nexus ran its OWN engine hunt in public,
-// found one real edge (sector-neutral funding carry), and now runs it live in PAPER
-// with the equity curve open for anyone to verify — losers included. Reads the
-// nexus-carry-engine worker's /carry/record. Fail-soft: renders nothing if the
-// endpoint is unreachable; honest "accruing" copy while the curve is still forming.
+// ── HOUSE CARRY SLEEVE — our own paper basket, in the open ─────────────────────
+// A sector-neutral funding-carry basket run on PAPER, with the equity curve open for anyone to check, losers included.
+// It is not a registered read and the scoreboard doesn't grade it, so the copy claims nothing: no "edge", no "proven",
+// no ranking against other ideas (honesty pass 2026-11-28). Reads the nexus-carry-engine worker's /carry/record.
+// Fail-soft: renders nothing if the endpoint is unreachable; "accruing" while the curve is still forming. Colours:
+// green/red only on money (net, funding, price); the carry share is a ratio, in ink.
 import { useEffect, useMemo, useState } from "react";
 
 const CARRY_API = "https://nexus-carry-engine.stephenpatrick24.workers.dev";
@@ -97,10 +97,9 @@ export default function CarrySleeve({ flush }: { flush?: boolean } = {}) {
       </div>
 
       <div style={{ fontFamily: UI, fontSize: 12.5, color: FOG, lineHeight: 1.6, maxWidth: 620, marginBottom: 14 }}>
-        We hunted our own strategies in public — directional bets were a dead end. This is the most promising lead we
-        found: long the cheapest-funding perp and short the richest <i>within each sector</i>, so market moves cancel and
-        funding income is left. It runs live in <b style={{ color: BRIGHT }}>paper</b> — equity curve open, losers
-        included — while we test whether the edge actually holds, before a dollar of capital.
+        Long the cheapest-funding perp and short the richest <i>within each sector</i>, so most of the market move cancels
+        and what is left is mostly funding. It runs on <b style={{ color: BRIGHT }}>paper</b> with maker fees counted, the
+        curve open, losers included. It is not graded by the scoreboard and claims nothing: no capital is on it.
       </div>
 
       {curve.length >= 2 ? (
@@ -116,16 +115,17 @@ export default function CarrySleeve({ flush }: { flush?: boolean } = {}) {
       {s && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: 12, marginBottom: 4 }}>
           {stat("Net P&L", usd(net), netTone)}
-          {stat("Carry share", `${s.carrySharePct}%`, s.carrySharePct >= 55 ? POS : FOG)}
+          {stat("Carry share", `${s.carrySharePct}%`)}
           {stat("Funding", usd(s.cumFunding), s.cumFunding >= 0 ? POS : NEG)}
-          {stat("Price resid.", usd(s.cumPrice), Math.abs(s.cumPrice) < Math.abs(s.cumFunding) || s.cumPrice >= 0 ? FOG : NEG)}
+          {stat("Price resid.", usd(s.cumPrice), s.cumPrice > 0 ? POS : s.cumPrice < 0 ? NEG : FOG)}
+          {stat("Fees", usd(-s.cumFees), s.cumFees > 0 ? NEG : FOG)}
           {stat("Legs", s.legs)}
         </div>
       )}
 
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BORDER}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={{ fontFamily: UI, fontSize: 11, color: MUTED, lineHeight: 1.5 }}>
-          Carry-driven when the <b style={{ color: FOG }}>carry share</b> is high — that’s funding income, not price luck.
+          <b style={{ color: FOG }}>Carry share</b> = how much of the result’s size came from funding rather than price moves.
         </span>
         <a href={`${CARRY_API}/carry/record`} target="_blank" rel="noopener noreferrer"
           style={{ marginLeft: "auto", fontFamily: "var(--nx-font-ui)", fontSize: 12, color: FOG, textDecoration: "none", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "3px 8px", background: "#1a1a1e" }}>

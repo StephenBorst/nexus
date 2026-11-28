@@ -12,6 +12,7 @@ import { C, SIGNAL } from "@/config/theme";
 import { PageMeta } from "@/components/PageMeta";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { paperRunLine } from "@/lib/paperRun.mjs";
+import { BADGE_BAR } from "@/lib/badgeBar.mjs";
 import { quietAgeText } from "@/lib/quietLine.mjs";
 import { useAccount } from "@orderly.network/hooks";
 import { ExecutionGapCard } from "@/pages/lab/ExecutionGapCard";
@@ -214,7 +215,7 @@ export default function PaperRunPage() {
                 <li>Fill prices come from the public tape. A fill outside what traded is judged at the worse of its price and the nearest traded price: it can only hurt the run. A fill with no bar to check is counted and named.</li>
                 <li>Parity must read clean: every entry paired with a graded event, every event the agent was free to take taken. Drift holds the verdict until it’s explained.</li>
                 <li>A reset after the rules were locked ends the run unjudged. The verdict is recorded once and never rewritten. It arms nothing.</li>
-                <li>The badge asks one more thing of a pass: the same 30 trades must beat at least 90% of 300 random entries on the same coins and side, inside the run’s own window, with the same exit and fees. Computed once, stored with the verdict.</li>
+                <li>The badge asks one more thing of a pass: the same {judge.target} trades must beat at least {BADGE_BAR.beatPct}% of {BADGE_BAR.runs} random entries on the same coins and side, inside the run’s own window, with the same exit and fees. Computed once, stored with the verdict.</li>
               </ul>
               <p style={{ margin: "10px 0 0", fontSize: 12.5 }}>
                 <a href={`${AGENT_API}/signals/paper-judge/${encodeURIComponent(axis)}`} target="_blank" rel="noopener noreferrer" style={{ color: FOG }}>The judgment, as computed (JSON)</a>

@@ -18,7 +18,7 @@ import { recordShareText, recordShareHref, recordShareLink } from "@/lib/recordS
 import { agoShort } from "@/lib/callPulse.mjs";
 import Fold from "./Fold";
 import HowWeGrade from "./HowWeGrade";
-import { callsRecordLine, callersLine, PLAIN_WORDS, engineNote } from "@/lib/proofCopy.mjs";
+import { callsRecordLine, callersLine, PLAIN_WORDS, engineNote, ORDER_LINES } from "@/lib/proofCopy.mjs";
 import { ruleCheckFor, ruleCheckLine } from "@/lib/ruleCheck.mjs";
 import { engineBeat, ENGINE_QUIET_H } from "@/lib/engineBeat.mjs";
 import SignalBoard, { type Scorecard, useBoardGroups } from "./SignalBoard";
@@ -150,8 +150,9 @@ function ProofEdgeCard({ c, onClick }: { c: ProofCard; onClick: () => void }) {
 
 export default function ProofPage() {
   const isMobile = useIsMobile();
-  // Phone: a ranks row wraps instead of scrolling sideways — rank · name · score stay on line 1
-  // (the score is the number that matters), the stats drop to line 2 under the name.
+  // Phone: a ranks row wraps instead of scrolling sideways — rank · name stay on line 1, the stats drop to line 2.
+  // No composite score is printed (callerScore / agentScore are 0–100 blends, not grades): the rows show the record's
+  // own numbers, and the order line under each title says what the order is.
   const rowM: React.CSSProperties = isMobile ? { flexWrap: "wrap", rowGap: 4, overflowX: "visible" } : {};
   const statM: React.CSSProperties = isMobile ? { order: 10, flexBasis: "100%", paddingLeft: 32, marginLeft: 0 } : {};
   const navigate = useNavigate();
@@ -273,7 +274,7 @@ export default function ProofPage() {
           <SectionTitle title="Verified callers" />
           {callers === null ? empty("loading…") : (
             <>
-              <div style={{ marginTop: -4, marginBottom: 12, fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.5 }}>{callersLine(callers.length, minCalls)}</div>
+              <div style={{ marginTop: -4, marginBottom: 12, fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.5 }}>{callersLine(callers.length, minCalls)} {callers.length > 1 ? ORDER_LINES.callers : ""}</div>
               {callers.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {callers.slice(0, 15).map((c, i) => (
@@ -283,7 +284,6 @@ export default function ProofPage() {
                       <span style={nameCell}>{c.displayName || short(c.wallet)}</span>
                       {c.meritRank?.glyph && <span title={c.meritRank.title} style={{ fontFamily: MONO, fontSize: 10, color: BONE, flexShrink: 0 }}>{c.meritRank.glyph}</span>}
                       <span style={{ ...statCell, ...statM }} title={riskBrief(c.risk) ?? `Risk in R shows from ${RISK_MIN_CALLS} graded calls`}>{c.calls} calls · {c.hitRate}% · {c.avgR >= 0 ? "+" : ""}{c.avgR}R{riskBrief(c.risk) ? ` · ${riskBrief(c.risk)}` : ""}</span>
-                      <span style={{ ...scoreCell, color: c.score > 0 ? BONE : FAINT }}>{c.score || "—"}</span>
                     </div>
                   ))}
                 </div>
@@ -338,13 +338,13 @@ export default function ProofPage() {
         <Fold title="Autonomous agents" count={agents?.length}>
           {agents === null ? empty("loading…") : agents.length === 0 ? empty("No ranked agents yet: 10 live trades over 3+ days to qualify.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ marginBottom: 4, fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.5 }}>{ORDER_LINES.agents}</div>
               {agents.slice(0, 15).map((a) => (
                 <div role="link" tabIndex={0} key={a.wallet} onClick={() => navigate(`/feed/trader/${a.wallet}`)} onKeyDown={pressKey(() => navigate(`/feed/trader/${a.wallet}`))} style={{ ...rowStyle(true), ...rowM }}>
                   <span style={rankCell}>{a.rank}</span>
                   <Pfp src={a.pfp} />
                   <span style={nameCell}>{a.displayName || short(a.wallet)}</span>
                   <span style={{ ...statCell, ...statM }}>{a.trades}T · {a.winRate}% · PF {a.profitFactor} · <span style={{ color: a.netPnl >= 0 ? POS : NEG }}>{usd(a.netPnl)}</span></span>
-                  <span style={{ ...scoreCell, color: a.score > 0 ? BONE : FAINT }}>{a.score || "—"}</span>
                 </div>
               ))}
             </div>
@@ -378,12 +378,12 @@ export default function ProofPage() {
         <Fold title="Desks · teams" count={desks?.length}>
           {desks === null ? empty("loading…") : desks.length === 0 ? empty("No desks yet. Teams rank by their members’ combined graded record.") : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ marginBottom: 4, fontFamily: UI, fontSize: 13, color: FOG, lineHeight: 1.5 }}>{ORDER_LINES.desks}</div>
               {desks.slice(0, 15).map((d) => (
                 <div role="link" tabIndex={0} key={d.id} onClick={() => navigate("/feed")} onKeyDown={pressKey(() => navigate("/feed"))} style={{ ...rowStyle(true), ...rowM }}>
                   <span style={rankCell}>#{d.rank}</span>
                   <span style={nameCell}>{d.name}</span>
                   <span style={statCell}>{d.members} members · {d.calls} calls · {d.hitRate}% · {d.totalR >= 0 ? "+" : ""}{d.totalR}R</span>
-                  <span style={{ ...scoreCell, color: d.score > 0 ? BONE : FAINT }}>{d.score || "—"}</span>
                 </div>
               ))}
             </div>

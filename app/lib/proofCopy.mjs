@@ -1,5 +1,6 @@
 import { isCleared } from "./signalCard.mjs";
-import { ARCHIVED_READS } from "./readPipeline.mjs";
+import { ARCHIVED_READS, PIPELINE_RULES, PAPER_MIN_TRADES } from "./readPipeline.mjs";
+import { BADGE_BAR } from "./badgeBar.mjs";
 // ── /proof copy: the plain lines the page prints about the record ────────────────────────────
 // Display only. Every number comes from an endpoint as served (/intel/axis-backtest,
 // /theses/proof-of-edge, /theses/leaderboard); nothing here grades. Pure + tested
@@ -14,14 +15,19 @@ const STAGE_WORD = { LEAD: "a lead", EDGE: "an edge", TRADEABLE: "tradeable", PA
 //   at/over the bar but still REGISTERED (it didn't advance) → "31 events · failing",
 //                     with the grader's own `next` as the reason line
 //   advanced        → "34 events · a lead", with `next` as what it needs after that
-export function pipelineLine(reg, minEvents = 30, holdoutMinEvents = 30, holdoutPct = 80) {
-  const base = ladderLine(reg, minEvents, holdoutMinEvents, holdoutPct);
+/** @param {any} reg @param {number} [minEvents] */
+export function pipelineLine(reg, minEvents = PIPELINE_RULES.minEvents) {
+  const base = ladderLine(reg, minEvents);
   const extra = [failingLine(reg), oldRetirementLine(reg?.axis)].filter(Boolean);
   if (!extra.length) return base;
   return { ...base, sub: [base.sub, ...extra].filter(Boolean).join(" "), ...(failingLine(reg) ? { state: "failing" } : {}) };
 }
 
-function ladderLine(reg, minEvents, holdoutMinEvents, holdoutPct) {
+// Is a holdout bar still in the way? Read from the SERVED gates (readPipeline.mjs pipelineStage), the same bars the
+// stage and the watcher use: never re-derived here from numbers and a second copy of the thresholds.
+const holdoutPending = (reg) => (Array.isArray(reg?.gates) ? reg.gates : []).some((g) => /^holdout_/.test(String(g?.key || "")) && !g.met);
+
+function ladderLine(reg, minEvents) {
   const events = Math.max(0, Number(reg?.numbers?.events) || 0);
   const ev = `${events} ${events === 1 ? "event" : "events"}`;
   const next = typeof reg?.next === "string" && reg.next.trim() ? reg.next.trim() : "";
@@ -30,12 +36,11 @@ function ladderLine(reg, minEvents, holdoutMinEvents, holdoutPct) {
     const text = `${ev} · ${STAGE_WORD[stage]}`;
     if (stage === "LEAD") {
       // pipeline-if-then.md, Lead: "A lead. Not an edge yet." with events and mean R; the holdout caveat
-      // stays until the holdout passes its bar (30+ events, mean R > 0, beats 80% of random).
+      // stays while a holdout bar is among the served gates.
       const n = reg?.numbers || {};
       const parts = ["A lead. Not an edge yet."];
       if (Number.isFinite(n.meanR)) parts.push(`Mean ${signR(n.meanR)}.`);
-      const held = (n.holdoutEvents ?? 0) >= holdoutMinEvents && n.holdoutMeanR > 0 && (n.holdoutBeatsRandomPct ?? 0) >= holdoutPct;
-      if (!held) parts.push("Hasn't repeated on coins it was never picked on.");
+      if (holdoutPending(reg)) parts.push("Hasn't repeated on coins it was never picked on.");
       if (next) parts.push(`Next: ${next}.`);
       return { text, sub: parts.join(" "), state: "advanced" };
     }
@@ -81,6 +86,16 @@ export function callersLine(count, minCalls = 5) {
   if (!n) return `No caller qualifies for the board yet: ${rule}.`;
   return `${n} ${n === 1 ? "caller qualifies" : "callers qualify"} for the board: ${rule}. Not tested against chance.`;
 }
+
+// What each board's order is, said once under its title. The servers order by a 0–100 blend (callerScore: average R
+// shrunk toward 0 for small records, plus profit factor; agentScore: win rate + profit factor, shrunk for few trades;
+// desks: members' hit rate + average R, shrunk under 30 calls). The blend is an ordering, not a grade, so the page prints the record's own
+// numbers and this line instead of the blend.
+export const ORDER_LINES = Object.freeze({
+  callers: "Ordered by average R, pulled toward zero for short records, then profit factor.",
+  agents: "Live trades as booked at the fill, not a graded record. Ordered by win rate and profit factor, pulled toward zero for few trades.",
+  desks: "Ordered by the members’ graded calls combined: hit rate and average R, pulled toward zero under 30 calls.",
+});
 
 // Graded-exit variants retired under their own pre-registered bar (graded-exit-prereg.md "Fails"),
 // with the day and the reason as recorded in docs/research/pipeline-stages.json (proofCopy.test.mjs
@@ -139,8 +154,12 @@ export const failingLine = (reg) => {
 export const HEADLINE_DEFAULT = Object.freeze({ cleared: false, title: "Nothing has proven itself yet.", sub: "Here’s the public record." });
 // The bar in one sentence, and a cleared read's next gate: one copy for /proof's header (FeaturedLead) and the
 // HTML snapshot its Function writes before the app boots (proofSnapshot.mjs).
-export const PROOF_BAR_LINE = "To pass, a signal has to beat random entries, make money after fees, and keep doing it on new data, over 30+ trades.";
-export const paperGateLine = (target = 30) => `A live plan is written only after ${target} paper trades, net positive after fees. Nothing is armed.`;
+// The numbers in these lines are the pipeline's and the badge bar's own (readPipeline PIPELINE_RULES, badgeBar BADGE_BAR):
+// one source, so the page can't state a bar the watcher and the judge don't use.
+export const PROOF_BAR_LINE = `To pass, a signal has to beat random entries, make money after fees, and keep doing it on new data, over ${PIPELINE_RULES.minEvents}+ trades.`;
+export const paperGateLine = (/** @type {number} */ target = PAPER_MIN_TRADES) => `A live plan is written only after ${target} paper trades, net positive after fees, that also beat ${BADGE_BAR.beatPct}% of random entries. Nothing is armed.`;
+/** What CLEARED takes, in one line (signalCard.mjs isCleared + badgeBar.mjs beatsRandom). */
+export const CLEARED_LINE = `Passed every stage on new data, then ${PAPER_MIN_TRADES} paper trades net positive after fees with parity clean, and those trades beat ${BADGE_BAR.beatPct}% of ${BADGE_BAR.runs} random entries on the same coins and side.`;
 export const HEADLINE_MAX_AGE_MS = 6 * 3600000; // the scoreboard is cached 1h; older than this = no claim
 const CLEARED_STAGES = new Set(["TRADEABLE", "PAPER"]);
 const asOfDay = (ms) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });

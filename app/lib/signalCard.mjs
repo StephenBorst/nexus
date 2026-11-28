@@ -89,7 +89,7 @@ export function takeaway(a) {
     parts.push(`leans above random entries (${rb.pctBeaten}%), not yet separated` + (rb.moreTradesNeeded ? `, ~${rb.moreTradesNeeded} more events` : ""));
   } else if (rb?.verdict === "NOT_DISTINGUISHABLE") parts.push("can't yet be told apart from random entries");
   else if (rb?.verdict === "TOO_FEW") parts.push("too few events to test against random");
-  if (clearsDrift === false) { parts.push("edge doesn’t clear the market’s drift"); if (tone === "neutral") tone = "neg"; }
+  if (clearsDrift === false) { parts.push("its move doesn’t clear the market’s drift"); if (tone === "neutral") tone = "neg"; }
   if (!parts.length) return { text: "Graded. No baseline yet.", tone };
   const text = parts.join(" · ");
   return { text: text[0].toUpperCase() + text.slice(1) + ".", tone };

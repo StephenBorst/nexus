@@ -19,8 +19,9 @@ import { usePaperJudgments, type Judgment } from "@/hooks/usePaperJudgments";
 import { usePaperCounts, type PaperCount } from "@/hooks/usePaperCounts";
 import { paperCountLine } from "@/lib/paperRun.mjs";
 import { badgeLine } from "@/lib/badgeBar.mjs";
-import { pipelineLine, countingSince, retiredGradedExit, retiredLine, archivedLine, NO_RETIRE_LINE, BADGE_RECHECK_LINE } from "@/lib/proofCopy.mjs";
-import { ARCHIVED_READS } from "@/lib/readPipeline.mjs";
+import { pipelineLine, countingSince, retiredGradedExit, retiredLine, archivedLine, NO_RETIRE_LINE, BADGE_RECHECK_LINE, CLEARED_LINE } from "@/lib/proofCopy.mjs";
+import { ARCHIVED_READS, PIPELINE_RULES } from "@/lib/readPipeline.mjs";
+import { RANDOM_CUTOFFS } from "@/lib/proofLayout.mjs";
 import { overviewReads, fmtR } from "@/lib/engineOverview.mjs";
 import Fold from "./Fold";
 
@@ -137,6 +138,21 @@ function HorizonStrip({ hz, sel, onSelect, isMobile }: { hz: Horizon[]; sel: num
   );
 }
 
+// Where a read sits against its random replays: a dot on a track, ticks at the two cutoffs the words use
+// (RANDOM_CUTOFFS: worse ≤ 5%, beats ≥ 95%). Never a filling bar: the number moves both ways. Ink, not money colours.
+function RandomTrack({ pct, verdict }: { pct: number; verdict?: string }) {
+  const at = Math.max(0, Math.min(100, pct));
+  const dot = verdict === "BEATS_RANDOM" ? BONE : verdict === "BELOW_RANDOM" ? MUTED : FOG;
+  return (
+    <span aria-hidden style={{ position: "relative", display: "block", flex: 1, minWidth: 48, height: 10 }}>
+      <span style={{ position: "absolute", left: 0, right: 0, top: 4, height: 2, borderRadius: 1, background: C.border }} />
+      <span style={{ position: "absolute", left: `${RANDOM_CUTOFFS.worse}%`, top: 1, bottom: 1, width: 1, background: MUTED }} />
+      <span style={{ position: "absolute", left: `${RANDOM_CUTOFFS.beats}%`, top: 1, bottom: 1, width: 1, background: MUTED }} />
+      <span style={{ position: "absolute", left: `calc(${at}% - 4px)`, top: 1, width: 8, height: 8, borderRadius: "50%", background: dot, border: `1px solid ${C.inset}` }} />
+    </span>
+  );
+}
+
 function SideRow({ a, side }: { a: AxisRow; side: "LONG" | "SHORT" }) {
   const isMobile = useIsMobile();
   const b = sideBar(a, side);
@@ -147,9 +163,8 @@ function SideRow({ a, side }: { a: AxisRow; side: "LONG" | "SHORT" }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "68px minmax(0, 1fr)" : "84px minmax(0, 1fr) auto", alignItems: "center", gap: isMobile ? "4px 10px" : 12, fontFamily: MONO, fontSize: 10.5 }}>
       <span style={{ color: BRIGHT, whiteSpace: "nowrap" }}>{name} <span style={{ color: MUTED }}>{b.events.toLocaleString()}</span></span>
-      <span style={{ height: 4, borderRadius: 2, background: b.state === "tested" ? C.border : "transparent", border: b.state === "tested" ? "none" : `1px dashed ${C.border}`, position: "relative", overflow: "hidden" }}>
-        {b.state === "tested" && <span style={{ position: "absolute", inset: 0, width: `${b.pct}%`, background: moneyTone(b.meanR ?? 0), borderRadius: 2 }} />}
-      </span>
+      {b.state === "tested" ? <RandomTrack pct={b.pct ?? 0} verdict={b.verdict} />
+        : <span style={{ height: 4, borderRadius: 2, border: `1px dashed ${C.border}` }} />}
       <span style={{ color: FOG, whiteSpace: "nowrap", textAlign: isMobile ? "left" : "right", gridColumn: isMobile ? "1 / -1" : undefined }}>
         {b.state === "tested" ? (
           <><span style={{ color: moneyTone(b.meanR ?? 0) }}>{sign(b.meanR ?? 0, 2)}R</span>{vsRandom} · beat {b.pct}%</>
@@ -326,7 +341,7 @@ function SignalCard({ a }: { a: AxisRow }) {
                 </div>
               ) : <div />}
               {a.sides && (a.sides.LONG.events + a.sides.SHORT.events) > 0 && (
-                <div title="Each side graded on its own, in R. 'beat X%' = share of 300 random-hour replays (same market, same side, same window, same contract) the read out-earned. 95%+ beats random; 5% or under is reliably worse.">
+                <div title={`Each side graded on its own, in R. 'beat X%' = share of 300 random-hour replays (same market, same side, same window, same contract) the read out-earned. ${RANDOM_CUTOFFS.beats}%+ beats random; ${RANDOM_CUTOFFS.worse}% or under is reliably worse.`}>
                   <div style={{ ...label, fontSize: 8.5, marginBottom: 10 }}>Each side vs random entries · all horizons</div>
                   <div style={{ display: "grid", rowGap: 10 }}>
                     <SideRow a={a} side="LONG" />
@@ -349,18 +364,12 @@ type Reg = { stage: string; registeredAt?: string; next?: string; numbers?: { ev
 
 function RandomBar({ a }: { a: AxisRow }) {
   const b = randomBar(a);
-  const tip = "Share of 300 random-hour replays (same markets, same sides, same window, same R contract) the read out-earned. 95%+ beats random; 5% or under is reliably worse.";
+  const tip = `Share of 300 random-hour replays (same markets, same sides, same window, same R contract) the read out-earned. ${RANDOM_CUTOFFS.beats}%+ beats random; ${RANDOM_CUTOFFS.worse}% or under is reliably worse.`;
   if (b.state !== "tested") return <span title={tip} style={{ fontFamily: MONO, fontSize: 10, color: FAINT, cursor: "help" }}>{b.label}</span>;
-  const fill = b.verdict === "BELOW_RANDOM" ? NEG : b.verdict === "BEATS_RANDOM" ? BONE : FOG;
   return (
     <span title={tip} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "help", minWidth: 0 }}>
-      <span style={{ position: "relative", flex: 1, minWidth: 48, height: 6, borderRadius: 3, background: C.border }}>
-        <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${b.pct}%`, borderRadius: 3, background: fill }} />
-        {/* the two bars a read is judged against: 5% (reliably worse) and 95% (beats random) */}
-        <span style={{ position: "absolute", left: "5%", top: -2, bottom: -2, width: 1, background: MUTED }} />
-        <span style={{ position: "absolute", left: "95%", top: -2, bottom: -2, width: 1, background: MUTED }} />
-      </span>
-      <span style={{ fontFamily: MONO, fontSize: 10.5, color: b.verdict === "BELOW_RANDOM" ? NEG : FOG, width: 38, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{Math.round(b.pct ?? 0)}%</span>
+      <RandomTrack pct={b.pct ?? 0} verdict={b.verdict} />
+      <span style={{ fontFamily: MONO, fontSize: 10.5, color: FOG, width: 38, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{Math.round(b.pct ?? 0)}%</span>
     </span>
   );
 }
@@ -426,7 +435,7 @@ function StageRow({ a, reg, minEvents }: { a: AxisRow; reg: Reg; minEvents: numb
 
 // The three groups at the top, in order, best first (pipeline-if-then.md § "Board layout and the CLEARED badge").
 const SECTIONS: Record<string, { title: string; note: string }> = {
-  cleared: { title: "Cleared", note: `Beat random on new data on each side, repeated on coins it was never picked on, netted above 0 after fees, then passed 30 paper trades after fees with parity clean. ${BADGE_RECHECK_LINE}` },
+  cleared: { title: "Cleared", note: `${CLEARED_LINE} ${BADGE_RECHECK_LINE}` },
   lead: { title: "Leads", note: "Positive on new data. Not cleared: each still has a bar to pass, named on its row." },
   testing: { title: "Still testing", note: "Counting new events since each read was registered. None has passed its first bar on new data yet. A read failing the 100-event check sits last, still running." },
 };
@@ -479,7 +488,7 @@ function TestRow({ a, reg, minEvents, since, cleared = false, paper, judgment, n
           padding: isMobile ? "13px 4px" : "13px 10px", minHeight: 44, display: "flex", alignItems: "flex-start", gap: 12, flexWrap: isMobile ? "wrap" : "nowrap" }}>
         <span style={{ minWidth: 0, flex: "1 1 220px" }}>
           {cleared && (
-            <span title="Cleared the full ladder and 30 paper trades after fees" style={{ display: "inline-block", marginRight: 8, fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.12em", color: MARK, background: "#1a1a1e", borderRadius: 5, padding: "3px 7px", verticalAlign: "2px" }}>CLEARED</span>
+            <span title={CLEARED_LINE} style={{ display: "inline-block", marginRight: 8, fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.12em", color: MARK, background: "#1a1a1e", borderRadius: 5, padding: "3px 7px", verticalAlign: "2px" }}>CLEARED</span>
           )}
           <span style={{ fontFamily: UI, fontSize: 14.5, fontWeight: 600, letterSpacing: "-0.01em", color: BRIGHT }}>{main}</span>
           {aside && <span style={{ fontFamily: UI, fontSize: 13.5, color: MUTED }}> {aside}</span>}
@@ -518,7 +527,7 @@ function DetailRows({ rows, minEvents }: { rows: { a: AxisRow; reg: Reg }[]; min
     <>
       {!isMobile && (
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 104px 64px 64px 170px 14px", columnGap: 14, padding: "4px 10px 6px", ...label, fontSize: 8.5 }}>
-          <span>Read</span><span>Grade · old data</span><span style={{ textAlign: "right" }}>Mean R</span><span style={{ textAlign: "right" }}>Events</span><span>Beats random · 5% / 95%</span><span />
+          <span>Read</span><span>Grade · old data</span><span style={{ textAlign: "right" }}>Mean R</span><span style={{ textAlign: "right" }}>Events</span><span>Beats random · {RANDOM_CUTOFFS.worse}% / {RANDOM_CUTOFFS.beats}%</span><span />
         </div>
       )}
       <div style={{ borderBottom: `1px solid ${C.border}` }}>
@@ -544,7 +553,7 @@ export default function SignalBoard({ scorecard }: { scorecard: Scorecard | null
   const isMobile = useIsMobile();
   const reads = scorecard?.pipeline?.reads;
   const { groups, judgments, paperCounts } = useBoardGroups(scorecard);
-  const minEvents = scorecard?.pipeline?.rules?.minEvents ?? 30;
+  const minEvents = scorecard?.pipeline?.rules?.minEvents ?? PIPELINE_RULES.minEvents;
   const since = countingSince(reads);
   const newData = new Map((overviewReads(scorecard, { line: "main", minEvents }) as (NewData & { axis: string })[]).map((r) => [r.axis, r]));
   // Leads show; Still testing opens on a tap (borst 2026-11-21). Same groups, same order, nothing dropped.

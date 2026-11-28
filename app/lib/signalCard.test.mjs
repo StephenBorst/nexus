@@ -38,7 +38,7 @@ test("takeaway says one-sidedness, the random verdict and the drift, from served
   const worse = takeaway(axis({ random: { pooled: { verdict: "BELOW_RANDOM", pctBeaten: 1.3 } } }));
   assert.equal(worse.tone, "neg");
   const drift = takeaway(axis({ best: { ...axis().best, drift: { excessBps: -2.8 } }, random: { pooled: { verdict: "NOT_DISTINGUISHABLE", pctBeaten: 50 } } }));
-  assert.match(drift.text, /edge doesn’t clear the market’s drift\.$/);
+  assert.match(drift.text, /its move doesn’t clear the market’s drift\.$/);
   assert.equal(drift.tone, "neg");
   assert.equal(takeaway(axis({ verdict: "INSUFFICIENT" })).text, "Accruing. Not enough history to rate yet.");
   assert.equal(takeaway(null).tone, "neutral");

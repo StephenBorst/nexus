@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { C } from "@/config/theme";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { overviewReads, tideOf, btcRegime, strongSides, paperCard, fmtR } from "@/lib/engineOverview.mjs";
-import { vsRandomCards, RANDOM_WORDS } from "@/lib/proofLayout.mjs";
+import { vsRandomCards, RANDOM_WORDS, RANDOM_CUTOFFS } from "@/lib/proofLayout.mjs";
 import { WordChip } from "@/components/ReadCard";
 import { pressKey } from "@/utils/a11y";
 
@@ -111,7 +111,7 @@ export function SideChart({ scorecard }: { scorecard: any }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <h2 style={{ margin: 0, fontFamily: UI, fontSize: isMobile ? 20 : 22, fontWeight: 600, letterSpacing: "-0.02em", color: BRIGHT }}>Every read vs random trades</h2>
         <p style={{ margin: 0, fontFamily: UI, fontSize: 13.5, lineHeight: 1.55, color: MUTED, maxWidth: 680 }}>
-          For each read we take 300 random trades on the same coins, same side, same hours. If it can’t beat them, it’s luck.
+          For each read we take 300 random trades on the same coins, same side, same hours. If it can’t beat them, its timing adds nothing.
           New data only.
         </p>
       </div>
@@ -122,9 +122,9 @@ export function SideChart({ scorecard }: { scorecard: any }) {
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", fontFamily: UI, fontSize: 12, color: MUTED }}>
-          <WordChip word={{ key: "BEATS", text: RANDOM_WORDS.BEATS }} /> 95%+
-          <WordChip word={{ key: "LEANS", text: RANDOM_WORDS.LEANS }} /> 80%+
-          <WordChip word={{ key: "WORSE", text: RANDOM_WORDS.WORSE }} /> 5% or less
+          <WordChip word={{ key: "BEATS", text: RANDOM_WORDS.BEATS }} /> {RANDOM_CUTOFFS.beats}%+
+          <WordChip word={{ key: "LEANS", text: RANDOM_WORDS.LEANS }} /> {RANDOM_CUTOFFS.leans}%+
+          <WordChip word={{ key: "WORSE", text: RANDOM_WORDS.WORSE }} /> {RANDOM_CUTOFFS.worse}% or less
         </div>
         <Seg label="Coins" value={line} onChange={(v) => { setLine(v as "main" | "holdout"); setPicked(null); }} options={[["main", "Main coins"], ["holdout", "Fresh coins"]]} />
       </div>
