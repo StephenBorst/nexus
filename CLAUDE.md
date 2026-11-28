@@ -526,7 +526,10 @@ product is what sits on top:
 - **Read pipeline** (`docs/research/read-pipeline.md`, `app/lib/readPipeline.mjs`): REGISTERED → LEAD → EDGE → TRADEABLE →
   PAPER. **Nothing retires** (borst 2026-11-20, pipeline-if-then.md "Reads no longer retire"): the 100-event check
   (`failEvents`) is a `failing` label on the served row, set each build, never final; a failing read can't pass LEAD
-  and never wears CLEARED. Archive = by hand only (`ARCHIVED_READS`, empty). Registrations are frozen by fingerprint
+  and never wears CLEARED. Archive = by hand only (`ARCHIVED_READS`, empty). **Stage bars FROZEN** (borst signed in session 2026-11-28,
+  `docs/research/pipeline-bars-freeze.md`, text above Results sha256-pinned by `app/lib/pipelineBarsFreeze.test.mjs`, which
+  also pins `PIPELINE_RULES`, `PAPER_MIN_TRADES`, `BADGE_BAR` runs / beatPct / minUsable / feeBps and `LOCK_RULE`): a
+  changed bar = a new dated page signed on its own + the test pointed at it, never an edit. Registrations are frozen by fingerprint
   (`app/lib/readFingerprints.mjs`, events on seeded tapes, `workers/nexus-lab-api/readFingerprint.mjs`; test-pinned),
   not by a signature; signing stays for the badge bar. **Badge bar v2** (`docs/research/badge-bar-v2.md`, SIGNED by borst in session
   2026-11-20 at 90%, pinned above Results by `app/lib/badgeBar.test.mjs`; BUILT 2026-11-20): a recorded paper
