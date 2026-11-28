@@ -15,6 +15,9 @@ import { Button } from "@/components/ui";
 import { useIsMobile } from "./useIsMobile";
 import { CardHead, CardShell, Tiles, WHY, WordChip } from "@/components/ReadCard";
 import { ExecutionGapCard, type Gap } from "./ExecutionGapCard";
+import { ReadChecklist, type Checklist } from "@/components/ReadChecklist";
+import { readChecklist } from "@/lib/readChecklist.mjs";
+import { PROMOTION_LOCKS } from "@/lib/promotionLocks.mjs";
 
 const SCOREBOARD = "https://og.nexustradinglabs.com/intel/axis-backtest";
 const MONO = "var(--nx-font-mono)";
@@ -27,6 +30,10 @@ export type ShelfLoad = { name: string; stageWord: string; config: Record<string
 // `mine`: the connected wallet's own paper run, if it runs one of these reads: that card shows it (counts + pairs).
 export function StrategyShelf({ onLoad, mine }: { onLoad: (load: ShelfLoad) => void; mine?: { wallet: string | null; read: string | null; gap?: Gap | null | "failed" } }) {
   const [rows, setRows] = useState<ShelfRow[] | null>(null);
+  // The board's own read rows (the stage + its served gates), kept for each card's "what it still needs" checklist.
+  const [regs, setRegs] = useState<Record<string, { axis: string; stage: string } & Record<string, unknown>>>({});
+  // Recorded 30-trade judgments, read only where they can matter: 30+ paper trades, or a read at Tradeable / Paper.
+  const [judgments, setJudgments] = useState<Record<string, unknown>>({});
   const [failed, setFailed] = useState(false);
   // Every registered read also runs its own public paper agent (house runs): each row links to it, so you can see
   // the strategy's own paper record before you load it (2026-11-22).
@@ -46,10 +53,30 @@ export function StrategyShelf({ onLoad, mine }: { onLoad: (load: ShelfLoad) => v
         if (!alive) return;
         const out = shelfRows(sc);
         if (out.length) setRows(out); else setFailed(true);
+        const reads = Array.isArray(sc?.pipeline?.reads) ? sc.pipeline.reads : [];
+        setRegs(Object.fromEntries(reads.map((r: { axis: string; stage: string }) => [r.axis, r])));
       })
       .catch(() => { if (alive) setFailed(true); });
     return () => { alive = false; };
   }, []);
+
+  const judgeKey = Object.values(regs)
+    .filter((r) => r.stage === "PAPER" || r.stage === "TRADEABLE" || (runs[r.axis]?.count ?? 0) >= 30)
+    .map((r) => r.axis).sort().join(",");
+  useEffect(() => {
+    if (!judgeKey) return;
+    let alive = true;
+    Promise.all(judgeKey.split(",").map((ax) => sharedJson(`https://og.nexustradinglabs.com/signals/paper-judge/${encodeURIComponent(ax)}`)
+      .then((j) => [ax, j ?? null] as const).catch(() => [ax, null] as const)))
+      .then((pairs) => { if (alive) setJudgments(Object.fromEntries(pairs)); });
+    return () => { alive = false; };
+  }, [judgeKey]);
+  const checklistFor = (axis: string): Checklist | null => {
+    const reg = regs[axis];
+    if (!reg) return null;
+    const judgment = (Object.prototype.hasOwnProperty.call(judgments, axis) ? judgments[axis] : undefined) as object | null | undefined;
+    return readChecklist({ reg, paper: runs[axis] || null, judgment, locks: PROMOTION_LOCKS }) as Checklist;
+  };
 
   return (
     <div style={agentCardStyle}>
@@ -105,8 +132,11 @@ export function StrategyShelf({ onLoad, mine }: { onLoad: (load: ShelfLoad) => v
                 <ExecutionGapCard wallet={mine.wallet} read={r.id} gap={mine.gap} compact />
               )}
 
-              {/* What it still needs: kept, secondary. */}
-              {(r.need || r.eta) && (
+              {/* What it still needs, in numbers: the next stage's served bars → the later stages → the CLEARED stretch
+                  (app/lib/readChecklist.mjs). Replaces the one-line "Needs …" for registered reads. */}
+              {r.kind === "read" && regs[r.id] ? (
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}><ReadChecklist list={checklistFor(r.id)} compact /></div>
+              ) : (r.need || r.eta) && (
                 <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, color: C.text.muted, fontFamily: UI, fontSize: 11, lineHeight: 1.45 }}>
                   {r.need && <>Needs {r.need}.</>}{r.eta && <span style={{ fontFamily: MONO, fontSize: 10 }}>{r.need ? " " : ""}{r.eta}</span>}
                 </div>
