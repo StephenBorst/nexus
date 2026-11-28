@@ -65,7 +65,8 @@ const fmtVol = (n: number) => (n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3
 const fmtEnds = (iso: string | null) => { if (!iso) return null; const d = new Date(iso); return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); };
 
 function ImpactChip({ im, c, verdict }: { im: Impact; c: Catalyst; verdict?: Verdict }) {
-  const col = im.direction === "LONG" ? C.pos : C.neg;
+  // A side is not money: ink (green/red is P&L and price only). The mapping is a fixed rule, not graded.
+  const col = C.text.bright;
   // The gate (Grok): an impact can draft the frozen thesis ONLY when its coin has a funding
   // verdict object (⇒ live mark + deep tv/history for the H4 ATR stop, no invention). Else it
   // stays a calendar chip with no draft CTA — "not a trade yet."
@@ -81,7 +82,7 @@ function ImpactChip({ im, c, verdict }: { im: Impact; c: Catalyst; verdict?: Ver
         <button onClick={async () => { if (drafting) return; setDrafting(true); const ok = await draftCatalyst(im, c, verdict!); if (!ok) setDrafting(false); }}
           className="nx-press"
           style={{ fontFamily: "var(--nx-font-ui)", fontSize: 12, fontWeight: 600, color: C.accent, background: "none", border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "4px 9px", cursor: "pointer", whiteSpace: "nowrap" }}>
-          {drafting ? "drafting…" : "◆ Draft thesis →"}
+          {drafting ? "drafting…" : "Draft a call →"}
         </button>
       ) : (
         <span style={{ fontFamily: MONO, fontSize: 9, color: C.text.faint, whiteSpace: "nowrap" }} title="No funding verdict for this market — event stays a calendar chip until it can fill a frozen thesis">not a trade yet</span>
@@ -92,12 +93,12 @@ function ImpactChip({ im, c, verdict }: { im: Impact; c: Catalyst; verdict?: Ver
 
 function CatalystCard({ c, verdicts }: { c: Catalyst; verdicts: Record<string, Verdict> }) {
   const ends = fmtEnds(c.endDate);
-  const lensCol = c.riskLens === "RISK_ON" ? C.pos : c.riskLens === "RISK_OFF" ? C.neg : C.text.fog;
+  const lensCol = C.text.muted;
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, background: C.surfaceAlt, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 11 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.1em", color: C.text.muted, border: `1px solid ${C.border}`, borderRadius: 3, padding: "1px 6px" }}>{CAT_LABEL[c.category] || c.category}</span>
-        <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: lensCol }}>{c.riskLens === "RISK_ON" ? "▲ RISK-ON" : "▼ RISK-OFF"}</span>
+        <span style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: lensCol }}>{c.riskLens === "RISK_ON" ? "if yes: risk-on" : "if yes: risk-off"}</span>
         <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 9, color: C.text.faint }}>{fmtVol(c.volumeUsd)} vol{ends ? ` · ends ${ends}` : ""}</span>
       </div>
 
@@ -151,11 +152,10 @@ export function CatalystBoard() {
 
   return (
     <div>
-      <SectionHeader eyebrow="CATALYSTS" title="World events → your trades" note="EVENT → A TRADE YOU CAN TAKE" />
+      <SectionHeader eyebrow="CATALYSTS" title="World events and the markets they touch" note="EVENT → MARKET, BY A FIXED RULE" />
       <div style={{ fontFamily: UI, fontSize: 13, color: C.text.fog, lineHeight: 1.6, maxWidth: 680, marginBottom: 14 }}>
-        Liquid prediction-market events — rates, the economy, geopolitics — mapped to the markets they move on Nexus.
-        A Strait-of-Hormuz de-escalation unwinds the crude risk premium → <b style={{ color: C.text.bright }}>short CL</b>; a rate cut lifts tech → <b style={{ color: C.text.bright }}>long NAS</b>.
-        Where the moved market has a funding verdict on the board, one tap drafts a <b style={{ color: C.text.bright }}>frozen, graded thesis</b> (mark, 1.2× ATR stop, 1.5R, 7d, why = event + funding) — the rest stay event chips until they can. Not a signal.
+        Liquid prediction-market events (rates, the economy, geopolitics), each mapped to the markets it touches on Nexus by a fixed rule, written on each chip.
+        The mapping is not graded. Where the market has a funding verdict on the board, one tap drafts a call you can publish (mark, 1.2× ATR stop, 1.5R, 7d); a published call is graded like any other.
       </div>
 
       {err || (board && board.catalysts.length === 0)
@@ -163,12 +163,12 @@ export function CatalystBoard() {
         : !board
         ? <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.faint, padding: "10px 2px" }}>reading the event tape…</div>
         : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))", gap: 12 }}>
             {board.catalysts.map((c, i) => <CatalystCard key={`${c.clobTokenId || c.question}-${i}`} c={c} verdicts={verdicts} />)}
           </div>
         )}
       <div style={{ fontFamily: MONO, fontSize: 8, color: C.text.faint, marginTop: 12, lineHeight: 1.5 }}>
-        Event probabilities via Polymarket. Impact mapping is a transparent rule (not a black box), not a fair-value oracle. Not advice.
+        Event probabilities via Polymarket. The impact mapping is a fixed rule, not graded, not a fair value. Not advice.
       </div>
     </div>
   );

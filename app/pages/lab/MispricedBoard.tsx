@@ -695,7 +695,7 @@ export function MispricedBoard() {
     // tap down under WHY: on a phone the essay pushed the one button that answers this page's
     // question below three screens of prose. Desktop is untouched. Every value here reads the
     // SAME verdict object the badge and the Draft gate read, so the head cannot disagree.
-    const verdictLabel = verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? "⚠ WATCH" : "◆ WATCHING";
+    const verdictLabel = verdict === "NONE" ? "BALANCED" : isFade ? `FADE ${m.direction}` : draftAnyway ? "⚠ WATCH" : "WATCHING";
     const verdictColor = isFade ? C.accent : draftAnyway ? C.warn : C.text.muted;
     const fundingLabel = `${fmt8h(m.funding8hPct)} → ${fmtYr(m.fundingAnnualPct)}`;
     // HIST is the canonical edgeQuality record (the source the share card already cites); absent
@@ -818,7 +818,7 @@ export function MispricedBoard() {
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: C.text.muted }}>
                   <span style={{ color: C.text.fog }}>◆ Nexus · Funding stretch</span>
-                  <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: verdictColor }}>{verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? `⚠ WATCH · FADE ${m.edgeQuality?.revertedPct}% HIST` : "◆ WATCHING"}</span>
+                  <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: verdictColor }}>{verdict === "NONE" ? "BALANCED" : isFade ? `FADE ${m.direction}` : draftAnyway ? `⚠ WATCH · FADE ${m.edgeQuality?.revertedPct}% HIST` : "WATCHING"}</span>
                 </div>
                 <div style={{ fontFamily: UI, fontSize: 14, color: C.text.fog, marginTop: 18 }}>{m.coin} perpetual</div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 1 }}>
@@ -930,7 +930,7 @@ export function MispricedBoard() {
                         <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.text.bright }}>{m.coin}</span>
                         <span style={{ fontFamily: MONO, fontSize: 8.5, color: C.text.faint }}>{fmtUsd(m.oiUsd)} open interest</span>
                         {isThinOi(m) && <span title={THIN_TITLE} style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: C.warn, border: `1px solid ${C.warn}55`, borderRadius: 2, padding: "0 4px" }}>THIN · LOW CONF</span>}
-                        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: badgeColor }}>{verdict === "NONE" ? "BALANCED" : isFade ? `◆ FADE ${m.direction}` : draftAnyway ? `⚠ WATCH · ${m.edgeQuality?.revertedPct}% HIST` : "◆ WATCHING"}</span>
+                        <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 8.5, fontWeight: 700, letterSpacing: "0.08em", color: badgeColor }}>{verdict === "NONE" ? "BALANCED" : isFade ? `FADE ${m.direction}` : draftAnyway ? `⚠ WATCH · ${m.edgeQuality?.revertedPct}% HIST` : "WATCHING"}</span>
                       </div>
                       <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
                         <div>

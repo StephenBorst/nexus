@@ -113,9 +113,10 @@ export function MarketTable({ onOpenBoard }: { onOpenBoard?: (id: string) => voi
     const on = watched.includes(r.coin);
     const asking = callFor === r.coin;
     const callOn = (side: "LONG" | "SHORT") => handOffCall(r.coin, side, navigate, "market-table");
-    const sideBtn = (side: "LONG" | "SHORT"): React.CSSProperties => ({
+    const sideBtn = (_side: "LONG" | "SHORT"): React.CSSProperties => ({
       fontFamily: UI, fontSize: 13, fontWeight: 600, padding: "7px 12px", borderRadius: 8, cursor: "pointer", background: "transparent",
-      color: side === "LONG" ? C.pos : C.neg, border: `1px solid ${side === "LONG" ? C.pos : C.neg}`,
+      // A side is not money: both in ink (green/red is P&L and price only).
+      color: C.text.bright, border: `1px solid ${C.borderStrong}`,
     });
     return (
       <Fragment key={r.coin}>
