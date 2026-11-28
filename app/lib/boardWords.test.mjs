@@ -45,3 +45,11 @@ test("the Board's phone rows use the plain words", () => {
   assert.doesNotMatch(src, /d === "LONG" \? C\.pos : d === "SHORT" \? C\.neg/, "a side is not money");
   assert.match(src, /trendWords\(r\.trend, r\.trendMove\)/);
 });
+
+test("call side pickers are ink, not money colours (market table, Thesis Engine)", () => {
+  const table = readFileSync(new URL("../pages/lab/MarketTable.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(table, /side === "LONG" \? C\.pos : C\.neg/);
+  const thesis = readFileSync(new URL("../pages/lab/ThesisView.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(thesis, /d === "LONG" \? "#3ecf8e" : "#f7525f"/);
+  assert.doesNotMatch(thesis, /form\.direction === "LONG" \? "#3ecf8e" : "#f7525f"/);
+});

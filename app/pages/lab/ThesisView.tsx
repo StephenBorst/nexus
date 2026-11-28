@@ -614,7 +614,7 @@ function ThesisAnalyticsSection({ trades }: { trades: ThesisTrade[] }) {
                     <span style={{ fontSize: 16, color: "#ededf0", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{formatPnl(bestThesis.actualPnl ?? 0)}</span>
                   </div>
                   <div style={{ display: "flex", gap: 12 }}>
-                    <div style={{ fontSize: 10, color: bestThesis.direction === "LONG" ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)" }}>
+                    <div style={{ fontSize: 10, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>
                       {bestThesis.direction === "LONG" ? "↑" : "↓"} {bestThesis.direction}
                     </div>
                     <div style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>1:{bestThesis.riskReward.toFixed(2)} R:R</div>
@@ -640,7 +640,7 @@ function ThesisAnalyticsSection({ trades }: { trades: ThesisTrade[] }) {
                     <span style={{ fontSize: 16, color: "#f7525f", fontFamily: "var(--nx-font-mono)", fontWeight: "bold" }}>{formatPnl(worstThesis.actualPnl ?? 0)}</span>
                   </div>
                   <div style={{ display: "flex", gap: 12 }}>
-                    <div style={{ fontSize: 10, color: worstThesis.direction === "LONG" ? "#3ecf8e" : "#f7525f", fontFamily: "var(--nx-font-mono)" }}>
+                    <div style={{ fontSize: 10, color: "#a1a1aa", fontFamily: "var(--nx-font-mono)" }}>
                       {worstThesis.direction === "LONG" ? "↑" : "↓"} {worstThesis.direction}
                     </div>
                     <div style={{ fontSize: 10, color: "#52525b", fontFamily: "var(--nx-font-mono)" }}>1:{worstThesis.riskReward.toFixed(2)} R:R</div>
@@ -1686,9 +1686,9 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                         return (
                         <button key={d} aria-pressed={on} onClick={() => { pickSide(d); if (canBuild) quickSetup(quickStopPct, quickTpR, d); }} style={{
                           flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5, cursor: "pointer", borderRadius: 3, border: "1px solid",
-                          background: on ? (d === "LONG" ? "#1a1a1e" : "#241012") : "#0f0f11",
-                          borderColor: on ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : suggested ? "#e0a45866" : "#232327",
-                          color: on ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : suggested ? "#e0a458" : "#52525b",
+                          background: on ? "#1a1a1e" : "#0f0f11",
+                          borderColor: on ? "#ededf0" : suggested ? "#e0a45866" : "#232327",
+                          color: on ? "#ededf0" : suggested ? "#e0a458" : "#52525b",
                         }}>{d === "LONG" ? "↑ Long" : "↓ Short"}</button>
                         );
                       })}
@@ -1930,9 +1930,9 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     <button key={d} aria-pressed={dirArmed && form.direction === d} onClick={() => pickSide(d)} style={{
                       flex: 1, padding: "8px 0", fontFamily: "var(--nx-font-ui)", fontSize: 12.5,
                       cursor: "pointer", borderRadius: 3, border: "1px solid",
-                      background: dirArmed && form.direction === d ? (d === "LONG" ? "#1a1a1e" : "#241012") : "#0f0f11",
-                      borderColor: dirArmed && form.direction === d ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : !dirArmed && suggestedDir === d ? "#e0a45866" : "#232327",
-                      color: dirArmed && form.direction === d ? (d === "LONG" ? "#3ecf8e" : "#f7525f") : !dirArmed && suggestedDir === d ? "#e0a458" : "#52525b",
+                      background: dirArmed && form.direction === d ? "#1a1a1e" : "#0f0f11",
+                      borderColor: dirArmed && form.direction === d ? "#ededf0" : !dirArmed && suggestedDir === d ? "#e0a45866" : "#232327",
+                      color: dirArmed && form.direction === d ? "#ededf0" : !dirArmed && suggestedDir === d ? "#e0a458" : "#52525b",
                     }}>{d === "LONG" ? "↑ Long" : "↓ Short"}</button>
                   ))}
                 </div>
@@ -2257,7 +2257,7 @@ export function ThesisView({ realizedTrades, wallet }: { realizedTrades?: Proces
                     </div>
                     {[
                       { label: "SYMBOL", val: `PERP_${form.symbol.toUpperCase()}_USDC` },
-                      { label: "SIDE", val: form.direction, color: form.direction === "LONG" ? "#3ecf8e" : "#f7525f" },
+                      { label: "SIDE", val: form.direction, color: "#ededf0" },
                       { label: "ENTRY", val: `$${parseFloat(form.entryPrice).toLocaleString()}` },
                       { label: "QTY", val: (calc.positionSize / parseFloat(form.entryPrice)).toFixed(6) },
                       { label: "SIZE", val: `$${calc.positionSize.toFixed(0)} notional` },
