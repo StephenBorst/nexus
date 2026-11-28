@@ -15,6 +15,10 @@ import { paperRunLine } from "@/lib/paperRun.mjs";
 import { quietAgeText } from "@/lib/quietLine.mjs";
 import { useAccount } from "@orderly.network/hooks";
 import { ExecutionGapCard } from "@/pages/lab/ExecutionGapCard";
+import { ReadChecklist, type Checklist } from "@/components/ReadChecklist";
+import { readChecklist } from "@/lib/readChecklist.mjs";
+import { PROMOTION_LOCKS } from "@/lib/promotionLocks.mjs";
+import { sharedJson } from "@/lib/sharedJson.mjs";
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
@@ -73,6 +77,10 @@ export default function PaperRunPage() {
   const [state, setState] = useState<"loading" | "ok" | "missing" | "failed">("loading");
   // The 30-trade judgment (GET /signals/paper-judge/:axis, rule app/lib/paperJudge.mjs). Unread = the block hides.
   const [judge, setJudge] = useState<Judgment | null>(null);
+  // For the checklist: the judgment reply as served, including "no judgment page" (undefined = not read yet, null = unread).
+  const [judgeRaw, setJudgeRaw] = useState<object | null | undefined>(undefined);
+  // The board's row for this read (stage + its served gates), from the same scoreboard /proof reads.
+  const [reg, setReg] = useState<({ axis: string; stage: string } & Record<string, unknown>) | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -93,16 +101,33 @@ export default function PaperRunPage() {
   useEffect(() => {
     let alive = true;
     setJudge(null);
+    setJudgeRaw(undefined);
     (async () => {
       try {
         const res = await fetch(`${AGENT_API}/signals/paper-judge/${encodeURIComponent(axis)}`);
-        if (!res.ok) return;
-        const d = (await res.json()) as Judgment;
-        if (alive && d?.ok) setJudge(d);
-      } catch { /* no judgment block */ }
+        const d = (await res.json().catch(() => null)) as (Judgment & { error?: string }) | null;
+        if (!alive) return;
+        setJudgeRaw(res.ok || d?.error === "no_judgment" ? d : null);
+        if (res.ok && d?.ok) setJudge(d);
+      } catch { if (alive) setJudgeRaw(null); }
     })();
     return () => { alive = false; };
   }, [axis]);
+
+  useEffect(() => {
+    let alive = true;
+    setReg(null);
+    sharedJson(`${AGENT_API}/intel/axis-backtest`)
+      .then((sc) => {
+        const reads = (sc as { pipeline?: { reads?: ({ axis: string; stage: string } & Record<string, unknown>)[] } } | null)?.pipeline?.reads;
+        if (alive) setReg(Array.isArray(reads) ? reads.find((r) => r.axis === axis) || null : null);
+      })
+      .catch(() => { /* no checklist */ });
+    return () => { alive = false; };
+  }, [axis]);
+  const checklist: Checklist | null = reg && run && !run.unread
+    ? readChecklist({ reg, paper: { count: run.count, target: run.target }, judgment: judgeRaw, locks: PROMOTION_LOCKS }) as Checklist
+    : null;
 
   const line = run ? paperRunLine(run) : null;
   const pageUrl = `https://trade.nexustradinglabs.com/proof/paper/${encodeURIComponent(axis)}`;
@@ -152,6 +177,12 @@ export default function PaperRunPage() {
           </p>
           {/* Your own paper run of this read, if your agent runs it (app/lib/executionGap.mjs). Counts + pairs; it moves no stage. */}
           <div style={{ marginTop: 16, maxWidth: 720 }}><ExecutionGapCard wallet={wallet} read={axis} /></div>
+          {/* What this read still needs, in numbers (app/lib/readChecklist.mjs): served gates → later stages → CLEARED. */}
+          {checklist && (
+            <div style={{ marginTop: 16, maxWidth: 720, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 14px", background: C.surface }}>
+              <ReadChecklist list={checklist} />
+            </div>
+          )}
           {/* Flat and waiting: why, from the brain's last check (app/lib/quietLine.mjs). Not a grade, not a forecast. */}
           {!run.open && !run.complete && run.quiet && (
             <p style={{ margin: "8px 0 0", fontFamily: MONO, fontSize: 12, lineHeight: 1.6, color: FOG, maxWidth: 680 }}>

@@ -241,6 +241,15 @@ product is what sits on top:
   no comparative words, no mean R / beat-random before a run's 30-trade verdict, `NO_STAGE_LINE` always (test-pinned).
   One read (`useExecutionGap`) feeds the Agent-tab card, the read's Shelf card (compact) and its `/proof/paper/:axis` page
   (the connected wallet's run; renders only when the wallet's run IS that read and isn't the read's own wallet).
+- **What a read still needs** (borst 2026-11-28, pipeline item #2; rules `app/lib/readChecklist.mjs`, UI
+  `app/components/ReadChecklist.tsx`, tested): on each read's Shelf card (compact: head + next 2 open rows + "Show all")
+  and its `/proof/paper/:axis` page (full). No new source: the next stage's served `gates` (/intel/axis-backtest, numbers
+  now vs bar, the checklist's own number-only titles) → the later stages' bars from `PIPELINE_RULES` ("checked at that
+  stage") → the CLEARED stretch (30 closed paper trades from the judgment's count or /signals/paper-counts; after-fees
+  average > 0 from `/signals/paper-judge/:axis`; ≥ `BADGE_BAR.beatPct`% of 300 random entries under it) + the failing
+  label / a promotion lock. CLEARED (`isCleared`) is the only passed state; rows are ✓ ○ … ? in ink; a row that can't be
+  measured says "needs N more closed trades". No comparative words (test-pinned). The Shelf fetches a judgment only at
+  30+ trades or Tradeable / Paper.
 - **Paper record card** (Agent tab, borst 2026-11-27, rules `app/lib/paperGraduation.mjs`, `PaperRecordCard` in
   AgentPanels.tsx, tested): replaced READY TO GO LIVE?, which offered "Go autonomous" after 5 trades of fee-free paper
   P&L. Under 30 lifetime trades (`paper_agg`) = "n OF 30", nothing to switch; 30+ = judged on the after-costs re-read
