@@ -42,7 +42,7 @@ export default function Contrarians() {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <StripHead title="Contrarians" sub="right when they fade the crowd" />
+      <StripHead title="Contrarians" sub="graded record on calls made against the crowd's lean" />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {rows.map((r) => (
@@ -52,18 +52,18 @@ export default function Contrarians() {
             {r.meritRank && <span title={r.meritRank.title} style={{ fontSize: 10, color: "#ededf0", flexShrink: 0 }}>{r.meritRank.glyph}</span>}
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 12, color: "#ededf0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "underline", textDecorationColor: "#33333a" }}>{r.displayName || short(r.wallet)}</span>
             <span style={{ marginLeft: "auto", display: "flex", alignItems: "baseline", gap: 12, flexShrink: 0 }}>
-              <span title="record on contrarian calls" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: r.contrarianAvgR >= 0 ? "#3ecf8e" : "#f7525f" }}>
-                {rStr(r.contrarianAvgR)} <span style={{ color: "#52525b" }}>· {r.contrarianCalls} fades{r.contrarianWinRate != null ? ` · ${r.contrarianWinRate}%` : ""}</span>
+              <span title="average R on calls made against the crowd's lean" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: "#ededf0" }}>
+                {rStr(r.contrarianAvgR)} <span style={{ color: "#52525b" }}>· {r.contrarianCalls} against the crowd{r.contrarianWinRate != null ? ` · ${r.contrarianWinRate}%` : ""}</span>
               </span>
-              <span title="how much better they do fading vs following the crowd" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: r.edge >= 0 ? "#3ecf8e" : "#71717a" }}>
-                edge {rStr(r.edge)}
+              <span title="average R against the crowd minus average R with it" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa" }}>
+                {rStr(r.edge)} vs with the crowd{r.withCrowdCalls ? ` (${r.withCrowdCalls})` : ""}
               </span>
             </span>
           </div>
         ))}
       </div>
       <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", marginTop: 8, lineHeight: 1.5 }}>
-        A call is contrarian if it opposed the merit-weighted consensus lean that preceded it. Ranked by contrarian avg-R, shrunk by sample and gated net-positive. Same trustless grade — this only asks whether fading the crowd paid.
+        A call is contrarian if it opposed the merit-weighted consensus lean that preceded it. Ordered by that average R, pulled toward zero for few calls; only net-positive records are listed. Same grade as every call; a small sample, not a tested edge.
       </div>
     </div>
   );

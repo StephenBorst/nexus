@@ -1,9 +1,8 @@
-// ⚔ CONTESTED — where credible callers are OPPOSED right now.
-// Consensus is worthless; disagreement is the signal. Built from data we already
-// publish (open positions + active public calls), weighted by each participant's
-// EARNED merit tier so a sharp-vs-sharp standoff outranks anonymous noise. Ranked
-// by tension = weight balance × total weight. Pure public read (GET /theses/
-// contested), fail-soft, 30s poll. Clicking a side prefills a copy trade.
+// ⚔ CONTESTED — coins where public callers hold opposite sides right now (open positions + active public calls,
+// GET /theses/contested, fail-soft, 30s poll). Honesty pass (borst 2026-11-28): who is on each side and each side's
+// own graded record, as facts. No weighted split bar, no "% split", no weights, and no "◆ LONGS have the record here ·
+// edge" line: neither side's record is a grade of THIS trade, and a tally of who's where is not a signal. Sides in ink
+// (green/red is money). Pinned by app/lib/feedHonesty.test.mjs.
 import { StripHead } from "@/components/ui/StripHead";
 import { useEffect, useState } from "react";
 
@@ -27,13 +26,13 @@ const short = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`;
 const name = (p: Party) => p.displayName || short(p.wallet);
 const rStr = (n: number) => `${n >= 0 ? "+" : ""}${n}R`;
 
-function Camp({ side, parties, weight, count, record }: { side: "LONG" | "SHORT"; parties: Party[]; weight: number; count: number; record?: SideRecord }) {
-  const tone = side === "LONG" ? "#3ecf8e" : "#f7525f";
+function Camp({ side, parties, count, record }: { side: "LONG" | "SHORT"; parties: Party[]; count: number; record?: SideRecord }) {
+  const tone = "#ededf0";
   return (
     <div style={{ flex: "1 1 0", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
         <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, fontWeight: 700, color: tone, letterSpacing: "0.08em" }}>{side}</span>
-        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>{count} · wt {weight}</span>
+        <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#71717a" }}>{count}</span>
       </div>
       {/* This side's combined graded record — who's actually been right */}
       <div title="combined graded call record of this side's callers" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: record && record.calls ? "#a1a1aa" : "#52525b", marginBottom: 6 }}>
@@ -45,7 +44,7 @@ function Camp({ side, parties, weight, count, record }: { side: "LONG" | "SHORT"
             {p.meritRank && <span title={p.meritRank.title} style={{ fontSize: 9, color: "#ededf0", flexShrink: 0 }}>{p.meritRank.glyph}</span>}
             <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 10, color: "#a1a1aa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name(p)}</span>
             {p.record && <span title={`${p.record.calls} graded calls`} style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b", flexShrink: 0 }}>{rStr(p.record.avgR)}</span>}
-            {p.sources.includes("position") && <span title="holds an open position" style={{ fontSize: 8, color: "#3ecf8e", flexShrink: 0 }}>●</span>}
+            {p.sources.includes("position") && <span title="holds an open position" style={{ fontSize: 8, color: "#a1a1aa", flexShrink: 0 }}>●</span>}
           </div>
         ))}
         {parties.length > 4 && <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>+{parties.length - 4} more</span>}
@@ -74,41 +73,21 @@ export default function Contested() {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <StripHead title="Contested" sub="where the sharp callers disagree" />
+      <StripHead title="Contested" sub="callers on opposite sides of one coin · each side's own graded record, not a grade of this trade" />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 8 }}>
         {rows.map((row) => {
-          // Split bar: how the weighted conviction divides. A dead-even bar is the
-          // strongest signal — real, credible two-sided disagreement.
-          const total = row.longWeight + row.shortWeight;
-          const longPct = total > 0 ? (row.longWeight / total) * 100 : 50;
           return (
             <div key={row.symbol} style={{ background: "#0f0f11", border: "1px solid #232327", borderRadius: 6, padding: "12px 14px", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)" }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
                 <span style={{ fontFamily: "var(--nx-font-mono)", fontSize: 14, fontWeight: 700, color: "#f4f4f5" }}>{row.symbol}</span>
-                <span title="tension = how evenly credible weight is split × how much of it there is" style={{ fontFamily: "var(--nx-font-mono)", fontSize: 9, color: "#52525b" }}>
-                  {Math.round(row.balance * 100)}% split
-                </span>
-              </div>
-
-              {/* weighted split bar */}
-              <div style={{ display: "flex", height: 4, borderRadius: 2, overflow: "hidden", marginBottom: 10, background: "#232327" }}>
-                <div style={{ width: `${longPct}%`, background: "#3ecf8e" }} />
-                <div style={{ width: `${100 - longPct}%`, background: "#f7525f" }} />
               </div>
 
               <div style={{ display: "flex", gap: 12 }}>
-                <Camp side="LONG" parties={row.longs} weight={row.longWeight} count={row.longCount} record={row.longRecord} />
+                <Camp side="LONG" parties={row.longs} count={row.longCount} record={row.longRecord} />
                 <div style={{ width: 1, background: "#232327", flexShrink: 0 }} />
-                <Camp side="SHORT" parties={row.shorts} weight={row.shortWeight} count={row.shortCount} record={row.shortRecord} />
+                <Camp side="SHORT" parties={row.shorts} count={row.shortCount} record={row.shortRecord} />
               </div>
-
-              {/* Which side has the graded record — the actionable read */}
-              {row.edge && row.edge.side && (
-                <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid #1a1a1e", fontFamily: "var(--nx-font-mono)", fontSize: 10, color: row.edge.side === "LONG" ? "#3ecf8e" : "#f7525f" }}>
-                  ◆ {row.edge.side}S have the record here <span style={{ color: "#52525b" }}>· +{row.edge.gapR}R avg-R edge</span>
-                </div>
-              )}
             </div>
           );
         })}

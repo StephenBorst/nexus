@@ -306,7 +306,7 @@ function CopyModal({
           <div>
             <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 16, fontWeight: "bold", color: "#fff" }}>
               {ticker}
-              <span style={{ fontSize: 11, marginLeft: 8, color: thesis.direction === "LONG" ? "#3ecf8e" : "#f7525f" }}>
+              <span style={{ fontSize: 11, marginLeft: 8, color: "#ededf0" }}>
                 {thesis.direction === "LONG" ? "↑" : "↓"} {thesis.direction}
               </span>
             </div>
@@ -383,7 +383,7 @@ function CopyModal({
               </div>
               <div>
                 <div style={labelStyle}>LEVERAGE</div>
-                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: calc.leverage > 25 ? "#f7525f" : calc.leverage > 10 ? "#fbbf24" : "#3ecf8e" }}>
+                <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 13, fontWeight: "bold", color: calc.leverage > 25 ? "#f7525f" : calc.leverage > 10 ? "#fbbf24" : "#ededf0" }}>
                   {calc.leverage.toFixed(1)}x
                 </div>
               </div>
@@ -917,7 +917,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
   }
 
   // Trustless call grades (public-price graded, on-chain anchored) keyed by wallet.
-  const [graded, setGraded] = useState<Map<string, { hitRate: number; avgR: number; calls: number; score: number; meritRank: { tier: string; title: string; glyph: string } | null; rSeries: number[]; discipline: { score: number; scored: number } | null; regimeEdge: { best: { bucket: string; avgR: number } } | null; calibration: { calibrated: boolean; inverted: boolean; gap: number } | null; contrarian: { calls: number; avgR: number; edge: number; score: number } | null }>>(new Map());
+  const [graded, setGraded] = useState<Map<string, { hitRate: number; avgR: number; calls: number; score: number; meritRank: { tier: string; title: string; glyph: string } | null; rSeries: number[]; discipline: { score: number; scored: number } | null; regimeEdge: { best: { bucket: string; avgR: number; calls: number } } | null; calibration: { calibrated: boolean; inverted: boolean; gap: number } | null; contrarian: { calls: number; avgR: number; edge: number; score: number } | null }>>(new Map());
   const [emerging, setEmerging] = useState<Map<string, { calls: number; toQualify: number }>>(new Map());
   const [callLedger, setCallLedger] = useState<{ ledgerHash?: string; onChain?: { verified?: boolean; explorer?: string } | null } | null>(null);
   const [gradedState, setGradedState] = useState<"loading" | "ok" | "error">("loading");
@@ -929,7 +929,7 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
     ]).then(([lb, led]) => {
       if (cancel) return;
       setGradedState(lb && Array.isArray(lb.leaderboard) ? "ok" : "error");
-      const m = new Map<string, { hitRate: number; avgR: number; calls: number; score: number; meritRank: { tier: string; title: string; glyph: string } | null; rSeries: number[]; discipline: { score: number; scored: number } | null; regimeEdge: { best: { bucket: string; avgR: number } } | null; calibration: { calibrated: boolean; inverted: boolean; gap: number } | null; contrarian: { calls: number; avgR: number; edge: number; score: number } | null }>();
+      const m = new Map<string, { hitRate: number; avgR: number; calls: number; score: number; meritRank: { tier: string; title: string; glyph: string } | null; rSeries: number[]; discipline: { score: number; scored: number } | null; regimeEdge: { best: { bucket: string; avgR: number; calls: number } } | null; calibration: { calibrated: boolean; inverted: boolean; gap: number } | null; contrarian: { calls: number; avgR: number; edge: number; score: number } | null }>();
       for (const e of (lb?.leaderboard || [])) {
         if (e.wallet) m.set(e.wallet.toLowerCase(), { hitRate: e.hitRate, avgR: e.avgR, calls: e.calls, score: e.score, meritRank: e.meritRank ?? null, rSeries: Array.isArray(e.rSeries) ? e.rSeries : [], discipline: e.discipline ?? null, regimeEdge: e.regimeEdge ?? null, calibration: e.calibration ?? null, contrarian: e.contrarian ?? null });
       }
@@ -1044,33 +1044,22 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   {trader.graded?.meritRank && <span title={`${trader.graded.meritRank.title}. Earned from graded calls. Not bought.`} style={{ fontSize: 10, color: C.canvas, fontWeight: 700, border: `1px solid ${C.accent}`, borderRadius: 4, padding: "1px 6px", background: C.accent }}>{trader.graded.meritRank.glyph} {trader.graded.meritRank.title}</span>}
                   {/* CALIBRATED — earned: their bigger-conviction calls genuinely
                       did better. Sizing skill, invisible in hit rate or P&L. */}
-                  {trader.graded?.calibration?.calibrated && <span title={`Calibrated. Higher-conviction calls average +${trader.graded.calibration.gap}R more than smaller ones.`} style={{ fontSize: 10, color: C.text.fog, border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "1px 6px" }}>◎ Calibrated</span>}
+                  {trader.graded?.calibration?.calibrated && <span title="Their calls split at the median of their own stated size or R:R. A small sample, not a grade." style={{ fontSize: 10, color: C.text.fog, border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "1px 6px" }}>Bigger calls +{trader.graded.calibration.gap}R vs smaller</span>}
                   {!trader.graded && emerging.has(trader.wallet.toLowerCase()) && (
                     <span title="Resolved graded calls. 5 to become a Verified Caller." style={{ fontSize: 10, color: SIGNAL.watch, border: `1px solid ${LINE.watch}`, borderRadius: 4, padding: "1px 6px", background: SIGNAL.watchBg }}>
                       Emerging · {emerging.get(trader.wallet.toLowerCase())!.toQualify} to verify
                     </span>
                   )}
-                  {/* PLAN — process alongside outcome. Were the calls well-formed
-                      when posted (obtainable entry, real stop, honest R:R)? Scored
-                      from the same public candles as the grade, so it's verifiable
-                      by anyone. Amber below 70 = caution, never decoration. */}
-                  {trader.graded?.discipline && (
-                    <span
-                      title={`Plan quality ${trader.graded.discipline.score}/100 across ${trader.graded.discipline.scored} calls. Scored at post time from public price: obtainable entry, a stop outside the noise, R:R matching the posted levels. Reported, not ranked on.`}
-                      style={{ fontSize: 10, color: trader.graded.discipline.score >= 70 ? C.text.fog : SIGNAL.watch, border: `1px solid ${trader.graded.discipline.score >= 70 ? C.borderStrong : LINE.watch}`, borderRadius: 4, padding: "1px 6px" }}
-                    >
-                      Plan {trader.graded.discipline.score}
-                    </span>
-                  )}
-                  {/* ⚡ FADER — proven right against the crowd. Shown only when their
-                      contrarian avg-R is net-positive (the meaningful signal); the
-                      record is graded from stance snapshots joined at post time. */}
+                  {/* No "Plan N" badge (honesty pass 2026-11-28): a 0–100 plan-quality blend is a score, not a grade.
+                      The flags it is built from stay on each call's own card. */}
+                  {/* Against the crowd: the average R of calls made against the crowd's lean at post time, shown only
+                      when net-positive. A count and an average, in ink: a small sample, not a tested edge. */}
                   {trader.graded?.contrarian && trader.graded.contrarian.avgR > 0 && (
                     <span
-                      title={`Right when fading the crowd: +${trader.graded.contrarian.avgR}R avg over ${trader.graded.contrarian.calls} contrarian calls (made against the consensus lean that preceded them), ${trader.graded.contrarian.edge >= 0 ? "+" : ""}${trader.graded.contrarian.edge}R better than their with-crowd calls.`}
-                      style={{ fontSize: 10, color: C.pos, border: `1px solid ${LINE.pos}`, borderRadius: 4, padding: "1px 6px" }}
+                      title={`Calls made against the crowd's lean at post time: +${trader.graded.contrarian.avgR}R average over ${trader.graded.contrarian.calls}; ${trader.graded.contrarian.edge >= 0 ? "+" : ""}${trader.graded.contrarian.edge}R vs their calls with the crowd. A small sample, not a grade.`}
+                      style={{ fontSize: 10, color: C.text.fog, border: `1px solid ${C.borderStrong}`, borderRadius: 4, padding: "1px 6px" }}
                     >
-                      &#9889; Fader +{trader.graded.contrarian.avgR}R
+                      Against the crowd +{trader.graded.contrarian.avgR}R · {trader.graded.contrarian.calls}
                     </span>
                   )}
                   <NexusTierBadge address={trader.wallet} />
@@ -1079,8 +1068,8 @@ function LeaderboardView({ feed, walletAddress, onCopy }: {
                   <div style={{ fontFamily: "var(--nx-font-mono)", fontSize: 11, color: C.text.muted, marginTop: 4 }}>
                     {trader.graded.hitRate.toFixed(0)}% hit · <span title="R = profit per call in multiples of what was risked. +1R made the risk back. +2R made twice it. Averaged across every graded call.">{trader.graded.avgR > 0 ? "+" : ""}{trader.graded.avgR.toFixed(2)}R avg</span> · {trader.graded.calls} graded calls
                     {trader.graded.regimeEdge && (
-                      <span title="The regime this caller's record is strongest in. Classified from the candles before each call.">
-                        {" "}· best in {REGIME_LABEL[trader.graded.regimeEdge.best.bucket] ?? trader.graded.regimeEdge.best.bucket}
+                      <span title="Their highest average R among market states with 5+ graded calls, classified from the candles before each call. A slice of their own record, not a grade.">
+                        {" "}· {REGIME_LABEL[trader.graded.regimeEdge.best.bucket] ?? trader.graded.regimeEdge.best.bucket}: {trader.graded.regimeEdge.best.avgR > 0 ? "+" : ""}{Number(trader.graded.regimeEdge.best.avgR).toFixed(2)}R over {trader.graded.regimeEdge.best.calls}
                       </span>
                     )}
                   </div>
@@ -1252,8 +1241,8 @@ function FeedEmptyState({ variant }: { variant: "feed" | "ranks" }) {
   const isRanks = variant === "ranks";
   const steps = [
     { n: "01", title: "Plan a thesis", desc: "Size it in the Nexus Thesis Engine. Entry, stop, targets, R:R." },
-    { n: "02", title: "Publish it", desc: "Publish it to the feed. Timestamped on-chain." },
-    { n: "03", title: "Build your rep", desc: "It gets graded from public price. The record is yours." },
+    { n: "02", title: "Publish it", desc: "Publish it to the feed. The server stamps the time; a published call can't be edited or deleted." },
+    { n: "03", title: "Build your record", desc: "It gets graded from public price. The record is yours." },
   ];
   return (
     <div style={{ textAlign: "center", padding: "48px 16px", maxWidth: 620, margin: "0 auto" }}>
@@ -1642,7 +1631,7 @@ export default function FeedPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {(["latest", "trending"] as const).map((mode) => (
               <button key={mode} aria-pressed={sortMode === mode} onClick={() => setSortMode(mode)} style={navBtnStyle(sortMode === mode)}>
-                {mode === "latest" ? "Latest" : "Trending"}
+                {mode === "latest" ? "Latest" : "Most copied"}
               </button>
             ))}
             {!isMobile && (
@@ -1726,7 +1715,7 @@ export default function FeedPage() {
             {!loading && !error && (
               <div role="link" tabIndex={0} onClick={() => navigate("/proof")} onKeyDown={pressKey(() => navigate("/proof"))} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", margin: "12px 0", cursor: "pointer" }}>
                 <span style={{ fontFamily: "var(--nx-font-ui)", fontSize: 13, color: C.text.fog, lineHeight: 1.55 }}>
-                  <b style={{ color: C.text.bright, fontWeight: 600 }}>The Proof</b> — every track record on Nexus (callers, agents, Arena, desks) under the on-chain ledger, in one place.
+                  <b style={{ color: C.text.bright, fontWeight: 600 }}>The Proof</b> — every track record on Nexus (callers, agents, Arena, desks) in one place, with a ledger anyone can recompute.
                 </span>
                 <span style={{ flexShrink: 0, fontFamily: "var(--nx-font-ui)", fontSize: 12.5, fontWeight: 500, color: C.text.bright, border: `1px solid ${C.borderStrong}`, borderRadius: 15, height: 28, display: "inline-flex", alignItems: "center", padding: "0 12px", whiteSpace: "nowrap" }}>Open Proof →</span>
               </div>

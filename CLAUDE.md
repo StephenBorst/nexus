@@ -905,6 +905,12 @@ every minute); open index `open1m:{wallet}:{id}` (`minuteIndex.mjs`, written at
   graded calls (else "N so far, M to go"); a range that includes zero says "not yet distinguishable from break-even". No
   Sharpe (calls aren't evenly spaced returns). Served as `risk` on `/theses/process/:w` and `/theses/leaderboard` rows;
   `RiskRecordCard.tsx` on trader profiles + Lab Analytics (`WalletRiskCard`), `riskBrief` on /proof caller rows.
+- **Feed honesty pass** (borst 2026-11-28, pinned by `app/lib/feedHonesty.test.mjs`): Contested = who holds each side +
+  each side's own graded record (no weighted split bar, no "% split", no "◆ LONGS have the record here · edge");
+  Contrarians = average R against the crowd's lean + the gap vs their with-crowd calls (no "edge"); trader cards show
+  "Against the crowd +XR · N", "Bigger calls +XR vs smaller" and the best market-state slice WITH its average and count
+  (no Fader / Calibrated badges, no "Plan N" 0–100 score); no desk score or profile BOARD SCORE (`ORDER_LINES`); the
+  sort is "Most copied" (was "Trending"); sides, takes and low leverage in ink.
 - **Ranks:** only graded callers, in the grader's order, then emerging unranked. No self-scored REP anywhere; Rep Score
   code is deleted. Merit ranks (`rankCaller`): Signal / Sharp / Apex. Identity card = `app/lib/identityCard.mjs` on
   `loadIdentity`; no badge unless the grader gave one.
