@@ -15,7 +15,7 @@ public price + anchored on-chain.
 |---|---|---|---|
 | `nexus-callers` | Verified-caller leaderboard (graded, anchored) | 10,000 $NEXUS | Provably-real track records |
 | `nexus-agents-live` | LIVE NOW open positions, uPnL from public price | 10,000 $NEXUS | Real-time, verifiable |
-| `nexus-signals` | Funding + OI-divergence reads, with the scoreboard's live grade attached | 50,000 $NEXUS | Board data, graded in public (currently NOISE, see below) |
+| `nexus-signals` | Funding + OI-divergence reads, with the scoreboard's live grade attached | 50,000 $NEXUS | Board data, graded in public; each response carries the read's live grade |
 
 Prices are in TOKEN units, not USD (Bankr resolves symbol/decimals from the
 `tokenAddress` at deploy). ~$0.005 / $0.025 at current $NEXUS price — **tune them.**
@@ -28,9 +28,10 @@ $NEXUS = `0x3D958634ab725B627919EF8F2Ed59227309fDba3` (Base).
   the corresponding `og.nexustradinglabs.com` endpoint and returns it.
 
 ## ⚠️ Honest label on `nexus-signals` (2026-09-25)
-Our own scoreboard (`/intel/axis-backtest`, shown on /proof) grades the funding-fade read this feed
-serves as **NOISE** (n≈3,076, 31% hit, −0.21R). The handler now attaches that live grade to every
-response (`grade`), and the listing no longer calls it "the edge". Plan: swap the feed to the graded
+The record on 2026-09-25: our own scoreboard (`/intel/axis-backtest`, shown on /proof) graded the funding-fade
+read this feed serves as NOISE (n≈3,076, 31% hit, −0.21R). Those numbers are that day's, not today's: the grade
+moves, so the handler reads it live on every call and attaches it to the response (`grade`). Today's grade is on
+/proof. The listing no longer calls it "the edge". Plan: swap the feed to the graded
 basis reads after the Oct-15 re-validation. **Redeploy to make it live:** `bankr x402 deploy nexus-signals`
 (Bankr hosts the handler; pushing to GitHub does not update it).
 
@@ -39,12 +40,12 @@ basis reads after the Oct-15 re-validation. **Redeploy to make it live:** `bankr
 rules `app/lib/soldRead.mjs`). That route answers 403 `not_cleared` (no signals) until the read is CLEARED on /proof
 (served Tradeable/Paper, not failing, no promotion lock, a recorded 30-trade paper PASS that beat random entries,
 pipeline-if-then.md "Only a CLEARED read may be marketed or promoted: … the paid feed"). The handler serves btc_lead_lag
-only on a cleared 200 with its grade; anything else serves today's funding-fade feed with its NOISE grade, as before.
+only on a cleared 200 with its grade; anything else serves today's funding-fade feed with its live grade, as before.
 Every response names its `read` and carries `grade`. Nothing switches by hand: the gate is re-read on every call, and
 it switches back by itself if the read loses CLEARED.
 
 Deploy: after the PR merges, `bankr x402 deploy nexus-signals` from the deployer wallet (a separate step). Check: pay
-one call and see `read: "funding_fade"` with the NOISE grade (btc_lead_lag hasn't cleared). The basis swap below stays
+one call and see `read: "funding_fade"` with its live grade from the scoreboard (btc_lead_lag hasn't cleared). The basis swap below stays
 staged; don't run it.
 
 ## Oct-15 basis swap (STAGED — do not run before the verdict)
@@ -60,7 +61,7 @@ until the lab-api flag is set. Run the swap only if the Oct-15 re-validation hol
 3. `bankr x402 deploy nexus-signals` from the deployer wallet, then pay one call and check the
    response carries `grade.axis: "basis_x_cvd"`.
 
-If the read does NOT hold on Oct-15: leave all three untouched. The live feed keeps its honest NOISE label.
+If the read does NOT hold on Oct-15: leave all three untouched. The live feed keeps its live grade.
 
 ## Deploy — two paths
 
