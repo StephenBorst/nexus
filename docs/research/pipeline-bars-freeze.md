@@ -1,8 +1,8 @@
 # The stage bars, frozen · what a read must show to move up
 
-Written 2026-11-28. **DRAFT. Not signed. It binds nothing until borst signs it.** Once signed, the text above Results
-is pinned by `app/lib/pipelineBarsFreeze.test.mjs`, and a change to any number below is a new dated page, signed on its
-own, never an edit to this one.
+Written 2026-11-28. **Signed by borst in session 2026-11-28 ("sign the freeze page").** The text above Results is
+pinned by `app/lib/pipelineBarsFreeze.test.mjs`, and a change to any number below is a new dated page, signed on its own,
+never an edit to this one.
 
 ## Why
 
@@ -42,7 +42,7 @@ CLEARED is the only passed state. Stage names are not claims: Lead and Edge are 
 ## What the freeze covers
 
 - Every number above, and which events count toward it.
-- Once signed, `app/lib/pipelineBarsFreeze.test.mjs` pins the code's constants (`PIPELINE_RULES`, `PAPER_MIN_TRADES`,
+- `app/lib/pipelineBarsFreeze.test.mjs` pins the code's constants (`PIPELINE_RULES`, `PAPER_MIN_TRADES`,
   `BADGE_BAR.runs` / `beatPct` / `minUsable` / `feeBps`, `LOCK_RULE`) to the numbers on this page. A PR that changes one
   fails until a new dated page with the new number is signed and the test points at it.
 
@@ -58,6 +58,6 @@ CLEARED is the only passed state. Stage names are not claims: Lead and Edge are 
 
 ## Sign-off
 
-Signature: pending. borst signs this page in session; the signing PR records the line here and adds the pin.
+Signed by borst in session 2026-11-28: "sign the freeze page".
 
 ## Results
