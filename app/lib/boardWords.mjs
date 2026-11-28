@@ -10,12 +10,29 @@ export function fundingWords(annualPct) {
   return `${annualPct > 0 ? "longs" : "shorts"} pay ${a.toFixed(1)}%/yr`;
 }
 
-/** How many of the Board's 4 independent reads (callers, smart money, catalysts, forecasts) back the play. */
-export const BOARD_READS = 4;
-export function agreeWords(agree, hasPlay) {
-  if (!hasPlay) return "no play";
-  const n = Math.max(0, Math.min(BOARD_READS, Number(agree) || 0));
-  return n === 0 ? `0 of ${BOARD_READS} reads agree` : `${n} of ${BOARD_READS} ${n === 1 ? "read agrees" : "reads agree"}`;
+// The other reads (graded callers, smart money, catalysts, forecasts), each in its own words, NEVER counted (borst
+// 2026-11-28, Lab pass): the board used to print "3/4 reads agree", rank rows by that count and call 3+ "confluence".
+// None of the four is graded on the scoreboard, so adding them up is a tally of ungraded reads (CLAUDE.md: show
+// inputs, never a tally). Each lean is listed; whether it sides with the fade is the reader's call.
+export const LENS_LABELS = Object.freeze({ callers: "callers", smart: "smart money", catalyst: "catalysts", forecast: "forecasts" });
+/** "callers long · smart money short" / null when no read has a lean. */
+export function otherReadsLine(lens) {
+  const parts = [];
+  for (const [k, label] of Object.entries(LENS_LABELS)) {
+    const v = lens?.[k];
+    if (v === "LONG" || v === "SHORT") parts.push(`${label} ${v.toLowerCase()}`);
+  }
+  return parts.length ? parts.join(" · ") : null;
+}
+
+/** Your own closed trades on one side, as a count: "your shorts: 6 of 9 won". Only from 5 trades on that side. */
+export const SIDE_MIN_TRADES = 5;
+export function sideRecordLine(trades, dir) {
+  if (dir !== "LONG" && dir !== "SHORT") return null;
+  const side = (Array.isArray(trades) ? trades : []).filter((t) => t && t.direction === dir && Number.isFinite(Number(t.pnl)));
+  if (side.length < SIDE_MIN_TRADES) return null;
+  const won = side.filter((t) => Number(t.pnl) > 0).length;
+  return `your ${dir === "LONG" ? "longs" : "shorts"}: ${won} of ${side.length} won`;
 }
 
 /** The trend read's window: classifyRegime looks back 48 one-hour candles (lab-api logic.mjs REGIME.LOOKBACK). */

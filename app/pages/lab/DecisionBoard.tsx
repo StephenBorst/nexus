@@ -1,7 +1,6 @@
 // ── THE BOARD — every market, one read ───────────────────────────────────────
-// The unified decision surface: a dense, scannable confluence grid that fuses the
-// signals nobody else has into one line per market — funding (fade side), OI drift,
-// 1h trend, the graded-caller lean, and the mechanical PLAY. It's the "Market Cipher"
+// One line per market: funding (fade side), OI drift, the trend, the other reads in
+// their own words, and the mechanical PLAY. It's the "Market Cipher"
 // packaging lesson (one legible screen) done on OUR verifiable inputs instead of a
 // stack of unverifiable oscillators.
 //
@@ -10,19 +9,23 @@
 // is the MECHANICAL read — what the rules say — NOT a confidence or a promise. It gets
 // GRADED after the fact like every call. No fabricated edge, no fake score.
 //
+// 2026-11-28 (Lab pass): no count of the other reads (it printed "3 of 4" and ranked by it, with a sort and a
+// highlight for 3+, and wrote a line saying the other reads confirmed the play into a drafted call), no tape-mood tag, no side in money colours. The other reads are
+// listed in words (boardWords.mjs otherReadsLine), your own record on the side is a count (sideRecordLine).
+//
 // Sits between the Briefing (the narrative read) and Market Intel (the deep detail):
 // Briefing = "what matters now", Board = "scan the whole book", Intel = "go deep".
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { CoinLink } from "@/components/CoinLink";
-import { fundingWords, agreeWords, trendWords } from "@/lib/boardWords.mjs";
+import { fundingWords, otherReadsLine, sideRecordLine, trendWords } from "@/lib/boardWords.mjs";
 import { Link, useSearchParams } from "react-router-dom";
 import { C, MONO, UI, RADIUS, SIGNAL } from "@/config/theme";
 import { SectionHeader } from "./components";
 import { useIsMobile } from "./useIsMobile";
 import { useFadeFamilyGrade } from "./useFadeFamilyGrade";
 import { fadeFamilyLine } from "@/lib/fadeGrade.mjs";
-import { computeTape, FADE_FUNDING_FLOOR_PCT_YR, type MarketSignal } from "./briefing";
+import { FADE_FUNDING_FLOOR_PCT_YR, type MarketSignal } from "./briefing";
 import { annualFundingPct, finiteOrNull } from "@/lib/funding.mjs";
 import type { TabId } from "./types";
 import { R_CONTRACT } from "@/lib/rContract.mjs";
@@ -77,13 +80,11 @@ interface Row {
   consensus: { side: "LONG" | "SHORT" | "SPLIT"; participants: number } | null;
   play: { klass: "FADE" | "WATCH" | null; dir: Dir | null; label: string; strong: boolean };
   fundingAnnual: number | null;          // funding ×1095. The ticket's %/yr language. null = no rate
-  // The independent-lens strip: four PUBLIC reads that either confirm or contradict the
-  // mechanical play — graded callers, smart money, catalysts, forecasters. agree = how many
-  // point the SAME way as the play (the "agreement = signal" fusion, kept explainable).
+  // Four other PUBLIC reads, each shown in its own words (callers, smart money, catalysts, forecasters). Never
+  // counted or added up: none is graded on the scoreboard.
   lens: { callers: Dir | null; smart: Dir | null; catalyst: Dir | null; forecast: Dir | null };
-  agree: number;
   score: number;
-  mine: { tone: "pos" | "caution"; text: string } | null;
+  mine: string | null;                                      // your own record on the play's side, as a count
   record: { net: number; n: number; wr: number } | null;   // your graded record on THIS market
 }
 
@@ -119,8 +120,8 @@ const pct = (n: number, d = 2) => `${n >= 0 ? "+" : ""}${n.toFixed(d)}%`;
 const fmtPrice = (n: number) => (n >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 5 : n < 100 ? 3 : 2 }));
 
 // The mechanical play for one market — mirrors the agent's own rule priority
-// (confluence > crowded-funding fade > OI/trend), never invents a signal. STRONG
-// plays (confluence/fade/trend) are real setups and render bright; below them, a
+// (crowded-funding fade > OI/trend), never invents a signal. STRONG
+// plays (fade/trend) render bright; below them, a
 // faint LEAN tier shows which way the crowd/tape tilts so a calm market still reads
 // as information, not a wall of "no read" — but a lean is explicitly NOT a setup.
 // THE PLAY = the ONE verdict object (Grok): FADE SHORT / FADE LONG / WATCH. No "leans."
@@ -156,21 +157,17 @@ function derivePlay(s: MarketSignal): Row["play"] {
 const fundLabel = (v: number | null, unit: string) =>
   v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}${unit}`;
 
-// Actionability (Grok): a real FADE ranks first, then rows where ≥2 independent lenses agree,
-// then everything else. Chop + empty lenses falls to the bottom (use FUNDING/MOVERS for those).
-function scoreOf(play: Row["play"], funding: number | null, agree: number): number {
-  const base = play.klass === "FADE" ? 300 : play.klass === "WATCH" ? (agree >= 2 ? 100 : 0) : 0;
+// Default order: a FADE first, then WATCH, then the rest, each by how stretched funding is. No count of the other
+// reads moves a row (they're ungraded).
+function scoreOf(play: Row["play"], funding: number | null): number {
+  const base = play.klass === "FADE" ? 300 : play.klass === "WATCH" ? 100 : 0;
   // `?? 0` keeps score FINITE when the rate is missing — a NaN score would break the
   // actionable comparator the same way a NaN funding breaks the funding one.
-  return base + (play.strong ? agree * 25 : 0) + Math.min(49, Math.abs(funding ?? 0) * 100000);
+  return base + Math.min(99, Math.abs(funding ?? 0) * 100000);
 }
 
-// ── The personal edge lens ───────────────────────────────────────────────────
-// The insight nobody else can compute: is THIS market's play YOUR kind of trade?
-// Derived from the user's own graded record — which direction they measurably win
-// on (userSide) and their counter-trend/with-trend align edge — the same inputs the
-// Briefing's fusion uses, applied per row. Honest: it states your record, never that
-// you'll win because of it.
+// ── Your own record (the user's closed trades): per market, and on the play's side as a count (sideRecordLine).
+// It states the record, never that you'll win because of it.
 type Trade = { symbol: string; direction: Dir; pnl: number };
 
 // Your realized record per market (bare ticker) — the most granular personal lens,
@@ -185,43 +182,12 @@ function symbolRecords(trades: Trade[]): Record<string, { net: number; n: number
   }
   return m;
 }
-type ProcessEdge = { align?: { bucket: string; avgR: number }; contrarian?: { calls: number; avgR: number } } | null;
-type Edge = { side: Dir | null; wr: number; alignClass: "AGAINST_TREND" | "WITH_TREND" | null; alignAvgR: number };
+type SortMode = "actionable" | "funding" | "movers" | "mine";
 
-const wrOf = (r: Trade[]) => (r.length ? Math.round((r.filter((t) => t.pnl > 0).length / r.length) * 1000) / 10 : 0);
-
-function computeEdge(trades: Trade[], proc: ProcessEdge): Edge {
-  const longs = trades.filter((t) => t.direction === "LONG");
-  const shorts = trades.filter((t) => t.direction === "SHORT");
-  let side: Dir | null = null, wr = 0;
-  if (longs.length >= 4 && shorts.length >= 4) {
-    const lw = wrOf(longs), sw = wrOf(shorts);
-    if (Math.abs(lw - sw) >= 12) { side = lw > sw ? "LONG" : "SHORT"; wr = Math.max(lw, sw); }
-  }
-  const bucket = proc?.align?.bucket || null;
-  const alignClass = bucket === "align:AGAINST_TREND" ? "AGAINST_TREND" : bucket === "align:WITH_TREND" ? "WITH_TREND" : null;
-  return { side, wr, alignClass, alignAvgR: proc?.align?.avgR ?? 0 };
-}
-
-// The per-row personal tag — mirrors the fusion's your-setup / not-your-side / your-class
-// branches. Returns null when there's no honest personal read for this row.
-function personalRead(play: Row["play"], edge: Edge): { tone: "pos" | "caution"; text: string } | null {
-  if (!play.dir || !play.strong) return null;   // only real setups get a personal read, not faint leans
-  if (edge.side && play.dir === edge.side) return { tone: "pos", text: `your side · ${edge.wr}% win` };
-  if (edge.side && play.dir !== edge.side) return { tone: "caution", text: "off your side" };
-  if (!edge.side && edge.alignClass) {
-    // a FADE is a counter-trend setup — reward the trader whose edge is counter-trend.
-    if (play.klass === "FADE" && edge.alignClass === "AGAINST_TREND") return { tone: "pos", text: `your class · +${edge.alignAvgR}R counter-trend` };
-  }
-  return null;
-}
-
-type SortMode = "actionable" | "confluence" | "funding" | "movers" | "mine";
-
-export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, hideHeader = false }: {
+export function DecisionBoard({ onSelectTab, trades, wallet: _wallet, theses, positions, hideHeader = false }: {
   onSelectTab?: (tab: TabId) => void;
   hideHeader?: boolean;      // inside a fold row (Lab home): the row carries the title; the live status stays
-  trades?: Trade[];          // the user's closed trades. Powers the personal edge lens
+  trades?: Trade[];          // the user's closed trades: your record per market and on the play's side
   wallet?: string | null;
   theses?: { symbol?: string; direction?: string; gradedOutcome?: string; status?: string }[]; // your active calls (PLAN leg)
   positions?: { symbol?: string; direction?: "LONG" | "SHORT" }[];                              // your open positions (EXECUTE leg)
@@ -235,12 +201,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
   const [signalsSlow, setSignalsSlow] = useState(false);     // first load is taking longer than SIGNALS_SLOW_MS
   const retrySignalsRef = useRef<() => void>(() => {});
   const [tape, setTape] = useState<Record<string, { price: number; change: number }>>({});
-  const [tapeRead, setTapeRead] = useState<{ score: number; label: string } | null>(null); // RISK-OFF/ON breadth. Context for the fade tag
   const [consensus, setConsensus] = useState<Consensus | null>(null);
   const [smart, setSmart] = useState<Record<string, Dir>>({});       // smart-money lean per coin
   const [catalyst, setCatalyst] = useState<Record<string, Dir>>({}); // catalyst lean per coin
   const [forecast, setForecast] = useState<Record<string, Dir>>({}); // forecaster lean per coin
-  const [proc, setProc] = useState<ProcessEdge>(null);
   const [sort, setSort] = useState<SortMode>("actionable");
   const [draftingSym, setDraftingSym] = useState<string | null>(null); // the row whose PLAY→draft is fetching levels
   // ── Deep link: /lab?guest=1&coin=SOL (or &play=SOL) ───────────────────────────
@@ -253,21 +217,8 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const scrolledFor = useRef<string | null>(null);
 
-  // Personal edge = which side the user measurably wins on + their align (counter/with-
-  // trend) class. From their own trades + graded process record. Fail-soft; empty when
-  // disconnected → the board stays purely market-level.
-  useEffect(() => {
-    if (!wallet) { setProc(null); return; }
-    let alive = true;
-    fetch(`${AGENT_API}/theses/process/${wallet}`).then((r) => r.json())
-      .then((d) => { if (alive) setProc(d?.regimeEdges?.align?.best || d?.contrarian ? { align: d?.regimeEdges?.align?.best, contrarian: d?.contrarian } : null); })
-      .catch(() => { /* lens still works off trades alone */ });
-    return () => { alive = false; };
-  }, [wallet]);
-
-  const edge = useMemo(() => computeEdge(trades ?? [], proc), [trades, proc]);
   const records = useMemo(() => symbolRecords(trades ?? []), [trades]);
-  const hasLens = !!(edge.side || edge.alignClass || Object.keys(records).length);
+  const hasLens = Object.keys(records).length > 0 || (trades?.length ?? 0) >= 5;
 
   // ── THE RETURN LEG: your loop state per market ────────────────────────────────
   // The Board is the OBSERVE surface; overlay where YOU already are in the loop on each
@@ -345,10 +296,6 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
           map[tk(m.symbol)] = { price, change: open ? ((price - open) / open) * 100 : 0 };
         }
         setTape(map);
-        // Breadth read (same engine as the Briefing) — so a FADE that IS the tape's mean-
-        // reversion book can be tagged RISK-OFF · FADE here, where ACTIONABLE lives (Grok).
-        setTapeRead(computeTape(rows.map((m: { symbol: string; "24h_open"?: string | number; mark_price?: string | number; index_price?: string | number; last_funding_rate?: string | number }) =>
-          ({ symbol: m.symbol, "24h_open": m["24h_open"], "24h_close": m.mark_price ?? m.index_price, last_funding_rate: m.last_funding_rate }))));
       }).catch(() => { /* price column just shows — */ });
     };
     retrySignalsRef.current = () => { fails = 0; setSignalsFails(0); setSignalsFailed(false); loadSignals(); };
@@ -370,8 +317,6 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
         catalyst: catalyst[coin] ?? null,
         forecast: forecast[coin] ?? null,
       };
-      // agreement = independent lenses pointing the SAME way as the mechanical play.
-      const agree = play.dir ? (Object.values(lens).filter((v) => v === play.dir).length) : 0;
       return {
         sym: s.symbol,
         price: t?.price ?? null,
@@ -387,26 +332,21 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
         consensus: c ? { side: c.side, participants: c.participants } : null,
         play,
         lens,
-        agree,
-        // ACTIONABLE ranks a real FADE first, then rows with ≥2 agreeing lenses (Grok).
-        score: scoreOf(play, s.funding_rate_8h, agree),
-        mine: personalRead(play, edge),
+        score: scoreOf(play, s.funding_rate_8h),
+        mine: play.strong && play.dir ? sideRecordLine(trades ?? [], play.dir) : null,
         record: (() => { const rec = records[s.symbol]; return rec && rec.n >= 2 ? { net: rec.net, n: rec.n, wr: Math.round((rec.wins / rec.n) * 100) } : null; })(),
       } as Row;
     });
-    // "mine" ranks your-edge plays first, then any market you have a record on, then the rest.
-    const mineRank = (r: Row) => (r.mine?.tone === "pos" ? 0 : r.record ? 1 : r.mine?.tone === "caution" ? 2 : 3);
-    // "confluence" ranks the most-confirmed real setups first (agreement = signal).
-    const confRank = (r: Row) => (r.play.strong ? r.agree : -1);
+    // "mine" = markets you have a record on first (most trades first), then the rest.
+    const mineRank = (r: Row) => (r.record ? -r.record.n : 1);
     const cmp: Record<SortMode, (a: Row, b: Row) => number> = {
       actionable: (a, b) => b.score - a.score,
-      confluence: (a, b) => (confRank(b) - confRank(a)) || (b.score - a.score),
       funding: (a, b) => Math.abs(b.funding ?? 0) - Math.abs(a.funding ?? 0), // no rate ⇒ |0| ⇒ last
       movers: (a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0),
       mine: (a, b) => (mineRank(a) - mineRank(b)) || (b.score - a.score),
     };
     return out.sort(cmp[sort]);
-  }, [signals, tape, consensus, smart, catalyst, forecast, sort, edge, records]);
+  }, [signals, tape, consensus, smart, catalyst, forecast, sort, records, trades]);
 
   // Bring the deep-linked row into view once the board has rows (once per coin).
   useEffect(() => {
@@ -423,11 +363,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
     if (!r.play.dir || draftingSym) return;
     const dir = r.play.dir;
     const crowd = dir === "SHORT" ? "long" : "short";
-    // Carry the FUSION into the plan: name the independent lenses that confirm this play so
-    // the drafted thesis records WHY it was a confluent read (the loop stays explainable).
-    const lensName: Record<string, string> = { callers: "graded callers", smart: "smart money", catalyst: "catalysts", forecast: "forecasters" };
-    const agreeing = (["callers", "smart", "catalyst", "forecast"] as const).filter((k) => r.lens[k] === dir);
-    const confNote = r.agree >= 2 ? ` ${r.agree} independent reads confirm this: ${agreeing.map((k) => lensName[k]).join(", ")}.` : "";
+    // No "N reads confirm this" in the drafted call: the other reads are ungraded, and a published call is permanent.
     // why = the board verdict + funding (the same object the ticket shows).
     // No readable rate ⇒ drop the funding clause entirely. A graded thesis records what was
     // actually observed; "funding —%/yr" in a permanent record is worse than not saying it.
@@ -446,7 +382,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
           entryPrice: String(lv.entryPrice), stopLoss: String(lv.stopLoss), takeProfit1: String(lv.takeProfit1),
           targetWindow: `${lv.holdDays}d`,
           catalyst: why,
-          notes: `${r.play.label}. The crowd is stretched ${crowd}. Frozen: entry at mark, stop ${R_CONTRACT.atrMult}× H4 ATR(14), TP +${lv.riskReward}R, ${lv.holdDays}-day time-stop. Graded first-touch vs the tape.${confNote}`,
+          notes: `${r.play.label}. The crowd is stretched ${crowd}. Frozen: entry at mark, stop ${R_CONTRACT.atrMult}× H4 ATR(14), TP +${lv.riskReward}R, ${lv.holdDays}-day time-stop. Graded first-touch vs the tape.`,
         }
       : {
           symbol: r.sym, direction: dir,
@@ -454,7 +390,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
           // the engine's BUILD sets the frozen stop from live volatility, the trader sets target.
           entryPrice: r.price != null ? String(r.price) : "",
           catalyst: why,
-          notes: `${r.play.label}. The crowd is stretched ${crowd}. BUILD sets a 1.2× H4 ATR stop from live volatility; set your target, then it grades first-touch vs the tape.${confNote}`,
+          notes: `${r.play.label}. The crowd is stretched ${crowd}. BUILD sets a 1.2× H4 ATR stop from live volatility; set your target, then it grades first-touch vs the tape.`,
         };
     try { window.localStorage.setItem("nexus_thesis_draft", JSON.stringify(draft)); } catch { /* private mode */ }
     try {
@@ -469,7 +405,8 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
   // never VANISHES (was `return null`, which left a guest on the manifesto with nothing) and
   // never HANGS. Its identity/header stays; the row area carries the honest empty message.
 
-  const dirColor = (d: Dir | null) => (d === "LONG" ? C.pos : d === "SHORT" ? C.neg : C.text.faint);
+  // A side is not money: your live call / position marks are ink (green/red is P&L and price only).
+  const dirColor = (d: Dir | null) => (d ? C.text.fog : C.text.faint);
   const sortBtn = (mode: SortMode, label: string) => (
     <button onClick={() => setSort(mode)} aria-pressed={sort === mode} style={{
       background: sort === mode ? C.surface : "none", border: `1px solid ${sort === mode ? C.borderStrong : C.border}`,
@@ -521,7 +458,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
   return (
     <div style={{ marginBottom: 28 }}>
       {(() => {
-        const note = <span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : signalsFails >= SIGNALS_MAX_QUICK_TRIES ? "unavailable" : signalsFailed ? "retrying…" : "loading…"}{signals && rows.some((r) => r.play.strong && r.agree >= 3) ? ` · ${rows.filter((r) => r.play.strong && r.agree >= 3).length} in confluence` : ""}</span>;
+        const note = <span>{signals ? (rows.length ? `${rows.length} markets` : "no rows this tick") : signalsFails >= SIGNALS_MAX_QUICK_TRIES ? "unavailable" : signalsFailed ? "retrying…" : "loading…"}{signals && rows.some((r) => r.play.klass === "FADE") ? ` · ${rows.filter((r) => r.play.klass === "FADE").length} FADE` : ""}</span>;
         return hideHeader
           ? <div style={{ fontFamily: MONO, fontSize: 11, color: C.text.muted, marginBottom: 14 }}>{note}</div>
           : <SectionHeader eyebrow="THE BOARD" title="Every market, one read" note={note} />;
@@ -542,8 +479,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
         </div>
         {!isMobile && (
           <div style={{ fontSize: 12, color: C.text.faint, marginTop: 4 }}>
-            <span style={{ color: C.accent }}>◆</span> separate reads agree with the play
-            {hasLens && <> · <span style={{ color: C.pos }}>◆</span> on your side · <span style={{ color: C.warn }}>△</span> off it</>}
+            Other reads: graded callers, smart money, catalysts and forecasts, each in its own words. None is graded, so they are listed, never counted.
             {hasLoop && <> · ● your live call · ▸ your open position</>}
           </div>
         )}
@@ -562,7 +498,6 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
           <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" }} className="nx-noscrollbar">
             {hasLens && sortBtn("mine", "◆ Mine")}
             {sortBtn("actionable", "Actionable")}
-            {sortBtn("confluence", "◆ Confluence")}
             {sortBtn("funding", "Funding")}
             {sortBtn("movers", "Movers")}
           </div>
@@ -572,7 +507,6 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
           <span style={{ fontFamily: MONO, fontSize: 10, color: C.text.muted, alignSelf: "center", letterSpacing: "0.14em", marginRight: 4 }}>SORT</span>
           {hasLens && sortBtn("mine", "◆ Mine")}
           {sortBtn("actionable", "Actionable")}
-          {sortBtn("confluence", "◆ Confluence")}
           {sortBtn("funding", "Funding")}
           {sortBtn("movers", "Movers")}
           {shareBtn}
@@ -602,26 +536,21 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
       ) : isMobile ? (
         // Mobile — the 720px table hid THE PLAY behind a side-swipe. Instead, one 2-line card per
         // row so the DECISION is the first paint: line 1 = market · funding/yr · the play · → ;
-        // line 2 = confluence · trend · tape. No side-scroll; the → is pinned right so it's never
+        // line 2 = trend · the other reads · your record. No side-scroll; the → is pinned right so it's never
         // clipped. Desktop keeps the full verifiable table (the `else` branch below, unchanged).
         <div style={{ display: "flex", flexDirection: "column" }}>
           {rows.map((r) => {
             const fundHot = r.funding != null && Math.abs(r.funding) >= CROWDED;
-            const confluent = r.play.strong && !!r.play.dir && r.agree >= 3;
             const busy = draftingSym === r.sym;
             const deepHit = !!deepCoin && r.sym === deepCoin;   // arrived from a shared verdict card
-            const tapeTag = r.play.klass === "FADE" && r.play.dir && tapeRead
-              ? (tapeRead.label === "RISK-OFF" && r.play.dir === "LONG" ? "risk-off"
-                : tapeRead.label === "RISK-ON" && r.play.dir === "SHORT" ? "risk-on" : null)
-              : null;
-            // Plain words on a phone (app/lib/boardWords.mjs): who pays the funding, how many reads agree, the
+            // Plain words on a phone (app/lib/boardWords.mjs): who pays the funding, the other reads in words, the
             // trend's window. The desktop table keeps the compact columns.
             const tw = trendWords(r.trend, r.trendMove);
             const trendEl = <span style={{ color: tw.tone === "pos" ? C.pos : tw.tone === "neg" ? C.neg : C.text.faint }}>{tw.text}</span>;
             const dot = <span style={{ color: C.text.faint }}>·</span>;
             return (
               <div key={r.sym} ref={(el: HTMLDivElement | null) => { rowRefs.current[r.sym] = el; }}
-                style={{ display: "flex", flexDirection: "column", gap: 4, padding: "10px 8px 10px 11px", borderBottom: `1px solid ${C.surfaceAlt}`, borderLeft: deepHit || confluent ? `3px solid ${C.accent}` : "3px solid transparent", background: deepHit ? `${C.accent}1c` : confluent ? `${C.accent}0c` : undefined }}>
+                style={{ display: "flex", flexDirection: "column", gap: 4, padding: "10px 8px 10px 11px", borderBottom: `1px solid ${C.surfaceAlt}`, borderLeft: deepHit ? `3px solid ${C.accent}` : "3px solid transparent", background: deepHit ? `${C.accent}1c` : undefined }}>
                 {/* Line 1 — the decision. The market/funding/play group flexes + wraps; → pinned right. */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontFamily: MONO }}>
@@ -647,12 +576,11 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
                     </button>
                   )}
                 </div>
-                {/* Line 2 — the why: confluence · trend · tape (· your edge, when connected). */}
+                {/* Line 2 — trend, then the other reads in their own words, then your record on the side. */}
                 <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontFamily: MONO, fontSize: 11 }}>
-                  <span title="Graded callers, smart money, catalysts and forecasts: how many back THE PLAY" style={{ fontWeight: 700, color: r.play.dir ? (r.agree >= 3 ? C.accent : r.agree >= 2 ? C.text.bright : C.text.muted) : C.text.faint }}>{agreeWords(r.agree, !!r.play.dir)}</span>
-                  {dot}{trendEl}
-                  {tapeTag && <>{dot}<span style={{ color: C.accent }}>{tapeTag}</span></>}
-                  {r.mine && <>{dot}<span style={{ color: r.mine.tone === "pos" ? C.pos : C.warn, fontSize: 10 }}>{r.mine.tone === "pos" ? "◆" : "△"} {r.mine.text}</span></>}
+                  {trendEl}
+                  {otherReadsLine(r.lens) && <>{dot}<span title="Other reads, not graded: listed, never counted" style={{ color: C.text.muted }}>{otherReadsLine(r.lens)}</span></>}
+                  {r.mine && <>{dot}<span style={{ color: C.text.fog, fontSize: 10 }}>{r.mine}</span></>}
                 </div>
               </div>
             );
@@ -668,27 +596,17 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
               <div style={head}>Funding /yr</div>
               <div style={head}>OI Δ</div>
               <div style={head}>Trend</div>
-              <div style={head}>Confluence</div>
+              <div style={head}>Other reads</div>
               <div style={head}>The play</div>
               <div style={head} />
             </div>
             {rows.map((r) => {
               const fundHot = r.funding != null && Math.abs(r.funding) >= CROWDED;
-              // A confirmed setup = a real play with ≥3 independent lenses agreeing. The whole
-              // moat in one glance: not one indicator, but where separate verifiable reads converge.
-              const confluent = r.play.strong && !!r.play.dir && r.agree >= 3;
               const pc = C.accent; // FADE highlight = bone accent (matches the ticket; green stays profit-only)
               const deepHit = !!deepCoin && r.sym === deepCoin;   // arrived from a shared verdict card
-              // Is THIS fade the mean-reversion book the tape favors? (long into RISK-OFF /
-              // short into RISK-ON) — a context tag, never a vote, so the risk-off gate reads
-              // as "keep the stretched fade," not "kill longs." Only on real FADE plays.
-              const tapeFadeTag = r.play.klass === "FADE" && r.play.dir && tapeRead
-                ? (tapeRead.label === "RISK-OFF" && r.play.dir === "LONG" ? "RISK-OFF"
-                  : tapeRead.label === "RISK-ON" && r.play.dir === "SHORT" ? "RISK-ON" : null)
-                : null;
               return (
                 <div key={r.sym} ref={(el: HTMLDivElement | null) => { rowRefs.current[r.sym] = el; }}
-                  style={{ display: "grid", gridTemplateColumns: cols, gap: gridGap, padding: rowPad, borderBottom: `1px solid ${C.surfaceAlt}`, alignItems: "center", borderLeft: deepHit || confluent ? `3px solid ${pc}` : "3px solid transparent", background: deepHit ? `${pc}1c` : confluent ? `${pc}0c` : undefined }}>
+                  style={{ display: "grid", gridTemplateColumns: cols, gap: gridGap, padding: rowPad, borderBottom: `1px solid ${C.surfaceAlt}`, alignItems: "center", borderLeft: deepHit ? `3px solid ${pc}` : "3px solid transparent", background: deepHit ? `${pc}1c` : undefined }}>
                   {/* Market + YOUR loop state: ● live call (plan) · ◆ in position (execute) */}
                   <div style={{ ...cell, fontSize: 13, fontWeight: 700, color: C.text.bright, gap: 5 }}>
                     <span><CoinLink coin={r.sym} /></span>
@@ -712,33 +630,10 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
                     : r.trend === "TREND_DOWN" ? <span style={{ color: C.neg }}>↓ dn{r.trendMove != null ? ` ${Math.abs(r.trendMove).toFixed(1)}%` : ""}</span>
                     : <span style={{ color: C.text.faint }}>chop</span>}
                   </div>
-                  {/* CONFLUENCE — how many of the four INDEPENDENT reads (callers · smart ·
-                      catalyst · forecast) confirm THE PLAY, as a legible "2/4". Not glyph soup
-                      (Grok). A lens FIGHTING the play is named "✗ callers" so an ETH-style
-                      conflict is visible without decoding abbreviations. No E[R] in this cell. */}
-                  <div style={{ ...cell, gap: 6, flexWrap: "wrap" }}>
-                    {(() => {
-                      const lensList = [
-                        { k: "callers", v: r.lens.callers },
-                        { k: "smart", v: r.lens.smart },
-                        { k: "catalyst", v: r.lens.catalyst },
-                        { k: "forecast", v: r.lens.forecast },
-                      ] as { k: string; v: Dir | null }[];
-                      if (!r.play.dir) {
-                        const n = lensList.filter((l) => l.v).length;
-                        return <span style={{ fontFamily: MONO, fontSize: 10, color: C.text.faint }} title="No play. Lenses with any read">{n ? `${n}/4 reads` : "—"}</span>;
-                      }
-                      const against = lensList.filter((l) => l.v && l.v !== r.play.dir);
-                      const col = r.agree >= 3 ? C.accent : r.agree >= 2 ? C.text.bright : C.text.muted;
-                      return (
-                        <>
-                          <span title="Independent reads confirming THE PLAY: graded callers · smart money · catalysts · forecasters" style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 700, color: col }}>{r.agree}/4</span>
-                          {against.map((l) => (
-                            <span key={l.k} title={`${l.k} is ${l.v?.toLowerCase()}. Against the play`} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: 600, color: C.warn, whiteSpace: "nowrap" }}>✗ {l.k}</span>
-                          ))}
-                        </>
-                      );
-                    })()}
+                  {/* OTHER READS — each lean in its own words (callers / smart money / catalysts / forecasts). Not graded,
+                      so never counted (it used to print "2/4" and rank by it). */}
+                  <div style={{ ...cell, gap: 6, flexWrap: "wrap", color: C.text.muted, fontSize: 10, lineHeight: 1.4 }}>
+                    {otherReadsLine(r.lens) ?? <span style={{ color: C.text.faint }}>—</span>}
                   </div>
                   {/* THE PLAY — the ONE verdict word (Grok): FADE SHORT / FADE LONG / WATCH — the
                       SAME object as the ticket + share card. FADE in bone; when smart money is
@@ -747,9 +642,6 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
                     {r.play.klass === "FADE"
                       ? <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
                           <span style={{ color: C.text.bright, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.03em" }}>{r.play.label}</span>
-                          {tapeFadeTag && (
-                            <span title={`Broad tape is ${tapeFadeTag}. This stretched fade is the mean-reversion book that tape favors (context, not a vote)`} style={{ fontSize: 8, color: C.accent, border: `1px solid ${C.accent}55`, borderRadius: 3, padding: "0 4px", lineHeight: 1.6, letterSpacing: "0.04em" }}>{tapeFadeTag} · FADE</span>
-                          )}
                           {r.lens.smart && r.play.dir && r.lens.smart !== r.play.dir && (
                             <span title="Smart money is positioned WITH the crowd, against the fade. Not a clean fade" style={{ fontSize: 9, color: C.warn, fontWeight: 600 }}>· SMART {r.lens.smart}</span>
                           )}
@@ -758,9 +650,7 @@ export function DecisionBoard({ onSelectTab, trades, wallet, theses, positions, 
                       ? <span style={{ color: C.text.muted, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em" }}>WATCH</span>
                       : <span style={{ color: C.text.faint, fontSize: 11 }}>—</span>}
                     {r.mine ? (
-                      <span style={{ fontSize: 8.5, letterSpacing: "0.02em", color: r.mine.tone === "pos" ? C.pos : C.warn, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ fontSize: 9 }}>{r.mine.tone === "pos" ? "◆" : "△"}</span>{r.mine.text}
-                      </span>
+                      <span style={{ fontSize: 8.5, letterSpacing: "0.02em", color: C.text.fog }}>{r.mine}</span>
                     ) : r.record ? (
                       <span style={{ fontSize: 8.5, letterSpacing: "0.02em", color: C.text.faint, display: "inline-flex", alignItems: "center", gap: 4 }}>
                         your record <b style={{ color: r.record.net >= 0 ? C.pos : C.neg }}>{r.record.net >= 0 ? "+" : "−"}${Math.abs(r.record.net) >= 1000 ? `${(Math.abs(r.record.net) / 1000).toFixed(1)}k` : Math.abs(r.record.net).toFixed(0)}</b>

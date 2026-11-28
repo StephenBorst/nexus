@@ -662,7 +662,12 @@ product is what sits on top:
   = up 24h · BTC · longs pay, no RISK-ON score or preset advice. /intel and /arena skip the connect-wallet wall
   (`PUBLIC_ROUTES`, App.tsx).
 - **The Read / Briefing / FADE:** show inputs, never a tally or crown of ungraded reads; the Board's FADE is "a
-  mechanical rule, not graded yet" with the nearest graded relative's live grade (`app/lib/fadeGrade.mjs`). Never call
+  mechanical rule, not graded yet" with the nearest graded relative's live grade (`app/lib/fadeGrade.mjs`).
+  **The Board (`DecisionBoard.tsx`, Lab pass 2026-11-28, rules `app/lib/boardWords.mjs`, tested):** the other reads
+  (callers / smart money / catalysts / forecasts) are listed in words (`otherReadsLine`), never counted: no "N of 4
+  agree", no Confluence sort or highlight, no count in the default order (FADE → WATCH → rest, by funding stretch), no
+  "reads confirm this" line in a drafted call, no RISK-ON / RISK-OFF tag; your record on the play's side is a count from
+  5 trades (`sideRecordLine`); sides (your call / position marks) in ink. Never call
   a read "proven" or "graded" unless the scoreboard grades that exact rule.
 - **/proof layout:** verdict (the headline is a claim COMPUTED from the served stage, `proofHeadline` in proofCopy.mjs, since
   2026-11-05: "Nothing has proven itself yet" until a read is CLEARED (since 2026-11-17; before: served TRADEABLE/PAPER with

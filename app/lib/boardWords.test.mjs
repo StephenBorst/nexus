@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fundingWords, agreeWords, trendWords, TREND_WINDOW } from "./boardWords.mjs";
+import { fundingWords, otherReadsLine, sideRecordLine, trendWords, TREND_WINDOW } from "./boardWords.mjs";
 import { REGIME } from "../../workers/nexus-lab-api/logic.mjs";
 
 test("funding says who pays", () => {
@@ -13,12 +13,17 @@ test("funding says who pays", () => {
   assert.equal(fundingWords(NaN), "—");
 });
 
-test("'1/4' becomes a sentence", () => {
-  assert.equal(agreeWords(1, true), "1 of 4 reads agree".replace("reads agree", "read agrees"));
-  assert.equal(agreeWords(3, true), "3 of 4 reads agree");
-  assert.equal(agreeWords(0, true), "0 of 4 reads agree");
-  assert.equal(agreeWords(9, true), "4 of 4 reads agree");
-  assert.equal(agreeWords(2, false), "no play");
+test("the other reads are listed, never counted (no '3 of 4 agree', no confluence)", () => {
+  assert.equal(otherReadsLine({ callers: "LONG", smart: "SHORT", catalyst: null, forecast: "SHORT" }), "callers long · smart money short · forecasts short");
+  assert.equal(otherReadsLine({ callers: null, smart: null }), null);
+  assert.equal(otherReadsLine(null), null);
+});
+
+test("your record on a side: a count, from 5 trades, never a verdict", () => {
+  const t = (direction, pnl) => ({ direction, pnl });
+  assert.equal(sideRecordLine([t("SHORT", 1), t("SHORT", -1), t("SHORT", 2), t("SHORT", 3)], "SHORT"), null, "4 trades is too few");
+  assert.equal(sideRecordLine([t("SHORT", 1), t("SHORT", -1), t("SHORT", 2), t("SHORT", 3), t("SHORT", 0), t("LONG", 9)], "SHORT"), "your shorts: 3 of 5 won");
+  assert.equal(sideRecordLine([], null), null);
 });
 
 test("the trend names its window, and the window is the server's", () => {
@@ -32,6 +37,11 @@ test("the trend names its window, and the window is the server's", () => {
 test("the Board's phone rows use the plain words", () => {
   const src = readFileSync(new URL("../pages/lab/DecisionBoard.tsx", import.meta.url), "utf8");
   assert.match(src, /fundingWords\(r\.fundingAnnual\)/);
-  assert.match(src, /agreeWords\(r\.agree, !!r\.play\.dir\)/);
+  assert.match(src, /otherReadsLine\(r\.lens\)/);
+  assert.doesNotMatch(src, /\bagree\b/, "no count of ungraded reads anywhere on the board");
+  assert.doesNotMatch(src, /confluence/i);
+  assert.doesNotMatch(src, /RISK-OFF|RISK-ON|computeTape/, "no risk-on / risk-off score");
+  assert.doesNotMatch(src, /independent reads confirm/, "no machine claim written into a drafted call");
+  assert.doesNotMatch(src, /d === "LONG" \? C\.pos : d === "SHORT" \? C\.neg/, "a side is not money");
   assert.match(src, /trendWords\(r\.trend, r\.trendMove\)/);
 });
