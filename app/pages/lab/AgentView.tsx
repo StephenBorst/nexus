@@ -38,7 +38,8 @@ import { getOrderlyKeyStore, findOrderlyTradingKey, getWalletAddress, getAgentSi
 import { bareTicker } from "@/utils/utils";
 import { quietLine, quietAgeText } from "@/lib/quietLine.mjs";
 import { agentStory } from "@/lib/agentStory.mjs";
-import { ExecutionGapCard } from "./ExecutionGapCard";
+import { ExecutionGapCard, useExecutionGap } from "./ExecutionGapCard";
+import { axisForConfig } from "@/lib/paperParity.mjs";
 import { pressKey } from "@/utils/a11y";
 import { C, SIGNAL } from "@/config/theme";
 import { ProLockNote } from "./ProLockNote";
@@ -83,6 +84,8 @@ export function AgentView() {
   const [ledgerInfo, setLedgerInfo] = useState<{ hash: string; count: number; onChain?: { verified?: boolean; explorer?: string } | null } | null>(null);
 
   const walletAddress = getWalletAddress();
+  // One read of this wallet's run vs the read's own run, shared by the Agent-tab card and the Shelf card (executionGap.mjs).
+  const gapRead = useExecutionGap(walletAddress, config.mode === "PAPER" && !!axisForConfig(config as unknown as Record<string, unknown>));
   const tradingKey = findOrderlyTradingKey();
   const { isPro, isLoading: subLoading } = useSubscription(walletAddress);
   // A PRO-locked click says so next to what was clicked (2026-11-22: it used to render far below, so a preset looked dead).
@@ -759,7 +762,7 @@ export function AgentView() {
       })()}
 
       {/* ── Your paper run of a registered read vs that read's own run (rule app/lib/executionGap.mjs). Paper only. ── */}
-      <ExecutionGapCard wallet={walletAddress} config={config as unknown as { mode?: string } & Record<string, unknown>} />
+      <ExecutionGapCard wallet={walletAddress} read={config.mode === "PAPER" ? axisForConfig(config as unknown as Record<string, unknown>) : null} gap={gapRead} />
 
       {/* ── Telegram trade alerts — passive updates without opening the app ── */}
       {walletAddress && (
@@ -947,7 +950,7 @@ export function AgentView() {
           {/* Strategy shelf: every strategy, by its served stage + grade. Every row loads ON PAPER
               (app/lib/strategyShelf.mjs, borst 2026-11-22). Never over a live position: switching a live
               agent to paper would leave that position unmanaged by its own config. */}
-          <StrategyShelf onLoad={({ name, stageWord, config: cfg }) => {
+          <StrategyShelf mine={{ wallet: walletAddress, read: config.mode === "PAPER" ? axisForConfig(config as unknown as Record<string, unknown>) : null, gap: gapRead }} onLoad={({ name, stageWord, config: cfg }) => {
             if (hasPosition && config.mode !== "PAPER") {
               setError(`Your agent holds a live position. Close it first, then load "${name}" on paper.`);
               return;

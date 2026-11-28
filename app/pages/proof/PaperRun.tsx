@@ -13,6 +13,8 @@ import { PageMeta } from "@/components/PageMeta";
 import { useIsMobile } from "@/pages/lab/useIsMobile";
 import { paperRunLine } from "@/lib/paperRun.mjs";
 import { quietAgeText } from "@/lib/quietLine.mjs";
+import { useAccount } from "@orderly.network/hooks";
+import { ExecutionGapCard } from "@/pages/lab/ExecutionGapCard";
 
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
@@ -63,6 +65,9 @@ const EXIT_WORD: Record<string, string> = { TP: "Target", SL: "Stop", TIMEOUT: "
 
 export default function PaperRunPage() {
   const { axis = "" } = useParams();
+  // The connected wallet, for "your run of this read" (shown only if its paper agent runs this read).
+  const { state: acct } = useAccount();
+  const wallet = (acct as { address?: string })?.address ?? null;
   const isMobile = useIsMobile();
   const [run, setRun] = useState<Run | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "missing" | "failed">("loading");
@@ -145,6 +150,8 @@ export default function PaperRunPage() {
             {run.complete ? <span style={{ color: FOG }}> · Sample complete.</span>
               : <span style={{ color: FOG }}>{` · ${run.remaining} to go.`}</span>}
           </p>
+          {/* Your own paper run of this read, if your agent runs it (app/lib/executionGap.mjs). Counts + pairs; it moves no stage. */}
+          <div style={{ marginTop: 16, maxWidth: 720 }}><ExecutionGapCard wallet={wallet} read={axis} /></div>
           {/* Flat and waiting: why, from the brain's last check (app/lib/quietLine.mjs). Not a grade, not a forecast. */}
           {!run.open && !run.complete && run.quiet && (
             <p style={{ margin: "8px 0 0", fontFamily: MONO, fontSize: 12, lineHeight: 1.6, color: FOG, maxWidth: 680 }}>
