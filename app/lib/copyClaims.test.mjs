@@ -15,6 +15,18 @@ test("the Briefing reads a trader's own record as 'done better', never an edge o
   assert.match(b, /A win rate isn’t an edge/);
 });
 
+test("the Briefing states facts: no mood score, no 'your setup', no advice, no false 'graded on-chain' (2026-11-28)", () => {
+  const b = visible(read("../pages/lab/briefing.ts"));
+  for (const re of [/RISK-ON|RISK-OFF/, /Your setup|Your kind of setup|where your edge lives|Not your side/, /Press the edge|Sit it out|size down|step away|Room to run|tighten the stop/i,
+    /graded on-chain/, /bullish|bearish/, /worth a graded thesis/, /Concentrate where|Fewer, better setups|That's tilt|Trade when you're sharp/, /graded from public price/]) {
+    assert.doesNotMatch(b, re, String(re));
+  }
+  assert.match(b, /The fade is a mechanical rule, not graded yet/);
+  const ui = visible(read("../pages/lab/NexusBriefing.tsx"));
+  assert.doesNotMatch(ui, /Act on this|computeTape|coachingInsight|highest-quality play|setups worth watching/);
+  assert.match(ui, /Facts, not advice/);
+});
+
 test("the Mispriced board's reversion chip says what was measured, without the scoreboard's ◆ mark", () => {
   const m = read("../pages/lab/MispricedBoard.tsx");
   const chip = visible(m.slice(m.indexOf("function EdgeQualityChip("), m.indexOf("function EdgeQualityChip(") + 900));

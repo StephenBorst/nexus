@@ -667,7 +667,15 @@ product is what sits on top:
   (callers / smart money / catalysts / forecasts) are listed in words (`otherReadsLine`), never counted: no "N of 4
   agree", no Confluence sort or highlight, no count in the default order (FADE → WATCH → rest, by funding stretch), no
   "reads confirm this" line in a drafted call, no RISK-ON / RISK-OFF tag; your record on the play's side is a count from
-  5 trades (`sideRecordLine`); sides (your call / position marks) in ink. Never call
+  5 trades (`sideRecordLine`); sides (your call / position marks) in ink.
+  **The Briefing (`briefing.ts` + `NexusBriefing.tsx`, Lab pass 2026-11-28; pinned by `copyClaims.test.mjs`):** facts, not
+  advice. No RISK-ON / RISK-OFF score (`computeTape`, a 50/40/10 blend, replaced by `computeBreadth`: "N of M markets up
+  · BTC ±x%"); the old "fusion" ("Your setup", "where your edge lives", "Not your side · sit it out", the momentum
+  "room to run") is ONE line: the stretched fade (server FADE over the floor) + "not graded yet" + the fade family's
+  grade + the callers' lean + your record on that side from 5 trades; personal reads keep their numbers and drop the
+  coaching ("press the edge", "that's tilt", "trade when you're sharp"); no "graded on-chain" for live agents; the
+  record line says realized P&L as Orderly reports it (not "graded"); the flagged-setups coaching loop + coaching.mjs are
+  deleted; the group label reads "Facts, not advice". Never call
   a read "proven" or "graded" unless the scoreboard grades that exact rule.
 - **/proof layout:** verdict (the headline is a claim COMPUTED from the served stage, `proofHeadline` in proofCopy.mjs, since
   2026-11-05: "Nothing has proven itself yet" until a read is CLEARED (since 2026-11-17; before: served TRADEABLE/PAPER with

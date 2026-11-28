@@ -11,9 +11,8 @@ import { useEffect, useMemo, useState } from "react";
 import { sharedJson } from "@/lib/sharedJson.mjs";
 import { Collapsible } from "./Collapsible";
 import type { TabId, ProcessedTrade } from "./types";
-import { buildBriefing, buildMarketRead, buildFusion, computeTape, type BriefingTrade, type Insight, type MarketSignal } from "./briefing";
+import { buildBriefing, buildMarketRead, buildFusion, computeBreadth, type BriefingTrade, type Insight, type MarketSignal } from "./briefing";
 import { useFadeFamilyGrade } from "./useFadeFamilyGrade";
-import { recordFlag, coachingInsight } from "@/lib/coaching.mjs";
 import { buildOperatorProfile, profileNarrative } from "@/lib/operatorProfile.mjs";
 import { tiltRead, sessionEdge, overtradingRead, sizingRead } from "@/lib/behavioral.mjs";
 import { computeEdge } from "@/config/edge";
@@ -22,8 +21,6 @@ import { C } from "@/config/theme";
 
 // Bare ticker for the briefing's symbol dedup (BTC, not PERP_BTC_USDC).
 
-const FLAGS_KEY = "nexus_flagged_setups";
-const money = (n: number) => `${n < 0 ? "-" : "+"}$${Math.abs(n) >= 1000 ? `${(Math.abs(n) / 1000).toFixed(1)}K` : Math.abs(n).toFixed(2)}`;
 
 type Consensus = Record<string, { side: "LONG" | "SHORT" | "SPLIT"; lean: number; participants: number }>;
 
@@ -32,7 +29,7 @@ const AGENT_API = "https://og.nexustradinglabs.com";
 const COLLAPSE_KEY = "nexus_briefing_collapsed";
 
 // The left bar + rank number. Positive = the bone accent mark, not green: green is kept for money
-// and price (docs/brand.md), and an insight is advice, not a P&L. Caution = amber, info = grey.
+// and price (docs/brand.md), and an insight is a fact, not a P&L. Caution = amber, info = grey.
 const TONE: Record<Insight["tone"], { bar: string; dot: string }> = {
   positive: { bar: C.brand, dot: C.brand },
   caution: { bar: "#fbbf24", dot: "#fbbf24" },
@@ -84,8 +81,6 @@ export function NexusBriefing({
   const [liveAgents, setLiveAgents] = useState<number | null>(null);
   const [agentActive, setAgentActive] = useState<boolean | null>(null);
   const [consensus, setConsensus] = useState<Consensus | null>(null);
-  const [myContrarian, setMyContrarian] = useState<{ calls: number; avgR: number } | null>(null);
-  const [myAlignEdge, setMyAlignEdge] = useState<{ best: { bucket: string; avgR: number } } | null>(null);
   const [process, setProcess] = useState<Record<string, unknown> | null>(null);
   // Folded by default (borst, 2026-11-05: Lab home leads with the graded calls, the read is one tap
   // away). Only an explicit earlier "show" ("0" under the old key) opens it on arrival.
@@ -108,7 +103,7 @@ export function NexusBriefing({
 
   // Agent status — powers the "proven record, no agent running" personal nudge.
   useEffect(() => {
-    if (!wallet) { setAgentActive(null); setMyContrarian(null); setMyAlignEdge(null); return; }
+    if (!wallet) { setAgentActive(null); return; }
     let alive = true;
     fetch(`${AGENT_API}/agent/${wallet}`).then((r) => r.json())
       .then((d) => { if (alive) setAgentActive(!!d?.state?.active); })
@@ -118,30 +113,28 @@ export function NexusBriefing({
       .then((d) => {
         if (!alive) return;
         setProcess(d && typeof d === "object" ? d : null);
-        setMyContrarian(d?.contrarian ? { calls: d.contrarian.calls, avgR: d.contrarian.avgR } : null);
-        setMyAlignEdge(d?.regimeEdges?.align?.best ? { best: { bucket: d.regimeEdges.align.best.bucket, avgR: d.regimeEdges.align.best.avgR } } : null);
       })
       .catch(() => { /* fusion still fires without it */ });
     return () => { alive = false; };
   }, [wallet]);
 
-  const tape = useMemo(() => computeTape(rows), [rows]);
+  const tape = useMemo(() => computeBreadth(rows), [rows]);
 
   const personal = useMemo(() => {
     if (!wallet || !trades.length) return [];
     const bt: BriefingTrade[] = trades.map((t) => ({ symbol: t.symbol, direction: t.direction, pnl: t.pnl, timestamp: t.timestamp }));
     return buildBriefing({
-      trades: bt, winRate, totalPnl, openPositions, tape,
+      trades: bt, winRate, totalPnl, openPositions,
       agent: agentActive == null ? null : { active: agentActive },
     }).slice(0, 3);
-  }, [wallet, trades, winRate, totalPnl, openPositions, tape, agentActive]);
+  }, [wallet, trades, winRate, totalPnl, openPositions, agentActive]);
 
   // ⭐ THE FUSION — is the market's setup MINE? Intersects the crowded-fade signal,
   // the graded caller lean, and my own edge. Leads the briefing when it fires.
   const fusion = useMemo(() => {
     const bt: BriefingTrade[] = trades.map((t) => ({ symbol: t.symbol, direction: t.direction, pnl: t.pnl, timestamp: t.timestamp }));
-    return buildFusion({ trades: bt, signals, consensus, tape, contrarian: myContrarian, alignEdge: myAlignEdge }).slice(0, 2);
-  }, [trades, signals, consensus, tape, myContrarian, myAlignEdge]);
+    return buildFusion({ trades: bt, signals, consensus, fadeGrade }).slice(0, 1);
+  }, [trades, signals, consensus, fadeGrade]);
 
   // ⭐ THE OPERATOR READ — the Lab's one point of view about YOU, surfaced proactively
   // on the OBSERVE tab instead of buried in Analytics. Composed from the same builder
@@ -162,35 +155,8 @@ export function NexusBriefing({
     return { archetype: p.archetype, lead: p.reads[0] || null, meritRank: p.meritRank, tier: p.tier, narrative: profileNarrative(p, { max: 2 }) };
   }, [wallet, trades, process]);
 
-  // Coaching loop — remember every "your setup" the fusion flags, so follow-through
-  // can be measured against your actual trades. Continuity, not a goldfish.
-  useEffect(() => {
-    const yourSetup = fusion.find((f) => f.id === "fusion-your-setup" && f.meta);
-    if (!yourSetup?.meta) return;
-    try {
-      const cur = JSON.parse(localStorage.getItem(FLAGS_KEY) || "[]");
-      localStorage.setItem(FLAGS_KEY, JSON.stringify(recordFlag(cur, yourSetup.meta, Date.now())));
-    } catch { /* private mode */ }
-  }, [fusion]);
-
-  const coaching = useMemo<Insight | null>(() => {
-    if (!wallet || !trades.length) return null;
-    let flags: { symbol: string; direction: "LONG" | "SHORT"; ts: number }[] = [];
-    try { flags = JSON.parse(localStorage.getItem(FLAGS_KEY) || "[]"); } catch { /* ignore */ }
-    const bt = trades.map((t) => ({ symbol: t.symbol, direction: t.direction, pnl: t.pnl, timestamp: t.timestamp }));
-    const c = coachingInsight(flags, bt, Date.now());
-    if (!c) return null;
-    return {
-      id: "coaching-followthrough",
-      priority: 58,
-      tone: c.taken === 0 ? "caution" : "info",
-      title: `You acted on ${c.taken} of your last ${c.flags} flagged setups`,
-      detail: c.taken === 0
-        ? `The Briefing flagged ${c.flags} setups on your side and you took none. A flagged setup only counts in your record if you take it.`
-        : `${c.rate}% follow-through${c.takenPnl !== 0 ? `, netting ${money(c.takenPnl)} on the ones you took` : ""}.${c.skipped > 0 ? ` ${c.skipped} you let go by.` : " Discipline on your own signal."}`,
-      action: { label: "Your log", tab: "tradelog" },
-    };
-  }, [wallet, trades, fusion]); // fusion dep → recompute after a fresh flag records
+  // The "flagged setups" coaching loop is gone (2026-11-28): it counted how many of the Briefing's "your setup" fades
+  // you took, and the Briefing no longer calls any setup yours.
 
   const market = useMemo(
     () => buildMarketRead({ rows, signals, liveAgents, tape, consensus, fadeGrade })
@@ -204,7 +170,7 @@ export function NexusBriefing({
   // in order" queue. The fusion (your edge × the market) naturally floats to the top by
   // its own priority; coaching/personal/market fall in behind by importance. Deduped by id.
   const queue = useMemo(() => {
-    const all: Insight[] = [...fusion, ...(coaching ? [coaching] : []), ...personal, ...market];
+    const all: Insight[] = [...fusion, ...personal, ...market];
     const seen = new Set<string>();
     const byId = all.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)));
     // Dedup by SYMBOL as well as by id (Grok). The four builders are independent, so the same
@@ -232,7 +198,7 @@ export function NexusBriefing({
       // Three items, not five: a briefing you scroll is a feed. The rest of the read is one tap
       // away on the Board, which ranks every market anyway.
       .slice(0, 3);
-  }, [fusion, coaching, personal, market, signals]);
+  }, [fusion, personal, market, signals]);
 
   if (!queue.length) return null;
 
@@ -242,17 +208,17 @@ export function NexusBriefing({
   const askAi = () => window.dispatchEvent(new CustomEvent("nexus:assistant-ask", {
     detail: {
       prompt: personal.length
-        ? "Use get_my_edge and get_market_regime together: given my graded record and the current tape, what is my single highest-quality play right now, and the one habit that's costing me the most? Be specific and blunt."
-        : "Use get_market_regime and get_smart_money: read the tape and what the top traders are doing, then tell me the two setups worth watching right now and why. Be specific.",
+        ? "Use get_my_edge and get_market_regime: lay out my own record and the market's inputs right now as facts, with each read's grade, and name the one pattern in my record that cost me the most."
+        : "Use get_market_regime and get_smart_money: lay out the market's inputs right now as facts, with each read's grade or \"not graded\".",
     },
   }));
 
   return (
     <Collapsible
       title="The briefing · what matters right now"
-      subtitle={`${total} ${total === 1 ? "read" : "reads"} worth a look${tape ? ` · ${tape.label} tape` : ""}`}
+      subtitle={`${total} ${total === 1 ? "fact" : "facts"} worth a look${tape ? ` · ${tape.up} of ${tape.total} markets up` : ""}`}
       shortTitle="The briefing"
-      shortSub={`${total} worth a look${tape ? ` · ${tape.label} tape` : ""}`}
+      shortSub={`${total} worth a look`}
       open={!collapsed}
       onToggle={toggle}
     >
@@ -280,7 +246,7 @@ export function NexusBriefing({
           )}
           {/* ⭐ THE ACTION QUEUE — one ranked list, most important first. What to act on,
               in order — your edge × the market floats to the top by priority. */}
-          <GroupLabel text={personal.length ? "Act on this — in order" : "Watch this — in order"} />
+          <GroupLabel text="Facts, not advice · most relevant first" />
           {queue.map((ins, i) => <InsightRow key={ins.id} ins={ins} onSelectTab={onSelectTab} rank={i + 1} />)}
           {/* Hand-off to the copilot. Not a duplicate of the floating bubble: the bubble opens an
               empty chat, this asks a prepared question built from THIS briefing (your record +
