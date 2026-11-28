@@ -31,7 +31,7 @@ const CACHE_TTL_MS = 15 * 60 * 1000; // re-opening within 15 min shows the last 
 // Canonical design tokens (app/config/theme.ts) — same palette the Forecast lens draws from.
 // Green stays rationed to data (profit/up), bone is THE accent.
 const BONE = C.text.bright, FOG = C.text.fog, DIM = C.text.muted, FAINT = C.text.faint;
-const POS = C.pos, NEG = C.neg, ACCENT = C.accent, CANVAS = C.canvas;
+const POS = C.pos, ACCENT = C.accent, CANVAS = C.canvas;
 const SURFACE = C.surface, SURFACE_ALT = C.surfaceAlt, INSET = C.inset, BORDER = C.border, BORDER_STRONG = C.borderStrong;
 const MF = "var(--nx-font-mono)";
 
@@ -54,9 +54,9 @@ function fmtClock(ts: number): string {
 }
 // A Base tx hash → the short receipt form used everywhere on-chain: 0xcbd2…4b36 (6 + 4).
 function shortTx(tx: string): string { return `${tx.slice(0, 6)}…${tx.slice(-4)}`; }
-// Conviction tier → the ONE bit of chroma on a card: green only for "high" (data role),
-// then quiet tones. If everything glows, nothing reads as the strong signal.
-const tierColor = (tier: number | null) => (tier != null && tier >= 3 ? POS : tier === 2 ? FOG : FAINT);
+// Q's conviction tier in ink (bone / fog / faint). It is Quotient's own label, not money and not our grade, so it
+// never wears green (Lab pass 2026-11-28).
+const tierColor = (tier: number | null) => (tier != null && tier >= 3 ? BONE : tier === 2 ? FOG : FAINT);
 
 // The convergence gap, drawn: a 0–100% track with the live market price and Q's fair
 // value as ticks, the space between them shaded — the edge, read at a glance.
@@ -93,7 +93,7 @@ function SignalCard({ s, onTrade, onStake }: { s: QSignal; onTrade: (x: QSignal)
         </span>
         {s.side ? <span style={{ color: BONE, fontFamily: MF, fontSize: 11, fontWeight: 700 }}>{s.side}</span> : null}
         {s.venue ? <span style={{ color: FAINT, fontFamily: MF, fontSize: 9, letterSpacing: "0.06em" }}>{s.venue}</span> : null}
-        {s.isNewToday ? <span style={{ color: POS, fontFamily: MF, fontSize: 8.5, letterSpacing: "0.1em" }}>NEW</span> : null}
+        {s.isNewToday ? <span style={{ color: FOG, fontFamily: MF, fontSize: 8.5, letterSpacing: "0.1em" }}>NEW</span> : null}
         {s.endDate ? <span style={{ color: FAINT, fontSize: 9.5, fontFamily: MF, marginLeft: "auto" }}>ends {fmtEnds(s.endDate)}</span> : null}
       </div>
       <div style={{ color: FOG, fontSize: 12, lineHeight: 1.45 }}>{s.question}</div>
@@ -101,7 +101,7 @@ function SignalCard({ s, onTrade, onStake }: { s: QSignal; onTrade: (x: QSignal)
       {s.thesis ? <div style={{ color: DIM, fontSize: 11, lineHeight: 1.5, margin: "6px 0 8px", fontStyle: "italic" }}>{s.thesis}</div> : null}
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontFamily: MF, fontSize: 10 }}>
         <span style={{ color: DIM }}>spread <b style={{ color: BONE }}>{s.spreadPp}pp</b></span>
-        {s.convergeUpsidePct != null ? <span style={{ color: DIM }}>upside <b style={{ color: POS }}>{s.convergeUpsidePct}%</b></span> : null}
+        {s.convergeUpsidePct != null ? <span style={{ color: DIM }} title="Quotient’s model: the move if the market converged to Q’s fair value. Not our grade.">Q’s model gap <b style={{ color: BONE }}>{s.convergeUpsidePct}%</b></span> : null}
         {s.windowDays != null ? <span style={{ color: FAINT }}>{s.windowDays}d window</span> : null}
         {s.capacityUsd != null ? <span style={{ color: FAINT }}>{fmtUsd(s.capacityUsd)} cap</span> : null}
         {link ? (
@@ -114,7 +114,7 @@ function SignalCard({ s, onTrade, onStake }: { s: QSignal; onTrade: (x: QSignal)
         <div style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${BORDER}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: BONE, fontFamily: MF, fontSize: 10, fontWeight: 700, letterSpacing: "0.06em" }}>
             <span style={{ color: FAINT }}>◆</span>{s.perp.coin}
-            <b style={{ color: s.perp.direction === "LONG" ? POS : NEG }}>{s.perp.direction}</b>
+            <b style={{ color: BONE }}>{s.perp.direction}</b>
           </span>
           <span style={{ color: FAINT, fontFamily: MF, fontSize: 8.5, letterSpacing: "0.08em" }}>Q READ → PERP</span>
           <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
@@ -123,7 +123,7 @@ function SignalCard({ s, onTrade, onStake }: { s: QSignal; onTrade: (x: QSignal)
             >⚡ Trade</button>
             <button onClick={() => onStake(s)} className="nx-press"
               style={{ background: "transparent", color: BONE, border: `1px solid ${BORDER_STRONG}`, borderRadius: 2, padding: "3px 11px", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer" }}
-            >◆ Stake thesis</button>
+            >Post a call</button>
           </div>
         </div>
       ) : null}

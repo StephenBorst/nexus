@@ -9,15 +9,15 @@ import { C, SIGNAL } from "@/config/theme";
 // ── POSITIONING — the crowd (funding) fused with the smart money (wallets) ────
 // Phase 2 of the OBSERVE re-slice. Leads the Smart Money tab: one read per coin that
 // joins where the CROWD is over-extended (funding-fade, from /intel/mispriced) with where
-// the SHARP wallets are positioned (/smart/board). CONFLUENCE = both point the same way
-// (high conviction); SPLIT = the smart money is with the crowd (the debate). The deep
-// boards (Smart Money, the funding board) sit below. Fail-soft + sparse at cold-start.
+// the SHARP wallets are positioned (/smart/board). CONFLUENCE (shown "SAME WAY") = both point the same way;
+// SPLIT = the smart money is with the crowd. Two inputs; their agreement is not graded, so the board never calls it
+// conviction or better odds (Lab pass 2026-11-28). Sides in ink. Fail-soft + sparse at cold-start.
 
 const AGENT_API = "https://og.nexustradinglabs.com";
 const MONO = "var(--nx-font-mono)";
 const UI = "var(--nx-font-ui, sans-serif)";
 const BONE = "#ededf0", FOG = "#a1a1aa", MUTED = "#71717a", FAINT = "#52525b";
-const POS = "#3ecf8e", NEG = "#f7525f", WATCH = "#e0a458", BORDER = "#232327", INSET = "#08080a";
+const WATCH = "#e0a458", BORDER = "#232327", INSET = "#08080a";
 
 type MispricedMkt = { coin?: string; symbol?: string; direction: "LONG" | "SHORT" | "NONE"; status: string; fundingAnnualPct: number; edge: number };
 type SmTrader = { address: string; positions: { coin?: string; sym?: string | null; side: "LONG" | "SHORT"; szUsd: number }[] };
@@ -27,12 +27,13 @@ type Fused = {
 };
 
 const bare = (s: string) => String(s || "").toUpperCase().replace(/^PERP_/, "").replace(/_USDC$/, "");
-const dirColor = (d: string | null) => (d === "LONG" ? POS : d === "SHORT" ? NEG : MUTED);
+// A side is not money: ink (green/red is P&L and price only).
+const dirColor = (d: string | null) => (d ? BONE : MUTED);
 const verdictStyle: Record<string, { label: string; color: string; bg: string }> = {
-  CONFLUENCE: { label: "◆ CONFLUENCE", color: BONE, bg: "#1a1a1e" },
-  SPLIT: { label: "⚡ SPLIT", color: WATCH, bg: SIGNAL.watchBg },
-  CROWD: { label: "CROWD", color: FOG, bg: "#141416" },
-  SMART: { label: "SMART", color: FOG, bg: "#141416" },
+  CONFLUENCE: { label: "SAME WAY", color: BONE, bg: "#1a1a1e" },
+  SPLIT: { label: "SPLIT", color: WATCH, bg: SIGNAL.watchBg },
+  CROWD: { label: "FUNDING ONLY", color: FOG, bg: "#141416" },
+  SMART: { label: "WALLETS ONLY", color: FOG, bg: "#141416" },
 };
 
 export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {}) {
@@ -84,8 +85,8 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
   }, [recordByCoin]);
   const mineCount = useMemo(() => rows.filter(isMine).length, [rows, isMine]);
 
-  // Lead with the reads that combine both signals; keep a few singles for context. In
-  // MY-EDGE mode, show every row you're proven on (not just the top-ranked).
+  // Lead with the reads that have both inputs; keep a few singles for context. In
+  // MY MARKETS mode, show every row where your own record is positive.
   const shown = useMemo(() => {
     if (mineOnly) return rows.filter(isMine);
     const both = rows.filter((r) => r.verdict === "CONFLUENCE" || r.verdict === "SPLIT");
@@ -98,9 +99,9 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
     const draft = {
       symbol: r.coin, direction: r.crowdFade, entryPrice: "", stopLoss: "", takeProfit1: "",
       notes: r.verdict === "CONFLUENCE"
-        ? `Positioning confluence — the funding-fade and the smart money both point ${r.crowdFade} on ${r.coin} (${r.smartTraders} sharp wallets ${r.smartSide?.toLowerCase()}${r.fundingAnnualPct != null ? `, funding ${r.fundingAnnualPct}%/yr` : ""}). High-conviction lean.`
-        : `Crowd fade — funding says fade ${r.crowdFade} on ${r.coin}${r.fundingAnnualPct != null ? ` (${r.fundingAnnualPct}%/yr)` : ""}. The sharp wallets haven't taken a side yet.`,
-      catalyst: r.verdict === "CONFLUENCE" ? "crowd + smart money confluence" : "funding-crowd fade",
+        ? `Funding fade ${r.crowdFade} on ${r.coin}${r.fundingAnnualPct != null ? ` (funding ${r.fundingAnnualPct}%/yr)` : ""}; ${r.smartTraders} tracked wallets lean ${r.smartSide?.toLowerCase()}. Two inputs, not graded together.`
+        : `Funding fade ${r.crowdFade} on ${r.coin}${r.fundingAnnualPct != null ? ` (${r.fundingAnnualPct}%/yr)` : ""}. The tracked wallets haven't taken a side.`,
+      catalyst: r.verdict === "CONFLUENCE" ? "funding fade, wallets the same way" : "funding fade",
       targetWindow: undefined,
     };
     try { window.localStorage.setItem(THESIS_DRAFT_KEY, JSON.stringify(draft)); } catch { /* ignore */ }
@@ -115,17 +116,17 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
       <SectionHeader
         eyebrow="POSITIONING"
         title="Crowd vs. smart money"
-        note={confluence > 0 ? `${confluence} CONFLUENCE` : "FADE VS FOLLOW"}
+        note={confluence > 0 ? `${confluence} SAME WAY` : "FUNDING VS WALLETS"}
       />
       <div style={{ fontFamily: UI, fontSize: 13.5, color: FOG, lineHeight: 1.6, maxWidth: 640, marginBottom: 14 }}>
         Two boards, one read. The funding board says where the <b style={{ color: BONE }}>crowd</b> is over-extended and which way to fade it;
-        the sharp wallets say where the <b style={{ color: BONE }}>smart money</b> sits. When they agree it’s <b style={{ color: BONE }}>confluence</b>;
-        when the smart money is with the crowd, the fade is <span style={{ color: WATCH }}>contested</span>. The deep boards are below.
+        the sharp wallets say where the <b style={{ color: BONE }}>smart money</b> sits. This shows when they point the <b style={{ color: BONE }}>same way</b>,
+        and when the smart money is with the crowd (<span style={{ color: WATCH }}>split</span>). Neither read is graded together. The deep boards are below.
       </div>
 
       {recordByCoin.size > 0 && (
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-          {([["all", "ALL"], ["mine", `◆ MY MARKETS${mineCount ? ` · ${mineCount}` : ""}`]] as const).map(([id, label]) => {
+          {([["all", "ALL"], ["mine", `MY MARKETS${mineCount ? ` · ${mineCount}` : ""}`]] as const).map(([id, label]) => {
             const on = (id === "mine") === mineOnly;
             return (
               <button key={id} type="button" onClick={() => setMineOnly(id === "mine")} style={{
@@ -164,11 +165,11 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
                   )}
                   {recordByCoin.has(r.coin) && (() => {
                     const rec = recordByCoin.get(r.coin)!; const mine = isMine(r);
-                    return <span style={{ fontFamily: MONO, fontSize: 8.5, color: mine ? BONE : FAINT, border: `1px solid ${mine ? "#33333a" : BORDER}`, borderRadius: 3, padding: "1px 6px" }}>{mine ? "◆ " : ""}your {r.coin} {rec.net >= 0 ? "+" : "-"}${Math.abs(Math.round(rec.net))} · {rec.n}t</span>;
+                    return <span style={{ fontFamily: MONO, fontSize: 8.5, color: mine ? BONE : FAINT, border: `1px solid ${mine ? "#33333a" : BORDER}`, borderRadius: 3, padding: "1px 6px" }}>your {r.coin} {rec.net >= 0 ? "+" : "-"}${Math.abs(Math.round(rec.net))} · {rec.n}t</span>;
                   })()}
                   {actionable && (
                     <button type="button" onClick={() => draftFade(r)} className="nx-press"
-                      style={{ marginLeft: "auto", color: BONE, background: "transparent", border: "1px solid #33333a", borderRadius: 4, padding: "3px 10px", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer" }}>◆ draft</button>
+                      style={{ marginLeft: "auto", color: BONE, background: "transparent", border: "1px solid #33333a", borderRadius: 4, padding: "3px 10px", fontFamily: "var(--nx-font-ui)", fontSize: 12, cursor: "pointer" }}>Draft a call →</button>
                   )}
                 </div>
                 <div style={{ fontFamily: UI, fontSize: 12, color: r.verdict === "SPLIT" ? WATCH : FOG, lineHeight: 1.5, marginTop: 7 }}>{positioningRead(r)}</div>
@@ -179,7 +180,7 @@ export function PositioningBoard({ trades }: { trades?: ProcessedTrade[] } = {})
       )}
 
       <div style={{ marginTop: 12, color: FAINT, fontSize: 9, fontFamily: MONO, lineHeight: 1.6 }}>
-        Crowd lean = annualized funding (fade the one-sided side). Smart lean = the dominant side among tracked sharp wallets (≥2). A read on positioning, not advice — confluence tightens the odds, it doesn’t guarantee them.
+        Crowd lean = annualized funding (the fade is the other side). Smart lean = the dominant side among tracked sharp wallets (≥2). Positioning inputs, not advice: agreement between them is not graded.
       </div>
       <div style={{ height: 1, background: BORDER, marginTop: 20 }} />
     </div>

@@ -675,7 +675,13 @@ product is what sits on top:
   grade + the callers' lean + your record on that side from 5 trades; personal reads keep their numbers and drop the
   coaching ("press the edge", "that's tilt", "trade when you're sharp"); no "graded on-chain" for live agents; the
   record line says realized P&L as Orderly reports it (not "graded"); the flagged-setups coaching loop + coaching.mjs are
-  deleted; the group label reads "Facts, not advice". Never call
+  deleted; the group label reads "Facts, not advice".
+  **Deep boards (Lab pass 2026-11-28, pinned by `app/lib/deepBoards.test.mjs` + `boardWords.test.mjs`):** Positioning
+  shows funding + wallets agreeing as "SAME WAY" (ids unchanged), never confluence / conviction / better odds; the funding
+  board's ungraded FADE drops the scoreboard's ◆; Catalysts = "World events and the markets they touch", the event →
+  market mapping a fixed rule, not graded, not "a trade you can take", grid fits a phone; Q Signals' conviction tier,
+  "NEW" and model gap in ink (Quotient's labels, not money). Call side pickers (market table, Thesis Engine, Quick Trade,
+  Catalysts, Q Signals, Positioning) are ink: a side is not money. Never call
   a read "proven" or "graded" unless the scoreboard grades that exact rule.
 - **/proof layout:** verdict (the headline is a claim COMPUTED from the served stage, `proofHeadline` in proofCopy.mjs, since
   2026-11-05: "Nothing has proven itself yet" until a read is CLEARED (since 2026-11-17; before: served TRADEABLE/PAPER with
