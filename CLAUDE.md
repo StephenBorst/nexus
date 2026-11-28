@@ -22,9 +22,10 @@ product is what sits on top:
   `0x06cD9c281E6ab09906B46a10e059F2770EfdE49A` (`SUBSCRIPTION_RECEIVER`). **Treasury Safe**
   `0x4Fe2c01bbeFaFFa35706C994646a3F8493B1C733` (1/1, Arbitrum + Base, signer `0x53Ce…9D33`, = `NEXUS_TREASURY_ADDRESS`).
   Sweep the receivers → the Safe on a cadence.
-- **x402 data (Bankr-hosted, priced in $NEXUS on Base):** `nexus-signals` (50k/req, `/signals`; the read grades NOISE,
-  so every response carries the live `grade` from `/intel/axis-backtest` and the listing says "not a proven edge";
-  swap only to a read that clears; the CLEARED gate is built in, borst 2026-11-27: the handler serves btc_lead_lag only on a cleared 200 from `GET /signals/read/:axis` (`routes-readsignals.mjs`, rules `app/lib/soldRead.mjs`, 403 `not_cleared` with no signals until then), else funding-fade + NOISE as today), `nexus-callers` (10k, `/theses/leaderboard`), `nexus-agents-live` (10k,
+- **x402 data (Bankr-hosted, priced in $NEXUS on Base):** `nexus-signals` (50k/req, `/signals`; the read's grade is live, read from `/intel/axis-backtest` on every call
+  and carried as `grade` in every response; the listing and README state no grade as current (it moves; a static
+  "NOISE" tripped Bankr's check 2026-11-27, test-pinned) and say "not a proven edge";
+  swap only to a read that clears; the CLEARED gate is built in, borst 2026-11-27: the handler serves btc_lead_lag only on a cleared 200 from `GET /signals/read/:axis` (`routes-readsignals.mjs`, rules `app/lib/soldRead.mjs`, 403 `not_cleared` with no signals until then), else funding-fade with its live grade), `nexus-callers` (10k, `/theses/leaderboard`), `nexus-agents-live` (10k,
   `/agents/live`). Handler + config in `bankr-x402/`; changes go live only via `bankr x402 deploy <name>`. Payout = the
   DEPLOYER wallet (Bankr wallet `0xd9f7…b449`, 95% after Bankr's 5%) → sweep it to the Safe (a multisig can't be the
   deployer). Token-demand framing is internal analysis only, never public copy.
